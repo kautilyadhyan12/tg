@@ -320,7 +320,12 @@ const BREAKS = [
   {
     name: "§11.2: a card-shaped cell is still shown as one of its column's samples",
     file: COLUMNS,
-    from: "      if (!card && stat.samples.length < MEMBER_LIST_COLUMN_SAMPLES) stat.samples.push(text);",
+    // IT BREAKS BOTH HALVES NOW, and that is a finding of its own. Since round one a
+    // sample is scrubbed of a card written INSIDE it as well as skipped for being one,
+    // so dropping the `!card` guard alone left the whole-cell card redacted and the
+    // mutant ran GREEN — a rule guarded twice cannot be disproved by breaking it once.
+    // What this row is for is "a card-shaped cell is never SHOWN", so it takes out both.
+    from: "      if (!card && stat.samples.length < MEMBER_LIST_COLUMN_SAMPLES) stat.samples.push(withoutCardNumbers(text).text);",
     to: "      if (stat.samples.length < MEMBER_LIST_COLUMN_SAMPLES) stat.samples.push(text);",
     suite: WIDER_SUITE,
     pure: true,
@@ -525,6 +530,14 @@ const BREAKS = [
     from: "    inAppEntryIds: records === \"current\" ? inAppEntryIds(members) : inAppEntryIdsWithFormer(members),",
     to: "    inAppEntryIds: inAppEntryIds(members),",
     suite: KEPT_SUITE,
+  },
+  {
+    name: "round one High-4, the samples: a card inside a note is still SHOWN beside its heading",
+    file: COLUMNS,
+    from: "if (!card && stat.samples.length < MEMBER_LIST_COLUMN_SAMPLES) stat.samples.push(withoutCardNumbers(text).text);",
+    to: "if (!card && stat.samples.length < MEMBER_LIST_COLUMN_SAMPLES) stat.samples.push(text);",
+    suite: WIDER_SUITE,
+    pure: true,
   },
 ];
 

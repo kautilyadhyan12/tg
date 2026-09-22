@@ -808,6 +808,35 @@ describe("the gym's own columns", () => {
     expect(found.extraFields.map((field) => field.label)).toEqual(["Column 3", "Belt", "Belt"]);
   });
 
+  it("A CARD WRITTEN INSIDE A NOTE IS TAKEN OUT OF THE SAMPLE CELLS TOO, not only out of the row", () => {
+    // Found while looking at round one's own fix on a real page: the row's cell was
+    // scrubbed and the three cells SHOWN beside the heading were not. A sample is not
+    // only on a screen — it is stored in the staged upload's document for the hour that
+    // upload lives. It is the same fault 3a-v-a's round one called a Critical.
+    const found = read([
+      ["Name", "Email", "Notes"],
+      ["Ann Lee", "ann@example.com", "Card on file 4111 1111 1111 1111 (Visa)"],
+      ["Bo Chen", "bo@example.com", "prefers mornings"],
+      ["Cal Fox", "cal@example.com", "paid by card 5555 5555 5555 4444 on 2 Jan"],
+    ]);
+    const notes = found.columns.find((column) => column.header === "Notes");
+    expect(notes?.samples).toEqual([
+      "Card on file [card number removed] (Visa)",
+      "prefers mornings",
+      "paid by card [card number removed] on 2 Jan",
+    ]);
+    // …and the row's own cells, which is what is stored on the person.
+    expect(found.rows.map((r) => r.extra[0])).toEqual([
+      "Card on file [card number removed] (Visa)",
+      "prefers mornings",
+      "paid by card [card number removed] on 2 Jan",
+    ]);
+    // NOT ONE DIGIT OF EITHER CARD SURVIVES ANYWHERE in what the server answers.
+    const everything = JSON.stringify(found);
+    expect(everything).not.toContain("4111");
+    expect(everything).not.toContain("5555 5555");
+  });
+
   it("AN UNNAMED COLUMN KEEPS ITS KEY WHEN A NAMED COLUMN IS INSERTED BEFORE IT (round one, High-3)", () => {
     // Keyed `column_<place>`, one unnamed column became a SECOND field the moment any
     // column was inserted to its left — and 3a-v-b makes that key DURABLE, so the same

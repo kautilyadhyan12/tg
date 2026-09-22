@@ -36,7 +36,16 @@ import { couldBePhone, looksLikeEmail, tidyCell } from "./cells.js";
 import { looksLikeADate, mostlyDates } from "./dates.js";
 import { isWritten } from "./grid.js";
 import { type HeaderReading, readHeader } from "./headerWords.js";
-import { type ColumnShapes, type SheetHints, cardShapedCell, governmentIdShaped, ibanShaped, neverKeptColumn, worthChecking } from "./neverKeep.js";
+import {
+  type ColumnShapes,
+  type SheetHints,
+  cardShapedCell,
+  governmentIdShaped,
+  ibanShaped,
+  neverKeptColumn,
+  withoutCardNumbers,
+  worthChecking,
+} from "./neverKeep.js";
 import { isPhoneValue } from "./phone.js";
 
 export type Rows = readonly (readonly string[])[];
@@ -153,8 +162,15 @@ export function columnStats(rows: Rows, headerRow: number | null, country: Count
       // A cell shaped like a payment card is never SHOWN either (§11.2). The
       // three cells beside a heading are a real file's own data on a real
       // screen, so a card left in them is a card kept.
+      //
+      // **AND A CARD WRITTEN INSIDE ONE IS TAKEN OUT OF IT, for exactly the same
+      // reason.** A sample is not only shown: it is stored in the staged upload's
+      // document for the hour that upload lives. The round-one fix for a card in a
+      // note scrubbed the ROW's cells and left these, which is the same fault 3a-v-a's
+      // own round one called a Critical — "a card-shaped cell still appeared among the
+      // three sample cells shown to staff, though the row itself had dropped it".
       const card = cardShapedCell(text);
-      if (!card && stat.samples.length < MEMBER_LIST_COLUMN_SAMPLES) stat.samples.push(text);
+      if (!card && stat.samples.length < MEMBER_LIST_COLUMN_SAMPLES) stat.samples.push(withoutCardNumbers(text).text);
       // What the column IS, which decides both what is kept from it and what is
       // never kept. Counted in the one pass the sample already costs.
       if (options.hints !== undefined) {
