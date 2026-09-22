@@ -190,7 +190,9 @@ describe('reading the timetable', () => {
     await screen.findByText('Sunrise Yoga');
     expect(screen.getByText('Mon & Wed at 18:30')).toBeTruthy();
     expect(
-      screen.getByText('Next: Mon 21 Sep 2026 · Wed 23 Sep 2026 · Mon 28 Sep 2026 · Wed 30 Sep 2026 · +12 more'),
+      screen.getByText(
+        'Next: Mon 21 Sep 2026 · Wed 23 Sep 2026 · Mon 28 Sep 2026 · Wed 30 Sep 2026 · more to come',
+      ),
     ).toBeTruthy();
   });
 

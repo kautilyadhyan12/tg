@@ -132,15 +132,35 @@ export function repeatFactsLine(schedule) {
  *  that recomputed "Mondays from today" would always look right, including on
  *  the day the fill had not run, a day was cancelled, or the repeat had ended —
  *  and the gym would be reading a promise nothing books against. So an empty
- *  list says so in words a person can act on. */
+ *  list says so in words a person can act on.
+ *
+ *  **`+N more` IS THE SAME NUMBER THE LINE ABOVE STOPPED PRINTING, AND IT IS
+ *  GATED ON THE SAME ANSWER** — the re-check's one open High, and the third
+ *  time `sessionsAhead` was shown to a person as if it were how many times the
+ *  class runs. Kd struck "16 dates on the calendar"; round one found the same
+ *  falsehood on the bounded branch; this is what was left, one line down and
+ *  spelled as a delta:
+ *
+ *      From Tue 22 Sep 2026 · ongoing
+ *      Next: … · +4 more            ← the class runs 52 times
+ *
+ *  "ongoing" and "+4 more" on consecutive lines is worse than either alone. So
+ *  the count is printed only when the server says every date is written
+ *  (`datesComplete`), and otherwise the line says **more to come** — which is
+ *  true of a repeat with no end and of one that ends past the window, and does
+ *  not pretend to know a number.
+ *
+ *  `finished` cannot reach the `more to come` branch: a repeat that has ended is
+ *  necessarily inside the window, so `datesComplete` is true for it. */
 export function nextDatesLine(schedule) {
   const dates = Array.isArray(schedule?.nextDates) ? schedule.nextDates : [];
   if (dates.length === 0) return 'No dates yet.';
   const labels = dates.map((d) => closureDateLabel(d)).filter((d) => d !== '');
   if (labels.length === 0) return 'No dates yet.';
+  const shown = `Next: ${labels.join(' · ')}`;
+  if (schedule?.datesComplete !== true) return `${shown} · more to come`;
   const ahead = Number.isInteger(schedule?.sessionsAhead) ? schedule.sessionsAhead : labels.length;
   const more = ahead - labels.length;
-  const shown = `Next: ${labels.join(' · ')}`;
   return more > 0 ? `${shown} · +${String(more)} more` : shown;
 }
 

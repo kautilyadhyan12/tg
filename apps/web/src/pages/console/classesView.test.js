@@ -165,13 +165,42 @@ describe('reading a repeat', () => {
   it('shows the dates the server wrote, and says so when there are none', () => {
     expect(nextDatesLine({ nextDates: [], sessionsAhead: 0 })).toBe('No dates yet.');
     expect(nextDatesLine({})).toBe('No dates yet.');
-    expect(nextDatesLine({ nextDates: ['2026-09-21', '2026-09-23'], sessionsAhead: 2 })).toBe(
-      'Next: Mon 21 Sep 2026 · Wed 23 Sep 2026',
+    expect(
+      nextDatesLine({ nextDates: ['2026-09-21', '2026-09-23'], sessionsAhead: 2, datesComplete: true }),
+    ).toBe('Next: Mon 21 Sep 2026 · Wed 23 Sep 2026');
+  });
+
+  // **`+N more` IS `sessionsAhead` WEARING A DELTA, AND IT IS THE THIRD TIME
+  // THAT NUMBER WAS SHOWN AS "how many times the class runs".** Kd struck it as
+  // "16 dates on the calendar"; round one found it on the bounded branch; the
+  // re-check found this, one line below the line that had just been fixed —
+  // "ongoing" and "+4 more" on consecutive lines about a class that runs 52
+  // times. The previous version of THIS test pinned it as correct.
+  it('never counts what is left unless the server says the dates are all written', () => {
+    const shown = ['2026-09-21', '2026-09-23', '2026-09-28', '2026-09-30'];
+
+    // Open-ended: the window holds 16, the class runs for ever.
+    expect(nextDatesLine({ nextDates: shown, sessionsAhead: 16, datesComplete: false })).toBe(
+      'Next: Mon 21 Sep 2026 · Wed 23 Sep 2026 · Mon 28 Sep 2026 · Wed 30 Sep 2026 · more to come',
     );
+    // Ends past the window: 52 Mondays, and the delta would claim 4 remain.
+    expect(nextDatesLine({ nextDates: shown.slice(0, 4), sessionsAhead: 8, datesComplete: false })).toBe(
+      'Next: Mon 21 Sep 2026 · Wed 23 Sep 2026 · Mon 28 Sep 2026 · Wed 30 Sep 2026 · more to come',
+    );
+    // A server that says nothing is treated as "not the whole truth".
     expect(nextDatesLine({ nextDates: ['2026-09-21'], sessionsAhead: 16 })).toBe(
-      'Next: Mon 21 Sep 2026 · +15 more',
+      'Next: Mon 21 Sep 2026 · more to come',
+    );
+
+    // ONLY when every date is written is the number real.
+    expect(nextDatesLine({ nextDates: shown, sessionsAhead: 16, datesComplete: true })).toBe(
+      'Next: Mon 21 Sep 2026 · Wed 23 Sep 2026 · Mon 28 Sep 2026 · Wed 30 Sep 2026 · +12 more',
+    );
+    expect(nextDatesLine({ nextDates: shown, sessionsAhead: 4, datesComplete: true })).toBe(
+      'Next: Mon 21 Sep 2026 · Wed 23 Sep 2026 · Mon 28 Sep 2026 · Wed 30 Sep 2026',
     );
   });
+
 
 });
 
