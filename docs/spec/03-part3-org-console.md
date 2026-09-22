@@ -2097,6 +2097,11 @@ zone and turned into an instant for each day, so a summer-time change never move
 6 pm class. Staff change or cancel **this day only** (the session is marked as changed
 alone and later edits of the schedule leave it be) or **this day and later** (the old
 schedule ends, a new one begins); people booked on a changed or cancelled day are told.
+*(AMENDED 2026-09-22, RULINGS: a repeat carries its OWN coach, places and length — the
+class type holds them as the values a new repeat is filled in from and changes nothing
+already on the calendar, 17b-ii-a — and staff can change EVERY repeat of one class in
+one go, forward only from a date they pick and never a day changed on purpose, which is
+TeamUp's Bulk Edit, 17b-ii-b.)*
 An open-gym slot is a class type marked so. `schedule.manage` (owner and manager); a
 trainer sees the lists of their own classes.
 
