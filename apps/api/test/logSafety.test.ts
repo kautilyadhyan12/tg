@@ -19,7 +19,7 @@ import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
-import { safeErrorSerializer, scrubbedForSentry } from "../src/logSafety.js";
+import { safeErrorSerializer, safeRequestSerializer, scrubbedForSentry } from "../src/logSafety.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -150,5 +150,78 @@ d("a database error carries a person, and nothing we write carries it on", () =>
     // holds the whole failing row.
     for (const secret of [NAME, ADDRESS, PHONE, MEMBER_NUMBER]) expect(written).not.toContain(secret);
     expect(written).not.toContain("Failing row contains");
+  });
+
+  // =========================================================================
+  // A REQUEST LINE SAYS WHICH ROUTE, NEVER WHAT WAS ASKED OF IT (3a-v-b)
+  // =========================================================================
+
+  it("the request serializer keeps the path and drops the query string, whatever is in it", () => {
+    // THE CASE IT EXISTS FOR: staff type a member's address into the search box, and
+    // pino's own `req` serializer writes the url as it arrived. Found 2026-09-22 by the
+    // member list's own log capture; `logSafety.ts` has the whole story.
+    expect(
+      safeRequestSerializer({
+        method: "GET",
+        url: `/v1/orgs/11111111-2222-3333-4444-555555555555/member-list/entries?query=${ADDRESS}`,
+        host: "gym.example",
+        ip: "10.0.0.9",
+        socket: { remotePort: 51234 },
+      }),
+    ).toEqual({
+      method: "GET",
+      url: "/v1/orgs/11111111-2222-3333-4444-555555555555/member-list/entries",
+      host: "gym.example",
+      remoteAddress: "10.0.0.9",
+      remotePort: 51234,
+    });
+
+    // The gym's own words for what a person bought and whether they have paid — cells
+    // of its file, which §9.9 says are never logged.
+    const filtered = safeRequestSerializer({
+      method: "GET",
+      url: "/v1/orgs/abc/member-list/entries?membershipType=Gold&paymentStatus=Overdue&records=former",
+    });
+    expect(filtered.url).toBe("/v1/orgs/abc/member-list/entries");
+    expect(JSON.stringify(filtered)).not.toContain("Gold");
+    expect(JSON.stringify(filtered)).not.toContain("Overdue");
+
+    // A url with no query string is untouched, and one that is nothing but a question
+    // mark still logs its path rather than nothing.
+    expect(safeRequestSerializer({ method: "POST", url: "/v1/orgs" }).url).toBe("/v1/orgs");
+    expect(safeRequestSerializer({ method: "GET", url: "/v1/health?" }).url).toBe("/v1/health");
+    // The fields Fastify may simply not hand over are ABSENT rather than null, which is
+    // what its own serializer type asks for.
+    expect("host" in safeRequestSerializer({ method: "POST", url: "/v1/orgs" })).toBe(false);
+  });
+
+  it("THE WIRING: the app's own logger writes a request's path and not its query string", async () => {
+    const capture = await buildCapturing();
+    let written = "";
+    try {
+      // What Fastify does per request, through the serializers the app really installs.
+      capture.app.log.info(
+        {
+          req: {
+            method: "GET",
+            url: `/v1/orgs/abc/member-list/entries?query=${ADDRESS}&membershipType=Gold`,
+            host: "gym.example",
+            ip: "10.0.0.9",
+          },
+        },
+        "incoming request",
+      );
+      written = capture.written();
+    } finally {
+      capture.stop();
+      await capture.app.close();
+    }
+    // THE CONTROL FIRST: the line was written, and it says which route.
+    expect(written).toContain("incoming request");
+    expect(written).toContain("/v1/orgs/abc/member-list/entries");
+    // AND NOT WHAT WAS ASKED OF IT. Without the serializer installed this line holds
+    // the address a member of staff typed into a search box.
+    expect(written).not.toContain(ADDRESS);
+    expect(written).not.toContain("membershipType");
   });
 });

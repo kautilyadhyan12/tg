@@ -796,12 +796,133 @@ describe("the gym's own columns", () => {
     expect(found.rows[0]?.extra).toEqual(["Blue", "Morning 6am", "L-14", "Bo Chen", "Kashyap"]);
   });
 
-  it("gives a column with no heading a key of its own place, and one repeated heading a number", () => {
+  it("numbers a column with no heading among the UNNAMED ones, and gives one repeated heading a number", () => {
     const found = read([
       ["Name", "Email", "", "Belt", "Belt"],
       ["Ann Lee", "ann@example.com", "x", "Blue", "Brown"],
     ]);
-    expect(found.extraFields.map((field) => field.key)).toEqual(["column_3", "belt", "belt_2"]);
+    expect(found.extraFields.map((field) => field.key)).toEqual(["unnamed_1", "belt", "belt_2"]);
+    // …and it is SHOWN by its place, because a screen needs something to print over
+    // it and §11.1 keeps an extra field "under the gym's own heading". The key is
+    // never the place; the label is (see `extraKey`).
+    expect(found.extraFields.map((field) => field.label)).toEqual(["Column 3", "Belt", "Belt"]);
+  });
+
+  it("A CARD WRITTEN INSIDE A NOTE IS TAKEN OUT OF THE SAMPLE CELLS TOO, not only out of the row", () => {
+    // Found while looking at round one's own fix on a real page: the row's cell was
+    // scrubbed and the three cells SHOWN beside the heading were not. A sample is not
+    // only on a screen — it is stored in the staged upload's document for the hour that
+    // upload lives. It is the same fault 3a-v-a's round one called a Critical.
+    const found = read([
+      ["Name", "Email", "Notes"],
+      ["Ann Lee", "ann@example.com", "Card on file 4111 1111 1111 1111 (Visa)"],
+      ["Bo Chen", "bo@example.com", "prefers mornings"],
+      ["Cal Fox", "cal@example.com", "paid by card 5555 5555 5555 4444 on 2 Jan"],
+    ]);
+    const notes = found.columns.find((column) => column.header === "Notes");
+    expect(notes?.samples).toEqual([
+      "Card on file [card number removed] (Visa)",
+      "prefers mornings",
+      "paid by card [card number removed] on 2 Jan",
+    ]);
+    // …and the row's own cells, which is what is stored on the person.
+    expect(found.rows.map((r) => r.extra[0])).toEqual([
+      "Card on file [card number removed] (Visa)",
+      "prefers mornings",
+      "paid by card [card number removed] on 2 Jan",
+    ]);
+    // NOT ONE DIGIT OF EITHER CARD SURVIVES ANYWHERE in what the server answers.
+    const everything = JSON.stringify(found);
+    expect(everything).not.toContain("4111");
+    expect(everything).not.toContain("5555 5555");
+  });
+
+  it("A CARD WRITTEN INSIDE THE GYM'S OWN WORDS, OR INSIDE A NAME, IS TAKEN OUT OF THEM TOO", () => {
+    // Chasing the sample-cell miss found three more: the status, the membership word and
+    // the payment word are all cleaned through `cleanStatus`, and only a WHOLE-cell card
+    // was ever dropped from them — so "paid by card 4111 1111 1111 1111" in a payment
+    // column reached the STAGED file intact, and sat in the database for the hour that
+    // upload lives. The boundary that WRITES scrubbed it; the one that stages did not.
+    const found = read([
+      ["Name", "Email", "Status", "Membership Type", "Payment Status"],
+      ["Ann Lee 4111 1111 1111 1111", "ann@example.com", "Active", "Gold", "paid by card 5555 5555 5555 4444"],
+      ["Bo Chen", "bo@example.com", "Active", "Gold", "Paid"],
+    ]);
+    expect(found.rows[0]?.fullName).toBe("Ann Lee [card number removed]");
+    expect(found.rows[0]?.paymentStatus).toBe("paid by card [card number removed]");
+    // …and an ordinary word is untouched.
+    expect(found.rows[1]?.paymentStatus).toBe("Paid");
+    expect(found.rows[0]?.membershipType).toBe("Gold");
+    // NOT ONE DIGIT OF EITHER CARD anywhere in what the server answers — which is what
+    // is stored on the staged upload and read back into every preview.
+    const everything = JSON.stringify(found);
+    expect(everything).not.toContain("4111");
+    expect(everything).not.toContain("5555 5555");
+  });
+
+  it("a word or a name ON its cap with a card in it is read, not refused: the result stays within the cap", () => {
+    // Cutting before scrubbing let the marker push a 40-character word to 42 and a
+    // 119-character name past 120, and the worker's answer then failed its own schema:
+    // the upload answered 500 instead of reading the file (re-check, §3).
+    const payment = "pay by card 4111 1111 1111 1111 on 2 Jan";
+    const name = `${"A".repeat(100)} 4111111111111111`;
+    expect(payment).toHaveLength(40);
+    expect(name.length).toBe(117);
+    const found = read([
+      ["Name", "Email", "Payment Status"],
+      [name, "ann@example.com", payment],
+    ]);
+    expect(found.rows[0]?.paymentStatus?.length ?? 0).toBeLessThanOrEqual(40);
+    expect(found.rows[0]?.fullName.length ?? 0).toBeLessThanOrEqual(120);
+    expect(JSON.stringify(found)).not.toContain("4111");
+  });
+
+  it("…but a member NUMBER keeps its whole-cell rule, because its whole purpose is to be a long number", () => {
+    // Redacting a run that happens to pass Luhn costs a gym its own member numbers, and
+    // 3a-v-a measured how often that is: 7,269 of 100,000 made-up twelve-digit runs pass
+    // Aadhaar's check. A whole-cell card is still dropped (its own case, above).
+    const found = read([
+      ["Name", "Email", "Member No"],
+      ["Ann Lee", "ann@example.com", "1234567890123456789"],
+    ]);
+    expect(found.rows[0]?.memberNumber).toBe("1234567890123456789");
+  });
+
+  it("AN UNNAMED COLUMN KEEPS ITS KEY WHEN A NAMED COLUMN IS INSERTED BEFORE IT (round one, High-3)", () => {
+    // Keyed `column_<place>`, one unnamed column became a SECOND field the moment any
+    // column was inserted to its left — and 3a-v-b makes that key DURABLE, so the same
+    // cell was then stored twice in one record under two keys, both with an empty
+    // label, with nothing ever clearing the stale one (a whole-list upload MERGES the
+    // document). A gym whose export shifts month to month burnt a slot of its forty on
+    // every shift. Numbered among the unnamed columns, the key survives the insertion.
+    const before = read([
+      ["Name", "Email", "", "Notes"],
+      ["Ann Lee", "ann@example.com", "blue", "n1"],
+    ]);
+    const after = read([
+      ["Name", "Email", "Town", "", "Notes"],
+      ["Ann Lee", "ann@example.com", "Leeds", "blue", "n1"],
+    ]);
+    const keyOf = (found: typeof before, label: string): string | undefined =>
+      found.extraFields.find((field) => field.label === label)?.key;
+    // The unnamed column is the one whose label moved with its place; its KEY did not.
+    expect(keyOf(before, "Column 3")).toBe("unnamed_1");
+    expect(keyOf(after, "Column 4")).toBe("unnamed_1");
+    // …and the named ones are keyed by their headings either way, as they always were.
+    expect(after.extraFields.map((field) => field.key)).toEqual(["town", "unnamed_1", "notes"]);
+  });
+
+  it("…and two unnamed columns are told apart, and stay told apart", () => {
+    const found = read([
+      ["Name", "Email", "", "Belt", ""],
+      ["Ann Lee", "ann@example.com", "blue", "Blue", "x"],
+    ]);
+    expect(found.extraFields.map((field) => field.key)).toEqual(["unnamed_1", "belt", "unnamed_2"]);
+    const moved = read([
+      ["Name", "Email", "Town", "", "Belt", ""],
+      ["Ann Lee", "ann@example.com", "Leeds", "blue", "Blue", "x"],
+    ]);
+    expect(moved.extraFields.map((field) => field.key)).toEqual(["town", "unnamed_1", "belt", "unnamed_2"]);
   });
 
   it("leaves out a column that is empty on every row", () => {

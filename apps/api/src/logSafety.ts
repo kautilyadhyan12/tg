@@ -60,6 +60,72 @@ export function safeErrorSerializer(err: Error): SafeError {
   };
 }
 
+/** What a request logger is allowed to say about a request. The shape is pino's own
+ *  `req` serializer's, minus the one field that can hold somebody's data. */
+export interface SafeRequest {
+  [key: string]: unknown;
+  method: string;
+  /** The PATH, with the query string taken off. */
+  url: string;
+  // Absent rather than undefined, which is what Fastify's own serializer type asks
+  // for under `exactOptionalPropertyTypes` — hence the spreads below rather than
+  // three plain assignments.
+  host?: string;
+  remoteAddress?: string;
+  remotePort?: number;
+}
+
+/** A REQUEST'S QUERY STRING IS PART OF THE REQUEST AND IS NOT PART OF THE LOG.
+ *
+ *  **FOUND 2026-09-22 BY THE MEMBER LIST'S OWN LOG CAPTURE** (3a-v-b), driving the
+ *  filters §11.5 adds. pino's stock `req` serializer writes `req.url` as it arrived,
+ *  which is the path AND the query string, on every single request Fastify logs. So:
+ *
+ *      GET /v1/orgs/…/member-list/entries?query=ada@members.example
+ *      GET /v1/orgs/…/member-list/entries?membershipType=Gold&paymentStatus=Overdue
+ *
+ *  A member's email address, typed into a search box by staff, written to the log by
+ *  the logger — and the gym's own words for what a person bought and whether they have
+ *  paid beside it. §9.9's rule is "never logged: a cell, a name, an address, a number,
+ *  the body", and a search term is somebody's address while a membership word is a cell
+ *  of the gym's file.
+ *
+ *  **IT IS OLDER THAN THIS JOB** — `?status=` and `?query=` have been on `GET /entries`
+ *  since 3a-iii-b — and nothing drove it, because the log capture only ever drove the
+ *  upload routes, whose values are all in a POST body. This job widened the same
+ *  surface by three filters and its own test found it.
+ *
+ *  **THE PATH IS KEPT AND THAT IS THE WHOLE VALUE OF A REQUEST LINE**: which route, for
+ *  which gym, answering what. Nothing in this repository reads a query string out of a
+ *  log — ids, counts and codes are what §9.9 allows — and an opaque cursor is the only
+ *  other thing that travels in one.
+ *
+ *  It is global rather than per-route on purpose. A route-by-route redaction is a list
+ *  somebody has to remember to add to, and the next screen with a search box would leak
+ *  again with nothing saying so. */
+export function safeRequestSerializer(req: {
+  method: string;
+  url: string;
+  // `| undefined` on each, not merely optional: `exactOptionalPropertyTypes` makes
+  // "may be absent" and "may be undefined" two different things, and what Fastify
+  // hands a serializer is the second.
+  host?: string | undefined;
+  ip?: string | undefined;
+  socket?: { remotePort?: number | undefined } | undefined;
+}): SafeRequest {
+  // A url arrives origin-form ("/a/b?c=d"), so the question mark is the whole of it.
+  // `split` and not a URL parse: there is no origin to parse against, and a url this
+  // never understands must still be logged as something.
+  const mark = req.url.indexOf("?");
+  return {
+    method: req.method,
+    url: mark === -1 ? req.url : req.url.slice(0, mark),
+    ...(req.host === undefined ? {} : { host: req.host }),
+    ...(req.ip === undefined ? {} : { remoteAddress: req.ip }),
+    ...(req.socket?.remotePort === undefined ? {} : { remotePort: req.socket.remotePort }),
+  };
+}
+
 /** The fields a database driver hangs on an error that can quote a row, or the
  *  statement a row's values were in. Known today; the allowlist above is what makes
  *  the unknown ones safe in a LOG, and this is the same protection for Sentry,

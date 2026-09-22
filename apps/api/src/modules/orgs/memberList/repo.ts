@@ -16,8 +16,11 @@
 import { z } from "zod";
 import type { Sql, TransactionSql } from "postgres";
 import {
+  MEMBER_LIST_MAX_EDITED_FIELDS,
   MEMBER_LIST_STATUS_CHIPS_MAX,
+  memberListEditedFieldSchema,
   memberListEntrySourceSchema,
+  memberListExtraDocumentSchema,
   memberListGroupsSchema,
   memberListMappingSchema,
   memberListModeSchema,
@@ -30,6 +33,7 @@ import {
   type MemberListGroups,
   type MemberListMapping,
   type MemberListMode,
+  type MemberListRecords,
   type MemberListStoredPerson,
   type MemberListRowGroup,
   type MemberListStagedFile,
@@ -37,7 +41,7 @@ import {
   type MemberListUploadStatus,
   type MemberListUploadSummary,
 } from "@app/shared";
-import type { ListEntry, ListMember } from "./reconcile.js";
+import type { CarriedFields, ListEntry, ListMember } from "./reconcile.js";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -88,6 +92,17 @@ export interface MemberAgainstList extends ListMember {
    *  what the list still says about them. Null where no entry matches. */
   entryStatus: string | null;
   entryMemberNumber: string | null;
+  /** WHICH FORMER RECORD THIS MEMBER MATCHES, AND NOTHING ELSE (round one, Low-2).
+   *
+   *  It answers one question only: a page asked for the gym's FORMER records has to be
+   *  able to say "this one is somebody who is in the app", and the match above
+   *  deliberately cannot, because it excludes former records so that one can never
+   *  admit anybody or be counted where an invite is decided (§11.1).
+   *
+   *  So it is read by a page's `inApp` tick when the page was asked for the former
+   *  records, and by NOTHING else: not the marks, not `leaving`, not the guard, not a
+   *  chip, not `canBeInvited`. */
+  formerEntryId: string | null;
 }
 
 export async function listState(sql: SqlOrTx, gymId: string): Promise<ListState | null> {
@@ -128,7 +143,20 @@ export async function listState(sql: SqlOrTx, gymId: string): Promise<ListState 
   };
 }
 
-/** The gym's list as it stands, in the order it was built. */
+/** THE GYM'S PEOPLE, in the order the list was built — the ones on it AND the FORMER
+ *  records (§11.1).
+ *
+ *  **THE FORMER RECORDS COME TOO, AND THE RULE TELLS THEM APART.** A file that holds
+ *  somebody the gym took off revives that very row, so a read that left them out would
+ *  make the confirm try to INSERT a person the identity key's UNIQUE already covers —
+ *  and the gym would have two records of one person if it did not. Everything else the
+ *  rule answers is about the current records alone, which is one `filter` inside it
+ *  rather than a condition every reader has to remember.
+ *
+ *  **THE DATES ARE CAST TO TEXT ON THE WAY OUT.** `postgres.js` turns a `date` column
+ *  into a JavaScript `Date` — midnight in whatever zone the process happens to run in —
+ *  and the rule is pure and compares plain days. `::text` gives `YYYY-MM-DD`, the one
+ *  shape `MEMBER_LIST_DAY` describes and the shape the file's own reading produces. */
 export async function listEntries(sql: SqlOrTx, gymId: string): Promise<ListEntry[]> {
   const rows = await sql<
     {
@@ -138,9 +166,27 @@ export async function listEntries(sql: SqlOrTx, gymId: string): Promise<ListEntr
       phone_e164: string | null;
       member_number: string | null;
       status: string | null;
+      membership_type: string | null;
+      joined_on: string | null;
+      ends_on: string | null;
+      ends_on_kind: string | null;
+      payment_status: string | null;
+      date_of_birth: string | null;
+      extra: unknown;
+      hand_edited: string[];
+      former: boolean;
     }[]
   >`
-    SELECT identity_key, full_name, email::text AS email, phone_e164, member_number, status
+    SELECT identity_key, full_name, email::text AS email, phone_e164, member_number, status,
+           membership_type,
+           joined_on::text     AS joined_on,
+           ends_on::text       AS ends_on,
+           ends_on_kind,
+           payment_status,
+           date_of_birth::text AS date_of_birth,
+           extra,
+           hand_edited,
+           (former_at IS NOT NULL) AS former
     FROM gym_member_list_entries
     WHERE gym_id = ${gymId}
     ORDER BY listed_seq`;
@@ -151,7 +197,108 @@ export async function listEntries(sql: SqlOrTx, gymId: string): Promise<ListEntr
     phone: row.phone_e164,
     memberNumber: row.member_number,
     status: row.status,
+    membershipType: row.membership_type,
+    joinedOn: row.joined_on,
+    endsOn: row.ends_on,
+    endsOnKind: parseEndsOnKind(row.ends_on_kind, row.identity_key),
+    paymentStatus: row.payment_status,
+    dateOfBirth: row.date_of_birth,
+    extra: parseExtra(row.extra, row.identity_key),
+    handEdited: parseHandEdited(row.hand_edited, row.identity_key),
+    former: row.former,
   }));
+}
+
+/** The gym's own columns as one record holds them, PARSED — see the schema's own note
+ *  for why this is not ceremony: a document read wrong is an upload writing over a
+ *  column it should have left alone. Loud, and with no cell in the message: the id is
+ *  an identity key, which is a hash. */
+function parseExtra(value: unknown, identityKey: string): Record<string, string> {
+  const parsed = memberListExtraDocumentSchema.safeParse(value);
+  if (!parsed.success) throw new Error(`member-list entry ${identityKey} holds extra fields that no longer parse`);
+  return parsed.data;
+}
+
+/** The field NAMES one record remembers being edited by hand (§11.4), parsed the same
+ *  way and for the same reason: a name nothing recognises would quietly stop guarding
+ *  the field it is about. */
+function parseHandEdited(value: readonly string[], identityKey: string): string[] {
+  const parsed = z.array(memberListEditedFieldSchema).max(MEMBER_LIST_MAX_EDITED_FIELDS).safeParse(value);
+  if (!parsed.success) throw new Error(`member-list entry ${identityKey} holds hand-edited field names that no longer parse`);
+  return parsed.data;
+}
+
+/** "Ends" or "renews", as the gym's own heading said (§11.1). A CHECK on the table
+ *  allows only those two, so anything else is a state the database forbids. */
+function parseEndsOnKind(value: string | null, identityKey: string): "ends" | "renews" | null {
+  if (value === null) return null;
+  if (value === "ends" || value === "renews") return value;
+  throw new Error(`member-list entry ${identityKey} holds an end-or-renewal kind that no longer parses`);
+}
+
+/** ONE OF THE GYM'S OWN COLUMNS, from its catalogue (§11.1). */
+export interface FieldRow {
+  key: string;
+  label: string;
+  ord: number;
+}
+
+/** THE GYM'S OWN COLUMNS, in the gym's own order. At most
+ *  `MEMBER_LIST_MAX_EXTRA_FIELDS` rows, so this is read whole wherever it is wanted. */
+export async function listFields(sql: SqlOrTx, gymId: string): Promise<FieldRow[]> {
+  const rows = await sql<{ key: string; label: string; ord: number }[]>`
+    SELECT key, label, ord
+    FROM gym_member_list_fields
+    WHERE gym_id = ${gymId}
+    ORDER BY ord, key`;
+  return rows.map((row) => ({ key: row.key, label: row.label, ord: row.ord }));
+}
+
+/** THE GYM'S CATALOGUE, GROWN BY WHAT THIS FILE BRINGS — the WRITE half, and the write
+ *  half ALONE (round one, High-1).
+ *
+ *  **IT IS SPLIT FROM THE RULE THAT DECIDES WHAT TO ADD, AND THE SPLIT IS THE FIX.**
+ *  This used to read, grow and INSERT in one call, made before the confirm's two tick
+ *  gates — and a gate `return`s out of `sql.begin`, which COMMITS. So a confirm that
+ *  answered "NOTHING was changed" had already written the file's new headings into the
+ *  gym's catalogue, which is a bounded per-gym resource (40) that nothing ever prunes:
+ *  any member of staff could fill a gym's forty slots with headings from files it never
+ *  applied, by uploading wide files the wrong-file guard refuses — the guard's ORDINARY
+ *  case, not an edge. The reviewer drove it on both gates.
+ *
+ *  Now `listFields` + the pure `growFields` answer the rule BEFORE the gates, and this
+ *  runs after them, immediately before the entries are written and under the same gym
+ *  row lock — so two staff confirming differently-shaped files still cannot both claim
+ *  the last free field.
+ *
+ *  **IT GROWS AND IS NEVER REPLACED.** A whole-list upload is the gym's list of PEOPLE
+ *  as of today, not a statement that the columns it leaves out have stopped existing:
+ *  the cells under them are still on the gym's people and the person's page still shows
+ *  them. So a heading already in the catalogue keeps its key and its place, and only
+ *  headings the gym has never had are appended.
+ *
+ *  **THE CEILING IS APPLIED HERE BECAUSE THIS IS WHERE THE GYM'S ROWS CAN BE COUNTED.**
+ *  The reader caps ONE file at `MEMBER_LIST_MAX_EXTRA_FIELDS` columns; without a cap on
+ *  the catalogue a gym uploading differently-shaped exports would accumulate fields
+ *  without limit, which is an unbounded document on every one of its people and an
+ *  unbounded reply on every page. A CHECK cannot count a jsonb object's keys (it would
+ *  need a set-returning function, and a CHECK may hold no subquery), so the bound is
+ *  here and the documents are only ever written from what this returns.
+ *
+ *  **THE LABEL IS THE SPELLING THE GYM WROTE FIRST**, like a status word (§9.7): a gym
+ *  whose two exports head one column "Locker" and "LOCKER" reads its own first word,
+ *  and `ON CONFLICT DO NOTHING` is what says so rather than a later file winning.
+ *
+ *  It answers the WHOLE catalogue after the growth, so the caller has one list to write
+ *  every document from and there is no second read to disagree with it. */
+export async function addFields(tx: TransactionSql, gymId: string, fresh: readonly FieldRow[]): Promise<void> {
+  if (fresh.length === 0) return;
+  const payload = fresh.map((field) => ({ key: field.key, label: field.label, ord: field.ord }));
+  await tx`
+    INSERT INTO gym_member_list_fields (gym_id, key, label, ord)
+    SELECT ${gymId}, r.key, r.label, r.ord
+    FROM jsonb_to_recordset(${tx.json(payload)}) AS r(key text, label text, ord int)
+    ON CONFLICT (gym_id, key) DO NOTHING`;
 }
 
 /** THE GYM'S OWN APP MEMBERS, as the match reads them (§9.7).
@@ -599,7 +746,16 @@ export async function stagedContacts(
  *  them. **`ORDER BY created_at` did NOT take the first** — one confirm gives every row
  *  the same instant, so the tie fell to a random uuid and this lateral could answer a
  *  different entry from the pure rule about the same member, and a different one again on
- *  the next read. `listed_seq` is what "first" means; see the column's own note. */
+ *  the next read. `listed_seq` is what "first" means; see the column's own note.
+ *
+ *  **A FORMER RECORD MATCHES NOBODY, AND `former_at IS NULL` IN BOTH CHANNELS IS WHERE
+ *  THAT IS ENFORCED** (§11.1, §11.2 of the re-plan's §10.2). Since 3a-v-b a person the
+ *  gym has taken off is kept rather than deleted, so without this every member the gym
+ *  has EVER listed would go on reading "on your list" for ever: the mark beside them,
+ *  the words shown against them, and the tick that says they are already in the app
+ *  would all come off a record the gym believes it has removed. It is the same two
+ *  conditions `reconcile` applies in this process by measuring everything against the
+ *  current records, which is why one function still answers for both. */
 export async function membersAgainstList(sql: SqlOrTx, gymId: string): Promise<MemberAgainstList[]> {
   const rows = await sql<
     {
@@ -613,6 +769,7 @@ export async function membersAgainstList(sql: SqlOrTx, gymId: string): Promise<M
       entry_status: string | null;
       entry_member_number: string | null;
       on_list: boolean;
+      former_entry_id: string | null;
     }[]
   >`
     SELECT m.user_id,
@@ -626,7 +783,8 @@ export async function membersAgainstList(sql: SqlOrTx, gymId: string): Promise<M
            e.id            AS entry_id,
            e.status        AS entry_status,
            e.member_number AS entry_member_number,
-           (e.id IS NOT NULL) AS on_list
+           (e.id IS NOT NULL) AS on_list,
+           f.id            AS former_entry_id
     FROM gym_members m
     JOIN users u ON u.id = m.user_id
     CROSS JOIN LATERAL (
@@ -639,19 +797,44 @@ export async function membersAgainstList(sql: SqlOrTx, gymId: string): Promise<M
       FROM (
         (SELECT x.id, x.status, x.member_number, x.listed_seq, true AS by_email
          FROM gym_member_list_entries x
-         WHERE x.gym_id = m.gym_id AND v.proved AND x.email = u.email
+         WHERE x.gym_id = m.gym_id AND x.former_at IS NULL AND v.proved AND x.email = u.email
          ORDER BY x.listed_seq
          LIMIT 1)
         UNION ALL
         (SELECT x.id, x.status, x.member_number, x.listed_seq, false AS by_email
          FROM gym_member_list_entries x
-         WHERE x.gym_id = m.gym_id AND m.stated_phone_e164 IS NOT NULL AND x.phone_e164 = m.stated_phone_e164
+         WHERE x.gym_id = m.gym_id AND x.former_at IS NULL
+           AND m.stated_phone_e164 IS NOT NULL AND x.phone_e164 = m.stated_phone_e164
          ORDER BY x.listed_seq
          LIMIT 1)
       ) c
       ORDER BY c.by_email DESC, c.listed_seq
       LIMIT 1
     ) e ON true
+    -- THE SAME MATCH OVER THE FORMER RECORDS, ANSWERING ONE QUESTION ONLY: which former
+    -- record belongs to somebody who IS in the app, so the page that shows them can say
+    -- so (round one, Low-2). It is deliberately no part of on_list, entry_status or
+    -- anything the marks, the counts and the chips read -- a former record admits nobody
+    -- and is invited by nothing, which is what the lateral above is for.
+    LEFT JOIN LATERAL (
+      SELECT c.id
+      FROM (
+        (SELECT x.id, x.listed_seq, true AS by_email
+         FROM gym_member_list_entries x
+         WHERE x.gym_id = m.gym_id AND x.former_at IS NOT NULL AND v.proved AND x.email = u.email
+         ORDER BY x.listed_seq
+         LIMIT 1)
+        UNION ALL
+        (SELECT x.id, x.listed_seq, false AS by_email
+         FROM gym_member_list_entries x
+         WHERE x.gym_id = m.gym_id AND x.former_at IS NOT NULL
+           AND m.stated_phone_e164 IS NOT NULL AND x.phone_e164 = m.stated_phone_e164
+         ORDER BY x.listed_seq
+         LIMIT 1)
+      ) c
+      ORDER BY c.by_email DESC, c.listed_seq
+      LIMIT 1
+    ) f ON true
     WHERE m.gym_id = ${gymId}
       AND m.removed_at IS NULL
     ORDER BY m.joined_at, m.user_id`;
@@ -666,6 +849,7 @@ export async function membersAgainstList(sql: SqlOrTx, gymId: string): Promise<M
     entryId: row.entry_id,
     entryStatus: row.entry_status,
     entryMemberNumber: row.entry_member_number,
+    formerEntryId: row.former_entry_id ?? null,
   }));
 }
 
@@ -715,6 +899,10 @@ export async function expireStagedUploads(
 export async function deleteListForGym(tx: TransactionSql, gymId: string): Promise<void> {
   await tx`DELETE FROM gym_member_list_uploads WHERE gym_id = ${gymId}`;
   await tx`DELETE FROM gym_member_list_entries WHERE gym_id = ${gymId}`;
+  // The gym's own column headings (3a-v-b). Nothing points at them once the entries
+  // are gone, and a catalogue outliving the gym it belongs to would be the one row of
+  // this feature the archive sweep left behind.
+  await tx`DELETE FROM gym_member_list_fields WHERE gym_id = ${gymId}`;
   await tx`DELETE FROM gym_member_lists WHERE gym_id = ${gymId}`;
 }
 
@@ -752,7 +940,24 @@ export interface EntryToWrite {
   phone: string | null;
   memberNumber: string | null;
   status: string | null;
+  membershipType: string | null;
+  joinedOn: string | null;
+  endsOn: string | null;
+  endsOnKind: "ends" | "renews" | null;
+  paymentStatus: string | null;
+  dateOfBirth: string | null;
+  /** The gym's own columns for this person, by catalogue key (§11.1). */
+  extra: Record<string, string>;
   identityKey: string;
+}
+
+/** ONE PERSON WHOSE RECORD MOVES — the same payload for a change and for a FORMER
+ *  record coming back, because the two write the same fields and differ in one SET.
+ *
+ *  `clear` is the hand-edit marks this write has done the work of: the field NAMES this
+ *  file really overwrote for this one person (§11.4). Everything else stays marked. */
+export interface EntryChange extends Omit<EntryToWrite, "fullName" | "email" | "phone" | "memberNumber"> {
+  clear: readonly string[];
 }
 
 /** THE PEOPLE A CONFIRM ADDS — ONE STATEMENT, WHATEVER THE FILE HOLDS.
@@ -786,6 +991,16 @@ export async function insertEntries(
     phone_e164: person.phone,
     member_number: person.memberNumber,
     status: person.status,
+    membership_type: person.membershipType,
+    joined_on: person.joinedOn,
+    ends_on: person.endsOn,
+    // A KIND ONLY WHERE THERE IS A DAY FOR IT TO BE ABOUT, which is the table's own
+    // CHECK: "Renews" beside no date is half a sentence, and a file whose heading said
+    // "renews" still has rows with the cell empty.
+    ends_on_kind: person.endsOn === null ? null : person.endsOnKind,
+    payment_status: person.paymentStatus,
+    date_of_birth: person.dateOfBirth,
+    extra: person.extra,
     identity_key: person.identityKey,
     // THE FILE'S OWN ROW ORDER, which `listed_seq` is then stamped in: see the
     // column's own note for the three answers that hang on it.
@@ -793,56 +1008,122 @@ export async function insertEntries(
   }));
   const rows = await tx<{ id: string }[]>`
     INSERT INTO gym_member_list_entries
-      (gym_id, full_name, email, phone_e164, member_number, status, identity_key, source)
+      (gym_id, full_name, email, phone_e164, member_number, status, membership_type,
+       joined_on, ends_on, ends_on_kind, payment_status, date_of_birth, extra,
+       identity_key, source)
     SELECT ${gymId}, r.full_name, r.email, r.phone_e164, r.member_number, r.status,
-           r.identity_key, ${source}
+           r.membership_type, r.joined_on, r.ends_on, r.ends_on_kind, r.payment_status,
+           r.date_of_birth, r.extra, r.identity_key, ${source}
     FROM jsonb_to_recordset(${tx.json(payload)})
       AS r(full_name text, email text, phone_e164 text, member_number text,
-           status text, identity_key text, ord int)
+           status text, membership_type text, joined_on date, ends_on date,
+           ends_on_kind text, payment_status text, date_of_birth date, extra jsonb,
+           identity_key text, ord int)
     ORDER BY r.ord
     ON CONFLICT (gym_id, identity_key) DO NOTHING
     RETURNING id`;
   return rows.length;
 }
 
-/** THE PEOPLE WHOSE STATUS WORD MOVED — one statement, in place.
+/** THE PEOPLE WHOSE RECORDS MOVE — one statement, in place, and the same statement for
+ *  a change and for a FORMER record coming back (§11.1, §11.4).
  *
- *  **ONLY THE STATUS, AND THAT IS THE WHOLE OF `changed`** (§9.7). The identity key
- *  is built from the name, address, phone and member number, so two entries sharing
- *  a key cannot differ in any of them: a person whose NAME changed is honestly a new
- *  person and somebody gone, which §9.5 settled and costs nothing because nothing
- *  durable hangs on the key. Writing the other four here would be four columns that
- *  cannot have changed, and one day one of them would be written from the wrong row. */
-export async function updateEntryStatuses(
+ *  **THE FOUR FIELDS BEHIND THE IDENTITY KEY ARE STILL NOT WRITTEN** (§9.7). The key is
+ *  built from the name, address, phone and member number, so two entries sharing a key
+ *  cannot differ in any of them: a person whose NAME changed is honestly a new person
+ *  and somebody gone. Writing them here would be four columns that cannot have changed,
+ *  and one day one of them would be written from the wrong row.
+ *
+ *  **A FIELD THE FILE DOES NOT CARRY IS LEFT ALONE, AND THE `carries` FLAGS ARE HOW.**
+ *  Each is a boolean PARAMETER inside a CASE, not a SET list built as text: a gym
+ *  uploading a narrower export — name and address only — must not have its membership
+ *  words, its dates and its own columns emptied off every one of its people, and the
+ *  columns a file legitimately leaves out are exactly the ones §11.2 refuses to keep.
+ *
+ *  **THE GYM'S OWN COLUMNS ARE MERGED WITH `||` AND NEVER REPLACED.** `e.extra ||
+ *  r.extra` writes every key this file carries, blank cell and all, and leaves every
+ *  key it does not mention where it was — which is the same rule as the standard
+ *  fields, expressed in the one operator jsonb has for it.
+ *
+ *  **`former_at` IS CLEARED BY A PARAMETER TOO**, so reviving a record and changing one
+ *  are one statement. A change sets it to NULL where it is already NULL, which costs
+ *  nothing and cannot be the wrong answer; a revive is the only caller that means it.
+ *
+ *  **AND THE HAND-EDIT MARKS THIS WRITE HAS ANSWERED ARE REMOVED, PER PERSON.** Only
+ *  the names this file really overwrote for that one record: a mark on a field the file
+ *  left alone, or agrees with, is owed the same question next month (§11.4). */
+export async function updateEntries(
   tx: TransactionSql,
   gymId: string,
-  changes: readonly { identityKey: string; status: string | null }[],
+  changes: readonly EntryChange[],
+  carries: CarriedFields,
+  revive: boolean,
 ): Promise<number> {
   if (changes.length === 0) return 0;
-  const payload = changes.map((change) => ({ identity_key: change.identityKey, status: change.status }));
+  const payload = changes.map((change) => ({
+    identity_key: change.identityKey,
+    status: change.status,
+    membership_type: change.membershipType,
+    joined_on: change.joinedOn,
+    ends_on: change.endsOn,
+    ends_on_kind: change.endsOn === null ? null : change.endsOnKind,
+    payment_status: change.paymentStatus,
+    date_of_birth: change.dateOfBirth,
+    extra: change.extra,
+    clear: [...change.clear],
+  }));
   const rows = await tx<{ id: string }[]>`
     UPDATE gym_member_list_entries e
-    SET status = r.status
-    FROM jsonb_to_recordset(${tx.json(payload)}) AS r(identity_key text, status text)
+    SET status         = CASE WHEN ${carries.status} THEN r.status ELSE e.status END,
+        membership_type = CASE WHEN ${carries.membershipType} THEN r.membership_type ELSE e.membership_type END,
+        joined_on      = CASE WHEN ${carries.joinedOn} THEN r.joined_on ELSE e.joined_on END,
+        ends_on        = CASE WHEN ${carries.endsOn} THEN r.ends_on ELSE e.ends_on END,
+        ends_on_kind   = CASE WHEN ${carries.endsOn} THEN r.ends_on_kind ELSE e.ends_on_kind END,
+        payment_status = CASE WHEN ${carries.paymentStatus} THEN r.payment_status ELSE e.payment_status END,
+        date_of_birth  = CASE WHEN ${carries.dateOfBirth} THEN r.date_of_birth ELSE e.date_of_birth END,
+        extra          = e.extra || r.extra,
+        former_at      = CASE WHEN ${revive} THEN NULL ELSE e.former_at END,
+        hand_edited    = (
+          SELECT coalesce(array_agg(name), '{}'::text[])
+          FROM unnest(e.hand_edited) AS name
+          WHERE name <> ALL(r.clear)
+        )
+    FROM jsonb_to_recordset(${tx.json(payload)})
+      AS r(identity_key text, status text, membership_type text, joined_on date,
+           ends_on date, ends_on_kind text, payment_status text, date_of_birth date,
+           extra jsonb, clear text[])
     WHERE e.gym_id = ${gymId} AND e.identity_key = r.identity_key
     RETURNING e.id`;
   return rows.length;
 }
 
-/** THE PEOPLE COMING OFF — one statement, keys only.
+/** THE PEOPLE COMING OFF — marked FORMER with the instant they came off, never deleted
+ *  (§11.1). One statement, keys only.
+ *
+ *  **NOBODY IS DELETED FROM A GYM'S LIST ANY MORE**, which reverses §9.2 rule 2: the
+ *  visits, the reports and a returning member's history all hang off this row, so a
+ *  management app keeps it. The gym can still delete a former record for good.
+ *
+ *  **`former_at IS NULL` IS IN THE `WHERE` AND IT IS LOAD-BEARING.** The rule never
+ *  hands an already-former person here — they are not on the list to come off it — and
+ *  if anything ever did, this would write a fresh date over the day they really left.
+ *  It also makes the statement safe to run twice, which is what the module asks of
+ *  every write inside the confirm.
  *
  *  An array of keys rather than a document because there is nothing to carry but the
  *  key, and `= ANY($1)` is one parameter like the document is: the eight-thousand
  *  ceiling above is about placeholders, not about how many values one array holds. */
-export async function deleteEntries(
+export async function markEntriesFormer(
   tx: TransactionSql,
   gymId: string,
   identityKeys: readonly string[],
+  at: Date,
 ): Promise<number> {
   if (identityKeys.length === 0) return 0;
   const rows = await tx<{ id: string }[]>`
-    DELETE FROM gym_member_list_entries
-    WHERE gym_id = ${gymId} AND identity_key = ANY(${identityKeys}::text[])
+    UPDATE gym_member_list_entries
+    SET former_at = ${at}
+    WHERE gym_id = ${gymId} AND identity_key = ANY(${identityKeys}::text[]) AND former_at IS NULL
     RETURNING id`;
   return rows.length;
 }
@@ -939,9 +1220,17 @@ export async function markUploadConfirmed(
 /** The chips AND the whole-list numbers, from ONE statement. The chips are capped
  *  (`MEMBER_LIST_STATUS_CHIPS_MAX`); the totals never are. */
 export interface StatusCounts {
-  totals: { entries: number; inApp: number; canBeInvited: number; noEmail: number };
+  totals: { entries: number; inApp: number; canBeInvited: number; noEmail: number; former: number };
+  /** The gym's own words, each kind capped at `MEMBER_LIST_STATUS_CHIPS_MAX` (§11.1). */
   statuses: StatusCountRow[];
+  membershipTypes: StatusCountRow[];
+  paymentStatuses: StatusCountRow[];
 }
+
+/** WHICH OF THE THREE KINDS OF THE GYM'S OWN WORD A CHIP IS COUNTING (§11.1). One
+ *  statement answers all three and labels each group with its kind, so the three sets of
+ *  chips and the header's numbers come out of one pass over the gym's list. */
+type WordKind = "status" | "membership_type" | "payment_status";
 
 export interface StatusCountRow {
   label: string;
@@ -989,6 +1278,8 @@ export async function listStatusCounts(
       t_in_app: number;
       t_can_be_invited: number;
       t_no_email: number;
+      t_former: number;
+      kind: string | null;
       label: string | null;
       count: number | null;
       in_app: number | null;
@@ -996,68 +1287,122 @@ export async function listStatusCounts(
       no_email: number | null;
     }[]
   >`
-    WITH grouped AS (
-      SELECT (array_agg(e.status ORDER BY e.listed_seq))[1] AS label,
-             count(*)::int AS count,
-             count(*) FILTER (WHERE e.id = ANY(${inAppEntryIds}::uuid[]))::int AS in_app,
-             count(*) FILTER (
-               WHERE e.id <> ALL(${inAppEntryIds}::uuid[]) AND e.email IS NOT NULL)::int AS can_be_invited,
-             count(*) FILTER (WHERE e.email IS NULL)::int AS no_email,
-             min(e.listed_seq) AS first_seq
+    -- MATERIALIZED, AND THAT ONE WORD IS WHY THREE KINDS OF CHIP COST ONE PASS. Three
+    -- GROUP BYs over the same rows would otherwise be three scans of a gym's whole
+    -- list; this reads it once and aggregates the result three ways.
+    WITH mine AS MATERIALIZED (
+      SELECT e.status, e.membership_type, e.payment_status, e.listed_seq,
+             (e.id = ANY(${inAppEntryIds}::uuid[])) AS in_app,
+             (e.id <> ALL(${inAppEntryIds}::uuid[]) AND e.email IS NOT NULL) AS can_be_invited,
+             (e.email IS NULL) AS no_email
       FROM gym_member_list_entries e
-      WHERE e.gym_id = ${gymId}
-      GROUP BY lower(coalesce(e.status, ''))
+      -- THE LIST AS IT STANDS. A former record is somebody the gym has taken off, so
+      -- it is in no chip and no count here: a chip is what staff click to act on
+      -- people, and one whose number held an ex-member would offer them an invite
+      -- (§11.1).
+      WHERE e.gym_id = ${gymId} AND e.former_at IS NULL
     ),
-    -- THE WHOLE LIST, COUNTED BEFORE THE CHIPS ARE CUT. The chips have a ceiling and
-    -- these numbers must not: summing the CAPPED rows made a gym past the ceiling
-    -- read "200 people" over a list of 205, and left canBeInvited short by the
+    -- THE WHOLE LIST, COUNTED FROM THE ROWS AND NEVER FROM THE CHIPS. The chips have a
+    -- ceiling and these numbers must not: summing the CAPPED rows made a gym past the
+    -- ceiling read "200 people" over a list of 205, and left canBeInvited short by the
     -- truncated groups (review of PR #88, High-3). One statement still answers both,
-    -- which is the point — two would be two answers to one question.
+    -- which is the point: two would be two answers to one question.
     totals AS (
-      SELECT coalesce(sum(count), 0)::int AS t_entries,
-             coalesce(sum(in_app), 0)::int AS t_in_app,
-             coalesce(sum(can_be_invited), 0)::int AS t_can_be_invited,
-             coalesce(sum(no_email), 0)::int AS t_no_email
-      FROM grouped
+      SELECT count(*)::int AS t_entries,
+             count(*) FILTER (WHERE mine.in_app)::int AS t_in_app,
+             count(*) FILTER (WHERE mine.can_be_invited)::int AS t_can_be_invited,
+             count(*) FILTER (WHERE mine.no_email)::int AS t_no_email
+      FROM mine
+    ),
+    -- The people the gym has taken off. Its own line, because it is not part of any
+    -- number above it (§11.1) and staff need to know the records are there.
+    former AS (
+      SELECT count(*)::int AS t_former
+      FROM gym_member_list_entries e
+      WHERE e.gym_id = ${gymId} AND e.former_at IS NOT NULL
+    ),
+    -- THREE KINDS OF THE GYM'S OWN WORD, ONE SHAPE, ONE FOLD. lower(coalesce(x,'')) is
+    -- the rule's own foldWord in SQL for each of them — a stored word is already trimmed
+    -- with its spaces collapsed (cleanStatus), so lower-casing is the whole of the
+    -- difference, and a NULL and an empty one are one group here as they are one word
+    -- there. The label is the spelling the list wrote FIRST (§9.5's rule for the preview,
+    -- applied to the kept list), which listed_seq is what makes answerable.
+    grouped AS (
+      SELECT 'status' AS kind,
+             (array_agg(mine.status ORDER BY mine.listed_seq))[1] AS label,
+             count(*)::int AS count,
+             count(*) FILTER (WHERE mine.in_app)::int AS in_app,
+             count(*) FILTER (WHERE mine.can_be_invited)::int AS can_be_invited,
+             count(*) FILTER (WHERE mine.no_email)::int AS no_email,
+             min(mine.listed_seq) AS first_seq
+      FROM mine
+      GROUP BY lower(coalesce(mine.status, ''))
+      UNION ALL
+      SELECT 'membership_type' AS kind,
+             (array_agg(mine.membership_type ORDER BY mine.listed_seq))[1] AS label,
+             count(*)::int AS count,
+             count(*) FILTER (WHERE mine.in_app)::int AS in_app,
+             count(*) FILTER (WHERE mine.can_be_invited)::int AS can_be_invited,
+             count(*) FILTER (WHERE mine.no_email)::int AS no_email,
+             min(mine.listed_seq) AS first_seq
+      FROM mine
+      GROUP BY lower(coalesce(mine.membership_type, ''))
+      UNION ALL
+      SELECT 'payment_status' AS kind,
+             (array_agg(mine.payment_status ORDER BY mine.listed_seq))[1] AS label,
+             count(*)::int AS count,
+             count(*) FILTER (WHERE mine.in_app)::int AS in_app,
+             count(*) FILTER (WHERE mine.can_be_invited)::int AS can_be_invited,
+             count(*) FILTER (WHERE mine.no_email)::int AS no_email,
+             min(mine.listed_seq) AS first_seq
+      FROM mine
+      GROUP BY lower(coalesce(mine.payment_status, ''))
+    ),
+    -- EACH KIND CAPPED ON ITS OWN, so a gym with two hundred status words does not
+    -- lose its membership chips to them. The cut is by the list's own order, so what a
+    -- gym past a ceiling loses is its rarest words and never a count of PEOPLE — the
+    -- totals above are taken from the rows, before any of this.
+    capped AS (
+      SELECT r.kind, r.label, r.count, r.in_app, r.can_be_invited, r.no_email, r.first_seq
+      FROM (
+        SELECT g.*, row_number() OVER (PARTITION BY g.kind ORDER BY g.first_seq) AS rn
+        FROM grouped g
+      ) r
+      WHERE r.rn <= ${MEMBER_LIST_STATUS_CHIPS_MAX}
     )
-    SELECT t.t_entries, t.t_in_app, t.t_can_be_invited, t.t_no_email,
-           g.label, g.count, g.in_app, g.can_be_invited, g.no_email
+    SELECT t.t_entries, t.t_in_app, t.t_can_be_invited, t.t_no_email, f.t_former,
+           c.kind, c.label, c.count, c.in_app, c.can_be_invited, c.no_email
     FROM totals t
-    LEFT JOIN LATERAL (
-      SELECT * FROM grouped
-    -- THE GROUPS COME BACK IN THE LIST'S OWN ORDER, which is one column now and
-    -- needs no tie-break at all: listed_seq is unique, where created_at is
-    -- shared by every row one confirm writes and left the order to a random uuid.
-      ORDER BY grouped.first_seq
-      -- The reply's own ceiling, so a gym that has accumulated status words across
-      -- many add-uploads cannot grow this answer without bound (see the constant's
-      -- note). The totals above are taken before it.
-      LIMIT ${MEMBER_LIST_STATUS_CHIPS_MAX}
-    ) g ON true`;
+    CROSS JOIN former f
+    -- A GYM WITH NO ENTRIES STILL ANSWERS ONE ROW, which is what lets an empty list
+    -- carry its zeroes: totals and former are one row each whatever the list holds.
+    LEFT JOIN capped c ON true
+    ORDER BY c.kind, c.first_seq`;
   const first = rows[0];
   const totals = {
     entries: first?.t_entries ?? 0,
     inApp: first?.t_in_app ?? 0,
     canBeInvited: first?.t_can_be_invited ?? 0,
     noEmail: first?.t_no_email ?? 0,
+    former: first?.t_former ?? 0,
   };
-  // A GYM WITH NO ENTRIES STILL ANSWERS ONE ROW, because the totals are on the
-  // outside — that is what lets an empty list carry its zeroes. `count` is null
-  // there and never null for a real group, which is the test for it: `label` is
-  // not, since the people with NO status are a real group whose label is null.
-  const statuses = rows
-    .filter((row) => row.count !== null)
-    .map((row) => ({
-      // "" is the people with no status at all — the same empty label the entries
-      // filter reads as "no status" (§9.9), and the same one the preview's own
-      // breakdown uses.
-      label: row.label ?? "",
-      count: row.count ?? 0,
-      inApp: row.in_app ?? 0,
-      canBeInvited: row.can_be_invited ?? 0,
-      noEmail: row.no_email ?? 0,
-    }));
-  return { totals, statuses };
+  // `count` is null on the one all-null row an empty list answers with, and never null
+  // for a real group — which is the test for it: `label` is not, since the people with
+  // NO word of that kind are a real group whose label is null.
+  const of = (kind: WordKind): StatusCountRow[] =>
+    rows
+      .filter((row) => row.count !== null && row.kind === kind)
+      .map((row) => ({
+        // "" is the people with no word of this kind at all — the same empty label the
+        // entries filter reads as "none" (§9.9, §11.5), and the same one the preview's
+        // own breakdown uses.
+        label: row.label ?? "",
+        count: row.count ?? 0,
+        inApp: row.in_app ?? 0,
+        canBeInvited: row.can_be_invited ?? 0,
+        noEmail: row.no_email ?? 0,
+      }));
+  return { totals, statuses: of("status"), membershipTypes: of("membership_type"), paymentStatuses: of("payment_status") };
 }
 
 /** One person on the kept list, as a page of it shows them. */
@@ -1068,6 +1413,13 @@ export interface EntryRow {
   phone: string | null;
   memberNumber: string | null;
   status: string | null;
+  membershipType: string | null;
+  joinedOn: string | null;
+  endsOn: string | null;
+  endsOnKind: "ends" | "renews" | null;
+  paymentStatus: string | null;
+  dateOfBirth: string | null;
+  formerAt: Date | null;
   source: MemberListEntrySource;
   inApp: boolean;
 }
@@ -1077,8 +1429,15 @@ export interface EntriesPageInput {
   inAppEntryIds: readonly string[];
   /** Null is "everybody"; an empty list would be "nobody" and is not a filter
    *  anybody can ask for, which is why the two are told apart rather than both
-   *  arriving as `[]`. Each word is already folded by the caller. */
+   *  arriving as `[]`. Each word is already folded by the caller.
+   *
+   *  The three read the three kinds of the gym's own word (§11.5) and are ANDed: a
+   *  gym asking for its Gold members who are overdue means both. */
   statuses: readonly string[] | null;
+  membershipTypes: readonly string[] | null;
+  paymentStatuses: readonly string[] | null;
+  /** Which records to cut the page from (§11.5). `current` is the default everywhere. */
+  records: MemberListRecords;
   filter: "all" | "in_app" | "not_in_app";
   /** Already escaped for LIKE by the caller, or null. */
   like: string | null;
@@ -1109,6 +1468,8 @@ export async function entriesPage(
   input: EntriesPageInput,
 ): Promise<{ total: number; entries: EntryRow[] }> {
   const statuses = input.statuses === null ? null : [...input.statuses];
+  const membershipTypes = input.membershipTypes === null ? null : [...input.membershipTypes];
+  const paymentStatuses = input.paymentStatuses === null ? null : [...input.paymentStatuses];
   const rows = await sql<
     {
       total: number;
@@ -1118,18 +1479,42 @@ export async function entriesPage(
       phone_e164: string | null;
       member_number: string | null;
       status: string | null;
+      membership_type: string | null;
+      joined_on: string | null;
+      ends_on: string | null;
+      ends_on_kind: string | null;
+      payment_status: string | null;
+      date_of_birth: string | null;
+      former_at: Date | null;
       source: string | null;
       in_app: boolean | null;
     }[]
   >`
     WITH filtered AS (
       SELECT e.id, e.full_name, e.email::text AS email, e.phone_e164, e.member_number,
-             e.status, e.source,
+             e.status, e.membership_type,
+             e.joined_on::text     AS joined_on,
+             e.ends_on::text       AS ends_on,
+             e.ends_on_kind,
+             e.payment_status,
+             e.date_of_birth::text AS date_of_birth,
+             e.former_at, e.source,
              (e.id = ANY(${input.inAppEntryIds}::uuid[])) AS in_app
       FROM gym_member_list_entries e
       WHERE e.gym_id = ${input.gymId}
+        -- CURRENT RECORDS UNLESS THE FORMER ONES WERE ASKED FOR BY NAME (§11.5). The
+        -- default is what every screen means by the list; a former record appearing in
+        -- a page nobody asked for is somebody the gym believes it has removed standing
+        -- among its members.
+        AND (${input.records}::text = 'all'
+             OR (${input.records}::text = 'current' AND e.former_at IS NULL)
+             OR (${input.records}::text = 'former' AND e.former_at IS NOT NULL))
         AND (${statuses}::text[] IS NULL
              OR lower(coalesce(e.status, '')) = ANY(${statuses}::text[]))
+        AND (${membershipTypes}::text[] IS NULL
+             OR lower(coalesce(e.membership_type, '')) = ANY(${membershipTypes}::text[]))
+        AND (${paymentStatuses}::text[] IS NULL
+             OR lower(coalesce(e.payment_status, '')) = ANY(${paymentStatuses}::text[]))
         AND (${input.like}::text IS NULL
              OR e.full_name ILIKE ${input.like}::text
              OR e.email::text ILIKE ${input.like}::text
@@ -1143,7 +1528,8 @@ export async function entriesPage(
     ),
     totals AS (SELECT count(*)::int AS total FROM filtered)
     SELECT t.total, f.id, f.full_name, f.email, f.phone_e164, f.member_number,
-           f.status, f.source, f.in_app
+           f.status, f.membership_type, f.joined_on, f.ends_on, f.ends_on_kind,
+           f.payment_status, f.date_of_birth, f.former_at, f.source, f.in_app
     FROM totals t
     LEFT JOIN LATERAL (
       SELECT *
@@ -1169,6 +1555,13 @@ export async function entriesPage(
       phone: row.phone_e164,
       memberNumber: row.member_number,
       status: row.status,
+      membershipType: row.membership_type,
+      joinedOn: row.joined_on,
+      endsOn: row.ends_on,
+      endsOnKind: parseEndsOnKind(row.ends_on_kind, row.id),
+      paymentStatus: row.payment_status,
+      dateOfBirth: row.date_of_birth,
+      formerAt: row.former_at,
       source: source.data,
       inApp: row.in_app ?? false,
     });

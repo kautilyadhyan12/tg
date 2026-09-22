@@ -30,6 +30,7 @@ import {
   MEMBER_FILE_MAX_BYTES,
   MEMBER_FILE_PARSE_TIMEOUT_MS,
   MEMBER_LIST_ENTRIES_PAGE,
+  MEMBER_LIST_MAX_EXTRA_FIELDS,
   MEMBER_LIST_PARSES_PER_GYM,
   MEMBER_LIST_ROWS_PAGE,
   MEMBER_LIST_UPLOAD_GONE_WORDS,
@@ -42,6 +43,7 @@ import {
   type MemberListEntriesPage,
   type MemberListEntriesQuery,
   type MemberListGuard,
+  type MemberListHandEdits,
   type MemberListMapping,
   type MemberListMode,
   type MemberListPreview,
@@ -62,8 +64,17 @@ import { insertAudit } from "../repo.js";
 import * as orgRepo from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { decodeEntryCursor, encodeEntryCursor } from "./cursor.js";
+import { extraForWriting, growFields, keptFields, wordForWriting, type FieldSlot } from "./extraFields.js";
 import { understandMemberFile } from "./parseMemberFile.js";
-import { inviteCounts, membersAgainstNewList, reconcile, type Reconciled, type ReconciledPerson } from "./reconcile.js";
+import {
+  inviteCounts,
+  membersAgainstNewList,
+  reconcile,
+  type CarriedFields,
+  type KeptField,
+  type Reconciled,
+  type ReconciledPerson,
+} from "./reconcile.js";
 import * as repo from "./repo.js";
 
 export interface MemberListDeps {
@@ -151,16 +162,24 @@ async function measure(
   understanding: MemberListUnderstanding,
   mode: MemberListMode,
   state: repo.ListState | null,
-): Promise<{ measured: Measured; reconciled: Reconciled }> {
+  /** The gym's catalogue as it WILL be after this file — the confirm's own, grown under
+   *  the lock; the preview's, worked out from the same pure rule. Both so that only the
+   *  columns this gym really keeps are compared, and under the labels it knows them by. */
+  catalogue: readonly FieldSlot[],
+): Promise<{ measured: Measured; reconciled: Reconciled; kept: KeptField[]; over: number }> {
   const [entries, members, seatCap] = await Promise.all([
     repo.listEntries(sql, gymId),
     repo.listMembers(sql, gymId),
     orgRepo.gymSeatCap(sql, gymId),
   ]);
+  const { kept, over } = keptFields(catalogue, understanding.extraFields);
   const reconciled = reconcile({
     rows: understanding.rows,
     entries,
     members,
+    keptFields: kept,
+    carries: carriedFields(understanding.mapping),
+    endsOnKind: understanding.endsOnKind,
     mode,
     hasList: state !== null,
   });
@@ -168,6 +187,9 @@ async function measure(
     file: understanding.counts,
     list: reconciled.counts,
     statuses: reconciled.statuses,
+    fieldChanges: reconciled.fieldChanges,
+    extraChanges: reconciled.extraChanges,
+    handEdits: reconciled.handEdits,
     members: reconciled.members,
     guard: reconciled.guard,
     needsMapping: understanding.needsMapping,
@@ -188,7 +210,34 @@ async function measure(
   return {
     measured: { counts, seat: counts.seat, lastFileSha256: state?.lastFileSha256 ?? null },
     reconciled,
+    kept,
+    over,
   };
+}
+
+/** WHICH STANDARD FIELDS THIS FILE CARRIES AT ALL (§11.4), read off the mapping that
+ *  was actually used — staff's own, where they sent one, and the server's guess
+ *  otherwise. A column that was guessed and then disbelieved is not in the mapping, so
+ *  it is not carried, which is the answer we want: the file said nothing we trust about
+ *  that field.
+ *
+ *  The four behind the identity key are not here, because two entries sharing a key
+ *  cannot differ in them and nothing ever writes them on a change. */
+const carriedFields = (mapping: MemberListMapping): CarriedFields => ({
+  status: mapping.status !== null,
+  membershipType: mapping.membershipType !== null,
+  joinedOn: mapping.joinedOn !== null,
+  endsOn: mapping.endsOn !== null,
+  paymentStatus: mapping.paymentStatus !== null,
+  dateOfBirth: mapping.dateOfBirth !== null,
+});
+
+/** The warning a gym at its field ceiling reads, appended where the gym's own catalogue
+ *  can be seen — the request thread, never the file reader, which has no database.
+ *  Nothing else about the file changes: the columns it CAN keep are kept as usual. */
+function withGymFieldsFull(understanding: MemberListUnderstanding, over: number): MemberListUnderstanding {
+  if (over <= 0) return understanding;
+  return { ...understanding, warnings: [...understanding.warnings, { code: "gym_fields_full", columns: over }] };
 }
 
 /** The grouping, as it is stored beside the rows (`memberListGroupsSchema`): a place
@@ -357,6 +406,9 @@ function assemble(input: {
     file: measured.counts.file,
     list: measured.counts.list,
     statuses: measured.counts.statuses,
+    fieldChanges: measured.counts.fieldChanges,
+    extraChanges: measured.counts.extraChanges,
+    handEdits: measured.counts.handEdits,
     members: measured.counts.members,
     skipped: shell.skipped,
     warnings: shell.warnings,
@@ -419,12 +471,18 @@ export async function previewUpload(
 
   const fileSha256 = createHash("sha256").update(bytes).digest("hex");
   const expiresAt = new Date(deps.now().getTime() + MEMBER_LIST_UPLOAD_TTL_MINUTES * 60_000);
+  // THE GYM'S OWN CATALOGUE AS IT WOULD BE AFTER THIS FILE, by the same pure rule the
+  // confirm applies under the lock (`growFields`). It is what decides which of the
+  // file's own columns are compared and which are over the gym's ceiling — asked here
+  // so staff are told before they confirm, and asked again there because a catalogue
+  // read an hour ago is not the one being written to.
+  const catalogue = growFields(await repo.listFields(deps.sql, gymId), understood.extraFields, MEMBER_LIST_MAX_EXTRA_FIELDS).catalogue;
   // The rule drops any row whose person is on an earlier one, and the grouping
   // points into what it KEPT — so the rows stored are the rule's own, never the
   // reader's, or a stored place would name somebody who was never on the list.
-  const { measured, reconciled } = await measure(deps.sql, gymId, understood, input.mode, state);
+  const { measured, reconciled, over } = await measure(deps.sql, gymId, understood, input.mode, state, catalogue);
   const file: MemberListStagedFile = {
-    understanding: { ...understood, rows: reconciled.rows },
+    understanding: { ...withGymFieldsFull(understood, over), rows: reconciled.rows },
     groups: groupsOf(reconciled),
   };
   const body = assemble({ mode: input.mode, expiresAt, fileSha256, shell: shellOf(file), measured });
@@ -542,7 +600,10 @@ async function readStaged(deps: MemberListDeps, gymId: string, upload: repo.Uplo
   // longer exists and the whole comparison runs again over the stored rows.
   const file = await repo.stagedFile(deps.sql, gymId, upload.id);
   if (file === null) throw expired();
-  const { measured, reconciled } = await measure(deps.sql, gymId, file.understanding, upload.mode, state);
+  // The gym's catalogue as it WOULD be after this file, by the same pure rule the stage
+  // and the confirm use: the file's columns are compared only where the gym keeps them.
+  const catalogue = growFields(await repo.listFields(deps.sql, gymId), file.understanding.extraFields, MEMBER_LIST_MAX_EXTRA_FIELDS).catalogue;
+  const { measured, reconciled } = await measure(deps.sql, gymId, file.understanding, upload.mode, state, catalogue);
   const groups = groupsOf(reconciled);
   const side = await freshMemberSide(deps, gymId, upload, groups, measured.counts, state);
   if (side === null) throw expired();
@@ -680,6 +741,10 @@ export type ConfirmAnswer =
   | { kind: "confirmed"; confirmed: MemberListConfirmed }
   | { kind: "list_changed"; baseVersion: number; version: number }
   | { kind: "large_change"; guard: MemberListGuard }
+  /** This file would write over details staff typed in, and nothing was applied
+   *  (§11.4). The field NAMES so a screen can ask the right question; never a value and
+   *  never a person. */
+  | { kind: "hand_edits"; handEdits: MemberListHandEdits }
   /** The limiter has answered 429 itself and the handler is finished. */
   | { kind: "rate_limited" };
 
@@ -713,16 +778,77 @@ function storedAnswer(upload: repo.UploadRow, version: number): MemberListConfir
   };
 }
 
-/** A person of the file as the list stores them. The identity key is the rule's, not
- *  built again here: two ways of deciding who one person is would be two lists. */
-const toEntry = (person: ReconciledPerson): repo.EntryToWrite => ({
-  fullName: person.fullName,
-  email: person.email,
-  phone: person.phone,
-  memberNumber: person.memberNumber,
-  status: person.status,
-  identityKey: person.identityKey,
-});
+/** WHAT THE CONFIRM IS ABOUT TO WRITE, and what §11.2 took out of it on the way.
+ *
+ *  The counts are counts: how many cells and words were dropped here because they are
+ *  shaped like a payment card. Never a cell, never a person — what is logged is the
+ *  number (§9.9). */
+interface ToWrite {
+  add: repo.EntryToWrite[];
+  revive: repo.EntryChange[];
+  change: repo.EntryChange[];
+  cardsDropped: number;
+}
+
+/** THE PEOPLE OF THE FILE AS THE LIST STORES THEM — built once, for all three
+ *  statements, from the rows the rule kept.
+ *
+ *  **THE ROW IS THE SOURCE AND THE PERSON IS THE POINTER.** A `ReconciledPerson` is what
+ *  a screen shows — a name, an address, a status — and a record is ten fields and the
+ *  gym's own columns beside them. Carrying all of that on ten thousand people twice over
+ *  would double what the preview already costs, so the wider values are read out of
+ *  `reconciled.rows` through the `at` the rule put there. The identity key is still the
+ *  rule's and is never built again: two ways of deciding who one person is would be two
+ *  lists.
+ *
+ *  **§11.2'S CELL RULE RUNS AGAIN HERE, AND THIS IS THE FIRST JOB THAT COULD NEED IT.**
+ *  See `extraForWriting`'s own note: the reader drops a card-shaped cell before any row
+ *  crosses to this thread, and a staged upload is still a document in the database that
+ *  outlives a deploy and can be reached by a hand-run statement. The boundary that
+ *  WRITES checks what it writes. */
+function toWrite(reconciled: Reconciled, kept: readonly KeptField[], endsOnKind: "ends" | "renews" | null): ToWrite {
+  let cardsDropped = 0;
+  const rowAt = (person: ReconciledPerson): (typeof reconciled.rows)[number] => {
+    const row = person.at === null ? undefined : reconciled.rows[person.at];
+    // Everybody the confirm writes came out of a row, so the place is there. `?? rows[0]`
+    // would quietly write the first person of the file into somebody else's record, so a
+    // missing one is a fault of this module and says so.
+    if (row === undefined) raise(`a person the confirm would write has no place in the file (row ${String(person.row)})`);
+    return row;
+  };
+  /** The five words and three days a record keeps, with the card rule on the words. */
+  const valuesOf = (person: ReconciledPerson) => {
+    const row = rowAt(person);
+    const status = wordForWriting(row.status);
+    const membershipType = wordForWriting(row.membershipType);
+    const paymentStatus = wordForWriting(row.paymentStatus);
+    const extra = extraForWriting(row.extra, kept);
+    cardsDropped += extra.cardsDropped + (status.card ? 1 : 0) + (membershipType.card ? 1 : 0) + (paymentStatus.card ? 1 : 0);
+    return {
+      status: status.value,
+      membershipType: membershipType.value,
+      joinedOn: row.joinedOn,
+      endsOn: row.endsOn,
+      endsOnKind,
+      paymentStatus: paymentStatus.value,
+      dateOfBirth: row.dateOfBirth,
+      extra: extra.document,
+      identityKey: person.identityKey,
+    };
+  };
+  const add = reconciled.added.map((person) => ({
+    ...valuesOf(person),
+    fullName: person.fullName,
+    email: person.email,
+    phone: person.phone,
+    memberNumber: person.memberNumber,
+  }));
+  // A FIELD THE FILE DOES NOT CARRY IS NOT WRITTEN AT ALL, and for a fresh INSERT that
+  // means the column is left NULL rather than filled from a row that says nothing — the
+  // `carries` flags do it for an update, and here there is nothing to preserve.
+  const asChange = (person: ReconciledPerson): repo.EntryChange => ({ ...valuesOf(person), clear: person.moved });
+  return { add, revive: reconciled.returning.map(asChange), change: reconciled.changed.map(asChange), cardsDropped };
+}
 
 /** APPLY A STAGED UPLOAD TO THE GYM'S LIST — the one transaction that writes it.
  *
@@ -739,7 +865,7 @@ export async function confirmUpload(
   userId: string,
   gymId: string,
   uploadId: string,
-  input: { acknowledgeLargeChange: boolean },
+  input: { acknowledgeLargeChange: boolean; acknowledgeHandEdits: boolean },
   limit: () => Promise<boolean>,
 ): Promise<ConfirmAnswer> {
   await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
@@ -779,7 +905,21 @@ export async function confirmUpload(
     // moved, the gym's own MEMBERS have no version at all — somebody joined, proved
     // an address or left while the preview was on the screen, and who is "already in
     // the app" moved with them (review of PR #87, High-1).
-    const { measured, reconciled } = await measure(tx, gymId, file.understanding, upload.mode, before);
+    // THE GYM'S OWN CATALOGUE AS IT WOULD BE, WORKED OUT BEFORE THE RULE AND WRITTEN
+    // AFTER THE GATES (round one, High-1). Which of the file's columns this gym keeps is
+    // what the rule compares, so the answer has to be known here — but a gate below
+    // `return`s out of `sql.begin`, which COMMITS, so a refused confirm that had already
+    // INSERTed would leave the file's headings in a catalogue the gym never agreed to,
+    // and the catalogue is a bounded resource nothing prunes. Reading and growing is
+    // pure; `repo.addFields` is the only write and it happens past both gates.
+    const grown = growFields(await repo.listFields(tx, gymId), file.understanding.extraFields, MEMBER_LIST_MAX_EXTRA_FIELDS);
+
+    // THE RULE, RUN AGAIN, ON WHAT IS TRUE NOW. Not the stored grouping: that one is
+    // about the list at `base_version`, and although the version says it has not
+    // moved, the gym's own MEMBERS have no version at all — somebody joined, proved
+    // an address or left while the preview was on the screen, and who is "already in
+    // the app" moved with them (review of PR #87, High-1).
+    const { measured, reconciled, kept } = await measure(tx, gymId, file.understanding, upload.mode, before, grown.catalogue);
 
     // THE WRONG-FILE GUARD (§9.8), measured on THIS answer and ticked on THIS
     // request. A gym that acknowledged a large change an hour ago has acknowledged
@@ -789,19 +929,36 @@ export async function confirmUpload(
       return { kind: "large_change", guard: reconciled.guard };
     }
 
-    // THREE STATEMENTS, EACH THE SAME SIZE WHATEVER THE FILE HOLDS, each safe to run
+    // THE SECOND TICK, AND IT IS A DIFFERENT QUESTION FROM THE FIRST (§11.4). The guard
+    // above is about the FILE being the wrong file; this is about the file being right
+    // and a member of staff's own correction being lost anyway. Measured under the same
+    // lock, asked of THIS press, and nothing is written when it is missing — the whole
+    // refusal happens before the first statement.
+    if (reconciled.handEdits.entries > 0 && !input.acknowledgeHandEdits) {
+      return { kind: "hand_edits", handEdits: reconciled.handEdits };
+    }
+
+    // FOUR STATEMENTS, EACH THE SAME SIZE WHATEVER THE FILE HOLDS, each safe to run
     // twice. What each one did is checked against what the rule said it would: under
     // this lock they cannot differ, so a difference is a fault of ours, and a confirm
     // that cannot say truthfully what it applied writes nothing at all.
-    const added = await repo.insertEntries(tx, gymId, reconciled.new.map(toEntry), "upload");
-    expectApplied(added, reconciled.new.length, "added", uploadId);
-    const updated = await repo.updateEntryStatuses(
-      tx,
-      gymId,
-      reconciled.changed.map((person) => ({ identityKey: person.identityKey, status: person.status })),
-    );
-    expectApplied(updated, reconciled.changed.length, "changed", uploadId);
-    const removed = await repo.deleteEntries(tx, gymId, reconciled.gone.map((person) => person.identityKey));
+    // PAST BOTH GATES, so this is the first statement a refused confirm never reaches.
+    // Still under the gym's row lock, so two staff confirming differently-shaped files
+    // cannot both claim the last free field.
+    await repo.addFields(tx, gymId, grown.fresh);
+
+    const carries = carriedFields(file.understanding.mapping);
+    const writing = toWrite(reconciled, kept, file.understanding.endsOnKind);
+    const added = await repo.insertEntries(tx, gymId, writing.add, "upload");
+    expectApplied(added, writing.add.length, "added", uploadId);
+    // A FORMER RECORD THE FILE HOLDS AGAIN IS REVIVED, NEVER INSERTED (§11.1): the same
+    // row, its id and everything that hangs off it, with `former_at` cleared.
+    const revived = await repo.updateEntries(tx, gymId, writing.revive, carries, true);
+    expectApplied(revived, writing.revive.length, "revived", uploadId);
+    const updated = await repo.updateEntries(tx, gymId, writing.change, carries, false);
+    expectApplied(updated, writing.change.length, "changed", uploadId);
+    // MARKED FORMER WITH THE INSTANT THEY CAME OFF, never deleted (§11.1).
+    const removed = await repo.markEntriesFormer(tx, gymId, reconciled.gone.map((person) => person.identityKey), at);
     expectApplied(removed, reconciled.gone.length, "removed", uploadId);
 
     // "THIS GYM HAS YOU ON ITS LIST, AS OF NOW" — on everybody the old list held or
@@ -812,7 +969,7 @@ export async function confirmUpload(
     // The version moves only when something actually changed (§9.7): bumping it for a
     // confirm that wrote nothing would throw away every other preview open in the gym
     // for no reason, and the same file uploaded twice is exactly that case.
-    const bump = added + updated + removed > 0;
+    const bump = added + revived + updated + removed > 0;
     const after = await repo.moveListOn(tx, { gymId, uploadId, at, bump });
     // The cells go in the same statement that marks it confirmed, and `summary`
     // becomes what was APPLIED rather than what the preview guessed.
@@ -830,14 +987,33 @@ export async function confirmUpload(
       meta: {
         mode: upload.mode,
         added: String(added),
+        revived: String(revived),
         updated: String(updated),
         removed: String(removed),
         unchanged: String(reconciled.counts.unchanged),
         membersLeaving: String(reconciled.members.leaving),
         version: String(after),
         ...(input.acknowledgeLargeChange ? { acknowledgedLargeChange: "true" } : {}),
+        // THE NAMES OF THE FIELDS, never the values, and only where one was really
+        // written over: an audit row of this is read by a human weeks later asking why
+        // a gym's own correction went (§11.6).
+        ...(reconciled.handEdits.entries > 0
+          ? { handEditsReplaced: String(reconciled.handEdits.entries), handEditFields: reconciled.handEdits.fields.join(", ") }
+          : {}),
       },
     });
+
+    // §11.2, RUN AGAIN AT THE BOUNDARY THAT WRITES, and what it took out — a COUNT, and
+    // never a cell. Warned rather than raised: a gym must not be left unable to load its
+    // own list because one value in ten thousand passes a card's check digit, and the
+    // cell is already gone by the time this is written. Non-zero here means the file
+    // reader let something through and is a fault of OURS to go and find.
+    if (writing.cardsDropped > 0) {
+      deps.log.warn(
+        { event: "memberlist.card_cells_dropped_at_write", gymId, uploadId, cells: writing.cardsDropped },
+        "card-shaped cells were dropped as the member list was written",
+      );
+    }
 
     // NOTHING ABOVE SENDS AN EMAIL, and a test drives it: the capturing sender stays
     // empty through a confirm that adds two hundred people.
@@ -912,6 +1088,25 @@ function inAppEntryIds(members: readonly repo.MemberAgainstList[]): string[] {
   return [...ids];
 }
 
+/** THE SAME ANSWER FOR A PAGE THAT WAS ASKED FOR THE FORMER RECORDS (round one, Low-2).
+ *
+ *  A former record matches nobody in the set above, on purpose — that is what stops one
+ *  admitting anybody or being counted where an invite is decided (§11.1). But a page
+ *  asked for the former records then said `inApp: false` about every one of them,
+ *  including people who really are in the app: something FALSE about a named person, on
+ *  the one page whose whole job is to show them.
+ *
+ *  So a page that asked for them reads the union, and every OTHER reader — the counts,
+ *  the chips, `canBeInvited` — keeps the set that excludes them. */
+function inAppEntryIdsWithFormer(members: readonly repo.MemberAgainstList[]): string[] {
+  const ids = new Set<string>();
+  for (const member of members) {
+    if (member.entryId !== null) ids.add(member.entryId);
+    if (member.formerEntryId !== null) ids.add(member.formerEntryId);
+  }
+  return [...ids];
+}
+
 /** THE LIST AS IT STANDS (§9.9's `GET /`).
  *
  *  Reading it is a READ, so a gym with no live plan still gets it: what a gym that
@@ -926,11 +1121,16 @@ export async function readList(
 ): Promise<MemberListView | null> {
   await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
-  const [state, members] = await Promise.all([
+  const [state, members, fields] = await Promise.all([
     repo.listState(deps.sql, gymId),
     repo.membersAgainstList(deps.sql, gymId),
+    repo.listFields(deps.sql, gymId),
   ]);
-  const { totals, statuses } = await repo.listStatusCounts(deps.sql, gymId, inAppEntryIds(members));
+  const { totals, statuses, membershipTypes, paymentStatuses } = await repo.listStatusCounts(
+    deps.sql,
+    gymId,
+    inAppEntryIds(members),
+  );
   // THE WHOLE-LIST NUMBERS AND THE CHIPS COME FROM ONE STATEMENT, never two: two
   // statements counting one gym's people two ways is two answers to one question, and
   // the screen would show both at once.
@@ -946,18 +1146,44 @@ export async function readList(
     version: state?.version ?? 0,
     lastConfirmedAt: state?.lastConfirmedAt?.toISOString() ?? null,
     counts,
-    statuses: statuses.map((row) => ({
-      label: row.label,
-      count: row.count,
-      inApp: row.inApp,
-      canBeInvited: row.canBeInvited,
-    })),
+    statuses: chipsOf(statuses),
+    // THE GYM'S OTHER TWO KINDS OF WORD (§11.1), from the same statement, so the three
+    // sets of chips and the header's numbers cannot be answers asked a moment apart.
+    membershipTypes: chipsOf(membershipTypes),
+    paymentStatuses: chipsOf(paymentStatuses),
+    fields: fields.map((field) => ({ key: field.key, label: field.label })),
   };
 }
+
+/** ONE KIND OF THE GYM'S OWN WORD AS ITS CHIPS.
+ *
+ *  **A SINGLE EMPTY CHIP IS NO CHIPS AT ALL**, which is the one thing done here rather
+ *  than in SQL. A gym whose export has no membership-type column has every one of its
+ *  people in one group whose label is "" — a chip saying "no membership type: 312" over
+ *  a list of 312, which tells staff nothing and invites a click that filters nothing
+ *  out. Where a gym really uses the word, the empty group is meaningful ("Gold 40 ·
+ *  Student 12 · none 3") and it stays. The counts in the header are taken from the rows
+ *  and are untouched by this. */
+const chipsOf = (rows: readonly repo.StatusCountRow[]): { label: string; count: number; inApp: number; canBeInvited: number }[] =>
+  rows.length === 1 && rows[0]?.label === ""
+    ? []
+    : rows.map((row) => ({ label: row.label, count: row.count, inApp: row.inApp, canBeInvited: row.canBeInvited }));
 
 /** A search as LIKE reads it. The three characters LIKE gives its own meaning to are
  *  escaped, so a member number of `10%` finds that member and not every member. */
 const escapeLike = (text: string): string => text.replace(/[\\%_]/g, (char) => `\\${char}`);
+
+/** ONE OF THE THREE WORD FILTERS, folded the way every comparison of one of the gym's
+ *  own words is folded (§11.5): case and spaces down, duplicates out, and "" kept as
+ *  itself because it means "the people with none".
+ *
+ *  Null is "everybody" and an empty LIST would be "nobody" — which is not a filter
+ *  anybody can ask for, so a query that sends none stays null rather than becoming `[]`. */
+const foldedFilter = (asked: string | string[] | undefined): string[] | null => {
+  if (asked === undefined) return null;
+  const words = Array.isArray(asked) ? asked : [asked];
+  return [...new Set(words.map((word) => word.trim().toLowerCase()))];
+};
 
 /** ONE PAGE OF THE LIST THE GYM KEEPS (§9.9's `GET /entries`).
  *
@@ -982,17 +1208,25 @@ export async function readEntries(
     throw new OrgsError(400, "bad_cursor", "That page of the list could not be read. Open the list again.");
   }
 
-  // A status is matched with its case and spaces folded, exactly as the rule folds
-  // one, and "" is the people with no status at all (§9.9).
-  const asked = query.status === undefined ? null : Array.isArray(query.status) ? query.status : [query.status];
-  const statuses = asked === null ? null : [...new Set(asked.map((word) => word.trim().toLowerCase()))];
+  // THE THREE KINDS OF THE GYM'S OWN WORD, FOLDED EXACTLY AS THE RULE FOLDS THEM, and
+  // "" is the people with none of that kind (§9.9, §11.5). One function for all three,
+  // because a second way of folding one of them would be a filter that quietly matched
+  // nobody.
   const typed = (query.query ?? "").trim();
-
   const members = await repo.membersAgainstList(deps.sql, gymId);
+  // A page that asked for the FORMER records has to be able to say which of them is a
+  // person who is in the app; every other reader keeps the set that leaves them out
+  // (round one, Low-2, and `inAppEntryIdsWithFormer`'s own note).
+  const records = query.records ?? "current";
   const page = await repo.entriesPage(deps.sql, {
     gymId,
-    inAppEntryIds: inAppEntryIds(members),
-    statuses,
+    inAppEntryIds: records === "current" ? inAppEntryIds(members) : inAppEntryIdsWithFormer(members),
+    statuses: foldedFilter(query.status),
+    membershipTypes: foldedFilter(query.membershipType),
+    paymentStatuses: foldedFilter(query.paymentStatus),
+    // CURRENT RECORDS UNLESS THE FORMER ONES WERE ASKED FOR BY NAME (§11.5): what every
+    // screen means by "the list" is the people on it.
+    records,
     filter: query.filter ?? "all",
     like: typed === "" ? null : `%${escapeLike(typed)}%`,
     cursor,
@@ -1009,6 +1243,13 @@ export async function readEntries(
       phone: entry.phone,
       memberNumber: entry.memberNumber,
       status: entry.status,
+      membershipType: entry.membershipType,
+      joinedOn: entry.joinedOn,
+      endsOn: entry.endsOn,
+      endsOnKind: entry.endsOnKind,
+      paymentStatus: entry.paymentStatus,
+      dateOfBirth: entry.dateOfBirth,
+      formerAt: entry.formerAt?.toISOString() ?? null,
       source: entry.source,
       inApp: entry.inApp,
     })),
