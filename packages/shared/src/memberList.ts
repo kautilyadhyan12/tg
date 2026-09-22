@@ -306,6 +306,47 @@ export type MemberListField = z.infer<typeof memberListFieldSchema>;
 export const MEMBER_LIST_DATE_FIELDS = ["joinedOn", "endsOn", "dateOfBirth"] as const;
 export type MemberListDateField = (typeof MEMBER_LIST_DATE_FIELDS)[number];
 
+/** EACH KEPT FIELD IN PLAIN ENGLISH, because two things staff READ field names
+ *  rather than count them: what an upload would change, field by field (§11.4), and
+ *  which of their own corrections it is about to write over. A screen prints these as
+ *  sent; it never writes its own (§9.9). */
+export const MEMBER_LIST_FIELD_WORDS: Readonly<Record<MemberListField, string>> = {
+  fullName: "name",
+  firstName: "first name",
+  lastName: "last name",
+  email: "email address",
+  phone: "phone number",
+  memberNumber: "member number",
+  status: "status",
+  membershipType: "membership type",
+  joinedOn: "join date",
+  endsOn: "end or renewal date",
+  paymentStatus: "payment status",
+  dateOfBirth: "date of birth",
+};
+
+/** How one of the gym's OWN columns is named wherever a field NAME is wanted: this
+ *  prefix and the catalogue key. A standard field is named by itself. */
+export const MEMBER_LIST_EXTRA_FIELD_PREFIX = "extra:";
+
+/** THE NAME OF ONE FIELD A MEMBER OF STAFF EDITED BY HAND (§11.4, §11.6) — a standard
+ *  field by its own name, or one of the gym's own columns as `extra:<key>`.
+ *
+ *  **NAMES ONLY, NEVER VALUES, AND THAT IS THE WHOLE SHAPE OF IT.** What an entry
+ *  remembers is THAT somebody corrected the phone number, never what they corrected
+ *  it from: a third copy of a person's phone number, kept only to guard the second,
+ *  is one more place it can leak from, and the guard does not need it — the file's
+ *  value and the column's are both there to be compared. */
+export const memberListEditedFieldSchema = z.union([
+  memberListFieldSchema,
+  z.string().regex(new RegExp(`^${MEMBER_LIST_EXTRA_FIELD_PREFIX}[a-z0-9_]{1,${String(MEMBER_LIST_MAX_FIELD_KEY_CHARS)}}$`)),
+]);
+export type MemberListEditedField = z.infer<typeof memberListEditedFieldSchema>;
+
+/** The most field names one entry can remember: every standard field plus every one of
+ *  the gym's own columns, so nothing unbounded reaches a reply or a row. */
+export const MEMBER_LIST_MAX_EDITED_FIELDS = memberListFieldSchema.options.length + MEMBER_LIST_MAX_EXTRA_FIELDS;
+
 /** Which way round a column's two-number dates are read. `dayFirst` is
  *  03/04/2026 → 3 April; `monthFirst` is 3 April → March 4. */
 export const memberListDateOrderSchema = z.enum(["dayFirst", "monthFirst"]);
@@ -438,6 +479,20 @@ export const memberListExtraFieldSchema = z
   .strict();
 export type MemberListExtraField = z.infer<typeof memberListExtraFieldSchema>;
 
+/** ONE PERSON'S CELLS UNDER THE GYM'S OWN COLUMNS, as the record keeps them: the
+ *  catalogue key to the cell (§11.1).
+ *
+ *  **IT IS PARSED ON THE WAY OUT OF THE DATABASE LIKE ANY OTHER OUTSIDE INPUT**, and
+ *  here that is not ceremony: the rule compares this document against the file's cells
+ *  to decide what CHANGED, so a document left half-shaped by a later migration or a
+ *  hand-run statement would read as "every column of this person is different" and the
+ *  upload would write over the lot. */
+export const memberListExtraDocumentSchema = z.record(
+  z.string().regex(/^[a-z0-9_]+$/).max(MEMBER_LIST_MAX_FIELD_KEY_CHARS),
+  z.string().max(MEMBER_LIST_MAX_EXTRA_CHARS),
+);
+export type MemberListExtraDocument = z.infer<typeof memberListExtraDocumentSchema>;
+
 /** How one date column was read, said back to staff so they can flip it
  *  (§11.3): "We read 03/04/2026 as 3 April 2026". */
 export const memberListDateColumnSchema = z
@@ -504,6 +559,18 @@ export const memberListWarningSchema = z.discriminatedUnion("code", [
   /** A file wider than the extra fields a gym may hold (§11.1). The columns
    *  furthest to the right are left out, and this says how many. */
   z.object({ code: z.literal("extra_columns_left_out"), columns: z.number().int().positive() }),
+  /** THE GYM ALREADY KEEPS AS MANY OF ITS OWN COLUMNS AS IT MAY (§11.1), so columns
+   *  this file brings that the gym has never had are not kept.
+   *
+   *  **IT IS NOT `extra_columns_left_out` AND THE DIFFERENCE MATTERS TO STAFF.** That
+   *  one is about THIS FILE being wider than we read, and moving a column left fixes
+   *  it. This one is about the GYM's catalogue being full — every column already in it
+   *  is kept as usual, and moving anything left changes nothing. The catalogue grows
+   *  across uploads and a whole-list upload does not replace it, so a gym that has
+   *  uploaded several differently-shaped exports can reach the ceiling with a file of
+   *  five columns. It is worked out where the gym's own catalogue can be read, which
+   *  is the request thread and not the file reader. */
+  z.object({ code: z.literal("gym_fields_full"), columns: z.number().int().positive() }),
 ]);
 export type MemberListWarning = z.infer<typeof memberListWarningSchema>;
 export type MemberListWarningCode = MemberListWarning["code"];
@@ -599,6 +666,8 @@ export function memberListWarningWords(warning: MemberListWarning): string {
       return `${numberWords(warning.rows, "cell was dropped because it is shaped like a payment card number", "cells were dropped because they are shaped like payment card numbers")}. We never store card details, wherever they sit in a file.`;
     case "extra_columns_left_out":
       return `This file has more of the gym's own columns than we keep. The ${String(warning.columns)} furthest to the right were left out; move the ones you need further left and upload again.`;
+    case "gym_fields_full":
+      return `Your gym already keeps ${String(MEMBER_LIST_MAX_EXTRA_FIELDS)} of its own columns, which is as many as we hold, so ${numberWords(warning.columns, "column in this file is", "columns in this file are")} not kept. Everything else in the file is kept as usual.`;
   }
 }
 
@@ -687,8 +756,55 @@ export const memberListChangeCountsSchema = z.object({
   alreadyInApp: z.number().int().min(0),
   canBeInvited: z.number().int().min(0),
   noEmail: z.number().int().min(0),
+  /** OF THE `new`, HOW MANY THE GYM HAS HAD BEFORE — a FORMER record coming back
+   *  (§11.1). Since 3a-v-b nobody is deleted from a list: somebody who drops off one
+   *  becomes former with the date, and uploading them again revives that same record
+   *  with whatever hangs on it. They are `new` to the list as it stands, which is what
+   *  staff are deciding about, and this says how many of them are not new to the gym.
+   *
+   *  It is a SLICE of `new` and not a group beside it, so no test may add the two. */
+  returning: z.number().int().min(0).default(0),
 });
 export type MemberListChangeCounts = z.infer<typeof memberListChangeCountsSchema>;
+
+/** WHAT AN UPLOAD WOULD CHANGE, FIELD BY FIELD (§11.4) — one row per kept field, with
+ *  how many people's records it would move.
+ *
+ *  **`changed` ON ITS OWN STOPPED BEING AN ANSWER THE DAY THE ROW GOT WIDER.** Before
+ *  3a-v-b the only thing that could differ was the status word, so "412 changed" said
+ *  what would happen. Now a record holds ten fields and the gym's own columns beside
+ *  them, and "412 changed" could be 412 corrected phone numbers or 412 dates read the
+ *  wrong way round off one badly-ordered column — which is exactly the mistake §11.3's
+ *  date switch exists to catch, and the count that would have hidden it. */
+export const memberListFieldChangeSchema = z
+  .object({ field: memberListFieldSchema, count: z.number().int().positive() })
+  .strict();
+export type MemberListFieldChange = z.infer<typeof memberListFieldChangeSchema>;
+
+/** The same, for one of the gym's OWN columns, named by the heading the gym wrote. */
+export const memberListExtraChangeSchema = z
+  .object({
+    key: z.string().max(MEMBER_LIST_MAX_FIELD_KEY_CHARS),
+    label: z.string().max(MEMBER_LIST_MAX_FIELD_LABEL_CHARS),
+    count: z.number().int().positive(),
+  })
+  .strict();
+export type MemberListExtraChange = z.infer<typeof memberListExtraChangeSchema>;
+
+/** WHICH OF STAFF'S OWN CORRECTIONS AN UPLOAD WOULD WRITE OVER (§11.4) — the refusal's
+ *  numbers, and the one thing a screen needs to ask the question with.
+ *
+ *  `fields` is field NAMES in plain English, already the words a screen prints, and
+ *  never a value and never a person: "3 people's phone number and membership type
+ *  would be replaced by this file" is the whole sentence, and naming the people would
+ *  put a page of addresses inside an error reply (§9.9). */
+export const memberListHandEditsSchema = z
+  .object({
+    entries: z.number().int().min(0),
+    fields: z.array(z.string().max(MEMBER_LIST_MAX_FIELD_LABEL_CHARS)).max(MEMBER_LIST_MAX_EDITED_FIELDS),
+  })
+  .strict();
+export type MemberListHandEdits = z.infer<typeof memberListHandEditsSchema>;
 
 /** One of the gym's own status words, with what the upload does to the people
  *  carrying it. The app attaches no meaning to the word itself. */
@@ -765,6 +881,13 @@ export const memberListPreviewSchema = z.object({
   /** What it would do to the LIST. */
   list: memberListChangeCountsSchema,
   statuses: z.array(memberListStatusChangeSchema),
+  /** Field by field, what the `changed` people's records would move (§11.4). Only
+   *  fields something would actually change appear. */
+  fieldChanges: z.array(memberListFieldChangeSchema).max(memberListFieldSchema.options.length).default([]),
+  extraChanges: z.array(memberListExtraChangeSchema).max(MEMBER_LIST_MAX_EXTRA_FIELDS).default([]),
+  /** Staff's own corrections this file would write over (§11.4). `entries: 0` means
+   *  none, and the confirm needs no tick for them. */
+  handEdits: memberListHandEditsSchema.default({ entries: 0, fields: [] }),
   members: memberListMembersSchema,
   skipped: z.array(memberListSkippedSchema).max(MEMBER_LIST_SKIPPED_SHOWN),
   warnings: z.array(memberListWarningSchema),
@@ -899,6 +1022,15 @@ export const memberListUploadSummarySchema = z
     file: memberListUnderstandingSchema.shape.counts,
     list: memberListChangeCountsSchema,
     statuses: z.array(memberListStatusChangeSchema),
+    /** The field-by-field breakdown and the hand edits, kept for the record with
+     *  everything else here — counts and field NAMES, never a value (§11.4). The
+     *  three carry `.default(…)` so a summary written before 3a-v-b still parses:
+     *  this document is read back out of the database on every look at a confirmed
+     *  upload, and a shape that refuses last month's row would make the record
+     *  unreadable rather than out of date. */
+    fieldChanges: z.array(memberListFieldChangeSchema).max(memberListFieldSchema.options.length).default([]),
+    extraChanges: z.array(memberListExtraChangeSchema).max(MEMBER_LIST_MAX_EXTRA_FIELDS).default([]),
+    handEdits: memberListHandEditsSchema.default({ entries: 0, fields: [] }),
     members: memberListMembersSchema,
     guard: memberListGuardSchema,
     needsMapping: z.boolean(),
@@ -971,12 +1103,18 @@ export type MemberListRowsResponse = z.infer<typeof memberListRowsResponseSchema
 
 // ── Pressing Confirm, and the list you keep (3a-iii-b; §9.7–§9.9) ───────────
 
-/** CONFIRM THIS UPLOAD. The one field is the tick the wrong-file guard asks for,
- *  and it is asked for ON THAT REQUEST (§9.8): a gym that acknowledged a large
- *  change an hour ago has acknowledged nothing about this press. Absent is the
- *  same as false — so a screen that forgets to send it cannot apply one. */
+/** CONFIRM THIS UPLOAD. Both fields are ticks, and both are asked for ON THAT
+ *  REQUEST (§9.8, §11.4): a gym that acknowledged a large change or a lost correction
+ *  an hour ago has acknowledged nothing about this press. Absent is the same as
+ *  false — so a screen that forgets to send one cannot apply it.
+ *
+ *  **THEY ARE TWO TICKS AND NOT ONE, because they are two different questions.** "More
+ *  of your list would come off than we apply without asking" is about the FILE being
+ *  the wrong file; "this would replace corrections your own staff typed in" is about
+ *  the file being right and somebody's work being lost anyway. A screen that asked
+ *  them together would let a yes to either stand for a yes to both. */
 export const memberListConfirmRequestSchema = z
-  .object({ acknowledgeLargeChange: z.boolean().optional() })
+  .object({ acknowledgeLargeChange: z.boolean().optional(), acknowledgeHandEdits: z.boolean().optional() })
   .strict();
 export type MemberListConfirmRequest = z.infer<typeof memberListConfirmRequestSchema>;
 
@@ -1010,21 +1148,31 @@ export type MemberListConfirmed = z.infer<typeof memberListConfirmedSchema>;
 export const memberListConfirmResponseSchema = z.object({ confirmed: memberListConfirmedSchema });
 export type MemberListConfirmResponse = z.infer<typeof memberListConfirmResponseSchema>;
 
-/** THE TWO REFUSALS THAT CARRY NUMBERS, and why they are not sentences alone.
+/** THE THREE REFUSALS THAT CARRY NUMBERS, and why they are not sentences alone.
  *
- *  Both mean "we did NOT do that, and here is what we saw", and a screen cannot ask
+ *  Each means "we did NOT do that, and here is what we saw", and a screen cannot ask
  *  the right question without the figures: a large change has to show staff what
- *  would go before it asks them to tick, and a changed list has to say which
- *  version it measured against and which it found, or "somebody changed it" is a
- *  dead end. Every other refusal in this module is a sentence alone, because there
- *  is nothing to show. Neither carries anything about a PERSON — a version is the
- *  gym's own list's, and the guard is counts. */
+ *  would go before it asks them to tick, a changed list has to say which version it
+ *  measured against and which it found, or "somebody changed it" is a dead end, and a
+ *  lost correction has to name the FIELDS or "your edits would be replaced" tells
+ *  nobody whether it matters. Every other refusal in this module is a sentence alone,
+ *  because there is nothing to show. None carries anything about a PERSON — a version
+ *  is the gym's own list's, the guard is counts, and the hand edits are field names. */
 export const MEMBER_LIST_CONFIRM_REFUSAL_WORDS = {
   list_changed:
     "Your list changed while you were looking at this preview, so nothing was applied. Upload the file again to see what it would do now.",
   large_change:
     "This would change more of your list than we apply without asking. Check the numbers below, then confirm again to go ahead.",
+  hand_edits:
+    "This file would replace details your staff typed in here. Check the fields below, then confirm again to let the file win.",
 } as const;
+
+export const memberListHandEditsRefusalSchema = z.object({
+  error: z.literal("hand_edits"),
+  message: z.string(),
+  handEdits: memberListHandEditsSchema,
+  requestId: z.string().optional(),
+});
 
 export const memberListListChangedSchema = z.object({
   error: z.literal("list_changed"),
@@ -1053,6 +1201,15 @@ export const memberListCountsSchema = z.object({
   inApp: z.number().int().min(0),
   canBeInvited: z.number().int().min(0),
   noEmail: z.number().int().min(0),
+  /** HOW MANY FORMER RECORDS THE GYM HOLDS (§11.1) — people it has had and has taken
+   *  off, kept so that their visits, reports and a return survive.
+   *
+   *  **IT IS NOT PART OF ANY OTHER NUMBER HERE**, and that is the point of it being
+   *  its own line: `entries`, `inApp`, `canBeInvited` and `noEmail` are all about the
+   *  list as it STANDS, which is what every screen and every invite means by the list.
+   *  A former record admits nobody and is invited by nothing, so counting one under
+   *  `canBeInvited` would be an ex-member offered a way back in by a number. */
+  former: z.number().int().min(0).default(0),
 });
 export type MemberListCounts = z.infer<typeof memberListCountsSchema>;
 
@@ -1101,6 +1258,25 @@ export const memberListViewSchema = z.object({
   lastConfirmedAt: z.string().nullable(),
   counts: memberListCountsSchema,
   statuses: z.array(memberListStatusCountSchema).max(MEMBER_LIST_STATUS_CHIPS_MAX),
+  /** THE GYM'S OWN MEMBERSHIP AND PAYMENT WORDS, as chips with the same numbers
+   *  (§11.1). Three kinds of word, one shape, one cap and one rule for all three: the
+   *  app attaches no meaning to any of them, shows each in the spelling the list wrote
+   *  first, and folds case and spaces when it compares. A payment word is never read
+   *  as a state of membership and neither is ever worked out from a date (§11.1).
+   *
+   *  **THEY COUNT THE LIST AS IT STANDS AND LEAVE THE FORMER RECORDS OUT**, like every
+   *  other number beside them: a chip is something staff click to act on people, and a
+   *  chip whose count included people the gym has taken off would offer an ex-member
+   *  up for an invite. */
+  membershipTypes: z.array(memberListStatusCountSchema).max(MEMBER_LIST_STATUS_CHIPS_MAX).default([]),
+  paymentStatuses: z.array(memberListStatusCountSchema).max(MEMBER_LIST_STATUS_CHIPS_MAX).default([]),
+  /** The gym's own columns, in the order they were first seen, so the person's page
+   *  (3a-iv) and item 5's screen show them in the gym's own order and under the gym's
+   *  own heading. At most `MEMBER_LIST_MAX_EXTRA_FIELDS` a gym (§11.1). */
+  fields: z
+    .array(z.object({ key: z.string(), label: z.string() }).strict())
+    .max(MEMBER_LIST_MAX_EXTRA_FIELDS)
+    .default([]),
 });
 export type MemberListView = z.infer<typeof memberListViewSchema>;
 
@@ -1117,8 +1293,27 @@ export const memberListEntrySchema = z.object({
   phone: z.string().nullable(),
   memberNumber: z.string().nullable(),
   status: z.string().nullable(),
+  /** The five the gym's file also gave (§11.1), each the gym's own word or a plain
+   *  calendar day. `endsOnKind` says which of "ends" and "renews" the heading said, so
+   *  a screen prints "Renews 3 Oct" rather than choosing for the gym. */
+  membershipType: z.string().nullable(),
+  joinedOn: memberListDaySchema.nullable(),
+  endsOn: memberListDaySchema.nullable(),
+  endsOnKind: z.enum(["ends", "renews"]).nullable(),
+  paymentStatus: z.string().nullable(),
+  dateOfBirth: memberListDaySchema.nullable(),
+  /** When this person was taken off the list, or null while they are on it (§11.1).
+   *  A former record admits nobody, is invited by nothing, and is left out of a page
+   *  unless it is asked for. */
+  formerAt: z.string().nullable(),
   source: memberListEntrySourceSchema,
   inApp: z.boolean(),
+  /** **THE GYM'S OWN COLUMNS ARE NOT HERE, AND THAT IS DELIBERATE.** A page holds a
+   *  hundred people and a gym may keep forty of its own columns of up to five hundred
+   *  characters each, so carrying them would be two megabytes of a screen that shows
+   *  none of it — the extra fields belong on ONE person's page (§11.6, 3a-iv), where
+   *  they are read and where there is one of them. This comment is the field that is
+   *  missing, so nobody adds it here by accident. */
 });
 export type MemberListEntry = z.infer<typeof memberListEntrySchema>;
 
@@ -1146,15 +1341,32 @@ export const MEMBER_LIST_STATUS_FILTERS_MAX = 25;
  *  straight back. A screen never builds one, so nothing here describes its
  *  contents: what it is made of is the server's business, and it is parsed there
  *  like any other outside input. */
+const wordFilterSchema = z
+  .union([
+    z.string().max(MEMBER_LIST_MAX_STATUS_CHARS),
+    z.array(z.string().max(MEMBER_LIST_MAX_STATUS_CHARS)).max(MEMBER_LIST_STATUS_FILTERS_MAX),
+  ])
+  .optional();
+
+/** Which records a page is cut from (§11.5). `current` is the default and is what
+ *  every screen means by the list; `former` is the people the gym has taken off, and
+ *  `all` is both — asked for by name, never by leaving a filter out, because a former
+ *  record appearing in a page nobody asked for is somebody the gym believes it has
+ *  removed standing in a list of its members. */
+export const memberListRecordsSchema = z.enum(["current", "former", "all"]);
+export type MemberListRecords = z.infer<typeof memberListRecordsSchema>;
+
 export const memberListEntriesQuerySchema = z
   .object({
     filter: z.enum(["all", "in_app", "not_in_app"]).optional(),
-    status: z
-      .union([
-        z.string().max(MEMBER_LIST_MAX_STATUS_CHARS),
-        z.array(z.string().max(MEMBER_LIST_MAX_STATUS_CHARS)).max(MEMBER_LIST_STATUS_FILTERS_MAX),
-      ])
-      .optional(),
+    status: wordFilterSchema,
+    /** The gym's own membership and payment words, each matched with case and spaces
+     *  folded and each with the same "empty means the people with none" rule as
+     *  `status` (§11.5). Three filters of one shape, because they are three lists of
+     *  the gym's own words and the app attaches no meaning to any of them. */
+    membershipType: wordFilterSchema,
+    paymentStatus: wordFilterSchema,
+    records: memberListRecordsSchema.optional(),
     query: z.string().max(MEMBER_LIST_QUERY_MAX_CHARS).optional(),
     cursor: z.string().max(512).optional(),
   })
