@@ -937,7 +937,7 @@ export type ClassDayOutcome =
   | { kind: "cancelled" }
   | { kind: "time_passed" }
   | { kind: "time_missing" }
-  | { kind: "no_repeat_that_day"; className: string; isoWeekday: number }
+  | { kind: "no_repeat_that_day"; className: string; localDate: string }
   | { kind: "clashes" };
 
 /** A change to one date: `change` carries the new values, the other two none. */
@@ -979,7 +979,6 @@ export async function changeSession(
       {
         class_type_id: string;
         name: string;
-        iso_weekday: number;
         local_date: string;
         local_start_minute: number;
         minutes: number;
@@ -993,7 +992,7 @@ export async function changeSession(
         repeat_stopped: boolean;
       }[]
     >`
-      SELECT x.class_type_id, t.name, EXTRACT(ISODOW FROM x.local_date)::int AS iso_weekday,
+      SELECT x.class_type_id, t.name,
              x.local_date::text AS local_date, x.local_start_minute,
              x.minutes, x.places, x.coach_user_id, x.status,
              x.starts_at <= ${input.now} AS started,
@@ -1115,42 +1114,79 @@ export async function changeSession(
 
 /** LIFT A HOLD — put back a cancelled date whose repeat was stopped, or whose
  *  class was removed (re-check, N-1). Called inside `changeSession`'s
- *  transaction, under the gym's lock. */
+ *  transaction, under the gym's lock.
+ *
+ *  **Every hold of that class on that date goes**, not only the one pressed: a
+ *  second one would still stop the fill, and the gym would be told it worked
+ *  while nothing ran (second re-check, N-3). Then the class's live repeats are
+ *  filled. **If no running date of the class was added that day, the savepoint
+ *  rolls it all back** and the gym is told no repeat would add one — whether no
+ *  repeat runs on that weekday, one starts later, or the class already runs
+ *  there at another time (N-2). */
 async function liftHold(
   tx: TransactionSql,
   input: { gymId: string; sessionId: string; actorUserId: string; now: Date },
-  row: { class_type_id: string; name: string; iso_weekday: number; local_date: string },
+  row: { class_type_id: string; name: string; local_date: string },
 ): Promise<ClassDayOutcome> {
-  // The class's live repeats that run on that date.
-  const live = await tx<{ id: string }[]>`
-    SELECT s.id FROM gym_class_schedules s
-    JOIN gym_class_types t ON t.id = s.class_type_id AND t.gym_id = s.gym_id
-    WHERE s.gym_id = ${input.gymId}
-      AND s.class_type_id = ${row.class_type_id}
-      AND s.ended_at IS NULL
-      AND t.archived_at IS NULL
-      AND ${row.iso_weekday}::int = ANY(s.weekdays)
-      AND s.starts_on <= ${row.local_date}::date
-      AND (s.ends_on IS NULL OR s.ends_on >= ${row.local_date}::date)`;
-  if (live.length === 0) {
-    return { kind: "no_repeat_that_day", className: row.name, isoWeekday: row.iso_weekday };
-  }
-
-  await tx`
-    DELETE FROM gym_class_sessions
-    WHERE id = ${input.sessionId} AND gym_id = ${input.gymId}`;
-  const filled = await fillClassSessions(tx, {
-    gymIds: [input.gymId],
-    scheduleIds: live.map((s) => s.id),
-    now: input.now,
-  });
-  await insertAudit(tx, {
-    actorUserId: input.actorUserId,
-    gymId: input.gymId,
-    action: "org.class_session_hold_lifted",
-    targetType: "gym_class_session",
-    targetId: input.sessionId,
-    meta: { date: row.local_date, sessionsWritten: String(filled.sessions) },
-  });
-  return { kind: "ok", localDate: row.local_date };
+  const running = async (q: TransactionSql) => {
+    const [r] = await q<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM gym_class_sessions
+      WHERE gym_id = ${input.gymId} AND class_type_id = ${row.class_type_id}
+        AND local_date = ${row.local_date}::date AND status = 'scheduled'`;
+    return r?.n ?? 0;
+  };
+  const before = await running(tx);
+  const outcome = await tx
+    .savepoint(async (sp): Promise<ClassDayOutcome> => {
+      const cleared = await sp`
+        DELETE FROM gym_class_sessions x
+        USING gym_class_types t
+        WHERE t.id = x.class_type_id AND t.gym_id = x.gym_id
+          AND x.gym_id = ${input.gymId}
+          AND x.class_type_id = ${row.class_type_id}
+          AND x.local_date = ${row.local_date}::date
+          AND x.status = 'cancelled'
+          AND (t.archived_at IS NOT NULL
+               OR EXISTS (SELECT 1 FROM gym_class_schedules s
+                          WHERE s.id = x.schedule_id AND s.ended_at IS NOT NULL))`;
+      const live = await sp<{ id: string }[]>`
+        SELECT s.id FROM gym_class_schedules s
+        JOIN gym_class_types t ON t.id = s.class_type_id AND t.gym_id = s.gym_id
+        WHERE s.gym_id = ${input.gymId}
+          AND s.class_type_id = ${row.class_type_id}
+          AND s.ended_at IS NULL
+          AND t.archived_at IS NULL`;
+      if (live.length > 0) {
+        await fillClassSessions(sp, {
+          gymIds: [input.gymId],
+          scheduleIds: live.map((s) => s.id),
+          now: input.now,
+        });
+      }
+      const after = await running(sp);
+      if (after <= before) throw new NothingToAdd();
+      await insertAudit(sp, {
+        actorUserId: input.actorUserId,
+        gymId: input.gymId,
+        action: "org.class_session_hold_lifted",
+        targetType: "gym_class_session",
+        targetId: input.sessionId,
+        meta: {
+          date: row.local_date,
+          holdsCleared: String(cleared.count),
+          classesAdded: String(after - before),
+        },
+      });
+      return { kind: "ok", localDate: row.local_date };
+    })
+    .catch((err: unknown): ClassDayOutcome => {
+      if (err instanceof NothingToAdd) {
+        return { kind: "no_repeat_that_day", className: row.name, localDate: row.local_date };
+      }
+      throw err;
+    });
+  return outcome;
 }
+
+/** Thrown inside the lift's savepoint to roll it back: nothing would run. */
+class NothingToAdd extends Error {}

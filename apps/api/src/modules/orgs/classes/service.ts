@@ -380,9 +380,15 @@ export async function updateSchedule(
 
 // ── THE WEEK VIEW AND "THIS DAY ONLY" (17b-ii-b-i) ──────────────────────────
 
-/** ISO weekday 1–7, for the one sentence that names a day. */
-const WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-
+/** `Tuesday 29 September` — for the one sentence that names a day. A calendar
+ *  date has no zone, so it is read as UTC. */
+function dayLabel(day: string): string {
+  const made = new Date(`${day}T00:00:00Z`);
+  const weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const months = ["January", "February", "March", "April", "May", "June", "July", "August",
+    "September", "October", "November", "December"];
+  return `${weekdays[made.getUTCDay()] ?? ""} ${String(made.getUTCDate())} ${months[made.getUTCMonth()] ?? ""}`;
+}
 async function readWeekOr404(
   deps: ClassesDeps,
   gymId: string,
@@ -488,7 +494,7 @@ async function writeDay(
       throw new OrgsError(
         409,
         "class_no_repeat_that_day",
-        `No ${outcome.className} repeats on ${WEEKDAY_NAMES[outcome.isoWeekday - 1] ?? "that day"}s now, so there is nothing to run on this day.`,
+        `No ${outcome.className} repeat would add a class on ${dayLabel(outcome.localDate)}, so this day stays as it is.`,
       );
     case "clashes":
       throw new OrgsError(

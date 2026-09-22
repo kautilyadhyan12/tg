@@ -125,11 +125,11 @@ function DayPanel({ session, clockFormat, staff, locked, busy, onClose, onChange
           This class has already started, so it can&apos;t be changed.
         </p>
       ) : cancelled && session.repeatStopped ? (
-        // A cancelled day whose repeat was stopped keeps the class off the whole
-        // day; the button lets its other repeats run (re-check, N-1).
+        // A cancelled day whose repeat was stopped stops the class's repeats adding
+        // it that day; the button lifts that (re-checks N-1 and N-2).
         <div className="mt-3 flex flex-col gap-3">
           <p className="text-sm" style={labelStyle}>
-            {`Its repeat was stopped. While this day stays cancelled, no other ${session.name} class runs on it.`}
+            {`Its repeat was stopped. While this stays cancelled, no ${session.name} repeat adds a class on this day.`}
           </p>
           {locked ? null : (
             <button
@@ -140,7 +140,7 @@ function DayPanel({ session, clockFormat, staff, locked, busy, onClose, onChange
               style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F', opacity: busy ? 0.5 : 1 }}
             >
               {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-              {`Let ${session.name} run this day`}
+              {`Let ${session.name} repeats run this day`}
             </button>
           )}
         </div>

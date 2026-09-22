@@ -308,17 +308,17 @@ describe('this day only', () => {
     expect(screen.queryByRole('button', { name: 'Cancel this day' })).toBeNull();
   });
 
-  it('a cancelled day whose repeat was stopped says what it holds off, and one tap lets the class run', async () => {
+  it('a cancelled day whose repeat was stopped says what it holds off, and one tap lets its repeats run', async () => {
     api.getClassWeek.mockResolvedValue(
       week({ sessions: [{ ...SPIN_TUE, status: 'cancelled', repeatStopped: true }] }),
     );
     draw();
     await openDay('Spin on Tue 22 Sep 2026 at 18:00, cancelled');
     expect(
-      screen.getByText('Its repeat was stopped. While this day stays cancelled, no other Spin class runs on it.'),
+      screen.getByText('Its repeat was stopped. While this stays cancelled, no Spin repeat adds a class on this day.'),
     ).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Put it back on' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Let Spin run this day' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Let Spin repeats run this day' }));
     await waitFor(() => expect(api.restoreClassDay).toHaveBeenCalledWith('g1', 'x1'));
   });
 
