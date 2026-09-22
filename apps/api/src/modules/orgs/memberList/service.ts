@@ -905,18 +905,21 @@ export async function confirmUpload(
     // moved, the gym's own MEMBERS have no version at all — somebody joined, proved
     // an address or left while the preview was on the screen, and who is "already in
     // the app" moved with them (review of PR #87, High-1).
-    // THE GYM'S OWN CATALOGUE, GROWN BY WHAT THIS FILE BRINGS, BEFORE THE RULE RUNS —
-    // because which of the file's columns this gym keeps is what the rule compares, and
-    // the answer has to be the one the writes will use. Under this lock, so two staff
-    // confirming two differently-shaped files cannot both claim the last free field.
-    const catalogue = await repo.reconcileFields(tx, gymId, file.understanding.extraFields);
+    // THE GYM'S OWN CATALOGUE AS IT WOULD BE, WORKED OUT BEFORE THE RULE AND WRITTEN
+    // AFTER THE GATES (round one, High-1). Which of the file's columns this gym keeps is
+    // what the rule compares, so the answer has to be known here — but a gate below
+    // `return`s out of `sql.begin`, which COMMITS, so a refused confirm that had already
+    // INSERTed would leave the file's headings in a catalogue the gym never agreed to,
+    // and the catalogue is a bounded resource nothing prunes. Reading and growing is
+    // pure; `repo.addFields` is the only write and it happens past both gates.
+    const grown = growFields(await repo.listFields(tx, gymId), file.understanding.extraFields, MEMBER_LIST_MAX_EXTRA_FIELDS);
 
     // THE RULE, RUN AGAIN, ON WHAT IS TRUE NOW. Not the stored grouping: that one is
     // about the list at `base_version`, and although the version says it has not
     // moved, the gym's own MEMBERS have no version at all — somebody joined, proved
     // an address or left while the preview was on the screen, and who is "already in
     // the app" moved with them (review of PR #87, High-1).
-    const { measured, reconciled, kept } = await measure(tx, gymId, file.understanding, upload.mode, before, catalogue);
+    const { measured, reconciled, kept } = await measure(tx, gymId, file.understanding, upload.mode, before, grown.catalogue);
 
     // THE WRONG-FILE GUARD (§9.8), measured on THIS answer and ticked on THIS
     // request. A gym that acknowledged a large change an hour ago has acknowledged
@@ -939,6 +942,11 @@ export async function confirmUpload(
     // twice. What each one did is checked against what the rule said it would: under
     // this lock they cannot differ, so a difference is a fault of ours, and a confirm
     // that cannot say truthfully what it applied writes nothing at all.
+    // PAST BOTH GATES, so this is the first statement a refused confirm never reaches.
+    // Still under the gym's row lock, so two staff confirming differently-shaped files
+    // cannot both claim the last free field.
+    await repo.addFields(tx, gymId, grown.fresh);
+
     const carries = carriedFields(file.understanding.mapping);
     const writing = toWrite(reconciled, kept, file.understanding.endsOnKind);
     const added = await repo.insertEntries(tx, gymId, writing.add, "upload");
@@ -1080,6 +1088,25 @@ function inAppEntryIds(members: readonly repo.MemberAgainstList[]): string[] {
   return [...ids];
 }
 
+/** THE SAME ANSWER FOR A PAGE THAT WAS ASKED FOR THE FORMER RECORDS (round one, Low-2).
+ *
+ *  A former record matches nobody in the set above, on purpose — that is what stops one
+ *  admitting anybody or being counted where an invite is decided (§11.1). But a page
+ *  asked for the former records then said `inApp: false` about every one of them,
+ *  including people who really are in the app: something FALSE about a named person, on
+ *  the one page whose whole job is to show them.
+ *
+ *  So a page that asked for them reads the union, and every OTHER reader — the counts,
+ *  the chips, `canBeInvited` — keeps the set that excludes them. */
+function inAppEntryIdsWithFormer(members: readonly repo.MemberAgainstList[]): string[] {
+  const ids = new Set<string>();
+  for (const member of members) {
+    if (member.entryId !== null) ids.add(member.entryId);
+    if (member.formerEntryId !== null) ids.add(member.formerEntryId);
+  }
+  return [...ids];
+}
+
 /** THE LIST AS IT STANDS (§9.9's `GET /`).
  *
  *  Reading it is a READ, so a gym with no live plan still gets it: what a gym that
@@ -1187,15 +1214,19 @@ export async function readEntries(
   // nobody.
   const typed = (query.query ?? "").trim();
   const members = await repo.membersAgainstList(deps.sql, gymId);
+  // A page that asked for the FORMER records has to be able to say which of them is a
+  // person who is in the app; every other reader keeps the set that leaves them out
+  // (round one, Low-2, and `inAppEntryIdsWithFormer`'s own note).
+  const records = query.records ?? "current";
   const page = await repo.entriesPage(deps.sql, {
     gymId,
-    inAppEntryIds: inAppEntryIds(members),
+    inAppEntryIds: records === "current" ? inAppEntryIds(members) : inAppEntryIdsWithFormer(members),
     statuses: foldedFilter(query.status),
     membershipTypes: foldedFilter(query.membershipType),
     paymentStatuses: foldedFilter(query.paymentStatus),
     // CURRENT RECORDS UNLESS THE FORMER ONES WERE ASKED FOR BY NAME (§11.5): what every
     // screen means by "the list" is the people on it.
-    records: query.records ?? "current",
+    records,
     filter: query.filter ?? "all",
     like: typed === "" ? null : `%${escapeLike(typed)}%`,
     cursor,

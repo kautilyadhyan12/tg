@@ -82,6 +82,66 @@ export function cardShapedCell(text: string): boolean {
   return looksLikeAPaymentCard(text.replace(/[^0-9]/g, ""));
 }
 
+/** WHAT A CARD NUMBER LEAVES BEHIND when one is found inside other text. A marker and
+ *  not an empty string, so a gym reading its own note can see that something was taken
+ *  out rather than wondering what it once said. */
+export const CARD_REDACTED = "[card number removed]";
+
+/** A RUN OF DIGITS WITH THE SEPARATORS A PERSON WRITES BETWEEN THEM — spaces and the
+ *  several kinds of dash — anywhere in a cell. A run may not begin or end on one. */
+const CARD_RUN = /[0-9](?:[0-9 \u2010-\u2015-]*[0-9])?/g;
+/** The separators, for splitting a run into the GROUPS a card is written in. */
+const CARD_SEPARATORS = /[ \u2010-\u2015-]+/;
+
+/** A CELL WITH THE PAYMENT CARD NUMBERS INSIDE IT TAKEN OUT, and how many went (§11.2).
+ *
+ *  **`cardShapedCell` ASKS WHETHER A CELL *IS* A CARD; THIS ASKS WHETHER ONE IS IN IT**,
+ *  which is how a gym actually writes one down (round one, High-4). A free-text "Notes"
+ *  column reading `Card on file 4111 1111 1111 1111 (Visa)` is not a column of card
+ *  numbers, so the column rule leaves it; it is not a card-shaped cell, so the cell rule
+ *  left it too — and a live Visa number sat in the database under a member's name.
+ *  §11.2's sentence is "13 to 19 digits … that pass the card check digit — in ANY
+ *  column", and a cell that CONTAINS one is the common shape.
+ *
+ *  **JUST THE RUN IS TAKEN OUT, NEVER THE WHOLE CELL**, and that is what makes this
+ *  affordable. The recorded objection to widening the rule was that Luhn passes about
+ *  one made-up digit run in ten, so a gym's long invoice number would blank a note it
+ *  had written. Redacting the run alone leaves the note; what is lost in the rare false
+ *  positive is a number, and what is gained in the true one is a card number never
+ *  reaching our database. A lost invoice number is the smaller harm.
+ *
+ *  **THE SPANS TRIED ARE ALIGNED TO THE GROUPS A CARD IS WRITTEN IN**, which is what
+ *  keeps this from being either too narrow or too greedy. Checking each whole run and
+ *  nothing else misses `4111 1111 1111 1111 2024` — a card with a year after it is one
+ *  run of twenty digits, and twenty is not a card. Checking EVERY window of 13 to 19
+ *  digits instead would run about a hundred Luhn checks over a thirty-digit run and, at
+ *  one in ten, shred almost any long number a gym keeps. A card is written in groups, so
+ *  only spans of WHOLE groups are tried: `[4111][1111][1111][1111]` is found beside the
+ *  year, while `07911 100001` offers spans of 5, 6 and 11 digits and none is a card. */
+export function withoutCardNumbers(text: string): { text: string; removed: number } {
+  if (text.length < 13) return { text, removed: 0 };
+  let removed = 0;
+  const out = text.replace(CARD_RUN, (run) => {
+    const groups = run.split(CARD_SEPARATORS).filter((group) => group !== "");
+    // Longest span first, so a card is taken out whole rather than a shorter span
+    // inside it being redacted and the rest of its digits left in the cell.
+    for (let width = groups.length; width >= 1; width--) {
+      for (let at = 0; at + width <= groups.length; at++) {
+        const digits = groups.slice(at, at + width).join("");
+        if (digits.length < 13 || digits.length > 19) continue;
+        if (!looksLikeAPaymentCard(digits)) continue;
+        removed += 1;
+        // What is around the span is the gym's own note and stays.
+        const before = groups.slice(0, at).join(" ");
+        const after = groups.slice(at + width).join(" ");
+        return [before, CARD_REDACTED, after].filter((part) => part !== "").join(" ");
+      }
+    }
+    return run;
+  });
+  return { text: out, removed };
+}
+
 /** An IBAN by its own check digits (ISO 13616): the country and check digits
  *  moved to the end, every letter written as two digits, the whole read as a
  *  number modulo 97, which must be 1. Nothing else is shaped like one. */

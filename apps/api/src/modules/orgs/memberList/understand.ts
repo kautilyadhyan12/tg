@@ -52,7 +52,7 @@ import { evidenceInColumn, evidenceOf, mostlyDates, readDay, settleOrder } from 
 import { booleanStatus, cleanEmail, cleanMemberNumber, cleanName, cleanStatus, cut, fold, identityKey, isBooleanWord } from "./fields.js";
 import { isWritten } from "./grid.js";
 import { endsOrRenews, normaliseHeader, readHeader } from "./headerWords.js";
-import { type SheetHints, cardShapedCell, sheetHints } from "./neverKeep.js";
+import { type SheetHints, cardShapedCell, sheetHints, withoutCardNumbers } from "./neverKeep.js";
 import { type PhoneReading, readCountry, readPhone } from "./phone.js";
 
 /** A `?` anywhere in a name: a Windows export of a name in an alphabet the code
@@ -146,18 +146,36 @@ function hintsOf(rows: Rows, headerRow: number | null): SheetHints {
   return sheetHints((rows[headerRow] ?? []).map((cell) => tidyCell(cell)));
 }
 
-/** A key for one of the gym's own columns, built from the heading the gym
- *  wrote. 3a-v-b writes an entry's document under it, so the same heading must
- *  give the same key next month — which is why it is built from the heading and
- *  not from where the column happens to sit. A column with no heading has
- *  nothing else to be named by, so it is named by its place. */
-function extraKey(header: string | null, index: number, taken: Set<string>): string {
+/** A key for one of the gym's own columns, built from the heading the gym wrote.
+ *  3a-v-b writes an entry's document under it and keeps a per-gym catalogue of them,
+ *  so the same heading must give the same key next month — which is why it is built
+ *  from the heading and not from where the column happens to sit.
+ *
+ *  **A COLUMN WITH NO HEADING IS NUMBERED AMONG THE UNNAMED ONES, NEVER BY ITS PLACE
+ *  IN THE SHEET** (round one, High-3). Keyed `column_<index>`, one unnamed column
+ *  became a SECOND catalogue field the moment any column was inserted to its left —
+ *  the same cell stored twice under two keys, both with an empty label, and nothing
+ *  ever clearing the stale one because a whole-list upload MERGES the document. A gym
+ *  whose columns shift month to month burnt a slot of its forty on every shift until
+ *  its real columns started being dropped as `gym_fields_full`. Counting only the
+ *  unnamed ones is stable under every insertion of a NAMED column, which is the shape
+ *  an export actually changes in.
+ *
+ *  The label is "Column N" rather than nothing, because §11.1 keeps an extra field
+ *  "under the gym's own heading" and a screen with a value under no heading at all is
+ *  worse than one under a placeholder. The real answer is staff naming it in 5a's
+ *  column matching; the catalogue keeps whatever it was first called. */
+function extraKey(header: string | null, taken: Set<string>, unnamed: { n: number }): string {
   const room = MEMBER_LIST_MAX_FIELD_KEY_CHARS - 6;
   const base = normaliseHeader(header ?? "")
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, room);
-  let key = base === "" ? `column_${String(index + 1)}` : base;
+  let key = base;
+  if (base === "") {
+    unnamed.n += 1;
+    key = `unnamed_${String(unnamed.n)}`;
+  }
   if (taken.has(key)) {
     let n = 2;
     while (taken.has(`${key}_${String(n)}`)) n++;
@@ -166,6 +184,11 @@ function extraKey(header: string | null, index: number, taken: Set<string>): str
   taken.add(key);
   return key;
 }
+
+/** What a column with no heading of its own is SHOWN as. Its place in the sheet, which
+ *  is the only thing anybody could recognise it by — and only ever a label, never the
+ *  key (see `extraKey`). */
+const placeholderLabel = (index: number): string => `Column ${String(index + 1)}`;
 
 const widthOf = (rows: Rows): number => rows.reduce((widest, row) => Math.max(widest, row.length), 0);
 
@@ -282,12 +305,19 @@ function wideRow(row: readonly string[], plan: WidePlan, counts: WideCounts): Wi
   }
   const extra: string[] = [];
   for (const field of plan.extra) {
-    const text = tidyCell(row[field.column] ?? "");
-    if (text !== "" && cardShapedCell(text)) {
+    const raw = tidyCell(row[field.column] ?? "");
+    if (raw !== "" && cardShapedCell(raw)) {
       counts.cards++;
       extra.push("");
       continue;
     }
+    // A CARD WRITTEN INSIDE A NOTE IS TAKEN OUT OF IT, and the note kept (§11.2; round
+    // one, High-4). A "Notes" column is mostly ordinary notes, so the column rule does
+    // not drop it and the cell rule does not either — which left a live card number in
+    // the database under a member's name. Only the card's own digits go.
+    const scrubbed = withoutCardNumbers(raw);
+    counts.cards += scrubbed.removed;
+    const text = scrubbed.text;
     if (text.length > MEMBER_LIST_MAX_EXTRA_CHARS) {
       counts.cellsCut++;
       extra.push(cut(text, MEMBER_LIST_MAX_EXTRA_CHARS));
@@ -565,6 +595,9 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
   for (const at of [...mapping.email, ...mapping.phone]) standard.add(at);
   const notWanted = new Set(mapping.dontKeep);
   const takenKeys = new Set<string>();
+  // Counted across the whole sheet, so an unnamed column's key does not move when a
+  // NAMED one is inserted beside it (round one, High-3).
+  const unnamedSoFar = { n: 0 };
   const extraFields: MemberListExtraField[] = [];
   let extraLeftOut = 0;
   for (const stat of stats) {
@@ -573,7 +606,8 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
       extraLeftOut++;
       continue;
     }
-    extraFields.push({ key: extraKey(stat.header, stat.index, takenKeys), label: cut(stat.header ?? "", MEMBER_LIST_MAX_FIELD_LABEL_CHARS), column: stat.index });
+    const label = tidyCell(stat.header ?? "") === "" ? placeholderLabel(stat.index) : cut(stat.header ?? "", MEMBER_LIST_MAX_FIELD_LABEL_CHARS);
+    extraFields.push({ key: extraKey(stat.header, takenKeys, unnamedSoFar), label, column: stat.index });
   }
   const plan: WidePlan = { membershipType: membershipTypePlan, paymentStatus: paymentStatusPlan, dates: datePlans, extra: extraFields };
   const wideCounts: WideCounts = { cards: 0, cellsCut: 0 };

@@ -17,7 +17,6 @@ import { z } from "zod";
 import type { Sql, TransactionSql } from "postgres";
 import {
   MEMBER_LIST_MAX_EDITED_FIELDS,
-  MEMBER_LIST_MAX_EXTRA_FIELDS,
   MEMBER_LIST_STATUS_CHIPS_MAX,
   memberListEditedFieldSchema,
   memberListEntrySourceSchema,
@@ -42,7 +41,6 @@ import {
   type MemberListUploadStatus,
   type MemberListUploadSummary,
 } from "@app/shared";
-import { growFields } from "./extraFields.js";
 import type { CarriedFields, ListEntry, ListMember } from "./reconcile.js";
 
 type SqlOrTx = Sql | TransactionSql;
@@ -94,6 +92,17 @@ export interface MemberAgainstList extends ListMember {
    *  what the list still says about them. Null where no entry matches. */
   entryStatus: string | null;
   entryMemberNumber: string | null;
+  /** WHICH FORMER RECORD THIS MEMBER MATCHES, AND NOTHING ELSE (round one, Low-2).
+   *
+   *  It answers one question only: a page asked for the gym's FORMER records has to be
+   *  able to say "this one is somebody who is in the app", and the match above
+   *  deliberately cannot, because it excludes former records so that one can never
+   *  admit anybody or be counted where an invite is decided (§11.1).
+   *
+   *  So it is read by a page's `inApp` tick when the page was asked for the former
+   *  records, and by NOTHING else: not the marks, not `leaving`, not the guard, not a
+   *  chip, not `canBeInvited`. */
+  formerEntryId: string | null;
 }
 
 export async function listState(sql: SqlOrTx, gymId: string): Promise<ListState | null> {
@@ -245,8 +254,22 @@ export async function listFields(sql: SqlOrTx, gymId: string): Promise<FieldRow[
   return rows.map((row) => ({ key: row.key, label: row.label, ord: row.ord }));
 }
 
-/** THE GYM'S CATALOGUE, GROWN BY WHAT THIS FILE BRINGS — inside the confirm's
- *  transaction, under the gym's row lock (§11.1).
+/** THE GYM'S CATALOGUE, GROWN BY WHAT THIS FILE BRINGS — the WRITE half, and the write
+ *  half ALONE (round one, High-1).
+ *
+ *  **IT IS SPLIT FROM THE RULE THAT DECIDES WHAT TO ADD, AND THE SPLIT IS THE FIX.**
+ *  This used to read, grow and INSERT in one call, made before the confirm's two tick
+ *  gates — and a gate `return`s out of `sql.begin`, which COMMITS. So a confirm that
+ *  answered "NOTHING was changed" had already written the file's new headings into the
+ *  gym's catalogue, which is a bounded per-gym resource (40) that nothing ever prunes:
+ *  any member of staff could fill a gym's forty slots with headings from files it never
+ *  applied, by uploading wide files the wrong-file guard refuses — the guard's ORDINARY
+ *  case, not an edge. The reviewer drove it on both gates.
+ *
+ *  Now `listFields` + the pure `growFields` answer the rule BEFORE the gates, and this
+ *  runs after them, immediately before the entries are written and under the same gym
+ *  row lock — so two staff confirming differently-shaped files still cannot both claim
+ *  the last free field.
  *
  *  **IT GROWS AND IS NEVER REPLACED.** A whole-list upload is the gym's list of PEOPLE
  *  as of today, not a statement that the columns it leaves out have stopped existing:
@@ -268,24 +291,14 @@ export async function listFields(sql: SqlOrTx, gymId: string): Promise<FieldRow[
  *
  *  It answers the WHOLE catalogue after the growth, so the caller has one list to write
  *  every document from and there is no second read to disagree with it. */
-export async function reconcileFields(
-  tx: TransactionSql,
-  gymId: string,
-  wanted: readonly { key: string; label: string }[],
-): Promise<FieldRow[]> {
-  const have = await listFields(tx, gymId);
-  // THE RULE IS PURE AND LIVES IN ONE PLACE (`extraFields.growFields`), because the
-  // preview asks it an hour earlier to tell staff what this file would do to their
-  // catalogue. Two copies would be a screen promising a column the confirm drops.
-  const { catalogue, fresh } = growFields(have, wanted, MEMBER_LIST_MAX_EXTRA_FIELDS);
-  if (fresh.length === 0) return have;
+export async function addFields(tx: TransactionSql, gymId: string, fresh: readonly FieldRow[]): Promise<void> {
+  if (fresh.length === 0) return;
   const payload = fresh.map((field) => ({ key: field.key, label: field.label, ord: field.ord }));
   await tx`
     INSERT INTO gym_member_list_fields (gym_id, key, label, ord)
     SELECT ${gymId}, r.key, r.label, r.ord
     FROM jsonb_to_recordset(${tx.json(payload)}) AS r(key text, label text, ord int)
     ON CONFLICT (gym_id, key) DO NOTHING`;
-  return catalogue;
 }
 
 /** THE GYM'S OWN APP MEMBERS, as the match reads them (§9.7).
@@ -756,6 +769,7 @@ export async function membersAgainstList(sql: SqlOrTx, gymId: string): Promise<M
       entry_status: string | null;
       entry_member_number: string | null;
       on_list: boolean;
+      former_entry_id: string | null;
     }[]
   >`
     SELECT m.user_id,
@@ -769,7 +783,8 @@ export async function membersAgainstList(sql: SqlOrTx, gymId: string): Promise<M
            e.id            AS entry_id,
            e.status        AS entry_status,
            e.member_number AS entry_member_number,
-           (e.id IS NOT NULL) AS on_list
+           (e.id IS NOT NULL) AS on_list,
+           f.id            AS former_entry_id
     FROM gym_members m
     JOIN users u ON u.id = m.user_id
     CROSS JOIN LATERAL (
@@ -796,6 +811,30 @@ export async function membersAgainstList(sql: SqlOrTx, gymId: string): Promise<M
       ORDER BY c.by_email DESC, c.listed_seq
       LIMIT 1
     ) e ON true
+    -- THE SAME MATCH OVER THE FORMER RECORDS, ANSWERING ONE QUESTION ONLY: which former
+    -- record belongs to somebody who IS in the app, so the page that shows them can say
+    -- so (round one, Low-2). It is deliberately no part of on_list, entry_status or
+    -- anything the marks, the counts and the chips read -- a former record admits nobody
+    -- and is invited by nothing, which is what the lateral above is for.
+    LEFT JOIN LATERAL (
+      SELECT c.id
+      FROM (
+        (SELECT x.id, x.listed_seq, true AS by_email
+         FROM gym_member_list_entries x
+         WHERE x.gym_id = m.gym_id AND x.former_at IS NOT NULL AND v.proved AND x.email = u.email
+         ORDER BY x.listed_seq
+         LIMIT 1)
+        UNION ALL
+        (SELECT x.id, x.listed_seq, false AS by_email
+         FROM gym_member_list_entries x
+         WHERE x.gym_id = m.gym_id AND x.former_at IS NOT NULL
+           AND m.stated_phone_e164 IS NOT NULL AND x.phone_e164 = m.stated_phone_e164
+         ORDER BY x.listed_seq
+         LIMIT 1)
+      ) c
+      ORDER BY c.by_email DESC, c.listed_seq
+      LIMIT 1
+    ) f ON true
     WHERE m.gym_id = ${gymId}
       AND m.removed_at IS NULL
     ORDER BY m.joined_at, m.user_id`;
@@ -810,6 +849,7 @@ export async function membersAgainstList(sql: SqlOrTx, gymId: string): Promise<M
     entryId: row.entry_id,
     entryStatus: row.entry_status,
     entryMemberNumber: row.entry_member_number,
+    formerEntryId: row.former_entry_id ?? null,
   }));
 }
 

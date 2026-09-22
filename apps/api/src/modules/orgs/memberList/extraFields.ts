@@ -10,7 +10,7 @@
 // and a whole-list upload does not un-keep a column the report it came from
 // happens to leave out.
 import { MEMBER_LIST_MAX_EXTRA_CHARS, type MemberListExtraField } from "@app/shared";
-import { cardShapedCell } from "./neverKeep.js";
+import { cardShapedCell, withoutCardNumbers } from "./neverKeep.js";
 import type { KeptField } from "./reconcile.js";
 
 /** One of the gym's own columns as the catalogue holds it. */
@@ -128,7 +128,13 @@ export function extraForWriting(cells: readonly string[], fields: readonly KeptF
       document[field.key] = "";
       continue;
     }
-    document[field.key] = cell.length > MEMBER_LIST_MAX_EXTRA_CHARS ? cell.slice(0, MEMBER_LIST_MAX_EXTRA_CHARS) : cell;
+    // …and a card written INSIDE a note has its own digits taken out while the note
+    // stays (round one, High-4). The reader does this too; this is the boundary that
+    // writes, and it checks what it writes.
+    const scrubbed = withoutCardNumbers(cell);
+    cardsDropped += scrubbed.removed;
+    const text = scrubbed.text;
+    document[field.key] = text.length > MEMBER_LIST_MAX_EXTRA_CHARS ? text.slice(0, MEMBER_LIST_MAX_EXTRA_CHARS) : text;
   }
   return { document, cardsDropped };
 }
@@ -142,5 +148,9 @@ export function extraForWriting(cells: readonly string[], fields: readonly KeptF
 export function wordForWriting(word: string | null): { value: string | null; card: boolean } {
   if (word === null || word === "") return { value: word, card: false };
   if (cardShapedCell(word)) return { value: null, card: true };
-  return { value: word, card: false };
+  // A word with a card INSIDE it is not a word either — a status of "paid by card
+  // 4111 1111 1111 1111" is a note somebody put in the wrong column, and what must not
+  // survive is the number (round one, High-4).
+  const scrubbed = withoutCardNumbers(word);
+  return scrubbed.removed === 0 ? { value: word, card: false } : { value: scrubbed.text, card: true };
 }

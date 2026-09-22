@@ -317,7 +317,17 @@ function changedFields(row: MemberListRow, entry: ListEntry, carries: CarriedFie
   if (carries.status && foldWord(row.status) !== foldWord(entry.status)) moved.push("status");
   if (carries.membershipType && foldWord(row.membershipType) !== foldWord(entry.membershipType)) moved.push("membershipType");
   if (carries.joinedOn && foldDay(row.joinedOn) !== foldDay(entry.joinedOn)) moved.push("joinedOn");
-  if (carries.endsOn && (foldDay(row.endsOn) !== foldDay(entry.endsOn) || endsOnKind !== entry.endsOnKind)) moved.push("endsOn");
+  // THE KIND IS ONLY COMPARED WHERE THERE IS A DAY FOR IT TO BE ABOUT, which mirrors
+  // exactly what the write stores (`insertEntries` and `updateEntries` both null it with
+  // the day, and the table's own CHECK forbids anything else). Compared unconditionally
+  // it made every person whose end-or-renewal cell is EMPTY read as `changed` on every
+  // upload for ever: the file's "renews" against the record's NULL, the write then
+  // storing NULL again, so the next upload said exactly the same thing — a false number
+  // on the one field the breakdown exists to watch, a version bump for a confirm that
+  // moved nothing, and a hand-edit mark cleared for a field nothing overwrote (round
+  // one, High-2).
+  const rowKind = row.endsOn === null ? null : endsOnKind;
+  if (carries.endsOn && (foldDay(row.endsOn) !== foldDay(entry.endsOn) || rowKind !== entry.endsOnKind)) moved.push("endsOn");
   if (carries.paymentStatus && foldWord(row.paymentStatus) !== foldWord(entry.paymentStatus)) moved.push("paymentStatus");
   if (carries.dateOfBirth && foldDay(row.dateOfBirth) !== foldDay(entry.dateOfBirth)) moved.push("dateOfBirth");
   return moved;
