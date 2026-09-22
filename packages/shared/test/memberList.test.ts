@@ -114,12 +114,50 @@ describe("what the server says it understood (3a-ii)", () => {
   const mapping = memberListMappingSchema.parse({ headerRow: 0, email: [2], phone: [3] });
 
   it("fills in what a mapping leaves out, so nothing is ever undefined", () => {
-    expect(mapping).toEqual({ sheet: null, headerRow: 0, fullName: null, firstName: null, lastName: null, email: [2], phone: [3], memberNumber: null, status: null });
+    expect(mapping).toEqual({
+      sheet: null,
+      headerRow: 0,
+      fullName: null,
+      firstName: null,
+      lastName: null,
+      email: [2],
+      phone: [3],
+      memberNumber: null,
+      status: null,
+      // The five fields and the two choices Part 2 added (§11.1, §11.3).
+      membershipType: null,
+      joinedOn: null,
+      endsOn: null,
+      paymentStatus: null,
+      dateOfBirth: null,
+      dontKeep: [],
+      dateOrder: [],
+    });
   });
 
   it.each([
     ["no heading row at all, which is a real answer", { headerRow: null }],
-    ["a mapping of every field", { headerRow: 1, sheet: 2, fullName: 0, firstName: 1, lastName: 2, email: [3, 4], phone: [5], memberNumber: 6, status: 7 }],
+    [
+      "a mapping of every field",
+      {
+        headerRow: 1,
+        sheet: 2,
+        fullName: 0,
+        firstName: 1,
+        lastName: 2,
+        email: [3, 4],
+        phone: [5],
+        memberNumber: 6,
+        status: 7,
+        membershipType: 8,
+        joinedOn: 9,
+        endsOn: 10,
+        paymentStatus: 11,
+        dateOfBirth: 12,
+        dontKeep: [13, 14],
+        dateOrder: [{ column: 9, order: "monthFirst" }],
+      },
+    ],
   ])("takes %s", (_label, sent) => {
     expect(memberListMappingSchema.safeParse(sent).success).toBe(true);
   });
@@ -142,12 +180,50 @@ describe("what the server says it understood (3a-ii)", () => {
     sheet: { index: 0, name: null },
     headerRow: 0,
     headerFingerprint: "a".repeat(64),
-    columns: [{ index: 0, header: "Email", samples: ["ann@example.com"], guess: "email", confidence: "header", headerSays: "email" }],
+    columns: [
+      { index: 0, header: "Email", samples: ["ann@example.com"], guess: "email", confidence: "header", headerSays: "email", neverKept: null },
+      { index: 1, header: "Medical Conditions", samples: [], guess: null, confidence: null, headerSays: null, neverKept: "medical" },
+    ],
     mapping,
     needsMapping: false,
-    rows: [{ row: 2, fullName: "Ann Lee", email: "ann@example.com", phone: "+919876543210", memberNumber: "000123", status: "Active", identityKey: "b".repeat(64) }],
-    counts: { dataRows: 1, kept: 1, noContact: 0, duplicates: 0, withEmail: 1, withPhone: 1, withMemberNumber: 1, withStatus: 1 },
+    rows: [
+      {
+        row: 2,
+        fullName: "Ann Lee",
+        email: "ann@example.com",
+        phone: "+919876543210",
+        memberNumber: "000123",
+        status: "Active",
+        membershipType: "Gold",
+        joinedOn: "2024-03-14",
+        endsOn: "2026-03-14",
+        paymentStatus: "Paid",
+        dateOfBirth: "1990-11-02",
+        extra: ["Blue"],
+        identityKey: "b".repeat(64),
+      },
+    ],
+    extraFields: [{ key: "belt", label: "Belt", column: 4 }],
+    dateColumns: [{ column: 5, field: "joinedOn", order: "dayFirst", from: "file", example: { raw: "03/04/2026", read: "2026-04-03" }, notRead: 0 }],
+    endsOnKind: "ends",
+    counts: {
+      dataRows: 1,
+      kept: 1,
+      noContact: 0,
+      duplicates: 0,
+      withEmail: 1,
+      withPhone: 1,
+      withMemberNumber: 1,
+      withStatus: 1,
+      withMembershipType: 1,
+      withJoinedOn: 1,
+      withEndsOn: 1,
+      withPaymentStatus: 1,
+      withDateOfBirth: 1,
+    },
     statuses: [{ label: "Active", count: 1 }],
+    membershipTypes: [{ label: "Gold", count: 1 }],
+    paymentStatuses: [{ label: "Paid", count: 1 }],
     skipped: [{ row: 3, reason: "no_contact" }],
     warnings: [{ code: "no_header_row" }],
   };
@@ -166,6 +242,16 @@ describe("what the server says it understood (3a-ii)", () => {
     ["a warning nobody sends", { ...understanding, warnings: [{ code: "looks_odd" }] }],
     ["a counted warning with no count", { ...understanding, warnings: [{ code: "phones_unusual" }] }],
     ["four samples of one column", { ...understanding, columns: [{ ...understanding.columns[0], samples: ["a", "b", "c", "d"] }] }],
+    // Part 2's own shapes (§11.1, §11.3).
+    ["a joining date that is not a plain day", { ...understanding, rows: [{ ...understanding.rows[0], joinedOn: "14/03/2024" }] }],
+    ["a date of birth carrying a time", { ...understanding, rows: [{ ...understanding.rows[0], dateOfBirth: "1990-11-02T00:00:00Z" }] }],
+    ["an extra field key with a capital in it", { ...understanding, extraFields: [{ key: "Belt", label: "Belt", column: 4 }] }],
+    ["an extra field key with a space in it", { ...understanding, extraFields: [{ key: "locker no", label: "Locker No", column: 4 }] }],
+    ["a reason for not keeping a column that nobody sends", { ...understanding, columns: [{ ...understanding.columns[0], neverKept: "felt like it" }] }],
+    ["a date column read in an order nobody sends", { ...understanding, dateColumns: [{ ...understanding.dateColumns[0], order: "yearFirst" }] }],
+    ["a date column whose example is no day", { ...understanding, dateColumns: [{ ...understanding.dateColumns[0], example: { raw: "x", read: "x" } }] }],
+    ["an end column that neither ends nor renews", { ...understanding, endsOnKind: "stops" }],
+    ["a membership type nobody carries", { ...understanding, membershipTypes: [{ label: "Gold", count: 0 }] }],
   ])("refuses %s", (_label, value) => {
     expect(memberListUnderstandResultSchema.safeParse(value).success).toBe(false);
   });
@@ -184,6 +270,10 @@ describe("the words a warning is shown with", () => {
     { code: "shared_emails", rows: 2 },
     { code: "placeholders", rows: 300, values: ["frontdesk@example.com"] },
     { code: "other_sheets_ignored", sheets: ["Staff", "Classes"] },
+    { code: "cells_cut", rows: 12 },
+    { code: "dates_not_read", rows: 5 },
+    { code: "card_cells_dropped", rows: 2 },
+    { code: "extra_columns_left_out", columns: 7 },
   ];
 
   it("cover every warning the server can send, each its own and each a sentence", () => {

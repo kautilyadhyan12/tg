@@ -3,7 +3,8 @@
 // Written as one table over every class of case, before review.
 import { describe, expect, it } from "vitest";
 import { MEMBER_LIST_MAX_EMAIL_CHARS, MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS, MEMBER_LIST_MAX_NAME_CHARS, MEMBER_LIST_MAX_STATUS_CHARS, authEmailSchema } from "@app/shared";
-import { booleanStatus, cleanEmail, cleanMemberNumber, cleanName, cleanStatus, cut, fold, identityKey, isBooleanWord, looksLikeAPaymentCard } from "../src/modules/orgs/memberList/fields.js";
+import { booleanStatus, cleanEmail, cleanMemberNumber, cleanName, cleanStatus, cut, fold, identityKey, isBooleanWord } from "../src/modules/orgs/memberList/fields.js";
+import { looksLikeAPaymentCard } from "../src/modules/orgs/memberList/neverKeep.js";
 
 const ch = (code: number): string => String.fromCodePoint(code);
 
@@ -87,20 +88,20 @@ describe("a member number", () => {
     ["exponent form with every digit", "1.23456789012E+11", "123456789012"],
     ["spaces around it", "  A123  ", "A123"],
   ])("%s", (_label, cell, expected) => {
-    expect(cleanMemberNumber(cell)).toEqual({ value: expected, shortened: false });
+    expect(cleanMemberNumber(cell)).toEqual({ value: expected, shortened: false, card: false });
   });
 
   it.each([["", ""], ["0", "0"], ["-", "-"], ["N/A", "N/A"], ["na", "na"], ["none", "none"], ["NULL", "NULL"]])("%s is no number at all", (_label, cell) => {
-    expect(cleanMemberNumber(cell)).toEqual({ value: null, shortened: false });
+    expect(cleanMemberNumber(cell)).toEqual({ value: null, shortened: false, card: false });
   });
 
   it("says a number the spreadsheet shortened, and never guesses it back", () => {
-    expect(cleanMemberNumber("1.23457E+15")).toEqual({ value: null, shortened: true });
+    expect(cleanMemberNumber("1.23457E+15")).toEqual({ value: null, shortened: true, card: false });
   });
 
   it("is dropped whole rather than cut, because half a number is another member's", () => {
     const tooLong = "A".repeat(MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS + 1);
-    expect(cleanMemberNumber(tooLong)).toEqual({ value: null, shortened: false });
+    expect(cleanMemberNumber(tooLong)).toEqual({ value: null, shortened: false, card: false });
   });
 
   // A gym's software calls the door fob a "card number", so that heading is
@@ -113,7 +114,19 @@ describe("a member number", () => {
     ["a 16-digit number with a card's check digit", "4242424242424242"],
   ])("%s is never kept", (_label, card) => {
     expect(looksLikeAPaymentCard(card)).toBe(true);
-    expect(cleanMemberNumber(card)).toEqual({ value: null, shortened: false });
+    expect(cleanMemberNumber(card)).toEqual({ value: null, shortened: false, card: true });
+  });
+
+  it.each([
+    // Review of PR #90, Critical 1: this rule asked the BARE-DIGITS check, so a
+    // card typed the way a person types it was kept as the member's own number
+    // while the same card without spaces was dropped.
+    ["written in fours", "4111 1111 1111 1111"],
+    ["written with dashes", "4111-1111-1111-1111"],
+    ["written in fours with a trailing space", " 5555 5555 5555 4444 "],
+    ["an Amex written in its own groups", "3782 822463 10005"],
+  ])("a card %s is never kept either, and says it was a card", (_label, card) => {
+    expect(cleanMemberNumber(card)).toEqual({ value: null, shortened: false, card: true });
   });
 
   it.each([

@@ -44,6 +44,29 @@ const readGrid = (grid: MemberFileGrid, options: Partial<UnderstandOptions> = {}
 
 const read = (rows: string[][], options: Partial<UnderstandOptions> = {}): MemberListUnderstanding => readGrid(gridOf([{ rows }]), options);
 
+/** A mapping staff sent, with everything they did not name left out. Written as
+ *  a helper and not by hand so a field added to the mapping later cannot leave
+ *  a test asserting a shape the server no longer answers with. */
+const EMPTY_MAPPING: MemberListMapping = {
+  sheet: null,
+  headerRow: null,
+  fullName: null,
+  firstName: null,
+  lastName: null,
+  email: [],
+  phone: [],
+  memberNumber: null,
+  status: null,
+  membershipType: null,
+  joinedOn: null,
+  endsOn: null,
+  paymentStatus: null,
+  dateOfBirth: null,
+  dontKeep: [],
+  dateOrder: [],
+};
+const mappingOf = (over: Partial<MemberListMapping>): MemberListMapping => ({ ...EMPTY_MAPPING, ...over });
+
 const refusalOf = (grid: MemberFileGrid, options: Partial<UnderstandOptions> = {}): string => {
   const result = understandMemberGrid(grid, { country: "IN", ...options });
   expect(memberListUnderstandResultSchema.safeParse(result).success).toBe(true);
@@ -60,7 +83,9 @@ const PEOPLE = [
 describe("an ordinary export", () => {
   it("is read into the five things the list keeps", () => {
     const read5 = read(PEOPLE);
-    const withoutKey = (row: MemberListUnderstanding["rows"][number]): Omit<MemberListUnderstanding["rows"][number], "identityKey"> => ({
+    const withoutKey = (
+      row: MemberListUnderstanding["rows"][number],
+    ): Pick<MemberListUnderstanding["rows"][number], "row" | "fullName" | "email" | "phone" | "memberNumber" | "status"> => ({
       row: row.row,
       fullName: row.fullName,
       email: row.email,
@@ -74,7 +99,21 @@ describe("an ordinary export", () => {
       { row: 4, fullName: "Cara Diaz", email: "cara@example.com", phone: "+919876543212", memberNumber: "000125", status: "Active" },
     ]);
     for (const row of read5.rows) expect(row.identityKey).toMatch(/^[0-9a-f]{64}$/);
-    expect(read5.counts).toEqual({ dataRows: 3, kept: 3, noContact: 0, duplicates: 0, withEmail: 3, withPhone: 3, withMemberNumber: 3, withStatus: 3 });
+    expect(read5.counts).toEqual({
+      dataRows: 3,
+      kept: 3,
+      noContact: 0,
+      duplicates: 0,
+      withEmail: 3,
+      withPhone: 3,
+      withMemberNumber: 3,
+      withStatus: 3,
+      withMembershipType: 0,
+      withJoinedOn: 0,
+      withEndsOn: 0,
+      withPaymentStatus: 0,
+      withDateOfBirth: 0,
+    });
     expect(read5.needsMapping).toBe(false);
     expect(read5.warnings).toEqual([]);
     expect(read5.skipped).toEqual([]);
@@ -354,7 +393,7 @@ describe("the status column", () => {
   });
 
   it("refuses a hand mapping of a column that is not one, and says why", () => {
-    const mapping: MemberListMapping = { sheet: null, headerRow: 0, fullName: null, firstName: null, lastName: null, email: [0], phone: [], memberNumber: null, status: 1 };
+    const mapping = mappingOf({ headerRow: 0, email: [0], status: 1 });
     const result = understandMemberGrid(gridOf([{ rows: withWords(21) }]), { country: "IN", mapping });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.refusal).toEqual({ code: "mapped_column_not_status", column: 1 });
@@ -383,7 +422,7 @@ describe("the status column", () => {
 
 describe("staff's own mapping", () => {
   const rows = [["A", "B", "C", "D"], ["Ann Lee", "ann@example.com", "9876543210", "Active"]];
-  const mapping: MemberListMapping = { sheet: null, headerRow: 0, fullName: 0, firstName: null, lastName: null, email: [1], phone: [2], memberNumber: null, status: 3 };
+  const mapping = mappingOf({ headerRow: 0, fullName: 0, email: [1], phone: [2], status: 3 });
 
   it("is used as sent, with nothing guessed", () => {
     const found = read(rows, { mapping });
@@ -414,7 +453,7 @@ describe("staff's own mapping", () => {
 
 describe("the mapping this gym used last time", () => {
   const rows = [["A", "B"], ["Ann Lee", "ann@example.com"]];
-  const remembered: MemberListMapping = { sheet: null, headerRow: 0, fullName: 0, firstName: null, lastName: null, email: [1], phone: [], memberNumber: null, status: null };
+  const remembered = mappingOf({ headerRow: 0, fullName: 0, email: [1] });
 
   it("is used again where the headings are the same, and says so", () => {
     // Headings nothing here knows: no column would be guessed at all, which is
@@ -484,7 +523,7 @@ describe("whose email would be invited", () => {
   });
 
   it("the member's own, where staff say that is what the column is", () => {
-    const mapping: MemberListMapping = { sheet: null, headerRow: 0, fullName: 2, firstName: null, lastName: null, email: [0], phone: [], memberNumber: null, status: null };
+    const mapping = mappingOf({ headerRow: 0, fullName: 2, email: [0] });
     const found = read(withNominee, { mapping });
     expect(found.rows.map((row) => row.email)).toEqual(["nominee1@example.com", "nominee2@example.com", "nominee3@example.com"]);
   });
@@ -505,8 +544,9 @@ describe("a column the server disbelieved", () => {
 
   it("claims nothing for a column whose heading names no field at all", () => {
     expect(read(PEOPLE).columns[3]).toMatchObject({ header: "Mobile", headerSays: "phone", guess: "phone" });
-    const joined = read([["Full Name", "Email", "Joined"], ["Ann Lee", "ann@example.com", "2024-01-05"], ["Bo Chen", "bo@example.com", "2024-02-01"]]);
-    expect(joined.columns[2]).toMatchObject({ header: "Joined", headerSays: null, guess: null });
+    // "Joined" stood here until 3a-v-a, when it became the join date (§11.1).
+    const belts = read([["Full Name", "Email", "Belt"], ["Ann Lee", "ann@example.com", "Blue"], ["Bo Chen", "bo@example.com", "Brown"]]);
+    expect(belts.columns[2]).toMatchObject({ header: "Belt", headerSays: null, guess: null });
   });
 });
 

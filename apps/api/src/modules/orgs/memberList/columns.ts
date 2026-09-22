@@ -20,6 +20,8 @@ import {
   MEMBER_LIST_HEADER_LEAST_SCORE,
   MEMBER_LIST_HEADER_VALUE_PENALTY,
   MEMBER_LIST_HEADER_WORD_SCORE,
+  MEMBER_LIST_MAX_STATUS_WORDS,
+  MEMBER_LIST_MAX_TYPE_WORDS,
   MEMBER_LIST_MOST_COLUMNS_PER_FIELD,
   MEMBER_LIST_VALUES_ONLY_SHARE,
   MEMBER_LIST_VALUE_SAMPLE_CELLS,
@@ -27,11 +29,14 @@ import {
   type MemberListConfidence,
   type MemberListField,
   type MemberListMapping,
+  type MemberListNeverKeptReason,
 } from "@app/shared";
 import type { CountryCode } from "libphonenumber-js/max";
 import { couldBePhone, looksLikeEmail, tidyCell } from "./cells.js";
+import { looksLikeADate, mostlyDates } from "./dates.js";
 import { isWritten } from "./grid.js";
 import { type HeaderReading, readHeader } from "./headerWords.js";
+import { type ColumnShapes, type SheetHints, cardShapedCell, governmentIdShaped, ibanShaped, neverKeptColumn, worthChecking } from "./neverKeep.js";
 import { isPhoneValue } from "./phone.js";
 
 export type Rows = readonly (readonly string[])[];
@@ -77,6 +82,18 @@ export interface ColumnStat {
   written: number;
   emails: number;
   phones: number;
+  /** Cells that read as a calendar day under one order or the other (§11.3).
+   *  A SHARE, so the sample is the right window for it — unlike which way
+   *  round the column is written, which `evidenceInColumn` reads over every
+   *  row because one late cell is the whole proof (review of PR #90, High 5). */
+  dates: number;
+  /** The different words the column holds, folded, counted up to one past the
+   *  membership-type cap: what tells a status or a type from a note or a date. */
+  distinct: number;
+  /** The self-checking shapes §11.2 drops a whole column for. */
+  shapes: ColumnShapes;
+  /** Why nothing of this column is kept, or null where it is kept (§11.2). */
+  neverKept: MemberListNeverKeptReason | null;
   samples: string[];
 }
 
@@ -88,6 +105,10 @@ export interface StatOptions {
    *  tell which sheet of a workbook holds the members, and costs nothing: the
    *  package is about 0.04 ms a call, and a workbook may hold many sheets. */
   parsePhones: boolean;
+  /** What the sheet as a whole says, for the two never-keep rules no heading can
+   *  settle on its own (§11.2). Left out while choosing which SHEET holds the
+   *  members, where nothing is kept yet and nothing is dropped yet. */
+  hints?: SheetHints;
 }
 
 /** What each column holds, over its first written cells. Every column stops at
@@ -108,22 +129,44 @@ export function columnStats(rows: Rows, headerRow: number | null, country: Count
       written: 0,
       emails: 0,
       phones: 0,
+      dates: 0,
+      distinct: 0,
+      shapes: { written: 0, cards: 0, ibans: 0, governmentIds: 0 },
+      neverKept: null,
       samples: [],
     });
   }
+  const distinctWords = stats.map(() => new Set<string>());
   let collecting = width;
   for (let r = headerRow === null ? 0 : headerRow + 1; r < rows.length && collecting > 0; r++) {
     const row = rows[r];
     if (row === undefined) continue;
     for (let c = 0; c < width; c++) {
       const stat = stats[c];
-      if (stat === undefined || stat.written >= MEMBER_LIST_VALUE_SAMPLE_CELLS) continue;
+      const words = distinctWords[c];
+      if (stat === undefined || words === undefined || stat.written >= MEMBER_LIST_VALUE_SAMPLE_CELLS) continue;
       const raw = row[c];
       if (raw === undefined || !isWritten(raw)) continue;
       const text = tidyCell(raw);
       if (text === "") continue;
       stat.written++;
-      if (stat.samples.length < MEMBER_LIST_COLUMN_SAMPLES) stat.samples.push(text);
+      // A cell shaped like a payment card is never SHOWN either (§11.2). The
+      // three cells beside a heading are a real file's own data on a real
+      // screen, so a card left in them is a card kept.
+      const card = cardShapedCell(text);
+      if (!card && stat.samples.length < MEMBER_LIST_COLUMN_SAMPLES) stat.samples.push(text);
+      // What the column IS, which decides both what is kept from it and what is
+      // never kept. Counted in the one pass the sample already costs.
+      if (options.hints !== undefined) {
+        if (words.size <= MEMBER_LIST_MAX_TYPE_WORDS) words.add(text.toLowerCase());
+        if (looksLikeADate(text)) stat.dates++;
+        stat.shapes.written++;
+        if (card) stat.shapes.cards++;
+        else if (worthChecking(text)) {
+          if (ibanShaped(text)) stat.shapes.ibans++;
+          else if (governmentIdShaped(text)) stat.shapes.governmentIds++;
+        }
+      }
       if (looksLikeEmail(text)) stat.emails++;
       // With no country on the gym, only a number written with its own country
       // code can be READ (§9.5) — but the column is still the phone column, and
@@ -132,6 +175,13 @@ export function columnStats(rows: Rows, headerRow: number | null, country: Count
       // row rule still refuses to guess a country for any of them.
       else if (options.parsePhones && country !== null ? isPhoneValue(text, country) : couldBePhone(text)) stat.phones++;
       if (stat.written === MEMBER_LIST_VALUE_SAMPLE_CELLS) collecting--;
+    }
+  }
+  const hints = options.hints;
+  if (hints !== undefined) {
+    for (const stat of stats) {
+      stat.distinct = distinctWords[stat.index]?.size ?? 0;
+      stat.neverKept = neverKeptColumn(stat.header, stat.shapes, hints);
     }
   }
   return stats;
@@ -154,7 +204,13 @@ export interface GuessedMapping {
 /** Which column is which, from the headings and the cells (§9.5). */
 export function guessMapping(stats: readonly ColumnStat[], headerRow: number | null): GuessedMapping {
   const headed: Headed[] = [];
-  for (const stat of stats) if (stat.reading !== null && stat.reading.field !== null) headed.push({ stat, reading: stat.reading });
+  // A column §11.2 never keeps is not a candidate for ANYTHING: it is dropped
+  // before a field can be guessed onto it, so an export whose "Card Number"
+  // really holds cards can never become this gym's member numbers.
+  for (const stat of stats) {
+    if (stat.neverKept !== null) continue;
+    if (stat.reading !== null && stat.reading.field !== null) headed.push({ stat, reading: stat.reading });
+  }
   const headedFor = (field: MemberListField): Headed[] =>
     headed.filter((h) => h.reading.field === field && !h.reading.never.has(field)).sort(byRankThenFilledThenPlace);
 
@@ -194,11 +250,31 @@ export function guessMapping(stats: readonly ColumnStat[], headerRow: number | n
   const lastName = one(last);
   // Neither of these is ever guessed from what a column holds (§9.5).
   const memberNumber = one(headedFor("memberNumber"));
-  const status = one(headedFor("status"));
+
+  // The gym's own WORDS: a status, a membership type, a payment word. A column
+  // of dates is none of them (§11.1: no status is ever worked out from a date),
+  // and neither is a column of too many different words — that is a note.
+  const words = (field: "status" | "membershipType" | "paymentStatus", most: number): number | null =>
+    one(headedFor(field).filter((h) => !mostlyDates(h.stat.dates, h.stat.written) && h.stat.distinct <= most));
+  const status = words("status", MEMBER_LIST_MAX_STATUS_WORDS);
+  const membershipType = words("membershipType", MEMBER_LIST_MAX_TYPE_WORDS);
+  const paymentStatus = words("paymentStatus", MEMBER_LIST_MAX_STATUS_WORDS);
+
+  // The gym's own DATES, which are believed only where the cells read as dates:
+  // a heading is a hint here as everywhere else (§11.3).
+  const dated = (field: "joinedOn" | "endsOn" | "dateOfBirth"): number | null =>
+    one(headedFor(field).filter((h) => mostlyDates(h.stat.dates, h.stat.written)));
+  const joinedOn = dated("joinedOn");
+  const endsOn = dated("endsOn");
+  const dateOfBirth = dated("dateOfBirth");
 
   // Then the columns whose heading says nothing — or that have no heading at
   // all — on their cells alone, and only where nearly every cell agrees.
-  const unheaded = stats.filter((stat) => !taken.has(stat.index) && (stat.reading === null || stat.reading.field === null));
+  // §11.2 again, and it is NOT enough to have skipped these while reading the
+  // headings: a bank account number and an Aadhaar number are both twelve or
+  // so digits, which is a possible phone number, so a column dropped for its
+  // heading was being taken back on its cells and shown as the member's phone.
+  const unheaded = stats.filter((stat) => stat.neverKept === null && !taken.has(stat.index) && (stat.reading === null || stat.reading.field === null));
   const byValues = (field: "email" | "phone", count: (stat: ColumnStat) => number): number[] =>
     unheaded
       .filter((stat) => stat.reading?.never.has(field) !== true && shareOf(count(stat), stat.written) >= MEMBER_LIST_VALUES_ONLY_SHARE)
@@ -212,7 +288,24 @@ export function guessMapping(stats: readonly ColumnStat[], headerRow: number | n
   phone.splice(MEMBER_LIST_MOST_COLUMNS_PER_FIELD);
 
   return {
-    mapping: { sheet: null, headerRow, fullName, firstName, lastName, email, phone, memberNumber, status },
+    mapping: {
+      sheet: null,
+      headerRow,
+      fullName,
+      firstName,
+      lastName,
+      email,
+      phone,
+      memberNumber,
+      status,
+      membershipType,
+      joinedOn,
+      endsOn,
+      paymentStatus,
+      dateOfBirth,
+      dontKeep: [],
+      dateOrder: [],
+    },
     confidence,
   };
 }
@@ -226,6 +319,11 @@ export function fieldOf(mapping: MemberListMapping, index: number): MemberListFi
   if (mapping.lastName === index) return "lastName";
   if (mapping.memberNumber === index) return "memberNumber";
   if (mapping.status === index) return "status";
+  if (mapping.membershipType === index) return "membershipType";
+  if (mapping.joinedOn === index) return "joinedOn";
+  if (mapping.endsOn === index) return "endsOn";
+  if (mapping.paymentStatus === index) return "paymentStatus";
+  if (mapping.dateOfBirth === index) return "dateOfBirth";
   return null;
 }
 
@@ -242,11 +340,15 @@ export function describeColumns(
     const guess = fieldOf(mapping, stat.index);
     return {
       index: stat.index,
+      // A column §11.2 drops shows its heading and its reason and NOTHING of
+      // its own cells: three sample cells of a bank column are three people's
+      // bank details, and the whole point is that they never leave the worker.
       header: stat.header,
-      samples: stat.samples,
+      samples: stat.neverKept === null ? stat.samples : [],
       guess,
       confidence: guess === null ? null : (whole ?? confidence.get(stat.index) ?? null),
       headerSays: stat.reading?.field ?? null,
+      neverKept: stat.neverKept,
     };
   });
 }

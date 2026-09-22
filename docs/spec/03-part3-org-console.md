@@ -1250,6 +1250,36 @@ Each cell: **wall clock · longest event-loop block · a bystander's median wait
 
 **At ten thousand a page still costs the server about a third of a second of answering nobody**, and that is the honest headline. It is not a regression and it is not the paging fix: the first version cost the same (the review measured 309 ms beside a page of it), because what a page really waits on is the pool of ONE, behind statements that read a ten-thousand-person document. Moving the grouping into the database took the work off Node's thread — the event-loop block is 13 ms where it was 121 — and a bystander is now served in 4–5 ms for MOST of that window rather than waiting the whole of it. What it did not do, and could not, is make one connection into two. **That is ROADMAP Stage 4 item 11 and it is the next thing to fix for this screen, not this card.**
 
+**3a-v-a's own cost, measured 2026-09-22** at the processor's full 2,592 MHz on mains
+(checked: a battery halves it), three runs at each size, best of each, on the shape
+§11.8 names — 10,000 people carrying 30 of the gym's OWN columns beside the ten
+standard ones. **Reading the wider row happens in the WORKER thread**, so the reading
+itself is taken from nobody; what the request's own thread pays is receiving that
+answer and checking it against its contract before it is staged. Once per FILE, never
+per page.
+
+| 10,000 × 30 of the gym's own columns | keeping only the five old things | as shipped |
+|---|---|---|
+| understanding it, in the worker | — | 707–770 ms (the parse timeout is 15,000 ms) |
+| what crosses to the request's thread | 3.2 MB | 9.2 MB |
+| **the request's thread answers nobody for** | **46–47 ms** | **86–95 ms** (61–68 ms checking the contract, 25–27 ms writing it out) |
+
+At the launch shape — 20 gyms of 200 (RULINGS 2026-09-20) — the same file costs the
+request's thread **4 ms** (81 ms in the worker, 0.2 MB across), and at a band-5 gym of
+2,100 it costs **29 ms** (212 ms in the worker, 1.9 MB). So Part 2 of the re-plan costs
+**+3 ms at launch, +16 ms at 2,100 and +40 ms at the biggest list allowed**. The 95 ms
+sits beside the 61–63 ms the preview's own rule already blocks for on that same file and
+is accepted for the same reason (twelve uploads an hour a person); the pool of ONE is
+still what to fix for this screen (Stage 4 item 11), not this.
+
+*(Re-measured after round one’s fixes, three runs at each size. Round one’s High 5 made
+a date column’s order read every row of it rather than its first 200 cells, which costs
+the WORKER about 11 ms on the biggest file and the request’s thread nothing. The first
+table here reported a single run’s 118 ms; three runs put it at 86–95, and the honest
+number is the range.)* **What is worth watching
+is the 9.2 MB**, which is a staged upload's row in the database growing threefold —
+3a-v-b measures it again once that row is written per entry rather than as one document.
+
 **ONE STATEMENT WAS COSTING MEMBERS × ENTRIES, and it is the one that answers everything about the gym's own people** (review of PR #87, High-B). `repo.membersAgainstList` asked a single lateral with `email = … OR phone_e164 = …`, and cast `u.email` to `text` on the way past. An `OR` across two columns rules out both of `0033`'s indexes, and the cast rules out the one on a `citext` column by itself — so it read the gym's whole list once per member. It runs on the preview read and on every page of names, and it grows as members × entries, which is the one shape in this card that gets worse as the app succeeds. Measured at the launch shape crossed with the biggest list — 200 members against 10,000 entries, `EXPLAIN (ANALYZE, BUFFERS)`:
 
 | | the first shape | as shipped |
