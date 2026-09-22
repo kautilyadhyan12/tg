@@ -205,6 +205,28 @@ export async function fillClassSessions(
       -- ISO weekdays, Monday 1 — EXTRACT(ISODOW …) answers in exactly the
       -- numbers the column stores, which is why there is no lookup table.
       AND EXTRACT(ISODOW FROM d)::int = ANY(s.weekdays)
+      -- A date this repeat already holds is skipped here, through the unique
+      -- index, before the wider check below: most nights that is every date but
+      -- one, and without it the wider check made a normal night 54 % slower
+      -- (measured, .cost/fillVariants.mts). ON CONFLICT below still guards it.
+      AND NOT EXISTS (
+        SELECT 1 FROM gym_class_sessions own
+        WHERE own.schedule_id = s.id AND own.local_date = d::date)
+      -- ONE CLASS, ONE TIME, ONE DATE (17b-ii-b-i). A date of another repeat
+      -- moved to this time on its own already runs then; the repeat clash check
+      -- in createSchedule compares repeats and cannot see it.
+      AND NOT EXISTS (
+        SELECT 1 FROM gym_class_sessions o
+        WHERE o.gym_id = s.gym_id
+          AND o.class_type_id = s.class_type_id
+          -- Bounds for the (class_type_id, starts_at) index, so the check does
+          -- not walk the class's whole history; local_date decides.
+          AND o.starts_at >= ((d::date)::timestamp AT TIME ZONE g.timezone) - interval '2 days'
+          AND o.starts_at < ((d::date)::timestamp AT TIME ZONE g.timezone) + interval '3 days'
+          AND o.local_date = d::date
+          AND o.local_start_minute = s.local_start_minute
+          AND o.status = 'scheduled'
+          AND o.schedule_id IS DISTINCT FROM s.id)
     ON CONFLICT (schedule_id, local_date) DO NOTHING`;
 
   return { sessions: written.count };

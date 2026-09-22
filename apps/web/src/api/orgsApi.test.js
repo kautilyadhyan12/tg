@@ -70,6 +70,8 @@ const okBody = (url, method = 'get') => {
   // create-a-gym fallback and the contract parse would fail for the wrong
   // reason.
   if (url.includes('/classes') || url.includes('/class-repeats')) return CLASSES_BODY;
+  // The week view's four doors (17b-ii-b-i) all answer one week.
+  if (url.includes('/class-sessions')) return WEEK_BODY;
   if (url.includes('/staff/')) {
     return method === 'delete' ? { status: 'removed' } : { staff: STAFF_BODY };
   }
@@ -153,6 +155,34 @@ const CLASSES_BODY = {
   archivedTotal: 0,
 };
 
+/** One week, in the shape `gymClassWeekResponseSchema` demands. */
+const WEEK_BODY = {
+  timezone: 'Europe/London',
+  clockFormat: '24h',
+  today: '2026-09-23',
+  weekStart: '2026-09-21',
+  lastWeekStart: '2026-11-09',
+  sessions: [
+    {
+      id: '77777777-7777-7777-7777-777777777777',
+      classTypeId: '22222222-2222-2222-2222-222222222222',
+      scheduleId: '33333333-3333-3333-3333-333333333333',
+      name: 'Sunrise Yoga',
+      colour: 'blue',
+      openGym: false,
+      localDate: '2026-09-23',
+      startMinute: 1110,
+      startsAt: '2026-09-23T17:30:00.000Z',
+      minutes: 60,
+      places: 12,
+      coachUserId: null,
+      coachName: null,
+      status: 'cancelled',
+      changedAlone: false,
+      started: false,
+    },
+  ],
+};
 function recordRequests(api) {
   const seen = [];
   api.defaults.adapter = async (config) => {
@@ -262,6 +292,35 @@ describe('orgService endpoints', () => {
     expect(JSON.parse(seen[8].data)).toEqual(unlimited);
   });
 
+  /** The week view's four doors (17b-ii-b-i). Cancel and restore share an
+   *  address but for their last word, and a PUT that went out as a POST would
+   *  cancel a day instead of changing it. */
+  it('hits the week view at the right address, with the right verb and the week asked for', async () => {
+    const seen = recordRequests(authApi);
+    const body = { startMinute: 1140, minutes: 45, places: null, coachUserId: null };
+    await orgService.getClassWeek('gym-1', '2026-09-28');
+    await orgService.getClassWeek('gym-1', null);
+    await orgService.changeClassDay('gym-1', 'x1', body);
+    await orgService.cancelClassDay('gym-1', 'x1');
+    await orgService.restoreClassDay('gym-1', 'x1');
+    expect(seen.map((r) => `${r.method} ${r.url}`)).toEqual([
+      'get /v1/orgs/gym-1/class-sessions',
+      'get /v1/orgs/gym-1/class-sessions',
+      'put /v1/orgs/gym-1/class-sessions/x1',
+      'post /v1/orgs/gym-1/class-sessions/x1/cancel',
+      'post /v1/orgs/gym-1/class-sessions/x1/restore',
+    ]);
+    expect(seen[0].params).toEqual({ week: '2026-09-28' });
+    expect(seen[1].params).toEqual({});
+    expect(JSON.parse(seen[2].data)).toEqual(body);
+  });
+
+  it('treats a week that does not match its contract as a failure', async () => {
+    answerWith(authApi, { sessions: [] });
+    await expect(orgService.getClassWeek('gym-1', null)).rejects.toMatchObject({
+      isContractError: true,
+    });
+  });
   /** A body the screen cannot read is a FAILURE, never an empty timetable — the
    *  rule `readThrough` exists for, applied to the newest surface. */
   it('treats a timetable that does not match its contract as a failure', async () => {

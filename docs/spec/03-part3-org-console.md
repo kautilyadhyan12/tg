@@ -2102,6 +2102,13 @@ class type holds them as the values a new repeat is filled in from and changes n
 already on the calendar, 17b-ii-a — and staff can change EVERY repeat of one class in
 one go, forward only from a date they pick and never a day changed on purpose, which is
 TeamUp's Bulk Edit, 17b-ii-b.)*
+*(17b-ii-b-i, 2026-09-23: a CANCEL is a status and is not marked "changed alone" —
+nothing that writes the calendar touches a date's status, so it stays cancelled
+through the nightly fill and every edit of its repeat, and a date put back on runs
+as its repeat then does. Only a change to one date's time, length, places or coach
+marks it changed alone. One class runs once at a given time on a given date: a day
+cannot be moved or put back onto a time the class already runs, and the fill writes
+no second one there.)*
 An open-gym slot is a class type marked so. `schedule.manage` (owner and manager); a
 trainer sees the lists of their own classes.
 

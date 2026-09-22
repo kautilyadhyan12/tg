@@ -3,7 +3,7 @@
 // authorisation. Registered from `registerOrgRoutes` — the same console behind
 // the same gates, sharing its deps.
 //
-// **ONE RATE LIMIT COVERS ALL SEVEN, AND ITS `ipMax` IS EXPLICIT.** A gym's front
+// **ONE RATE LIMIT COVERS EVERY ROUTE HERE, AND ITS `ipMax` IS EXPLICIT.** A gym's front
 // desk is ONE address with several staff signed in on it (the shared-address
 // class this repo has been bitten by more than once), so a per-address ceiling
 // equal to the per-person one would throttle the second person to touch the
@@ -21,14 +21,21 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
 import {
+  changeGymClassSessionRequestSchema,
   createGymClassScheduleRequestSchema,
   createGymClassTypeRequestSchema,
+  gymClassWeekQuerySchema,
   updateGymClassScheduleRequestSchema,
   updateGymClassTypeRequestSchema,
 } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
-import { classScheduleParamsSchema, classTypeParamsSchema, orgParamsSchema } from "../schemas.js";
+import {
+  classScheduleParamsSchema,
+  classSessionParamsSchema,
+  classTypeParamsSchema,
+  orgParamsSchema,
+} from "../schemas.js";
 import * as service from "./service.js";
 
 function parseOr400<S extends z.ZodTypeAny>(
@@ -211,5 +218,59 @@ export function registerClassRoutes(app: FastifyInstance, deps: ClassRouteDeps):
       params.scheduleId,
     );
     return reply.status(200).send(timetable);
+  });
+
+  // ── THE WEEK VIEW AND "THIS DAY ONLY" (17b-ii-b-i) ──────────────────────────
+  // Each change answers with the week the date is in.
+
+  app.get("/v1/orgs/:gymId/class-sessions", guarded, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(gymClassWeekQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const week = await service.getWeek(classDeps, requireUserId(req), params.gymId, query.week);
+    return reply.status(200).send(week);
+  });
+
+  /** PUT: every field every time, as the repeat's own edit. */
+  app.put("/v1/orgs/:gymId/class-sessions/:sessionId", guarded, async (req, reply) => {
+    const params = parseOr400(classSessionParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(changeGymClassSessionRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const week = await service.changeClassSession(
+      classDeps,
+      requireUserId(req),
+      params.gymId,
+      params.sessionId,
+      body,
+    );
+    return reply.status(200).send(week);
+  });
+
+  /** Cancelling a cancelled day, or putting back a running one, answers 200 and
+   *  writes nothing. */
+  app.post("/v1/orgs/:gymId/class-sessions/:sessionId/cancel", guarded, async (req, reply) => {
+    const params = parseOr400(classSessionParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const week = await service.cancelClassSession(
+      classDeps,
+      requireUserId(req),
+      params.gymId,
+      params.sessionId,
+    );
+    return reply.status(200).send(week);
+  });
+
+  app.post("/v1/orgs/:gymId/class-sessions/:sessionId/restore", guarded, async (req, reply) => {
+    const params = parseOr400(classSessionParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const week = await service.restoreClassSession(
+      classDeps,
+      requireUserId(req),
+      params.gymId,
+      params.sessionId,
+    );
+    return reply.status(200).send(week);
   });
 }

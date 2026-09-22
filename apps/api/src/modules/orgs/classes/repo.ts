@@ -31,6 +31,7 @@ import {
   CLASS_TYPES_MAX,
 } from "@app/shared";
 import { insertAudit, lockOrgRow } from "../repo.js";
+import { dayVerdict } from "./dayRule.js";
 import { fillClassSessions } from "./fill.js";
 
 export interface ClassTypeRow {
@@ -780,5 +781,293 @@ export async function endSchedule(
       meta: { sessionsRemoved: String(removed.count) },
     });
     return { kind: "ok" };
+  });
+}
+
+// ── ONE WEEK, AND ONE DATE AT A TIME (17b-ii-b-i) ────────────────────────────
+
+export interface ClassSessionRow {
+  id: string;
+  classTypeId: string;
+  scheduleId: string | null;
+  name: string;
+  colour: string;
+  openGym: boolean;
+  localDate: string;
+  startMinute: number;
+  startsAt: Date;
+  minutes: number;
+  places: number | null;
+  coachUserId: string | null;
+  coachName: string | null;
+  status: string;
+  changedAlone: boolean;
+  started: boolean;
+}
+
+export interface ClassWeekRow {
+  timezone: string;
+  clockFormat: string;
+  today: string;
+  weekStart: string;
+  lastWeekStart: string;
+  sessions: ClassSessionRow[];
+}
+
+/** The week holding `week` (the gym's today when null), Monday to Sunday in the
+ *  gym's own calendar.
+ *
+ *  `lastWeekStart` is the last Monday whose Sunday is inside the written window.
+ *  The window's far edge is today + 55, not + 56: the nightly fill runs at 05:00
+ *  UTC, so for part of each day the 56th date is not written yet.
+ *
+ *  The `starts_at` bounds are only there so the gym's index can find the week;
+ *  `local_date` decides. Two days of slack each side covers any offset, and a
+ *  date written before a gym changed its time zone. */
+export async function readWeek(
+  sql: Sql,
+  gymId: string,
+  opts: { week: string | null; now: Date },
+): Promise<ClassWeekRow | null> {
+  const [gym] = await sql<
+    {
+      timezone: string;
+      clock_format: string;
+      today: string;
+      week_start: string;
+      last_week_start: string;
+    }[]
+  >`
+    SELECT g.timezone, g.clock_format, w.today::text AS today,
+           (w.wanted - (EXTRACT(ISODOW FROM w.wanted)::int - 1))::text AS week_start,
+           (w.edge + 1 - (EXTRACT(ISODOW FROM w.edge + 1)::int - 1) - 7)::text AS last_week_start
+    FROM gyms g
+    CROSS JOIN LATERAL (
+      SELECT (${opts.now}::timestamptz AT TIME ZONE g.timezone)::date AS today
+    ) t
+    CROSS JOIN LATERAL (
+      SELECT t.today,
+             coalesce(${opts.week}::date, t.today) AS wanted,
+             t.today + ${CLASS_FILL_HORIZON_DAYS - 1}::int AS edge
+    ) w
+    WHERE g.id = ${gymId}`;
+  if (gym === undefined) return null;
+
+  const rows = await sql<
+    {
+      id: string;
+      class_type_id: string;
+      schedule_id: string | null;
+      name: string;
+      colour: string;
+      open_gym: boolean;
+      local_date: string;
+      local_start_minute: number;
+      starts_at: Date;
+      minutes: number;
+      places: number | null;
+      coach_user_id: string | null;
+      coach_name: string | null;
+      status: string;
+      changed_alone: boolean;
+      started: boolean;
+    }[]
+  >`
+    SELECT x.id, x.class_type_id, x.schedule_id, t.name, t.colour, t.open_gym,
+           x.local_date::text AS local_date, x.local_start_minute, x.starts_at,
+           x.minutes, x.places, x.coach_user_id,
+           -- Named only while still this gym's active staff, as on the timetable.
+           cu.display_name AS coach_name,
+           x.status, x.changed_alone,
+           x.starts_at <= ${opts.now} AS started
+    FROM gym_class_sessions x
+    JOIN gym_class_types t ON t.id = x.class_type_id AND t.gym_id = x.gym_id
+    LEFT JOIN gym_staff cs ON cs.gym_id = x.gym_id AND cs.user_id = x.coach_user_id
+    LEFT JOIN users cu ON cu.id = cs.user_id AND cu.status = 'active'
+    WHERE x.gym_id = ${gymId}
+      AND x.starts_at >= (${gym.week_start}::date::timestamp AT TIME ZONE ${gym.timezone})
+                         - interval '2 days'
+      AND x.starts_at < ((${gym.week_start}::date + 7)::timestamp AT TIME ZONE ${gym.timezone})
+                        + interval '2 days'
+      AND x.local_date BETWEEN ${gym.week_start}::date AND ${gym.week_start}::date + 6
+    ORDER BY x.local_date, x.local_start_minute, lower(t.name), x.id`;
+
+  return {
+    timezone: gym.timezone,
+    clockFormat: gym.clock_format,
+    today: gym.today,
+    weekStart: gym.week_start,
+    lastWeekStart: gym.last_week_start,
+    sessions: rows.map((r) => ({
+      id: r.id,
+      classTypeId: r.class_type_id,
+      scheduleId: r.schedule_id,
+      name: r.name,
+      colour: r.colour,
+      openGym: r.open_gym,
+      localDate: r.local_date,
+      startMinute: r.local_start_minute,
+      startsAt: r.starts_at,
+      minutes: r.minutes,
+      places: r.places,
+      coachUserId: r.coach_user_id,
+      coachName: r.coach_name,
+      status: r.status,
+      changedAlone: r.changed_alone,
+      started: r.started,
+    })),
+  };
+}
+
+export type ClassDayOutcome =
+  | { kind: "ok"; localDate: string }
+  | { kind: "not_found" }
+  | { kind: "coach_not_staff" }
+  | { kind: "started" }
+  | { kind: "cancelled" }
+  | { kind: "time_passed" }
+  | { kind: "clashes" };
+
+/** A change to one date: `change` carries the new values, the other two none. */
+export type ClassDayInput =
+  | ({ action: "change"; startMinute: number } & ClassScheduleFields)
+  | { action: "cancel" }
+  | { action: "restore" };
+
+/** CHANGE, CANCEL OR PUT BACK ONE DATE — under the gym's row lock, like every
+ *  other write here, so it cannot interleave with the nightly fill or a repeat
+ *  edit re-stamping the same rows.
+ *
+ *  **Only a CHANGE sets `changed_alone`.** A cancel is a status, and nothing
+ *  that writes the calendar touches status: the fill never updates a row
+ *  (`ON CONFLICT DO NOTHING`) and a repeat edit re-stamps only length, places
+ *  and coach. So a cancelled date stays cancelled whatever happens to its
+ *  repeat, and when it is put back it runs as the repeat now does — rather than
+ *  as it did the day it was cancelled.
+ *
+ *  **One class, one time, one date.** A date moved to a time, or put back at a
+ *  time, where the same class already runs that day is refused; `fill.ts`
+ *  carries the same rule the other way round. */
+export async function changeSession(
+  sql: Sql,
+  input: ClassDayInput & { gymId: string; sessionId: string; actorUserId: string; now: Date },
+): Promise<ClassDayOutcome> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId);
+    const newMinute = input.action === "change" ? input.startMinute : null;
+    // The pair is the key: an id from another gym is a 404 here, not a write.
+    const [row] = await tx<
+      {
+        class_type_id: string;
+        local_date: string;
+        local_start_minute: number;
+        minutes: number;
+        places: number | null;
+        coach_user_id: string | null;
+        status: string;
+        started: boolean;
+        new_starts_at: Date;
+        new_start_passed: boolean;
+      }[]
+    >`
+      SELECT x.class_type_id, x.local_date::text AS local_date, x.local_start_minute,
+             x.minutes, x.places, x.coach_user_id, x.status,
+             x.starts_at <= ${input.now} AS started,
+             n.at AS new_starts_at,
+             n.at <= ${input.now} AS new_start_passed
+      FROM gym_class_sessions x
+      JOIN gyms g ON g.id = x.gym_id
+      CROSS JOIN LATERAL (
+        SELECT ((x.local_date + make_interval(
+                  mins => coalesce(${newMinute}::int, x.local_start_minute)))
+                AT TIME ZONE g.timezone) AS at
+      ) n
+      WHERE x.id = ${input.sessionId} AND x.gym_id = ${input.gymId}`;
+    if (row === undefined) return { kind: "not_found" };
+
+    const unchanged =
+      input.action === "change" &&
+      input.startMinute === row.local_start_minute &&
+      input.minutes === row.minutes &&
+      input.places === row.places &&
+      input.coachUserId === row.coach_user_id;
+    const verdict = dayVerdict(input.action, {
+      status: row.status === "cancelled" ? "cancelled" : "scheduled",
+      started: row.started,
+      unchanged,
+      newStartPassed: input.action === "change" && row.new_start_passed,
+    });
+    switch (verdict) {
+      case "nothing":
+        return { kind: "ok", localDate: row.local_date };
+      case "started":
+      case "cancelled":
+      case "time_passed":
+        return { kind: verdict };
+      case "write":
+        break;
+      default: {
+        const never: never = verdict;
+        throw new Error(`unhandled day verdict: ${String(never)}`);
+      }
+    }
+
+    if (input.action === "change" && !(await coachIsStaff(tx, input.gymId, input.coachUserId))) {
+      return { kind: "coach_not_staff" };
+    }
+
+    if (input.action !== "cancel") {
+      const minute = newMinute ?? row.local_start_minute;
+      const [clash] = await tx<{ id: string }[]>`
+        SELECT id FROM gym_class_sessions
+        WHERE gym_id = ${input.gymId}
+          AND class_type_id = ${row.class_type_id}
+          AND local_date = ${row.local_date}::date
+          AND local_start_minute = ${minute}
+          AND status = 'scheduled'
+          AND id <> ${input.sessionId}
+        LIMIT 1`;
+      if (clash !== undefined) return { kind: "clashes" };
+    }
+
+    let meta: Record<string, string>;
+    if (input.action === "change") {
+      await tx`
+        UPDATE gym_class_sessions
+        SET local_start_minute = ${input.startMinute}, starts_at = ${row.new_starts_at},
+            minutes = ${input.minutes}, places = ${input.places},
+            coach_user_id = ${input.coachUserId}, changed_alone = true
+        WHERE id = ${input.sessionId} AND gym_id = ${input.gymId}`;
+      const places = (p: number | null) => (p === null ? "none" : String(p));
+      // Ids, never a coach's name.
+      meta = {
+        date: row.local_date,
+        startMinute: `${String(row.local_start_minute)} -> ${String(input.startMinute)}`,
+        minutes: `${String(row.minutes)} -> ${String(input.minutes)}`,
+        places: `${places(row.places)} -> ${places(input.places)}`,
+        coach: `${row.coach_user_id ?? "none"} -> ${input.coachUserId ?? "none"}`,
+      };
+    } else {
+      const status = input.action === "cancel" ? "cancelled" : "scheduled";
+      await tx`
+        UPDATE gym_class_sessions SET status = ${status}
+        WHERE id = ${input.sessionId} AND gym_id = ${input.gymId}`;
+      meta = { date: row.local_date };
+    }
+
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action:
+        input.action === "change"
+          ? "org.class_session_changed"
+          : input.action === "cancel"
+            ? "org.class_session_cancelled"
+            : "org.class_session_restored",
+      targetType: "gym_class_session",
+      targetId: input.sessionId,
+      meta,
+    });
+    return { kind: "ok", localDate: row.local_date };
   });
 }
