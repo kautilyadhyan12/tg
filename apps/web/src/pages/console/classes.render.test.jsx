@@ -27,6 +27,7 @@ const api = {
   archiveClass: vi.fn(),
   addClassRepeat: vi.fn(),
   stopClassRepeat: vi.fn(),
+  restoreClass: vi.fn(),
   getStaff: vi.fn(),
 };
 vi.mock('../../api/orgsApi', async (importOriginal) => {
@@ -97,6 +98,7 @@ beforeEach(() => {
   api.archiveClass.mockReset().mockResolvedValue(timetable({ entries: [], archived: [YOGA] }));
   api.addClassRepeat.mockReset().mockResolvedValue(timetable());
   api.stopClassRepeat.mockReset().mockResolvedValue(timetable({ entries: [{ type: YOGA, schedules: [] }] }));
+  api.restoreClass.mockReset().mockResolvedValue(timetable());
   api.getStaff.mockReset().mockResolvedValue({
     data: { staff: [{ userId: 'u9', displayName: 'Priya Sharma', email: 'p@example.com', role: 'trainer' }] },
   });
@@ -153,11 +155,16 @@ describe('the nav item', () => {
 });
 
 describe('reading the timetable', () => {
-  it('says which clock the times are on, so nobody reads their own', async () => {
+  it('says which clock the times are on, and never explains its own plumbing', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
     expect(screen.getByText(/times are Europe\/London/)).toBeTruthy();
-    expect(screen.getByText(/8 weeks ahead/)).toBeTruthy();
+    // **STRUCK BY KD, 2026-09-22.** The header used to say "Dates are written 8
+    // weeks ahead and move forward every night", and he read it as a demand
+    // that the gym plan eight weeks out. No product in this market explains its
+    // own generation window to a gym owner. Pinned so nobody re-adds it.
+    expect(screen.queryByText(/weeks ahead/)).toBeNull();
+    expect(screen.queryByText(/move forward every night/)).toBeNull();
   });
 
   it('draws the class, its numbers and its coach', async () => {
@@ -174,9 +181,34 @@ describe('reading the timetable', () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
     expect(screen.getByText('Mon & Wed at 18:30')).toBeTruthy();
-    expect(screen.getByText(/16 dates on the calendar/)).toBeTruthy();
     expect(
       screen.getByText('Next: Mon 21 Sep 2026 · Wed 23 Sep 2026 · Mon 28 Sep 2026 · Wed 30 Sep 2026 · +12 more'),
+    ).toBeTruthy();
+  });
+
+  // **KD'S SECOND CATCH, 2026-09-22.** The fixture repeat has NO end date, and
+  // the line used to print "16 dates on the calendar" — the size of the
+  // eight-week window, read by a gym as "it only runs sixteen times". It says
+  // ongoing now, and a repeat the gym DID give an end date still shows a count,
+  // because there the count is what the gym asked for.
+  it('says ongoing for a repeat with no end date, and counts one that ends', async () => {
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    expect(screen.getByText('From Mon 21 Sep 2026 · ongoing')).toBeTruthy();
+    expect(screen.queryByText(/16 dates on the calendar/)).toBeNull();
+    cleanup();
+
+    api.getClasses.mockResolvedValue(
+      timetable({
+        entries: [
+          { type: YOGA, schedules: [{ ...REPEAT, endsOn: '2026-10-14', sessionsAhead: 7 }] },
+        ],
+      }),
+    );
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    expect(
+      screen.getByText('Mon 21 Sep 2026 to Wed 14 Oct 2026 · 7 dates on the calendar.'),
     ).toBeTruthy();
   });
 
@@ -214,7 +246,7 @@ describe('reading the timetable', () => {
     );
     drawScreen();
     await screen.findByText('No dates yet.');
-    expect(screen.getByText(/Nothing on the calendar yet/)).toBeTruthy();
+    expect(screen.getByText(/nothing on the calendar yet/)).toBeTruthy();
   });
 });
 
@@ -335,10 +367,25 @@ describe('saying when it repeats', () => {
     expect(api.addClassRepeat).not.toHaveBeenCalled();
   });
 
-  it('stops a repeat and leaves the class standing', async () => {
+  it('asks before stopping a repeat, and stopping leaves the class standing', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
     fireEvent.click(screen.getByRole('button', { name: /Stop the Mon & Wed repeat of Sunrise Yoga/ }));
+
+    // THE FIRST TAP ASKS AND SENDS NOTHING. Stopping clears every date the
+    // repeat had ahead of it and no tap puts them back.
+    expect(api.stopClassRepeat).not.toHaveBeenCalled();
+    expect(screen.getByText(/Stop the Mon & Wed repeat of Sunrise Yoga\?/)).toBeTruthy();
+    // The sentence says what SURVIVES, not only what goes.
+    expect(screen.getByText(/stays on your timetable/)).toBeTruthy();
+
+    // Backing out sends nothing either.
+    fireEvent.click(screen.getByRole('button', { name: 'Leave it running' }));
+    expect(api.stopClassRepeat).not.toHaveBeenCalled();
+    expect(screen.getByText('Mon & Wed at 18:30')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Stop the Mon & Wed repeat of Sunrise Yoga/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Stop it' }));
     await waitFor(() => expect(api.stopClassRepeat).toHaveBeenCalledWith('g1', 's1'));
     await screen.findByText(/isn't on the calendar yet/);
     expect(screen.getByText('Sunrise Yoga')).toBeTruthy();
@@ -373,10 +420,33 @@ describe('changing and removing a class', () => {
     });
   });
 
+  // **KD, 2026-09-22:** *"clicking remove button directly removes it, i think
+  // there should be a small pop up not covering whole screen"*. It asks in
+  // place, under the class it is asking about.
+  it('asks before taking a class off the timetable, and backing out sends nothing', async () => {
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    fireEvent.click(screen.getByRole('button', { name: /Take Sunrise Yoga off the timetable/ }));
+
+    expect(api.archiveClass).not.toHaveBeenCalled();
+    expect(screen.getByText(/Take Sunrise Yoga off the timetable\?/)).toBeTruthy();
+    // The sentence says what SURVIVES and where to find it again.
+    expect(screen.getByText(/days it already ran are kept/)).toBeTruthy();
+    expect(screen.getByText(/bring it back/)).toBeTruthy();
+    // IT IS NOT A DIALOG OVER THE PAGE: the class it is asking about is still
+    // on screen, which is the whole of what Kd asked for.
+    expect(screen.getByText('Sunrise Yoga')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Keep it' }));
+    expect(api.archiveClass).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Take Sunrise Yoga off the timetable\?/)).toBeNull();
+  });
+
   it('takes a class off the timetable and keeps it in the list below', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
     fireEvent.click(screen.getByRole('button', { name: /Take Sunrise Yoga off the timetable/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove it' }));
     await waitFor(() => expect(api.archiveClass).toHaveBeenCalledWith('g1', 't1'));
     // The archived section's heading, and the class still named inside it —
     // "removed from the timetable" is not "deleted".
@@ -385,11 +455,25 @@ describe('changing and removing a class', () => {
     expect(screen.getByText(/Sunrise Yoga · 60 min · 20 places/)).toBeTruthy();
   });
 
+  // **KD'S THIRD CALL THAT DAY**, taking Mindbody's behaviour over TeamUp's,
+  // which cannot reinstate an archived Class Type at all. No question in front
+  // of it: bringing a class back ADDS to the timetable and takes nothing away.
+  it('brings a removed class back to the timetable', async () => {
+    api.getClasses.mockResolvedValue(timetable({ entries: [], archived: [YOGA] }));
+    drawScreen();
+    fireEvent.click(await screen.findByRole('button', { name: /No longer running/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Bring Sunrise Yoga back to the timetable/ }));
+    await waitFor(() => expect(api.restoreClass).toHaveBeenCalledWith('g1', 't1'));
+    // The reply is the whole timetable, so the class is simply live again.
+    await screen.findByText('Mon & Wed at 18:30');
+  });
+
   it('prints the server s own sentence when a save is refused', async () => {
     api.archiveClass.mockRejectedValue(new Error('nope'));
     drawScreen();
     await screen.findByText('Sunrise Yoga');
     fireEvent.click(screen.getByRole('button', { name: /Take Sunrise Yoga off the timetable/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove it' }));
     await screen.findByText("We couldn't save that.");
     // AND THE TIMETABLE IS STILL THERE. A failed save must not blank the screen.
     expect(screen.getByText('Sunrise Yoga')).toBeTruthy();
@@ -409,6 +493,21 @@ describe('who may change it', () => {
     expect(screen.queryByRole('button', { name: /Add a class/ })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
     expect(screen.queryByRole('button', { name: /Add a repeat/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Take Sunrise Yoga off the timetable/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Stop the Mon & Wed repeat/ })).toBeNull();
+  });
+
+  it('a lapsed gym is not offered Bring back either', async () => {
+    api.getClasses.mockResolvedValue(timetable({ entries: [], archived: [YOGA] }));
+    api.getMine.mockResolvedValue({
+      data: { orgs: [{ ...ORG, consoleReadOnly: true, subscription: null }], formerOrgs: [] },
+    });
+    drawScreen();
+    fireEvent.click(await screen.findByRole('button', { name: /No longer running/ }));
+    // The class is still NAMED — read-only seals nobody out of reading — and
+    // the control is what goes quiet.
+    expect(screen.getByText(/Sunrise Yoga · 60 min · 20 places/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Bring Sunrise Yoga back/ })).toBeNull();
   });
 
   // Hiding is not the enforcement (R3.3) — the address is reachable by typing

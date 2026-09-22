@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Loader2, Plus, X } from 'lucide-react';
+import { Loader2, Plus, RotateCcw, X } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
-import { ConsoleCard, ConsoleFailed, ConsoleLoading, ConsoleSection } from '../../components/console/ConsoleStates';
+import {
+  ConfirmInline,
+  ConsoleCard,
+  ConsoleFailed,
+  ConsoleLoading,
+  ConsoleSection,
+} from '../../components/console/ConsoleStates';
 import TimePick from '../../components/console/TimePick';
 import { useConsoleOrg } from './useConsoleOrg';
 import { viewerPrivileges } from './consoleView';
@@ -17,15 +23,13 @@ import {
   classSwatch,
   emptyClassDraft,
   emptyRepeatDraft,
-  horizonLine,
   minutesLine,
   nextDatesLine,
   placesLine,
+  repeatFactsLine,
   repeatLine,
   repeatProblem,
   repeatRequest,
-  repeatWindowLine,
-  sessionsAheadLine,
   timetableLists,
   toggleWeekday,
   weekdayLine,
@@ -61,6 +65,17 @@ import {
 // calendar and no way to change or cancel a single day. Both are 17b-ii. What a
 // gym can do here is say what it runs and when it repeats, and see the dates
 // that produced.
+//
+// **NOTHING ON THIS SCREEN DESTROYS DATES WITHOUT ASKING** (Kd, 2026-09-22).
+// Remove and Stop both clear every date a class or a repeat had ahead of it, and
+// no tap puts them back — so each one asks first, IN PLACE (`ConfirmInline`),
+// never over the whole page. Everything else here is one tap, because everything
+// else is one tap to undo.
+//
+// **AND NOTHING LEAVES FOR GOOD.** A removed class keeps its name, its numbers
+// and its past dates under "No longer running", with a **Bring back** button —
+// Kd's ruling the same day, taking Mindbody's behaviour over TeamUp's, which
+// cannot reinstate an archived Class Type at all.
 
 const inputStyle = {
   background: '#0A0908',
@@ -362,6 +377,10 @@ export default function Classes() {
   const [addDraft, setAddDraft] = useState(emptyClassDraft);
   const [editing, setEditing] = useState(null);
   const [editDraft, setEditDraft] = useState(emptyClassDraft);
+  // WHICH ROW IS ASKING A QUESTION RIGHT NOW — an id, never a boolean: two rows
+  // sharing one flag would open both questions at once, and a person answering
+  // the wrong one is the defect the question exists to prevent.
+  const [confirming, setConfirming] = useState(null);
   const [repeatFor, setRepeatFor] = useState(null);
   const [repeatDraftState, setRepeatDraftState] = useState(emptyRepeatDraft(''));
 
@@ -509,9 +528,6 @@ export default function Classes() {
           {org.name}
           {lists.timezone === '' ? '' : ` · times are ${lists.timezone}`}
         </p>
-        <p className="text-sm mt-1" style={labelStyle}>
-          {horizonLine(lists.horizonDays)}
-        </p>
       </div>
 
       {/* §4.2's read-only console: staff of a lapsed gym SEE everything and
@@ -600,9 +616,13 @@ export default function Classes() {
                       >
                         {isEditing ? 'Close' : 'Edit'}
                       </button>
+                      {/* IT ASKS FIRST (Kd, 2026-09-22). Removing a class stops
+                          its repeats and clears every date it had ahead of it,
+                          and tapping again cannot put those dates back — so the
+                          tap that does it is not the tap that asks for it. */}
                       <button
                         type="button"
-                        onClick={() => void run(`archive:${type.id}`, () => orgService.archiveClass(gymId, type.id))}
+                        onClick={() => setConfirming(`archive:${type.id}`)}
                         disabled={busy !== null}
                         aria-label={`Take ${type.name} off the timetable`}
                         className="text-sm inline-flex items-center gap-1"
@@ -618,6 +638,22 @@ export default function Classes() {
                     </div>
                   )}
                 </div>
+
+                {confirming === `archive:${type.id}` ? (
+                  <div className="mt-3">
+                    <ConfirmInline
+                      question={`Take ${type.name} off the timetable? Its repeats stop and the dates it had coming up are cleared. The days it already ran are kept, and you can bring it back from "No longer running" below.`}
+                      confirmLabel="Remove it"
+                      cancelLabel="Keep it"
+                      busy={busy !== null}
+                      onCancel={() => setConfirming(null)}
+                      onConfirm={() => {
+                        setConfirming(null);
+                        void run(`archive:${type.id}`, () => orgService.archiveClass(gymId, type.id));
+                      }}
+                    />
+                  </div>
+                ) : null}
 
                 {isEditing ? (
                   <div className="mt-4">
@@ -648,36 +684,54 @@ export default function Classes() {
                   {entry.schedules.map((schedule) => (
                     <div
                       key={schedule.id}
-                      className="rounded-xl px-3 py-2.5 flex items-start justify-between gap-3"
+                      className="rounded-xl px-3 py-2.5 flex flex-col gap-2"
                       style={{ background: 'rgba(255,255,255,0.03)' }}
                     >
-                      <div className="min-w-0">
-                        <div className="text-sm" style={{ color: '#fff' }}>
-                          {repeatLine(schedule, lists.clockFormat)}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm" style={{ color: '#fff' }}>
+                            {repeatLine(schedule, lists.clockFormat)}
+                          </div>
+                          <div className="text-xs mt-0.5" style={labelStyle}>
+                            {repeatFactsLine(schedule)}
+                          </div>
+                          <div className="text-xs mt-0.5" style={labelStyle}>
+                            {nextDatesLine(schedule)}
+                          </div>
                         </div>
-                        <div className="text-xs mt-0.5" style={labelStyle}>
-                          {repeatWindowLine(schedule)} · {sessionsAheadLine(schedule)}
-                        </div>
-                        <div className="text-xs mt-0.5" style={labelStyle}>
-                          {nextDatesLine(schedule)}
-                        </div>
+                        {locked ? null : (
+                          <button
+                            type="button"
+                            onClick={() => setConfirming(`stop:${schedule.id}`)}
+                            disabled={busy !== null}
+                            aria-label={`Stop the ${weekdayLine(schedule.weekdays)} repeat of ${type.name}`}
+                            className="text-sm flex-shrink-0"
+                            style={{ color: 'rgba(255,255,255,0.45)' }}
+                          >
+                            {busy === `stop:${schedule.id}` ? 'Stopping…' : 'Stop'}
+                          </button>
+                        )}
                       </div>
-                      {locked ? null : (
-                        <button
-                          type="button"
-                          onClick={() =>
+                      {/* STOP ASKS TOO, and that is the CLASS of the change
+                          rather than the one button Kd named: stopping a repeat
+                          clears every date it had ahead of it, exactly as
+                          removing the class does, and no tap brings them back.
+                          Two buttons on this screen destroy dates; both ask. */}
+                      {confirming === `stop:${schedule.id}` ? (
+                        <ConfirmInline
+                          question={`Stop the ${weekdayLine(schedule.weekdays)} repeat of ${type.name}? Its coming dates are cleared and ${type.name} stays on your timetable — you can add a repeat again whenever you like.`}
+                          confirmLabel="Stop it"
+                          cancelLabel="Leave it running"
+                          busy={busy !== null}
+                          onCancel={() => setConfirming(null)}
+                          onConfirm={() => {
+                            setConfirming(null);
                             void run(`stop:${schedule.id}`, () =>
                               orgService.stopClassRepeat(gymId, schedule.id),
-                            )
-                          }
-                          disabled={busy !== null}
-                          aria-label={`Stop the ${weekdayLine(schedule.weekdays)} repeat of ${type.name}`}
-                          className="text-sm flex-shrink-0"
-                          style={{ color: 'rgba(255,255,255,0.45)' }}
-                        >
-                          {busy === `stop:${schedule.id}` ? 'Stopping…' : 'Stop'}
-                        </button>
-                      )}
+                            );
+                          }}
+                        />
+                      ) : null}
                     </div>
                   ))}
 
@@ -749,13 +803,43 @@ export default function Classes() {
           {lists.archived.length === 0 ? null : (
             <ConsoleSection
               title="No longer running"
-              summary="Classes you have taken off the timetable. Their past dates are kept."
+              summary="Classes you have taken off the timetable. Their past dates are kept, and you can bring one back."
               aside={`${String(lists.archived.length)} kept`}
             >
               <div className="flex flex-col gap-2">
                 {lists.archived.map((type) => (
-                  <div key={type.id} className="text-sm" style={labelStyle}>
-                    {type.name} · {minutesLine(type.minutes)} · {placesLine(type.places)}
+                  <div
+                    key={type.id}
+                    className="text-sm flex items-center justify-between gap-3"
+                    style={labelStyle}
+                  >
+                    <span className="min-w-0 truncate">
+                      {type.name} · {minutesLine(type.minutes)} · {placesLine(type.places)}
+                    </span>
+                    {/* BRING IT BACK — Kd, 2026-09-22, Mindbody's way rather than
+                        TeamUp's (which cannot reinstate an archived Class Type
+                        at all). No question in front of this one: it ADDS a
+                        class back to the timetable and takes nothing away, and
+                        Remove is one tap from undoing it. */}
+                    {locked ? null : (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void run(`restore:${type.id}`, () => orgService.restoreClass(gymId, type.id))
+                        }
+                        disabled={busy !== null}
+                        aria-label={`Bring ${type.name} back to the timetable`}
+                        className="text-sm inline-flex items-center gap-1 flex-shrink-0"
+                        style={{ color: '#FF8A1F' }}
+                      >
+                        {busy === `restore:${type.id}` ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <RotateCcw className="w-4 h-4" />
+                        )}
+                        Bring back
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>

@@ -143,6 +143,21 @@ export function registerClassRoutes(app: FastifyInstance, deps: ClassRouteDeps):
     return reply.status(200).send(timetable);
   });
 
+  /** BRING IT BACK. POST and not PUT: it is an action on a thing, not a
+   *  replacement of it, and the same request twice answers 404 the second time
+   *  — which is what a caller acting on a stale list should be told. */
+  app.post("/v1/orgs/:gymId/classes/:classTypeId/restore", guarded, async (req, reply) => {
+    const params = parseOr400(classTypeParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const timetable = await service.restoreClassType(
+      classDeps,
+      requireUserId(req),
+      params.gymId,
+      params.classTypeId,
+    );
+    return reply.status(200).send(timetable);
+  });
+
   app.post("/v1/orgs/:gymId/classes/:classTypeId/repeats", guarded, async (req, reply) => {
     const params = parseOr400(classTypeParamsSchema, req.params, req, reply);
     if (params === null) return;

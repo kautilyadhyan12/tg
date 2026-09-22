@@ -692,6 +692,19 @@ export const orgService = {
       authApi.delete(`/v1/orgs/${gymId}/classes/${classTypeId}`),
     ),
 
+  /** POST /v1/orgs/:gymId/classes/:classTypeId/restore — bring it back.
+   *
+   *  Kd's ruling, 2026-09-22, after being shown that TeamUp cannot reinstate an
+   *  archived Class Type and Mindbody can ("View inactive service categories" →
+   *  Activate). **Its repeats stay stopped**: the gym adds one again, and the
+   *  class's past dates were never touched. */
+  restoreClass: (gymId, classTypeId) =>
+    readThrough(
+      gymClassMutationResponseSchema,
+      'that class',
+      authApi.post(`/v1/orgs/${gymId}/classes/${classTypeId}/restore`, {}),
+    ),
+
   /** POST /v1/orgs/:gymId/classes/:classTypeId/repeats — when it runs.
    *
    *  The body is the gym's own CLOCK TIME and its weekdays, never an instant:

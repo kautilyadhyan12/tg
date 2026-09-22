@@ -265,6 +265,27 @@ export async function archiveClassType(
   return await readOr404(deps, gymId);
 }
 
+/** BRING A CLASS BACK (Kd, 2026-09-22 — Mindbody's way, not TeamUp's; the repo
+ *  carries the ruling). A write, so the read-only console refuses it like every
+ *  other change. */
+export async function restoreClassType(
+  deps: ClassesDeps,
+  userId: string,
+  gymId: string,
+  classTypeId: string,
+): Promise<GymClassesResponse> {
+  await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
+  throwOnFailure(
+    await repo.restoreClassType(deps.sql, {
+      gymId,
+      classTypeId,
+      actorUserId: userId,
+      now: deps.now(),
+    }),
+  );
+  return await readOr404(deps, gymId);
+}
+
 export async function createSchedule(
   deps: ClassesDeps,
   userId: string,

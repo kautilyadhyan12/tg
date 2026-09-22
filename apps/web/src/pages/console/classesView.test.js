@@ -16,16 +16,14 @@ import {
   classSwatch,
   emptyClassDraft,
   emptyRepeatDraft,
-  horizonLine,
   minutesLine,
   nextDatesLine,
   placesLine,
+  repeatFactsLine,
   repeatLine,
   repeatProblem,
   repeatRequest,
   repeatTimeValue,
-  repeatWindowLine,
-  sessionsAheadLine,
   timetableLists,
   toggleWeekday,
   weekdayLine,
@@ -82,13 +80,40 @@ describe('reading a repeat', () => {
     expect(repeatLine({ weekdays: [1], startMinute: null }, '24h')).toBe('');
   });
 
-  it('says the window, and says when there is no end', () => {
-    expect(repeatWindowLine({ startsOn: '2026-09-21' })).toBe('From Mon 21 Sep 2026');
-    expect(repeatWindowLine({ startsOn: '2026-09-21', endsOn: '2026-12-25' })).toBe(
-      'Mon 21 Sep 2026 to Fri 25 Dec 2026',
+  // **THE ASYMMETRY IS THE RULE, AND KD IS THE ONE WHO FOUND THE DEFECT.** The
+  // line used to read "From Tue 22 Sep · 16 dates on the calendar" for a repeat
+  // with NO end date, and 16 is the size of the eight-week window rather than
+  // the number of times the class runs — so a gym would read its ongoing class
+  // as stopping after sixteen. An open-ended repeat says **ongoing**; one the
+  // gym gave an end date keeps the count, because there the count is true.
+  it('never counts the dates of an open-ended repeat, and always counts a bounded one', () => {
+    expect(repeatFactsLine({ startsOn: '2026-09-21', endsOn: null, sessionsAhead: 16 })).toBe(
+      'From Mon 21 Sep 2026 · ongoing',
     );
-    expect(repeatWindowLine({ startsOn: '2026-09-21', endsOn: '' })).toBe('From Mon 21 Sep 2026');
-    expect(repeatWindowLine({})).toBe('');
+    expect(repeatFactsLine({ startsOn: '2026-09-21', sessionsAhead: 16 })).toBe(
+      'From Mon 21 Sep 2026 · ongoing',
+    );
+    expect(repeatFactsLine({ startsOn: '2026-09-21', endsOn: '', sessionsAhead: 16 })).toBe(
+      'From Mon 21 Sep 2026 · ongoing',
+    );
+    expect(
+      repeatFactsLine({ startsOn: '2026-09-21', endsOn: '2026-12-25', sessionsAhead: 16 }),
+    ).toBe('Mon 21 Sep 2026 to Fri 25 Dec 2026 · 16 dates on the calendar.');
+    expect(
+      repeatFactsLine({ startsOn: '2026-09-21', endsOn: '2026-09-21', sessionsAhead: 1 }),
+    ).toBe('Mon 21 Sep 2026 to Mon 21 Sep 2026 · 1 date on the calendar.');
+  });
+
+  // Zero is said in BOTH cases and is never silent: it means the window has
+  // passed, has not started, or the calendar was not written.
+  it('says when a repeat has no dates at all, ended or not', () => {
+    expect(repeatFactsLine({ startsOn: '2026-09-21', sessionsAhead: 0 })).toBe(
+      'From Mon 21 Sep 2026 · nothing on the calendar yet.',
+    );
+    expect(repeatFactsLine({ startsOn: '2026-09-21', endsOn: '2026-12-25' })).toBe(
+      'Mon 21 Sep 2026 to Fri 25 Dec 2026 · nothing on the calendar yet.',
+    );
+    expect(repeatFactsLine({})).toBe('');
   });
 
   // **THE LINE IS THE SERVER'S ANSWER, AND AN EMPTY ONE SAYS SO.** A screen that
@@ -106,20 +131,6 @@ describe('reading a repeat', () => {
     );
   });
 
-  it('counts what is on the calendar, and words the zero', () => {
-    expect(sessionsAheadLine({ sessionsAhead: 0 })).toBe('Nothing on the calendar yet.');
-    expect(sessionsAheadLine({})).toBe('Nothing on the calendar yet.');
-    expect(sessionsAheadLine({ sessionsAhead: 1 })).toBe('1 date on the calendar.');
-    expect(sessionsAheadLine({ sessionsAhead: 16 })).toBe('16 dates on the calendar.');
-  });
-
-  it('says how far ahead the calendar goes, from the server s own number', () => {
-    expect(horizonLine(56)).toContain('8 weeks');
-    expect(horizonLine(28)).toContain('4 weeks');
-    // A reply that has not arrived falls back to the shared constant rather than
-    // printing a sentence about nothing.
-    expect(horizonLine(undefined)).toBe(horizonLine(CLASS_FILL_HORIZON_DAYS));
-  });
 });
 
 describe('reading a class', () => {

@@ -86,14 +86,32 @@ export function repeatLine(schedule, clockFormat) {
   return `${days} at ${time}`;
 }
 
-/** WHEN IT RUNS BETWEEN. Most repeats have no end — a gym's ordinary timetable —
- *  and that case says so rather than leaving the sentence hanging. */
-export function repeatWindowLine(schedule) {
+/** WHEN IT RUNS BETWEEN, AND HOW MANY DATES — one line, because the two halves
+ *  cannot be written independently without saying something false.
+ *
+ *  **A REPEAT WITH NO END DATE GETS NO COUNT, and that is the whole point of
+ *  this function** (Kd, 2026-09-22). It used to read "From Tue 22 Sep · 16 dates
+ *  on the calendar", and 16 is the size of the eight-week window, not the number
+ *  of times the class runs — so a gym reading it would think its ongoing class
+ *  stops after sixteen. It says **ongoing**, which is what it is.
+ *
+ *  **A repeat the gym gave an end date DOES get the count**, because there it is
+ *  true: the window closes before the horizon does, so the number IS how many
+ *  times it runs. That asymmetry is the rule, not an oversight.
+ *
+ *  **Zero dates is said in both cases and is never silent.** It means the
+ *  repeat's window has already passed, has not started, or the calendar was not
+ *  written — all of which look like a bug until somebody says otherwise. */
+export function repeatFactsLine(schedule) {
   const from = closureDateLabel(schedule?.startsOn ?? '');
   if (from === '') return '';
   const until = schedule?.endsOn;
-  if (typeof until !== 'string' || until === '') return `From ${from}`;
-  return `${from} to ${closureDateLabel(until)}`;
+  const openEnded = typeof until !== 'string' || until === '';
+  const window = openEnded ? `From ${from}` : `${from} to ${closureDateLabel(until)}`;
+  const ahead = Number.isInteger(schedule?.sessionsAhead) ? schedule.sessionsAhead : 0;
+  if (ahead === 0) return `${window} · nothing on the calendar yet.`;
+  if (openEnded) return `${window} · ongoing`;
+  return `${window} · ${ahead === 1 ? '1 date' : `${String(ahead)} dates`} on the calendar.`;
 }
 
 /** THE NEXT FEW DATES, FROM THE CALENDAR THE SERVER WROTE — never worked out
@@ -115,15 +133,19 @@ export function nextDatesLine(schedule) {
   return more > 0 ? `${shown} · +${String(more)} more` : shown;
 }
 
-/** HOW FAR AHEAD THE CALENDAR GOES, in weeks, from the server's own number.
- *  Read off the reply rather than from the shared constant so the sentence is
- *  about what THIS server is doing; the constant is the fallback for a reply
- *  that has not arrived. */
-export function horizonLine(horizonDays) {
-  const days = Number.isInteger(horizonDays) && horizonDays > 0 ? horizonDays : CLASS_FILL_HORIZON_DAYS;
-  const weeks = Math.round(days / 7);
-  return `Dates are written ${String(weeks)} weeks ahead and move forward every night.`;
-}
+/** ~~`horizonLine` — "Dates are written 8 weeks ahead and move forward every
+ *  night."~~ **STRUCK 2026-09-22, and Kd is the one who found it.** He read it
+ *  and asked *"will gyms set things 8 weeks ahead?"* — which is exactly what it
+ *  made him think, and is the opposite of what happens: the gym says "Mon and
+ *  Wed at 6:30, no end date" ONCE and the server keeps the dates written.
+ *
+ *  **The number was right and the sentence was wrong.** No product in this
+ *  market explains its own plumbing to a gym owner: in Mindbody a class simply
+ *  runs indefinitely, in TeamUp a schedule is open-ended until you give it an
+ *  end date, and neither says a word about how far ahead anything is generated.
+ *  Struck in place rather than deleted so the next person does not re-add it.
+ *  `horizonDays` stays ON THE WIRE — the week calendar (17b-ii) needs to know
+ *  how far it can page — it is simply not a sentence. */
 
 /** HOW MANY FIT. `null` is NO LIMIT and is said in words — a blank would read as
  *  "nobody has filled this in", which is a different thing and is the
@@ -274,16 +296,6 @@ export function repeatRequest(draft) {
  *  form holds a clock face" stay one. */
 export function repeatTimeValue(startMinute) {
   return minutesToClock(startMinute);
-}
-
-/** HOW MANY DATES THIS REPEAT HOLDS, as a sentence. Zero is the case worth
- *  wording: it means the repeat's window has already passed or has not started,
- *  which looks like a bug until somebody says it is not. */
-export function sessionsAheadLine(schedule) {
-  const ahead = Number.isInteger(schedule?.sessionsAhead) ? schedule.sessionsAhead : 0;
-  if (ahead === 0) return 'Nothing on the calendar yet.';
-  if (ahead === 1) return '1 date on the calendar.';
-  return `${String(ahead)} dates on the calendar.`;
 }
 
 /** Everything the screen lists, in one place, so the page body has no `filter`

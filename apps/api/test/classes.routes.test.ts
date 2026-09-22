@@ -22,6 +22,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
+import { fillClassSessions } from "../src/modules/orgs/classes/fill.js";
 import {
   CLASS_FILL_HORIZON_DAYS,
   CLASS_SCHEDULES_PER_TYPE_MAX,
@@ -187,6 +188,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
   const classesUrl = (gymId: string) => `/v1/orgs/${gymId}/classes`;
   const typeUrl = (gymId: string, typeId: string) => `${classesUrl(gymId)}/${typeId}`;
   const repeatsUrl = (gymId: string, typeId: string) => `${typeUrl(gymId, typeId)}/repeats`;
+  const restoreUrl = (gymId: string, typeId: string) => `${typeUrl(gymId, typeId)}/restore`;
   const repeatUrl = (gymId: string, id: string) => `/v1/orgs/${gymId}/class-repeats/${id}`;
 
   const timetable = (res: { body: string }) => JSON.parse(res.body) as GymClassesResponse;
@@ -308,6 +310,9 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
             outsider.cookies,
           ),
           await del(repeatUrl(org.org.id, repeatId), outsider.cookies),
+          // The seventh door, added with Bring back: a class somebody else
+          // archived is not a class a stranger may put back on their timetable.
+          await post(restoreUrl(org.org.id, typeId), {}, outsider.cookies),
         ];
         for (const res of tried) {
           expect(
@@ -337,6 +342,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
         ).statusCode,
       ).toBe(404);
       expect((await del(repeatUrl(rivalOrg.org.id, repeatId), rival.cookies)).statusCode).toBe(404);
+      expect((await post(restoreUrl(rivalOrg.org.id, typeId), {}, rival.cookies)).statusCode).toBe(404);
       expect(await stateOf(org.org.id)).toEqual(before);
       expect(await stateOf(rivalOrg.org.id)).toEqual({ types: 0, repeats: 0, sessions: 0 });
 
@@ -533,6 +539,61 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       // caller asked about is no longer on the live timetable.
       expect((await del(typeUrl(org.org.id, type.id), owner.cookies)).statusCode).toBe(404);
       expect((await put(typeUrl(org.org.id, type.id), aClass(), owner.cookies)).statusCode).toBe(404);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "brings an archived class back, without bringing its old dates back",
+    async () => {
+      const owner = await makeUser("back-owner");
+      const org = await makeOrg(owner.cookies, "Bring Back Classes Gym");
+      const made = await post(classesUrl(org.org.id), aClass({ name: "Barre" }), owner.cookies);
+      const type = timetable(made).entries[0]?.type;
+      if (type === undefined) throw new Error("create answered no class");
+      await post(
+        repeatsUrl(org.org.id, type.id),
+        { weekdays: [1, 2, 3, 4, 5, 6, 7], startMinute: at(7), startsOn: dayFromToday(0) },
+        owner.cookies,
+      );
+      expect((await stateOf(org.org.id)).sessions).toBe(CLASS_FILL_HORIZON_DAYS + 1);
+      expect((await del(typeUrl(org.org.id, type.id), owner.cookies)).statusCode).toBe(200);
+
+      const back = await post(restoreUrl(org.org.id, type.id), {}, owner.cookies);
+      expect(back.statusCode).toBe(200);
+      const after = timetable(back);
+      // LIVE AGAIN, with its name and its numbers, and the archived list empty.
+      expect(after.entries[0]?.type).toMatchObject({ name: "Barre", minutes: 60, places: 20 });
+      expect(after.entries[0]?.type.archivedAt).toBeNull();
+      expect(after.archived).toEqual([]);
+
+      // **AND ITS REPEATS STAY STOPPED, WHICH IS THE POINT OF THE CASE.** The
+      // archive ended them and cleared their dates; un-ending them would put
+      // dates back on a calendar nobody has asked for.
+      expect(after.entries[0]?.schedules).toEqual([]);
+      expect(await stateOf(org.org.id)).toMatchObject({ types: 1, repeats: 0 });
+
+      // THE NIGHTLY JOB MUST NOT PUT THEM BACK EITHER \u2014 driven, not assumed,
+      // because this is the one way a stopped repeat could come back to life.
+      await fillClassSessions(sql, { gymIds: [org.org.id] });
+      const [left] = await sql<{ future: number }[]>`
+        SELECT count(*) FILTER (WHERE starts_at > now())::int AS future
+        FROM gym_class_sessions WHERE gym_id = ${org.org.id}`;
+      expect(left?.future).toBe(0);
+
+      // Bringing back a class that is already live is a 404: the caller is
+      // acting on a list that has moved under them.
+      expect((await post(restoreUrl(org.org.id, type.id), {}, owner.cookies)).statusCode).toBe(404);
+
+      // And the gym can simply add a repeat again \u2014 two taps, and the dates
+      // are written as they always are.
+      const again = await post(
+        repeatsUrl(org.org.id, type.id),
+        { weekdays: [1, 2, 3, 4, 5, 6, 7], startMinute: at(7), startsOn: dayFromToday(0) },
+        owner.cookies,
+      );
+      expect(again.statusCode).toBe(201);
+      expect((await stateOf(org.org.id)).sessions).toBeGreaterThan(CLASS_FILL_HORIZON_DAYS);
     },
     TEST_TIMEOUT_MS,
   );
@@ -756,6 +817,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
           { weekdays: [MON], startMinute: at(7), startsOn: dayFromToday(0) },
           owner.cookies,
         ),
+        await post(restoreUrl(org.org.id, type.id), {}, owner.cookies),
       ]) {
         expect(res.statusCode).toBe(409);
         expect(JSON.parse(res.body)).toMatchObject({ error: "gym_not_on_plan" });
@@ -812,6 +874,15 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       );
       expect(tooMany.statusCode).toBe(409);
       expect(JSON.parse(tooMany.body)).toMatchObject({ error: "too_many_classes" });
+
+      // **BRINGING ONE BACK COUNTS AGAINST THE CAP**, because a restored class
+      // is a live class \u2014 otherwise the archive would be a way round the limit.
+      expect((await post(restoreUrl(org.org.id, oldest.id), {}, owner.cookies)).statusCode)
+        .toBe(409);
+      // Archive one and there is room for it again.
+      expect((await del(typeUrl(org.org.id, mine.id), owner.cookies)).statusCode).toBe(200);
+      expect((await post(restoreUrl(org.org.id, oldest.id), {}, owner.cookies)).statusCode)
+        .toBe(200);
     },
     TEST_TIMEOUT_MS,
   );

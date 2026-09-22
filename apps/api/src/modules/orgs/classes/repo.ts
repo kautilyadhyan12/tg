@@ -367,6 +367,60 @@ export async function archiveClassType(
   });
 }
 
+/** BRING A CLASS BACK — the other side of the archive, and Kd's call on
+ *  2026-09-22 after asking what real gym software does.
+ *
+ *  **THE TWO BIGGEST PRODUCTS DISAGREE AND THAT IS WHY IT IS HIS RULING.**
+ *  TeamUp: *"once a Class Type has been archived in TeamUp, you will not be able
+ *  to reinstate it"* — one way. Mindbody: deactivate, then "View inactive
+ *  service categories" and press **Activate**. He took Mindbody's, on his own
+ *  standing rule that nothing is taken away, and because the button that
+ *  archives says "Remove", which is not a word a one-way door should carry.
+ *
+ *  **ITS REPEATS STAY STOPPED, DELIBERATELY.** The archive ended them and
+ *  deleted their future dates; un-ending them here would put dates back on a
+ *  calendar nobody has asked for, off a window that may be months past. The gym
+ *  adds a repeat again — two taps — and its PAST dates were never touched, so
+ *  the class comes back with its history attached.
+ *
+ *  **IT COUNTS AGAINST THE CAP**, because a restored class is a live class. A
+ *  gym at its limit is told to archive one first, which is the same sentence
+ *  `createClassType` answers. */
+export async function restoreClassType(
+  sql: Sql,
+  input: { gymId: string; classTypeId: string; actorUserId: string; now: Date },
+): Promise<ClassWriteOutcome> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId);
+    // The pair is the key, and `archived_at IS NOT NULL` is part of it: bringing
+    // back a class that is already live is a 404, not a silent no-op, because
+    // the caller is acting on a list that has moved under them.
+    const [before] = await tx<{ id: string; name: string }[]>`
+      SELECT id, name FROM gym_class_types
+      WHERE id = ${input.classTypeId} AND gym_id = ${input.gymId} AND archived_at IS NOT NULL`;
+    if (before === undefined) return { kind: "not_found" };
+
+    const [live] = await tx<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM gym_class_types
+      WHERE gym_id = ${input.gymId} AND archived_at IS NULL`;
+    if ((live?.n ?? 0) >= CLASS_TYPES_MAX) return { kind: "too_many", cap: CLASS_TYPES_MAX };
+
+    await tx`
+      UPDATE gym_class_types SET archived_at = NULL, updated_at = ${input.now}
+      WHERE id = ${input.classTypeId} AND gym_id = ${input.gymId}`;
+
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.class_type_restored",
+      targetType: "gym_class_type",
+      targetId: input.classTypeId,
+      meta: { name: before.name },
+    });
+    return { kind: "ok" };
+  });
+}
+
 export interface ClassScheduleInput {
   weekdays: readonly number[];
   startMinute: number;
