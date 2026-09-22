@@ -396,12 +396,23 @@ export function runFieldsRequest(draft) {
  *  and never has to guess a missing field. A gym that changes nothing gets
  *  exactly what 17b-i would have given it. */
 export function repeatDraft(type, today) {
+  const fields = runFieldsDraft(type ?? null);
+  // **A COACH THE SERVER NO LONGER NAMES IS NOT FILLED IN.**
+  // The server answers `coachName` only while that person is still this gym's
+  // active staff, so an id with no name is somebody who has gone, and the save
+  // would be refused with `coach_not_staff` — for a field the gym never typed,
+  // on the first Save of an unrelated new Tuesday. The EDIT forms keep the value
+  // as they have it (`coachChoices` shows it as "No longer on your staff" and
+  // the server's sentence says what to do): there the gym is changing something
+  // that already names them. A NEW repeat starts with nobody instead.
+  const gone = fields.coachUserId !== '' && (fields.coachName === null || fields.coachName === '');
   return {
     weekdays: [],
     time: '18:00',
     startsOn: today ?? '',
     endsOn: '',
-    ...runFieldsDraft(type ?? null),
+    ...fields,
+    ...(gone ? { coachUserId: '', coachName: null } : {}),
   };
 }
 

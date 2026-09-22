@@ -690,8 +690,10 @@ export async function updateSchedule(
     await lockOrgRow(tx, input.gymId);
     // THE PAIR IS THE KEY. `id` alone would let one gym re-coach another gym's
     // repeat with a uuid it came by — the worst-thing test's second half.
-    const [before] = await tx<{ id: string; minutes: number; places: number | null }[]>`
-      SELECT id, minutes, places FROM gym_class_schedules
+    const [before] = await tx<
+      { id: string; minutes: number; places: number | null; coach_user_id: string | null }[]
+    >`
+      SELECT id, minutes, places, coach_user_id FROM gym_class_schedules
       WHERE id = ${input.scheduleId} AND gym_id = ${input.gymId} AND ended_at IS NULL`;
     if (before === undefined) return { kind: "not_found" };
 
@@ -724,11 +726,18 @@ export async function updateSchedule(
       targetId: input.scheduleId,
       // What changed and how far it reached — never the coach's name, which is
       // a person's own and is one join away for anybody entitled to it.
+      //
+      // **THE COACH IS HERE, AS AN ID.** Without it a change that swapped only
+      // the coach — this card's own worst thing, and the reason `coachIsStaff`
+      // exists — would be written as `60 -> 60`, `20 -> 20` and read as a no-op.
+      // An id and never a name, as `applicantUserId` and `removedUserId` already
+      // are one module up.
       meta: {
         minutes: `${String(before.minutes)} -> ${String(input.minutes)}`,
         places: `${before.places === null ? "none" : String(before.places)} -> ${
           input.places === null ? "none" : String(input.places)
         }`,
+        coach: `${before.coach_user_id ?? "none"} -> ${input.coachUserId ?? "none"}`,
         sessionsRestamped: String(restamped.count),
       },
     });

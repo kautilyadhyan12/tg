@@ -887,6 +887,33 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       // And so does the other repeat of the same class, every date of it.
       expect(byBucket.get("sister")).toMatchObject({ minutes: 60, places: 20, coach: null });
 
+      // **THE AUDIT SAYS THE COACH CHANGED**, and a change of the COACH ALONE is
+      // the case that proves it: without the coach on the row it would read
+      // "45 -> 45, 8 -> 8", a no-op — this card's own worst thing, invisible in
+      // the one place a gym looks afterwards. An id and never a name.
+      const coachOnly = await put(
+        repeatUrl(org.org.id, mine.id),
+        { minutes: 45, places: 8, coachUserId: null },
+        owner.cookies,
+      );
+      expect(coachOnly.statusCode).toBe(200);
+      const audit = await sql<{ meta: Record<string, string> }[]>`
+        SELECT meta FROM audit_log
+        WHERE gym_id = ${org.org.id} AND action = 'org.class_schedule_updated'
+          AND target_id = ${mine.id}
+        -- The identity column, not at: two writes a few milliseconds apart
+        -- can share a timestamp, and an order that can tie is a test that is
+        -- right most of the time.
+        ORDER BY id DESC`;
+      expect(audit).toHaveLength(2);
+      expect(audit[0]?.meta).toMatchObject({
+        minutes: "45 -> 45",
+        places: "8 -> 8",
+        coach: `${coach.userId} -> none`,
+      });
+      expect(audit[1]?.meta).toMatchObject({ coach: `none -> ${coach.userId}` });
+      expect(JSON.stringify(audit.map((a) => a.meta))).not.toContain("Cls rep-coach");
+
       // A STOPPED REPEAT IS A 404, not a silent write nobody can see: it has no
       // coming dates to re-stamp and it is not on the screen the caller acted
       // from.

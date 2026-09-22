@@ -25,9 +25,7 @@ import {
   classSwatch,
   coachChoices,
   emptyClassDraft,
-  minutesLine,
   nextDatesLine,
-  placesLine,
   repeatDraft,
   repeatEditDraft,
   repeatEditRequest,
@@ -989,8 +987,17 @@ export default function Classes() {
                     className="text-sm flex items-center justify-between gap-3"
                     style={labelStyle}
                   >
-                    <span className="min-w-0 truncate">
-                      {type.name} · {minutesLine(type.minutes)} · {placesLine(type.places)}
+                    {/* WORDED AS THE LIVE CARD IS. A bare "60 min · 20 places"
+                        here would be the very line `classDefaultsLine` exists
+                        to qualify: since Kd's ruling a class's numbers are what
+                        a NEW repeat starts from, and bringing this class back
+                        brings exactly that. Kept, not dropped — they are what
+                        the gym reads to tell two removed classes apart. */}
+                    <span className="min-w-0 flex flex-col">
+                      <span className="truncate">{type.name}</span>
+                      {classDefaultsLine(type) === '' ? null : (
+                        <span className="text-xs truncate">{classDefaultsLine(type)}</span>
+                      )}
                     </span>
                     {/* BRING IT BACK — Kd, 2026-09-22, Mindbody's way rather than
                         TeamUp's (which cannot reinstate an archived Class Type

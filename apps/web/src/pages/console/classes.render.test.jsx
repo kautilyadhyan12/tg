@@ -466,6 +466,31 @@ describe('saying when it repeats', () => {
     expect('endsOn' in body).toBe(false);
   });
 
+  // THE SAME RULE, AT THE SCREEN: once the class's coach has left, the server
+  // keeps the id and stops naming them, and a new repeat that copied the id
+  // would be refused `coach_not_staff` on its first Save — for a field the gym
+  // never typed.
+  it('starts a new repeat with nobody when the class s coach has left', async () => {
+    api.getClasses.mockResolvedValue(
+      timetable({ entries: [{ type: { ...YOGA, coachName: null }, schedules: [REPEAT] }] }),
+    );
+    // The staff list agrees she has gone — the fixture is one consistent world.
+    api.getStaff.mockResolvedValue({ data: { staff: [] } });
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    fireEvent.click(screen.getByRole('button', { name: /Add a repeat/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tue' }));
+    fireEvent.change(screen.getByLabelText('First date'), { target: { value: '2026-10-01' } });
+    // The other two still come from the class.
+    expect(screen.getByLabelText('How long (minutes)').value).toBe('60');
+    expect(screen.getByLabelText('Coach (optional)').value).toBe('');
+    fireEvent.click(screen.getByRole('button', { name: /Save this repeat/ }));
+
+    await waitFor(() => expect(api.addClassRepeat).toHaveBeenCalledTimes(1));
+    const [, , body] = api.addClassRepeat.mock.calls[0];
+    expect(body).toMatchObject({ minutes: 60, places: 20, coachUserId: null });
+  });
+
   it('lets the new repeat differ from its class, and sends what was typed', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
@@ -640,7 +665,10 @@ describe('changing and removing a class', () => {
     // "removed from the timetable" is not "deleted".
     await screen.findByText('No longer running');
     fireEvent.click(screen.getByRole('button', { name: /No longer running/ }));
-    expect(screen.getByText(/Sunrise Yoga · 60 min · 20 places/)).toBeTruthy();
+    // The removed class, worded as the live card is.
+    expect(
+      screen.getByText('A new repeat starts from: 60 min · 20 places · Priya Sharma'),
+    ).toBeTruthy();
   });
 
   // **KD'S THIRD CALL THAT DAY**, taking Mindbody's behaviour over TeamUp's,
@@ -668,6 +696,20 @@ describe('changing and removing a class', () => {
     await screen.findByText('1 kept');
     fireEvent.click(screen.getByRole('button', { name: /No longer running/ }));
     expect(screen.queryByText(/most recently removed/)).toBeNull();
+  });
+
+  // THE REMOVED-CLASSES LIST SAYS WHAT THE NUMBERS ARE FOR, in the live card's
+  // own words: a bare "60 min · 20 places" is the one claim `classDefaultsLine`
+  // exists to qualify. The numbers are KEPT, because they are how a gym tells
+  // two removed classes apart.
+  it('words a removed class s numbers as the live card does', async () => {
+    api.getClasses.mockResolvedValue(timetable({ entries: [], archived: [YOGA], archivedTotal: 1 }));
+    drawScreen();
+    fireEvent.click(await screen.findByRole('button', { name: /No longer running/ }));
+    expect(
+      await screen.findByText('A new repeat starts from: 60 min · 20 places · Priya Sharma'),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Sunrise Yoga · 60 min · 20 places/)).toBeNull();
   });
 
   it('brings a removed class back to the timetable', async () => {
@@ -718,7 +760,10 @@ describe('who may change it', () => {
     fireEvent.click(await screen.findByRole('button', { name: /No longer running/ }));
     // The class is still NAMED — read-only seals nobody out of reading — and
     // the control is what goes quiet.
-    expect(screen.getByText(/Sunrise Yoga · 60 min · 20 places/)).toBeTruthy();
+    // The removed class, worded as the live card is.
+    expect(
+      screen.getByText('A new repeat starts from: 60 min · 20 places · Priya Sharma'),
+    ).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Bring Sunrise Yoga back/ })).toBeNull();
   });
 

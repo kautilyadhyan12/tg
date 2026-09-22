@@ -420,7 +420,14 @@ describe('the repeat form', () => {
   // server takes all three outright and never guesses, so a form that stopped
   // copying them would send a gym's Monday whatever the constants say.
   it('fills a new repeat in from its class, and from the constants when there is none', () => {
-    const type = { minutes: 45, places: 12, coachUserId: 'dana-id', name: 'Spin' };
+    // A real class, as the server sends it: a named coach comes WITH their name.
+    const type = {
+      minutes: 45,
+      places: 12,
+      coachUserId: 'dana-id',
+      coachName: 'Dana Okafor',
+      name: 'Spin',
+    };
     expect(repeatDraft(type, '2026-09-21')).toEqual({
       weekdays: [],
       time: '18:00',
@@ -433,7 +440,7 @@ describe('the repeat form', () => {
       // Carried so the coach box can offer whoever is already set even when
       // the staff list does not hold them — `coachChoices`. It never goes back
       // on the wire.
-      coachName: null,
+      coachName: 'Dana Okafor',
     });
     // NO LIMIT SURVIVES THE COPY as the tick, not as a blank box — and the box
     // keeps a number behind it, so switching the tick off leaves something
@@ -446,6 +453,29 @@ describe('the repeat form', () => {
       places: '20',
       coachUserId: '',
     });
+  });
+
+  // MEASURED AGAINST REAL POSTGRES: once a coach leaves, the server keeps their
+  // id on the class and stops naming them, and a new repeat that copied the id
+  // is refused `coach_not_staff` on its first Save — for a field the gym never
+  // typed. A NEW repeat starts with nobody; everything else still comes from
+  // the class.
+  it('does not fill in a coach the server no longer names', () => {
+    const gone = { minutes: 45, places: 12, coachUserId: 'dana-id', coachName: null };
+    expect(repeatDraft(gone, '2026-09-21')).toMatchObject({
+      minutes: '45',
+      places: '12',
+      coachUserId: '',
+      coachName: null,
+    });
+    // An empty name is the same answer as none.
+    expect(repeatDraft({ ...gone, coachName: '' }, '2026-09-21').coachUserId).toBe('');
+    // Nobody named on the class stays nobody.
+    expect(repeatDraft({ ...gone, coachUserId: null }, '2026-09-21').coachUserId).toBe('');
+    // And the EDIT form is deliberately different: it keeps the id it was
+    // given, so `coachChoices` can show "No longer on your staff" and the gym
+    // decides — it is changing something that already names that person.
+    expect(repeatEditDraft(gone).coachUserId).toBe('dana-id');
   });
 
   it('refuses a repeat whose own length or places are out of bounds, in the form as on the server', () => {
