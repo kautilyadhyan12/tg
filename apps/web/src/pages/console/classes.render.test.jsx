@@ -272,6 +272,10 @@ describe('reading the timetable', () => {
     drawScreen();
     await screen.findByText('Fri 24 Jul 2026 to Sun 23 Aug 2026 · finished');
     expect(screen.queryByText(/nothing on the calendar yet/)).toBeNull();
+    // AND THE LINE UNDERNEATH DOES NOT SAY "yet" EITHER — the closing re-check's
+    // one line, which is Low-1's word surviving in the other function.
+    expect(screen.getByText('No more dates.')).toBeTruthy();
+    expect(screen.queryByText('No dates yet.')).toBeNull();
   });
 
   // THE EMPTY ARM AND THE FAILED ARM ARE DIFFERENT SCREENS. An unreadable page

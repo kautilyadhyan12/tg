@@ -165,6 +165,18 @@ describe('reading a repeat', () => {
   it('shows the dates the server wrote, and says so when there are none', () => {
     expect(nextDatesLine({ nextDates: [], sessionsAhead: 0 })).toBe('No dates yet.');
     expect(nextDatesLine({})).toBe('No dates yet.');
+    // **"YET" IS LOW-1's WORD AND IT SURVIVED IN THIS FUNCTION**: a repeat that
+    // has run its course read "finished" on one line and "No dates yet." on the
+    // next. Raised by the closing re-check as a line for 17b-ii; fixed here,
+    // because it is the same defect in the same shape.
+    expect(nextDatesLine({ nextDates: [], sessionsAhead: 0, finished: true })).toBe(
+      'No more dates.',
+    );
+    // `[null]` and not `['not-a-date']`: `closureDateLabel` returns an
+    // unreadable STRING unchanged on purpose, so only a non-string empties the
+    // list — which is the second of the two branches that print this word.
+    expect(nextDatesLine({ nextDates: [null], finished: true })).toBe('No more dates.');
+    expect(nextDatesLine({ nextDates: [null] })).toBe('No dates yet.');
     expect(
       nextDatesLine({ nextDates: ['2026-09-21', '2026-09-23'], sessionsAhead: 2, datesComplete: true }),
     ).toBe('Next: Mon 21 Sep 2026 · Wed 23 Sep 2026');

@@ -153,10 +153,20 @@ export function repeatFactsLine(schedule) {
  *  `finished` cannot reach the `more to come` branch: a repeat that has ended is
  *  necessarily inside the window, so `datesComplete` is true for it. */
 export function nextDatesLine(schedule) {
+  // **"YET" IS LOW-1's WORD, AND IT SURVIVED IN THIS FUNCTION** — raised by the
+  // closing re-check as a line for 17b-ii rather than a finding, and fixed here
+  // instead because it is the same defect in the same shape: a repeat that has
+  // run its course read "· finished" on one line and "No dates yet." on the
+  // next. "Yet" is what you say about something that has not started.
+  //
+  // It is the CLASS, not the case: Low-1 fixed `repeatFactsLine` and left its
+  // twin standing, which is how a word gets corrected twice and is still wrong
+  // somewhere (:5348 rule 5).
+  const ended = schedule?.finished === true;
   const dates = Array.isArray(schedule?.nextDates) ? schedule.nextDates : [];
-  if (dates.length === 0) return 'No dates yet.';
+  if (dates.length === 0) return ended ? 'No more dates.' : 'No dates yet.';
   const labels = dates.map((d) => closureDateLabel(d)).filter((d) => d !== '');
-  if (labels.length === 0) return 'No dates yet.';
+  if (labels.length === 0) return ended ? 'No more dates.' : 'No dates yet.';
   const shown = `Next: ${labels.join(' · ')}`;
   if (schedule?.datesComplete !== true) return `${shown} · more to come`;
   const ahead = Number.isInteger(schedule?.sessionsAhead) ? schedule.sessionsAhead : labels.length;
