@@ -361,6 +361,26 @@ export const codeParamsSchema = z
   .strict();
 export type CodeParams = z.infer<typeof codeParamsSchema>;
 
+/** A gym and one of its class types, together — §13.3's timetable routes.
+ *
+ *  **BOTH ids, always, and that is the tenancy decision rather than a habit.** A
+ *  class type id is a uuid another gym's staff could come by, so the id alone is
+ *  never the key: `classes/repo.ts` carries the pair into every `WHERE`, and a
+ *  shape that could not express the pair is how a route ends up trusting one.
+ *  Spelled separately from the repeat's below rather than shared — the two
+ *  happen to have the same shape today, and a schema whose NAME says "type"
+ *  quietly becomes the justification for the next person who widens one. */
+export const classTypeParamsSchema = z
+  .object({ gymId: z.string().uuid(), classTypeId: z.string().uuid() })
+  .strict();
+export type ClassTypeParams = z.infer<typeof classTypeParamsSchema>;
+
+/** A gym and one of its repeats. See the note above on why it is its own shape. */
+export const classScheduleParamsSchema = z
+  .object({ gymId: z.string().uuid(), scheduleId: z.string().uuid() })
+  .strict();
+export type ClassScheduleParams = z.infer<typeof classScheduleParamsSchema>;
+
 /** The gym id AND the date being un-closed.
  *
  *  **The date is shape-checked here and NOT calendar-checked**, deliberately:

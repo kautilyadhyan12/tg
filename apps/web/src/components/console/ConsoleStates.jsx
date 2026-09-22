@@ -48,6 +48,58 @@ export function ConsoleFailed({ message, onRetry }) {
   );
 }
 
+/** ASK BEFORE SOMETHING CANNOT BE TAPPED BACK — Kd, 2026-09-22, at the Classes
+ *  screen: *"clicking remove button directly removes it, i think there should be
+ *  a small pop up NOT COVERING WHOLE SCREEN, small options such as discard
+ *  proceed or whatever is appropriate"*.
+ *
+ *  **IT IS NOT A MODAL AND MUST NOT BECOME ONE.** It replaces the row's own
+ *  controls in place, so the thing being decided about is still on screen above
+ *  it. A dialog over the whole page hides exactly the row whose name the person
+ *  is trying to read before answering — and on a phone it is the difference
+ *  between a question and an interruption.
+ *
+ *  **THE SENTENCE SAYS WHAT SURVIVES, not only what goes.** That is
+ *  `JoinCodesPanel`'s own rule, learned there: an owner tidying a screen must
+ *  not be left wondering whether they have just deleted their members. So the
+ *  caller writes the sentence; this only lays it out.
+ *
+ *  **THE BUTTONS NAME THE OUTCOME, never Yes and No.** "Remove it" / "Keep it"
+ *  can be answered without re-reading the question, which "Yes" cannot.
+ *
+ *  `JoinCodesPanel` has two hand-built copies of this shape and predates it;
+ *  they are the reason it exists as a component rather than a third copy, and
+ *  they should move here the next time anybody touches that file. */
+export function ConfirmInline({ question, confirmLabel, cancelLabel = 'Keep it', onConfirm, onCancel, busy = false }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-xs" style={{ color: 'rgba(255,255,255,0.7)' }}>
+        {question}
+      </p>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={busy}
+          className="text-xs rounded-lg px-3 py-1.5 font-semibold disabled:opacity-40"
+          style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}
+        >
+          {confirmLabel}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={busy}
+          className="text-xs rounded-lg px-3 py-1.5 disabled:opacity-40"
+          style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
+        >
+          {cancelLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function ConsoleCard({ children, className = '' }) {
   return (
     <div

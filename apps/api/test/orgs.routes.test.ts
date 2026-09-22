@@ -5069,15 +5069,22 @@ d("orgs routes (real Postgres)", () => {
     // The screen shows the same effective set rather than an empty list.
     const listed = await readStaff(org.org.id, owner.cookies);
     expect(listed.find((s) => s.userId === legacy.userId)?.privileges).toEqual([
-      // The MANAGER template, which also gained `attendance.read` (:28107) —
-      // and this row's whole point is that it has NO stored set, so it reads
-      // the template. It moving is the fallback proving it is live.
+      // The MANAGER template, which gained `attendance.read` (:28107) and then
+      // `schedule.manage` (spec §13.3, migration `0035`, ROADMAP 17b-i) — and
+      // this row's whole point is that it has NO stored set, so it reads the
+      // template. It moving is the fallback proving it is live.
+      //
+      // **THE TRAINER LISTS ELSEWHERE IN THIS FILE DID NOT MOVE WITH IT, and
+      // that is the assertion rather than an oversight**: §13.3 grants the
+      // timetable to owner and manager only, so a trainer's three ticks are
+      // still three.
       "attendance.read",
       "codes.invite",
       "codes.manage",
       "members.confirm",
       "members.read",
       "members.remove",
+      "schedule.manage",
     ]);
   });
 

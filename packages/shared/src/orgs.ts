@@ -1551,6 +1551,7 @@ export const ORG_PRIVILEGES = [
   "org.manage",
   "billing.manage",
   "attendance.read",
+  "schedule.manage",
 ] as const;
 export const orgPrivilegeSchema = z.enum(ORG_PRIVILEGES);
 export type OrgPrivilege = z.infer<typeof orgPrivilegeSchema>;
@@ -1673,7 +1674,31 @@ export type OrgPrivilege = z.infer<typeof orgPrivilegeSchema>;
  *  **Absent from `OWNER_ONLY_PRIVILEGES`** — a manager's and a trainer's row
  *  must be able to carry it, which is the point — **and absent from the api's
  *  `LAST_OWNER_REQUIRED_PRIVILEGES`**, which guards the two ticks that can
- *  STRAND a gym; losing a READ strands nobody and is one tick from restored. */
+ *  STRAND a gym; losing a READ strands nobody and is one tick from restored.
+ *
+ *  `schedule.manage` is "set the gym's timetable" — **spec Part 3 §13.3 names it
+ *  and names its holders in the same breath: "`schedule.manage` (owner and
+ *  manager); a trainer sees the lists of their own classes"** (ROADMAP 17b).
+ *  Two different powers in one sentence, and only the first is a tick here: what
+ *  a trainer gets is a READ of their own classes, which is a SCOPE and not a
+ *  privilege — the axis this file's vocabulary comment says has no storage yet,
+ *  because `gym_staff` carries no group column. Giving a trainer this tick to
+ *  approximate it would hand them the gym's whole timetable AND the power to
+ *  rewrite it, which is the silent widening :13803 forbids.
+ *
+ *  **It is a WRITE tick that also gates its READ, narrower than §13.3 strictly
+ *  requires, and the direction is the reversible one** — `staff.manage`'s
+ *  reasoning verbatim. The timetable screen is a management screen; the read a
+ *  trainer and a member need is the CALENDAR, which is 17b-ii's and 17d's and
+ *  will be gated on being this gym's audience, not on this tick. Widening later
+ *  is one tick under :11429 rule 3; narrowing a read staff have grown used to is
+ *  not.
+ *
+ *  **Absent from `OWNER_ONLY_PRIVILEGES`** — the manager row below carries it by
+ *  default, so it could not be owner-only — **and absent from the api's
+ *  `LAST_OWNER_REQUIRED_PRIVILEGES`**: an owner ticked down from it still holds
+ *  `staff.manage` and can tick it straight back, and a gym whose timetable
+ *  nobody can edit is inconvenienced, not stranded. */
 export const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>> = {
   owner: [
     "members.read",
@@ -1685,6 +1710,7 @@ export const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>>
     "org.manage",
     "billing.manage",
     "attendance.read",
+    "schedule.manage",
   ],
   manager: [
     "members.read",
@@ -1693,6 +1719,7 @@ export const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>>
     "members.confirm",
     "members.remove",
     "attendance.read",
+    "schedule.manage",
   ],
   trainer: ["members.read", "codes.invite", "attendance.read"],
 };
