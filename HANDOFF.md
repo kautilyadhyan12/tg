@@ -4,6 +4,18 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-23 · 3a-iv: the member list kept by hand, one person's page, joining two records, and "Remove all" (PR #95)
+
+- **Built** (Folder A, risky, Opus xhigh; spec §9.9, §11.6). Ten routes under `/member-list`: one person's page; add; change; take off (former); put back; delete a former record for good; join two records; put an app member on the list; the names "Remove all" would remove; "Remove all". No migration, no new package; its notes and cost are in spec §11.6.
+- **Kd decided** (RULINGS 2026-09-23): two records of one person are joined PushPress's way — start from the one not kept; the kept one keeps its values and fills only its blanks.
+- **The worst thing, first test**: "Remove all" taking out somebody still on the list, the owner, a trainer, a free place or another gym's member. The group is the preview's own marks (paid seats only), re-derived under the gym's lock; the removal must send back the list's version, the count AND a digest of the exact set, so a member who joined after staff looked is never removed (a count alone would pass).
+- **Three deliberate breaks, all RED, restored sha256-identical** (now harness rows #65–#67, census 68/68): paid-seat filter dropped (5 names shown instead of 2; six unit rows red); digest check dropped (200 instead of 409, the late joiner removed); gym dropped from the write (3 memberships closed where 2 were chosen, rolled back).
+- Typed fields go through the file's own rules; a card number in any field is refused; hand-edit marks feed the next upload's tick (driven end to end); a change into another record's person is 409 with that record's id; the log-leak test now carries typed sentinels.
+- **Verified**: api tsc 0 · api eslint 0 · shared tsc 0 · shared eslint 0 · shared 219/219 · new route suite 19/19 · new unit table 70/70 · full api suite on local Postgres before taking in master 97 files, 2,872 passed, 0 failed; after taking in master 99 files, 2,902 passed, 0 failed.
+- **Taken in master**: Folder B's #94 (no migration). It fixed the same Monday/Wednesday date bug in `classes.routes.test.ts` that this branch had fixed (`91426d8`); theirs is kept.
+- **Cost** (mains, 2,592 MHz, worst bystander wait): launch shape one write 39–75 ms (the commit alone is 24–33 ms on this machine's disk); the cap (10,000 entries · 2,000 members) the Remove all page 168–212 ms, removing 1,000 members 305–561 ms.
+- **Open**: review round one (`reviews/3a-iv-1-review.md`). The two extra passes run once after 3c over all of "getting in". Next in Folder A: 3b-i.
+
 ## 2026-09-23 · 17b-ii-b-i (Folder B): the week view, and one day changed or cancelled
 
 - **17b-ii-b was split first** (week view, one-day changes, "this day and later" and the bulk edit is more than one terminal): **17b-ii-b-i** here, **17b-ii-b-ii** next. Risky job, Opus xhigh. Branch `class-week-view`. Kd said go to the plan; he decided nothing new, so no RULINGS line.
