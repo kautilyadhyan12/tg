@@ -105,6 +105,9 @@ export interface MyOrgRow extends OrgRow {
    *  the service nulls it for a caller who is not staff, as it does the two
    *  fields above. */
   ownerTrialUsed: boolean;
+  /** The gym's postal address for its invitations; the service withholds it from a
+   *  caller who is not staff. */
+  postalAddress: string | null;
   /** IS THIS GYM'S CONSOLE READ-ONLY — i.e. will every write route refuse it.
    *  Derived from the SAME lateral `subscription` comes out of, so this reader
    *  cannot disagree with itself about what a live plan is. Always a boolean
@@ -434,6 +437,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
       sub_seat_cap: number | null;
       seats_used: number;
       owner_trial_used: boolean;
+      postal_address: string | null;
       cheer_preset: string | null;
       cheer_sent_at: Date | null;
       nudge_preset: string | null;
@@ -442,6 +446,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
   >`
     SELECT g.id, g.slug, g.name, g.city, g.country, g.org_type, g.timezone,
            g.locale, g.currency_display, g.clock_format, g.manual_attendance_enabled, g.status,
+           g.postal_address,
            s.role AS staff_role,
            s.privileges,
            (m.id IS NOT NULL) AS is_member,
@@ -601,6 +606,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
           }),
     seatsUsed: r.seats_used,
     ownerTrialUsed: r.owner_trial_used,
+    postalAddress: r.postal_address,
     // THE CONSOLE IS READ-ONLY EXACTLY WHEN THIS GYM HAS NO LIVE PLAN — Part 3
     // §4.2, and Kd's ruling of 2026-08-29 that it stops every member of staff.
     //
@@ -743,11 +749,14 @@ export interface OrgPatch {
    *  lock protects — no money, no day boundary — so like `clockFormat` it is a
    *  field a paying gym may always change. */
   manualAttendanceEnabled?: boolean;
+  /** The postal address printed in the gym's invitations (Part 3 §9.12), already
+   *  tidied by the service; null clears it. */
+  postalAddress?: string | null;
 }
 
 export type UpdateOrgOutcome =
-  | { kind: "updated"; org: OrgRow; changed: readonly string[] }
-  | { kind: "unchanged"; org: OrgRow }
+  | { kind: "updated"; org: OrgRow; postalAddress: string | null; changed: readonly string[] }
+  | { kind: "unchanged"; org: OrgRow; postalAddress: string | null }
   /** RENAMED from `country_locked` in the T3 round-1 fix, because the old name
    *  described the wrong thing and the message built on it was false to a gym
    *  with no country recorded. What is locked is the CURRENCY. */
@@ -916,7 +925,12 @@ export async function updateOrg(
     ) {
       changed.push("manualAttendanceEnabled");
     }
-    if (changed.length === 0) return { kind: "unchanged", org: before };
+    const postalBefore =
+      (await tx<{ postal_address: string | null }[]>`SELECT postal_address FROM gyms WHERE id = ${input.gymId}`)[0]
+        ?.postal_address ?? null;
+    const postalAfter = "postalAddress" in input.patch ? (input.patch.postalAddress ?? null) : postalBefore;
+    if (postalAfter !== postalBefore) changed.push("postalAddress");
+    if (changed.length === 0) return { kind: "unchanged", org: before, postalAddress: postalBefore };
 
     // Written out column by column rather than assembled from a loop over the
     // patch's keys: a dynamic identifier built from caller-controlled data is
@@ -942,7 +956,8 @@ export async function updateOrg(
           "manualAttendanceEnabled" in input.patch
             ? (input.patch.manualAttendanceEnabled ?? before.manualAttendanceEnabled)
             : before.manualAttendanceEnabled
-        }
+        },
+        postal_address = ${postalAfter}
       WHERE id = ${input.gymId}
       RETURNING id, slug, name, city, country, org_type, timezone, locale,
                 currency_display, clock_format, manual_attendance_enabled, status`;
@@ -969,7 +984,7 @@ export async function updateOrg(
       },
     });
 
-    return { kind: "updated", org: toOrgRow(raw), changed };
+    return { kind: "updated", org: toOrgRow(raw), postalAddress: postalAfter, changed };
   });
 }
 

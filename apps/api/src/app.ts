@@ -36,6 +36,8 @@ import { NutritionError } from "./modules/nutrition/service.js";
 import { registerGeoRoutes, type GeoRouteOverrides } from "./modules/geo/routes.js";
 import { GeoError } from "./modules/geo/errors.js";
 import { registerOrgRoutes, type OrgRouteOverrides } from "./modules/orgs/routes.js";
+import { inviteSettings } from "./modules/orgs/invites/settings.js";
+import { registerUnsubscribeRoutes } from "./modules/orgs/invites/unsubscribe.js";
 import { OrgsError } from "./modules/orgs/service.js";
 import { ExportError } from "./modules/privacy/export.js";
 import { safeErrorSerializer, safeRequestSerializer, scrubbedForSentry } from "./logSafety.js";
@@ -267,7 +269,10 @@ export async function buildApp(
   registerEntitlementRoutes(app, { sql, redis });
   registerNutritionRoutes(app, { sql, redis, config, reportError }, overrides.nutrition ?? {});
   registerGeoRoutes(app, { sql, redis, config }, overrides.geo ?? {});
-  registerOrgRoutes(app, { sql, redis }, overrides.orgs ?? {});
+  const invites = inviteSettings(config);
+  registerOrgRoutes(app, { sql, redis, invites }, overrides.orgs ?? {});
+  // The unsubscribe link in every invitation: public, and not under /v1/orgs.
+  registerUnsubscribeRoutes(app, { sql, redis, settings: invites });
 
   return app;
 }

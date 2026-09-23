@@ -2,12 +2,20 @@
 // code, list mine, read the roster. Authorization decisions live here (R3.3
 // step 3); the repo enforces tenancy in every WHERE and the routes stay thin.
 import type { Sql } from "postgres";
-import { JOIN_CODE_LENGTH, ORG_TYPES_PHRASE, currencyForCountry, normaliseJoinCode, orgWords } from "@app/shared";
+import {
+  GYM_POSTAL_ADDRESS_MAX_CHARS,
+  JOIN_CODE_LENGTH,
+  ORG_TYPES_PHRASE,
+  currencyForCountry,
+  normaliseJoinCode,
+  orgWords,
+} from "@app/shared";
 import { bustEntitlements } from "../entitlements/service.js";
 import { onAttendanceMarked } from "../gamification/service.js";
 import { getUserSyncContext } from "../users/service.js";
 import type { RedisLike } from "../../redis.js";
 import { codeFromBytes, slugCandidate, slugifyName } from "./codes.js";
+import { cleanGymText } from "./invites/gymText.js";
 import * as repo from "./repo.js";
 import {
   ORG_PRIVILEGES,
@@ -346,6 +354,19 @@ export async function updateOrg(
     patch.country = normaliseCountry(req.country);
     patch.currencyDisplay = resolveCurrency(req.country);
   }
+  // Stored as every invitation prints it (Part 3 §9.12): lines joined, links and `@`
+  // taken out. Empty after that clears it.
+  if ("postalAddress" in req && req.postalAddress !== undefined) {
+    const tidied = req.postalAddress === null ? "" : cleanGymText(req.postalAddress, Number.MAX_SAFE_INTEGER);
+    if (Array.from(tidied).length > GYM_POSTAL_ADDRESS_MAX_CHARS) {
+      throw new OrgsError(
+        400,
+        "postal_address_too_long",
+        `That address is too long. Keep it to ${String(GYM_POSTAL_ADDRESS_MAX_CHARS)} characters.`,
+      );
+    }
+    patch.postalAddress = tidied === "" ? null : tidied;
+  }
 
   const outcome = await repo.updateOrg(deps.sql, { gymId, patch, actorUserId: userId });
 
@@ -356,7 +377,7 @@ export async function updateOrg(
     // a no-op is deliberately absent.
     case "updated":
     case "unchanged":
-      return updateOrgResponseSchema.parse({ org: toOrgSummary(outcome.org) });
+      return updateOrgResponseSchema.parse({ org: toOrgSummary(outcome.org), postalAddress: outcome.postalAddress });
     case "currency_locked":
       // KD RULING 2026-08-26. The sentence names the reason and the way out,
       // because a refusal an owner cannot act on is a dead end — and the way out
@@ -482,6 +503,8 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
       // "locked"** — C97's rule, and the reason this is a field of its own rather
       // than `subscription === null` read at the client.
       consoleReadOnly: r.staffRole === null ? null : r.consoleReadOnly,
+      // A fact about the gym for its staff (the Settings box and the Invite screen).
+      postalAddress: r.staffRole === null ? null : r.postalAddress,
       // THE NEWEST CHEER THIS GYM SENT **THIS CALLER** — and it is the one field
       // on this response that is NOT withheld from a plain member.
       //

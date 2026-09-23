@@ -37,6 +37,7 @@ import {
   updateOrgStaffRequestSchema,
 } from "./schemas.js";
 import { registerClassRoutes } from "./classes/routes.js";
+import type { InviteSettings } from "./invites/settings.js";
 import { registerMemberListRoutes } from "./memberList/routes.js";
 import * as service from "./service.js";
 
@@ -75,7 +76,7 @@ export interface OrgRouteOverrides {
 
 export function registerOrgRoutes(
   app: FastifyInstance,
-  deps: { sql: Sql; redis: RedisLike },
+  deps: { sql: Sql; redis: RedisLike; invites: InviteSettings | null },
   overrides: OrgRouteOverrides = {},
 ): void {
   const orgDeps: service.OrgsDeps = {
@@ -91,7 +92,7 @@ export function registerOrgRoutes(
   // THE MEMBER LIST (Part 3 §9.9), registered here rather than in `app.ts`: it is
   // the same console behind the same two gates, on the same deps, and a second
   // registration point would be a second place to forget one of them.
-  registerMemberListRoutes(app, { sql: deps.sql, redis: deps.redis });
+  registerMemberListRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites });
 
   // THE GYM'S TIMETABLE (Part 3 §13.3), registered here for the same reason the
   // member list is: the same console, the same gates, the same deps.

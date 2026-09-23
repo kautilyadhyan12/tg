@@ -34,6 +34,84 @@ export class EmailTransportError extends Error {
   }
 }
 
+/** An invitation email (Part 3 §9.12): its own sender on the invitations' sub-domain,
+ *  its unsubscribe headers, and the idempotency key that makes a retry of the same
+ *  send a no-op at Resend for 24 hours. */
+export interface InviteEmail extends EmailMessage {
+  from: string;
+  headers: Record<string, string>;
+  idempotencyKey: string;
+}
+
+/** What became of one invitation email. `sent` with a null id is a retry Resend
+ *  recognised as already sent under this key with a different body. */
+export type InviteSendResult =
+  | { kind: "sent"; id: string | null }
+  /** Resend refused the request, a 4xx other than a running key's 409: our request (400,
+   *  422), our key or account (401, 403), or the rate (429). The email did not go. */
+  | { kind: "not_sent"; status: number }
+  /** No clear answer (a timeout, a network failure, a 5xx, the same key still running):
+   *  the email may have gone. */
+  | { kind: "unclear"; status: number | null };
+
+export interface InviteTransport {
+  send(message: InviteEmail): Promise<InviteSendResult>;
+}
+
+const resendErrorSchema = z.object({ name: z.string().max(100) });
+
+/** Resend for invitations. Never throws for an answer from Resend; the status alone
+ *  says what happened, and no body or request is ever logged or returned. */
+export function createResendInviteTransport(opts: { apiKey: string; fetchImpl?: typeof fetch }): InviteTransport {
+  const doFetch = opts.fetchImpl ?? fetch;
+  return {
+    async send(message) {
+      let response: Response;
+      try {
+        response = await doFetch(RESEND_ENDPOINT, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${opts.apiKey}`,
+            "Content-Type": "application/json",
+            "Idempotency-Key": message.idempotencyKey,
+          },
+          body: JSON.stringify({
+            from: message.from,
+            to: [message.to],
+            subject: message.subject,
+            text: message.text,
+            html: message.html,
+            headers: message.headers,
+          }),
+          signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+        });
+      } catch {
+        return { kind: "unclear", status: null };
+      }
+      let body: unknown = null;
+      try {
+        body = await response.json();
+      } catch {
+        body = null;
+      }
+      if (response.ok) {
+        const ok = resendOkSchema.safeParse(body);
+        return { kind: "sent", id: ok.success ? ok.data.id.slice(0, 100) : null };
+      }
+      if (response.status === 409) {
+        // Resend's idempotency answers: the key was already used with a different body
+        // (the first send went), or its first request is still running (ask again).
+        const error = resendErrorSchema.safeParse(body);
+        if (error.success && error.data.name === "invalid_idempotent_request") return { kind: "sent", id: null };
+        return { kind: "unclear", status: 409 };
+      }
+      // Any other 4xx is Resend refusing the request before it did anything with it.
+      if (response.status >= 400 && response.status < 500) return { kind: "not_sent", status: response.status };
+      return { kind: "unclear", status: response.status };
+    },
+  };
+}
+
 export function createResendTransport(opts: {
   apiKey: string;
   from: string;

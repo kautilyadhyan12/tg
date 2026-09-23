@@ -260,6 +260,13 @@
       "when": 1788220800020,
       "tag": "0037_member_record_kept",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1788220800021,
+      "tag": "0038_member_invites",
+      "breakpoints": true
     }
   ]
 }

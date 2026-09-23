@@ -60,6 +60,8 @@ import {
   type MemberListView,
 } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
+import * as invites from "../invites/service.js";
+import type { InviteSettings } from "../invites/settings.js";
 import { insertAudit } from "../repo.js";
 import * as orgRepo from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
@@ -91,6 +93,11 @@ export interface MemberListDeps {
   /** The reader, so a test can stand in for the worker where what it is proving
    *  is the route and not the parsing. Production passes nothing. */
   read?: typeof understandMemberFile;
+  /** Invitations (3b-i-a), or null while they are switched off. */
+  invites?: InviteSettings | null;
+  /** Runs after a press has read its group and before it writes; a test changes the
+   *  list here to reach the check made under the gym's lock. Production passes nothing. */
+  afterInviteGroupRead?: () => Promise<void>;
 }
 
 /** A file refusal as this route answers it. 400 for everything the uploader can
@@ -1218,6 +1225,7 @@ export async function readEntries(
   // person who is in the app; every other reader keeps the set that leaves them out
   // (round one, Low-2, and `inAppEntryIdsWithFormer`'s own note).
   const records = query.records ?? "current";
+  const settings = deps.invites ?? null;
   const page = await repo.entriesPage(deps.sql, {
     gymId,
     inAppEntryIds: records === "current" ? inAppEntryIds(members) : inAppEntryIdsWithFormer(members),
@@ -1228,15 +1236,18 @@ export async function readEntries(
     // screen means by "the list" is the people on it.
     records,
     filter: query.filter ?? "all",
+    invitation:
+      query.invitation === undefined ? null : await invites.entriesByInvitation(deps.sql, settings, gymId, query.invitation),
     like: typed === "" ? null : `%${escapeLike(typed)}%`,
     cursor,
     limit: MEMBER_LIST_ENTRIES_PAGE + 1,
   });
   const shown = page.entries.slice(0, MEMBER_LIST_ENTRIES_PAGE);
   const last = page.entries.length > MEMBER_LIST_ENTRIES_PAGE ? shown[shown.length - 1] : undefined;
+  const invitations = await invites.invitationsOf(deps.sql, settings, gymId, shown);
   return {
     total: page.total,
-    entries: shown.map((entry) => ({
+    entries: shown.map((entry, at) => ({
       entryId: entry.entryId,
       fullName: entry.fullName,
       email: entry.email,
@@ -1252,6 +1263,7 @@ export async function readEntries(
       formerAt: entry.formerAt?.toISOString() ?? null,
       source: entry.source,
       inApp: entry.inApp,
+      invitation: invitations[at] ?? null,
     })),
     cursor: last === undefined ? null : encodeEntryCursor({ name: last.fullName, id: last.entryId }),
   };

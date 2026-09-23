@@ -28,6 +28,8 @@ import {
 import type { TransactionSql } from "postgres";
 import { z } from "zod";
 import { bustEntitlements } from "../../entitlements/service.js";
+import { invitationsOf, inviteEntryInTx, readyToSend } from "../invites/service.js";
+import type { InviteSettings } from "../invites/settings.js";
 import { insertAudit } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { applyTyped, EMPTY_VALUES, mergeValues, type EntryValues, type TypedContext } from "./byHand.js";
@@ -44,10 +46,16 @@ type Sql = MemberListDeps["sql"];
 const notFound = (): OrgsError => new OrgsError(404, "entry_not_found", MEMBER_LIST_BY_HAND_WORDS.entry_not_found);
 
 /** One person's page, read on `sql` (the pool, or the caller's transaction). */
-async function detailOf(sql: Sql | TransactionSql, gymId: string, entry: repo.StoredEntry): Promise<MemberListEntryDetail> {
-  const [fields, reached] = await Promise.all([
+async function detailOf(
+  sql: Sql | TransactionSql,
+  gymId: string,
+  entry: repo.StoredEntry,
+  settings: InviteSettings | null,
+): Promise<MemberListEntryDetail> {
+  const [fields, reached, invitation] = await Promise.all([
     repo.listFields(sql, gymId),
     repo.membersAgainstList(sql, gymId, { email: entry.values.email, phone: entry.values.phone }),
+    invitationsOf(sql, settings, gymId, [{ email: entry.values.email }]),
   ]);
   // A member belongs to this record when §9.7's match takes them to it: the current
   // record for a current one, the former match for a former one.
@@ -74,6 +82,7 @@ async function detailOf(sql: Sql | TransactionSql, gymId: string, entry: repo.St
     formerAt: entry.formerAt?.toISOString() ?? null,
     source: entry.source,
     inApp: mine.length > 0,
+    invitation: invitation[0] ?? null,
     extra: fields.map((field) => ({ key: field.key, label: field.label, value: values.extra[field.key] ?? "" })),
     handEdited: entry.handEdited,
     members: visits.map((row) => ({
@@ -86,10 +95,10 @@ async function detailOf(sql: Sql | TransactionSql, gymId: string, entry: repo.St
   };
 }
 
-async function detailAfter(sql: Sql, gymId: string, entryId: string): Promise<MemberListEntryDetail> {
-  const entry = await repo.entryFor(sql, gymId, entryId);
+async function detailAfter(deps: MemberListDeps, gymId: string, entryId: string): Promise<MemberListEntryDetail> {
+  const entry = await repo.entryFor(deps.sql, gymId, entryId);
   if (entry === null) throw notFound();
-  return await detailOf(sql, gymId, entry);
+  return await detailOf(deps.sql, gymId, entry, deps.invites ?? null);
 }
 
 async function typedContext(tx: TransactionSql, gymId: string, country: string | null): Promise<TypedContext> {
@@ -140,7 +149,7 @@ export async function readEntry(
 ): Promise<MemberListEntryDetail | null> {
   await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
-  return await detailAfter(deps.sql, gymId, entryId);
+  return await detailAfter(deps, gymId, entryId);
 }
 
 export type WriteAnswer =
@@ -166,14 +175,18 @@ interface Done {
   outcome: MemberListEntryOutcome;
   entryId: string;
   version: number;
+  /** "Add and invite": what happened to the invitation. */
+  invited?: "queued" | "already_invited";
 }
 
 async function finish(deps: MemberListDeps, gymId: string, done: Done): Promise<WriteAnswer> {
-  return {
-    kind: "written",
-    status: done.outcome === "added" ? 201 : 200,
-    written: { outcome: done.outcome, entry: await detailAfter(deps.sql, gymId, done.entryId), version: done.version },
-  };
+  const entry = await detailAfter(deps, gymId, done.entryId);
+  const written: MemberListEntryWritten = { outcome: done.outcome, entry, version: done.version };
+  if (done.invited !== undefined) {
+    if (entry.invitation === null) throw new Error("an invited entry has no invitation");
+    written.invite = { outcome: done.invited, invitation: entry.invitation };
+  }
+  return { kind: "written", status: done.outcome === "added" ? 201 : 200, written };
 }
 
 /** Put a person on the list whose key nobody holds, or bring back the FORMER record
@@ -212,7 +225,9 @@ async function placeOnList(
   return { outcome: holder === null ? "added" : "revived", entryId, version };
 }
 
-/** "Add member" (§11.6). */
+/** "Add member" (§11.6), and "Add and invite" (§9.12) when `input.invite` is set: both
+ *  in one transaction, so a person who cannot be invited is not added either and the
+ *  answer says why. */
 export async function addEntry(
   deps: MemberListDeps,
   userId: string,
@@ -221,6 +236,7 @@ export async function addEntry(
   limit: () => Promise<boolean>,
 ): Promise<WriteAnswer> {
   const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
+  const settings = input.invite === true ? await readyToSend(deps, gymId) : null;
   if (!(await limit())) return { kind: "rate_limited" };
   const at = deps.now();
   const done = await deps.sql.begin(async (tx) => {
@@ -228,7 +244,7 @@ export async function addEntry(
     const context = await typedContext(tx, gymId, org.country);
     const applied = applyTyped(EMPTY_VALUES, input, context);
     if (!applied.ok) throw new OrgsError(400, applied.refusal.code, applied.refusal.message);
-    return await placeOnList(tx, {
+    const placed = await placeOnList(tx, {
       gymId,
       userId,
       at,
@@ -241,6 +257,11 @@ export async function addEntry(
         return again.values;
       },
     });
+    // Somebody already on the list is shown, not invited: the screen offers Invite on
+    // that record.
+    if (settings === null || placed.outcome === "already_on_list") return placed;
+    const invited = await inviteEntryInTx(tx, settings, { gymId, entryId: placed.entryId, userId, at });
+    return { ...placed, invited: invited.outcome };
   });
   return await finish(deps, gymId, done);
 }

@@ -37,6 +37,51 @@ export function deleteAccountCodeEmail(to: string, code: string, minutes: number
   );
 }
 
+/** An invitation's From line: the gym named, on our invitations' own mailbox (CAN-SPAM
+ *  names the gym as the sender). `configured` is INVITE_EMAIL_FROM. The characters RFC
+ *  5322 treats as special are left out of the display name, so it needs no quoting. */
+export function memberInviteFrom(configured: string, gymName: string): string {
+  const open = configured.lastIndexOf("<");
+  const box = open >= 0 ? configured.slice(open + 1, configured.lastIndexOf(">")) : configured;
+  const name = `${gymName} via ${APP_NAME}`.replace(/[()<>[\]:;@\\,."]/g, "").replace(/\s+/g, " ").trim();
+  return `${name} <${box}>`;
+}
+
+/** A gym's invitation to a person on its list (Part 3 §9.12). The words are fixed;
+ *  the gym's name, city and postal address arrive already cleaned (`cleanGymText`),
+ *  and both links are to our own origins. The join link carries no token: joining
+ *  needs a sign-in with this same address. */
+export function memberInviteEmail(words: {
+  to: string;
+  gymName: string;
+  gymCity: string | null;
+  postalAddress: string;
+  joinLink: string;
+  unsubscribeLink: string;
+}): EmailMessage {
+  const gym = words.gymName;
+  const where = words.gymCity === null || words.gymCity === "" ? gym : `${gym} in ${words.gymCity}`;
+  const lines = {
+    lead: `${where} has invited you to ${APP_NAME}, the app its members use.`,
+    how: `To join ${gym} in the app, sign in with this email address, ${words.to}:`,
+    only: "The invitation works only for someone who signs in with this address.",
+    why: `You are getting this email because ${gym} has you on its member list and asked us to invite you. We won't send you another unless you ask ${gym} for one.`,
+    footer: `Sent by ${APP_NAME} on behalf of ${gym}, ${words.postalAddress}.`,
+    stop: `Stop emails from ${gym} through ${APP_NAME}:`,
+  };
+  const text =
+    `${lines.lead}\n\n${lines.how}\n${words.joinLink}\n\n${lines.only}\n\n${lines.why}\n\n` +
+    `${lines.footer}\n${lines.stop} ${words.unsubscribeLink}\n`;
+  const link = (href: string) => `<a href="${escapeHtml(href)}">${escapeHtml(href)}</a>`;
+  const html =
+    `<p>${escapeHtml(lines.lead)}</p>` +
+    `<p>${escapeHtml(lines.how)}<br>${link(words.joinLink)}</p>` +
+    `<p>${escapeHtml(lines.only)}</p>` +
+    `<p>${escapeHtml(lines.why)}</p>` +
+    `<p style="color:#666;font-size:12px">${escapeHtml(lines.footer)}<br>${escapeHtml(lines.stop)} ${link(words.unsubscribeLink)}</p>`;
+  return { to: words.to, subject: `You're a member of ${gym} — get the app`, text, html };
+}
+
 /** Part 4 §5.2's Day-0 undo email: the one link, to our own restore page,
  *  and the number of days it stays good for — interpolated from the caller,
  *  never restated here, so the email can never promise a window the code
