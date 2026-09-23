@@ -484,7 +484,10 @@ async function writeDay(
       throw new OrgsError(
         409,
         "class_day_clashes",
-        "This class already runs at that time on this day. Pick another time.",
+        // Un-cancel has no time to pick, so its refusal names the way out.
+        input.action === "restore"
+          ? "This class already runs at this time on this day. Edit or cancel that one first."
+          : "This class already runs at that time on this day. Pick another time.",
       );
     default: {
       const never: never = outcome;

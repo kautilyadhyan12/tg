@@ -161,7 +161,11 @@ describe('closing and backing out never change the timetable', () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
 
+    // Each form is closed holding something it COULD save, so a Close wired to
+    // Save would send it.
     fireEvent.click(screen.getByRole('button', { name: 'Add class' }));
+    fireEvent.change(screen.getByPlaceholderText('Sunrise Yoga'), { target: { value: 'Spin' } });
+    expect(screen.getByRole('button', { name: 'Add class' }).disabled).toBe(false);
     expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
 
@@ -170,10 +174,12 @@ describe('closing and backing out never change the timetable', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
 
     fireEvent.click(screen.getByRole('button', { name: 'Add time slot' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tue' }));
+    expect(screen.getByRole('button', { name: 'Add time slot' }).disabled).toBe(false);
     expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Edit the Mon & Wed time slot of Sunrise Yoga' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit the Mon & Wed 18:30 time slot of Sunrise Yoga' }));
     expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
 
@@ -189,7 +195,7 @@ describe('closing and backing out never change the timetable', () => {
     expect(screen.getByText(/Archive Sunrise Yoga\?/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Keep it' }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel the Mon & Wed time slot of Sunrise Yoga' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel the Mon & Wed 18:30 time slot of Sunrise Yoga' }));
     expect(screen.getByText(/Cancel the Mon & Wed 18:30 time slot\?/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Keep it' }));
 
@@ -505,7 +511,7 @@ describe('adding a time slot', () => {
   it('cancelling a time slot asks first, and the class stays', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
-    const slotCancel = { name: 'Cancel the Mon & Wed time slot of Sunrise Yoga' };
+    const slotCancel = { name: 'Cancel the Mon & Wed 18:30 time slot of Sunrise Yoga' };
     fireEvent.click(screen.getByRole('button', slotCancel));
 
     expect(api.stopClassRepeat).not.toHaveBeenCalled();
@@ -531,7 +537,7 @@ describe('adding a time slot', () => {
 // from the SLOT, never from its class.
 describe('editing a time slot', () => {
   const openEdit = () =>
-    fireEvent.click(screen.getByRole('button', { name: 'Edit the Mon & Wed time slot of Sunrise Yoga' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit the Mon & Wed 18:30 time slot of Sunrise Yoga' }));
 
   it('opens filled in from the time slot, not its class, and sends the three fields back', async () => {
     drawScreen();
@@ -559,7 +565,9 @@ describe('editing a time slot', () => {
     await screen.findByText('Sunrise Yoga');
     openEdit();
     await screen.findByLabelText('Length (minutes)');
-    expect(screen.getByText('Applies to upcoming classes.')).toBeTruthy();
+    expect(
+      screen.getByText('Applies to upcoming classes, except any marked Changed on the Calendar.'),
+    ).toBeTruthy();
     expect(screen.queryByLabelText('Start date')).toBeNull();
     expect(screen.queryByLabelText('Start time hour')).toBeNull();
   });
@@ -613,7 +621,7 @@ describe('editing, archiving and restoring a class', () => {
     expect(api.archiveClass).not.toHaveBeenCalled();
     expect(
       screen.getByText(
-        'Archive Sunrise Yoga? Its upcoming classes come off the calendar. You can restore it later.',
+        'Archive Sunrise Yoga? Its time slots are cancelled and its upcoming classes come off the calendar. You can restore the class later and add its time slots again.',
       ),
     ).toBeTruthy();
     expect(screen.getByText('Sunrise Yoga')).toBeTruthy();
@@ -652,13 +660,16 @@ describe('editing, archiving and restoring a class', () => {
     expect(screen.queryByText(/most recent of/)).toBeNull();
   });
 
-  it('restores an archived class with one tap', async () => {
+  // The server brings the class back with none of its time slots (they stay
+  // cancelled), and the screen says so rather than showing old ones.
+  it('restores an archived class with one tap, without its time slots', async () => {
     api.getClasses.mockResolvedValue(timetable({ entries: [], archived: [YOGA], archivedTotal: 1 }));
+    api.restoreClass.mockResolvedValue(timetable({ entries: [{ type: YOGA, schedules: [] }] }));
     drawScreen();
     fireEvent.click(await screen.findByRole('button', { name: /Archived classes/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Restore Sunrise Yoga' }));
     await waitFor(() => expect(api.restoreClass).toHaveBeenCalledWith('g1', 't1'));
-    await waitFor(() => expect(slotHeading('Mon & Wed · 18:30–19:15')).toBeTruthy());
+    await screen.findByText('No time slots yet.');
   });
 
   it('prints the server s own sentence when a save is refused, and keeps the timetable', async () => {

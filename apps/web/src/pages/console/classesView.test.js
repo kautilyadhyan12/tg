@@ -133,6 +133,13 @@ describe('reading a time slot', () => {
     );
   });
 
+  // A one-day time slot (a workshop) names its day once, not "3 Oct – 3 Oct".
+  it('names a one-day time slot s date once', () => {
+    expect(datesLine({ startsOn: '2026-10-03', endsOn: '2026-10-03', nextDates: ['2026-10-03'] })).toBe(
+      '3 Oct 2026 · Next: Sat 3 Oct',
+    );
+  });
+
   it('lists no next dates when there are none, and says Ended when the slot is over', () => {
     expect(datesLine({ startsOn: '2027-01-04', nextDates: [] })).toBe('From 4 Jan 2027');
     expect(datesLine({ startsOn: '2027-01-04' })).toBe('From 4 Jan 2027');

@@ -265,7 +265,7 @@ function RepeatEditForm({ draft, setDraft, staff, disabled, saving, onSave, onCl
     <div className="flex flex-col gap-4">
       <RunFields draft={draft} set={set} staff={staff} disabled={disabled} forClass={false} />
       <p className="text-xs" style={labelStyle}>
-        Applies to upcoming classes.
+        Applies to upcoming classes, except any marked Changed on the Calendar.
       </p>
       <Problem text={problem} />
       <FormButtons
@@ -601,7 +601,7 @@ export default function Classes() {
                 {asking ? (
                   <div className="mt-3">
                     <ConfirmInline
-                      question={`Archive ${type.name}? Its upcoming classes come off the calendar. You can restore it later.`}
+                      question={`Archive ${type.name}? Its time slots are cancelled and its upcoming classes come off the calendar. You can restore the class later and add its time slots again.`}
                       confirmLabel="Archive"
                       cancelLabel="Keep it"
                       busy={busy !== null}
@@ -642,6 +642,7 @@ export default function Classes() {
                   ) : null}
                   {entry.schedules.map((schedule) => {
                     const days = weekdayLine(schedule.weekdays);
+                    const startsAt = clockLabel(schedule.startMinute, lists.clockFormat);
                     const editingThis = editingRepeat === schedule.id;
                     const askingThis = confirming === `stop:${schedule.id}`;
                     return (
@@ -686,7 +687,7 @@ export default function Classes() {
                                   setEditingRepeat(schedule.id);
                                   setRepeatEditState(repeatEditDraft(schedule));
                                 }}
-                                aria-label={`Edit the ${days} time slot of ${type.name}`}
+                                aria-label={`Edit the ${days} ${startsAt} time slot of ${type.name}`}
                                 className="text-sm"
                                 style={{ color: '#FF8A1F' }}
                               >
@@ -696,7 +697,7 @@ export default function Classes() {
                                 type="button"
                                 onClick={() => setConfirming(`stop:${schedule.id}`)}
                                 disabled={busy !== null}
-                                aria-label={`Cancel the ${days} time slot of ${type.name}`}
+                                aria-label={`Cancel the ${days} ${startsAt} time slot of ${type.name}`}
                                 className="text-sm"
                                 style={{ color: 'rgba(255,255,255,0.5)' }}
                               >
@@ -720,7 +721,7 @@ export default function Classes() {
                         ) : null}
                         {askingThis ? (
                           <ConfirmInline
-                            question={`Cancel the ${days} ${clockLabel(schedule.startMinute, lists.clockFormat)} time slot? Its upcoming classes come off the calendar.`}
+                            question={`Cancel the ${days} ${startsAt} time slot? Its upcoming classes come off the calendar.`}
                             confirmLabel="Cancel time slot"
                             cancelLabel="Keep it"
                             busy={busy !== null}

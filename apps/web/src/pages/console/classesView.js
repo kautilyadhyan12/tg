@@ -107,8 +107,9 @@ function longDate(day) {
 }
 
 /** `22 Sep – 15 Dec 2026`, or with both years when they differ; each end
- *  kept on one line. */
+ *  kept on one line. A one-day time slot names its day once. */
 function dateRange(from, until) {
+  if (from === until) return whole(longDate(from));
   const start = from.slice(0, 4) === until.slice(0, 4) ? shortDate(from) : longDate(from);
   return `${whole(start)} – ${whole(longDate(until))}`;
 }
