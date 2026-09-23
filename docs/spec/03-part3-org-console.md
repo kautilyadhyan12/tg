@@ -2167,6 +2167,18 @@ at a given time on a given date: a day cannot be moved or put back onto a time t
 class already runs, and the fill writes no second one where the class already has a
 date at that time, running or cancelled. A day cannot be moved to a time the clocks
 skip on that date.)*
+*(17b-ii-b-ii-a, 2026-09-23, RULINGS that day: "this day and later" is a change
+from an **Update from** date, on the time slot's Edit or a Calendar class's "This
+and future classes". Classes before the date, and any that has started, are never
+touched. A new day or time is a MOVE: the time slot ends the day before (or stops
+outright when it has no class left before the date) and a new one starts on the
+date; its classes from the date are replaced, one changed or cancelled on its own
+included, and the server answers 409 `class_slot_replaces` with the count until
+the request confirms that same number. A new length, size or coach keeps the
+classes: the time slot is split at the date when it still runs before it — its
+classes from the date move to the new one with their ids — and each takes the
+values except one changed on its own. The date must be on the written calendar. A
+time slot whose last day has passed no longer counts toward the cap.)*
 An open-gym slot is a class type marked so. `schedule.manage` (owner and manager); a
 trainer sees the lists of their own classes.
 
