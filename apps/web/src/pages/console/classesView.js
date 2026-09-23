@@ -4,7 +4,16 @@ import {
   CLASS_FILL_HORIZON_DAYS,
   CLASS_SCHEDULE_PREVIEW_DATES,
 } from '@app/shared';
-import { WEEKDAYS, clockLabel, clockToMinutes, closureDateLabel, minutesToClock } from './hoursView';
+import {
+  MONTH_SHORT,
+  WEEKDAYS,
+  addDays,
+  clockLabel,
+  clockToMinutes,
+  closureDateLabel,
+  isoWeekdayOfDay,
+  minutesToClock,
+} from './hoursView';
 
 // THE CLASSES SCREEN'S RULES, AWAY FROM ITS PIXELS — the shape `hoursView.js`,
 // `attendanceView.js` and `staffView.js` already use in this folder, and the
@@ -517,6 +526,166 @@ export function timetableLists(timetable) {
 export function archivedPageNote(shown, total) {
   if (!Number.isInteger(shown) || !Number.isInteger(total) || total <= shown) return null;
   return `Showing the ${String(shown)} most recently removed, of ${String(total)}.`;
+}
+
+// ── THE WEEK VIEW (17b-ii-b-i) ──────────────────────────────────────────────
+//
+// Every date and time here is the gym's, sent by the server: the week's Monday,
+// the gym's today and the last week that is fully written. Nothing below asks
+// the browser what day it is.
+
+/** The week as the screen reads it, with safe values for anything missing. */
+export function weekLists(week) {
+  return {
+    sessions: Array.isArray(week?.sessions) ? week.sessions : [],
+    weekStart: typeof week?.weekStart === 'string' ? week.weekStart : '',
+    lastWeekStart: typeof week?.lastWeekStart === 'string' ? week.lastWeekStart : '',
+    today: typeof week?.today === 'string' ? week.today : '',
+    timezone: typeof week?.timezone === 'string' ? week.timezone : '',
+    clockFormat: week?.clockFormat === '12h' ? '12h' : '24h',
+  };
+}
+
+function shortDate(day) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day ?? '');
+  if (m === null) return '';
+  return `${String(Number(m[3]))} ${MONTH_SHORT[Number(m[2]) - 1] ?? ''}`;
+}
+
+/** `21 – 27 Sep 2026`, `28 Sep – 4 Oct 2026`, or with both years when the week
+ *  crosses one. */
+export function weekTitle(weekStart) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(weekStart ?? '');
+  if (m === null) return '';
+  const end = addDays(weekStart, 6);
+  const endYear = end.slice(0, 4);
+  if (endYear !== m[1]) {
+    return `${shortDate(weekStart)} ${m[1]} – ${shortDate(end)} ${endYear}`;
+  }
+  if (end.slice(5, 7) === m[2]) {
+    return `${String(Number(m[3]))} – ${shortDate(end)} ${endYear}`;
+  }
+  return `${shortDate(weekStart)} – ${shortDate(end)} ${endYear}`;
+}
+
+/** `Tue 29 Sep` — a column's heading. */
+export function dayHeading(day) {
+  const short = WEEKDAYS.find((w) => w.iso === isoWeekdayOfDay(day))?.short ?? '';
+  const date = shortDate(day);
+  return date === '' ? '' : `${short} ${date}`;
+}
+
+/** WHAT THE FILTERS OFFER — the classes and the coaches this week holds, plus
+ *  whatever is picked now, so a pick that is not in this week still shows as
+ *  picked rather than as a blank box. */
+export function weekFilterChoices(sessions, filter) {
+  const list = Array.isArray(sessions) ? sessions : [];
+  const classes = new Map();
+  const coaches = new Map();
+  let anyWithoutCoach = false;
+  for (const s of list) {
+    if (typeof s?.classTypeId === 'string') classes.set(s.classTypeId, s.name ?? '');
+    if (typeof s?.coachUserId === 'string' && s.coachUserId !== '') {
+      if (!coaches.has(s.coachUserId)) coaches.set(s.coachUserId, coachLine(s));
+    } else {
+      anyWithoutCoach = true;
+    }
+  }
+  if (filter?.classTypeId && !classes.has(filter.classTypeId)) {
+    classes.set(filter.classTypeId, filter.className ?? 'That class');
+  }
+  if (filter?.coach && filter.coach !== 'none' && !coaches.has(filter.coach)) {
+    coaches.set(filter.coach, filter.coachLabel ?? 'That coach');
+  }
+  const byLabel = (a, b) => a.label.localeCompare(b.label);
+  const coachList = [...coaches].map(([value, label]) => ({ value, label })).sort(byLabel);
+  if (anyWithoutCoach || filter?.coach === 'none') {
+    coachList.push({ value: 'none', label: 'No coach' });
+  }
+  return {
+    classes: [...classes].map(([value, label]) => ({ value, label })).sort(byLabel),
+    coaches: coachList,
+  };
+}
+
+/** The week's dates that pass the filters. An empty filter value is "all". */
+export function filterWeek(sessions, filter) {
+  const list = Array.isArray(sessions) ? sessions : [];
+  return list.filter((s) => {
+    if (filter?.classTypeId && s.classTypeId !== filter.classTypeId) return false;
+    if (filter?.coach === 'none') return s.coachUserId === null || s.coachUserId === undefined;
+    if (filter?.coach && s.coachUserId !== filter.coach) return false;
+    return true;
+  });
+}
+
+/** Monday to Sunday, each with its dates in the server's order. */
+export function weekColumns(weekStart, today, sessions) {
+  if (typeof weekStart !== 'string' || weekStart === '') return [];
+  const list = Array.isArray(sessions) ? sessions : [];
+  return [0, 1, 2, 3, 4, 5, 6].map((n) => {
+    const date = addDays(weekStart, n);
+    return {
+      date,
+      heading: dayHeading(date),
+      isToday: date === today,
+      sessions: list.filter((s) => s.localDate === date),
+    };
+  });
+}
+
+/** `18:00 · 60 min` — when it starts and how long it runs. */
+export function sessionTimeLine(session, clockFormat) {
+  const time = clockLabel(session?.startMinute, clockFormat);
+  const length = minutesLine(session?.minutes);
+  return [time, length].filter((part) => part !== '').join(' · ');
+}
+
+/** `20 places · Priya Sharma`. */
+export function sessionPeopleLine(session) {
+  if (session === null || session === undefined) return '';
+  return [placesLine(session.places), coachLine(session)].filter((p) => p !== '').join(' · ');
+}
+
+/** The word a date carries when it is not simply running as its repeat. */
+export function sessionTag(session) {
+  if (session?.status === 'cancelled') return 'Cancelled';
+  if (session?.changedAlone === true) return 'Changed for this day';
+  return '';
+}
+
+/** `Spin on Tue 29 Sep at 18:00` — how a date is named in a question. */
+export function sessionName(session, clockFormat) {
+  const when = closureDateLabel(session?.localDate ?? '');
+  const time = clockLabel(session?.startMinute, clockFormat);
+  return `${session?.name ?? ''} on ${when} at ${time}`;
+}
+
+/** Can the screen step forward? Only up to the last week the server says is
+ *  fully written, so an unwritten week is never shown as "no classes". */
+export function canGoForward(weekStart, lastWeekStart) {
+  if (typeof weekStart !== 'string' || typeof lastWeekStart !== 'string') return false;
+  if (weekStart === '' || lastWeekStart === '') return false;
+  return weekStart < lastWeekStart;
+}
+
+/** "Change this day" starts from the date as it runs now. */
+export function dayDraft(session) {
+  return {
+    time: minutesToClock(session?.startMinute),
+    ...runFieldsDraft(session ?? null),
+  };
+}
+
+export function dayProblem(draft) {
+  const minute = clockToMinutes(draft?.time ?? '');
+  if (minute === null || minute === 1440) return 'What time does it start?';
+  return runFieldsProblem(draft);
+}
+
+export function dayRequest(draft) {
+  if (dayProblem(draft) !== null) return null;
+  return { startMinute: clockToMinutes(draft.time), ...runFieldsRequest(draft) };
 }
 
 export { CLASS_ARCHIVED_PAGE, CLASS_SCHEDULE_PREVIEW_DATES };

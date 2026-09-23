@@ -522,7 +522,7 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
                                  BETWEEN the two times rather than inside one — the
                                  halves are `shrink-0` above, so a break can only
                                  happen where it reads properly. */
-                              <div key={session.id} className="flex flex-wrap items-center gap-2 mb-2">
+                              <div key={session.id} className="flex flex-wrap items-start gap-2 mb-2">
                                 {/* THE LABEL CARRIES THE SESSION NUMBER, and it
                                     is not cosmetic: a day can hold many, so
                                     without it three controls are indistinguishable
@@ -536,7 +536,7 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
                                   onChange={(v) => editSession(weekday.iso, session.id, 'opens', v)}
                                   disabled={controlsOff}
                                 />
-                                <span className="text-sm" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                                <span className="text-sm py-1.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
                                   to
                                 </span>
                                 <TimePick
@@ -552,7 +552,7 @@ export default function OpeningHoursPanel({ org, privileges, readOnly = false })
                                   onClick={() => removeSession(weekday.iso, session.id)}
                                   disabled={controlsOff}
                                   aria-label={`Remove ${weekday.label} session ${String(index + 1)}`}
-                                  className="p-1 rounded-lg"
+                                  className="p-1 mt-1 rounded-lg"
                                   style={{
                                     color: 'rgba(255,255,255,0.55)',
                                     opacity: controlsOff ? 0.5 : 1,

@@ -360,6 +360,75 @@ export const updateGymClassScheduleRequestSchema = z
   .strict();
 export type UpdateGymClassScheduleRequest = z.infer<typeof updateGymClassScheduleRequestSchema>;
 
+/** A date on the calendar is `scheduled` or `cancelled` — the column's CHECK,
+ *  word for word. A cancelled date keeps its row so the week can show it struck
+ *  through and staff can put it back (17b-ii-b-i). */
+export const CLASS_SESSION_STATUSES = ["scheduled", "cancelled"] as const;
+export const classSessionStatusSchema = z.enum(CLASS_SESSION_STATUSES);
+export type ClassSessionStatus = z.infer<typeof classSessionStatusSchema>;
+
+/** ONE DATE A CLASS RUNS ON, as the week view draws it (§13.3, §13.6).
+ *
+ *  Its numbers are its own: a date is stamped from its repeat when it is
+ *  written, and a date changed on its own keeps what staff gave it. */
+export const gymClassSessionSchema = z
+  .object({
+    id: z.string().uuid(),
+    classTypeId: z.string().uuid(),
+    /** Null only for a date with no repeat behind it, which nothing writes yet. */
+    scheduleId: z.string().uuid().nullable(),
+    name: z.string().min(1).max(80),
+    colour: classColourSchema,
+    openGym: z.boolean(),
+    localDate: classDaySchema,
+    startMinute: classStartMinuteSchema,
+    startsAt: z.string().datetime({ offset: true }),
+    minutes: classMinutesSchema,
+    places: classPlacesSchema.nullable(),
+    coachUserId: z.string().uuid().nullable(),
+    /** Answered only while the coach is still this gym's active staff. */
+    coachName: z.string().max(200).nullable(),
+    status: classSessionStatusSchema,
+    /** Staff changed this date's time, length, places or coach on its own, so a
+     *  later change to its repeat leaves it as it is. */
+    changedAlone: z.boolean(),
+    /** Has it already started, by the server's clock? A started date cannot be
+     *  changed, cancelled or put back. */
+    started: z.boolean(),
+  })
+  .strict();
+export type GymClassSession = z.infer<typeof gymClassSessionSchema>;
+
+/** ONE WEEK OF THE CALENDAR, Monday to Sunday in the gym's own calendar.
+ *
+ *  `lastWeekStart` is the last Monday whose whole week is already written, so
+ *  the screen never shows an unwritten week as "no classes". */
+export const gymClassWeekResponseSchema = z
+  .object({
+    timezone: z.string().min(1).max(64),
+    clockFormat: z.enum(["12h", "24h"]),
+    /** The gym's own today. */
+    today: classDaySchema,
+    weekStart: classDaySchema,
+    lastWeekStart: classDaySchema,
+    sessions: z.array(gymClassSessionSchema),
+  })
+  .strict();
+export type GymClassWeekResponse = z.infer<typeof gymClassWeekResponseSchema>;
+
+/** Any date inside the week wanted; the server moves it back to its Monday.
+ *  Absent is the week holding the gym's today. */
+export const gymClassWeekQuerySchema = z.object({ week: classDaySchema.optional() }).strict();
+export type GymClassWeekQuery = z.infer<typeof gymClassWeekQuerySchema>;
+
+/** CHANGE THIS DAY ONLY — its start time, length, places and coach. Every field
+ *  every time, a replace like the repeat's own edit. The DATE is not here:
+ *  moving a class to another day is "this day and later" (17b-ii-b-ii). */
+export const changeGymClassSessionRequestSchema = z
+  .object({ startMinute: classStartMinuteSchema, ...classScheduleFieldsShape })
+  .strict();
+export type ChangeGymClassSessionRequest = z.infer<typeof changeGymClassSessionRequestSchema>;
+
 /** Every mutation answers with the WHOLE timetable, deliberately.
  *
  *  Saving a repeat writes up to eight weeks of dates, archiving a type removes
