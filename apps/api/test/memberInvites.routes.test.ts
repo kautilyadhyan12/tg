@@ -77,7 +77,9 @@ d("press Invite (real Postgres)", () => {
     if (app === undefined) throw new Error("beforeAll did not build the app");
     return app;
   };
-  const settings = inviteSettings(loadConfig(baseEnv));
+  // Read while the tests are listed, so also where the suite is skipped for want of a
+  // database: the key comes from JWT_SECRET alone, and the address is a stand-in.
+  const settings = inviteSettings(loadConfig({ ...baseEnv, DATABASE_URL: "postgres://unused@localhost:5432/unused" }));
   if (settings === null) throw new Error("invitations are off in the test config");
 
   const cleanup = async () => {
