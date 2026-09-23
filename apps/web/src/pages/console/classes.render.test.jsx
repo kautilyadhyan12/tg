@@ -30,7 +30,7 @@ vi.mock('../../context/AuthContext', () => ({
 }));
 
 const Classes = (await import('./Classes')).default;
-const { addDays, gymToday } = await import('./hoursView');
+const { addDays, closureDateLabel, gymToday } = await import('./hoursView');
 const ConsoleLayout = (await import('../../components/console/ConsoleLayout')).default;
 const { resetConsoleOrgs } = await import('./consoleOrgs');
 
@@ -134,6 +134,17 @@ const drawShell = () =>
       </Routes>
     </MemoryRouter>,
   );
+
+/** Pick a date the way a person does: open the calendar under the box named
+ *  `label`, go forward a month at a time until the day is there, press it. */
+const pickDate = (label, day) => {
+  fireEvent.click(screen.getByRole('button', { name: label }));
+  const dayName = closureDateLabel(day);
+  for (let n = 0; n < 24 && screen.queryByRole('button', { name: dayName }) === null; n += 1) {
+    fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
+  }
+  fireEvent.click(screen.getByRole('button', { name: dayName }));
+};
 
 // A time slot's heading: its days as text, its time range in a span of its
 // own that never breaks across lines.
@@ -445,7 +456,7 @@ describe('adding a time slot', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Thu' }));
     fireEvent.change(screen.getByLabelText('Start time hour'), { target: { value: '7' } });
     fireEvent.change(screen.getByLabelText('Start time minute'), { target: { value: '15' } });
-    fireEvent.change(screen.getByLabelText('Start date'), { target: { value: '2026-10-01' } });
+    pickDate('Start date', addDays(gymToday('Europe/London'), 8));
     fireEvent.click(save);
 
     await waitFor(() => expect(api.addClassRepeat).toHaveBeenCalledTimes(1));
@@ -456,7 +467,7 @@ describe('adding a time slot', () => {
     expect(body).toEqual({
       weekdays: [2, 4],
       startMinute: 435,
-      startsOn: '2026-10-01',
+      startsOn: addDays(gymToday('Europe/London'), 8),
       minutes: 60,
       places: 20,
       coachUserId: 'u9',
@@ -475,7 +486,7 @@ describe('adding a time slot', () => {
     await screen.findByText('Sunrise Yoga');
     const save = await openSlotForm();
     fireEvent.click(screen.getByRole('button', { name: 'Tue' }));
-    fireEvent.change(screen.getByLabelText('Start date'), { target: { value: '2026-10-01' } });
+    pickDate('Start date', addDays(gymToday('Europe/London'), 8));
     expect(screen.getByLabelText('Length (minutes)').value).toBe('60');
     expect(screen.getByLabelText('Coach (optional)').value).toBe('');
     fireEvent.click(save);
@@ -491,7 +502,7 @@ describe('adding a time slot', () => {
     const save = await openSlotForm();
 
     fireEvent.click(screen.getByRole('button', { name: 'Tue' }));
-    fireEvent.change(screen.getByLabelText('Start date'), { target: { value: '2026-10-01' } });
+    pickDate('Start date', addDays(gymToday('Europe/London'), 8));
     expect(screen.getByLabelText('Class size').value).toBe('20');
     fireEvent.change(screen.getByLabelText('Length (minutes)'), { target: { value: '90' } });
     fireEvent.click(screen.getByLabelText('No limit'));
@@ -596,7 +607,7 @@ describe('editing a time slot', () => {
     fireEvent.change(screen.getByLabelText('Start time hour'), { target: { value: '19' } });
     fireEvent.change(screen.getByLabelText('Start time minute'), { target: { value: '0' } });
     const later = addDays(today(), 7);
-    fireEvent.change(screen.getByLabelText('Update from'), { target: { value: later } });
+    pickDate('Update from', later);
     // A move says only what is true of a move.
     expect(screen.getByText('Classes before this date stay as they are.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -755,7 +766,7 @@ describe('bulk edit', () => {
     fireEvent.change(screen.getByLabelText('Coach (optional)'), { target: { value: 'u9' } });
     tick(/Tue & Thu/);
     const later = addDays(today(), 7);
-    fireEvent.change(screen.getByLabelText('Update from'), { target: { value: later } });
+    pickDate('Update from', later);
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(api.bulkEditClass).toHaveBeenCalledTimes(1));

@@ -1,3 +1,4 @@
+import DatePick from '../../components/console/DatePick';
 import TimePick from '../../components/console/TimePick';
 import { coachChoices } from './classesView';
 import { inputStyle, labelStyle } from './classStyles';
@@ -14,6 +15,29 @@ export function Field({ label, children }) {
       </span>
       {children}
     </label>
+  );
+}
+
+/** A date, picked from a calendar. Not a `Field`: the calendar opens inside
+ *  it, and a <label> around a calendar would click its button again. */
+export function DateField({ label, value, min, max, today, onChange, disabled, emptyText, onClear }) {
+  return (
+    <div className="flex flex-col gap-1.5 text-sm">
+      <span className="text-xs uppercase tracking-wider" style={labelStyle}>
+        {label}
+      </span>
+      <DatePick
+        label={label}
+        value={value}
+        min={min}
+        max={max}
+        today={today}
+        onChange={onChange}
+        disabled={disabled}
+        emptyText={emptyText}
+        onClear={onClear}
+      />
+    </div>
   );
 }
 

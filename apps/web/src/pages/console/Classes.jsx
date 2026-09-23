@@ -11,6 +11,7 @@ import {
 } from '../../components/console/ConsoleStates';
 import {
   CoachField,
+  DateField,
   DaysPick,
   Field,
   LengthField,
@@ -206,30 +207,26 @@ function RepeatForm({ draft, setDraft, staff, clockFormat, today, disabled, savi
       />
 
       <div className="grid gap-4 md:grid-cols-2">
-        <Field label="Start date">
-          <input
-            type="date"
-            value={draft.startsOn}
-            min={today}
-            max={addDays(today, 365)}
-            onChange={(e) => setDraft({ ...draft, startsOn: e.target.value })}
-            disabled={disabled}
-            className="rounded-lg px-3 py-2 text-sm"
-            style={inputStyle}
-          />
-        </Field>
-        <Field label="End date (optional)">
-          <input
-            type="date"
-            value={draft.endsOn}
-            min={draft.startsOn || today}
-            max={addDays(today, 730)}
-            onChange={(e) => setDraft({ ...draft, endsOn: e.target.value })}
-            disabled={disabled}
-            className="rounded-lg px-3 py-2 text-sm"
-            style={inputStyle}
-          />
-        </Field>
+        <DateField
+          label="Start date"
+          value={draft.startsOn}
+          min={today}
+          max={addDays(today, 365)}
+          today={today}
+          onChange={(startsOn) => setDraft({ ...draft, startsOn })}
+          disabled={disabled}
+        />
+        <DateField
+          label="End date (optional)"
+          value={draft.endsOn}
+          min={draft.startsOn || today}
+          max={addDays(today, 730)}
+          today={today}
+          onChange={(endsOn) => setDraft({ ...draft, endsOn })}
+          disabled={disabled}
+          emptyText="No end date"
+          onClear={() => setDraft({ ...draft, endsOn: '' })}
+        />
       </div>
 
       <RunFields draft={draft} set={set} staff={staff} disabled={disabled} forClass={false} />
@@ -254,6 +251,7 @@ function RepeatEditForm({
   draft,
   setDraft,
   bounds,
+  today,
   staff,
   clockFormat,
   disabled,
@@ -280,18 +278,15 @@ function RepeatEditForm({
         disabled={disabled}
       />
       <RunFields draft={draft} set={set} staff={staff} disabled={disabled} forClass={false} />
-      <Field label="Update from">
-        <input
-          type="date"
-          value={draft.updateFrom}
-          min={bounds.min}
-          max={bounds.max}
-          onChange={(e) => set({ updateFrom: e.target.value })}
-          disabled={disabled}
-          className="rounded-lg px-3 py-2 text-sm"
-          style={inputStyle}
-        />
-      </Field>
+      <DateField
+        label="Update from"
+        value={draft.updateFrom}
+        min={bounds.min}
+        max={bounds.max}
+        today={today}
+        onChange={(updateFrom) => set({ updateFrom })}
+        disabled={disabled}
+      />
       <p className="text-xs" style={labelStyle}>
         {repeatEditNote(repeatEditMoves(schedule, draft))}
       </p>
@@ -338,6 +333,7 @@ function BulkEditForm({
   draft,
   setDraft,
   bounds,
+  today,
   staff,
   clockFormat,
   disabled,
@@ -398,18 +394,15 @@ function BulkEditForm({
       >
         <SizeField draft={draft} set={set} disabled={disabled} />
       </BulkChange>
-      <Field label="Update from">
-        <input
-          type="date"
-          value={draft.updateFrom}
-          min={bounds.min}
-          max={bounds.max}
-          onChange={(e) => set({ updateFrom: e.target.value })}
-          disabled={disabled}
-          className="rounded-lg px-3 py-2 text-sm"
-          style={inputStyle}
-        />
-      </Field>
+      <DateField
+        label="Update from"
+        value={draft.updateFrom}
+        min={bounds.min}
+        max={bounds.max}
+        today={today}
+        onChange={(updateFrom) => set({ updateFrom })}
+        disabled={disabled}
+      />
       <p className="text-xs" style={labelStyle}>
         {repeatEditNote(false)}
       </p>
@@ -854,6 +847,7 @@ export default function Classes() {
                       draft={bulkState}
                       setDraft={setBulkState}
                       bounds={bulkBounds(bulkSlots)}
+                      today={today}
                       staff={staff}
                       clockFormat={lists.clockFormat}
                       disabled={locked}
@@ -954,6 +948,7 @@ export default function Classes() {
                               setRepeatEditState(next);
                             }}
                             bounds={editBounds(schedule)}
+                            today={today}
                             staff={staff}
                             clockFormat={lists.clockFormat}
                             disabled={locked}

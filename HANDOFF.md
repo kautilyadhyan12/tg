@@ -23,7 +23,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **The worst thing, first test**: a bulk edit reaching classes before its date, or a time slot of another class or another gym. **Three deliberate breaks, each RED, repo.ts restored identical (sha256 433edcc2…)**: the class dropped from the time slot read (Yoga's time slot accepted under Spin, 200 not 404); the date ignored (the 20 classes before it changed); a missing id skipped instead of refusing (the rival's time slot beside ours, 200 not 404).
 - **Proven**: api tsc 0 · eslint 0 · shared tsc 0 · lint 0 · 220/220 · **the whole api suite on `aihg_b`: 104 files, 3,114 passed** (after applying master's 0038 to `aihg_b`, which Folder A had merged) · web 2,477 passed (`poseAssets.contract` local Node 24 only, as before) · changed web files lint 0.
 - **Cost at full size** (mains, 2,592 MHz; 20 gyms × 60 daily classes, 68,400 dates): a bulk edit of 12 time slots (684 classes) holds only that gym's lock, median 279 ms and 438 ms in two runs (the Docker volume); the longest event-loop stall during it 15–18 ms against 16–19 ms while merely waiting on the database; the rule's own work 0.039 ms.
-- **Open**: Kd's click-through; the review round (`reviews/17b-ii-b-ii-b-1-review.md`).
+- **Kd clicked through it and passed it** (*"all passed"*), and ruled the date box be a calendar in the app's colours (RULINGS 2026-09-23): `components/console/DatePick.jsx`, on all four date boxes of the Classes screen; its month grid and range table-tested (15), the screen's tests pick dates from it. Web after: 2,491 passed (`settingsHealth` timed out once under the full suite, 9/9 alone; `poseAssets.contract` local Node 24 only).
+- **Open**: the review round (`reviews/17b-ii-b-ii-b-1-review.md`).
 
 ## 2026-09-23 · 3a-iv: the member list kept by hand, one person's page, joining two records, and "Remove all" (PR #95)
 
