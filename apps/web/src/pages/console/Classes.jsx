@@ -9,14 +9,13 @@ import {
   ConsoleLoading,
   ConsoleSection,
 } from '../../components/console/ConsoleStates';
-import TimePick from '../../components/console/TimePick';
-import { Field, RunFields } from './ClassFields';
+import { DaysPick, Field, RunFields, StartTimePick } from './ClassFields';
 import { inputStyle, labelStyle } from './classStyles';
 import ClassWeek from './ClassWeek';
 import { useConsoleOrg } from './useConsoleOrg';
 import { viewerPrivileges } from './consoleView';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
-import { WEEKDAYS, addDays, clockLabel, gymToday } from './hoursView';
+import { addDays, clockLabel, gymToday } from './hoursView';
 import {
   archivedPageNote,
   CLASS_COLOUR_CHOICES,
@@ -30,13 +29,18 @@ import {
   repeatDatesLine,
   repeatDraft,
   repeatEditDraft,
+  repeatEditMoves,
+  repeatEditNote,
+  repeatEditProblem,
   repeatEditRequest,
   repeatProblem,
   repeatRequest,
-  runFieldsProblem,
+  replaceQuestion,
+  replacesAsked,
   timeRange,
   timetableLists,
   toggleWeekday,
+  updateFromBounds,
   weekdayLine,
 } from './classesView';
 
@@ -174,46 +178,17 @@ function RepeatForm({ draft, setDraft, staff, clockFormat, today, disabled, savi
         New time slot
       </div>
 
-      <div className="flex flex-col gap-2">
-        <span className="text-xs uppercase tracking-wider" style={labelStyle}>
-          Days
-        </span>
-        <div className="flex flex-wrap gap-2">
-          {WEEKDAYS.map((day) => {
-            const on = draft.weekdays.includes(day.iso);
-            return (
-              <button
-                key={day.iso}
-                type="button"
-                onClick={() => setDraft(toggleWeekday(draft, day.iso))}
-                disabled={disabled}
-                aria-pressed={on}
-                className="rounded-lg px-3 py-1.5 text-sm"
-                style={{
-                  background: on ? 'rgba(255,138,31,0.15)' : 'rgba(255,255,255,0.04)',
-                  color: on ? '#FF8A1F' : 'rgba(255,255,255,0.65)',
-                }}
-              >
-                {day.short}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <span className="text-xs uppercase tracking-wider" style={labelStyle}>
-          Start time
-        </span>
-        <TimePick
-          label="Start time"
-          kind="opens"
-          value={draft.time}
-          clockFormat={clockFormat}
-          onChange={(time) => setDraft({ ...draft, time })}
-          disabled={disabled}
-        />
-      </div>
+      <DaysPick
+        weekdays={draft.weekdays}
+        onToggle={(iso) => setDraft(toggleWeekday(draft, iso))}
+        disabled={disabled}
+      />
+      <StartTimePick
+        value={draft.time}
+        clockFormat={clockFormat}
+        onChange={(time) => setDraft({ ...draft, time })}
+        disabled={disabled}
+      />
 
       <div className="grid gap-4 md:grid-cols-2">
         <Field label="Start date">
@@ -256,25 +231,74 @@ function RepeatForm({ draft, setDraft, staff, clockFormat, today, disabled, savi
   );
 }
 
-/** Editing a time slot: its length, coach and size. Its days and time are
- *  moved from a date, which is 17b-ii-b-ii. */
-function RepeatEditForm({ draft, setDraft, staff, disabled, saving, onSave, onClose }) {
-  const problem = runFieldsProblem(draft);
+/** Editing a time slot from a date: its days, start time, length, coach and
+ *  size. When a move would replace classes changed on their own, the server
+ *  asks and the question stands where Save was. */
+function RepeatEditForm({
+  schedule,
+  draft,
+  setDraft,
+  bounds,
+  staff,
+  clockFormat,
+  disabled,
+  saving,
+  question,
+  onSave,
+  onClose,
+  onMove,
+  onBack,
+}) {
+  const problem = repeatEditProblem(draft, bounds);
   const set = (patch) => setDraft({ ...draft, ...patch });
   return (
     <div className="flex flex-col gap-4">
+      <DaysPick
+        weekdays={draft.weekdays}
+        onToggle={(iso) => setDraft(toggleWeekday(draft, iso))}
+        disabled={disabled}
+      />
+      <StartTimePick
+        value={draft.time}
+        clockFormat={clockFormat}
+        onChange={(time) => set({ time })}
+        disabled={disabled}
+      />
       <RunFields draft={draft} set={set} staff={staff} disabled={disabled} forClass={false} />
+      <Field label="Update from">
+        <input
+          type="date"
+          value={draft.updateFrom}
+          min={bounds.min}
+          max={bounds.max}
+          onChange={(e) => set({ updateFrom: e.target.value })}
+          disabled={disabled}
+          className="rounded-lg px-3 py-2 text-sm"
+          style={inputStyle}
+        />
+      </Field>
       <p className="text-xs" style={labelStyle}>
-        Applies to upcoming classes, except any marked Changed on the Calendar.
+        {repeatEditNote(repeatEditMoves(schedule, draft))}
       </p>
       <Problem text={problem} />
-      <FormButtons
-        saveLabel="Save"
-        onSave={onSave}
-        onClose={onClose}
-        saving={saving}
-        blocked={disabled || problem !== null}
-      />
+      {question === null ? (
+        <FormButtons
+          saveLabel="Save"
+          onSave={onSave}
+          onClose={onClose}
+          saving={saving}
+          blocked={disabled || problem !== null}
+        />
+      ) : (
+        <ConfirmInline
+          question={question}
+          confirmLabel="Move anyway"
+          cancelLabel="Go back"
+          busy={saving}
+          onConfirm={onMove}
+          onCancel={onBack}
+        />
+      )}
     </div>
   );
 }
@@ -301,6 +325,9 @@ export default function Classes() {
   // Which time slot is open for editing — an id, for the same reason.
   const [editingRepeat, setEditingRepeat] = useState(null);
   const [repeatEditState, setRepeatEditState] = useState(() => repeatEditDraft(null));
+  // A move the server asked about: how many classes it would replace, from
+  // which date. Any change to the form puts Save back.
+  const [replaceAsk, setReplaceAsk] = useState(null);
 
   const [reloadKey, setReloadKey] = useState(0);
   // Which tab, in the address so a reload or a shared link keeps it.
@@ -435,15 +462,29 @@ export default function Classes() {
     }
   };
 
-  const saveRepeatEdit = async (scheduleId) => {
-    const body = repeatEditRequest(repeatEditState);
+  const editBounds = (schedule) => updateFromBounds(schedule, today, lists.horizonDays);
+
+  // Not `run`: a move the server asks about is a question, not a failure.
+  const saveRepeatEdit = async (schedule, confirmReplace = null) => {
+    const body = repeatEditRequest(repeatEditState, editBounds(schedule), confirmReplace);
     if (body === null) return;
-    if (
-      await run(`repeatEdit:${scheduleId}`, () =>
-        orgService.updateClassRepeat(gymId, scheduleId, body),
-      )
-    ) {
+    setBusy(`repeatEdit:${schedule.id}`);
+    setActionError(null);
+    try {
+      const res = await orgService.updateClassRepeat(gymId, schedule.id, body);
+      setTimetable(res.data);
+      setReplaceAsk(null);
       setEditingRepeat(null);
+    } catch (err) {
+      const count = replacesAsked(err);
+      if (count === null) {
+        setReplaceAsk(null);
+        setActionError(errorText(err, "We couldn't save that."));
+      } else {
+        setReplaceAsk({ count, from: body.updateFrom });
+      }
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -685,7 +726,8 @@ export default function Classes() {
                                 type="button"
                                 onClick={() => {
                                   setEditingRepeat(schedule.id);
-                                  setRepeatEditState(repeatEditDraft(schedule));
+                                  setReplaceAsk(null);
+                                  setRepeatEditState(repeatEditDraft(schedule, editBounds(schedule)));
                                 }}
                                 aria-label={`Edit the ${days} ${startsAt} time slot of ${type.name}`}
                                 className="text-sm"
@@ -710,13 +752,31 @@ export default function Classes() {
                         {editingThis ? (
                           <RepeatEditForm
                             key={schedule.id}
+                            schedule={schedule}
                             draft={repeatEditState}
-                            setDraft={setRepeatEditState}
+                            setDraft={(next) => {
+                              setReplaceAsk(null);
+                              setRepeatEditState(next);
+                            }}
+                            bounds={editBounds(schedule)}
                             staff={staff}
+                            clockFormat={lists.clockFormat}
                             disabled={locked}
                             saving={busy === `repeatEdit:${schedule.id}`}
-                            onSave={() => void saveRepeatEdit(schedule.id)}
-                            onClose={() => setEditingRepeat(null)}
+                            question={
+                              replaceAsk === null
+                                ? null
+                                : replaceQuestion(replaceAsk.count, replaceAsk.from)
+                            }
+                            onSave={() => void saveRepeatEdit(schedule)}
+                            onClose={() => {
+                              setReplaceAsk(null);
+                              setEditingRepeat(null);
+                            }}
+                            onMove={() => {
+                              if (replaceAsk !== null) void saveRepeatEdit(schedule, replaceAsk.count);
+                            }}
+                            onBack={() => setReplaceAsk(null)}
                           />
                         ) : null}
                         {askingThis ? (

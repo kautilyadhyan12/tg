@@ -23,11 +23,17 @@ import {
   repeatDatesLine,
   repeatDraft,
   repeatEditDraft,
+  repeatEditMoves,
+  repeatEditNote,
+  repeatEditProblem,
   repeatEditRequest,
   repeatProblem,
   repeatRequest,
   repeatTimeValue,
+  replaceQuestion,
+  replacesAsked,
   runFieldsProblem,
+  updateFromBounds,
   timeRange,
   timetableLists,
   toggleWeekday,
@@ -413,16 +419,24 @@ describe('the time slot form', () => {
 // CHANGING A REPEAT — its three fields and nothing else, which is the rule the
 // server's `.strict()` schema enforces and this side must not break.
 describe('editing a time slot', () => {
-  it('fills the form from the saved repeat, never from its class', () => {
-    expect(
-      repeatEditDraft({
-        minutes: 90,
-        places: null,
-        coachUserId: 'sam-id',
-        coachName: 'Sam Reid',
-        startMinute: 1110,
-      }),
-    ).toEqual({
+  const SLOT = {
+    weekdays: [3, 1],
+    startMinute: 1110,
+    startsOn: '2026-09-01',
+    endsOn: null,
+    minutes: 90,
+    places: null,
+    coachUserId: 'sam-id',
+    coachName: 'Sam Reid',
+    nextDates: ['2026-10-05', '2026-10-07'],
+  };
+  const BOUNDS = { min: '2026-10-05', max: '2026-11-29' };
+
+  it('fills the form from the saved time slot, never from its class, from its next class', () => {
+    expect(repeatEditDraft(SLOT, BOUNDS)).toEqual({
+      weekdays: [1, 3],
+      time: '18:30',
+      updateFrom: '2026-10-05',
       minutes: '90',
       unlimited: true,
       places: '20',
@@ -431,28 +445,96 @@ describe('editing a time slot', () => {
     });
   });
 
-  it('sends the three fields and NOT when it runs, and never the coach s NAME', () => {
-    const draft = {
-      minutes: '45',
-      unlimited: false,
-      places: '8',
-      coachUserId: 'dana-id',
-      coachName: 'Dana Okafor',
-    };
-    expect(repeatEditRequest(draft)).toEqual({
+  // A class that already ran this morning is not today's next one: the date
+  // starts at the next class, so a move from it never gives today a second one.
+  it('starts the date at the next class that has not run, inside the bounds', () => {
+    expect(repeatEditDraft({ ...SLOT, nextDates: ['2026-10-07'] }, BOUNDS).updateFrom).toBe('2026-10-07');
+    expect(repeatEditDraft({ ...SLOT, nextDates: [] }, BOUNDS).updateFrom).toBe('2026-10-05');
+    // A stale or odd date never lands outside what can be picked.
+    expect(repeatEditDraft({ ...SLOT, nextDates: ['2026-09-20'] }, BOUNDS).updateFrom).toBe('2026-10-05');
+    expect(repeatEditDraft({ ...SLOT, nextDates: ['2027-01-01'] }, BOUNDS).updateFrom).toBe('2026-10-05');
+  });
+
+  it('offers dates from today or the slot s first day, to the calendar s last day or the slot s own last day', () => {
+    expect(updateFromBounds(SLOT, '2026-10-05', 56)).toEqual({ min: '2026-10-05', max: '2026-11-29' });
+    expect(updateFromBounds({ ...SLOT, startsOn: '2026-10-19' }, '2026-10-05', 56)).toEqual({
+      min: '2026-10-19',
+      max: '2026-11-29',
+    });
+    expect(updateFromBounds({ ...SLOT, endsOn: '2026-10-31' }, '2026-10-05', 56)).toEqual({
+      min: '2026-10-05',
+      max: '2026-10-31',
+    });
+    // Without the server's number it uses the shared one: 5 Oct + 55 days.
+    expect(CLASS_FILL_HORIZON_DAYS).toBe(56);
+    expect(updateFromBounds(SLOT, '2026-10-05', undefined).max).toBe('2026-11-29');
+  });
+
+  it('knows a move from a change of length, size or coach', () => {
+    const same = repeatEditDraft(SLOT, BOUNDS);
+    expect(repeatEditMoves(SLOT, same)).toBe(false);
+    expect(repeatEditMoves(SLOT, { ...same, minutes: '30', coachUserId: '' })).toBe(false);
+    expect(repeatEditMoves(SLOT, { ...same, time: '19:00' })).toBe(true);
+    expect(repeatEditMoves(SLOT, { ...same, weekdays: [1, 3, 5] })).toBe(true);
+    expect(repeatEditMoves(SLOT, { ...same, weekdays: [1] })).toBe(true);
+    expect(repeatEditMoves(SLOT, { ...same, weekdays: [3, 1] })).toBe(false);
+    // The line under the form is true for each.
+    expect(repeatEditNote(false)).toMatch(/marked Changed on the Calendar keep their own/);
+    expect(repeatEditNote(true)).toBe('Classes before this date stay as they are.');
+  });
+
+  it('sends the date, the days, the time and the three fields, and never the coach s NAME', () => {
+    const draft = { ...repeatEditDraft(SLOT, BOUNDS), minutes: '45', unlimited: false, places: '8' };
+    expect(repeatEditRequest(draft, BOUNDS)).toEqual({
+      updateFrom: '2026-10-05',
+      weekdays: [1, 3],
+      startMinute: 1110,
       minutes: 45,
       places: 8,
-      coachUserId: 'dana-id',
+      coachUserId: 'sam-id',
     });
     // `null` IS THE VALUE for both, never an omission: the route replaces
     // rather than merges.
-    expect(repeatEditRequest({ ...draft, unlimited: true, coachUserId: '' })).toEqual({
-      minutes: 45,
+    expect(repeatEditRequest({ ...draft, unlimited: true, coachUserId: '' }, BOUNDS)).toMatchObject({
       places: null,
       coachUserId: null,
     });
-    expect(repeatEditRequest({ ...draft, minutes: '0' })).toBeNull();
+    // The count goes back only when the server asked for it.
+    expect(repeatEditRequest(draft, BOUNDS, 2)).toMatchObject({ confirmReplace: 2 });
+    expect(repeatEditRequest(draft, BOUNDS, 0)).not.toHaveProperty('confirmReplace');
     expect(runFieldsProblem({ ...draft, places: 'twenty' })).toMatch(/1 to 500/);
+  });
+
+  it('will not send a form the server would refuse, and says why', () => {
+    const ok = repeatEditDraft(SLOT, BOUNDS);
+    expect(repeatEditProblem(ok, BOUNDS)).toBeNull();
+    const cases = [
+      [{ weekdays: [] }, 'Pick at least one day of the week.'],
+      [{ time: '' }, 'Pick a start time.'],
+      [{ time: '24:00' }, 'Pick a start time.'],
+      [{ minutes: '4' }, 'Length must be 5 to 600 minutes.'],
+      [{ updateFrom: '' }, 'Pick the date to update from.'],
+      [{ updateFrom: '2026-10-04' }, 'Pick a date from Mon 5 Oct 2026 to Sun 29 Nov 2026.'],
+      [{ updateFrom: '2026-11-30' }, 'Pick a date from Mon 5 Oct 2026 to Sun 29 Nov 2026.'],
+    ];
+    for (const [over, words] of cases) {
+      expect(repeatEditProblem({ ...ok, ...over }, BOUNDS), JSON.stringify(over)).toBe(words);
+      expect(repeatEditRequest({ ...ok, ...over }, BOUNDS)).toBeNull();
+    }
+  });
+
+  it('asks before a move replaces classes changed on their own, in the gym s words', () => {
+    expect(replaceQuestion(2, '2026-10-12')).toBe(
+      '2 classes from Mon 12 Oct on were changed or cancelled on their own. Move anyway?',
+    );
+    expect(replaceQuestion(1, '2026-10-12')).toBe(
+      '1 class from Mon 12 Oct on was changed or cancelled on its own. Move anyway?',
+    );
+    const asked = (data) => replacesAsked({ response: { status: 409, data } });
+    expect(asked({ error: 'class_slot_replaces', replaces: 2 })).toBe(2);
+    expect(asked({ error: 'class_slot_replaces' })).toBeNull();
+    expect(asked({ error: 'repeat_clashes', replaces: 2 })).toBeNull();
+    expect(replacesAsked(new Error('offline'))).toBeNull();
   });
 
   // **A `<select>` WHOSE VALUE IS NOT AMONG ITS OPTIONS RENDERS BLANK, AND THE

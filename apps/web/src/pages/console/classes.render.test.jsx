@@ -29,6 +29,7 @@ vi.mock('../../context/AuthContext', () => ({
 }));
 
 const Classes = (await import('./Classes')).default;
+const { addDays, gymToday } = await import('./hoursView');
 const ConsoleLayout = (await import('../../components/console/ConsoleLayout')).default;
 const { resetConsoleOrgs } = await import('./consoleOrgs');
 
@@ -539,7 +540,11 @@ describe('editing a time slot', () => {
   const openEdit = () =>
     fireEvent.click(screen.getByRole('button', { name: 'Edit the Mon & Wed 18:30 time slot of Sunrise Yoga' }));
 
-  it('opens filled in from the time slot, not its class, and sends the three fields back', async () => {
+  // The fixture's next dates may be in the past by the time this runs, so the
+  // date the form starts at is the gym's today, worked out the screen's way.
+  const today = () => gymToday('Europe/London');
+
+  it('opens filled in from the time slot, not its class, and sends its days, time and three fields from the date', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
     openEdit();
@@ -547,6 +552,16 @@ describe('editing a time slot', () => {
     expect((await screen.findByLabelText('Length (minutes)')).value).toBe('45');
     expect(screen.getByLabelText('Class size').value).toBe('12');
     expect(screen.getByLabelText('Coach (optional)').value).toBe('u8');
+    expect(screen.getByLabelText('Start time hour').value).toBe('18');
+    expect(screen.getByLabelText('Start time minute').value).toBe('30');
+    expect(screen.getByRole('button', { name: 'Mon' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Tue' }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByLabelText('Update from').value).toBe(today());
+    expect(
+      screen.getByText(
+        'Classes before this date stay as they are, and any marked Changed on the Calendar keep their own.',
+      ),
+    ).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText('Length (minutes)'), { target: { value: '30' } });
     fireEvent.change(screen.getByLabelText('Coach (optional)'), { target: { value: 'u9' } });
@@ -556,20 +571,79 @@ describe('editing a time slot', () => {
     const [gymId, scheduleId, body] = api.updateClassRepeat.mock.calls[0];
     expect(gymId).toBe('g1');
     expect(scheduleId).toBe('s1');
-    // Exactly three keys: the route's schema is `.strict()`.
-    expect(body).toEqual({ minutes: 30, places: 12, coachUserId: 'u9' });
+    // Every key, and no more: the route's schema is `.strict()`.
+    expect(body).toEqual({
+      updateFrom: today(),
+      weekdays: [1, 3],
+      startMinute: 1110,
+      minutes: 30,
+      places: 12,
+      coachUserId: 'u9',
+    });
+    await waitFor(() => expect(screen.queryByLabelText('Update from')).toBeNull());
   });
 
-  it('says what a change reaches, and offers no way to move the day or the time', async () => {
+  it('moves the time slot to new days and a new time from a later date', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
     openEdit();
-    await screen.findByLabelText('Length (minutes)');
-    expect(
-      screen.getByText('Applies to upcoming classes, except any marked Changed on the Calendar.'),
-    ).toBeTruthy();
-    expect(screen.queryByLabelText('Start date')).toBeNull();
-    expect(screen.queryByLabelText('Start time hour')).toBeNull();
+    await screen.findByLabelText('Update from');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fri' }));
+    fireEvent.change(screen.getByLabelText('Start time hour'), { target: { value: '19' } });
+    fireEvent.change(screen.getByLabelText('Start time minute'), { target: { value: '0' } });
+    const later = addDays(today(), 7);
+    fireEvent.change(screen.getByLabelText('Update from'), { target: { value: later } });
+    // A move says only what is true of a move.
+    expect(screen.getByText('Classes before this date stay as they are.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(api.updateClassRepeat).toHaveBeenCalledTimes(1));
+    expect(api.updateClassRepeat.mock.calls[0][2]).toEqual({
+      updateFrom: later,
+      weekdays: [1, 3, 5],
+      startMinute: 1140,
+      minutes: 45,
+      places: 12,
+      coachUserId: 'u8',
+    });
+  });
+
+  it('asks before a move replaces classes changed on their own: Go back sends nothing, Move anyway sends the count', async () => {
+    const asked = { response: { status: 409, data: { error: 'class_slot_replaces', replaces: 2 } } };
+    api.updateClassRepeat.mockRejectedValueOnce(asked).mockRejectedValueOnce(asked);
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    openEdit();
+    await screen.findByLabelText('Update from');
+    fireEvent.change(screen.getByLabelText('Start time hour'), { target: { value: '7' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    const question = await screen.findByText(/^2 classes from .+ on were changed or cancelled on their own\. Move anyway\?$/);
+    expect(question).toBeTruthy();
+    // The question stands where Save was, and it is not an error.
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+    expect(screen.queryByText("We couldn't save that.")).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Go back' }));
+    expect(screen.queryByText(/Move anyway\?/)).toBeNull();
+    expect(api.updateClassRepeat).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await screen.findByText(/Move anyway\?/);
+    // Changing the form takes the question away: it was about the old answer.
+    fireEvent.change(screen.getByLabelText('Length (minutes)'), { target: { value: '50' } });
+    expect(screen.queryByText(/Move anyway\?/)).toBeNull();
+    fireEvent.change(screen.getByLabelText('Length (minutes)'), { target: { value: '45' } });
+    expect(api.updateClassRepeat).toHaveBeenCalledTimes(2);
+
+    api.updateClassRepeat.mockRejectedValueOnce(asked);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await screen.findByText(/Move anyway\?/);
+    fireEvent.click(screen.getByRole('button', { name: 'Move anyway' }));
+    await waitFor(() => expect(api.updateClassRepeat).toHaveBeenCalledTimes(4));
+    expect(api.updateClassRepeat.mock.calls[3][2]).toMatchObject({ startMinute: 450, confirmReplace: 2 });
+    expect(api.updateClassRepeat.mock.calls[2][2]).not.toHaveProperty('confirmReplace');
+    await waitFor(() => expect(screen.queryByLabelText('Update from')).toBeNull());
   });
 
   it('sends nothing when the numbers are out of bounds', async () => {

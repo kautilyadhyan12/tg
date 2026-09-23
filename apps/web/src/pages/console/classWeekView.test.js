@@ -139,7 +139,24 @@ describe('editing one date', () => {
 
   it('sends every field, "no limit" and "nobody" as null', () => {
     const draft = { ...dayDraft(s({})), time: '19:30', unlimited: true, coachUserId: '' };
-    expect(dayRequest(draft)).toEqual({ startMinute: 1170, minutes: 45, places: null, coachUserId: null });
+    expect(dayRequest(draft)).toEqual({
+      scope: 'this',
+      startMinute: 1170,
+      minutes: 45,
+      places: null,
+      coachUserId: null,
+    });
+  });
+
+  // 17b-ii-b-ii: "This and future classes" is the time slot's change from this
+  // date; a count to confirm goes only with it, and only when the server asked.
+  it('says which classes it is for, and sends a count to confirm only with this and future', () => {
+    const draft = dayDraft(s({}));
+    expect(dayRequest(draft, 'future')).toMatchObject({ scope: 'future' });
+    expect(dayRequest(draft, 'future')).not.toHaveProperty('confirmReplace');
+    expect(dayRequest(draft, 'future', 2)).toMatchObject({ scope: 'future', confirmReplace: 2 });
+    expect(dayRequest(draft, 'this', 2)).not.toHaveProperty('confirmReplace');
+    expect(dayRequest(draft, 'anything else')).toMatchObject({ scope: 'this' });
   });
 
   it('refuses a missing start time, midnight at the end of a day, and the repeat s own bounds', () => {

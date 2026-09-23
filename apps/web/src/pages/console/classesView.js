@@ -3,6 +3,7 @@ import {
   CLASS_COLOURS,
   CLASS_FILL_HORIZON_DAYS,
   CLASS_SCHEDULE_PREVIEW_DATES,
+  CLASS_SLOT_REPLACES_ERROR,
 } from '@app/shared';
 import {
   MONTH_SHORT,
@@ -328,16 +329,99 @@ export function repeatDraft(type, today) {
   };
 }
 
-/** Changing a repeat: its three fields and nothing else. Its days, its time and
- *  its window are "this day and later" (17b-ii-b) and are deliberately not
- *  editable here — see `updateGymClassScheduleRequestSchema`. */
-export function repeatEditDraft(schedule) {
-  return runFieldsDraft(schedule ?? null);
+// ── EDITING A TIME SLOT FROM A DATE (17b-ii-b-ii) ───────────────────────────
+//
+// Its days, start time, length, size and coach, from an "Update from" date
+// (TeamUp's words). Classes before the date never change; a new day or time
+// ends the time slot the day before and starts a new one on the date. The
+// server decides all of that; the form only says which date.
+
+const isDay = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+
+/** The dates a time slot can be changed from: not before today or its own first
+ *  day, and not past its own last day or the calendar's last written day. */
+export function updateFromBounds(schedule, today, horizonDays) {
+  const min = [today, schedule?.startsOn].filter(isDay).sort().at(-1) ?? '';
+  const days = Number.isInteger(horizonDays) ? horizonDays : CLASS_FILL_HORIZON_DAYS;
+  const last = isDay(today) ? addDays(today, days - 1) : '';
+  const max = isDay(schedule?.endsOn) && schedule.endsOn < last ? schedule.endsOn : last;
+  return { min, max };
 }
 
-export function repeatEditRequest(draft) {
-  if (runFieldsProblem(draft) !== null) return null;
-  return runFieldsRequest(draft);
+/** Where the date starts: the time slot's next class that has not run, so a
+ *  class that already ran this morning is not given a second one today. */
+function firstUpdateDate(schedule, bounds) {
+  const next = Array.isArray(schedule?.nextDates) ? schedule.nextDates[0] : undefined;
+  if (isDay(next) && next > bounds.min && next <= bounds.max) return next;
+  return bounds.min;
+}
+
+export function repeatEditDraft(schedule, bounds = { min: '', max: '' }) {
+  const weekdays = Array.isArray(schedule?.weekdays) ? schedule.weekdays : [];
+  return {
+    weekdays: [...new Set(weekdays)].sort((a, b) => a - b),
+    time: minutesToClock(schedule?.startMinute),
+    updateFrom: firstUpdateDate(schedule, bounds),
+    ...runFieldsDraft(schedule ?? null),
+  };
+}
+
+/** A new day or start time: the server moves the time slot from the date. */
+export function repeatEditMoves(schedule, draft) {
+  const before = Array.isArray(schedule?.weekdays) ? [...new Set(schedule.weekdays)].sort() : [];
+  const after = Array.isArray(draft?.weekdays) ? [...new Set(draft.weekdays)].sort() : [];
+  if (before.join(',') !== after.join(',')) return true;
+  return clockToMinutes(draft?.time ?? '') !== schedule?.startMinute;
+}
+
+export function repeatEditProblem(draft, bounds) {
+  const days = Array.isArray(draft?.weekdays) ? draft.weekdays : [];
+  if (days.length === 0) return 'Pick at least one day of the week.';
+  const minute = clockToMinutes(draft?.time ?? '');
+  if (minute === null || minute === 1440) return 'Pick a start time.';
+  const fields = runFieldsProblem(draft);
+  if (fields !== null) return fields;
+  const from = draft?.updateFrom ?? '';
+  if (!isDay(from)) return 'Pick the date to update from.';
+  if ((isDay(bounds?.min) && from < bounds.min) || (isDay(bounds?.max) && from > bounds.max)) {
+    return `Pick a date from ${closureDateLabel(bounds.min)} to ${closureDateLabel(bounds.max)}.`;
+  }
+  return null;
+}
+
+/** The body, or null when the form is not ready. `confirmReplace` is the count
+ *  the server asked about, sent back only after the gym said Move anyway. */
+export function repeatEditRequest(draft, bounds, confirmReplace = null) {
+  if (repeatEditProblem(draft, bounds) !== null) return null;
+  return {
+    updateFrom: draft.updateFrom,
+    weekdays: [...new Set(draft.weekdays)].sort((a, b) => a - b),
+    startMinute: clockToMinutes(draft.time),
+    ...runFieldsRequest(draft),
+    ...(Number.isInteger(confirmReplace) && confirmReplace > 0 ? { confirmReplace } : {}),
+  };
+}
+
+/** The line under the form, true for what the Save will do. */
+export function repeatEditNote(moves) {
+  return moves
+    ? 'Classes before this date stay as they are.'
+    : 'Classes before this date stay as they are, and any marked Changed on the Calendar keep their own.';
+}
+
+/** How many classes a move would replace, when the server asked; else null. */
+export function replacesAsked(err) {
+  const data = err?.response?.data;
+  if (data?.error !== CLASS_SLOT_REPLACES_ERROR) return null;
+  return Number.isInteger(data?.replaces) && data.replaces > 0 ? data.replaces : null;
+}
+
+/** The question before a move replaces classes the gym changed on its own. */
+export function replaceQuestion(count, fromDay) {
+  const when = whole(dayHeading(fromDay ?? ''));
+  return count === 1
+    ? `1 class from ${when} on was changed or cancelled on its own. Move anyway?`
+    : `${String(count)} classes from ${when} on were changed or cancelled on their own. Move anyway?`;
 }
 
 /** Tick a day on or off, keeping the set sorted. Returned as a NEW draft: the
@@ -585,9 +669,18 @@ export function dayProblem(draft) {
   return runFieldsProblem(draft);
 }
 
-export function dayRequest(draft) {
+/** `scope` is "this" (this class only) or "future" (this and future classes,
+ *  which is its time slot's change from this date). */
+export function dayRequest(draft, scope = 'this', confirmReplace = null) {
   if (dayProblem(draft) !== null) return null;
-  return { startMinute: clockToMinutes(draft.time), ...runFieldsRequest(draft) };
+  return {
+    scope: scope === 'future' ? 'future' : 'this',
+    startMinute: clockToMinutes(draft.time),
+    ...runFieldsRequest(draft),
+    ...(scope === 'future' && Number.isInteger(confirmReplace) && confirmReplace > 0
+      ? { confirmReplace }
+      : {}),
+  };
 }
 
 export { CLASS_ARCHIVED_PAGE, CLASS_SCHEDULE_PREVIEW_DATES };

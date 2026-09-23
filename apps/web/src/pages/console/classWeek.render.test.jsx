@@ -287,14 +287,83 @@ describe('one class on one date', () => {
     fireEvent.change(screen.getByLabelText('Class size'), { target: { value: '15' } });
     fireEvent.click(screen.getByLabelText('No limit'));
     fireEvent.change(screen.getByLabelText('Coach (optional)'), { target: { value: '' } });
+    // "This class only" unless the gym picks otherwise.
+    expect(screen.getByRole('button', { name: 'This class only' }).getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(api.changeClassDay).toHaveBeenCalled());
     expect(api.changeClassDay).toHaveBeenCalledWith('g1', 'x3', {
+      scope: 'this',
       startMinute: 1170,
       minutes: 90,
       places: null,
       coachUserId: null,
     });
+  });
+
+  // 17b-ii-b-ii: the same form changes its time slot from this date.
+  it('This and future classes sends the time slot s change from this date', async () => {
+    draw();
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00');
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'This and future classes' }));
+    expect(screen.getByRole('button', { name: 'This and future classes' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    fireEvent.change(screen.getByLabelText('Coach (optional)'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.changeClassDay).toHaveBeenCalled());
+    expect(api.changeClassDay).toHaveBeenCalledWith('g1', 'x1', {
+      scope: 'future',
+      startMinute: 1080,
+      minutes: 45,
+      places: 12,
+      coachUserId: null,
+    });
+  });
+
+  it('asks before a move from this date replaces classes changed on their own: Go back sends nothing more, Move anyway sends the count', async () => {
+    const asked = { response: { status: 409, data: { error: 'class_slot_replaces', replaces: 3 } } };
+    api.changeClassDay.mockRejectedValueOnce(asked);
+    draw();
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00');
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'This and future classes' }));
+    fireEvent.change(screen.getByLabelText('Start time hour'), { target: { value: '19' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(
+      await screen.findByText(
+        /^3 classes from Tue.22.Sep on were changed or cancelled on their own\. Move anyway\?$/,
+      ),
+    ).toBeTruthy();
+    // A question, not a failure: no error line, and the week is not re-read.
+    expect(screen.queryByText("We couldn't save that.")).toBeNull();
+    expect(api.getClassWeek).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Go back' }));
+    expect(screen.queryByText(/Move anyway\?/)).toBeNull();
+    expect(api.changeClassDay).toHaveBeenCalledTimes(1);
+
+    api.changeClassDay.mockRejectedValueOnce(asked);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await screen.findByText(/Move anyway\?/);
+    fireEvent.click(screen.getByRole('button', { name: 'Move anyway' }));
+    await waitFor(() => expect(api.changeClassDay).toHaveBeenCalledTimes(3));
+    expect(api.changeClassDay.mock.calls[2][2]).toEqual({
+      scope: 'future',
+      startMinute: 1140,
+      minutes: 45,
+      places: 12,
+      coachUserId: 'u8',
+      confirmReplace: 3,
+    });
+  });
+
+  it('a date with no time slot behind it offers This class only and nothing else', async () => {
+    api.getClassWeek.mockResolvedValue(week({ sessions: [{ ...SPIN_TUE, scheduleId: null }] }));
+    draw();
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00');
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    expect(screen.queryByRole('button', { name: 'This and future classes' })).toBeNull();
   });
 
   it('a class that has already started offers nothing to press', async () => {
