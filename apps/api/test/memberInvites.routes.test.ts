@@ -341,11 +341,12 @@ d("press Invite (real Postgres)", () => {
       expect(emailsTo(addr("eve")).map((message) => message.idempotencyKey)).toEqual([`member-invite-${claimed.id}`]);
 
       // A person taken off, deleted for good and typed in again is the same address:
-      // already invited, and nothing is queued.
+      // already invited, and nothing is queued. Taking her off withdrew the invitation
+      // (§10.2); only staff sending it again re-opens it.
       expect((await del(entryUrl(gym, cat.entry.entryId), owner.cookies)).statusCode).toBe(200);
       expect((await del(`${listUrl(gym)}/former/${cat.entry.entryId}`, owner.cookies)).statusCode).toBe(200);
       const catAgain = await typeIn(gym, owner, { fullName: "Cat", email: addr("cat") });
-      expect(catAgain.entry.invitation?.state).toBe("pending");
+      expect(catAgain.entry.invitation?.state).toBe("withdrawn");
       preview = await previewOf(gym, owner);
       expect(preview.reach).toBe(0);
       expect((await post(`${entryUrl(gym, catAgain.entry.entryId)}/invite`, {}, owner.cookies)).statusCode).toBe(200);
@@ -901,7 +902,7 @@ d("press Invite (real Postgres)", () => {
       expect(errorOf(gymLimit).error).toBe("again_gym_limit");
 
       // A declined invitation sent again is pending again (§10.2).
-      await sql`UPDATE gym_invites SET state = 'declined' WHERE gym_id = ${gym} AND email_hmac = ${emailHmac(settings.hmacKey, addr("ned"))}`;
+      await sql`UPDATE gym_invites SET state = 'declined', answered_at = now() WHERE gym_id = ${gym} AND email_hmac = ${emailHmac(settings.hmacKey, addr("ned"))}`;
       await sql`DELETE FROM gym_invite_sends WHERE gym_id = ${gym} AND kind = 'again' AND email IS NULL AND provider_id IS NULL AND attempts = 0`;
       const reopened = await post(`${entryUrl(gym, ned.entry.entryId)}/invite/resend`, {}, owner.cookies);
       expect(reopened.statusCode, reopened.body).toBe(200);
@@ -926,7 +927,7 @@ d("press Invite (real Postgres)", () => {
       expect((await post(`${entryUrl(gym, oli.entry.entryId)}/invite`, {}, owner.cookies)).statusCode).toBe(200);
       expect((await post(`${entryUrl(gym, rex.entry.entryId)}/invite`, {}, owner.cookies)).statusCode).toBe(200);
       await runSender();
-      await sql`UPDATE gym_invites SET state = 'declined' WHERE gym_id = ${gym} AND email_hmac = ${emailHmac(settings.hmacKey, addr("rex"))}`;
+      await sql`UPDATE gym_invites SET state = 'declined', answered_at = now() WHERE gym_id = ${gym} AND email_hmac = ${emailHmac(settings.hmacKey, addr("rex"))}`;
 
       const page = async (query: string) => {
         const res = await get(`${entriesUrl(gym)}${query}`, owner.cookies);
@@ -979,7 +980,8 @@ d("press Invite (real Postgres)", () => {
       const reasons = await sql<{ reason: string | null; state: string }[]>`
         SELECT state, reason FROM gym_invite_sends WHERE gym_id = ${gym} ORDER BY reason NULLS LAST`;
       expect(reasons.map((row) => `${row.state}:${row.reason ?? ""}`).sort()).toEqual(
-        ["queued:", "sent:", "skipped:in_app", "skipped:no_mail_domain", "skipped:not_on_list"].sort(),
+        // Rae was taken off by staff, which withdrew her invitation (§10.2).
+        ["queued:", "sent:", "skipped:in_app", "skipped:no_mail_domain", "skipped:invitation_withdrawn"].sort(),
       );
       expect(emailsTo(addr("tia"))).toHaveLength(1);
 

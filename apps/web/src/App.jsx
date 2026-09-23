@@ -24,6 +24,8 @@ import Nutrition       from './pages/Nutrition';
 import Achievements    from './pages/Achievements';
 import Settings        from './pages/Settings';
 import JoinGym         from './pages/JoinGym';
+import InvitationLink  from './pages/InvitationLink';
+import Invitations     from './pages/Invitations';
 import MyGyms          from './pages/MyGyms';
 import Running         from './pages/Running';
 import RunPlanner      from './pages/RunPlanner';
@@ -173,6 +175,15 @@ export default function App() {
                 </ProtectedRoute>
               </CarryJoinCode>
             } />
+            {/* The invitation email's link (Part 3 §10.2). Until the phone app
+                exists it opens sign-in; the invitation itself hangs on the
+                address, never on this link. */}
+            <Route path="/join/:slug" element={<InvitationLink />} />
+            <Route path="/invitations" element={
+              <ProtectedRoute requireInvitations={false}>
+                <AppLayout><Invitations /></AppLayout>
+              </ProtectedRoute>
+            } />
 
             {/* ── Running ───────────────────────────────────────────────── */}
             <Route path="/running" element={
@@ -204,24 +215,25 @@ export default function App() {
                 the member app — which ProtectedRoute's default still walls.
                 The same for the sign-up note (Kd, 2026-09-14): it is the
                 training side's, so the console skips it too and a person
-                who runs an organisation meets it on coming to train. */}
+                who runs an organisation meets it on coming to train. And for
+                "You're invited", which is a member joining a gym. */}
             <Route path="/console" element={
-              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false}>
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
                 <ConsoleLayout><ConsoleHome /></ConsoleLayout>
               </ProtectedRoute>
             } />
             <Route path="/console/new" element={
-              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false}>
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
                 <ConsoleLayout><NewGym /></ConsoleLayout>
               </ProtectedRoute>
             } />
             <Route path="/console/:orgSlug" element={
-              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false}>
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
                 <ConsoleLayout><ConsoleOverview /></ConsoleLayout>
               </ProtectedRoute>
             } />
             <Route path="/console/:orgSlug/members" element={
-              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false}>
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
                 <ConsoleLayout><ConsoleMembers /></ConsoleLayout>
               </ProtectedRoute>
             } />
@@ -231,7 +243,7 @@ export default function App() {
                 by typing the address either way — the server is the enforcement
                 (R3.3) and the screen prints its refusal. */}
             <Route path="/console/:orgSlug/attendance" element={
-              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false}>
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
                 <ConsoleLayout><ConsoleAttendance /></ConsoleLayout>
               </ProtectedRoute>
             } />
@@ -241,12 +253,12 @@ export default function App() {
                 the tab only for somebody holding `schedule.manage`; the address
                 is reachable either way, and the server is the enforcement. */}
             <Route path="/console/:orgSlug/classes" element={
-              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false}>
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
                 <ConsoleLayout><ConsoleClasses /></ConsoleLayout>
               </ProtectedRoute>
             } />
             <Route path="/console/:orgSlug/settings" element={
-              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false}>
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
                 <ConsoleLayout><ConsoleSettings /></ConsoleLayout>
               </ProtectedRoute>
             } />

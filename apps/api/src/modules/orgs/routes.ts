@@ -37,6 +37,7 @@ import {
   updateOrgStaffRequestSchema,
 } from "./schemas.js";
 import { registerClassRoutes } from "./classes/routes.js";
+import { registerInvitationRoutes } from "./invites/joinRoutes.js";
 import type { InviteSettings } from "./invites/settings.js";
 import { registerMemberListRoutes } from "./memberList/routes.js";
 import * as service from "./service.js";
@@ -83,6 +84,7 @@ export function registerOrgRoutes(
     sql: deps.sql,
     redis: deps.redis,
     randomBytes: overrides.randomBytes ?? ((n) => randomBytes(n)),
+    invites: deps.invites,
     // Only the attendance hook uses it: a streak that fails to recompute warns
     // rather than losing a visit that is already committed (R8.5 — the
     // alternative is the empty catch that rule forbids).
@@ -97,6 +99,10 @@ export function registerOrgRoutes(
   // THE GYM'S TIMETABLE (Part 3 §13.3), registered here for the same reason the
   // member list is: the same console, the same gates, the same deps.
   registerClassRoutes(app, { sql: deps.sql, redis: deps.redis });
+
+  // A person's own invitations: what is waiting for their address, Join, No thanks
+  // (Part 3 §10.2).
+  registerInvitationRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites });
 
   app.post("/v1/orgs", { preHandler: [app.authenticate] }, async (req, reply) => {
     const body = parseOr400(createOrgRequestSchema, req.body, req, reply);

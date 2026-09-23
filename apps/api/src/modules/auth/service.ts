@@ -115,7 +115,7 @@ async function issueSession(
     ip: meta.ip,
     userAgent: meta.userAgent,
   });
-  return { accessToken: signAccessToken(userId, deps.config), refreshToken };
+  return { accessToken: signAccessToken(userId, deps.config, familyId), refreshToken };
 }
 
 async function toAuthUser(sql: Sql, row: repo.UserAuthRow): Promise<AuthUser> {
@@ -215,9 +215,9 @@ function oauthDisplayName(name: string | null): string {
 /** Record email-verified once (idempotent — skips if a verify_email marker
  *  already exists), using the derivation isEmailVerified() already reads
  *  (DECISIONS: no verified column). Google asserts the address; a proved
- *  sign-in code proves it. */
+ *  sign-in code proves it. The first proof also ends any password and session
+ *  set up before it (repo). Runs before the new session is issued. */
 async function ensureEmailVerified(deps: AuthDeps, userId: string): Promise<void> {
-  if (await repo.isEmailVerified(deps.sql, userId)) return;
   await repo.recordVerifiedEmail(deps.sql, userId, sha256Hex(mintOpaqueToken()));
 }
 
@@ -237,8 +237,9 @@ export async function googleSignIn(
     return { user: await toAuthUser(deps.sql, user), tokens: await issueSession(deps, user.id, meta) };
   }
 
-  // 2. Existing account with this email → link Google to it (never downgrade
-  //    or touch the password), then log in.
+  // 2. Existing account with this email → link Google to it, then log in. A
+  //    password stays only if the address was proved before it; one set on an
+  //    address nobody had proved ends here (ensureEmailVerified).
   const byEmail = await repo.findUserByEmail(deps.sql, identity.email);
   if (byEmail !== null) {
     if (byEmail.status !== "active") throw googleUnavailable();
@@ -395,7 +396,7 @@ export async function refresh(
     }
     throw err;
   }
-  return { accessToken: signAccessToken(row.userId, deps.config), refreshToken };
+  return { accessToken: signAccessToken(row.userId, deps.config, row.familyId), refreshToken };
 }
 
 // ── logout ──────────────────────────────────────────────────────────────────
@@ -416,7 +417,7 @@ export async function verifyEmail(
   rawToken: string,
   meta: RequestMeta,
 ): Promise<{ user: AuthUser; tokens: SessionTokens }> {
-  const userId = await repo.consumeOneTimeToken(deps.sql, "verify_email", sha256Hex(rawToken));
+  const userId = await repo.consumeVerifyEmailToken(deps.sql, sha256Hex(rawToken));
   if (userId === null) {
     throw new AuthError(400, "invalid_token", "Invalid or expired verification token");
   }
@@ -496,6 +497,21 @@ const RESTORE_TTL_MS = DPDP_RETENTION_MS;
 
 export async function isUserEmailVerified(sql: Sql, userId: string): Promise<boolean> {
   return await repo.isEmailVerified(sql, userId);
+}
+
+/** The active account's address, and whether THIS sign-in session may answer for it:
+ *  the address is proved, and the session is still live and began after the first
+ *  proof (Part 3 §10.2; see `recordVerifiedEmail`). Null when there is no such account
+ *  or it has no address. */
+export async function accountAddress(
+  sql: Sql,
+  userId: string,
+  familyId: string | null,
+): Promise<{ email: string; provedForSession: boolean } | null> {
+  const user = await repo.findUserById(sql, userId);
+  if (user === null || user.status !== "active" || user.email === null) return null;
+  const provedForSession = familyId !== null && (await repo.sessionBegunAfterProof(sql, userId, familyId));
+  return { email: user.email, provedForSession };
 }
 
 /** Mints + stores (hashed) a restore_account token; returns the raw token for

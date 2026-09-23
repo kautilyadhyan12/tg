@@ -2,7 +2,7 @@
 // one_time_tokens for this module (v1 §6.2, R4.6). Every query is keyed by
 // the owning identity or an unguessable token hash — no fetch-by-id-alone of
 // tenant data leaves this file unscoped (R3.2).
-import type { Sql } from "postgres";
+import type { Sql, TransactionSql } from "postgres";
 
 /** The password-hash algorithms users.hash_algo may hold (identity.ts §3.1
  *  CHECK). Owned here because it types the DB row; the service imports it. */
@@ -162,9 +162,70 @@ export async function recordVerifiedEmail(
   userId: string,
   markerHash: string,
 ): Promise<void> {
-  await sql`
-    INSERT INTO one_time_tokens (user_id, purpose, token_hash, expires_at, used_at)
-    VALUES (${userId}, 'verify_email', ${markerHash}, now(), now())`;
+  await sql.begin(async (tx) => {
+    await tx`SELECT 1 FROM users WHERE id = ${userId} FOR UPDATE`;
+    const proved = await tx<{ one: number }[]>`
+      SELECT 1 AS one FROM one_time_tokens
+      WHERE user_id = ${userId} AND purpose = 'verify_email' AND used_at IS NOT NULL
+      LIMIT 1`;
+    if (proved.length > 0) return;
+    await tx`
+      INSERT INTO one_time_tokens (user_id, purpose, token_hash, expires_at, used_at)
+      VALUES (${userId}, 'verify_email', ${markerHash}, now(), now())`;
+    await forgetWhatCameBeforeProof(tx, userId);
+  });
+}
+
+/** THE FIRST PROOF OF AN ADDRESS ENDS WHAT WAS SET UP BEFORE IT. `POST /v1/auth/register`
+ *  lets anyone make an account under an address they do not hold, with a password; when
+ *  the address's owner later proves it (a code, Google, the verification link), that
+ *  account becomes theirs — so the password set before, and every session begun with it,
+ *  are ended here, in the proof's own transaction ("pre-account hijacking": Sudhodanan &
+ *  Paverd, USENIX Security 2022, its "classic–federated merge" and "unexpired session"
+ *  attacks). An access token already out lives its 15 minutes; `sessionBegunAfterProof`
+ *  below is what a route that must not trust one asks. */
+async function forgetWhatCameBeforeProof(tx: TransactionSql, userId: string): Promise<void> {
+  await tx`UPDATE users SET password_hash = NULL, hash_algo = NULL WHERE id = ${userId}`;
+  await tx`
+    UPDATE refresh_tokens SET revoked_at = now()
+    WHERE user_id = ${userId} AND revoked_at IS NULL`;
+}
+
+/** The verification link: consumed, and if it is the address's first proof, what came
+ *  before it ended. Null when the token is unknown, used or expired. */
+export async function consumeVerifyEmailToken(sql: Sql, tokenHash: string): Promise<string | null> {
+  return await sql.begin(async (tx) => {
+    const rows = await tx<{ user_id: string }[]>`
+      UPDATE one_time_tokens SET used_at = now()
+      WHERE token_hash = ${tokenHash} AND purpose = 'verify_email'
+        AND used_at IS NULL AND expires_at > now()
+      RETURNING user_id`;
+    const userId = rows[0]?.user_id;
+    if (userId === undefined) return null;
+    await tx`SELECT 1 FROM users WHERE id = ${userId} FOR UPDATE`;
+    const proofs = await tx<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM one_time_tokens
+      WHERE user_id = ${userId} AND purpose = 'verify_email' AND used_at IS NOT NULL`;
+    if ((proofs[0]?.n ?? 0) === 1) await forgetWhatCameBeforeProof(tx, userId);
+    return userId;
+  });
+}
+
+/** Is this sign-in session still live, and did it begin at or after the address's
+ *  first proof? Both times are the database's own clock: the proof's transaction
+ *  stamps `used_at`, and a session is issued after it commits. A session from before
+ *  the proof is false even if a refresh raced the proof's revocation. */
+export async function sessionBegunAfterProof(sql: Sql, userId: string, familyId: string): Promise<boolean> {
+  const rows = await sql<{ ok: boolean | null }[]>`
+    SELECT (
+      EXISTS (
+        SELECT 1 FROM refresh_tokens
+        WHERE user_id = ${userId} AND family_id = ${familyId} AND revoked_at IS NULL AND expires_at > now())
+      AND (SELECT min(created_at) FROM refresh_tokens WHERE user_id = ${userId} AND family_id = ${familyId})
+          >= (SELECT min(used_at) FROM one_time_tokens
+              WHERE user_id = ${userId} AND purpose = 'verify_email' AND used_at IS NOT NULL)
+    ) AS ok`;
+  return rows[0]?.ok === true;
 }
 
 // ── refresh tokens (rotation + reuse detection, v1 §6.1 / Part 4 §3.1) ──────

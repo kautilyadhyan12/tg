@@ -40,6 +40,8 @@ export function decideSend(facts: SendFacts): SendDecision {
   if (facts.gym.stopped) return { kind: "skip", reason: "sending_stopped" };
   if (!facts.gym.hasPostalAddress) return { kind: "skip", reason: "no_postal_address" };
   if (!facts.gym.named) return { kind: "skip", reason: "gym_name" };
+  // Staff took the person off or removed them: said as that, not as an answer they gave.
+  if (facts.inviteState === "withdrawn") return { kind: "skip", reason: "invitation_withdrawn" };
   if (facts.inviteState === null || facts.inviteState !== "pending") return { kind: "skip", reason: "invitation_closed" };
   if (!facts.addressMatchesInvite || !facts.onList) return { kind: "skip", reason: "not_on_list" };
   if (facts.inApp) return { kind: "skip", reason: "in_app" };

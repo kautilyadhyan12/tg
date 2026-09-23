@@ -7,12 +7,13 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { AppConfig } from "../../config.js";
 import { findUserById } from "./repo.js";
-import { ACCESS_COOKIE, verifyAccessToken } from "./tokens.js";
+import { ACCESS_COOKIE, verifyAccessTokenClaims } from "./tokens.js";
 
 declare module "fastify" {
   interface FastifyRequest {
-    /** Set by `authenticate`; present on any route that lists it as preHandler. */
-    authUser?: { id: string };
+    /** Set by `authenticate`; present on any route that lists it as preHandler.
+     *  `familyId` is the sign-in session the access token was issued under. */
+    authUser?: { id: string; familyId: string | null };
   }
   interface FastifyInstance {
     authenticate: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
@@ -41,20 +42,20 @@ export function registerAuthenticate(
       return;
     }
 
-    let userId: string;
+    let claims: { userId: string; familyId: string | null };
     try {
-      userId = verifyAccessToken(token, deps.config);
+      claims = verifyAccessTokenClaims(token, deps.config);
     } catch {
       await unauthorized(); // invalid/expired/refresh-typed — uniformly dark
       return;
     }
 
     // Ported authGuard.js:24-38: the user must still exist and be active.
-    const user = await findUserById(deps.sql, userId);
+    const user = await findUserById(deps.sql, claims.userId);
     if (user === null || user.status !== "active") {
       await unauthorized();
       return;
     }
-    req.authUser = { id: user.id };
+    req.authUser = { id: user.id, familyId: claims.familyId };
   });
 }

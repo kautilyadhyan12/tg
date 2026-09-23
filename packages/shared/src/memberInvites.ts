@@ -10,8 +10,8 @@ import { z } from "zod";
 /** The longest postal address a gym may keep for its invitations' footer. */
 export const GYM_POSTAL_ADDRESS_MAX_CHARS = 200;
 
-/** Where an invitation stands (§10.2). Only `pending` is written by this job;
- *  `accepted`, `declined` and `withdrawn` (a person taken off or removed) are 3b-ii's. */
+/** Where an invitation stands (§10.2): waiting, joined, declined, or withdrawn (staff
+ *  took the person off the list or removed them, so signing in lets nobody back in). */
 export const memberInviteStateSchema = z.enum(["pending", "accepted", "declined", "withdrawn"]);
 export type MemberInviteState = z.infer<typeof memberInviteStateSchema>;
 
@@ -31,6 +31,7 @@ export const memberInviteEmailReasonSchema = z.enum([
   "bad_address",
   "no_mail_domain",
   "invitation_closed",
+  "invitation_withdrawn",
   "gym_not_active",
   "no_postal_address",
   "gym_name",
@@ -54,6 +55,7 @@ export const MEMBER_INVITE_EMAIL_REASON_WORDS: Readonly<Record<MemberInviteEmail
   bad_address: "Not sent: this email address isn't valid.",
   no_mail_domain: "Not sent: this email address can't receive email. Check it with the person.",
   invitation_closed: "Not sent: this person has already answered the invitation.",
+  invitation_withdrawn: "Not sent: you took this person off your list or removed them from the app.",
   gym_not_active: "Not sent: your gym had no active plan when it was due to go.",
   no_postal_address: "Not sent: your gym had no postal address when it was due to go.",
   gym_name: "Not sent: your gym's name can't be shown in an email. Change it in Settings.",
@@ -120,6 +122,9 @@ export const memberListInvitationSchema = z
       .nullable(),
     /** How many times it was sent again at the person's request and went. */
     sentAgain: z.number().int().min(0),
+    /** Since when the person has been waiting: they tapped Join and the gym had no free
+     *  place ("invited · waiting for a place"). */
+    waitingSince: z.string().nullable().default(null),
   })
   .strict();
 export type MemberListInvitation = z.infer<typeof memberListInvitationSchema>;

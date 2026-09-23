@@ -28,6 +28,7 @@ import {
 import type { TransactionSql } from "postgres";
 import { z } from "zod";
 import { bustEntitlements } from "../../entitlements/service.js";
+import { withdrawForAccounts, withdrawForAddress } from "../invites/join.js";
 import { invitationsOf, inviteEntryInTx, readyToSend } from "../invites/service.js";
 import type { InviteSettings } from "../invites/settings.js";
 import { insertAudit } from "../repo.js";
@@ -365,6 +366,10 @@ async function setOnList(
     // The members this record reached were on the list (taking off) or are now
     // (putting back); either way they have been listed.
     await repo.stampListedByContact(tx, gymId, currentContacts({ values: stored.values, current: true }), at);
+    // Taken off by staff: signing in with the address must not let them in, even if a
+    // later upload holds them again, until staff send the invitation again (§10.2).
+    // Putting back re-opens nothing.
+    if (!on) await withdrawForAddress(tx, deps.invites ?? null, { gymId, email: stored.values.email, at });
     const version = await repo.bumpListVersion(tx, gymId);
     await insertAudit(tx, {
       actorUserId: userId,
@@ -439,8 +444,9 @@ export async function mergeEntries(
       handEdited: keep.handEdited,
       formerAt: current ? null : keep.formerAt,
     });
-    // Nothing points at a record yet; a table that does is moved onto the kept record
-    // here, before the other is deleted (the reference test fails until it is).
+    // What points at the record not kept moves onto the kept one before it is deleted
+    // (the reference test lists every table that does).
+    await repo.moveMembershipLinks(tx, gymId, goneId, keepId);
     await repo.deleteEntry(tx, gymId, goneId);
     const lost = await leftOff(tx, gymId, gone.values, reached);
     if (lost > 0 && !acknowledgeLeavesList) throw new LeavesList(lost, "merge");
@@ -599,6 +605,7 @@ export async function removeUnlisted(
       throw new Error(`remove-unlisted closed ${String(closed.length)} memberships where the rule chose ${String(ids.length)}`);
     }
     await repo.insertRemovalAudits(tx, { actorUserId: userId, gymId, group: input.group, removed: closed });
+    await withdrawForAccounts(tx, deps.invites ?? null, { gymId, userIds: closed.map((row) => row.userId), at });
     await insertAudit(tx, {
       actorUserId: userId,
       gymId,

@@ -10,7 +10,13 @@ import { z } from "zod";
 import type { AppConfig } from "../../config.js";
 
 // A presented JWT is external input (R2.3) — parse, don't cast.
-const accessClaimsSchema = z.object({ sub: z.string().uuid(), typ: z.literal("access") });
+const accessClaimsSchema = z.object({
+  sub: z.string().uuid(),
+  typ: z.literal("access"),
+  // The sign-in session (refresh family) the token was issued under. Absent on a
+  // token signed before the claim existed.
+  fid: z.string().uuid().optional(),
+});
 
 // Cookie names live here so plugin.ts and routes.ts can't drift (T3 2026-07-11).
 export const ACCESS_COOKIE = "accessToken";
@@ -29,8 +35,8 @@ export class InvalidAccessTokenError extends Error {
 /** Access JWTs are explicitly type-tagged. The old code tagged only refresh
  *  tokens and rejected {type:'refresh'}; requiring typ==='access' is the same
  *  defense with the safer default (an untagged/foreign token also fails). */
-export function signAccessToken(userId: string, config: AppConfig): string {
-  return jwt.sign({ sub: userId, typ: "access" }, config.JWT_SECRET, {
+export function signAccessToken(userId: string, config: AppConfig, familyId: string): string {
+  return jwt.sign({ sub: userId, typ: "access", fid: familyId }, config.JWT_SECRET, {
     algorithm: "HS256",
     // v1 §6.1: "JWT access (15 min)" — minutes come from config (default 15).
     expiresIn: config.ACCESS_TTL_MIN * 60,
@@ -40,6 +46,11 @@ export function signAccessToken(userId: string, config: AppConfig): string {
 /** Returns the userId or throws InvalidAccessTokenError. Never leaks jwt
  *  internals to callers (routes answer a uniform 401). */
 export function verifyAccessToken(token: string, config: AppConfig): string {
+  return verifyAccessTokenClaims(token, config).userId;
+}
+
+/** The userId and the sign-in session the token belongs to (null on an older token). */
+export function verifyAccessTokenClaims(token: string, config: AppConfig): { userId: string; familyId: string | null } {
   let decoded: unknown;
   try {
     decoded = jwt.verify(token, config.JWT_SECRET, { algorithms: ["HS256"] });
@@ -51,7 +62,7 @@ export function verifyAccessToken(token: string, config: AppConfig): string {
     // R3.7: refresh (or any non-access) token rejected on access paths.
     throw new InvalidAccessTokenError("not an access token");
   }
-  return claims.data.sub;
+  return { userId: claims.data.sub, familyId: claims.data.fid ?? null };
 }
 
 /** 32 random bytes, hex — the shape the audited code mailed in links

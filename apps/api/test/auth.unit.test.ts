@@ -10,6 +10,7 @@ import {
   sha256Hex,
   signAccessToken,
   verifyAccessToken,
+  verifyAccessTokenClaims,
 } from "../src/modules/auth/tokens.js";
 import {
   argon2idHasher,
@@ -50,9 +51,15 @@ describe("config (P2.1 additions)", () => {
 });
 
 describe("access JWT (R3.7)", () => {
-  it("round-trips a signed access token", () => {
-    const token = signAccessToken(USER, config);
+  it("round-trips a signed access token, with the sign-in session it belongs to", () => {
+    const FAMILY = "44444444-4444-4444-8444-444444444444";
+    const token = signAccessToken(USER, config, FAMILY);
     expect(verifyAccessToken(token, config)).toBe(USER);
+    expect(verifyAccessTokenClaims(token, config)).toEqual({ userId: USER, familyId: FAMILY });
+    // A token signed before the session claim existed still signs its owner in; it
+    // names no session.
+    const older = jwt.sign({ sub: USER, typ: "access" }, SECRET, { algorithm: "HS256", expiresIn: 60 });
+    expect(verifyAccessTokenClaims(older, config)).toEqual({ userId: USER, familyId: null });
   });
 
   it("pins algorithms to HS256: an HS512 token with the SAME secret is rejected", () => {

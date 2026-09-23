@@ -25,6 +25,7 @@ import mlApi from '../api/mlApi'; // KEPT: avatar/profile-picture only — no ne
 import Select from '../components/common/Select';
 import JoinGymPanel from '../components/gym/JoinGymPanel';
 import GymMembershipCard from '../components/gym/GymMembershipCard';
+import InvitationsPanel from '../components/gym/InvitationsPanel';
 
 // `gym` is where v1 §8 puts joining a gym — "member enters code at
 // registration or in Settings" — and it is the MEMBER's side of that
@@ -564,6 +565,9 @@ function GymTab() {
   const [applied, setApplied] = useState(0);
   return (
     <div className="flex flex-col gap-5">
+      {/* Invitations still open for this address, a declined one with its Join
+          (Part 3 §10.2). A Join re-reads the card below. */}
+      <InvitationsPanel onJoined={() => setApplied((n) => n + 1)} />
       <GymMembershipCard refreshToken={applied} />
       <JoinGymPanel onApplied={() => setApplied((n) => n + 1)} />
     </div>

@@ -1,8 +1,9 @@
 // The only file that touches the invitation tables (Part 3 §9.12). Every statement
 // names its gym, except the two a public unsubscribe link reaches, which are keyed by
-// an invitation id the link's MAC has already proved, and the one a Resend report
+// an invitation id the link's MAC has already proved, the one a Resend report
 // reaches, keyed by the email's tag or Resend's id for it, whose gym every later
-// write then names.
+// write then names, and the two a signed-in person's own address reaches (§10.2),
+// keyed by that address's HMAC.
 import type { Sql, TransactionSql } from "postgres";
 import {
   memberInviteEmailReasonSchema,
@@ -205,13 +206,16 @@ export async function queueFirst(
   return rows.length;
 }
 
-/** Queue one more email for an invitation, at the person's request, and make the
- *  invitation pending again (§10.2: "Invite again" re-opens a declined or withdrawn
- *  one). */
-export async function queueAgain(tx: TransactionSql, gymId: string, inviteId: string, email: string, at: Date): Promise<void> {
+/** Make a declined or withdrawn invitation pending again (§10.2: "Invite again"
+ *  re-opens it). */
+export async function reopenInvitation(tx: TransactionSql, gymId: string, inviteId: string): Promise<void> {
   await tx`
-    UPDATE gym_invites SET state = 'pending'
+    UPDATE gym_invites SET state = 'pending', answered_at = NULL
     WHERE gym_id = ${gymId} AND id = ${inviteId} AND state IN ('declined','withdrawn')`;
+}
+
+/** Queue one more email for an invitation, at the person's request. */
+export async function queueAgain(tx: TransactionSql, gymId: string, inviteId: string, email: string, at: Date): Promise<void> {
   await tx`
     INSERT INTO gym_invite_sends (gym_id, invite_id, kind, email, not_before, created_at)
     VALUES (${gymId}, ${inviteId}, 'again', ${email}, ${at}, ${at})`;
@@ -269,9 +273,10 @@ export async function invitationViews(
       email_at: Date | null;
       email_result: string | null;
       again: number;
+      waiting_since: Date | null;
     }[]
   >`
-    SELECT i.id, i.email_hmac, i.state, i.created_at,
+    SELECT i.id, i.email_hmac, i.state, i.created_at, i.waiting_since,
            l.state AS email_state,
            l.reason AS email_reason,
            coalesce(l.finished_at, l.created_at) AS email_at,
@@ -309,6 +314,7 @@ export async function invitationViews(
       invitedAt: row.created_at.toISOString(),
       email,
       sentAgain: row.again,
+      waitingSince: row.waiting_since?.toISOString() ?? null,
     });
   }
   return views;
@@ -764,4 +770,129 @@ export async function resumeGym(sql: SqlOrTx, gymId: string, at: Date): Promise<
     WHERE id = ${gymId} AND invites_stopped_at IS NOT NULL
     RETURNING id`;
   return rows.length === 1;
+}
+// ── Joining (§10.2): the invitation's own person, found by the address's HMAC ──
+//
+// Every statement below that finds an invitation names the caller's address HMAC as
+// well as any id, so an invitation is only ever reached through the address it was
+// sent to; the gym each one belongs to is named in every write.
+
+export interface WaitingInvitationRow {
+  id: string;
+  state: "pending" | "declined";
+  gymId: string;
+  gymName: string;
+  gymCity: string | null;
+  orgType: string;
+  onPlan: boolean;
+}
+
+/** The invitations this address may answer: waiting or declined, at an active gym whose
+ *  current list still holds the address, where the person is not already a member. */
+export async function invitationsForAddress(
+  sql: SqlOrTx,
+  input: { hmac: string; email: string; userId: string },
+): Promise<WaitingInvitationRow[]> {
+  const rows = await sql<
+    { id: string; state: string; gym_id: string; name: string; city: string | null; org_type: string; on_plan: boolean }[]
+  >`
+    SELECT i.id, i.state, g.id AS gym_id, g.name, g.city, g.org_type,
+           EXISTS (
+             SELECT 1 FROM subscriptions s
+             WHERE s.owner_type = 'gym' AND s.owner_id = g.id
+               AND s.status IN ('trialing','active','past_due') -- gymHasLivePlan's set
+           ) AS on_plan
+    FROM gym_invites i
+    JOIN gyms g ON g.id = i.gym_id
+    WHERE i.email_hmac = ${input.hmac}
+      AND i.state IN ('pending','declined')
+      AND g.status = 'active'
+      AND EXISTS (
+        SELECT 1 FROM gym_member_list_entries e
+        WHERE e.gym_id = i.gym_id AND e.former_at IS NULL AND e.email = ${input.email}::citext)
+      AND NOT EXISTS (
+        SELECT 1 FROM gym_members m
+        WHERE m.gym_id = i.gym_id AND m.user_id = ${input.userId} AND m.removed_at IS NULL)
+    ORDER BY i.created_at, i.id`;
+  return rows.map((row) => {
+    if (row.state !== "pending" && row.state !== "declined") throw new Error(`gym invite ${row.id} read in a state it was not asked for`);
+    return {
+      id: row.id,
+      state: row.state,
+      gymId: row.gym_id,
+      gymName: row.name,
+      gymCity: row.city,
+      orgType: row.org_type,
+      onPlan: row.on_plan,
+    };
+  });
+}
+
+/** The gym of this address's invitation, or null: the id alone finds nothing. */
+export async function invitationGym(sql: SqlOrTx, inviteId: string, hmac: string): Promise<string | null> {
+  const rows = await sql<{ gym_id: string }[]>`
+    SELECT gym_id FROM gym_invites WHERE id = ${inviteId} AND email_hmac = ${hmac}`;
+  return rows[0]?.gym_id ?? null;
+}
+
+/** The invitation, locked, under the caller's lock on its gym. */
+export async function lockInvitation(
+  tx: TransactionSql,
+  input: { gymId: string; inviteId: string; hmac: string },
+): Promise<{ id: string; state: MemberInviteState } | null> {
+  const rows = await tx<{ id: string; state: string }[]>`
+    SELECT id, state FROM gym_invites
+    WHERE gym_id = ${input.gymId} AND id = ${input.inviteId} AND email_hmac = ${input.hmac}
+    FOR UPDATE`;
+  const row = rows[0];
+  return row === undefined ? null : { id: row.id, state: parseState(row.state, row.id) };
+}
+
+/** Joined or declined. */
+export async function answerInvitation(
+  tx: TransactionSql,
+  input: { gymId: string; inviteId: string; state: "accepted" | "declined"; at: Date },
+): Promise<void> {
+  await tx`
+    UPDATE gym_invites SET state = ${input.state}, answered_at = ${input.at}, waiting_since = NULL
+    WHERE gym_id = ${input.gymId} AND id = ${input.inviteId}`;
+}
+
+/** A Join the gym had no place for: the invitation waits (a declined one too, since the
+ *  person has now asked to join), and staff see since when. */
+export async function markWaitingForPlace(tx: TransactionSql, input: { gymId: string; inviteId: string; at: Date }): Promise<void> {
+  await tx`
+    UPDATE gym_invites SET state = 'pending', answered_at = NULL, waiting_since = coalesce(waiting_since, ${input.at})
+    WHERE gym_id = ${input.gymId} AND id = ${input.inviteId}`;
+}
+
+/** Staff took these addresses off the list, or removed their member: their invitations
+ *  let nobody in until one is sent again. Answers how many changed. */
+export async function withdrawInvitations(
+  tx: TransactionSql,
+  input: { gymId: string; hmacs: readonly string[]; at: Date },
+): Promise<number> {
+  if (input.hmacs.length === 0) return 0;
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_invites SET state = 'withdrawn', answered_at = ${input.at}, waiting_since = NULL
+    WHERE gym_id = ${input.gymId} AND email_hmac = ANY(${[...input.hmacs]}::text[]) AND state <> 'withdrawn'
+    RETURNING id`;
+  return rows.length;
+}
+
+/** Is this person a live member of the gym? */
+export async function isLiveMember(sql: SqlOrTx, gymId: string, userId: string): Promise<boolean> {
+  const rows = await sql<{ live: boolean }[]>`
+    SELECT EXISTS (
+      SELECT 1 FROM gym_members WHERE gym_id = ${gymId} AND user_id = ${userId} AND removed_at IS NULL
+    ) AS live`;
+  return rows[0]?.live ?? false;
+}
+
+/** The accounts' addresses, for withdrawing their invitations when staff remove them. */
+export async function accountAddresses(sql: SqlOrTx, userIds: readonly string[]): Promise<string[]> {
+  if (userIds.length === 0) return [];
+  const rows = await sql<{ email: string }[]>`
+    SELECT email::text AS email FROM users WHERE id = ANY(${[...userIds]}::uuid[]) AND email IS NOT NULL`;
+  return rows.map((row) => row.email);
 }

@@ -9,9 +9,12 @@
 // an Idempotency-Key. Creating a gym has no key, so a dropped connection leaves
 // the owner to press the button again — a visible duplicate beats a silent one.
 import {
+  acceptInvitationResponseSchema,
   closeGymDayResponseSchema,
   confirmApplicationResponseSchema,
   createOrgResponseSchema,
+  declineInvitationResponseSchema,
+  myInvitationsResponseSchema,
   gymClassesResponseSchema,
   gymClassMutationResponseSchema,
   gymClassWeekResponseSchema,
@@ -430,6 +433,27 @@ export const orgService = {
    *  which is a defect this module has already shipped once (the owner's own
    *  seat, T3 round 1). */
   join: (body) => readThrough(joinOrgResponseSchema, 'your request', authApi.post('/v1/orgs/join', body)),
+
+  /** GET /v1/orgs/invitations — what is waiting for the signed-in address, a
+   *  declined one included, with the address itself (Part 3 §10.2). */
+  getInvitations: () =>
+    readThrough(myInvitationsResponseSchema, 'your invitations', authApi.get('/v1/orgs/invitations')),
+
+  /** POST /v1/orgs/invitations/:invitationId/accept — Join, the one tap. */
+  acceptInvitation: (invitationId) =>
+    readThrough(
+      acceptInvitationResponseSchema,
+      'joining',
+      authApi.post(`/v1/orgs/invitations/${encodeURIComponent(invitationId)}/accept`, {}),
+    ),
+
+  /** POST /v1/orgs/invitations/:invitationId/decline — No thanks. */
+  declineInvitation: (invitationId) =>
+    readThrough(
+      declineInvitationResponseSchema,
+      'your answer',
+      authApi.post(`/v1/orgs/invitations/${encodeURIComponent(invitationId)}/decline`, {}),
+    ),
 
   /** GET /v1/orgs/applications/mine — the caller's own waiting list: everything
    *  still pending, plus anything refused in the last 14 days so the screen can
