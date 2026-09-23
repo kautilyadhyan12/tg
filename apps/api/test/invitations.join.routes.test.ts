@@ -107,6 +107,9 @@ d("join by invitation (real Postgres)", () => {
     await sql`DELETE FROM gyms WHERE id IN (${mine()})`;
     await sql`DELETE FROM gym_members WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'ijoin%')`;
     await sql`DELETE FROM users WHERE email LIKE 'ijoin%'`;
+    // A code asked for within 60 seconds of the last one is refused, so a run straight
+    // after another would be refused its sign-ins.
+    await sql`DELETE FROM sign_in_codes WHERE email LIKE 'ijoin%'`;
     await sql`DELETE FROM plans WHERE code IN (${LIVE_PLAN}, ${SMALL_PLAN})`;
   };
 
@@ -273,6 +276,24 @@ d("join by invitation (real Postgres)", () => {
       expect((await membershipsOf(iron, bob)).length).toBe(0);
       expect((await inviteStateOf(iron, addr("alice")))?.state).toBe("pending");
 
+      // Ben is on Iron House's list, but the gym invited only some of its people and not
+      // him (§9.12: being on the list is not the gym's yes). Alice's forwarded email and
+      // its invitation id do not let him in.
+      await post(entriesUrl(iron), { fullName: "Ben Stone", email: addr("ben") }, iron.owner.cookies);
+      const ben = await signIn(addr("ben"));
+      expect((await invitationsOf(ben)).invitations).toEqual([]);
+      expect((await accept(ben, aliceInvite)).statusCode).toBe(404);
+      expect((await decline(ben, aliceInvite)).statusCode).toBe(404);
+      expect((await membershipsOf(iron, ben)).length).toBe(0);
+
+      // Carol, invited herself, cannot spend Alice's invitation either: Alice would be
+      // left with one that no longer opens.
+      const carolFirst = await signIn(addr("carol"));
+      expect((await accept(carolFirst, aliceInvite)).statusCode).toBe(404);
+      expect((await decline(carolFirst, aliceInvite)).statusCode).toBe(404);
+      expect((await inviteStateOf(iron, addr("alice")))?.state).toBe("pending");
+      expect((await membershipsOf(iron, carolFirst)).length).toBe(0);
+
       // Alice's work account is not the address the gym has.
       const aliceWork = await signIn(addr("alice.work"));
       expect((await invitationsOf(aliceWork)).invitations).toEqual([]);
@@ -293,7 +314,7 @@ d("join by invitation (real Postgres)", () => {
       expect(errorOf(erinTries).message).not.toContain(ICLOUD);
 
       // Carol's address in other capitals is the same address: she is let in.
-      const carol = await signIn(addr("carol"));
+      const carol = carolFirst;
       const carolSees = await invitationsOf(carol);
       expect(carolSees.invitations.map((invite) => invite.gym.name)).toEqual(["Iron House"]);
       const carolJoins = await accept(carol, carolSees.invitations[0]?.id ?? "");
