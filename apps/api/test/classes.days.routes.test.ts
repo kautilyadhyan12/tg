@@ -682,7 +682,10 @@ d("the week view and this day only (real Postgres)", () => {
       expect((await post(cancelUrl(org.org.id, b.id), {}, owner.cookies)).statusCode).toBe(200);
       const onCancelled = await put(dayUrl(org.org.id, b.id), { ...RUN, startMinute: at(20) }, owner.cookies);
       expect(onCancelled.statusCode).toBe(409);
-      expect(JSON.parse(onCancelled.body)).toMatchObject({ error: "class_day_cancelled" });
+      expect(JSON.parse(onCancelled.body)).toMatchObject({
+        error: "class_day_cancelled",
+        message: "This class is cancelled. Un-cancel it first, then edit it.",
+      });
       expect((await rowOf(b.id)).local_start_minute).toBe(at(18));
 
       // THE SAME CANCEL TWICE: one write, one audit row.
@@ -732,7 +735,10 @@ d("the week view and this day only (real Postgres)", () => {
 
       const onto = await put(dayUrl(org.org.id, six.id), { ...RUN, startMinute: at(19) }, owner.cookies);
       expect(onto.statusCode).toBe(409);
-      expect(JSON.parse(onto.body)).toMatchObject({ error: "class_day_clashes" });
+      expect(JSON.parse(onto.body)).toMatchObject({
+        error: "class_day_clashes",
+        message: "This class already runs at that time on this day. Pick another time.",
+      });
 
       // With the 19:00 cancelled that day, the 18:00 may move there...
       expect((await post(cancelUrl(org.org.id, seven.id), {}, owner.cookies)).statusCode).toBe(200);
@@ -742,7 +748,11 @@ d("the week view and this day only (real Postgres)", () => {
       // ...and then the cancelled 19:00 cannot be put back on top of it.
       const back = await post(restoreUrl(org.org.id, seven.id), {}, owner.cookies);
       expect(back.statusCode).toBe(409);
-      expect(JSON.parse(back.body)).toMatchObject({ error: "class_day_clashes" });
+      // Un-cancel has no time to pick, so its refusal names the way out.
+      expect(JSON.parse(back.body)).toMatchObject({
+        error: "class_day_clashes",
+        message: "This class already runs at this time on this day. Edit or cancel that one first.",
+      });
       expect((await rowOf(seven.id)).status).toBe("cancelled");
 
       // The moved day now holds 20:00; a new 20:00 repeat must not write that

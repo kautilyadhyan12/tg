@@ -1208,7 +1208,11 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       // twice at the same minute, which 17c would offer as two bookable places.
       const again = await post(repeatsUrl(org.org.id, type.id), body, owner.cookies);
       expect(again.statusCode).toBe(409);
-      expect(JSON.parse(again.body)).toMatchObject({ error: "repeat_clashes" });
+      expect(JSON.parse(again.body)).toMatchObject({
+        error: "repeat_clashes",
+        message:
+          "This class already has a time slot at this time on one of those days. Cancel that time slot first, or pick another time.",
+      });
 
       // ONE OVERLAPPING WEEKDAY IS ENOUGH, and so is an overlapping window.
       expect(
