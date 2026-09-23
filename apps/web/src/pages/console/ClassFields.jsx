@@ -1,5 +1,7 @@
+import TimePick from '../../components/console/TimePick';
 import { coachChoices } from './classesView';
 import { inputStyle, labelStyle } from './classStyles';
+import { WEEKDAYS } from './hoursView';
 
 // The fields the Classes screen's forms share: a class, a time slot, and one
 // class on the calendar.
@@ -12,6 +14,58 @@ export function Field({ label, children }) {
       </span>
       {children}
     </label>
+  );
+}
+
+/** A time slot's days, one button a day. */
+export function DaysPick({ weekdays, onToggle, disabled }) {
+  const on = Array.isArray(weekdays) ? weekdays : [];
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-xs uppercase tracking-wider" style={labelStyle}>
+        Days
+      </span>
+      <div className="flex flex-wrap gap-2">
+        {WEEKDAYS.map((day) => {
+          const picked = on.includes(day.iso);
+          return (
+            <button
+              key={day.iso}
+              type="button"
+              onClick={() => onToggle(day.iso)}
+              disabled={disabled}
+              aria-pressed={picked}
+              className="rounded-lg px-3 py-1.5 text-sm"
+              style={{
+                background: picked ? 'rgba(255,138,31,0.15)' : 'rgba(255,255,255,0.04)',
+                color: picked ? '#FF8A1F' : 'rgba(255,255,255,0.65)',
+              }}
+            >
+              {day.short}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** A class's start time, on the gym's clock. */
+export function StartTimePick({ value, clockFormat, onChange, disabled }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-xs uppercase tracking-wider" style={labelStyle}>
+        Start time
+      </span>
+      <TimePick
+        label="Start time"
+        kind="opens"
+        value={value}
+        clockFormat={clockFormat}
+        onChange={onChange}
+        disabled={disabled}
+      />
+    </div>
   );
 }
 

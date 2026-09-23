@@ -147,6 +147,7 @@ const CLASSES_BODY = {
           sessionsAhead: 16,
           datesComplete: false,
           finished: false,
+          startedToday: false,
         },
       ],
     },

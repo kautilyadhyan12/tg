@@ -2,8 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, Loader2, X } from 'lucide-react';
 import { orgService, errorStatus, errorText } from '../../api/orgsApi';
 import { ConfirmInline, ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
-import TimePick from '../../components/console/TimePick';
-import { RunFields } from './ClassFields';
+import { RunFields, StartTimePick } from './ClassFields';
 import { inputStyle, labelStyle } from './classStyles';
 import { addDays } from './hoursView';
 import {
@@ -14,6 +13,8 @@ import {
   dayRequest,
   filterWeek,
   peopleLine,
+  replaceQuestion,
+  replacesAsked,
   sessionName,
   sessionTag,
   sessionTimeLine,
@@ -26,54 +27,97 @@ import {
 
 // THE CALENDAR TAB (Part 3 §13.3, §13.6). Monday to Sunday in the gym's own
 // calendar: seven columns on a wide screen, a list by day on a phone. Tapping a
-// class opens it: Edit or Cancel class for that date only, Un-cancel for a
-// cancelled one. Moving a time slot to another day or time is 17b-ii-b-ii.
+// class opens it: Edit (this class only, or this and future classes of its time
+// slot) or Cancel class for that date, Un-cancel for a cancelled one.
 
 const EMPTY_FILTER = { classTypeId: '', className: '', coach: '', coachLabel: '' };
 
-function DayForm({ draft, setDraft, staff, clockFormat, saving, onSave, onClose }) {
+const SCOPES = [
+  ['this', 'This class only'],
+  ['future', 'This and future classes'],
+];
+
+function DayForm({
+  draft,
+  setDraft,
+  staff,
+  clockFormat,
+  saving,
+  scope,
+  setScope,
+  offerFuture,
+  question,
+  onSave,
+  onClose,
+  onMove,
+  onBack,
+}) {
   const problem = dayProblem(draft);
   const set = (patch) => setDraft({ ...draft, ...patch });
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1.5">
-        <span className="text-xs uppercase tracking-wider" style={labelStyle}>
-          Start time
-        </span>
-        <TimePick
-          label="Start time"
-          kind="opens"
-          value={draft.time}
-          clockFormat={clockFormat}
-          onChange={(time) => set({ time })}
-          disabled={saving}
-        />
-      </div>
+      {offerFuture ? (
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Which classes to change">
+          {SCOPES.map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setScope(key)}
+              disabled={saving}
+              aria-pressed={scope === key}
+              className="rounded-lg px-3 py-1.5 text-sm"
+              style={{
+                background: scope === key ? 'rgba(255,138,31,0.15)' : 'rgba(255,255,255,0.04)',
+                color: scope === key ? '#FF8A1F' : 'rgba(255,255,255,0.65)',
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <StartTimePick
+        value={draft.time}
+        clockFormat={clockFormat}
+        onChange={(time) => set({ time })}
+        disabled={saving}
+      />
       <RunFields draft={draft} set={set} staff={staff} disabled={saving} forClass={false} />
       {problem === null ? null : (
         <p className="text-sm" style={{ color: '#FBBF24' }}>
           {problem}
         </p>
       )}
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={onSave}
-          disabled={saving || problem !== null}
-          className="rounded-xl px-4 py-2 text-sm font-medium inline-flex items-center gap-2"
-          style={{
-            background: 'rgba(255,138,31,0.15)',
-            color: '#FF8A1F',
-            opacity: saving || problem !== null ? 0.5 : 1,
-          }}
-        >
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-          Save
-        </button>
-        <button type="button" onClick={onClose} className="text-sm" style={labelStyle}>
-          Close
-        </button>
-      </div>
+      {question !== null ? (
+        <ConfirmInline
+          question={question}
+          confirmLabel="Move anyway"
+          cancelLabel="Go back"
+          busy={saving}
+          onConfirm={onMove}
+          onCancel={onBack}
+        />
+      ) : (
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={saving || problem !== null}
+            className="rounded-xl px-4 py-2 text-sm font-medium inline-flex items-center gap-2"
+            style={{
+              background: 'rgba(255,138,31,0.15)',
+              color: '#FF8A1F',
+              opacity: saving || problem !== null ? 0.5 : 1,
+            }}
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            Save
+          </button>
+          <button type="button" onClick={onClose} className="text-sm" style={labelStyle}>
+            Close
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -84,6 +128,9 @@ function DayForm({ draft, setDraft, staff, clockFormat, saving, onSave, onClose 
 function DayPanel({ session, clockFormat, staff, locked, busy, onClose, onChange, onCancel, onRestore }) {
   const [mode, setMode] = useState(null);
   const [draft, setDraft] = useState(() => dayDraft(session));
+  const [scope, setScope] = useState('this');
+  // How many classes a move from this date would replace, when the server asked.
+  const [asked, setAsked] = useState(null);
   const tag = sessionTag(session);
   const name = sessionName(session, clockFormat);
   const cancelled = session.status === 'cancelled';
@@ -136,15 +183,39 @@ function DayPanel({ session, clockFormat, staff, locked, busy, onClose, onChange
         <div className="mt-4">
           <DayForm
             draft={draft}
-            setDraft={setDraft}
+            setDraft={(next) => {
+              setAsked(null);
+              setDraft(next);
+            }}
             staff={staff}
             clockFormat={clockFormat}
             saving={busy}
-            onClose={() => setMode(null)}
-            onSave={async () => {
-              const body = dayRequest(draft);
-              if (body !== null && (await onChange(body))) setMode(null);
+            scope={scope}
+            setScope={(next) => {
+              setAsked(null);
+              setScope(next);
             }}
+            offerFuture={typeof session.scheduleId === 'string'}
+            question={asked === null ? null : replaceQuestion(asked, session.localDate)}
+            onClose={() => {
+              setAsked(null);
+              setMode(null);
+            }}
+            onSave={async () => {
+              const body = dayRequest(draft, scope);
+              if (body === null) return;
+              const done = await onChange(body);
+              if (done === true) setMode(null);
+              else if (typeof done === 'number') setAsked(done);
+            }}
+            onMove={async () => {
+              const body = dayRequest(draft, scope, asked);
+              if (body === null) return;
+              const done = await onChange(body);
+              if (done === true) setMode(null);
+              else setAsked(typeof done === 'number' ? done : null);
+            }}
+            onBack={() => setAsked(null)}
           />
         </div>
       ) : mode === 'cancel' ? (
@@ -168,6 +239,8 @@ function DayPanel({ session, clockFormat, staff, locked, busy, onClose, onChange
             type="button"
             onClick={() => {
               setDraft(dayDraft(session));
+              setScope('this');
+              setAsked(null);
               setMode('change');
             }}
             className="rounded-xl px-4 py-2 text-sm font-medium"
@@ -238,6 +311,8 @@ export default function ClassWeek({ gymId, staff, locked }) {
   const openDay = open === null ? -1 : columns.findIndex((c) => c.date === open.localDate);
   const thisWeek = lists.today !== '' && lists.weekStart !== '' && lists.today >= lists.weekStart && lists.today <= addDays(lists.weekStart, 6);
 
+  // True when saved; the count when a move must be asked about first (the
+  // question is the form's, not an error); false otherwise.
   const act = async (call) => {
     setBusy(true);
     setActionError(null);
@@ -246,6 +321,8 @@ export default function ClassWeek({ gymId, staff, locked }) {
       setWeek(res.data);
       return true;
     } catch (err) {
+      const count = replacesAsked(err);
+      if (count !== null) return count;
       setActionError(errorText(err, "We couldn't save that."));
       // A refusal means the week on screen is out of date — the class started,
       // or another date now holds that time — so read it again, keeping the

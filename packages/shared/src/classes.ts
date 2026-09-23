@@ -238,6 +238,10 @@ export const gymClassScheduleSchema = z
      *  finished months ago — round one, Low-1. Again the SERVER's answer,
      *  because "today" is the gym's, not the reader's. */
     finished: z.boolean(),
+    /** Has this time slot's class on the gym's today already started? The
+     *  screen then offers tomorrow as the first date a change starts from, so a
+     *  move never gives today a second class (17b-ii-b-ii-a, round one L-4). */
+    startedToday: z.boolean(),
   })
   .strict();
 export type GymClassSchedule = z.infer<typeof gymClassScheduleSchema>;
@@ -312,20 +316,26 @@ const classScheduleFieldsShape = {
   coachUserId: z.string().uuid().nullable(),
 };
 
-/** A repeat, as a gym types it.
- *
- *  **`weekdays` is de-duplicated and sorted HERE**, so the column, the fill's
+/** **`weekdays` is de-duplicated and sorted HERE**, so the column, the fill's
  *  `= ANY` and the screen all see one canonical set. Sending Monday twice is a
  *  clumsy spelling of a valid request, not an error — and a duplicate left in
  *  would not double a date (the unique index refuses it) but would make the
  *  stored row and the screen disagree about what the gym asked for. */
+const classWeekdaysField = z
+  .array(classWeekdaySchema)
+  .min(1)
+  .max(7)
+  .transform((days) => [...new Set(days)].sort((a, b) => a - b));
+
+/** How many classes the gym changed or cancelled on their own that a move of
+ *  their time slot replaces, as the screen was told when it asked. The server
+ *  counts again under the gym's lock and moves only when the two agree. */
+const confirmReplaceField = z.number().int().min(1).max(1000);
+
+/** A repeat, as a gym types it. */
 export const createGymClassScheduleRequestSchema = z
   .object({
-    weekdays: z
-      .array(classWeekdaySchema)
-      .min(1)
-      .max(7)
-      .transform((days) => [...new Set(days)].sort((a, b) => a - b)),
+    weekdays: classWeekdaysField,
     startMinute: classStartMinuteSchema,
     startsOn: classDaySchema,
     endsOn: classDaySchema.nullable().optional(),
@@ -344,21 +354,31 @@ export const createGymClassScheduleRequestSchema = z
   });
 export type CreateGymClassScheduleRequest = z.infer<typeof createGymClassScheduleRequestSchema>;
 
-/** CHANGING A REPEAT — its length, its places and its coach, and nothing else.
+/** CHANGING A TIME SLOT FROM A DATE (§13.3's "this day and later", 17b-ii-b-ii).
  *
- *  **WHEN IT RUNS IS DELIBERATELY NOT HERE.** Moving a repeat's day or time is
- *  §13.3's *"this day and later"* — the old repeat ends and a new one begins, so
- *  that the dates already on the calendar keep the time they were booked at —
- *  and that is 17b-ii-b's, with the week view it needs. A PUT that quietly
- *  re-timed every coming date would be the same change with none of the care.
+ *  Classes before `updateFrom` never change. From it on, a new length, size or
+ *  coach goes onto each class except one changed on its own; a new day or time
+ *  ends the time slot the day before and starts a new one on that date, which
+ *  is how TeamUp moves a class ("End the old slot ➔ create a new repeating slot
+ *  on the new day/time").
  *
- *  A replace and not a merge, `updateGymClassTypeRequestSchema`'s reasoning:
- *  `places: null` has to mean "no limit" and can never be allowed to also mean
- *  "leave it alone". */
+ *  Every field every time, a replace and not a merge: `places: null` has to
+ *  mean "no limit" and can never also mean "leave it alone". `confirmReplace`
+ *  is sent only after the server has asked (409 `class_slot_replaces`). */
 export const updateGymClassScheduleRequestSchema = z
-  .object({ ...classScheduleFieldsShape })
+  .object({
+    updateFrom: classDaySchema,
+    weekdays: classWeekdaysField,
+    startMinute: classStartMinuteSchema,
+    ...classScheduleFieldsShape,
+    confirmReplace: confirmReplaceField.optional(),
+  })
   .strict();
 export type UpdateGymClassScheduleRequest = z.infer<typeof updateGymClassScheduleRequestSchema>;
+
+/** The 409 a move answers when it would replace classes the gym changed or
+ *  cancelled on their own. Its body carries `replaces`, the count. */
+export const CLASS_SLOT_REPLACES_ERROR = "class_slot_replaces";
 
 /** A date on the calendar is `scheduled` or `cancelled` — the column's CHECK,
  *  word for word. A cancelled date keeps its row so the week can show it struck
@@ -421,12 +441,24 @@ export type GymClassWeekResponse = z.infer<typeof gymClassWeekResponseSchema>;
 export const gymClassWeekQuerySchema = z.object({ week: classDaySchema.optional() }).strict();
 export type GymClassWeekQuery = z.infer<typeof gymClassWeekQuerySchema>;
 
-/** CHANGE THIS DAY ONLY — its start time, length, places and coach. Every field
- *  every time, a replace like the repeat's own edit. The DATE is not here:
- *  moving a class to another day is "this day and later" (17b-ii-b-ii). */
+/** EDIT ONE CLASS ON THE CALENDAR — its start time, length, places and coach,
+ *  for **this** class only or for **this** one and every **future** one of its
+ *  time slot (the second is the time slot's own change, from this date). Every
+ *  field every time. The DATE is not here: a class moves to another day by
+ *  its time slot's Days. */
+export const CLASS_EDIT_SCOPES = ["this", "future"] as const;
 export const changeGymClassSessionRequestSchema = z
-  .object({ startMinute: classStartMinuteSchema, ...classScheduleFieldsShape })
-  .strict();
+  .object({
+    scope: z.enum(CLASS_EDIT_SCOPES),
+    startMinute: classStartMinuteSchema,
+    ...classScheduleFieldsShape,
+    confirmReplace: confirmReplaceField.optional(),
+  })
+  .strict()
+  .refine((r) => r.scope === "future" || r.confirmReplace === undefined, {
+    message: "`confirmReplace` goes only with `scope: future`",
+    path: ["confirmReplace"],
+  });
 export type ChangeGymClassSessionRequest = z.infer<typeof changeGymClassSessionRequestSchema>;
 
 /** Every mutation answers with the WHOLE timetable, deliberately.

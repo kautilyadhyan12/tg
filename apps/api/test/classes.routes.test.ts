@@ -32,7 +32,7 @@ import {
   CLASS_ARCHIVED_PAGE,
   ROLE_PRIVILEGES,
 } from "@app/shared";
-import type { GymClassesResponse } from "@app/shared";
+import type { GymClassesResponse, GymClassWeekResponse } from "@app/shared";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -228,6 +228,21 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
   const dayFromToday = (offset: number) =>
     new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
 
+  /** The gym's own today, as the server works it out. */
+  const gymToday = async (gymId: string, cookies: Record<string, string>) => {
+    const res = await get(`/v1/orgs/${gymId}/class-sessions`, cookies);
+    expect(res.statusCode).toBe(200);
+    return (JSON.parse(res.body) as GymClassWeekResponse).today;
+  };
+
+  /** A time slot's change from a date (17b-ii-b-ii): its days and start time,
+   *  which stay what they were unless a test says otherwise. */
+  const slotChange = (updateFrom: string, weekdays: number[], startMinute: number) => ({
+    updateFrom,
+    weekdays,
+    startMinute,
+  });
+
   beforeAll(async () => {
     await cleanup();
     await sql`
@@ -330,10 +345,14 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
           // The seventh door, added with Bring back: a class somebody else
           // archived is not a class a stranger may put back on their timetable.
           await post(restoreUrl(org.org.id, typeId), {}, outsider.cookies),
-          // The EIGHTH, added by 17b-ii-a: changing a repeat's length, places
-          // or coach. A door added without a line here is a door nothing
-          // guards.
-          await put(repeatUrl(org.org.id, repeatId), { ...RUN }, outsider.cookies),
+          // The EIGHTH, added by 17b-ii-a: changing a time slot — since
+          // 17b-ii-b-ii from a date, days and time included. A door added
+          // without a line here is a door nothing guards.
+          await put(
+            repeatUrl(org.org.id, repeatId),
+            { ...slotChange(dayFromToday(1), [MON], at(6)), ...RUN },
+            outsider.cookies,
+          ),
         ];
         for (const res of tried) {
           expect(
@@ -365,8 +384,13 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       expect((await del(repeatUrl(rivalOrg.org.id, repeatId), rival.cookies)).statusCode).toBe(404);
       expect((await post(restoreUrl(rivalOrg.org.id, typeId), {}, rival.cookies)).statusCode).toBe(404);
       expect(
-        (await put(repeatUrl(rivalOrg.org.id, repeatId), { ...RUN, minutes: 5 }, rival.cookies))
-          .statusCode,
+        (
+          await put(
+            repeatUrl(rivalOrg.org.id, repeatId),
+            { ...slotChange(dayFromToday(1), [MON], at(6)), ...RUN, minutes: 5 },
+            rival.cookies,
+          )
+        ).statusCode,
       ).toBe(404);
       expect(await stateOf(org.org.id)).toEqual(before);
       expect(await stateOf(rivalOrg.org.id)).toEqual({ types: 0, repeats: 0, sessions: 0 });
@@ -436,6 +460,8 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       expect(repeat.coachUserId).toBe(ourCoach.userId);
       expect(repeat.coachName).toBe("Cls cw-ours");
 
+      const today = await gymToday(org.org.id, owner.cookies);
+
       // NOBODY WHO IS NOT THIS GYM'S STAFF, THROUGH ANY DOOR.
       const strangers: [string, string][] = [
         ["another gym's trainer", theirCoach.userId],
@@ -456,7 +482,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
         );
         const onThisRepeat = await put(
           repeatUrl(org.org.id, repeat.id),
-          { ...RUN, coachUserId },
+          { ...slotChange(today, [MON], at(9)), ...RUN, coachUserId },
           owner.cookies,
         );
         for (const res of [onAClass, onANewRepeat, onThisRepeat]) {
@@ -852,9 +878,11 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
           AND local_date = (SELECT max(local_date) FROM gym_class_sessions
                              WHERE schedule_id = ${mine.id})`;
 
+      const today = await gymToday(org.org.id, owner.cookies);
+      const everyDayAt7 = slotChange(today, [1, 2, 3, 4, 5, 6, 7], at(7));
       const changed = await put(
         repeatUrl(org.org.id, mine.id),
-        { minutes: 45, places: 8, coachUserId: coach.userId },
+        { ...everyDayAt7, minutes: 45, places: 8, coachUserId: coach.userId },
         owner.cookies,
       );
       expect(changed.statusCode).toBe(200);
@@ -872,7 +900,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
         places: 20,
         coachUserId: null,
       });
-      // The repeat's DAYS AND TIME are not this route's to change, and did not.
+      // Its days and time were sent unchanged, and stayed so.
       expect(now?.weekdays).toEqual([1, 2, 3, 4, 5, 6, 7]);
       expect(now?.startMinute).toBe(at(7));
 
@@ -908,7 +936,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       // the one place a gym looks afterwards. An id and never a name.
       const coachOnly = await put(
         repeatUrl(org.org.id, mine.id),
-        { minutes: 45, places: 8, coachUserId: null },
+        { ...everyDayAt7, minutes: 45, places: 8, coachUserId: null },
         owner.cookies,
       );
       expect(coachOnly.statusCode).toBe(200);
@@ -934,8 +962,13 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       // from.
       expect((await del(repeatUrl(org.org.id, other.id), owner.cookies)).statusCode).toBe(200);
       expect(
-        (await put(repeatUrl(org.org.id, other.id), { ...RUN, minutes: 30 }, owner.cookies))
-          .statusCode,
+        (
+          await put(
+            repeatUrl(org.org.id, other.id),
+            { ...slotChange(today, [1, 2, 3, 4, 5, 6, 7], at(20)), ...RUN, minutes: 30 },
+            owner.cookies,
+          )
+        ).statusCode,
       ).toBe(404);
       const [untouched] = await sql<{ n: number }[]>`
         SELECT count(*)::int AS n FROM gym_class_schedules
@@ -1404,11 +1437,9 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
         expect(JSON.parse(res.body)).toMatchObject({ error: "validation_error" });
       }
 
-      // CHANGING A REPEAT IS PARSED AT THE SAME BOUNDARY, and it refuses the
-      // fields it does NOT own outright rather than ignoring them: a client
-      // sending `startMinute` here believes it moved the class, and a `.strict()`
-      // schema is what tells it otherwise. (Moving a repeat is "this day and
-      // later", 17b-ii-b.)
+      // CHANGING A TIME SLOT IS PARSED AT THE SAME BOUNDARY: every field every
+      // time, and a field it does not own is refused outright rather than
+      // ignored (a `.strict()` schema).
       const live = await post(
         repeatsUrl(org.org.id, type.id),
         { ...RUN, weekdays: [MON], startMinute: at(7), startsOn: dayFromToday(0) },
@@ -1417,15 +1448,22 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       expect(live.statusCode).toBe(201);
       const liveId = timetable(live).entries[0]?.schedules[0]?.id;
       if (liveId === undefined) throw new Error("repeat answered no id");
+      const from = await gymToday(org.org.id, owner.cookies);
+      const same = slotChange(from, [MON], at(7));
       const badEdits: [string, Record<string, unknown>][] = [
         ["nothing at all", {}],
-        ["no length", { places: 20, coachUserId: null }],
-        ["four minutes", { ...RUN, minutes: 4 }],
-        ["nought places", { ...RUN, places: 0 }],
-        ["a coach that is not a uuid", { ...RUN, coachUserId: "coach-bob" }],
-        ["a new time", { ...RUN, startMinute: at(9) }],
-        ["new weekdays", { ...RUN, weekdays: [MON, WED] }],
-        ["a field we never named", { ...RUN, room: "Studio 2" }],
+        ["no length", { ...same, places: 20, coachUserId: null }],
+        ["four minutes", { ...same, ...RUN, minutes: 4 }],
+        ["nought places", { ...same, ...RUN, places: 0 }],
+        ["a coach that is not a uuid", { ...same, ...RUN, coachUserId: "coach-bob" }],
+        ["no date to change it from", { ...RUN, weekdays: [MON], startMinute: at(7) }],
+        ["no days", { ...RUN, updateFrom: from, startMinute: at(7) }],
+        ["no start time", { ...RUN, updateFrom: from, weekdays: [MON] }],
+        ["an empty week", { ...same, ...RUN, weekdays: [] }],
+        ["a date that is not one", { ...same, ...RUN, updateFrom: "2026-02-31" }],
+        ["a start date, which a change does not have", { ...same, ...RUN, startsOn: from }],
+        ["a count of nought to confirm", { ...same, ...RUN, confirmReplace: 0 }],
+        ["a field we never named", { ...same, ...RUN, room: "Studio 2" }],
       ];
       for (const [what, body] of badEdits) {
         const res = await put(repeatUrl(org.org.id, liveId), body, owner.cookies);
@@ -1505,7 +1543,11 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
           { ...RUN, weekdays: [WED], startMinute: at(9), startsOn: dayFromToday(0) },
           owner.cookies,
         ),
-        await put(repeatUrl(org.org.id, repeatId), { ...RUN, minutes: 30 }, owner.cookies),
+        await put(
+          repeatUrl(org.org.id, repeatId),
+          { ...slotChange(dayFromToday(1), [MON], at(7)), ...RUN, minutes: 30 },
+          owner.cookies,
+        ),
         await del(repeatUrl(org.org.id, repeatId), owner.cookies),
         await post(restoreUrl(org.org.id, type.id), {}, owner.cookies),
       ]) {

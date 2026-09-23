@@ -48,6 +48,14 @@ const cookieMap = (res: { cookies: { name: string; value: string }[] }) =>
 const EVERY_DAY = [1, 2, 3, 4, 5, 6, 7];
 const at = (h: number, m = 0) => h * 60 + m;
 const RUN = { minutes: 60, places: 20, coachUserId: null };
+/** "This class only" — every edit of one date says which it is (17b-ii-b-ii). */
+const ONLY = { scope: "this" as const };
+/** A time slot's change from the gym's today, keeping `dailyClass`'s days and time. */
+const fromToday = (today: string, startMinute = at(18)) => ({
+  updateFrom: today,
+  weekdays: EVERY_DAY,
+  startMinute,
+});
 
 const silent = {
   info: () => {
@@ -304,7 +312,13 @@ d("the week view and this day only (real Postgres)", () => {
         (
           await put(
             repeatUrl(org.org.id, repeatId),
-            { ...RUN, minutes: 45, places: 12, coachUserId: trainer.userId },
+            {
+              ...fromToday(week.today),
+              ...RUN,
+              minutes: 45,
+              places: 12,
+              coachUserId: trainer.userId,
+            },
             owner.cookies,
           )
         ).statusCode,
@@ -356,7 +370,7 @@ d("the week view and this day only (real Postgres)", () => {
           await post(cancelUrl(org.org.id, wednesday.id), {}, outsider.cookies),
           await put(
             dayUrl(org.org.id, wednesday.id),
-            { ...RUN, startMinute: at(7) },
+            { ...ONLY, ...RUN, startMinute: at(7) },
             outsider.cookies,
           ),
         ];
@@ -374,7 +388,7 @@ d("the week view and this day only (real Postgres)", () => {
       for (const res of [
         await post(restoreUrl(rivalOrg.org.id, tuesday.id), {}, rival.cookies),
         await post(cancelUrl(rivalOrg.org.id, wednesday.id), {}, rival.cookies),
-        await put(dayUrl(rivalOrg.org.id, wednesday.id), { ...RUN, startMinute: at(7) }, rival.cookies),
+        await put(dayUrl(rivalOrg.org.id, wednesday.id), { ...ONLY, ...RUN, startMinute: at(7) }, rival.cookies),
       ]) {
         expect(res.statusCode).toBe(404);
       }
@@ -406,7 +420,7 @@ d("the week view and this day only (real Postgres)", () => {
       const wed = sessionIn(await nextWeek(org.org.id, owner.cookies), typeId, 2);
 
       expect(
-        (await put(dayUrl(org.org.id, wed.id), { ...RUN, startMinute: at(19) }, owner.cookies)).statusCode,
+        (await put(dayUrl(org.org.id, wed.id), { ...ONLY, ...RUN, startMinute: at(19) }, owner.cookies)).statusCode,
       ).toBe(200);
       expect(
         (
@@ -507,19 +521,19 @@ d("the week view and this day only (real Postgres)", () => {
       const gap = days.find((s) => s.startMinute === at(1, 30));
       if (nine === undefined || gap === undefined) throw new Error("fill wrote nothing");
 
-      const refused = await put(dayUrl(org.org.id, nine.id), { ...RUN, startMinute: at(1, 45) }, owner.cookies);
+      const refused = await put(dayUrl(org.org.id, nine.id), { ...ONLY, ...RUN, startMinute: at(1, 45) }, owner.cookies);
       expect(refused.statusCode).toBe(409);
       expect(JSON.parse(refused.body)).toMatchObject({ error: "class_time_missing" });
       expect((await rowOf(nine.id)).local_start_minute).toBe(at(9));
       // 00:30 and 02:30 exist that night.
       expect(
-        (await put(dayUrl(org.org.id, nine.id), { ...RUN, startMinute: at(2, 30) }, owner.cookies)).statusCode,
+        (await put(dayUrl(org.org.id, nine.id), { ...ONLY, ...RUN, startMinute: at(2, 30) }, owner.cookies)).statusCode,
       ).toBe(200);
 
       // The fill already put a repeat at 01:30 there; changing only its places is allowed.
       const places = await put(
         dayUrl(org.org.id, gap.id),
-        { ...RUN, startMinute: at(1, 30), places: 5 },
+        { ...ONLY, ...RUN, startMinute: at(1, 30), places: 5 },
         owner.cookies,
       );
       expect(places.statusCode).toBe(200);
@@ -546,7 +560,7 @@ d("the week view and this day only (real Postgres)", () => {
 
       const changed = await put(
         dayUrl(org.org.id, friday.id),
-        { startMinute: at(19, 30), minutes: 90, places: 8, coachUserId: coach.userId },
+        { ...ONLY, startMinute: at(19, 30), minutes: 90, places: 8, coachUserId: coach.userId },
         owner.cookies,
       );
       expect(changed.statusCode).toBe(200);
@@ -574,8 +588,13 @@ d("the week view and this day only (real Postgres)", () => {
 
       // The repeat is changed: Monday follows it, Friday keeps its own.
       expect(
-        (await put(repeatUrl(org.org.id, repeatId), { ...RUN, minutes: 30, places: 40 }, owner.cookies))
-          .statusCode,
+        (
+          await put(
+            repeatUrl(org.org.id, repeatId),
+            { ...fromToday(week.today), ...RUN, minutes: 30, places: 40 },
+            owner.cookies,
+          )
+        ).statusCode,
       ).toBe(200);
       expect(await rowOf(monday.id)).toMatchObject({ minutes: 30, places: 40, changed_alone: false });
       expect(await rowOf(friday.id)).toMatchObject({
@@ -612,7 +631,7 @@ d("the week view and this day only (real Postgres)", () => {
         ["our member who is not staff", justAMember.userId],
         ["a uuid that is nobody", randomUUID()],
       ] as const) {
-        const res = await put(dayUrl(org.org.id, day.id), { ...RUN, startMinute: at(18), coachUserId }, owner.cookies);
+        const res = await put(dayUrl(org.org.id, day.id), { ...ONLY, ...RUN, startMinute: at(18), coachUserId }, owner.cookies);
         expect(res.statusCode, `${who} was accepted`).toBe(400);
         expect(JSON.parse(res.body)).toMatchObject({ error: "coach_not_staff" });
         expect(await rowOf(day.id)).toEqual(before);
@@ -620,7 +639,7 @@ d("the week view and this day only (real Postgres)", () => {
 
       const good = await put(
         dayUrl(org.org.id, day.id),
-        { ...RUN, startMinute: at(18), coachUserId: ours.userId },
+        { ...ONLY, ...RUN, startMinute: at(18), coachUserId: ours.userId },
         owner.cookies,
       );
       expect(good.statusCode).toBe(200);
@@ -665,7 +684,7 @@ d("the week view and this day only (real Postgres)", () => {
       await sql`UPDATE gym_class_sessions SET starts_at = now() - interval '5 minutes' WHERE id = ${a.id}`;
       const startedBefore = await rowOf(a.id);
       for (const res of [
-        await put(dayUrl(org.org.id, a.id), { ...RUN, startMinute: at(20) }, owner.cookies),
+        await put(dayUrl(org.org.id, a.id), { ...ONLY, ...RUN, startMinute: at(20) }, owner.cookies),
         await post(cancelUrl(org.org.id, a.id), {}, owner.cookies),
         await post(restoreUrl(org.org.id, a.id), {}, owner.cookies),
       ]) {
@@ -680,7 +699,7 @@ d("the week view and this day only (real Postgres)", () => {
 
       // CANCELLED, then CHANGED: refused until it is put back.
       expect((await post(cancelUrl(org.org.id, b.id), {}, owner.cookies)).statusCode).toBe(200);
-      const onCancelled = await put(dayUrl(org.org.id, b.id), { ...RUN, startMinute: at(20) }, owner.cookies);
+      const onCancelled = await put(dayUrl(org.org.id, b.id), { ...ONLY, ...RUN, startMinute: at(20) }, owner.cookies);
       expect(onCancelled.statusCode).toBe(409);
       expect(JSON.parse(onCancelled.body)).toMatchObject({
         error: "class_day_cancelled",
@@ -697,7 +716,7 @@ d("the week view and this day only (real Postgres)", () => {
 
       // A CHANGE TO WHAT IT ALREADY IS: nothing written, and the day is NOT
       // marked as changed on its own, so it still follows its repeat.
-      const same = await put(dayUrl(org.org.id, c.id), { ...RUN, startMinute: at(18) }, owner.cookies);
+      const same = await put(dayUrl(org.org.id, c.id), { ...ONLY, ...RUN, startMinute: at(18) }, owner.cookies);
       expect(same.statusCode).toBe(200);
       expect((await rowOf(c.id)).changed_alone).toBe(false);
       expect(await auditCount(org.org.id, "org.class_session_changed")).toBe(0);
@@ -705,7 +724,7 @@ d("the week view and this day only (real Postgres)", () => {
       // A TIME ALREADY PASSED ON THAT DAY: the date is set to yesterday while its
       // instant stays in the future, so only the NEW time can be what refuses.
       await sql`UPDATE gym_class_sessions SET local_date = local_date - 14 WHERE id = ${e.id}`;
-      const passed = await put(dayUrl(org.org.id, e.id), { ...RUN, startMinute: at(9) }, owner.cookies);
+      const passed = await put(dayUrl(org.org.id, e.id), { ...ONLY, ...RUN, startMinute: at(9) }, owner.cookies);
       expect(passed.statusCode).toBe(409);
       expect(JSON.parse(passed.body)).toMatchObject({ error: "class_time_passed" });
       expect((await rowOf(e.id)).local_start_minute).toBe(at(18));
@@ -733,7 +752,7 @@ d("the week view and this day only (real Postgres)", () => {
       if (six === undefined || seven === undefined) throw new Error("missing days");
       expect(seven.localDate).toBe(six.localDate);
 
-      const onto = await put(dayUrl(org.org.id, six.id), { ...RUN, startMinute: at(19) }, owner.cookies);
+      const onto = await put(dayUrl(org.org.id, six.id), { ...ONLY, ...RUN, startMinute: at(19) }, owner.cookies);
       expect(onto.statusCode).toBe(409);
       expect(JSON.parse(onto.body)).toMatchObject({
         error: "class_day_clashes",
@@ -743,7 +762,7 @@ d("the week view and this day only (real Postgres)", () => {
       // With the 19:00 cancelled that day, the 18:00 may move there...
       expect((await post(cancelUrl(org.org.id, seven.id), {}, owner.cookies)).statusCode).toBe(200);
       expect(
-        (await put(dayUrl(org.org.id, six.id), { ...RUN, startMinute: at(19) }, owner.cookies)).statusCode,
+        (await put(dayUrl(org.org.id, six.id), { ...ONLY, ...RUN, startMinute: at(19) }, owner.cookies)).statusCode,
       ).toBe(200);
       // ...and then the cancelled 19:00 cannot be put back on top of it.
       const back = await post(restoreUrl(org.org.id, seven.id), {}, owner.cookies);
@@ -758,7 +777,7 @@ d("the week view and this day only (real Postgres)", () => {
       // The moved day now holds 20:00; a new 20:00 repeat must not write that
       // date a second time.
       expect(
-        (await put(dayUrl(org.org.id, six.id), { ...RUN, startMinute: at(20) }, owner.cookies)).statusCode,
+        (await put(dayUrl(org.org.id, six.id), { ...ONLY, ...RUN, startMinute: at(20) }, owner.cookies)).statusCode,
       ).toBe(200);
       expect(
         (
@@ -915,7 +934,7 @@ d("the week view and this day only (real Postgres)", () => {
               remoteAddress: desk,
               cookies: owner.cookies,
               headers: { "content-type": "application/json" },
-              payload: JSON.stringify({ ...RUN, startMinute: at(19) }),
+              payload: JSON.stringify({ ...ONLY, ...RUN, startMinute: at(19) }),
             }),
             second.inject({
               method: "POST",
@@ -996,7 +1015,7 @@ d("the week view and this day only (real Postgres)", () => {
       for (const res of [
         await post(restoreUrl(org.org.id, day.id), {}, owner.cookies),
         await post(cancelUrl(org.org.id, day.id), {}, owner.cookies),
-        await put(dayUrl(org.org.id, day.id), { ...RUN, startMinute: at(7) }, owner.cookies),
+        await put(dayUrl(org.org.id, day.id), { ...ONLY, ...RUN, startMinute: at(7) }, owner.cookies),
       ]) {
         expect(res.statusCode).toBe(409);
         expect(JSON.parse(res.body)).toMatchObject({ error: "gym_not_on_plan" });
@@ -1016,11 +1035,16 @@ d("the week view and this day only (real Postgres)", () => {
       const before = await rowOf(day.id);
 
       for (const body of [
-        { ...RUN },
-        { ...RUN, startMinute: 1440 },
-        { ...RUN, startMinute: at(9), minutes: 4 },
-        { ...RUN, startMinute: at(9), places: 0 },
-        { ...RUN, startMinute: at(9), localDate: "2026-12-01" },
+        { ...ONLY, ...RUN },
+        { ...ONLY, ...RUN, startMinute: 1440 },
+        { ...ONLY, ...RUN, startMinute: at(9), minutes: 4 },
+        { ...ONLY, ...RUN, startMinute: at(9), places: 0 },
+        { ...ONLY, ...RUN, startMinute: at(9), localDate: "2026-12-01" },
+        // Which classes it is for is always said, and a count to confirm goes
+        // only with "this and future".
+        { ...RUN, startMinute: at(9) },
+        { ...RUN, startMinute: at(9), scope: "all" },
+        { ...ONLY, ...RUN, startMinute: at(9), confirmReplace: 1 },
       ]) {
         expect((await put(dayUrl(org.org.id, day.id), body, owner.cookies)).statusCode).toBe(400);
       }

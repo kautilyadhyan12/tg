@@ -21,6 +21,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
 import {
+  CLASS_SLOT_REPLACES_ERROR,
   changeGymClassSessionRequestSchema,
   createGymClassScheduleRequestSchema,
   createGymClassTypeRequestSchema,
@@ -55,6 +56,19 @@ function parseOr400<S extends z.ZodTypeAny>(
     return null;
   }
   return parsed.data;
+}
+
+/** The 409 a time slot move answers when it would replace classes the gym
+ *  changed or cancelled on their own: the count, for the screen to ask about
+ *  and send back as `confirmReplace`. */
+function sendReplaces(reply: FastifyReply, req: FastifyRequest, count: number) {
+  const one = count === 1;
+  return reply.status(409).send({
+    error: CLASS_SLOT_REPLACES_ERROR,
+    message: `${String(count)} ${one ? "class" : "classes"} from that date ${one ? "was" : "were"} changed or cancelled on ${one ? "its" : "their"} own. Moving the time slot replaces ${one ? "it" : "them"}.`,
+    replaces: count,
+    requestId: req.id,
+  });
 }
 
 function requireUserId(req: FastifyRequest): string {
@@ -181,10 +195,9 @@ export function registerClassRoutes(app: FastifyInstance, deps: ClassRouteDeps):
     return reply.status(201).send(timetable);
   });
 
-  /** CHANGE A REPEAT — its length, its places, its coach (RULINGS 2026-09-22:
-   *  the repeat is the live answer, the class type is the default it started
-   *  from). Its days, its time and its window are NOT here: that is "this day
-   *  and later", 17b-ii-b.
+  /** CHANGE A TIME SLOT FROM A DATE — its days, start time, length, places and
+   *  coach (§13.3's "this day and later"; RULINGS 2026-09-22: the time slot is
+   *  the live answer, the class type the default it started from).
    *
    *  PUT and not PATCH, and every field every time —
    *  `updateGymClassScheduleRequestSchema` carries the reasoning: `places: null`
@@ -195,14 +208,15 @@ export function registerClassRoutes(app: FastifyInstance, deps: ClassRouteDeps):
     if (params === null) return;
     const body = parseOr400(updateGymClassScheduleRequestSchema, req.body, req, reply);
     if (body === null) return;
-    const timetable = await service.updateSchedule(
+    const answer = await service.updateSchedule(
       classDeps,
       requireUserId(req),
       params.gymId,
       params.scheduleId,
       body,
     );
-    return reply.status(200).send(timetable);
+    if (answer.kind === "replaces") return sendReplaces(reply, req, answer.count);
+    return reply.status(200).send(answer.body);
   });
 
   /** STOP A REPEAT. The repeat id is addressed under its GYM, never alone — the
@@ -232,20 +246,22 @@ export function registerClassRoutes(app: FastifyInstance, deps: ClassRouteDeps):
     return reply.status(200).send(week);
   });
 
-  /** PUT: every field every time, as the repeat's own edit. */
+  /** PUT: every field every time. `scope` is this class only, or this one and
+   *  every future one of its time slot. */
   app.put("/v1/orgs/:gymId/class-sessions/:sessionId", guarded, async (req, reply) => {
     const params = parseOr400(classSessionParamsSchema, req.params, req, reply);
     if (params === null) return;
     const body = parseOr400(changeGymClassSessionRequestSchema, req.body, req, reply);
     if (body === null) return;
-    const week = await service.changeClassSession(
+    const answer = await service.changeClassSession(
       classDeps,
       requireUserId(req),
       params.gymId,
       params.sessionId,
       body,
     );
-    return reply.status(200).send(week);
+    if (answer.kind === "replaces") return sendReplaces(reply, req, answer.count);
+    return reply.status(200).send(answer.body);
   });
 
   /** Cancelling a cancelled day, or putting back a running one, answers 200 and
