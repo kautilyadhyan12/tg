@@ -1014,10 +1014,11 @@ d("changing a time slot from a date (real Postgres)", () => {
     TEST_TIMEOUT_MS,
   );
 
-  // L-1: a move or a split asks the class's limit of time slots, counting the
-  // old half while it still runs.
+  // L-1: a move or a split asks the class's limits. Each move from a later date
+  // leaves one more half listed until its date, and the listed limit (24) is
+  // what stops a chain of them (17b-ii-b-ii-b: twelve RUNNING at once).
   it(
-    "moves and splits count toward the limit of time slots that have not ended",
+    "moves and splits count toward the limit of time slots listed and not yet finished",
     async () => {
       const owner = await makeUser("l1-owner");
       const org = await makeOrg(owner.cookies, "L1 Slots Gym");
@@ -1026,7 +1027,7 @@ d("changing a time slot from a date (real Postgres)", () => {
       const today = await gymToday(gym, owner.cookies);
       const answers: number[] = [];
       let current = repeatId;
-      for (let k = 2; k <= 13; k += 1) {
+      for (let k = 2; k <= 26; k += 1) {
         const res = await put(
           repeatUrl(gym, current),
           { updateFrom: addDays(today, k), weekdays: EVERY_DAY, startMinute: at(6, k), ...RUN },
@@ -1034,30 +1035,30 @@ d("changing a time slot from a date (real Postgres)", () => {
         );
         answers.push(res.statusCode);
         if (res.statusCode !== 200) {
-          expect(JSON.parse(res.body)).toMatchObject({ error: "too_many_classes" });
+          expect(JSON.parse(res.body)).toMatchObject({ error: "too_many_listed" });
           break;
         }
         const next = timetableOf(res).entries[0]?.schedules.find((s) => s.startMinute === at(6, k));
         if (next === undefined) throw new Error("no new time slot");
         current = next.id;
       }
-      expect(answers).toEqual([...Array<number>(11).fill(200), 409]);
+      expect(answers).toEqual([...Array<number>(23).fill(200), 409]);
       const [open] = await sql<{ n: number }[]>`
         SELECT count(*)::int AS n FROM gym_class_schedules
         WHERE class_type_id = ${typeId} AND ended_at IS NULL`;
-      expect(open?.n).toBe(12);
+      expect(open?.n).toBe(24);
       // Changed from its own first day, a time slot changes where it stands and
       // adds none, so the limit does not stop it.
       const inPlace = await put(
         repeatUrl(gym, current),
-        { updateFrom: addDays(today, 12), weekdays: EVERY_DAY, startMinute: at(6, 12), ...RUN, minutes: 30 },
+        { updateFrom: addDays(today, 24), weekdays: EVERY_DAY, startMinute: at(6, 24), ...RUN, minutes: 30 },
         owner.cookies,
       );
       expect(inPlace.statusCode).toBe(200);
       const [still] = await sql<{ n: number }[]>`
         SELECT count(*)::int AS n FROM gym_class_schedules
         WHERE class_type_id = ${typeId} AND ended_at IS NULL`;
-      expect(still?.n).toBe(12);
+      expect(still?.n).toBe(24);
     },
     TEST_TIMEOUT_MS,
   );

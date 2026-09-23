@@ -23,6 +23,8 @@
 // classes") is the gym's own choice for that class, so it always takes the change
 // and is never counted in the question.
 
+import { CLASS_SCHEDULES_LISTED_PER_TYPE_MAX, CLASS_SCHEDULES_PER_TYPE_MAX } from "@app/shared";
+
 export type SlotChange = "fields" | "move";
 
 /** A move when the days or the start time differ; the order of the days is not
@@ -75,6 +77,56 @@ export function slotDateFate(change: SlotChange, facts: SlotDateFacts): SlotDate
       throw new Error(`unhandled slot change: ${String(never)}`);
     }
   }
+}
+
+/** The most of these time slots not yet finished on one date, from
+ *  `window.from` to `window.until` (null: no end), whatever weekdays each runs.
+ *  The count only rises on a day one of them starts, so those days and the first
+ *  are the only ones to look at. */
+export function peakRunning(
+  slots: readonly { startsOn: string; endsOn: string | null }[],
+  window: { from: string; until: string | null },
+): number {
+  const days = [
+    window.from,
+    ...slots
+      .map((s) => s.startsOn)
+      .filter((day) => day > window.from && (window.until === null || day <= window.until)),
+  ];
+  let peak = 0;
+  for (const day of days) {
+    const running = slots.filter(
+      (s) => s.startsOn <= day && (s.endsOn === null || s.endsOn >= day),
+    ).length;
+    if (running > peak) peak = running;
+  }
+  return peak;
+}
+
+/** THE CLASS'S LIMITS OF TIME SLOTS, for a write that adds one, and which of
+ *  the two is full.
+ *
+ *  `peak` is the most of the class's other time slots running at once while the
+ *  new one runs (`peakRunning`): at most `CLASS_SCHEDULES_PER_TYPE_MAX`, the
+ *  limit a gym is told about. A time slot changed from a date ends the day
+ *  before it, so it never runs beside the one that follows.
+ *
+ *  `listed` is how many time slots the class has not finished, every half
+ *  included: at most `CLASS_SCHEDULES_LISTED_PER_TYPE_MAX`, the number the
+ *  Classes screen reads a class. It fills only while changes from a date wait
+ *  to start, so its refusal never asks the gym to cancel anything (round one,
+ *  H-1). */
+export type SlotLimitVerdict = "ok" | "running" | "listed";
+
+export function slotLimitVerdict(counts: {
+  peak: number;
+  addsRunning: number;
+  listed: number;
+  addsListed: number;
+}): SlotLimitVerdict {
+  if (counts.peak + counts.addsRunning > CLASS_SCHEDULES_PER_TYPE_MAX) return "running";
+  if (counts.listed + counts.addsListed > CLASS_SCHEDULES_LISTED_PER_TYPE_MAX) return "listed";
+  return "ok";
 }
 
 export type FromVerdict =

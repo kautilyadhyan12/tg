@@ -22,6 +22,7 @@ import type { Sql } from "postgres";
 import type { z } from "zod";
 import {
   CLASS_SLOT_REPLACES_ERROR,
+  bulkEditGymClassSchedulesRequestSchema,
   changeGymClassSessionRequestSchema,
   createGymClassScheduleRequestSchema,
   createGymClassTypeRequestSchema,
@@ -217,6 +218,23 @@ export function registerClassRoutes(app: FastifyInstance, deps: ClassRouteDeps):
     );
     if (answer.kind === "replaces") return sendReplaces(reply, req, answer.count);
     return reply.status(200).send(answer.body);
+  });
+
+  /** BULK EDIT several time slots of one class from a date. POST: an action on
+   *  the class's time slots, answered with the whole timetable. */
+  app.post("/v1/orgs/:gymId/classes/:classTypeId/bulk-edit", guarded, async (req, reply) => {
+    const params = parseOr400(classTypeParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(bulkEditGymClassSchedulesRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const timetable = await service.bulkEditSchedules(
+      classDeps,
+      requireUserId(req),
+      params.gymId,
+      params.classTypeId,
+      body,
+    );
+    return reply.status(200).send(timetable);
   });
 
   /** STOP A REPEAT. The repeat id is addressed under its GYM, never alone — the

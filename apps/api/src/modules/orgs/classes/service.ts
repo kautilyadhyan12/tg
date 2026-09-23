@@ -38,6 +38,7 @@ import {
   classSessionStatusSchema,
   gymClassesResponseSchema,
   gymClassWeekResponseSchema,
+  type BulkEditGymClassSchedulesRequest,
   type ChangeGymClassSessionRequest,
   type CreateGymClassScheduleRequest,
   type CreateGymClassTypeRequest,
@@ -190,6 +191,15 @@ export async function getTimetable(
   return await readOr404(deps, gymId);
 }
 
+/** The class's limit of time slots running at once, for a new one and a change. */
+const slotLimitText = (cap: number) =>
+  `This class is at its limit of ${String(cap)} time slots. Cancel one you no longer run first.`;
+
+/** The class's limit of time slots listed. It fills only while changes from a
+ *  date wait to start, so it never asks the gym to cancel anything. */
+const listedLimitText = (cap: number) =>
+  `This class can list ${String(cap)} time slots, counting ones changed from a date that has not come yet`;
+
 /** Turn a repo outcome into this module's refusals, in ONE place: six routes
  *  share four outcomes, and a `switch` per route is four chances for one of them
  *  to answer 200 on a failure nobody mapped. */
@@ -222,6 +232,14 @@ function throwOnFailure(outcome: repo.ClassWriteOutcome): void {
         409,
         "too_many_classes",
         `This gym is at its limit of ${String(outcome.cap)}. Archive one you no longer run first.`,
+      );
+    case "too_many_slots":
+      throw new OrgsError(409, "too_many_classes", slotLimitText(outcome.cap));
+    case "too_many_listed":
+      throw new OrgsError(
+        409,
+        "too_many_listed",
+        `${listedLimitText(outcome.cap)}, and already has ${String(outcome.would - 1)}. Add this one once those dates have passed.`,
       );
     default: {
       // Exhaustive: a fifth outcome added to the repo fails to compile here
@@ -364,6 +382,9 @@ export type SlotChangeAnswer<T> = { kind: "ok"; body: T } | { kind: "replaces"; 
  *  the date it was made from, or the count to ask about. */
 function slotOutcome(
   outcome: repo.SlotChangeOutcome,
+  /** Where the change was made: the Classes list (an Update from date) or
+   *  the Calendar's "This and future classes" (a class, no date box). */
+  door: "list" | "calendar",
 ): { kind: "ok"; localDate: string } | { kind: "replaces"; count: number } {
   switch (outcome.kind) {
     case "ok":
@@ -416,10 +437,14 @@ function slotOutcome(
         "This class already runs at that time on this day. Pick another time.",
       );
     case "too_many":
+      throw new OrgsError(409, "too_many_classes", slotLimitText(outcome.cap));
+    case "too_many_listed":
       throw new OrgsError(
         409,
-        "too_many_classes",
-        `This class is at its limit of ${String(outcome.cap)} time slots. Cancel one you no longer run first.`,
+        "too_many_listed",
+        `${listedLimitText(outcome.cap)}, and this change would make ${String(outcome.would)}. ${
+          door === "list" ? "Pick the earliest Update from date" : "Pick an earlier class"
+        }, or wait until those dates have passed.`,
       );
     default: {
       const never: never = outcome;
@@ -456,9 +481,40 @@ export async function updateSchedule(
       actorUserId: userId,
       now: deps.now(),
     }),
+    "list",
   );
   if (done.kind === "replaces") return done;
   return { kind: "ok", body: await readOr404(deps, gymId) };
+}
+
+/** BULK EDIT — a new length, size or coach for several time slots of one class
+ *  from one date (`repo.bulkChangeSlots`). */
+export async function bulkEditSchedules(
+  deps: ClassesDeps,
+  userId: string,
+  gymId: string,
+  classTypeId: string,
+  req: BulkEditGymClassSchedulesRequest,
+): Promise<GymClassesResponse> {
+  await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
+  const outcome = await repo.bulkChangeSlots(deps.sql, {
+    gymId,
+    classTypeId,
+    scheduleIds: req.scheduleIds,
+    updateFrom: requireCalendarDate(req.updateFrom, "updateFrom"),
+    set: req.set,
+    actorUserId: userId,
+    now: deps.now(),
+  });
+  if (outcome.kind === "from_outside" && outcome.verdict !== "past") {
+    throw new OrgsError(
+      409,
+      "class_update_from",
+      "Pick a date on the calendar while every ticked time slot runs.",
+    );
+  }
+  slotOutcome(outcome, "list");
+  return await readOr404(deps, gymId);
 }
 
 // ── THE WEEK VIEW AND "THIS DAY ONLY" (17b-ii-b-i) ──────────────────────────
@@ -612,6 +668,7 @@ export async function changeClassSession(
       actorUserId: userId,
       now: deps.now(),
     }),
+    "calendar",
   );
   if (done.kind === "replaces") return done;
   return { kind: "ok", body: await readWeekOr404(deps, gymId, done.localDate) };

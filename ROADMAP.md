@@ -154,7 +154,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
          - 17b-ii-w. [x] **The Classes screen in a gym's own words** — merged 2026-09-23 (PR #96).
          - 17b-ii-b-ii. **This day and later, and every time slot of one class at once.** Split in two 2026-09-23 (a move from a date, the Calendar's "This and future classes" and a bulk edit are more than one terminal).
            - 17b-ii-b-ii-a. [x] **Change a time slot from a date** — merged 2026-09-23 (PR #97).
-           - 17b-ii-b-ii-b. [ ] **Edit all time slots of a class at once** (TeamUp's Bulk Edit; Kd, RULINGS 2026-09-22): coach, size and length across the time slots staff tick, from an Update-from date, never a class changed on its own.
+           - 17b-ii-b-ii-b. [x] **Edit all time slots of a class at once** — merged 2026-09-23 (PR #99).
    - 17c. [ ] **Booking and the waitlist, on the server.** Book · cancel · hand-over · claim as ONE rule under the session's lock, with its table test and its races RUN across two app instances; who may book; packs charged once and given back on a free cancel; the gym's settings with their starting values; the emails. **First tests: fifty people and one place; a pack charged once however often the request arrives.** Needs 17a, 17b-i, 3b-ii.
    - 17d. [ ] **The member's side**: the list by day with Book · Cancel · Join waitlist · Claim, on the member web until the phone app shows it.
    - 17e. [ ] **Personal training**: a trainer's hours and session length, free times worked out, an appointment the DATABASE refuses to overlap, booked at once, PT packs.

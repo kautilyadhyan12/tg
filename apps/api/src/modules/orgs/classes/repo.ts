@@ -26,6 +26,7 @@ import type { Sql, TransactionSql } from "postgres";
 import {
   CLASS_ARCHIVED_PAGE,
   CLASS_FILL_HORIZON_DAYS,
+  CLASS_SCHEDULES_LISTED_PER_TYPE_MAX,
   CLASS_SCHEDULES_PER_TYPE_MAX,
   CLASS_SCHEDULE_PREVIEW_DATES,
   CLASS_TYPES_MAX,
@@ -33,7 +34,14 @@ import {
 import { insertAudit, lockOrgRow } from "../repo.js";
 import { dayVerdict } from "./dayRule.js";
 import { fillClassSessions } from "./fill.js";
-import { fromVerdict, slotChangeKind, slotDateFate, type FromVerdict } from "./slotRule.js";
+import {
+  fromVerdict,
+  slotChangeKind,
+  peakRunning,
+  slotDateFate,
+  slotLimitVerdict,
+  type FromVerdict,
+} from "./slotRule.js";
 
 export interface ClassTypeRow {
   id: string;
@@ -240,14 +248,14 @@ export async function readTimetable(
       AND s.ended_at IS NULL
     -- Time slots that have ended come last, newest first, so the LIMIT can only
     -- ever leave out an ended one; a split's two halves sit in date order
-    -- (round one, L-1 and L-2). The live ones are capped at
-    -- CLASS_SCHEDULES_PER_TYPE_MAX a class, which is what the LIMIT is sized on.
+    -- (round one, L-1 and L-2). The ones not finished are capped at
+    -- CLASS_SCHEDULES_LISTED_PER_TYPE_MAX a class, which is what the LIMIT is sized on.
     ORDER BY (s.ends_on IS NOT NULL
               AND s.ends_on < (${now}::timestamptz AT TIME ZONE g.timezone)::date),
              CASE WHEN s.ends_on < (${now}::timestamptz AT TIME ZONE g.timezone)::date
                   THEN s.ends_on END DESC NULLS FIRST,
              s.local_start_minute, s.starts_on, s.id
-    LIMIT ${CLASS_TYPES_MAX * CLASS_SCHEDULES_PER_TYPE_MAX}`;
+    LIMIT ${CLASS_TYPES_MAX * CLASS_SCHEDULES_LISTED_PER_TYPE_MAX}`;
 
   const toType = (r: {
     id: string;
@@ -325,7 +333,12 @@ export type ClassWriteOutcome =
   | { kind: "not_found" }
   | { kind: "coach_not_staff" }
   | { kind: "clashes" }
-  | { kind: "too_many"; cap: number };
+  /** The gym's limit of classes. */
+  | { kind: "too_many"; cap: number }
+  /** The class's limit of time slots running at once. */
+  | { kind: "too_many_slots"; cap: number }
+  /** The class's limit of time slots listed; `would` is how many it would list. */
+  | { kind: "too_many_listed"; cap: number; would: number };
 
 /** IS THIS PERSON THIS GYM'S STAFF — asked INSIDE the write's transaction, under
  *  the gym's lock, so it cannot be answered against a roster that changes
@@ -554,6 +567,29 @@ export interface ClassScheduleFields {
   coachUserId: string | null;
 }
 
+/** A class's time slots not yet finished (the ones the Classes screen lists),
+ *  and the gym's today, for `slotLimitVerdict`. */
+async function listedSlots(
+  tx: TransactionSql,
+  w: { gymId: string; classTypeId: string; now: Date },
+): Promise<{ today: string; slots: { id: string; startsOn: string; endsOn: string | null }[] }> {
+  const [gym] = await tx<{ today: string }[]>`
+    SELECT ((${w.now}::timestamptz AT TIME ZONE timezone)::date)::text AS today
+    FROM gyms WHERE id = ${w.gymId}`;
+  if (gym === undefined) throw new Error("gym not found under its own lock");
+  const rows = await tx<{ id: string; starts_on: string; ends_on: string | null }[]>`
+    SELECT id, starts_on::text AS starts_on, ends_on::text AS ends_on
+    FROM gym_class_schedules
+    WHERE class_type_id = ${w.classTypeId}
+      AND gym_id = ${w.gymId}
+      AND ended_at IS NULL
+      AND (ends_on IS NULL OR ends_on >= ${gym.today}::date)`;
+  return {
+    today: gym.today,
+    slots: rows.map((r) => ({ id: r.id, startsOn: r.starts_on, endsOn: r.ends_on })),
+  };
+}
+
 /** ADD A REPEAT — **and write its dates in the same transaction.**
  *
  *  That is the one thing this function does that a naive version would not, and
@@ -588,19 +624,25 @@ export async function createSchedule(
       return { kind: "coach_not_staff" };
     }
 
-    // A time slot whose last day has passed runs no more and does not count: a
-    // time slot moved from a date leaves its first half behind with an end date
-    // (`changeSlotFrom`), and those would otherwise fill the cap for good.
-    const [live] = await tx<{ n: number }[]>`
-      SELECT count(*)::int AS n FROM gym_class_schedules s
-      JOIN gyms g ON g.id = s.gym_id
-      WHERE s.class_type_id = ${input.classTypeId}
-        AND s.gym_id = ${input.gymId}
-        AND s.ended_at IS NULL
-        AND (s.ends_on IS NULL
-             OR s.ends_on >= (${input.now}::timestamptz AT TIME ZONE g.timezone)::date)`;
-    if ((live?.n ?? 0) >= CLASS_SCHEDULES_PER_TYPE_MAX) {
-      return { kind: "too_many", cap: CLASS_SCHEDULES_PER_TYPE_MAX };
+    // THE LIMITS (`slotLimitVerdict`): twelve running at once while this one
+    // runs, and twenty-four listed. A time slot whose last day has passed counts
+    // toward neither.
+    const { today, slots } = await listedSlots(tx, input);
+    const peak = peakRunning(slots, {
+      from: input.startsOn > today ? input.startsOn : today,
+      until: input.endsOn,
+    });
+    switch (slotLimitVerdict({ peak, addsRunning: 1, listed: slots.length, addsListed: 1 })) {
+      case "running":
+        return { kind: "too_many_slots", cap: CLASS_SCHEDULES_PER_TYPE_MAX };
+      case "listed":
+        return {
+          kind: "too_many_listed",
+          cap: CLASS_SCHEDULES_LISTED_PER_TYPE_MAX,
+          would: slots.length + 1,
+        };
+      case "ok":
+        break;
     }
 
     // THE SAME CLASS CANNOT RUN TWICE AT THE SAME MINUTE ON THE SAME DAY —
@@ -698,8 +740,10 @@ export type SlotChangeOutcome =
   /** The opened class would go back to a time the same class already runs on
    *  its date (round one, H-1). */
   | { kind: "day_clashes" }
-  /** The class would hold more time slots that have not ended than it may. */
-  | { kind: "too_many"; cap: number };
+  /** The class would run more time slots at once than it may. */
+  | { kind: "too_many"; cap: number }
+  /** The class would list more time slots than it may; `would` is how many. */
+  | { kind: "too_many_listed"; cap: number; would: number };
 
 /** Where the change is made from: a time slot and a date (the Classes list), or
  *  one class on the Calendar ("This and future classes") — its time slot, its
@@ -707,6 +751,114 @@ export type SlotChangeOutcome =
 export type SlotChangeTarget =
   | { by: "slot"; scheduleId: string; updateFrom: string; weekdays: readonly number[] }
   | { by: "session"; sessionId: string };
+
+/** A time slot's classes from `today` on, with what `slotDateFate` needs. */
+async function comingClasses(
+  tx: TransactionSql,
+  w: { gymId: string; scheduleId: string; today: string; now: Date },
+) {
+  return await tx<
+    { id: string; local_date: string; status: string; changed_alone: boolean; started: boolean }[]
+  >`
+    SELECT id, local_date::text AS local_date, status, changed_alone,
+           starts_at <= ${w.now} AS started
+    FROM gym_class_sessions
+    WHERE schedule_id = ${w.scheduleId} AND gym_id = ${w.gymId}
+      AND local_date >= ${w.today}::date`;
+}
+
+/** A time slot's second half: it starts on `from` and keeps the old end. */
+async function insertSlotFrom(
+  tx: TransactionSql,
+  w: ClassScheduleFields & {
+    gymId: string;
+    classTypeId: string;
+    weekdays: readonly number[];
+    startMinute: number;
+    from: string;
+    endsOn: string | null;
+  },
+): Promise<string> {
+  const [created] = await tx<{ id: string }[]>`
+    INSERT INTO gym_class_schedules
+      (gym_id, class_type_id, weekdays, local_start_minute, starts_on, ends_on,
+       minutes, places, coach_user_id)
+    VALUES (${w.gymId}, ${w.classTypeId}, ${tx.array([...w.weekdays])}::int[],
+            ${w.startMinute}, ${w.from}::date, ${w.endsOn}::date,
+            ${w.minutes}, ${w.places}, ${w.coachUserId})
+    RETURNING id`;
+  if (created === undefined) throw new Error("class schedule insert returned no row");
+  return created.id;
+}
+
+/** The classes in `ids` take a time slot's start, length, size and coach, and
+ *  are no longer marked changed on their own. Their status is left alone. */
+async function restampClasses(
+  tx: TransactionSql,
+  w: ClassScheduleFields & {
+    gymId: string;
+    scheduleId: string;
+    startMinute: number;
+    ids: readonly string[];
+  },
+): Promise<number> {
+  if (w.ids.length === 0) return 0;
+  const done = await tx`
+    UPDATE gym_class_sessions x
+    SET local_start_minute = ${w.startMinute},
+        starts_at = ((x.local_date + make_interval(mins => ${w.startMinute}::int))
+                     AT TIME ZONE g.timezone),
+        minutes = ${w.minutes}, places = ${w.places},
+        coach_user_id = ${w.coachUserId}, changed_alone = false
+    FROM gyms g
+    WHERE g.id = x.gym_id
+      AND x.gym_id = ${w.gymId}
+      AND x.schedule_id = ${w.scheduleId}
+      AND x.id = ANY(${tx.array([...w.ids])}::uuid[])`;
+  return done.count;
+}
+
+/** A NEW LENGTH, SIZE OR COACH FROM A DATE, for one time slot, once every check
+ *  has passed. When the time slot still runs before the date it is split: it
+ *  ends the day before, a new one starts on the date, and its classes from the
+ *  date move to the new one with their ids. Otherwise it is changed where it
+ *  stands. Then the classes in `restamp` take the values. Shared by a time
+ *  slot's own Edit and the bulk edit. */
+async function writeFieldsFrom(
+  tx: TransactionSql,
+  w: ClassScheduleFields & {
+    gymId: string;
+    scheduleId: string;
+    classTypeId: string;
+    weekdays: readonly number[];
+    startMinute: number;
+    from: string;
+    endsOn: string | null;
+    runsBefore: boolean;
+    restamp: readonly string[];
+  },
+): Promise<{ onSchedule: string; restamped: number }> {
+  let onSchedule = w.scheduleId;
+  if (w.runsBefore) {
+    await tx`
+      UPDATE gym_class_schedules SET ends_on = ${w.from}::date - 1
+      WHERE id = ${w.scheduleId} AND gym_id = ${w.gymId}`;
+    onSchedule = await insertSlotFrom(tx, w);
+    // Every class from the date moves to the new time slot as it is, so the
+    // unique (time slot, date) keeps the new one's fill from writing a second.
+    await tx`
+      UPDATE gym_class_sessions SET schedule_id = ${onSchedule}
+      WHERE gym_id = ${w.gymId} AND schedule_id = ${w.scheduleId}
+        AND local_date >= ${w.from}::date`;
+  } else {
+    await tx`
+      UPDATE gym_class_schedules
+      SET minutes = ${w.minutes}, places = ${w.places}, coach_user_id = ${w.coachUserId}
+      WHERE id = ${w.scheduleId} AND gym_id = ${w.gymId}`;
+  }
+  const restamped = await restampClasses(tx, { ...w, scheduleId: onSchedule, ids: w.restamp });
+  return { onSchedule, restamped };
+}
 
 /** CHANGE A TIME SLOT FROM A DATE — §13.3's "this day and later" (17b-ii-b-ii).
  *
@@ -881,14 +1033,12 @@ export async function changeSlotFrom(
       await fillClassSessions(tx, { gymIds: [input.gymId], scheduleIds: [scheduleId], now: input.now });
     }
 
-    const coming = await tx<
-      { id: string; local_date: string; status: string; changed_alone: boolean; started: boolean }[]
-    >`
-      SELECT id, local_date::text AS local_date, status, changed_alone,
-             starts_at <= ${input.now} AS started
-      FROM gym_class_sessions
-      WHERE schedule_id = ${scheduleId} AND gym_id = ${input.gymId}
-        AND local_date >= ${slot.today}::date`;
+    const coming = await comingClasses(tx, {
+      gymId: input.gymId,
+      scheduleId,
+      today: slot.today,
+      now: input.now,
+    });
 
     const restamp: string[] = [];
     const replace: string[] = [];
@@ -925,20 +1075,34 @@ export async function changeSlotFrom(
     }
     if (asked > 0 && input.confirmReplace !== asked) return { kind: "replaces", count: asked };
 
-    // THE CLASS'S LIMIT OF TIME SLOTS, as `createSchedule` counts it (round one,
-    // L-1): a move or a split adds one, and the old one still counts while it
-    // runs before the date.
+    // THE CLASS'S LIMITS, as `createSchedule` counts them (round one, L-1). The
+    // new time slot starts on the date and the old one ends before it; the old
+    // one is still listed while it runs before the date, and a move that leaves
+    // nothing before it stops it outright.
     const addsSlot = change === "move" || (!fieldsSame && runsBefore);
     if (addsSlot) {
-      const [others] = await tx<{ n: number }[]>`
-        SELECT count(*)::int AS n FROM gym_class_schedules
-        WHERE class_type_id = ${slot.class_type_id}
-          AND gym_id = ${input.gymId}
-          AND ended_at IS NULL
-          AND id <> ${scheduleId}
-          AND (ends_on IS NULL OR ends_on >= ${slot.today}::date)`;
-      if ((others?.n ?? 0) + 1 + (runsBefore ? 1 : 0) > CLASS_SCHEDULES_PER_TYPE_MAX) {
-        return { kind: "too_many", cap: CLASS_SCHEDULES_PER_TYPE_MAX };
+      const { slots } = await listedSlots(tx, {
+        gymId: input.gymId,
+        classTypeId: slot.class_type_id,
+        now: input.now,
+      });
+      const peak = peakRunning(
+        slots.filter((l) => l.id !== scheduleId),
+        { from, until: slot.ends_on },
+      );
+      switch (
+        slotLimitVerdict({ peak, addsRunning: 1, listed: slots.length, addsListed: runsBefore ? 1 : 0 })
+      ) {
+        case "running":
+          return { kind: "too_many", cap: CLASS_SCHEDULES_PER_TYPE_MAX };
+        case "listed":
+          return {
+            kind: "too_many_listed",
+            cap: CLASS_SCHEDULES_LISTED_PER_TYPE_MAX,
+            would: slots.length + (runsBefore ? 1 : 0),
+          };
+        case "ok":
+          break;
       }
     }
     if (change === "fields" && fieldsSame) {
@@ -974,36 +1138,6 @@ export async function changeSlotFrom(
           WHERE id = ${scheduleId} AND gym_id = ${input.gymId}`;
       }
     };
-    const insertNew = async () => {
-      const [created] = await tx<{ id: string }[]>`
-        INSERT INTO gym_class_schedules
-          (gym_id, class_type_id, weekdays, local_start_minute, starts_on, ends_on,
-           minutes, places, coach_user_id)
-        VALUES (${input.gymId}, ${slot.class_type_id}, ${tx.array(weekdays)}::int[],
-                ${input.startMinute}, ${from}::date, ${slot.ends_on}::date,
-                ${input.minutes}, ${input.places}, ${input.coachUserId})
-        RETURNING id`;
-      if (created === undefined) throw new Error("class schedule insert returned no row");
-      return created.id;
-    };
-    const restampRows = async (onSchedule: string) =>
-      restamp.length === 0
-        ? 0
-        : (
-            await tx`
-              UPDATE gym_class_sessions x
-              SET local_start_minute = ${input.startMinute},
-                  starts_at = ((x.local_date + make_interval(mins => ${input.startMinute}::int))
-                               AT TIME ZONE g.timezone),
-                  minutes = ${input.minutes}, places = ${input.places},
-                  coach_user_id = ${input.coachUserId}, changed_alone = false
-              FROM gyms g
-              WHERE g.id = x.gym_id
-                AND x.gym_id = ${input.gymId}
-                AND x.schedule_id = ${onSchedule}
-                AND x.id = ANY(${tx.array(restamp)}::uuid[])`
-          ).count;
-
     if (change === "move") {
       const removed =
         replace.length === 0
@@ -1015,7 +1149,17 @@ export async function changeSlotFrom(
                   AND id = ANY(${tx.array(replace)}::uuid[])`
             ).count;
       await endOld();
-      const newId = await insertNew();
+      const newId = await insertSlotFrom(tx, {
+        gymId: input.gymId,
+        classTypeId: slot.class_type_id,
+        weekdays,
+        startMinute: input.startMinute,
+        from,
+        endsOn: slot.ends_on,
+        minutes: input.minutes,
+        places: input.places,
+        coachUserId: input.coachUserId,
+      });
       const filled = await fillClassSessions(tx, {
         gymIds: [input.gymId],
         scheduleIds: [newId],
@@ -1041,7 +1185,15 @@ export async function changeSlotFrom(
     }
 
     if (fieldsSame) {
-      const restamped = await restampRows(scheduleId);
+      const restamped = await restampClasses(tx, {
+        gymId: input.gymId,
+        scheduleId,
+        startMinute: input.startMinute,
+        minutes: input.minutes,
+        places: input.places,
+        coachUserId: input.coachUserId,
+        ids: restamp,
+      });
       await insertAudit(tx, {
         actorUserId: input.actorUserId,
         gymId: input.gymId,
@@ -1053,24 +1205,20 @@ export async function changeSlotFrom(
       return { kind: "ok", localDate: from };
     }
 
-    let onSchedule = scheduleId;
-    if (runsBefore) {
-      await endOld();
-      onSchedule = await insertNew();
-      // Every class from the date moves to the new time slot as it is, so the
-      // unique (time slot, date) keeps the new one's fill from writing a second.
-      await tx`
-        UPDATE gym_class_sessions SET schedule_id = ${onSchedule}
-        WHERE gym_id = ${input.gymId} AND schedule_id = ${scheduleId}
-          AND local_date >= ${from}::date`;
-    } else {
-      await tx`
-        UPDATE gym_class_schedules
-        SET minutes = ${input.minutes}, places = ${input.places},
-            coach_user_id = ${input.coachUserId}
-        WHERE id = ${scheduleId} AND gym_id = ${input.gymId}`;
-    }
-    const restamped = await restampRows(onSchedule);
+    const { onSchedule, restamped } = await writeFieldsFrom(tx, {
+      gymId: input.gymId,
+      scheduleId,
+      classTypeId: slot.class_type_id,
+      weekdays,
+      startMinute: input.startMinute,
+      from,
+      endsOn: slot.ends_on,
+      runsBefore,
+      restamp,
+      minutes: input.minutes,
+      places: input.places,
+      coachUserId: input.coachUserId,
+    });
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
       gymId: input.gymId,
@@ -1084,6 +1232,200 @@ export async function changeSlotFrom(
       },
     });
     return { kind: "ok", localDate: from };
+  });
+}
+
+export type BulkEditOutcome = Extract<
+  SlotChangeOutcome,
+  { kind: "ok" | "not_found" | "coach_not_staff" | "from_outside" | "too_many_listed" }
+>;
+
+/** What a bulk edit sets; a key left out keeps each time slot's own value. */
+export interface BulkEditSet {
+  minutes?: number | undefined;
+  places?: number | null | undefined;
+  coachUserId?: string | null | undefined;
+}
+
+/** BULK EDIT — several time slots of ONE class, a new length, size or coach
+ *  from one date (TeamUp's Bulk Edit; ROADMAP 17b-ii-b-ii-b).
+ *
+ *  Each time slot is changed exactly as its own Edit changes it
+ *  (`writeFieldsFrom`), from `updateFrom` or from its own first day when that is
+ *  later: classes before that date, and any that has started, keep what they
+ *  have, and so does a class changed on its own; a cancelled class stays
+ *  cancelled.
+ *
+ *  All or nothing, under the gym's lock: every id must be a running time slot
+ *  of this class in this gym, and every one must run on its date, or nothing is
+ *  written. Each time slot is followed by exactly one, so no more run from the
+ *  date than before; only the listed limit is asked. */
+export async function bulkChangeSlots(
+  sql: Sql,
+  input: {
+    gymId: string;
+    classTypeId: string;
+    scheduleIds: readonly string[];
+    updateFrom: string;
+    set: BulkEditSet;
+    actorUserId: string;
+    now: Date;
+  },
+): Promise<BulkEditOutcome> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId);
+
+    const [type] = await tx<{ id: string }[]>`
+      SELECT id FROM gym_class_types
+      WHERE id = ${input.classTypeId} AND gym_id = ${input.gymId} AND archived_at IS NULL`;
+    if (type === undefined) return { kind: "not_found" };
+
+    // The class AND the gym in the WHERE: an id of another class, or of another
+    // gym's, is simply not found, and one missing id refuses the whole request.
+    const slots = await tx<
+      {
+        id: string;
+        weekdays: number[];
+        local_start_minute: number;
+        starts_on: string;
+        ends_on: string | null;
+        minutes: number;
+        places: number | null;
+        coach_user_id: string | null;
+        today: string;
+        last_calendar_date: string;
+      }[]
+    >`
+      SELECT s.id, s.weekdays, s.local_start_minute,
+             s.starts_on::text AS starts_on, s.ends_on::text AS ends_on,
+             s.minutes, s.places, s.coach_user_id,
+             t.today::text AS today,
+             (t.today + ${CLASS_FILL_HORIZON_DAYS}::int)::text AS last_calendar_date
+      FROM gym_class_schedules s
+      JOIN gyms g ON g.id = s.gym_id
+      CROSS JOIN LATERAL (
+        SELECT (${input.now}::timestamptz AT TIME ZONE g.timezone)::date AS today
+      ) t
+      WHERE s.id = ANY(${tx.array([...input.scheduleIds])}::uuid[])
+        AND s.gym_id = ${input.gymId}
+        AND s.class_type_id = ${input.classTypeId}
+        AND s.ended_at IS NULL
+      ORDER BY s.starts_on, s.local_start_minute, s.id`;
+    if (slots.length !== input.scheduleIds.length) return { kind: "not_found" };
+
+    const { set } = input;
+    if (set.coachUserId !== undefined && !(await coachIsStaff(tx, input.gymId, set.coachUserId))) {
+      return { kind: "coach_not_staff" };
+    }
+
+    // Every check before the first write.
+    const plans = [];
+    for (const slot of slots) {
+      const from = input.updateFrom > slot.starts_on ? input.updateFrom : slot.starts_on;
+      const verdict =
+        input.updateFrom < slot.today
+          ? "past"
+          : fromVerdict(from, {
+              today: slot.today,
+              startsOn: slot.starts_on,
+              endsOn: slot.ends_on,
+              lastCalendarDate: slot.last_calendar_date,
+            });
+      if (verdict !== "ok") return { kind: "from_outside", verdict };
+      const values: ClassScheduleFields = {
+        minutes: set.minutes ?? slot.minutes,
+        places: set.places === undefined ? slot.places : set.places,
+        coachUserId: set.coachUserId === undefined ? slot.coach_user_id : set.coachUserId,
+      };
+      const same =
+        values.minutes === slot.minutes &&
+        values.places === slot.places &&
+        values.coachUserId === slot.coach_user_id;
+      if (!same) plans.push({ slot, from, values });
+    }
+
+    // Every class before its date is written with the old values first, as a
+    // single Edit does, so a later fill cannot write one with the new. This is
+    // what the nightly job would write anyway, so a refusal below leaves only
+    // that behind.
+    const work = [];
+    for (const plan of plans) {
+      await fillClassSessions(tx, {
+        gymIds: [input.gymId],
+        scheduleIds: [plan.slot.id],
+        now: input.now,
+      });
+      const coming = await comingClasses(tx, {
+        gymId: input.gymId,
+        scheduleId: plan.slot.id,
+        today: plan.slot.today,
+        now: input.now,
+      });
+      const restamp: string[] = [];
+      let runsBefore = false;
+      for (const row of coming) {
+        const beforeFrom = row.local_date < plan.from;
+        if (beforeFrom && !row.started) runsBefore = true;
+        const fate = slotDateFate("fields", {
+          beforeFrom,
+          started: row.started,
+          status: row.status === "cancelled" ? "cancelled" : "scheduled",
+          changedAlone: row.changed_alone,
+          opened: false,
+        });
+        if (fate === "restamp") restamp.push(row.id);
+      }
+      work.push({ ...plan, restamp, runsBefore });
+    }
+
+    // Each split lists one more time slot until its date.
+    const splits = work.filter((w) => w.runsBefore).length;
+    if (splits > 0) {
+      const { slots: listed } = await listedSlots(tx, input);
+      if (slotLimitVerdict({ peak: 0, addsRunning: 0, listed: listed.length, addsListed: splits }) !== "ok") {
+        return {
+          kind: "too_many_listed",
+          cap: CLASS_SCHEDULES_LISTED_PER_TYPE_MAX,
+          would: listed.length + splits,
+        };
+      }
+    }
+
+    // ── Writes from here on ──
+
+    const places = (p: number | null) => (p === null ? "none" : String(p));
+    for (const { slot, from, values, restamp, runsBefore } of work) {
+      const { onSchedule, restamped } = await writeFieldsFrom(tx, {
+        gymId: input.gymId,
+        scheduleId: slot.id,
+        classTypeId: input.classTypeId,
+        weekdays: slot.weekdays,
+        startMinute: slot.local_start_minute,
+        from,
+        endsOn: slot.ends_on,
+        runsBefore,
+        restamp,
+        ...values,
+      });
+      await insertAudit(tx, {
+        actorUserId: input.actorUserId,
+        gymId: input.gymId,
+        action: "org.class_schedule_updated",
+        targetType: "gym_class_schedule",
+        targetId: slot.id,
+        meta: {
+          bulk: "true",
+          from,
+          minutes: `${String(slot.minutes)} -> ${String(values.minutes)}`,
+          places: `${places(slot.places)} -> ${places(values.places)}`,
+          // Ids, never a coach's name.
+          coach: `${slot.coach_user_id ?? "none"} -> ${values.coachUserId ?? "none"}`,
+          ...(onSchedule === slot.id ? {} : { newSchedule: onSchedule }),
+          sessionsRestamped: String(restamped),
+        },
+      });
+    }
+    return { kind: "ok", localDate: input.updateFrom };
   });
 }
 

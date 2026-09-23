@@ -436,6 +436,90 @@ export function replaceQuestion(count, fromDay) {
     : `${String(count)} classes from ${when} on were changed or cancelled on their own. Move anyway?`;
 }
 
+// ── BULK EDIT (17b-ii-b-ii-b) ───────────────────────────────────────────────
+//
+// TeamUp's Bulk Edit: a new length, coach or class size for the time slots of
+// one class that staff tick, from an Update-from date. Each field changes only
+// when its box is ticked; the rest keep each time slot's own.
+
+/** The time slots a bulk edit can reach: the ones with a date left to change
+ *  from. The button shows when a class has two or more. */
+export function bulkEditSlots(schedules, today, horizonDays) {
+  const list = Array.isArray(schedules) ? schedules : [];
+  return list.filter((s) => slotEditable(s, updateFromBounds(s, today, horizonDays)));
+}
+
+/** The dates the ticked time slots can all be changed from: from today, and
+ *  not past the calendar or any ticked time slot's last day. A time slot that
+ *  starts later is changed from its own first day. */
+export function bulkEditBounds(ticked, today, horizonDays) {
+  const days = Number.isInteger(horizonDays) ? horizonDays : CLASS_FILL_HORIZON_DAYS;
+  const ends = (Array.isArray(ticked) ? ticked : []).map((s) => s?.endsOn).filter(isDay);
+  const max = [isDay(today) ? addDays(today, days - 1) : '', ...ends].filter(isDay).sort()[0] ?? '';
+  return { min: isDay(today) ? today : '', max };
+}
+
+export function bulkEditDraft(slots, today) {
+  const list = Array.isArray(slots) ? slots : [];
+  return {
+    ticked: list.map((s) => s.id),
+    changeMinutes: false,
+    changeCoach: false,
+    changePlaces: false,
+    updateFrom: isDay(today) ? today : '',
+    // What the boxes open with, from the first time slot.
+    ...runFieldsDraft(list[0] ?? null),
+  };
+}
+
+export function toggleBulkSlot(draft, id) {
+  const ticked = Array.isArray(draft?.ticked) ? draft.ticked : [];
+  return {
+    ...draft,
+    ticked: ticked.includes(id) ? ticked.filter((t) => t !== id) : [...ticked, id],
+  };
+}
+
+export function bulkEditProblem(draft, bounds) {
+  if (!Array.isArray(draft?.ticked) || draft.ticked.length === 0) {
+    return 'Tick at least one time slot.';
+  }
+  if (!draft.changeMinutes && !draft.changeCoach && !draft.changePlaces) {
+    return 'Tick what to change.';
+  }
+  const fields = runFieldsProblem({
+    minutes: draft.changeMinutes ? draft.minutes : '60',
+    unlimited: draft.changePlaces ? draft.unlimited : true,
+    places: draft.places,
+  });
+  if (fields !== null) return fields;
+  const from = draft.updateFrom ?? '';
+  if (!isDay(from)) return 'Pick the date to update from.';
+  if (!isDay(bounds?.min) || !isDay(bounds?.max) || bounds.min > bounds.max) {
+    return 'A ticked time slot has no date left to change.';
+  }
+  if (from < bounds.min || from > bounds.max) {
+    return `Pick a date from ${closureDateLabel(bounds.min)} to ${closureDateLabel(bounds.max)}.`;
+  }
+  return null;
+}
+
+/** The body, or null when the form is not ready. Only the ticked fields go in
+ *  `set`; a field left out keeps each time slot's own. */
+export function bulkEditRequest(draft, bounds) {
+  if (bulkEditProblem(draft, bounds) !== null) return null;
+  const run = runFieldsRequest(draft);
+  return {
+    scheduleIds: [...draft.ticked],
+    updateFrom: draft.updateFrom,
+    set: {
+      ...(draft.changeMinutes ? { minutes: run.minutes } : {}),
+      ...(draft.changeCoach ? { coachUserId: run.coachUserId } : {}),
+      ...(draft.changePlaces ? { places: run.places } : {}),
+    },
+  };
+}
+
 /** Tick a day on or off, keeping the set sorted. Returned as a NEW draft: the
  *  caller stores it in React state, and mutating in place is how a screen stops
  *  re-rendering for no reason anybody can see. */

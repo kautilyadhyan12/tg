@@ -9,6 +9,12 @@ import { describe, expect, it } from 'vitest';
 import { CLASS_ARCHIVED_PAGE, CLASS_COLOURS, CLASS_FILL_HORIZON_DAYS } from '@app/shared';
 import {
   archivedPageNote,
+  bulkEditBounds,
+  bulkEditDraft,
+  bulkEditProblem,
+  bulkEditRequest,
+  bulkEditSlots,
+  toggleBulkSlot,
   CLASS_COLOUR_CHOICES,
   canManageSchedule,
   classDraft,
@@ -631,5 +637,96 @@ describe('the timetable as a whole', () => {
       }),
     ).toMatchObject({ timezone: 'Asia/Kolkata', clockFormat: '12h', horizonDays: 56 });
     expect(timetableLists({ clockFormat: 'roman' }).clockFormat).toBe('24h');
+  });
+});
+
+describe('bulk edit', () => {
+  const today = '2026-10-05';
+  const slot = (over = {}) => ({
+    id: 's1',
+    weekdays: [1],
+    startMinute: 1080,
+    startsOn: '2026-09-01',
+    endsOn: null,
+    minutes: 45,
+    places: 12,
+    coachUserId: 'u8',
+    coachName: 'Dana',
+    nextDates: ['2026-10-05'],
+    finished: false,
+    startedToday: false,
+    ...over,
+  });
+
+  it('reaches only the time slots with a date left to change from', () => {
+    const ended = slot({ id: 's2', endsOn: '2026-10-01', finished: true });
+    const later = slot({ id: 's3', startsOn: '2027-01-04' });
+    expect(bulkEditSlots([slot(), ended, later], today, 56).map((s) => s.id)).toEqual(['s1', 's3']);
+  });
+
+  it('offers dates from today to the calendar s end or the earliest ticked last day', () => {
+    const last = '2026-11-29';
+    expect(bulkEditBounds([slot()], today, 56)).toEqual({ min: today, max: last });
+    expect(bulkEditBounds([slot(), slot({ id: 's2', endsOn: '2026-10-20' })], today, 56)).toEqual({
+      min: today,
+      max: '2026-10-20',
+    });
+    // One that starts later is changed from its own first day; it narrows nothing.
+    expect(bulkEditBounds([slot(), slot({ id: 's3', startsOn: '2027-01-04' })], today, 56)).toEqual({
+      min: today,
+      max: last,
+    });
+  });
+
+  it('sends only what is ticked, and every ticked time slot', () => {
+    const bounds = bulkEditBounds([slot()], today, 56);
+    const draft = bulkEditDraft([slot(), slot({ id: 's2' })], today);
+    expect(draft.ticked).toEqual(['s1', 's2']);
+    expect(bulkEditRequest(draft, bounds)).toBeNull();
+    expect(bulkEditProblem(draft, bounds)).toBe('Tick what to change.');
+
+    const rows = [
+      [{ changeMinutes: true, minutes: '50' }, { minutes: 50 }],
+      [{ changeCoach: true, coachUserId: '' }, { coachUserId: null }],
+      [{ changeCoach: true, coachUserId: 'u9' }, { coachUserId: 'u9' }],
+      [{ changePlaces: true, unlimited: true }, { places: null }],
+      [{ changePlaces: true, unlimited: false, places: '15' }, { places: 15 }],
+      [
+        { changeMinutes: true, minutes: '30', changePlaces: true, unlimited: false, places: '10' },
+        { minutes: 30, places: 10 },
+      ],
+    ];
+    for (const [patch, set] of rows) {
+      expect(bulkEditRequest({ ...draft, ...patch }, bounds)).toEqual({
+        scheduleIds: ['s1', 's2'],
+        updateFrom: today,
+        set,
+      });
+    }
+  });
+
+  it('sends nothing the server would refuse, and says why', () => {
+    const bounds = bulkEditBounds([slot()], today, 56);
+    const draft = { ...bulkEditDraft([slot()], today), changeMinutes: true };
+    const cases = [
+      [{ ticked: [] }, 'Tick at least one time slot.'],
+      [{ minutes: '2' }, 'Length must be 5 to 600 minutes.'],
+      [{ changePlaces: true, unlimited: false, places: '0' }, 'Class size must be 1 to 500, or tick No limit.'],
+      [{ updateFrom: '' }, 'Pick the date to update from.'],
+      [{ updateFrom: '2026-10-04' }, 'Pick a date from Mon 5 Oct 2026 to Sun 29 Nov 2026.'],
+      [{ updateFrom: '2026-11-30' }, 'Pick a date from Mon 5 Oct 2026 to Sun 29 Nov 2026.'],
+    ];
+    for (const [patch, problem] of cases) {
+      expect(bulkEditProblem({ ...draft, ...patch }, bounds)).toBe(problem);
+      expect(bulkEditRequest({ ...draft, ...patch }, bounds)).toBeNull();
+    }
+    // A size left unticked is not checked: its box is not sent.
+    expect(bulkEditProblem({ ...draft, places: '0', unlimited: false }, bounds)).toBeNull();
+  });
+
+  it('ticks and unticks a time slot', () => {
+    const draft = bulkEditDraft([slot(), slot({ id: 's2' })], today);
+    expect(toggleBulkSlot(draft, 's1').ticked).toEqual(['s2']);
+    expect(toggleBulkSlot(toggleBulkSlot(draft, 's1'), 's1').ticked).toEqual(['s2', 's1']);
   });
 });

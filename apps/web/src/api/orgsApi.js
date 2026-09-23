@@ -736,6 +736,15 @@ export const orgService = {
       authApi.put(`/v1/orgs/${gymId}/class-repeats/${scheduleId}`, body),
     ),
 
+  /** POST /v1/orgs/:gymId/classes/:classTypeId/bulk-edit — a new length,
+   *  coach or class size for several time slots of one class, from a date. */
+  bulkEditClass: (gymId, classTypeId, body) =>
+    readThrough(
+      gymClassMutationResponseSchema,
+      'those time slots',
+      authApi.post(`/v1/orgs/${gymId}/classes/${classTypeId}/bulk-edit`, body),
+    ),
+
   /** DELETE /v1/orgs/:gymId/class-repeats/:scheduleId — stop a repeat.
    *
    *  It takes the repeat's FUTURE dates with it and leaves the class itself
