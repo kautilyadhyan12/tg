@@ -50,6 +50,9 @@ export const gymInviteSends = pgTable(
     providerId: text("provider_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
+    /** What Resend reported about an email that went, once Resend's record agreed. */
+    result: text("result"),
+    resultAt: timestamp("result_at", { withTimezone: true }),
   },
   (t) => [
     uniqueIndex("gym_invite_sends_first_uq")
@@ -76,6 +79,10 @@ export const gymInviteSends = pgTable(
       sql`${t.providerId} IS NULL OR (${t.state} = 'sent' AND length(${t.providerId}) <= 100)`,
     ),
     check("gym_invite_sends_attempts_check", sql`${t.attempts} >= 0`),
+    index("gym_invite_sends_provider_idx").on(t.providerId).where(sql`${t.providerId} IS NOT NULL`),
+    check("gym_invite_sends_result_check", sql`${t.result} IS NULL OR ${t.result} IN ('delivered','bounced','complained','failed')`),
+    check("gym_invite_sends_result_state_check", sql`${t.result} IS NULL OR ${t.state} = 'sent'`),
+    check("gym_invite_sends_result_at_check", sql`(${t.result} IS NULL) = (${t.resultAt} IS NULL)`),
   ],
 );
 

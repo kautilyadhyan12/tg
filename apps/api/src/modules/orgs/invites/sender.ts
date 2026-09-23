@@ -154,6 +154,7 @@ async function sendOne(deps: SenderDeps, claim: repo.ClaimedSend): Promise<Tally
         : {
             active: ctx.gym.active,
             onPlan: ctx.gym.onPlan,
+            stopped: ctx.gym.stopped,
             hasPostalAddress: (ctx.gym.postalAddress ?? "") !== "",
             named: gymName !== "",
           },

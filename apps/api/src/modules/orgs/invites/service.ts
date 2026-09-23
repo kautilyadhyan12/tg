@@ -113,14 +113,16 @@ async function blockedFor(sql: SqlOrTx, settings: InviteSettings | null, gymId: 
   if (status !== "active") return "gym_archived";
   if (!(await gymHasLivePlan(sql, gymId))) return "gym_not_on_plan";
   if ((await repo.gymPostalAddress(sql, gymId)) === null) return "no_postal_address";
+  if (await repo.gymInvitesStopped(sql, gymId)) return "sending_stopped";
   return null;
 }
 
-/** Sending switched on and a postal address: what every write needs first. */
+/** Sending switched on, a postal address, and not stopped: what every write needs first. */
 export async function readyToSend(deps: MemberListDeps, gymId: string): Promise<InviteSettings> {
   const settings = deps.invites ?? null;
   if (settings === null || settings.sender === null) throw refuse(503, "invites_off");
   if ((await repo.gymPostalAddress(deps.sql, gymId)) === null) throw refuse(409, "no_postal_address");
+  if (await repo.gymInvitesStopped(deps.sql, gymId)) throw refuse(409, "sending_stopped");
   return settings;
 }
 

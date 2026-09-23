@@ -23,8 +23,10 @@ import { Redis } from "ioredis";
 import pino from "pino";
 import postgres from "postgres";
 import { loadConfig } from "./config.js";
-import { createResendInviteTransport } from "./email/resend.js";
+import { createResendEmailReader, createResendInviteTransport, createResendTransport } from "./email/resend.js";
 import { cachedMailDomainCheck, systemResolver } from "./modules/orgs/invites/mailDomain.js";
+import { operatorTeller } from "./modules/orgs/invites/operatorNote.js";
+import { processInviteResults } from "./modules/orgs/invites/results.js";
 import { devInviteTransport, sendDueInvites } from "./modules/orgs/invites/sender.js";
 import { inviteSettings } from "./modules/orgs/invites/settings.js";
 import { archiveLapsedGyms } from "./modules/orgs/archiveSweep.js";
@@ -309,6 +311,7 @@ try {
 // run sends what is due within the caps. Only when invitations are switched on.
 export const INVITES_QUEUE = "invites";
 export const INVITES_SEND_JOB = "invites.send";
+export const INVITES_RESULTS_JOB = "invites.results";
 
 const invites = inviteSettings(config);
 const inviteSender = invites?.sender ?? null;
@@ -338,9 +341,55 @@ if (invites === null || inviteSender === null) {
     log.fatal({ err }, "failed to register the invitation sender schedule");
     process.exit(1);
   }
+  // What Resend reports back, confirmed with Resend before it is acted on. Reading an
+  // email back needs the API key; without one nothing is confirmed and the reports wait.
+  const reader = config.RESEND_API_KEY === undefined ? null : createResendEmailReader({ apiKey: config.RESEND_API_KEY });
+  const tellOperator = operatorTeller(
+    config.RESEND_API_KEY !== undefined && config.EMAIL_FROM !== undefined
+      ? createResendTransport({ apiKey: config.RESEND_API_KEY, from: config.EMAIL_FROM })
+      : null,
+    config.OPERATOR_EMAIL ?? null,
+    log,
+  );
+  if (reader === null) {
+    log.warn({ event: "worker.invite_results_off" }, "Resend reports are not confirmed or acted on: RESEND_API_KEY is missing");
+    // A schedule left from a run that had a key would otherwise land on a worker that cannot run it.
+    await invitesQueue.removeJobScheduler(INVITES_RESULTS_JOB).catch(() => false);
+  } else {
+    try {
+      await invitesQueue.upsertJobScheduler(
+        INVITES_RESULTS_JOB,
+        { every: 60_000 },
+        {
+          name: INVITES_RESULTS_JOB,
+          // Each report is leased and finished by its lease, and every write is safe to
+          // repeat, so a retry or a second run at once changes nothing twice.
+          opts: { attempts: 1, removeOnComplete: { count: 50 }, removeOnFail: { count: 200 } },
+        },
+      );
+    } catch (err) {
+      log.fatal({ err }, "failed to register the invitation results schedule");
+      process.exit(1);
+    }
+  }
   invitesWorker = new Worker(
     INVITES_QUEUE,
     async (job) => {
+      if (job.name === INVITES_RESULTS_JOB && reader !== null) {
+        const startedAt = Date.now();
+        const results = await processInviteResults({
+          sql,
+          log,
+          reader,
+          tellOperator,
+          now: () => new Date(),
+          sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+        });
+        if (results.applied + results.ignored + results.deferred + results.givenUp + results.forgotten > 0 || results.denied) {
+          log.info({ ...results, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
+        }
+        return;
+      }
       if (job.name !== INVITES_SEND_JOB) throw new Error(`unknown job on ${INVITES_QUEUE}: ${job.name}`);
       const startedAt = Date.now();
       const run = await sendDueInvites({

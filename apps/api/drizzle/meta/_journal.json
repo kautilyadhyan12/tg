@@ -267,6 +267,13 @@
       "when": 1788220800021,
       "tag": "0038_member_invites",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1788220800022,
+      "tag": "0039_invite_results",
+      "breakpoints": true
     }
   ]
 }

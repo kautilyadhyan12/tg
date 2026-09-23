@@ -1280,4 +1280,46 @@ d("press Invite (real Postgres)", () => {
     await expect(sql`
       INSERT INTO gym_invites (gym_id, email_hmac) VALUES (${gym}, ${"ann@example.com"})`).rejects.toMatchObject({ code: "23514" });
   });
+
+  // =========================================================================
+  // WHAT COMES BACK (3b-i-b): THE FIRST 50 WAIT FOR THEIR RESULTS
+  // =========================================================================
+
+  it("a gym's 51st email waits until its first 50 have come back, then goes; a stopped gym sends nothing", async () => {
+    const owner = await makeUser("gate-owner");
+    const gym = (await makeGym(owner, "Gate Gym")).org.id;
+    const went = new Date(Date.now() - 5 * 60_000);
+    for (let i = 0; i < 50; i++) {
+      const hmac = emailHmac(settings.hmacKey, addr(`gate-${String(i)}`));
+      const at = new Date(went.getTime() + i * 1000);
+      await sql`INSERT INTO gym_invites (gym_id, email_hmac, created_at) VALUES (${gym}, ${hmac}, ${at})`;
+      await sql`
+        INSERT INTO gym_invite_sends (gym_id, invite_id, kind, state, not_before, created_at, finished_at, provider_id)
+        VALUES (${gym}, (SELECT id FROM gym_invites WHERE gym_id = ${gym} AND email_hmac = ${hmac}),
+                'first', 'sent', ${at}, ${at}, ${at}, ${`re_gate_${String(i)}`})`;
+    }
+    const next = await typeIn(gym, owner, { fullName: "Fifty One", email: addr("gate-next") });
+    expect((await post(`${entryUrl(gym, next.entry.entryId)}/invite`, {}, owner.cookies)).statusCode).toBe(200);
+
+    await runSender();
+    expect(emailsTo(addr("gate-next"))).toHaveLength(0);
+    // 49 back is not enough.
+    await sql`
+      UPDATE gym_invite_sends SET result = 'delivered', result_at = now()
+      WHERE gym_id = ${gym} AND provider_id <> 're_gate_49' AND state = 'sent'`;
+    await runSender();
+    expect(emailsTo(addr("gate-next"))).toHaveLength(0);
+    // Stopped, it stays put even with all 50 back.
+    await sql`UPDATE gym_invite_sends SET result = 'delivered', result_at = now() WHERE gym_id = ${gym} AND provider_id = 're_gate_49'`;
+    await sql`UPDATE gyms SET invites_stopped_at = now(), invites_stopped_reason = 'bounces' WHERE id = ${gym}`;
+    await runSender();
+    expect(emailsTo(addr("gate-next"))).toHaveLength(0);
+    await sql`UPDATE gyms SET invites_stopped_at = NULL, invites_stopped_reason = NULL WHERE id = ${gym}`;
+    await runSender();
+    expect(emailsTo(addr("gate-next"))).toHaveLength(1);
+    // A result belongs only to an email that went.
+    await expect(sql`
+      UPDATE gym_invite_sends SET state = 'queued', finished_at = NULL, provider_id = NULL
+      WHERE gym_id = ${gym} AND provider_id = 're_gate_0'`).rejects.toMatchObject({ code: "23514" });
+  }, TEST_TIMEOUT_MS);
 });

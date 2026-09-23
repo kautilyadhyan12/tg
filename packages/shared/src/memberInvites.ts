@@ -37,6 +37,7 @@ export const memberInviteEmailReasonSchema = z.enum([
   "provider_refused",
   "provider_unavailable",
   "dns_unavailable",
+  "sending_stopped",
 ]);
 export type MemberInviteEmailReason = z.infer<typeof memberInviteEmailReasonSchema>;
 
@@ -58,6 +59,20 @@ export const MEMBER_INVITE_EMAIL_REASON_WORDS: Readonly<Record<MemberInviteEmail
   provider_refused: "Not sent: the email service would not take it for a week. Invite them again.",
   provider_unavailable: "Not sent: the email service could not be reached for a week. Invite them again.",
   dns_unavailable: "Not sent: we could not check this address's email service for a week. Invite them again.",
+  sending_stopped: "Not sent: your gym's invitations were stopped because too many bounced or one was marked as spam.",
+};
+
+/** What the email service reported about an email that went (§9.12), once its own
+ *  record agreed. Null until a report arrives. */
+export const memberInviteEmailResultSchema = z.enum(["delivered", "bounced", "complained", "failed"]);
+export type MemberInviteEmailResult = z.infer<typeof memberInviteEmailResultSchema>;
+
+/** The sentence staff read beside an email that went but did not arrive, or was marked
+ *  as spam. A delivered email needs none. */
+export const MEMBER_INVITE_EMAIL_RESULT_WORDS: Readonly<Record<Exclude<MemberInviteEmailResult, "delivered">, string>> = {
+  bounced: "This email bounced: the address doesn't take email. Check it with the person.",
+  complained: "This person marked the invitation as spam. Your gym won't email them again.",
+  failed: "This email didn't arrive. Check the address with the person.",
 };
 
 /** Why somebody in the chosen group is not invited by a press. */
@@ -79,7 +94,7 @@ export const memberInviteSkippedSchema = z
 export type MemberInviteSkipped = z.infer<typeof memberInviteSkippedSchema>;
 
 /** Why a gym cannot send invitations at all right now. */
-export const memberInviteBlockedSchema = z.enum(["no_postal_address", "gym_not_on_plan", "gym_archived", "invites_off"]);
+export const memberInviteBlockedSchema = z.enum(["no_postal_address", "gym_not_on_plan", "gym_archived", "invites_off", "sending_stopped"]);
 export type MemberInviteBlocked = z.infer<typeof memberInviteBlockedSchema>;
 
 /** One person's invitation, as their page and the list show it. */
@@ -93,6 +108,8 @@ export const memberListInvitationSchema = z
         state: memberInviteEmailStateSchema,
         reason: memberInviteEmailReasonSchema.nullable(),
         at: z.string(),
+        /** What the email service reported, for an email that went. */
+        result: memberInviteEmailResultSchema.nullable(),
       })
       .strict()
       .nullable(),
@@ -127,6 +144,8 @@ export const MEMBER_INVITE_WORDS = {
   invite_changed: "Your list changed while you were looking, so nobody was invited. Check the number again.",
   no_postal_address: "Add your gym's postal address in Settings first. Every invitation shows it, as the law requires.",
   invites_off: "Invitations can't be sent yet.",
+  sending_stopped:
+    "Your gym's invitations are stopped because too many bounced or one was marked as spam. Contact us to start them again.",
   no_email: "This person has no email address. Add one to invite them.",
   not_on_list: "This person has been taken off your list.",
   in_app: "This person is already a member in the app.",

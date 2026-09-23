@@ -103,10 +103,21 @@ export const gyms = pgTable(
     /** The gym's postal address, printed in the footer of every invitation it sends
      *  (CAN-SPAM, CASL; Part 3 §9.12). A gym without one cannot send invitations. */
     postalAddress: text("postal_address"),
+    /** Set when too many of the gym's invitations bounced or one was marked as spam
+     *  (Part 3 §9.12): it sends none until started again. */
+    invitesStoppedAt: timestamp("invites_stopped_at", { withTimezone: true }),
+    invitesStoppedReason: text("invites_stopped_reason"),
+    /** Where its bounce and complaint counts start; null for its first email. */
+    invitesCountedFrom: timestamp("invites_counted_from", { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [
     check("gyms_postal_address_check", sql`${t.postalAddress} IS NULL OR length(${t.postalAddress}) BETWEEN 1 AND 200`),
+    check(
+      "gyms_invites_stopped_reason_check",
+      sql`${t.invitesStoppedReason} IS NULL OR ${t.invitesStoppedReason} IN ('bounces','complaint')`,
+    ),
+    check("gyms_invites_stopped_check", sql`(${t.invitesStoppedAt} IS NULL) = (${t.invitesStoppedReason} IS NULL)`),
     check(
       "gyms_org_type_check",
       sql`${t.orgType} IN ('gym','studio','personal_trainer','clinic')`,
