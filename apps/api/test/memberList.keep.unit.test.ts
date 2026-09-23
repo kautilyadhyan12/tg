@@ -176,6 +176,16 @@ describe("the worst thing: what is written is checked against §11.2 again", () 
     ["with a year after it", "4111 1111 1111 1111 2024", "[card number removed] 2024"],
     ["with a year before it", "2024 4111 1111 1111 1111", "2024 [card number removed]"],
     ["two of them in one note", "cards 4111111111111111 and 4242424242424242", "cards [card number removed] and [card number removed]"],
+    // A card joined straight on to a phone number that starts with "+" (the re-check of
+    // 3a-iv): only the phone's own first group is exempt, never what follows it.
+    ["after a phone, by a comma", "+447911123456,4111111111111111", "+447911123456,[card number removed]"],
+    ["after a spaced phone", "Mob +44 7911 123456 4111 1111 1111 1111", "Mob +44 7911 123456 [card number removed]"],
+    ["after a country code, by dots", "+44.4111.1111.1111.1111", "+44.[card number removed]"],
+    // A card glued to a "+" (the second re-check): only a group that can start a phone —
+    // a 1–3 digit country code, or a whole 7–15 digit number — is exempt.
+    ["glued to a plus", "+4111111111111111", "+[card number removed]"],
+    ["glued to a word and a plus", "Visa+4111111111111111", "Visa+[card number removed]"],
+    ["grouped after a plus", "+4111 1111 1111 1111", "+[card number removed]"],
   ])("a card written inside a note is taken out of it and the note kept — %s", (_label, cell, expected) => {
     const written = extraForWriting([cell], [kept("notes", "Notes", 0)]);
     expect(written.document["notes"]).toBe(expected);
@@ -203,6 +213,11 @@ describe("the worst thing: what is written is checked against §11.2 again", () 
     // code grouped 4-2-2-2-3 as no card ever is.
     ["membership years that pass Luhn", "renewed 2023 2024 2025 2026"],
     ["a dashed code that passes Luhn", "kit 6955-17-19-43-102"],
+    // International mobiles with no spaces whose digits pass Luhn and start with a 4
+    // (review of 3a-iv, High 3): a card is never written after a "+".
+    ["a German mobile, the international way", "emergency +4915100015838"],
+    ["an Austrian mobile, the international way", "+4366401234563 (mum)"],
+    ["a mobile with a year after it", "+4915100015838 2024"],
   ])("…and an ordinary note is left exactly as the gym wrote it — %s", (_label, cell) => {
     const written = extraForWriting([cell], [kept("notes", "Notes", 0)]);
     expect(written.document["notes"]).toBe(cell);

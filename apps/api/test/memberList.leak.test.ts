@@ -47,6 +47,13 @@ const STATUS_WORD = `F-${randomUUID()}`;
 const MEMBERSHIP_WORD = `G-${randomUUID()}`;
 const PAYMENT_WORD = `P-${randomUUID()}`;
 const OWN_CELL = `Locker-${randomUUID()}`;
+/** What staff TYPE by hand (3a-iv, §11.6): a person, a changed word, and one of the
+ *  gym's own cells, each sent in a request body. */
+const TYPED_NAME = `Typed ${randomUUID()}`;
+const TYPED_ADDRESS = `${randomUUID()}@typed.example`;
+const TYPED_PHONE = "+447911998877";
+const TYPED_WORD = `T-${randomUUID()}`;
+const TYPED_CELL = `Note-${randomUUID()}`;
 
 const csv = (rows: string[][]): Buffer => Buffer.from(rows.map((r) => r.join(",")).join("\r\n"), "utf8");
 
@@ -256,6 +263,33 @@ d("a member file reaches no log (real Postgres, the loudest logger)", () => {
         expect(handRefusal.body).not.toContain(NAME);
         expect(handRefusal.body).not.toContain(ADDRESS);
 
+        // 8. KEEPING THE LIST BY HAND (3a-iv): a person typed in, changed, refused, read
+        //    back, taken off and joined to another record — every value in a request
+        //    body, and the one page whose job is to send them back.
+        const send = (method: "POST" | "PATCH" | "DELETE", path: string, payload?: unknown) =>
+          app.inject({
+            method,
+            url: path,
+            remoteAddress: "10.77.0.4",
+            cookies,
+            ...(payload === undefined ? {} : { headers: { "content-type": "application/json" }, payload: JSON.stringify(payload) }),
+          });
+        const typed = await send("POST", `${list}/entries`, { fullName: TYPED_NAME, email: TYPED_ADDRESS, phone: TYPED_PHONE });
+        expect(typed.statusCode).toBe(201);
+        const typedId = (JSON.parse(typed.body) as { entry: { entryId: string } }).entry.entryId;
+        expect((await send("PATCH", `${list}/entries/${typedId}`, { status: TYPED_WORD, extra: { locker_no: TYPED_CELL } })).statusCode).toBe(200);
+        const cardRefused = await send("PATCH", `${list}/entries/${typedId}`, { status: `${TYPED_WORD} 4111 1111 1111 1111` });
+        expect(cardRefused.statusCode).toBe(400);
+        expect(cardRefused.body).not.toContain(TYPED_WORD);
+        const one = await read(`${list}/entries/${typedId}`);
+        expect(one.body).toContain(TYPED_NAME); // it is SENT, deliberately…
+        expect((await send("DELETE", `${list}/entries/${typedId}`)).statusCode).toBe(200);
+        const [other] = await sql<{ id: string }[]>`
+          SELECT id FROM gym_member_list_entries WHERE gym_id = ${gymId} AND id <> ${typedId} LIMIT 1`;
+        if (other === undefined) throw new Error("no second record to join");
+        expect((await send("POST", `${list}/entries/${typedId}/merge`, { keepEntryId: other.id })).statusCode).toBe(200);
+        expect((await read(`${list}/unlisted?group=never_listed`)).statusCode).toBe(200);
+
         // …AND NONE OF IT IS IN THE LOG. Each sentinel is asserted on its own, so a
         // failure names which field escaped rather than only that something did.
         expect({
@@ -272,6 +306,11 @@ d("a member file reaches no log (real Postgres, the loudest logger)", () => {
           // The base64 body itself: a log line holding it holds every person in the
           // file, one decode away.
           fileBody: written.includes(body.contentBase64.slice(0, 60)),
+          typedName: written.includes(TYPED_NAME),
+          typedAddress: written.includes(TYPED_ADDRESS),
+          typedPhone: written.includes(TYPED_PHONE),
+          typedWord: written.includes(TYPED_WORD),
+          typedCell: written.includes(TYPED_CELL),
         }).toEqual({
           name: false,
           address: false,
@@ -282,6 +321,11 @@ d("a member file reaches no log (real Postgres, the loudest logger)", () => {
           paymentWord: false,
           ownColumnCell: false,
           fileBody: false,
+          typedName: false,
+          typedAddress: false,
+          typedPhone: false,
+          typedWord: false,
+          typedCell: false,
         });
         // THE CAPTURE REALLY WAS LISTENING, and to the REQUESTS — not merely to the
         // server starting up. `written.length > 0` was the first version of this
@@ -292,6 +336,7 @@ d("a member file reaches no log (real Postgres, the loudest logger)", () => {
         // route's own url in it.
         expect(written).toContain('"msg":"request completed"');
         expect(written).toContain(`${uploads}"`);
+        expect(written).toContain(`/member-list/entries/${typedId}"`);
       } finally {
         await app.close();
         await cleanup();

@@ -48,6 +48,17 @@ import {
   memberFileRefusalWords,
   memberFileResultSchema,
   type MemberFileRefusal,
+  MEMBER_LIST_BY_HAND_WORDS,
+  memberListCardTypedWords,
+  memberListEntryDetailSchema,
+  memberListEntryInputSchema,
+  memberListEntryPatchSchema,
+  memberListEntryWrittenSchema,
+  memberListMergeRequestSchema,
+  memberListRemoveUnlistedRequestSchema,
+  memberListRemovedSchema,
+  memberListUnlistedPageSchema,
+  memberListUnlistedQuerySchema,
 } from "../src/memberList.js";
 
 /** Every refusal the schema allows, each variant once. */
@@ -774,5 +785,86 @@ describe("the wider record, kept (3a-v-b's own shapes)", () => {
     delete older["returning"];
     expect(memberListChangeCountsSchema.parse(older).returning).toBe(0);
     expect(memberListChangeCountsSchema.safeParse({ ...counts, returning: -1 }).success).toBe(false);
+  });
+});
+
+describe("keeping the list by hand (3a-iv's own shapes)", () => {
+  const entry = {
+    entryId: "11111111-2222-3333-4444-555555555555",
+    fullName: "Ann Bell",
+    email: "ann@x.example",
+    phone: null,
+    memberNumber: null,
+    status: "Active",
+    membershipType: null,
+    joinedOn: null,
+    endsOn: null,
+    endsOnKind: null,
+    paymentStatus: null,
+    dateOfBirth: null,
+    formerAt: null,
+    source: "typed",
+    inApp: false,
+    extra: [{ key: "locker_no", label: "Locker No", value: "L-1" }],
+    handEdited: ["status", "extra:locker_no"],
+    members: [],
+  };
+  const digest = "a".repeat(64);
+
+  it("Add member takes the typed fields and nothing else", () => {
+    expect(memberListEntryInputSchema.safeParse({ fullName: "Ann", email: "ann@x.example" }).success).toBe(true);
+    expect(memberListEntryInputSchema.safeParse({ email: "ann@x.example", nonsense: 1 }).success).toBe(false);
+    expect(memberListEntryInputSchema.safeParse({ email: "ann@x.example", joinedOn: "03/04/2026" }).success).toBe(false);
+    expect(memberListEntryInputSchema.safeParse({ email: null }).success).toBe(false);
+    expect(memberListEntryInputSchema.safeParse({ extra: { "Locker No": "L-1" } }).success).toBe(false);
+    expect(memberListEntryInputSchema.safeParse({ extra: { locker_no: "x".repeat(501) } }).success).toBe(false);
+    const tooMany = Object.fromEntries(Array.from({ length: 41 }, (_, i) => [`f${String(i)}`, "v"]));
+    expect(memberListEntryInputSchema.safeParse({ extra: tooMany }).success).toBe(false);
+  });
+
+  it("a change needs at least one field, and null empties one", () => {
+    expect(memberListEntryPatchSchema.safeParse({}).success).toBe(false);
+    expect(memberListEntryPatchSchema.safeParse({ phone: null }).success).toBe(true);
+    expect(memberListEntryPatchSchema.safeParse({ fullName: null }).success).toBe(false);
+    // The tick alone changes nothing, so it is not a change.
+    expect(memberListEntryPatchSchema.safeParse({ acknowledgeLeavesList: true }).success).toBe(false);
+    expect(memberListEntryPatchSchema.safeParse({ email: null, acknowledgeLeavesList: true }).success).toBe(true);
+  });
+
+  it("Remove all's answer says whether this press removed them or an earlier one did", () => {
+    expect(memberListRemovedSchema.safeParse({ group: "never_listed", removed: 2, alreadyRemoved: true }).success).toBe(true);
+    expect(memberListRemovedSchema.safeParse({ group: "never_listed", removed: 2 }).success).toBe(false);
+  });
+
+  it("one person's page and a write's answer carry the gym's own columns and the edited field names", () => {
+    expect(memberListEntryDetailSchema.parse(entry).extra).toHaveLength(1);
+    expect(memberListEntryDetailSchema.safeParse({ ...entry, handEdited: ["favourite colour"] }).success).toBe(false);
+    expect(memberListEntryWrittenSchema.safeParse({ outcome: "added", entry, version: 1 }).success).toBe(true);
+    expect(memberListEntryWrittenSchema.safeParse({ outcome: "deleted", entry, version: 1 }).success).toBe(false);
+  });
+
+  it("joining two records names the one kept", () => {
+    expect(memberListMergeRequestSchema.safeParse({ keepEntryId: entry.entryId }).success).toBe(true);
+    expect(memberListMergeRequestSchema.safeParse({ keepEntryId: entry.entryId, acknowledgeLeavesList: true }).success).toBe(true);
+    expect(memberListMergeRequestSchema.safeParse({ keepEntryId: "nope" }).success).toBe(false);
+  });
+
+  it("Remove all names one group, and sends back the version, count and digest it was shown", () => {
+    expect(memberListUnlistedQuerySchema.safeParse({ group: "never_listed" }).success).toBe(true);
+    expect(memberListUnlistedQuerySchema.safeParse({ group: "everyone" }).success).toBe(false);
+    const request = { group: "no_longer_listed", version: 3, expectedCount: 2, digest };
+    expect(memberListRemoveUnlistedRequestSchema.safeParse(request).success).toBe(true);
+    expect(memberListRemoveUnlistedRequestSchema.safeParse({ ...request, digest: "short" }).success).toBe(false);
+    expect(memberListRemoveUnlistedRequestSchema.safeParse({ ...request, expectedCount: -1 }).success).toBe(false);
+    expect(memberListRemoveUnlistedRequestSchema.safeParse({ group: "no_longer_listed", version: 3, digest }).success).toBe(false);
+    expect(
+      memberListUnlistedPageSchema.safeParse({ group: "never_listed", version: 0, total: 0, digest, people: [], cursor: null }).success,
+    ).toBe(true);
+  });
+
+  it("every sentence is a whole sentence, and the card sentence names the field and no digits", () => {
+    for (const words of Object.values(MEMBER_LIST_BY_HAND_WORDS)) expect(words).toMatch(/^[A-Z].*[.!]$/);
+    expect(memberListCardTypedWords("status")).toContain("status");
+    expect(memberListCardTypedWords("status")).not.toMatch(/\d/);
   });
 });

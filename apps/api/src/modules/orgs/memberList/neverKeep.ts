@@ -125,17 +125,25 @@ const isCardNumber = (digits: string): boolean => issuerPrefix(digits) && looksL
  *  6 and a last group of 1–6, with the same separator throughout and 13–19 digits in all
  *  (4-4-4-4, 4-6-5, 4-6-4, 4-4-4-1, 4-4-4-4-3). The candidate must also carry an issuer
  *  prefix and pass Luhn. Linear in the length of the cell; the rest of the text,
- *  separators included, is left exactly as written. */
+ *  separators included, is left exactly as written.
+ *
+ *  A group straight after a "+" that can begin a phone number never begins a card: a
+ *  1–3 digit country code, or a whole 7–15 digit number (E.164 holds at most 15). A
+ *  mobile such as +49151… with no spaces has a card's leading 4 and passes Luhn about
+ *  one time in ten. Only that group is exempt, so a card joined on after the phone, or
+ *  a 4-digit or 16-digit group glued to a "+", is still found. */
 export function withoutCardNumbers(text: string): { text: string; removed: number } {
   if (text.length < 13) return { text, removed: 0 };
   let removed = 0;
-  const out = text.replace(DIGIT_RUN, (run) => {
+  const out = text.replace(DIGIT_RUN, (run: string, at: number) => {
+    const afterPlus = at > 0 && text[at - 1] === "+";
     const groups = [...run.matchAll(DIGIT_GROUP)].map((m) => ({ at: m.index, digits: m[0] }));
     let result = "";
     let copied = 0;
     for (let i = 0; i < groups.length; i++) {
       const first = groups[i];
       if (first === undefined) break;
+      if (i === 0 && afterPlus && (first.digits.length <= 3 || (first.digits.length >= 7 && first.digits.length <= 15))) continue;
       let end = -1;
       if (first.digits.length >= 13 && first.digits.length <= 19) {
         if (isCardNumber(first.digits)) end = i;

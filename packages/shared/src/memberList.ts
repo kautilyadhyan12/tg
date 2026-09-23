@@ -1392,3 +1392,259 @@ export type MemberListEntriesPage = z.infer<typeof memberListEntriesPageSchema>;
 
 export const memberListEntriesResponseSchema = z.object({ page: memberListEntriesPageSchema });
 export type MemberListEntriesResponse = z.infer<typeof memberListEntriesResponseSchema>;
+
+// ── Keeping the list by hand (3a-iv; §9.9, §11.6) ───────────────────────────
+
+/** The longest phone number staff may type, before it is read. */
+export const MEMBER_LIST_MAX_TYPED_PHONE_CHARS = 40;
+
+/** The most app members one person's page lists against one record (a household
+ *  sharing an address is the case with more than one). */
+export const MEMBER_LIST_MAX_ENTRY_MEMBERS = 100;
+
+const extraKeySchema = z.string().regex(new RegExp(`^[a-z0-9_]{1,${String(MEMBER_LIST_MAX_FIELD_KEY_CHARS)}}$`));
+
+const extraInputSchema = z
+  .record(extraKeySchema, z.string().max(MEMBER_LIST_MAX_EXTRA_CHARS))
+  .refine((extra) => Object.keys(extra).length <= MEMBER_LIST_MAX_EXTRA_FIELDS, { message: "too many fields" });
+
+/** "Add member" (§11.6). Every field as staff typed it; the server cleans each one
+ *  by the file's own rules and refuses what it cannot keep. Email or phone is
+ *  required, checked by the server. `extra` is keyed by the gym's own catalogue. */
+export const memberListEntryInputSchema = z
+  .object({
+    fullName: z.string().max(MEMBER_LIST_MAX_NAME_CHARS).optional(),
+    email: z.string().max(MEMBER_LIST_MAX_EMAIL_CHARS).optional(),
+    phone: z.string().max(MEMBER_LIST_MAX_TYPED_PHONE_CHARS).optional(),
+    memberNumber: z.string().max(MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS).optional(),
+    status: z.string().max(MEMBER_LIST_MAX_STATUS_CHARS).optional(),
+    membershipType: z.string().max(MEMBER_LIST_MAX_STATUS_CHARS).optional(),
+    joinedOn: memberListDaySchema.optional(),
+    endsOn: memberListDaySchema.optional(),
+    endsOnKind: z.enum(["ends", "renews"]).optional(),
+    paymentStatus: z.string().max(MEMBER_LIST_MAX_STATUS_CHARS).optional(),
+    dateOfBirth: memberListDaySchema.optional(),
+    extra: extraInputSchema.optional(),
+  })
+  .strict();
+export type MemberListEntryInput = z.infer<typeof memberListEntryInputSchema>;
+
+/** Changing one person. A field left out is left alone; `null` empties it. An
+ *  `extra` key set to "" empties that column. At least one field.
+ *
+ *  `acknowledgeLeavesList` is the tick for a change that would leave app members
+ *  reached by no record (409 `leaves_list`); asked of this request only. */
+export const memberListEntryPatchSchema = z
+  .object({
+    fullName: z.string().max(MEMBER_LIST_MAX_NAME_CHARS).optional(),
+    email: z.string().max(MEMBER_LIST_MAX_EMAIL_CHARS).nullable().optional(),
+    phone: z.string().max(MEMBER_LIST_MAX_TYPED_PHONE_CHARS).nullable().optional(),
+    memberNumber: z.string().max(MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS).nullable().optional(),
+    status: z.string().max(MEMBER_LIST_MAX_STATUS_CHARS).nullable().optional(),
+    membershipType: z.string().max(MEMBER_LIST_MAX_STATUS_CHARS).nullable().optional(),
+    joinedOn: memberListDaySchema.nullable().optional(),
+    endsOn: memberListDaySchema.nullable().optional(),
+    endsOnKind: z.enum(["ends", "renews"]).nullable().optional(),
+    paymentStatus: z.string().max(MEMBER_LIST_MAX_STATUS_CHARS).nullable().optional(),
+    dateOfBirth: memberListDaySchema.nullable().optional(),
+    extra: extraInputSchema.optional(),
+    acknowledgeLeavesList: z.boolean().optional(),
+  })
+  .strict()
+  .refine((patch) => Object.keys(patch).some((key) => key !== "acknowledgeLeavesList"), { message: "nothing to change" });
+export type MemberListEntryPatch = z.infer<typeof memberListEntryPatchSchema>;
+
+/** Join two records of one person (PushPress's merge): the record this is sent
+ *  to is the one NOT kept; `keepEntryId` is the one that stays. The tick is as for a
+ *  change. */
+export const memberListMergeRequestSchema = z
+  .object({ keepEntryId: z.string().uuid(), acknowledgeLeavesList: z.boolean().optional() })
+  .strict();
+export type MemberListMergeRequest = z.infer<typeof memberListMergeRequestSchema>;
+
+/** One of the gym's own columns on one person's page, under the gym's heading. */
+export const memberListEntryFieldValueSchema = z
+  .object({
+    key: z.string().max(MEMBER_LIST_MAX_FIELD_KEY_CHARS),
+    label: z.string().max(MEMBER_LIST_MAX_FIELD_LABEL_CHARS),
+    value: z.string().max(MEMBER_LIST_MAX_EXTRA_CHARS),
+  })
+  .strict();
+export type MemberListEntryFieldValue = z.infer<typeof memberListEntryFieldValueSchema>;
+
+/** An app member this record belongs to, and only what §2.4 lets a gym see:
+ *  when they joined and their visits here during this membership. */
+export const memberListEntryMemberSchema = z
+  .object({
+    userId: z.string().uuid(),
+    displayName: z.string(),
+    joinedAt: z.string(),
+    visits: z.number().int().min(0),
+    lastVisitOn: memberListDaySchema.nullable(),
+  })
+  .strict();
+export type MemberListEntryMember = z.infer<typeof memberListEntryMemberSchema>;
+
+/** One person's page (§11.6): the page row, every one of the gym's own columns in
+ *  the gym's order, which fields staff edited by hand, and the app members this
+ *  record belongs to. */
+export const memberListEntryDetailSchema = memberListEntrySchema.extend({
+  extra: z.array(memberListEntryFieldValueSchema).max(MEMBER_LIST_MAX_EXTRA_FIELDS),
+  handEdited: z.array(memberListEditedFieldSchema).max(MEMBER_LIST_MAX_EDITED_FIELDS),
+  members: z.array(memberListEntryMemberSchema).max(MEMBER_LIST_MAX_ENTRY_MEMBERS),
+});
+export type MemberListEntryDetail = z.infer<typeof memberListEntryDetailSchema>;
+
+export const memberListEntryResponseSchema = z.object({ entry: memberListEntryDetailSchema });
+export type MemberListEntryResponse = z.infer<typeof memberListEntryResponseSchema>;
+
+/** What a write by hand did. `already_on_list` and `already_taken_off` wrote
+ *  nothing; `unchanged` is a change that matched what was stored. */
+export const memberListEntryOutcomeSchema = z.enum([
+  "added",
+  "revived",
+  "already_on_list",
+  "changed",
+  "unchanged",
+  "taken_off",
+  "already_taken_off",
+  "restored",
+  "merged",
+]);
+export type MemberListEntryOutcome = z.infer<typeof memberListEntryOutcomeSchema>;
+
+/** `version` is the list's version after the write, which a later removal names. */
+export const memberListEntryWrittenSchema = z
+  .object({ outcome: memberListEntryOutcomeSchema, entry: memberListEntryDetailSchema, version: z.number().int().min(0) })
+  .strict();
+export type MemberListEntryWritten = z.infer<typeof memberListEntryWrittenSchema>;
+
+export const memberListEntryDeletedSchema = z
+  .object({ deleted: z.literal(true), version: z.number().int().min(0) })
+  .strict();
+export type MemberListEntryDeleted = z.infer<typeof memberListEntryDeletedSchema>;
+
+/** A change that would make this record the same person as another one: 409, with
+ *  the other record's id so a screen can open it, or offer to join the two.
+ *  `former_record` when that other record is a former one. */
+export const memberListAlreadyOnListSchema = z.object({
+  error: z.enum(["already_on_list", "former_record"]),
+  message: z.string(),
+  entryId: z.string().uuid(),
+  requestId: z.string().optional(),
+});
+
+/** A change or a join that would leave app members reached by no current record, so
+ *  they would read "no longer on your list": 409 with how many, never who. */
+export const memberListLeavesListSchema = z.object({
+  error: z.literal("leaves_list"),
+  message: z.string(),
+  members: z.number().int().positive(),
+  requestId: z.string().optional(),
+});
+
+/** Which of the gym's app members a removal is about (§9.7's marks). */
+export const memberListUnlistedGroupSchema = z.enum(["no_longer_listed", "never_listed"]);
+export type MemberListUnlistedGroup = z.infer<typeof memberListUnlistedGroupSchema>;
+
+export const memberListUnlistedQuerySchema = z
+  .object({ group: memberListUnlistedGroupSchema, cursor: z.string().max(512).optional() })
+  .strict();
+export type MemberListUnlistedQuery = z.infer<typeof memberListUnlistedQuerySchema>;
+
+/** One app member in the group: the name, their proved address or null, and when
+ *  they joined. */
+export const memberListUnlistedPersonSchema = z
+  .object({ userId: z.string().uuid(), displayName: z.string(), email: z.string().nullable(), joinedAt: z.string() })
+  .strict();
+export type MemberListUnlistedPerson = z.infer<typeof memberListUnlistedPersonSchema>;
+
+/** The people "Remove all" would remove, a page at a time. `total`, `version` and
+ *  `digest` describe the WHOLE group and are sent back with the removal, which is
+ *  refused unless the group is still exactly this one. */
+export const memberListUnlistedPageSchema = z
+  .object({
+    group: memberListUnlistedGroupSchema,
+    version: z.number().int().min(0),
+    total: z.number().int().min(0),
+    digest: sha256Schema,
+    people: z.array(memberListUnlistedPersonSchema).max(MEMBER_LIST_ENTRIES_PAGE),
+    cursor: z.string().nullable(),
+  })
+  .strict();
+export type MemberListUnlistedPage = z.infer<typeof memberListUnlistedPageSchema>;
+
+export const memberListUnlistedResponseSchema = z.object({ page: memberListUnlistedPageSchema });
+export type MemberListUnlistedResponse = z.infer<typeof memberListUnlistedResponseSchema>;
+
+/** Remove the whole group from the gym in one call (§9.8, §9.9). The three
+ *  numbers are the ones the page showed; the tick is asked of this request only. */
+export const memberListRemoveUnlistedRequestSchema = z
+  .object({
+    group: memberListUnlistedGroupSchema,
+    version: z.number().int().min(0),
+    expectedCount: z.number().int().min(0),
+    digest: sha256Schema,
+    acknowledgeLargeChange: z.boolean().optional(),
+  })
+  .strict();
+export type MemberListRemoveUnlistedRequest = z.infer<typeof memberListRemoveUnlistedRequestSchema>;
+
+/** `alreadyRemoved` answers the same press again (a retry, or the second of two staff):
+ *  these people were removed by an earlier press, and nobody was removed now. */
+export const memberListRemovedSchema = z
+  .object({ group: memberListUnlistedGroupSchema, removed: z.number().int().min(0), alreadyRemoved: z.boolean() })
+  .strict();
+export type MemberListRemoved = z.infer<typeof memberListRemovedSchema>;
+
+export const memberListRemovedResponseSchema = z.object({ removed: memberListRemovedSchema });
+export type MemberListRemovedResponse = z.infer<typeof memberListRemovedResponseSchema>;
+
+/** The removal's two refusals, each with what the server found, so a screen can
+ *  show it before asking again. Counts and a version only, never a person. */
+export const memberListRemoveChangedSchema = z.object({
+  error: z.literal("list_changed"),
+  message: z.string(),
+  version: z.number().int().min(0),
+  total: z.number().int().min(0),
+  digest: sha256Schema,
+  requestId: z.string().optional(),
+});
+
+export const memberListRemoveLargeSchema = z.object({
+  error: z.literal("large_change"),
+  message: z.string(),
+  removing: z.number().int().min(0),
+  of: z.number().int().min(0),
+  requestId: z.string().optional(),
+});
+
+/** The server's sentences for writes by hand, printed as sent (§9.9). */
+export const MEMBER_LIST_BY_HAND_WORDS = {
+  needs_contact: "Add an email address or a phone number. The list needs one of them to tell people apart.",
+  bad_email: "That email address doesn't look right. Check it and try again.",
+  bad_phone: "That phone number doesn't look right. Check it, or start it with + and the country code.",
+  bad_member_number: "That member number can't be stored as it is. Check it and try again.",
+  bad_day: "That date isn't a real day. Check it and try again.",
+  ends_kind_without_day: "Choose the end or renewal date first.",
+  unknown_field: "That column isn't one of your list's columns.",
+  already_on_list: "This person is already on your list.",
+  former_record: "A former record already has these details. Put it back, or join the two records.",
+  leaves_list_change:
+    "This would leave people who use the app off your list, because their details would no longer match. Check the change, then confirm to go ahead.",
+  leaves_list_merge:
+    "This would leave people who use the app off your list, because only the record you are removing has their details. Keep that record instead, or confirm to go ahead.",
+  entry_not_found: "That person could not be found on your list.",
+  member_not_found: "That person isn't a member here.",
+  not_former: "Take this person off the list before deleting their record for good.",
+  no_contact:
+    "We don't have a proven email address or a phone number for this person, so they can't be put on the list from here. Add them by hand instead.",
+  merge_same: "Choose a different record to keep.",
+  list_changed: "Your list or your members changed while you were looking, so nobody was removed. Look at the names again.",
+  large_change:
+    "This would remove more of your members than we do without asking. Check the number, then confirm again to go ahead.",
+} as const;
+
+/** The sentence for a card number typed into a field, naming the field. */
+export const memberListCardTypedWords = (field: string): string =>
+  `The ${field} looks like a payment card number. We never store card details, so nothing was saved.`;

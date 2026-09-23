@@ -17,6 +17,7 @@ import { z } from "zod";
 import type { Sql, TransactionSql } from "postgres";
 import {
   MEMBER_LIST_MAX_EDITED_FIELDS,
+  MEMBER_LIST_MAX_ENTRY_MEMBERS,
   MEMBER_LIST_STATUS_CHIPS_MAX,
   memberListEditedFieldSchema,
   memberListEntrySourceSchema,
@@ -41,6 +42,7 @@ import {
   type MemberListUploadStatus,
   type MemberListUploadSummary,
 } from "@app/shared";
+import type { EntryValues } from "./byHand.js";
 import type { CarriedFields, ListEntry, ListMember } from "./reconcile.js";
 
 type SqlOrTx = Sql | TransactionSql;
@@ -103,6 +105,8 @@ export interface MemberAgainstList extends ListMember {
    *  records, and by NOTHING else: not the marks, not `leaving`, not the guard, not a
    *  chip, not `canBeInvited`. */
   formerEntryId: string | null;
+  /** When this membership began, for a screen naming the person. */
+  joinedAt: Date;
 }
 
 export async function listState(sql: SqlOrTx, gymId: string): Promise<ListState | null> {
@@ -756,7 +760,17 @@ export async function stagedContacts(
  *  would all come off a record the gym believes it has removed. It is the same two
  *  conditions `reconcile` applies in this process by measuring everything against the
  *  current records, which is why one function still answers for both. */
-export async function membersAgainstList(sql: SqlOrTx, gymId: string): Promise<MemberAgainstList[]> {
+export async function membersAgainstList(
+  sql: SqlOrTx,
+  gymId: string,
+  /** Only the members this email or phone could reach (one person's page). Each is
+   *  still matched against the whole list, so the answer is the same one the full
+   *  read gives for them. */
+  reaching?: { email: string | null; phone: string | null },
+): Promise<MemberAgainstList[]> {
+  const narrowed = reaching !== undefined;
+  const reachEmail = reaching?.email ?? null;
+  const reachPhone = reaching?.phone ?? null;
   const rows = await sql<
     {
       user_id: string;
@@ -770,9 +784,11 @@ export async function membersAgainstList(sql: SqlOrTx, gymId: string): Promise<M
       entry_member_number: string | null;
       on_list: boolean;
       former_entry_id: string | null;
+      joined_at: Date;
     }[]
   >`
     SELECT m.user_id,
+           m.joined_at,
            u.display_name,
            (m.complimentary = false
             AND NOT EXISTS (
@@ -837,6 +853,11 @@ export async function membersAgainstList(sql: SqlOrTx, gymId: string): Promise<M
     ) f ON true
     WHERE m.gym_id = ${gymId}
       AND m.removed_at IS NULL
+      -- On the plain columns, so the members are narrowed before the laterals run; an
+      -- unproved address still matches no entry (the lateral asks v.proved).
+      AND (NOT ${narrowed}::boolean
+           OR u.email = ${reachEmail}::citext
+           OR (m.stated_phone_e164 IS NOT NULL AND m.stated_phone_e164 = ${reachPhone}::text))
     ORDER BY m.joined_at, m.user_id`;
   return rows.map((row) => ({
     userId: row.user_id,
@@ -850,6 +871,7 @@ export async function membersAgainstList(sql: SqlOrTx, gymId: string): Promise<M
     entryStatus: row.entry_status,
     entryMemberNumber: row.entry_member_number,
     formerEntryId: row.former_entry_id ?? null,
+    joinedAt: row.joined_at,
   }));
 }
 
@@ -1597,4 +1619,332 @@ export async function entriesPage(
  *  failure is warned about and never fails a confirm that has already been applied. */
 export async function analyseEntries(sql: Sql): Promise<void> {
   await sql`ANALYZE gym_member_list_entries`;
+}
+
+// ── KEEPING THE LIST BY HAND (3a-iv; §9.9, §11.6) ───────────────────────────
+//
+// Every write below runs inside a transaction that holds the gym's row
+// (`lockGym`), the lock the confirm and the join door take, so a typed change,
+// a confirm and a join are applied one at a time and a check made here (is this
+// person already on the list?) stays true until the write that relies on it.
+
+/** One record as staff see and change it. */
+export interface StoredEntry {
+  id: string;
+  identityKey: string;
+  values: EntryValues;
+  handEdited: string[];
+  formerAt: Date | null;
+  source: MemberListEntrySource;
+}
+
+interface StoredEntryRow {
+  id: string;
+  identity_key: string;
+  full_name: string;
+  email: string | null;
+  phone_e164: string | null;
+  member_number: string | null;
+  status: string | null;
+  membership_type: string | null;
+  joined_on: string | null;
+  ends_on: string | null;
+  ends_on_kind: string | null;
+  payment_status: string | null;
+  date_of_birth: string | null;
+  extra: unknown;
+  hand_edited: string[];
+  former_at: Date | null;
+  source: string;
+}
+
+function toStored(row: StoredEntryRow): StoredEntry {
+  const source = memberListEntrySourceSchema.safeParse(row.source);
+  if (!source.success) throw new Error(`member-list entry ${row.id} holds a source that no longer parses`);
+  return {
+    id: row.id,
+    identityKey: row.identity_key,
+    values: {
+      fullName: row.full_name,
+      email: row.email,
+      phone: row.phone_e164,
+      memberNumber: row.member_number,
+      status: row.status,
+      membershipType: row.membership_type,
+      joinedOn: row.joined_on,
+      endsOn: row.ends_on,
+      endsOnKind: parseEndsOnKind(row.ends_on_kind, row.id),
+      paymentStatus: row.payment_status,
+      dateOfBirth: row.date_of_birth,
+      extra: parseExtra(row.extra, row.id),
+    },
+    handEdited: parseHandEdited(row.hand_edited, row.id),
+    formerAt: row.former_at,
+    source: source.data,
+  };
+}
+
+/** One record of this gym's list, current or former. Null when it is not this
+ *  gym's, which the caller answers as not found. */
+export async function entryFor(sql: SqlOrTx, gymId: string, entryId: string): Promise<StoredEntry | null> {
+  const rows = await sql<StoredEntryRow[]>`
+    SELECT id, identity_key, full_name, email::text AS email, phone_e164, member_number,
+           status, membership_type,
+           joined_on::text     AS joined_on,
+           ends_on::text       AS ends_on,
+           ends_on_kind, payment_status,
+           date_of_birth::text AS date_of_birth,
+           extra, hand_edited, former_at, source
+    FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND id = ${entryId}`;
+  const row = rows[0];
+  return row === undefined ? null : toStored(row);
+}
+
+/** The record of this gym that already holds `identityKey`, if any. */
+export async function entryHolding(
+  sql: SqlOrTx,
+  gymId: string,
+  identityKey: string,
+): Promise<{ id: string; former: boolean } | null> {
+  const rows = await sql<{ id: string; former: boolean }[]>`
+    SELECT id, (former_at IS NOT NULL) AS former
+    FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND identity_key = ${identityKey}`;
+  return rows[0] ?? null;
+}
+
+/** A person typed in, or put on the list from their membership. The caller has
+ *  already checked under the gym's lock that nobody holds the key. */
+export async function insertEntry(
+  tx: TransactionSql,
+  gymId: string,
+  values: EntryValues,
+  identityKey: string,
+  source: MemberListEntrySource,
+): Promise<string> {
+  const rows = await tx<{ id: string }[]>`
+    INSERT INTO gym_member_list_entries
+      (gym_id, full_name, email, phone_e164, member_number, status, membership_type,
+       joined_on, ends_on, ends_on_kind, payment_status, date_of_birth, extra,
+       identity_key, source)
+    VALUES (${gymId}, ${values.fullName}, ${values.email}, ${values.phone}, ${values.memberNumber},
+            ${values.status}, ${values.membershipType}, ${values.joinedOn}::date, ${values.endsOn}::date,
+            ${values.endsOn === null ? null : values.endsOnKind}, ${values.paymentStatus},
+            ${values.dateOfBirth}::date, ${tx.json(values.extra)}, ${identityKey}, ${source})
+    RETURNING id`;
+  const id = rows[0]?.id;
+  if (id === undefined) throw new Error("inserting a member-list entry returned no row");
+  return id;
+}
+
+/** One record written whole: every field, its key, its hand-edit marks and whether
+ *  it is former. */
+export async function writeEntry(
+  tx: TransactionSql,
+  gymId: string,
+  entryId: string,
+  write: { values: EntryValues; identityKey: string; handEdited: readonly string[]; formerAt: Date | null },
+): Promise<void> {
+  const { values } = write;
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_member_list_entries
+    SET full_name       = ${values.fullName},
+        email           = ${values.email},
+        phone_e164      = ${values.phone},
+        member_number   = ${values.memberNumber},
+        status          = ${values.status},
+        membership_type = ${values.membershipType},
+        joined_on       = ${values.joinedOn}::date,
+        ends_on         = ${values.endsOn}::date,
+        ends_on_kind    = ${values.endsOn === null ? null : values.endsOnKind},
+        payment_status  = ${values.paymentStatus},
+        date_of_birth   = ${values.dateOfBirth}::date,
+        extra           = ${tx.json(values.extra)},
+        identity_key    = ${write.identityKey},
+        hand_edited     = ${[...write.handEdited]}::text[],
+        former_at       = ${write.formerAt}
+    WHERE gym_id = ${gymId} AND id = ${entryId}
+    RETURNING id`;
+  if (rows.length !== 1) throw new Error(`writing member-list entry ${entryId} moved ${String(rows.length)} rows`);
+}
+
+/** Take a record off the list (a date) or put it back (null). False when it was
+ *  already in that state. */
+export async function setEntryFormer(tx: TransactionSql, gymId: string, entryId: string, at: Date | null): Promise<boolean> {
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_member_list_entries
+    SET former_at = ${at}
+    WHERE gym_id = ${gymId} AND id = ${entryId}
+      AND ((${at}::timestamptz IS NULL AND former_at IS NOT NULL)
+           OR (${at}::timestamptz IS NOT NULL AND former_at IS NULL))
+    RETURNING id`;
+  return rows.length === 1;
+}
+
+/** A record deleted for good: a former one deleted, or the one not kept when two
+ *  are joined. No table points at a record yet; the last test in
+ *  `memberList.byHand.routes.test.ts` fails the day a foreign key does. */
+export async function deleteEntry(tx: TransactionSql, gymId: string, entryId: string): Promise<boolean> {
+  const rows = await tx<{ id: string }[]>`
+    DELETE FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND id = ${entryId}
+    RETURNING id`;
+  return rows.length === 1;
+}
+
+/** The list moved by hand: its version up by one, and the list created for a gym
+ *  whose first change is a typed person. */
+export async function bumpListVersion(tx: TransactionSql, gymId: string): Promise<number> {
+  const rows = await tx<{ version: number }[]>`
+    INSERT INTO gym_member_lists (gym_id, version)
+    VALUES (${gymId}, 1)
+    ON CONFLICT (gym_id) DO UPDATE SET version = gym_member_lists.version + 1
+    RETURNING version`;
+  const version = rows[0]?.version;
+  if (version === undefined) throw new Error("moving a member list on by hand returned no row");
+  return version;
+}
+
+/** §9.7's stamp for a change by hand: every live member a current record reaches by
+ *  these contacts (their proved email or the phone they gave), so a member whose
+ *  record is later taken off reads "no longer listed" and not "never listed". */
+export async function stampListedByContact(
+  tx: TransactionSql,
+  gymId: string,
+  contacts: readonly { email: string | null; phone: string | null }[],
+  at: Date,
+): Promise<number> {
+  const emails = contacts.flatMap((c) => (c.email === null ? [] : [c.email]));
+  const phones = contacts.flatMap((c) => (c.phone === null ? [] : [c.phone]));
+  if (emails.length === 0 && phones.length === 0) return 0;
+  const rows = await tx<{ user_id: string }[]>`
+    UPDATE gym_members m
+    SET last_listed_at = ${at}
+    FROM users u
+    WHERE u.id = m.user_id
+      AND m.gym_id = ${gymId}
+      AND m.removed_at IS NULL
+      AND ((u.email = ANY(${emails}::citext[])
+            AND EXISTS (
+              SELECT 1 FROM one_time_tokens t
+              WHERE t.user_id = m.user_id AND t.purpose = 'verify_email' AND t.used_at IS NOT NULL))
+           OR (m.stated_phone_e164 IS NOT NULL AND m.stated_phone_e164 = ANY(${phones}::text[])))
+    RETURNING m.user_id`;
+  return rows.length;
+}
+
+export interface MemberVisitRow {
+  userId: string;
+  displayName: string;
+  joinedAt: Date;
+  visits: number;
+  lastVisitOn: string | null;
+}
+
+/** When each of these live members joined, and their visits here since (§2.4: a gym
+ *  sees attendance, and only during the membership). */
+export async function memberVisits(sql: SqlOrTx, gymId: string, userIds: readonly string[]): Promise<MemberVisitRow[]> {
+  if (userIds.length === 0) return [];
+  const rows = await sql<{ user_id: string; display_name: string; joined_at: Date; visits: number; last_visit_on: string | null }[]>`
+    SELECT m.user_id, u.display_name, m.joined_at,
+           (SELECT count(*)::int FROM gym_attendance a
+             WHERE a.gym_id = m.gym_id AND a.user_id = m.user_id AND a.marked_at >= m.joined_at) AS visits,
+           (SELECT max(a.day)::text FROM gym_attendance a
+             WHERE a.gym_id = m.gym_id AND a.user_id = m.user_id AND a.marked_at >= m.joined_at) AS last_visit_on
+    FROM gym_members m
+    JOIN users u ON u.id = m.user_id
+    WHERE m.gym_id = ${gymId} AND m.user_id = ANY(${[...userIds]}::uuid[]) AND m.removed_at IS NULL
+    ORDER BY m.joined_at, m.user_id
+    LIMIT ${MEMBER_LIST_MAX_ENTRY_MEMBERS}`;
+  return rows.map((row) => ({
+    userId: row.user_id,
+    displayName: row.display_name,
+    joinedAt: row.joined_at,
+    visits: row.visits,
+    lastVisitOn: row.last_visit_on,
+  }));
+}
+
+/** A live member of this gym as the list would hold them: their name, their proved
+ *  email or null, and the phone they gave the gym. Null when they are not a live
+ *  member here. */
+export async function memberContact(
+  sql: SqlOrTx,
+  gymId: string,
+  userId: string,
+): Promise<{ displayName: string; email: string | null; phone: string | null } | null> {
+  const rows = await sql<{ display_name: string; email: string | null; stated_phone_e164: string | null }[]>`
+    SELECT u.display_name,
+           CASE
+             WHEN EXISTS (
+               SELECT 1 FROM one_time_tokens t
+               WHERE t.user_id = m.user_id AND t.purpose = 'verify_email' AND t.used_at IS NOT NULL)
+             THEN u.email::text
+             ELSE NULL
+           END AS email,
+           m.stated_phone_e164
+    FROM gym_members m
+    JOIN users u ON u.id = m.user_id
+    WHERE m.gym_id = ${gymId} AND m.user_id = ${userId} AND m.removed_at IS NULL`;
+  const row = rows[0];
+  return row === undefined ? null : { displayName: row.display_name, email: row.email, phone: row.stated_phone_e164 };
+}
+
+/** "REMOVE ALL": the memberships closed, in one statement — `removeMember`'s own
+ *  write for a set. The owner, staff and free places are refused here as well as by
+ *  the rule that chose the set. */
+export async function closeMemberships(
+  tx: TransactionSql,
+  gymId: string,
+  userIds: readonly string[],
+  at: Date,
+): Promise<{ membershipId: string; userId: string }[]> {
+  if (userIds.length === 0) return [];
+  const rows = await tx<{ id: string; user_id: string }[]>`
+    UPDATE gym_members m
+    SET removed_at = ${at}
+    WHERE m.gym_id = ${gymId}
+      AND m.user_id = ANY(${[...userIds]}::uuid[])
+      AND m.removed_at IS NULL
+      AND m.complimentary = false
+      AND NOT EXISTS (SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)
+    RETURNING m.id, m.user_id`;
+  return rows.map((row) => ({ membershipId: row.id, userId: row.user_id }));
+}
+
+/** How many people an earlier "Remove all" of this exact set removed, since `since`, or
+ *  null when there was none: the summary audit row keeps the set's digest. */
+export async function unlistedRemovalByDigest(
+  tx: TransactionSql,
+  gymId: string,
+  group: string,
+  digest: string,
+  since: Date,
+): Promise<number | null> {
+  const rows = await tx<{ removed: string | null }[]>`
+    SELECT meta->>'removed' AS removed
+    FROM audit_log
+    WHERE gym_id = ${gymId} AND at >= ${since}
+      AND action = 'org.member_list_unlisted_removed'
+      AND meta->>'group' = ${group} AND meta->>'digest' = ${digest}
+    ORDER BY at DESC
+    LIMIT 1`;
+  const removed = rows[0]?.removed;
+  return removed === undefined || removed === null ? null : Number(removed);
+}
+
+/** One `org.member_removed` audit row per closed membership, as a single removal
+ *  writes, in one statement. */
+export async function insertRemovalAudits(
+  tx: TransactionSql,
+  input: { actorUserId: string; gymId: string; group: string; removed: readonly { membershipId: string; userId: string }[] },
+): Promise<void> {
+  if (input.removed.length === 0) return;
+  const payload = input.removed.map((r) => ({ membership_id: r.membershipId, user_id: r.userId }));
+  await tx`
+    INSERT INTO audit_log (actor_user_id, gym_id, action, target_type, target_id, meta)
+    SELECT ${input.actorUserId}, ${input.gymId}, 'org.member_removed', 'gym_member', r.membership_id,
+           jsonb_build_object('removedUserId', r.user_id, 'via', 'remove_unlisted', 'group', ${input.group}::text)
+    FROM jsonb_to_recordset(${tx.json(payload)}) AS r(membership_id text, user_id text)`;
 }
