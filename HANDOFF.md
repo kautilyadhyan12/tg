@@ -14,7 +14,7 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Not this job's**: two class tests failed here on a Wednesday evening, London time; Folder B's #101 (taken in) fixed them, 26/26 at 20:05 London. `memberInvites.results.test.ts`'s "two workers at once" fails now and then on CI only (ROADMAP 10).
 - **Cost** (mains, 2,592 MHz): Join 58–69 ms median at 20×200 and at the cap; what is waiting 10–13 ms; Remove all of 1,000 with withdrawals 311 ms median (one Docker-disk stall at 1,168 ms).
 - **Kd clicked through it and passed it** (*"all passed"*): the email's link signed out, sign-in, "You're invited" before setup with Join and a lapsed gym's No thanks, the set-up account's declined invitation joined from Settings → Gym, and `/invitations`' wall.
-- **Open**: review round one. Next in Folder A: 3b-ii-b.
+- **Open**: review round one (`reviews/3b-ii-a-1-review.md`, not started). PR #102's api check fails on 3b-i-b's "two workers at once" test every CI run and never locally (ROADMAP 10); it blocks the merge. Next step: make that test say which report stays pending and why, run it on CI, fix the cause. The records commit `ea2e91e` is local only, unpushed on purpose (a records-only push skips the code checks). Next in Folder A: 3b-ii-b.
 
 ## 2026-09-23 · Stage 3 item 2a (Folder B): the price list, the 200-member trial, no individual trial, one free scan
 
