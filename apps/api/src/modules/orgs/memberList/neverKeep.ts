@@ -127,20 +127,22 @@ const isCardNumber = (digits: string): boolean => issuerPrefix(digits) && looksL
  *  prefix and pass Luhn. Linear in the length of the cell; the rest of the text,
  *  separators included, is left exactly as written.
  *
- *  A run straight after a "+" is an international phone number and is left alone: a
- *  card is never written that way, and a mobile such as +49 151… with no spaces has
- *  a card's leading 4 and passes Luhn about one time in ten. */
+ *  The group straight after a "+" begins an international phone number and never
+ *  begins a card: a card is never written that way, and a mobile such as +49151…
+ *  with no spaces has a card's leading 4 and passes Luhn about one time in ten. Only
+ *  that group is exempt, so a card joined on after the phone is still found. */
 export function withoutCardNumbers(text: string): { text: string; removed: number } {
   if (text.length < 13) return { text, removed: 0 };
   let removed = 0;
   const out = text.replace(DIGIT_RUN, (run: string, at: number) => {
-    if (at > 0 && text[at - 1] === "+") return run;
+    const afterPlus = at > 0 && text[at - 1] === "+";
     const groups = [...run.matchAll(DIGIT_GROUP)].map((m) => ({ at: m.index, digits: m[0] }));
     let result = "";
     let copied = 0;
     for (let i = 0; i < groups.length; i++) {
       const first = groups[i];
       if (first === undefined) break;
+      if (i === 0 && afterPlus) continue;
       let end = -1;
       if (first.digits.length >= 13 && first.digits.length <= 19) {
         if (isCardNumber(first.digits)) end = i;

@@ -558,10 +558,13 @@ export async function removeUnlisted(
     const ids = people.map((person) => person.userId);
     const digest = unlistedDigest(gymId, input.group, ids);
     if (version !== input.version || ids.length !== input.expectedCount || digest !== input.digest) {
-      // The same press again (a retry, or the second of two staff): those people were
-      // removed by it, so say so rather than "nobody was removed".
-      const earlier = await repo.unlistedRemovalByDigest(tx, gymId, input.group, input.digest, new Date(at.getTime() - REMOVAL_REPLAY_MS));
-      if (earlier !== null) return { kind: "removed", group: input.group, removed: earlier, alreadyRemoved: true };
+      // The same press again (a retry, or the second of two staff): the set shown is gone
+      // because that press removed it, so say so rather than "nobody was removed". Only
+      // when the set really moved: the same set with a moved version is a list_changed.
+      if (digest !== input.digest) {
+        const earlier = await repo.unlistedRemovalByDigest(tx, gymId, input.group, input.digest, new Date(at.getTime() - REMOVAL_REPLAY_MS));
+        if (earlier !== null) return { kind: "removed", group: input.group, removed: earlier, alreadyRemoved: true };
+      }
       return { kind: "list_changed", version, total: ids.length, digest };
     }
     const seats = members.filter((member) => member.seatCounted).length;

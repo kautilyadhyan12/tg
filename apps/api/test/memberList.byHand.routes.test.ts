@@ -455,6 +455,32 @@ d("member list: keeping it by hand (real Postgres)", () => {
   );
 
   it(
+    "the same people removed, let back in and shown again are never answered 'already removed' when only the list's version moved",
+    async () => {
+      const owner = await makeUser("back-owner");
+      const org = await makeOrg(owner, "Back Gym");
+      const gym = org.org.id;
+      await typeIn(gym, owner, { fullName: "Listed", email: "mhand-t-back-listed@example.com" });
+      const x = await member("back-x", org, owner);
+      const first = await unlisted(gym, owner, "never_listed");
+      expect((await removeAll(gym, owner, first)).statusCode).toBe(200);
+
+      // Let back in the same day, and shown again: the same set, so the same digest.
+      await join(x, org, owner);
+      const again = await unlisted(gym, owner, "never_listed");
+      expect(again.digest).toBe(first.digest);
+      // A colleague types a walk-in, which moves the version before the press.
+      await typeIn(gym, owner, { fullName: "Walk In", email: "mhand-t-back-walkin@example.com" });
+
+      const press = await removeAll(gym, owner, again);
+      expect(press.statusCode).toBe(409);
+      expect(errorOf(press).error).toBe("list_changed");
+      expect(await liveMembers(gym)).toContain(x.userId);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "the removal's own write refuses the owner, staff and free places even if it is handed them",
     async () => {
       const owner = await makeUser("guard-owner");

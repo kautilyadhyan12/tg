@@ -134,6 +134,7 @@ describe("a page of the group", () => {
 const GB: TypedContext = { country: "GB", fields: new Map([["locker_no", "Locker No"], ["notes", "Notes"]]) };
 const US: TypedContext = { country: "US", fields: new Map() };
 const IN: TypedContext = { country: "IN", fields: new Map() };
+const DE: TypedContext = { country: "DE", fields: new Map() };
 
 const typed = (patch: MemberListEntryPatch, context: TypedContext = GB, stored: EntryValues = EMPTY_VALUES) =>
   applyTyped(stored, patch, context);
@@ -177,6 +178,24 @@ describe("a typed phone number, in each market's own way of writing it", () => {
     [GB, "+4366401234571"],
   ])("%# the mobile %s is kept, never read as a card", (context, raw) => {
     expect(valuesOf({ phone: raw }, context).phone).toBe(raw);
+  });
+
+  // The same kind of number written with "00" for the "+", Europe's and India's usual way,
+  // whose digits pass the card check digit (the re-check of round one).
+  it.each([
+    [DE, "0049 151 00000400", "+4915100000400"],
+    [GB, "0044 7911 000001", "+447911000001"],
+    [IN, "0091 98000 00029", "+919800000029"],
+  ])("%# %s is read as the phone %s, never as a card", (context, raw, e164) => {
+    expect(valuesOf({ phone: raw }, context).phone).toBe(e164);
+  });
+
+  // A published 13-digit Visa test number is also a valid German landline in form, so a
+  // German gym reading the phone first would keep it; the prefix-aware card rule is
+  // asked before the phone is read.
+  it("a 13-digit test card typed into a German gym's phone box is refused", () => {
+    expect(refusalOf({ phone: "4222222222222" }, DE)).toBe("card_number");
+    expect(refusalOf({ phone: "4222 2222 2222 2" }, DE)).toBe("card_number");
   });
 });
 
