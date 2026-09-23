@@ -214,7 +214,7 @@ function throwOnFailure(outcome: repo.ClassWriteOutcome): void {
       throw new OrgsError(
         409,
         "repeat_clashes",
-        "That class already repeats at this time on one of those days. Stop the old repeat first, or pick another time.",
+        "This class already has a time slot at this time on one of those days. Cancel that time slot first, or pick another time.",
       );
     case "too_many":
       throw new OrgsError(
@@ -466,7 +466,7 @@ async function writeDay(
       throw new OrgsError(
         409,
         "class_day_cancelled",
-        "This day is cancelled. Put it back on first, then change it.",
+        "This class is cancelled. Un-cancel it first, then edit it.",
       );
     case "time_passed":
       throw new OrgsError(

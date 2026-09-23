@@ -4,6 +4,16 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-23 · 17b-ii-w (Folder B): the Classes screen in a gym's own words
+
+- **Screen-and-wording job, Opus high, no review** (CLAUDE.md §2). Branch `classes-gym-words`. Picture first: https://claude.ai/artifact/3Qtff3uMSo9yJCrSY46LZ4, four boards; Kd said *"go"* (RULINGS 2026-09-23, the words line).
+- **What changed on screen**: time slot · Cancel (a time slot) · Archive / Restore (a class) · Edit · Cancel class · Un-cancel (one date) · the Calendar tab · "Today"; times as ranges ("18:00–18:45", past midnight read on the next day's clock); a slot's dates as "From 23 Sep 2026 · Next: Wed 23 Sep, …" or "Ended …", no counts; forms close with Close; a class's defaults only in its Edit form ("Default length / class size / coach"); dates never break mid-date on a phone (no-break spaces).
+- **Server**: two messages reworded (`repeat_clashes`, `class_day_cancelled`), codes unchanged; their route tests now pin the words. Nothing else on the server.
+- **The worst thing, first test** (red before, green after): a button whose word does something else — Close, the X and Keep it send nothing; Archive, a time slot's Cancel and Cancel class each ask first; no form offers a button named Cancel.
+- **Proven**: web Classes tests 101/101 · the whole web suite 2,449 passed before the no-break-space fix, which touched only `classesView` and its test (`poseAssets.contract` fails locally on Node 24 only, as before) · web eslint 0 · api tsc 0 · api eslint 0 · the two class route files on `aihg_b` 31/31.
+- **Looked at in headless Edge** at 1280 and 400 wide on a throwaway local gym ("Northside Fitness", `wordsdemo…@example.com`): list, both questions, all four forms, the Calendar, Un-cancel, the phone.
+- **Open**: a slot's "Next:" dates start at the gym's today, so a class earlier today is listed after it ran — server, pre-existing, added to 17b-ii-b-ii. Kd's click-through, then "merge" and the ROADMAP tick.
+
 ## 2026-09-23 · 17b-ii-b-i (Folder B): the week view, and one day changed or cancelled
 
 - **17b-ii-b was split first** (week view, one-day changes, "this day and later" and the bulk edit is more than one terminal): **17b-ii-b-i** here, **17b-ii-b-ii** next. Risky job, Opus xhigh. Branch `class-week-view`. Kd said go to the plan; he decided nothing new, so no RULINGS line.

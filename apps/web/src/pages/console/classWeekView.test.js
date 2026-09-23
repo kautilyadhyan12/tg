@@ -1,4 +1,4 @@
-// THE WEEK VIEW'S RULES, ON THEIR OWN. ROADMAP 17b-ii-b-i.
+// THE CALENDAR TAB'S RULES, ON THEIR OWN. ROADMAP 17b-ii-b-i, 17b-ii-w.
 import { describe, expect, it } from 'vitest';
 import {
   canGoForward,
@@ -7,10 +7,11 @@ import {
   dayProblem,
   dayRequest,
   filterWeek,
+  peopleLine,
   sessionName,
-  sessionPeopleLine,
   sessionTag,
   sessionTimeLine,
+  sessionWhenLine,
   weekColumns,
   weekFilterChoices,
   weekTitle,
@@ -66,18 +67,19 @@ describe('the week s title and days', () => {
 });
 
 describe('one date, in words', () => {
-  it('says the time, the length, the places and the coach', () => {
-    expect(sessionTimeLine(s({}), '24h')).toBe('18:00 · 45 min');
-    expect(sessionTimeLine(s({}), '12h')).toBe('6:00 PM · 45 min');
-    expect(sessionPeopleLine(s({}))).toBe('12 places · Dana Okafor');
-    expect(sessionPeopleLine(s({ places: null, coachUserId: null, coachName: null }))).toBe('No limit');
-    expect(sessionPeopleLine(s({ coachName: null }))).toBe("12 places · Coach not on this gym's staff");
+  it('says the time range, the places and the coach', () => {
+    expect(sessionTimeLine(s({}), '24h')).toBe('18:00–18:45');
+    expect(sessionTimeLine(s({}), '12h')).toBe('6:00 PM–6:45 PM');
+    expect(sessionWhenLine(s({}), '24h')).toBe('Tue 22 Sep · 18:00–18:45');
+    expect(peopleLine(s({}))).toBe('12 places · Dana Okafor');
+    expect(peopleLine(s({ places: null, coachUserId: null, coachName: null }))).toBe('No limit');
+    expect(peopleLine(s({ coachName: null }))).toBe("12 places · Coach not on this gym's staff");
     expect(sessionName(s({}), '24h')).toBe('Spin on Tue 22 Sep 2026 at 18:00');
   });
 
   it('a cancelled date says Cancelled even if it was also changed; a changed one says so', () => {
     expect(sessionTag(s({}))).toBe('');
-    expect(sessionTag(s({ changedAlone: true }))).toBe('Changed for this day');
+    expect(sessionTag(s({ changedAlone: true }))).toBe('Changed');
     expect(sessionTag(s({ status: 'cancelled' }))).toBe('Cancelled');
     expect(sessionTag(s({ status: 'cancelled', changedAlone: true }))).toBe('Cancelled');
   });
@@ -125,7 +127,7 @@ describe('the filters', () => {
   });
 });
 
-describe('change this day', () => {
+describe('editing one date', () => {
   it('starts from the date as it runs now', () => {
     expect(dayDraft(s({ places: null }))).toMatchObject({
       time: '18:00',
@@ -143,10 +145,10 @@ describe('change this day', () => {
   it('refuses a missing start time, midnight at the end of a day, and the repeat s own bounds', () => {
     const ok = dayDraft(s({}));
     expect(dayProblem(ok)).toBeNull();
-    expect(dayProblem({ ...ok, time: '' })).toBe('What time does it start?');
-    expect(dayProblem({ ...ok, time: '24:00' })).toBe('What time does it start?');
-    expect(dayProblem({ ...ok, minutes: '4' })).toMatch(/How long/);
-    expect(dayProblem({ ...ok, places: '0' })).toMatch(/How many people/);
+    expect(dayProblem({ ...ok, time: '' })).toBe('Pick a start time.');
+    expect(dayProblem({ ...ok, time: '24:00' })).toBe('Pick a start time.');
+    expect(dayProblem({ ...ok, minutes: '4' })).toBe('Length must be 5 to 600 minutes.');
+    expect(dayProblem({ ...ok, places: '0' })).toBe('Class size must be 1 to 500, or tick No limit.');
     expect(dayRequest({ ...ok, time: '' })).toBeNull();
   });
 });

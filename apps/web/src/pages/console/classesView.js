@@ -86,129 +86,65 @@ export function weekdayLine(weekdays) {
   return `${shorts.slice(0, -1).join(', ')} & ${shorts[shorts.length - 1]}`;
 }
 
-/** ONE REPEAT, IN ONE LINE — `Mon & Wed at 18:30`, on the clock the GYM chose.
- *  Empty when either half is missing, so a caller renders nothing rather than
- *  `at 18:30` with no days in front of it. */
+/** When a class runs, as a calendar prints it — `18:00–18:45`, on the gym's
+ *  clock. A class that runs past midnight ends on the next day's clock
+ *  (`23:30–00:30`). Just the start when the length is missing. */
+export function timeRange(startMinute, minutes, clockFormat) {
+  const start = clockLabel(startMinute, clockFormat);
+  if (start === '' || startMinute === 1440) return '';
+  if (!Number.isInteger(minutes) || minutes < 1) return start;
+  return `${start}–${clockLabel((startMinute + minutes) % 1440, clockFormat)}`;
+}
+
+/** A time slot in one line — `Mon & Wed · 18:30–19:15`. Empty when the days or
+ *  the time are missing. */
 export function repeatLine(schedule, clockFormat) {
   const days = weekdayLine(schedule?.weekdays);
-  const time = clockLabel(schedule?.startMinute, clockFormat);
+  const time = timeRange(schedule?.startMinute, schedule?.minutes, clockFormat);
   if (days === '' || time === '') return '';
-  return `${days} at ${time}`;
+  return `${days} · ${time}`;
 }
 
-/** WHEN IT RUNS BETWEEN, AND HOW MANY DATES — one line, because the two halves
- *  cannot be written independently without saying something false.
- *
- *  **THE COUNT IS PRINTED ONLY WHEN THE SERVER SAYS IT IS THE WHOLE TRUTH**
- *  (`datesComplete`), and that is the fix for the SECOND time this sentence lied.
- *
- *  Kd struck it on the open-ended branch: "16 dates on the calendar" is the size
- *  of the eight-week window, not how many times the class runs, so a gym read
- *  its ongoing class as stopping after sixteen. The bounded branch kept the
- *  count on the argument that "there it is true: the window closes before the
- *  horizon does" — **which holds only while the end date is inside 56 days.**
- *  Round one drove it: a repeat from 22 Sep 2026 to 22 Sep 2027 runs on 52
- *  Mondays and rendered as "9 dates on the calendar", and the test at this
- *  file's own line 100 asserted such a case as CORRECT. A table built from the
- *  code's own assumption proves only that the code matches itself.
- *
- *  **So the page no longer works it out at all.** `datesComplete` is the
- *  server's answer, computed against the horizon and the gym's own today, which
- *  are both the server's to know. A repeat that ends beyond the window shows its
- *  dates and no number — saying nothing beats saying something false.
- *
- *  **`finished` is the same division of labour** (round one, Low-1): nothing
- *  ends a repeat whose end date passes, so it stayed on screen reading "nothing
- *  on the calendar **yet**" about something that finished months ago. "Today" is
- *  the gym's, so the server answers that too. */
-export function repeatFactsLine(schedule) {
-  const from = closureDateLabel(schedule?.startsOn ?? '');
-  if (from === '') return '';
-  const until = schedule?.endsOn;
-  const openEnded = typeof until !== 'string' || until === '';
-  const window = openEnded ? `From ${from}` : `${from} to ${closureDateLabel(until)}`;
-  if (schedule?.finished === true) return `${window} · finished`;
-  const ahead = Number.isInteger(schedule?.sessionsAhead) ? schedule.sessionsAhead : 0;
-  if (ahead === 0) return `${window} · nothing on the calendar yet.`;
-  if (schedule?.datesComplete !== true) return openEnded ? `${window} · ongoing` : window;
-  return `${window} · ${ahead === 1 ? '1 date' : `${String(ahead)} dates`} on the calendar.`;
+/** Keeps a date on one line: a phone wraps between dates, never inside one. */
+const whole = (text) => text.replaceAll(' ', '\u00a0');
+
+/** `22 Sep 2026`. */
+function longDate(day) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day ?? '');
+  if (m === null) return '';
+  return `${shortDate(day)} ${m[1]}`;
 }
 
-/** THE NEXT FEW DATES, FROM THE CALENDAR THE SERVER WROTE — never worked out
- *  here.
- *
- *  **That is the point of the line, not an implementation detail.** A screen
- *  that recomputed "Mondays from today" would always look right, including on
- *  the day the fill had not run, a day was cancelled, or the repeat had ended —
- *  and the gym would be reading a promise nothing books against. So an empty
- *  list says so in words a person can act on.
- *
- *  **`+N more` IS THE SAME NUMBER THE LINE ABOVE STOPPED PRINTING, AND IT IS
- *  GATED ON THE SAME ANSWER** — the re-check's one open High, and the third
- *  time `sessionsAhead` was shown to a person as if it were how many times the
- *  class runs. Kd struck "16 dates on the calendar"; round one found the same
- *  falsehood on the bounded branch; this is what was left, one line down and
- *  spelled as a delta:
- *
- *      From Tue 22 Sep 2026 · ongoing
- *      Next: … · +4 more            ← the class runs 52 times
- *
- *  "ongoing" and "+4 more" on consecutive lines is worse than either alone. So
- *  the count is printed only when the server says every date is written
- *  (`datesComplete`), and otherwise the line says **more to come** — which is
- *  true of a repeat with no end and of one that ends past the window, and does
- *  not pretend to know a number.
- *
- *  `finished` cannot reach the `more to come` branch: a repeat that has ended is
- *  necessarily inside the window, so `datesComplete` is true for it. */
-export function nextDatesLine(schedule) {
-  // **"YET" IS LOW-1's WORD, AND IT SURVIVED IN THIS FUNCTION** — raised by the
-  // closing re-check as a line for 17b-ii rather than a finding, and fixed here
-  // instead because it is the same defect in the same shape: a repeat that has
-  // run its course read "· finished" on one line and "No dates yet." on the
-  // next. "Yet" is what you say about something that has not started.
-  //
-  // It is the CLASS, not the case: Low-1 fixed `repeatFactsLine` and left its
-  // twin standing, which is how a word gets corrected twice and is still wrong
-  // somewhere (:5348 rule 5).
-  const ended = schedule?.finished === true;
-  const dates = Array.isArray(schedule?.nextDates) ? schedule.nextDates : [];
-  if (dates.length === 0) return ended ? 'No more dates.' : 'No dates yet.';
-  const labels = dates.map((d) => closureDateLabel(d)).filter((d) => d !== '');
-  if (labels.length === 0) return ended ? 'No more dates.' : 'No dates yet.';
-  const shown = `Next: ${labels.join(' · ')}`;
-  if (schedule?.datesComplete !== true) return `${shown} · more to come`;
-  const ahead = Number.isInteger(schedule?.sessionsAhead) ? schedule.sessionsAhead : labels.length;
-  const more = ahead - labels.length;
-  return more > 0 ? `${shown} · +${String(more)} more` : shown;
+/** `22 Sep – 15 Dec 2026`, or with both years when they differ; each end
+ *  kept on one line. */
+function dateRange(from, until) {
+  const start = from.slice(0, 4) === until.slice(0, 4) ? shortDate(from) : longDate(from);
+  return `${whole(start)} – ${whole(longDate(until))}`;
 }
 
-/** ~~`horizonLine` — "Dates are written 8 weeks ahead and move forward every
- *  night."~~ **STRUCK 2026-09-22, and Kd is the one who found it.** He read it
- *  and asked *"will gyms set things 8 weeks ahead?"* — which is exactly what it
- *  made him think, and is the opposite of what happens: the gym says "Mon and
- *  Wed at 6:30, no end date" ONCE and the server keeps the dates written.
+/** A time slot's dates — `From 22 Sep 2026 · Next: Wed 23 Sep, Fri 25 Sep`.
  *
- *  **The number was right and the sentence was wrong.** No product in this
- *  market explains its own plumbing to a gym owner: in Mindbody a class simply
- *  runs indefinitely, in TeamUp a schedule is open-ended until you give it an
- *  end date, and neither says a word about how far ahead anything is generated.
- *  Struck in place rather than deleted so the next person does not re-add it.
- *  `horizonDays` stays ON THE WIRE — the week calendar (17b-ii) needs to know
- *  how far it can page — it is simply not a sentence. */
+ *  The next dates are the ones the server wrote on the calendar, never worked
+ *  out here, so a cancelled date is not listed. A slot that has ended says so
+ *  and lists nothing. */
+export function repeatDatesLine(schedule) {
+  const startsOn = schedule?.startsOn ?? '';
+  if (longDate(startsOn) === '') return '';
+  const until = typeof schedule?.endsOn === 'string' ? schedule.endsOn : '';
+  const bounded = longDate(until) !== '';
+  if (schedule?.finished === true) return bounded ? `Ended ${whole(longDate(until))}` : 'Ended';
+  const when = bounded ? dateRange(startsOn, until) : `From ${whole(longDate(startsOn))}`;
+  const next = (Array.isArray(schedule?.nextDates) ? schedule.nextDates : [])
+    .map((d) => whole(dayHeading(d)))
+    .filter((d) => d !== '');
+  return next.length === 0 ? when : `${when} · Next: ${next.join(', ')}`;
+}
 
-/** HOW MANY FIT. `null` is NO LIMIT and is said in words — a blank would read as
- *  "nobody has filled this in", which is a different thing and is the
- *  distinction the column exists for. */
+/** How many fit. `null` is no limit, said in words rather than left blank. */
 export function placesLine(places) {
   if (places === null || places === undefined) return 'No limit';
   if (!Number.isInteger(places)) return '';
   return places === 1 ? '1 place' : `${String(places)} places`;
-}
-
-export function minutesLine(minutes) {
-  if (!Number.isInteger(minutes)) return '';
-  return `${String(minutes)} min`;
 }
 
 /** THE COACH, IN WORDS — and it says something when the name is missing but a
@@ -228,34 +164,10 @@ export function coachLine(holder) {
     : '';
 }
 
-/** HOW LONG, HOW MANY, WHO — the three a repeat owns and a class holds as the
- *  values a new repeat starts from. One line, one function, both callers, so
- *  the screen cannot say "45 min" about a repeat and "45 min · 20 places" about
- *  its class. */
-export function runLine(holder) {
-  const length = minutesLine(holder?.minutes);
-  // NO LENGTH, NO LINE. `placesLine` answers "No limit" for a missing `places`
-  // because null IS no limit on a real row — so a holder that is not a real row
-  // would otherwise render as the bare words "No limit", which says something
-  // about a class nobody described. Every class and every repeat the server
-  // sends has a length.
-  if (length === '') return '';
-  return [length, placesLine(holder?.places), coachLine(holder)]
-    .filter((part) => part !== '')
-    .join(' · ');
-}
-
-/** WHAT THE CLASS'S OWN THREE NUMBERS ARE FOR, said on the card that shows them.
- *
- *  **Without these words the line is something a gym can SEE that is FALSE**
- *  (Kd, RULINGS 2026-09-22). Since the repeat became the live answer, "60 min ·
- *  20 places · Dana" under a class name is not what that class runs as — it is
- *  what the next repeat will be filled in from, and a gym whose Monday runs 45
- *  minutes would read the card and believe otherwise. The wording is the
- *  ruling's own. */
-export function classDefaultsLine(type) {
-  const line = runLine(type);
-  return line === '' ? '' : `A new repeat starts from: ${line}`;
+/** `20 places · Priya Sharma` — under a time slot and on a calendar date. */
+export function peopleLine(holder) {
+  if (holder === null || holder === undefined) return '';
+  return [placesLine(holder.places), coachLine(holder)].filter((p) => p !== '').join(' · ');
 }
 
 /** THE CLASS FORM'S OWN STATE — its name, its words and its colour, plus the
@@ -372,17 +284,16 @@ export function coachChoices(staff, draft) {
 }
 
 /** What is wrong with those three, in one sentence — or null. Mirrors the
- *  server's bounds and does not replace them (R3.3); the numbers come from
- *  `@app/shared`'s schema rather than being typed again. */
+ *  server's bounds and does not replace them (R3.3). */
 export function runFieldsProblem(draft) {
   const minutes = Number(draft?.minutes);
   if (!Number.isInteger(minutes) || minutes < 5 || minutes > 600) {
-    return 'How long is it? Anything from 5 minutes to 10 hours.';
+    return 'Length must be 5 to 600 minutes.';
   }
   if (draft?.unlimited !== true) {
     const places = Number(draft?.places);
     if (!Number.isInteger(places) || places < 1 || places > 500) {
-      return 'How many people fit? A whole number from 1 to 500, or tick "no limit".';
+      return 'Class size must be 1 to 500, or tick No limit.';
     }
   }
   return null;
@@ -457,16 +368,16 @@ export function repeatProblem(draft) {
   // 1440 is midnight at the END of a day: a legal CLOSING time for the gym's
   // hours and never a time a class can start, which is why this is checked here
   // and not left to `clockToMinutes` (it accepts it for the hours form).
-  if (minute === null || minute === 1440) return 'What time does it start?';
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(draft?.startsOn ?? '')) return 'Pick the first date it runs.';
+  if (minute === null || minute === 1440) return 'Pick a start time.';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(draft?.startsOn ?? '')) return 'Pick a start date.';
   const until = draft?.endsOn ?? '';
   if (until !== '') {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(until)) return 'That last date is not a date.';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(until)) return 'Pick the end date from the calendar.';
     // Compared as strings: a fixed-width zero-padded `YYYY-MM-DD` sorts in
     // calendar order, which `attendanceHistoryQuerySchema` records at length.
     // Equal is allowed — a one-day repeat is how a gym puts a single workshop on
     // the calendar.
-    if (until < draft.startsOn) return 'The last date is before the first one.';
+    if (until < draft.startsOn) return 'The end date is before the start date.';
   }
   return null;
 }
@@ -525,7 +436,7 @@ export function timetableLists(timetable) {
  *  sentence about paging over a list with nothing hidden is noise. */
 export function archivedPageNote(shown, total) {
   if (!Number.isInteger(shown) || !Number.isInteger(total) || total <= shown) return null;
-  return `Showing the ${String(shown)} most recently removed, of ${String(total)}.`;
+  return `Showing the ${String(shown)} most recent of ${String(total)}.`;
 }
 
 // ── THE WEEK VIEW (17b-ii-b-i) ──────────────────────────────────────────────
@@ -634,23 +545,22 @@ export function weekColumns(weekStart, today, sessions) {
   });
 }
 
-/** `18:00 · 60 min` — when it starts and how long it runs. */
+/** `18:00–18:45`. */
 export function sessionTimeLine(session, clockFormat) {
-  const time = clockLabel(session?.startMinute, clockFormat);
-  const length = minutesLine(session?.minutes);
-  return [time, length].filter((part) => part !== '').join(' · ');
+  return timeRange(session?.startMinute, session?.minutes, clockFormat);
 }
 
-/** `20 places · Priya Sharma`. */
-export function sessionPeopleLine(session) {
-  if (session === null || session === undefined) return '';
-  return [placesLine(session.places), coachLine(session)].filter((p) => p !== '').join(' · ');
+/** `Tue 22 Sep · 18:00–18:45` — the opened class's date and time. */
+export function sessionWhenLine(session, clockFormat) {
+  return [dayHeading(session?.localDate ?? ''), sessionTimeLine(session, clockFormat)]
+    .filter((part) => part !== '')
+    .join(' · ');
 }
 
-/** The word a date carries when it is not simply running as its repeat. */
+/** The word a date carries when it is not simply running as its time slot. */
 export function sessionTag(session) {
   if (session?.status === 'cancelled') return 'Cancelled';
-  if (session?.changedAlone === true) return 'Changed for this day';
+  if (session?.changedAlone === true) return 'Changed';
   return '';
 }
 
@@ -679,7 +589,7 @@ export function dayDraft(session) {
 
 export function dayProblem(draft) {
   const minute = clockToMinutes(draft?.time ?? '');
-  if (minute === null || minute === 1440) return 'What time does it start?';
+  if (minute === null || minute === 1440) return 'Pick a start time.';
   return runFieldsProblem(draft);
 }
 

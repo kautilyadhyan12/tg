@@ -1,20 +1,9 @@
-// THE CLASSES SCREEN, AT THE SCREEN. ROADMAP 17b-i; Part 3 §13.3.
+// THE CLASSES SCREEN, AT THE SCREEN. ROADMAP 17b-i, 17b-ii-w; Part 3 §13.3.
 //
-// RENDER ASSERTIONS RATHER THAN SOURCE GREPS, for the reason the attendance
-// suite records: a grep is satisfied by spelling a thing differently, and what
-// is pinned here is what an OWNER sees — a nav item that appears only with the
-// privilege, the dates the SERVER wrote, and what actually goes on the wire when
-// they press Save.
-//
-// **THE STORE IS REAL AND ONLY THE NETWORK IS MOCKED**, matching
-// `consoleAttendance.render`: the nav gate reads `schedule.manage` out of the
-// same kept answer the screen resolves its gym from, exactly as in the browser.
-//
-// **THE MUTATION CASES ASSERT THE BODY, NOT THE BUTTON.** A test that only
-// checked a call happened would stay green if the screen sent the gym's places
-// as a string, or dropped `places: null` on the floor — and both put a number on
-// a calendar that nobody typed, which is this card's own worst thing one screen
-// removed.
+// Only the network is mocked; the nav gate reads `schedule.manage` from the
+// same kept answer the screen resolves its gym from. The cases that save assert
+// the BODY sent, not only that a call happened — a wrong body puts a number on
+// a calendar that nobody typed.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
@@ -75,18 +64,14 @@ const REPEAT = {
   startMinute: 1110,
   startsOn: '2026-09-21',
   endsOn: null,
-  // **THE REPEAT'S OWN THREE** (17b-ii-a). Deliberately DIFFERENT from the
-  // class's 60/20/Priya: a screen still reading the class would render the
-  // class's numbers here and this fixture is what catches it.
+  // The time slot's own three, deliberately DIFFERENT from the class's
+  // 60/20/Priya: a screen still reading the class would show the class's.
   minutes: 45,
   places: 12,
   coachUserId: 'u8',
   coachName: 'Dana Okafor',
   nextDates: ['2026-09-21', '2026-09-23', '2026-09-28', '2026-09-30'],
   sessionsAhead: 16,
-  // THE SERVER'S TWO ANSWERS (round one, C/H-3 and Low-1). This repeat is
-  // open-ended, so the count is NOT the whole truth and the screen must not
-  // print it.
   datesComplete: false,
   finished: false,
 };
@@ -146,15 +131,75 @@ const drawShell = () =>
     </MemoryRouter>,
   );
 
+const withSlot = (slot) => timetable({ entries: [{ type: YOGA, schedules: [{ ...REPEAT, ...slot }] }] });
+
+// THE WORST THING THIS SCREEN'S WORDS COULD DO (17b-ii-w): a button whose word
+// does something else — classes taken off by a tap that read "Close", or a time
+// slot's classes cleared without a question. "Cancel" on this screen only ever
+// takes classes off, so no form offers a button of that name.
+describe('closing and backing out never change the timetable', () => {
+  const nothingSent = () => {
+    for (const call of [
+      api.createClass,
+      api.updateClass,
+      api.archiveClass,
+      api.addClassRepeat,
+      api.updateClassRepeat,
+      api.stopClassRepeat,
+      api.restoreClass,
+    ]) {
+      expect(call).not.toHaveBeenCalled();
+    }
+  };
+
+  it('every form closes with Close, sends nothing, and never offers a button named Cancel', async () => {
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add class' }));
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Sunrise Yoga' }));
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add time slot' }));
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit the Mon & Wed time slot of Sunrise Yoga' }));
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+    nothingSent();
+    expect(screen.getByText('Mon & Wed · 18:30–19:15')).toBeTruthy();
+  });
+
+  it('Archive and a time slot s Cancel ask first, and Keep it sends nothing', async () => {
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Archive Sunrise Yoga' }));
+    expect(screen.getByText(/Archive Sunrise Yoga\?/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Keep it' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel the Mon & Wed time slot of Sunrise Yoga' }));
+    expect(screen.getByText(/Cancel the Mon & Wed 18:30 time slot\?/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Keep it' }));
+
+    nothingSent();
+    expect(screen.queryByText(/time slot\?/)).toBeNull();
+  });
+});
+
 describe('the nav item', () => {
   it('appears in the console rail for somebody holding the privilege', async () => {
     drawShell();
     await waitFor(() => expect(screen.getAllByText('Classes').length).toBeGreaterThan(0));
   });
 
-  // :11429's SEAM AT THE SCREEN. The tab asks for the POWER, not the job title:
-  // an owner may tick `schedule.manage` away from a manager, and a screen
-  // reading the role would go on drawing a tab the server refuses.
+  // The tab asks for the POWER, not the job title (:11429).
   it('is absent for staff whose owner unticked it, even though they are staff', async () => {
     api.getMine.mockResolvedValue({
       data: {
@@ -163,205 +208,127 @@ describe('the nav item', () => {
       },
     });
     drawShell();
-    // Waited on a tab this staffer DOES hold, not on a timeout: a bare
-    // `queryByText(...).toBeNull()` would pass before the org row had even
-    // arrived, which is a test that proves nothing.
+    // Waited on a tab this staffer DOES hold, so the absence below is not
+    // checked before the org row has arrived.
     await waitFor(() => expect(screen.getAllByText('Members').length).toBeGreaterThan(0));
     expect(screen.queryByText('Classes')).toBeNull();
   });
 });
 
 describe('reading the timetable', () => {
-  it('says which clock the times are on, and never explains its own plumbing', async () => {
+  it('says which clock the times are on, in gym words', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
-    expect(screen.getByText(/times are Europe\/London/)).toBeTruthy();
-    // **STRUCK BY KD, 2026-09-22.** The header used to say "Dates are written 8
-    // weeks ahead and move forward every night", and he read it as a demand
-    // that the gym plan eight weeks out. No product in this market explains its
-    // own generation window to a gym owner. Pinned so nobody re-adds it.
+    expect(screen.getByText('Iron House · Europe/London time')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Classes' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Calendar' })).toBeTruthy();
+    // Struck by Kd on 2026-09-22 and 2026-09-23: nothing explains how dates are
+    // written or what a class's numbers are for.
     expect(screen.queryByText(/weeks ahead/)).toBeNull();
-    expect(screen.queryByText(/move forward every night/)).toBeNull();
+    expect(screen.queryByText(/repeat/i)).toBeNull();
   });
 
-  // **WHAT A CLASS'S OWN NUMBERS ARE FOR IS SAID ON THE CARD THAT SHOWS THEM**
-  // (Kd, RULINGS 2026-09-22). Since the repeat became the live answer, a bare
-  // "60 min · 20 places · Priya Sharma" under a class name is not what that
-  // class runs as — this gym's Monday runs 45 minutes with Dana — and a gym
-  // reading the card would believe otherwise.
-  it('draws the class, and says its numbers are what a NEW repeat starts from', async () => {
+  it('draws the class with its description, and not its defaults', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
-    expect(
-      screen.getByText('A new repeat starts from: 60 min · 20 places · Priya Sharma'),
-    ).toBeTruthy();
-    expect(screen.queryByText('60 min · 20 places · Priya Sharma')).toBeNull();
     expect(screen.getByText('Bring a mat.')).toBeTruthy();
+    // 60 min · 20 places · Priya are what a NEW time slot starts from, not what
+    // this class runs as; they live in the class's Edit form.
+    expect(screen.queryByText(/20 places/)).toBeNull();
+    expect(screen.queryByText(/Priya Sharma/)).toBeNull();
   });
 
-  // TeamUp's own shape, read 2026-09-22: "the class size limit and the current
-  // instructor are displayed beside each time slot".
-  it('draws the REPEAT s own length, places and coach beside it', async () => {
+  it('draws each time slot with its own time range, places and coach', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
-    expect(screen.getByText('45 min · 12 places · Dana Okafor')).toBeTruthy();
+    expect(screen.getByText('Mon & Wed · 18:30–19:15')).toBeTruthy();
+    expect(screen.getByText('12 places · Dana Okafor')).toBeTruthy();
   });
 
-  // The server answers `coachName` only while that person is still this gym's
-  // active staff, so an id with no name is a coach who has gone. Printing
-  // nothing would leave the gym reading it as "nobody was ever picked".
-  it('says when the coach a repeat names is no longer this gym s staff', async () => {
-    api.getClasses.mockResolvedValue(
-      timetable({
-        entries: [
-          { type: YOGA, schedules: [{ ...REPEAT, coachUserId: 'u8', coachName: null }] },
-        ],
-      }),
-    );
+  it('says when the coach a time slot names is no longer this gym s staff', async () => {
+    api.getClasses.mockResolvedValue(withSlot({ coachName: null }));
     drawScreen();
     await screen.findByText('Sunrise Yoga');
-    expect(screen.getByText(/45 min · 12 places · Coach not on this gym's staff/)).toBeTruthy();
+    expect(screen.getByText("12 places · Coach not on this gym's staff")).toBeTruthy();
   });
 
-  // **THE DATES ARE THE SERVER'S.** This is the case that would go green on a
-  // screen that worked them out itself, so the fixture's dates are deliberately
-  // NOT the ones "Mondays and Wednesdays from today" would produce.
-  it('reads the repeat and its dates off the wire, and never recomputes them', async () => {
-    drawScreen();
-    await screen.findByText('Sunrise Yoga');
-    expect(screen.getByText('Mon & Wed at 18:30')).toBeTruthy();
-    expect(
-      screen.getByText(
-        'Next: Mon 21 Sep 2026 · Wed 23 Sep 2026 · Mon 28 Sep 2026 · Wed 30 Sep 2026 · more to come',
-      ),
-    ).toBeTruthy();
-  });
-
-  // **KD'S SECOND CATCH, 2026-09-22, AND ROUND ONE'S C/H-3 ON TOP OF IT.** The
-  // fixture repeat has no end date, so the count is not the whole truth and the
-  // line says ongoing. The case round one found is the THIRD one below: a repeat
-  // that ends, but past the eight-week window, where the count is equally false
-  // and the screen must simply not print it.
-  it('says ongoing, counts, or says nothing — whichever the server says is true', async () => {
-    drawScreen();
-    await screen.findByText('Sunrise Yoga');
-    expect(screen.getByText('From Mon 21 Sep 2026 · ongoing')).toBeTruthy();
-    expect(screen.queryByText(/16 dates on the calendar/)).toBeNull();
-    cleanup();
-
-    // Ends INSIDE the window: the count is the whole truth, so it is shown.
-    api.getClasses.mockResolvedValue(
-      timetable({
-        entries: [
-          {
-            type: YOGA,
-            schedules: [
-              { ...REPEAT, endsOn: '2026-10-14', sessionsAhead: 7, datesComplete: true },
-            ],
-          },
-        ],
-      }),
-    );
+  // The dates are the server's: the fixture's are not what "Mondays and
+  // Wednesdays from today" would give.
+  it('shows the next dates the server wrote, and never a count of them', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
     expect(
-      screen.getByText('Mon 21 Sep 2026 to Wed 14 Oct 2026 · 7 dates on the calendar.'),
+      screen.getByText('From 21 Sep 2026 · Next: Mon 21 Sep, Wed 23 Sep, Mon 28 Sep, Wed 30 Sep'),
     ).toBeTruthy();
     cleanup();
 
-    // **ENDS A YEAR OUT.** 52 Mondays, a window of 16 — the screen shows the
-    // window and NO number, because saying nothing beats saying something false.
     api.getClasses.mockResolvedValue(
-      timetable({
-        entries: [
-          {
-            type: YOGA,
-            schedules: [
-              { ...REPEAT, endsOn: '2027-09-20', sessionsAhead: 16, datesComplete: false },
-            ],
-          },
-        ],
-      }),
+      withSlot({ endsOn: '2026-10-14', sessionsAhead: 7, datesComplete: true }),
     );
     drawScreen();
-    await screen.findByText('Sunrise Yoga');
-    expect(screen.getByText('Mon 21 Sep 2026 to Mon 20 Sep 2027')).toBeTruthy();
-    expect(screen.queryByText(/dates on the calendar/)).toBeNull();
+    await screen.findByText(
+      '21 Sep – 14 Oct 2026 · Next: Mon 21 Sep, Wed 23 Sep, Mon 28 Sep, Wed 30 Sep',
+    );
+    cleanup();
+
+    api.getClasses.mockResolvedValue(withSlot({ endsOn: '2027-09-20' }));
+    drawScreen();
+    await screen.findByText(
+      '21 Sep 2026 – 20 Sep 2027 · Next: Mon 21 Sep, Wed 23 Sep, Mon 28 Sep, Wed 30 Sep',
+    );
+    expect(screen.queryByText(/on the calendar/)).toBeNull();
+    expect(screen.queryByText(/ongoing|more to come|\+\d+ more/)).toBeNull();
   });
 
-  // Round one, Low-1.
-  it('says a repeat has finished rather than "nothing on the calendar yet"', async () => {
+  it('says a time slot has ended, and lists no dates for it', async () => {
     api.getClasses.mockResolvedValue(
-      timetable({
-        entries: [
-          {
-            type: YOGA,
-            schedules: [
-              {
-                ...REPEAT,
-                startsOn: '2026-07-24',
-                endsOn: '2026-08-23',
-                nextDates: [],
-                sessionsAhead: 0,
-                finished: true,
-              },
-            ],
-          },
-        ],
-      }),
+      withSlot({ startsOn: '2026-07-24', endsOn: '2026-08-23', nextDates: [], sessionsAhead: 0, finished: true }),
     );
     drawScreen();
-    await screen.findByText('Fri 24 Jul 2026 to Sun 23 Aug 2026 · finished');
-    expect(screen.queryByText(/nothing on the calendar yet/)).toBeNull();
-    // AND THE LINE UNDERNEATH DOES NOT SAY "yet" EITHER — the closing re-check's
-    // one line, which is Low-1's word surviving in the other function.
-    expect(screen.getByText('No more dates.')).toBeTruthy();
-    expect(screen.queryByText('No dates yet.')).toBeNull();
+    await screen.findByText('Ended 23 Aug 2026');
+    expect(screen.queryByText(/Next:/)).toBeNull();
+    expect(screen.queryByText(/yet/)).toBeNull();
   });
 
-  // THE EMPTY ARM AND THE FAILED ARM ARE DIFFERENT SCREENS. An unreadable page
-  // drawn as an empty one tells a gym with a full timetable that it has none.
-  it('tells a gym with no classes what to do, and a gym whose read failed that it failed', async () => {
+  it('shows only the start date of a time slot with nothing on the calendar yet', async () => {
+    api.getClasses.mockResolvedValue(withSlot({ startsOn: '2027-01-04', nextDates: [], sessionsAhead: 0 }));
+    drawScreen();
+    await screen.findByText('From 4 Jan 2027');
+    expect(screen.queryByText(/Next:/)).toBeNull();
+  });
+
+  // An unreadable page drawn as an empty one tells a gym with a full timetable
+  // that it has none.
+  it('tells a gym with no classes so, and a gym whose read failed that it failed', async () => {
     api.getClasses.mockResolvedValue(timetable({ entries: [] }));
     drawScreen();
-    await screen.findByText(/haven't added any classes yet/);
+    await screen.findByText('No classes yet.');
     cleanup();
 
     api.getClasses.mockRejectedValue(new Error('down'));
     drawScreen();
     await screen.findByText("We couldn't load your timetable.");
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
-    expect(screen.queryByText(/haven't added any classes yet/)).toBeNull();
-  });
-
-  it('says so when a repeat has no dates, rather than looking blank', async () => {
-    api.getClasses.mockResolvedValue(
-      timetable({
-        entries: [
-          { type: YOGA, schedules: [{ ...REPEAT, nextDates: [], sessionsAhead: 0 }] },
-        ],
-      }),
-    );
-    drawScreen();
-    await screen.findByText('No dates yet.');
-    expect(screen.getByText(/nothing on the calendar yet/)).toBeTruthy();
+    expect(screen.queryByText('No classes yet.')).toBeNull();
   });
 });
 
 describe('adding a class', () => {
   const openAddForm = async () => {
-    fireEvent.click(await screen.findByRole('button', { name: /Add a class/ }));
-    return screen.findByRole('button', { name: /Add this class/ });
+    fireEvent.click(await screen.findByRole('button', { name: 'Add class' }));
+    // The opener gives way to the form, whose own button has the same words.
+    return screen.findByRole('button', { name: 'Add class' });
   };
 
   it('sends what the gym typed, as numbers, with the colour it picked', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
     const save = await openAddForm();
+    expect(screen.getByText('New class')).toBeTruthy();
 
     fireEvent.change(screen.getByPlaceholderText('Sunrise Yoga'), { target: { value: 'Spin' } });
-    fireEvent.change(screen.getByLabelText('How long (minutes)'), { target: { value: '45' } });
-    fireEvent.change(screen.getByLabelText('How many people fit'), { target: { value: '12' } });
+    fireEvent.change(screen.getByLabelText('Default length (minutes)'), { target: { value: '45' } });
+    fireEvent.change(screen.getByLabelText('Default class size'), { target: { value: '12' } });
     fireEvent.click(screen.getByRole('button', { name: 'red' }));
     fireEvent.click(save);
 
@@ -377,17 +344,16 @@ describe('adding a class', () => {
     });
   });
 
-  // **`places: null` ON THE WIRE, and this is the case that stops an open-gym
-  // slot silently keeping a cap.** The route REPLACES rather than merges, so an
-  // omitted key and an explicit null are not the same thing.
-  it('sends no limit as an explicit null for an open-gym slot', async () => {
+  // The route REPLACES rather than merges, so "no limit" must be an explicit
+  // null on the wire, never a missing key.
+  it('sends no limit as an explicit null for an open-gym class', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
     const save = await openAddForm();
 
     fireEvent.change(screen.getByPlaceholderText('Sunrise Yoga'), { target: { value: 'Open Gym' } });
     fireEvent.click(screen.getByLabelText('No limit'));
-    fireEvent.click(screen.getByLabelText('This is open gym, not a taught class'));
+    fireEvent.click(screen.getByLabelText('Open gym (not a taught class)'));
     fireEvent.click(save);
 
     await waitFor(() => expect(api.createClass).toHaveBeenCalledTimes(1));
@@ -401,60 +367,63 @@ describe('adding a class', () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
     const save = await openAddForm();
-    // Empty name: the button is dead and the sentence is on screen.
     expect(screen.getByText('Give the class a name.')).toBeTruthy();
     fireEvent.click(save);
     expect(api.createClass).not.toHaveBeenCalled();
 
     fireEvent.change(screen.getByPlaceholderText('Sunrise Yoga'), { target: { value: 'Spin' } });
-    fireEvent.change(screen.getByLabelText('How long (minutes)'), { target: { value: '4' } });
-    expect(screen.getByText(/5 minutes to 10 hours/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Default length (minutes)'), { target: { value: '4' } });
+    expect(screen.getByText('Length must be 5 to 600 minutes.')).toBeTruthy();
     fireEvent.click(save);
     expect(api.createClass).not.toHaveBeenCalled();
   });
 
-  it('offers this gym s own staff as the coach, and nobody as the default', async () => {
+  it('offers this gym s own staff as the coach, and no coach as the default', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
     await openAddForm();
-    const picker = screen.getByLabelText('Usual coach (optional)');
+    const picker = screen.getByLabelText('Default coach (optional)');
     expect(picker.value).toBe('');
-    expect(screen.getByRole('option', { name: 'Nobody yet' })).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'No coach' })).toBeTruthy();
     expect(screen.getByRole('option', { name: 'Priya Sharma' })).toBeTruthy();
   });
 
-  // The coach list is gated on `staff.manage`, which somebody setting the
-  // timetable need not hold. Its failure is NOT this screen's failure.
+  // The coach list needs `staff.manage`, which somebody setting the timetable
+  // need not hold; its failure is not this screen's failure.
   it('still works when the staff list is refused', async () => {
     api.getStaff.mockRejectedValue(new Error('403'));
     drawScreen();
     await screen.findByText('Sunrise Yoga');
     await openAddForm();
-    expect(screen.getByRole('option', { name: 'Nobody yet' })).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'No coach' })).toBeTruthy();
     expect(screen.queryByText("We couldn't load your timetable.")).toBeNull();
   });
 });
 
-describe('saying when it repeats', () => {
-  it('sends the weekdays and the gym s clock time, leaving a blank end date off', async () => {
+describe('adding a time slot', () => {
+  const openSlotForm = async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Add time slot' }));
+    return screen.findByRole('button', { name: 'Add time slot' });
+  };
+
+  it('sends the days and the gym s clock time, leaving a blank end date off', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
-    fireEvent.click(screen.getByRole('button', { name: /Add a repeat/ }));
+    const save = await openSlotForm();
+    expect(screen.getByText('New time slot')).toBeTruthy();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Tue' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tue' }));
     fireEvent.click(screen.getByRole('button', { name: 'Thu' }));
-    fireEvent.change(screen.getByLabelText('Class start hour'), { target: { value: '7' } });
-    fireEvent.change(screen.getByLabelText('Class start minute'), { target: { value: '15' } });
-    fireEvent.change(screen.getByLabelText('First date'), { target: { value: '2026-10-01' } });
-    fireEvent.click(screen.getByRole('button', { name: /Save this repeat/ }));
+    fireEvent.change(screen.getByLabelText('Start time hour'), { target: { value: '7' } });
+    fireEvent.change(screen.getByLabelText('Start time minute'), { target: { value: '15' } });
+    fireEvent.change(screen.getByLabelText('Start date'), { target: { value: '2026-10-01' } });
+    fireEvent.click(save);
 
     await waitFor(() => expect(api.addClassRepeat).toHaveBeenCalledTimes(1));
     const [, typeId, body] = api.addClassRepeat.mock.calls[0];
     expect(typeId).toBe('t1');
-    // **FILLED IN FROM THE CLASS AND SENT OUTRIGHT** (Kd, RULINGS 2026-09-22).
-    // The gym touched none of the three, so they are the CLASS's 60/20/Priya —
-    // not the fixture repeat's 45/12/Dana, and not a key left off for the
-    // server to guess, which it never does.
+    // Filled in from the class's defaults (60/20/Priya), not the other time
+    // slot's 45/12/Dana, and sent outright (Kd, RULINGS 2026-09-22).
     expect(body).toEqual({
       weekdays: [2, 4],
       startMinute: 435,
@@ -466,158 +435,141 @@ describe('saying when it repeats', () => {
     expect('endsOn' in body).toBe(false);
   });
 
-  // THE SAME RULE, AT THE SCREEN: once the class's coach has left, the server
-  // keeps the id and stops naming them, and a new repeat that copied the id
-  // would be refused `coach_not_staff` on its first Save — for a field the gym
-  // never typed.
-  it('starts a new repeat with nobody when the class s coach has left', async () => {
+  // A class whose default coach has left: the server keeps the id and stops
+  // naming them, and copying the id would be refused on the first Save.
+  it('starts a new time slot with no coach when the class s coach has left', async () => {
     api.getClasses.mockResolvedValue(
       timetable({ entries: [{ type: { ...YOGA, coachName: null }, schedules: [REPEAT] }] }),
     );
-    // The staff list agrees she has gone — the fixture is one consistent world.
     api.getStaff.mockResolvedValue({ data: { staff: [] } });
     drawScreen();
     await screen.findByText('Sunrise Yoga');
-    fireEvent.click(screen.getByRole('button', { name: /Add a repeat/ }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Tue' }));
-    fireEvent.change(screen.getByLabelText('First date'), { target: { value: '2026-10-01' } });
-    // The other two still come from the class.
-    expect(screen.getByLabelText('How long (minutes)').value).toBe('60');
+    const save = await openSlotForm();
+    fireEvent.click(screen.getByRole('button', { name: 'Tue' }));
+    fireEvent.change(screen.getByLabelText('Start date'), { target: { value: '2026-10-01' } });
+    expect(screen.getByLabelText('Length (minutes)').value).toBe('60');
     expect(screen.getByLabelText('Coach (optional)').value).toBe('');
-    fireEvent.click(screen.getByRole('button', { name: /Save this repeat/ }));
+    fireEvent.click(save);
 
     await waitFor(() => expect(api.addClassRepeat).toHaveBeenCalledTimes(1));
     const [, , body] = api.addClassRepeat.mock.calls[0];
     expect(body).toMatchObject({ minutes: 60, places: 20, coachUserId: null });
   });
 
-  it('lets the new repeat differ from its class, and sends what was typed', async () => {
+  it('lets the new time slot differ from its class, and sends what was typed', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
-    fireEvent.click(screen.getByRole('button', { name: /Add a repeat/ }));
+    const save = await openSlotForm();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Tue' }));
-    fireEvent.change(screen.getByLabelText('First date'), { target: { value: '2026-10-01' } });
-    // The three start from the class and are then changed, which is the whole
-    // card: 17b-i could not express a Tuesday that differs from its Monday.
-    expect(screen.getByLabelText('How many people fit').value).toBe('20');
-    fireEvent.change(screen.getByLabelText('How long (minutes)'), { target: { value: '90' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Tue' }));
+    fireEvent.change(screen.getByLabelText('Start date'), { target: { value: '2026-10-01' } });
+    expect(screen.getByLabelText('Class size').value).toBe('20');
+    fireEvent.change(screen.getByLabelText('Length (minutes)'), { target: { value: '90' } });
     fireEvent.click(screen.getByLabelText('No limit'));
     fireEvent.change(screen.getByLabelText('Coach (optional)'), { target: { value: '' } });
-    fireEvent.click(screen.getByRole('button', { name: /Save this repeat/ }));
+    fireEvent.click(save);
 
     await waitFor(() => expect(api.addClassRepeat).toHaveBeenCalledTimes(1));
     const [, , body] = api.addClassRepeat.mock.calls[0];
     expect(body).toMatchObject({ minutes: 90, places: null, coachUserId: null });
   });
 
-  it('will not send a repeat that runs on no day', async () => {
+  it('will not send a time slot that runs on no day', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
-    fireEvent.click(screen.getByRole('button', { name: /Add a repeat/ }));
-    const save = await screen.findByRole('button', { name: /Save this repeat/ });
-    expect(screen.getByText(/at least one day/)).toBeTruthy();
+    const save = await openSlotForm();
+    expect(screen.getByText('Pick at least one day of the week.')).toBeTruthy();
     fireEvent.click(save);
     expect(api.addClassRepeat).not.toHaveBeenCalled();
   });
 
-  it('asks before stopping a repeat, and stopping leaves the class standing', async () => {
+  it('cancelling a time slot asks first, and the class stays', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
-    fireEvent.click(screen.getByRole('button', { name: /Stop the Mon & Wed repeat of Sunrise Yoga/ }));
+    const slotCancel = { name: 'Cancel the Mon & Wed time slot of Sunrise Yoga' };
+    fireEvent.click(screen.getByRole('button', slotCancel));
 
-    // THE FIRST TAP ASKS AND SENDS NOTHING. Stopping clears every date the
-    // repeat had ahead of it and no tap puts them back.
     expect(api.stopClassRepeat).not.toHaveBeenCalled();
-    expect(screen.getByText(/Stop the Mon & Wed repeat of Sunrise Yoga\?/)).toBeTruthy();
-    // The sentence says what SURVIVES, not only what goes.
-    expect(screen.getByText(/stays on your timetable/)).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Cancel the Mon & Wed 18:30 time slot? Its upcoming classes come off the calendar.',
+      ),
+    ).toBeTruthy();
 
-    // Backing out sends nothing either.
-    fireEvent.click(screen.getByRole('button', { name: 'Leave it running' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Keep it' }));
     expect(api.stopClassRepeat).not.toHaveBeenCalled();
-    expect(screen.getByText('Mon & Wed at 18:30')).toBeTruthy();
+    expect(screen.getByText('Mon & Wed · 18:30–19:15')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: /Stop the Mon & Wed repeat of Sunrise Yoga/ }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Stop it' }));
+    fireEvent.click(screen.getByRole('button', slotCancel));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel time slot' }));
     await waitFor(() => expect(api.stopClassRepeat).toHaveBeenCalledWith('g1', 's1'));
-    await screen.findByText(/isn't on the calendar yet/);
+    await screen.findByText('No time slots yet.');
     expect(screen.getByText('Sunrise Yoga')).toBeTruthy();
   });
 });
 
-// **THE REPEAT IS THE LIVE ANSWER** (Kd, RULINGS 2026-09-22). These cases pin
-// what goes on the wire, not that a button exists: a form that opened from the
-// CLASS would look identical and would send a gym's Monday the wrong numbers.
-describe('changing a repeat', () => {
-  it('opens filled in from the REPEAT, not from its class, and sends the three fields back', async () => {
+// The time slot is the live answer (Kd, RULINGS 2026-09-22): its form opens
+// from the SLOT, never from its class.
+describe('editing a time slot', () => {
+  const openEdit = () =>
+    fireEvent.click(screen.getByRole('button', { name: 'Edit the Mon & Wed time slot of Sunrise Yoga' }));
+
+  it('opens filled in from the time slot, not its class, and sends the three fields back', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
-    fireEvent.click(
-      screen.getByRole('button', { name: /Change the Mon & Wed repeat of Sunrise Yoga/ }),
-    );
+    openEdit();
 
-    // 45/12/Dana — the repeat's own. The class says 60/20/Priya.
-    expect((await screen.findByLabelText('How long (minutes)')).value).toBe('45');
-    expect(screen.getByLabelText('How many people fit').value).toBe('12');
+    expect((await screen.findByLabelText('Length (minutes)')).value).toBe('45');
+    expect(screen.getByLabelText('Class size').value).toBe('12');
     expect(screen.getByLabelText('Coach (optional)').value).toBe('u8');
 
-    fireEvent.change(screen.getByLabelText('How long (minutes)'), { target: { value: '30' } });
+    fireEvent.change(screen.getByLabelText('Length (minutes)'), { target: { value: '30' } });
     fireEvent.change(screen.getByLabelText('Coach (optional)'), { target: { value: 'u9' } });
-    fireEvent.click(screen.getByRole('button', { name: /Save this repeat/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(api.updateClassRepeat).toHaveBeenCalledTimes(1));
     const [gymId, scheduleId, body] = api.updateClassRepeat.mock.calls[0];
     expect(gymId).toBe('g1');
     expect(scheduleId).toBe('s1');
-    // EXACTLY THREE KEYS. The route's schema is `.strict()`, so a `startMinute`
-    // smuggled in here is a 400 the gym would read as "we could not save that"
-    // — and moving a repeat is "this day and later", 17b-ii-b.
+    // Exactly three keys: the route's schema is `.strict()`.
     expect(body).toEqual({ minutes: 30, places: 12, coachUserId: 'u9' });
   });
 
-  it('tells the gym what a change reaches, and offers no way to move the day or the time', async () => {
+  it('says what a change reaches, and offers no way to move the day or the time', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
-    fireEvent.click(
-      screen.getByRole('button', { name: /Change the Mon & Wed repeat of Sunrise Yoga/ }),
-    );
-    await screen.findByLabelText('How long (minutes)');
-    expect(screen.getByText(/changes every date this repeat still has coming up/)).toBeTruthy();
-    expect(screen.getByText(/already run keep what they ran as/)).toBeTruthy();
-    // The controls that would move it are not on this form at all.
-    expect(screen.queryByLabelText('First date')).toBeNull();
-    expect(screen.queryByLabelText('Class start hour')).toBeNull();
+    openEdit();
+    await screen.findByLabelText('Length (minutes)');
+    expect(screen.getByText('Applies to upcoming classes.')).toBeTruthy();
+    expect(screen.queryByLabelText('Start date')).toBeNull();
+    expect(screen.queryByLabelText('Start time hour')).toBeNull();
   });
 
   it('sends nothing when the numbers are out of bounds', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
-    fireEvent.click(
-      screen.getByRole('button', { name: /Change the Mon & Wed repeat of Sunrise Yoga/ }),
-    );
-    fireEvent.change(await screen.findByLabelText('How many people fit'), {
-      target: { value: '0' },
-    });
-    expect(screen.getByText(/1 to 500/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /Save this repeat/ }));
+    openEdit();
+    fireEvent.change(await screen.findByLabelText('Class size'), { target: { value: '0' } });
+    expect(screen.getByText('Class size must be 1 to 500, or tick No limit.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(api.updateClassRepeat).not.toHaveBeenCalled();
   });
 });
 
-describe('changing and removing a class', () => {
-  it('opens the form already filled in, and sends every field back', async () => {
+describe('editing, archiving and restoring a class', () => {
+  it('opens the form already filled in, with the defaults, and sends every field back', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Sunrise Yoga' }));
 
     const name = await screen.findByPlaceholderText('Sunrise Yoga');
     expect(name.value).toBe('Sunrise Yoga');
-    expect(screen.getByLabelText('How many people fit').value).toBe('20');
-    expect(screen.getByLabelText('Usual coach (optional)').value).toBe('u9');
+    expect(screen.getByLabelText('Default length (minutes)').value).toBe('60');
+    expect(screen.getByLabelText('Default class size').value).toBe('20');
+    expect(screen.getByLabelText('Default coach (optional)').value).toBe('u9');
 
     fireEvent.change(name, { target: { value: 'Sunrise Yoga (Reformer)' } });
-    fireEvent.click(screen.getByRole('button', { name: /Save changes/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(api.updateClass).toHaveBeenCalledTimes(1));
     const [, typeId, body] = api.updateClass.mock.calls[0];
@@ -633,110 +585,76 @@ describe('changing and removing a class', () => {
     });
   });
 
-  // **KD, 2026-09-22:** *"clicking remove button directly removes it, i think
-  // there should be a small pop up not covering whole screen"*. It asks in
-  // place, under the class it is asking about.
-  it('asks before taking a class off the timetable, and backing out sends nothing', async () => {
+  // Kd, 2026-09-22: it asks in place, under the class it is asking about.
+  it('asks before archiving a class, and Keep it sends nothing', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
-    fireEvent.click(screen.getByRole('button', { name: /Take Sunrise Yoga off the timetable/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Archive Sunrise Yoga' }));
 
     expect(api.archiveClass).not.toHaveBeenCalled();
-    expect(screen.getByText(/Take Sunrise Yoga off the timetable\?/)).toBeTruthy();
-    // The sentence says what SURVIVES and where to find it again.
-    expect(screen.getByText(/days it already ran are kept/)).toBeTruthy();
-    expect(screen.getByText(/bring it back/)).toBeTruthy();
-    // IT IS NOT A DIALOG OVER THE PAGE: the class it is asking about is still
-    // on screen, which is the whole of what Kd asked for.
+    expect(
+      screen.getByText(
+        'Archive Sunrise Yoga? Its upcoming classes come off the calendar. You can restore it later.',
+      ),
+    ).toBeTruthy();
     expect(screen.getByText('Sunrise Yoga')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Keep it' }));
     expect(api.archiveClass).not.toHaveBeenCalled();
-    expect(screen.queryByText(/Take Sunrise Yoga off the timetable\?/)).toBeNull();
+    expect(screen.queryByText(/Archive Sunrise Yoga\?/)).toBeNull();
   });
 
-  it('takes a class off the timetable and keeps it in the list below', async () => {
+  it('archives a class and keeps it under Archived classes, by name', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
-    fireEvent.click(screen.getByRole('button', { name: /Take Sunrise Yoga off the timetable/ }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Remove it' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Archive Sunrise Yoga' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
     await waitFor(() => expect(api.archiveClass).toHaveBeenCalledWith('g1', 't1'));
-    // The archived section's heading, and the class still named inside it —
-    // "removed from the timetable" is not "deleted".
-    await screen.findByText('No longer running');
-    fireEvent.click(screen.getByRole('button', { name: /No longer running/ }));
-    // The removed class, worded as the live card is.
-    expect(
-      screen.getByText('A new repeat starts from: 60 min · 20 places · Priya Sharma'),
-    ).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: /Archived classes/ }));
+    expect(screen.getByText('Sunrise Yoga')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Restore Sunrise Yoga' })).toBeTruthy();
+    expect(screen.queryByText(/20 places/)).toBeNull();
   });
 
-  // **KD'S THIRD CALL THAT DAY**, taking Mindbody's behaviour over TeamUp's,
-  // which cannot reinstate an archived Class Type at all. No question in front
-  // of it: bringing a class back ADDS to the timetable and takes nothing away.
-  // Round one, C/H-2: the archived list is a PAGE, so the heading must print the
-  // gym's REAL total and say when the list is not all of it. The old screen said
-  // "117 kept" over 130 and the other 13 could not be brought back at all.
+  // Round one, C/H-2 of 17b-i: the archived list is a PAGE, so the heading
+  // prints the gym's real total and says when it shows only part of it.
   it('prints the real archived total, and says when it is showing a page of it', async () => {
     const many = Array.from({ length: 200 }, (_, i) => ({ ...YOGA, id: `t${String(i)}`, name: `Old ${String(i)}` }));
-    api.getClasses.mockResolvedValue(
-      timetable({ entries: [], archived: many, archivedTotal: 341 }),
-    );
+    api.getClasses.mockResolvedValue(timetable({ entries: [], archived: many, archivedTotal: 341 }));
     drawScreen();
-    await screen.findByText('341 kept');
-    fireEvent.click(screen.getByRole('button', { name: /No longer running/ }));
-    expect(screen.getByText('Showing the 200 most recently removed, of 341.')).toBeTruthy();
+    await screen.findByText('341');
+    fireEvent.click(screen.getByRole('button', { name: /Archived classes/ }));
+    expect(screen.getByText('Showing the 200 most recent of 341.')).toBeTruthy();
     cleanup();
 
-    // Nothing hidden: the total is the length and there is no sentence about it.
-    api.getClasses.mockResolvedValue(
-      timetable({ entries: [], archived: [YOGA], archivedTotal: 1 }),
-    );
-    drawScreen();
-    await screen.findByText('1 kept');
-    fireEvent.click(screen.getByRole('button', { name: /No longer running/ }));
-    expect(screen.queryByText(/most recently removed/)).toBeNull();
-  });
-
-  // THE REMOVED-CLASSES LIST SAYS WHAT THE NUMBERS ARE FOR, in the live card's
-  // own words: a bare "60 min · 20 places" is the one claim `classDefaultsLine`
-  // exists to qualify. The numbers are KEPT, because they are how a gym tells
-  // two removed classes apart.
-  it('words a removed class s numbers as the live card does', async () => {
     api.getClasses.mockResolvedValue(timetable({ entries: [], archived: [YOGA], archivedTotal: 1 }));
     drawScreen();
-    fireEvent.click(await screen.findByRole('button', { name: /No longer running/ }));
-    expect(
-      await screen.findByText('A new repeat starts from: 60 min · 20 places · Priya Sharma'),
-    ).toBeTruthy();
-    expect(screen.queryByText(/Sunrise Yoga · 60 min · 20 places/)).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: /Archived classes/ }));
+    expect(screen.queryByText(/most recent of/)).toBeNull();
   });
 
-  it('brings a removed class back to the timetable', async () => {
+  it('restores an archived class with one tap', async () => {
     api.getClasses.mockResolvedValue(timetable({ entries: [], archived: [YOGA], archivedTotal: 1 }));
     drawScreen();
-    fireEvent.click(await screen.findByRole('button', { name: /No longer running/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Bring Sunrise Yoga back to the timetable/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Archived classes/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Restore Sunrise Yoga' }));
     await waitFor(() => expect(api.restoreClass).toHaveBeenCalledWith('g1', 't1'));
-    // The reply is the whole timetable, so the class is simply live again.
-    await screen.findByText('Mon & Wed at 18:30');
+    await screen.findByText('Mon & Wed · 18:30–19:15');
   });
 
-  it('prints the server s own sentence when a save is refused', async () => {
+  it('prints the server s own sentence when a save is refused, and keeps the timetable', async () => {
     api.archiveClass.mockRejectedValue(new Error('nope'));
     drawScreen();
     await screen.findByText('Sunrise Yoga');
-    fireEvent.click(screen.getByRole('button', { name: /Take Sunrise Yoga off the timetable/ }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Remove it' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Archive Sunrise Yoga' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
     await screen.findByText("We couldn't save that.");
-    // AND THE TIMETABLE IS STILL THERE. A failed save must not blank the screen.
     expect(screen.getByText('Sunrise Yoga')).toBeTruthy();
   });
 });
 
 describe('who may change it', () => {
-  // §4.2's read-only console: staff of a lapsed gym SEE everything and change
-  // nothing (:23711 — read-only "seals nobody out").
+  // §4.2: staff of a lapsed gym see everything and change nothing (:23711).
   it('a lapsed gym reads its timetable and is offered no control', async () => {
     api.getMine.mockResolvedValue({
       data: { orgs: [{ ...ORG, consoleReadOnly: true, subscription: null }], formerOrgs: [] },
@@ -744,37 +662,32 @@ describe('who may change it', () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
     expect(screen.getByText(/needs a plan before anything here can be changed/)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Add a class/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
-    expect(screen.queryByRole('button', { name: /Add a repeat/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: /Take Sunrise Yoga off the timetable/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: /Stop the Mon & Wed repeat/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add class' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Edit Sunrise Yoga' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add time slot' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Archive Sunrise Yoga' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /time slot of Sunrise Yoga/ })).toBeNull();
   });
 
-  it('a lapsed gym is not offered Bring back either', async () => {
+  it('a lapsed gym is not offered Restore either', async () => {
     api.getClasses.mockResolvedValue(timetable({ entries: [], archived: [YOGA], archivedTotal: 1 }));
     api.getMine.mockResolvedValue({
       data: { orgs: [{ ...ORG, consoleReadOnly: true, subscription: null }], formerOrgs: [] },
     });
     drawScreen();
-    fireEvent.click(await screen.findByRole('button', { name: /No longer running/ }));
-    // The class is still NAMED — read-only seals nobody out of reading — and
-    // the control is what goes quiet.
-    // The removed class, worded as the live card is.
-    expect(
-      screen.getByText('A new repeat starts from: 60 min · 20 places · Priya Sharma'),
-    ).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Bring Sunrise Yoga back/ })).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: /Archived classes/ }));
+    expect(screen.getByText('Sunrise Yoga')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Restore Sunrise Yoga' })).toBeNull();
   });
 
-  // Hiding is not the enforcement (R3.3) — the address is reachable by typing
-  // it, so the screen says why rather than drawing controls that would 403.
+  // Hiding is not the enforcement (R3.3): somebody who types the address is
+  // told why, not handed controls that would 403.
   it('somebody without the tick who types the address is told, not handed controls', async () => {
     api.getMine.mockResolvedValue({
       data: { orgs: [{ ...ORG, staffRole: 'trainer', privileges: ['members.read'] }], formerOrgs: [] },
     });
     drawScreen();
     await screen.findByText(/role doesn't allow you to set the timetable/);
-    expect(screen.queryByRole('button', { name: /Add a class/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add class' })).toBeNull();
   });
 });

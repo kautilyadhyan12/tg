@@ -682,7 +682,10 @@ d("the week view and this day only (real Postgres)", () => {
       expect((await post(cancelUrl(org.org.id, b.id), {}, owner.cookies)).statusCode).toBe(200);
       const onCancelled = await put(dayUrl(org.org.id, b.id), { ...RUN, startMinute: at(20) }, owner.cookies);
       expect(onCancelled.statusCode).toBe(409);
-      expect(JSON.parse(onCancelled.body)).toMatchObject({ error: "class_day_cancelled" });
+      expect(JSON.parse(onCancelled.body)).toMatchObject({
+        error: "class_day_cancelled",
+        message: "This class is cancelled. Un-cancel it first, then edit it.",
+      });
       expect((await rowOf(b.id)).local_start_minute).toBe(at(18));
 
       // THE SAME CANCEL TWICE: one write, one audit row.
