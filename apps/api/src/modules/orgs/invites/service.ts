@@ -82,7 +82,7 @@ async function workOutGroup(sql: SqlOrTx, settings: InviteSettings, gymId: strin
     repo.invitesFor(sql, gymId, hmacs),
     repo.suppressionsFor(sql, gymId, hmacs),
   ]);
-  const skipped: MemberInviteSkipped = { noEmail: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, sharedAddress: 0 };
+  const skipped: MemberInviteSkipped = { noEmail: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, refused: 0, sharedAddress: 0 };
   const reach: Group["reach"] = [];
   const taken = new Set<string>();
   let next = 0;
@@ -97,6 +97,7 @@ async function workOutGroup(sql: SqlOrTx, settings: InviteSettings, gymId: strin
     if (inAppAddresses.has(person.email.toLowerCase())) skipped.inApp += 1;
     else if ((invite !== undefined && repo.alreadyInvited(invite)) || taken.has(person.hmac)) skipped.alreadyInvited += 1;
     else if (suppressions.get(person.hmac) === "bounced") skipped.bounced += 1;
+    else if (suppressions.get(person.hmac) === "refused") skipped.refused += 1;
     else if (suppressions.has(person.hmac)) skipped.unsubscribed += 1;
     else if (isSharedAddress(person.email)) skipped.sharedAddress += 1;
     else {
@@ -113,14 +114,16 @@ async function blockedFor(sql: SqlOrTx, settings: InviteSettings | null, gymId: 
   if (status !== "active") return "gym_archived";
   if (!(await gymHasLivePlan(sql, gymId))) return "gym_not_on_plan";
   if ((await repo.gymPostalAddress(sql, gymId)) === null) return "no_postal_address";
+  if (await repo.gymInvitesStopped(sql, gymId)) return "sending_stopped";
   return null;
 }
 
-/** Sending switched on and a postal address: what every write needs first. */
+/** Sending switched on, a postal address, and not stopped: what every write needs first. */
 export async function readyToSend(deps: MemberListDeps, gymId: string): Promise<InviteSettings> {
   const settings = deps.invites ?? null;
   if (settings === null || settings.sender === null) throw refuse(503, "invites_off");
   if ((await repo.gymPostalAddress(deps.sql, gymId)) === null) throw refuse(409, "no_postal_address");
+  if (await repo.gymInvitesStopped(deps.sql, gymId)) throw refuse(409, "sending_stopped");
   return settings;
 }
 
@@ -141,7 +144,7 @@ export async function previewInvite(
     return {
       version: state?.version ?? 0,
       reach: 0,
-      skipped: { noEmail: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, sharedAddress: 0 },
+      skipped: { noEmail: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, refused: 0, sharedAddress: 0 },
       blocked,
     };
   }
@@ -209,6 +212,7 @@ export async function pressInvite(
         alreadyInvited: String(group.skipped.alreadyInvited),
         unsubscribed: String(group.skipped.unsubscribed),
         bounced: String(group.skipped.bounced),
+        refused: String(group.skipped.refused),
         sharedAddress: String(group.skipped.sharedAddress),
       },
     });
@@ -242,10 +246,11 @@ async function inviteable(
   return { email, hmac, invite };
 }
 
-/** Refuse an address the gym may not email: unsubscribed, bounced or shared. */
+/** Refuse an address the gym may not email: unsubscribed, bounced, refused or shared. */
 async function mayEmail(tx: TransactionSql, gymId: string, email: string, hmac: string): Promise<void> {
   const suppressed = (await repo.suppressionsFor(tx, gymId, [hmac])).get(hmac);
   if (suppressed === "bounced") throw refuse(409, "bounced");
+  if (suppressed === "refused") throw refuse(409, "refused");
   if (suppressed !== undefined) throw refuse(409, "unsubscribed");
   if (isSharedAddress(email)) throw refuse(409, "shared_address");
 }

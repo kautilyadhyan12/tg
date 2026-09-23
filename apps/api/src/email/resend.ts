@@ -6,6 +6,7 @@
 // THE KEY NEVER LEAVES THIS FILE and is never logged: a failed call throws an
 // Error carrying the HTTP status only — never the response body, which can
 // echo the recipient address, and never the request, which carries the key.
+import { resendEmailRecordSchema } from "@app/shared";
 import { z } from "zod";
 
 export interface EmailMessage {
@@ -41,6 +42,9 @@ export interface InviteEmail extends EmailMessage {
   from: string;
   headers: Record<string, string>;
   idempotencyKey: string;
+  /** Resend tags, returned on every webhook about this email: they name the send row, so
+   *  a report finds its email even before Resend's id for it is known. */
+  tags: { name: string; value: string }[];
 }
 
 /** What became of one invitation email. `sent` with a null id is a retry Resend
@@ -82,6 +86,7 @@ export function createResendInviteTransport(opts: { apiKey: string; fetchImpl?: 
             text: message.text,
             html: message.html,
             headers: message.headers,
+            tags: message.tags,
           }),
           signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
         });
@@ -108,6 +113,55 @@ export function createResendInviteTransport(opts: { apiKey: string; fetchImpl?: 
       // Any other 4xx is Resend refusing the request before it did anything with it.
       if (response.status >= 400 && response.status < 500) return { kind: "not_sent", status: response.status };
       return { kind: "unclear", status: response.status };
+    },
+  };
+}
+
+/** Resend's own record of one email, read back to confirm a webhook report. */
+export type EmailRecordLookup =
+  | { kind: "found"; lastEvent: string; tags: { name: string; value: string }[] }
+  /** Resend has no such email in this account. */
+  | { kind: "missing" }
+  /** The key may not read emails (a "Sending access" key) or is wrong. */
+  | { kind: "denied"; status: number }
+  /** No clear answer: try again later. */
+  | { kind: "unavailable"; status: number | null };
+
+export interface EmailRecordReader {
+  read(emailId: string): Promise<EmailRecordLookup>;
+}
+
+const RESEND_EMAIL_ID = /^[A-Za-z0-9-]{1,100}$/;
+
+/** `GET /emails/{id}`. Like the senders, it never logs or returns a body. */
+export function createResendEmailReader(opts: { apiKey: string; fetchImpl?: typeof fetch }): EmailRecordReader {
+  const doFetch = opts.fetchImpl ?? fetch;
+  return {
+    async read(emailId) {
+      // The id came from a webhook body: it goes into the address only in Resend's shape.
+      if (!RESEND_EMAIL_ID.test(emailId)) return { kind: "missing" };
+      let response: Response;
+      try {
+        response = await doFetch(`${RESEND_ENDPOINT}/${emailId}`, {
+          method: "GET",
+          headers: { Authorization: `Bearer ${opts.apiKey}` },
+          signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+        });
+      } catch {
+        return { kind: "unavailable", status: null };
+      }
+      if (response.status === 404) return { kind: "missing" };
+      if (response.status === 401 || response.status === 403) return { kind: "denied", status: response.status };
+      if (!response.ok) return { kind: "unavailable", status: response.status };
+      let body: unknown = null;
+      try {
+        body = await response.json();
+      } catch {
+        body = null;
+      }
+      const record = resendEmailRecordSchema.safeParse(body);
+      if (!record.success || record.data.id !== emailId) return { kind: "unavailable", status: response.status };
+      return { kind: "found", lastEvent: record.data.last_event, tags: record.data.tags ?? [] };
     },
   };
 }

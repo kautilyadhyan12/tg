@@ -22,7 +22,7 @@ import { readUnsubscribeToken, unsubscribeToken } from "../src/modules/orgs/invi
 const allowed: SendFacts = {
   inviteState: "pending",
   addressMatchesInvite: true,
-  gym: { active: true, onPlan: true, hasPostalAddress: true, named: true },
+  gym: { active: true, onPlan: true, stopped: false, hasPostalAddress: true, named: true },
   onList: true,
   inApp: false,
   suppression: null,
@@ -38,10 +38,12 @@ describe("decideSend — every class of case", () => {
     ["the domain takes no mail", { mail: "no_mail" }, { kind: "skip", reason: "no_mail_domain" }],
     ["the domain could not be asked", { mail: "unknown" }, { kind: "retry", reason: "dns_unavailable" }],
     ["the gym is gone", { gym: null }, { kind: "skip", reason: "gym_not_active" }],
-    ["the gym is archived", { gym: { active: false, onPlan: true, hasPostalAddress: true, named: true } }, { kind: "skip", reason: "gym_not_active" }],
-    ["the gym has no plan", { gym: { active: true, onPlan: false, hasPostalAddress: true, named: true } }, { kind: "skip", reason: "gym_not_active" }],
-    ["the gym has no postal address", { gym: { active: true, onPlan: true, hasPostalAddress: false, named: true } }, { kind: "skip", reason: "no_postal_address" }],
-    ["the gym's name cannot be shown", { gym: { active: true, onPlan: true, hasPostalAddress: true, named: false } }, { kind: "skip", reason: "gym_name" }],
+    ["the gym is archived", { gym: { active: false, onPlan: true, stopped: false, hasPostalAddress: true, named: true } }, { kind: "skip", reason: "gym_not_active" }],
+    ["the gym has no plan", { gym: { active: true, onPlan: false, stopped: false, hasPostalAddress: true, named: true } }, { kind: "skip", reason: "gym_not_active" }],
+    ["the gym has no postal address", { gym: { active: true, onPlan: true, stopped: false, hasPostalAddress: false, named: true } }, { kind: "skip", reason: "no_postal_address" }],
+    ["the gym's sending was stopped", { gym: { active: true, onPlan: true, stopped: true, hasPostalAddress: true, named: true } }, { kind: "skip", reason: "sending_stopped" }],
+    ["a stopped gym and an unsubscribe", { gym: { active: true, onPlan: true, stopped: true, hasPostalAddress: true, named: true }, suppression: "unsubscribed" }, { kind: "skip", reason: "sending_stopped" }],
+    ["the gym's name cannot be shown", { gym: { active: true, onPlan: true, stopped: false, hasPostalAddress: true, named: false } }, { kind: "skip", reason: "gym_name" }],
     ["the invitation is gone", { inviteState: null }, { kind: "skip", reason: "invitation_closed" }],
     ["the invitation was accepted", { inviteState: "accepted" }, { kind: "skip", reason: "invitation_closed" }],
     ["the invitation was declined", { inviteState: "declined" }, { kind: "skip", reason: "invitation_closed" }],
@@ -56,7 +58,7 @@ describe("decideSend — every class of case", () => {
     ["the address is a shared mailbox", { shared: true }, { kind: "skip", reason: "shared_address" }],
     // Order: a stop that holds for every address comes before one about this address,
     // and nothing about the address is asked of DNS once it is already ruled out.
-    ["a lapsed gym and an unsubscribe", { gym: { active: true, onPlan: false, hasPostalAddress: true, named: true }, suppression: "unsubscribed" }, { kind: "skip", reason: "gym_not_active" }],
+    ["a lapsed gym and an unsubscribe", { gym: { active: true, onPlan: false, stopped: false, hasPostalAddress: true, named: true }, suppression: "unsubscribed" }, { kind: "skip", reason: "gym_not_active" }],
     ["taken off the list and unsubscribed", { onList: false, suppression: "unsubscribed" }, { kind: "skip", reason: "not_on_list" }],
     ["unsubscribed, with no domain asked", { suppression: "unsubscribed", mail: null }, { kind: "skip", reason: "unsubscribed" }],
     ["shared, with no domain asked", { shared: true, mail: null }, { kind: "skip", reason: "shared_address" }],
@@ -73,6 +75,7 @@ describe("decideSend — every class of case", () => {
       { inviteState: "declined" },
       { addressMatchesInvite: false },
       { gym: null },
+      { gym: { active: true, onPlan: true, stopped: true, hasPostalAddress: true, named: true } },
       { onList: false },
       { inApp: true },
       { suppression: "unsubscribed" },
@@ -214,6 +217,7 @@ describe("the development sender's log", () => {
       from: "",
       headers: { "List-Unsubscribe": "<https://api.example.com/v1/email/unsubscribe?t=SECRETTOKEN.MAC>" },
       idempotencyKey: "member-invite-1",
+    tags: [{ name: "invite_send", value: "9b2f7c1e-0000-4000-8000-000000000001" }],
     });
     const written = JSON.stringify(lines);
     expect(written).toContain("https://app.example.com/join/iron-house");
@@ -388,6 +392,7 @@ describe("createResendInviteTransport", () => {
     from: "Iron House via AI Home Gym <invites@invites.example.com>",
     headers: { "List-Unsubscribe": "<https://api.example.com/u/x>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" },
     idempotencyKey: "member-invite-1",
+    tags: [{ name: "invite_send", value: "9b2f7c1e-0000-4000-8000-000000000001" }],
   };
   const answer = (status: number, body: unknown) =>
     new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -413,6 +418,8 @@ describe("createResendInviteTransport", () => {
     expect(body["headers"]).toEqual(message.headers);
     expect(body["from"]).toBe(message.from);
     expect(body["to"]).toEqual(["ann@example.org"]);
+    // The tag names the send row, so a report can find its email before Resend's id is known.
+    expect(body["tags"]).toEqual([{ name: "invite_send", value: "9b2f7c1e-0000-4000-8000-000000000001" }]);
   });
 
   // Three kinds of answer: it went; it did not go (Resend refused the request before

@@ -103,6 +103,15 @@ const envSchema = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((value) => value === "true"),
+  // The signing secret of the Resend webhook that reports bounces and complaints
+  // (`whsec_` and base64, from Resend's dashboard). Unset: the webhook answers 503.
+  RESEND_WEBHOOK_SECRET: z
+    .string()
+    .regex(/^whsec_[A-Za-z0-9+/]+={0,2}$/, "RESEND_WEBHOOK_SECRET must be Resend's `whsec_…` signing secret")
+    .optional(),
+  // Where the app tells its operator that a gym's invitations were stopped (the "have
+  // a look" list, until the admin panel). Unset: the log alone says so.
+  OPERATOR_EMAIL: z.string().trim().email().max(254).optional(),
 });
 
 export type AppConfig = Readonly<z.infer<typeof envSchema>>;

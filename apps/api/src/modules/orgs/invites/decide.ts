@@ -12,8 +12,9 @@ export interface SendFacts {
   inviteState: MemberInviteState | null;
   /** The address the email is for matches the invitation's HMAC. */
   addressMatchesInvite: boolean;
-  /** `named`: the gym's name can be shown in an email (`gymNameForEmail`). */
-  gym: { active: boolean; onPlan: boolean; hasPostalAddress: boolean; named: boolean } | null;
+  /** `named`: the gym's name can be shown in an email (`gymNameForEmail`); `stopped`:
+   *  its sending was stopped for bounces or a complaint. */
+  gym: { active: boolean; onPlan: boolean; stopped: boolean; hasPostalAddress: boolean; named: boolean } | null;
   /** A current entry of the gym holds exactly this address. */
   onList: boolean;
   /** A member of the gym is matched to one of those entries (§9.7). */
@@ -36,6 +37,7 @@ export type SendDecision =
 
 export function decideSend(facts: SendFacts): SendDecision {
   if (facts.gym === null || !facts.gym.active || !facts.gym.onPlan) return { kind: "skip", reason: "gym_not_active" };
+  if (facts.gym.stopped) return { kind: "skip", reason: "sending_stopped" };
   if (!facts.gym.hasPostalAddress) return { kind: "skip", reason: "no_postal_address" };
   if (!facts.gym.named) return { kind: "skip", reason: "gym_name" };
   if (facts.inviteState === null || facts.inviteState !== "pending") return { kind: "skip", reason: "invitation_closed" };

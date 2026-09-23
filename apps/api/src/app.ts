@@ -38,6 +38,7 @@ import { GeoError } from "./modules/geo/errors.js";
 import { registerOrgRoutes, type OrgRouteOverrides } from "./modules/orgs/routes.js";
 import { inviteSettings } from "./modules/orgs/invites/settings.js";
 import { registerUnsubscribeRoutes } from "./modules/orgs/invites/unsubscribe.js";
+import { registerResendWebhookRoutes } from "./modules/webhooks/resendRoutes.js";
 import { OrgsError } from "./modules/orgs/service.js";
 import { ExportError } from "./modules/privacy/export.js";
 import { safeErrorSerializer, safeRequestSerializer, scrubbedForSentry } from "./logSafety.js";
@@ -273,6 +274,12 @@ export async function buildApp(
   registerOrgRoutes(app, { sql, redis, invites }, overrides.orgs ?? {});
   // The unsubscribe link in every invitation: public, and not under /v1/orgs.
   registerUnsubscribeRoutes(app, { sql, redis, settings: invites });
+  // What Resend reports about each email: signed, kept once, acted on by the worker.
+  registerResendWebhookRoutes(app, {
+    sql,
+    secret: config.RESEND_WEBHOOK_SECRET,
+    nowSeconds: () => Math.floor(Date.now() / 1000),
+  });
 
   return app;
 }
