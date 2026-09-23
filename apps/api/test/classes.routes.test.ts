@@ -576,16 +576,28 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       // broken.
       expect(timetable(made).entries[0]?.schedules).toEqual([]);
 
+      // Two weekdays that are never TODAY's, in the gym's zone or in UTC: the eight
+      // weeks run from today to the same weekday eight weeks on, so today's weekday
+      // has nine dates and any other has eight. With Monday and Wednesday fixed here,
+      // this case read 17 on every Monday and Wednesday.
+      const isoToday = [
+        ((new Date().getUTCDay() + 6) % 7) + 1,
+        ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].indexOf(
+          new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "short" }).format(new Date()),
+        ) + 1,
+      ];
+      const [early, late] = [1, 2, 3, 4, 5, 6, 7].filter((day) => !isoToday.includes(day));
+      if (early === undefined || late === undefined) throw new Error("no two weekdays left");
       const withRepeat = await post(
         repeatsUrl(org.org.id, type.id),
-        { ...RUN, weekdays: [WED, MON], startMinute: at(18, 30), startsOn: dayFromToday(0) },
+        { ...RUN, weekdays: [late, early], startMinute: at(18, 30), startsOn: dayFromToday(0) },
         owner.cookies,
       );
       expect(withRepeat.statusCode).toBe(201);
       const schedule = timetable(withRepeat).entries[0]?.schedules[0];
       if (schedule === undefined) throw new Error("repeat answered nothing");
-      // SORTED AND DE-DUPLICATED ON THE WAY IN: the screen sent Wednesday first.
-      expect(schedule.weekdays).toEqual([MON, WED]);
+      // SORTED AND DE-DUPLICATED ON THE WAY IN: the screen sent the later day first.
+      expect(schedule.weekdays).toEqual([early, late]);
       expect(schedule.startMinute).toBe(at(18, 30));
       expect(schedule.endsOn).toBeNull();
       // THE DATES ARE THERE BEFORE THE NIGHTLY JOB EVER RUNS — two a week over
