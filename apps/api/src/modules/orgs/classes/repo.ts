@@ -18,8 +18,8 @@
 // from the class type, RULINGS 2026-09-22), which must not interleave with a
 // fill writing new ones.
 //
-// **AND THE COACH CHECK IS ASKED INSIDE EVERY WRITE THAT CAN NAME ONE** — three
-// of them now, since a repeat carries its own. `coach_user_id` is a FK to
+// **AND THE COACH CHECK IS ASKED INSIDE EVERY WRITE THAT CAN NAME ONE**, since a
+// repeat and a single date carry their own. `coach_user_id` is a FK to
 // `users`, so nothing structural stops one gym naming another gym's trainer on
 // its timetable; `coachIsStaff` under the lock is what does.
 import type { Sql, TransactionSql } from "postgres";
@@ -33,6 +33,7 @@ import {
 import { insertAudit, lockOrgRow } from "../repo.js";
 import { dayVerdict } from "./dayRule.js";
 import { fillClassSessions } from "./fill.js";
+import { fromVerdict, slotChangeKind, slotDateFate, type FromVerdict } from "./slotRule.js";
 
 export interface ClassTypeRow {
   id: string;
@@ -213,13 +214,16 @@ export async function readTimetable(
     -- recomputed from the repeat for the screen. A second derivation is a second
     -- answer, and the one shown would be the one nothing books against: if the
     -- fill has not run, or a day was cancelled, THIS is what says so.
+    -- From NOW, not from the gym's today: a class that ran this morning is not
+    -- one of the next ones (found at 17b-ii-w).
     LEFT JOIN LATERAL (
       SELECT count(*)::int AS sessions_ahead,
              (array_agg(x.local_date::text ORDER BY x.local_date))
                [1:${CLASS_SCHEDULE_PREVIEW_DATES}] AS next_dates
       FROM gym_class_sessions x
       WHERE x.schedule_id = s.id
-        AND x.local_date >= (${now}::timestamptz AT TIME ZONE g.timezone)::date
+        AND x.gym_id = s.gym_id
+        AND x.starts_at > ${now}
         AND x.status = 'scheduled'
     ) n ON TRUE
     WHERE s.gym_id = ${gymId}
@@ -395,7 +399,7 @@ export async function updateClassType(
     // (a Class Type edits its name, description and visibility; a time slot
     // edits instructor, times and class size limits).
     //
-    // The re-stamp moved to `updateSchedule` below, where the numbers now live.
+    // The re-stamp moved to `changeSlotFrom` below, where the numbers now live.
 
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
@@ -565,11 +569,17 @@ export async function createSchedule(
       return { kind: "coach_not_staff" };
     }
 
+    // A time slot whose last day has passed runs no more and does not count: a
+    // time slot moved from a date leaves its first half behind with an end date
+    // (`changeSlotFrom`), and those would otherwise fill the cap for good.
     const [live] = await tx<{ n: number }[]>`
-      SELECT count(*)::int AS n FROM gym_class_schedules
-      WHERE class_type_id = ${input.classTypeId}
-        AND gym_id = ${input.gymId}
-        AND ended_at IS NULL`;
+      SELECT count(*)::int AS n FROM gym_class_schedules s
+      JOIN gyms g ON g.id = s.gym_id
+      WHERE s.class_type_id = ${input.classTypeId}
+        AND s.gym_id = ${input.gymId}
+        AND s.ended_at IS NULL
+        AND (s.ends_on IS NULL
+             OR s.ends_on >= (${input.now}::timestamptz AT TIME ZONE g.timezone)::date)`;
     if ((live?.n ?? 0) >= CLASS_SCHEDULES_PER_TYPE_MAX) {
       return { kind: "too_many", cap: CLASS_SCHEDULES_PER_TYPE_MAX };
     }
@@ -652,97 +662,364 @@ export async function createSchedule(
   });
 }
 
-/** CHANGE A REPEAT'S LENGTH, PLACES OR COACH — **and re-stamp its coming dates
- *  in the same transaction.**
+export type SlotChangeOutcome =
+  | { kind: "ok"; localDate: string }
+  | { kind: "not_found" }
+  | { kind: "coach_not_staff" }
+  | { kind: "clashes" }
+  | { kind: "from_outside"; verdict: Exclude<FromVerdict, "ok"> }
+  | { kind: "time_passed" }
+  /** A move would replace this many classes changed or cancelled on their own,
+   *  and the request did not confirm that number. */
+  | { kind: "replaces"; count: number }
+  /** The class opened on the Calendar has started. */
+  | { kind: "started" }
+  /** The class opened on the Calendar is cancelled: un-cancel it first. */
+  | { kind: "cancelled" };
+
+/** Where the change is made from: a time slot and a date (the Classes list), or
+ *  one class on the Calendar ("This and future classes") — its time slot, its
+ *  date and its days. */
+export type SlotChangeTarget =
+  | { by: "slot"; scheduleId: string; updateFrom: string; weekdays: readonly number[] }
+  | { by: "session"; sessionId: string };
+
+/** CHANGE A TIME SLOT FROM A DATE — §13.3's "this day and later" (17b-ii-b-ii).
  *
- *  This is where 17b-i's re-stamp moved to, and moving it is the whole point of
- *  `0036`: the numbers now live on the repeat, so the repeat is what re-stamps.
+ *  Under the gym's row lock, like every write here, so it cannot interleave
+ *  with the nightly fill or another change to the same time slot. Every check
+ *  comes before the first write, so a refusal writes nothing.
  *
- *  **FUTURE ONLY.** A session that has already happened is history: changing a
- *  repeat from 45 minutes to 60 must not rewrite last Tuesday, and the gym's
- *  attendance for that day was taken against the length it actually ran.
+ *  What happens to each coming class is `slotDateFate`'s (`slotRule.ts`); this
+ *  reads the facts and writes by the ids it answers.
  *
- *  **AND NEVER A DAY THE GYM CHANGED ON PURPOSE** (`changed_alone`, 17b-ii-b).
- *  Nothing sets that flag yet; the condition is here because this is the
- *  statement it exists to restrain, and a condition added later would mean this
- *  one shipped able to undo a deliberate change.
+ *  **A MOVE** (new days or start time): the time slot ends the day before the
+ *  date — or stops outright when it has no class left to run before it — and a
+ *  new one starts on the date with the same end, writing its own classes.
  *
- *  **WHAT IT DELIBERATELY CANNOT CHANGE IS WHEN.** Days, time and window are
- *  §13.3's *"this day and later"* — the old repeat ends and a new one begins, so
- *  the dates already written keep the time they were written at — and that is
- *  17b-ii-b's, with the week view it needs. Re-timing every coming date behind a
- *  PUT would be the same change with none of the care, and the clash rule
- *  `createSchedule` carries would have to be asked again here to do it safely.
+ *  **A CHANGE OF LENGTH, SIZE OR COACH**: when the time slot still runs before
+ *  the date, it is split the same way and its classes from the date move to the
+ *  new one with their ids, status and own changes, so the list shows the old
+ *  values until the day before and the new ones from the date. Otherwise it is
+ *  changed where it stands. A class changed on its own keeps its values either
+ *  way.
  *
- *  **A STOPPED REPEAT IS NOT EDITABLE** (`ended_at IS NULL` in the key, as
- *  `endSchedule`'s own read has): it has no coming dates to re-stamp and it is
- *  not on the screen the caller is acting from, so this is a 404 rather than a
- *  silent write nobody can see. */
-export async function updateSchedule(
+ *  **WHEN 17c LANDS** a replaced class may have people booked on it, and they
+ *  have to be told (§13.3); today nothing can be booked. */
+export async function changeSlotFrom(
   sql: Sql,
   input: ClassScheduleFields & {
     gymId: string;
-    scheduleId: string;
+    target: SlotChangeTarget;
+    startMinute: number;
+    confirmReplace: number | null;
     actorUserId: string;
     now: Date;
   },
-): Promise<ClassWriteOutcome> {
+): Promise<SlotChangeOutcome> {
   return await sql.begin(async (tx) => {
     await lockOrgRow(tx, input.gymId);
-    // THE PAIR IS THE KEY. `id` alone would let one gym re-coach another gym's
-    // repeat with a uuid it came by — the worst-thing test's second half.
-    const [before] = await tx<
-      { id: string; minutes: number; places: number | null; coach_user_id: string | null }[]
-    >`
-      SELECT id, minutes, places, coach_user_id FROM gym_class_schedules
-      WHERE id = ${input.scheduleId} AND gym_id = ${input.gymId} AND ended_at IS NULL`;
-    if (before === undefined) return { kind: "not_found" };
 
-    // The worst thing, refused: `createSchedule`'s check, in the second place a
-    // coach can reach the database. One rule, asked at every door.
+    // THE DATE AND THE TIME SLOT. The pair is the key at every step: an id from
+    // another gym is a 404 here, never a write.
+    let scheduleId: string;
+    let from: string;
+    let openedId: string | null = null;
+    if (input.target.by === "session") {
+      const [opened] = await tx<
+        { schedule_id: string | null; local_date: string; status: string; started: boolean }[]
+      >`
+        SELECT schedule_id, local_date::text AS local_date, status,
+               starts_at <= ${input.now} AS started
+        FROM gym_class_sessions
+        WHERE id = ${input.target.sessionId} AND gym_id = ${input.gymId}`;
+      if (opened === undefined || opened.schedule_id === null) return { kind: "not_found" };
+      if (opened.started) return { kind: "started" };
+      if (opened.status === "cancelled") return { kind: "cancelled" };
+      scheduleId = opened.schedule_id;
+      from = opened.local_date;
+      openedId = input.target.sessionId;
+    } else {
+      scheduleId = input.target.scheduleId;
+      from = input.target.updateFrom;
+    }
+
+    const [slot] = await tx<
+      {
+        class_type_id: string;
+        weekdays: number[];
+        local_start_minute: number;
+        starts_on: string;
+        ends_on: string | null;
+        minutes: number;
+        places: number | null;
+        coach_user_id: string | null;
+        today: string;
+        last_calendar_date: string;
+        from_weekday: number;
+        new_start_passed: boolean;
+      }[]
+    >`
+      SELECT s.class_type_id, s.weekdays, s.local_start_minute,
+             s.starts_on::text AS starts_on, s.ends_on::text AS ends_on,
+             s.minutes, s.places, s.coach_user_id,
+             t.today::text AS today,
+             (t.today + ${CLASS_FILL_HORIZON_DAYS}::int)::text AS last_calendar_date,
+             EXTRACT(ISODOW FROM ${from}::date)::int AS from_weekday,
+             ((${from}::date + make_interval(mins => ${input.startMinute}::int))
+               AT TIME ZONE g.timezone) <= ${input.now} AS new_start_passed
+      FROM gym_class_schedules s
+      JOIN gyms g ON g.id = s.gym_id
+      JOIN gym_class_types c ON c.id = s.class_type_id AND c.gym_id = s.gym_id
+      CROSS JOIN LATERAL (
+        SELECT (${input.now}::timestamptz AT TIME ZONE g.timezone)::date AS today
+      ) t
+      WHERE s.id = ${scheduleId} AND s.gym_id = ${input.gymId}
+        AND s.ended_at IS NULL AND c.archived_at IS NULL`;
+    if (slot === undefined) return { kind: "not_found" };
+
+    const verdict = fromVerdict(from, {
+      today: slot.today,
+      startsOn: slot.starts_on,
+      endsOn: slot.ends_on,
+      lastCalendarDate: slot.last_calendar_date,
+    });
+    if (verdict !== "ok") return { kind: "from_outside", verdict };
+
+    const weekdays = input.target.by === "slot" ? [...input.target.weekdays] : slot.weekdays;
+    const change = slotChangeKind(
+      { weekdays: slot.weekdays, startMinute: slot.local_start_minute },
+      { weekdays, startMinute: input.startMinute },
+    );
+    const fieldsSame =
+      input.minutes === slot.minutes &&
+      input.places === slot.places &&
+      input.coachUserId === slot.coach_user_id;
+    // Nothing to do: the Classes list saved what it already had.
+    if (change === "fields" && fieldsSame && openedId === null) {
+      return { kind: "ok", localDate: from };
+    }
+
     if (!(await coachIsStaff(tx, input.gymId, input.coachUserId))) {
       return { kind: "coach_not_staff" };
     }
 
-    await tx`
-      UPDATE gym_class_schedules
-      SET minutes = ${input.minutes}, places = ${input.places},
-          coach_user_id = ${input.coachUserId}
-      WHERE id = ${input.scheduleId} AND gym_id = ${input.gymId}`;
+    // A class that would run at the new time on the date itself, when that time
+    // has gone: the opened class always runs on it, a moved time slot only on
+    // one of its days.
+    const runsOnFrom = openedId !== null || (change === "move" && weekdays.includes(slot.from_weekday));
+    if (runsOnFrom && slot.new_start_passed) return { kind: "time_passed" };
 
-    const restamped = await tx`
-      UPDATE gym_class_sessions
-      SET minutes = ${input.minutes}, places = ${input.places},
-          coach_user_id = ${input.coachUserId}
-      WHERE schedule_id = ${input.scheduleId}
-        AND gym_id = ${input.gymId}
-        AND starts_at > ${input.now}
-        AND changed_alone = false`;
+    if (change === "move") {
+      // The new time slot must not overlap another of this class at the same
+      // start on a shared day — `createSchedule`'s rule, with this one left out
+      // because it ends before the date.
+      const [clash] = await tx<{ id: string }[]>`
+        SELECT id FROM gym_class_schedules
+        WHERE class_type_id = ${slot.class_type_id}
+          AND gym_id = ${input.gymId}
+          AND ended_at IS NULL
+          AND id <> ${scheduleId}
+          AND local_start_minute = ${input.startMinute}
+          AND weekdays && ${tx.array(weekdays)}::int[]
+          AND starts_on <= coalesce(${slot.ends_on}::date, 'infinity'::date)
+          AND coalesce(ends_on, 'infinity'::date) >= ${from}::date
+        LIMIT 1`;
+      if (clash !== undefined) return { kind: "clashes" };
+    } else {
+      // Every class before the date must be written before the time slot's own
+      // values change, or a later fill would write one of them with the new
+      // values. The date is inside the window (`beyond_calendar`), so this
+      // writes all of them; it is what the nightly job would write anyway.
+      await fillClassSessions(tx, { gymIds: [input.gymId], scheduleIds: [scheduleId], now: input.now });
+    }
 
+    const coming = await tx<
+      { id: string; local_date: string; status: string; changed_alone: boolean; started: boolean }[]
+    >`
+      SELECT id, local_date::text AS local_date, status, changed_alone,
+             starts_at <= ${input.now} AS started
+      FROM gym_class_sessions
+      WHERE schedule_id = ${scheduleId} AND gym_id = ${input.gymId}
+        AND local_date >= ${slot.today}::date`;
+
+    const restamp: string[] = [];
+    const replace: string[] = [];
+    let asked = 0;
+    let runsBefore = false;
+    for (const row of coming) {
+      const beforeFrom = row.local_date < from;
+      if (beforeFrom && !row.started) runsBefore = true;
+      const fate = slotDateFate(change, {
+        beforeFrom,
+        started: row.started,
+        status: row.status === "cancelled" ? "cancelled" : "scheduled",
+        changedAlone: row.changed_alone,
+        opened: row.id === openedId,
+      });
+      switch (fate) {
+        case "keep":
+          break;
+        case "restamp":
+          restamp.push(row.id);
+          break;
+        case "replace":
+          replace.push(row.id);
+          break;
+        case "replace_asked":
+          replace.push(row.id);
+          asked += 1;
+          break;
+        default: {
+          const never: never = fate;
+          throw new Error(`unhandled slot date fate: ${String(never)}`);
+        }
+      }
+    }
+    if (asked > 0 && input.confirmReplace !== asked) return { kind: "replaces", count: asked };
+    if (change === "fields" && fieldsSame) {
+      // The time slot keeps its values; only an opened class changed on its own
+      // differs from it, and goes back to it.
+      const opened = coming.find((row) => row.id === openedId);
+      if (opened === undefined || !opened.changed_alone) return { kind: "ok", localDate: from };
+      restamp.splice(0, restamp.length, opened.id);
+    }
+
+    // ── Writes from here on ──
+
+    const places = (p: number | null) => (p === null ? "none" : String(p));
+    const meta: Record<string, string> = {
+      from,
+      minutes: `${String(slot.minutes)} -> ${String(input.minutes)}`,
+      places: `${places(slot.places)} -> ${places(input.places)}`,
+      // Ids, never a coach's name.
+      coach: `${slot.coach_user_id ?? "none"} -> ${input.coachUserId ?? "none"}`,
+    };
+
+    // The old time slot: stopped outright when it has no class left to run
+    // before the date (the list then leaves it out, as it does a cancelled time
+    // slot, and its past classes stay), else ended the day before the date.
+    const endOld = async () => {
+      if (runsBefore) {
+        await tx`
+          UPDATE gym_class_schedules SET ends_on = ${from}::date - 1
+          WHERE id = ${scheduleId} AND gym_id = ${input.gymId}`;
+      } else {
+        await tx`
+          UPDATE gym_class_schedules SET ended_at = ${input.now}
+          WHERE id = ${scheduleId} AND gym_id = ${input.gymId}`;
+      }
+    };
+    const insertNew = async () => {
+      const [created] = await tx<{ id: string }[]>`
+        INSERT INTO gym_class_schedules
+          (gym_id, class_type_id, weekdays, local_start_minute, starts_on, ends_on,
+           minutes, places, coach_user_id)
+        VALUES (${input.gymId}, ${slot.class_type_id}, ${tx.array(weekdays)}::int[],
+                ${input.startMinute}, ${from}::date, ${slot.ends_on}::date,
+                ${input.minutes}, ${input.places}, ${input.coachUserId})
+        RETURNING id`;
+      if (created === undefined) throw new Error("class schedule insert returned no row");
+      return created.id;
+    };
+    const restampRows = async (onSchedule: string) =>
+      restamp.length === 0
+        ? 0
+        : (
+            await tx`
+              UPDATE gym_class_sessions x
+              SET local_start_minute = ${input.startMinute},
+                  starts_at = ((x.local_date + make_interval(mins => ${input.startMinute}::int))
+                               AT TIME ZONE g.timezone),
+                  minutes = ${input.minutes}, places = ${input.places},
+                  coach_user_id = ${input.coachUserId}, changed_alone = false
+              FROM gyms g
+              WHERE g.id = x.gym_id
+                AND x.gym_id = ${input.gymId}
+                AND x.schedule_id = ${onSchedule}
+                AND x.id = ANY(${tx.array(restamp)}::uuid[])`
+          ).count;
+
+    if (change === "move") {
+      const removed =
+        replace.length === 0
+          ? 0
+          : (
+              await tx`
+                DELETE FROM gym_class_sessions
+                WHERE gym_id = ${input.gymId} AND schedule_id = ${scheduleId}
+                  AND id = ANY(${tx.array(replace)}::uuid[])`
+            ).count;
+      await endOld();
+      const newId = await insertNew();
+      const filled = await fillClassSessions(tx, {
+        gymIds: [input.gymId],
+        scheduleIds: [newId],
+        now: input.now,
+      });
+      await insertAudit(tx, {
+        actorUserId: input.actorUserId,
+        gymId: input.gymId,
+        action: "org.class_schedule_moved",
+        targetType: "gym_class_schedule",
+        targetId: scheduleId,
+        meta: {
+          ...meta,
+          newSchedule: newId,
+          weekdays: `${slot.weekdays.join(",")} -> ${weekdays.join(",")}`,
+          startMinute: `${String(slot.local_start_minute)} -> ${String(input.startMinute)}`,
+          sessionsReplaced: String(removed),
+          changedAloneReplaced: String(asked),
+          sessionsWritten: String(filled.sessions),
+        },
+      });
+      return { kind: "ok", localDate: from };
+    }
+
+    if (fieldsSame) {
+      const restamped = await restampRows(scheduleId);
+      await insertAudit(tx, {
+        actorUserId: input.actorUserId,
+        gymId: input.gymId,
+        action: "org.class_session_changed",
+        targetType: "gym_class_session",
+        targetId: openedId ?? scheduleId,
+        meta: { ...meta, sessionsRestamped: String(restamped) },
+      });
+      return { kind: "ok", localDate: from };
+    }
+
+    let onSchedule = scheduleId;
+    if (runsBefore) {
+      await endOld();
+      onSchedule = await insertNew();
+      // Every class from the date moves to the new time slot as it is, so the
+      // unique (time slot, date) keeps the new one's fill from writing a second.
+      await tx`
+        UPDATE gym_class_sessions SET schedule_id = ${onSchedule}
+        WHERE gym_id = ${input.gymId} AND schedule_id = ${scheduleId}
+          AND local_date >= ${from}::date`;
+    } else {
+      await tx`
+        UPDATE gym_class_schedules
+        SET minutes = ${input.minutes}, places = ${input.places},
+            coach_user_id = ${input.coachUserId}
+        WHERE id = ${scheduleId} AND gym_id = ${input.gymId}`;
+    }
+    const restamped = await restampRows(onSchedule);
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
       gymId: input.gymId,
       action: "org.class_schedule_updated",
       targetType: "gym_class_schedule",
-      targetId: input.scheduleId,
-      // What changed and how far it reached — never the coach's name, which is
-      // a person's own and is one join away for anybody entitled to it.
-      //
-      // **THE COACH IS HERE, AS AN ID.** Without it a change that swapped only
-      // the coach — this card's own worst thing, and the reason `coachIsStaff`
-      // exists — would be written as `60 -> 60`, `20 -> 20` and read as a no-op.
-      // An id and never a name, as `applicantUserId` and `removedUserId` already
-      // are one module up.
+      targetId: scheduleId,
       meta: {
-        minutes: `${String(before.minutes)} -> ${String(input.minutes)}`,
-        places: `${before.places === null ? "none" : String(before.places)} -> ${
-          input.places === null ? "none" : String(input.places)
-        }`,
-        coach: `${before.coach_user_id ?? "none"} -> ${input.coachUserId ?? "none"}`,
-        sessionsRestamped: String(restamped.count),
+        ...meta,
+        ...(onSchedule === scheduleId ? {} : { newSchedule: onSchedule }),
+        sessionsRestamped: String(restamped),
       },
     });
-    return { kind: "ok" };
+    return { kind: "ok", localDate: from };
   });
 }
 
