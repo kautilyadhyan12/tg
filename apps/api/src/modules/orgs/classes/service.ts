@@ -35,12 +35,16 @@ import type { Sql } from "postgres";
 import {
   CLASS_FILL_HORIZON_DAYS,
   classColourSchema,
+  classSessionStatusSchema,
   gymClassesResponseSchema,
+  gymClassWeekResponseSchema,
+  type ChangeGymClassSessionRequest,
   type CreateGymClassScheduleRequest,
   type CreateGymClassTypeRequest,
   type GymClassesResponse,
   type GymClassSchedule,
   type GymClassType,
+  type GymClassWeekResponse,
   type UpdateGymClassScheduleRequest,
   type UpdateGymClassTypeRequest,
 } from "@app/shared";
@@ -372,6 +376,156 @@ export async function updateSchedule(
     }),
   );
   return await readOr404(deps, gymId);
+}
+
+// ── THE WEEK VIEW AND "THIS DAY ONLY" (17b-ii-b-i) ──────────────────────────
+
+async function readWeekOr404(
+  deps: ClassesDeps,
+  gymId: string,
+  week: string | null,
+): Promise<GymClassWeekResponse> {
+  const row = await repo.readWeek(deps.sql, gymId, { week, now: deps.now() });
+  if (row === null) throw new OrgsError(404, "org_not_found", "Organisation not found.");
+  return gymClassWeekResponseSchema.parse({
+    timezone: row.timezone,
+    clockFormat: row.clockFormat,
+    today: row.today,
+    weekStart: row.weekStart,
+    lastWeekStart: row.lastWeekStart,
+    sessions: row.sessions.map((s) => ({
+      id: s.id,
+      classTypeId: s.classTypeId,
+      scheduleId: s.scheduleId,
+      name: s.name,
+      colour: classColourSchema.parse(s.colour),
+      openGym: s.openGym,
+      localDate: s.localDate,
+      startMinute: s.startMinute,
+      startsAt: s.startsAt.toISOString(),
+      minutes: s.minutes,
+      places: s.places,
+      coachUserId: s.coachUserId,
+      coachName: s.coachName,
+      status: classSessionStatusSchema.parse(s.status),
+      changedAlone: s.changedAlone,
+      started: s.started,
+    })),
+  });
+}
+
+/** ONE WEEK OF THE GYM'S CALENDAR. `schedule.manage`, like the rest of Classes. */
+export async function getWeek(
+  deps: ClassesDeps,
+  userId: string,
+  gymId: string,
+  week: string | undefined,
+): Promise<GymClassWeekResponse> {
+  await requirePrivilege(deps, gymId, userId, "schedule.manage");
+  return await readWeekOr404(
+    deps,
+    gymId,
+    week === undefined ? null : requireCalendarDate(week, "week"),
+  );
+}
+
+async function writeDay(
+  deps: ClassesDeps,
+  userId: string,
+  gymId: string,
+  sessionId: string,
+  input: repo.ClassDayInput,
+): Promise<GymClassWeekResponse> {
+  await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
+  const outcome = await repo.changeSession(deps.sql, {
+    ...input,
+    gymId,
+    sessionId,
+    actorUserId: userId,
+    now: deps.now(),
+  });
+  switch (outcome.kind) {
+    case "ok":
+      // The week the date is in, so the screen redraws what it is looking at.
+      return await readWeekOr404(deps, gymId, outcome.localDate);
+    case "not_found":
+      throw new OrgsError(404, "class_not_found", NOT_FOUND_MESSAGE);
+    case "coach_not_staff":
+      throw new OrgsError(
+        400,
+        "coach_not_staff",
+        "Pick a coach who is on this gym's staff, or leave it blank.",
+      );
+    case "started":
+      throw new OrgsError(
+        409,
+        "class_started",
+        "This class has already started, so it can't be changed now.",
+      );
+    case "cancelled":
+      throw new OrgsError(
+        409,
+        "class_day_cancelled",
+        "This day is cancelled. Put it back on first, then change it.",
+      );
+    case "time_passed":
+      throw new OrgsError(
+        409,
+        "class_time_passed",
+        "That time has already passed on this day. Pick a later one.",
+      );
+    case "time_missing":
+      throw new OrgsError(
+        409,
+        "class_time_missing",
+        "The clocks go forward on this day, so that time doesn't exist. Pick another time.",
+      );
+    case "clashes":
+      throw new OrgsError(
+        409,
+        "class_day_clashes",
+        "This class already runs at that time on this day. Pick another time.",
+      );
+    default: {
+      const never: never = outcome;
+      throw new Error(`unhandled class day outcome: ${JSON.stringify(never)}`);
+    }
+  }
+}
+
+/** THIS DAY ONLY: its start time, length, places and coach. */
+export async function changeClassSession(
+  deps: ClassesDeps,
+  userId: string,
+  gymId: string,
+  sessionId: string,
+  req: ChangeGymClassSessionRequest,
+): Promise<GymClassWeekResponse> {
+  return await writeDay(deps, userId, gymId, sessionId, {
+    action: "change",
+    startMinute: req.startMinute,
+    minutes: req.minutes,
+    places: req.places,
+    coachUserId: req.coachUserId,
+  });
+}
+
+export async function cancelClassSession(
+  deps: ClassesDeps,
+  userId: string,
+  gymId: string,
+  sessionId: string,
+): Promise<GymClassWeekResponse> {
+  return await writeDay(deps, userId, gymId, sessionId, { action: "cancel" });
+}
+
+export async function restoreClassSession(
+  deps: ClassesDeps,
+  userId: string,
+  gymId: string,
+  sessionId: string,
+): Promise<GymClassWeekResponse> {
+  return await writeDay(deps, userId, gymId, sessionId, { action: "restore" });
 }
 
 export async function endSchedule(

@@ -387,6 +387,12 @@ export const classScheduleParamsSchema = z
   .strict();
 export type ClassScheduleParams = z.infer<typeof classScheduleParamsSchema>;
 
+/** A gym and one date on its calendar. The pair, as for the two above. */
+export const classSessionParamsSchema = z
+  .object({ gymId: z.string().uuid(), sessionId: z.string().uuid() })
+  .strict();
+export type ClassSessionParams = z.infer<typeof classSessionParamsSchema>;
+
 /** The gym id AND the date being un-closed.
  *
  *  **The date is shape-checked here and NOT calendar-checked**, deliberately:

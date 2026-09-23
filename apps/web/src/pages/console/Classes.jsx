@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Loader2, Plus, RotateCcw, X } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import {
@@ -10,6 +10,9 @@ import {
   ConsoleSection,
 } from '../../components/console/ConsoleStates';
 import TimePick from '../../components/console/TimePick';
+import { Field, RunFields } from './ClassFields';
+import { inputStyle, labelStyle } from './classStyles';
+import ClassWeek from './ClassWeek';
 import { useConsoleOrg } from './useConsoleOrg';
 import { viewerPrivileges } from './consoleView';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
@@ -23,7 +26,6 @@ import {
   classProblem,
   classRequest,
   classSwatch,
-  coachChoices,
   emptyClassDraft,
   nextDatesLine,
   repeatDraft,
@@ -74,11 +76,11 @@ import {
 // are labelled as that, because since the ruling they are not what the class
 // runs as.
 //
-// **WHAT THIS HALF DOES NOT DO, said so nobody looks for it**: there is no week
-// calendar, no way to change or cancel a single day, and no way to move a
-// repeat's day or time. All three are 17b-ii-b — moving a repeat is "this day
-// and later", which ends the old one and begins a new one so the dates already
-// written keep the time they were written at.
+// **THE WEEK TAB (17b-ii-b-i)** is `ClassWeek.jsx`: the calendar a week at a
+// time, where one day is changed or cancelled on its own. Moving a repeat to
+// another day or time from a date is still to come (17b-ii-b-ii) — it ends the
+// old repeat and begins a new one, so the dates already written keep the time
+// they were written at.
 //
 // **NOTHING ON THIS SCREEN DESTROYS DATES WITHOUT ASKING** (Kd, 2026-09-22).
 // Remove and Stop both clear every date a class or a repeat had ahead of it, and
@@ -90,115 +92,6 @@ import {
 // and its past dates under "No longer running", with a **Bring back** button —
 // Kd's ruling the same day, taking Mindbody's behaviour over TeamUp's, which
 // cannot reinstate an archived Class Type at all.
-
-const inputStyle = {
-  background: '#0A0908',
-  border: '1px solid rgba(255,255,255,0.10)',
-  color: '#fff',
-};
-
-const labelStyle = { color: 'rgba(255,255,255,0.45)' };
-
-function Field({ label, children }) {
-  return (
-    <label className="flex flex-col gap-1.5 text-sm">
-      <span className="text-xs uppercase tracking-wider" style={labelStyle}>
-        {label}
-      </span>
-      {children}
-    </label>
-  );
-}
-
-/** HOW LONG, HOW MANY, WHO — the three fields a class and a repeat BOTH hold,
- *  drawn once and used by all three forms on this screen.
- *
- *  **ONE COMPONENT BECAUSE THERE IS ONE "no limit" TICK TO GET WRONG.** The
- *  class form's own note said it of two forms; there are three now (a new class,
- *  a new repeat, changing a repeat), and the tick's whole subtlety — the box
- *  keeps its number while the tick is on, so a gym that ticks it by mistake
- *  finds its 20 still there — would otherwise be written out three times.
- *
- *  `forClass` changes only the words. On a CLASS these three are the values a
- *  new repeat is filled in from (Kd, RULINGS 2026-09-22) and the note above them
- *  says so; on a REPEAT they are what that repeat actually runs as. */
-function RunFields({ draft, set, staff, disabled, forClass }) {
-  return (
-    <div className="flex flex-col gap-4">
-      {forClass ? (
-        <p className="text-xs" style={labelStyle}>
-          These fill in a new repeat. Each repeat can then have its own.
-        </p>
-      ) : null}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Field label="How long (minutes)">
-          <input
-            value={draft.minutes}
-            onChange={(e) => set({ minutes: e.target.value })}
-            disabled={disabled}
-            inputMode="numeric"
-            className="rounded-lg px-3 py-2 text-sm"
-            style={inputStyle}
-          />
-        </Field>
-        <Field label={forClass ? 'Usual coach (optional)' : 'Coach (optional)'}>
-          <select
-            value={draft.coachUserId}
-            onChange={(e) => set({ coachUserId: e.target.value })}
-            disabled={disabled}
-            className="rounded-lg px-3 py-2 text-sm"
-            style={inputStyle}
-          >
-            <option value="">Nobody yet</option>
-            {/* WHOEVER IS ALREADY SET IS ALWAYS AN OPTION — `coachChoices`
-                carries the argument: a select whose value is not among its
-                options renders blank and the next Save sends null, which would
-                take a coach off with nobody touching the box. */}
-            {coachChoices(staff, draft).map((person) => (
-              <option key={person.userId} value={person.userId}>
-                {person.displayName}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </div>
-
-      {/* NOT a `Field`, and the reason is a real one rather than layout: a
-          `<label>` wrapping TWO controls labels NEITHER of them, so the box
-          and the tick both need their own name. A screen reader lands on
-          "How many people fit" and then on "No limit"; the render test can
-          reach both by those names, which is what a person can do. */}
-      <div className="flex flex-col gap-1.5 text-sm">
-        <span className="text-xs uppercase tracking-wider" style={labelStyle}>
-          How many people fit
-        </span>
-        <div className="flex items-center gap-3">
-          <input
-            value={draft.places}
-            onChange={(e) => set({ places: e.target.value })}
-            aria-label="How many people fit"
-            /* THE BOX KEEPS ITS NUMBER WHILE "no limit" IS TICKED, so a gym
-               that ticks it by mistake finds its 20 still there. Disabled, not
-               emptied. */
-            disabled={disabled || draft.unlimited}
-            inputMode="numeric"
-            className="rounded-lg px-3 py-2 text-sm w-24"
-            style={{ ...inputStyle, opacity: draft.unlimited ? 0.5 : 1 }}
-          />
-          <label className="flex items-center gap-2 text-sm" style={labelStyle}>
-            <input
-              type="checkbox"
-              checked={draft.unlimited}
-              onChange={(e) => set({ unlimited: e.target.checked })}
-              disabled={disabled}
-            />
-            No limit
-          </label>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /** THE ONE FORM, for adding a class and for editing one.
  *
@@ -429,9 +322,9 @@ function RepeatEditForm({ draft, setDraft, staff, disabled, saving, onSave, onCa
       <RunFields draft={draft} set={set} staff={staff} disabled={disabled} forClass={false} />
 
       <p className="text-xs" style={labelStyle}>
-        This changes every date this repeat still has coming up. The days it has
-        already run keep what they ran as. To move the day or the time, stop this
-        repeat and add a new one.
+        This changes every date this repeat still has coming up, except a day you
+        changed on its own in the week view. The days it has already run keep what
+        they ran as. To move the day or the time, stop this repeat and add a new one.
       </p>
 
       {problem === null ? null : (
@@ -491,6 +384,9 @@ export default function Classes() {
   const [repeatEditState, setRepeatEditState] = useState(() => repeatEditDraft(null));
 
   const [reloadKey, setReloadKey] = useState(0);
+  // Which tab, in the address so a reload or a shared link keeps it.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const view = searchParams.get('view') === 'week' ? 'week' : 'list';
 
   /** THE ONE FETCH SITE, and the loading flag is set by the CLICK rather than
    *  inside the effect.
@@ -525,7 +421,10 @@ export default function Classes() {
     return () => {
       live = false;
     };
-  }, [gymId, reloadKey]);
+    // `view` is here so the list is read again every time it is shown — by the
+    // tab or by the browser's Back — since a day changed in the week moves its
+    // repeat's coming dates (round one, H-3).
+  }, [gymId, reloadKey, view]);
 
   // THE COACH LIST IS A SEPARATE, OPTIONAL READ, and its failure is not this
   // screen's failure: somebody who may set the timetable does not necessarily
@@ -636,8 +535,16 @@ export default function Classes() {
     }
   };
 
+  const showView = (next) => {
+    if (next === view) return;
+    setSearchParams(next === 'week' ? { view: 'week' } : {});
+  };
+  const weekShown = view === 'week' && allowed;
+
   return (
-    <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 flex flex-col gap-4">
+    <div
+      className={`${weekShown ? 'max-w-6xl' : 'max-w-3xl'} mx-auto px-4 md:px-8 py-8 flex flex-col gap-4`}
+    >
       <div>
         <h1 className="text-2xl font-bold" style={{ color: '#fff' }}>
           Classes
@@ -667,12 +574,40 @@ export default function Classes() {
         </ConsoleCard>
       ) : null}
 
-      {actionError === null ? null : <ConsoleFailed message={actionError} />}
+      {allowed ? (
+        <div className="flex gap-2" role="tablist" aria-label="How to show your classes">
+          {[
+            ['list', 'Classes'],
+            ['week', 'Week'],
+          ].map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={view === key}
+              onClick={() => showView(key)}
+              className="rounded-lg px-4 py-2 text-sm font-medium"
+              style={{
+                background: view === key ? 'rgba(255,138,31,0.15)' : 'rgba(255,255,255,0.04)',
+                color: view === key ? '#FF8A1F' : 'rgba(255,255,255,0.65)',
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
-      {loading ? <ConsoleLoading label="Loading your timetable…" /> : null}
-      {!loading && failed !== null ? <ConsoleFailed message={failed} onRetry={retry} /> : null}
+      {weekShown ? <ClassWeek gymId={gymId} staff={staff} locked={locked} /> : null}
 
-      {!loading && failed === null ? (
+      {!weekShown && actionError !== null ? <ConsoleFailed message={actionError} /> : null}
+
+      {!weekShown && loading ? <ConsoleLoading label="Loading your timetable…" /> : null}
+      {!weekShown && !loading && failed !== null ? (
+        <ConsoleFailed message={failed} onRetry={retry} />
+      ) : null}
+
+      {!weekShown && !loading && failed === null ? (
         <>
           {lists.entries.length === 0 ? (
             <ConsoleCard>

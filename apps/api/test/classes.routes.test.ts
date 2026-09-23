@@ -576,36 +576,39 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       // broken.
       expect(timetable(made).entries[0]?.schedules).toEqual([]);
 
-      // Two weekdays that are never TODAY's, in the gym's zone or in UTC: the eight
-      // weeks run from today to the same weekday eight weeks on, so today's weekday
-      // has nine dates and any other has eight. With Monday and Wednesday fixed here,
-      // this case read 17 on every Monday and Wednesday.
-      const isoToday = [
-        ((new Date().getUTCDay() + 6) % 7) + 1,
-        ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].indexOf(
-          new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "short" }).format(new Date()),
-        ) + 1,
-      ];
-      const [early, late] = [1, 2, 3, 4, 5, 6, 7].filter((day) => !isoToday.includes(day));
-      if (early === undefined || late === undefined) throw new Error("no two weekdays left");
       const withRepeat = await post(
         repeatsUrl(org.org.id, type.id),
-        { ...RUN, weekdays: [late, early], startMinute: at(18, 30), startsOn: dayFromToday(0) },
+        { ...RUN, weekdays: [WED, MON], startMinute: at(18, 30), startsOn: dayFromToday(0) },
         owner.cookies,
       );
       expect(withRepeat.statusCode).toBe(201);
       const schedule = timetable(withRepeat).entries[0]?.schedules[0];
       if (schedule === undefined) throw new Error("repeat answered nothing");
-      // SORTED AND DE-DUPLICATED ON THE WAY IN: the screen sent the later day first.
-      expect(schedule.weekdays).toEqual([early, late]);
+      // SORTED AND DE-DUPLICATED ON THE WAY IN: the screen sent Wednesday first.
+      expect(schedule.weekdays).toEqual([MON, WED]);
       expect(schedule.startMinute).toBe(at(18, 30));
       expect(schedule.endsOn).toBeNull();
       // THE DATES ARE THERE BEFORE THE NIGHTLY JOB EVER RUNS — two a week over
       // eight weeks, and the screen shows the first few.
       // EXACT, not `>= 15` — round one's third weak test. A fill that ignored
-      // `weekdays` altogether writes 57 dates and passed the old assertion; the
-      // number this case was written for is two a week over eight weeks.
-      expect(schedule.sessionsAhead).toBe(16);
+      // `weekdays` altogether writes 57 dates and passed the old assertion.
+      // The window is the gym's today to today + 56, 57 days, so a Monday or a
+      // Wednesday today has nine of that weekday in it (17b-ii-b-i's re-check
+      // found the literal 16 failing on those two days): counted, not assumed.
+      const londonToday = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(
+        new Date(),
+      );
+      const firstDay = londonToday > dayFromToday(0) ? londonToday : dayFromToday(0);
+      let mondaysAndWednesdays = 0;
+      for (let i = 0; i <= 56; i += 1) {
+        const day = new Date(Date.parse(`${londonToday}T00:00:00Z`) + i * 86_400_000);
+        const iso = day.getUTCDay() === 0 ? 7 : day.getUTCDay();
+        if (day.toISOString().slice(0, 10) >= firstDay && (iso === MON || iso === WED)) {
+          mondaysAndWednesdays += 1;
+        }
+      }
+      expect([16, 17]).toContain(mondaysAndWednesdays);
+      expect(schedule.sessionsAhead).toBe(mondaysAndWednesdays);
       // And the server says the count is NOT the whole truth, because the
       // repeat has no end date (C/H-3).
       expect(schedule.datesComplete).toBe(false);

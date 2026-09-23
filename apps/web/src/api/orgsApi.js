@@ -14,6 +14,7 @@ import {
   createOrgResponseSchema,
   gymClassesResponseSchema,
   gymClassMutationResponseSchema,
+  gymClassWeekResponseSchema,
   gymAttendanceDayResponseSchema,
   gymAttendanceHistoryResponseSchema,
   gymHoursResponseSchema,
@@ -744,6 +745,39 @@ export const orgService = {
       gymClassMutationResponseSchema,
       'that repeat',
       authApi.delete(`/v1/orgs/${gymId}/class-repeats/${scheduleId}`),
+    ),
+
+  /** GET /v1/orgs/:gymId/class-sessions?week=YYYY-MM-DD — one week of the
+   *  calendar, Monday to Sunday in the gym's own calendar. `week` may be any day
+   *  of the week wanted; without it the server answers the gym's current week.
+   *  The three changes below answer with the week the date is in. */
+  getClassWeek: (gymId, week) =>
+    readThrough(
+      gymClassWeekResponseSchema,
+      "your gym's week",
+      authApi.get(`/v1/orgs/${gymId}/class-sessions`, { params: week ? { week } : {} }),
+    ),
+
+  /** PUT — this day only: its start time, length, places and coach. */
+  changeClassDay: (gymId, sessionId, body) =>
+    readThrough(
+      gymClassWeekResponseSchema,
+      'that day',
+      authApi.put(`/v1/orgs/${gymId}/class-sessions/${sessionId}`, body),
+    ),
+
+  cancelClassDay: (gymId, sessionId) =>
+    readThrough(
+      gymClassWeekResponseSchema,
+      'that day',
+      authApi.post(`/v1/orgs/${gymId}/class-sessions/${sessionId}/cancel`, {}),
+    ),
+
+  restoreClassDay: (gymId, sessionId) =>
+    readThrough(
+      gymClassWeekResponseSchema,
+      'that day',
+      authApi.post(`/v1/orgs/${gymId}/class-sessions/${sessionId}/restore`, {}),
     ),
 };
 
