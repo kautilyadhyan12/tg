@@ -66,6 +66,7 @@ export interface ClassScheduleRow {
   sessionsAhead: number;
   datesComplete: boolean;
   finished: boolean;
+  startedToday: boolean;
 }
 
 export interface TimetableRow {
@@ -180,6 +181,7 @@ export async function readTimetable(
       sessions_ahead: number;
       dates_complete: boolean;
       finished: boolean;
+      started_today: boolean;
     }[]
   >`
     SELECT s.id, s.class_type_id, s.weekdays, s.local_start_minute,
@@ -205,7 +207,15 @@ export async function readTimetable(
            -- passes, so without this the screen said "nothing on the calendar
            -- YET" about something finished months ago (round one, Low-1).
            (s.ends_on IS NOT NULL
-            AND s.ends_on < (${now}::timestamptz AT TIME ZONE g.timezone)::date) AS finished
+            AND s.ends_on < (${now}::timestamptz AT TIME ZONE g.timezone)::date) AS finished,
+           -- Has today's class of this time slot started? The screen then offers
+           -- tomorrow as the first date a change starts from (round one, L-4).
+           EXISTS (
+             SELECT 1 FROM gym_class_sessions t
+             WHERE t.schedule_id = s.id
+               AND t.gym_id = s.gym_id
+               AND t.local_date = (${now}::timestamptz AT TIME ZONE g.timezone)::date
+               AND t.starts_at <= ${now}) AS started_today
     FROM gym_class_schedules s
     JOIN gyms g ON g.id = s.gym_id
     LEFT JOIN gym_staff scs ON scs.gym_id = s.gym_id AND scs.user_id = s.coach_user_id
@@ -228,7 +238,15 @@ export async function readTimetable(
     ) n ON TRUE
     WHERE s.gym_id = ${gymId}
       AND s.ended_at IS NULL
-    ORDER BY s.local_start_minute, s.id
+    -- Time slots that have ended come last, newest first, so the LIMIT can only
+    -- ever leave out an ended one; a split's two halves sit in date order
+    -- (round one, L-1 and L-2). The live ones are capped at
+    -- CLASS_SCHEDULES_PER_TYPE_MAX a class, which is what the LIMIT is sized on.
+    ORDER BY (s.ends_on IS NOT NULL
+              AND s.ends_on < (${now}::timestamptz AT TIME ZONE g.timezone)::date),
+             CASE WHEN s.ends_on < (${now}::timestamptz AT TIME ZONE g.timezone)::date
+                  THEN s.ends_on END DESC NULLS FIRST,
+             s.local_start_minute, s.starts_on, s.id
     LIMIT ${CLASS_TYPES_MAX * CLASS_SCHEDULES_PER_TYPE_MAX}`;
 
   const toType = (r: {
@@ -287,6 +305,7 @@ export async function readTimetable(
       sessionsAhead: r.sessions_ahead,
       datesComplete: r.dates_complete,
       finished: r.finished,
+      startedToday: r.started_today,
     })),
   };
 }
@@ -675,7 +694,12 @@ export type SlotChangeOutcome =
   /** The class opened on the Calendar has started. */
   | { kind: "started" }
   /** The class opened on the Calendar is cancelled: un-cancel it first. */
-  | { kind: "cancelled" };
+  | { kind: "cancelled" }
+  /** The opened class would go back to a time the same class already runs on
+   *  its date (round one, H-1). */
+  | { kind: "day_clashes" }
+  /** The class would hold more time slots that have not ended than it may. */
+  | { kind: "too_many"; cap: number };
 
 /** Where the change is made from: a time slot and a date (the Classes list), or
  *  one class on the Calendar ("This and future classes") — its time slot, its
@@ -725,11 +749,18 @@ export async function changeSlotFrom(
     let scheduleId: string;
     let from: string;
     let openedId: string | null = null;
+    let openedMinute: number | null = null;
     if (input.target.by === "session") {
       const [opened] = await tx<
-        { schedule_id: string | null; local_date: string; status: string; started: boolean }[]
+        {
+          schedule_id: string | null;
+          local_date: string;
+          local_start_minute: number;
+          status: string;
+          started: boolean;
+        }[]
       >`
-        SELECT schedule_id, local_date::text AS local_date, status,
+        SELECT schedule_id, local_date::text AS local_date, local_start_minute, status,
                starts_at <= ${input.now} AS started
         FROM gym_class_sessions
         WHERE id = ${input.target.sessionId} AND gym_id = ${input.gymId}`;
@@ -739,6 +770,7 @@ export async function changeSlotFrom(
       scheduleId = opened.schedule_id;
       from = opened.local_date;
       openedId = input.target.sessionId;
+      openedMinute = opened.local_start_minute;
     } else {
       scheduleId = input.target.scheduleId;
       from = input.target.updateFrom;
@@ -827,6 +859,21 @@ export async function changeSlotFrom(
         LIMIT 1`;
       if (clash !== undefined) return { kind: "clashes" };
     } else {
+      // ONE CLASS, ONE TIME, ONE DATE (round one, H-1). An opened class changed on
+      // its own to another time goes back to the time slot's; "This class only"
+      // refuses a time the class already runs that day, and so does this.
+      if (openedId !== null && openedMinute !== input.startMinute) {
+        const [taken] = await tx<{ id: string }[]>`
+          SELECT id FROM gym_class_sessions
+          WHERE gym_id = ${input.gymId}
+            AND class_type_id = ${slot.class_type_id}
+            AND local_date = ${from}::date
+            AND local_start_minute = ${input.startMinute}
+            AND status = 'scheduled'
+            AND id <> ${openedId}
+          LIMIT 1`;
+        if (taken !== undefined) return { kind: "day_clashes" };
+      }
       // Every class before the date must be written before the time slot's own
       // values change, or a later fill would write one of them with the new
       // values. The date is inside the window (`beyond_calendar`), so this
@@ -877,6 +924,23 @@ export async function changeSlotFrom(
       }
     }
     if (asked > 0 && input.confirmReplace !== asked) return { kind: "replaces", count: asked };
+
+    // THE CLASS'S LIMIT OF TIME SLOTS, as `createSchedule` counts it (round one,
+    // L-1): a move or a split adds one, and the old one still counts while it
+    // runs before the date.
+    const addsSlot = change === "move" || (!fieldsSame && runsBefore);
+    if (addsSlot) {
+      const [others] = await tx<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM gym_class_schedules
+        WHERE class_type_id = ${slot.class_type_id}
+          AND gym_id = ${input.gymId}
+          AND ended_at IS NULL
+          AND id <> ${scheduleId}
+          AND (ends_on IS NULL OR ends_on >= ${slot.today}::date)`;
+      if ((others?.n ?? 0) + 1 + (runsBefore ? 1 : 0) > CLASS_SCHEDULES_PER_TYPE_MAX) {
+        return { kind: "too_many", cap: CLASS_SCHEDULES_PER_TYPE_MAX };
+      }
+    }
     if (change === "fields" && fieldsSame) {
       // The time slot keeps its values; only an opened class changed on its own
       // differs from it, and goes back to it.

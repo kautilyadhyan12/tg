@@ -33,6 +33,7 @@ import {
   replaceQuestion,
   replacesAsked,
   runFieldsProblem,
+  slotEditable,
   updateFromBounds,
   timeRange,
   timetableLists,
@@ -468,6 +469,32 @@ describe('editing a time slot', () => {
     // Without the server's number it uses the shared one: 5 Oct + 55 days.
     expect(CLASS_FILL_HORIZON_DAYS).toBe(56);
     expect(updateFromBounds(SLOT, '2026-10-05', undefined).max).toBe('2026-11-29');
+  });
+
+  // Round one, L-4 and H-2.
+  it('starts at tomorrow once today s class has run, and keeps a later-starting slot s own first day', () => {
+    expect(updateFromBounds({ ...SLOT, startedToday: true }, '2026-10-05', 56)).toEqual({
+      min: '2026-10-06',
+      max: '2026-11-29',
+    });
+    // Starting past the calendar: its own first day, and only that.
+    const later = { ...SLOT, startsOn: '2026-12-22', nextDates: [] };
+    expect(updateFromBounds(later, '2026-10-05', 56)).toEqual({ min: '2026-12-22', max: '2026-12-22' });
+    expect(slotEditable(later, updateFromBounds(later, '2026-10-05', 56))).toBe(true);
+    const draft = repeatEditDraft(later, updateFromBounds(later, '2026-10-05', 56));
+    expect(draft.updateFrom).toBe('2026-12-22');
+    expect(repeatEditProblem(draft, updateFromBounds(later, '2026-10-05', 56))).toBeNull();
+  });
+
+  it('offers no Edit on a time slot with no date left to change it from', () => {
+    const ended = { ...SLOT, endsOn: '2026-09-25', finished: true };
+    expect(slotEditable(ended, updateFromBounds(ended, '2026-10-05', 56))).toBe(false);
+    // Its last class ran this morning.
+    const lastToday = { ...SLOT, endsOn: '2026-10-05', startedToday: true };
+    expect(slotEditable(lastToday, updateFromBounds(lastToday, '2026-10-05', 56))).toBe(false);
+    // The control: the same slot before its last class has run.
+    const notYet = { ...SLOT, endsOn: '2026-10-05', startedToday: false };
+    expect(slotEditable(notYet, updateFromBounds(notYet, '2026-10-05', 56))).toBe(true);
   });
 
   it('knows a move from a change of length, size or coach', () => {

@@ -753,6 +753,9 @@ d("changing a time slot from a date (real Postgres)", () => {
       expect((await classRows(a.typeId))[0]).toMatchObject({ local_date: "2026-10-05" });
       const read = await readTimetable(sql, gym, { now });
       expect(read?.schedules.find((s) => s.id === a.slotId)?.nextDates[0]).toBe("2026-10-06");
+      // Round one, L-4: the screen is told today's class has run, so it offers
+      // tomorrow as the first date a move can start from.
+      expect(read?.schedules.find((s) => s.id === a.slotId)?.startedToday).toBe(true);
 
       // A MOVE FROM TODAY: the 07:00 that ran stays on the old time slot, the
       // old time slot leaves the list, and today's 18:00 is written.
@@ -771,6 +774,8 @@ d("changing a time slot from a date (real Postgres)", () => {
       expect(listed?.map((s) => [s.startMinute, s.startsOn, s.nextDates[0]])).toEqual([
         [at(18), "2026-10-05", "2026-10-05"],
       ]);
+      // Today's 18:00 has not started yet.
+      expect(listed?.[0]?.startedToday).toBe(false);
 
       // A TIME ALREADY GONE TODAY is refused and writes nothing; from tomorrow
       // it is fine.
@@ -779,6 +784,17 @@ d("changing a time slot from a date (real Postgres)", () => {
       expect(await change(b.slotId, "2026-10-05", at(9))).toEqual({ kind: "time_passed" });
       expect(await classRows(b.typeId)).toEqual(bRows);
       expect((await change(b.slotId, "2026-10-06", at(9))).kind).toBe("ok");
+      // Round one, T-2: its only class before the date has run, so the old time
+      // slot is stopped outright — never left with an end date and no next class.
+      const bSlots = await slotRows(b.typeId);
+      expect(bSlots).toHaveLength(2);
+      expect(bSlots[0]).toMatchObject({ id: b.slotId, ends_on: null });
+      expect(bSlots[0]?.ended_at).not.toBeNull();
+      expect(
+        (await readTimetable(sql, gym, { now }))?.schedules
+          .filter((s) => s.classTypeId === b.typeId)
+          .map((s) => [s.startMinute, s.startsOn]),
+      ).toEqual([[at(9), "2026-10-06"]]);
 
       // A NEW LENGTH FROM TODAY: the class that ran keeps the length it ran at.
       const c = await makeType("Steady");
@@ -893,6 +909,187 @@ d("changing a time slot from a date (real Postgres)", () => {
         WHERE class_type_id = ${typeId} AND local_start_minute = ${at(6)}`;
       expect((await add(at(20))).statusCode).toBe(201);
       expect((await add(at(21))).statusCode).toBe(409);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // =========================================================================
+  // ROUND ONE
+  // =========================================================================
+
+  // H-1: one class never runs twice at one time on one date, through "This and
+  // future classes" as through "This class only".
+  it(
+    "This and future classes cannot put the opened class at a time the same class already runs that day",
+    async () => {
+      const owner = await makeUser("h1-owner");
+      const org = await makeOrg(owner.cookies, "H1 Slots Gym");
+      const gym = org.org.id;
+      const { typeId } = await dailyClass(gym, owner.cookies, "Yoga", at(18));
+      expect(
+        (
+          await post(
+            `${classesUrl(gym)}/${typeId}/repeats`,
+            { ...RUN, weekdays: EVERY_DAY, startMinute: at(7), startsOn: await gymToday(gym, owner.cookies) },
+            owner.cookies,
+          )
+        ).statusCode,
+      ).toBe(201);
+      const day = addDays(await gymToday(gym, owner.cookies), 5);
+      const a = await onDate(typeId, day, at(18));
+      const b = await onDate(typeId, day, at(7));
+      await changeAlone(gym, owner.cookies, a.id, at(7, 30));
+      await changeAlone(gym, owner.cookies, b.id, at(18));
+      const rows = await classRows(typeId);
+      const slots = await slotRows(typeId);
+
+      // The control that already held: this class only.
+      const only = await put(dayUrl(gym, a.id), { scope: "this", ...RUN, startMinute: at(18) }, owner.cookies);
+      expect(only.statusCode).toBe(409);
+      expect(JSON.parse(only.body)).toMatchObject({ error: "class_day_clashes" });
+      // This and future classes, with nothing else changed, and with a new coach.
+      for (const body of [
+        { scope: "future", ...RUN, startMinute: at(18) },
+        { scope: "future", ...RUN, startMinute: at(18), minutes: 45 },
+      ]) {
+        const res = await put(dayUrl(gym, a.id), body, owner.cookies);
+        expect(res.statusCode, JSON.stringify(body)).toBe(409);
+        expect(JSON.parse(res.body)).toMatchObject({ error: "class_day_clashes" });
+      }
+      expect(await classRows(typeId)).toEqual(rows);
+      expect(await slotRows(typeId)).toEqual(slots);
+
+      // The positive control: with 18:00 free again, the same request goes through.
+      await changeAlone(gym, owner.cookies, b.id, at(7));
+      const freed = await put(dayUrl(gym, a.id), { scope: "future", ...RUN, startMinute: at(18) }, owner.cookies);
+      expect(freed.statusCode).toBe(200);
+      expect((await onDate(typeId, day, at(18))).id).toBe(a.id);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // H-2: a time slot that starts past the calendar can be changed from its own
+  // first day; no date past the calendar is otherwise taken.
+  it(
+    "a time slot starting past the calendar is changed from its own first day, and a later date past the calendar is still refused",
+    async () => {
+      const owner = await makeUser("h2-owner");
+      const org = await makeOrg(owner.cookies, "H2 Slots Gym");
+      const gym = org.org.id;
+      const made = await post(classesUrl(gym), { name: "Term", minutes: 60, places: 20, colour: "green" }, owner.cookies);
+      const typeId = timetableOf(made).entries[0]?.type.id;
+      if (typeId === undefined) throw new Error("create answered no class");
+      const today = await gymToday(gym, owner.cookies);
+      const first = addDays(today, 90);
+      const res = await post(
+        `${classesUrl(gym)}/${typeId}/repeats`,
+        { ...RUN, weekdays: [2], startMinute: at(18), startsOn: first },
+        owner.cookies,
+      );
+      expect(res.statusCode).toBe(201);
+      const slotId = timetableOf(res).entries[0]?.schedules[0]?.id;
+      if (slotId === undefined) throw new Error("no time slot");
+      const body = (updateFrom: string, over: Record<string, unknown> = {}) => ({
+        updateFrom,
+        weekdays: [2],
+        startMinute: at(18),
+        ...RUN,
+        ...over,
+      });
+
+      const later = await put(repeatUrl(gym, slotId), body(addDays(first, 1), { minutes: 30 }), owner.cookies);
+      expect(later.statusCode).toBe(409);
+      expect(JSON.parse(later.body)).toMatchObject({ error: "class_update_from" });
+
+      const coached = await put(repeatUrl(gym, slotId), body(first, { minutes: 30 }), owner.cookies);
+      expect(coached.statusCode).toBe(200);
+      expect(await slotRows(typeId)).toEqual([
+        expect.objectContaining({ id: slotId, starts_on: first, minutes: 30, ended_at: null }),
+      ]);
+      const moved = await put(repeatUrl(gym, slotId), body(first, { weekdays: [4], minutes: 30 }), owner.cookies);
+      expect(moved.statusCode).toBe(200);
+      const live = (await slotRows(typeId)).filter((s) => s.ended_at === null);
+      expect(live).toEqual([expect.objectContaining({ starts_on: first, weekdays: [4] })]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // L-1: a move or a split asks the class's limit of time slots, counting the
+  // old half while it still runs.
+  it(
+    "moves and splits count toward the limit of time slots that have not ended",
+    async () => {
+      const owner = await makeUser("l1-owner");
+      const org = await makeOrg(owner.cookies, "L1 Slots Gym");
+      const gym = org.org.id;
+      const { typeId, repeatId } = await dailyClass(gym, owner.cookies, "Often", at(6));
+      const today = await gymToday(gym, owner.cookies);
+      const answers: number[] = [];
+      let current = repeatId;
+      for (let k = 2; k <= 13; k += 1) {
+        const res = await put(
+          repeatUrl(gym, current),
+          { updateFrom: addDays(today, k), weekdays: EVERY_DAY, startMinute: at(6, k), ...RUN },
+          owner.cookies,
+        );
+        answers.push(res.statusCode);
+        if (res.statusCode !== 200) {
+          expect(JSON.parse(res.body)).toMatchObject({ error: "too_many_classes" });
+          break;
+        }
+        const next = timetableOf(res).entries[0]?.schedules.find((s) => s.startMinute === at(6, k));
+        if (next === undefined) throw new Error("no new time slot");
+        current = next.id;
+      }
+      expect(answers).toEqual([...Array<number>(11).fill(200), 409]);
+      const [open] = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM gym_class_schedules
+        WHERE class_type_id = ${typeId} AND ended_at IS NULL`;
+      expect(open?.n).toBe(12);
+      // Changed from its own first day, a time slot changes where it stands and
+      // adds none, so the limit does not stop it.
+      const inPlace = await put(
+        repeatUrl(gym, current),
+        { updateFrom: addDays(today, 12), weekdays: EVERY_DAY, startMinute: at(6, 12), ...RUN, minutes: 30 },
+        owner.cookies,
+      );
+      expect(inPlace.statusCode).toBe(200);
+      const [still] = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM gym_class_schedules
+        WHERE class_type_id = ${typeId} AND ended_at IS NULL`;
+      expect(still?.n).toBe(12);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // L-2: the two halves of a split are listed in date order, every time.
+  it(
+    "the two halves of a split are listed with the earlier one first",
+    async () => {
+      const owner = await makeUser("l2-owner");
+      const org = await makeOrg(owner.cookies, "L2 Slots Gym");
+      const gym = org.org.id;
+      const today = await gymToday(gym, owner.cookies);
+      const ids: string[] = [];
+      for (let n = 0; n < 6; n += 1) {
+        const { typeId, repeatId } = await dailyClass(gym, owner.cookies, `Split ${String(n)}`, at(9, n));
+        expect(
+          (
+            await put(
+              repeatUrl(gym, repeatId),
+              { updateFrom: addDays(today, 5), weekdays: EVERY_DAY, startMinute: at(9, n), ...RUN, minutes: 30 },
+              owner.cookies,
+            )
+          ).statusCode,
+        ).toBe(200);
+        ids.push(typeId);
+      }
+      const listed = timetableOf(await get(classesUrl(gym), owner.cookies));
+      for (const typeId of ids) {
+        const halves = listed.entries.find((e) => e.type.id === typeId)?.schedules ?? [];
+        expect(halves.map((s) => s.startsOn)).toEqual([halves[0]?.startsOn, addDays(today, 5)]);
+        expect(halves[0]?.endsOn).toBe(addDays(today, 4));
+      }
     },
     TEST_TIMEOUT_MS,
   );

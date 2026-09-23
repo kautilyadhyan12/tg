@@ -75,6 +75,7 @@ const REPEAT = {
   sessionsAhead: 16,
   datesComplete: false,
   finished: false,
+  startedToday: false,
 };
 
 const timetable = (over = {}) => ({
@@ -607,6 +608,44 @@ describe('editing a time slot', () => {
       places: 12,
       coachUserId: 'u8',
     });
+  });
+
+  // Round one, H-2: no Edit on a time slot that has ended, and one that starts
+  // past the calendar opens at its own first day and can be saved.
+  it('offers no Edit on a time slot that has ended, and still offers its Cancel', async () => {
+    api.getClasses.mockResolvedValue(withSlot({ endsOn: '2026-09-25', finished: true, nextDates: [] }));
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    expect(screen.queryByRole('button', { name: 'Edit the Mon & Wed 18:30 time slot of Sunrise Yoga' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Cancel the Mon & Wed 18:30 time slot of Sunrise Yoga' })).toBeTruthy();
+  });
+
+  it('opens a time slot that starts past the calendar at its own first day, and saves from it', async () => {
+    const first = addDays(today(), 90);
+    api.getClasses.mockResolvedValue(withSlot({ startsOn: first, nextDates: [] }));
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    openEdit();
+    expect((await screen.findByLabelText('Update from')).value).toBe(first);
+    fireEvent.change(screen.getByLabelText('Length (minutes)'), { target: { value: '30' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.updateClassRepeat).toHaveBeenCalledTimes(1));
+    expect(api.updateClassRepeat.mock.calls[0][2]).toMatchObject({ updateFrom: first, minutes: 30 });
+  });
+
+  // Round one, L-3: a refusal can mean the list is out of date.
+  it('reads the list again after a refusal, and says so', async () => {
+    api.updateClassRepeat.mockRejectedValueOnce({
+      response: { status: 409, data: { error: 'class_update_from', message: 'Pick a date.' } },
+    });
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    expect(api.getClasses).toHaveBeenCalledTimes(1);
+    openEdit();
+    await screen.findByLabelText('Update from');
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.getClasses).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("We couldn't save that.")).toBeTruthy();
   });
 
   it('asks before a move replaces classes changed on their own: Go back sends nothing, Move anyway sends the count', async () => {

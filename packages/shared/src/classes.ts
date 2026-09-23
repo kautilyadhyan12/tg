@@ -238,6 +238,10 @@ export const gymClassScheduleSchema = z
      *  finished months ago — round one, Low-1. Again the SERVER's answer,
      *  because "today" is the gym's, not the reader's. */
     finished: z.boolean(),
+    /** Has this time slot's class on the gym's today already started? The
+     *  screen then offers tomorrow as the first date a change starts from, so a
+     *  move never gives today a second class (17b-ii-b-ii-a, round one L-4). */
+    startedToday: z.boolean(),
   })
   .strict();
 export type GymClassSchedule = z.infer<typeof gymClassScheduleSchema>;

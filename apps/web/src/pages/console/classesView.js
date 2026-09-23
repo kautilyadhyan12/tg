@@ -338,14 +338,26 @@ export function repeatDraft(type, today) {
 
 const isDay = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
 
-/** The dates a time slot can be changed from: not before today or its own first
- *  day, and not past its own last day or the calendar's last written day. */
+/** The dates a time slot can be changed from: not before today — tomorrow once
+ *  today's class has started, so a move never gives today a second class — or
+ *  its own first day; and not past its own last day or the calendar's last
+ *  written day, except that a time slot starting later than that can always be
+ *  changed from its own first day. */
 export function updateFromBounds(schedule, today, horizonDays) {
-  const min = [today, schedule?.startsOn].filter(isDay).sort().at(-1) ?? '';
+  const first = isDay(today) && schedule?.startedToday === true ? addDays(today, 1) : today;
+  const min = [first, schedule?.startsOn].filter(isDay).sort().at(-1) ?? '';
   const days = Number.isInteger(horizonDays) ? horizonDays : CLASS_FILL_HORIZON_DAYS;
-  const last = isDay(today) ? addDays(today, days - 1) : '';
+  const calendarEnd = isDay(today) ? addDays(today, days - 1) : '';
+  const last = [calendarEnd, schedule?.startsOn].filter(isDay).sort().at(-1) ?? '';
   const max = isDay(schedule?.endsOn) && schedule.endsOn < last ? schedule.endsOn : last;
   return { min, max };
+}
+
+/** Is there any date left to change this time slot from? None once it has
+ *  ended, or once its last class has run, and then it offers no Edit. */
+export function slotEditable(schedule, bounds) {
+  if (schedule?.finished === true) return false;
+  return isDay(bounds?.min) && isDay(bounds?.max) && bounds.min <= bounds.max;
 }
 
 /** Where the date starts: the time slot's next class that has not run, so a

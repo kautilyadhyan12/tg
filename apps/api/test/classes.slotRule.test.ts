@@ -173,6 +173,10 @@ describe("the dates a time slot can be changed from", () => {
     ["a slot's last day", "2026-10-20", { ...base, endsOn: "2026-10-20" }, "ok"],
     ["after a slot's last day", "2026-10-21", { ...base, endsOn: "2026-10-20" }, "after_end"],
     ["the past, before a later slot starts", "2026-10-01", { ...base, startsOn: "2026-10-12" }, "past"],
+    // Round one, H-2: a slot that starts past the calendar has no class before
+    // its own first day, so that day can be changed from; the next cannot.
+    ["a later slot's own first day, past the calendar", "2026-12-22", { ...base, startsOn: "2026-12-22" }, "ok"],
+    ["the day after it", "2026-12-23", { ...base, startsOn: "2026-12-22" }, "beyond_calendar"],
   ] as const)("%s → %s", (_label, from, slot, verdict) => {
     expect(fromVerdict(from, slot)).toBe(verdict);
   });

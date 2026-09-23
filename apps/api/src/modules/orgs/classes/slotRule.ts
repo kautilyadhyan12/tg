@@ -86,7 +86,8 @@ export type FromVerdict =
   /** After the time slot's own last day. */
   | "after_end"
   /** Past the calendar's written window, where the classes before it are not
-   *  all written yet and so could not be told apart from the ones after it. */
+   *  all written yet and so could not be told apart from the ones after it. A
+   *  time slot's own first day is never this: it has no class before it. */
   | "beyond_calendar";
 
 /** Is `from` a date this time slot can be changed from? All `YYYY-MM-DD`, which
@@ -98,6 +99,6 @@ export function fromVerdict(
   if (from < slot.today) return "past";
   if (from < slot.startsOn) return "before_start";
   if (slot.endsOn !== null && from > slot.endsOn) return "after_end";
-  if (from > slot.lastCalendarDate) return "beyond_calendar";
+  if (from > slot.lastCalendarDate && from !== slot.startsOn) return "beyond_calendar";
   return "ok";
 }

@@ -37,6 +37,7 @@ import {
   repeatRequest,
   replaceQuestion,
   replacesAsked,
+  slotEditable,
   timeRange,
   timetableLists,
   toggleWeekday,
@@ -480,6 +481,15 @@ export default function Classes() {
       if (count === null) {
         setReplaceAsk(null);
         setActionError(errorText(err, "We couldn't save that."));
+        // A refusal can mean the list on screen is out of date — the same Save
+        // pressed again after the first one went through — so read it again
+        // (round one, L-3), as the Calendar does.
+        try {
+          const fresh = await orgService.getClasses(gymId);
+          setTimetable(fresh.data);
+        } catch {
+          // The sentence above already says the save failed.
+        }
       } else {
         setReplaceAsk({ count, from: body.updateFrom });
       }
@@ -722,19 +732,22 @@ export default function Classes() {
                           </div>
                           {locked || editingThis || askingThis ? null : (
                             <div className="flex items-center gap-4 flex-shrink-0">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingRepeat(schedule.id);
-                                  setReplaceAsk(null);
-                                  setRepeatEditState(repeatEditDraft(schedule, editBounds(schedule)));
-                                }}
-                                aria-label={`Edit the ${days} ${startsAt} time slot of ${type.name}`}
-                                className="text-sm"
-                                style={{ color: '#FF8A1F' }}
-                              >
-                                Edit
-                              </button>
+                              {/* No date is left to change an ended time slot from. */}
+                              {slotEditable(schedule, editBounds(schedule)) ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingRepeat(schedule.id);
+                                    setReplaceAsk(null);
+                                    setRepeatEditState(repeatEditDraft(schedule, editBounds(schedule)));
+                                  }}
+                                  aria-label={`Edit the ${days} ${startsAt} time slot of ${type.name}`}
+                                  className="text-sm"
+                                  style={{ color: '#FF8A1F' }}
+                                >
+                                  Edit
+                                </button>
+                              ) : null}
                               <button
                                 type="button"
                                 onClick={() => setConfirming(`stop:${schedule.id}`)}

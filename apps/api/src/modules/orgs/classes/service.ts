@@ -134,6 +134,7 @@ function toSchedule(row: repo.ClassScheduleRow): GymClassSchedule {
     sessionsAhead: row.sessionsAhead,
     datesComplete: row.datesComplete,
     finished: row.finished,
+    startedToday: row.startedToday,
   };
 }
 
@@ -407,6 +408,18 @@ function slotOutcome(
         409,
         "class_day_cancelled",
         "This class is cancelled. Un-cancel it first, then edit it.",
+      );
+    case "day_clashes":
+      throw new OrgsError(
+        409,
+        "class_day_clashes",
+        "This class already runs at that time on this day. Pick another time.",
+      );
+    case "too_many":
+      throw new OrgsError(
+        409,
+        "too_many_classes",
+        `This class is at its limit of ${String(outcome.cap)} time slots. Cancel one you no longer run first.`,
       );
     default: {
       const never: never = outcome;
