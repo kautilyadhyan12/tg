@@ -1913,6 +1913,17 @@ visits). `PATCH` changes any field under the never-keep rules; "Add member" is t
 same form with **Add** and **Add and invite**. The audit row holds the NAMES of the
 fields that changed, never their values. The member app never shows a gym's notes.
 
+**Out of 3a-iv (built 2026-09-23).**
+
+- Routes beside §9.9's: `GET /entries/:entryId` (the page) · `DELETE /entries/:entryId` takes a person off, their record becomes former · `POST /entries/:entryId/restore` puts it back · `DELETE /former/:entryId` deletes a former record for good (a current one: 409 `not_former`) · `POST /entries/:entryId/merge { keepEntryId }` joins two records (RULINGS 2026-09-23) · `GET /unlisted?group=` lists who "Remove all" would remove, with the version, count and digest the removal sends back.
+- **"Remove all" sends a digest as well as the version and count.** A count still matches when one member leaves and another joins between the look and the press; the digest fingerprints the set (gym, group, user ids), so nobody is removed whom staff were not shown. The set is §9.7's marks from `membersAgainstNewList`, the preview's own function; only paid seats are marked, so the owner, staff and free places are never in it. The guard (§9.8) measures against the gym's paid-seat members.
+- A typed field goes through the file's own rule for it (sign-in's email rule, the phone reader with the gym's country, the member-number rule, the card rule); one that cannot be kept refuses the whole change with the server's sentence, and a card number typed into any field is refused (§11.2).
+- Hand-edit marks (§11.4) are set by a change, never by an add, and only on the fields an upload can write over. Changing a name, address, phone or member number moves the identity key; one that lands on another record's key answers 409 `already_on_list` with that record's id.
+- The page shows, for an app member, when they joined and their visits during this membership. "Last active" and the streak wait for 1a's active day; the invitation's state and "Add and invite" arrive with 3b-i.
+- Every write bumps the list's version under the gym's row lock (creating the list for a gym whose first change is typed), so a preview staged before it cannot be confirmed, and stamps `last_listed_at` on the members the record reached, so a member whose record is taken off reads "no longer listed".
+- `repo.ENTRY_REFERENCES` lists the tables that point at a record (none yet); a test fails when a migration adds one that the merge and the delete do not move.
+- **Cost at full size** (2026-09-23, mains, 2,592 MHz; a bystander's worst wait, three runs each): 20 gyms of 200 — the page 5–7 ms, one write 39–75 ms (spikes of 155–314 ms in two of the three runs, a different step each time; the commit alone is 24–33 ms on this machine's disk), the Remove all page 13–18 ms, removing 100 members 57–151 ms. The cap, 10,000 entries · 2,000 members — the page 8–9 ms, one write 48–150 ms (spikes to 280), the Remove all page 168–212 ms (1,920 ms once in four runs, not repeated), removing 1,000 members 305–561 ms.
+
 ### 11.7 Moving from other software
 
 A step before the upload, "Which software are you leaving?": that product's own export
