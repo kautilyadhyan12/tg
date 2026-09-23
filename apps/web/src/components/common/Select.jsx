@@ -5,6 +5,10 @@ import { ChevronDown } from 'lucide-react';
  *  (py-1): what the list is expected to take before it is drawn. */
 const OPTION_HEIGHT_PX = 36;
 const LIST_PADDING_PX = 8;
+/** Space kept between the list and the window's edge. */
+const EDGE_GAP_PX = 8;
+/** However little room there is, the list shows about three options. */
+const MIN_LIST_PX = 3 * OPTION_HEIGHT_PX;
 
 /**
  * Dark dropdown that replaces the native <select>.
@@ -36,15 +40,23 @@ export default function Select({
   // the window and there is more room above, as for the measure picker at the
   // foot of Add food, whose list went off the screen (Kd's click-through, 7a-iv-a).
   const [above, setAbove] = useState(false);
+  // The list's tallest on the side it opens, so it never runs out of the window:
+  // the 24 countries opened upward past the top of it (Kd's click-through, Stage 3
+  // item 2a). Past this height the list scrolls.
+  const [listMax, setListMax] = useState(maxListHeight);
   const ref = useRef(null);
   const current = options.find((o) => o.value === value);
 
   const toggle = () => {
     if (!open && ref.current) {
       const field = ref.current.getBoundingClientRect();
-      const listHeight = Math.min(maxListHeight ?? Number.POSITIVE_INFINITY, options.length * OPTION_HEIGHT_PX + LIST_PADDING_PX);
-      const roomBelow = window.innerHeight - field.bottom;
-      setAbove(listHeight > roomBelow && field.top > roomBelow);
+      const cap = maxListHeight ?? Number.POSITIVE_INFINITY;
+      const listHeight = Math.min(cap, options.length * OPTION_HEIGHT_PX + LIST_PADDING_PX);
+      const roomBelow = window.innerHeight - field.bottom - EDGE_GAP_PX;
+      const roomAbove = field.top - EDGE_GAP_PX;
+      const opensAbove = listHeight > roomBelow && roomAbove > roomBelow;
+      setAbove(opensAbove);
+      setListMax(Math.min(cap, Math.max(MIN_LIST_PX, opensAbove ? roomAbove : roomBelow)));
     }
     setOpen((v) => !v);
   };
@@ -92,7 +104,7 @@ export default function Select({
             background: '#0A0908',
             border: '1px solid rgba(255,138,31,0.30)',
             boxShadow: '0 10px 30px rgba(0,0,0,0.60)',
-            ...(maxListHeight === undefined ? {} : { maxHeight: maxListHeight, overflowY: 'auto' }),
+            ...(listMax === undefined ? {} : { maxHeight: listMax, overflowY: 'auto' }),
           }}
         >
           {options.map((o) => {

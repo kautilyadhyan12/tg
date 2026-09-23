@@ -39,10 +39,30 @@ describe('where the dropdown opens', () => {
     expect(onChange).toHaveBeenCalledWith('m10');
   });
 
-  it('below the field where there is less room above than below, and as tall as its options without a cap', () => {
-    // 11 options want 404 px, more than the 390 px below — but only 380 px are above: below stays.
+  it('below the field where there is less room above than below, scrolling inside the room there is', () => {
+    // 11 options want 404 px, more than the 390 px below — but only 380 px are above: below stays,
+    // and the list stops 8 px short of the window's foot.
     const { list } = renderAt(380);
     expect(list.className).toContain('mt-1');
-    expect(list.style.maxHeight).toBe('');
+    expect(list.style.maxHeight).toBe('382px');
+    expect(list.style.overflowY).toBe('auto');
+  });
+
+  it('never runs off the top of the window: the 24 countries above a field near the foot scroll inside it', () => {
+    // Kd's click-through of Stage 3 item 2a: the country list opened upward, 872 px tall,
+    // and Austria to France sat above the window where nobody could reach them.
+    const countries = Array.from({ length: 24 }, (_, at) => ({ value: `c${at}`, label: `Country ${at}` }));
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ top: 700, bottom: 730, left: 0, right: 200, width: 200, height: 30, x: 0, y: 700, toJSON: () => ({}) });
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(800);
+    const onChange = vi.fn();
+    render(<Select ariaLabel="Country" value="" onChange={onChange} options={countries} placeholder="Choose a country" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Country' }));
+    const list = screen.getByRole('listbox');
+    expect(list.className).toContain('bottom-full');
+    // 700 px above the field, less 8 px: the list's top stays inside the window.
+    expect(list.style.maxHeight).toBe('692px');
+    expect(list.style.overflowY).toBe('auto');
+    fireEvent.click(screen.getByRole('option', { name: 'Country 0' }));
+    expect(onChange).toHaveBeenCalledWith('c0');
   });
 });

@@ -13,6 +13,7 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Tests moved with the rulings**: the seed's price-book test (and a retired `pro_in_m` it now builds itself), trial 10 days and 200 seats, free scans 1; the scanner-pricing tests' accounts go on the $10 plan (they scan more than once and test pricing, not the allowance); the over-limit test now runs on the one free scan. `classes.bulk.routes.test.ts` failed after 18:00 London time (its 18:00 class had begun, so one time slot had nothing before the date); its date is now 8 days out.
 - **Verified**: api tsc 0 · api eslint 0 · shared tsc 0 · shared eslint 0 · shared 220/220 · **the whole api suite on `aihg_b`: 104 files, 3,124 passed** · web 2,493 passed (`poseAssets.contract` local Node 24 only, as before) · changed web files lint 0.
 - **Cost at full size**: reads no list of people; nothing to measure.
+- **Kd's click-through passed**, and found the new-gym Country list (24 countries) opening upward past the top of the window, Austria to France out of reach: the app's dropdown (`common/Select.jsx`) now caps its list to the room on the side it opens and scrolls (red first). The time zone is prefilled from the device; the codes still showing are removed by Folder A's 3c.
 - **Not in this job**: "more than 2,100: contact us" and any Subscribe button (Stage 3 item 1, Paddle). The rupee list is checked once a year against the rate.
 
 ## 2026-09-23 · 3b-i-a: press Invite, and the email goes (PR #98)
