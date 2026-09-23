@@ -107,7 +107,7 @@ d("what comes back (real Postgres)", () => {
     await sql`DELETE FROM gyms WHERE id IN (${mine})`;
     await sql`DELETE FROM users WHERE email LIKE ${`minvr-t-%@${DOMAIN}`}`;
     // Hard bounces are every gym's, so they are found by this suite's own addresses.
-    const locals = ["bounced", "soft", "spam", "forged", "unconfirmed", "order", "page", "twice", "early", "unknown", "wrongtag", "lease", "denied"];
+    const locals = ["bounced", "soft", "spam", "forged", "unconfirmed", "order", "page", "twice", "early", "unknown", "wrongtag", "lease", "denied", "unknown-failed", "unknown-refused"];
     for (const [prefix, n] of [["stop", 50], ["bulk", 200], ["cmp", 120], ["gate", 50], ["refused", 50], ["race", 50], ["half", 200]] as const) {
       for (let i = 0; i < n; i++) locals.push(`${prefix}-${String(i)}`);
     }
@@ -648,6 +648,22 @@ d("what comes back (real Postgres)", () => {
       expect(await suppressionsOf(email)).toEqual([{ gym_id: null, reason: "bounced" }]);
     }, TEST_TIMEOUT_MS);
 
+    it("an email the sender could not confirm stays so when Resend says it failed or refused it", async () => {
+      for (const [local, type, last] of [["unknown-failed", "email.failed", "failed"], ["unknown-refused", "email.suppressed", "suppressed"]] as const) {
+        const sendId = await seedRetrying(gymA, addr(local));
+        await sql`
+          UPDATE gym_invite_sends SET state = 'failed', reason = 'send_unknown', email = NULL, finished_at = now()
+          WHERE id = ${sendId}`;
+        const providerId = `re_${randomUUID()}`;
+        tagFor(providerId, sendId);
+        resendRecords.set(providerId, last);
+        await report(type, providerId);
+        await processAll();
+        const row = await sql<{ state: string; reason: string | null; provider_id: string | null; result: string | null }[]>`
+          SELECT state, reason, provider_id, result FROM gym_invite_sends WHERE id = ${sendId}`;
+        expect(row).toEqual([{ state: "failed", reason: "send_unknown", provider_id: null, result: null }]);
+      }
+    }, TEST_TIMEOUT_MS);
     it("a report whose tag Resend's record does not carry is not acted on", async () => {
       const email = addr("wrongtag");
       const providerId = await seedSent(gymA, email);

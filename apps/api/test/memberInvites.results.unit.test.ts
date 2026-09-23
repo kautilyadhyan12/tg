@@ -212,7 +212,8 @@ describe("confirm — Resend's last event against each report, from the orders R
       before = true;
     }
     return before ? "not_yet" : "disagrees";
-  };  const lastEvents = [...new Set([...orders.flat(), "canceled", "something_new", ""])];
+  };
+  const lastEvents = [...new Set([...orders.flat(), "canceled", "something_new", ""])];
   for (const type of Object.keys(eventOf) as StoredResendEvent["type"][]) {
     for (const last of lastEvents) {
       const want = expected(eventOf[type], last);

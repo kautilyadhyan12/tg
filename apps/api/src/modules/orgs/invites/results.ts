@@ -161,7 +161,11 @@ async function processOne(deps: ResultsDeps, event: webhooks.ClaimedEvent): Prom
   const done = await deps.sql
     .begin(async (tx) => {
       await listRepo.lockGym(tx, send.gymId);
-      if (wentAfterAll) await repo.markWentAfterAll(tx, send.gymId, send.id, payload.emailId);
+      // Only a report that the email reached a mail server shows it went: Resend's
+      // "failed" and its own refusal say it never left, so the row keeps "couldn't confirm".
+      if (wentAfterAll && effect.result !== "failed" && effect.result !== "refused") {
+        await repo.markWentAfterAll(tx, send.gymId, send.id, payload.emailId);
+      }
       const current = await repo.sendForResult(tx, send.gymId, send.id);
       if (current === null) return { mine: await webhooks.finishEvent(tx, event, "done", at), stopped: null };
       if (replacesResult(effect.result, current.result)) await repo.setResult(tx, send.gymId, send.id, effect.result, at);
