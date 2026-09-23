@@ -337,8 +337,8 @@ export type ClassWriteOutcome =
   | { kind: "too_many"; cap: number }
   /** The class's limit of time slots running at once. */
   | { kind: "too_many_slots"; cap: number }
-  /** The class's limit of time slots listed. */
-  | { kind: "too_many_listed"; cap: number };
+  /** The class's limit of time slots listed; `would` is how many it would list. */
+  | { kind: "too_many_listed"; cap: number; would: number };
 
 /** IS THIS PERSON THIS GYM'S STAFF — asked INSIDE the write's transaction, under
  *  the gym's lock, so it cannot be answered against a roster that changes
@@ -636,7 +636,11 @@ export async function createSchedule(
       case "running":
         return { kind: "too_many_slots", cap: CLASS_SCHEDULES_PER_TYPE_MAX };
       case "listed":
-        return { kind: "too_many_listed", cap: CLASS_SCHEDULES_LISTED_PER_TYPE_MAX };
+        return {
+          kind: "too_many_listed",
+          cap: CLASS_SCHEDULES_LISTED_PER_TYPE_MAX,
+          would: slots.length + 1,
+        };
       case "ok":
         break;
     }
@@ -738,8 +742,8 @@ export type SlotChangeOutcome =
   | { kind: "day_clashes" }
   /** The class would run more time slots at once than it may. */
   | { kind: "too_many"; cap: number }
-  /** The class would list more time slots than it may. */
-  | { kind: "too_many_listed"; cap: number };
+  /** The class would list more time slots than it may; `would` is how many. */
+  | { kind: "too_many_listed"; cap: number; would: number };
 
 /** Where the change is made from: a time slot and a date (the Classes list), or
  *  one class on the Calendar ("This and future classes") — its time slot, its
@@ -1092,7 +1096,11 @@ export async function changeSlotFrom(
         case "running":
           return { kind: "too_many", cap: CLASS_SCHEDULES_PER_TYPE_MAX };
         case "listed":
-          return { kind: "too_many_listed", cap: CLASS_SCHEDULES_LISTED_PER_TYPE_MAX };
+          return {
+            kind: "too_many_listed",
+            cap: CLASS_SCHEDULES_LISTED_PER_TYPE_MAX,
+            would: slots.length + (runsBefore ? 1 : 0),
+          };
         case "ok":
           break;
       }
@@ -1375,7 +1383,11 @@ export async function bulkChangeSlots(
     if (splits > 0) {
       const { slots: listed } = await listedSlots(tx, input);
       if (slotLimitVerdict({ peak: 0, addsRunning: 0, listed: listed.length, addsListed: splits }) !== "ok") {
-        return { kind: "too_many_listed", cap: CLASS_SCHEDULES_LISTED_PER_TYPE_MAX };
+        return {
+          kind: "too_many_listed",
+          cap: CLASS_SCHEDULES_LISTED_PER_TYPE_MAX,
+          would: listed.length + splits,
+        };
       }
     }
 

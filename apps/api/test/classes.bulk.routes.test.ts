@@ -785,9 +785,34 @@ d("bulk edit of a class's time slots (real Postgres)", () => {
       expect(answers.map((a) => a.statusCode)).toEqual([200, 200, 409]);
       const refusal = JSON.parse(answers[2]?.body ?? "{}") as { error: string; message: string };
       expect(refusal.error).toBe("too_many_listed");
+      // The real numbers, and the advice that works (re-check, H-1): a later
+      // date splits every time slot again. 21 are listed, and each with a class
+      // still to start before the date would split: counted from the calendar,
+      // since it depends on the hour the test runs.
+      const [splitting] = await sql<{ n: number }[]>`
+        SELECT count(DISTINCT schedule_id)::int AS n FROM gym_class_sessions
+        WHERE class_type_id = ${type} AND local_date < ${addDays(today, 5)}::date
+          AND starts_at > now()`;
+      const would = 21 + (splitting?.n ?? 0);
+      expect(would).toBeGreaterThan(24);
       expect(refusal.message).toBe(
-        "This class already has 24 time slots listed, counting ones changed from a date that has not come yet. Pick a later Update from date, or wait until those dates have passed.",
+        `This class can list 24 time slots, counting ones changed from a date that has not come yet, and this change would make ${String(would)}. Pick the earliest Update from date, or wait until those dates have passed.`,
       );
+      expect(await slotRows(type)).toHaveLength(21);
+      // A later date is refused the same way; the earliest date goes through
+      // and lists no more.
+      const later = await post(
+        bulkUrl(gym, type),
+        { scheduleIds: await listedIds(), updateFrom: addDays(today, 8), set: { minutes: 30 } },
+        owner.cookies,
+      );
+      expect(later.statusCode).toBe(409);
+      const earliest = await post(
+        bulkUrl(gym, type),
+        { scheduleIds: await listedIds(), updateFrom: today, set: { minutes: 30 } },
+        owner.cookies,
+      );
+      expect(earliest.statusCode, earliest.body).toBe(200);
       expect(await slotRows(type)).toHaveLength(21);
 
       // Three more make 24 listed with only 10 running at once; one more is
@@ -805,7 +830,7 @@ d("bulk edit of a class's time slots (real Postgres)", () => {
         expect.objectContaining({
           error: "too_many_listed",
           message:
-            "This class already has 24 time slots listed, counting ones changed from a date that has not come yet. Add this one once those dates have passed.",
+            "This class can list 24 time slots, counting ones changed from a date that has not come yet, and already has 24. Add this one once those dates have passed.",
         }),
       );
     },

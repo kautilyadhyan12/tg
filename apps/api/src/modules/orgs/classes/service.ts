@@ -198,7 +198,7 @@ const slotLimitText = (cap: number) =>
 /** The class's limit of time slots listed. It fills only while changes from a
  *  date wait to start, so it never asks the gym to cancel anything. */
 const listedLimitText = (cap: number) =>
-  `This class already has ${String(cap)} time slots listed, counting ones changed from a date that has not come yet.`;
+  `This class can list ${String(cap)} time slots, counting ones changed from a date that has not come yet`;
 
 /** Turn a repo outcome into this module's refusals, in ONE place: six routes
  *  share four outcomes, and a `switch` per route is four chances for one of them
@@ -239,7 +239,7 @@ function throwOnFailure(outcome: repo.ClassWriteOutcome): void {
       throw new OrgsError(
         409,
         "too_many_listed",
-        `${listedLimitText(outcome.cap)} Add this one once those dates have passed.`,
+        `${listedLimitText(outcome.cap)}, and already has ${String(outcome.would - 1)}. Add this one once those dates have passed.`,
       );
     default: {
       // Exhaustive: a fifth outcome added to the repo fails to compile here
@@ -439,7 +439,7 @@ function slotOutcome(
       throw new OrgsError(
         409,
         "too_many_listed",
-        `${listedLimitText(outcome.cap)} Pick a later Update from date, or wait until those dates have passed.`,
+        `${listedLimitText(outcome.cap)}, and this change would make ${String(outcome.would)}. Pick the earliest Update from date, or wait until those dates have passed.`,
       );
     default: {
       const never: never = outcome;
