@@ -75,7 +75,7 @@ export default function InvitationCard({ invitation, onAnswered }) {
           ) : null}
           {state === 'declined' ? (
             <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.75)' }}>
-              You said no thanks. You can still join.
+              {invitation.canTakeMembers ? 'You said no thanks. You can still join.' : 'You said no thanks.'}
             </p>
           ) : null}
         </div>

@@ -190,6 +190,9 @@ describe("You're invited", () => {
     fireEvent.click(screen.getByRole('button', { name: 'No thanks' }));
     expect(await screen.findByRole('button', { name: 'Continue' })).toBeTruthy();
     expect(orgService.declineInvitation).toHaveBeenCalledWith(IRON.id);
+    // It cannot be joined now, so the card does not say it can.
+    expect(screen.getByText('You said no thanks.')).toBeTruthy();
+    expect(screen.queryByText('You said no thanks. You can still join.')).toBeNull();
   });
 
   it("a Join the server refuses shows the server's own sentence, and the card stays", async () => {
