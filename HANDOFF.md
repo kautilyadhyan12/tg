@@ -4,6 +4,17 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-23 · 3b-i-a: press Invite, and the email goes (branch `press-invite`)
+
+- **3b-i was split** (records, routes, sender, email and unsubscribe; then what comes back): **3b-i-a** here, **3b-i-b** next (webhook, bounces, complaints, first 50 then wait, the 2 % stop). Risky, Opus xhigh. Kd said *"go"*; he decided nothing new, so no RULINGS line.
+- **Built** (server only; spec §9.12's "Out of 3b-i-a"): migration `0038` (postal address, `gym_invites`, `gym_invite_sends`, `email_suppressions`); the count and the press (batches of 500), invite one, Add and invite, send again (3 a person in 30 days, 20 a gym a day); the invitation on each row and page and a list filter; the worker's `invites` queue (500 a gym a day, 200 on trial, `INVITE_EMAILS_PER_DAY`, `INVITES_PAUSED`) checking every email again just before it goes; the email; one-click unsubscribe. No new package.
+- **The worst thing, first test**: a second email, one after an unsubscribe, one about a gym whose list no longer holds the person. **Three breaks, all red, restored sha256-identical** (re-run on the final code): unsubscribe check out ("expected 1 to be +0"), a sent email claimable ("expected 118 to be 4"), a new idempotency key a try (`…-2`).
+- **Found on the way**: the unsubscribe token first rode in the path, which the api logs; it now rides in the query string, and `infra/Caddyfile` drops query strings from Caddy's access log too (validated with `caddy:2-alpine` v2.11.4; the log reads `/v1/email/unsubscribe`), which also stops it writing member-list search words.
+- **Cost**: the single-transaction press held everybody 1,176 ms at 9,000 people; in batches 142–174 ms, or 798–943 ms when one write stalled on this laptop's Docker disk (plain inserts stall too: 746 ms). Full table in spec §9.12.
+- **Verified**: api tsc 0 · api eslint (src test tools) 0 · shared tsc 0 · shared eslint 0 · shared 220/220 · invite unit 80/80 · invite routes 16/16 · full api suite on local Postgres 101 files, 3,029 passed, 0 failed · web 2,451 passed (`poseAssets.contract` fails locally on Node 24 only, as before) · Caddyfile valid (`caddy:2-alpine`) · gitleaks on the staged files: no leaks.
+- **Harnesses**: member-list census 68/68; the orgs harness had one anchor this job moved (O118, re-anchored, red by hand), and five were already stale on master (O110, O113, O121, O134, O217 — seed and shared/orgs.ts, not this job's), which stop that harness running at all.
+- **Open**: review round one by file (`reviews/3b-i-a-1-review.md`). ROADMAP 3b-ii now also builds the web `/join/{slug}` page the email links to; 5b the postal-address box. In production invitations stay off until Kd has the invites sub-domain in Resend and `INVITE_EMAIL_FROM`, `INVITE_HMAC_SECRET`, `API_ORIGIN` are set.
+
 ## 2026-09-23 · 3a-iv: the member list kept by hand, one person's page, joining two records, and "Remove all" (PR #95)
 
 - **Built** (Folder A, risky, Opus xhigh; spec §9.9, §11.6). Ten routes under `/member-list`: one person's page; add; change; take off (former); put back; delete a former record for good; join two records; put an app member on the list; the names "Remove all" would remove; "Remove all". No migration, no new package; its notes and cost are in spec §11.6.
