@@ -1,15 +1,20 @@
 // The only file that touches the invitation tables (Part 3 §9.12). Every statement
 // names its gym, except the two a public unsubscribe link reaches, which are keyed by
-// an invitation id the link's MAC has already proved.
+// an invitation id the link's MAC has already proved, and the one a Resend report
+// reaches, keyed by the email's tag or Resend's id for it, whose gym every later
+// write then names.
 import type { Sql, TransactionSql } from "postgres";
 import {
   memberInviteEmailReasonSchema,
+  memberInviteEmailResultSchema,
   memberInviteEmailStateSchema,
   memberInviteStateSchema,
   type MemberInviteEmailReason,
+  type MemberInviteEmailResult,
   type MemberInviteState,
   type MemberListInvitation,
 } from "@app/shared";
+import { INVITE_STANDING, mayGymSend, type GateFacts, type GymCounts, type StopReason } from "./standing.js";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -127,10 +132,10 @@ export async function allInvites(sql: SqlOrTx, gymId: string): Promise<Map<strin
   return new Map(rows.map((row) => [row.email_hmac, parseState(row.state, row.id)]));
 }
 
-export type SuppressionReason = "unsubscribed" | "complained" | "bounced";
+export type SuppressionReason = "unsubscribed" | "complained" | "bounced" | "refused";
 
 /** Which of these addresses no invitation from this gym may go to, and why: this
- *  gym's unsubscribes and complaints, and every gym's hard bounces. */
+ *  gym's unsubscribes and complaints, and every gym's hard bounces and refusals. */
 export async function suppressionsFor(
   sql: SqlOrTx,
   gymId: string,
@@ -141,12 +146,12 @@ export async function suppressionsFor(
     SELECT email_hmac, reason
     FROM email_suppressions
     WHERE email_hmac = ANY(${[...hmacs]}::text[]) AND (gym_id = ${gymId} OR gym_id IS NULL)
-    -- A bounce outranks a complaint, which outranks an unsubscribe.
-    ORDER BY CASE reason WHEN 'bounced' THEN 0 WHEN 'complained' THEN 1 ELSE 2 END`;
+    -- A bounce outranks a refusal, then a complaint, then an unsubscribe.
+    ORDER BY CASE reason WHEN 'bounced' THEN 0 WHEN 'refused' THEN 1 WHEN 'complained' THEN 2 ELSE 3 END`;
   const found = new Map<string, SuppressionReason>();
   for (const row of rows) {
     if (found.has(row.email_hmac)) continue;
-    if (row.reason !== "unsubscribed" && row.reason !== "complained" && row.reason !== "bounced") {
+    if (row.reason !== "unsubscribed" && row.reason !== "complained" && row.reason !== "bounced" && row.reason !== "refused") {
       throw new Error("email suppression holds a reason that no longer parses");
     }
     found.set(row.email_hmac, row.reason);
@@ -262,6 +267,7 @@ export async function invitationViews(
       email_state: string | null;
       email_reason: string | null;
       email_at: Date | null;
+      email_result: string | null;
       again: number;
     }[]
   >`
@@ -269,11 +275,12 @@ export async function invitationViews(
            l.state AS email_state,
            l.reason AS email_reason,
            coalesce(l.finished_at, l.created_at) AS email_at,
+           l.result AS email_result,
            (SELECT count(*)::int FROM gym_invite_sends a
              WHERE a.gym_id = i.gym_id AND a.invite_id = i.id AND a.kind = 'again' AND a.state = 'sent') AS again
     FROM gym_invites i
     LEFT JOIN LATERAL (
-      SELECT s.state, s.reason, s.finished_at, s.created_at
+      SELECT s.state, s.reason, s.finished_at, s.created_at, s.result
       FROM gym_invite_sends s
       WHERE s.gym_id = i.gym_id AND s.invite_id = i.id
       ORDER BY s.created_at DESC, s.id DESC
@@ -286,10 +293,16 @@ export async function invitationViews(
     if (row.email_state !== null && row.email_at !== null) {
       const state = memberInviteEmailStateSchema.safeParse(row.email_state);
       const reason = row.email_reason === null ? null : memberInviteEmailReasonSchema.safeParse(row.email_reason);
-      if (!state.success || (reason !== null && !reason.success)) {
+      const result = row.email_result === null ? null : memberInviteEmailResultSchema.safeParse(row.email_result);
+      if (!state.success || (reason !== null && !reason.success) || (result !== null && !result.success)) {
         throw new Error(`gym invite ${row.id} has an email whose state no longer parses`);
       }
-      email = { state: state.data, reason: reason === null ? null : reason.data, at: row.email_at.toISOString() };
+      email = {
+        state: state.data,
+        reason: reason === null ? null : reason.data,
+        at: row.email_at.toISOString(),
+        result: result === null ? null : result.data,
+      };
     }
     views.set(row.email_hmac, {
       state: parseState(row.state, row.id),
@@ -376,7 +389,51 @@ export interface ClaimLimits {
   trialGymPerDay: number;
 }
 
-/** Take the next email that is due and within every cap, and lease it. Claims are
+/** For each gym with an email due: whether it is stopped, and how far its first batch
+ *  has gone (`mayGymSend` decides). Counts start at the gym's `invites_counted_from`. */
+export async function gateFacts(sql: SqlOrTx, now: Date): Promise<{ gymId: string; facts: GateFacts }[]> {
+  const rows = await sql<
+    { id: string; stopped: boolean; sent_or_sending: number; first_sent: number; with_result: number; last_sent_at: Date | null }[]
+  >`
+    WITH due AS (
+      SELECT DISTINCT s.gym_id FROM gym_invite_sends s
+      WHERE (s.state = 'queued' AND s.not_before <= ${now}) OR (s.state = 'sending' AND s.lease_until < ${now})
+    )
+    SELECT g.id,
+           g.invites_stopped_at IS NOT NULL AS stopped,
+           (SELECT count(*)::int FROM (
+              SELECT 1 FROM gym_invite_sends x
+              WHERE x.gym_id = g.id
+                AND ((x.state = 'sent' AND x.finished_at >= coalesce(g.invites_counted_from, '-infinity'::timestamptz))
+                     OR (x.state = 'sending' AND x.lease_until >= ${now}))
+              LIMIT ${INVITE_STANDING.firstBatch}) n) AS sent_or_sending,
+           f.first_sent, f.with_result, f.last_sent_at
+    FROM gyms g
+    JOIN due ON due.gym_id = g.id
+    CROSS JOIN LATERAL (
+      SELECT count(*)::int AS first_sent,
+             count(*) FILTER (WHERE b.result IS NOT NULL)::int AS with_result,
+             max(b.finished_at) AS last_sent_at
+      FROM (
+        SELECT x.result, x.finished_at FROM gym_invite_sends x
+        WHERE x.gym_id = g.id AND x.state = 'sent'
+          AND x.finished_at >= coalesce(g.invites_counted_from, '-infinity'::timestamptz)
+        ORDER BY x.finished_at, x.id
+        LIMIT ${INVITE_STANDING.firstBatch}
+      ) b
+    ) f`;
+  return rows.map((row) => ({
+    gymId: row.id,
+    facts: {
+      stopped: row.stopped,
+      sentOrSending: row.sent_or_sending,
+      firstBatch: { sent: row.first_sent, withResult: row.with_result, lastSentAt: row.last_sent_at },
+    },
+  }));
+}
+
+/** Take the next email that is due and within every cap, and lease it. A gym that is
+ *  stopped, or waiting for its first 50 emails' results, is passed over. Claims are
  *  serialised by a transaction-level advisory lock, so two workers cannot both take
  *  the last place under a cap. An email that may already have gone is taken first and
  *  outside the caps: it is the same email again, and Resend forgets its key after a day.
@@ -408,6 +465,7 @@ export async function claimNextSend(sql: Sql, limits: ClaimLimits): Promise<Clai
       WHERE (state = 'sent' AND finished_at > ${dayAgo})
          OR (state = 'sending' AND lease_until >= ${limits.now})`;
     if ((used[0]?.n ?? 0) >= limits.platformPerDay) return "capped";
+    const waiting = (await gateFacts(tx, limits.now)).flatMap((gym) => (mayGymSend(gym.facts, limits.now) ? [] : [gym.gymId]));
     const rows = await tx<ClaimedRow[]>`
       WITH busy AS (
         SELECT x.gym_id, count(*) AS n
@@ -431,6 +489,7 @@ export async function claimNextSend(sql: Sql, limits: ClaimLimits): Promise<Clai
         WHERE ((s.state = 'queued' AND s.not_before <= ${limits.now})
                OR (s.state = 'sending' AND s.lease_until < ${limits.now}))
           AND s.gym_id NOT IN (SELECT capped.gym_id FROM capped)
+          AND s.gym_id <> ALL(${waiting}::uuid[])
         ORDER BY s.not_before, s.created_at, s.id
         LIMIT 1
         FOR UPDATE OF s SKIP LOCKED
@@ -465,6 +524,7 @@ export interface SendContext {
     postalAddress: string | null;
     active: boolean;
     onPlan: boolean;
+    stopped: boolean;
   } | null;
   /** The gym's current entries holding exactly this address. */
   holders: { entryId: string; phone: string | null }[];
@@ -474,9 +534,17 @@ export async function sendContext(sql: SqlOrTx, send: ClaimedSend): Promise<Send
   const invites = await sql<{ email_hmac: string; state: string; id: string }[]>`
     SELECT id, email_hmac, state FROM gym_invites WHERE gym_id = ${send.gymId} AND id = ${send.inviteId}`;
   const gyms = await sql<
-    { name: string; city: string | null; slug: string; postal_address: string | null; status: string; on_plan: boolean }[]
+    {
+      name: string;
+      city: string | null;
+      slug: string;
+      postal_address: string | null;
+      status: string;
+      on_plan: boolean;
+      stopped: boolean;
+    }[]
   >`
-    SELECT g.name, g.city, g.slug, g.postal_address, g.status,
+    SELECT g.name, g.city, g.slug, g.postal_address, g.status, g.invites_stopped_at IS NOT NULL AS stopped,
            EXISTS (
              SELECT 1 FROM subscriptions s
              WHERE s.owner_type = 'gym' AND s.owner_id = g.id
@@ -497,6 +565,7 @@ export async function sendContext(sql: SqlOrTx, send: ClaimedSend): Promise<Send
             postalAddress: gym.postal_address,
             active: gym.status === "active",
             onPlan: gym.on_plan,
+            stopped: gym.stopped,
           },
     holders,
   };
@@ -545,6 +614,154 @@ export async function retrySend(
     SET state = 'queued', lease_until = NULL, not_before = ${notBefore},
         maybe_sent_at = CASE WHEN ${keep}::boolean THEN maybe_sent_at ELSE ${value}::timestamptz END
     WHERE id = ${send.id} AND gym_id = ${send.gymId} AND state = 'sending' AND attempts = ${send.attempts}
+    RETURNING id`;
+  return rows.length === 1;
+}
+
+// ── What comes back (a Resend report, confirmed with Resend) ─────────────────
+
+/** The gym's name, for the operator's note. */
+export async function gymName(sql: SqlOrTx, gymId: string): Promise<string | null> {
+  const rows = await sql<{ name: string }[]>`SELECT name FROM gyms WHERE id = ${gymId}`;
+  return rows[0]?.name ?? null;
+}
+
+/** Has this gym's sending been stopped? */
+export async function gymInvitesStopped(sql: SqlOrTx, gymId: string): Promise<boolean> {
+  const rows = await sql<{ stopped: boolean }[]>`
+    SELECT invites_stopped_at IS NOT NULL AS stopped FROM gyms WHERE id = ${gymId}`;
+  return rows[0]?.stopped ?? false;
+}
+
+/** The invitation email a report is about: the row its tag names, in any state, or
+ *  else the sent row Resend knows by this id. Null: not an invitation. */
+export interface ReportedSend {
+  id: string;
+  gymId: string;
+  state: string;
+  reason: string | null;
+  providerId: string | null;
+}
+
+export async function sendForReport(sql: SqlOrTx, report: { sendId: string | null; providerId: string }): Promise<ReportedSend | null> {
+  const rows =
+    report.sendId !== null
+      ? await sql<{ id: string; gym_id: string; state: string; reason: string | null; provider_id: string | null }[]>`
+          SELECT id, gym_id, state, reason, provider_id FROM gym_invite_sends WHERE id = ${report.sendId}`
+      : await sql<{ id: string; gym_id: string; state: string; reason: string | null; provider_id: string | null }[]>`
+          SELECT id, gym_id, state, reason, provider_id FROM gym_invite_sends
+          WHERE provider_id = ${report.providerId} AND state = 'sent'
+          ORDER BY finished_at, id
+          LIMIT 1`;
+  const row = rows[0];
+  return row === undefined
+    ? null
+    : { id: row.id, gymId: row.gym_id, state: row.state, reason: row.reason, providerId: row.provider_id };
+}
+
+/** An email the sender could not confirm, which Resend's own record shows went: it is
+ *  sent after all, under Resend's id. */
+export async function markWentAfterAll(tx: TransactionSql, gymId: string, sendId: string, providerId: string): Promise<void> {
+  await tx`
+    UPDATE gym_invite_sends SET state = 'sent', reason = NULL, provider_id = ${providerId}
+    WHERE gym_id = ${gymId} AND id = ${sendId} AND state = 'failed' AND reason = 'send_unknown'`;
+}
+
+/** The email's result now, and the address its invitation is for, read under the
+ *  caller's lock. */
+export async function sendForResult(
+  tx: TransactionSql,
+  gymId: string,
+  sendId: string,
+): Promise<{ result: MemberInviteEmailResult | null; hmac: string } | null> {
+  const rows = await tx<{ result: string | null; email_hmac: string }[]>`
+    SELECT s.result, i.email_hmac
+    FROM gym_invite_sends s JOIN gym_invites i ON i.id = s.invite_id AND i.gym_id = s.gym_id
+    WHERE s.gym_id = ${gymId} AND s.id = ${sendId} AND s.state = 'sent'
+    FOR UPDATE OF s`;
+  const row = rows[0];
+  if (row === undefined) return null;
+  const result = row.result === null ? null : memberInviteEmailResultSchema.safeParse(row.result);
+  if (result !== null && !result.success) throw new Error(`invite send ${sendId} holds a result that no longer parses`);
+  return { result: result === null ? null : result.data, hmac: row.email_hmac };
+}
+
+export async function setResult(tx: TransactionSql, gymId: string, sendId: string, result: MemberInviteEmailResult, at: Date): Promise<void> {
+  await tx`
+    UPDATE gym_invite_sends SET result = ${result}, result_at = ${at}
+    WHERE gym_id = ${gymId} AND id = ${sendId} AND state = 'sent'`;
+}
+
+/** Keep this address from every gym's invitations: a hard bounce, or an address Resend
+ *  refuses. Twice is once; a bounce replaces a refusal, never the other way round. */
+export async function suppressEveryGym(sql: SqlOrTx, hmac: string, reason: "bounced" | "refused"): Promise<void> {
+  await sql`
+    INSERT INTO email_suppressions (email_hmac, gym_id, reason)
+    VALUES (${hmac}, NULL, ${reason})
+    ON CONFLICT (email_hmac) WHERE gym_id IS NULL
+    DO UPDATE SET reason = EXCLUDED.reason
+    WHERE email_suppressions.reason = 'refused' AND EXCLUDED.reason = 'bounced'`;
+}
+
+/** What the gym has sent since its counts start, and what came back. An email Resend
+ *  refused to deliver never reached anybody, so it is not counted at all. */
+export async function gymCounts(sql: SqlOrTx, gymId: string): Promise<GymCounts> {
+  const rows = await sql<{ sent: number; bounced: number; complained_early: boolean }[]>`
+    WITH counted AS (
+      SELECT x.result, x.finished_at, x.id
+      FROM gym_invite_sends x JOIN gyms g ON g.id = x.gym_id
+      WHERE x.gym_id = ${gymId} AND x.state = 'sent' AND x.result IS DISTINCT FROM 'refused'
+        AND x.finished_at >= coalesce(g.invites_counted_from, '-infinity'::timestamptz)
+    )
+    SELECT (SELECT count(*)::int FROM counted) AS sent,
+           (SELECT count(*)::int FROM counted WHERE result = 'bounced') AS bounced,
+           EXISTS (
+             SELECT 1 FROM (
+               SELECT result FROM counted ORDER BY finished_at, id LIMIT ${INVITE_STANDING.complaintWindow}
+             ) early WHERE early.result = 'complained') AS complained_early`;
+  const row = rows[0];
+  return { sent: row?.sent ?? 0, bounced: row?.bounced ?? 0, complainedEarly: row?.complained_early ?? false };
+}
+
+/** Stop the gym's invitations. Its waiting emails that certainly have not gone are
+ *  skipped, so nothing is spent and a later press may queue them again; one that may
+ *  have gone is stopped by the worker's own check. True only for the call that stopped
+ *  it. */
+export async function stopGym(tx: TransactionSql, gymId: string, reason: StopReason, at: Date): Promise<boolean> {
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gyms SET invites_stopped_at = ${at}, invites_stopped_reason = ${reason}
+    WHERE id = ${gymId} AND invites_stopped_at IS NULL
+    RETURNING id`;
+  if (rows.length === 0) return false;
+  await tx`
+    UPDATE gym_invite_sends
+    SET state = 'skipped', reason = 'sending_stopped', email = NULL, finished_at = ${at}
+    WHERE gym_id = ${gymId} AND state = 'queued' AND maybe_sent_at IS NULL`;
+  return true;
+}
+
+/** The gyms whose invitations are stopped: Kd's "have a look" list. */
+export async function stoppedGyms(
+  sql: SqlOrTx,
+): Promise<{ gymId: string; name: string; reason: StopReason; stoppedAt: Date }[]> {
+  const rows = await sql<{ id: string; name: string; invites_stopped_reason: string; invites_stopped_at: Date }[]>`
+    SELECT id, name, invites_stopped_reason, invites_stopped_at FROM gyms
+    WHERE invites_stopped_at IS NOT NULL
+    ORDER BY invites_stopped_at`;
+  return rows.map((row) => {
+    if (row.invites_stopped_reason !== "bounces" && row.invites_stopped_reason !== "complaint") {
+      throw new Error(`gym ${row.id} holds a stop reason that no longer parses`);
+    }
+    return { gymId: row.id, name: row.name, reason: row.invites_stopped_reason, stoppedAt: row.invites_stopped_at };
+  });
+}
+
+/** Start a stopped gym again. Its counts start afresh, so it sends a first 50 and waits
+ *  again. False if it was not stopped. */
+export async function resumeGym(sql: SqlOrTx, gymId: string, at: Date): Promise<boolean> {
+  const rows = await sql<{ id: string }[]>`
+    UPDATE gyms SET invites_stopped_at = NULL, invites_stopped_reason = NULL, invites_counted_from = ${at}
+    WHERE id = ${gymId} AND invites_stopped_at IS NOT NULL
     RETURNING id`;
   return rows.length === 1;
 }

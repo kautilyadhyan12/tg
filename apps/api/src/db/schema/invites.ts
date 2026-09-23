@@ -50,6 +50,9 @@ export const gymInviteSends = pgTable(
     providerId: text("provider_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
+    /** What Resend reported about an email that went, once Resend's record agreed. */
+    result: text("result"),
+    resultAt: timestamp("result_at", { withTimezone: true }),
   },
   (t) => [
     uniqueIndex("gym_invite_sends_first_uq")
@@ -76,11 +79,15 @@ export const gymInviteSends = pgTable(
       sql`${t.providerId} IS NULL OR (${t.state} = 'sent' AND length(${t.providerId}) <= 100)`,
     ),
     check("gym_invite_sends_attempts_check", sql`${t.attempts} >= 0`),
+    index("gym_invite_sends_provider_idx").on(t.providerId).where(sql`${t.providerId} IS NOT NULL`),
+    check("gym_invite_sends_result_check", sql`${t.result} IS NULL OR ${t.result} IN ('delivered','bounced','complained','failed','refused')`),
+    check("gym_invite_sends_result_state_check", sql`${t.result} IS NULL OR ${t.state} = 'sent'`),
+    check("gym_invite_sends_result_at_check", sql`(${t.result} IS NULL) = (${t.resultAt} IS NULL)`),
   ],
 );
 
 /** Addresses no invitation may go to: for one gym (an unsubscribe, a complaint) or,
- *  with no gym, for every gym (a hard bounce). */
+ *  with no gym, for every gym (a hard bounce, or an address Resend refuses). */
 export const emailSuppressions = pgTable(
   "email_suppressions",
   {
@@ -94,7 +101,7 @@ export const emailSuppressions = pgTable(
     uniqueIndex("email_suppressions_gym_uq").on(t.emailHmac, t.gymId).where(sql`${t.gymId} IS NOT NULL`),
     uniqueIndex("email_suppressions_every_gym_uq").on(t.emailHmac).where(sql`${t.gymId} IS NULL`),
     check("email_suppressions_email_hmac_check", sql`${t.emailHmac} ~ '^[0-9a-f]{64}$'`),
-    check("email_suppressions_reason_check", sql`${t.reason} IN ('unsubscribed','complained','bounced')`),
-    check("email_suppressions_scope_check", sql`(${t.gymId} IS NULL) = (${t.reason} = 'bounced')`),
+    check("email_suppressions_reason_check", sql`${t.reason} IN ('unsubscribed','complained','bounced','refused')`),
+    check("email_suppressions_scope_check", sql`(${t.gymId} IS NULL) = (${t.reason} IN ('bounced','refused'))`),
   ],
 );

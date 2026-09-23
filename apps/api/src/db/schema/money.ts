@@ -138,9 +138,18 @@ export const webhookEvents = pgTable(
     processedAt: timestamp("processed_at", { withTimezone: true }),
     status: text("status").notNull().default("pending"),
     createdAt: createdAt(),
+    /** The claim's number, the tries at confirming the event, and when the next may be
+     *  made (migration `0039`). */
+    attempts: integer("attempts").notNull().default(0),
+    tries: integer("tries").notNull().default(0),
+    notBefore: timestamp("not_before", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     check("webhook_events_status_check", sql`${t.status} IN ('pending','done','failed')`),
+    check("webhook_events_attempts_check", sql`${t.attempts} >= 0`),
+    check("webhook_events_tries_check", sql`${t.tries} >= 0`),
+    index("webhook_events_due_idx").on(t.provider, t.notBefore).where(sql`${t.status} = 'pending'`),
+    index("webhook_events_processed_idx").on(t.processedAt).where(sql`${t.status} <> 'pending'`),
     unique("webhook_events_provider_event_uq").on(t.provider, t.eventId), // the dedupe that makes v1 §10's enqueue-then-ack safe
   ],
 );

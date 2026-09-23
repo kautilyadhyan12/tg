@@ -12,7 +12,7 @@
 // the row is marked before every hand-over, the next try goes first and under the same
 // idempotency key, and once 20 hours have passed since the mark it is never handed to
 // Resend again — Resend keeps a key for 24 — and ends as "may have gone".
-import { authEmailSchema, GYM_POSTAL_ADDRESS_MAX_CHARS, type MemberInviteEmailReason } from "@app/shared";
+import { authEmailSchema, GYM_POSTAL_ADDRESS_MAX_CHARS, INVITE_SEND_TAG, type MemberInviteEmailReason } from "@app/shared";
 import type { Sql } from "postgres";
 import { memberInviteEmail, memberInviteFrom } from "../../../email/templates.js";
 import type { InviteEmail, InviteTransport } from "../../../email/resend.js";
@@ -154,6 +154,7 @@ async function sendOne(deps: SenderDeps, claim: repo.ClaimedSend): Promise<Tally
         : {
             active: ctx.gym.active,
             onPlan: ctx.gym.onPlan,
+            stopped: ctx.gym.stopped,
             hasPostalAddress: (ctx.gym.postalAddress ?? "") !== "",
             named: gymName !== "",
           },
@@ -232,6 +233,7 @@ function inviteMessage(
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
     },
     idempotencyKey: `member-invite-${claim.id}`,
+    tags: [{ name: INVITE_SEND_TAG, value: claim.id }],
   };
 }
 

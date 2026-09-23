@@ -26,6 +26,7 @@ export const memberInviteEmailReasonSchema = z.enum([
   "unsubscribed",
   "complained",
   "bounced",
+  "refused",
   "shared_address",
   "bad_address",
   "no_mail_domain",
@@ -37,6 +38,7 @@ export const memberInviteEmailReasonSchema = z.enum([
   "provider_refused",
   "provider_unavailable",
   "dns_unavailable",
+  "sending_stopped",
 ]);
 export type MemberInviteEmailReason = z.infer<typeof memberInviteEmailReasonSchema>;
 
@@ -47,6 +49,7 @@ export const MEMBER_INVITE_EMAIL_REASON_WORDS: Readonly<Record<MemberInviteEmail
   unsubscribed: "Not sent: this person unsubscribed from your emails.",
   complained: "Not sent: this person marked an earlier email from you as spam.",
   bounced: "Not sent: emails to this address bounce.",
+  refused: "Not sent: our email service won't deliver to this address. Ask the person for another one.",
   shared_address: "Not sent: this is a shared address such as info@ or support@. Ask the person for their own.",
   bad_address: "Not sent: this email address isn't valid.",
   no_mail_domain: "Not sent: this email address can't receive email. Check it with the person.",
@@ -58,10 +61,25 @@ export const MEMBER_INVITE_EMAIL_REASON_WORDS: Readonly<Record<MemberInviteEmail
   provider_refused: "Not sent: the email service would not take it for a week. Invite them again.",
   provider_unavailable: "Not sent: the email service could not be reached for a week. Invite them again.",
   dns_unavailable: "Not sent: we could not check this address's email service for a week. Invite them again.",
+  sending_stopped: "Not sent: your gym's invitations were stopped because too many bounced or one was marked as spam.",
+};
+
+/** What the email service reported about an email that went (§9.12), once its own
+ *  record agreed. Null until a report arrives. */
+export const memberInviteEmailResultSchema = z.enum(["delivered", "bounced", "complained", "failed", "refused"]);
+export type MemberInviteEmailResult = z.infer<typeof memberInviteEmailResultSchema>;
+
+/** The sentence staff read beside an email that went but did not arrive, or was marked
+ *  as spam. A delivered email needs none. */
+export const MEMBER_INVITE_EMAIL_RESULT_WORDS: Readonly<Record<Exclude<MemberInviteEmailResult, "delivered">, string>> = {
+  bounced: "This email bounced: the address doesn't take email. Check it with the person.",
+  complained: "This person marked the invitation as spam. Your gym won't email them again.",
+  failed: "This email didn't arrive. Check the address with the person.",
+  refused: "Not delivered: our email service won't deliver to this address. Ask the person for another one.",
 };
 
 /** Why somebody in the chosen group is not invited by a press. */
-export const memberInviteSkipReasonSchema = z.enum(["no_email", "in_app", "already_invited", "unsubscribed", "bounced", "shared_address"]);
+export const memberInviteSkipReasonSchema = z.enum(["no_email", "in_app", "already_invited", "unsubscribed", "bounced", "refused", "shared_address"]);
 export type MemberInviteSkipReason = z.infer<typeof memberInviteSkipReasonSchema>;
 
 /** How many of the group each reason leaves out. They partition the group with
@@ -73,13 +91,15 @@ export const memberInviteSkippedSchema = z
     alreadyInvited: z.number().int().min(0),
     unsubscribed: z.number().int().min(0),
     bounced: z.number().int().min(0),
+    /** Addresses our email service won't deliver to (its own list). */
+    refused: z.number().int().min(0),
     sharedAddress: z.number().int().min(0),
   })
   .strict();
 export type MemberInviteSkipped = z.infer<typeof memberInviteSkippedSchema>;
 
 /** Why a gym cannot send invitations at all right now. */
-export const memberInviteBlockedSchema = z.enum(["no_postal_address", "gym_not_on_plan", "gym_archived", "invites_off"]);
+export const memberInviteBlockedSchema = z.enum(["no_postal_address", "gym_not_on_plan", "gym_archived", "invites_off", "sending_stopped"]);
 export type MemberInviteBlocked = z.infer<typeof memberInviteBlockedSchema>;
 
 /** One person's invitation, as their page and the list show it. */
@@ -93,6 +113,8 @@ export const memberListInvitationSchema = z
         state: memberInviteEmailStateSchema,
         reason: memberInviteEmailReasonSchema.nullable(),
         at: z.string(),
+        /** What the email service reported, for an email that went. */
+        result: memberInviteEmailResultSchema.nullable(),
       })
       .strict()
       .nullable(),
@@ -127,11 +149,14 @@ export const MEMBER_INVITE_WORDS = {
   invite_changed: "Your list changed while you were looking, so nobody was invited. Check the number again.",
   no_postal_address: "Add your gym's postal address in Settings first. Every invitation shows it, as the law requires.",
   invites_off: "Invitations can't be sent yet.",
+  sending_stopped:
+    "Your gym's invitations are stopped because too many bounced or one was marked as spam. Contact us to start them again.",
   no_email: "This person has no email address. Add one to invite them.",
   not_on_list: "This person has been taken off your list.",
   in_app: "This person is already a member in the app.",
   unsubscribed: "This person asked not to get your emails, so they can't be invited again.",
   bounced: "Emails to this address bounce. Check it with the person.",
+  refused: "Our email service won't deliver to this address. Ask the person for another one.",
   shared_address: "This is a shared address such as info@ or support@. Ask the person for their own.",
   not_invited: "This person hasn't been invited yet. Invite them first.",
   already_joined: "This person has already joined.",
