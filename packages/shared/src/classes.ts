@@ -395,10 +395,6 @@ export const gymClassSessionSchema = z
     /** Has it already started, by the server's clock? A started date cannot be
      *  changed, cancelled or put back. */
     started: z.boolean(),
-    /** Its repeat has been stopped, or its class removed. Only a cancelled date
-     *  can be in this state (Stop and Remove delete the running ones), and it
-     *  cannot be put back: nothing runs there any more. */
-    repeatStopped: z.boolean(),
   })
   .strict();
 export type GymClassSession = z.infer<typeof gymClassSessionSchema>;

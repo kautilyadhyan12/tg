@@ -443,14 +443,11 @@ export async function archiveClassType(
       WHERE class_type_id = ${input.classTypeId}
         AND gym_id = ${input.gymId}
         AND ended_at IS NULL`;
-    // Running dates only: a date the gym CANCELLED stays, so a repeat added
-    // later does not run over it (round one, H-2; fill.ts says how).
     const removed = await tx`
       DELETE FROM gym_class_sessions
       WHERE class_type_id = ${input.classTypeId}
         AND gym_id = ${input.gymId}
-        AND starts_at > ${input.now}
-        AND status = 'scheduled'`;
+        AND starts_at > ${input.now}`;
 
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
@@ -769,13 +766,11 @@ export async function endSchedule(
     await tx`
       UPDATE gym_class_schedules SET ended_at = ${input.now}
       WHERE id = ${input.scheduleId} AND gym_id = ${input.gymId}`;
-    // Running dates only, as in archiveClassType: a cancelled date stays.
     const removed = await tx`
       DELETE FROM gym_class_sessions
       WHERE schedule_id = ${input.scheduleId}
         AND gym_id = ${input.gymId}
-        AND starts_at > ${input.now}
-        AND status = 'scheduled'`;
+        AND starts_at > ${input.now}`;
 
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
@@ -808,7 +803,6 @@ export interface ClassSessionRow {
   status: string;
   changedAlone: boolean;
   started: boolean;
-  repeatStopped: boolean;
 }
 
 export interface ClassWeekRow {
@@ -877,7 +871,6 @@ export async function readWeek(
       status: string;
       changed_alone: boolean;
       started: boolean;
-      repeat_stopped: boolean;
     }[]
   >`
     SELECT x.id, x.class_type_id, x.schedule_id, t.name, t.colour, t.open_gym,
@@ -886,11 +879,9 @@ export async function readWeek(
            -- Named only while still this gym's active staff, as on the timetable.
            cu.display_name AS coach_name,
            x.status, x.changed_alone,
-           x.starts_at <= ${opts.now} AS started,
-           (sc.ended_at IS NOT NULL OR t.archived_at IS NOT NULL) AS repeat_stopped
+           x.starts_at <= ${opts.now} AS started
     FROM gym_class_sessions x
     JOIN gym_class_types t ON t.id = x.class_type_id AND t.gym_id = x.gym_id
-    LEFT JOIN gym_class_schedules sc ON sc.id = x.schedule_id AND sc.gym_id = x.gym_id
     LEFT JOIN gym_staff cs ON cs.gym_id = x.gym_id AND cs.user_id = x.coach_user_id
     LEFT JOIN users cu ON cu.id = cs.user_id AND cu.status = 'active'
     WHERE x.gym_id = ${gymId}
@@ -924,7 +915,6 @@ export async function readWeek(
       status: r.status,
       changedAlone: r.changed_alone,
       started: r.started,
-      repeatStopped: r.repeat_stopped,
     })),
   };
 }
@@ -937,7 +927,6 @@ export type ClassDayOutcome =
   | { kind: "cancelled" }
   | { kind: "time_passed" }
   | { kind: "time_missing" }
-  | { kind: "no_repeat_that_day"; className: string; localDate: string }
   | { kind: "clashes" };
 
 /** A change to one date: `change` carries the new values, the other two none. */
@@ -953,16 +942,10 @@ export type ClassDayInput =
  *  **Only a CHANGE sets `changed_alone`.** A cancel is a status, and nothing
  *  that writes the calendar touches status: the fill never updates a row, and
  *  holds back from a slot the class has cancelled (`fill.ts`); a repeat edit
- *  re-stamps only length, places and coach; Stop and Remove delete running dates
- *  only. So a cancelled date stays cancelled whatever happens to its repeat, and
- *  when it is put back it runs as the repeat now does.
- *
- *  **A cancelled date whose repeat was stopped, or whose class was removed,**
- *  keeps that class off the whole day (`fill.ts`). Putting it back LIFTS that
- *  hold: the row goes and the class's live repeats that run on that weekday
- *  write the day, in this transaction. With no such repeat there is nothing to
- *  run, and it says so rather than deleting the gym's cancellation (re-check,
- *  N-1).
+ *  re-stamps only length, places and coach. So a cancelled date stays cancelled
+ *  while its repeat runs, and when it is put back it runs as the repeat now does.
+ *  Stop and Remove clear every coming date, cancelled ones too: a new repeat is
+ *  a new timetable, which is TeamUp's model (Kd, RULINGS 2026-09-23).
  *
  *  **One class, one time, one date.** A date moved to a time, or put back at a
  *  time, where the same class already runs that day is refused; `fill.ts`
@@ -978,7 +961,6 @@ export async function changeSession(
     const [row] = await tx<
       {
         class_type_id: string;
-        name: string;
         local_date: string;
         local_start_minute: number;
         minutes: number;
@@ -989,11 +971,9 @@ export async function changeSession(
         new_starts_at: Date;
         new_start_passed: boolean;
         new_time_missing: boolean;
-        repeat_stopped: boolean;
       }[]
     >`
-      SELECT x.class_type_id, t.name,
-             x.local_date::text AS local_date, x.local_start_minute,
+      SELECT x.class_type_id, x.local_date::text AS local_date, x.local_start_minute,
              x.minutes, x.places, x.coach_user_id, x.status,
              x.starts_at <= ${input.now} AS started,
              n.at AS new_starts_at,
@@ -1003,12 +983,9 @@ export async function changeSession(
              NOT ((n.at AT TIME ZONE g.timezone)::date = x.local_date
                   AND EXTRACT(HOUR FROM n.at AT TIME ZONE g.timezone)::int * 60
                       + EXTRACT(MINUTE FROM n.at AT TIME ZONE g.timezone)::int
-                      = coalesce(${newMinute}::int, x.local_start_minute)) AS new_time_missing,
-             (sc.ended_at IS NOT NULL OR t.archived_at IS NOT NULL) AS repeat_stopped
+                      = coalesce(${newMinute}::int, x.local_start_minute)) AS new_time_missing
       FROM gym_class_sessions x
       JOIN gyms g ON g.id = x.gym_id
-      JOIN gym_class_types t ON t.id = x.class_type_id AND t.gym_id = x.gym_id
-      LEFT JOIN gym_class_schedules sc ON sc.id = x.schedule_id AND sc.gym_id = x.gym_id
       CROSS JOIN LATERAL (
         SELECT ((x.local_date + make_interval(
                   mins => coalesce(${newMinute}::int, x.local_start_minute)))
@@ -1032,7 +1009,6 @@ export async function changeSession(
         input.action === "change" &&
         input.startMinute !== row.local_start_minute &&
         row.new_time_missing,
-      repeatStopped: row.repeat_stopped,
     });
     switch (verdict) {
       case "nothing":
@@ -1042,8 +1018,6 @@ export async function changeSession(
       case "time_passed":
       case "time_missing":
         return { kind: verdict };
-      case "lift":
-        return await liftHold(tx, input, row);
       case "write":
         break;
       default: {
@@ -1111,82 +1085,3 @@ export async function changeSession(
     return { kind: "ok", localDate: row.local_date };
   });
 }
-
-/** LIFT A HOLD — put back a cancelled date whose repeat was stopped, or whose
- *  class was removed (re-check, N-1). Called inside `changeSession`'s
- *  transaction, under the gym's lock.
- *
- *  **Every hold of that class on that date goes**, not only the one pressed: a
- *  second one would still stop the fill, and the gym would be told it worked
- *  while nothing ran (second re-check, N-3). Then the class's live repeats are
- *  filled. **If no running date of the class was added that day, the savepoint
- *  rolls it all back** and the gym is told no repeat would add one — whether no
- *  repeat runs on that weekday, one starts later, or the class already runs
- *  there at another time (N-2). */
-async function liftHold(
-  tx: TransactionSql,
-  input: { gymId: string; sessionId: string; actorUserId: string; now: Date },
-  row: { class_type_id: string; name: string; local_date: string },
-): Promise<ClassDayOutcome> {
-  const running = async (q: TransactionSql) => {
-    const [r] = await q<{ n: number }[]>`
-      SELECT count(*)::int AS n FROM gym_class_sessions
-      WHERE gym_id = ${input.gymId} AND class_type_id = ${row.class_type_id}
-        AND local_date = ${row.local_date}::date AND status = 'scheduled'`;
-    return r?.n ?? 0;
-  };
-  const before = await running(tx);
-  const outcome = await tx
-    .savepoint(async (sp): Promise<ClassDayOutcome> => {
-      const cleared = await sp`
-        DELETE FROM gym_class_sessions x
-        USING gym_class_types t
-        WHERE t.id = x.class_type_id AND t.gym_id = x.gym_id
-          AND x.gym_id = ${input.gymId}
-          AND x.class_type_id = ${row.class_type_id}
-          AND x.local_date = ${row.local_date}::date
-          AND x.status = 'cancelled'
-          AND (t.archived_at IS NOT NULL
-               OR EXISTS (SELECT 1 FROM gym_class_schedules s
-                          WHERE s.id = x.schedule_id AND s.ended_at IS NOT NULL))`;
-      const live = await sp<{ id: string }[]>`
-        SELECT s.id FROM gym_class_schedules s
-        JOIN gym_class_types t ON t.id = s.class_type_id AND t.gym_id = s.gym_id
-        WHERE s.gym_id = ${input.gymId}
-          AND s.class_type_id = ${row.class_type_id}
-          AND s.ended_at IS NULL
-          AND t.archived_at IS NULL`;
-      if (live.length > 0) {
-        await fillClassSessions(sp, {
-          gymIds: [input.gymId],
-          scheduleIds: live.map((s) => s.id),
-          now: input.now,
-        });
-      }
-      const after = await running(sp);
-      if (after <= before) throw new NothingToAdd();
-      await insertAudit(sp, {
-        actorUserId: input.actorUserId,
-        gymId: input.gymId,
-        action: "org.class_session_hold_lifted",
-        targetType: "gym_class_session",
-        targetId: input.sessionId,
-        meta: {
-          date: row.local_date,
-          holdsCleared: String(cleared.count),
-          classesAdded: String(after - before),
-        },
-      });
-      return { kind: "ok", localDate: row.local_date };
-    })
-    .catch((err: unknown): ClassDayOutcome => {
-      if (err instanceof NothingToAdd) {
-        return { kind: "no_repeat_that_day", className: row.name, localDate: row.local_date };
-      }
-      throw err;
-    });
-  return outcome;
-}
-
-/** Thrown inside the lift's savepoint to roll it back: nothing would run. */
-class NothingToAdd extends Error {}

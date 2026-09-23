@@ -57,7 +57,6 @@ const day = (over) => ({
   status: 'scheduled',
   changedAlone: false,
   started: false,
-  repeatStopped: false,
   ...over,
 });
 
@@ -306,20 +305,6 @@ describe('this day only', () => {
       await screen.findByText("This class has already started, so it can't be changed."),
     ).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Cancel this day' })).toBeNull();
-  });
-
-  it('a cancelled day whose repeat was stopped says what it holds off, and one tap lets its repeats run', async () => {
-    api.getClassWeek.mockResolvedValue(
-      week({ sessions: [{ ...SPIN_TUE, status: 'cancelled', repeatStopped: true }] }),
-    );
-    draw();
-    await openDay('Spin on Tue 22 Sep 2026 at 18:00, cancelled');
-    expect(
-      screen.getByText('Its repeat was stopped. While this stays cancelled, no Spin repeat adds a class on this day.'),
-    ).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Put it back on' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Let Spin repeats run this day' }));
-    await waitFor(() => expect(api.restoreClassDay).toHaveBeenCalledWith('g1', 'x1'));
   });
 
   it('coming back to the list with the browser s Back reads the timetable again', async () => {

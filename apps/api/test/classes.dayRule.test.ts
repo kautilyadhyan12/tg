@@ -13,8 +13,8 @@ import {
   type DayVerdict,
 } from "../src/modules/orgs/classes/dayRule.js";
 
-type Flag = "started" | "unchanged" | "newStartPassed" | "newTimeMissing" | "repeatStopped";
-const FLAGS: Flag[] = ["started", "unchanged", "newStartPassed", "newTimeMissing", "repeatStopped"];
+type Flag = "started" | "unchanged" | "newStartPassed" | "newTimeMissing";
+const FLAGS: Flag[] = ["started", "unchanged", "newStartPassed", "newTimeMissing"];
 const ACTIONS: DayAction[] = ["change", "cancel", "restore"];
 const STATUSES: DayFacts["status"][] = ["scheduled", "cancelled"];
 
@@ -59,18 +59,7 @@ const ROWS: Row[] = [
   { action: "cancel", status: "cancelled", fixed: { started: false }, verdict: "nothing" },
   // Putting back.
   { action: "restore", status: "scheduled", fixed: { started: false }, verdict: "nothing" },
-  {
-    action: "restore",
-    status: "cancelled",
-    fixed: { started: false, repeatStopped: false },
-    verdict: "write",
-  },
-  {
-    action: "restore",
-    status: "cancelled",
-    fixed: { started: false, repeatStopped: true },
-    verdict: "lift",
-  },
+  { action: "restore", status: "cancelled", fixed: { started: false }, verdict: "write" },
 ];
 
 /** Every combination of the swept flags for one row. */
@@ -84,7 +73,6 @@ function expand(row: Row): DayFacts[] {
       unchanged: false,
       newStartPassed: false,
       newTimeMissing: false,
-      repeatStopped: false,
     };
     for (const f of FLAGS) {
       const fixed = row.fixed[f];

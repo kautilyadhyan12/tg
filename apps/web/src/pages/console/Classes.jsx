@@ -701,7 +701,7 @@ export default function Classes() {
                 {confirming === `archive:${type.id}` ? (
                   <div className="mt-3">
                     <ConfirmInline
-                      question={`Take ${type.name} off the timetable? Its repeats stop and the dates it had coming up are cleared, except days you cancelled, which stay cancelled. The days it already ran are kept, and you can bring it back from "No longer running" below.`}
+                      question={`Take ${type.name} off the timetable? Its repeats stop and the dates it had coming up are cleared. The days it already ran are kept, and you can bring it back from "No longer running" below.`}
                       confirmLabel="Remove it"
                       cancelLabel="Keep it"
                       busy={busy !== null}
@@ -817,7 +817,7 @@ export default function Classes() {
                           Two buttons on this screen destroy dates; both ask. */}
                       {confirming === `stop:${schedule.id}` ? (
                         <ConfirmInline
-                          question={`Stop the ${weekdayLine(schedule.weekdays)} repeat of ${type.name}? Its coming dates are cleared, except days you cancelled, which stay cancelled, and ${type.name} stays on your timetable — you can add a repeat again whenever you like.`}
+                          question={`Stop the ${weekdayLine(schedule.weekdays)} repeat of ${type.name}? Its coming dates are cleared and ${type.name} stays on your timetable — you can add a repeat again whenever you like.`}
                           confirmLabel="Stop it"
                           cancelLabel="Leave it running"
                           busy={busy !== null}

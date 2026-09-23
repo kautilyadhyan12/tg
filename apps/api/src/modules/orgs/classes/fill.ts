@@ -212,16 +212,11 @@ export async function fillClassSessions(
       AND NOT EXISTS (
         SELECT 1 FROM gym_class_sessions own
         WHERE own.schedule_id = s.id AND own.local_date = d::date)
-      -- THE CLASS ALREADY HAS THIS SLOT, RUNNING OR CANCELLED (17b-ii-b-i):
-      --  · another repeat's date moved to this time on its own holds it — the
-      --    repeat clash check in createSchedule compares repeats and cannot
-      --    see it — and a CANCELLED one holds it too, or the class the gym
-      --    cancelled at that time would come back the next night (round one,
-      --    H-1);
-      --  · a cancelled date whose repeat was stopped, or whose class was
-      --    removed, holds the whole day for that class: it is the gym's "no
-      --    class that day", and a repeat added afterwards, at any time, must
-      --    not run over it (round one, H-2).
+      -- ONE CLASS, ONE TIME, ONE DATE (17b-ii-b-i). Another repeat's date moved
+      -- to this time on its own already holds the slot — the repeat clash check
+      -- in createSchedule compares repeats and cannot see it — and a CANCELLED
+      -- one holds it too, or the class the gym cancelled at that time would come
+      -- back the next night (round one, H-1).
       AND NOT EXISTS (
         SELECT 1 FROM gym_class_sessions o
         WHERE o.gym_id = s.gym_id
@@ -232,10 +227,7 @@ export async function fillClassSessions(
           AND o.starts_at < ((d::date)::timestamp AT TIME ZONE g.timezone) + interval '3 days'
           AND o.local_date = d::date
           AND o.schedule_id IS DISTINCT FROM s.id
-          AND (o.local_start_minute = s.local_start_minute
-               OR (o.status = 'cancelled'
-                   AND EXISTS (SELECT 1 FROM gym_class_schedules x
-                               WHERE x.id = o.schedule_id AND x.ended_at IS NOT NULL))))
+          AND o.local_start_minute = s.local_start_minute)
     ON CONFLICT (schedule_id, local_date) DO NOTHING`;
 
   return { sessions: written.count };

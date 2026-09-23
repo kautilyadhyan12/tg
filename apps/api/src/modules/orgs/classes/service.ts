@@ -380,15 +380,6 @@ export async function updateSchedule(
 
 // ── THE WEEK VIEW AND "THIS DAY ONLY" (17b-ii-b-i) ──────────────────────────
 
-/** `Tuesday 29 September` — for the one sentence that names a day. A calendar
- *  date has no zone, so it is read as UTC. */
-function dayLabel(day: string): string {
-  const made = new Date(`${day}T00:00:00Z`);
-  const weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-  const months = ["January", "February", "March", "April", "May", "June", "July", "August",
-    "September", "October", "November", "December"];
-  return `${weekdays[made.getUTCDay()] ?? ""} ${String(made.getUTCDate())} ${months[made.getUTCMonth()] ?? ""}`;
-}
 async function readWeekOr404(
   deps: ClassesDeps,
   gymId: string,
@@ -419,7 +410,6 @@ async function readWeekOr404(
       status: classSessionStatusSchema.parse(s.status),
       changedAlone: s.changedAlone,
       started: s.started,
-      repeatStopped: s.repeatStopped,
     })),
   });
 }
@@ -489,12 +479,6 @@ async function writeDay(
         409,
         "class_time_missing",
         "The clocks go forward on this day, so that time doesn't exist. Pick another time.",
-      );
-    case "no_repeat_that_day":
-      throw new OrgsError(
-        409,
-        "class_no_repeat_that_day",
-        `No ${outcome.className} repeat would add a class on ${dayLabel(outcome.localDate)}, so this day stays as it is.`,
       );
     case "clashes":
       throw new OrgsError(

@@ -180,7 +180,6 @@ const WEEK_BODY = {
       status: 'cancelled',
       changedAlone: false,
       started: false,
-      repeatStopped: false,
     },
   ],
 };
