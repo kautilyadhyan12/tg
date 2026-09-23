@@ -95,6 +95,9 @@ export interface MemberListDeps {
   read?: typeof understandMemberFile;
   /** Invitations (3b-i-a), or null while they are switched off. */
   invites?: InviteSettings | null;
+  /** Runs after a press has read its group and before it writes; a test changes the
+   *  list here to reach the check made under the gym's lock. Production passes nothing. */
+  afterInviteGroupRead?: () => Promise<void>;
 }
 
 /** A file refusal as this route answers it. 400 for everything the uploader can

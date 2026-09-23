@@ -10,8 +10,8 @@ import { z } from "zod";
 /** The longest postal address a gym may keep for its invitations' footer. */
 export const GYM_POSTAL_ADDRESS_MAX_CHARS = 200;
 
-/** Where an invitation stands (§10.2). Only `pending` is written by this job; the
- *  others are 3b-ii's (accept, decline) and a removal's (withdrawn). */
+/** Where an invitation stands (§10.2). Only `pending` is written by this job;
+ *  `accepted`, `declined` and `withdrawn` (a person taken off or removed) are 3b-ii's. */
 export const memberInviteStateSchema = z.enum(["pending", "accepted", "declined", "withdrawn"]);
 export type MemberInviteState = z.infer<typeof memberInviteStateSchema>;
 
@@ -32,6 +32,8 @@ export const memberInviteEmailReasonSchema = z.enum([
   "invitation_closed",
   "gym_not_active",
   "no_postal_address",
+  "gym_name",
+  "send_unknown",
   "provider_refused",
   "provider_unavailable",
   "dns_unavailable",
@@ -51,9 +53,11 @@ export const MEMBER_INVITE_EMAIL_REASON_WORDS: Readonly<Record<MemberInviteEmail
   invitation_closed: "Not sent: this person has already answered the invitation.",
   gym_not_active: "Not sent: your gym had no active plan when it was due to go.",
   no_postal_address: "Not sent: your gym had no postal address when it was due to go.",
-  provider_refused: "Not sent: the email service refused this address.",
-  provider_unavailable: "Not sent: the email service could not be reached. Send it again later.",
-  dns_unavailable: "Not sent: we could not check this address's email service. Send it again later.",
+  gym_name: "Not sent: your gym's name can't be shown in an email. Change it in Settings.",
+  send_unknown: "We couldn't confirm this email went. Only send it again if the person says they didn't get it.",
+  provider_refused: "Not sent: the email service would not take it for a week. Invite them again.",
+  provider_unavailable: "Not sent: the email service could not be reached for a week. Invite them again.",
+  dns_unavailable: "Not sent: we could not check this address's email service for a week. Invite them again.",
 };
 
 /** Why somebody in the chosen group is not invited by a press. */
@@ -92,7 +96,7 @@ export const memberListInvitationSchema = z
       })
       .strict()
       .nullable(),
-    /** How many times it was sent again at the person's request. */
+    /** How many times it was sent again at the person's request and went. */
     sentAgain: z.number().int().min(0),
   })
   .strict();

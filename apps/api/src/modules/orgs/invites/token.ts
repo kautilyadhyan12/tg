@@ -23,6 +23,9 @@ export function readUnsubscribeToken(key: Buffer, token: string): string | null 
   const id = Buffer.from(idPart, "base64url");
   const given = Buffer.from(macPart, "base64url");
   if (id.length !== 16 || given.length !== MAC_BYTES) return null;
+  // One spelling only: the last character of each part carries bits nothing reads, so
+  // the same bytes have other spellings, each a new key to the link's rate limit.
+  if (id.toString("base64url") !== idPart || given.toString("base64url") !== macPart) return null;
   if (!timingSafeEqual(given, macOf(key, id))) return null;
   const hex = id.toString("hex");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;

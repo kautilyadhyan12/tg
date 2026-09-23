@@ -89,17 +89,36 @@ export interface InviteRow {
   id: string;
   hmac: string;
   state: MemberInviteState;
+  /** An email of this invitation went, may have gone, or is waiting to go. Without one,
+   *  nobody was ever emailed about it and a press may queue its first email again. */
+  reached: boolean;
 }
 
 /** The gym's invitations to these addresses, by HMAC. */
 export async function invitesFor(sql: SqlOrTx, gymId: string, hmacs: readonly string[]): Promise<Map<string, InviteRow>> {
   if (hmacs.length === 0) return new Map();
-  const rows = await sql<{ id: string; email_hmac: string; state: string }[]>`
-    SELECT id, email_hmac, state
-    FROM gym_invites
-    WHERE gym_id = ${gymId} AND email_hmac = ANY(${[...hmacs]}::text[])`;
-  return new Map(rows.map((row) => [row.email_hmac, { id: row.id, hmac: row.email_hmac, state: parseState(row.state, row.id) }]));
+  const rows = await sql<{ id: string; email_hmac: string; state: string; reached: boolean }[]>`
+    SELECT i.id, i.email_hmac, i.state,
+           EXISTS (
+             SELECT 1 FROM gym_invite_sends s
+             WHERE s.gym_id = i.gym_id AND s.invite_id = i.id
+               AND (s.state IN ('queued','sending','sent') OR s.reason = 'send_unknown')
+           ) AS reached
+    FROM gym_invites i
+    WHERE i.gym_id = ${gymId} AND i.email_hmac = ANY(${[...hmacs]}::text[])`;
+  return new Map(
+    rows.map((row) => [
+      row.email_hmac,
+      { id: row.id, hmac: row.email_hmac, state: parseState(row.state, row.id), reached: row.reached },
+    ]),
+  );
 }
+
+/** Is this invitation done with, as far as a press or Invite is concerned: answered,
+ *  or an email of it went, may have gone, or is on its way? One email per person per
+ *  gym is about emails, so an invitation nobody was ever emailed about can have its
+ *  first email queued again. */
+export const alreadyInvited = (invite: InviteRow): boolean => invite.state !== "pending" || invite.reached;
 
 /** Every invitation the gym has, by HMAC. */
 export async function allInvites(sql: SqlOrTx, gymId: string): Promise<Map<string, MemberInviteState>> {
@@ -135,9 +154,12 @@ export async function suppressionsFor(
   return found;
 }
 
-/** Queue the first email for each address, creating its invitation. An address the
- *  gym has already invited is left alone (`ON CONFLICT`), so a second press, a second
- *  member of staff or a retry queues nothing more. Answers how many were queued. */
+/** Queue the first email for each address, creating its invitation, or, for a pending
+ *  invitation nobody was ever emailed about, queueing its first email again. An address
+ *  with an email that went, may have gone or is waiting is left alone — by the check
+ *  here and, for two presses at once, by the unique index on a live first email — so a
+ *  second press, a second member of staff or a retry queues nothing more. Answers how
+ *  many were queued. */
 export async function queueFirst(
   tx: SqlOrTx,
   gymId: string,
@@ -151,15 +173,29 @@ export async function queueFirst(
       SELECT r.hmac, r.email, r.ord
       FROM jsonb_to_recordset(${tx.json(payload)}) AS r(hmac text, email text, ord int)
     ),
-    invited AS (
+    created AS (
       INSERT INTO gym_invites (gym_id, email_hmac, created_at)
       SELECT ${gymId}, input.hmac, ${at} FROM input ORDER BY input.ord
       ON CONFLICT (gym_id, email_hmac) DO NOTHING
       RETURNING id, email_hmac
+    ),
+    -- The new invitations, and the pending ones that were already there (a statement
+    -- does not see its own inserts, so nothing is here twice).
+    invited AS (
+      SELECT created.id, created.email_hmac FROM created
+      UNION ALL
+      SELECT i.id, i.email_hmac FROM gym_invites i JOIN input ON input.hmac = i.email_hmac
+      WHERE i.gym_id = ${gymId} AND i.state = 'pending'
     )
     INSERT INTO gym_invite_sends (gym_id, invite_id, kind, email, not_before, created_at)
     SELECT ${gymId}, invited.id, 'first', input.email, ${at}, ${at}
     FROM invited JOIN input ON input.hmac = invited.email_hmac
+    WHERE NOT EXISTS (
+      SELECT 1 FROM gym_invite_sends s
+      WHERE s.gym_id = ${gymId} AND s.invite_id = invited.id
+        AND (s.state IN ('queued','sending','sent') OR s.reason = 'send_unknown'))
+    ON CONFLICT (invite_id) WHERE kind = 'first' AND (state IN ('queued','sending','sent') OR reason = 'send_unknown')
+    DO NOTHING
     RETURNING id`;
   return rows.length;
 }
@@ -234,7 +270,7 @@ export async function invitationViews(
            l.reason AS email_reason,
            coalesce(l.finished_at, l.created_at) AS email_at,
            (SELECT count(*)::int FROM gym_invite_sends a
-             WHERE a.gym_id = i.gym_id AND a.invite_id = i.id AND a.kind = 'again') AS again
+             WHERE a.gym_id = i.gym_id AND a.invite_id = i.id AND a.kind = 'again' AND a.state = 'sent') AS again
     FROM gym_invites i
     LEFT JOIN LATERAL (
       SELECT s.state, s.reason, s.finished_at, s.created_at
@@ -292,7 +328,8 @@ export async function suppressForGym(sql: SqlOrTx, gymId: string, hmac: string, 
 
 /** An email the worker has claimed. `attempts` is the claim's own number: every write
  *  that finishes it names it, so a claim that timed out and was taken over by another
- *  run cannot finish the row a second time. */
+ *  run cannot finish the row a second time. `maybeSentAt` is set once an attempt may
+ *  have reached Resend. */
 export interface ClaimedSend {
   id: string;
   gymId: string;
@@ -300,21 +337,34 @@ export interface ClaimedSend {
   kind: "first" | "again";
   email: string | null;
   attempts: number;
+  maybeSentAt: Date | null;
+  createdAt: Date;
 }
 
-/** A send whose lease ran out this long ago may already have gone and its idempotency
- *  key (24 hours at the email service) may have expired, so it is never sent again. */
-export const STALE_SEND_MS = 20 * 60 * 60 * 1000;
-
-/** Give up on sends whose worker vanished long ago: sending them now could send twice. */
-export async function failStaleSends(sql: SqlOrTx, now: Date): Promise<number> {
-  const rows = await sql<{ id: string }[]>`
-    UPDATE gym_invite_sends
-    SET state = 'failed', reason = 'provider_unavailable', email = NULL, lease_until = NULL, finished_at = ${now}
-    WHERE state = 'sending' AND lease_until < ${new Date(now.getTime() - STALE_SEND_MS)}
-    RETURNING id`;
-  return rows.length;
+interface ClaimedRow {
+  id: string;
+  gym_id: string;
+  invite_id: string;
+  kind: string;
+  email: string | null;
+  attempts: number;
+  maybe_sent_at: Date | null;
+  created_at: Date;
 }
+
+const toClaimed = (row: ClaimedRow): ClaimedSend => {
+  if (row.kind !== "first" && row.kind !== "again") throw new Error(`invite send ${row.id} holds a kind that no longer parses`);
+  return {
+    id: row.id,
+    gymId: row.gym_id,
+    inviteId: row.invite_id,
+    kind: row.kind,
+    email: row.email,
+    attempts: row.attempts,
+    maybeSentAt: row.maybe_sent_at,
+    createdAt: row.created_at,
+  };
+};
 
 export interface ClaimLimits {
   now: Date;
@@ -328,19 +378,37 @@ export interface ClaimLimits {
 
 /** Take the next email that is due and within every cap, and lease it. Claims are
  *  serialised by a transaction-level advisory lock, so two workers cannot both take
- *  the last place under a cap. Answers null when nothing is due, and `capped` when
- *  the whole app has reached its day. */
+ *  the last place under a cap. An email that may already have gone is taken first and
+ *  outside the caps: it is the same email again, and Resend forgets its key after a day.
+ *  Answers null when nothing is due, and `capped` when the whole app has reached its day. */
 export async function claimNextSend(sql: Sql, limits: ClaimLimits): Promise<ClaimedSend | "capped" | null> {
   const dayAgo = new Date(limits.now.getTime() - 24 * 60 * 60 * 1000);
   const leaseUntil = new Date(limits.now.getTime() + limits.leaseMs);
   return await sql.begin(async (tx) => {
     await tx`SELECT pg_advisory_xact_lock(hashtext('gym_invite_sends.claim'))`;
+    const again = await tx<ClaimedRow[]>`
+      WITH next AS (
+        SELECT s.id FROM gym_invite_sends s
+        WHERE s.maybe_sent_at IS NOT NULL
+          AND ((s.state = 'queued' AND s.not_before <= ${limits.now})
+               OR (s.state = 'sending' AND s.lease_until < ${limits.now}))
+        ORDER BY s.not_before, s.id
+        LIMIT 1
+        FOR UPDATE OF s SKIP LOCKED
+      )
+      UPDATE gym_invite_sends u
+      SET state = 'sending', lease_until = ${leaseUntil}, attempts = u.attempts + 1
+      FROM next
+      WHERE u.id = next.id
+      RETURNING u.id, u.gym_id, u.invite_id, u.kind, u.email::text AS email, u.attempts, u.maybe_sent_at, u.created_at`;
+    const retry = again[0];
+    if (retry !== undefined) return toClaimed(retry);
     const used = await tx<{ n: number }[]>`
       SELECT count(*)::int AS n FROM gym_invite_sends
       WHERE (state = 'sent' AND finished_at > ${dayAgo})
          OR (state = 'sending' AND lease_until >= ${limits.now})`;
     if ((used[0]?.n ?? 0) >= limits.platformPerDay) return "capped";
-    const rows = await tx<{ id: string; gym_id: string; invite_id: string; kind: string; email: string | null; attempts: number }[]>`
+    const rows = await tx<ClaimedRow[]>`
       WITH busy AS (
         SELECT x.gym_id, count(*) AS n
         FROM gym_invite_sends x
@@ -371,12 +439,20 @@ export async function claimNextSend(sql: Sql, limits: ClaimLimits): Promise<Clai
       SET state = 'sending', lease_until = ${leaseUntil}, attempts = u.attempts + 1
       FROM next
       WHERE u.id = next.id
-      RETURNING u.id, u.gym_id, u.invite_id, u.kind, u.email::text AS email, u.attempts`;
+      RETURNING u.id, u.gym_id, u.invite_id, u.kind, u.email::text AS email, u.attempts, u.maybe_sent_at, u.created_at`;
     const row = rows[0];
-    if (row === undefined) return null;
-    if (row.kind !== "first" && row.kind !== "again") throw new Error(`invite send ${row.id} holds a kind that no longer parses`);
-    return { id: row.id, gymId: row.gym_id, inviteId: row.invite_id, kind: row.kind, email: row.email, attempts: row.attempts };
+    return row === undefined ? null : toClaimed(row);
   });
+}
+
+/** Record, before an email is handed to Resend, that from now on it may have gone.
+ *  False when the claim is no longer this run's: then nothing may be sent. */
+export async function markMaybeSent(sql: SqlOrTx, send: ClaimedSend, at: Date): Promise<boolean> {
+  const rows = await sql<{ id: string }[]>`
+    UPDATE gym_invite_sends SET maybe_sent_at = coalesce(maybe_sent_at, ${at})
+    WHERE id = ${send.id} AND gym_id = ${send.gymId} AND state = 'sending' AND attempts = ${send.attempts}
+    RETURNING id`;
+  return rows.length === 1;
 }
 
 /** What the worker checks about a claimed email just before it goes. */
@@ -432,24 +508,42 @@ export type SendOutcome =
   | { kind: "failed"; reason: MemberInviteEmailReason };
 
 /** Finish a claimed email. The address is cleared in the same statement. False when
- *  the claim was no longer this run's. */
-export async function finishSend(sql: SqlOrTx, send: ClaimedSend, outcome: SendOutcome, at: Date): Promise<boolean> {
+ *  the claim was no longer this run's. `certainlyNotSent` clears the mark this attempt
+ *  made before handing it over, when Resend said it did not go. */
+export async function finishSend(
+  sql: SqlOrTx,
+  send: ClaimedSend,
+  outcome: SendOutcome,
+  at: Date,
+  certainlyNotSent = false,
+): Promise<boolean> {
   const reason = outcome.kind === "sent" ? null : outcome.reason;
   const providerId = outcome.kind === "sent" ? outcome.providerId : null;
   const rows = await sql<{ id: string }[]>`
     UPDATE gym_invite_sends
     SET state = ${outcome.kind}, reason = ${reason}, provider_id = ${providerId},
-        email = NULL, lease_until = NULL, finished_at = ${at}
+        email = NULL, lease_until = NULL, finished_at = ${at},
+        maybe_sent_at = CASE WHEN ${certainlyNotSent}::boolean THEN NULL ELSE maybe_sent_at END
     WHERE id = ${send.id} AND gym_id = ${send.gymId} AND state = 'sending' AND attempts = ${send.attempts}
     RETURNING id`;
   return rows.length === 1;
 }
 
-/** Put a claimed email back to wait until `notBefore`. */
-export async function retrySend(sql: SqlOrTx, send: ClaimedSend, notBefore: Date): Promise<boolean> {
+/** Put a claimed email back to wait until `notBefore`. `maybeSentAt` is what the row
+ *  should say afterwards: the claim's own value when Resend said the email did not go,
+ *  so an attempt that certainly did not send marks nothing. */
+export async function retrySend(
+  sql: SqlOrTx,
+  send: ClaimedSend,
+  notBefore: Date,
+  maybeSentAt: "keep" | Date | null = "keep",
+): Promise<boolean> {
+  const keep = maybeSentAt === "keep";
+  const value = maybeSentAt === "keep" ? null : maybeSentAt;
   const rows = await sql<{ id: string }[]>`
     UPDATE gym_invite_sends
-    SET state = 'queued', lease_until = NULL, not_before = ${notBefore}
+    SET state = 'queued', lease_until = NULL, not_before = ${notBefore},
+        maybe_sent_at = CASE WHEN ${keep}::boolean THEN maybe_sent_at ELSE ${value}::timestamptz END
     WHERE id = ${send.id} AND gym_id = ${send.gymId} AND state = 'sending' AND attempts = ${send.attempts}
     RETURNING id`;
   return rows.length === 1;

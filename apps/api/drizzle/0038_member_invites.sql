@@ -41,6 +41,10 @@ CREATE TABLE gym_invite_sends (
   attempts integer NOT NULL DEFAULT 0,
   not_before timestamptz NOT NULL,
   lease_until timestamptz,
+  -- When an attempt was first handed to Resend without a clear answer, so the email may
+  -- have gone. Resend keeps an idempotency key for 24 hours; past 20 the email is never
+  -- handed to it again.
+  maybe_sent_at timestamptz,
   provider_id text,
   created_at timestamptz NOT NULL,
   finished_at timestamptz,
@@ -57,12 +61,16 @@ CREATE TABLE gym_invite_sends (
   CONSTRAINT gym_invite_sends_attempts_check CHECK (attempts >= 0)
 );--> statement-breakpoint
 
--- At most one first email an invitation. With gym_invites' UNIQUE, one first email an
--- address a gym, whatever presses or retries arrive.
-CREATE UNIQUE INDEX gym_invite_sends_first_uq ON gym_invite_sends (invite_id) WHERE kind = 'first';--> statement-breakpoint
--- What the worker picks up next.
+-- At most one first email an invitation that is waiting, went, or may have gone. With
+-- gym_invites' UNIQUE, one such email an address a gym, whatever presses or retries
+-- arrive. A first email that was skipped or could not be sent leaves room for another.
+CREATE UNIQUE INDEX gym_invite_sends_first_uq ON gym_invite_sends (invite_id)
+  WHERE kind = 'first' AND (state IN ('queued','sending','sent') OR reason = 'send_unknown');--> statement-breakpoint
+-- What the worker picks up next, and first the emails that may already have gone.
 CREATE INDEX gym_invite_sends_due_idx ON gym_invite_sends (not_before, created_at, id)
   WHERE state IN ('queued','sending');--> statement-breakpoint
+CREATE INDEX gym_invite_sends_retry_idx ON gym_invite_sends (not_before, id)
+  WHERE state IN ('queued','sending') AND maybe_sent_at IS NOT NULL;--> statement-breakpoint
 -- The daily caps: a gym's sends and the whole app's, over the last 24 hours.
 CREATE INDEX gym_invite_sends_gym_sent_idx ON gym_invite_sends (gym_id, finished_at) WHERE state = 'sent';--> statement-breakpoint
 CREATE INDEX gym_invite_sends_sent_idx ON gym_invite_sends (finished_at) WHERE state = 'sent';--> statement-breakpoint

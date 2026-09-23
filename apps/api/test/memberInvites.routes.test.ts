@@ -6,6 +6,7 @@
 // one after they unsubscribed, or one about a gym whose list no longer holds them.
 // Every email is counted where it would leave: the transport the sender hands it to.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import Fastify from "fastify";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
@@ -14,10 +15,13 @@ import { emailHmac } from "../src/modules/orgs/invites/address.js";
 import type { MailCheck } from "../src/modules/orgs/invites/decide.js";
 import { claimNextSend } from "../src/modules/orgs/invites/repo.js";
 import { sendDueInvites, type SendRun, type SenderDeps } from "../src/modules/orgs/invites/sender.js";
-import { previewInvite, pressInvite } from "../src/modules/orgs/invites/service.js";
+import { InviteChanged, invitationsOf, previewInvite, pressInvite } from "../src/modules/orgs/invites/service.js";
 import { inviteSettings } from "../src/modules/orgs/invites/settings.js";
+import { unsubscribeToken } from "../src/modules/orgs/invites/token.js";
+import { registerUnsubscribeRoutes } from "../src/modules/orgs/invites/unsubscribe.js";
 import { createMemoryRedis } from "../src/redis.js";
 import {
+  MEMBER_INVITE_EMAIL_REASON_WORDS,
   memberInviteOneSchema,
   memberInvitePreviewSchema,
   memberInvitedSchema,
@@ -188,15 +192,22 @@ d("press Invite (real Postgres)", () => {
   // ── The worker's sender, with every email it would send recorded ──
 
   const outbox: InviteEmail[] = [];
+  /** Every email handed to the transport, whatever it answered. */
+  const calls: InviteEmail[] = [];
   /** What the next sends answer; empty means "sent". */
   const nextAnswers: InviteSendResult[] = [];
+  /** Resend's answers the tests give: one that may mean the email went, one that says it did not. */
+  const unclear = (status: number | null = null): InviteSendResult => ({ kind: "unclear", status });
+  const notSent = (status: number): InviteSendResult => ({ kind: "not_sent", status });
   const transport: InviteTransport = {
     send: (message) => {
+      calls.push(message);
       const answer = nextAnswers.shift() ?? { kind: "sent", id: `msg_${String(outbox.length + 1)}` };
       if (answer.kind === "sent") outbox.push(message);
       return Promise.resolve(answer);
     },
   };
+  const callsTo = (address: string) => calls.filter((message) => message.to === address);
   const domains = new Map<string, MailCheck>();
   const logged: unknown[] = [];
   const log = {
@@ -207,11 +218,14 @@ d("press Invite (real Postgres)", () => {
       logged.push(obj);
     },
   };
+  const sender = settings.sender;
+  if (sender === null) throw new Error("sending is off in the test config");
   const runSender = async (over: Partial<SenderDeps> = {}): Promise<SendRun> =>
     await sendDueInvites({
       sql,
       log,
       settings,
+      sender,
       transport,
       mailDomain: (domain) => Promise.resolve(domains.get(domain) ?? "accepts"),
       now: () => new Date(),
@@ -395,6 +409,237 @@ d("press Invite (real Postgres)", () => {
       await runSender();
       expect(emailsTo(addr("fay"))).toHaveLength(1);
       expect(emailsTo(addr("bounced"))).toHaveLength(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // =========================================================================
+  // WHAT THE SENDER DOES WITH RESEND'S ANSWER
+  // =========================================================================
+
+  const hours = (n: number) => new Date(Date.now() + n * 60 * 60 * 1000);
+  const sendRow = async (gym: string, address: string) => {
+    const rows = await sql<{ state: string; reason: string | null; email: string | null }[]>`
+      SELECT s.state, s.reason, s.email::text AS email FROM gym_invite_sends s JOIN gym_invites i ON i.id = s.invite_id
+      WHERE s.gym_id = ${gym} AND i.email_hmac = ${emailHmac(settings.hmacKey, address)}
+      ORDER BY s.created_at DESC LIMIT 1`;
+    return rows[0];
+  };
+
+  it(
+    "an email Resend may already have received goes again under its own key before the gym's cap, and never once 20 hours have passed",
+    async () => {
+      const owner = await makeUser("unclear-owner");
+      const gym = (await makeGym(owner, "Unclear Gym")).org.id;
+      for (const who of ["unc1", "unc2", "unc3"]) await typeIn(gym, owner, { fullName: who, email: addr(who) });
+      expect((await press(gym, owner, await previewOf(gym, owner))).statusCode).toBe(200);
+      const first = await sql<{ email: string }[]>`
+        SELECT email::text AS email FROM gym_invite_sends WHERE gym_id = ${gym} ORDER BY not_before, created_at, id LIMIT 1`;
+      const who = first[0]?.email ?? "";
+      // The first answer is a timeout: the email may have gone.
+      nextAnswers.push(unclear());
+      expect((await runSender({ limits: { trialGymPerDay: 2 } })).sent).toBe(2);
+      // A minute later the gym is at its cap of 2; the retry is the same email, and goes.
+      expect((await runSender({ limits: { trialGymPerDay: 2 }, now: () => hours(0.05) })).sent).toBe(1);
+      expect(new Set(callsTo(who).map((message) => message.idempotencyKey)).size).toBe(1);
+
+      // Another person, whose retry would come due only after Resend has forgotten the key.
+      const late = await typeIn(gym, owner, { fullName: "unc4", email: addr("unc4") });
+      await subscribeGym(gym, "active");
+      expect((await post(`${entryUrl(gym, late.entry.entryId)}/invite`, {}, owner.cookies)).statusCode).toBe(200);
+      nextAnswers.push(unclear(503));
+      await runSender();
+      expect(callsTo(addr("unc4"))).toHaveLength(1);
+      await runSender({ now: () => hours(21) });
+      expect(callsTo(addr("unc4"))).toHaveLength(1);
+      expect(await sendRow(gym, addr("unc4"))).toEqual({ state: "failed", reason: "send_unknown", email: null });
+      expect(MEMBER_INVITE_EMAIL_REASON_WORDS.send_unknown).toBe(
+        "We couldn't confirm this email went. Only send it again if the person says they didn't get it.",
+      );
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "an answer that says the email did not go (a bad key, a closed account, too many requests, our own request) never spends it, and a bad key stops the run",
+    async () => {
+      const owner = await makeUser("notsent-owner");
+      const gym = (await makeGym(owner, "Not Sent Gym")).org.id;
+      await typeIn(gym, owner, { fullName: "ns1", email: addr("ns1") });
+      await typeIn(gym, owner, { fullName: "ns2", email: addr("ns2") });
+      expect((await press(gym, owner, await previewOf(gym, owner))).statusCode).toBe(200);
+      const before = calls.length;
+      nextAnswers.push(notSent(401));
+      await runSender();
+      // The key is bad for every email: the run stops at the first answer.
+      expect(calls.length - before).toBe(1);
+      nextAnswers.length = 0;
+      // Six hours of a closed account: nothing is given up.
+      for (let hour = 1; hour <= 6; hour++) {
+        for (let i = 0; i < 4; i++) nextAnswers.push(notSent(403));
+        await runSender({ now: () => hours(hour) });
+      }
+      nextAnswers.length = 0;
+      expect((await sendRow(gym, addr("ns1")))?.state).toBe("queued");
+      expect((await sendRow(gym, addr("ns2")))?.state).toBe("queued");
+      // A request of ours Resend could not read is our fault, not the address's.
+      for (const status of [400, 422, 429]) {
+        nextAnswers.push(notSent(status), notSent(status));
+        await runSender({ now: () => hours(8) });
+        nextAnswers.length = 0;
+      }
+      expect((await sendRow(gym, addr("ns1")))?.state).toBe("queued");
+      // The key is fixed: both go.
+      await runSender({ now: () => hours(20) });
+      expect(emailsTo(addr("ns1"))).toHaveLength(1);
+      expect(emailsTo(addr("ns2"))).toHaveLength(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "an invitation whose email never went can be sent by a later press or Invite, and one given up after a week of refusals too",
+    async () => {
+      const owner = await makeUser("again-press-owner");
+      const gym = (await makeGym(owner, "Again Press Gym")).org.id;
+      for (const who of ["ap1", "ap2", "ap3"]) await typeIn(gym, owner, { fullName: who, email: addr(who) });
+      expect((await press(gym, owner, await previewOf(gym, owner))).statusCode).toBe(200);
+      // The gym lapses for a moment: the worker skips all three.
+      await sql`UPDATE subscriptions SET status = 'expired' WHERE owner_type = 'gym' AND owner_id = ${gym}`;
+      expect((await runSender()).skipped).toBe(3);
+      await subscribeGym(gym);
+      const again = await previewOf(gym, owner);
+      expect(again).toMatchObject({ reach: 3, skipped: { alreadyInvited: 0 } });
+      expect((await press(gym, owner, again)).statusCode).toBe(200);
+      expect((await runSender()).sent).toBe(3);
+      for (const who of ["ap1", "ap2", "ap3"]) expect(emailsTo(addr(who))).toHaveLength(1);
+      // Sent once, it is invited for good.
+      expect((await previewOf(gym, owner)).skipped.alreadyInvited).toBe(3);
+
+      // Invite on one person's page does the same.
+      const fay = await typeIn(gym, owner, { fullName: "ap4", email: addr("ap4") });
+      expect((await post(`${entryUrl(gym, fay.entry.entryId)}/invite`, {}, owner.cookies)).statusCode).toBe(200);
+      await sql`UPDATE gyms SET postal_address = NULL WHERE id = ${gym}`;
+      expect((await runSender()).skipped).toBe(1);
+      await sql`UPDATE gyms SET postal_address = '1 Mill Lane, Leeds' WHERE id = ${gym}`;
+      const res = await post(`${entryUrl(gym, fay.entry.entryId)}/invite`, {}, owner.cookies);
+      expect(memberInviteOneSchema.parse((JSON.parse(res.body) as { invite: unknown }).invite).outcome).toBe("queued");
+      expect((await runSender()).sent).toBe(1);
+
+      // A week of Resend refusing it: given up, and a press can send it again.
+      await typeIn(gym, owner, { fullName: "ap5", email: addr("ap5") });
+      expect((await press(gym, owner, await previewOf(gym, owner))).statusCode).toBe(200);
+      await sql`UPDATE gym_invite_sends SET created_at = now() - interval '8 days' WHERE gym_id = ${gym} AND state = 'queued'`;
+      nextAnswers.push(notSent(403));
+      await runSender();
+      nextAnswers.length = 0;
+      expect(await sendRow(gym, addr("ap5"))).toEqual({ state: "failed", reason: "provider_unavailable", email: null });
+      expect((await previewOf(gym, owner)).reach).toBe(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "with sending switched off, the unsubscribe links already sent still work and the list still shows every invitation",
+    async () => {
+      const owner = await makeUser("off-owner");
+      const gym = (await makeGym(owner, "Off Gym")).org.id;
+      const ida = await typeIn(gym, owner, { fullName: "Ida", email: addr("off-ida") });
+      expect((await post(`${entryUrl(gym, ida.entry.entryId)}/invite`, {}, owner.cookies)).statusCode).toBe(200);
+      await runSender();
+      const email = emailsTo(addr("off-ida"))[0];
+      if (email === undefined) throw new Error("no email");
+      const link = new URL((email.headers["List-Unsubscribe"] ?? "").replace(/^<|>$/g, ""));
+
+      const sendingOff = { ...settings, sender: null };
+      const quiet = Fastify();
+      registerUnsubscribeRoutes(quiet, { sql, redis: createMemoryRedis(), settings: sendingOff });
+      await quiet.ready();
+      const oneClick = await quiet.inject({
+        method: "POST",
+        url: `${link.pathname}${link.search}`,
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        payload: "List-Unsubscribe=One-Click",
+      });
+      await quiet.close();
+      expect(oneClick.statusCode).toBe(200);
+
+      const off = { sql, redis: createMemoryRedis(), log: { warn: () => undefined }, now: () => new Date(), invites: sendingOff };
+      expect((await previewInvite(off, owner.userId, gym, {}, () => Promise.resolve(true)))?.blocked).toBe("invites_off");
+      const views = await invitationsOf(sql, sendingOff, gym, [{ email: addr("off-ida") }]);
+      expect(views[0]?.state).toBe("pending");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "the version is checked again under the gym's lock: a list changed after the group was read is refused",
+    async () => {
+      const owner = await makeUser("lock-owner");
+      const gym = (await makeGym(owner, "Lock Gym")).org.id;
+      await typeIn(gym, owner, { fullName: "Lou", email: addr("lock-lou") });
+      const seen = await previewOf(gym, owner);
+      const deps = {
+        sql,
+        redis: createMemoryRedis(),
+        log: { warn: () => undefined },
+        now: () => new Date(),
+        invites: settings,
+        afterInviteGroupRead: async () => {
+          await sql`UPDATE gym_member_lists SET version = version + 1 WHERE gym_id = ${gym}`;
+        },
+      };
+      await expect(
+        pressInvite(deps, owner.userId, gym, { version: seen.version, expectedCount: seen.reach }, () => Promise.resolve(true)),
+      ).rejects.toBeInstanceOf(InviteChanged);
+      const invited = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_invites WHERE gym_id = ${gym}`;
+      expect(invited[0]?.n).toBe(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "several staff and several unsubscribes at one address: the front desk's allowance and every link's own",
+    async () => {
+      const owner = await makeUser("desk-owner");
+      const org = await makeGym(owner, "Desk Gym");
+      const gym = org.org.id;
+      const staff: User[] = [owner];
+      for (const n of [1, 2, 3, 4]) {
+        const manager = await makeUser(`desk-manager-${String(n)}`);
+        await verify(manager.email);
+        await appoint(manager, org, owner, "manager");
+        staff.push(manager);
+      }
+      const stale = { version: 999, reach: 0, skipped: { noEmail: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, sharedAddress: 0 }, blocked: null };
+      const desk = "10.64.0.1";
+      // Five people, 24 presses each, at one address: all answered (the list moved).
+      for (const who of staff) {
+        for (let i = 0; i < 24; i++) expect((await press(gym, who, stale, {}, desk)).statusCode).toBe(409);
+      }
+      // The address's 121st press is refused; the same person elsewhere is not.
+      expect((await press(gym, owner, stale, {}, desk)).statusCode).toBe(429);
+      expect((await press(gym, owner, stale, {}, "10.64.0.2")).statusCode).toBe(409);
+
+      // 25 people's links from one mail provider's address all work; one link, 21 times, does not.
+      await sql`
+        INSERT INTO gym_invites (gym_id, email_hmac)
+        SELECT ${gym}, encode(sha256(convert_to(${gym} || '-desk-' || n, 'UTF8')), 'hex') FROM generate_series(1, 25) AS n`;
+      const ids = await sql<{ id: string }[]>`SELECT id FROM gym_invites WHERE gym_id = ${gym} ORDER BY id`;
+      const mailer = "10.64.0.9";
+      const unsubscribe = (id: string) =>
+        api().inject({
+          method: "POST",
+          url: `/v1/email/unsubscribe?t=${unsubscribeToken(settings.hmacKey, id)}`,
+          remoteAddress: mailer,
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          payload: "List-Unsubscribe=One-Click",
+        });
+      for (const row of ids) expect((await unsubscribe(row.id)).statusCode).toBe(200);
+      const one = ids[0]?.id ?? "";
+      const answers: number[] = [];
+      for (let i = 0; i < 21; i++) answers.push((await unsubscribe(one)).statusCode);
+      expect(answers.filter((status) => status === 429).length).toBeGreaterThan(0);
     },
     TEST_TIMEOUT_MS,
   );
@@ -632,6 +877,8 @@ d("press Invite (real Postgres)", () => {
         expect(res.statusCode, res.body).toBe(200);
         const one = memberInviteOneSchema.parse((JSON.parse(res.body) as { invite: unknown }).invite);
         expect(one.outcome).toBe("queued");
+        // Counted once it has gone, not while it waits.
+        expect(one.invitation.sentAgain).toBe(time - 1);
         await runSender();
         expect(emailsTo(addr("max"))).toHaveLength(time + 1);
       }
@@ -675,8 +922,11 @@ d("press Invite (real Postgres)", () => {
       const oli = await typeIn(gym, owner, { fullName: "Oli", email: addr("oli") });
       await typeIn(gym, owner, { fullName: "Pat", email: addr("pat") });
       await typeIn(gym, owner, { fullName: "Quin", phone: "+447911000303" });
+      const rex = await typeIn(gym, owner, { fullName: "Rex", email: addr("rex") });
       expect((await post(`${entryUrl(gym, oli.entry.entryId)}/invite`, {}, owner.cookies)).statusCode).toBe(200);
+      expect((await post(`${entryUrl(gym, rex.entry.entryId)}/invite`, {}, owner.cookies)).statusCode).toBe(200);
       await runSender();
+      await sql`UPDATE gym_invites SET state = 'declined' WHERE gym_id = ${gym} AND email_hmac = ${emailHmac(settings.hmacKey, addr("rex"))}`;
 
       const page = async (query: string) => {
         const res = await get(`${entriesUrl(gym)}${query}`, owner.cookies);
@@ -690,7 +940,8 @@ d("press Invite (real Postgres)", () => {
       expect(byName.get("Quin")?.invitation).toBeNull();
       expect((await page("?invitation=pending")).entries.map((entry) => entry.fullName)).toEqual(["Oli"]);
       expect((await page("?invitation=not_invited")).entries.map((entry) => entry.fullName)).toEqual(["Pat", "Quin"]);
-      expect((await page("?invitation=declined")).total).toBe(0);
+      expect((await page("?invitation=declined")).entries.map((entry) => entry.fullName)).toEqual(["Rex"]);
+      expect((await page("?invitation=accepted")).total).toBe(0);
 
       const detail = await get(entryUrl(gym, oli.entry.entryId), owner.cookies);
       const oliPage = memberListEntryDetailSchema.parse((JSON.parse(detail.body) as { entry: unknown }).entry);
@@ -724,7 +975,7 @@ d("press Invite (real Postgres)", () => {
       await join(sam, org, owner);
 
       const run = await runSender();
-      expect(run).toMatchObject({ sent: 1, skipped: 3, retried: 1 });
+      expect(run).toMatchObject({ sent: 1, skipped: 3, held: 1 });
       const reasons = await sql<{ reason: string | null; state: string }[]>`
         SELECT state, reason FROM gym_invite_sends WHERE gym_id = ${gym} ORDER BY reason NULLS LAST`;
       expect(reasons.map((row) => `${row.state}:${row.reason ?? ""}`).sort()).toEqual(
@@ -732,8 +983,10 @@ d("press Invite (real Postgres)", () => {
       );
       expect(emailsTo(addr("tia"))).toHaveLength(1);
 
-      // The flaky domain waits, then gives up after its last try without sending.
-      await sql`UPDATE gym_invite_sends SET not_before = now(), attempts = 5 WHERE gym_id = ${gym} AND state = 'queued'`;
+      // The flaky domain waits, spending nothing, and after a week it is given up.
+      await sql`UPDATE gym_invite_sends SET not_before = now() WHERE gym_id = ${gym} AND state = 'queued'`;
+      expect((await runSender()).held).toBe(1);
+      await sql`UPDATE gym_invite_sends SET not_before = now(), created_at = now() - interval '8 days' WHERE gym_id = ${gym} AND state = 'queued'`;
       expect((await runSender()).failed).toBe(1);
       const vic = await sql<{ state: string; reason: string | null; email: string | null }[]>`
         SELECT state, reason, email FROM gym_invite_sends WHERE gym_id = ${gym} AND reason = 'dns_unavailable'`;
@@ -766,33 +1019,37 @@ d("press Invite (real Postgres)", () => {
   );
 
   it(
-    "Resend refusing an address fails it, a Resend outage retries it, and a send abandoned long ago is never sent",
+    "a refused request waits and marks nothing, an outage is tried again later, and a send whose worker vanished after handing it over is never sent again",
     async () => {
       const owner = await makeUser("provider-owner");
       const gym = (await makeGym(owner, "Provider Gym")).org.id;
       await typeIn(gym, owner, { fullName: "Xan", email: addr("xan") });
       await typeIn(gym, owner, { fullName: "Yul", email: addr("yul") });
       expect((await press(gym, owner, await previewOf(gym, owner))).statusCode).toBe(200);
-      nextAnswers.push({ kind: "refused", status: 422 }, { kind: "retry", status: 503 });
+      nextAnswers.push(notSent(422), unclear(503));
       const run = await runSender();
-      expect(run).toMatchObject({ failed: 1, retried: 1, sent: 0 });
-      const waiting = await sql<{ not_before: Date; attempts: number }[]>`
-        SELECT not_before, attempts FROM gym_invite_sends WHERE gym_id = ${gym} AND state = 'queued'`;
-      expect(waiting).toHaveLength(1);
-      expect(waiting[0]?.attempts).toBe(1);
-      expect((waiting[0]?.not_before.getTime() ?? 0) - Date.now()).toBeGreaterThan(30_000);
+      expect(run).toMatchObject({ held: 1, retried: 1, sent: 0, failed: 0 });
+      const waiting = await sql<{ not_before: Date; attempts: number; maybe_sent_at: Date | null }[]>`
+        SELECT not_before, attempts, maybe_sent_at FROM gym_invite_sends WHERE gym_id = ${gym} AND state = 'queued'
+        ORDER BY maybe_sent_at NULLS FIRST`;
+      expect(waiting).toHaveLength(2);
+      // The refused one did not go, so nothing says it may have.
+      expect(waiting[0]?.maybe_sent_at).toBeNull();
+      expect(waiting[1]?.maybe_sent_at).not.toBeNull();
+      for (const row of waiting) expect((row.not_before.getTime() - Date.now())).toBeGreaterThan(30_000);
 
-      // Its worker vanished 21 hours ago, after possibly sending: never sent again.
+      // A worker died after handing one over 21 hours ago: its lease ran out, and it is
+      // never handed to Resend again.
       await sql`
-        UPDATE gym_invite_sends SET state = 'sending', lease_until = now() - interval '21 hours'
-        WHERE gym_id = ${gym} AND state = 'queued'`;
-      expect((await runSender()).staleFailed).toBeGreaterThanOrEqual(1);
-      const stale = await sql<{ state: string; reason: string | null }[]>`
-        SELECT state, reason FROM gym_invite_sends WHERE gym_id = ${gym} ORDER BY reason`;
-      expect(stale).toEqual([
-        { state: "failed", reason: "provider_refused" },
-        { state: "failed", reason: "provider_unavailable" },
-      ]);
+        UPDATE gym_invite_sends
+        SET state = 'sending', lease_until = now() - interval '20 hours', maybe_sent_at = now() - interval '21 hours'
+        WHERE gym_id = ${gym} AND maybe_sent_at IS NOT NULL`;
+      const before = calls.length;
+      await runSender();
+      expect(calls.length).toBe(before);
+      const rows = await sql<{ state: string; reason: string | null }[]>`
+        SELECT state, reason FROM gym_invite_sends WHERE gym_id = ${gym} AND state <> 'queued'`;
+      expect(rows).toEqual([{ state: "failed", reason: "send_unknown" }]);
       expect(emailsTo(addr("xan")).length + emailsTo(addr("yul")).length).toBe(0);
     },
     TEST_TIMEOUT_MS,
@@ -837,7 +1094,7 @@ d("press Invite (real Postgres)", () => {
       expect((await press(gym, owner, await previewOf(gym, owner))).statusCode).toBe(200);
       logged.length = 0;
       // A Resend outage first, so the sender has something to log.
-      nextAnswers.push({ kind: "retry", status: 503 });
+      nextAnswers.push(unclear(503));
       expect((await runSender()).retried).toBe(1);
       expect(logged.length).toBeGreaterThan(0);
       await sql`UPDATE gym_invite_sends SET not_before = now() WHERE gym_id = ${gym} AND state = 'queued'`;
@@ -852,6 +1109,15 @@ d("press Invite (real Postgres)", () => {
       expect(email.headers["List-Unsubscribe"]).toMatch(/^<http:\/\/localhost:3000\/v1\/email\/unsubscribe\?t=[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{22}>$/);
       expect(email.text.match(/https?:\/\//g)).toHaveLength(2);
       expect(JSON.stringify(logged)).not.toContain("minv-t-");
+
+      // A name that is all web address is still named, never left blank.
+      await sql`UPDATE gyms SET name = 'https://ironhouse.fit' WHERE id = ${gym}`;
+      const yan = await typeIn(gym, owner, { fullName: "Yan", email: addr("yan") });
+      expect((await post(`${entryUrl(gym, yan.entry.entryId)}/invite`, {}, owner.cookies)).statusCode).toBe(200);
+      await runSender();
+      const named = emailsTo(addr("yan"))[0];
+      expect(named?.subject).toBe("You're a member of ironhouse fit — get the app");
+      expect(named?.text.startsWith("ironhouse fit in Leeds has invited you")).toBe(true);
     },
     TEST_TIMEOUT_MS,
   );

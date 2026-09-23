@@ -9,8 +9,9 @@ import { createResendInviteTransport, type InviteEmail } from "../src/email/rese
 import { memberInviteEmail, memberInviteFrom } from "../src/email/templates.js";
 import { emailHmac, isSharedAddress } from "../src/modules/orgs/invites/address.js";
 import { decideSend, type SendFacts } from "../src/modules/orgs/invites/decide.js";
-import { cleanGymText } from "../src/modules/orgs/invites/gymText.js";
+import { cleanGymText, gymNameForEmail } from "../src/modules/orgs/invites/gymText.js";
 import { cachedMailDomainCheck, checkMailDomain, type MailResolver } from "../src/modules/orgs/invites/mailDomain.js";
+import { devInviteTransport } from "../src/modules/orgs/invites/sender.js";
 import { inviteSettings } from "../src/modules/orgs/invites/settings.js";
 import { readUnsubscribeToken, unsubscribeToken } from "../src/modules/orgs/invites/token.js";
 
@@ -21,7 +22,7 @@ import { readUnsubscribeToken, unsubscribeToken } from "../src/modules/orgs/invi
 const allowed: SendFacts = {
   inviteState: "pending",
   addressMatchesInvite: true,
-  gym: { active: true, onPlan: true, hasPostalAddress: true },
+  gym: { active: true, onPlan: true, hasPostalAddress: true, named: true },
   onList: true,
   inApp: false,
   suppression: null,
@@ -37,9 +38,10 @@ describe("decideSend — every class of case", () => {
     ["the domain takes no mail", { mail: "no_mail" }, { kind: "skip", reason: "no_mail_domain" }],
     ["the domain could not be asked", { mail: "unknown" }, { kind: "retry", reason: "dns_unavailable" }],
     ["the gym is gone", { gym: null }, { kind: "skip", reason: "gym_not_active" }],
-    ["the gym is archived", { gym: { active: false, onPlan: true, hasPostalAddress: true } }, { kind: "skip", reason: "gym_not_active" }],
-    ["the gym has no plan", { gym: { active: true, onPlan: false, hasPostalAddress: true } }, { kind: "skip", reason: "gym_not_active" }],
-    ["the gym has no postal address", { gym: { active: true, onPlan: true, hasPostalAddress: false } }, { kind: "skip", reason: "no_postal_address" }],
+    ["the gym is archived", { gym: { active: false, onPlan: true, hasPostalAddress: true, named: true } }, { kind: "skip", reason: "gym_not_active" }],
+    ["the gym has no plan", { gym: { active: true, onPlan: false, hasPostalAddress: true, named: true } }, { kind: "skip", reason: "gym_not_active" }],
+    ["the gym has no postal address", { gym: { active: true, onPlan: true, hasPostalAddress: false, named: true } }, { kind: "skip", reason: "no_postal_address" }],
+    ["the gym's name cannot be shown", { gym: { active: true, onPlan: true, hasPostalAddress: true, named: false } }, { kind: "skip", reason: "gym_name" }],
     ["the invitation is gone", { inviteState: null }, { kind: "skip", reason: "invitation_closed" }],
     ["the invitation was accepted", { inviteState: "accepted" }, { kind: "skip", reason: "invitation_closed" }],
     ["the invitation was declined", { inviteState: "declined" }, { kind: "skip", reason: "invitation_closed" }],
@@ -54,7 +56,7 @@ describe("decideSend — every class of case", () => {
     ["the address is a shared mailbox", { shared: true }, { kind: "skip", reason: "shared_address" }],
     // Order: a stop that holds for every address comes before one about this address,
     // and nothing about the address is asked of DNS once it is already ruled out.
-    ["a lapsed gym and an unsubscribe", { gym: { active: true, onPlan: false, hasPostalAddress: true }, suppression: "unsubscribed" }, { kind: "skip", reason: "gym_not_active" }],
+    ["a lapsed gym and an unsubscribe", { gym: { active: true, onPlan: false, hasPostalAddress: true, named: true }, suppression: "unsubscribed" }, { kind: "skip", reason: "gym_not_active" }],
     ["taken off the list and unsubscribed", { onList: false, suppression: "unsubscribed" }, { kind: "skip", reason: "not_on_list" }],
     ["unsubscribed, with no domain asked", { suppression: "unsubscribed", mail: null }, { kind: "skip", reason: "unsubscribed" }],
     ["shared, with no domain asked", { shared: true, mail: null }, { kind: "skip", reason: "shared_address" }],
@@ -179,6 +181,14 @@ describe("cleanGymText", () => {
       expect(cleanGymText(input, 200)).toBe(expected);
     });
   }
+  it("a gym named like a web address is still named in an email, and a name of nothing but symbols is not", () => {
+    expect(gymNameForEmail("Iron House")).toBe("Iron House");
+    expect(gymNameForEmail("www.IronHouse.com")).toBe("IronHouse com");
+    expect(gymNameForEmail("https://ironhouse.fit")).toBe("ironhouse fit");
+    expect(gymNameForEmail("HTTP://www.gym.co.uk/join")).toBe("gym co uk/join");
+    expect(gymNameForEmail("@@@")).toBe("");
+  });
+
   it("cuts at the limit without splitting a character", () => {
     expect(cleanGymText("a".repeat(80), 60)).toHaveLength(60);
     const emoji = "💪".repeat(70);
@@ -191,6 +201,26 @@ describe("cleanGymText", () => {
 // =========================================================================
 // THE UNSUBSCRIBE TOKEN
 // =========================================================================
+
+describe("the development sender's log", () => {
+  it("names the join link and the send, never the unsubscribe token or the address", async () => {
+    const lines: unknown[] = [];
+    const dev = devInviteTransport({ info: (obj) => lines.push(obj) });
+    await dev.send({
+      to: "ann@example.org",
+      subject: "You're a member of Iron House — get the app",
+      text: "… https://app.example.com/join/iron-house … https://api.example.com/v1/email/unsubscribe?t=SECRETTOKEN.MAC",
+      html: "",
+      from: "",
+      headers: { "List-Unsubscribe": "<https://api.example.com/v1/email/unsubscribe?t=SECRETTOKEN.MAC>" },
+      idempotencyKey: "member-invite-1",
+    });
+    const written = JSON.stringify(lines);
+    expect(written).toContain("https://app.example.com/join/iron-house");
+    expect(written).not.toContain("SECRETTOKEN");
+    expect(written).not.toContain("ann@example.org");
+  });
+});
 
 describe("the unsubscribe link in the api's request log", () => {
   it("is logged without its token: the token rides in the query string, which the log drops", () => {
@@ -207,6 +237,27 @@ describe("unsubscribe token", () => {
     expect(token).toMatch(/^[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{22}$/);
     expect(readUnsubscribeToken(key, token)).toBe(id);
   });
+  it("refuses the same bytes spelled another way (the last character of each part carries spare bits)", () => {
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    const token = unsubscribeToken(key, id);
+    const [idPart = "", macPart = ""] = token.split(".");
+    const respell = (part: string) => {
+      const last = alphabet.indexOf(part.slice(-1));
+      // Only the top two of the last character's six bits are read; flip a low one.
+      return part.slice(0, -1) + (alphabet[last ^ 1] ?? "");
+    };
+    expect(Buffer.from(respell(macPart), "base64url")).toEqual(Buffer.from(macPart, "base64url"));
+    expect(readUnsubscribeToken(key, `${idPart}.${respell(macPart)}`)).toBeNull();
+    expect(readUnsubscribeToken(key, `${respell(idPart)}.${macPart}`)).toBeNull();
+  });
+
+  it("refuses a real MAC with one bit changed", () => {
+    const [idPart = "", macPart = ""] = unsubscribeToken(key, id).split(".");
+    const bytes = Buffer.from(macPart, "base64url");
+    bytes[0] = (bytes[0] ?? 0) ^ 0x01;
+    expect(readUnsubscribeToken(key, `${idPart}.${bytes.toString("base64url")}`)).toBeNull();
+  });
+
   it("refuses a changed id, a changed MAC, another key and junk", () => {
     const token = unsubscribeToken(key, id);
     const [idPart, mac] = token.split(".");
@@ -364,16 +415,21 @@ describe("createResendInviteTransport", () => {
     expect(body["to"]).toEqual(["ann@example.org"]);
   });
 
+  // Three kinds of answer: it went; it did not go (Resend refused the request before
+  // sending anything); and unclear, when it may have gone. Resend's errors page (read
+  // 2026-09-23): 400 validation_error and 422 missing_required_field describe the
+  // request, 401 and 403 the key and account, 429 the rate.
   const cases: [string, () => Promise<Response>, string][] = [
     ["an idempotency key already used with another body means it went", () => Promise.resolve(answer(409, { name: "invalid_idempotent_request" })), "sent"],
-    ["the same key still running: ask again", () => Promise.resolve(answer(409, { name: "concurrent_idempotent_requests" })), "retry"],
-    ["an address Resend will not take", () => Promise.resolve(answer(422, { name: "validation_error" })), "refused"],
-    ["a bad request", () => Promise.resolve(answer(400, { name: "validation_error" })), "refused"],
-    ["our key is wrong: never burn the invitation", () => Promise.resolve(answer(401, { name: "missing_api_key" })), "retry"],
-    ["our account is refused: never burn the invitation", () => Promise.resolve(answer(403, { name: "invalid_access" })), "retry"],
-    ["too many requests", () => Promise.resolve(answer(429, { name: "rate_limit_exceeded" })), "retry"],
-    ["Resend is down", () => Promise.resolve(answer(503, {})), "retry"],
-    ["the network failed", () => Promise.reject(new Error("socket hang up")), "retry"],
+    ["the same key still running: it may have gone", () => Promise.resolve(answer(409, { name: "concurrent_idempotent_requests" })), "unclear"],
+    ["a request Resend could not read (422) did not go", () => Promise.resolve(answer(422, { name: "missing_required_field" })), "not_sent"],
+    ["a bad request (400) did not go", () => Promise.resolve(answer(400, { name: "validation_error" })), "not_sent"],
+    ["our key is wrong: it did not go", () => Promise.resolve(answer(401, { name: "missing_api_key" })), "not_sent"],
+    ["our account is refused: it did not go", () => Promise.resolve(answer(403, { name: "invalid_access" })), "not_sent"],
+    ["too many requests: it did not go", () => Promise.resolve(answer(429, { name: "rate_limit_exceeded" })), "not_sent"],
+    ["Resend is down: it may have gone", () => Promise.resolve(answer(503, {})), "unclear"],
+    ["Resend failed inside: it may have gone", () => Promise.resolve(answer(500, {})), "unclear"],
+    ["the network failed: it may have gone", () => Promise.reject(new Error("socket hang up")), "unclear"],
     ["a 200 with no id still went", () => Promise.resolve(answer(200, {})), "sent"],
   ];
   for (const [name, reply, kind] of cases) {
@@ -397,7 +453,7 @@ describe("invitation settings", () => {
   };
   const prod = { ...good, NODE_ENV: "production", RESEND_API_KEY: "re_x", EMAIL_FROM: "AI Home Gym <hi@example.com>" };
 
-  it("production with any piece missing: invitations are off", () => {
+  it("production: the key alone keeps invitations readable; sending needs the sender and the api's address too", () => {
     expect(inviteSettings(loadConfig(prod))).toBeNull();
     const full = {
       ...prod,
@@ -405,16 +461,22 @@ describe("invitation settings", () => {
       INVITE_HMAC_SECRET: "invite-hmac-secret-0123456789abcdef", // gitleaks:allow
       API_ORIGIN: "https://api.example.com",
     };
-    expect(inviteSettings(loadConfig(full))).not.toBeNull();
-    for (const missing of ["INVITE_EMAIL_FROM", "INVITE_HMAC_SECRET", "API_ORIGIN"] as const) {
-      const env = Object.fromEntries(Object.entries(full).filter(([name]) => name !== missing));
-      expect(inviteSettings(loadConfig(env)), missing).toBeNull();
+    expect(inviteSettings(loadConfig(full))?.sender).not.toBeNull();
+    const without = (missing: string) => Object.fromEntries(Object.entries(full).filter(([name]) => name !== missing));
+    // No key: nothing can be read or sent.
+    expect(inviteSettings(loadConfig(without("INVITE_HMAC_SECRET")))).toBeNull();
+    // A key but no sender: sending is off, and invitations already made can still be
+    // read and unsubscribed from.
+    for (const missing of ["INVITE_EMAIL_FROM", "API_ORIGIN"]) {
+      const settings = inviteSettings(loadConfig(without(missing)));
+      expect(settings, missing).not.toBeNull();
+      expect(settings?.sender, missing).toBeNull();
     }
   });
   it("outside production: a key from JWT_SECRET, this api's own address, the logging sender", () => {
     const settings = inviteSettings(loadConfig({ ...good, NODE_ENV: "development", PORT: "3001" }));
-    expect(settings?.from).toBeNull();
-    expect(settings?.apiOrigin).toBe("http://localhost:3001");
+    expect(settings?.sender?.from).toBeNull();
+    expect(settings?.sender?.apiOrigin).toBe("http://localhost:3001");
     expect(settings?.hmacKey.length).toBe(32);
     expect(settings?.perDay).toBe(2000);
     expect(settings?.paused).toBe(false);

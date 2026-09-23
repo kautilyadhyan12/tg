@@ -47,10 +47,12 @@ export interface InviteEmail extends EmailMessage {
  *  recognised as already sent under this key with a different body. */
 export type InviteSendResult =
   | { kind: "sent"; id: string | null }
-  /** Resend refused it for good (an address it will not take). */
-  | { kind: "refused"; status: number }
-  /** Try again later: a timeout, a 5xx, a 429, a key or account problem. */
-  | { kind: "retry"; status: number | null };
+  /** Resend refused the request, a 4xx other than a running key's 409: our request (400,
+   *  422), our key or account (401, 403), or the rate (429). The email did not go. */
+  | { kind: "not_sent"; status: number }
+  /** No clear answer (a timeout, a network failure, a 5xx, the same key still running):
+   *  the email may have gone. */
+  | { kind: "unclear"; status: number | null };
 
 export interface InviteTransport {
   send(message: InviteEmail): Promise<InviteSendResult>;
@@ -84,7 +86,7 @@ export function createResendInviteTransport(opts: { apiKey: string; fetchImpl?: 
           signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
         });
       } catch {
-        return { kind: "retry", status: null };
+        return { kind: "unclear", status: null };
       }
       let body: unknown = null;
       try {
@@ -101,12 +103,11 @@ export function createResendInviteTransport(opts: { apiKey: string; fetchImpl?: 
         // (the first send went), or its first request is still running (ask again).
         const error = resendErrorSchema.safeParse(body);
         if (error.success && error.data.name === "invalid_idempotent_request") return { kind: "sent", id: null };
-        return { kind: "retry", status: 409 };
+        return { kind: "unclear", status: 409 };
       }
-      // 401 and 403 are our key or account, not the address: never burn an invitation
-      // on them.
-      if (response.status === 400 || response.status === 422) return { kind: "refused", status: response.status };
-      return { kind: "retry", status: response.status };
+      // Any other 4xx is Resend refusing the request before it did anything with it.
+      if (response.status >= 400 && response.status < 500) return { kind: "not_sent", status: response.status };
+      return { kind: "unclear", status: response.status };
     },
   };
 }

@@ -93,8 +93,9 @@ async function workOutGroup(sql: SqlOrTx, settings: InviteSettings, gymId: strin
     }
     const person = withEmail[next++];
     if (person === undefined) throw new Error("an address fell out of the invite group");
+    const invite = invites.get(person.hmac);
     if (inAppAddresses.has(person.email.toLowerCase())) skipped.inApp += 1;
-    else if (invites.has(person.hmac) || taken.has(person.hmac)) skipped.alreadyInvited += 1;
+    else if ((invite !== undefined && repo.alreadyInvited(invite)) || taken.has(person.hmac)) skipped.alreadyInvited += 1;
     else if (suppressions.get(person.hmac) === "bounced") skipped.bounced += 1;
     else if (suppressions.has(person.hmac)) skipped.unsubscribed += 1;
     else if (isSharedAddress(person.email)) skipped.sharedAddress += 1;
@@ -108,17 +109,17 @@ async function workOutGroup(sql: SqlOrTx, settings: InviteSettings, gymId: strin
 
 /** Why this gym cannot send at all yet, or null. */
 async function blockedFor(sql: SqlOrTx, settings: InviteSettings | null, gymId: string, status: string): Promise<MemberInviteBlocked | null> {
-  if (settings === null) return "invites_off";
+  if (settings === null || settings.sender === null) return "invites_off";
   if (status !== "active") return "gym_archived";
   if (!(await gymHasLivePlan(sql, gymId))) return "gym_not_on_plan";
   if ((await repo.gymPostalAddress(sql, gymId)) === null) return "no_postal_address";
   return null;
 }
 
-/** Invitations switched on and a postal address: what every write needs first. */
+/** Sending switched on and a postal address: what every write needs first. */
 export async function readyToSend(deps: MemberListDeps, gymId: string): Promise<InviteSettings> {
   const settings = deps.invites ?? null;
-  if (settings === null) throw refuse(503, "invites_off");
+  if (settings === null || settings.sender === null) throw refuse(503, "invites_off");
   if ((await repo.gymPostalAddress(deps.sql, gymId)) === null) throw refuse(409, "no_postal_address");
   return settings;
 }
@@ -185,6 +186,7 @@ export async function pressInvite(
   if (version !== request.version || group.reach.length !== request.expectedCount) {
     throw new InviteChanged({ version, reach: group.reach.length, skipped: group.skipped, blocked: null });
   }
+  await deps.afterInviteGroupRead?.();
   const batches: (typeof group.reach)[] = [];
   for (let from = 0; from < group.reach.length; from += INVITE_PRESS_BATCH) {
     batches.push(group.reach.slice(from, from + INVITE_PRESS_BATCH));
@@ -256,7 +258,7 @@ export async function inviteEntryInTx(
   input: { gymId: string; entryId: string; userId: string; at: Date },
 ): Promise<{ outcome: "queued" | "already_invited"; hmac: string }> {
   const { email, hmac, invite } = await inviteable(tx, settings, input.gymId, input.entryId);
-  if (invite !== null) return { outcome: "already_invited", hmac };
+  if (invite !== null && repo.alreadyInvited(invite)) return { outcome: "already_invited", hmac };
   await mayEmail(tx, input.gymId, email, hmac);
   const queued = await repo.queueFirst(tx, input.gymId, [{ hmac, email }], input.at);
   if (queued !== 1) throw new Error("a one-person invite queued nothing under the gym's lock");

@@ -36,3 +36,13 @@ export function cleanGymText(text: string, most: number): string {
 
 /** The most characters of a gym's name or city an invitation shows. */
 export const GYM_TEXT_IN_EMAIL_CHARS = 60;
+
+/** A gym's name as an invitation shows it. A name that is all web address
+ *  ("www.IronHouse.com") would clean to nothing, so its scheme and `www.` are taken off
+ *  and it is read as words ("IronHouse com"). Empty only when nothing can be shown. */
+export function gymNameForEmail(name: string): string {
+  const cleaned = cleanGymText(name, GYM_TEXT_IN_EMAIL_CHARS);
+  if (cleaned !== "") return cleaned;
+  const bare = name.trim().replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/^www\./i, "");
+  return cleanGymText(bare, GYM_TEXT_IN_EMAIL_CHARS);
+}

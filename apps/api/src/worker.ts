@@ -311,13 +311,14 @@ export const INVITES_QUEUE = "invites";
 export const INVITES_SEND_JOB = "invites.send";
 
 const invites = inviteSettings(config);
+const inviteSender = invites?.sender ?? null;
 let invitesQueue: Queue | null = null;
 let invitesWorker: Worker | null = null;
-if (invites === null) {
-  log.warn({ event: "worker.invites_off" }, "member invitations are switched off: INVITE_EMAIL_FROM, INVITE_HMAC_SECRET or API_ORIGIN is missing");
+if (invites === null || inviteSender === null) {
+  log.warn({ event: "worker.invites_off" }, "member invitations are not sent: INVITE_EMAIL_FROM, INVITE_HMAC_SECRET or API_ORIGIN is missing");
 } else {
   const inviteTransport =
-    invites.from !== null && config.RESEND_API_KEY !== undefined
+    inviteSender.from !== null && config.RESEND_API_KEY !== undefined
       ? createResendInviteTransport({ apiKey: config.RESEND_API_KEY })
       : devInviteTransport(log);
   const mailDomain = cachedMailDomainCheck(systemResolver, () => Date.now());
@@ -346,12 +347,13 @@ if (invites === null) {
         sql,
         log,
         settings: invites,
+        sender: inviteSender,
         transport: inviteTransport,
         mailDomain,
         now: () => new Date(),
         sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       });
-      if (run.sent + run.skipped + run.failed + run.retried + run.staleFailed > 0 || run.capped) {
+      if (run.sent + run.skipped + run.failed + run.retried + run.held > 0 || run.capped || run.stoppedByProvider) {
         log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
       }
     },

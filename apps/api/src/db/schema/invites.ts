@@ -45,13 +45,20 @@ export const gymInviteSends = pgTable(
     attempts: integer("attempts").notNull().default(0),
     notBefore: timestamp("not_before", { withTimezone: true }).notNull(),
     leaseUntil: timestamp("lease_until", { withTimezone: true }),
+    /** When an attempt was first handed to Resend without a clear answer. */
+    maybeSentAt: timestamp("maybe_sent_at", { withTimezone: true }),
     providerId: text("provider_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
   },
   (t) => [
-    uniqueIndex("gym_invite_sends_first_uq").on(t.inviteId).where(sql`${t.kind} = 'first'`),
+    uniqueIndex("gym_invite_sends_first_uq")
+      .on(t.inviteId)
+      .where(sql`${t.kind} = 'first' AND (${t.state} IN ('queued','sending','sent') OR ${t.reason} = 'send_unknown')`),
     index("gym_invite_sends_due_idx").on(t.notBefore, t.createdAt, t.id).where(sql`${t.state} IN ('queued','sending')`),
+    index("gym_invite_sends_retry_idx")
+      .on(t.notBefore, t.id)
+      .where(sql`${t.state} IN ('queued','sending') AND ${t.maybeSentAt} IS NOT NULL`),
     index("gym_invite_sends_gym_sent_idx").on(t.gymId, t.finishedAt).where(sql`${t.state} = 'sent'`),
     index("gym_invite_sends_sent_idx").on(t.finishedAt).where(sql`${t.state} = 'sent'`),
     index("gym_invite_sends_invite_idx").on(t.inviteId, t.createdAt.desc()),
