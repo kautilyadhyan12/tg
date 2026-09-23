@@ -179,12 +179,17 @@ describe("You're invited", () => {
     expect(orgService.getInvitations).not.toHaveBeenCalled();
   });
 
-  it("a gym that cannot take members: no Join, and the screen says so before any tap", async () => {
+  it("a gym that cannot take members: no Join and no sheet of what it would see, the screen says so, and No thanks still answers it", async () => {
     waiting({ ...IRON, canTakeMembers: false });
+    orgService.declineInvitation.mockResolvedValue({ data: { state: 'declined' } });
     draw('/dashboard');
     expect(await screen.findByText("Iron House can't take new members in the app right now — tell the front desk.")).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Join' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'What Iron House can see' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Not now' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'No thanks' }));
+    expect(await screen.findByRole('button', { name: 'Continue' })).toBeTruthy();
+    expect(orgService.declineInvitation).toHaveBeenCalledWith(IRON.id);
   });
 
   it("a Join the server refuses shows the server's own sentence, and the card stays", async () => {

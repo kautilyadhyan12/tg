@@ -81,20 +81,31 @@ export default function InvitationCard({ invitation, onAnswered }) {
         </div>
       </div>
 
-      <OrgVisibilitySheet orgName={gym.name} orgType={gym.orgType} />
-
+      {/* What the gym can see sits above Join, the tap it is about. A gym that cannot
+          take members has no Join yet, so it says that instead; No thanks is always
+          there, so the invitation can be answered either way. */}
       {invitation.canTakeMembers ? (
+        <OrgVisibilitySheet orgName={gym.name} orgType={gym.orgType} />
+      ) : (
+        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
+          {INVITATION_WORDS.gym_not_taking_members(gym.name, gym.orgType)}
+        </p>
+      )}
+
+      {invitation.canTakeMembers || state === 'pending' ? (
         <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={() => answer('join')}
-            disabled={busy !== null}
-            className="rounded-xl px-6 py-3 text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
-            style={{ background: '#FF8A1F', color: '#0A0908', minHeight: 44 }}
-          >
-            {busy === 'join' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            {busy === 'join' ? 'Joining…' : 'Join'}
-          </button>
+          {invitation.canTakeMembers ? (
+            <button
+              type="button"
+              onClick={() => answer('join')}
+              disabled={busy !== null}
+              className="rounded-xl px-6 py-3 text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
+              style={{ background: '#FF8A1F', color: '#0A0908', minHeight: 44 }}
+            >
+              {busy === 'join' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              {busy === 'join' ? 'Joining…' : 'Join'}
+            </button>
+          ) : null}
           {state === 'pending' ? (
             <button
               type="button"
@@ -108,11 +119,7 @@ export default function InvitationCard({ invitation, onAnswered }) {
             </button>
           ) : null}
         </div>
-      ) : (
-        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-          {INVITATION_WORDS.gym_not_taking_members(gym.name, gym.orgType)}
-        </p>
-      )}
+      ) : null}
 
       {error !== null ? (
         <div
