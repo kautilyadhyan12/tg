@@ -28,7 +28,7 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Driven in headless Edge** on `127.0.0.1:5174`, throwaway local gym "Riverside Fitness" (`aihg_b` only): the move asked about 2 classes, then the list read "23 Sep – 4 Oct 2026" at 18:30 and "From 5 Oct 2026" at 19:00; This and future classes set every Spin from 28 Sep to 07:00–07:30; the phone form fits at 400 wide.
 - **Kd clicked through it and passed it** (*"all test passed"*).
 - **Round one: 2 High, 4 Low, 3 weak tests, all fixed (`49a7cbb`), each first as a failing test** (six api, five web, all red before): H-1 This and future classes put the opened class at a time the same class already ran that day — now 409 `class_day_clashes`, as This class only; H-2 a time slot starting past the calendar could never be changed — its own first day now can, and a time slot with no date left shows no Edit; L-1 moves and splits skipped the limit of 12 time slots; L-2 a split's halves listed in random order; L-3 a refused save now reads the list again; L-4 the first date offered is tomorrow once today's class has started (`startedToday`). T-2's stop rule broken on purpose: red (*"ends_on": "2026-10-05"*), restored identical. After: api 101 files, 2,978 passed · web 2,466 passed.
-- **Open**: the re-check (`reviews/17b-ii-b-ii-a-3-recheck.md`); merge on Kd's word. Next in Folder B: 17b-ii-b-ii-b.
+- **The re-check closed the round** (`reviews/17b-ii-b-ii-a-4-verdict.md`: all nine closed, nothing broken). **Merged on Kd's word, 2026-09-23 (PR #97).** Next in Folder B: 17b-ii-b-ii-b (Edit all time slots of a class at once).
 
 ## 2026-09-23 · 17b-ii-w (Folder B): the Classes screen in a gym's own words
 
