@@ -134,6 +134,7 @@ function toSchedule(row: repo.ClassScheduleRow): GymClassSchedule {
     sessionsAhead: row.sessionsAhead,
     datesComplete: row.datesComplete,
     finished: row.finished,
+    startedToday: row.startedToday,
   };
 }
 
@@ -353,29 +354,111 @@ export async function createSchedule(
   return await readOr404(deps, gymId);
 }
 
-/** CHANGE A REPEAT'S LENGTH, PLACES OR COACH — the card's own route
- *  (RULINGS 2026-09-22). Not its days or its time: that is "this day and
- *  later", 17b-ii-b, and `updateGymClassScheduleRequestSchema` says why. */
+/** A change from a date answers either with the screen it was made on or, when
+ *  a move would replace classes the gym changed or cancelled on their own, with
+ *  how many — the route turns that into a 409 carrying the count, and the
+ *  screen asks before sending it back as `confirmReplace`. */
+export type SlotChangeAnswer<T> = { kind: "ok"; body: T } | { kind: "replaces"; count: number };
+
+/** A time slot change's refusals, in one place for both of its doors. Returns
+ *  the date it was made from, or the count to ask about. */
+function slotOutcome(
+  outcome: repo.SlotChangeOutcome,
+): { kind: "ok"; localDate: string } | { kind: "replaces"; count: number } {
+  switch (outcome.kind) {
+    case "ok":
+    case "replaces":
+      return outcome;
+    case "not_found":
+      throw new OrgsError(404, "class_not_found", NOT_FOUND_MESSAGE);
+    case "coach_not_staff":
+      throw new OrgsError(
+        400,
+        "coach_not_staff",
+        "Pick a coach who is on this gym's staff, or leave it blank.",
+      );
+    case "clashes":
+      throw new OrgsError(
+        409,
+        "repeat_clashes",
+        "This class already has a time slot at this time on one of those days. Cancel that time slot first, or pick another time.",
+      );
+    case "from_outside":
+      throw new OrgsError(
+        409,
+        "class_update_from",
+        outcome.verdict === "past"
+          ? "That date has passed. Pick today or a later date."
+          : "Pick a date on the calendar while this time slot runs.",
+      );
+    case "time_passed":
+      throw new OrgsError(
+        409,
+        "class_time_passed",
+        "That time has already passed on that day. Pick a later time, or a later date.",
+      );
+    case "started":
+      throw new OrgsError(
+        409,
+        "class_started",
+        "This class has already started, so it can't be changed now.",
+      );
+    case "cancelled":
+      throw new OrgsError(
+        409,
+        "class_day_cancelled",
+        "This class is cancelled. Un-cancel it first, then edit it.",
+      );
+    case "day_clashes":
+      throw new OrgsError(
+        409,
+        "class_day_clashes",
+        "This class already runs at that time on this day. Pick another time.",
+      );
+    case "too_many":
+      throw new OrgsError(
+        409,
+        "too_many_classes",
+        `This class is at its limit of ${String(outcome.cap)} time slots. Cancel one you no longer run first.`,
+      );
+    default: {
+      const never: never = outcome;
+      throw new Error(`unhandled slot change outcome: ${JSON.stringify(never)}`);
+    }
+  }
+}
+
+/** CHANGE A TIME SLOT FROM A DATE — its days, start time, length, size and
+ *  coach (§13.3's "this day and later"; `repo.changeSlotFrom` says what each
+ *  class from that date gets). */
 export async function updateSchedule(
   deps: ClassesDeps,
   userId: string,
   gymId: string,
   scheduleId: string,
   req: UpdateGymClassScheduleRequest,
-): Promise<GymClassesResponse> {
+): Promise<SlotChangeAnswer<GymClassesResponse>> {
   await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
-  throwOnFailure(
-    await repo.updateSchedule(deps.sql, {
+  const done = slotOutcome(
+    await repo.changeSlotFrom(deps.sql, {
       gymId,
-      scheduleId,
+      target: {
+        by: "slot",
+        scheduleId,
+        updateFrom: requireCalendarDate(req.updateFrom, "updateFrom"),
+        weekdays: req.weekdays,
+      },
+      startMinute: req.startMinute,
       minutes: req.minutes,
       places: req.places,
       coachUserId: req.coachUserId,
+      confirmReplace: req.confirmReplace ?? null,
       actorUserId: userId,
       now: deps.now(),
     }),
   );
-  return await readOr404(deps, gymId);
+  if (done.kind === "replaces") return done;
+  return { kind: "ok", body: await readOr404(deps, gymId) };
 }
 
 // ── THE WEEK VIEW AND "THIS DAY ONLY" (17b-ii-b-i) ──────────────────────────
@@ -496,21 +579,42 @@ async function writeDay(
   }
 }
 
-/** THIS DAY ONLY: its start time, length, places and coach. */
+/** EDIT ONE CLASS: its start time, length, places and coach, for this class
+ *  only, or for this one and every future one of its time slot — the time
+ *  slot's own change, made from this class's date. */
 export async function changeClassSession(
   deps: ClassesDeps,
   userId: string,
   gymId: string,
   sessionId: string,
   req: ChangeGymClassSessionRequest,
-): Promise<GymClassWeekResponse> {
-  return await writeDay(deps, userId, gymId, sessionId, {
-    action: "change",
-    startMinute: req.startMinute,
-    minutes: req.minutes,
-    places: req.places,
-    coachUserId: req.coachUserId,
-  });
+): Promise<SlotChangeAnswer<GymClassWeekResponse>> {
+  if (req.scope === "this") {
+    const week = await writeDay(deps, userId, gymId, sessionId, {
+      action: "change",
+      startMinute: req.startMinute,
+      minutes: req.minutes,
+      places: req.places,
+      coachUserId: req.coachUserId,
+    });
+    return { kind: "ok", body: week };
+  }
+  await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
+  const done = slotOutcome(
+    await repo.changeSlotFrom(deps.sql, {
+      gymId,
+      target: { by: "session", sessionId },
+      startMinute: req.startMinute,
+      minutes: req.minutes,
+      places: req.places,
+      coachUserId: req.coachUserId,
+      confirmReplace: req.confirmReplace ?? null,
+      actorUserId: userId,
+      now: deps.now(),
+    }),
+  );
+  if (done.kind === "replaces") return done;
+  return { kind: "ok", body: await readWeekOr404(deps, gymId, done.localDate) };
 }
 
 export async function cancelClassSession(
