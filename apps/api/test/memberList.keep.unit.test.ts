@@ -181,6 +181,11 @@ describe("the worst thing: what is written is checked against §11.2 again", () 
     ["after a phone, by a comma", "+447911123456,4111111111111111", "+447911123456,[card number removed]"],
     ["after a spaced phone", "Mob +44 7911 123456 4111 1111 1111 1111", "Mob +44 7911 123456 [card number removed]"],
     ["after a country code, by dots", "+44.4111.1111.1111.1111", "+44.[card number removed]"],
+    // A card glued to a "+" (the second re-check): only a group that can start a phone —
+    // a 1–3 digit country code, or a whole 7–15 digit number — is exempt.
+    ["glued to a plus", "+4111111111111111", "+[card number removed]"],
+    ["glued to a word and a plus", "Visa+4111111111111111", "Visa+[card number removed]"],
+    ["grouped after a plus", "+4111 1111 1111 1111", "+[card number removed]"],
   ])("a card written inside a note is taken out of it and the note kept — %s", (_label, cell, expected) => {
     const written = extraForWriting([cell], [kept("notes", "Notes", 0)]);
     expect(written.document["notes"]).toBe(expected);

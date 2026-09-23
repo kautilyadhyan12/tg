@@ -193,6 +193,12 @@ describe("a typed phone number, in each market's own way of writing it", () => {
   // A published 13-digit Visa test number is also a valid German landline in form, so a
   // German gym reading the phone first would keep it; the prefix-aware card rule is
   // asked before the phone is read.
+  // A range the phone package marks as not handed out yet still matches itself (§9.5);
+  // written the 00 way it must be treated as written the national way, not as a card.
+  it.each(["0044 7911 300922", "07911 300922", "+44 7911 300922"])("%s is one phone number however it is written", (raw) => {
+    expect(valuesOf({ phone: raw }, GB).phone).toBe("+447911300922");
+  });
+
   it("a 13-digit test card typed into a German gym's phone box is refused", () => {
     expect(refusalOf({ phone: "4222222222222" }, DE)).toBe("card_number");
     expect(refusalOf({ phone: "4222 2222 2222 2" }, DE)).toBe("card_number");

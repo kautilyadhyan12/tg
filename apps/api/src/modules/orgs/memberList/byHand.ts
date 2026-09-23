@@ -147,9 +147,10 @@ export function applyTyped(stored: EntryValues, typed: MemberListEntryPatch, con
     }
   }
 
-  // The card rule with an issuer prefix is always asked; it never fires on a number after
-  // a "+" or starting 0 or 00. The whole-field rule, a check digit alone, is skipped for
-  // a number valid for its country: a 0049 or 0044 number passes it about one time in ten.
+  // The card rule with an issuer prefix is always asked; it never fires on a phone number
+  // after a "+" or on digits starting 0 or 00. The whole-field rule, a check digit alone,
+  // is skipped for a number valid for its country (a 0049 or 0044 number passes it about
+  // one time in ten) and for digits starting 0, which no card does.
   if (typed.phone !== undefined) {
     const text = tidyCell(typed.phone ?? "");
     if (text === "") next.phone = null;
@@ -157,7 +158,7 @@ export function applyTyped(stored: EntryValues, typed: MemberListEntryPatch, con
       if (withoutCardNumbers(text).removed > 0) return refuseCard(MEMBER_LIST_FIELD_WORDS.phone);
       const read = readPhone(text, context.country);
       if (read.e164 === null || read.unusual) {
-        if (cardShapedCell(text)) return refuseCard(MEMBER_LIST_FIELD_WORDS.phone);
+        if (!/^\D*0/.test(text) && cardShapedCell(text)) return refuseCard(MEMBER_LIST_FIELD_WORDS.phone);
         if (read.e164 === null) return refuse("bad_phone");
       }
       next.phone = read.e164;

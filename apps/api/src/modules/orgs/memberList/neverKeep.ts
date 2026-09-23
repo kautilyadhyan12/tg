@@ -127,10 +127,11 @@ const isCardNumber = (digits: string): boolean => issuerPrefix(digits) && looksL
  *  prefix and pass Luhn. Linear in the length of the cell; the rest of the text,
  *  separators included, is left exactly as written.
  *
- *  The group straight after a "+" begins an international phone number and never
- *  begins a card: a card is never written that way, and a mobile such as +49151…
- *  with no spaces has a card's leading 4 and passes Luhn about one time in ten. Only
- *  that group is exempt, so a card joined on after the phone is still found. */
+ *  A group straight after a "+" that can begin a phone number never begins a card: a
+ *  1–3 digit country code, or a whole 7–15 digit number (E.164 holds at most 15). A
+ *  mobile such as +49151… with no spaces has a card's leading 4 and passes Luhn about
+ *  one time in ten. Only that group is exempt, so a card joined on after the phone, or
+ *  a 4-digit or 16-digit group glued to a "+", is still found. */
 export function withoutCardNumbers(text: string): { text: string; removed: number } {
   if (text.length < 13) return { text, removed: 0 };
   let removed = 0;
@@ -142,7 +143,7 @@ export function withoutCardNumbers(text: string): { text: string; removed: numbe
     for (let i = 0; i < groups.length; i++) {
       const first = groups[i];
       if (first === undefined) break;
-      if (i === 0 && afterPlus) continue;
+      if (i === 0 && afterPlus && (first.digits.length <= 3 || (first.digits.length >= 7 && first.digits.length <= 15))) continue;
       let end = -1;
       if (first.digits.length >= 13 && first.digits.length <= 19) {
         if (isCardNumber(first.digits)) end = i;
