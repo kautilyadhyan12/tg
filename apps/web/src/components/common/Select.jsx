@@ -7,6 +7,8 @@ const OPTION_HEIGHT_PX = 36;
 const LIST_PADDING_PX = 8;
 /** Space kept between the list and the window's edge. */
 const EDGE_GAP_PX = 8;
+/** The list's own 4 px margin off the field (`mt-1` / `mb-1`). */
+const LIST_MARGIN_PX = 4;
 /** However little room there is, the list shows about three options. */
 const MIN_LIST_PX = 3 * OPTION_HEIGHT_PX;
 
@@ -52,8 +54,8 @@ export default function Select({
       const field = ref.current.getBoundingClientRect();
       const cap = maxListHeight ?? Number.POSITIVE_INFINITY;
       const listHeight = Math.min(cap, options.length * OPTION_HEIGHT_PX + LIST_PADDING_PX);
-      const roomBelow = window.innerHeight - field.bottom - EDGE_GAP_PX;
-      const roomAbove = field.top - EDGE_GAP_PX;
+      const roomBelow = window.innerHeight - field.bottom - LIST_MARGIN_PX - EDGE_GAP_PX;
+      const roomAbove = field.top - LIST_MARGIN_PX - EDGE_GAP_PX;
       const opensAbove = listHeight > roomBelow && roomAbove > roomBelow;
       setAbove(opensAbove);
       setListMax(Math.min(cap, Math.max(MIN_LIST_PX, opensAbove ? roomAbove : roomBelow)));

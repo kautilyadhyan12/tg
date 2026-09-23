@@ -500,7 +500,8 @@ export type OrgSubscription = z.infer<typeof orgSubscriptionSchema>;
 
 /** How long a gym's free trial lasts (Kd, RULINGS 2026-09-23). The seed writes
  *  it onto every gym plan and the console's trial prompt says it, so the two
- *  cannot drift. */
+ *  agree on any database the seed has run on since; one not re-seeded still
+ *  grants whatever its `plans.trial_days` holds. */
 export const GYM_TRIAL_DAYS = 10;
 
 /** Starting the gym's own free trial.

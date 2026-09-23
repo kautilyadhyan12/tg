@@ -41,10 +41,10 @@ describe('where the dropdown opens', () => {
 
   it('below the field where there is less room above than below, scrolling inside the room there is', () => {
     // 11 options want 404 px, more than the 390 px below — but only 380 px are above: below stays,
-    // and the list stops 8 px short of the window's foot.
+    // and the list, 4 px off the field, stops 8 px short of the window's foot.
     const { list } = renderAt(380);
     expect(list.className).toContain('mt-1');
-    expect(list.style.maxHeight).toBe('382px');
+    expect(list.style.maxHeight).toBe('378px');
     expect(list.style.overflowY).toBe('auto');
   });
 
@@ -59,8 +59,8 @@ describe('where the dropdown opens', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Country' }));
     const list = screen.getByRole('listbox');
     expect(list.className).toContain('bottom-full');
-    // 700 px above the field, less 8 px: the list's top stays inside the window.
-    expect(list.style.maxHeight).toBe('692px');
+    // 700 px above the field, less its 4 px margin and 8 px: the list's top stays inside the window.
+    expect(list.style.maxHeight).toBe('688px');
     expect(list.style.overflowY).toBe('auto');
     fireEvent.click(screen.getByRole('option', { name: 'Country 0' }));
     expect(onChange).toHaveBeenCalledWith('c0');

@@ -292,19 +292,26 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
   /** The ruled list (RULINGS 2026-09-22 and 2026-09-23), written out here from
    *  Kd's words rather than read from the seed: dollars for every country but
    *  India, fixed rupees for India, and a trial of 10 days on the 200-member band. */
-  const RULED: Record<"USD" | "INR", { seatCaps: number[]; labels: string[] }> = {
-    USD: { seatCaps: [200, 500, 1000, 1500, 2100], labels: ["$79", "$129", "$199", "$279", "$379"] },
+  const RULED: Record<"USD" | "INR", { codes: string[]; seatCaps: number[]; labels: string[] }> = {
+    USD: {
+      codes: ["org_b1_us_m", "org_b2_us_m", "org_b3_us_m", "org_b4_us_m", "org_b5_us_m"],
+      seatCaps: [200, 500, 1000, 1500, 2100],
+      labels: ["$79", "$129", "$199", "$279", "$379"],
+    },
     INR: {
+      codes: ["org_b1_in_m", "org_b2_in_m", "org_b3_in_m", "org_b4_in_m", "org_b5_in_m"],
       seatCaps: [200, 500, 1000, 1500, 2100],
       labels: ["₹7,500", "₹12,500", "₹19,000", "₹26,500", "₹36,500"],
     },
   };
   const RULED_TRIAL_DAYS = 10;
   const DAY_MS = 24 * 60 * 60 * 1000;
-  /** The five ruled bands only. `org_micro` also starts `org_`, and
-   *  `db.migration.test.ts` turns it back on mid-run to prove the seed turns it
-   *  off, so an exact list over every `org_` row races that suite. */
-  const rulingBands = (plans: PlanOffer[]) => plans.filter((p) => /^org_b[1-5]_(us|in)_m$/.test(p.code));
+  /** Everything a gym is quoted, less the rows other suites own for a while:
+   *  their `zz_` fixtures, and `org_micro`, which `db.migration.test.ts` turns
+   *  back on mid-run to prove the seed turns it off. Any other row is a price we
+   *  do not sell at and fails the exact list below. */
+  const rulingBands = (plans: PlanOffer[]) =>
+    plans.filter((p) => p.code !== "org_micro" && !p.code.startsWith("zz_"));
 
   /** WORST THING: a gym is quoted or given the wrong price or member limit — the
    *  old $35 for 300 members, rupees outside India — or an Indian gym is told we
@@ -344,6 +351,7 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
       expect(onPlan.map((r) => r.code)).toEqual([currency === "INR" ? "org_b1_in_m" : "org_b1_us_m"]);
 
       const book = rulingBands(await readPlans(org.org.id, owner.cookies));
+      expect(book.map((p) => p.code)).toEqual(RULED[currency].codes);
       expect(book.map((p) => p.seatCap)).toEqual(RULED[currency].seatCaps);
       expect(book.map((p) => p.priceLabel)).toEqual(RULED[currency].labels);
       for (const p of book) {
@@ -426,7 +434,7 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
         expect(p.currency).toBe("INR");
         expect(p.priceLabel.startsWith("₹")).toBe(true);
       }
-      // The ratified INR band 1 is ₹1,500 (:18488's book, `seed.ts`). Named
+      // The ruled INR band 1 is ₹7,500 (RULINGS 2026-09-23, `seed.ts`). Named
       // rather than range-checked: a formatter that dropped the thousands
       // separator or the minor units would still be "greater than zero".
       expect(book.find((p) => p.code === "org_b1_in_m")?.priceLabel).toBe("₹7,500");

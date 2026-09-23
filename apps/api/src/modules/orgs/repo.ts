@@ -804,7 +804,7 @@ export async function updateOrg(
      *  it is shown — would otherwise be stuck for ever.
      *
      *  **THE TRIAL IS DELIBERATELY NOT A LOCK.** Kd's gym trial is card-less and
-     *  30 days (:16548), so a `trialing` gym has paid nothing and has no invoice;
+     *  10 days (`GYM_TRIAL_DAYS`), so a `trialing` gym has paid nothing and has no invoice;
      *  locking there would freeze the typo at exactly the moment before it starts
      *  to cost — the worst possible instant. Every other status locks, including
      *  `canceled` and `expired`, because a subscription that ended may still have
@@ -1669,7 +1669,7 @@ export type StartTrialOutcome =
   | { kind: "org_archived" }
   | { kind: "not_found" };
 
-/** THE GYM STARTS ITS OWN 30-DAY TRIAL — the first statement in this product
+/** THE GYM STARTS ITS OWN FREE TRIAL — the first statement in this product
  *  that has ever written `subscriptions`, and the reason the seat cap stops being
  *  correct-but-inert.
  *

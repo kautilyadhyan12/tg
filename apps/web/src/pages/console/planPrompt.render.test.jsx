@@ -197,7 +197,9 @@ describe('the forced trial prompt', () => {
     expect(screen.getByText('Your first 10 days are free. No card needed.')).toBeTruthy();
     // It must not promise a number nobody has been told yet: the seat cap comes
     // off the price book and the server picks the band.
-    expect(screen.queryByText(/300/)).toBeNull();
+    expect(
+      within(screen.getByTestId('plan-modal')).queryByText(/\b\d[\d,]*\s*(members|places|people)\b/i),
+    ).toBeNull();
     // And it does not ask for prices — there is nothing to choose between.
     expect(orgService.getPlans).not.toHaveBeenCalled();
   });

@@ -6190,7 +6190,7 @@ d("orgs routes (real Postgres)", () => {
 
     const row = await mineRow(owner.cookies, org.org.id);
     expect(row.subscription?.status).toBe("trialing");
-    // The REAL band off the seeded book, the same 300 the trial response
+    // The REAL band off the seeded book, the same 200 the trial response
     // asserts — the two readers must not be able to disagree about the cap.
     expect(row.subscription?.seatCap).toBe(200);
     expect(row.subscription?.trialEndsAt).not.toBeNull();
