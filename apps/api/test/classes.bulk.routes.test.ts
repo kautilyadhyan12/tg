@@ -833,6 +833,29 @@ d("bulk edit of a class's time slots (real Postgres)", () => {
             "This class can list 24 time slots, counting ones changed from a date that has not come yet, and already has 24. Add this one once those dates have passed.",
         }),
       );
+
+      // The Calendar's "This and future classes" has no Update from box, so its
+      // refusal names what it does have (second re-check, L-4). The last class
+      // of a Monday time slot: one of its classes before it is still to come.
+      const [monday] = await sql<{ id: string }[]>`
+        SELECT s.id FROM gym_class_sessions s
+        JOIN gym_class_schedules c ON c.id = s.schedule_id
+        WHERE s.class_type_id = ${type} AND c.local_start_minute = ${at(6)}
+        ORDER BY s.local_date DESC LIMIT 1`;
+      if (monday === undefined) throw new Error("no Monday class");
+      const future = await put(
+        dayUrl(gym, monday.id),
+        { scope: "future", ...RUN, startMinute: at(6), minutes: 50 },
+        owner.cookies,
+      );
+      expect(future.statusCode).toBe(409);
+      expect(JSON.parse(future.body)).toEqual(
+        expect.objectContaining({
+          error: "too_many_listed",
+          message:
+            "This class can list 24 time slots, counting ones changed from a date that has not come yet, and this change would make 25. Pick an earlier class, or wait until those dates have passed.",
+        }),
+      );
     },
     TEST_TIMEOUT_MS,
   );

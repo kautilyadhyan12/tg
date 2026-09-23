@@ -382,6 +382,9 @@ export type SlotChangeAnswer<T> = { kind: "ok"; body: T } | { kind: "replaces"; 
  *  the date it was made from, or the count to ask about. */
 function slotOutcome(
   outcome: repo.SlotChangeOutcome,
+  /** Where the change was made: the Classes list (an Update from date) or
+   *  the Calendar's "This and future classes" (a class, no date box). */
+  door: "list" | "calendar",
 ): { kind: "ok"; localDate: string } | { kind: "replaces"; count: number } {
   switch (outcome.kind) {
     case "ok":
@@ -439,7 +442,9 @@ function slotOutcome(
       throw new OrgsError(
         409,
         "too_many_listed",
-        `${listedLimitText(outcome.cap)}, and this change would make ${String(outcome.would)}. Pick the earliest Update from date, or wait until those dates have passed.`,
+        `${listedLimitText(outcome.cap)}, and this change would make ${String(outcome.would)}. ${
+          door === "list" ? "Pick the earliest Update from date" : "Pick an earlier class"
+        }, or wait until those dates have passed.`,
       );
     default: {
       const never: never = outcome;
@@ -476,6 +481,7 @@ export async function updateSchedule(
       actorUserId: userId,
       now: deps.now(),
     }),
+    "list",
   );
   if (done.kind === "replaces") return done;
   return { kind: "ok", body: await readOr404(deps, gymId) };
@@ -507,7 +513,7 @@ export async function bulkEditSchedules(
       "Pick a date on the calendar while every ticked time slot runs.",
     );
   }
-  slotOutcome(outcome);
+  slotOutcome(outcome, "list");
   return await readOr404(deps, gymId);
 }
 
@@ -662,6 +668,7 @@ export async function changeClassSession(
       actorUserId: userId,
       now: deps.now(),
     }),
+    "calendar",
   );
   if (done.kind === "replaces") return done;
   return { kind: "ok", body: await readWeekOr404(deps, gymId, done.localDate) };
