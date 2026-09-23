@@ -1,0 +1,539 @@
+// KEEPING THE LIST BY HAND — Part 3 §9.9, §11.6; ROADMAP Stage 2 item 3a-iv.
+//
+// One person's page; add, change, take off, put back, delete a former record for
+// good; join two records; put an app member on the list; and "Remove all" for the
+// members the list no longer holds or never held.
+//
+// Gates in CLAUDE.md §4's order: privilege (and a live plan, for a write), then the
+// rate limit, then the handler. Every write is one transaction holding the gym's
+// row — the lock the confirm and the join door take — and every statement inside
+// it uses `tx`: the API's pool is one connection.
+import {
+  isLargeMemberListChange,
+  MEMBER_LIST_BY_HAND_WORDS,
+  MEMBER_LIST_ENTRIES_PAGE,
+  MEMBER_LIST_MAX_EDITED_FIELDS,
+  MEMBER_LIST_MAX_NAME_CHARS,
+  type MemberListEntryDeleted,
+  type MemberListEntryDetail,
+  type MemberListEntryInput,
+  type MemberListEntryOutcome,
+  type MemberListEntryPatch,
+  type MemberListEntryWritten,
+  type MemberListRemoveUnlistedRequest,
+  type MemberListUnlistedGroup,
+  type MemberListUnlistedPage,
+  type MemberListUnlistedQuery,
+} from "@app/shared";
+import type { TransactionSql } from "postgres";
+import { z } from "zod";
+import { bustEntitlements } from "../../entitlements/service.js";
+import { insertAudit } from "../repo.js";
+import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
+import { applyTyped, EMPTY_VALUES, mergeValues, type EntryValues, type TypedContext } from "./byHand.js";
+import { tidyCell } from "./cells.js";
+import { cut, identityKey } from "./fields.js";
+import { withoutCardNumbers } from "./neverKeep.js";
+import { readCountry } from "./phone.js";
+import * as repo from "./repo.js";
+import type { MemberListDeps } from "./service.js";
+import { unlistedDigest, unlistedGroup, unlistedPage } from "./unlisted.js";
+
+type Sql = MemberListDeps["sql"];
+
+const notFound = (): OrgsError => new OrgsError(404, "entry_not_found", MEMBER_LIST_BY_HAND_WORDS.entry_not_found);
+
+/** One person's page, read on `sql` (the pool, or the caller's transaction). */
+async function detailOf(sql: Sql | TransactionSql, gymId: string, entry: repo.StoredEntry): Promise<MemberListEntryDetail> {
+  const [fields, reached] = await Promise.all([
+    repo.listFields(sql, gymId),
+    repo.membersAgainstList(sql, gymId, { email: entry.values.email, phone: entry.values.phone }),
+  ]);
+  // A member belongs to this record when §9.7's match takes them to it: the current
+  // record for a current one, the former match for a former one.
+  const mine = reached.filter((member) => (entry.formerAt === null ? member.entryId : member.formerEntryId) === entry.id);
+  const visits = await repo.memberVisits(
+    sql,
+    gymId,
+    mine.map((member) => member.userId),
+  );
+  const { values } = entry;
+  return {
+    entryId: entry.id,
+    fullName: values.fullName,
+    email: values.email,
+    phone: values.phone,
+    memberNumber: values.memberNumber,
+    status: values.status,
+    membershipType: values.membershipType,
+    joinedOn: values.joinedOn,
+    endsOn: values.endsOn,
+    endsOnKind: values.endsOnKind,
+    paymentStatus: values.paymentStatus,
+    dateOfBirth: values.dateOfBirth,
+    formerAt: entry.formerAt?.toISOString() ?? null,
+    source: entry.source,
+    inApp: mine.length > 0,
+    extra: fields.map((field) => ({ key: field.key, label: field.label, value: values.extra[field.key] ?? "" })),
+    handEdited: entry.handEdited,
+    members: visits.map((row) => ({
+      userId: row.userId,
+      displayName: row.displayName,
+      joinedAt: row.joinedAt.toISOString(),
+      visits: row.visits,
+      lastVisitOn: row.lastVisitOn,
+    })),
+  };
+}
+
+async function detailAfter(sql: Sql, gymId: string, entryId: string): Promise<MemberListEntryDetail> {
+  const entry = await repo.entryFor(sql, gymId, entryId);
+  if (entry === null) throw notFound();
+  return await detailOf(sql, gymId, entry);
+}
+
+async function typedContext(tx: TransactionSql, gymId: string, country: string | null): Promise<TypedContext> {
+  const fields = await repo.listFields(tx, gymId);
+  return { country: readCountry(country), fields: new Map(fields.map((field) => [field.key, field.label])) };
+}
+
+/** The contacts of every record that is current, before or after a change. */
+const currentContacts = (...records: { values: EntryValues; current: boolean }[]) =>
+  records.filter((record) => record.current).map((record) => ({ email: record.values.email, phone: record.values.phone }));
+
+const listVersion = async (tx: TransactionSql, gymId: string): Promise<number> => (await repo.listState(tx, gymId))?.version ?? 0;
+
+export async function readEntry(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  entryId: string,
+  limit: () => Promise<boolean>,
+): Promise<MemberListEntryDetail | null> {
+  await requirePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return null;
+  return await detailAfter(deps.sql, gymId, entryId);
+}
+
+export type WriteAnswer =
+  | { kind: "written"; status: 200 | 201; written: MemberListEntryWritten }
+  /** The change would make this record the same person as another one. */
+  | { kind: "already_on_list"; entryId: string }
+  | { kind: "rate_limited" };
+
+interface Done {
+  outcome: MemberListEntryOutcome;
+  entryId: string;
+  version: number;
+}
+
+async function finish(deps: MemberListDeps, gymId: string, done: Done): Promise<WriteAnswer> {
+  return {
+    kind: "written",
+    status: done.outcome === "added" ? 201 : 200,
+    written: { outcome: done.outcome, entry: await detailAfter(deps.sql, gymId, done.entryId), version: done.version },
+  };
+}
+
+/** Put a person on the list whose key nobody holds, or bring back the FORMER record
+ *  that holds it. Shared by "Add member" and "put an app member on the list". */
+async function placeOnList(
+  tx: TransactionSql,
+  input: { gymId: string; userId: string; at: Date; values: EntryValues; source: "typed" | "member"; revive: (stored: repo.StoredEntry) => EntryValues },
+): Promise<Done> {
+  const { gymId, values, at } = input;
+  const key = identityKey(values);
+  const holder = await repo.entryHolding(tx, gymId, key);
+  if (holder !== null && !holder.former) return { outcome: "already_on_list", entryId: holder.id, version: await listVersion(tx, gymId) };
+
+  let entryId: string;
+  let written: EntryValues;
+  if (holder === null) {
+    written = values;
+    entryId = await repo.insertEntry(tx, gymId, values, key, input.source);
+  } else {
+    const stored = await repo.entryFor(tx, gymId, holder.id);
+    if (stored === null) throw new Error(`member-list entry ${holder.id} vanished under the gym's lock`);
+    written = input.revive(stored);
+    entryId = holder.id;
+    await repo.writeEntry(tx, gymId, entryId, { values: written, identityKey: key, handEdited: stored.handEdited, formerAt: null });
+  }
+  await repo.stampListedByContact(tx, gymId, currentContacts({ values: written, current: true }), at);
+  const version = await repo.bumpListVersion(tx, gymId);
+  await insertAudit(tx, {
+    actorUserId: input.userId,
+    gymId,
+    action: "org.member_list_entry_added",
+    targetType: "member_list_entry",
+    targetId: entryId,
+    meta: { source: input.source, ...(holder === null ? {} : { revived: "true" }) },
+  });
+  return { outcome: holder === null ? "added" : "revived", entryId, version };
+}
+
+/** "Add member" (§11.6). */
+export async function addEntry(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  input: MemberListEntryInput,
+  limit: () => Promise<boolean>,
+): Promise<WriteAnswer> {
+  const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return { kind: "rate_limited" };
+  const at = deps.now();
+  const done = await deps.sql.begin(async (tx) => {
+    await repo.lockGym(tx, gymId);
+    const context = await typedContext(tx, gymId, org.country);
+    const applied = applyTyped(EMPTY_VALUES, input, context);
+    if (!applied.ok) throw new OrgsError(400, applied.refusal.code, applied.refusal.message);
+    return await placeOnList(tx, {
+      gymId,
+      userId,
+      at,
+      values: applied.values,
+      source: "typed",
+      // A former record coming back takes what staff typed on top of what it held.
+      revive: (stored) => {
+        const again = applyTyped(stored.values, input, context);
+        if (!again.ok) throw new OrgsError(400, again.refusal.code, again.refusal.message);
+        return again.values;
+      },
+    });
+  });
+  return await finish(deps, gymId, done);
+}
+
+/** Change one person (§11.6). Fields staff change are remembered by NAME, so a later
+ *  upload asks before it writes over them (§11.4). */
+export async function changeEntry(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  entryId: string,
+  patch: MemberListEntryPatch,
+  limit: () => Promise<boolean>,
+): Promise<WriteAnswer> {
+  const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return { kind: "rate_limited" };
+  const at = deps.now();
+  const done = await deps.sql.begin(async (tx): Promise<Done | { clash: string }> => {
+    await repo.lockGym(tx, gymId);
+    const stored = await repo.entryFor(tx, gymId, entryId);
+    if (stored === null) throw notFound();
+    const applied = applyTyped(stored.values, patch, await typedContext(tx, gymId, org.country));
+    if (!applied.ok) throw new OrgsError(400, applied.refusal.code, applied.refusal.message);
+    if (applied.edited.length === 0 && applied.identityFields.length === 0) {
+      return { outcome: "unchanged", entryId, version: await listVersion(tx, gymId) };
+    }
+    const key = identityKey(applied.values);
+    if (key !== stored.identityKey) {
+      const holder = await repo.entryHolding(tx, gymId, key);
+      if (holder !== null && holder.id !== entryId) return { clash: holder.id };
+    }
+    const handEdited = [...new Set([...stored.handEdited, ...applied.edited])].slice(0, MEMBER_LIST_MAX_EDITED_FIELDS);
+    await repo.writeEntry(tx, gymId, entryId, { values: applied.values, identityKey: key, handEdited, formerAt: stored.formerAt });
+    const current = stored.formerAt === null;
+    await repo.stampListedByContact(
+      tx,
+      gymId,
+      currentContacts({ values: stored.values, current }, { values: applied.values, current }),
+      at,
+    );
+    const version = await repo.bumpListVersion(tx, gymId);
+    await insertAudit(tx, {
+      actorUserId: userId,
+      gymId,
+      action: "org.member_list_entry_changed",
+      targetType: "member_list_entry",
+      targetId: entryId,
+      meta: { fields: [...applied.identityFields, ...applied.edited] },
+    });
+    return { outcome: "changed", entryId, version };
+  });
+  if ("clash" in done) return { kind: "already_on_list", entryId: done.clash };
+  return await finish(deps, gymId, done);
+}
+
+/** Take a person off the list: their record becomes FORMER, never deleted (§11.1). */
+export async function takeOff(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  entryId: string,
+  limit: () => Promise<boolean>,
+): Promise<WriteAnswer> {
+  return await setOnList(deps, userId, gymId, entryId, false, limit);
+}
+
+/** Put a former record back on the list. */
+export async function restore(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  entryId: string,
+  limit: () => Promise<boolean>,
+): Promise<WriteAnswer> {
+  return await setOnList(deps, userId, gymId, entryId, true, limit);
+}
+
+async function setOnList(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  entryId: string,
+  on: boolean,
+  limit: () => Promise<boolean>,
+): Promise<WriteAnswer> {
+  await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return { kind: "rate_limited" };
+  const at = deps.now();
+  const done = await deps.sql.begin(async (tx): Promise<Done> => {
+    await repo.lockGym(tx, gymId);
+    const stored = await repo.entryFor(tx, gymId, entryId);
+    if (stored === null) throw notFound();
+    const moved = await repo.setEntryFormer(tx, gymId, entryId, on ? null : at);
+    if (!moved) return { outcome: on ? "already_on_list" : "already_taken_off", entryId, version: await listVersion(tx, gymId) };
+    // The members this record reached were on the list (taking off) or are now
+    // (putting back); either way they have been listed.
+    await repo.stampListedByContact(tx, gymId, currentContacts({ values: stored.values, current: true }), at);
+    const version = await repo.bumpListVersion(tx, gymId);
+    await insertAudit(tx, {
+      actorUserId: userId,
+      gymId,
+      action: on ? "org.member_list_entry_restored" : "org.member_list_entry_taken_off",
+      targetType: "member_list_entry",
+      targetId: entryId,
+      meta: {},
+    });
+    return { outcome: on ? "restored" : "taken_off", entryId, version };
+  });
+  return await finish(deps, gymId, done);
+}
+
+/** Delete a FORMER record for good (§11.1). A current one has to be taken off first. */
+export async function deleteFormer(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  entryId: string,
+  limit: () => Promise<boolean>,
+): Promise<MemberListEntryDeleted | null> {
+  await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return null;
+  return await deps.sql.begin(async (tx) => {
+    await repo.lockGym(tx, gymId);
+    const stored = await repo.entryFor(tx, gymId, entryId);
+    if (stored === null) throw notFound();
+    if (stored.formerAt === null) throw new OrgsError(409, "not_former", MEMBER_LIST_BY_HAND_WORDS.not_former);
+    await repo.deleteEntry(tx, gymId, entryId);
+    const version = await repo.bumpListVersion(tx, gymId);
+    await insertAudit(tx, {
+      actorUserId: userId,
+      gymId,
+      action: "org.member_list_entry_deleted",
+      targetType: "member_list_entry",
+      targetId: entryId,
+      meta: {},
+    });
+    return { deleted: true as const, version };
+  });
+}
+
+/** Join two records of one person (PushPress's way): `goneId` is the record NOT
+ *  kept, `keepId` the one that stays. The kept record keeps its own values and fills
+ *  only its empty ones from the other; it is on the list if either was. */
+export async function mergeEntries(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  goneId: string,
+  keepId: string,
+  limit: () => Promise<boolean>,
+): Promise<WriteAnswer> {
+  await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
+  if (goneId === keepId) throw new OrgsError(400, "merge_same", MEMBER_LIST_BY_HAND_WORDS.merge_same);
+  if (!(await limit())) return { kind: "rate_limited" };
+  const at = deps.now();
+  const done = await deps.sql.begin(async (tx): Promise<Done> => {
+    await repo.lockGym(tx, gymId);
+    const [gone, keep] = await Promise.all([repo.entryFor(tx, gymId, goneId), repo.entryFor(tx, gymId, keepId)]);
+    if (gone === null || keep === null) throw notFound();
+    const { values, filled } = mergeValues(keep.values, gone.values);
+    const current = keep.formerAt === null || gone.formerAt === null;
+    await repo.writeEntry(tx, gymId, keepId, {
+      values,
+      identityKey: keep.identityKey,
+      handEdited: keep.handEdited,
+      formerAt: current ? null : keep.formerAt,
+    });
+    // Nothing points at a record yet (`repo.ENTRY_REFERENCES`); a table that does is
+    // moved onto the kept record here, before the other is deleted.
+    await repo.deleteEntry(tx, gymId, goneId);
+    await repo.stampListedByContact(
+      tx,
+      gymId,
+      currentContacts({ values: gone.values, current: gone.formerAt === null }, { values, current }),
+      at,
+    );
+    const version = await repo.bumpListVersion(tx, gymId);
+    await insertAudit(tx, {
+      actorUserId: userId,
+      gymId,
+      action: "org.member_list_entries_merged",
+      targetType: "member_list_entry",
+      targetId: keepId,
+      meta: { mergedEntryId: goneId, filled },
+    });
+    return { outcome: "merged", entryId: keepId, version };
+  });
+  return await finish(deps, gymId, done);
+}
+
+/** Put one of the gym's app members on the list from their membership: their name,
+ *  proved email and the phone they gave (§9.9). */
+export async function putMemberOnList(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  memberUserId: string,
+  limit: () => Promise<boolean>,
+): Promise<WriteAnswer> {
+  await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return { kind: "rate_limited" };
+  const at = deps.now();
+  const done = await deps.sql.begin(async (tx): Promise<Done> => {
+    await repo.lockGym(tx, gymId);
+    const contact = await repo.memberContact(tx, gymId, memberUserId);
+    if (contact === null) throw new OrgsError(404, "member_not_found", MEMBER_LIST_BY_HAND_WORDS.member_not_found);
+    if (contact.email === null && contact.phone === null) {
+      throw new OrgsError(409, "no_contact", MEMBER_LIST_BY_HAND_WORDS.no_contact);
+    }
+    // Already reached by a current record: they are on the list, under that record.
+    const reached = await repo.membersAgainstList(tx, gymId, { email: contact.email, phone: contact.phone });
+    const self = reached.find((member) => member.userId === memberUserId);
+    if (self !== undefined && self.entryId !== null) {
+      return { outcome: "already_on_list", entryId: self.entryId, version: await listVersion(tx, gymId) };
+    }
+    const values: EntryValues = {
+      ...EMPTY_VALUES,
+      fullName: cut(withoutCardNumbers(tidyCell(contact.displayName)).text, MEMBER_LIST_MAX_NAME_CHARS),
+      email: contact.email,
+      phone: contact.phone,
+    };
+    // A former record with these very details is the same person coming back; it
+    // keeps what it holds.
+    return await placeOnList(tx, { gymId, userId, at, values, source: "member", revive: (stored) => stored.values });
+  });
+  return await finish(deps, gymId, done);
+}
+
+// ── "Remove all" (§9.8, §9.9) ───────────────────────────────────────────────
+
+const cursorSchema = z.string().uuid();
+
+/** The members "Remove all" would remove, a page at a time, with the numbers the
+ *  removal must send back. */
+export async function readUnlisted(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  query: MemberListUnlistedQuery,
+  limit: () => Promise<boolean>,
+): Promise<MemberListUnlistedPage | null> {
+  await requirePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return null;
+  const [state, members] = await Promise.all([repo.listState(deps.sql, gymId), repo.membersAgainstList(deps.sql, gymId)]);
+  // The cursor is the last person shown. Their name is read afresh, so a page resumes
+  // after them in the group's order; one who has left since is a stale page.
+  let cursor: { name: string; id: string } | null = null;
+  if (query.cursor !== undefined) {
+    const id = cursorSchema.safeParse(query.cursor);
+    const last = id.success ? members.find((member) => member.userId === id.data) : undefined;
+    if (last === undefined) throw new OrgsError(400, "bad_cursor", "That page of names could not be read. Open the list again.");
+    cursor = { name: last.fullName, id: last.userId };
+  }
+  const people = unlistedGroup(members, state !== null, query.group);
+  const page = unlistedPage(people, cursor, MEMBER_LIST_ENTRIES_PAGE);
+  return {
+    group: query.group,
+    version: state?.version ?? 0,
+    total: people.length,
+    digest: unlistedDigest(gymId, query.group, people.map((person) => person.userId)),
+    people: page.shown.map((person) => ({
+      userId: person.userId,
+      displayName: person.fullName,
+      email: person.email,
+      joinedAt: person.joinedAt.toISOString(),
+    })),
+    cursor: page.last?.userId ?? null,
+  };
+}
+
+export type RemoveAnswer =
+  | { kind: "removed"; group: MemberListUnlistedGroup; removed: number }
+  | { kind: "list_changed"; version: number; total: number; digest: string }
+  | { kind: "large_change"; removing: number; of: number }
+  | { kind: "rate_limited" };
+
+/** "Remove all": every member of the group taken out of the gym in one call, as a
+ *  single removal does it — the membership closed, an audit row each, their gym
+ *  perks dropped at once. Refused unless the group is still exactly the one the page
+ *  showed; a large removal needs the tick on this request. */
+export async function removeUnlisted(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  input: MemberListRemoveUnlistedRequest,
+  limit: () => Promise<boolean>,
+): Promise<RemoveAnswer> {
+  await requireWritablePrivilege(deps, gymId, userId, "members.remove");
+  // It acts on the list's marks, so it needs the list's own tick as well.
+  await requirePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return { kind: "rate_limited" };
+  const at = deps.now();
+  const removedUsers: string[] = [];
+  const answer = await deps.sql.begin(async (tx): Promise<RemoveAnswer> => {
+    await repo.lockGym(tx, gymId);
+    const [state, members] = await Promise.all([repo.listState(tx, gymId), repo.membersAgainstList(tx, gymId)]);
+    const version = state?.version ?? 0;
+    const people = unlistedGroup(members, state !== null, input.group);
+    const ids = people.map((person) => person.userId);
+    const digest = unlistedDigest(gymId, input.group, ids);
+    if (version !== input.version || ids.length !== input.expectedCount || digest !== input.digest) {
+      return { kind: "list_changed", version, total: ids.length, digest };
+    }
+    const seats = members.filter((member) => member.seatCounted).length;
+    if (isLargeMemberListChange(ids.length, seats) && input.acknowledgeLargeChange !== true) {
+      return { kind: "large_change", removing: ids.length, of: seats };
+    }
+    const closed = await repo.closeMemberships(tx, gymId, ids, at);
+    // Under the gym's lock the set cannot move between the rule and the write, so a
+    // difference is a fault of ours and nothing is committed.
+    if (closed.length !== ids.length) {
+      throw new Error(`remove-unlisted closed ${String(closed.length)} memberships where the rule chose ${String(ids.length)}`);
+    }
+    await repo.insertRemovalAudits(tx, { actorUserId: userId, gymId, group: input.group, removed: closed });
+    await insertAudit(tx, {
+      actorUserId: userId,
+      gymId,
+      action: "org.member_list_unlisted_removed",
+      targetType: "member_list",
+      targetId: gymId,
+      meta: { group: input.group, removed: String(closed.length), version: String(version) },
+    });
+    removedUsers.push(...closed.map((row) => row.userId));
+    return { kind: "removed", group: input.group, removed: closed.length };
+  });
+
+  if (answer.kind === "removed" && removedUsers.length > 0) {
+    // After the commit, as a single removal does. A failed bust leaves the cached
+    // answer to expire on its own (60 s), so it is warned about, never raised.
+    const results = await Promise.allSettled(removedUsers.map((member) => bustEntitlements(deps.redis, member)));
+    const failed = results.filter((result) => result.status === "rejected").length;
+    if (failed > 0) {
+      deps.log.warn({ event: "memberlist.unlisted_bust_failed", gymId, failed }, "entitlements could not be refreshed after a removal");
+    }
+  }
+  return answer;
+}

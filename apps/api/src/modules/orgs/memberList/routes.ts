@@ -10,15 +10,22 @@ import type { Sql } from "postgres";
 import type { z } from "zod";
 import {
   MEMBER_FILE_MAX_BASE64_CHARS,
+  MEMBER_LIST_BY_HAND_WORDS,
   MEMBER_LIST_CONFIRM_REFUSAL_WORDS,
   memberListConfirmRequestSchema,
   memberListEntriesQuerySchema,
+  memberListEntryInputSchema,
+  memberListEntryPatchSchema,
+  memberListMergeRequestSchema,
+  memberListRemoveUnlistedRequestSchema,
   memberListRowsQuerySchema,
+  memberListUnlistedQuerySchema,
   memberListUploadRequestSchema,
 } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
-import { memberListParamsSchema, orgParamsSchema } from "../schemas.js";
+import { memberListEntryParamsSchema, memberListParamsSchema, memberParamsSchema, orgParamsSchema } from "../schemas.js";
+import * as byHand from "./byHandService.js";
 import * as service from "./service.js";
 
 /** The body limit for an upload: the base64 ceiling plus room for the two other
@@ -259,5 +266,162 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     const page = await service.readEntries(listDeps, requireUserId(req), params.gymId, query, readGate(req, reply));
     if (page === null) return;
     return reply.status(200).send({ page });
+  });
+
+  // ── Keeping the list by hand (3a-iv; §9.9, §11.6) ──
+
+  /** Typing one person in or taking one off: 120 an hour each, 600 from one address
+   *  (§9.9), `ipMax` explicit for the front desk. One allowance for every write by
+   *  hand, so a screen cannot spend around it by switching between them. */
+  const editGate = gate(
+    createDualRateLimit({
+      name: "memberlist_edit",
+      max: 120,
+      ipMax: 600,
+      windowMs: 60 * 60 * 1000,
+      identifier: (req) => req.authUser?.id ?? null,
+      redis: deps.redis,
+    }),
+  );
+
+  /** "Remove all": 10 an hour each, 40 from one address (§9.9). */
+  const removeGate = gate(
+    createDualRateLimit({
+      name: "memberlist_remove_unlisted",
+      max: 10,
+      ipMax: 40,
+      windowMs: 60 * 60 * 1000,
+      identifier: (req) => req.authUser?.id ?? null,
+      redis: deps.redis,
+    }),
+  );
+
+  const sendWrite = (req: FastifyRequest, reply: FastifyReply, answer: byHand.WriteAnswer) => {
+    switch (answer.kind) {
+      case "rate_limited":
+        return;
+      case "written":
+        return reply.status(answer.status).send(answer.written);
+      case "already_on_list":
+        return reply.status(409).send({
+          error: "already_on_list",
+          message: MEMBER_LIST_BY_HAND_WORDS.already_on_list,
+          entryId: answer.entryId,
+          requestId: req.id,
+        });
+    }
+  };
+
+  app.get("/v1/orgs/:gymId/member-list/entries/:entryId", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const entry = await byHand.readEntry(listDeps, requireUserId(req), params.gymId, params.entryId, readGate(req, reply));
+    if (entry === null) return;
+    return reply.status(200).send({ entry });
+  });
+
+  app.post("/v1/orgs/:gymId/member-list/entries", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(memberListEntryInputSchema, req.body, req, reply);
+    if (body === null) return;
+    return sendWrite(req, reply, await byHand.addEntry(listDeps, requireUserId(req), params.gymId, body, editGate(req, reply)));
+  });
+
+  app.patch("/v1/orgs/:gymId/member-list/entries/:entryId", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(memberListEntryPatchSchema, req.body, req, reply);
+    if (body === null) return;
+    const answer = await byHand.changeEntry(listDeps, requireUserId(req), params.gymId, params.entryId, body, editGate(req, reply));
+    return sendWrite(req, reply, answer);
+  });
+
+  app.delete("/v1/orgs/:gymId/member-list/entries/:entryId", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    return sendWrite(req, reply, await byHand.takeOff(listDeps, requireUserId(req), params.gymId, params.entryId, editGate(req, reply)));
+  });
+
+  app.post("/v1/orgs/:gymId/member-list/entries/:entryId/restore", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    return sendWrite(req, reply, await byHand.restore(listDeps, requireUserId(req), params.gymId, params.entryId, editGate(req, reply)));
+  });
+
+  app.post("/v1/orgs/:gymId/member-list/entries/:entryId/merge", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(memberListMergeRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const answer = await byHand.mergeEntries(
+      listDeps,
+      requireUserId(req),
+      params.gymId,
+      params.entryId,
+      body.keepEntryId,
+      editGate(req, reply),
+    );
+    return sendWrite(req, reply, answer);
+  });
+
+  app.post(
+    "/v1/orgs/:gymId/member-list/entries/from-member/:userId",
+    { preHandler: [app.authenticate] },
+    async (req, reply) => {
+      const params = parseOr400(memberParamsSchema, req.params, req, reply);
+      if (params === null) return;
+      const answer = await byHand.putMemberOnList(listDeps, requireUserId(req), params.gymId, params.userId, editGate(req, reply));
+      return sendWrite(req, reply, answer);
+    },
+  );
+
+  app.delete("/v1/orgs/:gymId/member-list/former/:entryId", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const deleted = await byHand.deleteFormer(listDeps, requireUserId(req), params.gymId, params.entryId, editGate(req, reply));
+    if (deleted === null) return;
+    return reply.status(200).send(deleted);
+  });
+
+  app.get("/v1/orgs/:gymId/member-list/unlisted", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(memberListUnlistedQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const page = await byHand.readUnlisted(listDeps, requireUserId(req), params.gymId, query, readGate(req, reply));
+    if (page === null) return;
+    return reply.status(200).send({ page });
+  });
+
+  app.post("/v1/orgs/:gymId/member-list/remove-unlisted", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(memberListRemoveUnlistedRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const answer = await byHand.removeUnlisted(listDeps, requireUserId(req), params.gymId, body, removeGate(req, reply));
+    switch (answer.kind) {
+      case "rate_limited":
+        return;
+      case "removed":
+        return reply.status(200).send({ removed: { group: answer.group, removed: answer.removed } });
+      case "list_changed":
+        return reply.status(409).send({
+          error: "list_changed",
+          message: MEMBER_LIST_BY_HAND_WORDS.list_changed,
+          version: answer.version,
+          total: answer.total,
+          digest: answer.digest,
+          requestId: req.id,
+        });
+      case "large_change":
+        return reply.status(409).send({
+          error: "large_change",
+          message: MEMBER_LIST_BY_HAND_WORDS.large_change,
+          removing: answer.removing,
+          of: answer.of,
+          requestId: req.id,
+        });
+    }
   });
 }

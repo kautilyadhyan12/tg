@@ -167,6 +167,12 @@ export const memberListParamsSchema = z
   .strict();
 export type MemberListParams = z.infer<typeof memberListParamsSchema>;
 
+/** A gym and one record of its list, together, for the same reason. */
+export const memberListEntryParamsSchema = z
+  .object({ gymId: z.string().uuid(), entryId: z.string().uuid() })
+  .strict();
+export type MemberListEntryParams = z.infer<typeof memberListEntryParamsSchema>;
+
 /** WHO CAME, ON WHICH DAY, FILTERED HOW.
  *
  *  **Every value here is a STRING on the wire and is parsed into one, never

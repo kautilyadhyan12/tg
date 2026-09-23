@@ -56,6 +56,11 @@ const NEVER_KEEP_SUITE = "memberList.neverKeep.unit.test.ts";
  *  the routes that write it against real Postgres. */
 const KEEP_SUITE = "memberList.keep.unit.test.ts";
 const KEPT_SUITE = "memberList.kept.routes.test.ts";
+/** 3a-iv's: keeping the list by hand, and "Remove all". */
+const UNLISTED = `${ROOT}/apps/api/src/modules/orgs/memberList/unlisted.ts`;
+const BYHAND_SERVICE = `${ROOT}/apps/api/src/modules/orgs/memberList/byHandService.ts`;
+const BYHAND_UNIT = "memberList.byHand.unit.test.ts";
+const BYHAND_ROUTES = "memberList.byHand.routes.test.ts";
 
 /** file, what it breaks, the anchor, the replacement, which suite must go red.
  *  `pure: true` runs the suite without a database. */
@@ -587,6 +592,30 @@ const BREAKS = [
     to: "  return { value: scrubbed.text, card: true };",
     suite: KEEP_SUITE,
     pure: true,
+  },
+  // 3a-iv: "Remove all" — the job's worst thing is a member taken out of the gym who
+  // is still on its list, the owner, staff, a free place, or another gym's member.
+  {
+    name: "3a-iv: Remove all's group forgets that only paid seats are marked (the owner and staff become removable)",
+    file: UNLISTED,
+    from: "  const seats = members.filter((member) => member.seatCounted);",
+    to: "  const seats = members.filter(() => true);",
+    suite: BYHAND_UNIT,
+    pure: true,
+  },
+  {
+    name: "3a-iv: Remove all checks the count and not the digest (somebody who joined after the look is removed)",
+    file: BYHAND_SERVICE,
+    from: " || digest !== input.digest",
+    to: "",
+    suite: BYHAND_ROUTES,
+  },
+  {
+    name: "3a-iv: the removal's write forgets the gym (a shared member is removed from every gym)",
+    file: REPO,
+    from: "    SET removed_at = ${at}\n    WHERE m.gym_id = ${gymId}\n      AND m.user_id = ANY",
+    to: "    SET removed_at = ${at}\n    WHERE true\n      AND m.user_id = ANY",
+    suite: BYHAND_ROUTES,
   },
 ];
 
