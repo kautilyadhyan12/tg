@@ -15,15 +15,12 @@ import {
   classProblem,
   classRequest,
   classSwatch,
-  classDefaultsLine,
   coachChoices,
   coachLine,
   emptyClassDraft,
-  minutesLine,
-  nextDatesLine,
+  peopleLine,
   placesLine,
-  repeatFactsLine,
-  repeatLine,
+  repeatDatesLine,
   repeatDraft,
   repeatEditDraft,
   repeatEditRequest,
@@ -31,7 +28,7 @@ import {
   repeatRequest,
   repeatTimeValue,
   runFieldsProblem,
-  runLine,
+  timeRange,
   timetableLists,
   toggleWeekday,
   weekdayLine,
@@ -63,13 +60,15 @@ describe('the colours', () => {
   });
 });
 
-describe('reading a repeat', () => {
+// Dates are kept whole with no-break spaces; compared here as plain text.
+const datesLine = (slot) => repeatDatesLine(slot).replaceAll('\u00a0', ' ');
+
+describe('reading a time slot', () => {
   it('says which days in words, and Every day when it is every day', () => {
     expect(weekdayLine([1])).toBe('Mon');
     expect(weekdayLine([1, 3])).toBe('Mon & Wed');
     expect(weekdayLine([1, 3, 5])).toBe('Mon, Wed & Fri');
-    // SORTED HERE TOO, because this also draws a DRAFT the gym is still ticking
-    // and that has no server behind it.
+    // Sorted here too: this also draws a draft the gym is still ticking.
     expect(weekdayLine([5, 1, 3])).toBe('Mon, Wed & Fri');
     expect(weekdayLine([1, 2, 3, 4, 5, 6, 7])).toBe('Every day');
     // A number nothing can produce is dropped rather than printed.
@@ -78,155 +77,90 @@ describe('reading a repeat', () => {
     expect(weekdayLine(undefined)).toBe('');
   });
 
-  it('reads the time on the clock the GYM chose, never the reader s', () => {
-    const schedule = { weekdays: [1, 3], startMinute: 1110 };
-    expect(repeatLine(schedule, '24h')).toBe('Mon & Wed at 18:30');
-    expect(repeatLine(schedule, '12h')).toBe('Mon & Wed at 6:30 PM');
-    // Half a line is no line: a caller must not render "at 18:30" with no days
-    // in front of it.
-    expect(repeatLine({ weekdays: [], startMinute: 1110 }, '24h')).toBe('');
-    expect(repeatLine({ weekdays: [1], startMinute: null }, '24h')).toBe('');
+  // A calendar prints a class as start–end on the gym's own clock.
+  it.each([
+    [1080, 45, '24h', '18:00–18:45'],
+    [1080, 45, '12h', '6:00 PM–6:45 PM'],
+    [390, 60, '24h', '06:30–07:30'],
+    [690, 60, '12h', '11:30 AM–12:30 PM'],
+    // Past midnight: the end is read on the next day's clock.
+    [1410, 60, '24h', '23:30–00:30'],
+    [1410, 60, '12h', '11:30 PM–12:30 AM'],
+    [1380, 60, '24h', '23:00–00:00'],
+    [1200, 600, '24h', '20:00–06:00'],
+    [0, 30, '24h', '00:00–00:30'],
+    // No length: the start alone. No start, or a start that is no start: nothing.
+    [1080, null, '24h', '18:00'],
+    [null, 45, '24h', ''],
+    [1440, 45, '24h', ''],
+  ])('%s + %s min on %s → %s', (start, minutes, clock, text) => {
+    expect(timeRange(start, minutes, clock)).toBe(text);
   });
 
-  // **THE COUNT IS PRINTED ONLY WHEN THE SERVER SAYS IT IS THE WHOLE TRUTH.**
-  //
-  // This block replaces one that asserted the DEFECT as correct. The old rule
-  // was "an open-ended repeat gets no count, a bounded one does, because there
-  // the window closes before the horizon" — true only while the end date is
-  // inside 56 days. Round one drove the case it misses: a repeat from 22 Sep
-  // 2026 to 22 Sep 2027 runs on 52 Mondays, `sessionsAhead` is the window's 8,
-  // and the line read "9 dates on the calendar". **The test asserted such a case
-  // as correct**, which is the shape a table built from the code's own
-  // assumption always has.
-  //
-  // So the page no longer decides: `datesComplete` is the server's answer,
-  // against the horizon and the gym's own today.
-  it('prints the count ONLY when the server says every date is written', () => {
-    const base = { startsOn: '2026-09-21', sessionsAhead: 16, finished: false };
-
-    // Open-ended: no count, and the word for it.
-    expect(repeatFactsLine({ ...base, endsOn: null, datesComplete: false })).toBe(
-      'From Mon 21 Sep 2026 · ongoing',
+  // The next dates are the server's, and no count of dates is ever printed:
+  // "16 dates on the calendar" was the size of the window, not how often the
+  // class runs (Kd, 2026-09-22; 17b-i's round one).
+  it('says when a time slot runs from, and the next dates the server wrote', () => {
+    const next = ['2026-09-21', '2026-09-23', '2026-09-28'];
+    const base = { startsOn: '2026-09-21', nextDates: next, sessionsAhead: 16, finished: false };
+    expect(datesLine({ ...base, endsOn: null })).toBe(
+      'From 21 Sep 2026 · Next: Mon 21 Sep, Wed 23 Sep, Mon 28 Sep',
     );
-    expect(repeatFactsLine({ ...base, datesComplete: false })).toBe(
-      'From Mon 21 Sep 2026 · ongoing',
+    expect(datesLine({ ...base, endsOn: '2026-12-25', datesComplete: false })).toBe(
+      '21 Sep – 25 Dec 2026 · Next: Mon 21 Sep, Wed 23 Sep, Mon 28 Sep',
     );
+    expect(datesLine({ ...base, endsOn: '2027-09-21' })).toBe(
+      '21 Sep 2026 – 21 Sep 2027 · Next: Mon 21 Sep, Wed 23 Sep, Mon 28 Sep',
+    );
+    // Across a new year the next dates carry no year; their weekday and the
+    // range above say which is which.
+    expect(
+      datesLine({ startsOn: '2026-12-28', nextDates: ['2026-12-28', '2027-01-04'] }),
+    ).toBe('From 28 Dec 2026 · Next: Mon 28 Dec, Mon 4 Jan');
+  });
 
-    // **THE CASE ROUND ONE FOUND**: it ends, but past the window. Dates shown,
-    // NO number — saying nothing beats saying something false.
-    expect(
-      repeatFactsLine({ ...base, endsOn: '2027-09-21', datesComplete: false }),
-    ).toBe('Mon 21 Sep 2026 to Tue 21 Sep 2027');
-    // The exact shape the old test asserted as correct, now asserted as silent.
-    expect(
-      repeatFactsLine({ ...base, endsOn: '2026-12-25', datesComplete: false }),
-    ).toBe('Mon 21 Sep 2026 to Fri 25 Dec 2026');
-
-    // Ends inside the window: the count IS the whole truth, so it is printed.
-    expect(
-      repeatFactsLine({ ...base, endsOn: '2026-10-14', sessionsAhead: 7, datesComplete: true }),
-    ).toBe('Mon 21 Sep 2026 to Wed 14 Oct 2026 · 7 dates on the calendar.');
-    expect(
-      repeatFactsLine({ ...base, endsOn: '2026-09-21', sessionsAhead: 1, datesComplete: true }),
-    ).toBe('Mon 21 Sep 2026 to Mon 21 Sep 2026 · 1 date on the calendar.');
-
-    // A server that sends no answer at all is treated as "not the whole truth",
-    // which is the safe direction: silence, never a false number.
-    expect(repeatFactsLine({ ...base, endsOn: '2026-10-14' })).toBe(
-      'Mon 21 Sep 2026 to Wed 14 Oct 2026',
+  // On a phone the line wraps, and it must wrap between dates, never inside
+  // one ("Wed 23 / Sep").
+  it('keeps each date on one line and lets the line break between them', () => {
+    const line = repeatDatesLine({
+      startsOn: '2026-09-21', endsOn: '2026-12-25', nextDates: ['2026-09-23', '2026-09-25'],
+    });
+    expect(line).toBe(
+      '21\u00a0Sep – 25\u00a0Dec\u00a02026 · Next: Wed\u00a023\u00a0Sep, Fri\u00a025\u00a0Sep',
+    );
+    expect(repeatDatesLine({ startsOn: '2026-07-24', endsOn: '2026-08-23', finished: true })).toBe(
+      'Ended 23\u00a0Aug\u00a02026',
     );
   });
 
-  // Round one, Low-1: nothing ends a repeat whose end date passes, so it stayed
-  // on screen reading "nothing on the calendar YET" about something finished
-  // months ago. "Today" is the gym's, so the server answers it.
-  it('says finished, not "yet", about a repeat that has run its course', () => {
+  // A one-day time slot (a workshop) names its day once, not "3 Oct – 3 Oct".
+  it('names a one-day time slot s date once', () => {
+    expect(datesLine({ startsOn: '2026-10-03', endsOn: '2026-10-03', nextDates: ['2026-10-03'] })).toBe(
+      '3 Oct 2026 · Next: Sat 3 Oct',
+    );
+  });
+
+  it('lists no next dates when there are none, and says Ended when the slot is over', () => {
+    expect(datesLine({ startsOn: '2027-01-04', nextDates: [] })).toBe('From 4 Jan 2027');
+    expect(datesLine({ startsOn: '2027-01-04' })).toBe('From 4 Jan 2027');
+    // An unreadable date is left out rather than printed raw.
+    expect(datesLine({ startsOn: '2026-09-21', nextDates: [null, 'soon'] })).toBe(
+      'From 21 Sep 2026',
+    );
+    // Ended wins over any stale dates.
     expect(
-      repeatFactsLine({
-        startsOn: '2026-07-24', endsOn: '2026-08-23', sessionsAhead: 0, finished: true,
+      datesLine({
+        startsOn: '2026-07-24', endsOn: '2026-08-23', nextDates: ['2026-08-24'], finished: true,
       }),
-    ).toBe('Fri 24 Jul 2026 to Sun 23 Aug 2026 · finished');
-    // Finished wins over every other branch, including a stale count.
-    expect(
-      repeatFactsLine({
-        startsOn: '2026-07-24', endsOn: '2026-08-23', sessionsAhead: 4,
-        datesComplete: true, finished: true,
-      }),
-    ).toBe('Fri 24 Jul 2026 to Sun 23 Aug 2026 · finished');
+    ).toBe('Ended 23 Aug 2026');
+    expect(datesLine({ startsOn: '2026-07-24', finished: true })).toBe('Ended');
+    expect(datesLine({})).toBe('');
   });
-
-  it('says when a repeat has no dates at all, ended or not', () => {
-    expect(repeatFactsLine({ startsOn: '2026-09-21', sessionsAhead: 0 })).toBe(
-      'From Mon 21 Sep 2026 · nothing on the calendar yet.',
-    );
-    expect(repeatFactsLine({ startsOn: '2026-09-21', endsOn: '2026-12-25' })).toBe(
-      'Mon 21 Sep 2026 to Fri 25 Dec 2026 · nothing on the calendar yet.',
-    );
-    expect(repeatFactsLine({})).toBe('');
-  });
-
-  // **THE LINE IS THE SERVER'S ANSWER, AND AN EMPTY ONE SAYS SO.** A screen that
-  // worked out "Mondays from today" would always look right — including on the
-  // day the calendar had not been written — and the gym would be reading a
-  // promise nothing books against.
-  it('shows the dates the server wrote, and says so when there are none', () => {
-    expect(nextDatesLine({ nextDates: [], sessionsAhead: 0 })).toBe('No dates yet.');
-    expect(nextDatesLine({})).toBe('No dates yet.');
-    // **"YET" IS LOW-1's WORD AND IT SURVIVED IN THIS FUNCTION**: a repeat that
-    // has run its course read "finished" on one line and "No dates yet." on the
-    // next. Raised by the closing re-check as a line for 17b-ii; fixed here,
-    // because it is the same defect in the same shape.
-    expect(nextDatesLine({ nextDates: [], sessionsAhead: 0, finished: true })).toBe(
-      'No more dates.',
-    );
-    // `[null]` and not `['not-a-date']`: `closureDateLabel` returns an
-    // unreadable STRING unchanged on purpose, so only a non-string empties the
-    // list — which is the second of the two branches that print this word.
-    expect(nextDatesLine({ nextDates: [null], finished: true })).toBe('No more dates.');
-    expect(nextDatesLine({ nextDates: [null] })).toBe('No dates yet.');
-    expect(
-      nextDatesLine({ nextDates: ['2026-09-21', '2026-09-23'], sessionsAhead: 2, datesComplete: true }),
-    ).toBe('Next: Mon 21 Sep 2026 · Wed 23 Sep 2026');
-  });
-
-  // **`+N more` IS `sessionsAhead` WEARING A DELTA, AND IT IS THE THIRD TIME
-  // THAT NUMBER WAS SHOWN AS "how many times the class runs".** Kd struck it as
-  // "16 dates on the calendar"; round one found it on the bounded branch; the
-  // re-check found this, one line below the line that had just been fixed —
-  // "ongoing" and "+4 more" on consecutive lines about a class that runs 52
-  // times. The previous version of THIS test pinned it as correct.
-  it('never counts what is left unless the server says the dates are all written', () => {
-    const shown = ['2026-09-21', '2026-09-23', '2026-09-28', '2026-09-30'];
-
-    // Open-ended: the window holds 16, the class runs for ever.
-    expect(nextDatesLine({ nextDates: shown, sessionsAhead: 16, datesComplete: false })).toBe(
-      'Next: Mon 21 Sep 2026 · Wed 23 Sep 2026 · Mon 28 Sep 2026 · Wed 30 Sep 2026 · more to come',
-    );
-    // Ends past the window: 52 Mondays, and the delta would claim 4 remain.
-    expect(nextDatesLine({ nextDates: shown.slice(0, 4), sessionsAhead: 8, datesComplete: false })).toBe(
-      'Next: Mon 21 Sep 2026 · Wed 23 Sep 2026 · Mon 28 Sep 2026 · Wed 30 Sep 2026 · more to come',
-    );
-    // A server that says nothing is treated as "not the whole truth".
-    expect(nextDatesLine({ nextDates: ['2026-09-21'], sessionsAhead: 16 })).toBe(
-      'Next: Mon 21 Sep 2026 · more to come',
-    );
-
-    // ONLY when every date is written is the number real.
-    expect(nextDatesLine({ nextDates: shown, sessionsAhead: 16, datesComplete: true })).toBe(
-      'Next: Mon 21 Sep 2026 · Wed 23 Sep 2026 · Mon 28 Sep 2026 · Wed 30 Sep 2026 · +12 more',
-    );
-    expect(nextDatesLine({ nextDates: shown, sessionsAhead: 4, datesComplete: true })).toBe(
-      'Next: Mon 21 Sep 2026 · Wed 23 Sep 2026 · Mon 28 Sep 2026 · Wed 30 Sep 2026',
-    );
-  });
-
-
 });
 
-describe('reading a class', () => {
-  // `null` IS NO LIMIT AND IS SAID IN WORDS. A blank would read as "nobody has
-  // filled this in", which is a different thing — and open gym is the case that
-  // makes the distinction real.
+describe('the places and the coach', () => {
+  // `null` is no limit, and said in words — a blank would read as "nobody has
+  // filled this in".
   it('says No limit for a class with no cap, and never a blank', () => {
     expect(placesLine(null)).toBe('No limit');
     expect(placesLine(undefined)).toBe('No limit');
@@ -234,15 +168,8 @@ describe('reading a class', () => {
     expect(placesLine(20)).toBe('20 places');
   });
 
-  it('says how long it runs', () => {
-    expect(minutesLine(45)).toBe('45 min');
-    expect(minutesLine(null)).toBe('');
-  });
-
-  // THE SERVER ANSWERS `coachName` ONLY WHILE THAT PERSON IS STILL THIS GYM'S
-  // ACTIVE STAFF. So an id with no name is a coach who has gone, and printing
-  // nothing there leaves the gym reading a repeat as though nobody was ever
-  // picked — something it cannot act on because it cannot see it.
+  // The server names a coach only while they are still this gym's staff, so an
+  // id with no name is a coach who has gone.
   it('names the coach, and says so when the one who was picked is gone', () => {
     expect(coachLine({ coachUserId: 'x', coachName: 'Dana' })).toBe('Dana');
     expect(coachLine({ coachUserId: 'x', coachName: null })).toBe("Coach not on this gym's staff");
@@ -250,28 +177,10 @@ describe('reading a class', () => {
     expect(coachLine(undefined)).toBe('');
   });
 
-  it('puts the length, the places and the coach in one line, for a class and a repeat alike', () => {
-    expect(runLine({ minutes: 45, places: 12, coachUserId: 'x', coachName: 'Dana' })).toBe(
-      '45 min · 12 places · Dana',
-    );
-    expect(runLine({ minutes: 600, places: null, coachUserId: null, coachName: null })).toBe(
-      '600 min · No limit',
-    );
-  });
-
-  // **WITHOUT THESE WORDS THE LINE IS SOMETHING A GYM CAN SEE THAT IS FALSE.**
-  // Since Kd's ruling of 2026-09-22 a class's three numbers are not what it
-  // runs as — the repeat is — so a gym whose Monday runs 45 minutes would read
-  // "60 min" under the class name and believe it.
-  it('says what a class s own numbers are FOR', () => {
-    expect(classDefaultsLine({ minutes: 60, places: 20, coachUserId: 'x', coachName: 'Dana' })).toBe(
-      'A new repeat starts from: 60 min · 20 places · Dana',
-    );
-    expect(classDefaultsLine({ minutes: 60, places: null })).toBe(
-      'A new repeat starts from: 60 min · No limit',
-    );
-    // Nothing to say is said as nothing, not as a dangling heading.
-    expect(classDefaultsLine({})).toBe('');
+  it('puts the places and the coach in one line', () => {
+    expect(peopleLine({ places: 12, coachUserId: 'x', coachName: 'Dana' })).toBe('12 places · Dana');
+    expect(peopleLine({ places: null, coachUserId: null, coachName: null })).toBe('No limit');
+    expect(peopleLine(null)).toBe('');
   });
 });
 
@@ -288,10 +197,10 @@ describe('the class form', () => {
     expect(classProblem({ ...ok, name: '   ' })).toBe('Give the class a name.');
     expect(classProblem({ ...ok, name: 'x'.repeat(81) })).toMatch(/too long/);
     expect(classProblem({ ...ok, description: 'x'.repeat(501) })).toMatch(/too long/);
-    expect(classProblem({ ...ok, minutes: '4' })).toMatch(/5 minutes/);
-    expect(classProblem({ ...ok, minutes: '601' })).toMatch(/5 minutes/);
-    expect(classProblem({ ...ok, minutes: '30.5' })).toMatch(/5 minutes/);
-    expect(classProblem({ ...ok, minutes: '' })).toMatch(/5 minutes/);
+    expect(classProblem({ ...ok, minutes: '4' })).toBe('Length must be 5 to 600 minutes.');
+    expect(classProblem({ ...ok, minutes: '601' })).toBe('Length must be 5 to 600 minutes.');
+    expect(classProblem({ ...ok, minutes: '30.5' })).toBe('Length must be 5 to 600 minutes.');
+    expect(classProblem({ ...ok, minutes: '' })).toBe('Length must be 5 to 600 minutes.');
     expect(classProblem({ ...ok, places: '0' })).toMatch(/1 to 500/);
     expect(classProblem({ ...ok, places: '501' })).toMatch(/1 to 500/);
     expect(classProblem({ ...ok, places: '' })).toMatch(/1 to 500/);
@@ -347,7 +256,7 @@ describe('the class form', () => {
   });
 });
 
-describe('the repeat form', () => {
+describe('the time slot form', () => {
   it('ticks a day on and off, keeping the set sorted and the draft new', () => {
     const draft = repeatDraft(null, '2026-09-21');
     const withWed = toggleWeekday(draft, 3);
@@ -371,14 +280,14 @@ describe('the repeat form', () => {
     };
     expect(repeatProblem(base)).toBeNull();
     expect(repeatProblem({ ...base, weekdays: [] })).toMatch(/at least one day/);
-    expect(repeatProblem({ ...base, time: '' })).toMatch(/What time/);
+    expect(repeatProblem({ ...base, time: '' })).toBe('Pick a start time.');
     // 24:00 IS MIDNIGHT AT THE END OF A DAY — a legal CLOSING time for the gym's
     // hours and never a time a class can start. `clockToMinutes` accepts it for
     // that other form, so it is refused HERE rather than there.
-    expect(repeatProblem({ ...base, time: '24:00' })).toMatch(/What time/);
-    expect(repeatProblem({ ...base, startsOn: '21/09/2026' })).toMatch(/first date/);
-    expect(repeatProblem({ ...base, endsOn: 'soon' })).toMatch(/not a date/);
-    expect(repeatProblem({ ...base, endsOn: '2026-09-20' })).toMatch(/before the first/);
+    expect(repeatProblem({ ...base, time: '24:00' })).toBe('Pick a start time.');
+    expect(repeatProblem({ ...base, startsOn: '21/09/2026' })).toBe('Pick a start date.');
+    expect(repeatProblem({ ...base, endsOn: 'soon' })).toBe('Pick the end date from the calendar.');
+    expect(repeatProblem({ ...base, endsOn: '2026-09-20' })).toBe('The end date is before the start date.');
     // EQUAL IS ALLOWED and is not a mistake: a one-day repeat is how a gym puts
     // a single workshop on the calendar.
     expect(repeatProblem({ ...base, endsOn: '2026-09-21' })).toBeNull();
@@ -490,9 +399,9 @@ describe('the repeat form', () => {
       coachUserId: '',
     };
     expect(repeatProblem(base)).toBeNull();
-    expect(repeatProblem({ ...base, minutes: '4' })).toMatch(/5 minutes to 10 hours/);
-    expect(repeatProblem({ ...base, minutes: '601' })).toMatch(/5 minutes to 10 hours/);
-    expect(repeatProblem({ ...base, minutes: '' })).toMatch(/5 minutes to 10 hours/);
+    expect(repeatProblem({ ...base, minutes: '4' })).toBe('Length must be 5 to 600 minutes.');
+    expect(repeatProblem({ ...base, minutes: '601' })).toBe('Length must be 5 to 600 minutes.');
+    expect(repeatProblem({ ...base, minutes: '' })).toBe('Length must be 5 to 600 minutes.');
     expect(repeatProblem({ ...base, places: '0' })).toMatch(/1 to 500/);
     expect(repeatProblem({ ...base, places: '501' })).toMatch(/1 to 500/);
     expect(repeatProblem({ ...base, places: '' })).toMatch(/1 to 500/);
@@ -503,7 +412,7 @@ describe('the repeat form', () => {
 
 // CHANGING A REPEAT — its three fields and nothing else, which is the rule the
 // server's `.strict()` schema enforces and this side must not break.
-describe('changing a repeat', () => {
+describe('editing a time slot', () => {
   it('fills the form from the saved repeat, never from its class', () => {
     expect(
       repeatEditDraft({
@@ -579,7 +488,7 @@ describe('the archived page', () => {
     // A sentence about paging over a list with nothing hidden is noise.
     expect(archivedPageNote(CLASS_ARCHIVED_PAGE, CLASS_ARCHIVED_PAGE)).toBeNull();
     expect(archivedPageNote(CLASS_ARCHIVED_PAGE, 341)).toBe(
-      `Showing the ${String(CLASS_ARCHIVED_PAGE)} most recently removed, of 341.`,
+      `Showing the ${String(CLASS_ARCHIVED_PAGE)} most recent of 341.`,
     );
     expect(archivedPageNote(undefined, 341)).toBeNull();
   });

@@ -1,4 +1,4 @@
-// THE WEEK TAB, AT THE SCREEN. ROADMAP 17b-ii-b-i; Part 3 §13.3, §13.6.
+// THE CALENDAR TAB, AT THE SCREEN. ROADMAP 17b-ii-b-i, 17b-ii-w; Part 3 §13.3, §13.6.
 //
 // Only the network is mocked. The mutation cases assert what goes on the wire
 // and what the screen draws from the server's answer — never only that a
@@ -150,10 +150,39 @@ const openDay = async (label) => {
   fireEvent.click(await screen.findByRole('button', { name: label }));
 };
 
-describe('the Week tab', () => {
+// THE WORST THING THIS SCREEN'S WORDS COULD DO (17b-ii-w): a class cancelled
+// for its members by a tap that read "Close", or cancelled without a question.
+describe('closing and backing out never change a class', () => {
+  it('Close, the X and Keep it send nothing; only the second Cancel class cancels', async () => {
+    draw();
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel class' }));
+    expect(screen.getByText('Cancel Spin on Tue 22 Sep 2026 at 18:00?')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Keep it' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close this class' }));
+
+    expect(api.changeClassDay).not.toHaveBeenCalled();
+    expect(api.cancelClassDay).not.toHaveBeenCalled();
+    expect(api.restoreClassDay).not.toHaveBeenCalled();
+
+    await openDay('Spin on Tue 22 Sep 2026 at 18:00');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel class' }));
+    expect(api.cancelClassDay).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel class' }));
+    await waitFor(() => expect(api.cancelClassDay).toHaveBeenCalledWith('g1', 'x1'));
+  });
+});
+
+describe('the Calendar tab', () => {
   it('opens from the Classes list, reads the gym s current week, and keeps the tab in the address', async () => {
     draw('/console/iron-house/classes');
-    fireEvent.click(await screen.findByRole('tab', { name: 'Week' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Calendar' }));
     await screen.findByText('21 – 27 Sep 2026');
     expect(api.getClassWeek).toHaveBeenCalledWith('g1', null);
     expect(lastSearch).toBe('?view=week');
@@ -165,21 +194,21 @@ describe('the Week tab', () => {
     expect(screen.getByText('Tue 22 Sep · Today')).toBeTruthy();
     expect(screen.getByText('Sun 27 Sep')).toBeTruthy();
     const tuesday = screen.getByRole('button', { name: 'Spin on Tue 22 Sep 2026 at 18:00' });
-    expect(within(tuesday).getByText('18:00 · 45 min')).toBeTruthy();
+    expect(within(tuesday).getByText('18:00–18:45')).toBeTruthy();
     expect(within(tuesday).getByText('12 places · Dana Okafor')).toBeTruthy();
     const wednesday = screen.getByRole('button', { name: 'Yoga on Wed 23 Sep 2026 at 07:00, cancelled' });
     expect(within(wednesday).getByText('Cancelled')).toBeTruthy();
     expect(within(wednesday).getByText('No limit')).toBeTruthy();
     const friday = screen.getByRole('button', {
-      name: 'Spin on Fri 25 Sep 2026 at 19:30, changed for this day',
+      name: 'Spin on Fri 25 Sep 2026 at 19:30, changed',
     });
-    expect(within(friday).getByText('Changed for this day')).toBeTruthy();
+    expect(within(friday).getByText('Changed')).toBeTruthy();
   });
 
   it('steps between weeks, and never past the last week the server says is written', async () => {
     draw();
     await screen.findByText('21 – 27 Sep 2026');
-    expect(screen.queryByRole('button', { name: 'This week' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Today' })).toBeNull();
 
     api.getClassWeek.mockResolvedValueOnce(
       week({ weekStart: '2026-09-14', sessions: [] }),
@@ -188,7 +217,7 @@ describe('the Week tab', () => {
     await screen.findByText('14 – 20 Sep 2026');
     expect(api.getClassWeek).toHaveBeenLastCalledWith('g1', '2026-09-14');
     expect(screen.getByText('No classes this week.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'This week' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Today' })).toBeTruthy();
 
     api.getClassWeek.mockResolvedValueOnce(week({ weekStart: '2026-11-09', sessions: [] }));
     fireEvent.click(screen.getByRole('button', { name: 'Week after' }));
@@ -216,49 +245,49 @@ describe('the Week tab', () => {
   });
 });
 
-describe('this day only', () => {
-  it('cancelling asks first, sends the date, and then offers to put it back', async () => {
+describe('one class on one date', () => {
+  it('Cancel class asks first, sends the date, and then offers Un-cancel', async () => {
     api.cancelClassDay.mockResolvedValue(
       week({ sessions: [SPIN_MON, { ...SPIN_TUE, status: 'cancelled' }, YOGA_WED, SPIN_FRI] }),
     );
     draw();
     await openDay('Spin on Tue 22 Sep 2026 at 18:00');
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel this day' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel class' }));
     expect(api.cancelClassDay).not.toHaveBeenCalled();
     expect(
       screen.getByText(
-        'Cancel Spin on Tue 22 Sep 2026 at 18:00? It stays on the week crossed out, and you can put it back on.',
+        'Cancel Spin on Tue 22 Sep 2026 at 18:00?',
       ),
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel this day' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel class' }));
     await waitFor(() => expect(api.cancelClassDay).toHaveBeenCalledWith('g1', 'x1'));
-    expect(await screen.findByRole('button', { name: 'Put it back on' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Un-cancel' })).toBeTruthy();
   });
 
-  it('putting a cancelled day back is one tap', async () => {
+  it('Un-cancel is one tap', async () => {
     draw();
     await openDay('Yoga on Wed 23 Sep 2026 at 07:00, cancelled');
-    fireEvent.click(screen.getByRole('button', { name: 'Put it back on' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Un-cancel' }));
     await waitFor(() => expect(api.restoreClassDay).toHaveBeenCalledWith('g1', 'x2'));
-    expect(screen.queryByRole('button', { name: 'Change this day' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
   });
 
-  it('changing a day starts from that day s own numbers and sends all four', async () => {
+  it('Edit starts from that date s own numbers and sends all four', async () => {
     draw();
-    await openDay('Spin on Fri 25 Sep 2026 at 19:30, changed for this day');
-    fireEvent.click(screen.getByRole('button', { name: 'Change this day' }));
+    await openDay('Spin on Fri 25 Sep 2026 at 19:30, changed');
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
     // Kd, at the click-through: "there is no hour" — the boxes now say which is which.
-    expect(screen.getByLabelText('Class start hour').value).toBe('19');
+    expect(screen.getByLabelText('Start time hour').value).toBe('19');
     expect(screen.getByText('Hour')).toBeTruthy();
     expect(screen.getByText('Minute')).toBeTruthy();
-    expect(screen.getByLabelText('How long (minutes)').value).toBe('90');
-    expect(screen.getByLabelText('How many people fit').value).toBe('8');
+    expect(screen.getByLabelText('Length (minutes)').value).toBe('90');
+    expect(screen.getByLabelText('Class size').value).toBe('8');
     expect(screen.getByLabelText('Coach (optional)').value).toBe('u8');
 
-    fireEvent.change(screen.getByLabelText('How many people fit'), { target: { value: '15' } });
+    fireEvent.change(screen.getByLabelText('Class size'), { target: { value: '15' } });
     fireEvent.click(screen.getByLabelText('No limit'));
     fireEvent.change(screen.getByLabelText('Coach (optional)'), { target: { value: '' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save this day' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(api.changeClassDay).toHaveBeenCalled());
     expect(api.changeClassDay).toHaveBeenCalledWith('g1', 'x3', {
       startMinute: 1170,
@@ -271,9 +300,9 @@ describe('this day only', () => {
   it('a class that has already started offers nothing to press', async () => {
     draw();
     await openDay('Spin on Mon 21 Sep 2026 at 18:00');
-    expect(screen.getByText("This class has already started, so it can't be changed.")).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Change this day' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Cancel this day' })).toBeNull();
+    expect(screen.getByText("This class has started, so it can't be changed.")).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Cancel class' })).toBeNull();
   });
 
   it('a gym with no live plan sees its week and nothing to press', async () => {
@@ -282,8 +311,8 @@ describe('this day only', () => {
     });
     draw();
     await openDay('Spin on Tue 22 Sep 2026 at 18:00');
-    expect(screen.queryByRole('button', { name: 'Change this day' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Cancel this day' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Cancel class' })).toBeNull();
   });
 
   it('a refusal says the server s own sentence, and the week is read again', async () => {
@@ -297,14 +326,14 @@ describe('this day only', () => {
     api.getClassWeek.mockResolvedValueOnce(
       week({ sessions: [SPIN_MON, { ...SPIN_TUE, started: true }, YOGA_WED, SPIN_FRI] }),
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel this day' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel this day' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel class' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel class' }));
     expect(await screen.findByText(sentence)).toBeTruthy();
     await waitFor(() => expect(api.getClassWeek).toHaveBeenLastCalledWith('g1', '2026-09-21'));
     expect(
-      await screen.findByText("This class has already started, so it can't be changed."),
+      await screen.findByText("This class has started, so it can't be changed."),
     ).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Cancel this day' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Cancel class' })).toBeNull();
   });
 
   it('coming back to the list with the browser s Back reads the timetable again', async () => {

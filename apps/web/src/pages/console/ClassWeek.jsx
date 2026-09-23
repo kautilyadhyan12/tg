@@ -13,24 +13,21 @@ import {
   dayProblem,
   dayRequest,
   filterWeek,
+  peopleLine,
   sessionName,
-  sessionPeopleLine,
   sessionTag,
   sessionTimeLine,
+  sessionWhenLine,
   weekColumns,
   weekFilterChoices,
   weekLists,
   weekTitle,
 } from './classesView';
 
-// THE WEEK VIEW — the Classes page's Week tab (Part 3 §13.3, §13.6; ROADMAP
-// 17b-ii-b-i). Monday to Sunday in the gym's own calendar: seven columns on a
-// wide screen, a list by day on a phone. Tapping a class opens it, and staff
-// change or cancel THAT DAY only.
-//
-// A day changed on its own keeps what staff gave it when its repeat is changed
-// later; a cancelled day stays on the week crossed out, with "Put it back on".
-// Moving a repeat to another day or time from a date is 17b-ii-b-ii.
+// THE CALENDAR TAB (Part 3 §13.3, §13.6). Monday to Sunday in the gym's own
+// calendar: seven columns on a wide screen, a list by day on a phone. Tapping a
+// class opens it: Edit or Cancel class for that date only, Un-cancel for a
+// cancelled one. Moving a time slot to another day or time is 17b-ii-b-ii.
 
 const EMPTY_FILTER = { classTypeId: '', className: '', coach: '', coachLabel: '' };
 
@@ -41,10 +38,10 @@ function DayForm({ draft, setDraft, staff, clockFormat, saving, onSave, onClose 
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1.5">
         <span className="text-xs uppercase tracking-wider" style={labelStyle}>
-          Starts at
+          Start time
         </span>
         <TimePick
-          label="Class start"
+          label="Start time"
           kind="opens"
           value={draft.time}
           clockFormat={clockFormat}
@@ -53,9 +50,6 @@ function DayForm({ draft, setDraft, staff, clockFormat, saving, onSave, onClose 
         />
       </div>
       <RunFields draft={draft} set={set} staff={staff} disabled={saving} forClass={false} />
-      <p className="text-xs" style={labelStyle}>
-        Only this date changes. Later changes to its repeat leave it as you set it here.
-      </p>
       {problem === null ? null : (
         <p className="text-sm" style={{ color: '#FBBF24' }}>
           {problem}
@@ -74,18 +68,18 @@ function DayForm({ draft, setDraft, staff, clockFormat, saving, onSave, onClose 
           }}
         >
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-          Save this day
+          Save
         </button>
         <button type="button" onClick={onClose} className="text-sm" style={labelStyle}>
-          Don&apos;t change it
+          Close
         </button>
       </div>
     </div>
   );
 }
 
-/** ONE DATE, OPENED. Its actions follow what the server says it is: a started
- *  date has none, a cancelled one can be put back, a running one can be changed
+/** One date, opened. Its actions follow what the server says it is: a started
+ *  class has none, a cancelled one can be un-cancelled, any other can be edited
  *  or cancelled. */
 function DayPanel({ session, clockFormat, staff, locked, busy, onClose, onChange, onCancel, onRestore }) {
   const [mode, setMode] = useState(null);
@@ -102,12 +96,13 @@ function DayPanel({ session, clockFormat, staff, locked, busy, onClose, onChange
             className="text-sm font-medium"
             style={{ color: '#fff', textDecoration: cancelled ? 'line-through' : 'none' }}
           >
-            {name}
+            {session.name}
           </div>
           <div className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.65)' }}>
-            {[sessionTimeLine(session, clockFormat), sessionPeopleLine(session)]
-              .filter((p) => p !== '')
-              .join(' · ')}
+            {sessionWhenLine(session, clockFormat)}
+          </div>
+          <div className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.65)' }}>
+            {peopleLine(session)}
           </div>
           {tag === '' ? null : (
             <div className="text-xs mt-1" style={{ color: cancelled ? '#F2544B' : '#FBBF24' }}>
@@ -115,14 +110,14 @@ function DayPanel({ session, clockFormat, staff, locked, busy, onClose, onChange
             </div>
           )}
         </div>
-        <button type="button" onClick={onClose} aria-label="Close this day" style={labelStyle}>
+        <button type="button" onClick={onClose} aria-label="Close this class" style={labelStyle}>
           <X className="w-4 h-4" />
         </button>
       </div>
 
       {session.started ? (
         <p className="text-sm mt-3" style={labelStyle}>
-          This class has already started, so it can&apos;t be changed.
+          This class has started, so it can&apos;t be changed.
         </p>
       ) : locked ? null : cancelled ? (
         <div className="mt-3">
@@ -134,7 +129,7 @@ function DayPanel({ session, clockFormat, staff, locked, busy, onClose, onChange
             style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F', opacity: busy ? 0.5 : 1 }}
           >
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            Put it back on
+            Un-cancel
           </button>
         </div>
       ) : mode === 'change' ? (
@@ -157,8 +152,8 @@ function DayPanel({ session, clockFormat, staff, locked, busy, onClose, onChange
           {/* It asks first, in place (Kd, 2026-09-22): nothing on this screen
               takes a class off the calendar on one tap. */}
           <ConfirmInline
-            question={`Cancel ${name}? It stays on the week crossed out, and you can put it back on.`}
-            confirmLabel="Cancel this day"
+            question={`Cancel ${name}?`}
+            confirmLabel="Cancel class"
             cancelLabel="Keep it"
             busy={busy}
             onCancel={() => setMode(null)}
@@ -178,7 +173,7 @@ function DayPanel({ session, clockFormat, staff, locked, busy, onClose, onChange
             className="rounded-xl px-4 py-2 text-sm font-medium"
             style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
           >
-            Change this day
+            Edit
           </button>
           <button
             type="button"
@@ -186,7 +181,7 @@ function DayPanel({ session, clockFormat, staff, locked, busy, onClose, onChange
             className="text-sm"
             style={{ color: 'rgba(255,255,255,0.65)' }}
           >
-            Cancel this day
+            Cancel class
           </button>
         </div>
       )}
@@ -271,84 +266,86 @@ export default function ClassWeek({ gymId, staff, locked }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => goTo(addDays(lists.weekStart, -7))}
-          disabled={loading || lists.weekStart === ''}
-          aria-label="Week before"
-          className="rounded-lg p-2"
-          style={{ background: 'rgba(255,255,255,0.04)', color: '#fff' }}
-        >
-          <ChevronLeft className="w-4 h-4" />
-        </button>
-        <div className="text-sm font-medium min-w-[11rem] text-center" style={{ color: '#fff' }}>
-          {weekTitle(lists.weekStart)}
-        </div>
-        <button
-          type="button"
-          onClick={() => goTo(addDays(lists.weekStart, 7))}
-          disabled={loading || !canGoForward(lists.weekStart, lists.lastWeekStart)}
-          aria-label="Week after"
-          className="rounded-lg p-2"
-          style={{
-            background: 'rgba(255,255,255,0.04)',
-            color: '#fff',
-            opacity: canGoForward(lists.weekStart, lists.lastWeekStart) ? 1 : 0.35,
-          }}
-        >
-          <ChevronRight className="w-4 h-4" />
-        </button>
-        {thisWeek || lists.weekStart === '' ? null : (
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => goTo(null)}
-            className="text-sm ml-1"
-            style={{ color: '#FF8A1F' }}
+            onClick={() => goTo(addDays(lists.weekStart, -7))}
+            disabled={loading || lists.weekStart === ''}
+            aria-label="Week before"
+            className="rounded-lg p-2"
+            style={{ background: 'rgba(255,255,255,0.04)', color: '#fff' }}
           >
-            This week
+            <ChevronLeft className="w-4 h-4" />
           </button>
+          <div className="text-sm font-medium min-w-[11rem] text-center" style={{ color: '#fff' }}>
+            {weekTitle(lists.weekStart)}
+          </div>
+          <button
+            type="button"
+            onClick={() => goTo(addDays(lists.weekStart, 7))}
+            disabled={loading || !canGoForward(lists.weekStart, lists.lastWeekStart)}
+            aria-label="Week after"
+            className="rounded-lg p-2"
+            style={{
+              background: 'rgba(255,255,255,0.04)',
+              color: '#fff',
+              opacity: canGoForward(lists.weekStart, lists.lastWeekStart) ? 1 : 0.35,
+            }}
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+          {thisWeek || lists.weekStart === '' ? null : (
+            <button
+              type="button"
+              onClick={() => goTo(null)}
+              className="text-sm ml-1"
+              style={{ color: '#FF8A1F' }}
+            >
+              Today
+            </button>
+          )}
+        </div>
+
+        {lists.sessions.length === 0 && filter === EMPTY_FILTER ? null : (
+          <div className="grid grid-cols-2 gap-2 lg:flex lg:ml-auto">
+            <select
+              aria-label="Show which class"
+              value={filter.classTypeId}
+              onChange={(e) => {
+                const choice = choices.classes.find((c) => c.value === e.target.value);
+                setFilter({ ...filter, classTypeId: e.target.value, className: choice?.label ?? '' });
+              }}
+              className="rounded-lg px-3 py-2 text-sm"
+              style={inputStyle}
+            >
+              <option value="">All classes</option>
+              {choices.classes.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="Show which coach"
+              value={filter.coach}
+              onChange={(e) => {
+                const choice = choices.coaches.find((c) => c.value === e.target.value);
+                setFilter({ ...filter, coach: e.target.value, coachLabel: choice?.label ?? '' });
+              }}
+              className="rounded-lg px-3 py-2 text-sm"
+              style={inputStyle}
+            >
+              <option value="">All coaches</option>
+              {choices.coaches.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </div>
         )}
       </div>
-
-      {lists.sessions.length === 0 && filter === EMPTY_FILTER ? null : (
-        <div className="flex flex-wrap gap-3">
-          <select
-            aria-label="Show which class"
-            value={filter.classTypeId}
-            onChange={(e) => {
-              const choice = choices.classes.find((c) => c.value === e.target.value);
-              setFilter({ ...filter, classTypeId: e.target.value, className: choice?.label ?? '' });
-            }}
-            className="rounded-lg px-3 py-2 text-sm"
-            style={inputStyle}
-          >
-            <option value="">All classes</option>
-            {choices.classes.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.label}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Show which coach"
-            value={filter.coach}
-            onChange={(e) => {
-              const choice = choices.coaches.find((c) => c.value === e.target.value);
-              setFilter({ ...filter, coach: e.target.value, coachLabel: choice?.label ?? '' });
-            }}
-            className="rounded-lg px-3 py-2 text-sm"
-            style={inputStyle}
-          >
-            <option value="">All coaches</option>
-            {choices.coaches.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
 
       {actionError === null ? null : <ConsoleFailed message={actionError} />}
       {loading ? <ConsoleLoading label="Loading this week…" /> : null}
@@ -360,7 +357,7 @@ export default function ClassWeek({ gymId, staff, locked }) {
         <>
           {shown.length === 0 ? (
             <p className="text-sm" style={labelStyle}>
-              {lists.sessions.length === 0 ? 'No classes this week.' : 'Nothing this week matches those filters.'}
+              {lists.sessions.length === 0 ? 'No classes this week.' : 'No classes match.'}
             </p>
           ) : null}
           {/* One list of days: a column each on a wide screen, stacked on a phone.
@@ -415,7 +412,7 @@ export default function ClassWeek({ gymId, staff, locked }) {
                         {s.name}
                       </div>
                       <div className="text-xs truncate" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                        {sessionPeopleLine(s)}
+                        {peopleLine(s)}
                       </div>
                       {tag === '' ? null : (
                         <div className="text-xs mt-0.5" style={{ color: cancelled ? '#F2544B' : '#FBBF24' }}>
