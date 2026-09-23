@@ -1782,13 +1782,9 @@ export async function setEntryFormer(tx: TransactionSql, gymId: string, entryId:
   return rows.length === 1;
 }
 
-/** THE TABLES THAT POINT AT A RECORD, and what joining or deleting one does to them.
- *  None does yet; each later job that adds one (invitations, visits, memberships)
- *  adds it here, and `db.memberListEntryRefs.test.ts` fails until it does. */
-export const ENTRY_REFERENCES: readonly { table: string; column: string }[] = [];
-
 /** A record deleted for good: a former one deleted, or the one not kept when two
- *  are joined. */
+ *  are joined. No table points at a record yet; the last test in
+ *  `memberList.byHand.routes.test.ts` fails the day a foreign key does. */
 export async function deleteEntry(tx: TransactionSql, gymId: string, entryId: string): Promise<boolean> {
   const rows = await tx<{ id: string }[]>`
     DELETE FROM gym_member_list_entries
@@ -1915,6 +1911,27 @@ export async function closeMemberships(
       AND NOT EXISTS (SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)
     RETURNING m.id, m.user_id`;
   return rows.map((row) => ({ membershipId: row.id, userId: row.user_id }));
+}
+
+/** How many people an earlier "Remove all" of this exact set removed, since `since`, or
+ *  null when there was none: the summary audit row keeps the set's digest. */
+export async function unlistedRemovalByDigest(
+  tx: TransactionSql,
+  gymId: string,
+  group: string,
+  digest: string,
+  since: Date,
+): Promise<number | null> {
+  const rows = await tx<{ removed: string | null }[]>`
+    SELECT meta->>'removed' AS removed
+    FROM audit_log
+    WHERE gym_id = ${gymId} AND at >= ${since}
+      AND action = 'org.member_list_unlisted_removed'
+      AND meta->>'group' = ${group} AND meta->>'digest' = ${digest}
+    ORDER BY at DESC
+    LIMIT 1`;
+  const removed = rows[0]?.removed;
+  return removed === undefined || removed === null ? null : Number(removed);
 }
 
 /** One `org.member_removed` audit row per closed membership, as a single removal

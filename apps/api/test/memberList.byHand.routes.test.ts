@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
-import { ENTRY_REFERENCES } from "../src/modules/orgs/memberList/repo.js";
+import { closeMemberships } from "../src/modules/orgs/memberList/repo.js";
 import {
   memberListEntryDetailSchema,
   memberListEntryWrittenSchema,
@@ -283,7 +283,7 @@ d("member list: keeping it by hand (real Postgres)", () => {
 
       const first = await removeAll(gym, owner, neverPage);
       expect(first.statusCode).toBe(200);
-      expect(JSON.parse(first.body)).toEqual({ removed: { group: "never_listed", removed: 2 } });
+      expect(JSON.parse(first.body)).toEqual({ removed: { group: "never_listed", removed: 2, alreadyRemoved: false } });
       const second = await removeAll(gym, owner, droppedPage);
       expect(second.statusCode).toBe(200);
 
@@ -378,7 +378,11 @@ d("member list: keeping it by hand (real Postgres)", () => {
       expect(page.total).toBe(3);
 
       const [a, b] = await Promise.all([removeAll(gym, owner, page), removeAll(gym, manager, page)]);
-      expect([a.statusCode, b.statusCode].sort()).toEqual([200, 409]);
+      expect([a.statusCode, b.statusCode]).toEqual([200, 200]);
+      // One press removed them; the other is told they were already removed.
+      const flags = [a, b].map((res) => (JSON.parse(res.body) as { removed: { removed: number; alreadyRemoved: boolean } }).removed);
+      expect(flags.map((f) => f.alreadyRemoved).sort()).toEqual([false, true]);
+      expect(flags.map((f) => f.removed)).toEqual([3, 3]);
       const audits = await sql<{ n: number }[]>`
         SELECT count(*)::int AS n FROM audit_log WHERE gym_id = ${gym} AND action = 'org.member_removed'`;
       expect(audits[0]?.n).toBe(3);
@@ -390,6 +394,83 @@ d("member list: keeping it by hand (real Postgres)", () => {
   // =========================================================================
   // TYPING PEOPLE IN, CHANGING THEM, TAKING THEM OFF
   // =========================================================================
+
+  it(
+    "joining two records never silently takes an app member off the list: refused without the tick, kept the other way round, and only removable once the gym has said so",
+    async () => {
+      const owner = await makeUser("unlist-owner");
+      const org = await makeOrg(owner, "Unlist Gym");
+      const gym = org.org.id;
+      const ada = await member("unlist-ada", org, owner);
+      // Two records of one person: one reaches Ada by her address, one has only a phone.
+      const byEmail = await typeIn(gym, owner, { fullName: "Ada Lovelace", email: ada.email });
+      const byPhone = await typeIn(gym, owner, { fullName: "Ada L", phone: "07911 000301" });
+      expect(byEmail.entry.inApp).toBe(true);
+      const before = await listState(gym);
+
+      // Keeping the phone record would leave Ada reached by nothing.
+      const refused = await post(`${entryUrl(gym, byEmail.entry.entryId)}/merge`, { keepEntryId: byPhone.entry.entryId }, owner.cookies);
+      expect(refused.statusCode).toBe(409);
+      expect(JSON.parse(refused.body)).toMatchObject({ error: "leaves_list", members: 1 });
+      expect(await listState(gym)).toEqual(before);
+      expect((await unlisted(gym, owner, "no_longer_listed")).total).toBe(0);
+
+      // Kept the other way round, nobody is left out.
+      const kept = await post(`${entryUrl(gym, byPhone.entry.entryId)}/merge`, { keepEntryId: byEmail.entry.entryId }, owner.cookies);
+      expect(kept.statusCode).toBe(200);
+      // The kept record's own identity is never changed, so it keeps no phone.
+      expect(written(kept).entry).toMatchObject({ inApp: true, email: ada.email, phone: null });
+      expect((await unlisted(gym, owner, "no_longer_listed")).total).toBe(0);
+
+      // Changing the address away from Ada's asks too; with the tick she is off the list.
+      const change = await patch(entryUrl(gym, byEmail.entry.entryId), { email: "mhand-t-unlist-other@example.com" }, owner.cookies);
+      expect(change.statusCode).toBe(409);
+      expect(JSON.parse(change.body)).toMatchObject({ error: "leaves_list", members: 1 });
+      const ticked = await patch(entryUrl(gym, byEmail.entry.entryId), { email: "mhand-t-unlist-other@example.com", acknowledgeLeavesList: true }, owner.cookies);
+      expect(ticked.statusCode).toBe(200);
+      expect((await unlisted(gym, owner, "no_longer_listed")).people.map((p) => p.userId)).toEqual([ada.userId]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "Remove all pressed again after it worked says the people were already removed, and removes nobody twice",
+    async () => {
+      const owner = await makeUser("again-owner");
+      const org = await makeOrg(owner, "Again Gym");
+      const gym = org.org.id;
+      await typeIn(gym, owner, { fullName: "Listed", email: "mhand-t-again-listed@example.com" });
+      await member("again-1", org, owner);
+      await member("again-2", org, owner);
+      const page = await unlisted(gym, owner, "never_listed");
+      expect((await removeAll(gym, owner, page)).statusCode).toBe(200);
+      const again = await removeAll(gym, owner, page);
+      expect(again.statusCode).toBe(200);
+      expect(JSON.parse(again.body)).toEqual({ removed: { group: "never_listed", removed: 2, alreadyRemoved: true } });
+      const audits = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM audit_log WHERE gym_id = ${gym} AND action = 'org.member_removed'`;
+      expect(audits[0]?.n).toBe(2);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "the removal's own write refuses the owner, staff and free places even if it is handed them",
+    async () => {
+      const owner = await makeUser("guard-owner");
+      const org = await makeOrg(owner, "Guard Gym");
+      const gym = org.org.id;
+      const trainer = await makeUser("guard-trainer");
+      await appoint(trainer, org, owner, "trainer");
+      const free = await member("guard-free", org, owner);
+      await sql`UPDATE gym_members SET complimentary = true WHERE gym_id = ${gym} AND user_id = ${free.userId}`;
+      const plain = await member("guard-plain", org, owner);
+      const closed = await sql.begin((tx) => closeMemberships(tx, gym, [owner.userId, trainer.userId, free.userId, plain.userId], new Date()));
+      expect(closed.map((c) => c.userId)).toEqual([plain.userId]);
+      expect((await liveMembers(gym)).sort()).toEqual([owner.userId, trainer.userId, free.userId].sort());
+    },
+    TEST_TIMEOUT_MS,
+  );
 
   it(
     "Add member adds a new person and moves the list on; the same person again is already on the list; taken off and typed again, the same record comes back",
@@ -449,6 +530,9 @@ d("member list: keeping it by hand (real Postgres)", () => {
         { fullName: "Card In Status", email: "mhand-t-card-1@example.com", status: "4111 1111 1111 1111" },
         { fullName: "Card In Number", email: "mhand-t-card-2@example.com", memberNumber: "5555555555554444" },
         { fullName: "3782 822463 10005", email: "mhand-t-card-3@example.com" },
+        // No-break spaces, as text copied from an email carries them.
+        { fullName: "Ada 3782 822463 10005", email: "mhand-t-card-4@example.com" },
+        { fullName: "Ada", email: "378282246310005@example.com" },
       ]) {
         const res = await post(entriesUrl(gym), body, owner.cookies);
         expect(res.statusCode).toBe(400);
@@ -462,8 +546,14 @@ d("member list: keeping it by hand (real Postgres)", () => {
       expect(await listState(gym)).toEqual(before);
       const cells = await sql<{ n: number }[]>`
         SELECT count(*)::int AS n FROM gym_member_list_entries
-        WHERE gym_id = ${gym} AND (status LIKE '%4111%' OR member_number LIKE '%5555%' OR full_name LIKE '%3782%' OR payment_status LIKE '%6011%')`;
+        WHERE gym_id = ${gym} AND (status LIKE '%4111%' OR member_number LIKE '%5555%' OR full_name LIKE '%3782%'
+          OR payment_status LIKE '%6011%' OR email::text LIKE '%3782%')`;
       expect(cells[0]?.n).toBe(0);
+
+      // A German mobile written the international way is a phone, whatever its digits.
+      const mobile = await post(entriesUrl(gym), { fullName: "Mobile Person", phone: "+4915112345678" }, owner.cookies);
+      expect(mobile.statusCode).toBe(201);
+      expect(written(mobile).entry.phone).toBe("+4915112345678");
     },
     TEST_TIMEOUT_MS,
   );
@@ -557,6 +647,14 @@ d("member list: keeping it by hand (real Postgres)", () => {
       const renamed = await patch(entryUrl(gym, a.entry.entryId), { fullName: "Patricia Doe" }, owner.cookies);
       expect(written(renamed)).toMatchObject({ outcome: "changed", entry: { fullName: "Patricia Doe", handEdited: [] } });
       expect((await listState(gym)).version).toBe((before.version ?? 0) + 1);
+
+      // Landing on a FORMER record's details says so, and never "already on your list"
+      // about somebody the list does not show.
+      expect((await del(entryUrl(gym, b.entry.entryId), owner.cookies)).statusCode).toBe(200);
+      const onFormer = await patch(entryUrl(gym, a.entry.entryId), { fullName: "Pat Doe", email: "mhand-t-pat2@example.com" }, owner.cookies);
+      expect(onFormer.statusCode).toBe(409);
+      expect(errorOf(onFormer)).toMatchObject({ error: "former_record", entryId: b.entry.entryId });
+      expect(errorOf(onFormer).message).not.toMatch(/already on your list/i);
     },
     TEST_TIMEOUT_MS,
   );
@@ -600,6 +698,15 @@ d("member list: keeping it by hand (real Postgres)", () => {
       expect(entry.members).toEqual([
         { userId: mo.userId, displayName: "Hand page-mo", joinedAt: row.joined_at.toISOString(), visits: 2, lastVisitOn: "2099-01-03" },
       ]);
+
+      // A household: a second record on Mo's address. §9.7 matches Mo to the FIRST, so
+      // the second record's page shows nobody in the app and none of Mo's visits.
+      const second = await typeIn(gym, owner, { fullName: "Sam Khan", email: mo.email });
+      const secondPage = await get(entryUrl(gym, second.entry.entryId), owner.cookies);
+      expect(memberListEntryDetailSchema.parse((JSON.parse(secondPage.body) as { entry: unknown }).entry)).toMatchObject({
+        inApp: false,
+        members: [],
+      });
     },
     TEST_TIMEOUT_MS,
   );
@@ -876,7 +983,12 @@ d("member list: keeping it by hand (real Postgres)", () => {
   // WHAT POINTS AT A RECORD
   // =========================================================================
 
-  it("every table that points at a list record is one that joining and deleting records know about", async () => {
+  // Joining two records deletes one, and so does deleting a former record. Nothing points
+  // at a record yet, so neither has anything to move. The day a migration adds a foreign
+  // key to a record (invitations, visits, memberships), this fails: that job must make
+  // the join move those rows onto the kept record, decide what deleting does to them,
+  // and drive both with a referencing row.
+  it("no table points at a list record yet, so joining and deleting one move nothing", async () => {
     const refs = await sql<{ table: string; column: string }[]>`
       SELECT tc.table_name AS table, kcu.column_name AS column
       FROM information_schema.table_constraints tc
@@ -886,6 +998,6 @@ d("member list: keeping it by hand (real Postgres)", () => {
         ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
       WHERE tc.constraint_type = 'FOREIGN KEY' AND ccu.table_name = 'gym_member_list_entries'
       ORDER BY 1, 2`;
-    expect(refs.map((r) => ({ table: r.table, column: r.column }))).toEqual([...ENTRY_REFERENCES]);
+    expect(refs.map((r) => `${r.table}.${r.column}`)).toEqual([]);
   });
 });

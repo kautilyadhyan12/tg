@@ -128,15 +128,19 @@ function editedBetween(before: EntryValues, after: EntryValues): string[] {
 export function applyTyped(stored: EntryValues, typed: MemberListEntryPatch, context: TypedContext): Applied {
   const next: EntryValues = { ...stored, extra: { ...stored.extra } };
 
+  // Every field is tidied before it is asked the card question, so a card written with
+  // no-break spaces, full-width digits or zero-width joiners is seen as one.
   if (typed.fullName !== undefined) {
-    if (holdsCard(typed.fullName)) return refuseCard(MEMBER_LIST_FIELD_WORDS.fullName);
-    next.fullName = cut(tidyCell(typed.fullName), MEMBER_LIST_MAX_NAME_CHARS);
+    const name = tidyCell(typed.fullName);
+    if (holdsCard(name)) return refuseCard(MEMBER_LIST_FIELD_WORDS.fullName);
+    next.fullName = cut(name, MEMBER_LIST_MAX_NAME_CHARS);
   }
 
   if (typed.email !== undefined) {
     const text = tidyCell(typed.email ?? "");
     if (text === "") next.email = null;
     else {
+      if (holdsCard(text)) return refuseCard(MEMBER_LIST_FIELD_WORDS.email);
       const parsed = authEmailSchema.safeParse(text);
       if (!parsed.success) return refuse("bad_email");
       next.email = parsed.data;

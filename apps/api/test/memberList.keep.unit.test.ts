@@ -203,6 +203,10 @@ describe("the worst thing: what is written is checked against §11.2 again", () 
     // code grouped 4-2-2-2-3 as no card ever is.
     ["membership years that pass Luhn", "renewed 2023 2024 2025 2026"],
     ["a dashed code that passes Luhn", "kit 6955-17-19-43-102"],
+    // International mobiles with no spaces whose digits pass Luhn and start with a 4
+    // (review of 3a-iv, High 3): a card is never written after a "+".
+    ["a German mobile, the international way", "emergency +4915100015838"],
+    ["an Austrian mobile, the international way", "+4366401234563 (mum)"],
   ])("…and an ordinary note is left exactly as the gym wrote it — %s", (_label, cell) => {
     const written = extraForWriting([cell], [kept("notes", "Notes", 0)]);
     expect(written.document["notes"]).toBe(cell);

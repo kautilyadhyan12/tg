@@ -97,6 +97,34 @@ async function typedContext(tx: TransactionSql, gymId: string, country: string |
   return { country: readCountry(country), fields: new Map(fields.map((field) => [field.key, field.label])) };
 }
 
+/** Thrown inside a write's transaction to roll it back: the write would leave app
+ *  members reached by no current record, and the request carried no tick. */
+class LeavesList extends Error {
+  constructor(
+    readonly members: number,
+    readonly by: "change" | "merge",
+  ) {
+    super("leaves_list");
+  }
+}
+
+/** The paid-seat members §9.7 matches to this record now: the people who read "on your
+ *  list" because of it. A former record reaches nobody. */
+async function membersOf(tx: TransactionSql, gymId: string, entry: repo.StoredEntry): Promise<string[]> {
+  if (entry.formerAt !== null) return [];
+  const reached = await repo.membersAgainstList(tx, gymId, { email: entry.values.email, phone: entry.values.phone });
+  return reached.filter((member) => member.seatCounted && member.entryId === entry.id).map((member) => member.userId);
+}
+
+/** How many of `userIds` no current record reaches any more, asked after the write and
+ *  inside the same transaction, by the same match every read uses. */
+async function leftOff(tx: TransactionSql, gymId: string, contact: EntryValues, userIds: readonly string[]): Promise<number> {
+  if (userIds.length === 0) return 0;
+  const after = await repo.membersAgainstList(tx, gymId, { email: contact.email, phone: contact.phone });
+  const listed = new Set(after.filter((member) => member.onList).map((member) => member.userId));
+  return userIds.filter((userId) => !listed.has(userId)).length;
+}
+
 /** The contacts of every record that is current, before or after a change. */
 const currentContacts = (...records: { values: EntryValues; current: boolean }[]) =>
   records.filter((record) => record.current).map((record) => ({ email: record.values.email, phone: record.values.phone }));
@@ -117,9 +145,22 @@ export async function readEntry(
 
 export type WriteAnswer =
   | { kind: "written"; status: 200 | 201; written: MemberListEntryWritten }
-  /** The change would make this record the same person as another one. */
-  | { kind: "already_on_list"; entryId: string }
+  /** The change would make this record the same person as another one, current or
+   *  former. */
+  | { kind: "already_on_list"; entryId: string; former: boolean }
+  /** The write would leave this many app members reached by no record. */
+  | { kind: "leaves_list"; members: number; by: "change" | "merge" }
   | { kind: "rate_limited" };
+
+/** A write's transaction, with a `LeavesList` refusal turned into its answer. */
+async function guarded<T>(run: () => Promise<T>): Promise<T | { kind: "leaves_list"; members: number; by: "change" | "merge" }> {
+  try {
+    return await run();
+  } catch (err) {
+    if (err instanceof LeavesList) return { kind: "leaves_list", members: err.members, by: err.by };
+    throw err;
+  }
+}
 
 interface Done {
   outcome: MemberListEntryOutcome;
@@ -217,7 +258,7 @@ export async function changeEntry(
   const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return { kind: "rate_limited" };
   const at = deps.now();
-  const done = await deps.sql.begin(async (tx): Promise<Done | { clash: string }> => {
+  const done = await guarded(() => deps.sql.begin(async (tx): Promise<Done | { clash: string; former: boolean }> => {
     await repo.lockGym(tx, gymId);
     const stored = await repo.entryFor(tx, gymId, entryId);
     if (stored === null) throw notFound();
@@ -229,10 +270,15 @@ export async function changeEntry(
     const key = identityKey(applied.values);
     if (key !== stored.identityKey) {
       const holder = await repo.entryHolding(tx, gymId, key);
-      if (holder !== null && holder.id !== entryId) return { clash: holder.id };
+      if (holder !== null && holder.id !== entryId) return { clash: holder.id, former: holder.former };
     }
+    // Only the email and the phone decide who a record reaches (§9.7).
+    const contactMoved = applied.identityFields.includes("email") || applied.identityFields.includes("phone");
+    const reached = contactMoved ? await membersOf(tx, gymId, stored) : [];
     const handEdited = [...new Set([...stored.handEdited, ...applied.edited])].slice(0, MEMBER_LIST_MAX_EDITED_FIELDS);
     await repo.writeEntry(tx, gymId, entryId, { values: applied.values, identityKey: key, handEdited, formerAt: stored.formerAt });
+    const lost = await leftOff(tx, gymId, stored.values, reached);
+    if (lost > 0 && patch.acknowledgeLeavesList !== true) throw new LeavesList(lost, "change");
     const current = stored.formerAt === null;
     await repo.stampListedByContact(
       tx,
@@ -247,11 +293,12 @@ export async function changeEntry(
       action: "org.member_list_entry_changed",
       targetType: "member_list_entry",
       targetId: entryId,
-      meta: { fields: [...applied.identityFields, ...applied.edited] },
+      meta: { fields: [...applied.identityFields, ...applied.edited], ...(lost > 0 ? { leftOffList: String(lost) } : {}) },
     });
     return { outcome: "changed", entryId, version };
-  });
-  if ("clash" in done) return { kind: "already_on_list", entryId: done.clash };
+  }));
+  if ("kind" in done) return done;
+  if ("clash" in done) return { kind: "already_on_list", entryId: done.clash, former: done.former };
   return await finish(deps, gymId, done);
 }
 
@@ -349,16 +396,20 @@ export async function mergeEntries(
   gymId: string,
   goneId: string,
   keepId: string,
+  acknowledgeLeavesList: boolean,
   limit: () => Promise<boolean>,
 ): Promise<WriteAnswer> {
   await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   if (goneId === keepId) throw new OrgsError(400, "merge_same", MEMBER_LIST_BY_HAND_WORDS.merge_same);
   if (!(await limit())) return { kind: "rate_limited" };
   const at = deps.now();
-  const done = await deps.sql.begin(async (tx): Promise<Done> => {
+  const done = await guarded(() => deps.sql.begin(async (tx): Promise<Done> => {
     await repo.lockGym(tx, gymId);
     const [gone, keep] = await Promise.all([repo.entryFor(tx, gymId, goneId), repo.entryFor(tx, gymId, keepId)]);
     if (gone === null || keep === null) throw notFound();
+    // The kept record keeps its own address and phone, so a member only the other
+    // record reaches would be left off the list; asked after the write, below.
+    const reached = await membersOf(tx, gymId, gone);
     const { values, filled } = mergeValues(keep.values, gone.values);
     const current = keep.formerAt === null || gone.formerAt === null;
     await repo.writeEntry(tx, gymId, keepId, {
@@ -367,9 +418,11 @@ export async function mergeEntries(
       handEdited: keep.handEdited,
       formerAt: current ? null : keep.formerAt,
     });
-    // Nothing points at a record yet (`repo.ENTRY_REFERENCES`); a table that does is
-    // moved onto the kept record here, before the other is deleted.
+    // Nothing points at a record yet; a table that does is moved onto the kept record
+    // here, before the other is deleted (the reference test fails until it is).
     await repo.deleteEntry(tx, gymId, goneId);
+    const lost = await leftOff(tx, gymId, gone.values, reached);
+    if (lost > 0 && !acknowledgeLeavesList) throw new LeavesList(lost, "merge");
     await repo.stampListedByContact(
       tx,
       gymId,
@@ -383,10 +436,11 @@ export async function mergeEntries(
       action: "org.member_list_entries_merged",
       targetType: "member_list_entry",
       targetId: keepId,
-      meta: { mergedEntryId: goneId, filled },
+      meta: { mergedEntryId: goneId, filled, ...(lost > 0 ? { leftOffList: String(lost) } : {}) },
     });
     return { outcome: "merged", entryId: keepId, version };
-  });
+  }));
+  if ("kind" in done) return done;
   return await finish(deps, gymId, done);
 }
 
@@ -470,8 +524,11 @@ export async function readUnlisted(
   };
 }
 
+/** How long the same press, sent again, is recognised as one already applied. */
+const REMOVAL_REPLAY_MS = 24 * 60 * 60 * 1000;
+
 export type RemoveAnswer =
-  | { kind: "removed"; group: MemberListUnlistedGroup; removed: number }
+  | { kind: "removed"; group: MemberListUnlistedGroup; removed: number; alreadyRemoved: boolean }
   | { kind: "list_changed"; version: number; total: number; digest: string }
   | { kind: "large_change"; removing: number; of: number }
   | { kind: "rate_limited" };
@@ -501,6 +558,10 @@ export async function removeUnlisted(
     const ids = people.map((person) => person.userId);
     const digest = unlistedDigest(gymId, input.group, ids);
     if (version !== input.version || ids.length !== input.expectedCount || digest !== input.digest) {
+      // The same press again (a retry, or the second of two staff): those people were
+      // removed by it, so say so rather than "nobody was removed".
+      const earlier = await repo.unlistedRemovalByDigest(tx, gymId, input.group, input.digest, new Date(at.getTime() - REMOVAL_REPLAY_MS));
+      if (earlier !== null) return { kind: "removed", group: input.group, removed: earlier, alreadyRemoved: true };
       return { kind: "list_changed", version, total: ids.length, digest };
     }
     const seats = members.filter((member) => member.seatCounted).length;
@@ -520,13 +581,14 @@ export async function removeUnlisted(
       action: "org.member_list_unlisted_removed",
       targetType: "member_list",
       targetId: gymId,
-      meta: { group: input.group, removed: String(closed.length), version: String(version) },
+      // The digest names the set, which is how the same press sent again is recognised.
+      meta: { group: input.group, removed: String(closed.length), version: String(version), digest },
     });
     removedUsers.push(...closed.map((row) => row.userId));
-    return { kind: "removed", group: input.group, removed: closed.length };
+    return { kind: "removed", group: input.group, removed: closed.length, alreadyRemoved: false };
   });
 
-  if (answer.kind === "removed" && removedUsers.length > 0) {
+  if (answer.kind === "removed" && !answer.alreadyRemoved && removedUsers.length > 0) {
     // After the commit, as a single removal does. A failed bust leaves the cached
     // answer to expire on its own (60 s), so it is warned about, never raised.
     const results = await Promise.allSettled(removedUsers.map((member) => bustEntitlements(deps.redis, member)));

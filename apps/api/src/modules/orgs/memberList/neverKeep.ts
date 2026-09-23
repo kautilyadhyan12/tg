@@ -125,11 +125,16 @@ const isCardNumber = (digits: string): boolean => issuerPrefix(digits) && looksL
  *  6 and a last group of 1–6, with the same separator throughout and 13–19 digits in all
  *  (4-4-4-4, 4-6-5, 4-6-4, 4-4-4-1, 4-4-4-4-3). The candidate must also carry an issuer
  *  prefix and pass Luhn. Linear in the length of the cell; the rest of the text,
- *  separators included, is left exactly as written. */
+ *  separators included, is left exactly as written.
+ *
+ *  A run straight after a "+" is an international phone number and is left alone: a
+ *  card is never written that way, and a mobile such as +49 151… with no spaces has
+ *  a card's leading 4 and passes Luhn about one time in ten. */
 export function withoutCardNumbers(text: string): { text: string; removed: number } {
   if (text.length < 13) return { text, removed: 0 };
   let removed = 0;
-  const out = text.replace(DIGIT_RUN, (run) => {
+  const out = text.replace(DIGIT_RUN, (run: string, at: number) => {
+    if (at > 0 && text[at - 1] === "+") return run;
     const groups = [...run.matchAll(DIGIT_GROUP)].map((m) => ({ at: m.index, digits: m[0] }));
     let result = "";
     let copied = 0;

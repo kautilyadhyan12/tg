@@ -167,6 +167,17 @@ describe("a typed phone number, in each market's own way of writing it", () => {
   it.each(["hello", "12", "+44 7911 1234567890123"])("%s is refused as a phone number", (raw) => {
     expect(refusalOf({ phone: raw, email: "a@x.example" })).toBe("bad_phone");
   });
+
+  // Mobiles written the international way with no spaces, whose digits happen to pass
+  // the card check digit and start with a card's 4 (review round one, High 3).
+  it.each([
+    [GB, "+4915100015838"],
+    [GB, "+4915112345678"],
+    [GB, "+4366401234563"],
+    [GB, "+4366401234571"],
+  ])("%# the mobile %s is kept, never read as a card", (context, raw) => {
+    expect(valuesOf({ phone: raw }, context).phone).toBe(raw);
+  });
 });
 
 describe("a typed email address", () => {
@@ -191,6 +202,17 @@ describe("a card number typed into any field is refused (§11.2)", () => {
     [{ membershipType: "6011 1111 1111 1117" }, "membership type"],
     [{ paymentStatus: "Visa 4111111111111111" }, "payment status"],
     [{ extra: { notes: "card on file 5555-5555-5555-4444" } }, "Notes"],
+    // Copied from an email or a web page: no-break spaces, full-width digits, zero-width
+    // joiners (review round one, High 2). The field is tidied before it is asked.
+    [{ fullName: "Ada 4111 1111 1111 1111" }, "name"],
+    [{ fullName: "Ada ４１１１１１１１１１１１１１１１" }, "name"],
+    [{ fullName: "Ada 4111‍1111‍1111‍1111" }, "name"],
+    [{ status: "4111 1111 1111 1111" }, "status"],
+    [{ extra: { notes: "card 4111 1111 1111 1111" } }, "Notes"],
+    // A card number as the local part of an address (review round one, Low 1).
+    [{ fullName: "Ada", email: "4111111111111111@example.com" }, "email address"],
+    // A card typed into the phone box, which the phone reader cannot read.
+    [{ phone: "4111 1111 1111 1111" }, "phone number"],
   ] as const)("%j is refused, naming the %s", (patch, field) => {
     const out = typed({ email: "a@x.example", ...patch });
     expect(out.ok).toBe(false);

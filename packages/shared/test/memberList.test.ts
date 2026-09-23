@@ -56,6 +56,7 @@ import {
   memberListEntryWrittenSchema,
   memberListMergeRequestSchema,
   memberListRemoveUnlistedRequestSchema,
+  memberListRemovedSchema,
   memberListUnlistedPageSchema,
   memberListUnlistedQuerySchema,
 } from "../src/memberList.js";
@@ -825,6 +826,14 @@ describe("keeping the list by hand (3a-iv's own shapes)", () => {
     expect(memberListEntryPatchSchema.safeParse({}).success).toBe(false);
     expect(memberListEntryPatchSchema.safeParse({ phone: null }).success).toBe(true);
     expect(memberListEntryPatchSchema.safeParse({ fullName: null }).success).toBe(false);
+    // The tick alone changes nothing, so it is not a change.
+    expect(memberListEntryPatchSchema.safeParse({ acknowledgeLeavesList: true }).success).toBe(false);
+    expect(memberListEntryPatchSchema.safeParse({ email: null, acknowledgeLeavesList: true }).success).toBe(true);
+  });
+
+  it("Remove all's answer says whether this press removed them or an earlier one did", () => {
+    expect(memberListRemovedSchema.safeParse({ group: "never_listed", removed: 2, alreadyRemoved: true }).success).toBe(true);
+    expect(memberListRemovedSchema.safeParse({ group: "never_listed", removed: 2 }).success).toBe(false);
   });
 
   it("one person's page and a write's answer carry the gym's own columns and the edited field names", () => {
@@ -836,6 +845,7 @@ describe("keeping the list by hand (3a-iv's own shapes)", () => {
 
   it("joining two records names the one kept", () => {
     expect(memberListMergeRequestSchema.safeParse({ keepEntryId: entry.entryId }).success).toBe(true);
+    expect(memberListMergeRequestSchema.safeParse({ keepEntryId: entry.entryId, acknowledgeLeavesList: true }).success).toBe(true);
     expect(memberListMergeRequestSchema.safeParse({ keepEntryId: "nope" }).success).toBe(false);
   });
 

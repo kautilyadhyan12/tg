@@ -302,11 +302,20 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
         return;
       case "written":
         return reply.status(answer.status).send(answer.written);
-      case "already_on_list":
+      case "already_on_list": {
+        const code = answer.former ? "former_record" : "already_on_list";
         return reply.status(409).send({
-          error: "already_on_list",
-          message: MEMBER_LIST_BY_HAND_WORDS.already_on_list,
+          error: code,
+          message: MEMBER_LIST_BY_HAND_WORDS[code],
           entryId: answer.entryId,
+          requestId: req.id,
+        });
+      }
+      case "leaves_list":
+        return reply.status(409).send({
+          error: "leaves_list",
+          message: MEMBER_LIST_BY_HAND_WORDS[answer.by === "merge" ? "leaves_list_merge" : "leaves_list_change"],
+          members: answer.members,
           requestId: req.id,
         });
     }
@@ -360,6 +369,7 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
       params.gymId,
       params.entryId,
       body.keepEntryId,
+      body.acknowledgeLeavesList ?? false,
       editGate(req, reply),
     );
     return sendWrite(req, reply, answer);
@@ -404,7 +414,9 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
       case "rate_limited":
         return;
       case "removed":
-        return reply.status(200).send({ removed: { group: answer.group, removed: answer.removed } });
+        return reply
+          .status(200)
+          .send({ removed: { group: answer.group, removed: answer.removed, alreadyRemoved: answer.alreadyRemoved } });
       case "list_changed":
         return reply.status(409).send({
           error: "list_changed",

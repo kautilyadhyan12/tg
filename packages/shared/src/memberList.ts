@@ -1430,7 +1430,10 @@ export const memberListEntryInputSchema = z
 export type MemberListEntryInput = z.infer<typeof memberListEntryInputSchema>;
 
 /** Changing one person. A field left out is left alone; `null` empties it. An
- *  `extra` key set to "" empties that column. At least one field. */
+ *  `extra` key set to "" empties that column. At least one field.
+ *
+ *  `acknowledgeLeavesList` is the tick for a change that would leave app members
+ *  reached by no record (409 `leaves_list`); asked of this request only. */
 export const memberListEntryPatchSchema = z
   .object({
     fullName: z.string().max(MEMBER_LIST_MAX_NAME_CHARS).optional(),
@@ -1445,14 +1448,18 @@ export const memberListEntryPatchSchema = z
     paymentStatus: z.string().max(MEMBER_LIST_MAX_STATUS_CHARS).nullable().optional(),
     dateOfBirth: memberListDaySchema.nullable().optional(),
     extra: extraInputSchema.optional(),
+    acknowledgeLeavesList: z.boolean().optional(),
   })
   .strict()
-  .refine((patch) => Object.keys(patch).length > 0, { message: "nothing to change" });
+  .refine((patch) => Object.keys(patch).some((key) => key !== "acknowledgeLeavesList"), { message: "nothing to change" });
 export type MemberListEntryPatch = z.infer<typeof memberListEntryPatchSchema>;
 
 /** Join two records of one person (PushPress's merge): the record this is sent
- *  to is the one NOT kept; `keepEntryId` is the one that stays. */
-export const memberListMergeRequestSchema = z.object({ keepEntryId: z.string().uuid() }).strict();
+ *  to is the one NOT kept; `keepEntryId` is the one that stays. The tick is as for a
+ *  change. */
+export const memberListMergeRequestSchema = z
+  .object({ keepEntryId: z.string().uuid(), acknowledgeLeavesList: z.boolean().optional() })
+  .strict();
 export type MemberListMergeRequest = z.infer<typeof memberListMergeRequestSchema>;
 
 /** One of the gym's own columns on one person's page, under the gym's heading. */
@@ -1518,11 +1525,21 @@ export const memberListEntryDeletedSchema = z
 export type MemberListEntryDeleted = z.infer<typeof memberListEntryDeletedSchema>;
 
 /** A change that would make this record the same person as another one: 409, with
- *  the other record's id so a screen can open it, or offer to join the two. */
+ *  the other record's id so a screen can open it, or offer to join the two.
+ *  `former_record` when that other record is a former one. */
 export const memberListAlreadyOnListSchema = z.object({
-  error: z.literal("already_on_list"),
+  error: z.enum(["already_on_list", "former_record"]),
   message: z.string(),
   entryId: z.string().uuid(),
+  requestId: z.string().optional(),
+});
+
+/** A change or a join that would leave app members reached by no current record, so
+ *  they would read "no longer on your list": 409 with how many, never who. */
+export const memberListLeavesListSchema = z.object({
+  error: z.literal("leaves_list"),
+  message: z.string(),
+  members: z.number().int().positive(),
   requestId: z.string().optional(),
 });
 
@@ -1573,8 +1590,10 @@ export const memberListRemoveUnlistedRequestSchema = z
   .strict();
 export type MemberListRemoveUnlistedRequest = z.infer<typeof memberListRemoveUnlistedRequestSchema>;
 
+/** `alreadyRemoved` answers the same press again (a retry, or the second of two staff):
+ *  these people were removed by an earlier press, and nobody was removed now. */
 export const memberListRemovedSchema = z
-  .object({ group: memberListUnlistedGroupSchema, removed: z.number().int().min(0) })
+  .object({ group: memberListUnlistedGroupSchema, removed: z.number().int().min(0), alreadyRemoved: z.boolean() })
   .strict();
 export type MemberListRemoved = z.infer<typeof memberListRemovedSchema>;
 
@@ -1610,6 +1629,11 @@ export const MEMBER_LIST_BY_HAND_WORDS = {
   ends_kind_without_day: "Choose the end or renewal date first.",
   unknown_field: "That column isn't one of your list's columns.",
   already_on_list: "This person is already on your list.",
+  former_record: "A former record already has these details. Put it back, or join the two records.",
+  leaves_list_change:
+    "This would leave people who use the app off your list, because their details would no longer match. Check the change, then confirm to go ahead.",
+  leaves_list_merge:
+    "This would leave people who use the app off your list, because only the record you are removing has their details. Keep that record instead, or confirm to go ahead.",
   entry_not_found: "That person could not be found on your list.",
   member_not_found: "That person isn't a member here.",
   not_former: "Take this person off the list before deleting their record for good.",
