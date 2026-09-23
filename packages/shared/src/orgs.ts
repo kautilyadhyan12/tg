@@ -4,6 +4,7 @@
 // visibility boundary), §3.3 (route surface), §4.0 (onboarding wizard fields);
 // Part 4 §3.2 (DDL), §4.2 (seat-safe join).
 import { z } from "zod";
+import { GYM_POSTAL_ADDRESS_MAX_CHARS } from "./memberInvites.js";
 import { instantSchema } from "./time.js";
 
 /** The DB vocabulary (Part 4 §3.2's CHECK, widened by migration `0024`), used
@@ -416,6 +417,10 @@ export const updateOrgRequestSchema = z
      *  Like `clockFormat` it is bound by nothing the country lock protects: no
      *  money, no day boundary, no currency. */
     manualAttendanceEnabled: z.boolean(),
+    /** The postal address printed in every invitation the gym sends (Part 3 §9.12);
+     *  null clears it. The server tidies it (lines joined, links and `@` taken out)
+     *  and refuses it when that leaves more than `GYM_POSTAL_ADDRESS_MAX_CHARS`. */
+    postalAddress: z.string().max(GYM_POSTAL_ADDRESS_MAX_CHARS * 2).nullable(),
   })
   .partial()
   .strict()
@@ -431,7 +436,12 @@ export type UpdateOrgRequest = z.infer<typeof updateOrgRequestSchema>;
  *  `createOrgResponseSchema` — a bare object leaves no room for the next thing
  *  this route has to say (a warning about the currency it just moved, say)
  *  without breaking every reader. */
-export const updateOrgResponseSchema = z.object({ org: orgSummarySchema });
+export const updateOrgResponseSchema = z.object({
+  org: orgSummarySchema,
+  /** The gym's postal address as stored. On this response and on `/mine` for staff,
+   *  never on the summary members read. */
+  postalAddress: z.string().nullable().default(null),
+});
 export type UpdateOrgResponse = z.infer<typeof updateOrgResponseSchema>;
 
 export const createOrgResponseSchema = z.object({
@@ -1042,6 +1052,9 @@ export const myOrgSchema = orgSummarySchema.extend({
    *  everybody: a trainer whose buttons no longer work is owed the sentence
    *  saying why. A plain member is told nothing, on §2.4's boundary. */
   consoleReadOnly: z.boolean().nullable().default(null),
+  /** The gym's postal address for its invitations (Part 3 §9.12). Staff only; null
+   *  for a member, for a gym with none, and from an api too old to send it. */
+  postalAddress: z.string().nullable().default(null),
   /** THE NEWEST CHEER THIS GYM HAS SENT THE CALLER, or null — Kd's ruling of
    *  2026-09-02 (:29961 ruling 4), reaching the member.
    *

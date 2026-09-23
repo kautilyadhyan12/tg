@@ -100,9 +100,13 @@ export const gyms = pgTable(
      *  §4); a gym that cares turns this off the day its QR poster goes up, and
      *  `gym_attendance.method` is what lets it tell the two apart meanwhile. */
     manualAttendanceEnabled: boolean("manual_attendance_enabled").notNull().default(true),
+    /** The gym's postal address, printed in the footer of every invitation it sends
+     *  (CAN-SPAM, CASL; Part 3 §9.12). A gym without one cannot send invitations. */
+    postalAddress: text("postal_address"),
     createdAt: createdAt(),
   },
   (t) => [
+    check("gyms_postal_address_check", sql`${t.postalAddress} IS NULL OR length(${t.postalAddress}) BETWEEN 1 AND 200`),
     check(
       "gyms_org_type_check",
       sql`${t.orgType} IN ('gym','studio','personal_trainer','clinic')`,

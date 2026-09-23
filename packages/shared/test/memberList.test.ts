@@ -751,7 +751,9 @@ describe("the wider record, kept (3a-v-b's own shapes)", () => {
       source: "upload" as const,
       inApp: false,
     };
-    expect(memberListEntrySchema.parse(entry)).toEqual(entry);
+    // The invitation (3b-i-a) is null for a person never invited, and for a row from a
+    // server too old to send it.
+    expect(memberListEntrySchema.parse(entry)).toEqual({ ...entry, invitation: null });
     // EVERY FIELD A GYM MAY LEAVE EMPTY IS NULLABLE — a gym whose export has four
     // columns is not a gym with a broken record.
     expect(

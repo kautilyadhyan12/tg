@@ -1642,8 +1642,8 @@ const MUTANTS = [
     id: 'O118',
     target: 'repo',
     why: "THE AUDIT LOG STOPS TELLING THE TRUTH: a no-op save writes a row claiming somebody changed something, so a log nobody can read a real event out of. It is the half of this card that only a comparison against the CURRENT row can carry — a console sends back every field it drew",
-    from: '    if (changed.length === 0) return { kind: "unchanged", org: before };',
-    to: '    if (changed.length === 0 && false) return { kind: "unchanged", org: before };',
+    from: '    if (changed.length === 0) return { kind: "unchanged", org: before, postalAddress: postalBefore };',
+    to: '    if (changed.length === 0 && false) return { kind: "unchanged", org: before, postalAddress: postalBefore };',
     expect: 'writes one audit entry per real change and none for a no-op',
   },
   {

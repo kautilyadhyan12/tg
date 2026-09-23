@@ -34,6 +34,83 @@ export class EmailTransportError extends Error {
   }
 }
 
+/** An invitation email (Part 3 §9.12): its own sender on the invitations' sub-domain,
+ *  its unsubscribe headers, and the idempotency key that makes a retry of the same
+ *  send a no-op at Resend for 24 hours. */
+export interface InviteEmail extends EmailMessage {
+  from: string;
+  headers: Record<string, string>;
+  idempotencyKey: string;
+}
+
+/** What became of one invitation email. `sent` with a null id is a retry Resend
+ *  recognised as already sent under this key with a different body. */
+export type InviteSendResult =
+  | { kind: "sent"; id: string | null }
+  /** Resend refused it for good (an address it will not take). */
+  | { kind: "refused"; status: number }
+  /** Try again later: a timeout, a 5xx, a 429, a key or account problem. */
+  | { kind: "retry"; status: number | null };
+
+export interface InviteTransport {
+  send(message: InviteEmail): Promise<InviteSendResult>;
+}
+
+const resendErrorSchema = z.object({ name: z.string().max(100) });
+
+/** Resend for invitations. Never throws for an answer from Resend; the status alone
+ *  says what happened, and no body or request is ever logged or returned. */
+export function createResendInviteTransport(opts: { apiKey: string; fetchImpl?: typeof fetch }): InviteTransport {
+  const doFetch = opts.fetchImpl ?? fetch;
+  return {
+    async send(message) {
+      let response: Response;
+      try {
+        response = await doFetch(RESEND_ENDPOINT, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${opts.apiKey}`,
+            "Content-Type": "application/json",
+            "Idempotency-Key": message.idempotencyKey,
+          },
+          body: JSON.stringify({
+            from: message.from,
+            to: [message.to],
+            subject: message.subject,
+            text: message.text,
+            html: message.html,
+            headers: message.headers,
+          }),
+          signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+        });
+      } catch {
+        return { kind: "retry", status: null };
+      }
+      let body: unknown = null;
+      try {
+        body = await response.json();
+      } catch {
+        body = null;
+      }
+      if (response.ok) {
+        const ok = resendOkSchema.safeParse(body);
+        return { kind: "sent", id: ok.success ? ok.data.id.slice(0, 100) : null };
+      }
+      if (response.status === 409) {
+        // Resend's idempotency answers: the key was already used with a different body
+        // (the first send went), or its first request is still running (ask again).
+        const error = resendErrorSchema.safeParse(body);
+        if (error.success && error.data.name === "invalid_idempotent_request") return { kind: "sent", id: null };
+        return { kind: "retry", status: 409 };
+      }
+      // 401 and 403 are our key or account, not the address: never burn an invitation
+      // on them.
+      if (response.status === 400 || response.status === 422) return { kind: "refused", status: response.status };
+      return { kind: "retry", status: response.status };
+    },
+  };
+}
+
 export function createResendTransport(opts: {
   apiKey: string;
   from: string;

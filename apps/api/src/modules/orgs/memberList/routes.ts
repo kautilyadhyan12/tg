@@ -12,6 +12,9 @@ import {
   MEMBER_FILE_MAX_BASE64_CHARS,
   MEMBER_LIST_BY_HAND_WORDS,
   MEMBER_LIST_CONFIRM_REFUSAL_WORDS,
+  MEMBER_INVITE_WORDS,
+  memberInvitePreviewQuerySchema,
+  memberInviteRequestSchema,
   memberListConfirmRequestSchema,
   memberListEntriesQuerySchema,
   memberListEntryInputSchema,
@@ -25,6 +28,8 @@ import {
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { memberListEntryParamsSchema, memberListParamsSchema, memberParamsSchema, orgParamsSchema } from "../schemas.js";
+import * as invites from "../invites/service.js";
+import type { InviteSettings } from "../invites/settings.js";
 import * as byHand from "./byHandService.js";
 import * as service from "./service.js";
 
@@ -63,6 +68,8 @@ function requireUserId(req: FastifyRequest): string {
 export interface MemberListRouteDeps {
   sql: Sql;
   redis: RedisLike;
+  /** Invitations (3b-i-a), or null while they are switched off. */
+  invites: InviteSettings | null;
 }
 
 export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListRouteDeps): void {
@@ -71,6 +78,7 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     redis: deps.redis,
     log: app.log,
     now: () => new Date(),
+    invites: deps.invites,
   };
 
   /** **`ipMax` IS EXPLICIT AND IT IS THE WHOLE POINT OF THIS LIMITER'S SHAPE.**
@@ -403,6 +411,70 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     if (page === null) return;
     return reply.status(200).send({ page });
   });
+
+  // ── Invite (3b-i-a; §9.12) ──
+
+  /** Pressing Invite: 30 an hour each, 120 from one address (the front desk). */
+  const inviteGate = gate(
+    createDualRateLimit({
+      name: "memberlist_invite",
+      max: 30,
+      ipMax: 120,
+      windowMs: 60 * 60 * 1000,
+      identifier: (req) => req.authUser?.id ?? null,
+      redis: deps.redis,
+    }),
+  );
+
+  app.get("/v1/orgs/:gymId/member-list/invites/preview", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(memberInvitePreviewQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const preview = await invites.previewInvite(listDeps, requireUserId(req), params.gymId, query, readGate(req, reply));
+    if (preview === null) return;
+    return reply.status(200).send({ preview });
+  });
+
+  app.post("/v1/orgs/:gymId/member-list/invites", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(memberInviteRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    try {
+      const invited = await invites.pressInvite(listDeps, requireUserId(req), params.gymId, body, inviteGate(req, reply));
+      if (invited === null) return;
+      return await reply.status(200).send({ invited });
+    } catch (err) {
+      if (!(err instanceof invites.InviteChanged)) throw err;
+      return await reply.status(409).send({
+        error: "invite_changed",
+        message: MEMBER_INVITE_WORDS.invite_changed,
+        preview: err.preview,
+        requestId: req.id,
+      });
+    }
+  });
+
+  app.post("/v1/orgs/:gymId/member-list/entries/:entryId/invite", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const invite = await invites.inviteOne(listDeps, requireUserId(req), params.gymId, params.entryId, editGate(req, reply));
+    if (invite === null) return;
+    return reply.status(200).send({ invite });
+  });
+
+  app.post(
+    "/v1/orgs/:gymId/member-list/entries/:entryId/invite/resend",
+    { preHandler: [app.authenticate] },
+    async (req, reply) => {
+      const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
+      if (params === null) return;
+      const invite = await invites.inviteAgain(listDeps, requireUserId(req), params.gymId, params.entryId, editGate(req, reply));
+      if (invite === null) return;
+      return reply.status(200).send({ invite });
+    },
+  );
 
   app.post("/v1/orgs/:gymId/member-list/remove-unlisted", { preHandler: [app.authenticate] }, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);

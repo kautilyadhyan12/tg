@@ -23,6 +23,10 @@ import { Redis } from "ioredis";
 import pino from "pino";
 import postgres from "postgres";
 import { loadConfig } from "./config.js";
+import { createResendInviteTransport } from "./email/resend.js";
+import { cachedMailDomainCheck, systemResolver } from "./modules/orgs/invites/mailDomain.js";
+import { devInviteTransport, sendDueInvites } from "./modules/orgs/invites/sender.js";
+import { inviteSettings } from "./modules/orgs/invites/settings.js";
 import { archiveLapsedGyms } from "./modules/orgs/archiveSweep.js";
 import { fillClassSessionsJob } from "./modules/orgs/classes/fill.js";
 import { expireStagedMemberListUploads } from "./modules/orgs/memberList/expiry.js";
@@ -300,6 +304,65 @@ try {
   process.exit(1);
 }
 
+// MEMBER INVITATIONS (Part 3 §9.12). Their own queue, so a slow run of emails never
+// holds up the nightly jobs above, and every minute: the rows are the queue, and each
+// run sends what is due within the caps. Only when invitations are switched on.
+export const INVITES_QUEUE = "invites";
+export const INVITES_SEND_JOB = "invites.send";
+
+const invites = inviteSettings(config);
+let invitesQueue: Queue | null = null;
+let invitesWorker: Worker | null = null;
+if (invites === null) {
+  log.warn({ event: "worker.invites_off" }, "member invitations are switched off: INVITE_EMAIL_FROM, INVITE_HMAC_SECRET or API_ORIGIN is missing");
+} else {
+  const inviteTransport =
+    invites.from !== null && config.RESEND_API_KEY !== undefined
+      ? createResendInviteTransport({ apiKey: config.RESEND_API_KEY })
+      : devInviteTransport(log);
+  const mailDomain = cachedMailDomainCheck(systemResolver, () => Date.now());
+  invitesQueue = new Queue(INVITES_QUEUE, { connection });
+  try {
+    await invitesQueue.upsertJobScheduler(
+      INVITES_SEND_JOB,
+      { every: 60_000 },
+      {
+        name: INVITES_SEND_JOB,
+        // Each run claims rows under a lease and finishes them by that lease, so a
+        // retry or a second run at once sends nothing twice.
+        opts: { attempts: 1, removeOnComplete: { count: 50 }, removeOnFail: { count: 200 } },
+      },
+    );
+  } catch (err) {
+    log.fatal({ err }, "failed to register the invitation sender schedule");
+    process.exit(1);
+  }
+  invitesWorker = new Worker(
+    INVITES_QUEUE,
+    async (job) => {
+      if (job.name !== INVITES_SEND_JOB) throw new Error(`unknown job on ${INVITES_QUEUE}: ${job.name}`);
+      const startedAt = Date.now();
+      const run = await sendDueInvites({
+        sql,
+        log,
+        settings: invites,
+        transport: inviteTransport,
+        mailDomain,
+        now: () => new Date(),
+        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      });
+      if (run.sent + run.skipped + run.failed + run.retried + run.staleFailed > 0 || run.capped) {
+        log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
+      }
+    },
+    { connection },
+  );
+  invitesWorker.on("failed", (job, err) => {
+    Sentry.captureException(err, { tags: { job: job?.name ?? "unknown", queue: INVITES_QUEUE } });
+    log.error({ errName: err.name, errMessage: err.message, event: "job.failed", job: job?.name, jobId: job?.id }, "job failed");
+  });
+}
+
 const worker = new Worker(
   ROLLUPS_QUEUE,
   async (job) => {
@@ -460,7 +523,9 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
       // close() waits for the in-flight job, so a purge transaction is never
       // torn down mid-cascade.
       await worker.close();
+      await invitesWorker?.close();
       await queue.close();
+      await invitesQueue?.close();
       await connection.quit();
       await sql.end();
       // T3 round 3 minor: an exception captured moments before SIGTERM would

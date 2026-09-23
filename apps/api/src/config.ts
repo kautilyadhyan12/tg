@@ -76,6 +76,33 @@ const envSchema = z.object({
   // a client that varies the address, which no per-address rule can see.
   // Sized for launch (Resend Pro has no daily cap); raise it as users grow.
   CODE_EMAILS_PER_DAY: z.coerce.number().int().positive().default(5000),
+  // Member invitations (Part 3 §9.12). In production all three below must be set or
+  // invitations are switched off (Invite answers 503); outside production the api's
+  // own address, a secret derived from JWT_SECRET and the logging sender stand in.
+  // The public address of THIS api, for the unsubscribe links an invitation carries.
+  API_ORIGIN: z.string().url().optional(),
+  // The invitations' own sender, on a sub-domain of its own, so a stale member list
+  // can never get sign-in codes blocked. Same shape rule as EMAIL_FROM.
+  INVITE_EMAIL_FROM: z
+    .string()
+    .trim()
+    .max(254)
+    .regex(
+      /^(?:[^<>@\r\n]+<[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+>|[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+)$/,
+      "INVITE_EMAIL_FROM must look like `Name <box@domain>` or `box@domain`",
+    )
+    .optional(),
+  // Keys the HMAC every invitation and suppression is stored under. NEVER CHANGE IT
+  // once set: every stored key would stop matching, and people already invited could
+  // be invited again.
+  INVITE_HMAC_SECRET: z.string().min(32).optional(),
+  // The most invitation emails the whole app sends in any 24 hours.
+  INVITE_EMAILS_PER_DAY: z.coerce.number().int().positive().default(2000),
+  // The off switch: while "true" the worker sends no invitation; they wait.
+  INVITES_PAUSED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
 });
 
 export type AppConfig = Readonly<z.infer<typeof envSchema>>;
@@ -93,6 +120,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     .refine((c) => c.RESEND_API_KEY === undefined || c.EMAIL_FROM !== undefined, {
       path: ["EMAIL_FROM"],
       message: "EMAIL_FROM is required when RESEND_API_KEY is set",
+    })
+    .refine((c) => c.INVITE_EMAIL_FROM === undefined || c.RESEND_API_KEY !== undefined, {
+      path: ["RESEND_API_KEY"],
+      message: "RESEND_API_KEY is required when INVITE_EMAIL_FROM is set",
     })
     .safeParse(env);
   if (!parsed.success) {

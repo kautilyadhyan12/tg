@@ -7,6 +7,13 @@
 // server's own words, each saying what to do next. A screen prints the words
 // as sent; it never writes its own.
 import { z } from "zod";
+import {
+  memberInviteBlockedSchema,
+  memberInviteOneSchema,
+  memberInviteSkippedSchema,
+  memberListInvitationFilterSchema,
+  memberListInvitationSchema,
+} from "./memberInvites.js";
 
 // ---------------------------------------------------------------------------
 // Limits (§9.9)
@@ -1314,6 +1321,9 @@ export const memberListEntrySchema = z.object({
   formerAt: z.string().nullable(),
   source: memberListEntrySourceSchema,
   inApp: z.boolean(),
+  /** The gym's invitation to this record's address, or null if it was never invited
+   *  (§9.12). */
+  invitation: memberListInvitationSchema.nullable().default(null),
   /** **THE GYM'S OWN COLUMNS ARE NOT HERE, AND THAT IS DELIBERATE.** A page holds a
    *  hundred people and a gym may keep forty of its own columns of up to five hundred
    *  characters each, so carrying them would be two megabytes of a screen that shows
@@ -1373,6 +1383,8 @@ export const memberListEntriesQuerySchema = z
     membershipType: wordFilterSchema,
     paymentStatus: wordFilterSchema,
     records: memberListRecordsSchema.optional(),
+    /** Who has been invited, and how it stands (§11.5). */
+    invitation: memberListInvitationFilterSchema.optional(),
     query: z.string().max(MEMBER_LIST_QUERY_MAX_CHARS).optional(),
     cursor: z.string().max(512).optional(),
   })
@@ -1392,6 +1404,57 @@ export type MemberListEntriesPage = z.infer<typeof memberListEntriesPageSchema>;
 
 export const memberListEntriesResponseSchema = z.object({ page: memberListEntriesPageSchema });
 export type MemberListEntriesResponse = z.infer<typeof memberListEntriesResponseSchema>;
+
+// ── Invite (3b-i-a; §9.12, §11.5) ───────────────────────────────────────────
+
+/** Who an Invite is for: the list's current people, narrowed by the gym's own words
+ *  exactly as `GET /entries` narrows them. No filter is everybody. */
+const inviteFilterShape = {
+  status: wordFilterSchema,
+  membershipType: wordFilterSchema,
+  paymentStatus: wordFilterSchema,
+};
+
+export const memberInvitePreviewQuerySchema = z.object(inviteFilterShape).strict();
+export type MemberInvitePreviewQuery = z.infer<typeof memberInvitePreviewQuerySchema>;
+
+/** What an Invite would do now: how many it would reach, who it leaves out and why,
+ *  and the list's version. The press sends `version` and `reach` back. `blocked` says
+ *  why the gym cannot send at all yet, or null. */
+export const memberInvitePreviewSchema = z
+  .object({
+    version: z.number().int().min(0),
+    reach: z.number().int().min(0),
+    skipped: memberInviteSkippedSchema,
+    blocked: memberInviteBlockedSchema.nullable(),
+  })
+  .strict();
+export type MemberInvitePreview = z.infer<typeof memberInvitePreviewSchema>;
+
+export const memberInvitePreviewResponseSchema = z.object({ preview: memberInvitePreviewSchema });
+export type MemberInvitePreviewResponse = z.infer<typeof memberInvitePreviewResponseSchema>;
+
+/** Press Invite. If the list's version or the number the preview showed has moved,
+ *  nobody is invited and the answer carries the new preview. */
+export const memberInviteRequestSchema = z
+  .object({ ...inviteFilterShape, version: z.number().int().min(0), expectedCount: z.number().int().min(0) })
+  .strict();
+export type MemberInviteRequest = z.infer<typeof memberInviteRequestSchema>;
+
+export const memberInvitedSchema = z
+  .object({ queued: z.number().int().min(0), skipped: memberInviteSkippedSchema, version: z.number().int().min(0) })
+  .strict();
+export type MemberInvited = z.infer<typeof memberInvitedSchema>;
+
+export const memberInvitedResponseSchema = z.object({ invited: memberInvitedSchema });
+export type MemberInvitedResponse = z.infer<typeof memberInvitedResponseSchema>;
+
+export const memberInviteChangedSchema = z.object({
+  error: z.literal("invite_changed"),
+  message: z.string(),
+  preview: memberInvitePreviewSchema,
+  requestId: z.string().optional(),
+});
 
 // ── Keeping the list by hand (3a-iv; §9.9, §11.6) ───────────────────────────
 
@@ -1425,6 +1488,8 @@ export const memberListEntryInputSchema = z
     paymentStatus: z.string().max(MEMBER_LIST_MAX_STATUS_CHARS).optional(),
     dateOfBirth: memberListDaySchema.optional(),
     extra: extraInputSchema.optional(),
+    /** "Add and invite": invite the person in the same step (§9.12). */
+    invite: z.boolean().optional(),
   })
   .strict();
 export type MemberListEntryInput = z.infer<typeof memberListEntryInputSchema>;
@@ -1515,7 +1580,13 @@ export type MemberListEntryOutcome = z.infer<typeof memberListEntryOutcomeSchema
 
 /** `version` is the list's version after the write, which a later removal names. */
 export const memberListEntryWrittenSchema = z
-  .object({ outcome: memberListEntryOutcomeSchema, entry: memberListEntryDetailSchema, version: z.number().int().min(0) })
+  .object({
+    outcome: memberListEntryOutcomeSchema,
+    entry: memberListEntryDetailSchema,
+    version: z.number().int().min(0),
+    /** What "Add and invite" did about the invitation; absent for any other write. */
+    invite: memberInviteOneSchema.optional(),
+  })
   .strict();
 export type MemberListEntryWritten = z.infer<typeof memberListEntryWrittenSchema>;
 

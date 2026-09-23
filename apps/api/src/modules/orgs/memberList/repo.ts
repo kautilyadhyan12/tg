@@ -1461,6 +1461,9 @@ export interface EntriesPageInput {
   /** Which records to cut the page from (§11.5). `current` is the default everywhere. */
   records: MemberListRecords;
   filter: "all" | "in_app" | "not_in_app";
+  /** The invitation filter (§11.5): only these entries, or all but these; null for
+   *  no filter. The ids are worked out by the caller from the address HMACs. */
+  invitation: { ids: readonly string[]; include: boolean } | null;
   /** Already escaped for LIKE by the caller, or null. */
   like: string | null;
   cursor: { name: string; id: string } | null;
@@ -1492,6 +1495,8 @@ export async function entriesPage(
   const statuses = input.statuses === null ? null : [...input.statuses];
   const membershipTypes = input.membershipTypes === null ? null : [...input.membershipTypes];
   const paymentStatuses = input.paymentStatuses === null ? null : [...input.paymentStatuses];
+  const invitedIds = input.invitation === null ? null : [...input.invitation.ids];
+  const invitedInclude = input.invitation?.include ?? true;
   const rows = await sql<
     {
       total: number;
@@ -1547,6 +1552,9 @@ export async function entriesPage(
                  AND e.id = ANY(${input.inAppEntryIds}::uuid[]))
              OR (${input.filter}::text = 'not_in_app'
                  AND e.id <> ALL(${input.inAppEntryIds}::uuid[])))
+        AND (${invitedIds}::uuid[] IS NULL
+             OR (${invitedInclude}::boolean AND e.id = ANY(${invitedIds}::uuid[]))
+             OR (NOT ${invitedInclude}::boolean AND e.id <> ALL(${invitedIds}::uuid[])))
     ),
     totals AS (SELECT count(*)::int AS total FROM filtered)
     SELECT t.total, f.id, f.full_name, f.email, f.phone_e164, f.member_number,
