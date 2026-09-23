@@ -17,6 +17,7 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Round one: no Critical or High; 5 Low and 2 weak tests, all fixed, no re-check due.** Stale 30-day / 300 / ₹1,500 comments and RULINGS' "15 days" line; the dropdown's room also counts its 4 px margin; the Indian list is now asserted code by code (a stray active INR row went red); the trial prompt must name no member count (a "200 members" line went red). Also fixed: `classes.routes.test.ts` expected today's 18:30 class among those ahead on a Monday or Wednesday evening in London.
 - **Re-seed every database after the merge** (`tsx src/db/seed.ts`), Neon included: until then a database holds the old $35 / 300 / 30-day rows while the console says 10 days, and a gym already trialling on band 1 drops from 300 places to 200 when it runs (the cap is read through the plan row). Harmless before launch; after it, a price edit needs its own plan rows.
 - **Not in this job**: "more than 2,100: contact us" and any Subscribe button (Stage 3 item 1, Paddle). The rupee list is checked once a year against the rate.
+- **Merged on Kd's word, 2026-09-24 (PR #101).** CI's api job failed once in Folder A's `memberInvites.results.test.ts` ("twice at once": `['pending','done','done']`), which this job does not touch, and passed on a re-run: a flaky race test for Folder A to fix. Next in Folder B: Stage 3 item 1 (Paddle, in its test mode).
 
 ## 2026-09-23 · 3b-i-b: what comes back (Folder A, branch `invite-results`, PR #100)
 
