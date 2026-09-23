@@ -301,7 +301,7 @@ describe('walking from one gym to another', () => {
     });
 
     renderConsole();
-    fireEvent.click(await screen.findByRole('button', { name: /start your 30-day free trial/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /start your 10-day free trial/i }));
     await waitFor(() => expect(screen.getByText('Free trial')).toBeTruthy());
 
     await walkTo('B');
@@ -337,13 +337,13 @@ describe('walking from one gym to another', () => {
     });
 
     renderConsole();
-    fireEvent.click(await screen.findByRole('button', { name: /start your 30-day free trial/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /start your 10-day free trial/i }));
     await waitFor(() => expect(screen.getByText('Free trial')).toBeTruthy());
 
     await walkTo('B');
 
     // Gym B's kept row is stale, so it offers the trial…
-    const button = await screen.findByRole('button', { name: /start your 30-day free trial/i });
+    const button = await screen.findByRole('button', { name: /start your 10-day free trial/i });
     orgService.startTrial.mockRejectedValue({
       response: {
         status: 409,
@@ -358,7 +358,7 @@ describe('walking from one gym to another', () => {
     // …and the refusal turns it into the honest arm rather than a dead button.
     await waitFor(() => expect(screen.getByText(/one per person, not one per gym/i)).toBeTruthy());
     expect(await screen.findByTestId('plan-list')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /start your 30-day free trial/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /start your 10-day free trial/i })).toBeNull();
   });
 
   it('does not show gym A’s prices under gym B’s prompt', async () => {
@@ -441,17 +441,17 @@ describe('walking from one gym to another', () => {
     });
 
     renderConsole();
-    fireEvent.click(await screen.findByRole('button', { name: /start your 30-day free trial/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /start your 10-day free trial/i }));
     await waitFor(() => expect(screen.getByText('Free trial')).toBeTruthy());
 
     await walkTo('B');
     // Gym B is untouched by any of it — the other half of the same guarantee.
     expect(screen.queryByText('Free trial')).toBeNull();
-    expect(screen.getAllByRole('button', { name: /start your 30-day free trial/i })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: /start your 10-day free trial/i })).toHaveLength(1);
 
     await walkTo('A');
     await waitFor(() => expect(screen.getByText('Free trial')).toBeTruthy());
-    expect(screen.queryByRole('button', { name: /start your 30-day free trial/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /start your 10-day free trial/i })).toBeNull();
   });
 
   it('does not let a banner dismissed on gym A silence gym B’s', async () => {

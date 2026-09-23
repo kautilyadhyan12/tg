@@ -113,7 +113,7 @@ export const orgService = {
   updateOrg: (gymId, patch) =>
     readThrough(updateOrgResponseSchema, 'that change', authApi.patch(`/v1/orgs/${gymId}`, patch)),
 
-  /** POST /v1/orgs/:gymId/trial — the gym starts its own 30-day free trial.
+  /** POST /v1/orgs/:gymId/trial — the gym starts its own free trial.
    *
    *  Kd ruling 2026-08-27, which reversed his own approval step: a gym starts on
    *  its own, and what replaces the gate is one trial per OWNER, ever. Gated on

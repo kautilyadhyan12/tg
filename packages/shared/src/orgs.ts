@@ -391,7 +391,7 @@ export const updateOrgRequestSchema = z
      *  subscription outright — but NEITHER freezes from day one, because before
      *  any money moves there is nothing to protect and a gym that mistyped its
      *  country on the first screen of signup would be stuck for ever. The
-     *  card-less 30-day trial (:16548) is deliberately NOT a lock, for the same
+     *  card-less free trial (:16548) is deliberately NOT a lock, for the same
      *  reason: it is the moment before the typo starts to cost. */
     country: z.string().trim().length(2),
     /** PROVEN to name a real IANA zone, not merely bounded in length — the same
@@ -498,7 +498,13 @@ export const orgSubscriptionSchema = z.object({
 });
 export type OrgSubscription = z.infer<typeof orgSubscriptionSchema>;
 
-/** Starting the gym's own 30-day trial.
+/** How long a gym's free trial lasts (Kd, RULINGS 2026-09-23). The seed writes
+ *  it onto every gym plan and the console's trial prompt says it, so the two
+ *  agree on any database the seed has run on since; one not re-seeded still
+ *  grants whatever its `plans.trial_days` holds. */
+export const GYM_TRIAL_DAYS = 10;
+
+/** Starting the gym's own free trial.
  *
  *  **`already_subscribed` is a SUCCESS arm, not an error**, and it is the same
  *  instinct as `already_member` and `already_confirmed` one file over: an owner
@@ -978,7 +984,7 @@ export const myOrgSchema = orgSummarySchema.extend({
    *  TO.** That field is the gym's LIVE plan and its LATERAL serves §4.1's three
    *  granting statuses only, so a gym whose trial ENDED and a gym that never
    *  started one are the same `null` — byte for byte. That identity is what put
-   *  *"Start your 30-day free trial"* over a button answering 409
+   *  *"Start your free trial"* over a button answering 409
    *  `trial_already_used` (:22341 §7, the finding the sweep card reported
    *  against itself), and it is what the expiry smoke's step 6 was staged over.
    *
@@ -1647,7 +1653,7 @@ export type OrgPrivilege = z.infer<typeof orgPrivilegeSchema>;
  *  cancel) | ✔ | — | —"*, `03-part3-org-console.md:99`). The owner, nobody else.
  *
  *  **It is a SEPARATE tick from `org.manage` on :13803's precedent**, not merged
- *  into it: `org.manage` edits a detail, this one starts a 30-day clock, caps the
+ *  into it: `org.manage` edits a detail, this one starts the trial clock, caps the
  *  roster at the plan's seat cap and freezes the gym's billing country
  *  (:19560). Merging them would mean an owner who ticked "let my manager fix our
  *  address" had also handed over the money.

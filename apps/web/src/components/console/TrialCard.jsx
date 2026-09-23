@@ -41,7 +41,7 @@ import { viewerPrivileges } from '../../pages/console/consoleView';
 // ── THREE THINGS THIS CARD STILL DELIBERATELY DOES NOT SAY ─────────────────
 //
 // **It does not print how many places the plan gives until the server has said
-// so.** Every gym trials at the same limit (:19129, 300 members), but that
+// so.** Every gym trials at the same limit (:19129; 200 members since 2026-09-22), but that
 // number lives in the price book and the server picks the band off it — the
 // lowest-capped active monthly plan in the gym's own currency, so the ruling
 // survives a re-priced book. A "300 places" written here would be a number

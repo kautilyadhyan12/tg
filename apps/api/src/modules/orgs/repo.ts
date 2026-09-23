@@ -804,7 +804,7 @@ export async function updateOrg(
      *  it is shown — would otherwise be stuck for ever.
      *
      *  **THE TRIAL IS DELIBERATELY NOT A LOCK.** Kd's gym trial is card-less and
-     *  30 days (:16548), so a `trialing` gym has paid nothing and has no invoice;
+     *  10 days (`GYM_TRIAL_DAYS`), so a `trialing` gym has paid nothing and has no invoice;
      *  locking there would freeze the typo at exactly the moment before it starts
      *  to cost — the worst possible instant. Every other status locks, including
      *  `canceled` and `expired`, because a subscription that ended may still have
@@ -1711,7 +1711,7 @@ export type StartTrialOutcome =
   | { kind: "org_archived" }
   | { kind: "not_found" };
 
-/** THE GYM STARTS ITS OWN 30-DAY TRIAL — the first statement in this product
+/** THE GYM STARTS ITS OWN FREE TRIAL — the first statement in this product
  *  that has ever written `subscriptions`, and the reason the seat cap stops being
  *  correct-but-inert.
  *
@@ -1834,7 +1834,7 @@ export async function startGymTrial(
 
     /** THE TRIAL BAND IS THE SMALLEST ONE, WHICH IS KD'S RULING EXPRESSED AS A
      *  QUERY RATHER THAN AS A NUMBER. :19129: *"no plan choice at signup · EVERY
-     *  gym trials at the SAME limit, 300 members · the gym subscribes to its real
+     *  gym trials at the SAME limit, 300 members (200 since 2026-09-22) · the gym subscribes to its real
      *  band AFTER the trial"*. The seed's own comment says `seat_cap` **is** the
      *  band boundary, so "band 1" and "the lowest cap" are the same row — and
      *  ordering by it means the ruling survives a re-priced book without anybody

@@ -138,10 +138,9 @@ try {
 // choice; `trial_ends_at` is an absolute instant, so — unlike streaks — this
 // needs no org-local day maths (trap #8).
 //
-// A DAILY CADENCE AGAINST A 30-DAY CLOCK, said out loud: a gym therefore keeps
-// its trial for up to 24 hours past its end date. On a month that is under 4%,
-// it errs in the generous direction (nobody is cut off EARLY), and running it
-// hourly would buy precision nobody asked for on a thirty-day promise.
+// A DAILY CADENCE AGAINST A 10-DAY CLOCK, said out loud: a gym therefore keeps
+// its trial for up to 24 hours past its end date, up to 10 % over. It errs in
+// the generous direction (nobody is cut off EARLY), so hourly is not needed.
 try {
   await queue.upsertJobScheduler(
     ORGS_TRIAL_SWEEP_JOB,

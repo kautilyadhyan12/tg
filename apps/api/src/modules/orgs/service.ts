@@ -972,7 +972,7 @@ export async function requireWritablePrivilege(
   return authorised;
 }
 
-/** START THE GYM'S OWN 30-DAY TRIAL.
+/** START THE GYM'S OWN FREE TRIAL.
  *
  *  **KD RULING 2026-08-27, reversing :11072 ruling 1: a gym starts its own trial,
  *  with no approval step.** *"a gym can start on own without my approval but i

@@ -625,16 +625,25 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
         new Date(),
       );
       const firstDay = londonToday > dayFromToday(0) ? londonToday : dayFromToday(0);
+      // Today's 18:30 class is written but no longer ahead once it has begun (a
+      // Monday or a Wednesday after 18:30 in London counted one too many).
+      const [londonHour, londonMinute] = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Europe/London", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+      }).format(new Date()).split(":").map(Number);
+      const todayBegun = (londonHour ?? 0) * 60 + (londonMinute ?? 0) >= at(18, 30);
       let mondaysAndWednesdays = 0;
+      let ahead = 0;
       for (let i = 0; i <= 56; i += 1) {
         const day = new Date(Date.parse(`${londonToday}T00:00:00Z`) + i * 86_400_000);
         const iso = day.getUTCDay() === 0 ? 7 : day.getUTCDay();
-        if (day.toISOString().slice(0, 10) >= firstDay && (iso === MON || iso === WED)) {
+        const dayIso = day.toISOString().slice(0, 10);
+        if (dayIso >= firstDay && (iso === MON || iso === WED)) {
           mondaysAndWednesdays += 1;
+          if (!(dayIso === londonToday && todayBegun)) ahead += 1;
         }
       }
       expect([16, 17]).toContain(mondaysAndWednesdays);
-      expect(schedule.sessionsAhead).toBe(mondaysAndWednesdays);
+      expect(schedule.sessionsAhead).toBe(ahead);
       // And the server says the count is NOT the whole truth, because the
       // repeat has no end date (C/H-3).
       expect(schedule.datesComplete).toBe(false);
@@ -650,7 +659,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
         FROM gym_class_sessions WHERE gym_id = ${org.org.id} LIMIT 1`;
       expect(rows[0]?.minute).toBe(at(18, 30));
       expect(rows[0]?.local_hour).toBe(18);
-      expect(rows[0]?.n).toBe(schedule.sessionsAhead);
+      expect(rows[0]?.n).toBe(mondaysAndWednesdays);
     },
     TEST_TIMEOUT_MS,
   );

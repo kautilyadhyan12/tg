@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { orgWords } from '@app/shared';
+import { GYM_TRIAL_DAYS, orgWords } from '@app/shared';
 import { Link } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { orgService, errorCode, errorText, isRetryable } from '../../api/orgsApi';
@@ -41,7 +41,7 @@ import { planPriceText, planPromptFor, planSeatLabel } from '../../pages/console
 //
 // ── THE TWO ARMS, BOTH KD'S ────────────────────────────────────────────────
 //
-// **Never trialled** → start the 30-day free trial. **Trial already spent** →
+// **Never trialled** → start the free trial. **Trial already spent** →
 // the real plans at their real prices, plus the line saying the free trial is
 // used: *"they will be showed subscription option that they can take and say
 // that they alreday ahd a free trial"* (:22697 §1). One trial per OWNER ever
@@ -136,7 +136,7 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
   useEffect(() => {
     if (showing === null) return;
     // The dialog itself takes focus (`tabIndex={-1}`) rather than its first
-    // button: landing on "Start your 30-day free trial" would read the button
+    // button: landing on "Start your free trial" would read the button
     // to a screen reader before the sentence explaining why it is there.
     dialogRef.current?.focus();
   }, [showing]);
@@ -262,7 +262,7 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
               plan.
             </p>
             <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.6)' }}>
-              Your first 30 days are free. No card needed.
+              Your first {GYM_TRIAL_DAYS} days are free. No card needed.
             </p>
           </>
         ) : (
@@ -366,7 +366,7 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
             style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
           >
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            {busy ? 'Starting…' : 'Start your 30-day free trial'}
+            {busy ? 'Starting…' : `Start your ${GYM_TRIAL_DAYS}-day free trial`}
           </button>
         ) : (
           <p className="text-sm mt-5" style={{ color: 'rgba(255,255,255,0.6)' }}>

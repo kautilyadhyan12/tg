@@ -871,7 +871,9 @@ d("bulk edit of a class's time slots (real Postgres)", () => {
       const org = await makeOrg(owner.cookies, "Cap Bulk Gym");
       const gym = org.org.id;
       const today = await gymToday(gym, owner.cookies);
-      const from = addDays(today, 7);
+      // Eight days on, so every weekday has a class before it even once today's
+      // 18:00 class has begun (at seven, after 18:00 today's slot had none).
+      const from = addDays(today, 8);
 
       // Seven time slots, one a weekday.
       const daily = await makeClass(gym, owner.cookies, "Daily");
