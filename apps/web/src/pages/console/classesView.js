@@ -96,15 +96,6 @@ export function timeRange(startMinute, minutes, clockFormat) {
   return `${start}–${clockLabel((startMinute + minutes) % 1440, clockFormat)}`;
 }
 
-/** A time slot in one line — `Mon & Wed · 18:30–19:15`. Empty when the days or
- *  the time are missing. */
-export function repeatLine(schedule, clockFormat) {
-  const days = weekdayLine(schedule?.weekdays);
-  const time = timeRange(schedule?.startMinute, schedule?.minutes, clockFormat);
-  if (days === '' || time === '') return '';
-  return `${days} · ${time}`;
-}
-
 /** Keeps a date on one line: a phone wraps between dates, never inside one. */
 const whole = (text) => text.replaceAll(' ', '\u00a0');
 

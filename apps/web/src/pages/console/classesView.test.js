@@ -21,7 +21,6 @@ import {
   peopleLine,
   placesLine,
   repeatDatesLine,
-  repeatLine,
   repeatDraft,
   repeatEditDraft,
   repeatEditRequest,
@@ -96,14 +95,6 @@ describe('reading a time slot', () => {
     [1440, 45, '24h', ''],
   ])('%s + %s min on %s → %s', (start, minutes, clock, text) => {
     expect(timeRange(start, minutes, clock)).toBe(text);
-  });
-
-  it('puts the days and the time range in one line, or nothing when half is missing', () => {
-    const slot = { weekdays: [1, 3], startMinute: 1110, minutes: 45 };
-    expect(repeatLine(slot, '24h')).toBe('Mon & Wed · 18:30–19:15');
-    expect(repeatLine(slot, '12h')).toBe('Mon & Wed · 6:30 PM–7:15 PM');
-    expect(repeatLine({ ...slot, weekdays: [] }, '24h')).toBe('');
-    expect(repeatLine({ ...slot, startMinute: null }, '24h')).toBe('');
   });
 
   // The next dates are the server's, and no count of dates is ever printed:

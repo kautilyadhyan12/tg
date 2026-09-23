@@ -131,6 +131,11 @@ const drawShell = () =>
     </MemoryRouter>,
   );
 
+// A time slot's heading: its days as text, its time range in a span of its
+// own that never breaks across lines.
+const slotHeading = (text) =>
+  screen.getByText((_, el) => el?.tagName === 'DIV' && el.textContent === text);
+
 const withSlot = (slot) => timetable({ entries: [{ type: YOGA, schedules: [{ ...REPEAT, ...slot }] }] });
 
 // THE WORST THING THIS SCREEN'S WORDS COULD DO (17b-ii-w): a button whose word
@@ -173,7 +178,7 @@ describe('closing and backing out never change the timetable', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
 
     nothingSent();
-    expect(screen.getByText('Mon & Wed · 18:30–19:15')).toBeTruthy();
+    expect(slotHeading('Mon & Wed · 18:30–19:15')).toBeTruthy();
   });
 
   it('Archive and a time slot s Cancel ask first, and Keep it sends nothing', async () => {
@@ -238,10 +243,24 @@ describe('reading the timetable', () => {
     expect(screen.queryByText(/Priya Sharma/)).toBeNull();
   });
 
+  // Kd, at the click-through: a class and its time slots were hard to tell
+  // apart. The class carries its own colour down its edge, as on the Calendar,
+  // and its buttons say they are the class's.
+  it('marks each class with its own colour, and names its buttons as the class s', async () => {
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    expect(screen.getByTestId('class-colour').style.background).toBe('rgb(76, 141, 255)');
+    expect(screen.getByRole('heading', { name: 'Sunrise Yoga' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Edit Sunrise Yoga' }).textContent).toBe('Edit class');
+    expect(screen.getByText('Time slots')).toBeTruthy();
+  });
+
   it('draws each time slot with its own time range, places and coach', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
-    expect(screen.getByText('Mon & Wed · 18:30–19:15')).toBeTruthy();
+    expect(slotHeading('Mon & Wed · 18:30–19:15')).toBeTruthy();
+    // On a phone the heading may wrap before the time, never inside it.
+    expect(screen.getByText('18:30–19:15').className).toContain('whitespace-nowrap');
     expect(screen.getByText('12 places · Dana Okafor')).toBeTruthy();
   });
 
@@ -498,7 +517,7 @@ describe('adding a time slot', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Keep it' }));
     expect(api.stopClassRepeat).not.toHaveBeenCalled();
-    expect(screen.getByText('Mon & Wed · 18:30–19:15')).toBeTruthy();
+    expect(slotHeading('Mon & Wed · 18:30–19:15')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', slotCancel));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel time slot' }));
@@ -639,7 +658,7 @@ describe('editing, archiving and restoring a class', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Archived classes/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Restore Sunrise Yoga' }));
     await waitFor(() => expect(api.restoreClass).toHaveBeenCalledWith('g1', 't1'));
-    await screen.findByText('Mon & Wed · 18:30–19:15');
+    await waitFor(() => expect(slotHeading('Mon & Wed · 18:30–19:15')).toBeTruthy());
   });
 
   it('prints the server s own sentence when a save is refused, and keeps the timetable', async () => {

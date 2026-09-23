@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { Loader2, Plus, RotateCcw } from 'lucide-react';
+import { Clock, Loader2, Plus, RotateCcw } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import {
   ConfirmInline,
@@ -31,10 +31,10 @@ import {
   repeatDraft,
   repeatEditDraft,
   repeatEditRequest,
-  repeatLine,
   repeatProblem,
   repeatRequest,
   runFieldsProblem,
+  timeRange,
   timetableLists,
   toggleWeekday,
   weekdayLine,
@@ -533,34 +533,42 @@ export default function Classes() {
             const isEditing = editing === type.id;
             const asking = confirming === `archive:${type.id}`;
             return (
-              <ConsoleCard key={type.id}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex items-start gap-3">
-                    {swatch === null ? null : (
-                      <span
-                        aria-hidden="true"
-                        className="w-3 h-3 rounded-full mt-1.5 flex-shrink-0"
-                        style={{ background: swatch }}
-                      />
-                    )}
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium" style={{ color: '#fff' }}>
+              <ConsoleCard key={type.id} className="relative overflow-hidden">
+                {/* The class's own colour down its edge, as its classes carry
+                    it on the Calendar (Kd, RULINGS 2026-09-23). */}
+                {swatch === null ? null : (
+                  <span
+                    aria-hidden="true"
+                    data-testid="class-colour"
+                    className="absolute left-0 top-0 bottom-0 w-1"
+                    style={{ background: swatch }}
+                  />
+                )}
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-base font-semibold" style={{ color: '#fff' }}>
                         {type.name}
-                        {type.openGym ? (
-                          <span className="ml-2 text-xs whitespace-nowrap" style={labelStyle}>
-                            Open gym
-                          </span>
-                        ) : null}
-                      </div>
-                      {type.description === null || type.description === '' ? null : (
-                        <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.65)' }}>
-                          {type.description}
-                        </p>
-                      )}
+                      </h2>
+                      {type.openGym ? (
+                        <span
+                          className="text-xs rounded-md px-1.5 py-0.5 whitespace-nowrap"
+                          style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.65)' }}
+                        >
+                          Open gym
+                        </span>
+                      ) : null}
                     </div>
+                    {type.description === null || type.description === '' ? null : (
+                      <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.65)' }}>
+                        {type.description}
+                      </p>
+                    )}
                   </div>
+                  {/* Buttons for the class, links for its time slots, so the
+                      two levels never look alike. */}
                   {locked || isEditing || asking ? null : (
-                    <div className="flex items-center gap-4 flex-shrink-0">
+                    <div className="flex items-center gap-2 flex-shrink-0">
                       <button
                         type="button"
                         onClick={() => {
@@ -568,18 +576,18 @@ export default function Classes() {
                           setEditDraft(classDraft(type));
                         }}
                         aria-label={`Edit ${type.name}`}
-                        className="text-sm"
-                        style={{ color: '#FF8A1F' }}
+                        className="text-sm rounded-lg px-3 py-1.5"
+                        style={{ border: '1px solid rgba(255,138,31,0.35)', color: '#FF8A1F' }}
                       >
-                        Edit
+                        Edit class
                       </button>
                       <button
                         type="button"
                         onClick={() => setConfirming(`archive:${type.id}`)}
                         disabled={busy !== null}
                         aria-label={`Archive ${type.name}`}
-                        className="text-sm inline-flex items-center gap-1"
-                        style={{ color: 'rgba(255,255,255,0.5)' }}
+                        className="text-sm rounded-lg px-3 py-1.5 inline-flex items-center gap-1"
+                        style={{ border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.65)' }}
                       >
                         {busy === `archive:${type.id}` ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -623,7 +631,10 @@ export default function Classes() {
                   </div>
                 ) : null}
 
-                <div className="mt-4 flex flex-col gap-3">
+                <div className="mt-4 flex flex-col gap-2">
+                  <div className="text-xs uppercase tracking-wider" style={labelStyle}>
+                    Time slots
+                  </div>
                   {entry.schedules.length === 0 ? (
                     <p className="text-sm" style={labelStyle}>
                       No time slots yet.
@@ -636,22 +647,36 @@ export default function Classes() {
                     return (
                       <div
                         key={schedule.id}
-                        className="rounded-xl px-3 py-2.5 flex flex-col gap-3"
-                        style={{ background: 'rgba(255,255,255,0.03)' }}
+                        className="rounded-xl px-3.5 py-3 flex flex-col gap-3"
+                        style={{
+                          background: 'rgba(255,255,255,0.05)',
+                          border: '1px solid rgba(255,255,255,0.07)',
+                        }}
                       >
                         <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="text-sm font-medium" style={{ color: '#fff' }}>
-                              {repeatLine(schedule, lists.clockFormat)}
-                            </div>
-                            <div className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.65)' }}>
-                              {peopleLine(schedule)}
-                            </div>
-                            {editingThis ? null : (
-                              <div className="text-xs mt-0.5" style={labelStyle}>
-                                {repeatDatesLine(schedule)}
+                          <div className="min-w-0 flex items-start gap-2.5">
+                            <Clock
+                              aria-hidden="true"
+                              className="w-4 h-4 mt-0.5 flex-shrink-0"
+                              style={{ color: swatch ?? 'rgba(255,255,255,0.45)' }}
+                            />
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold" style={{ color: '#fff' }}>
+                                {days} ·{' '}
+                                {/* The time range never breaks across lines. */}
+                                <span className="whitespace-nowrap">
+                                  {timeRange(schedule.startMinute, schedule.minutes, lists.clockFormat)}
+                                </span>
                               </div>
-                            )}
+                              <div className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                                {peopleLine(schedule)}
+                              </div>
+                              {editingThis ? null : (
+                                <div className="text-xs mt-1" style={labelStyle}>
+                                  {repeatDatesLine(schedule)}
+                                </div>
+                              )}
+                            </div>
                           </div>
                           {locked || editingThis || askingThis ? null : (
                             <div className="flex items-center gap-4 flex-shrink-0">

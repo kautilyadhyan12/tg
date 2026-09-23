@@ -12,7 +12,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **The worst thing, first test** (red before, green after): a button whose word does something else — Close, the X and Keep it send nothing; Archive, a time slot's Cancel and Cancel class each ask first; no form offers a button named Cancel.
 - **Proven**: web Classes tests 101/101 · the whole web suite 2,449 passed before the no-break-space fix, which touched only `classesView` and its test (`poseAssets.contract` fails locally on Node 24 only, as before) · web eslint 0 · api tsc 0 · api eslint 0 · the two class route files on `aihg_b` 31/31.
 - **Looked at in headless Edge** at 1280 and 400 wide on a throwaway local gym ("Northside Fitness", `wordsdemo…@example.com`): list, both questions, all four forms, the Calendar, Un-cancel, the phone.
-- **Open**: a slot's "Next:" dates start at the gym's today, so a class earlier today is listed after it ran — server, pre-existing, added to 17b-ii-b-ii. Kd's click-through, then "merge" and the ROADMAP tick.
+- **Kd's click-through** (*"all working"*) found the list hard to tell apart and left the look to the chat: each class card has its colour down its edge, a larger name, outlined "Edit class" / "Archive", and its time slots under "Time slots" in their own boxes with a clock in the class's colour; a slot's time range never breaks on a phone. Classes tests 101/101 after it; looked at again at 1280 and 400.
+- **Open**: a slot's "Next:" dates start at the gym's today, so a class earlier today is listed after it ran — server, pre-existing, added to 17b-ii-b-ii. Kd's "merge", then the ROADMAP tick.
 
 ## 2026-09-23 · 17b-ii-b-i (Folder B): the week view, and one day changed or cancelled
 
