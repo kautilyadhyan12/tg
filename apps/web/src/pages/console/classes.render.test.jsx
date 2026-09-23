@@ -16,6 +16,7 @@ const api = {
   archiveClass: vi.fn(),
   addClassRepeat: vi.fn(),
   updateClassRepeat: vi.fn(),
+  bulkEditClass: vi.fn(),
   stopClassRepeat: vi.fn(),
   restoreClass: vi.fn(),
   getStaff: vi.fn(),
@@ -101,6 +102,7 @@ beforeEach(() => {
     .mockResolvedValue(timetable({ entries: [], archived: [YOGA], archivedTotal: 1 }));
   api.addClassRepeat.mockReset().mockResolvedValue(timetable());
   api.updateClassRepeat.mockReset().mockResolvedValue(timetable());
+  api.bulkEditClass.mockReset().mockResolvedValue(timetable());
   api.stopClassRepeat.mockReset().mockResolvedValue(timetable({ entries: [{ type: YOGA, schedules: [] }] }));
   api.restoreClass.mockReset().mockResolvedValue(timetable());
   api.getStaff.mockReset().mockResolvedValue({
@@ -693,6 +695,130 @@ describe('editing a time slot', () => {
     expect(screen.getByText('Class size must be 1 to 500, or tick No limit.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(api.updateClassRepeat).not.toHaveBeenCalled();
+  });
+});
+
+describe('bulk edit', () => {
+  // A second time slot with values of its own, so a body that carried the
+  // first one's would show.
+  const MORNING = {
+    ...REPEAT,
+    id: 's2',
+    weekdays: [2, 4],
+    startMinute: 420,
+    minutes: 30,
+    places: 8,
+    coachUserId: null,
+    coachName: null,
+  };
+  const twoSlots = (morning = MORNING) =>
+    timetable({ entries: [{ type: YOGA, schedules: [REPEAT, morning] }] });
+  const openBulk = () =>
+    fireEvent.click(screen.getByRole('button', { name: 'Bulk edit the time slots of Sunrise Yoga' }));
+  const today = () => gymToday('Europe/London');
+  const tick = (name) => fireEvent.click(screen.getByRole('checkbox', { name }));
+
+  it('is offered for a class with two or more time slots that can still change, and not otherwise', async () => {
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    expect(screen.queryByRole('button', { name: /^Bulk edit/ })).toBeNull();
+    cleanup();
+
+    api.getClasses.mockResolvedValue(twoSlots({ ...MORNING, endsOn: '2026-09-25', finished: true, nextDates: [] }));
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    expect(screen.queryByRole('button', { name: /^Bulk edit/ })).toBeNull();
+    cleanup();
+
+    api.getClasses.mockResolvedValue(twoSlots());
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    expect(screen.getByRole('button', { name: 'Bulk edit the time slots of Sunrise Yoga' })).toBeTruthy();
+  });
+
+  it('opens with every time slot ticked and nothing to change, and sends only the ticked field for the ticked time slots', async () => {
+    api.getClasses.mockResolvedValue(twoSlots());
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    openBulk();
+
+    expect((await screen.findByLabelText('Update from')).value).toBe(today());
+    expect(screen.getByRole('checkbox', { name: /Mon & Wed/ }).checked).toBe(true);
+    expect(screen.getByRole('checkbox', { name: /Tue & Thu/ }).checked).toBe(true);
+    // Nothing is ticked to change, so nothing can be sent.
+    expect(screen.getByText('Tick what to change.')).toBeTruthy();
+    expect(screen.queryByLabelText('Coach (optional)')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(api.bulkEditClass).not.toHaveBeenCalled();
+
+    tick('Change coach');
+    fireEvent.change(screen.getByLabelText('Coach (optional)'), { target: { value: 'u9' } });
+    tick(/Tue & Thu/);
+    const later = addDays(today(), 7);
+    fireEvent.change(screen.getByLabelText('Update from'), { target: { value: later } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(api.bulkEditClass).toHaveBeenCalledTimes(1));
+    const [gymId, typeId, body] = api.bulkEditClass.mock.calls[0];
+    expect(gymId).toBe('g1');
+    expect(typeId).toBe('t1');
+    // Every key, and no more: the route's schema is `.strict()`.
+    expect(body).toEqual({ scheduleIds: ['s1'], updateFrom: later, set: { coachUserId: 'u9' } });
+    await waitFor(() => expect(screen.queryByLabelText('Update from')).toBeNull());
+  });
+
+  it('sends a new length and "no limit" as null, for both time slots', async () => {
+    api.getClasses.mockResolvedValue(twoSlots());
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    openBulk();
+    await screen.findByLabelText('Update from');
+    tick('Change length');
+    fireEvent.change(screen.getByLabelText('Length (minutes)'), { target: { value: '50' } });
+    tick('Change class size');
+    tick('No limit');
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.bulkEditClass).toHaveBeenCalledTimes(1));
+    expect(api.bulkEditClass.mock.calls[0][2]).toEqual({
+      scheduleIds: ['s1', 's2'],
+      updateFrom: today(),
+      set: { minutes: 50, places: null },
+    });
+  });
+
+  it('sends nothing with no time slot ticked or a length out of bounds, and Close sends nothing', async () => {
+    api.getClasses.mockResolvedValue(twoSlots());
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    openBulk();
+    await screen.findByLabelText('Update from');
+    tick('Change length');
+    fireEvent.change(screen.getByLabelText('Length (minutes)'), { target: { value: '2' } });
+    expect(screen.getByText('Length must be 5 to 600 minutes.')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Length (minutes)'), { target: { value: '50' } });
+    tick(/Mon & Wed/);
+    tick(/Tue & Thu/);
+    expect(screen.getByText('Tick at least one time slot.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByLabelText('Update from')).toBeNull();
+    expect(api.bulkEditClass).not.toHaveBeenCalled();
+  });
+
+  it('reads the list again after a refusal, and says so', async () => {
+    api.getClasses.mockResolvedValue(twoSlots());
+    api.bulkEditClass.mockRejectedValueOnce({
+      response: { status: 409, data: { error: 'class_update_from', message: 'Pick a date.' } },
+    });
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    expect(api.getClasses).toHaveBeenCalledTimes(1);
+    openBulk();
+    await screen.findByLabelText('Update from');
+    tick('Change length');
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.getClasses).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("We couldn't save that.")).toBeTruthy();
   });
 });
 

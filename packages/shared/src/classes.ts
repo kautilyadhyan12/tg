@@ -68,6 +68,12 @@ export const CLASS_TYPES_MAX = 60;
  *  twelve leaves room for a class that runs twice on some days. */
 export const CLASS_SCHEDULES_PER_TYPE_MAX = 12;
 
+/** The most time slots one class may have listed at once, the ones not yet
+ *  finished. A time slot changed from a date is listed twice until the day
+ *  before that date, so a class at its limit that is bulk edited lists twice
+ *  as many for a while; the Classes screen reads this many a class. */
+export const CLASS_SCHEDULES_LISTED_PER_TYPE_MAX = CLASS_SCHEDULES_PER_TYPE_MAX * 2;
+
 /** THE COLOURS, AS A FIXED LIST AND NOT AS A HEX STRING THE CONSOLE PICKS.
  *
  *  A colour crosses the wire, is stored, and is painted into a calendar cell
@@ -375,6 +381,35 @@ export const updateGymClassScheduleRequestSchema = z
   })
   .strict();
 export type UpdateGymClassScheduleRequest = z.infer<typeof updateGymClassScheduleRequestSchema>;
+
+/** BULK EDIT — several time slots of ONE class from one date (TeamUp's Bulk
+ *  Edit; Kd, RULINGS 2026-09-22). Each ticked time slot takes what is in `set`
+ *  from `updateFrom` on, or from its own first day when that is later, exactly
+ *  as its own Edit would; a key left out of `set` keeps each time slot's own
+ *  value. Inside `set`, `places: null` is "no limit" and `coachUserId: null` is
+ *  "no coach", never "leave it". Days and start time are not here: those move a
+ *  time slot, one at a time. */
+export const bulkEditGymClassSchedulesRequestSchema = z
+  .object({
+    scheduleIds: z
+      .array(z.string().uuid())
+      .min(1)
+      .max(CLASS_SCHEDULES_LISTED_PER_TYPE_MAX)
+      .refine((ids) => new Set(ids).size === ids.length, { message: "a time slot twice" }),
+    updateFrom: classDaySchema,
+    set: z
+      .object({
+        minutes: classMinutesSchema.optional(),
+        places: classPlacesSchema.nullable().optional(),
+        coachUserId: z.string().uuid().nullable().optional(),
+      })
+      .strict()
+      .refine((s) => Object.keys(s).length > 0, { message: "nothing to change" }),
+  })
+  .strict();
+export type BulkEditGymClassSchedulesRequest = z.infer<
+  typeof bulkEditGymClassSchedulesRequestSchema
+>;
 
 /** The 409 a move answers when it would replace classes the gym changed or
  *  cancelled on their own. Its body carries `replaces`, the count. */

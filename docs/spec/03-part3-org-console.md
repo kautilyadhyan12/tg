@@ -2191,6 +2191,15 @@ classes: the time slot is split at the date when it still runs before it — its
 classes from the date move to the new one with their ids — and each takes the
 values except one changed on its own. The date must be on the written calendar. A
 time slot whose last day has passed no longer counts toward the cap.)*
+*(17b-ii-b-ii-b, 2026-09-23: **Bulk edit** (TeamUp's name) is a new length, coach or
+class size for the time slots of ONE class that staff tick, from one Update-from
+date; a field not ticked keeps each time slot's own. Each time slot changes exactly
+as its own Edit would, from the date or from its own first day when that is later.
+All or nothing: an id that is not a running time slot of that class in that gym, or
+one that does not run on its date, refuses the whole request. Days and start time
+are not in it. **The limits:** at most 12 time slots of a class running on any one
+day, and at most 24 listed (not finished) — a time slot changed from a date is
+listed twice until the date, and the Classes screen reads 24 a class.)*
 An open-gym slot is a class type marked so. `schedule.manage` (owner and manager); a
 trainer sees the lists of their own classes.
 

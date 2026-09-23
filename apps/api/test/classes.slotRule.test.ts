@@ -9,7 +9,9 @@ import { describe, expect, it } from "vitest";
 import {
   fromVerdict,
   slotChangeKind,
+  peakRunning,
   slotDateFate,
+  withinSlotLimits,
   type SlotChange,
   type SlotDateFacts,
   type SlotDateFate,
@@ -179,5 +181,55 @@ describe("the dates a time slot can be changed from", () => {
     ["the day after it", "2026-12-23", { ...base, startsOn: "2026-12-22" }, "beyond_calendar"],
   ] as const)("%s → %s", (_label, from, slot, verdict) => {
     expect(fromVerdict(from, slot)).toBe(verdict);
+  });
+});
+
+// The two limits, from the gym's side: twelve time slots running on any one
+// day, and twenty-four listed while halves of time slots changed from a date
+// wait to end.
+describe("the most time slots running on one day", () => {
+  const daily = (startsOn: string, endsOn: string | null = null) => ({ startsOn, endsOn });
+  // Seven time slots, one a weekday, bulk edited from 12 Oct: seven halves end
+  // on 11 Oct and seven start on 12 Oct.
+  const bulkEdited = [
+    ...Array.from({ length: 7 }, () => daily("2026-09-01", "2026-10-11")),
+    ...Array.from({ length: 7 }, () => daily("2026-10-12")),
+  ];
+  it.each([
+    ["none", [], { from: "2026-10-05", until: null }, 0],
+    ["one running", [daily("2026-09-01")], { from: "2026-10-05", until: null }, 1],
+    ["one that ended before", [daily("2026-09-01", "2026-10-04")], { from: "2026-10-05", until: null }, 0],
+    ["one ending on the first day", [daily("2026-09-01", "2026-10-05")], { from: "2026-10-05", until: null }, 1],
+    ["one starting later", [daily("2026-11-01")], { from: "2026-10-05", until: null }, 1],
+    ["one starting after the window", [daily("2026-11-01")], { from: "2026-10-05", until: "2026-10-31" }, 0],
+    ["one starting on the window's last day", [daily("2026-10-31")], { from: "2026-10-05", until: "2026-10-31" }, 1],
+    ["two that never meet", [daily("2026-09-01", "2026-10-10"), daily("2026-10-11")], { from: "2026-10-05", until: null }, 1],
+    ["two that meet on one day", [daily("2026-09-01", "2026-10-11"), daily("2026-10-11")], { from: "2026-10-05", until: null }, 2],
+    ["a daily class bulk edited, looked at from today", bulkEdited, { from: "2026-10-05", until: null }, 7],
+    ["the same, from the edit's date", bulkEdited, { from: "2026-10-12", until: null }, 7],
+    ["the same, over a window ending before it", bulkEdited, { from: "2026-10-05", until: "2026-10-08" }, 7],
+  ] as const)("%s → %i", (_label, slots, window, peak) => {
+    expect(peakRunning(slots, window)).toBe(peak);
+  });
+});
+
+describe("the class's limits of time slots", () => {
+  it.each([
+    ["a first time slot", { peak: 0, addsRunning: 1, listed: 0, addsListed: 1 }, true],
+    ["the twelfth", { peak: 11, addsRunning: 1, listed: 11, addsListed: 1 }, true],
+    ["a thirteenth running at once", { peak: 12, addsRunning: 1, listed: 12, addsListed: 1 }, false],
+    // Seven daily time slots bulk edited: fourteen listed, seven running on any
+    // one day, so an eighth time slot can still be added.
+    ["an eighth after a daily class was bulk edited", { peak: 7, addsRunning: 1, listed: 14, addsListed: 1 }, true],
+    ["the twenty-fourth listed", { peak: 11, addsRunning: 1, listed: 23, addsListed: 1 }, true],
+    ["a twenty-fifth listed", { peak: 1, addsRunning: 1, listed: 24, addsListed: 1 }, false],
+    // One of a class's twelve changed from a date: the other eleven run beside
+    // the one that follows it, and it is listed twice until the date.
+    ["a split at twelve", { peak: 11, addsRunning: 1, listed: 12, addsListed: 1 }, true],
+    ["a move that stops the old time slot outright", { peak: 11, addsRunning: 1, listed: 24, addsListed: 0 }, true],
+    ["a bulk edit of twelve, each split", { peak: 0, addsRunning: 0, listed: 12, addsListed: 12 }, true],
+    ["a bulk edit past twenty-four listed", { peak: 0, addsRunning: 0, listed: 13, addsListed: 12 }, false],
+  ] as const)("%s → %s", (_label, counts, ok) => {
+    expect(withinSlotLimits(counts)).toBe(ok);
   });
 });

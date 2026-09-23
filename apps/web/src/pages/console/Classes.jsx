@@ -9,7 +9,15 @@ import {
   ConsoleLoading,
   ConsoleSection,
 } from '../../components/console/ConsoleStates';
-import { DaysPick, Field, RunFields, StartTimePick } from './ClassFields';
+import {
+  CoachField,
+  DaysPick,
+  Field,
+  LengthField,
+  RunFields,
+  SizeField,
+  StartTimePick,
+} from './ClassFields';
 import { inputStyle, labelStyle } from './classStyles';
 import ClassWeek from './ClassWeek';
 import { useConsoleOrg } from './useConsoleOrg';
@@ -18,6 +26,11 @@ import { consoleIsReadOnly, readOnlyNote } from './billingView';
 import { addDays, clockLabel, gymToday } from './hoursView';
 import {
   archivedPageNote,
+  bulkEditBounds,
+  bulkEditDraft,
+  bulkEditProblem,
+  bulkEditRequest,
+  bulkEditSlots,
   CLASS_COLOUR_CHOICES,
   canManageSchedule,
   classDraft,
@@ -40,6 +53,7 @@ import {
   slotEditable,
   timeRange,
   timetableLists,
+  toggleBulkSlot,
   toggleWeekday,
   updateFromBounds,
   weekdayLine,
@@ -304,6 +318,113 @@ function RepeatEditForm({
   );
 }
 
+/** One field of a bulk edit: a tick, and the box once it is ticked. */
+function BulkChange({ label, on, onToggle, disabled, children }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="flex items-center gap-2 text-sm" style={{ color: '#fff' }}>
+        <input type="checkbox" checked={on} onChange={onToggle} disabled={disabled} />
+        {label}
+      </label>
+      {on ? <div className="pl-6">{children}</div> : null}
+    </div>
+  );
+}
+
+/** BULK EDIT (TeamUp's name): a new length, coach or class size for the ticked
+ *  time slots of one class, from an Update-from date. */
+function BulkEditForm({
+  slots,
+  draft,
+  setDraft,
+  bounds,
+  staff,
+  clockFormat,
+  disabled,
+  saving,
+  onSave,
+  onClose,
+}) {
+  const problem = bulkEditProblem(draft, bounds);
+  const set = (patch) => setDraft({ ...draft, ...patch });
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2">
+        <span className="text-xs uppercase tracking-wider" style={labelStyle}>
+          Time slots
+        </span>
+        {slots.map((slot) => (
+          <label key={slot.id} className="flex items-start gap-2 text-sm" style={{ color: '#fff' }}>
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={draft.ticked.includes(slot.id)}
+              onChange={() => setDraft(toggleBulkSlot(draft, slot.id))}
+              disabled={disabled}
+            />
+            <span>
+              {weekdayLine(slot.weekdays)} ·{' '}
+              <span className="whitespace-nowrap">
+                {timeRange(slot.startMinute, slot.minutes, clockFormat)}
+              </span>
+              <span className="block text-xs" style={labelStyle}>
+                {peopleLine(slot)}
+              </span>
+            </span>
+          </label>
+        ))}
+      </div>
+      <BulkChange
+        label="Change length"
+        on={draft.changeMinutes}
+        onToggle={() => set({ changeMinutes: !draft.changeMinutes })}
+        disabled={disabled}
+      >
+        <LengthField draft={draft} set={set} disabled={disabled} />
+      </BulkChange>
+      <BulkChange
+        label="Change coach"
+        on={draft.changeCoach}
+        onToggle={() => set({ changeCoach: !draft.changeCoach })}
+        disabled={disabled}
+      >
+        <CoachField draft={draft} set={set} staff={staff} disabled={disabled} />
+      </BulkChange>
+      <BulkChange
+        label="Change class size"
+        on={draft.changePlaces}
+        onToggle={() => set({ changePlaces: !draft.changePlaces })}
+        disabled={disabled}
+      >
+        <SizeField draft={draft} set={set} disabled={disabled} />
+      </BulkChange>
+      <Field label="Update from">
+        <input
+          type="date"
+          value={draft.updateFrom}
+          min={bounds.min}
+          max={bounds.max}
+          onChange={(e) => set({ updateFrom: e.target.value })}
+          disabled={disabled}
+          className="rounded-lg px-3 py-2 text-sm"
+          style={inputStyle}
+        />
+      </Field>
+      <p className="text-xs" style={labelStyle}>
+        {repeatEditNote(false)}
+      </p>
+      <Problem text={problem} />
+      <FormButtons
+        saveLabel="Save"
+        onSave={onSave}
+        onClose={onClose}
+        saving={saving}
+        blocked={disabled || problem !== null}
+      />
+    </div>
+  );
+}
+
 export default function Classes() {
   const { orgSlug } = useParams();
   const { loading: orgLoading, error: orgError, org, notFound, reload } = useConsoleOrg(orgSlug);
@@ -329,6 +450,9 @@ export default function Classes() {
   // A move the server asked about: how many classes it would replace, from
   // which date. Any change to the form puts Save back.
   const [replaceAsk, setReplaceAsk] = useState(null);
+  // Which class is open for a bulk edit, and its form.
+  const [bulkFor, setBulkFor] = useState(null);
+  const [bulkState, setBulkState] = useState(() => bulkEditDraft([], ''));
 
   const [reloadKey, setReloadKey] = useState(0);
   // Which tab, in the address so a reload or a shared link keeps it.
@@ -498,6 +622,30 @@ export default function Classes() {
     }
   };
 
+  const bulkBounds = (slots) =>
+    bulkEditBounds(
+      slots.filter((s) => bulkState.ticked.includes(s.id)),
+      today,
+      lists.horizonDays,
+    );
+
+  const saveBulk = async (typeId, slots) => {
+    const body = bulkEditRequest(bulkState, bulkBounds(slots));
+    if (body === null) return;
+    if (await run(`bulk:${typeId}`, () => orgService.bulkEditClass(gymId, typeId, body))) {
+      setBulkFor(null);
+      return;
+    }
+    // A refusal can mean the list on screen is out of date, as for one time
+    // slot's Edit; read it again.
+    try {
+      const fresh = await orgService.getClasses(gymId);
+      setTimetable(fresh.data);
+    } catch {
+      // The sentence above already says the save failed.
+    }
+  };
+
   const showView = (next) => {
     if (next === view) return;
     setSearchParams(next === 'week' ? { view: 'week' } : {});
@@ -583,6 +731,8 @@ export default function Classes() {
             const swatch = classSwatch(type.colour);
             const isEditing = editing === type.id;
             const asking = confirming === `archive:${type.id}`;
+            const bulkSlots = bulkEditSlots(entry.schedules, today, lists.horizonDays);
+            const isBulk = bulkFor === type.id;
             return (
               <ConsoleCard key={type.id} className="relative overflow-hidden">
                 {/* The class's own colour down its edge, as its classes carry
@@ -618,8 +768,8 @@ export default function Classes() {
                   </div>
                   {/* Buttons for the class, links for its time slots, so the
                       two levels never look alike. */}
-                  {locked || isEditing || asking ? null : (
-                    <div className="flex items-center gap-2 flex-shrink-0">
+                  {locked || isEditing || asking || isBulk ? null : (
+                    <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
                       <button
                         type="button"
                         onClick={() => {
@@ -632,6 +782,20 @@ export default function Classes() {
                       >
                         Edit class
                       </button>
+                      {bulkSlots.length >= 2 ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBulkFor(type.id);
+                            setBulkState(bulkEditDraft(bulkSlots, today));
+                          }}
+                          aria-label={`Bulk edit the time slots of ${type.name}`}
+                          className="text-sm rounded-lg px-3 py-1.5"
+                          style={{ border: '1px solid rgba(255,138,31,0.35)', color: '#FF8A1F' }}
+                        >
+                          Bulk edit
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => setConfirming(`archive:${type.id}`)}
@@ -678,6 +842,24 @@ export default function Classes() {
                       saveLabel="Save"
                       onSave={() => void saveEdit(type.id)}
                       onClose={() => setEditing(null)}
+                    />
+                  </div>
+                ) : null}
+
+                {isBulk ? (
+                  <div className="mt-4">
+                    <BulkEditForm
+                      key={type.id}
+                      slots={bulkSlots}
+                      draft={bulkState}
+                      setDraft={setBulkState}
+                      bounds={bulkBounds(bulkSlots)}
+                      staff={staff}
+                      clockFormat={lists.clockFormat}
+                      disabled={locked}
+                      saving={busy === `bulk:${type.id}`}
+                      onSave={() => void saveBulk(type.id, bulkSlots)}
+                      onClose={() => setBulkFor(null)}
                     />
                   </div>
                 ) : null}

@@ -38,6 +38,7 @@ import {
   classSessionStatusSchema,
   gymClassesResponseSchema,
   gymClassWeekResponseSchema,
+  type BulkEditGymClassSchedulesRequest,
   type ChangeGymClassSessionRequest,
   type CreateGymClassScheduleRequest,
   type CreateGymClassTypeRequest,
@@ -459,6 +460,36 @@ export async function updateSchedule(
   );
   if (done.kind === "replaces") return done;
   return { kind: "ok", body: await readOr404(deps, gymId) };
+}
+
+/** BULK EDIT — a new length, size or coach for several time slots of one class
+ *  from one date (`repo.bulkChangeSlots`). */
+export async function bulkEditSchedules(
+  deps: ClassesDeps,
+  userId: string,
+  gymId: string,
+  classTypeId: string,
+  req: BulkEditGymClassSchedulesRequest,
+): Promise<GymClassesResponse> {
+  await requireWritablePrivilege(deps, gymId, userId, "schedule.manage");
+  const outcome = await repo.bulkChangeSlots(deps.sql, {
+    gymId,
+    classTypeId,
+    scheduleIds: req.scheduleIds,
+    updateFrom: requireCalendarDate(req.updateFrom, "updateFrom"),
+    set: req.set,
+    actorUserId: userId,
+    now: deps.now(),
+  });
+  if (outcome.kind === "from_outside" && outcome.verdict !== "past") {
+    throw new OrgsError(
+      409,
+      "class_update_from",
+      "Pick a date on the calendar while every ticked time slot runs.",
+    );
+  }
+  slotOutcome(outcome);
+  return await readOr404(deps, gymId);
 }
 
 // ── THE WEEK VIEW AND "THIS DAY ONLY" (17b-ii-b-i) ──────────────────────────

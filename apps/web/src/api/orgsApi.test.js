@@ -293,6 +293,14 @@ describe('orgService endpoints', () => {
     expect(JSON.parse(seen[8].data)).toEqual(unlimited);
   });
 
+  it('sends a bulk edit to its class, as a POST, with the body as given', async () => {
+    const seen = recordRequests(authApi);
+    const bulk = { scheduleIds: ['s1', 's2'], updateFrom: '2026-10-05', set: { places: null } };
+    await orgService.bulkEditClass('gym-1', 't1', bulk);
+    expect(seen.map((r) => `${r.method} ${r.url}`)).toEqual(['post /v1/orgs/gym-1/classes/t1/bulk-edit']);
+    expect(JSON.parse(seen[0].data)).toEqual(bulk);
+  });
+
   /** The week view's four doors (17b-ii-b-i). Cancel and restore share an
    *  address but for their last word, and a PUT that went out as a POST would
    *  cancel a day instead of changing it. */
