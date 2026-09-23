@@ -16,6 +16,7 @@ import { loadConfig } from "../src/config.js";
 import type { EmailRecordLookup, EmailRecordReader } from "../src/email/resend.js";
 import { emailHmac } from "../src/modules/orgs/invites/address.js";
 import { gateFacts, resumeGym, stoppedGyms } from "../src/modules/orgs/invites/repo.js";
+import { claimDueEvent, finishEvent } from "../src/modules/webhooks/repo.js";
 import { INVITE_RESULTS, processInviteResults, type ResultsRun, type StoppedGym } from "../src/modules/orgs/invites/results.js";
 import { inviteSettings } from "../src/modules/orgs/invites/settings.js";
 import { RESEND_WEBHOOK_PATH } from "../src/modules/webhooks/resendRoutes.js";
@@ -106,8 +107,8 @@ d("what comes back (real Postgres)", () => {
     await sql`DELETE FROM gyms WHERE id IN (${mine})`;
     await sql`DELETE FROM users WHERE email LIKE ${`minvr-t-%@${DOMAIN}`}`;
     // Hard bounces are every gym's, so they are found by this suite's own addresses.
-    const locals = ["bounced", "soft", "spam", "forged", "unconfirmed", "order", "page", "twice"];
-    for (const [prefix, n] of [["stop", 50], ["bulk", 200], ["cmp", 120], ["gate", 50]] as const) {
+    const locals = ["bounced", "soft", "spam", "forged", "unconfirmed", "order", "page", "twice", "early", "unknown", "wrongtag", "lease", "denied"];
+    for (const [prefix, n] of [["stop", 50], ["bulk", 200], ["cmp", 120], ["gate", 50], ["refused", 50], ["race", 50], ["half", 200]] as const) {
       for (let i = 0; i < n; i++) locals.push(`${prefix}-${String(i)}`);
     }
     const everyGym = locals.map((local) => hmacOf(addr(local)));
@@ -159,6 +160,9 @@ d("what comes back (real Postgres)", () => {
     return memberInvitePreviewSchema.parse((JSON.parse(res.body) as { preview: unknown }).preview);
   };
 
+  /** The send row each Resend id belongs to: its invitation tag. */
+  const sendIdOf = new Map<string, string>();
+
   /** An invitation email that went, as the sender leaves it, with Resend's id. */
   const seedSent = async (gymId: string, email: string, at = new Date()): Promise<string> => {
     const providerId = `re_${randomUUID()}`;
@@ -167,10 +171,15 @@ d("what comes back (real Postgres)", () => {
     await sql`
       INSERT INTO gym_invites (gym_id, email_hmac, created_at) VALUES (${gymId}, ${hmac}, ${at})
       ON CONFLICT (gym_id, email_hmac) DO NOTHING`;
-    await sql`
+    const rows = await sql<{ id: string }[]>`
       INSERT INTO gym_invite_sends (gym_id, invite_id, kind, state, not_before, created_at, finished_at, provider_id)
       VALUES (${gymId}, (SELECT id FROM gym_invites WHERE gym_id = ${gymId} AND email_hmac = ${hmac}),
-              'first', 'sent', ${at}, ${at}, ${at}, ${providerId})`;
+              'first', 'sent', ${at}, ${at}, ${at}, ${providerId})
+      RETURNING id`;
+    const sendId = rows[0]?.id;
+    if (sendId === undefined) throw new Error("the send was not written");
+    sendIdOf.set(providerId, sendId);
+    resendTags.set(providerId, [{ name: "invite_send", value: sendId }]);
     return providerId;
   };
 
@@ -186,8 +195,9 @@ d("what comes back (real Postgres)", () => {
   const report = (
     type: string,
     emailId: string,
-    opts: { secret?: string; id?: string; at?: number; bounceType?: string; tamper?: boolean } = {},
+    opts: { secret?: string; id?: string; at?: number; bounceType?: string; bounceSubType?: string; tamper?: boolean; sendId?: string | null } = {},
   ) => {
+    const sendId = opts.sendId === undefined ? (sendIdOf.get(emailId) ?? null) : opts.sendId;
     const id = opts.id ?? `msg_minvr_${randomUUID()}`;
     eventIds.push(id);
     const at = opts.at ?? Math.floor(Date.now() / 1000);
@@ -199,7 +209,9 @@ d("what comes back (real Postgres)", () => {
         from: "Gym via AI Home Gym <invites@example.com>",
         to: ["somebody@example.com"],
         subject: "You're a member",
-        ...(opts.bounceType === undefined ? {} : { bounce: { type: opts.bounceType, subType: "General", message: "x" } }),
+        ...(opts.bounceType === undefined ? {} : { bounce: { type: opts.bounceType, subType: opts.bounceSubType ?? "General", message: "x" } }),
+        // As Resend sends them: an object of name and value.
+        tags: sendId === null ? { category: "invite" } : { category: "invite", invite_send: sendId },
       },
     });
     const signature = sign(opts.secret ?? SECRET, id, at, body);
@@ -224,14 +236,17 @@ d("what comes back (real Postgres)", () => {
 
   // ── The worker, with Resend's own record answered by the test ──
 
-  /** Resend's record of each email: its last event. Absent means Resend has no such email. */
+  /** Resend's record of each email: its last event, and its tags. Absent means Resend has
+   *  no such email. */
   const resendRecords = new Map<string, string>();
+  const resendTags = new Map<string, { name: string; value: string }[]>();
   const reads: string[] = [];
   const reader: EmailRecordReader = {
     read: (emailId) => {
       reads.push(emailId);
       const last = resendRecords.get(emailId);
-      const answer: EmailRecordLookup = last === undefined ? { kind: "missing" } : { kind: "found", lastEvent: last };
+      const answer: EmailRecordLookup =
+        last === undefined ? { kind: "missing" } : { kind: "found", lastEvent: last, tags: resendTags.get(emailId) ?? [] };
       return Promise.resolve(answer);
     },
   };
@@ -251,7 +266,7 @@ d("what comes back (real Postgres)", () => {
     });
   /** Run the worker until no report is due, moving the clock past each retry. */
   const processAll = async (): Promise<void> => {
-    for (let i = 0; i < INVITE_RESULTS.maxAttempts + 2; i++) {
+    for (let i = 0; i < INVITE_RESULTS.maxTries + 2; i++) {
       await processResults();
       clock = new Date(clock.getTime() + 4 * 60 * 60 * 1000);
     }
@@ -328,6 +343,8 @@ d("what comes back (real Postgres)", () => {
       // Their invitation can still be sent again when they ask.
       const again = await inject("POST", `${listUrl(gymA)}/entries/${entryId}/invite/resend`, owner.cookies, {});
       expect(again.statusCode, again.body).toBe(200);
+      // Out of reach of every suite's sender: this suite sends nothing.
+      await sql`UPDATE gym_invite_sends SET not_before = now() + interval '1 year' WHERE gym_id = ${gymA} AND state = 'queued'`;
     }, TEST_TIMEOUT_MS);
 
     it("a signed report that Resend's own record does not bear out stops nobody", async () => {
@@ -410,7 +427,13 @@ d("what comes back (real Postgres)", () => {
       expect([first.statusCode, second.statusCode]).toEqual([200, 200]);
       const kept = (await keptEvents()).filter((e) => e.event_id === id);
       expect(kept).toHaveLength(1);
-      expect(kept[0]?.payload).toEqual({ type: "email.delivered", emailId: providerId, bounceType: null });
+      expect(kept[0]?.payload).toEqual({
+        type: "email.delivered",
+        emailId: providerId,
+        sendId: sendIdOf.get(providerId),
+        bounceType: null,
+        bounceSubType: null,
+      });
       expect(JSON.stringify(kept[0]?.payload)).not.toContain("example.com");
     }, TEST_TIMEOUT_MS);
 
@@ -561,6 +584,183 @@ d("what comes back (real Postgres)", () => {
       const farAhead = new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000);
       const facts = (await gateFacts(sql, farAhead)).find((gym) => gym.gymId === gymF)?.facts;
       expect(facts).toMatchObject({ stopped: false, sentOrSending: 50, firstBatch: { sent: 50, withResult: 49 } });
+    }, TEST_TIMEOUT_MS);
+  });
+
+  // =========================================================================
+  // ROUND ONE'S FINDINGS
+  // =========================================================================
+
+  describe("reports that arrive early, about refused addresses, or twice at once", () => {
+    /** An email still being tried after an unclear answer from Resend: no Resend id yet. */
+    const seedRetrying = async (gymId: string, email: string): Promise<string> => {
+      const hmac = hmacOf(email);
+      await sql`INSERT INTO gym_invites (gym_id, email_hmac) VALUES (${gymId}, ${hmac}) ON CONFLICT (gym_id, email_hmac) DO NOTHING`;
+      const rows = await sql<{ id: string }[]>`
+        INSERT INTO gym_invite_sends (gym_id, invite_id, kind, email, not_before, created_at, maybe_sent_at, attempts)
+        VALUES (${gymId}, (SELECT id FROM gym_invites WHERE gym_id = ${gymId} AND email_hmac = ${hmac}),
+                'again', ${email}, now() + interval '1 year', now(), now(), 1)
+        RETURNING id`;
+      const id = rows[0]?.id;
+      if (id === undefined) throw new Error("the send was not written");
+      return id;
+    };
+    const tagFor = (providerId: string, sendId: string) => {
+      sendIdOf.set(providerId, sendId);
+      resendTags.set(providerId, [{ name: "invite_send", value: sendId }]);
+    };
+
+    it("a bounce that arrives while its email is still being retried waits, then stops the address", async () => {
+      const email = addr("early");
+      const sendId = await seedRetrying(gymA, email);
+      const providerId = `re_${randomUUID()}`;
+      tagFor(providerId, sendId);
+      resendRecords.set(providerId, "bounced");
+      await report("email.bounced", providerId, { bounceType: "Permanent" });
+      await processAll();
+      expect(await suppressionsOf(email)).toEqual([]);
+      const waiting = (await keptEvents()).filter((e) => (e.payload as { emailId: string }).emailId === providerId);
+      expect(waiting.map((e) => e.status)).toEqual(["pending"]);
+      // The retry goes through under the same key and Resend's id comes back.
+      await sql`
+        UPDATE gym_invite_sends SET state = 'sent', email = NULL, finished_at = now(), provider_id = ${providerId}
+        WHERE id = ${sendId}`;
+      await sql`UPDATE webhook_events SET not_before = now() WHERE event_id = ${waiting[0]?.event_id ?? ""}`;
+      await processAll();
+      expect(await resultOf(providerId)).toBe("bounced");
+      expect(await suppressionsOf(email)).toEqual([{ gym_id: null, reason: "bounced" }]);
+    }, TEST_TIMEOUT_MS);
+
+    it("an email the sender could not confirm, that Resend's record shows went, is sent after all", async () => {
+      const email = addr("unknown");
+      const sendId = await seedRetrying(gymA, email);
+      await sql`
+        UPDATE gym_invite_sends SET state = 'failed', reason = 'send_unknown', email = NULL, finished_at = now()
+        WHERE id = ${sendId}`;
+      const providerId = `re_${randomUUID()}`;
+      tagFor(providerId, sendId);
+      resendRecords.set(providerId, "bounced");
+      await report("email.bounced", providerId, { bounceType: "Permanent" });
+      await processAll();
+      const row = await sql<{ state: string; reason: string | null; provider_id: string | null; result: string | null }[]>`
+        SELECT state, reason, provider_id, result FROM gym_invite_sends WHERE id = ${sendId}`;
+      expect(row).toEqual([{ state: "sent", reason: null, provider_id: providerId, result: "bounced" }]);
+      expect(await suppressionsOf(email)).toEqual([{ gym_id: null, reason: "bounced" }]);
+    }, TEST_TIMEOUT_MS);
+
+    it("a report whose tag Resend's record does not carry is not acted on", async () => {
+      const email = addr("wrongtag");
+      const providerId = await seedSent(gymA, email);
+      resendRecords.set(providerId, "complained");
+      resendTags.set(providerId, [{ name: "invite_send", value: randomUUID() }]);
+      await report("email.complained", providerId);
+      await processAll();
+      expect(await suppressionsOf(email)).toEqual([]);
+      expect(await resultOf(providerId)).toBeNull();
+    }, TEST_TIMEOUT_MS);
+
+    it("an address Resend refuses — another gym's complaint put it on Resend's list — never counts against this gym", async () => {
+      const staff = await makeUser("owner-g");
+      const gymG = await makeGym(staff, "Innocent Gym");
+      const sent = await seedManySent(gymG, "refused", 50, new Date(Date.now() - 60_000));
+      const [r1, r2, r3] = [sent[2], sent[9], sent[30]];
+      if (r1 === undefined || r2 === undefined || r3 === undefined) throw new Error("seeding fell short");
+      for (const id of [r1, r2]) {
+        resendRecords.set(id, "bounced");
+        await report("email.bounced", id, { bounceType: "Permanent", bounceSubType: "Suppressed" });
+      }
+      resendRecords.set(r3, "suppressed");
+      await report("email.suppressed", r3);
+      await processAll();
+      expect(await stoppedGyms(sql)).not.toContainEqual(expect.objectContaining({ gymId: gymG }));
+      expect([await resultOf(r1), await resultOf(r2), await resultOf(r3)]).toEqual(["refused", "refused", "refused"]);
+      expect(await suppressionsOf(addr("refused-2"))).toEqual([{ gym_id: null, reason: "refused" }]);
+      // Staff are told the truth about it, in any gym.
+      const entryId = await typeIn(gymB, otherOwner, "Refused Person", addr("refused-2"));
+      const one = await inject("POST", `${listUrl(gymB)}/entries/${entryId}/invite`, otherOwner.cookies, {});
+      expect(one.statusCode).toBe(409);
+      expect(JSON.parse(one.body)).toMatchObject({ error: "refused", message: MEMBER_INVITE_WORDS.refused });
+      expect((await previewOf(gymB, otherOwner)).skipped.refused).toBeGreaterThanOrEqual(1);
+      // A real hard bounce of the same address later replaces the refusal.
+      const again = await seedSent(gymA, addr("refused-2"));
+      resendRecords.set(again, "bounced");
+      await report("email.bounced", again, { bounceType: "Permanent", bounceSubType: "General" });
+      await processAll();
+      expect(await suppressionsOf(addr("refused-2"))).toEqual([{ gym_id: null, reason: "bounced" }]);
+    }, TEST_TIMEOUT_MS);
+
+    it("emails Resend refused are left out of what a gym sent: three bounces in 100 that went stop it", async () => {
+      const staff = await makeUser("owner-i");
+      const gymI = await makeGym(staff, "Half Refused Gym");
+      const sent = await seedManySent(gymI, "half", 200, new Date(Date.now() - 10 * 60_000));
+      // Half of them Resend never tried: its own list refused them.
+      await sql`
+        UPDATE gym_invite_sends SET result = 'refused', result_at = now()
+        WHERE gym_id = ${gymI} AND provider_id = ANY(${sent.filter((_id, i) => i % 2 === 1)}::text[])`;
+      for (const index of [10, 60, 120]) {
+        const id = sent[index];
+        if (id === undefined) throw new Error("seeding fell short");
+        resendRecords.set(id, "bounced");
+        await report("email.bounced", id, { bounceType: "Permanent" });
+      }
+      await processAll();
+      expect(await stoppedGyms(sql)).toContainEqual(expect.objectContaining({ gymId: gymI, reason: "bounces" }));
+    }, TEST_TIMEOUT_MS);
+    it("two workers at once act on a report once, and tell the operator once", async () => {
+      const staff = await makeUser("owner-h");
+      const gymH = await makeGym(staff, "Twice Gym");
+      const sent = await seedManySent(gymH, "race", 50, new Date(Date.now() - 60_000));
+      for (const id of [sent[1], sent[2], sent[3]]) {
+        if (id === undefined) throw new Error("seeding fell short");
+        resendRecords.set(id, "bounced");
+        await report("email.bounced", id, { bounceType: "Permanent" });
+      }
+      const told = toldOperator.length;
+      clock = new Date();
+      const runs = await Promise.all([processResults(), processResults(), processResults()]);
+      expect(runs.reduce((n, run) => n + run.stopped, 0)).toBe(1);
+      expect(toldOperator.slice(told).filter((s) => s.gymId === gymH)).toHaveLength(1);
+      const mine = (await keptEvents()).filter((e) => sent.includes((e.payload as { emailId: string }).emailId));
+      expect(mine.map((e) => e.status)).toEqual(["done", "done", "done"]);
+    }, TEST_TIMEOUT_MS);
+
+    it("a claim that outlived its lease cannot finish the report the next claim took", async () => {
+      const providerId = await seedSent(gymA, addr("lease"));
+      resendRecords.set(providerId, "delivered");
+      await report("email.delivered", providerId);
+      const first = await claimDueEvent(sql, new Date(), 1);
+      if (first === null) throw new Error("nothing to claim");
+      const second = await claimDueEvent(sql, new Date(Date.now() + 10), INVITE_RESULTS.leaseMs);
+      expect(second?.id).toBe(first.id);
+      expect(await finishEvent(sql, first, "done", new Date())).toBe(false);
+      if (second === null) throw new Error("the second claim took nothing");
+      expect(await finishEvent(sql, second, "done", new Date())).toBe(true);
+    }, TEST_TIMEOUT_MS);
+
+    it("a key that may not read, then a rate limit, use up none of a report's tries", async () => {
+      const email = addr("denied");
+      const providerId = await seedSent(gymA, email);
+      resendRecords.set(providerId, "complained");
+      await report("email.complained", providerId);
+      const denying: EmailRecordReader = { read: () => Promise.resolve({ kind: "denied", status: 403 }) };
+      const limited: EmailRecordReader = { read: () => Promise.resolve({ kind: "unavailable", status: 429 }) };
+      for (const blocked of [denying, limited]) {
+        for (let i = 0; i < INVITE_RESULTS.maxTries + 2; i++) {
+          await processInviteResults({
+            sql,
+            log: { info: () => undefined, warn: () => undefined, error: () => undefined },
+            reader: blocked,
+            tellOperator: () => Promise.resolve(),
+            now: () => clock,
+            sleep: () => Promise.resolve(),
+          });
+          clock = new Date(clock.getTime() + 60 * 60 * 1000);
+        }
+      }
+      clock = new Date();
+      await sql`UPDATE webhook_events SET not_before = now() WHERE status = 'pending' AND event_id = ANY(${eventIds}::text[])`;
+      await processAll();
+      expect(await suppressionsOf(email)).toEqual([{ gym_id: gymA, reason: "complained" }]);
     }, TEST_TIMEOUT_MS);
   });
 });

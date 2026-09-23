@@ -82,7 +82,7 @@ async function workOutGroup(sql: SqlOrTx, settings: InviteSettings, gymId: strin
     repo.invitesFor(sql, gymId, hmacs),
     repo.suppressionsFor(sql, gymId, hmacs),
   ]);
-  const skipped: MemberInviteSkipped = { noEmail: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, sharedAddress: 0 };
+  const skipped: MemberInviteSkipped = { noEmail: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, refused: 0, sharedAddress: 0 };
   const reach: Group["reach"] = [];
   const taken = new Set<string>();
   let next = 0;
@@ -97,6 +97,7 @@ async function workOutGroup(sql: SqlOrTx, settings: InviteSettings, gymId: strin
     if (inAppAddresses.has(person.email.toLowerCase())) skipped.inApp += 1;
     else if ((invite !== undefined && repo.alreadyInvited(invite)) || taken.has(person.hmac)) skipped.alreadyInvited += 1;
     else if (suppressions.get(person.hmac) === "bounced") skipped.bounced += 1;
+    else if (suppressions.get(person.hmac) === "refused") skipped.refused += 1;
     else if (suppressions.has(person.hmac)) skipped.unsubscribed += 1;
     else if (isSharedAddress(person.email)) skipped.sharedAddress += 1;
     else {
@@ -143,7 +144,7 @@ export async function previewInvite(
     return {
       version: state?.version ?? 0,
       reach: 0,
-      skipped: { noEmail: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, sharedAddress: 0 },
+      skipped: { noEmail: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, refused: 0, sharedAddress: 0 },
       blocked,
     };
   }
@@ -211,6 +212,7 @@ export async function pressInvite(
         alreadyInvited: String(group.skipped.alreadyInvited),
         unsubscribed: String(group.skipped.unsubscribed),
         bounced: String(group.skipped.bounced),
+        refused: String(group.skipped.refused),
         sharedAddress: String(group.skipped.sharedAddress),
       },
     });
@@ -244,10 +246,11 @@ async function inviteable(
   return { email, hmac, invite };
 }
 
-/** Refuse an address the gym may not email: unsubscribed, bounced or shared. */
+/** Refuse an address the gym may not email: unsubscribed, bounced, refused or shared. */
 async function mayEmail(tx: TransactionSql, gymId: string, email: string, hmac: string): Promise<void> {
   const suppressed = (await repo.suppressionsFor(tx, gymId, [hmac])).get(hmac);
   if (suppressed === "bounced") throw refuse(409, "bounced");
+  if (suppressed === "refused") throw refuse(409, "refused");
   if (suppressed !== undefined) throw refuse(409, "unsubscribed");
   if (isSharedAddress(email)) throw refuse(409, "shared_address");
 }

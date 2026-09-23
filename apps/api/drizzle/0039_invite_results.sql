@@ -10,7 +10,12 @@
 --                             for its first email, the moment it was started again after.
 -- gym_invite_sends.result     what Resend reported about an email that went, once the
 --                             report was confirmed with Resend itself.
--- webhook_events              gains a retry time and a count: a report is acted on only
+-- email_suppressions          gains 'refused': an address Resend itself will not send to
+--                             (its own list, which a bounce or a complaint about ANY of
+--                             the account's email puts it on). Every gym's, like a bounce,
+--                             but never counted as a bounce against a gym.
+-- webhook_events              gains a retry time, the claim's number (attempts) and the
+--                             tries at confirming it (tries): a report is acted on only
 --                             after Resend's own record of the email agrees with it.
 
 ALTER TABLE gyms ADD COLUMN invites_stopped_at timestamptz;--> statement-breakpoint
@@ -24,7 +29,7 @@ ALTER TABLE gyms ADD CONSTRAINT gyms_invites_stopped_check
 ALTER TABLE gym_invite_sends ADD COLUMN result text;--> statement-breakpoint
 ALTER TABLE gym_invite_sends ADD COLUMN result_at timestamptz;--> statement-breakpoint
 ALTER TABLE gym_invite_sends ADD CONSTRAINT gym_invite_sends_result_check
-  CHECK (result IS NULL OR result IN ('delivered','bounced','complained','failed'));--> statement-breakpoint
+  CHECK (result IS NULL OR result IN ('delivered','bounced','complained','failed','refused'));--> statement-breakpoint
 -- Only an email that went has a result.
 ALTER TABLE gym_invite_sends ADD CONSTRAINT gym_invite_sends_result_state_check
   CHECK (result IS NULL OR state = 'sent');--> statement-breakpoint
@@ -35,6 +40,16 @@ CREATE INDEX gym_invite_sends_provider_idx ON gym_invite_sends (provider_id) WHE
 
 ALTER TABLE webhook_events ADD COLUMN attempts integer NOT NULL DEFAULT 0;--> statement-breakpoint
 ALTER TABLE webhook_events ADD COLUMN not_before timestamptz NOT NULL DEFAULT now();--> statement-breakpoint
+ALTER TABLE webhook_events ADD COLUMN tries integer NOT NULL DEFAULT 0;--> statement-breakpoint
 ALTER TABLE webhook_events ADD CONSTRAINT webhook_events_attempts_check CHECK (attempts >= 0);--> statement-breakpoint
+ALTER TABLE webhook_events ADD CONSTRAINT webhook_events_tries_check CHECK (tries >= 0);--> statement-breakpoint
+
+ALTER TABLE email_suppressions DROP CONSTRAINT email_suppressions_reason_check;--> statement-breakpoint
+ALTER TABLE email_suppressions ADD CONSTRAINT email_suppressions_reason_check
+  CHECK (reason IN ('unsubscribed','complained','bounced','refused'));--> statement-breakpoint
+ALTER TABLE email_suppressions DROP CONSTRAINT email_suppressions_scope_check;--> statement-breakpoint
+-- A hard bounce and a refusal are for every gym; an unsubscribe or a complaint for one.
+ALTER TABLE email_suppressions ADD CONSTRAINT email_suppressions_scope_check
+  CHECK ((gym_id IS NULL) = (reason IN ('bounced','refused')));--> statement-breakpoint
 CREATE INDEX webhook_events_due_idx ON webhook_events (provider, not_before) WHERE status = 'pending';--> statement-breakpoint
 CREATE INDEX webhook_events_processed_idx ON webhook_events (processed_at) WHERE status <> 'pending';

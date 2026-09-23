@@ -26,6 +26,7 @@ export const memberInviteEmailReasonSchema = z.enum([
   "unsubscribed",
   "complained",
   "bounced",
+  "refused",
   "shared_address",
   "bad_address",
   "no_mail_domain",
@@ -48,6 +49,7 @@ export const MEMBER_INVITE_EMAIL_REASON_WORDS: Readonly<Record<MemberInviteEmail
   unsubscribed: "Not sent: this person unsubscribed from your emails.",
   complained: "Not sent: this person marked an earlier email from you as spam.",
   bounced: "Not sent: emails to this address bounce.",
+  refused: "Not sent: our email service won't deliver to this address. Ask the person for another one.",
   shared_address: "Not sent: this is a shared address such as info@ or support@. Ask the person for their own.",
   bad_address: "Not sent: this email address isn't valid.",
   no_mail_domain: "Not sent: this email address can't receive email. Check it with the person.",
@@ -64,7 +66,7 @@ export const MEMBER_INVITE_EMAIL_REASON_WORDS: Readonly<Record<MemberInviteEmail
 
 /** What the email service reported about an email that went (§9.12), once its own
  *  record agreed. Null until a report arrives. */
-export const memberInviteEmailResultSchema = z.enum(["delivered", "bounced", "complained", "failed"]);
+export const memberInviteEmailResultSchema = z.enum(["delivered", "bounced", "complained", "failed", "refused"]);
 export type MemberInviteEmailResult = z.infer<typeof memberInviteEmailResultSchema>;
 
 /** The sentence staff read beside an email that went but did not arrive, or was marked
@@ -73,10 +75,11 @@ export const MEMBER_INVITE_EMAIL_RESULT_WORDS: Readonly<Record<Exclude<MemberInv
   bounced: "This email bounced: the address doesn't take email. Check it with the person.",
   complained: "This person marked the invitation as spam. Your gym won't email them again.",
   failed: "This email didn't arrive. Check the address with the person.",
+  refused: "Not delivered: our email service won't deliver to this address. Ask the person for another one.",
 };
 
 /** Why somebody in the chosen group is not invited by a press. */
-export const memberInviteSkipReasonSchema = z.enum(["no_email", "in_app", "already_invited", "unsubscribed", "bounced", "shared_address"]);
+export const memberInviteSkipReasonSchema = z.enum(["no_email", "in_app", "already_invited", "unsubscribed", "bounced", "refused", "shared_address"]);
 export type MemberInviteSkipReason = z.infer<typeof memberInviteSkipReasonSchema>;
 
 /** How many of the group each reason leaves out. They partition the group with
@@ -88,6 +91,8 @@ export const memberInviteSkippedSchema = z
     alreadyInvited: z.number().int().min(0),
     unsubscribed: z.number().int().min(0),
     bounced: z.number().int().min(0),
+    /** Addresses our email service won't deliver to (its own list). */
+    refused: z.number().int().min(0),
     sharedAddress: z.number().int().min(0),
   })
   .strict();
@@ -151,6 +156,7 @@ export const MEMBER_INVITE_WORDS = {
   in_app: "This person is already a member in the app.",
   unsubscribed: "This person asked not to get your emails, so they can't be invited again.",
   bounced: "Emails to this address bounce. Check it with the person.",
+  refused: "Our email service won't deliver to this address. Ask the person for another one.",
   shared_address: "This is a shared address such as info@ or support@. Ask the person for their own.",
   not_invited: "This person hasn't been invited yet. Invite them first.",
   already_joined: "This person has already joined.",

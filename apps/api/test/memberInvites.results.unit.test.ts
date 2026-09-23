@@ -118,14 +118,21 @@ describe("Resend's own example body", () => {
     },
   };
 
-  it("reads as a hard bounce of that email", () => {
+  it("reads as Resend refusing that email", () => {
     const body = resendWebhookBodySchema.parse(example);
     expect(body.type).toBe("email.bounced");
     expect(body.data?.email_id).toBe("56761188-7520-42d8-8898-ff6fc54ce618");
-    expect(effectOf({ type: "email.bounced", emailId: "x", bounceType: body.data?.bounce?.type ?? null })).toEqual({
-      result: "bounced",
-      suppress: "every_gym",
-    });
+    // Resend's example is a bounce of sub-type Suppressed: its own list, which a complaint
+    // about another gym's email can put an address on. Refused, never a bounce against
+    // this gym.
+    const event = {
+      type: "email.bounced" as const,
+      emailId: "x",
+      sendId: null,
+      bounceType: body.data?.bounce?.type ?? null,
+      bounceSubType: body.data?.bounce?.subType ?? null,
+    };
+    expect(effectOf(event)).toEqual({ result: "refused", suppress: "refused" });
   });
 });
 
@@ -133,19 +140,29 @@ describe("Resend's own example body", () => {
 // WHAT A REPORT MEANS, AND WHEN RESEND'S RECORD CONFIRMS IT
 // =========================================================================
 
-const ev = (type: StoredResendEvent["type"], bounceType: string | null = null): StoredResendEvent => ({ type, emailId: "e", bounceType });
+const ev = (type: StoredResendEvent["type"], bounceType: string | null = null, bounceSubType: string | null = null): StoredResendEvent => ({
+  type,
+  emailId: "e",
+  sendId: null,
+  bounceType,
+  bounceSubType,
+});
 
 describe("effectOf — every report", () => {
   const cases: [string, StoredResendEvent, ReturnType<typeof effectOf>][] = [
     ["delivered", ev("email.delivered"), { result: "delivered", suppress: null }],
-    ["a Permanent bounce", ev("email.bounced", "Permanent"), { result: "bounced", suppress: "every_gym" }],
-    ["a permanent bounce, any case", ev("email.bounced", "PERMANENT"), { result: "bounced", suppress: "every_gym" }],
-    ["a bounce with no type (Resend calls every bounce permanent)", ev("email.bounced"), { result: "bounced", suppress: "every_gym" }],
+    ["a Permanent bounce", ev("email.bounced", "Permanent", "General"), { result: "bounced", suppress: "bounced" }],
+    ["a permanent bounce, any case", ev("email.bounced", "PERMANENT"), { result: "bounced", suppress: "bounced" }],
+    ["a bounce with no type (Resend calls every bounce permanent)", ev("email.bounced"), { result: "bounced", suppress: "bounced" }],
     ["a Transient bounce", ev("email.bounced", "Transient"), { result: "failed", suppress: null }],
     ["an Undetermined bounce", ev("email.bounced", "Undetermined"), { result: "failed", suppress: null }],
     ["a bounce typed with a word nobody uses", ev("email.bounced", "Soft"), { result: "failed", suppress: null }],
-    ["suppressed by Resend", ev("email.suppressed"), { result: "bounced", suppress: "every_gym" }],
-    ["a complaint", ev("email.complained"), { result: "complained", suppress: "this_gym" }],
+    // Resend's own example body: its list, which another gym's complaint can put an address on.
+    ["a Permanent bounce of sub-type Suppressed", ev("email.bounced", "Permanent", "Suppressed"), { result: "refused", suppress: "refused" }],
+    ["sub-type Suppressed, any case", ev("email.bounced", "Permanent", "suppressed"), { result: "refused", suppress: "refused" }],
+    ["a Permanent bounce of sub-type MessageRejected", ev("email.bounced", "Permanent", "MessageRejected"), { result: "bounced", suppress: "bounced" }],
+    ["suppressed by Resend", ev("email.suppressed"), { result: "refused", suppress: "refused" }],
+    ["a complaint", ev("email.complained"), { result: "complained", suppress: "complained" }],
     ["failed to send", ev("email.failed"), { result: "failed", suppress: null }],
   ];
   for (const [name, event, expected] of cases) {
@@ -155,43 +172,58 @@ describe("effectOf — every report", () => {
   }
 });
 
-describe("confirm — Resend's last event against each report", () => {
-  const lastEvents = [
-    "queued",
-    "scheduled",
-    "sent",
-    "delivery_delayed",
-    "delivered",
-    "opened",
-    "clicked",
-    "bounced",
-    "complained",
-    "failed",
-    "suppressed",
-    "canceled",
-    "something_new",
-    "",
+describe("confirm — Resend's last event against each report, from the orders Resend's events come in", () => {
+  // The event orders Resend's "Event Types" page describes (read 2026-09-23): an email is
+  // sent, may be delayed, then delivered or bounced; once delivered it may be opened,
+  // clicked and complained about in any order; or Resend suppresses it, or it fails.
+  // Written from those words, not from the code's own list.
+  // Any email may be scheduled, queued, sent and delayed before its outcome.
+  const start = ["scheduled", "queued", "sent", "delivery_delayed"];
+  const orders: string[][] = [
+    [...start, "delivered"],
+    [...start, "delivered", "opened", "clicked", "complained"],
+    [...start, "delivered", "complained", "opened", "clicked"],
+    [...start, "delivered", "clicked", "complained", "opened"],
+    [...start, "bounced"],
+    // A bounce can come back after the receiving server first accepted the email.
+    [...start, "delivered", "bounced"],
+    [...start, "suppressed"],
+    [...start, "failed"],
   ];
-  const agrees: Record<StoredResendEvent["type"], string[]> = {
-    "email.delivered": ["delivered", "opened", "clicked", "complained"],
-    "email.bounced": ["bounced"],
-    "email.suppressed": ["suppressed", "bounced"],
-    "email.complained": ["complained"],
-    "email.failed": ["failed"],
+  const eventOf: Record<StoredResendEvent["type"], string> = {
+    "email.delivered": "delivered",
+    "email.bounced": "bounced",
+    "email.complained": "complained",
+    "email.failed": "failed",
+    "email.suppressed": "suppressed",
   };
-  const notYet = ["queued", "scheduled", "sent", "delivery_delayed"];
-  for (const type of Object.keys(agrees) as StoredResendEvent["type"][]) {
+  // Resend reports a suppression as either event, and may record it as either.
+  const same = (a: string, b: string) => a === b || (["bounced", "suppressed"].includes(a) && ["bounced", "suppressed"].includes(b));
+  /** What the orders say: the record reads the report's event or one after it → agrees;
+   *  only ever an event before it → not yet; an event no order puts with it → disagrees. */
+  const expected = (report: string, last: string): string => {
+    if (same(last, report)) return "agrees";
+    let before = false;
+    for (const order of orders) {
+      const at = order.indexOf(report);
+      const lastAt = order.indexOf(last);
+      if (at < 0 || lastAt < 0) continue;
+      if (lastAt > at) return "agrees";
+      before = true;
+    }
+    return before ? "not_yet" : "disagrees";
+  };  const lastEvents = [...new Set([...orders.flat(), "canceled", "something_new", ""])];
+  for (const type of Object.keys(eventOf) as StoredResendEvent["type"][]) {
     for (const last of lastEvents) {
-      const expected = agrees[type].includes(last) ? "agrees" : notYet.includes(last) ? "not_yet" : "disagrees";
-      it(`${type} with last event "${last}" → ${expected}`, () => {
-        expect(confirm(type, last)).toBe(expected);
+      const want = expected(eventOf[type], last);
+      it(`${type} with last event "${last}" → ${want}`, () => {
+        expect(confirm(type, last)).toBe(want);
       });
     }
   }
 });
-
 describe("replacesResult — an email keeps its most serious result", () => {
-  const order = ["delivered", "failed", "bounced", "complained"] as const;
+  const order = ["delivered", "failed", "refused", "bounced", "complained"] as const;
   it("nothing yet: anything is written", () => {
     for (const next of order) expect(replacesResult(next, null)).toBe(true);
   });
@@ -281,9 +313,23 @@ describe("createResendEmailReader", () => {
   };
 
   it("reads the last event of the email asked about", async () => {
-    const { reader, asked } = answering(200, { object: "email", id, to: ["x@example.com"], last_event: "bounced" });
-    expect(await reader.read(id)).toEqual({ kind: "found", lastEvent: "bounced" });
+    const { reader, asked } = answering(200, {
+      object: "email",
+      id,
+      to: ["x@example.com"],
+      last_event: "bounced",
+      tags: [{ name: "invite_send", value: "9b2f7c1e-0000-4000-8000-000000000001" }],
+    });
+    expect(await reader.read(id)).toEqual({
+      kind: "found",
+      lastEvent: "bounced",
+      tags: [{ name: "invite_send", value: "9b2f7c1e-0000-4000-8000-000000000001" }],
+    });
     expect(asked).toEqual([`https://api.resend.com/emails/${id}`]);
+  });
+  it("a record with no tags, or tags that do not read, still reads", async () => {
+    expect(await answering(200, { id, last_event: "delivered", tags: null }).reader.read(id)).toEqual({ kind: "found", lastEvent: "delivered", tags: [] });
+    expect(await answering(200, { id, last_event: "delivered", tags: "x" }).reader.read(id)).toEqual({ kind: "found", lastEvent: "delivered", tags: [] });
   });
   it("another email's record is no answer", async () => {
     const { reader } = answering(200, { id: "another", last_event: "bounced" });

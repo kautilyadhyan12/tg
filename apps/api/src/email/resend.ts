@@ -42,6 +42,9 @@ export interface InviteEmail extends EmailMessage {
   from: string;
   headers: Record<string, string>;
   idempotencyKey: string;
+  /** Resend tags, returned on every webhook about this email: they name the send row, so
+   *  a report finds its email even before Resend's id for it is known. */
+  tags: { name: string; value: string }[];
 }
 
 /** What became of one invitation email. `sent` with a null id is a retry Resend
@@ -83,6 +86,7 @@ export function createResendInviteTransport(opts: { apiKey: string; fetchImpl?: 
             text: message.text,
             html: message.html,
             headers: message.headers,
+            tags: message.tags,
           }),
           signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
         });
@@ -115,7 +119,7 @@ export function createResendInviteTransport(opts: { apiKey: string; fetchImpl?: 
 
 /** Resend's own record of one email, read back to confirm a webhook report. */
 export type EmailRecordLookup =
-  | { kind: "found"; lastEvent: string }
+  | { kind: "found"; lastEvent: string; tags: { name: string; value: string }[] }
   /** Resend has no such email in this account. */
   | { kind: "missing" }
   /** The key may not read emails (a "Sending access" key) or is wrong. */
@@ -157,7 +161,7 @@ export function createResendEmailReader(opts: { apiKey: string; fetchImpl?: type
       }
       const record = resendEmailRecordSchema.safeParse(body);
       if (!record.success || record.data.id !== emailId) return { kind: "unavailable", status: response.status };
-      return { kind: "found", lastEvent: record.data.last_event };
+      return { kind: "found", lastEvent: record.data.last_event, tags: record.data.tags ?? [] };
     },
   };
 }

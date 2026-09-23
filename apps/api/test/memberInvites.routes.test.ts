@@ -611,7 +611,7 @@ d("press Invite (real Postgres)", () => {
         await appoint(manager, org, owner, "manager");
         staff.push(manager);
       }
-      const stale = { version: 999, reach: 0, skipped: { noEmail: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, sharedAddress: 0 }, blocked: null };
+      const stale = { version: 999, reach: 0, skipped: { noEmail: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, refused: 0, sharedAddress: 0 }, blocked: null };
       const desk = "10.64.0.1";
       // Five people, 24 presses each, at one address: all answered (the list moved).
       for (const who of staff) {
@@ -671,7 +671,7 @@ d("press Invite (real Postgres)", () => {
       const all = await previewOf(gym, owner);
       expect(all).toMatchObject({
         reach: 1,
-        skipped: { noEmail: 1, inApp: 2, alreadyInvited: 0, unsubscribed: 1, bounced: 0, sharedAddress: 1 },
+        skipped: { noEmail: 1, inApp: 2, alreadyInvited: 0, unsubscribed: 1, bounced: 0, refused: 0, sharedAddress: 1 },
         blocked: null,
       });
       const active = await previewOf(gym, owner, "?status=active");
@@ -1317,6 +1317,11 @@ d("press Invite (real Postgres)", () => {
     await sql`UPDATE gyms SET invites_stopped_at = NULL, invites_stopped_reason = NULL WHERE id = ${gym}`;
     await runSender();
     expect(emailsTo(addr("gate-next"))).toHaveLength(1);
+    // It carries the tag that lets a report find its row before Resend's id is known.
+    const nextRow = (await sql<{ id: string }[]>`
+      SELECT s.id FROM gym_invite_sends s JOIN gym_invites i ON i.id = s.invite_id
+      WHERE s.gym_id = ${gym} AND i.email_hmac = ${emailHmac(settings.hmacKey, addr("gate-next"))}`)[0];
+    expect(emailsTo(addr("gate-next"))[0]?.tags).toEqual([{ name: "invite_send", value: nextRow?.id }]);
     // A result belongs only to an email that went.
     await expect(sql`
       UPDATE gym_invite_sends SET state = 'queued', finished_at = NULL, provider_id = NULL

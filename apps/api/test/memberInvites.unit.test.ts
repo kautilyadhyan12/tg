@@ -217,6 +217,7 @@ describe("the development sender's log", () => {
       from: "",
       headers: { "List-Unsubscribe": "<https://api.example.com/v1/email/unsubscribe?t=SECRETTOKEN.MAC>" },
       idempotencyKey: "member-invite-1",
+    tags: [{ name: "invite_send", value: "9b2f7c1e-0000-4000-8000-000000000001" }],
     });
     const written = JSON.stringify(lines);
     expect(written).toContain("https://app.example.com/join/iron-house");
@@ -391,6 +392,7 @@ describe("createResendInviteTransport", () => {
     from: "Iron House via AI Home Gym <invites@invites.example.com>",
     headers: { "List-Unsubscribe": "<https://api.example.com/u/x>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" },
     idempotencyKey: "member-invite-1",
+    tags: [{ name: "invite_send", value: "9b2f7c1e-0000-4000-8000-000000000001" }],
   };
   const answer = (status: number, body: unknown) =>
     new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -416,6 +418,8 @@ describe("createResendInviteTransport", () => {
     expect(body["headers"]).toEqual(message.headers);
     expect(body["from"]).toBe(message.from);
     expect(body["to"]).toEqual(["ann@example.org"]);
+    // The tag names the send row, so a report can find its email before Resend's id is known.
+    expect(body["tags"]).toEqual([{ name: "invite_send", value: "9b2f7c1e-0000-4000-8000-000000000001" }]);
   });
 
   // Three kinds of answer: it went; it did not go (Resend refused the request before

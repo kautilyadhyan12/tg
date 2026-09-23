@@ -1,7 +1,8 @@
 // The only file that touches the invitation tables (Part 3 §9.12). Every statement
 // names its gym, except the two a public unsubscribe link reaches, which are keyed by
 // an invitation id the link's MAC has already proved, and the one a Resend report
-// reaches, keyed by Resend's id for an email once Resend's own record has confirmed it.
+// reaches, keyed by the email's tag or Resend's id for it, whose gym every later
+// write then names.
 import type { Sql, TransactionSql } from "postgres";
 import {
   memberInviteEmailReasonSchema,
@@ -131,10 +132,10 @@ export async function allInvites(sql: SqlOrTx, gymId: string): Promise<Map<strin
   return new Map(rows.map((row) => [row.email_hmac, parseState(row.state, row.id)]));
 }
 
-export type SuppressionReason = "unsubscribed" | "complained" | "bounced";
+export type SuppressionReason = "unsubscribed" | "complained" | "bounced" | "refused";
 
 /** Which of these addresses no invitation from this gym may go to, and why: this
- *  gym's unsubscribes and complaints, and every gym's hard bounces. */
+ *  gym's unsubscribes and complaints, and every gym's hard bounces and refusals. */
 export async function suppressionsFor(
   sql: SqlOrTx,
   gymId: string,
@@ -145,12 +146,12 @@ export async function suppressionsFor(
     SELECT email_hmac, reason
     FROM email_suppressions
     WHERE email_hmac = ANY(${[...hmacs]}::text[]) AND (gym_id = ${gymId} OR gym_id IS NULL)
-    -- A bounce outranks a complaint, which outranks an unsubscribe.
-    ORDER BY CASE reason WHEN 'bounced' THEN 0 WHEN 'complained' THEN 1 ELSE 2 END`;
+    -- A bounce outranks a refusal, then a complaint, then an unsubscribe.
+    ORDER BY CASE reason WHEN 'bounced' THEN 0 WHEN 'refused' THEN 1 WHEN 'complained' THEN 2 ELSE 3 END`;
   const found = new Map<string, SuppressionReason>();
   for (const row of rows) {
     if (found.has(row.email_hmac)) continue;
-    if (row.reason !== "unsubscribed" && row.reason !== "complained" && row.reason !== "bounced") {
+    if (row.reason !== "unsubscribed" && row.reason !== "complained" && row.reason !== "bounced" && row.reason !== "refused") {
       throw new Error("email suppression holds a reason that no longer parses");
     }
     found.set(row.email_hmac, row.reason);
@@ -632,18 +633,38 @@ export async function gymInvitesStopped(sql: SqlOrTx, gymId: string): Promise<bo
   return rows[0]?.stopped ?? false;
 }
 
-/** The email Resend knows by this id, if it is an invitation. */
-export async function sendByProviderId(
-  sql: SqlOrTx,
-  providerId: string,
-): Promise<{ id: string; gymId: string; inviteId: string } | null> {
-  const rows = await sql<{ id: string; gym_id: string; invite_id: string }[]>`
-    SELECT id, gym_id, invite_id FROM gym_invite_sends
-    WHERE provider_id = ${providerId} AND state = 'sent'
-    ORDER BY finished_at, id
-    LIMIT 1`;
+/** The invitation email a report is about: the row its tag names, in any state, or
+ *  else the sent row Resend knows by this id. Null: not an invitation. */
+export interface ReportedSend {
+  id: string;
+  gymId: string;
+  state: string;
+  reason: string | null;
+  providerId: string | null;
+}
+
+export async function sendForReport(sql: SqlOrTx, report: { sendId: string | null; providerId: string }): Promise<ReportedSend | null> {
+  const rows =
+    report.sendId !== null
+      ? await sql<{ id: string; gym_id: string; state: string; reason: string | null; provider_id: string | null }[]>`
+          SELECT id, gym_id, state, reason, provider_id FROM gym_invite_sends WHERE id = ${report.sendId}`
+      : await sql<{ id: string; gym_id: string; state: string; reason: string | null; provider_id: string | null }[]>`
+          SELECT id, gym_id, state, reason, provider_id FROM gym_invite_sends
+          WHERE provider_id = ${report.providerId} AND state = 'sent'
+          ORDER BY finished_at, id
+          LIMIT 1`;
   const row = rows[0];
-  return row === undefined ? null : { id: row.id, gymId: row.gym_id, inviteId: row.invite_id };
+  return row === undefined
+    ? null
+    : { id: row.id, gymId: row.gym_id, state: row.state, reason: row.reason, providerId: row.provider_id };
+}
+
+/** An email the sender could not confirm, which Resend's own record shows went: it is
+ *  sent after all, under Resend's id. */
+export async function markWentAfterAll(tx: TransactionSql, gymId: string, sendId: string, providerId: string): Promise<void> {
+  await tx`
+    UPDATE gym_invite_sends SET state = 'sent', reason = NULL, provider_id = ${providerId}
+    WHERE gym_id = ${gymId} AND id = ${sendId} AND state = 'failed' AND reason = 'send_unknown'`;
 }
 
 /** The email's result now, and the address its invitation is for, read under the
@@ -671,21 +692,25 @@ export async function setResult(tx: TransactionSql, gymId: string, sendId: strin
     WHERE gym_id = ${gymId} AND id = ${sendId} AND state = 'sent'`;
 }
 
-/** Keep this address from every gym's invitations: a hard bounce. Twice is once. */
-export async function suppressEveryGym(sql: SqlOrTx, hmac: string): Promise<void> {
+/** Keep this address from every gym's invitations: a hard bounce, or an address Resend
+ *  refuses. Twice is once; a bounce replaces a refusal, never the other way round. */
+export async function suppressEveryGym(sql: SqlOrTx, hmac: string, reason: "bounced" | "refused"): Promise<void> {
   await sql`
     INSERT INTO email_suppressions (email_hmac, gym_id, reason)
-    VALUES (${hmac}, NULL, 'bounced')
-    ON CONFLICT (email_hmac) WHERE gym_id IS NULL DO NOTHING`;
+    VALUES (${hmac}, NULL, ${reason})
+    ON CONFLICT (email_hmac) WHERE gym_id IS NULL
+    DO UPDATE SET reason = EXCLUDED.reason
+    WHERE email_suppressions.reason = 'refused' AND EXCLUDED.reason = 'bounced'`;
 }
 
-/** What the gym has sent since its counts start, and what came back. */
+/** What the gym has sent since its counts start, and what came back. An email Resend
+ *  refused to deliver never reached anybody, so it is not counted at all. */
 export async function gymCounts(sql: SqlOrTx, gymId: string): Promise<GymCounts> {
   const rows = await sql<{ sent: number; bounced: number; complained_early: boolean }[]>`
     WITH counted AS (
       SELECT x.result, x.finished_at, x.id
       FROM gym_invite_sends x JOIN gyms g ON g.id = x.gym_id
-      WHERE x.gym_id = ${gymId} AND x.state = 'sent'
+      WHERE x.gym_id = ${gymId} AND x.state = 'sent' AND x.result IS DISTINCT FROM 'refused'
         AND x.finished_at >= coalesce(g.invites_counted_from, '-infinity'::timestamptz)
     )
     SELECT (SELECT count(*)::int FROM counted) AS sent,

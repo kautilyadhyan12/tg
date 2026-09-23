@@ -6,12 +6,15 @@ import { z } from "zod";
 
 type SqlOrTx = Sql | TransactionSql;
 
-/** What is kept of a Resend event: never the address or the subject. */
+/** What is kept of a Resend event: never the address or the subject. `sendId` is the
+ *  invitation tag's value, the row in `gym_invite_sends` the email was sent for. */
 export const storedResendEventSchema = z
   .object({
     type: resendEmailEventTypeSchema,
     emailId: z.string().min(1).max(100),
+    sendId: z.string().uuid().nullable(),
     bounceType: z.string().max(40).nullable(),
+    bounceSubType: z.string().max(40).nullable(),
   })
   .strict();
 export type StoredResendEvent = z.infer<typeof storedResendEventSchema>;
@@ -31,6 +34,9 @@ export interface ClaimedEvent {
   id: string;
   /** The claim's own number: every write that finishes it names it. */
   attempts: number;
+  /** Tries at confirming it with Resend so far, this one not counted. */
+  tries: number;
+  receivedAt: Date;
   /** Null when the kept payload no longer parses. */
   payload: StoredResendEvent | null;
 }
@@ -38,7 +44,7 @@ export interface ClaimedEvent {
 /** Take the next Resend event that is due and hold it for `leaseMs`: a second worker
  *  skips it until then, and a worker that dies leaves it to be taken again. */
 export async function claimDueEvent(sql: Sql, now: Date, leaseMs: number): Promise<ClaimedEvent | null> {
-  const rows = await sql<{ id: string; attempts: number; payload: unknown }[]>`
+  const rows = await sql<{ id: string; attempts: number; tries: number; received_at: Date; payload: unknown }[]>`
     WITH next AS (
       SELECT id FROM webhook_events
       WHERE provider = 'resend' AND status = 'pending' AND not_before <= ${now}
@@ -49,11 +55,17 @@ export async function claimDueEvent(sql: Sql, now: Date, leaseMs: number): Promi
     UPDATE webhook_events e
     SET attempts = e.attempts + 1, not_before = ${new Date(now.getTime() + leaseMs)}
     FROM next WHERE e.id = next.id
-    RETURNING e.id, e.attempts, e.payload`;
+    RETURNING e.id, e.attempts, e.tries, e.received_at, e.payload`;
   const row = rows[0];
   if (row === undefined) return null;
   const payload = storedResendEventSchema.safeParse(row.payload);
-  return { id: row.id, attempts: row.attempts, payload: payload.success ? payload.data : null };
+  return {
+    id: row.id,
+    attempts: row.attempts,
+    tries: row.tries,
+    receivedAt: row.received_at,
+    payload: payload.success ? payload.data : null,
+  };
 }
 
 /** Finish an event, done or given up. False when the claim was no longer this run's. */
@@ -65,20 +77,24 @@ export async function finishEvent(sql: SqlOrTx, event: ClaimedEvent, status: "do
   return rows.length === 1;
 }
 
-/** Try an event again at `notBefore`. */
-export async function deferEvent(sql: SqlOrTx, event: ClaimedEvent, notBefore: Date): Promise<void> {
+/** Try an event again at `notBefore`. `countTry`: Resend's record was read and did not
+ *  confirm it yet. Waiting on anything else (the key, the rate, the email's own row)
+ *  spends no try. */
+export async function deferEvent(sql: SqlOrTx, event: ClaimedEvent, notBefore: Date, countTry: boolean): Promise<void> {
   await sql`
-    UPDATE webhook_events SET not_before = ${notBefore}
+    UPDATE webhook_events
+    SET not_before = ${notBefore}, tries = tries + CASE WHEN ${countTry}::boolean THEN 1 ELSE 0 END
     WHERE id = ${event.id} AND status = 'pending' AND attempts = ${event.attempts}`;
 }
 
-/** Forget finished events after 90 days (Part 4 §5.1). */
-export async function forgetOldEvents(sql: SqlOrTx, before: Date, limit: number): Promise<number> {
+/** Forget Resend's finished events after 90 days (Part 4 §5.1). Other providers'
+ *  events are their own jobs' to keep or forget. */
+export async function forgetOldResendEvents(sql: SqlOrTx, before: Date, limit: number): Promise<number> {
   const rows = await sql<{ id: string }[]>`
     DELETE FROM webhook_events
     WHERE id IN (
       SELECT id FROM webhook_events
-      WHERE status <> 'pending' AND processed_at < ${before}
+      WHERE provider = 'resend' AND status <> 'pending' AND processed_at < ${before}
       LIMIT ${limit})
     RETURNING id`;
   return rows.length;

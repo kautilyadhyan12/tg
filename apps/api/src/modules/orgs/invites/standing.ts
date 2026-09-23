@@ -2,8 +2,9 @@
 // Pure: each rule takes the facts read that moment and answers.
 //
 // - A report is acted on only when Resend's own record of the email agrees with it.
-// - A hard bounce keeps the address from every gym's invitations; a complaint from
-//   that gym's.
+// - A hard bounce, or an address Resend itself refuses, keeps the address from every
+//   gym's invitations; a complaint from that gym's. Only a hard bounce counts against
+//   the gym that sent it.
 // - A gym's first 50 emails go and the rest wait until all 50 have a result, or an
 //   hour after the 50th went.
 // - A gym stops when its hard bounces pass 2 % of what it sent (counted as if it had
@@ -20,10 +21,11 @@ export const INVITE_STANDING = {
   complaintWindow: 100,
 } as const;
 
-/** What a confirmed report does to the email, and to whom it stops sending. */
+/** What a confirmed report does to the email, and which suppression it writes:
+ *  `bounced` and `refused` for every gym, `complained` for the email's gym. */
 export interface ReportEffect {
   result: MemberInviteEmailResult;
-  suppress: "every_gym" | "this_gym" | null;
+  suppress: "bounced" | "refused" | "complained" | null;
 }
 
 export function effectOf(event: StoredResendEvent): ReportEffect {
@@ -31,42 +33,48 @@ export function effectOf(event: StoredResendEvent): ReportEffect {
     case "email.delivered":
       return { result: "delivered", suppress: null };
     case "email.bounced":
+      // Resend's own list, which a bounce or a complaint about ANY of the account's email
+      // puts an address on ("Email suppressions", resend.com/docs): no gym can reach it,
+      // but it says nothing against this gym's list.
+      if (event.bounceSubType?.toLowerCase() === "suppressed") return { result: "refused", suppress: "refused" };
       // Resend's bounced event is a permanent rejection; a bounce it types otherwise
       // ("Transient", "Undetermined") did not arrive but says nothing about the address.
       return event.bounceType === null || event.bounceType.toLowerCase() === "permanent"
-        ? { result: "bounced", suppress: "every_gym" }
+        ? { result: "bounced", suppress: "bounced" }
         : { result: "failed", suppress: null };
     case "email.suppressed":
-      // Resend refused it because the address is on its own list: no gym can reach it.
-      return { result: "bounced", suppress: "every_gym" };
+      return { result: "refused", suppress: "refused" };
     case "email.complained":
-      return { result: "complained", suppress: "this_gym" };
+      return { result: "complained", suppress: "complained" };
     case "email.failed":
       return { result: "failed", suppress: null };
   }
 }
 
-/** Resend's `last_event` values that confirm each report. A later event confirms an
- *  earlier one (a complaint follows delivery). */
-const CONFIRMED_BY: Readonly<Record<StoredResendEvent["type"], readonly string[]>> = {
-  "email.delivered": ["delivered", "complained", "opened", "clicked"],
-  "email.bounced": ["bounced"],
-  "email.suppressed": ["suppressed", "bounced"],
-  "email.complained": ["complained"],
-  "email.failed": ["failed"],
-};
+/** Resend's events before any result: its record has not caught up yet. */
+const BEFORE_RESULT = ["queued", "scheduled", "sent", "delivery_delayed"];
 
-/** Events that come before any result: the record has not caught up yet. */
-const NOT_YET = new Set(["queued", "scheduled", "sent", "delivery_delayed"]);
+/** For each report, the `last_event` values that confirm it, and those that may come
+ *  before it (asked again later). Anything else contradicts it. An open or a click can
+ *  come after a complaint and replace it as the last event, and a bounce can follow a
+ *  delivery. */
+const CONFIRMATION: Readonly<Record<StoredResendEvent["type"], { agrees: readonly string[]; before: readonly string[] }>> = {
+  "email.delivered": { agrees: ["delivered", "opened", "clicked", "complained", "bounced"], before: BEFORE_RESULT },
+  "email.complained": { agrees: ["complained", "opened", "clicked"], before: [...BEFORE_RESULT, "delivered"] },
+  "email.bounced": { agrees: ["bounced", "suppressed"], before: [...BEFORE_RESULT, "delivered"] },
+  "email.suppressed": { agrees: ["suppressed", "bounced"], before: BEFORE_RESULT },
+  "email.failed": { agrees: ["failed"], before: BEFORE_RESULT },
+};
 
 export type Confirmation = "agrees" | "not_yet" | "disagrees";
 
 export function confirm(type: StoredResendEvent["type"], lastEvent: string): Confirmation {
-  if (CONFIRMED_BY[type].includes(lastEvent)) return "agrees";
-  return NOT_YET.has(lastEvent) ? "not_yet" : "disagrees";
+  const rule = CONFIRMATION[type];
+  if (rule.agrees.includes(lastEvent)) return "agrees";
+  return rule.before.includes(lastEvent) ? "not_yet" : "disagrees";
 }
 
-const RANK: Readonly<Record<MemberInviteEmailResult, number>> = { delivered: 0, failed: 1, bounced: 2, complained: 3 };
+const RANK: Readonly<Record<MemberInviteEmailResult, number>> = { delivered: 0, failed: 1, refused: 2, bounced: 3, complained: 4 };
 
 /** An email keeps its most serious result: a delivery reported after a bounce, or a
  *  report that arrives twice, changes nothing. */
@@ -74,7 +82,7 @@ export const replacesResult = (next: MemberInviteEmailResult, current: MemberInv
   current === null || RANK[next] > RANK[current];
 
 export interface GymCounts {
-  /** Emails sent since the gym's counts start. */
+  /** Emails sent since the gym's counts start, less those Resend refused to deliver. */
   sent: number;
   /** Of those, hard bounces. */
   bounced: number;
