@@ -32,7 +32,9 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
   const api=():App=>{if(app===undefined)throw new Error("beforeAll did not run");return app;};
   const inject=(method:"GET"|"POST"|"PUT"|"PATCH"|"DELETE",path:string,access:string,body?:unknown)=>api().inject({method,url:path,cookies:access===""?{}:{accessToken:access},headers:body===undefined?{}:{"content-type":"application/json"},...(body===undefined?{}:{payload:JSON.stringify(body)})});
   async function session(email:string){const reg=await inject("POST","/v1/auth/register","",{email,password:PASSWORD,displayName:"P26a Fixture"});if(reg.statusCode!==201)throw new Error(reg.body);const userId=reg.json<{userId:string}>().userId;const login=await inject("POST","/v1/auth/login","",{email,password:PASSWORD});return{userId,access:login.cookies.find((c)=>c.name==="accessToken")?.value??""};}
-  beforeAll(async()=>{await sql`DELETE FROM meal_logs WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'p26a-%@example.com')`;await sql`DELETE FROM body_measurements WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'p26a-%@example.com')`;await sql`DELETE FROM user_dishware WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'p26a-%@example.com')`;await sql`DELETE FROM api_cost_events WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'p26a-%@example.com')`;await sql`DELETE FROM users WHERE email LIKE 'p26a-%@example.com'`;app=await buildApp(loadConfig(env),{redis,nutrition:{visionProvider:vision,foodSearchProvider:noExternal}});const a=await session("p26a-alice@example.com");userA=a.userId;cookieA=a.access;cookieB=(await session("p26a-bob@example.com")).access;},60_000);
+  beforeAll(async()=>{await sql`DELETE FROM subscriptions WHERE owner_type='user' AND owner_id IN (SELECT id FROM users WHERE email LIKE 'p26a-%@example.com')`;await sql`DELETE FROM meal_logs WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'p26a-%@example.com')`;await sql`DELETE FROM body_measurements WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'p26a-%@example.com')`;await sql`DELETE FROM user_dishware WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'p26a-%@example.com')`;await sql`DELETE FROM api_cost_events WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'p26a-%@example.com')`;await sql`DELETE FROM users WHERE email LIKE 'p26a-%@example.com'`;app=await buildApp(loadConfig(env),{redis,nutrition:{visionProvider:vision,foodSearchProvider:noExternal}});const a=await session("p26a-alice@example.com");userA=a.userId;cookieA=a.access;const b=await session("p26a-bob@example.com");cookieB=b.access;
+    // A free account scans once a day (RULINGS 2026-09-22) and these two scan all through the file, so both are on the $10 plan; the free limit has its own test below.
+    for(const id of [a.userId,b.userId])await sql`INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider) SELECT 'user', ${id}, id, 'active', 'pilot' FROM plans WHERE code='pro_us_m'`;},60_000);
   afterAll(async()=>{if(app!==undefined)await app.close();if(ringApp!==undefined)await ringApp.close();await sql.end({timeout:5});});
 
   it("auth and validation run before quota",async()=>{expect((await inject("POST","/v1/nutrition/analyze-photo","",{imageBase64:jpeg,mimeType:"image/jpeg"})).statusCode).toBe(401);for(let i=0;i<3;i++)expect((await inject("POST","/v1/nutrition/analyze-photo",cookieA,{imageBase64:"bad",mimeType:"image/jpeg"})).statusCode).toBe(400);const key=quotaKey("meal_scan",userA,"day",new Date());expect(await redis.get(key)).toBeNull();},30_000);
@@ -385,7 +387,7 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
 
   it("cross-user: B cannot DELETE A's meal, confirm a foreign scanToken, or spend a foreign retake token (T3 R9 gap)",async()=>{
     // Fresh scanner C so this test never leans on A's quota budget.
-    const c=await session("p26a-scanner@example.com");
+    const c=await session("p26a-scanner@example.com");await sql`INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider) SELECT 'user', ${c.userId}, id, 'active', 'pilot' FROM plans WHERE code='pro_us_m'`;
     // B tries to delete A's meal.
     expect((await inject("DELETE",`/v1/nutrition/meals/${mealId}`,cookieB)).statusCode).toBe(404);
     // C scans; B tries to confirm C's scanToken → invalid (drafts are user-bound).
@@ -882,12 +884,11 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
   },30_000);
 
   it("a try refused over the day's limit takes no scan, so the day's last scan given back after an outage can still be used",async()=>{
-    // A free person has 2 scans a day. The second waits at the scanner while they try again, then fails.
+    // A free person has 1 scan a day. It waits at the scanner while they try again, then fails.
     const hung={fail:(err:Error):void=>{throw err;}};
     let reached=():void=>undefined;
     const atScanner=new Promise<void>((resolve)=>{reached=resolve;});
     const answers:(()=>Promise<VisionResult>)[]=[
-      ()=>Promise.resolve({evidence:goodEvidence,tokensIn:100,tokensOut:200}),
       ()=>new Promise<VisionResult>((_resolve,reject)=>{hung.fail=reject;reached();}),
       ()=>Promise.resolve({evidence:goodEvidence,tokensIn:100,tokensOut:200}),
     ];
@@ -895,18 +896,20 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     const s=await scanApp("p26a-over-limit@example.com",{vision:google});
     try{
       vi.spyOn(s.app.log,"error").mockImplementation(()=>undefined);
-      expect((await s.scan()).statusCode).toBe(200);
       const last=s.scan();
       await atScanner;
       const refused=await s.scan();
       expect(refused.statusCode,refused.body).toBe(429);
-      expect(await s.scansUsed()).toBe("2");
+      expect(await s.scansUsed()).toBe("1");
       hung.fail(new VisionProviderError("vision network failure","unavailable"));
       expect(bodyOf(await last)).toEqual({error:"scanner_unavailable",message:BUSY});
-      expect(await s.scansUsed()).toBe("1");
+      expect(await s.scansUsed()).toBe("0");
       const again=await s.scan();
       expect(again.statusCode,again.body).toBe(200);
-      expect([answers.length,await s.scansUsed()]).toEqual([0,"2"]);
+      expect([answers.length,await s.scansUsed()]).toEqual([0,"1"]);
+      // One a day: the next try is refused.
+      const over=await s.scan();
+      expect(over.statusCode,over.body).toBe(429);
     }finally{await s.app.close();}
   },30_000);
 

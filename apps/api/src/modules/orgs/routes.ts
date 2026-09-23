@@ -122,7 +122,7 @@ export function registerOrgRoutes(
     return reply.status(200).send(updated);
   });
 
-  /** START THE GYM'S OWN 30-DAY TRIAL — Kd ruling 2026-08-27, which REVERSES
+  /** START THE GYM'S OWN FREE TRIAL — Kd ruling 2026-08-27, which REVERSES
    *  :11072 ruling 1 ("a gym's paid plan or TRIAL activates only after Kd
    *  approves the gym"): *"a gym can start on own without my approval but i will
    *  have the power of removing them or pausing their use if i find them to be

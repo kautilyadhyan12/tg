@@ -1,18 +1,14 @@
 // Part 4 §8 seeds — plans rows and feature_flags.
 //
-// **PRICES ARE KD'S RULED BOOK, NOT Part 5 §1's.** That spec table is
-// SUPERSEDED: DECISIONS :17366 §1 ratified a US/CA/EU book and an INR book,
-// and :17902 §1a/§1b then raised bands 1-2 and rounded every boundary. Read
-// both before touching a number here, and note the standing warning in each:
-// **an inferred ruling is not a ruling** — bands 3-5 and the INR prices are
-// what Kd left standing, and scaling them "to match" the band-1/2 raise is the
-// exact failure :17366 §0 records. Entitlements keep Part 4 §3.3's canonical
-// shape; the ALLOWANCES inside them are :17366 §1/§2's.
+// Prices, member limits, trial lengths and scan allowances are Kd's, from
+// RULINGS (Pricing, trials and money; 2026-09-22 and 2026-09-23), not Part 5
+// §1's superseded table. Every number here is a ruling; none is derived from
+// another. Entitlements keep Part 4 §3.3's canonical shape.
 // Idempotent: upsert on plans.code / feature_flags.key — running twice is a no-op.
 // Exercises = the full Part 2 §6 catalog (58) from @app/shared's reviewed
 // table; definitions / achievements seeds land with their own tasks.
 import { desc, eq, inArray } from "drizzle-orm";
-import { CATALOG_58, exerciseDefinitionSchema, exerciseNameKey } from "@app/shared";
+import { CATALOG_58, GYM_TRIAL_DAYS, exerciseDefinitionSchema, exerciseNameKey } from "@app/shared";
 import squatDef from "@app/engine/definitions/squat.json" with { type: "json" };
 import jumpSquatDef from "@app/engine/definitions/jump_squat.json" with { type: "json" };
 import chairSquatDef from "@app/engine/definitions/chair_squat.json" with { type: "json" };
@@ -33,9 +29,7 @@ import {
 const proEntitlements = {
   exercises: { mode: "all" },
   coach: { window: "day", limit: 30 },
-  // 20/day — Kd, DECISIONS :17366 §1. Also the TRIAL's allowance: :16702
-  // ratified capping the unlimited trial week at 20/day precisely so the trial
-  // IS the paid experience, which is why no separate trial document exists.
+  // 20/day — Kd, DECISIONS :17366 §1.
   meal_scan: { window: "day", limit: 20 },
   route_gen: { window: "day", limit: 2 },
   history_days: -1,
@@ -61,10 +55,9 @@ const gymMemberEntitlements = {
 const freeEntitlements = {
   exercises: { mode: "tier", tier: "T1" },
   coach: { window: "month", limit: 5 },
-  // Kd ruling 2026-07-16 (DEVIATION from the Part 5 §1 price book's 3/month,
-  // raised at the Card-5a smoke): free tier = 2 scans/day. Cost noted at the
-  // ruling: ~60/month ≈ $0.10/free user at Qwen prices vs ~$0.005 before.
-  meal_scan: { window: "day", limit: 2 },
+  // One meal photo a day without a subscription (Kd, RULINGS 2026-09-22: "PER
+  // DAY 1 MEAL"; was 2).
+  meal_scan: { window: "day", limit: 1 },
   route_gen: { window: "month", limit: 2 },
   history_days: 90, // read-gate, not deletion (Part 4 §0.2)
   programs: "starter",
@@ -74,16 +67,11 @@ const freeEntitlements = {
 
 type PlanSeed = typeof plans.$inferInsert;
 
-/** The consumer trial's LENGTH — one week (Kd, :16548). The trial's ALLOWANCE
- *  needs no document of its own: :16702 capped the "unlimited" week at 20/day,
- *  which is the paid plan's own figure. Nothing reads this column yet. */
-const CONSUMER_TRIAL_DAYS = 7;
-/** 30 days, Kd at :16548 — **superseding the spec's 7**, which appears in
- *  `03-part3-org-console.md:236` §4.0 step 2 and `05-part5-billing.md` §6.1.
- *  A chat reading only the spec will carry the 7 forward; do not. */
-const ORG_TRIAL_DAYS = 30;
+// An individual has no trial (Kd, RULINGS 2026-09-22): the free plan is the
+// way in, and the $10 plan starts paid.
+const CONSUMER_TRIAL_DAYS = 0;
 
-// Prices in integer minor units (R6.1) — $35 is 3500, ₹1,500 is 150000. No
+// Prices in integer minor units (R6.1) — $79 is 7900, ₹7,500 is 750000. No
 // float ever touches money.
 const consumerRows: PlanSeed[] = [
   {
@@ -91,45 +79,18 @@ const consumerRows: PlanSeed[] = [
     audience: "consumer",
     nameKey: "plan.free",
     priceMinor: 0,
-    currency: "INR",
+    currency: "USD",
     interval: "month",
     trialDays: 0,
     rank: 0,
     entitlements: freeEntitlements,
   },
   {
-    code: "pro_in_m",
-    audience: "consumer",
-    nameKey: "plan.pro_in_m",
-    // Kd ruled "$5" for India (:17366 §1); the rupee figure was a chat
-    // RECOMMENDATION there and was put to him and CONFIRMED on 2026-08-25.
-    priceMinor: 44900, // ₹449/mo
-    currency: "INR",
-    interval: "month",
-    trialDays: CONSUMER_TRIAL_DAYS,
-    rank: 10,
-    entitlements: proEntitlements,
-  },
-  {
-    code: "pro_in_y",
-    audience: "consumer",
-    nameKey: "plan.pro_in_y",
-    // ELEVEN months' money for twelve — "one month free", Kd 2026-08-25, asked
-    // directly when the old ₹999/yr turned out to be cheaper than three months
-    // at the new monthly price. NOT the spec's ×10 (two months free), which is
-    // the ORG yearly convention and is untouched by this seed.
-    priceMinor: 493900, // ₹4,939/yr = ₹449 × 11
-    currency: "INR",
-    interval: "year",
-    trialDays: CONSUMER_TRIAL_DAYS,
-    rank: 10,
-    entitlements: proEntitlements,
-  },
-  {
     code: "pro_us_m",
     audience: "consumer",
     nameKey: "plan.pro_us_m",
-    priceMinor: 1000, // $10/mo — Kd, :17366 §1 (supersedes :16702's $6.99)
+    // $10 a month in every country (Kd, RULINGS 2026-09-22: "10 dollar worldwide").
+    priceMinor: 1000,
     currency: "USD",
     interval: "month",
     trialDays: CONSUMER_TRIAL_DAYS,
@@ -140,7 +101,7 @@ const consumerRows: PlanSeed[] = [
     code: "pro_us_y",
     audience: "consumer",
     nameKey: "plan.pro_us_y",
-    priceMinor: 11000, // $110/yr = $10 × 11 (one month free, as above)
+    priceMinor: 11000, // $110/yr = $10 × 11, one month free (Kd, 2026-08-25)
     currency: "USD",
     interval: "year",
     trialDays: CONSUMER_TRIAL_DAYS,
@@ -149,35 +110,27 @@ const consumerRows: PlanSeed[] = [
   },
 ];
 
-/** THE GYM BANDS, both currency books.
+/** THE GYM PRICE LIST (Kd, RULINGS 2026-09-22 for the dollars and the
+ *  limits, 2026-09-23 for the rupees).
  *
- *  **`seatCap` IS the band boundary in code** (:17902 §4) — the same number
- *  does two jobs, and `seatCapFor` in `modules/orgs/repo.ts` reads it through
- *  the gym's live subscription to decide whether the next member gets in. That
- *  is why a price change and a boundary change are ONE edit here, and why the
- *  test asserts caps as hard as it asserts prices: the old book stayed stale
- *  through two rulings partly because nothing observed a cap.
+ *  `seatCap` IS the band's member limit (:17902 §4): `seatCapFor` in
+ *  `modules/orgs/repo.ts` reads it through the gym's live subscription to decide
+ *  whether the next member gets in, and a trial runs on band 1, so band 1's
+ *  limit is the trial's 200.
  *
- *  **The boundaries are Kd's rounded ones** (:17902 §1b — *"299 does not make
- *  sense make it 300 then 301 to like that"*), and they move in BOTH books
- *  because a boundary is a member count, not a currency.
+ *  Dollars for every country but India. An Indian gym sees FIXED rupee prices:
+ *  the dollar price at ₹95.65 to the dollar (open.er-api.com, 2026-09-23),
+ *  rounded to the nearest ₹500, checked once a year. Not a live conversion.
  *
- *  **The prices are two separate rulings and must not be reconciled with each
- *  other.** Bands 1-2 USD are :17902 §1a; bands 3-5 USD and the whole INR
- *  column are :17366 §1 and were NOT touched on 2026-08-25 — scaling them by
- *  the same ~17% would be inventing a ruling (:17366 §0). India lands near 57%
- *  of the US price with roughly half the margin, deliberately.
- *
- *  **No "custom above 2100" row is seeded.** The ruled book says "custom"
- *  there, and a plan row carrying no real price is a number waiting to be read
- *  as one; a 2101+ gym gets a row written for its own deal. */
+ *  No "more than 2,100" row is seeded: that gym is told "contact us", and a plan
+ *  row with no real price is a number waiting to be read as one. */
 const GYM_BANDS: { band: number; seatCap: number; usd: number; inr: number }[] = [
-  //                          members       USD minor    INR minor
-  { band: 1, seatCap: 300, usd: 3500, inr: 150000 }, //    0–300   $35 / ₹1,500
-  { band: 2, seatCap: 500, usd: 5000, inr: 250000 }, //  301–500   $50 / ₹2,500
-  { band: 3, seatCap: 1000, usd: 6900, inr: 450000 }, // 501–1000  $69 / ₹4,500
-  { band: 4, seatCap: 1500, usd: 9900, inr: 650000 }, // 1001–1500 $99 / ₹6,500
-  { band: 5, seatCap: 2100, usd: 12900, inr: 850000 }, // 1501–2100 $129 / ₹8,500
+  //                          members       USD minor     INR minor
+  { band: 1, seatCap: 200, usd: 7900, inr: 750000 }, //   up to 200  $79 / ₹7,500
+  { band: 2, seatCap: 500, usd: 12900, inr: 1250000 }, // up to 500  $129 / ₹12,500
+  { band: 3, seatCap: 1000, usd: 19900, inr: 1900000 }, // up to 1,000 $199 / ₹19,000
+  { band: 4, seatCap: 1500, usd: 27900, inr: 2650000 }, // up to 1,500 $279 / ₹26,500
+  { band: 5, seatCap: 2100, usd: 37900, inr: 3650000 }, // up to 2,100 $379 / ₹36,500
 ];
 
 /** entitlements = the console's own features: Part 4 §3.3 leaves that shape
@@ -196,7 +149,7 @@ const orgRows: PlanSeed[] = GYM_BANDS.flatMap(({ band, seatCap, usd, inr }) => [
     currency: "USD",
     interval: "month",
     seatCap,
-    trialDays: ORG_TRIAL_DAYS,
+    trialDays: GYM_TRIAL_DAYS,
     rank: 10,
     entitlements: {},
     memberEntitlements: gymMemberEntitlements,
@@ -209,7 +162,7 @@ const orgRows: PlanSeed[] = GYM_BANDS.flatMap(({ band, seatCap, usd, inr }) => [
     currency: "INR",
     interval: "month",
     seatCap,
-    trialDays: ORG_TRIAL_DAYS,
+    trialDays: GYM_TRIAL_DAYS,
     rank: 10,
     entitlements: {},
     memberEntitlements: gymMemberEntitlements,
@@ -218,18 +171,14 @@ const orgRows: PlanSeed[] = GYM_BANDS.flatMap(({ band, seatCap, usd, inr }) => [
 
 const planRows: PlanSeed[] = [...consumerRows, ...orgRows];
 
-/** THE PRE-RULING ORG BOOK — switched OFF, never deleted.
+/** RETIRED PLANS — switched OFF, never deleted.
  *
- *  These six carried caps of 25/25/100/150/400 and prices no ruled book has
- *  matched since 2026-08-24. They are RETIRED rather than removed because
- *  `subscriptions.plan_id` references `plans.id` under RESTRICT and history is
- *  soft-state here (R4.3) — a deleted plan row makes a past subscription
- *  unreadable, and `org_micro_clinic` in particular is the clinic tier that
- *  :10182 narrowed at the DOOR without deleting.
- *
- *  **Said plainly rather than implied: nothing reads `plans.active` today**
- *  (grep-verified across `apps/api/src`). This is bookkeeping — but it is the
- *  bookkeeping that is true, and the flag is the seam a plan picker will use. */
+ *  The first six are the pre-ruling org book (caps of 25/25/100/150/400, prices
+ *  no ruled book has matched since 2026-08-24). They are retired rather than
+ *  removed because `subscriptions.plan_id` references `plans.id` under RESTRICT
+ *  and history is soft-state here (R4.3): a deleted plan row makes a past
+ *  subscription unreadable. The gym trial and the gym price list read only
+ *  `active = true` rows. */
 const RETIRED_PLAN_CODES = [
   "org_micro",
   "org_micro_clinic",
@@ -237,6 +186,10 @@ const RETIRED_PLAN_CODES = [
   "org_standard",
   "org_growth",
   "org_scale",
+  // The rupee individual plan (₹449): one individual price in every country
+  // since RULINGS 2026-09-22. Switched off, never deleted, for the same reason.
+  "pro_in_m",
+  "pro_in_y",
 ] as const;
 
 // The full Part 2 §6 catalog — all 58, from the REVIEWED CONSTANTS TABLE in

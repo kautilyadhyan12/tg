@@ -119,6 +119,8 @@ stage. History, never a rule: RULINGS wins where they differ.
 
 ## Stage 3 — Money
 
+2a. **AMENDED 2026-09-22 (RULINGS that day): an individual has NO trial — the 7-day individual trial and the first week of unlimited scans go, the free plan scans ONE meal a day (the seed says 2) — a gym's trial is capped at 200 members (was 300), and there is ONE price list for every country, so the INR rows and `pro_in_*` are retired (active = false, never deleted).** As first written: Trial lengths 7 days individual and 15 days organisation (the button still says 30), one per owner account (built), no card; the price book seeded as ruled — the $79 · $129 · $199 · $279 · $379 ladder with its 200 / 500 / 1,000 / 1,500 / 2,100 boundaries (RULINGS 2026-09-15) replaces the 2026-08-25 USD book still in `seed.ts` and its migration test; the INR book is unchanged; the 7-scan member allowance is already seeded (the scanner card, Stage 4 item 7). Built with two changes Kd made before go (RULINGS 2026-09-23): the gym trial is 10 days, and an Indian gym sees fixed rupee prices (₹7,500 · ₹12,500 · ₹19,000 · ₹26,500 · ₹36,500). Merged 2026-09-24 on Kd's word (*"merge"*; PR #101).
+
 3. ~~Gym-collects-from-members~~ **Re-planned 2026-09-22 as Stage 2 item 18 (18c is this line; 18a, 18b and the Connect buttons are new).** As first written: the gym pastes its own payment link (Stripe, Square, anything) into the console, the member's app shows "Pay {gym}", and the gym marks the member paid (RULINGS 2026-09-15; Stripe Connect is closed to a platform in India) — after launch unless a gym asks.
 
 ## Stage 4 — Launch readiness

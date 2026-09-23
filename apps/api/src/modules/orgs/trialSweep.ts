@@ -93,7 +93,7 @@ export interface TrialSweepDeps {
 export interface TrialSweepOptions {
   /** Injected clock — R6.4's billing doctrine, and this is billing code.
    *
-   *  A thirty-day trial is not a thing a test can wait for, and it is not a
+   *  A ten-day trial is not a thing a test can wait for, and it is not a
    *  thing Kd can wait for during a smoke either: `tools/trial-sweep.ts` passes
    *  this so he can watch a trial end in his browser in three minutes. */
   now?: Date;
