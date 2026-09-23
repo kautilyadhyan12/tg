@@ -756,7 +756,7 @@ d("join by invitation (real Postgres)", () => {
     "eight people racing for the last three places: three join, five are told the gym is full",
     async () => {
       const gym = await makeGym("Race Gym", SMALL_PLAN);
-      const people = ["ben", "cal", "dee", "eli", "fay", "gus", "hal", "ida"];
+      const people = Array.from({ length: 8 }, (_, i) => `racer${String(i)}`);
       for (const local of people) await addInvited(gym, { fullName: local, email: addr(local) });
       const users = await Promise.all(people.map((local) => signIn(addr(local))));
       const ids = await Promise.all(users.map((who) => inviteIdOf(gym, who.email)));
