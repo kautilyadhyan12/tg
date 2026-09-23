@@ -30,6 +30,7 @@ vi.mock('../../context/AuthContext', () => ({
 }));
 
 const Classes = (await import('./Classes')).default;
+const { repeatDatesLine } = await import('./classesView');
 const { addDays, closureDateLabel, gymToday } = await import('./hoursView');
 const ConsoleLayout = (await import('../../components/console/ConsoleLayout')).default;
 const { resetConsoleOrgs } = await import('./consoleOrgs');
@@ -814,6 +815,24 @@ describe('bulk edit', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(screen.queryByLabelText('Update from')).toBeNull();
     expect(api.bulkEditClass).not.toHaveBeenCalled();
+  });
+
+  // Round one, L-1: the two halves of a time slot changed from a date read alike
+  // but for their dates, so the form shows them.
+  it('shows each time slot s dates, so the two halves of a changed one can be told apart', async () => {
+    const split = addDays(today(), 10);
+    const first = { ...REPEAT, endsOn: addDays(split, -1), datesComplete: true };
+    const second = { ...REPEAT, id: 's3', startsOn: split, nextDates: [split] };
+    api.getClasses.mockResolvedValue(timetable({ entries: [{ type: YOGA, schedules: [first, second] }] }));
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    openBulk();
+    await screen.findByRole('button', { name: 'Update from' });
+    const rows = screen.getAllByRole('checkbox', { name: /Mon & Wed/ }).map((t) => t.closest('label')?.textContent ?? '');
+    expect(rows).toHaveLength(2);
+    expect(repeatDatesLine(first)).not.toBe(repeatDatesLine(second));
+    expect(rows[0]).toContain(repeatDatesLine(first));
+    expect(rows[1]).toContain(repeatDatesLine(second));
   });
 
   it('reads the list again after a refusal, and says so', async () => {

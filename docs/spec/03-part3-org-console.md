@@ -2197,8 +2197,8 @@ date; a field not ticked keeps each time slot's own. Each time slot changes exac
 as its own Edit would, from the date or from its own first day when that is later.
 All or nothing: an id that is not a running time slot of that class in that gym, or
 one that does not run on its date, refuses the whole request. Days and start time
-are not in it. **The limits:** at most 12 time slots of a class running on any one
-day, and at most 24 listed (not finished) — a time slot changed from a date is
+are not in it. **The limits:** at most 12 time slots of a class running at once (not
+finished on the same date, whatever weekdays each runs), and at most 24 listed (not finished) — a time slot changed from a date is
 listed twice until the date, and the Classes screen reads 24 a class.)*
 An open-gym slot is a class type marked so. `schedule.manage` (owner and manager); a
 trainer sees the lists of their own classes.

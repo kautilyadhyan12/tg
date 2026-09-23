@@ -366,6 +366,11 @@ function BulkEditForm({
               <span className="block text-xs" style={labelStyle}>
                 {peopleLine(slot)}
               </span>
+              {/* Its dates, so the two halves of a time slot changed from a
+                  date can be told apart (round one, L-1). */}
+              <span className="block text-xs" style={labelStyle}>
+                {repeatDatesLine(slot)}
+              </span>
             </span>
           </label>
         ))}

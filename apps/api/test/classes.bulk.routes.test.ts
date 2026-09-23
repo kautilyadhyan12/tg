@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
+import { bulkChangeSlots, createSchedule } from "../src/modules/orgs/classes/repo.js";
 import type { GymClassWeekResponse, GymClassesResponse } from "@app/shared";
 
 const url = process.env["DATABASE_URL"];
@@ -681,6 +682,136 @@ d("bulk edit of a class's time slots (real Postgres)", () => {
     TEST_TIMEOUT_MS,
   );
 
+  // Round one, weak test: nothing sent a bulk edit for a gym with no live plan.
+  it(
+    "a gym with no live plan cannot bulk edit, and nothing is written",
+    async () => {
+      const owner = await makeUser("lapsed-owner");
+      const org = await makeOrg(owner.cookies, "Lapsed Bulk Gym");
+      const gym = org.org.id;
+      const today = await gymToday(gym, owner.cookies);
+      const type = await makeClass(gym, owner.cookies, "Lapsed");
+      const a = await addSlot(gym, owner.cookies, type, { startMinute: at(18), startsOn: today });
+      const b = await addSlot(gym, owner.cookies, type, { startMinute: at(7), startsOn: today });
+      await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gym}`;
+      const rows = await classRows(type);
+      const slots = await slotRows(type);
+      const res = await post(
+        bulkUrl(gym, type),
+        { scheduleIds: [a, b], updateFrom: addDays(today, 3), set: { minutes: 45 } },
+        owner.cookies,
+      );
+      expect(res.statusCode).toBe(409);
+      expect(await classRows(type)).toEqual(rows);
+      expect(await slotRows(type)).toEqual(slots);
+      expect(await bulkAudits(gym)).toEqual([]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // Round one, weak test: from today, with today's class already begun.
+  it(
+    "on a fixed clock: a bulk edit from today leaves the class that has started as it was, and changes the one still to come",
+    async () => {
+      const owner = await makeUser("clock-owner");
+      const org = await makeOrg(owner.cookies, "Clock Bulk Gym");
+      const gym = org.org.id;
+      // Monday 5 October 2026, 13:00 in London.
+      const now = new Date("2026-10-05T12:00:00Z");
+      const type = await makeClass(gym, owner.cookies, "Clock");
+      for (const minute of [at(7), at(18)]) {
+        const made = await createSchedule(sql, {
+          gymId: gym,
+          classTypeId: type,
+          weekdays: EVERY_DAY,
+          startMinute: minute,
+          startsOn: "2026-10-01",
+          endsOn: null,
+          ...RUN,
+          actorUserId: owner.userId,
+          now,
+        });
+        expect(made.kind).toBe("ok");
+      }
+      const ids = (await slotRows(type)).map((s) => s.id);
+      const out = await bulkChangeSlots(sql, {
+        gymId: gym,
+        classTypeId: type,
+        scheduleIds: ids,
+        updateFrom: "2026-10-05",
+        set: { minutes: 45 },
+        actorUserId: owner.userId,
+        now,
+      });
+      expect(out).toEqual({ kind: "ok", localDate: "2026-10-05" });
+      const todays = (await classRows(type)).filter((r) => r.local_date === "2026-10-05");
+      expect(todays.map((r) => [r.local_start_minute, r.minutes])).toEqual([
+        [at(7), 60],
+        [at(18), 45],
+      ]);
+      // Nothing before the date is left to run, so neither is split.
+      expect(await slotRows(type)).toHaveLength(2);
+      const tomorrow = (await classRows(type)).filter((r) => r.local_date === "2026-10-06");
+      expect(new Set(tomorrow.map((r) => r.minutes))).toEqual(new Set([45]));
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // Round one, H-1: the listed limit says what is full, and never tells the gym
+  // to cancel or archive anything.
+  it(
+    "the listed limit says so in its own words, for a bulk edit and for a new time slot",
+    async () => {
+      const owner = await makeUser("listed-owner");
+      const org = await makeOrg(owner.cookies, "Listed Bulk Gym");
+      const gym = org.org.id;
+      const today = await gymToday(gym, owner.cookies);
+      const type = await makeClass(gym, owner.cookies, "Weekly");
+      for (const day of EVERY_DAY) {
+        await addSlot(gym, owner.cookies, type, { weekdays: [day], startMinute: at(18), startsOn: today });
+      }
+      const listedIds = async () => (await slotRows(type)).map((s) => s.id);
+      // Three bulk edits, each from an earlier date, each ticking every one listed.
+      const answers: { statusCode: number; body: string }[] = [];
+      for (const k of [20, 10, 5]) {
+        answers.push(
+          await post(
+            bulkUrl(gym, type),
+            { scheduleIds: await listedIds(), updateFrom: addDays(today, k), set: { minutes: 30 + k } },
+            owner.cookies,
+          ),
+        );
+      }
+      expect(answers.map((a) => a.statusCode)).toEqual([200, 200, 409]);
+      const refusal = JSON.parse(answers[2]?.body ?? "{}") as { error: string; message: string };
+      expect(refusal.error).toBe("too_many_listed");
+      expect(refusal.message).toBe(
+        "This class already has 24 time slots listed, counting ones changed from a date that has not come yet. Pick a later Update from date, or wait until those dates have passed.",
+      );
+      expect(await slotRows(type)).toHaveLength(21);
+
+      // Three more make 24 listed with only 10 running at once; one more is
+      // refused by the listed limit, in words for adding one.
+      for (const minute of [at(6), at(7), at(8)]) {
+        await addSlot(gym, owner.cookies, type, { weekdays: [1], startMinute: minute, startsOn: today });
+      }
+      const added = await post(
+        `${classesUrl(gym)}/${type}/repeats`,
+        { ...RUN, weekdays: [2], startMinute: at(9), startsOn: today },
+        owner.cookies,
+      );
+      expect(added.statusCode).toBe(409);
+      expect(JSON.parse(added.body)).toEqual(
+        expect.objectContaining({
+          error: "too_many_listed",
+          message:
+            "This class already has 24 time slots listed, counting ones changed from a date that has not come yet. Add this one once those dates have passed.",
+        }),
+      );
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   // =========================================================================
   // THE LIMITS
   // =========================================================================
@@ -707,7 +838,7 @@ d("bulk edit of a class's time slots (real Postgres)", () => {
       );
       expect(edited.statusCode, edited.body).toBe(200);
       expect(timetableOf(edited).entries.find((e) => e.type.id === daily)?.schedules).toHaveLength(14);
-      // Fourteen listed, seven running on any one day: an eighth, from today.
+      // Fourteen listed, seven running at once: an eighth, from today.
       await addSlot(gym, owner.cookies, daily, { weekdays: [1], startMinute: at(7), startsOn: today });
 
       // Twelve, each bulk edited: twenty-four listed, all of them on the screen.
@@ -722,7 +853,10 @@ d("bulk edit of a class's time slots (real Postgres)", () => {
         owner.cookies,
       );
       expect(thirteenth.statusCode).toBe(409);
-      expect(JSON.parse(thirteenth.body)).toMatchObject({ error: "too_many_classes" });
+      expect(JSON.parse(thirteenth.body)).toMatchObject({
+        error: "too_many_classes",
+        message: "This class is at its limit of 12 time slots. Cancel one you no longer run first.",
+      });
 
       const all = await post(
         bulkUrl(gym, full),
@@ -745,7 +879,7 @@ d("bulk edit of a class's time slots (real Postgres)", () => {
         owner.cookies,
       );
       expect(again.statusCode).toBe(409);
-      expect(JSON.parse(again.body)).toMatchObject({ error: "too_many_classes" });
+      expect(JSON.parse(again.body)).toMatchObject({ error: "too_many_listed" });
       expect(await classRows(full)).toEqual(rows);
       expect(await slotRows(full)).toEqual(slots);
     },

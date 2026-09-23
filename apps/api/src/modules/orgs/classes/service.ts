@@ -191,6 +191,15 @@ export async function getTimetable(
   return await readOr404(deps, gymId);
 }
 
+/** The class's limit of time slots running at once, for a new one and a change. */
+const slotLimitText = (cap: number) =>
+  `This class is at its limit of ${String(cap)} time slots. Cancel one you no longer run first.`;
+
+/** The class's limit of time slots listed. It fills only while changes from a
+ *  date wait to start, so it never asks the gym to cancel anything. */
+const listedLimitText = (cap: number) =>
+  `This class already has ${String(cap)} time slots listed, counting ones changed from a date that has not come yet.`;
+
 /** Turn a repo outcome into this module's refusals, in ONE place: six routes
  *  share four outcomes, and a `switch` per route is four chances for one of them
  *  to answer 200 on a failure nobody mapped. */
@@ -223,6 +232,14 @@ function throwOnFailure(outcome: repo.ClassWriteOutcome): void {
         409,
         "too_many_classes",
         `This gym is at its limit of ${String(outcome.cap)}. Archive one you no longer run first.`,
+      );
+    case "too_many_slots":
+      throw new OrgsError(409, "too_many_classes", slotLimitText(outcome.cap));
+    case "too_many_listed":
+      throw new OrgsError(
+        409,
+        "too_many_listed",
+        `${listedLimitText(outcome.cap)} Add this one once those dates have passed.`,
       );
     default: {
       // Exhaustive: a fifth outcome added to the repo fails to compile here
@@ -417,10 +434,12 @@ function slotOutcome(
         "This class already runs at that time on this day. Pick another time.",
       );
     case "too_many":
+      throw new OrgsError(409, "too_many_classes", slotLimitText(outcome.cap));
+    case "too_many_listed":
       throw new OrgsError(
         409,
-        "too_many_classes",
-        `This class is at its limit of ${String(outcome.cap)} time slots. Cancel one you no longer run first.`,
+        "too_many_listed",
+        `${listedLimitText(outcome.cap)} Pick a later Update from date, or wait until those dates have passed.`,
       );
     default: {
       const never: never = outcome;

@@ -79,9 +79,10 @@ export function slotDateFate(change: SlotChange, facts: SlotDateFacts): SlotDate
   }
 }
 
-/** The most of these time slots that run on any one day from `window.from` to
- *  `window.until` (null: no end). The count only rises on a day one of them
- *  starts, so those days and the first are the only ones to look at. */
+/** The most of these time slots not yet finished on one date, from
+ *  `window.from` to `window.until` (null: no end), whatever weekdays each runs.
+ *  The count only rises on a day one of them starts, so those days and the first
+ *  are the only ones to look at. */
 export function peakRunning(
   slots: readonly { startsOn: string; endsOn: string | null }[],
   window: { from: string; until: string | null },
@@ -102,26 +103,30 @@ export function peakRunning(
   return peak;
 }
 
-/** THE CLASS'S LIMITS OF TIME SLOTS, for a write that adds one.
+/** THE CLASS'S LIMITS OF TIME SLOTS, for a write that adds one, and which of
+ *  the two is full.
  *
- *  `peak` is the most of the class's other time slots running on any one day
- *  the new one runs (`peakRunning`): at most `CLASS_SCHEDULES_PER_TYPE_MAX` may
- *  run at once, which is the limit a gym is told about. A time slot changed from
- *  a date ends the day before it, so it never runs beside the one that follows.
+ *  `peak` is the most of the class's other time slots running at once while the
+ *  new one runs (`peakRunning`): at most `CLASS_SCHEDULES_PER_TYPE_MAX`, the
+ *  limit a gym is told about. A time slot changed from a date ends the day
+ *  before it, so it never runs beside the one that follows.
  *
  *  `listed` is how many time slots the class has not finished, every half
  *  included: at most `CLASS_SCHEDULES_LISTED_PER_TYPE_MAX`, the number the
- *  Classes screen reads a class. */
-export function withinSlotLimits(counts: {
+ *  Classes screen reads a class. It fills only while changes from a date wait
+ *  to start, so its refusal never asks the gym to cancel anything (round one,
+ *  H-1). */
+export type SlotLimitVerdict = "ok" | "running" | "listed";
+
+export function slotLimitVerdict(counts: {
   peak: number;
   addsRunning: number;
   listed: number;
   addsListed: number;
-}): boolean {
-  return (
-    counts.peak + counts.addsRunning <= CLASS_SCHEDULES_PER_TYPE_MAX &&
-    counts.listed + counts.addsListed <= CLASS_SCHEDULES_LISTED_PER_TYPE_MAX
-  );
+}): SlotLimitVerdict {
+  if (counts.peak + counts.addsRunning > CLASS_SCHEDULES_PER_TYPE_MAX) return "running";
+  if (counts.listed + counts.addsListed > CLASS_SCHEDULES_LISTED_PER_TYPE_MAX) return "listed";
+  return "ok";
 }
 
 export type FromVerdict =

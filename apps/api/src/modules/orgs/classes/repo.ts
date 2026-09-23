@@ -39,7 +39,7 @@ import {
   slotChangeKind,
   peakRunning,
   slotDateFate,
-  withinSlotLimits,
+  slotLimitVerdict,
   type FromVerdict,
 } from "./slotRule.js";
 
@@ -333,7 +333,12 @@ export type ClassWriteOutcome =
   | { kind: "not_found" }
   | { kind: "coach_not_staff" }
   | { kind: "clashes" }
-  | { kind: "too_many"; cap: number };
+  /** The gym's limit of classes. */
+  | { kind: "too_many"; cap: number }
+  /** The class's limit of time slots running at once. */
+  | { kind: "too_many_slots"; cap: number }
+  /** The class's limit of time slots listed. */
+  | { kind: "too_many_listed"; cap: number };
 
 /** IS THIS PERSON THIS GYM'S STAFF — asked INSIDE the write's transaction, under
  *  the gym's lock, so it cannot be answered against a roster that changes
@@ -563,7 +568,7 @@ export interface ClassScheduleFields {
 }
 
 /** A class's time slots not yet finished (the ones the Classes screen lists),
- *  and the gym's today, for `withinSlotLimits`. */
+ *  and the gym's today, for `slotLimitVerdict`. */
 async function listedSlots(
   tx: TransactionSql,
   w: { gymId: string; classTypeId: string; now: Date },
@@ -619,7 +624,7 @@ export async function createSchedule(
       return { kind: "coach_not_staff" };
     }
 
-    // THE LIMITS (`withinSlotLimits`): twelve running on any one day this one
+    // THE LIMITS (`slotLimitVerdict`): twelve running at once while this one
     // runs, and twenty-four listed. A time slot whose last day has passed counts
     // toward neither.
     const { today, slots } = await listedSlots(tx, input);
@@ -627,8 +632,13 @@ export async function createSchedule(
       from: input.startsOn > today ? input.startsOn : today,
       until: input.endsOn,
     });
-    if (!withinSlotLimits({ peak, addsRunning: 1, listed: slots.length, addsListed: 1 })) {
-      return { kind: "too_many", cap: CLASS_SCHEDULES_PER_TYPE_MAX };
+    switch (slotLimitVerdict({ peak, addsRunning: 1, listed: slots.length, addsListed: 1 })) {
+      case "running":
+        return { kind: "too_many_slots", cap: CLASS_SCHEDULES_PER_TYPE_MAX };
+      case "listed":
+        return { kind: "too_many_listed", cap: CLASS_SCHEDULES_LISTED_PER_TYPE_MAX };
+      case "ok":
+        break;
     }
 
     // THE SAME CLASS CANNOT RUN TWICE AT THE SAME MINUTE ON THE SAME DAY —
@@ -726,8 +736,10 @@ export type SlotChangeOutcome =
   /** The opened class would go back to a time the same class already runs on
    *  its date (round one, H-1). */
   | { kind: "day_clashes" }
-  /** The class would hold more time slots that have not ended than it may. */
-  | { kind: "too_many"; cap: number };
+  /** The class would run more time slots at once than it may. */
+  | { kind: "too_many"; cap: number }
+  /** The class would list more time slots than it may. */
+  | { kind: "too_many_listed"; cap: number };
 
 /** Where the change is made from: a time slot and a date (the Classes list), or
  *  one class on the Calendar ("This and future classes") — its time slot, its
@@ -1074,15 +1086,15 @@ export async function changeSlotFrom(
         slots.filter((l) => l.id !== scheduleId),
         { from, until: slot.ends_on },
       );
-      if (
-        !withinSlotLimits({
-          peak,
-          addsRunning: 1,
-          listed: slots.length,
-          addsListed: runsBefore ? 1 : 0,
-        })
+      switch (
+        slotLimitVerdict({ peak, addsRunning: 1, listed: slots.length, addsListed: runsBefore ? 1 : 0 })
       ) {
-        return { kind: "too_many", cap: CLASS_SCHEDULES_PER_TYPE_MAX };
+        case "running":
+          return { kind: "too_many", cap: CLASS_SCHEDULES_PER_TYPE_MAX };
+        case "listed":
+          return { kind: "too_many_listed", cap: CLASS_SCHEDULES_LISTED_PER_TYPE_MAX };
+        case "ok":
+          break;
       }
     }
     if (change === "fields" && fieldsSame) {
@@ -1217,7 +1229,7 @@ export async function changeSlotFrom(
 
 export type BulkEditOutcome = Extract<
   SlotChangeOutcome,
-  { kind: "ok" | "not_found" | "coach_not_staff" | "from_outside" | "too_many" }
+  { kind: "ok" | "not_found" | "coach_not_staff" | "from_outside" | "too_many_listed" }
 >;
 
 /** What a bulk edit sets; a key left out keeps each time slot's own value. */
@@ -1362,8 +1374,8 @@ export async function bulkChangeSlots(
     const splits = work.filter((w) => w.runsBefore).length;
     if (splits > 0) {
       const { slots: listed } = await listedSlots(tx, input);
-      if (!withinSlotLimits({ peak: 0, addsRunning: 0, listed: listed.length, addsListed: splits })) {
-        return { kind: "too_many", cap: CLASS_SCHEDULES_PER_TYPE_MAX };
+      if (slotLimitVerdict({ peak: 0, addsRunning: 0, listed: listed.length, addsListed: splits }) !== "ok") {
+        return { kind: "too_many_listed", cap: CLASS_SCHEDULES_LISTED_PER_TYPE_MAX };
       }
     }
 

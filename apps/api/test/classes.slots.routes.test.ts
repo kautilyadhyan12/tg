@@ -1035,7 +1035,7 @@ d("changing a time slot from a date (real Postgres)", () => {
         );
         answers.push(res.statusCode);
         if (res.statusCode !== 200) {
-          expect(JSON.parse(res.body)).toMatchObject({ error: "too_many_classes" });
+          expect(JSON.parse(res.body)).toMatchObject({ error: "too_many_listed" });
           break;
         }
         const next = timetableOf(res).entries[0]?.schedules.find((s) => s.startMinute === at(6, k));
