@@ -55,7 +55,7 @@ const CAP1_PLAN = "zz_orgs_cap1";
 /** A ONE-SEAT plan carrying a real trial, in a currency the seeded book does not
  *  cover. Both halves are deliberate: `trial_days > 0` is what makes it eligible
  *  for the trial at all (`CAP1_PLAN` has none and is invisible to that query),
- *  and CAD keeps it out of the way of the USD and INR bands, so the "300-seat
+ *  and CAD keeps it out of the way of the USD and INR bands, so the "200-seat
  *  band" test still measures the REAL book rather than this fixture.
  *
  *  **SINCE 2026-08-28 NO COUNTRY REACHES IT BY ITSELF.** Kd's currency ruling
@@ -83,7 +83,7 @@ const TRIAL_CAD_PLAN = "zz_orgs_trial_cad";
  *  test pass or fail — `CAP1_PLAN` is still the only one-seat plan, and a test
  *  that wants the cap to bite still says so. **INR** matches `makeOrg`'s own
  *  default country, and **no `trial_days`** keeps it invisible to the trial
- *  query, so the 300-seat band test still measures the real book. */
+ *  query, so the 200-seat band test still measures the real book. */
 const LIVE_PLAN = "zz_orgs_live";
 
 type App = Awaited<ReturnType<typeof buildApp>>;
@@ -5760,10 +5760,10 @@ d("orgs routes (real Postgres)", () => {
    *  gets. A fixture plan here would assert the mechanism and say nothing about
    *  the ruling — :18652's C/H-1 exactly, tests pointed at a plan nobody is on.
    *
-   *  30 days is :16548's ruling and lives in `seed.ts`'s `ORG_TRIAL_DAYS`, quoted
-   *  not recalled (Part 0 rule 4); the window is wide because the clock is the
+   *  200 members and 10 days since RULINGS 2026-09-22 and 2026-09-23 (the length
+   *  is `GYM_TRIAL_DAYS` in `@app/shared`); the window is wide because the clock is the
    *  database's, not this process's. */
-  it("an owner starts the gym's 30-day trial and gets the 300-seat band", { timeout: 30_000 }, async () => {
+  it("an owner starts the gym's 10-day trial and gets the 200-seat band", { timeout: 30_000 }, async () => {
     const owner = await makeUser("trial-ok");
     const org = await makeOrg(owner.cookies, "Orgs Test Trial Ok", { country: "US", plan: null });
 
@@ -5772,13 +5772,13 @@ d("orgs routes (real Postgres)", () => {
     const body = JSON.parse(res.body) as TrialBody;
     expect(body.outcome).toBe("started");
     expect(body.subscription.status).toBe("trialing");
-    expect(body.subscription.seatCap).toBe(300);
+    expect(body.subscription.seatCap).toBe(200);
 
     const endsAt = body.subscription.trialEndsAt;
     if (endsAt === null) throw new Error("a trial with no end date is not a trial");
     const days = (Date.parse(endsAt) - Date.now()) / 86_400_000;
-    expect(days).toBeGreaterThan(29);
-    expect(days).toBeLessThan(31);
+    expect(days).toBeGreaterThan(9);
+    expect(days).toBeLessThan(11);
 
     // Read the ROW back rather than trusting the response about itself: this is
     // the first statement in the product that has ever written `subscriptions`,
@@ -5794,7 +5794,7 @@ d("orgs routes (real Postgres)", () => {
       SELECT action, target_id, meta FROM audit_log
       WHERE gym_id = ${org.org.id} AND action = 'org.trial_started'`;
     expect(audit).toHaveLength(1);
-    expect(audit[0]?.meta["seatCap"]).toBe("300");
+    expect(audit[0]?.meta["seatCap"]).toBe("200");
     // THE ROW POINTS AT THE SUBSCRIPTION IT NAMES (T3 round 1, Low-6). It said
     // `targetType: 'subscription'` while carrying the GYM's id, so it could not
     // be joined to the thing it was about — and P3's Done gate asks that any
@@ -5803,6 +5803,40 @@ d("orgs routes (real Postgres)", () => {
     // an assertion that only checked the shape would pass on the old value.
     expect(audit[0]?.target_id).toBe(subs[0]?.id);
     expect(audit[0]?.target_id).not.toBe(org.org.id);
+  });
+
+  /** A trial lets in 200 members, not 201 (RULINGS 2026-09-22), on the real
+   *  seeded band. 199 members are written straight in; the 200th and 201st come
+   *  through the front desk's Confirm. */
+  it("a trial confirms the 200th member and refuses the 201st", { timeout: 60_000 }, async () => {
+    const owner = await makeUser("trial-fill");
+    const org = await makeOrg(owner.cookies, "Orgs Test Trial Fill", { country: "US", plan: null });
+    const started = await post(`/v1/orgs/${org.org.id}/trial`, {}, { cookies: owner.cookies });
+    expect(started.statusCode).toBe(200);
+
+    const filler = await sql<{ id: string }[]>`
+      INSERT INTO users (display_name, email)
+      SELECT 'Trial fill', 'orgs-t-trial-fill-' || g || '-' || ${org.org.id} || '@example.com'
+      FROM generate_series(1, 199) g
+      RETURNING id`;
+    await sql`
+      INSERT INTO gym_members (gym_id, user_id, complimentary)
+      SELECT ${org.org.id}, id, false FROM users WHERE id IN ${sql(filler.map((u) => u.id))}`;
+
+    const two00 = await makeUser("trial-fill-200");
+    await joinAsMember(two00.cookies, org, owner.cookies);
+
+    const two01 = await makeUser("trial-fill-201");
+    const application = await applyWithCode(two01.cookies, org.joinCode.code);
+    const full = await post(
+      `/v1/orgs/${org.org.id}/applications/${application}/confirm`,
+      {},
+      { cookies: owner.cookies },
+    );
+    expect(full.statusCode).toBe(409);
+    const body = JSON.parse(full.body) as { error: string; message: string };
+    expect(body.error).toBe("seat_cap_reached");
+    expect(body.message).toMatch(/\b200\b/);
   });
 
   /** THE PROMISE THE WHOLE CARD IS FOR: the gym starts paying (in trial), and its
@@ -5815,8 +5849,8 @@ d("orgs routes (real Postgres)", () => {
    *  only differ if the trial genuinely busted it. Without that first read the
    *  assertion passes on a cold cache and proves nothing (:5543's fixture lesson).
    *
-   *  7 vs 2 is the observable, and it is Kd's own ruling twice over: a gym's
-   *  member gets 7 meal scans a day (RULINGS 2026-09-15) and the free tier gets 2. Read
+   *  7 vs 1 is the observable, and it is Kd's own ruling twice over: a gym's
+   *  member gets 7 meal scans a day (RULINGS 2026-09-15) and the free tier gets 1. Read
    *  through `/v1/entitlements/me` — the resolver — rather than out of the plans
    *  table, so it is the answer a screen would actually be given. */
   it("members get the gym plan the moment the trial starts", { timeout: 60_000 }, async () => {
@@ -5826,7 +5860,7 @@ d("orgs routes (real Postgres)", () => {
     const before = await get("/v1/entitlements/me", { cookies: owner.cookies });
     expect(before.statusCode).toBe(200);
     expect((JSON.parse(before.body) as { entitlements: { meal_scan: { limit: number } } })
-      .entitlements.meal_scan.limit).toBe(2);
+      .entitlements.meal_scan.limit).toBe(1);
 
     expect(
       (await post(`/v1/orgs/${org.org.id}/trial`, {}, { cookies: owner.cookies })).statusCode,
@@ -5852,7 +5886,7 @@ d("orgs routes (real Postgres)", () => {
     expect(second.statusCode).toBe(200);
     const body = JSON.parse(second.body) as TrialBody;
     expect(body.outcome).toBe("already_subscribed");
-    expect(body.subscription.seatCap).toBe(300);
+    expect(body.subscription.seatCap).toBe(200);
     expect(await readSubs(org.org.id)).toHaveLength(1);
   });
 
@@ -5897,7 +5931,7 @@ d("orgs routes (real Postgres)", () => {
     // THE CURRENCY IS SET DIRECTLY, AND IT HAS TO BE SINCE 2026-08-28. Creating
     // the gym in Canada used to leave it on CAD, which is the currency the
     // one-seat fixture plan sits in; Kd's ruling maps Canada to USD, so on the
-    // country alone this gym would now be handed the REAL 300-seat band and two
+    // country alone this gym would now be handed the REAL 200-seat band and two
     // members would never reach the cap — the test would pass while proving
     // nothing about it.
     //
@@ -6158,7 +6192,7 @@ d("orgs routes (real Postgres)", () => {
     expect(row.subscription?.status).toBe("trialing");
     // The REAL band off the seeded book, the same 300 the trial response
     // asserts — the two readers must not be able to disagree about the cap.
-    expect(row.subscription?.seatCap).toBe(300);
+    expect(row.subscription?.seatCap).toBe(200);
     expect(row.subscription?.trialEndsAt).not.toBeNull();
   });
 

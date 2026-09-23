@@ -114,17 +114,15 @@ d("0001_init on a real database", () => {
   // pooler; 30s flaked once under load (P2.5a PROVE) — headroom, not a bug.
   //
   // THE BOOK ASSERTED HERE IS THE RULED ONE, and every number is traceable:
-  //  · gym bands + boundaries — Kd, DECISIONS :17902 §1a/§1b (bands 1-2 raised
-  //    to $35/$50; boundaries rounded to 0-300 / 301-500 / 501-1000 /
-  //    1001-1500 / 1501-2100), over :17366 §1's ratified table for bands 3-5
-  //    and the whole INR book.
+  //  · gym bands — RULINGS 2026-09-22 (up to 200 $79 · 500 $129 · 1,000 $199 ·
+  //    1,500 $279 · 2,100 $379) and 2026-09-23 (India's fixed rupees).
   //  · seat_cap IS the band boundary in code (:17902 §4) — a cap asserted
   //    nowhere was how the old book stayed stale through two rulings.
-  //  · individual tiers — :17366 §1 ($10 international, $5 India) with Kd's
-  //    2026-08-25 ₹449 and "one month free" (yearly = 11x monthly).
-  //  · gym trial 30 days — Kd :16548, superseding the spec's 7.
-  //  · scan/route allowances — :17366 §1/§2 (paid 20/day, gym member 5/day,
-  //    free 2/day) and the OWED re-seed line's route_gen 2/day.
+  //  · individuals — $10 in every country, no trial (RULINGS 2026-09-22);
+  //    yearly = 11x monthly (Kd, 2026-08-25). The rupee plan is retired.
+  //  · gym trial 10 days — RULINGS 2026-09-23.
+  //  · scan/route allowances — paid 20/day, gym member 7/day, free 1/day
+  //    (RULINGS 2026-09-15, 2026-09-22) and route_gen 2/day.
   it("seed is idempotent and matches the ruled price book", { timeout: 120_000 }, async () => {
     type PlanRow = {
       code: string;
@@ -185,6 +183,14 @@ d("0001_init on a real database", () => {
       VALUES ('org_micro', 'org', 'plan.org_micro', 99900, 'INR', 'month',
               25, 7, 10, '{}'::jsonb, '{}'::jsonb, true)
       ON CONFLICT (code) DO UPDATE SET active = true`;
+    // The same for the retired rupee individual plan, which a fresh database
+    // never holds.
+    await sql`
+      INSERT INTO plans (code, audience, name_key, price_minor, currency, "interval",
+                         seat_cap, trial_days, rank, entitlements, active)
+      VALUES ('pro_in_m', 'consumer', 'plan.pro_in_m', 44900, 'INR', 'month',
+              NULL, 7, 10, '{}'::jsonb, true)
+      ON CONFLICT (code) DO UPDATE SET active = true`;
 
     await seed(url ?? "");
     const first = await readBook();
@@ -206,11 +212,9 @@ d("0001_init on a real database", () => {
     // ---- consumer -------------------------------------------------------
     const consumer: [string, number, string, string, number][] = [
       // code, price_minor, currency, interval, trial_days
-      ["free", 0, "INR", "month", 0],
-      ["pro_in_m", 44900, "INR", "month", 7],
-      ["pro_in_y", 493900, "INR", "year", 7],
-      ["pro_us_m", 1000, "USD", "month", 7],
-      ["pro_us_y", 11000, "USD", "year", 7],
+      ["free", 0, "USD", "month", 0],
+      ["pro_us_m", 1000, "USD", "month", 0],
+      ["pro_us_y", 11000, "USD", "year", 0],
     ];
     for (const [code, minor, currency, interval, trialDays] of consumer) {
       const r = row(code);
@@ -222,21 +226,22 @@ d("0001_init on a real database", () => {
       expect(r.active, `${code} active`).toBe(true);
     }
     expect(row("free").rank).toBe(0);
-    expect(row("pro_in_m").rank).toBe(10);
+    expect(row("pro_us_m").rank).toBe(10);
+    expect(row("pro_in_m").active, "the seed must retire the rupee individual plan").toBe(false);
 
     // ---- gym bands, both books -------------------------------------------
     const bands: [string, number, string, number][] = [
       // code, price_minor, currency, seat_cap
-      ["org_b1_us_m", 3500, "USD", 300],
-      ["org_b2_us_m", 5000, "USD", 500],
-      ["org_b3_us_m", 6900, "USD", 1000],
-      ["org_b4_us_m", 9900, "USD", 1500],
-      ["org_b5_us_m", 12900, "USD", 2100],
-      ["org_b1_in_m", 150000, "INR", 300],
-      ["org_b2_in_m", 250000, "INR", 500],
-      ["org_b3_in_m", 450000, "INR", 1000],
-      ["org_b4_in_m", 650000, "INR", 1500],
-      ["org_b5_in_m", 850000, "INR", 2100],
+      ["org_b1_us_m", 7900, "USD", 200],
+      ["org_b2_us_m", 12900, "USD", 500],
+      ["org_b3_us_m", 19900, "USD", 1000],
+      ["org_b4_us_m", 27900, "USD", 1500],
+      ["org_b5_us_m", 37900, "USD", 2100],
+      ["org_b1_in_m", 750000, "INR", 200],
+      ["org_b2_in_m", 1250000, "INR", 500],
+      ["org_b3_in_m", 1900000, "INR", 1000],
+      ["org_b4_in_m", 2650000, "INR", 1500],
+      ["org_b5_in_m", 3650000, "INR", 2100],
     ];
     for (const [code, minor, currency, seatCap] of bands) {
       const r = row(code);
@@ -244,7 +249,7 @@ d("0001_init on a real database", () => {
       expect(r.currency, `${code} currency`).toBe(currency);
       expect(r.seat_cap, `${code} seat cap`).toBe(seatCap);
       expect(r.interval, `${code} interval`).toBe("month");
-      expect(r.trial_days, `${code} trial days`).toBe(30);
+      expect(r.trial_days, `${code} trial days`).toBe(10);
       expect(r.rank, `${code} rank`).toBe(10);
       expect(r.active, `${code} active`).toBe(true);
       expect(r.member_entitlements?.["meal_scan"], `${code} member scans`).toEqual(day(7));
@@ -296,13 +301,13 @@ d("0001_init on a real database", () => {
     // ---- allowances -------------------------------------------------------
     expect(row("pro_us_m").entitlements["meal_scan"], "paid scans").toEqual(day(20));
     expect(row("pro_us_m").entitlements["route_gen"], "paid routes").toEqual(day(2));
-    expect(row("free").entitlements["meal_scan"], "free scans").toEqual(day(2));
+    expect(row("free").entitlements["meal_scan"], "free scans").toEqual(day(1));
   });
 
   it("subs_one_live_uq rejects a second live subscription (23505)", async () => {
     const [user] = await sql`
       INSERT INTO users (display_name) VALUES ('uq-test') RETURNING id`;
-    const [plan] = await sql`SELECT id FROM plans WHERE code = 'pro_in_m'`;
+    const [plan] = await sql`SELECT id FROM plans WHERE code = 'pro_us_m'`;
     const userId = user?.["id"] as string;
     const planId = plan?.["id"] as string;
     await sql`

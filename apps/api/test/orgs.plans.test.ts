@@ -122,7 +122,7 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
    *  filter above already excludes any `zz_` code from the exact ladders, so this
    *  row cannot pollute them; `trial_days = 0` because `startGymTrial` picks the
    *  LOWEST-capped plan carrying a trial, and a 42-seat row with a trial would
-   *  quietly become the band every US gym trials on — breaking the 300-seat
+   *  quietly become the band every US gym trials on — breaking the 200-seat
    *  assertion in a sibling suite. `CAP1_PLAN` next door is 0 for the same
    *  reason. */
   const FRACTIONAL_PLAN = "zz_plans_frac";
@@ -287,13 +287,79 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
     return found;
   };
 
+  // ── 0 · THE WORST THING THIS PRICE LIST COULD DO ────────────────────────────
+
+  /** The ruled list (RULINGS 2026-09-22 and 2026-09-23), written out here from
+   *  Kd's words rather than read from the seed: dollars for every country but
+   *  India, fixed rupees for India, and a trial of 10 days on the 200-member band. */
+  const RULED: Record<"USD" | "INR", { seatCaps: number[]; labels: string[] }> = {
+    USD: { seatCaps: [200, 500, 1000, 1500, 2100], labels: ["$79", "$129", "$199", "$279", "$379"] },
+    INR: {
+      seatCaps: [200, 500, 1000, 1500, 2100],
+      labels: ["₹7,500", "₹12,500", "₹19,000", "₹26,500", "₹36,500"],
+    },
+  };
+  const RULED_TRIAL_DAYS = 10;
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  /** The five ruled bands only. `org_micro` also starts `org_`, and
+   *  `db.migration.test.ts` turns it back on mid-run to prove the seed turns it
+   *  off, so an exact list over every `org_` row races that suite. */
+  const rulingBands = (plans: PlanOffer[]) => plans.filter((p) => /^org_b[1-5]_(us|in)_m$/.test(p.code));
+
+  /** WORST THING: a gym is quoted or given the wrong price or member limit — the
+   *  old $35 for 300 members, rupees outside India — or an Indian gym is told we
+   *  are not open in its country when it starts its trial. Driven through the
+   *  real routes for the US, India and one euro-area country. */
+  it.each([
+    { country: "US", currency: "USD" as const },
+    { country: "IN", currency: "INR" as const },
+    { country: "DE", currency: "USD" as const },
+  ])(
+    "a gym in $country trials for 10 days on 200 members and is quoted the ruled $currency list",
+    async ({ country, currency }) => {
+      const owner = await makeUser(`worst-${country.toLowerCase()}`);
+      const org = await makeOrg(owner.cookies, country);
+      expect(org.org.currencyDisplay).toBe(currency);
+
+      const before = Date.now();
+      const started = await post(`/v1/orgs/${org.org.id}/trial`, {}, owner.cookies);
+      const after = Date.now();
+      expect(started.statusCode, started.body).toBe(200);
+      const body = JSON.parse(started.body) as {
+        outcome: string;
+        subscription: { status: string; seatCap: number | null; trialEndsAt: string | null };
+      };
+      expect(body.outcome).toBe("started");
+      expect(body.subscription.status).toBe("trialing");
+      expect(body.subscription.seatCap).toBe(200);
+      const ends = Date.parse(body.subscription.trialEndsAt ?? "");
+      // The database's clock stamps it; a minute either side of the request.
+      expect(ends).toBeGreaterThanOrEqual(before + RULED_TRIAL_DAYS * DAY_MS - 60_000);
+      expect(ends).toBeLessThanOrEqual(after + RULED_TRIAL_DAYS * DAY_MS + 60_000);
+      // The trial sits on band 1 of the gym's OWN list: after it, the gym is
+      // quoted from the list its trial was on.
+      const onPlan = await sql<{ code: string }[]>`
+        SELECT p.code FROM subscriptions s JOIN plans p ON p.id = s.plan_id
+        WHERE s.owner_type = 'gym' AND s.owner_id = ${org.org.id} AND s.status = 'trialing'`;
+      expect(onPlan.map((r) => r.code)).toEqual([currency === "INR" ? "org_b1_in_m" : "org_b1_us_m"]);
+
+      const book = rulingBands(await readPlans(org.org.id, owner.cookies));
+      expect(book.map((p) => p.seatCap)).toEqual(RULED[currency].seatCaps);
+      expect(book.map((p) => p.priceLabel)).toEqual(RULED[currency].labels);
+      for (const p of book) {
+        expect(p.currency).toBe(currency);
+        expect(p.interval).toBe("month");
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   // ── 1 · THE PRICE LIST ──────────────────────────────────────────────────────
 
   /** KD'S RATIFIED USD BOOK, DRAWN THE WAY THE PROMPT WILL DRAW IT.
    *
-   *  The five bands and their boundaries are :17902 (bands 1–2, $35/$50, and
-   *  every boundary) and :16702 (bands 3–5, $59→$69/$79→$99/$99→$129 as ratified
-   *  the same day) — quoted from the seed, never recalled (Part 0 rule 4). The
+   *  The five bands and their limits are RULINGS 2026-09-22's ("up to 200
+   *  members $79 · up to 500 $129 …"). The
    *  ORDER is the assertion that matters as much as the numbers: `seat_cap ASC
    *  NULLS LAST`, which is the same rule `startGymTrial` picks band 1 by, so the
    *  list a buyer reads is the ladder Kd priced.
@@ -311,8 +377,8 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
 
       const book = seededBook(await readPlans(org.org.id, owner.cookies));
 
-      expect(book.map((p) => p.seatCap)).toEqual([300, 500, 1000, 1500, 2100]);
-      expect(book.map((p) => p.priceLabel)).toEqual(["$35", "$50", "$69", "$99", "$129"]);
+      expect(book.map((p) => p.seatCap)).toEqual([200, 500, 1000, 1500, 2100]);
+      expect(book.map((p) => p.priceLabel)).toEqual(["$79", "$129", "$199", "$279", "$379"]);
       expect(book.map((p) => p.code)).toEqual([
         "org_b1_us_m",
         "org_b2_us_m",
@@ -363,7 +429,7 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
       // The ratified INR band 1 is ₹1,500 (:18488's book, `seed.ts`). Named
       // rather than range-checked: a formatter that dropped the thousands
       // separator or the minor units would still be "greater than zero".
-      expect(book.find((p) => p.code === "org_b1_in_m")?.priceLabel).toBe("₹1,500");
+      expect(book.find((p) => p.code === "org_b1_in_m")?.priceLabel).toBe("₹7,500");
 
       /** A RETIRED BAND IS NEVER QUOTED TO A BUYER — and this assertion exists
        *  because MUTANT O148 SURVIVED WITHOUT IT.
@@ -442,11 +508,11 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
 
       // AND THE WHOLE-NUMBER BRANCH BESIDE IT, in the same read — so the two
       // halves are compared against each other rather than each being asserted
-      // alone. `$35` and `$34.99` are one penny apart and format differently.
+      // alone: a whole `$79` beside `$34.99`, which has pennies.
       expect(
         seededBook(plans).find((p) => p.code === "org_b1_us_m")?.priceLabel,
         "and a whole price must NOT grow a .00",
-      ).toBe("$35");
+      ).toBe("$79");
     },
     TEST_TIMEOUT_MS,
   );
@@ -569,9 +635,9 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
    *  (:22215 §3.5). A Canadian gym could be created and then refused its own
    *  trial with "We're not open for business in your country yet" — the brick
    *  wall an unskippable prompt turns into a dead end. It now trials on the USD
-   *  band like any American gym, and gets the same 300 seats. */
+   *  band like any American gym, and gets the same 200 seats. */
   it(
-    "a Canadian gym starts its trial on the dollar book, at the same 300 seats",
+    "a Canadian gym starts its trial on the dollar book, at the same 200 seats",
     async () => {
       const owner = await makeUser("ca-trial");
       const org = await makeOrg(owner.cookies, "CA");
@@ -584,14 +650,14 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
         subscription: { status: string; seatCap: number | null };
       };
       expect(body.outcome).toBe("started");
-      expect(body.subscription.seatCap).toBe(300);
+      expect(body.subscription.seatCap).toBe(200);
 
       expect(seededBook(await readPlans(org.org.id, owner.cookies)).map((p) => p.priceLabel)).toEqual([
-        "$35",
-        "$50",
-        "$69",
-        "$99",
+        "$79",
         "$129",
+        "$199",
+        "$279",
+        "$379",
       ]);
     },
     TEST_TIMEOUT_MS,

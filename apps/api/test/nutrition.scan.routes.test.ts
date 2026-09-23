@@ -444,6 +444,13 @@ d("the scanner prices every food it sees (real Postgres)", () => {
   const sessionOn = async (target: App, email: string): Promise<string> => {
     await injectOn(target, "POST", "/v1/auth/register", "", { email, password: PASSWORD, displayName: "Scan fixture" });
     const login = await injectOn(target, "POST", "/v1/auth/login", "", { email, password: PASSWORD });
+    // A free account scans once a day (RULINGS 2026-09-22); these tests price what a scan sees,
+    // so every person is on the $10 plan.
+    await sql`
+      INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider)
+      SELECT 'user', u.id, p.id, 'active', 'pilot' FROM users u, plans p
+      WHERE u.email = ${email} AND p.code = 'pro_us_m'
+        AND NOT EXISTS (SELECT 1 FROM subscriptions s WHERE s.owner_type = 'user' AND s.owner_id = u.id)`;
     return login.cookies.find((c) => c.name === "accessToken")?.value ?? "";
   };
   const session = (email: string): Promise<string> => sessionOn(api(), email);
@@ -458,6 +465,7 @@ d("the scanner prices every food it sees (real Postgres)", () => {
   /** The cited entries this run wrote, because the table did not hold them. */
   let wroteCited: number[] = [];
   const clean = async (): Promise<void> => {
+    await sql`DELETE FROM subscriptions WHERE owner_type = 'user' AND owner_id IN (SELECT id FROM users WHERE email LIKE 'scan7b-%@example.com')`;
     await sql`DELETE FROM meal_logs WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'scan7b-%@example.com')`;
     await sql`DELETE FROM api_cost_events WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'scan7b-%@example.com')`;
     await sql`DELETE FROM users WHERE email LIKE 'scan7b-%@example.com'`;
@@ -563,7 +571,7 @@ d("the scanner prices every food it sees (real Postgres)", () => {
     expect([borrowed.statusCode, borrowed.json<{ error: string }>().error]).toEqual([400, "unknown_food"]);
   }, 60_000);
 
-  // Each test below scans as a person of its own: a free account has two scans a day.
+  // Each test below scans as a person of its own.
   it("names a food nothing has and the model gave no usable number for, and prices nothing for it", async () => {
     // 500 kcal with no protein, carbohydrate or fat behind it is no number.
     const sheet = await scan(await session("scan7b-carol@example.com"), plate(seen("Qwzx vlorp", "qwzx vlorp", [100, 500, 0, 0, 0]), seen("Qwzx blank", "qwzx blank", null), DAL));

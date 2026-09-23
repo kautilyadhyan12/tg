@@ -202,7 +202,7 @@ describe('the plan card', () => {
     // bare "no such button" would now pass just as well over a card that had
     // quietly grown one back.
     const modal = screen.getByTestId('plan-modal');
-    const trialButtons = screen.getAllByRole('button', { name: /start your 30-day free trial/i });
+    const trialButtons = screen.getAllByRole('button', { name: /start your 10-day free trial/i });
     expect(trialButtons).toHaveLength(1);
     expect(modal.contains(trialButtons[0])).toBe(true);
     // And no banner, because there is no plan for §4.2 to have a state about.
@@ -241,7 +241,7 @@ describe('the plan card', () => {
     expect(await screen.findByText('Free trial')).toBeTruthy();
     expect(screen.getByText(/^Ends /)).toBeTruthy();
     expect(screen.getByText(/12 of 300 places used/)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /start your 30-day free trial/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /start your 10-day free trial/i })).toBeNull();
   });
 
   it('does NOT print an end date for a gym that is past its trial', async () => {

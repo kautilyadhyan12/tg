@@ -1792,7 +1792,7 @@ export async function startGymTrial(
 
     /** THE TRIAL BAND IS THE SMALLEST ONE, WHICH IS KD'S RULING EXPRESSED AS A
      *  QUERY RATHER THAN AS A NUMBER. :19129: *"no plan choice at signup · EVERY
-     *  gym trials at the SAME limit, 300 members · the gym subscribes to its real
+     *  gym trials at the SAME limit, 300 members (200 since 2026-09-22) · the gym subscribes to its real
      *  band AFTER the trial"*. The seed's own comment says `seat_cap` **is** the
      *  band boundary, so "band 1" and "the lowest cap" are the same row — and
      *  ordering by it means the ruling survives a re-priced book without anybody

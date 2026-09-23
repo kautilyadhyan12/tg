@@ -83,7 +83,7 @@ d("entitlements + quotas + history gate (real Postgres)", () => {
   const giveProSub = async (userId: string) => {
     await sql`
       INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider)
-      VALUES ('user', ${userId}, ${await planId("pro_in_m")}, 'active', 'pilot')`;
+      VALUES ('user', ${userId}, ${await planId("pro_us_m")}, 'active', 'pilot')`;
   };
 
   beforeAll(async () => {

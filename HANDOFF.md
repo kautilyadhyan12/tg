@@ -4,6 +4,17 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-23 · Stage 3 item 2a (Folder B): the price list, the 200-member trial, no individual trial, one free scan
+
+- **Risky (money), Opus xhigh; branch `price-list-trials`.** Kd changed the plan before go (RULINGS 2026-09-23): the gym trial is **10 days**, and an Indian gym sees **fixed rupee prices** (₹7,500 · 12,500 · 19,000 · 26,500 · 36,500), not the dollar list the plan proposed.
+- **Built**: `seed.ts` holds the ruled list ($79 · 129 · 199 · 279 · 379 at 200 / 500 / 1,000 / 1,500 / 2,100); band 1's 200 is the trial's limit; `GYM_TRIAL_DAYS = 10` in `@app/shared`, read by the seed and the console's trial prompt ("Start your 10-day free trial"); the $10 plan has no trial; the free plan scans 1 meal a day; `pro_in_m`/`pro_in_y` retired (switched off, never deleted); the free row's currency is USD. No migration, no new package; Indian gyms keep INR, so no gym's currency moves.
+- **The worst thing, first test** (`orgs.plans.test.ts`): a US, an Indian and a German gym each start a trial and get 200 members for 10 days on band 1 of their OWN list, and are quoted exactly the ruled list. Red on master's seed ("expected 300 to be 200"). Also new: a real trial confirms the 200th member and refuses the 201st (`orgs.routes.test.ts`).
+- **Four deliberate breaks, each RED, each file restored sha256-identical**: the trial ignoring the gym's currency (India landed on `org_b1_us_m`), band 1 at 300, ₹12,500 losing a zero ("₹1,250"), the trial at 15 days. Control green after.
+- **Tests moved with the rulings**: the seed's price-book test (and a retired `pro_in_m` it now builds itself), trial 10 days and 200 seats, free scans 1; the scanner-pricing tests' accounts go on the $10 plan (they scan more than once and test pricing, not the allowance); the over-limit test now runs on the one free scan. `classes.bulk.routes.test.ts` failed after 18:00 London time (its 18:00 class had begun, so one time slot had nothing before the date); its date is now 8 days out.
+- **Verified**: api tsc 0 · api eslint 0 · shared tsc 0 · shared eslint 0 · shared 220/220 · **the whole api suite on `aihg_b`: 104 files, 3,124 passed** · web 2,493 passed (`poseAssets.contract` local Node 24 only, as before) · changed web files lint 0.
+- **Cost at full size**: reads no list of people; nothing to measure.
+- **Not in this job**: "more than 2,100: contact us" and any Subscribe button (Stage 3 item 1, Paddle). The rupee list is checked once a year against the rate.
+
 ## 2026-09-23 · 3b-i-a: press Invite, and the email goes (PR #98)
 
 - **3b-i was split** (records, routes, sender, email and unsubscribe; then what comes back): **3b-i-a** here, **3b-i-b** next (webhook, bounces, complaints, first 50 then wait, the 2 % stop). Risky, Opus xhigh. Kd said *"go"*; he decided nothing new, so no RULINGS line.

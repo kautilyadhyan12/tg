@@ -192,7 +192,9 @@ describe('the forced trial prompt', () => {
 
     expect(await screen.findByTestId('plan-modal')).toBeTruthy();
     expect(screen.getByRole('dialog')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /start your 30-day free trial/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /start your 10-day free trial/i })).toBeTruthy();
+    // The trial length, in Kd's number (RULINGS 2026-09-23), written out here.
+    expect(screen.getByText('Your first 10 days are free. No card needed.')).toBeTruthy();
     // It must not promise a number nobody has been told yet: the seat cap comes
     // off the price book and the server picks the band.
     expect(screen.queryByText(/300/)).toBeNull();
@@ -220,7 +222,7 @@ describe('the forced trial prompt', () => {
     // Nor does clicking the backdrop, which is the click a person makes next.
     fireEvent.click(modal);
     expect(screen.getByTestId('plan-modal')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /start your 30-day free trial/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /start your 10-day free trial/i })).toBeTruthy();
 
     // AND ON THE DIALOG ITSELF, not only the backdrop — T3 round 1's instrument
     // note. Focus now moves INTO the dialog, so a real Escape press lands there;
@@ -325,7 +327,7 @@ describe('the forced trial prompt', () => {
     });
     renderConsole(Overview);
 
-    fireEvent.click(await screen.findByRole('button', { name: /start your 30-day free trial/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /start your 10-day free trial/i }));
 
     await waitFor(() => expect(screen.queryByTestId('plan-modal')).toBeNull());
     expect(orgService.startTrial).toHaveBeenCalledTimes(1);
@@ -351,7 +353,7 @@ describe('the forced trial prompt', () => {
     });
     renderConsole(Overview);
 
-    fireEvent.click(await screen.findByRole('button', { name: /start your 30-day free trial/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /start your 10-day free trial/i }));
     await waitFor(() => expect(screen.queryByTestId('plan-modal')).toBeNull());
 
     // The refresh has now failed; the true thing is still on screen.
@@ -375,7 +377,7 @@ describe('the forced trial prompt', () => {
     });
     renderConsole(Overview);
 
-    fireEvent.click(await screen.findByRole('button', { name: /start your 30-day free trial/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /start your 10-day free trial/i }));
 
     await waitFor(() => expect(screen.getByText(/not open for business/i)).toBeTruthy());
     expect(screen.queryByRole('button', { name: /try again/i })).toBeNull();
@@ -398,11 +400,11 @@ describe('the forced trial prompt', () => {
     });
     renderConsole(Overview);
 
-    fireEvent.click(await screen.findByRole('button', { name: /start your 30-day free trial/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /start your 10-day free trial/i }));
 
     await waitFor(() => expect(screen.getByText(/one per person, not one per gym/i)).toBeTruthy());
     expect(await screen.findByTestId('plan-list')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /start your 30-day free trial/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /start your 10-day free trial/i })).toBeNull();
   });
 });
 
@@ -460,7 +462,7 @@ describe('the screen that says the gym is ready', () => {
     expect(await screen.findByText(/Iron House is ready/i)).toBeTruthy();
     // …and the prompt is over it.
     expect(await screen.findByTestId('plan-modal')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /start your 30-day free trial/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /start your 10-day free trial/i })).toBeTruthy();
     // With the same two exits and no way past.
     const modal = screen.getByTestId('plan-modal');
     fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' });
@@ -485,7 +487,7 @@ describe('the screen that says the gym is ready', () => {
     renderNewGym();
     await createGym();
 
-    fireEvent.click(await screen.findByRole('button', { name: /start your 30-day free trial/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /start your 10-day free trial/i }));
 
     await waitFor(() => expect(screen.queryByTestId('plan-modal')).toBeNull());
     expect(screen.getByText('K7QM2X')).toBeTruthy();
@@ -726,7 +728,7 @@ describe('who the prompt stops', () => {
     renderConsole(Overview);
 
     await screen.findByTestId('plan-list');
-    expect(screen.queryByRole('button', { name: /start your 30-day free trial/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /start your 10-day free trial/i })).toBeNull();
     expect(screen.getByText(/already used your one free trial/i)).toBeTruthy();
   });
 });
