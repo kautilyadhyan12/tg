@@ -13,7 +13,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Verified**: api tsc 0 · eslint 0 · shared tsc 0 · eslint 0 · 220/220 · join suite 18/18 · full api suite 107 files, 3,331 passed, 2 failed (the class tests below) · web 2,493 passed (`poseAssets.contract` Node 24 only) + 14 new + 28 route-table · new web files lint 0 · gitleaks no leaks · harness anchors: member-list 68/68, auth 20/20, login-door 31/31 (D11 and S3 re-anchored, D11 red by hand), orgs unchanged.
 - **Not this job's**: two class tests failed here on a Wednesday evening, London time; Folder B's #101 (taken in) fixed them, 26/26 at 20:05 London. `memberInvites.results.test.ts`'s "two workers at once" fails now and then on CI only (ROADMAP 10).
 - **Cost** (mains, 2,592 MHz): Join 58–69 ms median at 20×200 and at the cap; what is waiting 10–13 ms; Remove all of 1,000 with withdrawals 311 ms median (one Docker-disk stall at 1,168 ms).
-- **Open**: review round one; Kd's click-through. Next in Folder A: 3b-ii-b.
+- **Kd clicked through it and passed it** (*"all passed"*): the email's link signed out, sign-in, "You're invited" before setup with Join and a lapsed gym's No thanks, the set-up account's declined invitation joined from Settings → Gym, and `/invitations`' wall.
+- **Open**: review round one. Next in Folder A: 3b-ii-b.
 
 ## 2026-09-23 · Stage 3 item 2a (Folder B): the price list, the 200-member trial, no individual trial, one free scan
 
