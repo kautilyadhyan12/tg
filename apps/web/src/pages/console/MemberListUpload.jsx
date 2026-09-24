@@ -29,6 +29,7 @@ import {
   guardNumber,
   importedColumnCount,
   missingOf,
+  missingStatusLine,
   missingTitle,
   neverKeptLines,
   pastedBytes,
@@ -695,10 +696,15 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
                   </>
                 ) : null}
               </div>
+              {missingStatusLine(missing) !== '' ? (
+                <div className="text-[13px] mt-1" style={{ color: C.soft }} data-testid="missing-statuses">
+                  {missingStatusLine(missing)}
+                </div>
+              ) : null}
             </div>
             <div role="radiogroup" aria-label="What happened to them?" className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <Choice on={answer === 'left'} title="They've left" sub={`Mark as past ${words.people}`} onClick={chooseLeft} disabled={busy !== null} />
-              <Choice on={answer === 'keep'} title="Keep them" sub="I'm only adding people" onClick={chooseKeep} disabled={busy !== null} />
+              <Choice on={answer === 'left'} title="They've left" sub={`Move to past ${words.people}`} onClick={chooseLeft} disabled={busy !== null} />
+              <Choice on={answer === 'keep'} title={`They're still ${words.people}`} sub="Leave them on the list" onClick={chooseKeep} disabled={busy !== null} />
             </div>
             {openGroup === 'gone' && wholeList ? namesFor('gone') : null}
             {answer === 'left' && needsTyping ? (

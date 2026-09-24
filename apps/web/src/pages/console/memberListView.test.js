@@ -6,6 +6,7 @@ import {
   guardNumber,
   importedColumnCount,
   missingOf,
+  missingStatusLine,
   missingTitle,
   neverKeptLines,
   roleOfColumn,
@@ -112,7 +113,7 @@ describe('dates', () => {
 
 const list = (over = {}) => ({ new: 0, changed: 0, unchanged: 0, gone: 0, alreadyInApp: 0, canBeInvited: 0, noEmail: 0, returning: 0, ...over });
 const calm = { entriesGoing: 0, listSize: 0, membersLeaving: 0, membersListedNow: 0, needsTick: false, mostOfListWouldGo: false };
-const pv = (over = {}) => ({ mode: 'whole_list', list: list(), members: { leaving: 0, listedNow: 0 }, guard: calm, ...over });
+const pv = (over = {}) => ({ mode: 'whole_list', list: list(), members: { leaving: 0, listedNow: 0 }, guard: calm, statuses: [], ...over });
 
 describe('what the review shows', () => {
   it.each([
@@ -129,12 +130,25 @@ describe('what the review shows', () => {
 
   it.each([
     ['nobody missing', pv({ list: list({ new: 30 }) }), null],
-    ['five missing', pv({ list: list({ gone: 5 }), guard: { ...calm, entriesGoing: 5, listSize: 40 } }), { n: 5, listSize: 40, needsTick: false }],
-    ['app members leaving with no entry gone', pv({ members: { leaving: 2, listedNow: 3 } }), { n: 2, listSize: 0, needsTick: false }],
-    ['the wrong-file check with nobody counted', pv({ guard: { ...calm, membersLeaving: 12, needsTick: true } }), { n: 12, listSize: 0, needsTick: true }],
+    ['five missing', pv({ list: list({ gone: 5 }), guard: { ...calm, entriesGoing: 5, listSize: 40 } }), { n: 5, listSize: 40, needsTick: false, statuses: [] }],
+    ['app members leaving with no entry gone', pv({ members: { leaving: 2, listedNow: 3 } }), { n: 2, listSize: 0, needsTick: false, statuses: [] }],
+    ['the wrong-file check with nobody counted', pv({ guard: { ...calm, membersLeaving: 12, needsTick: true } }), { n: 12, listSize: 0, needsTick: true, statuses: [] }],
     ['an add asks nothing', pv({ mode: 'add', list: list({ gone: 5 }) }), null],
   ])('missing: %s', (_name, preview, want) => {
     expect(missingOf(preview)).toEqual(want);
+  });
+
+  it("names the statuses of who is missing, so an export of only Active members shows itself", () => {
+    const status = (label, gone, rest = 0) => ({ label, count: rest, new: 0, changed: 0, unchanged: rest, gone });
+    const missing = missingOf(
+      pv({ list: list({ gone: 12 }), guard: { ...calm, entriesGoing: 12, listSize: 50 }, statuses: [status('Active', 0, 38), status('Frozen', 9), status('Expired', 3)] }),
+    );
+    expect(missing.statuses).toEqual([
+      { label: 'Frozen', n: 9 },
+      { label: 'Expired', n: 3 },
+    ]);
+    expect(missingStatusLine(missing)).toBe('Frozen 9 · Expired 3');
+    expect(missingStatusLine({ ...missing, statuses: [] })).toBe('');
   });
 
   it.each([

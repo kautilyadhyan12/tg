@@ -143,9 +143,17 @@ export function missingOf(preview) {
   const { list, members, guard } = preview;
   const n = list.gone > 0 ? list.gone : members.leaving > 0 ? members.leaving : guard.needsTick ? guardNumber(guard) : 0;
   if (n === 0) return null;
-  // Kept with the answer: after "Keep them" the file is read again as people to add,
-  // and that preview no longer knows how many were missing or whether it was a lot.
-  return { n, listSize: guard.listSize, needsTick: guard.needsTick };
+  // Kept with the answer: after "They're still members" the file is read again as
+  // people to add, and that preview no longer knows who was missing or how many.
+  const statuses = preview.statuses.filter((s) => s.gone > 0).map((s) => ({ label: s.label, n: s.gone }));
+  return { n, listSize: guard.listSize, needsTick: guard.needsTick, statuses };
+}
+
+/** The gym's own status words of the people missing from the file: "Frozen 5 · Active 1".
+ *  An export of only the Active members leaves out every Frozen one, and this is where
+ *  staff see it before answering. */
+export function missingStatusLine(missing) {
+  return missing.statuses.map((s) => `${s.label} ${count(s.n)}`).join(' · ');
 }
 
 /** The question's heading: "5 members aren't in this file", or, where the wrong-file

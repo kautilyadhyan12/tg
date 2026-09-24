@@ -113,6 +113,10 @@ describe('the worst thing: a wrong file cannot take people off unseen', () => {
   const wrongFile = () =>
     preview({
       list: list({ unchanged: 5, gone: 25 }),
+      statuses: [
+        { label: 'Active', count: 5, new: 0, changed: 0, unchanged: 5, gone: 20 },
+        { label: 'Frozen', count: 0, new: 0, changed: 0, unchanged: 0, gone: 5 },
+      ],
       members: { leaving: 2, listedNow: 4 },
       guard: { entriesGoing: 25, listSize: 30, membersLeaving: 2, membersListedNow: 4, needsTick: true, mostOfListWouldGo: true },
     });
@@ -130,11 +134,12 @@ describe('the worst thing: a wrong file cannot take people off unseen', () => {
     expect(screen.queryByText('No changes')).toBeNull();
     expect(screen.getByText('5 already up to date')).toBeTruthy();
     expect(await card.findByText(/Olivia Walker, Liam Hughes, Emma Price and 22 more/)).toBeTruthy();
+    expect(card.getByTestId('missing-statuses').textContent).toBe('Active 20 · Frozen 5');
     expect(orgService.getMemberListRows).toHaveBeenCalledWith(GYM, UPLOAD, 'gone', 0);
 
     // Nothing is chosen for staff.
     expect(card.getByRole('radio', { name: /They've left/ }).getAttribute('aria-checked')).toBe('false');
-    expect(card.getByRole('radio', { name: /Keep them/ }).getAttribute('aria-checked')).toBe('false');
+    expect(card.getByRole('radio', { name: /They're still members/ }).getAttribute('aria-checked')).toBe('false');
     tickPermission();
     expect(importButton().disabled).toBe(true);
 
@@ -168,12 +173,12 @@ describe('the worst thing: a wrong file cannot take people off unseen', () => {
     orgService.uploadMemberList.mockResolvedValueOnce({
       data: { preview: preview({ uploadId: UPLOAD_ADD, mode: 'add', list: list({ unchanged: 5 }), guard: { ...calm, listSize: 30 } }) },
     });
-    fireEvent.click(screen.getByRole('radio', { name: /Keep them/ }));
+    fireEvent.click(screen.getByRole('radio', { name: /They're still members/ }));
     await waitFor(() => expect(orgService.uploadMemberList).toHaveBeenCalledTimes(2));
     expect(orgService.uploadMemberList.mock.calls[1][1]).toMatchObject({ contentBase64: sent, mode: 'add' });
 
     // The question stays answered, with no number to type, and nobody goes.
-    await waitFor(() => expect(screen.getByRole('radio', { name: /Keep them/ }).getAttribute('aria-checked')).toBe('true'));
+    await waitFor(() => expect(screen.getByRole('radio', { name: /They're still members/ }).getAttribute('aria-checked')).toBe('true'));
     expect(screen.queryByLabelText('Type the number to confirm')).toBeNull();
     tickPermission();
     orgService.confirmMemberList.mockResolvedValueOnce({ data: { confirmed: confirmedAnswer({ uploadId: UPLOAD_ADD }) } });
@@ -192,8 +197,8 @@ describe('the worst thing: a wrong file cannot take people off unseen', () => {
     orgService.uploadMemberList.mockResolvedValueOnce({
       data: { preview: preview({ uploadId: UPLOAD_ADD, mode: 'add', list: list({ unchanged: 5 }) }) },
     });
-    fireEvent.click(screen.getByRole('radio', { name: /Keep them/ }));
-    await waitFor(() => expect(screen.getByRole('radio', { name: /Keep them/ }).getAttribute('aria-checked')).toBe('true'));
+    fireEvent.click(screen.getByRole('radio', { name: /They're still members/ }));
+    await waitFor(() => expect(screen.getByRole('radio', { name: /They're still members/ }).getAttribute('aria-checked')).toBe('true'));
 
     orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: wrongFile() } });
     fireEvent.click(screen.getByRole('radio', { name: /They've left/ }));
