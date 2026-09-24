@@ -172,7 +172,7 @@ export function consoleReadOnlyBanner(orgType) {
  *  the fix is the card, which pays what is owed and opens everything again. */
 export function paymentOverdueBanner(orgType) {
   const words = orgWords(orgType);
-  return `A payment for your ${words.it} is overdue. Nothing here can be changed and your ${words.people} get the free app only until your card is updated.`;
+  return `A payment for your ${words.it} is overdue. Nothing here can be changed and your ${words.people} get the free app only until it is paid. Update your payment method to pay now; Paddle also tries your card again by itself.`;
 }
 
 /** Is this gym in its free trial RIGHT NOW?
@@ -340,7 +340,7 @@ export function bannerFor(org, now = Date.now()) {
     return {
       key: 'past_due',
       tone: 'warn',
-      text: `A payment for your ${words.it} didn't go through. Update your card under Plan on the Overview — your ${words.people} keep everything for ${PAID_PLAN_GRACE_DAYS} days after a failed payment.`,
+      text: `A payment for your ${words.it} didn't go through. Paddle will try your card again by itself, or you can update your payment method under Plan on the Overview. Your ${words.people} keep everything for ${PAID_PLAN_GRACE_DAYS} days after a failed payment.`,
       dismissible: false,
     };
   }

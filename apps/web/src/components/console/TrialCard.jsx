@@ -149,7 +149,7 @@ export default function TrialCard({ org }) {
         <div className="mt-4">
           <ManagePaymentButton
             gymId={org.id}
-            label={org.subscription.status === 'past_due' ? 'Update your card' : 'Manage payment'}
+            label={org.subscription.status === 'past_due' ? 'Update payment method' : 'Manage payment'}
           />
         </div>
       ) : null}

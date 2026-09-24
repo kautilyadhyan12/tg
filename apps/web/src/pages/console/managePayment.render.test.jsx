@@ -160,7 +160,7 @@ describe("the plan card's way to Paddle's page", () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: plan({ status: 'trialing', trialEndsAt: '2026-12-01T00:00:00.000Z', priceLabel: null, currentPeriodEnd: null }) }));
     const { unmount } = renderOverview();
     expect(await screen.findByText('Free trial')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /manage payment|update your card/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /manage payment|update payment method/i })).toBeNull();
     unmount();
     resetConsoleOrgs();
 
@@ -168,7 +168,7 @@ describe("the plan card's way to Paddle's page", () => {
     renderOverview();
     await waitFor(() => expect(orgService.getMine).toHaveBeenCalled());
     await screen.findByText('Iron House');
-    expect(screen.queryByRole('button', { name: /manage payment|update your card/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /manage payment|update payment method/i })).toBeNull();
   });
 });
 
@@ -176,8 +176,12 @@ describe('a failed payment', () => {
   it('in the 2 days of grace: the banner says so and the card asks for a new card', async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: plan({ status: 'past_due' }) }));
     renderOverview();
-    expect(await screen.findByText(/a payment for your gym didn't go through\. update your card under plan on the overview — your members keep everything for 2 days after a failed payment\./i)).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Update your card' })).toBeTruthy();
+    expect(
+      await screen.findByText(
+        /a payment for your gym didn't go through\. paddle will try your card again by itself, or you can update your payment method under plan on the overview\. your members keep everything for 2 days after a failed payment\./i,
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Update payment method' })).toBeTruthy();
     // Nothing is locked yet.
     expect(screen.queryByTestId('plan-modal')).toBeNull();
   });
@@ -192,13 +196,13 @@ describe('a failed payment', () => {
       openSpy.mockReturnValue(tab);
       renderOverview();
 
-      expect(await screen.findByRole('heading', { name: 'Update your card' })).toBeTruthy();
-      expect(screen.getByText(/pays what's owed and opens everything again/i)).toBeTruthy();
+      expect(await screen.findByRole('heading', { name: 'Update payment method' })).toBeTruthy();
+      expect(screen.getByText(/pays what's owed and opens everything again\. paddle also tries your card again by itself/i)).toBeTruthy();
       // No plans, no Subscribe: a second plan would charge the gym twice.
       expect(orgService.getPlans).not.toHaveBeenCalled();
       expect(screen.queryByRole('button', { name: /subscribe|free trial/i })).toBeNull();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Update your card' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Update payment method' }));
       await waitFor(() => expect(tab.location.replace).toHaveBeenCalledWith(`${PORTAL}?action=update_subscription_payment_method`));
       expect(await screen.findByText(/opens again by itself/i)).toBeTruthy();
 
@@ -213,7 +217,11 @@ describe('a failed payment', () => {
   it('after the grace: the banner says why, to every member of staff, and a trainer is not stopped', async () => {
     orgService.getMine.mockResolvedValue(mineIs(overdue(TRAINER)));
     renderOverview();
-    expect(await screen.findByText(/a payment for your gym is overdue\. nothing here can be changed and your members get the free app only until your card is updated\./i)).toBeTruthy();
+    expect(
+      await screen.findByText(
+        /a payment for your gym is overdue\. nothing here can be changed and your members get the free app only until it is paid\. update your payment method to pay now; paddle also tries your card again by itself\./i,
+      ),
+    ).toBeTruthy();
     expect(screen.queryByTestId('plan-modal')).toBeNull();
   });
 });

@@ -371,7 +371,7 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
           {showing === 'trial'
             ? `Start your ${words.it}'s free trial`
             : showing === 'overdue'
-              ? 'Update your card'
+              ? 'Update payment method'
               : `Choose your ${words.it}'s plan`}
         </h2>
 
@@ -382,10 +382,11 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
               app only and nothing here can be changed.
             </p>
             <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.6)' }}>
-              Updating your card pays what&apos;s owed and opens everything again.
+              Updating your payment method pays what&apos;s owed and opens everything again. Paddle
+              also tries your card again by itself; if that works, everything opens again on its own.
             </p>
             <div className="mt-5">
-              <ManagePaymentButton gymId={gymId} label="Update your card" onOpened={watchForPayment} />
+              <ManagePaymentButton gymId={gymId} label="Update payment method" onOpened={watchForPayment} />
             </div>
             {overdueNote !== null ? (
               <p className="text-sm mt-4" style={{ color: 'rgba(255,255,255,0.6)' }}>

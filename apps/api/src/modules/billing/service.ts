@@ -84,7 +84,7 @@ export async function startOrgCheckout(
     case "already_subscribed":
       throw new OrgsError(409, "already_subscribed", "You're already on a paid plan.");
     case "payment_overdue":
-      throw new OrgsError(409, "payment_overdue", "A payment is overdue. Update your card to pay it and carry on.");
+      throw new OrgsError(409, "payment_overdue", "A payment is overdue. Update your payment method to pay it and carry on.");
     case "no_such_plan":
       throw new OrgsError(404, "plan_not_found", "That plan isn't on your price list.");
     case "plan_too_small":

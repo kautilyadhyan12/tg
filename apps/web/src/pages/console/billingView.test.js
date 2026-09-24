@@ -584,10 +584,10 @@ describe('bannerFor', () => {
     });
     const b = bannerFor(late, NOW);
     expect(b?.key).toBe('past_due');
-    // The card is updated on Paddle's page from the plan card (1c-i), and the grace is
+    // The payment method is updated on Paddle's page from the plan card (1c-i), and the grace is
     // the worker's 2 days (Kd, RULINGS 2026-09-24); it promises no retry of its own.
     expect(b?.text).toBe(
-      "A payment for your gym didn't go through. Update your card under Plan on the Overview — your members keep everything for 2 days after a failed payment.",
+      "A payment for your gym didn't go through. Paddle will try your card again by itself, or you can update your payment method under Plan on the Overview. Your members keep everything for 2 days after a failed payment.",
     );
     expect(b?.text).not.toMatch(/retry|retrying/i);
   });
@@ -596,7 +596,7 @@ describe('bannerFor', () => {
     const owed = gym({ subscription: null, consoleReadOnly: true, paymentOverdue: true });
     expect(bannerFor(owed, NOW)).toMatchObject({
       key: 'read_only',
-      text: 'A payment for your gym is overdue. Nothing here can be changed and your members get the free app only until your card is updated.',
+      text: 'A payment for your gym is overdue. Nothing here can be changed and your members get the free app only until it is paid. Update your payment method to pay now; Paddle also tries your card again by itself.',
     });
     // Without the flag (an older api, or a trial that ended) it is the plain read-only line.
     expect(bannerFor(gym({ subscription: null, consoleReadOnly: true }), NOW)?.text).toMatch(/has no plan/);

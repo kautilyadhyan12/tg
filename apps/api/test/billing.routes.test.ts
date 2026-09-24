@@ -666,7 +666,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
   );
 
   it(
-    "a failed payment: members keep everything for 2 days, then the console goes read-only until the card is updated, and the payment brings it all back",
+    "a failed payment: members keep everything for 2 days, then the console goes read-only until it is paid, and the payment brings it all back",
     async () => {
       const a = await paying();
       await paddleSays(a.subId, { status: "past_due" });
