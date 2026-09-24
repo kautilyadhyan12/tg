@@ -4,6 +4,7 @@ import {
   CalendarDays,
   Check,
   ChevronLeft,
+  ClipboardPaste,
   Columns3,
   FileSpreadsheet,
   Loader2,
@@ -464,20 +465,27 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
   if (stage === 'upload') {
     body = (
       <>
-        <div role="tablist" className="flex rounded-2xl p-1" style={{ background: C.plain }}>
+        {/* Two ways in, both in plain sight: a quiet second tab went unseen at Kd's
+            click-through, so each carries its icon and full-strength words. */}
+        <div role="tablist" className="grid grid-cols-2 gap-1 rounded-2xl p-1" style={{ background: C.plain }}>
           {[
-            ['file', 'Upload a file'],
-            ['paste', 'Paste'],
-          ].map(([key, label]) => (
+            ['file', 'Upload a file', Upload],
+            ['paste', 'Paste rows', ClipboardPaste],
+          ].map(([key, label, Icon]) => (
             <button
               key={key}
               type="button"
               role="tab"
               aria-selected={tab === key}
               onClick={() => setTab(key)}
-              className="flex-1 rounded-xl min-h-[40px] text-sm font-medium"
-              style={tab === key ? { background: C.card2, color: '#fff' } : { color: C.muted }}
+              className="rounded-xl min-h-[44px] text-[15px] font-semibold flex items-center justify-center gap-2"
+              style={
+                tab === key
+                  ? { background: C.card2, color: '#fff', border: '1px solid rgba(255,138,31,0.45)' }
+                  : { color: C.soft, border: '1px solid transparent' }
+              }
             >
+              <Icon className="w-4 h-4" style={{ color: tab === key ? C.orange : C.soft }} />
               {label}
             </button>
           ))}

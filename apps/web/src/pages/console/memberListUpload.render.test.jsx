@@ -97,7 +97,7 @@ function renderBox() {
 async function reviewWith(p) {
   orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: p } });
   renderBox();
-  fireEvent.click(screen.getByRole('tab', { name: 'Paste' }));
+  fireEvent.click(screen.getByRole('tab', { name: 'Paste rows' }));
   fireEvent.change(screen.getByLabelText('Paste your rows'), { target: { value: 'Name\tEmail\nAda\tada@members.example' } });
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
   await screen.findByRole('heading', { name: 'Review' });
@@ -284,7 +284,7 @@ describe('reading a file or pasted rows', () => {
   it("prints the server's refusal as sent", async () => {
     orgService.uploadMemberList.mockRejectedValueOnce(refusal(422, { error: 'old_excel', message: 'This is an old Excel file (.xls). Save it as .xlsx or CSV and upload that.' }));
     renderBox();
-    fireEvent.click(screen.getByRole('tab', { name: 'Paste' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Paste rows' }));
     fireEvent.change(screen.getByLabelText('Paste your rows'), { target: { value: 'x' } });
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     expect(await screen.findByText('This is an old Excel file (.xls). Save it as .xlsx or CSV and upload that.')).toBeTruthy();
@@ -294,7 +294,7 @@ describe('reading a file or pasted rows', () => {
     await reviewWith(preview());
     fireEvent.click(screen.getByRole('button', { name: 'Back' }));
     expect(screen.getByRole('heading', { name: 'Import members' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('tab', { name: 'Paste' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Paste rows' }));
     expect(screen.getByLabelText('Paste your rows').value).toBe('Name\tEmail\nAda\tada@members.example');
   });
 

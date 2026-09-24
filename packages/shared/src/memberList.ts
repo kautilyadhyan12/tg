@@ -666,7 +666,7 @@ export function memberListWarningWords(warning: MemberListWarning): string {
     case "phones_unusual":
       return `${numberWords(warning.rows, "phone number doesn't", "phone numbers don't")} look like a normal number for their country. They have been kept — check them before you invite anyone.`;
     case "shared_emails":
-      return `${numberWords(warning.rows, "person shares", "people share")} an email address with someone else on the list, as a family often does. Everyone is kept.`;
+      return `${numberWords(warning.rows, "person shares", "people share")} an email address with someone else on the list, as a family often does. Everyone is kept, but only one person can join the app with each address — add the others' own email to invite them.`;
     case "placeholders":
       return `The same contact details sit on more than ${String(MEMBER_LIST_PLACEHOLDER_ROWS)} rows, so they are the gym's own, not a member's: ${warning.values.join(", ")}. They were left out of ${numberWords(warning.rows, "row", "rows")}.`;
     case "other_sheets_ignored":
