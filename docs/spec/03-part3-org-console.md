@@ -1623,6 +1623,25 @@ written as they are (a blanket rule breaks `+44…`, and `-10` → `10` is a doc
 casualty elsewhere); a save-and-reopen test. Members are told when confirmed or
 removed, as a removal tells them today.
 
+**Out of 5a (built 2026-09-24).** Console → Members → "Member list": a file or pasted
+rows (sent as UTF-8 with its byte-order mark) as "my whole list" or "add these people";
+the preview's counts in words, each opening its names 100 at a time; never-kept columns
+always shown with their reason; the other columns folded under "Check the columns", each
+with its samples and a dropdown (a field, "Keep as your own column", "Don't keep"), read
+again with staff's mapping before Confirm is allowed; each date column's reading with a
+flip (the preview now carries `dateColumns`); a large change asks for the number of people
+coming off to be TYPED; the hand-edit tick names the fields. **The permission tick**
+(RULINGS 2026-09-24) is `permissionConfirmed` on the confirm request: without it the
+answer is 409 `permission_needed` and nothing is written; with it the audit row records
+`permissionConfirmed` beside the actor. **A page of names unpacks the staged document
+once** (`stagedPage`, a materialised step): written inside the per-person lookup, it was
+unpacked for each of the hundred people, and at 10,000 people × 30 of the gym's own columns
+(2 MB) a page held the one connection for 1.3–3.9 s; after, 0.17–0.36 s for a page of new
+people (a bystander's worst wait 91–187 ms). Every page still works out who is in the app
+live (members × entries, §9.9), which is the remaining ~0.5–0.8 s at the cap and belongs
+with the pool (ROADMAP Stage 4 item 11). Measured on mains at 2,592 MHz with Folder B's
+terminal sharing the database container, so runs varied two- to four-fold.
+
 ### 9.15 Where the facts came from (read or measured 2026-09-19)
 
 Measured here: Excel 16's six export formats · `read-excel-file` 9.3.10 on a real

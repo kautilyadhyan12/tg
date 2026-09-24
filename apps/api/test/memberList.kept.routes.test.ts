@@ -257,7 +257,7 @@ d("member list: the wider record, kept (real Postgres)", () => {
     mode: "whole_list" | "add" = "whole_list",
   ): Promise<MemberListConfirmed> => {
     const preview = await stage(gymId, cookies, bytes, mode);
-    const res = await post(confirmUrl(gymId, preview.uploadId), body, cookies);
+    const res = await post(confirmUrl(gymId, preview.uploadId), { permissionConfirmed: true, ...body }, cookies);
     expect(res.statusCode).toBe(200);
     return (JSON.parse(res.body) as { confirmed: MemberListConfirmed }).confirmed;
   };
@@ -441,6 +441,35 @@ d("member list: the wider record, kept (real Postgres)", () => {
   // =========================================================================
   // THE OTHER WORST THING: AN EX-MEMBER PUT BACK IN FRONT OF STAFF
   // =========================================================================
+
+  it(
+    "the preview says how each date column was read, and staff's flip is read back as chosen",
+    async () => {
+      const owner = await makeUser("dates-owner");
+      const org = await makeOrg(owner.cookies, "Dates Kept Gym");
+      const bytes = file([person(1), person(2)]);
+      const first = await stage(org.org.id, owner.cookies, bytes);
+      // A GB gym and no cell over 12: its country decides, day first.
+      expect(first.dateColumns.find((d) => d.field === "joinedOn")).toMatchObject({
+        order: "dayFirst",
+        from: "country",
+        example: { raw: "03/04/2024", read: "2024-04-03" },
+      });
+
+      const joined = first.dateColumns.find((d) => d.field === "joinedOn");
+      if (joined === undefined) throw new Error("no join date column");
+      const flipped = { ...first.mapping, dateOrder: [{ column: joined.column, order: "monthFirst" as const }] };
+      const res = await post(uploadsUrl(org.org.id), { contentBase64: bytes.toString("base64"), mode: "whole_list", mapping: flipped }, owner.cookies);
+      expect(res.statusCode).toBe(201);
+      const again = (JSON.parse(res.body) as { preview: MemberListPreview }).preview;
+      expect(again.dateColumns.find((d) => d.field === "joinedOn")).toMatchObject({
+        order: "monthFirst",
+        from: "chosen",
+        example: { raw: "03/04/2024", read: "2024-03-04" },
+      });
+    },
+    TEST_TIMEOUT_MS,
+  );
 
   it(
     "somebody taken off the list becomes a FORMER record that is in no count, on no chip, in no page and in no invite number — and their app member reads no longer listed",
@@ -642,7 +671,7 @@ d("member list: the wider record, kept (real Postgres)", () => {
       expect(preview.extraChanges).toEqual([]);
 
       // …and confirming it must move neither a value nor the version.
-      const again = await post(confirmUrl(org.org.id, preview.uploadId), {}, owner.cookies);
+      const again = await post(confirmUrl(org.org.id, preview.uploadId), { permissionConfirmed: true }, owner.cookies);
       expect(again.statusCode).toBe(200);
       const done = (JSON.parse(again.body) as { confirmed: MemberListConfirmed }).confirmed;
       expect(done.applied).toMatchObject({ new: 0, changed: 0, unchanged: 3, gone: 0 });
@@ -718,7 +747,7 @@ d("member list: the wider record, kept (real Postgres)", () => {
       const preview = await stage(org.org.id, owner.cookies, next);
       expect(preview.handEdits).toEqual({ entries: 1, fields: ["membership type"] });
 
-      const refused = await post(confirmUrl(org.org.id, preview.uploadId), {}, owner.cookies);
+      const refused = await post(confirmUrl(org.org.id, preview.uploadId), { permissionConfirmed: true }, owner.cookies);
       expect(refused.statusCode).toBe(409);
       const answer = JSON.parse(refused.body) as { error: string; handEdits: { entries: number; fields: string[] } };
       expect(answer.error).toBe("hand_edits");
@@ -736,7 +765,7 @@ d("member list: the wider record, kept (real Postgres)", () => {
       expect((await fieldsOf(org.org.id)).map((f) => f.key)).toEqual(fieldsBefore);
 
       // THE TICK BELONGS TO THE REQUEST. The same upload, pressed again with it.
-      const applied = await post(confirmUrl(org.org.id, preview.uploadId), { acknowledgeHandEdits: true }, owner.cookies);
+      const applied = await post(confirmUrl(org.org.id, preview.uploadId), { permissionConfirmed: true, acknowledgeHandEdits: true }, owner.cookies);
       expect(applied.statusCode).toBe(200);
       // …and NOW the catalogue grows, because the confirm went through.
       expect((await fieldsOf(org.org.id)).map((f) => f.key)).toContain("trainer_name");
@@ -783,13 +812,13 @@ d("member list: the wider record, kept (real Postgres)", () => {
       expect(preview.guard.needsTick).toBe(true);
       expect(preview.handEdits.entries).toBe(1);
 
-      const one = await post(confirmUrl(org.org.id, preview.uploadId), { acknowledgeLargeChange: true }, owner.cookies);
+      const one = await post(confirmUrl(org.org.id, preview.uploadId), { permissionConfirmed: true, acknowledgeLargeChange: true }, owner.cookies);
       expect(one.statusCode).toBe(409);
       expect((JSON.parse(one.body) as { error: string }).error).toBe("hand_edits");
       expect(await countsOf(org.org.id)).toEqual({ current: 20, former: 0 });
       expect((await fieldsOf(org.org.id)).map((f) => f.key)).toEqual(fieldsBefore);
 
-      const other = await post(confirmUrl(org.org.id, preview.uploadId), { acknowledgeHandEdits: true }, owner.cookies);
+      const other = await post(confirmUrl(org.org.id, preview.uploadId), { permissionConfirmed: true, acknowledgeHandEdits: true }, owner.cookies);
       expect(other.statusCode).toBe(409);
       expect((JSON.parse(other.body) as { error: string }).error).toBe("large_change");
       expect(await countsOf(org.org.id)).toEqual({ current: 20, former: 0 });
@@ -802,7 +831,7 @@ d("member list: the wider record, kept (real Postgres)", () => {
 
       const both = await post(
         confirmUrl(org.org.id, preview.uploadId),
-        { acknowledgeLargeChange: true, acknowledgeHandEdits: true },
+        { permissionConfirmed: true, acknowledgeLargeChange: true, acknowledgeHandEdits: true },
         owner.cookies,
       );
       expect(both.statusCode).toBe(200);
@@ -869,7 +898,7 @@ d("member list: the wider record, kept (real Postgres)", () => {
       // The preview says so in the server's own words, and only about the column
       // that cannot be kept: "Gotra" is already the gym's and is kept as usual.
       expect(preview.warnings).toContainEqual({ code: "gym_fields_full", columns: 1 });
-      await post(confirmUrl(org.org.id, preview.uploadId), {}, owner.cookies);
+      await post(confirmUrl(org.org.id, preview.uploadId), { permissionConfirmed: true }, owner.cookies);
       const after = await recordOf(org.org.id, "K-1");
       expect(after.extra["gotra"]).toBe("Bharadwaj");
       expect(after.extra["shoe_size"]).toBeUndefined();

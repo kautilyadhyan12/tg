@@ -4,6 +4,15 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-24 · 5a: bring a member list in (Folder A, branch `member-list-upload`)
+
+- **Risky (uploads, other people's names), Opus xhigh recommended; Kd said *"go"*** to both recommendations (RULINGS 2026-09-24): the permission tick's words, and "Which software are you leaving?" as its own job, ROADMAP 5c, after 5b.
+- **Built**: Console → Members → "Member list" (`MemberListUpload.jsx`, helpers `memberListView.js`): file or paste, whole list or add, the preview in words with names 100 at a time, columns and date flips read again, typed number for a large change, hand-edit tick, permission tick, the result line. Server: `permissionConfirmed` (409 `permission_needed`, audit row), `dateColumns` on the preview, and `stagedPage` unpacks the staged file once. Spec §9.14 "Out of 5a".
+- **Worst thing, first test**: a wrong whole-list file — the names coming off open before Confirm, and Confirm waits for the typed number. **Three breaks, each RED, restored sha256-identical**: typed number always matches (2 red), Confirm ignoring it (2 red), the "no longer on your list" line not offered (1 red).
+- **Verified**: api tsc 0 · eslint 0 · shared tsc 0 · eslint 0 · 220/220 · member-list suites 5 files 97 passed · full api suite 114 files, 3,593 passed, 2 failed on 5 s timeouts (`db.migration`, `orgs.routes`), both 185/185 alone · web 2,571 passed (`poseAssets.contract` Node 24 only) · changed web files lint 0.
+- **Cost** (mains, 2,592 MHz, Folder B sharing the database): a page of names at 10,000 × 30 columns was 1.3–3.9 s and is 0.17–0.36 s (bystander worst 91–187 ms); at 200 it is 41–132 ms (worst 16–34 ms) on a quiet run. Confirm at the cap stays the recorded seconds-long monthly press.
+- **Open**: Kd's click-through; review round one (`reviews/5a-1-review.md`); ROADMAP 5a ticks on merge. Next in Folder A: 5b.
+
 ## 2026-09-24 · 3b-ii-b: Not me, and the edges (Folder A, branch `not-me-edges`)
 
 - **Risky, Opus xhigh; Kd said *"go"*,** which took the plan's recommendation for gap D (RULINGS 2026-09-24: the Join screen says what the gym gives and what a person's own plan still adds — the $10 plan's 20 scans against a member's 7 — never a flat "the gym covers it").

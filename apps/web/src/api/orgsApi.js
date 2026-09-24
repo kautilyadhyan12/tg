@@ -14,7 +14,10 @@ import {
   confirmApplicationResponseSchema,
   createOrgResponseSchema,
   declineInvitationResponseSchema,
+  memberListConfirmResponseSchema,
   memberListNotMeResponseSchema,
+  memberListPreviewResponseSchema,
+  memberListRowsResponseSchema,
   myInvitationsResponseSchema,
   notMeInvitationResponseSchema,
   gymClassesResponseSchema,
@@ -494,6 +497,38 @@ export const orgService = {
       memberListNotMeResponseSchema,
       'the addresses to check',
       authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/not-me`),
+    ),
+
+  /** POST /v1/orgs/:gymId/member-list/uploads — read a file (or pasted rows) and
+   *  stage it. Nothing about the gym's people changes until Confirm. */
+  uploadMemberList: (gymId, body) =>
+    readThrough(
+      memberListPreviewResponseSchema,
+      'your file',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/uploads`, body),
+    ),
+
+  /** GET …/uploads/:uploadId/rows — one page of the names behind a preview's count. */
+  getMemberListRows: (gymId, uploadId, group, cursor) =>
+    readThrough(
+      memberListRowsResponseSchema,
+      'the names',
+      authApi.get(
+        `/v1/orgs/${encodeURIComponent(gymId)}/member-list/uploads/${encodeURIComponent(uploadId)}/rows`,
+        { params: cursor ? { group, cursor: String(cursor) } : { group } },
+      ),
+    ),
+
+  /** POST …/uploads/:uploadId/confirm — apply it. The ticks belong to THIS press; a
+   *  second press of an applied upload is a 200 with the same numbers. */
+  confirmMemberList: (gymId, uploadId, body) =>
+    readThrough(
+      memberListConfirmResponseSchema,
+      'your list',
+      authApi.post(
+        `/v1/orgs/${encodeURIComponent(gymId)}/member-list/uploads/${encodeURIComponent(uploadId)}/confirm`,
+        body,
+      ),
     ),
 
   /** GET /v1/orgs/applications/mine — the caller's own waiting list: everything

@@ -5,6 +5,7 @@ import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/con
 import { orgService, errorText, errorCode } from '../../api/orgsApi';
 import { useConsoleOrg } from './useConsoleOrg';
 import ApplicationsQueue from './ApplicationsQueue';
+import MemberListUpload from './MemberListUpload';
 import { orgWords } from '@app/shared';
 import {
   canRemoveMembers,
@@ -257,6 +258,35 @@ function NotMeBox({ gymId, words }) {
   );
 }
 
+/** "Member list": closed until staff open it, so the roster stays the first thing seen. */
+function MemberListCard({ gymId, gymName, words, readOnly, onApplied }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="rounded-2xl p-4 flex flex-col gap-3" style={{ background: '#121110', border: '1px solid rgba(255,255,255,0.06)' }}>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold" style={{ color: '#fff' }}>
+            Member list
+          </h2>
+          <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
+            Upload or paste your list of {words.people} from a spreadsheet.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          disabled={readOnly}
+          className="rounded-xl px-4 min-h-[44px] text-sm font-semibold flex-shrink-0 disabled:opacity-40"
+          style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
+        >
+          {open ? 'Close' : 'Bring in your list'}
+        </button>
+      </div>
+      {open ? <MemberListUpload gymId={gymId} gymName={gymName} words={words} readOnly={readOnly} onApplied={onApplied} /> : null}
+    </section>
+  );
+}
+
 export default function Members() {
   const { orgSlug } = useParams();
   const { loading: orgLoading, error: orgError, org, notFound, reload } = useConsoleOrg(orgSlug);
@@ -464,6 +494,11 @@ export default function Members() {
 
       {/* Invitations that came back "Not me": only for staff who may see the list. */}
       {canSeeList ? <NotMeBox gymId={gymId} words={words} /> : null}
+
+      {/* Bringing the gym's own list in (ROADMAP 5a): the same privilege the server asks. */}
+      {canSeeList ? (
+        <MemberListCard gymId={gymId} gymName={org.name} words={words} readOnly={readOnly} onApplied={reloadRoster} />
+      ) : null}
 
       {state.loading ? <ConsoleLoading label={`Loading ${words.people}…`} /> : null}
 

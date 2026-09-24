@@ -216,6 +216,7 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
         {
           acknowledgeLargeChange: body.acknowledgeLargeChange ?? false,
           acknowledgeHandEdits: body.acknowledgeHandEdits ?? false,
+          permissionConfirmed: body.permissionConfirmed ?? false,
         },
         confirmGate(req, reply),
       );
@@ -241,6 +242,12 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
             error: "large_change",
             message: MEMBER_LIST_CONFIRM_REFUSAL_WORDS.large_change,
             guard: answer.guard,
+            requestId: req.id,
+          });
+        case "permission_needed":
+          return reply.status(409).send({
+            error: "permission_needed",
+            message: MEMBER_LIST_CONFIRM_REFUSAL_WORDS.permission_needed,
             requestId: req.id,
           });
         case "hand_edits":
