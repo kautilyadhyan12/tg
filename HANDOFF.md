@@ -4,6 +4,18 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-25 · 3a-vi: the same person next month (Folder A, branch `same-person-next-month`)
+
+- **Risky (other people's records, a rule that picks), Opus xhigh; Kd said *"go and i agree recommendation"*** — the recommendation being 3a-vi-b, an app member matched by the invitation they joined with, as its own job before 5b (RULINGS 2026-09-25, ROADMAP).
+- **Built**: `samePerson.ts` (`matchRows`, pure): all carried fields equal, else member number, else email (the name picks on a shared one), else phone; one row to one record; never one person on a different name AND different number/contact, or a different date of birth. `reconcile` uses it; the confirm finds a record by its old key and writes the new name, email, phone, member number and key; the four identity fields are hand-edit marks too. No migration, no new package. Spec §11.4 "Out of 3a-vi".
+- **Outside cases** (a research pass, quotes in the test's header): PushPress and zingFit on families sharing a parent's email; Mindbody's editable client ID (SOK1234 → XSOK1234); GymMaster's reassigned key fobs; FCC's 35 million reassigned numbers a year; Zen Planner's export with no ID column. Two of them changed the rule before review (a member number alone neither joins nor parts two people).
+- **Two refinements of the ruling, flagged to Kd**: a phone match also counts when both carry the same name (the ruling's own Emma, new email, is one person); a different date of birth parts two people on an email or phone match. Known edge by the ruling: with no date-of-birth column, a parent who left and a child new on that lone address read as one renamed record.
+- **Worst thing, first tests**: a family at one parent's address stays two records; a daughter on a departed parent's address never takes the parent's record. **Three breaks, each RED, restored sha256-identical**: the name not picking on a shared address (4 unit + the route test — which first stayed GREEN because the dates of birth caught it; its second month now has no date column), the date-of-birth check removed (2 unit + route), a matching member number joining anyone (2 unit).
+- **Verified**: api tsc 0 · eslint 0 · new suites 35/35 and 5/5 · by-hand routes 23/23 · full api suite 117 files, 3,665 passed, 1 failed (orgs "currency with no price book", passed alone, the shared-seed clash). Folder A's database was missing Folder B's `0043`: migrated and re-seeded.
+- **Second month on the real server** (`.cost/scenarios-5a.ts`): 3 new · 2 missing · phone 2, email 1, name 1, status 4 (was 7 new, 6 missing); "Surname, First" 20 updated (was 20 new, 20 missing).
+- **Cost** (mains, 2,592 MHz): at 10,000 × 2,000 members the confirm's bystander worst is 2,909–2,920 ms against master's 2,841 ms on the same month, preview 559–641 ms against 439 ms, within run-to-run noise; at 200 with every phone changed, confirm 134 ms, preview 57 ms.
+- **Open**: round-one review; ROADMAP 3a-vi ticks on merge. Next in Folder A: 3a-vi-b, then 5b.
+
 ## 2026-09-24 · 5a: bring a member list in (Folder A, branch `member-list-upload`)
 
 - **Risky (uploads, other people's names), Opus xhigh recommended; Kd said *"go"*** to both recommendations (RULINGS 2026-09-24): the permission tick's words, and "Which software are you leaving?" as its own job, ROADMAP 5c, after 5b.

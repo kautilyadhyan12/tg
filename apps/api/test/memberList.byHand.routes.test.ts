@@ -671,7 +671,7 @@ d("member list: keeping it by hand (real Postgres)", () => {
 
       // A real change of name moves the key and the list.
       const renamed = await patch(entryUrl(gym, a.entry.entryId), { fullName: "Patricia Doe" }, owner.cookies);
-      expect(written(renamed)).toMatchObject({ outcome: "changed", entry: { fullName: "Patricia Doe", handEdited: [] } });
+      expect(written(renamed)).toMatchObject({ outcome: "changed", entry: { fullName: "Patricia Doe", handEdited: ["fullName"] } });
       expect((await listState(gym)).version).toBe((before.version ?? 0) + 1);
 
       // Landing on a FORMER record's details says so, and never "already on your list"
@@ -775,10 +775,10 @@ d("member list: keeping it by hand (real Postgres)", () => {
         const res = await post(`${listUrl(gym)}/uploads/${preview.uploadId}/confirm`, { permissionConfirmed: true, acknowledgeLargeChange: true }, owner.cookies);
         expect(res.statusCode).toBe(200);
       };
-      // The gym's software spelt him wrong, then corrected it: a former record
-      // beside the new one (RULINGS 2026-09-22).
+      // The gym's software made him again under a new name AND a new address: two
+      // people to the upload (RULINGS 2026-09-24), a former record beside the new one.
       await upload([["Jon Smith", "mhand-t-smith@example.com", "Active", "Gold", "L-4"]]);
-      await upload([["John Smith", "mhand-t-smith@example.com", "Active", "", ""]]);
+      await upload([["John Smith", "mhand-t-john@example.com", "Active", "", ""]]);
       const rows = await sql<{ id: string; full_name: string; former_at: Date | null }[]>`
         SELECT id, full_name, former_at FROM gym_member_list_entries WHERE gym_id = ${gym}`;
       const jon = rows.find((r) => r.full_name === "Jon Smith");
