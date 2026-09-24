@@ -18,6 +18,10 @@ export default function InvitationCard({ invitation, onAnswered }) {
   const [error, setError] = useState(null);
   const [state, setState] = useState(invitation.state);
   const [notMe, setNotMe] = useState(invitation.notMe === true);
+  // After Not me the card keeps only what was said; a real member who pressed it by
+  // mistake opens the rest again with one tap.
+  const [mistake, setMistake] = useState(false);
+  const collapsed = notMe && !mistake;
   const [joined, setJoined] = useState(null);
   const { gym } = invitation;
   const words = orgWords(gym.orgType);
@@ -76,7 +80,7 @@ export default function InvitationCard({ invitation, onAnswered }) {
         <Mail className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: '#FF8A1F' }} />
         <div className="min-w-0">
           <p className="text-base font-semibold" style={{ color: '#fff' }}>
-            You&apos;re invited to {gym.name}
+            {collapsed ? gym.name : <>You&apos;re invited to {gym.name}</>}
           </p>
           {gym.city ? (
             <p className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
@@ -98,7 +102,18 @@ export default function InvitationCard({ invitation, onAnswered }) {
       {/* What the gym can see sits above Join, the tap it is about. A gym that cannot
           take members has no Join yet, so it says that instead; No thanks is always
           there, so the invitation can be answered either way. */}
-      {invitation.canTakeMembers ? (
+      {collapsed ? (
+        invitation.canTakeMembers ? (
+          <button
+            type="button"
+            onClick={() => setMistake(true)}
+            className="self-start text-sm font-medium underline underline-offset-2"
+            style={{ color: 'rgba(255,255,255,0.85)', minHeight: 44 }}
+          >
+            Pressed this by mistake? Join {gym.name}
+          </button>
+        ) : null
+      ) : invitation.canTakeMembers ? (
         <OrgVisibilitySheet orgName={gym.name} orgType={gym.orgType} />
       ) : (
         <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
@@ -106,7 +121,7 @@ export default function InvitationCard({ invitation, onAnswered }) {
         </p>
       )}
 
-      {planWords !== null ? (
+      {!collapsed && planWords !== null ? (
         <div
           data-testid="your-plan"
           className="rounded-xl p-4 flex items-start gap-3"
@@ -120,7 +135,7 @@ export default function InvitationCard({ invitation, onAnswered }) {
         </div>
       ) : null}
 
-      {invitation.canTakeMembers || state === 'pending' ? (
+      {!collapsed && (invitation.canTakeMembers || state === 'pending') ? (
         <div className="flex flex-wrap items-center gap-3">
           {invitation.canTakeMembers ? (
             <button
