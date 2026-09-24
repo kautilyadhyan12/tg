@@ -299,7 +299,7 @@ export function registerOrgRoutes(
    *  for. :5807's "blocked from finishing something they should be able to do".
    *
    *  **3,000 IS DERIVED, NOT PICKED: the largest gym this product sells is band
-   *  5, 1501–2100 members** (`DECISIONS.md:17927`), so it clears a gym's ENTIRE
+   *  5, 1501–2000 members since 2026-09-24** (`DECISIONS.md:17927`), so it clears a gym's ENTIRE
    *  roster marking inside the same hour with headroom, from one address. It is
    *  also 0.83 requests/second, which is nothing against the row lock the
    *  paragraph above worries about. **The abuse guard is the PER-USER 30/hour

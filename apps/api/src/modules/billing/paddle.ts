@@ -43,6 +43,8 @@ export interface PaddleApi {
 /** The catalogue calls `tools/paddle-prices.ts` makes. */
 export interface PaddleCatalogueApi {
   getPrice(id: string): Promise<PaddleResult<PaddlePrice>>;
+  /** The name Paddle shows at checkout; never the amount (a new price is a new row). */
+  renamePrice(id: string, name: string): Promise<PaddleResult<PaddlePrice>>;
   createProduct(input: { name: string; description: string }): Promise<PaddleResult<{ id: string }>>;
   createPrice(input: {
     productId: string;
@@ -165,6 +167,10 @@ export function createPaddleApi(opts: {
     async getPrice(id) {
       if (!/^pri_[a-z\d]{26}$/.test(id)) return { kind: "not_found" };
       return unwrap(await call("GET", `/prices/${id}`, paddleEnvelope(paddlePriceSchema)));
+    },
+    async renamePrice(id, name) {
+      if (!/^pri_[a-z\d]{26}$/.test(id)) return { kind: "not_found" };
+      return unwrap(await call("PATCH", `/prices/${id}`, paddleEnvelope(paddlePriceSchema), { name }));
     },
     async createProduct(input) {
       return unwrap(

@@ -85,6 +85,7 @@ export type PaddleTransaction = z.infer<typeof paddleTransactionSchema>;
 export const paddlePriceSchema = z.object({
   id: paddlePriceIdSchema,
   product_id: paddleProductIdSchema,
+  name: z.string().max(150).nullable(),
   status: z.enum(["active", "archived"]),
   tax_mode: z.enum(["account_setting", "external", "internal"]),
   unit_price: z.object({ amount: z.string().regex(/^\d{1,12}$/), currency_code: z.string().length(3) }),

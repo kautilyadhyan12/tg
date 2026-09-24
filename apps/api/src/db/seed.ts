@@ -123,7 +123,7 @@ const consumerRows: PlanSeed[] = [
  *  raised on 2026-09-24 so that GST, once Kd is registered, comes out of them —
  *  ₹1,000 more on the two smallest, 18 % more on the three biggest, rounded to ₹500.
  *
- *  No "more than 2,100" row is seeded: that gym is told "contact us", and a plan
+ *  No "more than 2,000" row is seeded: that gym is told "contact us", and a plan
  *  row with no real price is a number waiting to be read as one. */
 const GYM_BANDS: { band: number; seatCap: number; usd: number; inr: number }[] = [
   //                          members       USD minor     INR minor
@@ -131,7 +131,7 @@ const GYM_BANDS: { band: number; seatCap: number; usd: number; inr: number }[] =
   { band: 2, seatCap: 500, usd: 12900, inr: 1350000 }, // up to 500  $129 / ₹13,500
   { band: 3, seatCap: 1000, usd: 19900, inr: 2250000 }, // up to 1,000 $199 / ₹22,500
   { band: 4, seatCap: 1500, usd: 27900, inr: 3150000 }, // up to 1,500 $279 / ₹31,500
-  { band: 5, seatCap: 2100, usd: 37900, inr: 4300000 }, // up to 2,100 $379 / ₹43,000
+  { band: 5, seatCap: 2000, usd: 37900, inr: 4300000 }, // up to 2,000 $379 / ₹43,000
 ];
 
 /** entitlements = the console's own features: Part 4 §3.3 leaves that shape

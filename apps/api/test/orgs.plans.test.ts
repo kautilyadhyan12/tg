@@ -295,12 +295,12 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
   const RULED: Record<"USD" | "INR", { codes: string[]; seatCaps: number[]; labels: string[] }> = {
     USD: {
       codes: ["org_b1_us_m", "org_b2_us_m", "org_b3_us_m", "org_b4_us_m", "org_b5_us_m"],
-      seatCaps: [200, 500, 1000, 1500, 2100],
+      seatCaps: [200, 500, 1000, 1500, 2000],
       labels: ["$79", "$129", "$199", "$279", "$379"],
     },
     INR: {
       codes: ["org_b1_in_m", "org_b2_in_m", "org_b3_in_m", "org_b4_in_m", "org_b5_in_m"],
-      seatCaps: [200, 500, 1000, 1500, 2100],
+      seatCaps: [200, 500, 1000, 1500, 2000],
       labels: ["₹8,500", "₹13,500", "₹22,500", "₹31,500", "₹43,000"],
     },
   };
@@ -385,7 +385,7 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
 
       const book = seededBook(await readPlans(org.org.id, owner.cookies));
 
-      expect(book.map((p) => p.seatCap)).toEqual([200, 500, 1000, 1500, 2100]);
+      expect(book.map((p) => p.seatCap)).toEqual([200, 500, 1000, 1500, 2000]);
       expect(book.map((p) => p.priceLabel)).toEqual(["$79", "$129", "$199", "$279", "$379"]);
       expect(book.map((p) => p.code)).toEqual([
         "org_b1_us_m",

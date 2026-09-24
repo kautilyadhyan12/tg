@@ -58,7 +58,16 @@ try {
         p.tax_mode === "external" &&
         p.quantity.minimum === 1 &&
         p.quantity.maximum === 1;
-      if (agrees) console.log(`${plan.code}: matches ${p.id}.`);
+      const name = `Monthly, ${members}`;
+      if (agrees && p.name !== name) {
+        // The name is what Paddle shows at checkout; the amount never changes here.
+        const renamed = await paddle.renamePrice(p.id, name);
+        if (renamed.kind === "ok") console.log(`${plan.code}: renamed ${p.id} to "${name}".`);
+        else {
+          console.error(`${plan.code}: could not rename ${p.id} (${renamed.kind}).`);
+          problems += 1;
+        }
+      } else if (agrees) console.log(`${plan.code}: matches ${p.id}.`);
       else {
         console.error(`${plan.code}: Paddle's price ${p.id} does not match the plan. Archive it in Paddle, clear the plan's paddle_price_id, and run this again.`);
         problems += 1;
