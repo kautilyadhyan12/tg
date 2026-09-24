@@ -14,7 +14,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Verified**: api tsc 0 · eslint 0 · new suites 35/35 and 5/5 · by-hand routes 23/23 · full api suite 117 files, 3,665 passed, 1 failed (orgs "currency with no price book", passed alone, the shared-seed clash). Folder A's database was missing Folder B's `0043`: migrated and re-seeded.
 - **Second month on the real server** (`.cost/scenarios-5a.ts`): 3 new · 2 missing · phone 2, email 1, name 1, status 4 (was 7 new, 6 missing); "Surname, First" 20 updated (was 20 new, 20 missing).
 - **Cost** (mains, 2,592 MHz): at 10,000 × 2,000 members the confirm's bystander worst is 2,909–2,920 ms against master's 2,841 ms on the same month, preview 559–641 ms against 439 ms, within run-to-run noise; at 200 with every phone changed, confirm 134 ms, preview 57 ms.
-- **Open**: round-one review; ROADMAP 3a-vi ticks on merge. Next in Folder A: 3a-vi-b, then 5b.
+- **Round one: 4 High, 2 Low, 3 weak tests, all fixed** (`8b02587`): the reviewer, on the real routes, got one person onto another's record four ways (a shared family email, "Keep them", a rename beating a later phone-and-name match, a fob or landline with a missing contact). Rebuilt, not patched: every carried field equal, then the same name with number/email/phone, then a rename only on a whole-list upload and a lone email; four breaks RED, restored identical. Member-list suites 26 files, 1,466 passed; second month still 3 new · 2 missing. The confirm at 10,000 now swings 2.8–6.8 s on master itself (disk stalls), this job 4.5–5.9 s: no measurable difference. Kd, asked whether a phone should accept a corrected spelling: kept split, the recommendation. The re-check closed the round.
+- **Open**: ROADMAP 3a-vi ticks on merge. Next in Folder A: 3a-vi-b, then 5b.
 
 ## 2026-09-24 · 5a: bring a member list in (Folder A, branch `member-list-upload`)
 
