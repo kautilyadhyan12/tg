@@ -191,7 +191,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 1a. [x] **A gym pays through Paddle** (test mode) — merged 2026-09-24 (PR #103).
    - 1b. ~~A person outside India pays $10 through Paddle, from Settings.~~ **Struck 2026-09-24, never built** (RULINGS that day): people pay in the phone app.
    - 1c. **Managing a gym's plan** — split 2026-09-24 in two, built back to back.
-     - 1c-i. [ ] **Paddle's own page, and a failed payment**: Manage payment (card, cancel, invoices), "Ends" after a cancel, a 2-day grace, then read-only with "Update payment method".
+     - 1c-i. [x] **Paddle's own page, and a failed payment** — merged 2026-09-25 (PR #105).
      - 1c-ii. [ ] **A bigger size as members grow, and paying before the trial ends.**
    - 1d. [ ] **Indian gyms through Razorpay**, UPI Autopay; GST off until Kd is registered (RULINGS 2026-09-24). Needs Kd's free Razorpay test account.
 2. **Trials enforced** (split 2026-09-08 after Kd's trial-abuse ruling; no approval queue, ever).
