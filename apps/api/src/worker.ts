@@ -451,7 +451,8 @@ if (paddle === null) {
       if (job.name !== BILLING_PADDLE_EVENTS_JOB) throw new Error(`unknown job on ${BILLING_QUEUE}: ${job.name}`);
       const startedAt = Date.now();
       const run = await processPaddleEvents({ sql, redis: createMemoryRedis(), paddle, log, now: () => new Date() });
-      if (run.applied + run.unchanged + run.deferred + run.givenUp + run.forgotten > 0) {
+      const refunds = run.refunds.requested + run.refunds.notNeeded + run.refunds.deferred + run.refunds.failed;
+      if (run.applied + run.unchanged + run.deferred + run.givenUp + run.forgotten + refunds > 0) {
         log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
       }
     },

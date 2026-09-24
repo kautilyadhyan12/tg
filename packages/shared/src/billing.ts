@@ -78,6 +78,11 @@ export const paddleTransactionSchema = z.object({
       }),
     )
     .max(100),
+  /** With `include=adjustments`: its refunds and credits, and each one's state. */
+  adjustments: z
+    .array(z.object({ action: z.string().max(40), status: z.enum(["pending_approval", "approved", "rejected", "reversed"]) }))
+    .max(100)
+    .optional(),
 });
 export type PaddleTransaction = z.infer<typeof paddleTransactionSchema>;
 

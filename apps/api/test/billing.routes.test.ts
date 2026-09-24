@@ -57,6 +57,11 @@ class FakePaddle implements PaddleApi {
   cancelledTxns: string[] = [];
   cancelledSubs: string[] = [];
   refunds: string[] = [];
+  adjustments = new Map<string, { action: string; status: "pending_approval" | "approved" | "rejected" | "reversed" }[]>();
+  /** Answer this many refund requests with a 503, making nothing. */
+  refundFailures = 0;
+  /** Make the next refund, but lose its answer (a timeout). */
+  loseRefundAnswer = false;
   created = 0;
   down = false;
   /** Make the next transaction carry a different amount than the one asked for. */
@@ -86,7 +91,9 @@ class FakePaddle implements PaddleApi {
   }
   getTransaction(id: string) {
     const txn = this.txns.get(id);
-    return Promise.resolve<PaddleResult<PaddleTransaction>>(txn === undefined ? { kind: "not_found" } : this.ok(txn));
+    return Promise.resolve<PaddleResult<PaddleTransaction>>(
+      txn === undefined ? { kind: "not_found" } : this.ok({ ...txn, adjustments: this.adjustments.get(id) ?? [] }),
+    );
   }
   cancelTransaction(id: string) {
     this.cancelledTxns.push(id);
@@ -105,7 +112,20 @@ class FakePaddle implements PaddleApi {
     return Promise.resolve<PaddleResult<null>>(this.ok(null));
   }
   refundTransaction(id: string) {
+    if (this.refundFailures > 0) {
+      this.refundFailures -= 1;
+      return Promise.resolve<PaddleResult<null>>({ kind: "unavailable", status: 503 });
+    }
+    // Paddle refunds only a completed transaction.
+    if (this.txns.get(id)?.status !== "completed") {
+      return Promise.resolve<PaddleResult<null>>({ kind: "refused", status: 400, code: "transaction_status_not_completed" });
+    }
     this.refunds.push(id);
+    this.adjustments.set(id, [...(this.adjustments.get(id) ?? []), { action: "refund", status: "pending_approval" }]);
+    if (this.loseRefundAnswer) {
+      this.loseRefundAnswer = false;
+      return Promise.resolve<PaddleResult<null>>({ kind: "unavailable", status: null });
+    }
     return Promise.resolve<PaddleResult<null>>(this.ok(null));
   }
 
@@ -114,12 +134,14 @@ class FakePaddle implements PaddleApi {
     return new Date(this.clock).toISOString();
   }
 
-  /** The customer pays a transaction: Paddle completes it and makes the subscription. */
-  pay(txnId: string, origin = "api"): string {
+  /** The customer pays a transaction: Paddle makes the subscription and, unless told
+   *  otherwise, completes the transaction at once (in Paddle it stays "paid" for about a
+   *  second first, measured on Kd's sandbox payment by the round-one review). */
+  pay(txnId: string, origin = "api", complete = true): string {
     const txn = this.txns.get(txnId);
     if (txn === undefined) throw new Error("no such transaction");
     const subId = paddleId("sub");
-    this.txns.set(txnId, { ...txn, status: "completed", subscription_id: subId, origin });
+    this.txns.set(txnId, { ...txn, status: complete ? "completed" : "paid", subscription_id: subId, origin });
     this.subs.set(subId, {
       id: subId,
       status: "active",
@@ -133,6 +155,12 @@ class FakePaddle implements PaddleApi {
       items: txn.items.map((i) => ({ quantity: i.quantity, price: { id: i.price.id } })),
     });
     return subId;
+  }
+
+  complete(txnId: string): void {
+    const txn = this.txns.get(txnId);
+    if (txn === undefined) throw new Error("no such transaction");
+    this.txns.set(txnId, { ...txn, status: "completed" });
   }
 
   update(subId: string, patch: Partial<PaddleSubscription>): void {
@@ -151,13 +179,14 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
     return app;
   };
   const silent = { info: () => undefined, warn: () => undefined, error: () => undefined };
-  const runWorker = () =>
+  /** One run of the worker's job; `aheadMs` runs it that far in the future, past a wait. */
+  const runWorker = (aheadMs = 0) =>
     processPaddleEvents({
       sql,
       redis: createMemoryRedis(),
       paddle: { api: paddle, environment: "sandbox", clientToken: CLIENT_TOKEN },
       log: silent,
-      now: () => new Date(),
+      now: () => new Date(Date.now() + aheadMs),
     });
 
   let ip = 0;
@@ -167,6 +196,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
   const mine = sql`SELECT id FROM gyms WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE 'billing-t-%@example.com')`;
   const cleanup = async () => {
     await sql`DELETE FROM webhook_events WHERE provider = 'paddle'`;
+    await sql`DELETE FROM billing_refunds WHERE provider = 'paddle'`;
     await sql`DELETE FROM billing_checkouts WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine})`;
     await sql`DELETE FROM gym_members WHERE gym_id IN (${mine})`;
@@ -344,6 +374,136 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       await signedWebhook(subscriptionEvent(extraSub, "subscription.canceled"));
       await runWorker();
       expect(paddle.refunds).toHaveLength(refundsBefore);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  const refundRow = async (transactionRef: string) =>
+    (await sql<{ state: string; reason: string }[]>`
+      SELECT state, reason FROM billing_refunds WHERE provider = 'paddle' AND transaction_ref = ${transactionRef}`)[0] ?? null;
+  const refundsOf = (transactionRef: string) => paddle.refunds.filter((id) => id === transactionRef).length;
+
+  /** A gym on a paid plan (the second of two windows) and the first window paid anyway. */
+  const payTwice = async (completeExtra: boolean) => {
+    const a = await owner();
+    const first = opened(await checkout(a.gymId, a.cookies, BIG));
+    const second = opened(await checkout(a.gymId, a.cookies, BIG));
+    paddle.pay(second.transactionId);
+    await post(`/v1/orgs/${a.gymId}/billing/checkouts/${second.checkoutId}/sync`, {}, a.cookies);
+    const extraSub = paddle.pay(first.transactionId, "api", completeExtra);
+    await signedWebhook(subscriptionEvent(extraSub));
+    return { a, extraTxn: first.transactionId, extraSub };
+  };
+
+  it(
+    "WORST THING: a second payment still finishing at Paddle is refunded once it finishes, and once only",
+    async () => {
+      const { a, extraTxn, extraSub } = await payTwice(false);
+      await runWorker();
+      expect(paddle.cancelledSubs).toContain(extraSub);
+      expect(refundsOf(extraTxn)).toBe(0);
+      expect(await refundRow(extraTxn)).toEqual({ state: "owed", reason: "duplicate" });
+
+      paddle.complete(extraTxn);
+      await runWorker(2 * 60_000);
+      expect(refundsOf(extraTxn)).toBe(1);
+      expect((await refundRow(extraTxn))?.state).toBe("requested");
+      await runWorker(20 * 60_000);
+      expect(refundsOf(extraTxn)).toBe(1);
+      expect((await paidRows(a.gymId)).filter((r) => r.status === "active")).toHaveLength(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "WORST THING: a refund Paddle fails to make is tried again until it is",
+    async () => {
+      const { extraTxn } = await payTwice(true);
+      paddle.refundFailures = 1;
+      await runWorker();
+      expect(refundsOf(extraTxn)).toBe(0);
+      expect((await refundRow(extraTxn))?.state).toBe("owed");
+      await runWorker(2 * 60_000);
+      expect(refundsOf(extraTxn)).toBe(1);
+      expect((await refundRow(extraTxn))?.state).toBe("requested");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a refund whose answer was lost is never asked for twice",
+    async () => {
+      const { extraTxn } = await payTwice(true);
+      paddle.loseRefundAnswer = true;
+      await runWorker();
+      expect(refundsOf(extraTxn)).toBe(1);
+      expect((await refundRow(extraTxn))?.state).toBe("owed");
+      await runWorker(2 * 60_000);
+      expect(refundsOf(extraTxn)).toBe(1);
+      expect((await refundRow(extraTxn))?.state).toBe("requested");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a subscription no checkout of ours made is refunded even when Paddle has already cancelled it",
+    async () => {
+      const stray = await paddle.createTransaction({ priceId: BIG_PRICE, customData: {} });
+      if (stray.kind !== "ok") throw new Error("fake Paddle refused");
+      const subId = paddle.pay(stray.value.id, "web");
+      paddle.update(subId, { status: "canceled", canceled_at: paddle.tick() });
+      await signedWebhook(subscriptionEvent(subId, "subscription.canceled"));
+      await runWorker();
+      expect(refundsOf(stray.value.id)).toBe(1);
+      expect(await refundRow(stray.value.id)).toEqual({ state: "requested", reason: "unmatched" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a payment made but not yet on the gym stops a second Subscribe, and puts the plan on the gym",
+    async () => {
+      const a = await owner();
+      const first = opened(await checkout(a.gymId, a.cookies, BIG));
+      // Paid, and the tab closed before the console confirmed it: no sync, no webhook yet.
+      const subId = paddle.pay(first.transactionId);
+      const before = paddle.created;
+      const again = await checkout(a.gymId, a.cookies, BIG);
+      expect(again.statusCode).toBe(409);
+      expect(JSON.parse(again.body)).toMatchObject({ error: "already_subscribed" });
+      expect(paddle.created).toBe(before);
+      expect((await paidRows(a.gymId)).map((r) => [r.provider_ref, r.status])).toEqual([[subId, "active"]]);
+
+      // Paid a moment ago, and Paddle has not made the subscription yet.
+      const b = await owner();
+      const pending = opened(await checkout(b.gymId, b.cookies, BIG));
+      const txn = paddle.txns.get(pending.transactionId);
+      if (txn === undefined) throw new Error("no transaction");
+      paddle.txns.set(pending.transactionId, { ...txn, status: "paid" });
+      const wait = await checkout(b.gymId, b.cookies, BIG);
+      expect(wait.statusCode).toBe(409);
+      expect(JSON.parse(wait.body)).toMatchObject({ error: "payment_in_progress" });
+      expect(paddle.cancelledTxns).not.toContain(pending.transactionId);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "staff without the billing tick may neither pay nor ask after a payment; a press still opening says so",
+    async () => {
+      const a = await owner();
+      const desk = await makeUser();
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${a.gymId}, ${desk.userId}, 'manager', ARRAY['members.read'])`;
+      const txn = opened(await checkout(a.gymId, a.cookies, BIG));
+      expect((await checkout(a.gymId, desk.cookies, BIG)).statusCode).toBe(403);
+      expect((await post(`/v1/orgs/${a.gymId}/billing/checkouts/${txn.checkoutId}/sync`, {}, desk.cookies)).statusCode).toBe(403);
+
+      await sql`
+        INSERT INTO billing_checkouts (gym_id, plan_id, idempotency_key, provider)
+        SELECT ${a.gymId}, id, 'still-opening', 'paddle' FROM plans WHERE code = ${BIG}`;
+      const replay = await checkout(a.gymId, a.cookies, BIG, "still-opening");
+      expect(replay.statusCode).toBe(409);
+      expect(JSON.parse(replay.body)).toMatchObject({ error: "checkout_in_progress" });
     },
     TEST_TIMEOUT_MS,
   );

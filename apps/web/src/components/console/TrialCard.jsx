@@ -116,7 +116,8 @@ export default function TrialCard({ org }) {
   const endsOn = trialing ? trialEndDateLabel(org.subscription.trialEndsAt) : null;
   // A paid plan: its price and its month, both the server's.
   const price = trialing ? null : org.subscription.priceLabel ?? null;
-  const periodEnd = trialing ? null : trialEndDateLabel(org.subscription.currentPeriodEnd);
+  // Only a plan in good standing renews; a failed payment says so in the banner instead.
+  const periodEnd = org.subscription.status === 'active' ? trialEndDateLabel(org.subscription.currentPeriodEnd) : null;
 
   return (
     <ConsoleCard>

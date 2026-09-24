@@ -47,4 +47,29 @@ CREATE TABLE billing_checkouts (
   CONSTRAINT billing_checkouts_provider_ref_uq UNIQUE (provider, provider_ref)
 );--> statement-breakpoint
 CREATE INDEX billing_checkouts_gym_open_idx ON billing_checkouts (gym_id)
-  WHERE state IN ('creating','open');
+  WHERE state IN ('creating','open');--> statement-breakpoint
+
+-- billing_refunds                a refund we owe for a subscription set aside: a second paid plan
+--                                for one gym ('duplicate'), or one no checkout of ours made
+--                                ('unmatched', no gym). One row per Paddle transaction; the worker
+--                                retries it until Paddle holds a refund for it.
+CREATE TABLE billing_refunds (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  gym_id uuid REFERENCES gyms(id),
+  provider text NOT NULL,
+  subscription_ref text NOT NULL,
+  transaction_ref text NOT NULL,
+  reason text NOT NULL,
+  state text NOT NULL DEFAULT 'owed',
+  tries integer NOT NULL DEFAULT 0,
+  not_before timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT billing_refunds_provider_check CHECK (provider IN ('paddle')),
+  CONSTRAINT billing_refunds_reason_check CHECK (reason IN ('duplicate','unmatched')),
+  CONSTRAINT billing_refunds_state_check CHECK (state IN ('owed','requested','not_needed','failed')),
+  CONSTRAINT billing_refunds_tries_check CHECK (tries >= 0),
+  CONSTRAINT billing_refunds_gym_check CHECK ((reason = 'unmatched') = (gym_id IS NULL)),
+  CONSTRAINT billing_refunds_transaction_uq UNIQUE (provider, transaction_ref)
+);--> statement-breakpoint
+CREATE INDEX billing_refunds_due_idx ON billing_refunds (not_before) WHERE state = 'owed';

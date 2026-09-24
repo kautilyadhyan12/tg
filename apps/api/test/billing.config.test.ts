@@ -31,4 +31,18 @@ describe("Paddle's settings", () => {
     expect(() => loadConfig({ ...base, PADDLE_CLIENT_TOKEN: TOKEN })).toThrow(/set together/);
     expect(() => loadConfig({ ...base, PADDLE_WEBHOOK_SECRET: "whsec_abc" })).toThrow(/PADDLE_WEBHOOK_SECRET/);
   });
+
+  it("in production, refuses Paddle's keys without the webhook secret", () => {
+    const production = {
+      ...base,
+      NODE_ENV: "production",
+      REDIS_URL: "redis://localhost:6379",
+      RESEND_API_KEY: "re_dummy",
+      EMAIL_FROM: "AI Home Gym <hello@example.com>",
+      PADDLE_API_KEY: SANDBOX_KEY,
+      PADDLE_CLIENT_TOKEN: TOKEN,
+    };
+    expect(() => loadConfig(production)).toThrow(/PADDLE_WEBHOOK_SECRET is required in production/);
+    expect(loadConfig({ ...production, PADDLE_WEBHOOK_SECRET: ["pdl", "ntfset", "01" + "e".repeat(24), "x"].join("_") }).PADDLE_ENV).toBe("sandbox");
+  });
 });

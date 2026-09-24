@@ -285,6 +285,28 @@ describe('the plan card', () => {
     expect(screen.queryByText(/^Ends /)).toBeNull();
   });
 
+  it('promises no renewal while a payment has failed', async () => {
+    orgService.getMine.mockResolvedValue(
+      mineIs({
+        ...ORG,
+        subscription: {
+          status: 'past_due',
+          trialEndsAt: null,
+          seatCap: 500,
+          priceLabel: '$129',
+          currentPeriodEnd: '2026-11-01T12:00:00.000Z',
+          cancelAtPeriodEnd: false,
+        },
+        seatsUsed: 40,
+      }),
+    );
+    renderConsole(Overview);
+
+    expect(await screen.findByText('$129 a month')).toBeTruthy();
+    expect(screen.queryByText(/^Renews /)).toBeNull();
+    expect(screen.getByText(/didn't go through/)).toBeTruthy();
+  });
+
   it('says a cancelled plan ends, rather than renews', async () => {
     orgService.getMine.mockResolvedValue(
       mineIs({

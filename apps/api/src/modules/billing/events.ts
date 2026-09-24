@@ -3,7 +3,7 @@
 // (`applyPaddleSubscription`). Safe to run twice: the rule ignores a record it already
 // holds, and every event is leased and finished by its lease.
 import * as webhooks from "../webhooks/repo.js";
-import { applyPaddleSubscription, type BillingDeps } from "./service.js";
+import { applyPaddleSubscription, settleOwedRefunds, type BillingDeps, type RefundsRun } from "./service.js";
 
 export const PADDLE_EVENTS = {
   perRun: 200,
@@ -20,10 +20,19 @@ export interface PaddleEventsRun {
   deferred: number;
   givenUp: number;
   forgotten: number;
+  /** The refunds owed, made or retried this run. */
+  refunds: RefundsRun;
 }
 
 export async function processPaddleEvents(deps: BillingDeps): Promise<PaddleEventsRun> {
-  const run: PaddleEventsRun = { applied: 0, unchanged: 0, deferred: 0, givenUp: 0, forgotten: 0 };
+  const run: PaddleEventsRun = {
+    applied: 0,
+    unchanged: 0,
+    deferred: 0,
+    givenUp: 0,
+    forgotten: 0,
+    refunds: { requested: 0, notNeeded: 0, deferred: 0, failed: 0 },
+  };
   for (let taken = 0; taken < PADDLE_EVENTS.perRun; taken++) {
     const event = await webhooks.claimDuePaddleEvent(deps.sql, deps.now(), PADDLE_EVENTS.leaseMs);
     if (event === null) break;
@@ -47,9 +56,10 @@ export async function processPaddleEvents(deps: BillingDeps): Promise<PaddleEven
       continue;
     }
     await webhooks.finishEvent(deps.sql, event, "done", deps.now());
-    if (result === "applied" || result === "refunded") run.applied += 1;
+    if (result === "applied" || result === "set_aside") run.applied += 1;
     else run.unchanged += 1;
   }
+  run.refunds = await settleOwedRefunds(deps);
   const keepSince = new Date(deps.now().getTime() - PADDLE_EVENTS.keepDays * 24 * 60 * 60 * 1000);
   run.forgotten = await webhooks.forgetOldPaddleEvents(deps.sql, keepSince, 1000);
   return run;

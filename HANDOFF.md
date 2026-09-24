@@ -15,7 +15,7 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - Took in master (Folder A's 3b-ii-a, PR #102, migration `0040` …023); this job's `0041` is …024, after it, so nothing was renumbered. `aihg_b` had `0041` first, so `0040` was applied there by hand with its ledger row.
 - **Kd's sandbox account in** (git-ignored `apps/api/.env.paddle.local`; its webhook secret carries a `/`, so the boot check was widened). Prices made in his sandbox by the tool; checkout run for real (same key reuses the payment, a replaced one is cancelled at Paddle, amounts exact, tax external); **Kd's click-through passed** (*"all passed"*) and his payment put `fhuhguh` on an active Paddle plan; Paddle's real record of it, signed with his secret, went through the webhook and worker: kept once, a wrong secret 401, nothing changed, one row.
 - **Kd then ruled the top band 2,000 members, not 2,100** (RULINGS): seed, tests and ROADMAP moved; the tool now renames a Paddle price whose name is stale (`Monthly, up to 2,000 members`).
-- Next: round-one review (`reviews/stage3-1a-1-review.md`). Re-seed every database after merge (the rupee prices, the 2,000 band).
+- Refunds are durable (`billing_refunds`, in `0041`): a set-aside plan's paid transactions are owed a refund, retried by the worker until Paddle holds one; a second Subscribe first asks Paddle about the gym's open window. Next: the re-check, then merge; re-seed every database after (the rupee prices, the 2,000 band).
 
 ## 2026-09-23 · 3b-ii-a: join a gym by invitation (Folder A, branch `join-invitation`)
 

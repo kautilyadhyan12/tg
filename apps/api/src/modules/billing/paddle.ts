@@ -131,7 +131,7 @@ export function createPaddleApi(opts: {
     async getTransaction(id) {
       const path = txnPath(id);
       if (path === null) return { kind: "not_found" };
-      return unwrap(await call("GET", path, paddleEnvelope(paddleTransactionSchema)));
+      return unwrap(await call("GET", `${path}?include=adjustments`, paddleEnvelope(paddleTransactionSchema)));
     },
     async cancelTransaction(id) {
       const path = txnPath(id);

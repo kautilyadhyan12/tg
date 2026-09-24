@@ -147,6 +147,13 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       message: "PADDLE_API_KEY and PADDLE_CLIENT_TOKEN are set together",
     })
     .refine(
+      (c) => c.NODE_ENV !== "production" || c.PADDLE_API_KEY === undefined || c.PADDLE_WEBHOOK_SECRET !== undefined,
+      {
+        path: ["PADDLE_WEBHOOK_SECRET"],
+        message: "PADDLE_WEBHOOK_SECRET is required in production when Paddle is set up (renewals and cancels arrive by webhook)",
+      },
+    )
+    .refine(
       (c) =>
         c.PADDLE_API_KEY === undefined ||
         c.PADDLE_API_KEY.startsWith(c.PADDLE_ENV === "sandbox" ? "pdl_sdbx_" : "pdl_live_"),

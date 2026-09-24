@@ -316,3 +316,73 @@ export async function paddlePlans(
 export async function setPaddlePriceId(sql: SqlOrTx, code: string, priceId: string): Promise<void> {
   await sql`UPDATE plans SET paddle_price_id = ${priceId} WHERE code = ${code}`;
 }
+
+/** A gym's checkouts still open at Paddle: before another is started, each is asked
+ *  whether it was paid meanwhile. */
+export async function openCheckoutsFor(sql: SqlOrTx, gymId: string): Promise<CheckoutRow[]> {
+  const rows = await sql<RawCheckout[]>`
+    SELECT c.id, c.gym_id, p.code AS plan_code, c.state, c.provider_ref
+    FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
+    WHERE c.gym_id = ${gymId} AND c.state = 'open' AND c.provider_ref IS NOT NULL
+    ORDER BY c.created_at
+    LIMIT 10`;
+  return rows.map(toCheckout);
+}
+
+export type RefundReason = "duplicate" | "unmatched";
+
+/** Write down the refunds owed for a subscription set aside, one per paid transaction.
+ *  Kept once per transaction, so recording them again changes nothing. */
+export async function oweRefunds(
+  sql: SqlOrTx,
+  input: { gymId: string | null; subscriptionRef: string; reason: RefundReason; transactionRefs: readonly string[] },
+): Promise<number> {
+  let added = 0;
+  for (const transactionRef of input.transactionRefs) {
+    const rows = await sql<{ id: string }[]>`
+      INSERT INTO billing_refunds (gym_id, provider, subscription_ref, transaction_ref, reason)
+      VALUES (${input.reason === "unmatched" ? null : input.gymId}, 'paddle', ${input.subscriptionRef},
+              ${transactionRef}, ${input.reason})
+      ON CONFLICT (provider, transaction_ref) DO NOTHING
+      RETURNING id`;
+    added += rows.length;
+  }
+  return added;
+}
+
+export interface OwedRefund {
+  id: string;
+  transactionRef: string;
+  tries: number;
+  createdAt: Date;
+}
+
+/** Take the next refund that is due and hold it for `leaseMs`: a second worker skips it. */
+export async function claimDueRefund(sql: Sql, now: Date, leaseMs: number): Promise<OwedRefund | null> {
+  const rows = await sql<{ id: string; transaction_ref: string; tries: number; created_at: Date }[]>`
+    WITH next AS (
+      SELECT id FROM billing_refunds
+      WHERE state = 'owed' AND not_before <= ${now}
+      ORDER BY not_before, id
+      LIMIT 1
+      FOR UPDATE SKIP LOCKED
+    )
+    UPDATE billing_refunds r
+    SET not_before = ${new Date(now.getTime() + leaseMs)}, updated_at = now()
+    FROM next WHERE r.id = next.id
+    RETURNING r.id, r.transaction_ref, r.tries, r.created_at`;
+  const row = rows[0];
+  return row === undefined ? null : { id: row.id, transactionRef: row.transaction_ref, tries: row.tries, createdAt: row.created_at };
+}
+
+export async function settleRefund(sql: SqlOrTx, id: string, state: "requested" | "not_needed" | "failed"): Promise<void> {
+  await sql`UPDATE billing_refunds SET state = ${state}, updated_at = now() WHERE id = ${id} AND state = 'owed'`;
+}
+
+/** Try again at `notBefore`; `countTry` when Paddle answered and refused. */
+export async function deferRefund(sql: SqlOrTx, id: string, notBefore: Date, countTry: boolean): Promise<void> {
+  await sql`
+    UPDATE billing_refunds
+    SET not_before = ${notBefore}, tries = tries + CASE WHEN ${countTry}::boolean THEN 1 ELSE 0 END, updated_at = now()
+    WHERE id = ${id} AND state = 'owed'`;
+}
