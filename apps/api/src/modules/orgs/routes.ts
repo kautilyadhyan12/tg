@@ -77,7 +77,7 @@ export interface OrgRouteOverrides {
 
 export function registerOrgRoutes(
   app: FastifyInstance,
-  deps: { sql: Sql; redis: RedisLike; invites: InviteSettings | null },
+  deps: { sql: Sql; redis: RedisLike; invites: InviteSettings | null; onlinePayments: boolean },
   overrides: OrgRouteOverrides = {},
 ): void {
   const orgDeps: service.OrgsDeps = {
@@ -89,6 +89,7 @@ export function registerOrgRoutes(
     // rather than losing a visit that is already committed (R8.5 — the
     // alternative is the empty catch that rule forbids).
     log: app.log,
+    onlinePayments: deps.onlinePayments,
   };
 
   // THE MEMBER LIST (Part 3 §9.9), registered here rather than in `app.ts`: it is
@@ -298,7 +299,7 @@ export function registerOrgRoutes(
    *  for. :5807's "blocked from finishing something they should be able to do".
    *
    *  **3,000 IS DERIVED, NOT PICKED: the largest gym this product sells is band
-   *  5, 1501–2100 members** (`DECISIONS.md:17927`), so it clears a gym's ENTIRE
+   *  5, 1501–2000 members since 2026-09-24** (`DECISIONS.md:17927`), so it clears a gym's ENTIRE
    *  roster marking inside the same hour with headroom, from one address. It is
    *  also 0.83 requests/second, which is nothing against the row lock the
    *  paragraph above worries about. **The abuse guard is the PER-USER 30/hour

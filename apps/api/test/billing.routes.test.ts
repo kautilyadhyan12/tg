@@ -1,0 +1,682 @@
+// A gym pays through Paddle (ROADMAP Stage 3 item 1a), against real Postgres with a
+// fake Paddle in place of Paddle's API. DATABASE_URL-gated.
+//
+// THE WORST THING THIS JOB COULD DO: charge an owner twice for one gym, or let their
+// payment switch on a different gym. The first three tests are those.
+import { createHmac, randomBytes } from "node:crypto";
+import type { PaddleSubscription, PaddleTransaction } from "@app/shared";
+import postgres from "postgres";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { buildApp } from "../src/app.js";
+import { loadConfig } from "../src/config.js";
+import { processPaddleEvents } from "../src/modules/billing/events.js";
+import type { PaddleApi, PaddleResult } from "../src/modules/billing/paddle.js";
+import { createMemoryRedis } from "../src/redis.js";
+
+const url = process.env["DATABASE_URL"];
+const d = describe.skipIf(url === undefined || url === "");
+
+const PASSWORD = "a-Perfectly-fine-pw-1"; // dummy fixture, gitleaks:allow
+const WEBHOOK_SECRET = ["pdl", "ntfset", "01" + "c".repeat(24), "TestSecretForBillingRoutes"].join("_");
+/** Fakes in Paddle's shapes, built at run time so no key-shaped text is in the repository. */
+const fakePaddleKey = (env: "sdbx" | "live") => ["pdl", env, "apikey", "01" + "a".repeat(24), "AbCdEfGhIjKlMnOpQrStUv", "Xyz"].join("_");
+const CLIENT_TOKEN = ["test", "0".repeat(27)].join("_");
+
+const baseEnv = {
+  NODE_ENV: "test",
+  DATABASE_URL: url ?? "",
+  WEB_ORIGIN: "http://localhost:5173",
+  JWT_SECRET: "billing-test-secret-0123456789abc", // dummy test value, gitleaks:allow
+  LOG_LEVEL: "error",
+  PADDLE_ENV: "sandbox",
+  PADDLE_API_KEY: fakePaddleKey("sdbx"),
+  PADDLE_CLIENT_TOKEN: CLIENT_TOKEN,
+  PADDLE_WEBHOOK_SECRET: WEBHOOK_SECRET,
+};
+
+const TEST_TIMEOUT_MS = 60_000;
+const HOOK_TIMEOUT_MS = 60_000;
+
+const paddleId = (prefix: string) => `${prefix}_${randomBytes(20).toString("hex").slice(0, 26)}`;
+
+const SMALL = "zz_billing_small"; // up to 1 member, $10
+const BIG = "zz_billing_big"; // up to 5,000 members, $20
+const SMALL_PRICE = paddleId("pri");
+const BIG_PRICE = paddleId("pri");
+const PRICES: Record<string, { amount: string; currency: string }> = {
+  [SMALL_PRICE]: { amount: "1000", currency: "USD" },
+  [BIG_PRICE]: { amount: "2000", currency: "USD" },
+};
+
+/** Paddle as the tests need it: transactions our server makes, and a `pay` that turns
+ *  one into an active subscription the way a completed checkout does. */
+class FakePaddle implements PaddleApi {
+  txns = new Map<string, PaddleTransaction>();
+  subs = new Map<string, PaddleSubscription>();
+  customData = new Map<string, Record<string, string>>();
+  cancelledTxns: string[] = [];
+  cancelledSubs: string[] = [];
+  refunds: string[] = [];
+  adjustments = new Map<string, { action: string; status: "pending_approval" | "approved" | "rejected" | "reversed" }[]>();
+  /** Answer this many refund requests with a 503, making nothing. */
+  refundFailures = 0;
+  /** Make the next refund, but lose its answer (a timeout). */
+  loseRefundAnswer = false;
+  created = 0;
+  down = false;
+  /** Make the next transaction carry a different amount than the one asked for. */
+  wrongAmount = false;
+  clock = Date.parse("2026-10-01T00:00:00Z");
+
+  private ok<T>(value: T): PaddleResult<T> {
+    return this.down ? { kind: "unavailable", status: 503 } : { kind: "ok", value };
+  }
+
+  createTransaction(input: { priceId: string; customData: Record<string, string> }) {
+    if (this.down) return Promise.resolve<PaddleResult<PaddleTransaction>>({ kind: "unavailable", status: 503 });
+    this.created += 1;
+    const price = PRICES[input.priceId] ?? { amount: "0", currency: "USD" };
+    const txn: PaddleTransaction = {
+      id: paddleId("txn"),
+      status: "draft",
+      subscription_id: null,
+      origin: "api",
+      currency_code: price.currency,
+      items: [{ quantity: 1, price: { id: input.priceId, unit_price: { amount: this.wrongAmount ? "1" : price.amount, currency_code: price.currency } } }],
+    };
+    this.wrongAmount = false;
+    this.txns.set(txn.id, txn);
+    this.customData.set(txn.id, input.customData);
+    return Promise.resolve(this.ok(txn));
+  }
+  getTransaction(id: string) {
+    const txn = this.txns.get(id);
+    return Promise.resolve<PaddleResult<PaddleTransaction>>(
+      txn === undefined ? { kind: "not_found" } : this.ok({ ...txn, adjustments: this.adjustments.get(id) ?? [] }),
+    );
+  }
+  cancelTransaction(id: string) {
+    this.cancelledTxns.push(id);
+    return Promise.resolve<PaddleResult<null>>(this.ok(null));
+  }
+  getSubscription(id: string) {
+    const sub = this.subs.get(id);
+    return Promise.resolve<PaddleResult<PaddleSubscription>>(sub === undefined ? { kind: "not_found" } : this.ok(sub));
+  }
+  /** Refuse to list transactions, as a key without that permission would. */
+  listRefused = false;
+  listSubscriptionTransactions(subscriptionId: string) {
+    if (this.listRefused) return Promise.resolve<PaddleResult<PaddleTransaction[]>>({ kind: "refused", status: 403, code: "forbidden" });
+    return Promise.resolve(this.ok([...this.txns.values()].filter((t) => t.subscription_id === subscriptionId)));
+  }
+  cancelSubscriptionNow(id: string) {
+    this.cancelledSubs.push(id);
+    this.update(id, { status: "canceled", canceled_at: this.tick() });
+    return Promise.resolve<PaddleResult<null>>(this.ok(null));
+  }
+  refundTransaction(id: string) {
+    if (this.refundFailures > 0) {
+      this.refundFailures -= 1;
+      return Promise.resolve<PaddleResult<null>>({ kind: "unavailable", status: 503 });
+    }
+    // Paddle refunds only a completed transaction.
+    if (this.txns.get(id)?.status !== "completed") {
+      return Promise.resolve<PaddleResult<null>>({ kind: "refused", status: 400, code: "transaction_status_not_completed" });
+    }
+    this.refunds.push(id);
+    this.adjustments.set(id, [...(this.adjustments.get(id) ?? []), { action: "refund", status: "pending_approval" }]);
+    if (this.loseRefundAnswer) {
+      this.loseRefundAnswer = false;
+      return Promise.resolve<PaddleResult<null>>({ kind: "unavailable", status: null });
+    }
+    return Promise.resolve<PaddleResult<null>>(this.ok(null));
+  }
+
+  tick(): string {
+    this.clock += 1000;
+    return new Date(this.clock).toISOString();
+  }
+
+  /** The customer pays a transaction: Paddle makes the subscription and, unless told
+   *  otherwise, completes the transaction at once (in Paddle it stays "paid" for about a
+   *  second first, measured on Kd's sandbox payment by the round-one review). */
+  pay(txnId: string, origin = "api", complete = true): string {
+    const txn = this.txns.get(txnId);
+    if (txn === undefined) throw new Error("no such transaction");
+    const subId = paddleId("sub");
+    this.txns.set(txnId, { ...txn, status: complete ? "completed" : "paid", subscription_id: subId, origin });
+    this.subs.set(subId, {
+      id: subId,
+      status: "active",
+      customer_id: paddleId("ctm"),
+      currency_code: txn.currency_code,
+      updated_at: this.tick(),
+      canceled_at: null,
+      paused_at: null,
+      current_billing_period: { starts_at: "2026-10-01T00:00:00Z", ends_at: "2026-11-01T00:00:00Z" },
+      scheduled_change: null,
+      items: txn.items.map((i) => ({ quantity: i.quantity, price: { id: i.price.id } })),
+    });
+    return subId;
+  }
+
+  complete(txnId: string): void {
+    const txn = this.txns.get(txnId);
+    if (txn === undefined) throw new Error("no such transaction");
+    this.txns.set(txnId, { ...txn, status: "completed" });
+  }
+
+  update(subId: string, patch: Partial<PaddleSubscription>): void {
+    const sub = this.subs.get(subId);
+    if (sub === undefined) throw new Error("no such subscription");
+    this.subs.set(subId, { ...sub, updated_at: this.tick(), ...patch });
+  }
+}
+
+d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
+  const sql = postgres(url ?? "", { prepare: false, max: 5 });
+  const paddle = new FakePaddle();
+  let app: Awaited<ReturnType<typeof buildApp>> | undefined;
+  const api = () => {
+    if (app === undefined) throw new Error("beforeAll did not build the app");
+    return app;
+  };
+  const silent = { info: () => undefined, warn: () => undefined, error: () => undefined };
+  /** One run of the worker's job; `aheadMs` runs it that far in the future, past a wait.
+   *  At least a second: an event's `not_before` is Postgres's microsecond clock and this
+   *  one counts milliseconds, so a run in the same millisecond as the webhook (CI is that
+   *  fast) reads the event as not yet due. The real worker runs a minute apart. */
+  const runWorker = (aheadMs = 1000) =>
+    processPaddleEvents({
+      sql,
+      redis: createMemoryRedis(),
+      paddle: { api: paddle, environment: "sandbox", clientToken: CLIENT_TOKEN },
+      log: silent,
+      now: () => new Date(Date.now() + aheadMs),
+    });
+
+  let ip = 0;
+  const nextIp = () => `10.41.${String(Math.floor(ip / 250))}.${String((ip++ % 250) + 1)}`;
+  type Cookies = Record<string, string>;
+
+  const mine = sql`SELECT id FROM gyms WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE 'billing-t-%@example.com')`;
+  const cleanup = async () => {
+    await sql`DELETE FROM webhook_events WHERE provider = 'paddle'`;
+    await sql`DELETE FROM billing_refunds WHERE provider = 'paddle'`;
+    await sql`DELETE FROM billing_checkouts WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine})`;
+    await sql`DELETE FROM gym_members WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_staff WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM audit_log WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gyms WHERE id IN (${mine})`;
+    await sql`DELETE FROM users WHERE email LIKE 'billing-t-%@example.com'`;
+  };
+
+  beforeAll(async () => {
+    await cleanup();
+    for (const [code, cap, price, priceId] of [
+      [SMALL, 1, 1000, SMALL_PRICE],
+      [BIG, 5000, 2000, BIG_PRICE],
+    ] as const) {
+      // trial_days 0: the trial is on the smallest plan WITH a trial, and these must not be it.
+      await sql`
+        INSERT INTO plans (code, audience, name_key, price_minor, currency, interval, seat_cap,
+                           trial_days, rank, entitlements, member_entitlements, paddle_price_id)
+        VALUES (${code}, 'org', ${"plan." + code}, ${price}, 'USD', 'month', ${cap}, 0, 10,
+                '{}'::jsonb, '{}'::jsonb, ${priceId})
+        ON CONFLICT (code) DO UPDATE SET active = true, price_minor = ${price}, seat_cap = ${cap},
+                                         paddle_price_id = ${priceId}`;
+    }
+    app = await buildApp(loadConfig(baseEnv), { paddleApi: paddle });
+  }, HOOK_TIMEOUT_MS);
+
+  afterAll(async () => {
+    await cleanup();
+    await sql`DELETE FROM plans WHERE code IN (${SMALL}, ${BIG})`;
+    await app?.close();
+    await sql.end();
+  }, HOOK_TIMEOUT_MS);
+
+  const post = (path: string, payload: unknown, cookies: Cookies = {}, headers: Record<string, string> = {}) =>
+    api().inject({
+      method: "POST",
+      url: path,
+      remoteAddress: nextIp(),
+      headers: { "content-type": "application/json", ...headers },
+      cookies,
+      payload: JSON.stringify(payload),
+    });
+  const get = (path: string, cookies: Cookies) => api().inject({ method: "GET", url: path, remoteAddress: nextIp(), cookies });
+
+  let seq = 0;
+  const makeUser = async (): Promise<{ userId: string; cookies: Cookies }> => {
+    const email = `billing-t-${String(seq++)}-${String(Date.now() % 100000)}@example.com`;
+    const reg = await post("/v1/auth/register", { email, password: PASSWORD, displayName: "Billing" });
+    expect(reg.statusCode).toBe(201);
+    const login = await post("/v1/auth/login", { email, password: PASSWORD });
+    expect(login.statusCode).toBe(200);
+    return {
+      userId: (JSON.parse(reg.body) as { userId: string }).userId,
+      cookies: Object.fromEntries(login.cookies.map((c) => [c.name, c.value])),
+    };
+  };
+  const makeGym = async (cookies: Cookies, country = "US"): Promise<string> => {
+    const res = await post("/v1/orgs", { name: `Billing Gym ${String(seq++)}`, city: "Austin", country, timezone: "America/Chicago" }, cookies);
+    expect(res.statusCode).toBe(201);
+    return (JSON.parse(res.body) as { org: { id: string } }).org.id;
+  };
+  const owner = async (country = "US") => {
+    const user = await makeUser();
+    return { ...user, gymId: await makeGym(user.cookies, country) };
+  };
+  const checkout = (gymId: string, cookies: Cookies, planCode: string, key: string = randomBytes(8).toString("hex")) =>
+    post(`/v1/orgs/${gymId}/billing/checkout`, { planCode }, cookies, { "idempotency-key": key });
+  const opened = (res: { statusCode: number; body: string }) => {
+    expect(res.statusCode).toBe(200);
+    return JSON.parse(res.body) as { checkoutId: string; transactionId: string; clientToken: string; environment: string };
+  };
+  const signedWebhook = (body: object, secret = WEBHOOK_SECRET, ts = Math.floor(Date.now() / 1000)) => {
+    const raw = JSON.stringify(body);
+    const h1 = createHmac("sha256", secret).update(`${String(ts)}:${raw}`).digest("hex");
+    return api().inject({
+      method: "POST",
+      url: "/v1/webhooks/paddle",
+      remoteAddress: nextIp(),
+      headers: { "content-type": "application/json", "paddle-signature": `ts=${String(ts)};h1=${h1}` },
+      payload: raw,
+    });
+  };
+  const subscriptionEvent = (subId: string, type = "subscription.created", extra: object = {}) => ({
+    event_id: paddleId("evt"),
+    event_type: type,
+    occurred_at: new Date().toISOString(),
+    data: { id: subId, ...extra },
+  });
+  const paidRows = (gymId: string) =>
+    sql<{ status: string; provider_ref: string; cancel_reason: string | null; ended_at: Date | null }[]>`
+      SELECT status, provider_ref, cancel_reason, ended_at FROM subscriptions
+      WHERE owner_type = 'gym' AND owner_id = ${gymId} AND provider = 'paddle' ORDER BY created_at`;
+
+  it(
+    "WORST THING: gym A's payment switches on gym A and never gym B, whatever the payment says",
+    async () => {
+      const a = await owner();
+      const b = await owner();
+      // B has a checkout of its own, made first, so "the first checkout" is B's.
+      opened(await checkout(b.gymId, b.cookies, BIG));
+      const txn = opened(await checkout(a.gymId, a.cookies, BIG));
+      // Paddle carries what we sent, and the webhook body below lies about the gym:
+      // neither is read to place the plan.
+      expect(paddle.customData.get(txn.transactionId)).toEqual({ gym_id: a.gymId, checkout_id: txn.checkoutId });
+      const subId = paddle.pay(txn.transactionId);
+      expect((await signedWebhook(subscriptionEvent(subId, "subscription.created", { custom_data: { gym_id: b.gymId } }))).statusCode).toBe(200);
+      await runWorker();
+
+      expect((await paidRows(a.gymId)).map((r) => [r.status, r.provider_ref])).toEqual([["active", subId]]);
+      expect(await paidRows(b.gymId)).toEqual([]);
+      // B's owner cannot ask after A's checkout, under either gym.
+      expect((await post(`/v1/orgs/${b.gymId}/billing/checkouts/${txn.checkoutId}/sync`, {}, b.cookies)).statusCode).toBe(404);
+      expect((await post(`/v1/orgs/${a.gymId}/billing/checkouts/${txn.checkoutId}/sync`, {}, b.cookies)).statusCode).toBe(404);
+      // A's console shows the plan, its price and its month.
+      const mineRes = await get("/v1/orgs/mine", a.cookies);
+      const gym = (JSON.parse(mineRes.body) as { orgs: { id: string; subscription: Record<string, unknown> | null; consoleReadOnly: boolean | null }[] }).orgs.find(
+        (o) => o.id === a.gymId,
+      );
+      expect(gym?.subscription).toMatchObject({ status: "active", priceLabel: "$20", currentPeriodEnd: "2026-11-01T00:00:00.000Z", cancelAtPeriodEnd: false, seatCap: 5000 });
+      expect(gym?.consoleReadOnly).toBe(false);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "WORST THING: a subscription no checkout of ours made gives nobody a plan, and is cancelled and refunded",
+    async () => {
+      const a = await owner();
+      // Somebody pays a Paddle transaction our server never made (as Paddle.js with our
+      // public token could), naming gym A.
+      const stray = (await paddle.createTransaction({ priceId: BIG_PRICE, customData: { gym_id: a.gymId } }));
+      if (stray.kind !== "ok") throw new Error("fake Paddle refused");
+      const subId = paddle.pay(stray.value.id, "web");
+      await signedWebhook(subscriptionEvent(subId));
+      await runWorker();
+      expect(await paidRows(a.gymId)).toEqual([]);
+      expect(await sql`SELECT 1 FROM subscriptions WHERE provider_ref = ${subId}`).toHaveLength(0);
+      expect(paddle.cancelledSubs).toContain(subId);
+      expect(paddle.refunds).toContain(stray.value.id);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "WORST THING: a gym is never charged twice — a second Subscribe is refused, and a second paid plan is cancelled and refunded",
+    async () => {
+      const a = await owner();
+      const first = opened(await checkout(a.gymId, a.cookies, BIG));
+      const second = opened(await checkout(a.gymId, a.cookies, BIG));
+      // Starting the second cancelled the first at Paddle.
+      expect(paddle.cancelledTxns).toContain(first.transactionId);
+      const liveSub = paddle.pay(second.transactionId);
+      const synced = await post(`/v1/orgs/${a.gymId}/billing/checkouts/${second.checkoutId}/sync`, {}, a.cookies);
+      expect(synced.statusCode).toBe(200);
+      expect(JSON.parse(synced.body)).toMatchObject({ state: "paid", subscription: { status: "active" } });
+      const third = await checkout(a.gymId, a.cookies, BIG);
+      expect(third.statusCode).toBe(409);
+      expect(JSON.parse(third.body)).toMatchObject({ error: "already_subscribed" });
+
+      // The first window was paid anyway, in the instant before Paddle cancelled it.
+      const extraSub = paddle.pay(first.transactionId);
+      await signedWebhook(subscriptionEvent(extraSub));
+      await runWorker();
+      const rows = await paidRows(a.gymId);
+      expect(rows.map((r) => [r.provider_ref, r.status, r.cancel_reason])).toEqual([
+        [liveSub, "active", null],
+        [extraSub, "expired", "duplicate"],
+      ]);
+      expect(paddle.cancelledSubs).toContain(extraSub);
+      expect(paddle.refunds).toContain(first.transactionId);
+      expect(paddle.refunds).not.toContain(second.transactionId);
+      // Running it again asks Paddle nothing more.
+      const refundsBefore = paddle.refunds.length;
+      await signedWebhook(subscriptionEvent(extraSub, "subscription.canceled"));
+      await runWorker();
+      expect(paddle.refunds).toHaveLength(refundsBefore);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  const refundRow = async (transactionRef: string) =>
+    (await sql<{ state: string; reason: string }[]>`
+      SELECT state, reason FROM billing_refunds WHERE provider = 'paddle' AND transaction_ref = ${transactionRef}`)[0] ?? null;
+  const refundsOf = (transactionRef: string) => paddle.refunds.filter((id) => id === transactionRef).length;
+
+  /** A gym on a paid plan (the second of two windows) and the first window paid anyway. */
+  const payTwice = async (completeExtra: boolean) => {
+    const a = await owner();
+    const first = opened(await checkout(a.gymId, a.cookies, BIG));
+    const second = opened(await checkout(a.gymId, a.cookies, BIG));
+    paddle.pay(second.transactionId);
+    await post(`/v1/orgs/${a.gymId}/billing/checkouts/${second.checkoutId}/sync`, {}, a.cookies);
+    const extraSub = paddle.pay(first.transactionId, "api", completeExtra);
+    await signedWebhook(subscriptionEvent(extraSub));
+    return { a, extraTxn: first.transactionId, extraSub };
+  };
+
+  it(
+    "WORST THING: a second payment still finishing at Paddle is refunded once it finishes, and once only",
+    async () => {
+      const { a, extraTxn, extraSub } = await payTwice(false);
+      await runWorker();
+      expect(paddle.cancelledSubs).toContain(extraSub);
+      expect(refundsOf(extraTxn)).toBe(0);
+      expect(await refundRow(extraTxn)).toEqual({ state: "owed", reason: "duplicate" });
+
+      paddle.complete(extraTxn);
+      await runWorker(2 * 60_000);
+      expect(refundsOf(extraTxn)).toBe(1);
+      expect((await refundRow(extraTxn))?.state).toBe("requested");
+      await runWorker(20 * 60_000);
+      expect(refundsOf(extraTxn)).toBe(1);
+      expect((await paidRows(a.gymId)).filter((r) => r.status === "active")).toHaveLength(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "WORST THING: a refund Paddle fails to make is tried again until it is",
+    async () => {
+      const { extraTxn } = await payTwice(true);
+      paddle.refundFailures = 1;
+      await runWorker();
+      expect(refundsOf(extraTxn)).toBe(0);
+      expect((await refundRow(extraTxn))?.state).toBe("owed");
+      await runWorker(2 * 60_000);
+      expect(refundsOf(extraTxn)).toBe(1);
+      expect((await refundRow(extraTxn))?.state).toBe("requested");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a refund whose answer was lost is never asked for twice",
+    async () => {
+      const { extraTxn } = await payTwice(true);
+      paddle.loseRefundAnswer = true;
+      await runWorker();
+      expect(refundsOf(extraTxn)).toBe(1);
+      expect((await refundRow(extraTxn))?.state).toBe("owed");
+      await runWorker(2 * 60_000);
+      expect(refundsOf(extraTxn)).toBe(1);
+      expect((await refundRow(extraTxn))?.state).toBe("requested");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a subscription no checkout of ours made is refunded even when Paddle has already cancelled it",
+    async () => {
+      const stray = await paddle.createTransaction({ priceId: BIG_PRICE, customData: {} });
+      if (stray.kind !== "ok") throw new Error("fake Paddle refused");
+      const subId = paddle.pay(stray.value.id, "web");
+      paddle.update(subId, { status: "canceled", canceled_at: paddle.tick() });
+      await signedWebhook(subscriptionEvent(subId, "subscription.canceled"));
+      await runWorker();
+      expect(refundsOf(stray.value.id)).toBe(1);
+      expect(await refundRow(stray.value.id)).toEqual({ state: "requested", reason: "unmatched" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a payment made but not yet on the gym stops a second Subscribe, and puts the plan on the gym",
+    async () => {
+      const a = await owner();
+      const first = opened(await checkout(a.gymId, a.cookies, BIG));
+      // Paid, and the tab closed before the console confirmed it: no sync, no webhook yet.
+      const subId = paddle.pay(first.transactionId);
+      const before = paddle.created;
+      const again = await checkout(a.gymId, a.cookies, BIG);
+      expect(again.statusCode).toBe(409);
+      expect(JSON.parse(again.body)).toMatchObject({ error: "already_subscribed" });
+      expect(paddle.created).toBe(before);
+      expect((await paidRows(a.gymId)).map((r) => [r.provider_ref, r.status])).toEqual([[subId, "active"]]);
+
+      // Paid a moment ago, and Paddle has not made the subscription yet.
+      const b = await owner();
+      const pending = opened(await checkout(b.gymId, b.cookies, BIG));
+      const txn = paddle.txns.get(pending.transactionId);
+      if (txn === undefined) throw new Error("no transaction");
+      paddle.txns.set(pending.transactionId, { ...txn, status: "paid" });
+      const wait = await checkout(b.gymId, b.cookies, BIG);
+      expect(wait.statusCode).toBe(409);
+      expect(JSON.parse(wait.body)).toMatchObject({ error: "payment_in_progress" });
+      expect(paddle.cancelledTxns).not.toContain(pending.transactionId);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "staff without the billing tick may neither pay nor ask after a payment; a press still opening says so",
+    async () => {
+      const a = await owner();
+      const desk = await makeUser();
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${a.gymId}, ${desk.userId}, 'manager', ARRAY['members.read'])`;
+      const txn = opened(await checkout(a.gymId, a.cookies, BIG));
+      expect((await checkout(a.gymId, desk.cookies, BIG)).statusCode).toBe(403);
+      expect((await post(`/v1/orgs/${a.gymId}/billing/checkouts/${txn.checkoutId}/sync`, {}, desk.cookies)).statusCode).toBe(403);
+
+      await sql`
+        INSERT INTO billing_checkouts (gym_id, plan_id, idempotency_key, provider)
+        SELECT ${a.gymId}, id, 'still-opening', 'paddle' FROM plans WHERE code = ${BIG}`;
+      const replay = await checkout(a.gymId, a.cookies, BIG, "still-opening");
+      expect(replay.statusCode).toBe(409);
+      expect(JSON.parse(replay.body)).toMatchObject({ error: "checkout_in_progress" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a gym's payment is never cancelled because Paddle would not list its transactions",
+    async () => {
+      const a = await owner();
+      const txn = opened(await checkout(a.gymId, a.cookies, BIG));
+      const subId = paddle.pay(txn.transactionId);
+      await signedWebhook(subscriptionEvent(subId));
+      paddle.listRefused = true;
+      try {
+        const run = await runWorker();
+        expect(run.deferred).toBe(1);
+      } finally {
+        paddle.listRefused = false;
+      }
+      expect(paddle.cancelledSubs).not.toContain(subId);
+      await runWorker(2 * 60_000);
+      expect((await paidRows(a.gymId)).map((r) => [r.provider_ref, r.status])).toEqual([[subId, "active"]]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "two Subscribe presses at the same instant leave one window open",
+    async () => {
+      const a = await owner();
+      const [x, y] = await Promise.all([checkout(a.gymId, a.cookies, BIG), checkout(a.gymId, a.cookies, BIG)]);
+      // One opens; the other either opened first and was replaced, or is told so. Never a 500.
+      const answers = [x, y].map((r) => (r.statusCode === 200 ? "open" : `${String(r.statusCode)} ${(JSON.parse(r.body) as { error: string }).error}`));
+      expect(answers).toContain("open");
+      for (const answer of answers) expect(["open", "409 checkout_replaced"]).toContain(answer);
+      const open = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM billing_checkouts WHERE gym_id = ${a.gymId} AND state = 'open'`;
+      expect(open[0]?.n).toBe(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a forged, stale or repeated Paddle message changes nothing",
+    async () => {
+      const a = await owner();
+      const txn = opened(await checkout(a.gymId, a.cookies, BIG));
+      const subId = paddle.pay(txn.transactionId);
+      const event = subscriptionEvent(subId);
+      const kept = () => sql`SELECT 1 FROM webhook_events WHERE provider = 'paddle' AND event_id = ${event.event_id}`;
+
+      expect((await signedWebhook(event, ["pdl", "ntfset", "01" + "d".repeat(24), "NotOurSecret"].join("_"))).statusCode).toBe(401);
+      expect((await signedWebhook(event, WEBHOOK_SECRET, Math.floor(Date.now() / 1000) - 60)).statusCode).toBe(401);
+      const unsigned = await api().inject({ method: "POST", url: "/v1/webhooks/paddle", remoteAddress: nextIp(), headers: { "content-type": "application/json" }, payload: JSON.stringify(event) });
+      expect(unsigned.statusCode).toBe(401);
+      expect(await kept()).toHaveLength(0);
+
+      expect((await signedWebhook(event)).statusCode).toBe(200);
+      expect((await signedWebhook(event)).statusCode).toBe(200);
+      expect(await kept()).toHaveLength(1);
+      await runWorker();
+      await signedWebhook(subscriptionEvent(subId, "subscription.updated"));
+      await runWorker();
+      expect(await paidRows(a.gymId)).toHaveLength(1);
+      const activations = await sql`SELECT 1 FROM audit_log WHERE gym_id = ${a.gymId} AND action = 'billing.activated'`;
+      expect(activations).toHaveLength(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a payment that fails keeps the plan; Paddle ending it closes the console",
+    async () => {
+      const a = await owner();
+      const txn = opened(await checkout(a.gymId, a.cookies, BIG));
+      const subId = paddle.pay(txn.transactionId);
+      await signedWebhook(subscriptionEvent(subId));
+      await runWorker();
+
+      paddle.update(subId, { status: "past_due" });
+      await signedWebhook(subscriptionEvent(subId, "subscription.past_due"));
+      await runWorker();
+      expect((await paidRows(a.gymId))[0]?.status).toBe("past_due");
+
+      // An older record arriving late is not written over the newer one.
+      const older = paddle.subs.get(subId);
+      if (older === undefined) throw new Error("no subscription");
+      paddle.update(subId, { status: "canceled", canceled_at: paddle.tick() });
+      await signedWebhook(subscriptionEvent(subId, "subscription.canceled"));
+      await runWorker();
+      const ended = (await paidRows(a.gymId))[0];
+      expect(ended?.status).toBe("expired");
+      expect(ended?.ended_at).not.toBeNull();
+      paddle.subs.set(subId, { ...older, status: "active" });
+      await signedWebhook(subscriptionEvent(subId, "subscription.updated"));
+      await runWorker();
+      expect((await paidRows(a.gymId))[0]?.status).toBe("expired");
+
+      const mineRes = await get("/v1/orgs/mine", a.cookies);
+      const gym = (JSON.parse(mineRes.body) as { orgs: { id: string; consoleReadOnly: boolean | null }[] }).orgs.find((o) => o.id === a.gymId);
+      expect(gym?.consoleReadOnly).toBe(true);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "the same Idempotency-Key opens the same window; for another plan it is refused",
+    async () => {
+      const a = await owner();
+      const before = paddle.created;
+      const one = opened(await checkout(a.gymId, a.cookies, BIG, "key-1"));
+      const again = opened(await checkout(a.gymId, a.cookies, BIG, "key-1"));
+      expect(again.transactionId).toBe(one.transactionId);
+      expect(paddle.created).toBe(before + 1);
+      const other = await checkout(a.gymId, a.cookies, SMALL, "key-1");
+      expect(other.statusCode).toBe(422);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "refusals: a stranger, no key, an unknown plan, a rupee gym, a trial, too many members, a wrong price, Paddle down",
+    async () => {
+      const a = await owner();
+      const stranger = await makeUser();
+      expect((await checkout(a.gymId, stranger.cookies, BIG)).statusCode).toBe(404);
+      expect((await post(`/v1/orgs/${a.gymId}/billing/checkout`, { planCode: BIG }, a.cookies)).statusCode).toBe(400);
+      expect((await checkout(a.gymId, a.cookies, "org_nope")).statusCode).toBe(404);
+      expect((await checkout(a.gymId, a.cookies, "org_b1_in_m")).statusCode).toBe(404);
+
+      const india = await owner("IN");
+      const rupees = await checkout(india.gymId, india.cookies, "org_b1_in_m");
+      expect(rupees.statusCode).toBe(409);
+      expect(JSON.parse(rupees.body)).toMatchObject({ error: "pay_online_soon" });
+
+      const trialling = await owner();
+      expect((await post(`/v1/orgs/${trialling.gymId}/trial`, {}, trialling.cookies)).statusCode).toBe(200);
+      expect(JSON.parse((await checkout(trialling.gymId, trialling.cookies, BIG)).body)).toMatchObject({ error: "trial_running" });
+
+      const full = await owner();
+      for (const person of [await makeUser(), await makeUser()]) {
+        await sql`INSERT INTO gym_members (gym_id, user_id) VALUES (${full.gymId}, ${person.userId})`;
+      }
+      const small = await checkout(full.gymId, full.cookies, SMALL);
+      expect(small.statusCode).toBe(409);
+      expect(JSON.parse(small.body)).toMatchObject({ error: "plan_too_small" });
+      const plans = JSON.parse((await get(`/v1/orgs/${full.gymId}/plans`, full.cookies)).body) as { plans: { code: string; fits: boolean }[]; payOnline: string };
+      expect(plans.payOnline).toBe("available");
+      expect(plans.plans.find((p) => p.code === SMALL)?.fits).toBe(false);
+      expect(plans.plans.find((p) => p.code === BIG)?.fits).toBe(true);
+      const indianPlans = JSON.parse((await get(`/v1/orgs/${india.gymId}/plans`, india.cookies)).body) as { payOnline: string };
+      expect(indianPlans.payOnline).toBe("coming_soon");
+
+      paddle.wrongAmount = true;
+      const wrong = await checkout(a.gymId, a.cookies, BIG);
+      expect(wrong.statusCode).toBe(503);
+      const lastTxn = [...paddle.txns.keys()].at(-1);
+      expect(paddle.cancelledTxns).toContain(lastTxn);
+
+      paddle.down = true;
+      try {
+        expect((await checkout(a.gymId, a.cookies, BIG)).statusCode).toBe(503);
+      } finally {
+        paddle.down = false;
+      }
+      const failed = await sql<{ state: string }[]>`SELECT state FROM billing_checkouts WHERE gym_id = ${a.gymId} ORDER BY created_at`;
+      expect(failed.map((r) => r.state)).toEqual(["failed", "failed"]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+});

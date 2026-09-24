@@ -39,6 +39,9 @@ import { registerOrgRoutes, type OrgRouteOverrides } from "./modules/orgs/routes
 import { inviteSettings } from "./modules/orgs/invites/settings.js";
 import { registerUnsubscribeRoutes } from "./modules/orgs/invites/unsubscribe.js";
 import { registerResendWebhookRoutes } from "./modules/webhooks/resendRoutes.js";
+import type { PaddleApi } from "./modules/billing/paddle.js";
+import { registerBillingRoutes } from "./modules/billing/routes.js";
+import { paddleSettings } from "./modules/billing/settings.js";
 import { OrgsError } from "./modules/orgs/service.js";
 import { ExportError } from "./modules/privacy/export.js";
 import { safeErrorSerializer, safeRequestSerializer, scrubbedForSentry } from "./logSafety.js";
@@ -69,6 +72,8 @@ export interface BuildAppOverrides {
   /** Tests read what Sentry would be sent through a transport that records it;
    *  unset, the SDK sends to SENTRY_DSN. */
   sentryTransport?: Sentry.NodeOptions["transport"];
+  /** Tests replace Paddle's API with a fake; the keys in the config still switch it on. */
+  paddleApi?: PaddleApi;
   /** Tests hold a password check open to race it against an address's first proof;
    *  unset is argon2id. */
   passwordHasher?: PasswordHasher;
@@ -275,13 +280,24 @@ export async function buildApp(
   registerNutritionRoutes(app, { sql, redis, config, reportError }, overrides.nutrition ?? {});
   registerGeoRoutes(app, { sql, redis, config }, overrides.geo ?? {});
   const invites = inviteSettings(config);
-  registerOrgRoutes(app, { sql, redis, invites }, overrides.orgs ?? {});
+  const paddle = paddleSettings(config, overrides.paddleApi);
+  registerOrgRoutes(app, { sql, redis, invites, onlinePayments: paddle !== null }, overrides.orgs ?? {});
   // The unsubscribe link in every invitation: public, and not under /v1/orgs.
   registerUnsubscribeRoutes(app, { sql, redis, settings: invites });
   // What Resend reports about each email: signed, kept once, acted on by the worker.
   registerResendWebhookRoutes(app, {
     sql,
     secret: config.RESEND_WEBHOOK_SECRET,
+    nowSeconds: () => Math.floor(Date.now() / 1000),
+  });
+  // A gym paying us through Paddle, and Paddle's webhook.
+  registerBillingRoutes(app, {
+    sql,
+    redis,
+    paddle,
+    log: app.log,
+    now: () => new Date(),
+    webhookSecret: config.PADDLE_WEBHOOK_SECRET,
     nowSeconds: () => Math.floor(Date.now() / 1000),
   });
 

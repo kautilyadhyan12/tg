@@ -33,6 +33,8 @@ import {
   orgApplicationPageSchema,
   orgCodeMutationResponseSchema,
   orgCodesResponseSchema,
+  orgCheckoutResponseSchema,
+  orgCheckoutSyncResponseSchema,
   orgMemberPageSchema,
   orgOverviewResponseSchema,
   orgPlansResponseSchema,
@@ -161,6 +163,25 @@ export const orgService = {
    *  by 100 (R10.4). */
   getPlans: (gymId) =>
     readThrough(orgPlansResponseSchema, "your gym's plans", authApi.get(`/v1/orgs/${gymId}/plans`)),
+
+  /** POST /v1/orgs/:gymId/billing/checkout — our server makes a Paddle payment for one
+   *  plan at its own price, and answers what Paddle's window needs. `key` is the press's
+   *  Idempotency-Key: the same key again reopens the same payment, never a second one. */
+  startCheckout: (gymId, planCode, key) =>
+    readThrough(
+      orgCheckoutResponseSchema,
+      'that payment',
+      authApi.post(`/v1/orgs/${gymId}/billing/checkout`, { planCode }, { headers: { 'Idempotency-Key': key } }),
+    ),
+
+  /** POST …/billing/checkouts/:checkoutId/sync — after Paddle's window says it is paid:
+   *  `waiting` until the plan is on the gym, then `paid` with the plan. Safe to repeat. */
+  syncCheckout: (gymId, checkoutId) =>
+    readThrough(
+      orgCheckoutSyncResponseSchema,
+      'your payment',
+      authApi.post(`/v1/orgs/${gymId}/billing/checkouts/${checkoutId}/sync`, {}),
+    ),
 
   /** GET /v1/orgs/:gymId/hours — when this gym is open (Kd :26624, :26684).
    *

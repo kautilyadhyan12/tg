@@ -1724,7 +1724,7 @@ gym's wi-fi at an induction (ROADMAP Stage 4 item 10's lesson); the list read 60
 
 **Out of 3b-ii-b (built 2026-09-24).** "Not me", a deleted account's invitations waiting again, and a person who pays for their own plan (RULINGS 2026-09-23, gaps A, B, D; 2026-09-24).
 
-- Migration `0041`: `gym_invites.not_me_at`, only on a declined invitation (a CHECK); every other change of state clears it.
+- Migration `0042` (numbered after Folder B's `0041`, which merged first): `gym_invites.not_me_at`, only on a declined invitation (a CHECK); every other change of state clears it.
 - **"Not me" in the email**: a link of its own, `/v1/email/not-me?t=…`, whose token is the unsubscribe token's shape with a purpose of its own in the MAC, so neither link can act as the other. GET shows one button and changes nothing (mail scanners open links); POST declines and marks the invitation. Its pages name the gym and nothing else. It never undoes a Join ("Somebody has already joined {gym} by signing in with this email address. If that wasn't you, contact {gym}.") and a withdrawn invitation stays withdrawn. 20 an hour a link, 5,000 an address.
 - **"Not me" on the Join screen**: `POST /v1/orgs/invitations/:id/not-me`, the same checks as No thanks. The person can still Join afterwards (a mis-tap), which clears the mark.
 - **Staff told**: `GET /v1/orgs/:gymId/member-list/not-me` (`members.confirm`) lists each current record at an address that said Not me; the console's Members screen shows them in a box, "Check the email address you have for them" (5b moves it onto the person's row). Send again to that address is refused (`said_not_me`) until the address is corrected, which is a different invitation.

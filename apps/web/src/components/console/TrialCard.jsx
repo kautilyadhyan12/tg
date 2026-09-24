@@ -114,6 +114,10 @@ export default function TrialCard({ org }) {
 
   const trialing = isTrialing(org);
   const endsOn = trialing ? trialEndDateLabel(org.subscription.trialEndsAt) : null;
+  // A paid plan: its price and its month, both the server's.
+  const price = trialing ? null : org.subscription.priceLabel ?? null;
+  // Only a plan in good standing renews; a failed payment says so in the banner instead.
+  const periodEnd = org.subscription.status === 'active' ? trialEndDateLabel(org.subscription.currentPeriodEnd) : null;
 
   return (
     <ConsoleCard>
@@ -121,8 +125,13 @@ export default function TrialCard({ org }) {
         Plan
       </div>
       <div className="font-semibold" style={{ color: '#fff' }}>
-        {trialing ? 'Free trial' : 'On a plan'}
+        {trialing ? 'Free trial' : price !== null ? `${price} a month` : 'On a plan'}
       </div>
+      {periodEnd !== null ? (
+        <div className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.6)' }}>
+          {org.subscription.cancelAtPeriodEnd ? `Ends ${periodEnd}` : `Renews ${periodEnd}`}
+        </div>
+      ) : null}
       {/* The end date is stated only while the gym is actually TRIALLING.
           `trialEndsAt` is never cleared when a subscription leaves that status,
           so a paying gym answers with the date its old trial ran out — printing

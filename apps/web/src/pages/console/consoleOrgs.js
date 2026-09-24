@@ -296,6 +296,18 @@ export function applyStartedTrial(gymId, subscription) {
   });
 }
 
+/** A gym just paid: the server's own answer goes into the kept row at once, as
+ *  `applyStartedTrial` does for a trial, and the console is writable again. */
+export function applyPaidPlan(gymId, subscription) {
+  if (typeof gymId !== 'string' || gymId === '' || subscription == null) return;
+  const forUserId = getUserId();
+  if (state.status !== 'ready' || state.forUserId !== forUserId) return;
+  if (!Array.isArray(state.orgs)) return;
+  publish({
+    ...state,
+    orgs: state.orgs.map((o) => (o?.id === gymId ? { ...o, subscription, consoleReadOnly: false } : o)),
+  });
+}
 /** Written out as a named step rather than two inline assignments so that ONE
  *  line names this guarantee and a mutant can point at it (C53). `resetConsoleOrgs`
  *  deliberately does NOT call it — it also has to bump the generation, because

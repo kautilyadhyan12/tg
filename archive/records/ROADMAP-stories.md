@@ -134,3 +134,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 ## Stage 5 — The phone app
 
 8. ~~**Phone check-in**~~ **STRUCK 2026-09-21, never built** (RULINGS that day: the scan at the front desk replaces it; the phone app's part of check-in is SHOWING THE PASS, spec §12.2, which joins item 2's screens). Kept for its words: (RULINGS 2026-09-17): the phone notices it is at the gym — a fence around the gym's address, which the gym types once in Settings — and asks "At {gym}? Tap to check in": one prompted tap that cannot be sent from home, recorded as a visit with its own source beside the tap and the QR, so it feeds active days (Stage 2 item 1a) unchanged. Needs the location permission and says why; nothing stored beyond the visit, no route. The QR poster stays as the backup for a gym without its own entry system.
+
+## Stage 3 — Money
+
+1a. [x] **A gym pays through Paddle** (test mode). Subscribe on the plan prompt, Paddle's checkout at our price (tax added on top), the signed webhook and worker, the one subscription rule; a second paid plan, or one no checkout of ours made, is cancelled at Paddle and refunded, the refund retried until Paddle holds it (`billing_refunds`). Run against Kd's Paddle sandbox (prices, checkout, his payment, the webhook on Paddle's real record); the top band became 2,000 members at his click-through. Merged 2026-09-24 on Kd's word (*"merge"*; PR #103, CI green).

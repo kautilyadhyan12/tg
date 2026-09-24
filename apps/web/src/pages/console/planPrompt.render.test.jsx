@@ -47,11 +47,15 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getOverview: vi.fn(),
       getAttendanceDay: vi.fn(),
       getPlans: vi.fn(),
+      startCheckout: vi.fn(),
+      syncCheckout: vi.fn(),
       startTrial: vi.fn(),
       createOrg: vi.fn(),
     },
   };
 });
+
+vi.mock('../../utils/paddleCheckout', () => ({ openPaddleCheckout: vi.fn(), closePaddleCheckout: vi.fn() }));
 
 const logout = vi.fn();
 vi.mock('../../context/AuthContext', () => ({
@@ -59,6 +63,7 @@ vi.mock('../../context/AuthContext', () => ({
 }));
 
 const { orgService } = await import('../../api/orgsApi');
+const { openPaddleCheckout, closePaddleCheckout } = await import('../../utils/paddleCheckout');
 const { resetConsoleOrgs } = await import('./consoleOrgs');
 const { setCurrentUserId } = await import('../../utils/storage');
 const ConsoleLayout = (await import('../../components/console/ConsoleLayout')).default;
@@ -564,10 +569,7 @@ describe('the forced subscribe prompt', () => {
   });
 
   it('promises no payment it cannot take', async () => {
-    // Paddle is unbuilt, the admin "mark as paid" tool is unbuilt, and the
-    // contact channel is owed — Kd was told all three before ruling. So the arm
-    // says we will be in touch, as a sentence: a button here would either do
-    // nothing when pressed or promise a message nothing can send.
+    // A server with no Paddle set up says so, and draws no button that could only fail.
     orgService.getMine.mockResolvedValue(mineIs(spent));
     renderConsole(Overview);
 
@@ -626,6 +628,87 @@ describe('the forced subscribe prompt', () => {
 
     expect(await screen.findByTestId('plan-list')).toBeTruthy();
     expect(screen.getByText('$35 a month')).toBeTruthy();
+  });
+});
+
+// ── PAYING THROUGH PADDLE (ROADMAP Stage 3 item 1a) ─────────────────────────
+
+describe('subscribing from the prompt', () => {
+  const spent = { ...ORG, ownerTrialUsed: true };
+  const OFFERS = [
+    { code: 'org_b1_us_m', priceLabel: '$79', currency: 'USD', interval: 'month', seatCap: 200, fits: false },
+    { code: 'org_b2_us_m', priceLabel: '$129', currency: 'USD', interval: 'month', seatCap: 500, fits: true },
+  ];
+  const PAID = {
+    status: 'active',
+    trialEndsAt: null,
+    seatCap: 500,
+    priceLabel: '$129',
+    currentPeriodEnd: '2026-11-01T00:00:00.000Z',
+    cancelAtPeriodEnd: false,
+  };
+
+  it('opens Paddle for the plan pressed, and the prompt goes once the payment reaches the gym', async () => {
+    orgService.getMine.mockResolvedValueOnce(mineIs(spent));
+    orgService.getMine.mockResolvedValue(mineIs({ ...spent, subscription: PAID, consoleReadOnly: false }));
+    orgService.getPlans.mockResolvedValue({ data: { plans: OFFERS, payOnline: 'available' } });
+    orgService.startCheckout.mockResolvedValue({
+      data: { checkoutId: 'c1', provider: 'paddle', environment: 'sandbox', clientToken: 'test_x', transactionId: 'txn_1' },
+    });
+    orgService.syncCheckout.mockResolvedValueOnce({ data: { state: 'waiting' } });
+    orgService.syncCheckout.mockResolvedValue({ data: { state: 'paid', subscription: PAID } });
+    renderConsole(Overview);
+
+    await screen.findByTestId('plan-list');
+    expect(screen.getByText(/tax is added at checkout/i)).toBeTruthy();
+    // Only the plan the gym fits has a button.
+    const buttons = screen.getAllByRole('button', { name: /^subscribe$/i });
+    expect(buttons).toHaveLength(1);
+    fireEvent.click(buttons[0]);
+
+    await waitFor(() => expect(openPaddleCheckout).toHaveBeenCalledTimes(1));
+    // The plan and a key for this press; never an amount.
+    expect(orgService.startCheckout).toHaveBeenCalledWith(GYM_ID, 'org_b2_us_m', expect.stringMatching(/^[0-9a-f-]{36}$/));
+    const opened = openPaddleCheckout.mock.calls[0][0];
+    expect(opened).toMatchObject({ environment: 'sandbox', clientToken: 'test_x', transactionId: 'txn_1' });
+
+    opened.onEvent({ type: 'completed', transactionId: 'txn_1' });
+    expect(await screen.findByText(/confirming your payment/i)).toBeTruthy();
+    await waitFor(() => expect(screen.queryByTestId('plan-modal')).toBeNull(), { timeout: 5000 });
+    expect(orgService.syncCheckout).toHaveBeenCalledWith(GYM_ID, 'c1');
+    expect(closePaddleCheckout).toHaveBeenCalled();
+  }, 10_000);
+
+  it('says why a plan the gym has outgrown has no button', async () => {
+    orgService.getMine.mockResolvedValue(mineIs(spent));
+    orgService.getPlans.mockResolvedValue({ data: { plans: OFFERS, payOnline: 'available' } });
+    renderConsole(Overview);
+    await screen.findByTestId('plan-list');
+    expect(screen.getByText(/more members than this plan allows/i)).toBeTruthy();
+  });
+
+  it('tells an Indian gym paying in rupees is coming soon, with no button', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...spent, country: 'IN', currencyDisplay: 'INR' }));
+    orgService.getPlans.mockResolvedValue({
+      data: { plans: [{ code: 'org_b1_in_m', priceLabel: '₹8,500', currency: 'INR', interval: 'month', seatCap: 200, fits: true }], payOnline: 'coming_soon' },
+    });
+    renderConsole(Overview);
+    await screen.findByTestId('plan-list');
+    expect(screen.getByText(/paying online in rupees is coming soon/i)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /subscribe/i })).toBeNull();
+  });
+
+  it('prints the server’s refusal and opens nothing', async () => {
+    orgService.getMine.mockResolvedValue(mineIs(spent));
+    orgService.getPlans.mockResolvedValue({ data: { plans: OFFERS, payOnline: 'available' } });
+    orgService.startCheckout.mockRejectedValue({
+      response: { status: 409, data: { error: 'plan_too_small', message: 'You have 250 members, more than this plan’s 200. Choose a bigger plan.' } },
+    });
+    renderConsole(Overview);
+    await screen.findByTestId('plan-list');
+    fireEvent.click(screen.getByRole('button', { name: /^subscribe$/i }));
+    expect(await screen.findByText(/choose a bigger plan/i)).toBeTruthy();
+    expect(openPaddleCheckout).not.toHaveBeenCalled();
   });
 });
 

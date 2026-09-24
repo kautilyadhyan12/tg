@@ -1988,8 +1988,8 @@ const MUTANTS = [
     suite: PLANS_SUITE,
     why: "OWNERSHIP: the price list drops to a privilege every TRAINER holds, so anybody the gym has hired can read what the gym is quoted. It is the same seam :15534's C/H-1 was, and Kd's ruling of 2026-08-28 is that this prompt stops only the person who can actually pay",
     expect: 'a trainer is refused the price list',
-    from: '  const { org } = await requirePrivilege(deps, gymId, userId, "billing.manage");\n  const rows = await repo.listOrgPlansForCurrency(deps.sql, org.currencyDisplay);',
-    to: '  const { org } = await requirePrivilege(deps, gymId, userId, "members.read");\n  const rows = await repo.listOrgPlansForCurrency(deps.sql, org.currencyDisplay);',
+    from: '  const { org } = await requirePrivilege(deps, gymId, userId, "billing.manage");\n  const [rows, used] = await Promise.all([',
+    to: '  const { org } = await requirePrivilege(deps, gymId, userId, "members.read");\n  const [rows, used] = await Promise.all([',
   },
   {
     id: 'O147',
