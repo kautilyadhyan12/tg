@@ -609,7 +609,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
     -- the LIMIT is what makes that a property of the QUERY rather than a fact
     -- this reader inherits from an index it does not name.
     LEFT JOIN LATERAL (
-      SELECT su.status, su.trial_ends_at, CASE WHEN su.status = 'trialing' THEN LEAST(p.seat_cap, su.trial_seat_cap) ELSE p.seat_cap END AS seat_cap,
+      SELECT su.status, su.trial_ends_at, LEAST(p.seat_cap, su.trial_seat_cap) AS seat_cap,
              p.seat_cap AS plan_seat_cap, p.price_minor, p.currency,
              su.current_period_end, su.cancel_at_period_end, su.provider
       FROM subscriptions su JOIN plans p ON p.id = su.plan_id
@@ -1470,9 +1470,10 @@ export async function claimSeatByInvitation(
  *
  *  Status set is §4.1's, so `past_due` still grants during v1 §10's grace. */
 async function seatCapFor(tx: SqlOrTx, gymId: string): Promise<number | null> {
-  // A trial the gym has paid for keeps its free trial's limit until the first payment.
+  // A trial the gym has paid for keeps its free trial's limit until a payment is taken
+  // (LEAST ignores the null every other row has).
   const rows = await tx<{ seat_cap: number | null }[]>`
-    SELECT CASE WHEN s.status = 'trialing' THEN LEAST(p.seat_cap, s.trial_seat_cap) ELSE p.seat_cap END AS seat_cap
+    SELECT LEAST(p.seat_cap, s.trial_seat_cap) AS seat_cap
     FROM subscriptions s JOIN plans p ON p.id = s.plan_id
     WHERE s.owner_type = 'gym' AND s.owner_id = ${gymId}
       AND s.status IN ('trialing','active','past_due')`;
@@ -1861,7 +1862,7 @@ export async function startGymTrial(
     // forbids the shared-`sql` shape, and :14493 Low-2 is what happens when two
     // readers of one rule drift.
     const live = await tx<RawGymSubscription[]>`
-      SELECT s.status, s.trial_ends_at, CASE WHEN s.status = 'trialing' THEN LEAST(p.seat_cap, s.trial_seat_cap) ELSE p.seat_cap END AS seat_cap,
+      SELECT s.status, s.trial_ends_at, LEAST(p.seat_cap, s.trial_seat_cap) AS seat_cap,
              p.seat_cap AS plan_seat_cap, p.price_minor, p.currency,
              s.current_period_end, s.cancel_at_period_end, s.provider
       FROM subscriptions s JOIN plans p ON p.id = s.plan_id
@@ -1959,7 +1960,7 @@ export async function startGymTrial(
 interface RawGymSubscription {
   status: string;
   trial_ends_at: Date | null;
-  /** The limit in force: a paid trial's is its free trial's until the first payment. */
+  /** The limit in force: a paid trial's is its free trial's until a payment is taken. */
   seat_cap: number | null;
   plan_seat_cap: number | null;
   price_minor: number;
@@ -1986,7 +1987,7 @@ function toGymSubscription(raw: RawGymSubscription): GymSubscriptionRow {
 /** The gym's live plan, or null: §4.1's three granting statuses. */
 export async function gymLiveSubscription(sql: SqlOrTx, gymId: string): Promise<GymSubscriptionRow | null> {
   const rows = await sql<RawGymSubscription[]>`
-    SELECT s.status, s.trial_ends_at, CASE WHEN s.status = 'trialing' THEN LEAST(p.seat_cap, s.trial_seat_cap) ELSE p.seat_cap END AS seat_cap,
+    SELECT s.status, s.trial_ends_at, LEAST(p.seat_cap, s.trial_seat_cap) AS seat_cap,
            p.seat_cap AS plan_seat_cap, p.price_minor, p.currency,
            s.current_period_end, s.cancel_at_period_end, s.provider
     FROM subscriptions s JOIN plans p ON p.id = s.plan_id

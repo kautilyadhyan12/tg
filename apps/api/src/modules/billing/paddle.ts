@@ -79,6 +79,10 @@ export interface PaddleApi {
   changePrice(subscriptionId: string, priceId: string, mode: ProrationMode): Promise<PaddleResult<PaddleSubscription>>;
   /** A catalogue price: a trial checkout copies its product and name. */
   getPrice(id: string): Promise<PaddleResult<PaddlePrice>>;
+  /** Move a trialing subscription's first charge to `at` (only `do_not_bill` is allowed). */
+  moveTrialEnd(subscriptionId: string, at: string): Promise<PaddleResult<PaddleSubscription>>;
+  /** End a subscription's trial now: Paddle charges the first payment at once. */
+  activateTrial(subscriptionId: string): Promise<PaddleResult<PaddleSubscription>>;
 }
 
 /** The catalogue calls `tools/paddle-prices.ts` makes. */
@@ -252,6 +256,18 @@ export function createPaddleApi(opts: {
           on_payment_failure: "prevent_change",
         }),
       );
+    },
+    async moveTrialEnd(subscriptionId, at) {
+      const path = subPath(subscriptionId);
+      if (path === null) return { kind: "not_found" };
+      return unwrap(
+        await call("PATCH", path, paddleEnvelope(paddleSubscriptionSchema), { next_billed_at: at, proration_billing_mode: "do_not_bill" }),
+      );
+    },
+    async activateTrial(subscriptionId) {
+      const path = subPath(subscriptionId);
+      if (path === null) return { kind: "not_found" };
+      return unwrap(await call("POST", `${path}/activate`, paddleEnvelope(paddleSubscriptionSchema)));
     },
     async getPrice(id) {
       if (!/^pri_[a-z\d]{26}$/.test(id)) return { kind: "not_found" };

@@ -472,8 +472,13 @@ export type ApplyResult =
   | "set_aside";
 
 
+/** A Paddle trial may end up to this much after the gym's own, never more. */
+const TRIAL_END_SLACK_MS = 60_000;
+/** Paddle refuses changes this close to a charge; a trial ending sooner is activated. */
+const TRIAL_MOVE_MIN_MS = 60 * 60 * 1000;
+
 /** Fetch one subscription from Paddle and write it onto its gym through the one rule. */
-export async function applyPaddleSubscription(deps: BillingDeps, subscriptionId: string): Promise<ApplyResult> {
+export async function applyPaddleSubscription(deps: BillingDeps, subscriptionId: string, align = true): Promise<ApplyResult> {
   const paddle = deps.paddle;
   if (paddle === null) return "retry";
   const fetched = await paddle.api.getSubscription(subscriptionId);
@@ -534,7 +539,31 @@ export async function applyPaddleSubscription(deps: BillingDeps, subscriptionId:
     return "unchanged";
   }
   deps.log.info({ event: "billing.applied", gymId, decision: outcome.decision.kind }, "a gym's paid plan changed");
+  if (align && sub.status === "trialing") return await alignTrial(deps, paddle, sub, gymId);
   return "applied";
+}
+
+/** A Paddle trial never runs past the gym's own free trial (1c-ii round one, H2). Paddle
+ *  counts whole days from when the card is saved, so a checkout paid late, or rounded up,
+ *  would give free days the gym never had: its first charge is moved back to the gym's own
+ *  trial end, or taken now if that has passed. Safe to run on every event: once Paddle's
+ *  date is the gym's, nothing is asked. */
+async function alignTrial(deps: BillingDeps, paddle: PaddleSettings, sub: PaddleSubscription, gymId: string): Promise<ApplyResult> {
+  const ownEnd = await repo.ownTrialEnd(deps.sql, gymId);
+  const paddleEnd = sub.next_billed_at === null || sub.next_billed_at === undefined ? null : Date.parse(sub.next_billed_at);
+  const now = deps.now().getTime();
+  if (ownEnd !== null && paddleEnd !== null && paddleEnd <= ownEnd.getTime() + TRIAL_END_SLACK_MS) return "applied";
+  const changed =
+    ownEnd !== null && ownEnd.getTime() - now >= TRIAL_MOVE_MIN_MS
+      ? await paddle.api.moveTrialEnd(sub.id, ownEnd.toISOString())
+      : await paddle.api.activateTrial(sub.id);
+  if (changed.kind !== "ok") {
+    const refusal = changed.kind === "refused" ? { status: changed.status, code: changed.code } : {};
+    deps.log.error({ event: "billing.trial_not_aligned", gymId, result: changed.kind, ...refusal }, "a Paddle trial runs past the gym's own; retrying");
+    return "retry";
+  }
+  deps.log.info({ event: "billing.trial_aligned", gymId, activated: changed.value.status !== "trialing" }, "a Paddle trial now ends with the gym's own");
+  return await applyPaddleSubscription(deps, sub.id, false);
 }
 
 export function toSnapshot(sub: PaddleSubscription, planId: string): Snapshot {

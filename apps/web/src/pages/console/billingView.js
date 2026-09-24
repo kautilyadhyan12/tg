@@ -225,10 +225,11 @@ export function chosenSeatCap(sub) {
 }
 
 /** "Up to 500 members from 5 Oct, when your first payment is taken." for a paid trial whose
- *  chosen size is bigger than the trial's; null otherwise. */
+ *  chosen size is bigger than the trial's; without a date once that first charge has failed
+ *  (the size still waits for it); null otherwise. */
 export function nextSizeText(sub, orgType) {
-  if (sub?.status !== 'trialing' || !Number.isFinite(sub?.nextSeatCap)) return null;
-  const date = trialEndDateLabel(sub.currentPeriodEnd);
+  if (!Number.isFinite(sub?.nextSeatCap)) return null;
+  const date = sub.status === 'trialing' ? trialEndDateLabel(sub.currentPeriodEnd) : null;
   const who = orgWords(orgType).people;
   return date === null
     ? `Up to ${sub.nextSeatCap} ${who} once your first payment is taken.`

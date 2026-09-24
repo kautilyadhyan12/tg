@@ -219,6 +219,18 @@ async function freeTrialSeatCap(tx: SqlOrTx, gymId: string): Promise<number | nu
   return band[0]?.seat_cap ?? null;
 }
 
+/** When the gym's own free trial ends, or null if it never had one: a Paddle trial it paid
+ *  for may not run past it (1c-ii round one, H2). */
+export async function ownTrialEnd(sql: SqlOrTx, gymId: string): Promise<Date | null> {
+  const rows = await sql<{ trial_ends_at: Date }[]>`
+    SELECT trial_ends_at FROM subscriptions
+    WHERE owner_type = 'gym' AND owner_id = ${gymId}
+      AND provider IN ('none','pilot') AND trial_ends_at IS NOT NULL
+    ORDER BY created_at DESC
+    LIMIT 1`;
+  return rows[0]?.trial_ends_at ?? null;
+}
+
 /** The gym's own free trial (no card, nobody charging), as opposed to a Paddle trial. */
 function isLocalTrial(row: { status: string; provider: string }): boolean {
   return row.status === "trialing" && (row.provider === "none" || row.provider === "pilot");
@@ -380,6 +392,8 @@ export async function applySnapshot(
         SET status = ${decision.status}, plan_id = ${s.planId}, current_period_end = ${s.currentPeriodEnd},
             -- Still in the paid trial: it ends the day Paddle charges.
             trial_ends_at = CASE WHEN ${decision.status} = 'trialing' THEN ${s.currentPeriodEnd}::timestamptz ELSE trial_ends_at END,
+            -- A payment taken: the chosen size starts; a failed first charge keeps the trial's.
+            trial_seat_cap = CASE WHEN ${decision.status} = 'active' THEN NULL ELSE trial_seat_cap END,
             cancel_at_period_end = ${s.cancelAtPeriodEnd}, provider_updated_at = ${s.updatedAt},
             provider_customer_ref = COALESCE(${input.customerId}, provider_customer_ref),
             ended_at = CASE WHEN ${decision.status} = 'expired' THEN COALESCE(ended_at, ${input.now}) ELSE NULL END,

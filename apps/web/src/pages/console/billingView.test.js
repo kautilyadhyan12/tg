@@ -763,7 +763,9 @@ describe('a paid trial’s chosen size', () => {
   it('says when the chosen size starts, and nothing once it has', () => {
     expect(nextSizeText(sub, 'gym')).toBe(`Up to 500 members from ${trialEndDateLabel(inDays(6))}, when your first payment is taken.`);
     expect(nextSizeText({ ...sub, nextSeatCap: null }, 'gym')).toBeNull();
-    expect(nextSizeText({ ...sub, status: 'active' }, 'gym')).toBeNull();
+    expect(nextSizeText({ ...sub, status: 'active', nextSeatCap: null }, 'gym')).toBeNull();
+    // The first charge failed: the size still waits for it, and the trial's date has passed.
+    expect(nextSizeText({ ...sub, status: 'past_due' }, 'gym')).toBe('Up to 500 members once your first payment is taken.');
   });
 });
 

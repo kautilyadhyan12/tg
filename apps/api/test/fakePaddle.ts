@@ -40,6 +40,11 @@ export class FakePaddle implements PaddleApi {
   changeDelayMs = 0;
   /** The trial checkouts asked for. */
   trialCheckouts: TrialCheckout[] = [];
+  /** Make the next trial checkout's price carry another plan's code, or another length. */
+  wrongTrial: "code" | "days" | null = null;
+  /** Trials moved (and to when), and trials ended at once. */
+  trialMoves: { subscriptionId: string; at: string }[] = [];
+  activations: string[] = [];
   static readonly PRODUCT = "pro_" + "0".repeat(26);
 
   constructor(private readonly prices: Record<string, { amount: string; currency: string }>) {}
@@ -69,13 +74,17 @@ export class FakePaddle implements PaddleApi {
             unit_price: { amount: this.wrongAmount ? "1" : price.amount, currency_code: price.currency },
             ...(trial === undefined
               ? {}
-              : { trial_period: { interval: "day" as const, frequency: trial.trialDays }, custom_data: { plan_code: trial.planCode } }),
+              : {
+                  trial_period: { interval: "day" as const, frequency: this.wrongTrial === "days" ? trial.trialDays + 30 : trial.trialDays },
+                  custom_data: { plan_code: this.wrongTrial === "code" ? "zz_someone_elses" : trial.planCode },
+                }),
           },
         },
       ],
       details: { totals: { grand_total: trial === undefined ? price.amount : "0" } },
     };
     this.wrongAmount = false;
+    this.wrongTrial = null;
     this.txns.set(txn.id, txn);
     this.customData.set(txn.id, input.customData);
     return Promise.resolve(this.ok(txn));
@@ -204,6 +213,32 @@ export class FakePaddle implements PaddleApi {
       return { kind: "unavailable", status: null };
     }
     return { kind: "ok", value: changed };
+  }
+
+  moveTrialEnd(subscriptionId: string, at: string) {
+    const sub = this.subs.get(subscriptionId);
+    if (sub === undefined) return Promise.resolve<PaddleResult<PaddleSubscription>>({ kind: "not_found" });
+    if (this.down) return Promise.resolve<PaddleResult<PaddleSubscription>>({ kind: "unavailable", status: 503 });
+    this.trialMoves.push({ subscriptionId, at });
+    this.update(subscriptionId, {
+      next_billed_at: at,
+      current_billing_period: { starts_at: sub.current_billing_period?.starts_at ?? at, ends_at: at },
+    });
+    return Promise.resolve<PaddleResult<PaddleSubscription>>({ kind: "ok", value: this.subs.get(subscriptionId) ?? sub });
+  }
+
+  /** Ends the trial now: the first month is charged and starts today (the fake's clock). */
+  activateTrial(subscriptionId: string) {
+    const sub = this.subs.get(subscriptionId);
+    if (sub === undefined) return Promise.resolve<PaddleResult<PaddleSubscription>>({ kind: "not_found" });
+    if (this.down) return Promise.resolve<PaddleResult<PaddleSubscription>>({ kind: "unavailable", status: 503 });
+    this.activations.push(subscriptionId);
+    const amount = Number(sub.items[0]?.price.unit_price?.amount ?? "0");
+    this.charges.push({ subscriptionId, amount });
+    const start = new Date(this.clock).toISOString();
+    const end = new Date(this.clock + 30 * 24 * 60 * 60 * 1000).toISOString();
+    this.update(subscriptionId, { status: "active", current_billing_period: { starts_at: start, ends_at: end }, next_billed_at: end });
+    return Promise.resolve<PaddleResult<PaddleSubscription>>({ kind: "ok", value: this.subs.get(subscriptionId) ?? sub });
   }
 
   tick(): string {

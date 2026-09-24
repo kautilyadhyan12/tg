@@ -533,8 +533,7 @@ export async function claimNextSend(sql: Sql, limits: ClaimLimits): Promise<Clai
         WHERE busy.n >= CASE
           WHEN EXISTS (
             SELECT 1 FROM subscriptions sub
-            WHERE sub.owner_type = 'gym' AND sub.owner_id = busy.gym_id AND sub.status = 'trialing'
-              AND sub.provider <> 'paddle')
+            WHERE sub.owner_type = 'gym' AND sub.owner_id = busy.gym_id AND sub.status = 'trialing')
           THEN ${limits.trialGymPerDay}::int
           ELSE ${limits.gymPerDay}::int
         END
