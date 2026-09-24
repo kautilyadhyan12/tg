@@ -1,11 +1,16 @@
-// Which record on a gym's list each row of a file is (RULINGS 2026-09-24, spec §11.4).
+// Which record on a gym's list each row of a file is (RULINGS 2026-09-24, 2026-09-25;
+// spec §11.4).
 //
-// A row is the same person as a record when their member numbers match, else their
-// email (where several share one, the name picks), else their phone (when one of the
-// two has no email, or both have the same name). Never one person: on a member-number
-// match, a different name AND a different email or phone; on an email or phone match,
-// a different name AND a different member number, or a different date of birth.
-// Everything else that differs is an update to that record.
+// A row is the same person as a record, in this order, each step over the whole file
+// before the next:
+//   1. every field the file carries is equal;
+//   2. the same name and the same member number, else email, else phone;
+//   3. a whole-list upload only: a different name on an email that exactly one record
+//      of the list holds and one row of the file (a corrected spelling, a married name,
+//      a parent who left and a child new on that parent's lone email).
+// A member number or a phone never joins two different names (a key fob handed to the
+// next member, a family landline), and a different date of birth parts two people on
+// an email or phone match. Everything else that differs is an update to that record.
 //
 // Pure: the same rows and records in give the same pairs out.
 import { nameParts } from "../invites/nameCheck.js";
@@ -29,8 +34,9 @@ export interface WhoCarried {
   dateOfBirth: boolean;
 }
 
-/** How a row was recognised: `same` is every carried field equal, nothing to update. */
-export type MatchedBy = "same" | "memberNumber" | "email" | "phone";
+/** How a row was recognised: `same` is every carried field equal, nothing to update;
+ *  `renamed` is step 3. */
+export type MatchedBy = "same" | "memberNumber" | "email" | "phone" | "renamed";
 
 export interface Match<E> {
   entry: E;
@@ -45,7 +51,7 @@ const emailOf = (who: WhoFields): string | null => text(who.email)?.toLowerCase(
 const phoneOf = (who: WhoFields): string | null => text(who.phone);
 const numberOf = (who: WhoFields): string | null => text(who.memberNumber)?.toLowerCase() ?? null;
 const birthOf = (who: WhoFields): string | null => text(who.dateOfBirth);
-/** The words of a name in any order, so "Shah, Priya" and "Priya Shah" pick the same record. */
+/** The words of a name in any order, so "Shah, Priya" and "Priya Shah" are one name. */
 const nameWordsOf = (who: WhoFields): string | null => {
   const parts = nameParts(who.fullName);
   return parts.length === 0 ? null : [...parts].sort().join(" ");
@@ -62,104 +68,93 @@ function sameSignature(who: WhoFields, carries: WhoCarried): string {
   ].join("\n");
 }
 
+const push = <K, V>(map: Map<K, V[]>, key: K, value: V): void => {
+  const list = map.get(key);
+  if (list === undefined) map.set(key, [value]);
+  else list.push(value);
+};
+
 /** Pairs each row with at most one record and each record with at most one row.
- *
- *  Each step runs over every row before the next begins, so a row that matches on
- *  everything is never beaten to its record by a weaker match earlier in the file.
- *  Current records are offered before former ones. */
+ *  `renames` is false for an upload that adds people: a record missing from such a file
+ *  has not left, so no row may take it over under another name. */
 export function matchRows<E extends WhoFields & { former: boolean }>(
   rows: readonly WhoFields[],
   entries: readonly E[],
   carries: WhoCarried,
+  renames: boolean,
 ): (Match<E> | null)[] {
   const ordered = [...entries.filter((entry) => !entry.former), ...entries.filter((entry) => entry.former)];
   const matches: (Match<E> | null)[] = rows.map(() => null);
   const taken = new Set<E>();
-
-  const differ = (a: string | null, b: string | null): boolean => a !== null && b !== null && a !== b;
-  const sameName = (row: WhoFields, entry: E): boolean => {
-    const words = carries.fullName ? nameWordsOf(row) : null;
-    return words !== null && words === nameWordsOf(entry);
+  const pair = (at: number, entry: E, by: MatchedBy): void => {
+    matches[at] = { entry, by };
+    taken.add(entry);
   };
-  /** Facts that say two people are different, whatever else they share. A member number
-   *  can be edited by staff (Mindbody's "SOK1234" becoming "XSOK1234") or handed to
-   *  somebody else with a key fob (GymMaster), so on its own it neither joins nor parts
-   *  two people: it takes a different name as well. */
-  const contradicts = (row: WhoFields, entry: E, by: MatchedBy): boolean => {
-    const namesDiffer = !sameName(row, entry);
-    if (by === "memberNumber") {
-      const contactDiffers = (carries.email && differ(emailOf(row), emailOf(entry))) || (carries.phone && differ(phoneOf(row), phoneOf(entry)));
-      return namesDiffer && contactDiffers;
-    }
-    if (namesDiffer && carries.memberNumber && differ(numberOf(row), numberOf(entry))) return true;
-    if (carries.dateOfBirth && differ(birthOf(row), birthOf(entry))) return true;
-    // A family sharing one phone has two names and two addresses; one person who changed
-    // address keeps their name (RULINGS 2026-09-24's own second month: Emma's new email).
-    if (by === "phone") return namesDiffer && carries.email && emailOf(row) !== null && emailOf(entry) !== null;
-    return false;
+  const birthsDiffer = (row: WhoFields, entry: E): boolean => {
+    if (!carries.dateOfBirth) return false;
+    const a = birthOf(row);
+    const b = birthOf(entry);
+    return a !== null && b !== null && a !== b;
   };
 
-  // Every carried field equal: the person as the list already has them.
+  // 1. Every carried field equal.
   const bySignature = new Map<string, E[]>();
-  for (const entry of ordered) {
-    const signature = sameSignature(entry, carries);
-    const list = bySignature.get(signature);
-    if (list === undefined) bySignature.set(signature, [entry]);
-    else list.push(entry);
-  }
+  for (const entry of ordered) push(bySignature, sameSignature(entry, carries), entry);
   rows.forEach((row, at) => {
     const found = bySignature.get(sameSignature(row, carries))?.find((entry) => !taken.has(entry));
-    if (found === undefined) return;
-    matches[at] = { entry: found, by: "same" };
-    taken.add(found);
+    if (found !== undefined) pair(at, found, "same");
   });
 
-  const step = (by: Exclude<MatchedBy, "same">, carried: boolean, valueOf: (who: WhoFields) => string | null): void => {
-    if (!carried) return;
-    const entriesByValue = new Map<string, E[]>();
-    for (const entry of ordered) {
-      if (taken.has(entry)) continue;
-      const value = valueOf(entry);
-      if (value === null) continue;
-      const list = entriesByValue.get(value);
-      if (list === undefined) entriesByValue.set(value, [entry]);
-      else list.push(entry);
-    }
-    const rowsByValue = new Map<string, number[]>();
-    rows.forEach((row, at) => {
-      if (matches[at] !== null) return;
-      const value = valueOf(row);
-      if (value === null || !entriesByValue.has(value)) return;
-      const list = rowsByValue.get(value);
-      if (list === undefined) rowsByValue.set(value, [at]);
-      else list.push(at);
-    });
-    for (const [value, rowsHere] of rowsByValue) {
-      const entriesHere = entriesByValue.get(value) ?? [];
-      const pair = (at: number, entry: E): void => {
-        matches[at] = { entry, by };
-        taken.add(entry);
-      };
-      // The name picks first: a family sharing one address keeps each person's record.
-      for (const at of rowsHere) {
-        const row = rows[at];
-        const words = row === undefined ? null : nameWordsOf(row);
-        if (row === undefined || words === null) continue;
-        const found = entriesHere.find((entry) => !taken.has(entry) && nameWordsOf(entry) === words && !contradicts(row, entry, by));
-        if (found !== undefined) pair(at, found);
+  // 2. The same name and one of the three keys. A file without a name column has no
+  //    name to be the same, and goes on to step 3 alone.
+  const steps: { by: "memberNumber" | "email" | "phone"; carried: boolean; valueOf: (who: WhoFields) => string | null }[] = [
+    { by: "memberNumber", carried: carries.memberNumber, valueOf: numberOf },
+    { by: "email", carried: carries.email, valueOf: emailOf },
+    { by: "phone", carried: carries.phone, valueOf: phoneOf },
+  ];
+  if (carries.fullName) {
+    for (const step of steps) {
+      if (!step.carried) continue;
+      const byKey = new Map<string, E[]>();
+      for (const entry of ordered) {
+        const value = step.valueOf(entry);
+        const words = nameWordsOf(entry);
+        if (value !== null && words !== null) push(byKey, `${value}\n${words}`, entry);
       }
-      // Then one row left and one record it can be: a changed name on an unshared value.
-      const rowsLeft = rowsHere.filter((at) => matches[at] === null);
-      const onlyRow = rowsLeft.length === 1 ? rowsLeft[0] : undefined;
-      const row = onlyRow === undefined ? undefined : rows[onlyRow];
-      if (onlyRow === undefined || row === undefined) continue;
-      const entriesLeft = entriesHere.filter((entry) => !taken.has(entry));
-      const onlyEntry = entriesLeft.length === 1 ? entriesLeft[0] : undefined;
-      if (onlyEntry !== undefined && !contradicts(row, onlyEntry, by)) pair(onlyRow, onlyEntry);
+      rows.forEach((row, at) => {
+        if (matches[at] !== null) return;
+        const value = step.valueOf(row);
+        const words = nameWordsOf(row);
+        if (value === null || words === null) return;
+        const found = byKey
+          .get(`${value}\n${words}`)
+          ?.find((entry) => !taken.has(entry) && (step.by === "memberNumber" || !birthsDiffer(row, entry)));
+        if (found !== undefined) pair(at, found, step.by);
+      });
     }
-  };
-  step("memberNumber", carries.memberNumber, numberOf);
-  step("email", carries.email, emailOf);
-  step("phone", carries.phone, phoneOf);
+  }
+
+  // 3. A different name on an email one record holds and one remaining row brings.
+  if (!renames || !carries.email) return matches;
+  const holders = new Map<string, E[]>();
+  for (const entry of ordered) {
+    const email = emailOf(entry);
+    if (email !== null) push(holders, email, entry);
+  }
+  const rowsLeft = new Map<string, number[]>();
+  rows.forEach((row, at) => {
+    const email = matches[at] === null ? emailOf(row) : null;
+    if (email !== null) push(rowsLeft, email, at);
+  });
+  for (const [email, ats] of rowsLeft) {
+    const onList = holders.get(email) ?? [];
+    const at = ats.length === 1 ? ats[0] : undefined;
+    const entry = onList.length === 1 ? onList[0] : undefined;
+    const row = at === undefined ? undefined : rows[at];
+    if (at === undefined || row === undefined || entry === undefined || taken.has(entry)) continue;
+    const numbersDiffer = carries.memberNumber && numberOf(row) !== null && numberOf(entry) !== null && numberOf(row) !== numberOf(entry);
+    if (numbersDiffer || birthsDiffer(row, entry)) continue;
+    pair(at, entry, "renamed");
+  }
   return matches;
 }

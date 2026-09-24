@@ -603,10 +603,11 @@ export function reconcile(input: ReconcileInput): Reconciled {
     rows.push(row);
   }
 
-  // WHICH RECORD EACH ROW IS (RULINGS 2026-09-24): member number, else email, else
-  // phone — so a new phone, a new address or a corrected name is an update to the same
-  // record, not one person gone and another new.
-  const matched = matchRows(rows, entries, carries);
+  // WHICH RECORD EACH ROW IS (RULINGS 2026-09-24, 2026-09-25) — so a new phone, a new
+  // address or a corrected name is an update to the same record, not one person gone
+  // and another new. Only a whole list can say somebody was renamed: in an add, a record
+  // missing from the file has not left.
+  const matched = matchRows(rows, entries, carries, mode === "whole_list");
 
   // How the gym's own members are reached, so "is this person already in the
   // app" is one lookup per person rather than a scan per person. EVERY live member

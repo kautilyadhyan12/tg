@@ -90,15 +90,15 @@ d("member list: the same person next month (real Postgres)", () => {
     return { cookies, gymId };
   };
 
-  const stage = async (gymId: string, cookies: Record<string, string>, bytes: Buffer): Promise<MemberListPreview> => {
-    const res = await post(`/v1/orgs/${gymId}/member-list/uploads`, { contentBase64: bytes.toString("base64"), mode: "whole_list" }, cookies);
+  const stage = async (gymId: string, cookies: Record<string, string>, bytes: Buffer, mode: "whole_list" | "add" = "whole_list"): Promise<MemberListPreview> => {
+    const res = await post(`/v1/orgs/${gymId}/member-list/uploads`, { contentBase64: bytes.toString("base64"), mode }, cookies);
     expect(res.statusCode).toBe(201);
     return (JSON.parse(res.body) as { preview: MemberListPreview }).preview;
   };
   const confirm = (gymId: string, cookies: Record<string, string>, uploadId: string, body: Record<string, boolean> = {}) =>
     post(`/v1/orgs/${gymId}/member-list/uploads/${uploadId}/confirm`, { permissionConfirmed: true, ...body }, cookies);
-  const apply = async (gymId: string, cookies: Record<string, string>, bytes: Buffer, body: Record<string, boolean> = {}) => {
-    const preview = await stage(gymId, cookies, bytes);
+  const apply = async (gymId: string, cookies: Record<string, string>, bytes: Buffer, body: Record<string, boolean> = {}, mode: "whole_list" | "add" = "whole_list") => {
+    const preview = await stage(gymId, cookies, bytes, mode);
     const res = await confirm(gymId, cookies, preview.uploadId, body);
     expect(res.statusCode).toBe(200);
     return { preview, confirmed: (JSON.parse(res.body) as { confirmed: MemberListConfirmed }).confirmed };
@@ -153,8 +153,9 @@ d("member list: the same person next month (real Postgres)", () => {
       expect(after.find((r) => r.id === idOf("Priya Shah"))).toMatchObject({ full_name: "Priya Shah", phone_e164: "+447700900298", former: false });
 
       // The month after: the parent has left, and a daughter joins on the parent's address.
+      // No date-of-birth column: the shared address alone must keep them apart.
       const daughter: Person = { name: "Meera Shah", email: "shah.family@example.com", phone: "07700 900203", number: "", dob: "30/06/2012" };
-      const third = await apply(gym.gymId, gym.cookies, csv([{ ...son, phone: "07700 900299" }, daughter, olivia]));
+      const third = await apply(gym.gymId, gym.cookies, csv([{ ...son, phone: "07700 900299" }, daughter, olivia], HEADER.slice(0, 5)));
       expect(third.preview.list).toMatchObject({ new: 1, gone: 1 });
       const last = await records(gym.gymId);
       expect(last.find((r) => r.id === idOf("Priya Shah"))).toMatchObject({ full_name: "Priya Shah", former: true });
@@ -237,6 +238,22 @@ d("member list: the same person next month (real Postgres)", () => {
 
       expect((await confirm(gym.gymId, gym.cookies, preview.uploadId, { acknowledgeHandEdits: true })).statusCode).toBe(200);
       expect((await records(gym.gymId))[0]).toMatchObject({ id: record.id, phone_e164: "+447700900101", hand_edited: [] });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "adding people ('Keep them'): a child on a current member's lone email is a new record, and the member's own record is untouched",
+    async () => {
+      const gym = await makeOwner("addmode");
+      const mary: Person = { name: "Mary Jones", email: "jones@example.com", phone: "07700 900501", number: "501" };
+      await apply(gym.gymId, gym.cookies, csv([mary, olivia]));
+      const before = await records(gym.gymId);
+      const added = await apply(gym.gymId, gym.cookies, csv([{ name: "Tom Jones", email: "jones@example.com", phone: "07700 900502", number: "" }]), {}, "add");
+      expect(added.preview.list).toMatchObject({ new: 1, changed: 0, gone: 0 });
+      const after = await records(gym.gymId);
+      expect(after.find((r) => r.id === before[0]?.id)).toMatchObject({ full_name: "Mary Jones", phone_e164: "+447700900501", member_number: "501", former: false });
+      expect(after.filter((r) => r.full_name === "Tom Jones")).toHaveLength(1);
     },
     TEST_TIMEOUT_MS,
   );

@@ -162,7 +162,7 @@ describe("the same person next month: the worst thing first", () => {
 });
 
 describe("the same person next month: what real gym software does between two exports", () => {
-  type Case = { name: string; before: Who[]; file: Who[]; carries?: CarriedFields; expect: string[]; gone: string[]; fields?: Record<string, number> };
+  type Case = { name: string; before: Who[]; file: Who[]; carries?: CarriedFields; mode?: "whole_list" | "add"; expect: string[]; gone: string[]; fields?: Record<string, number> };
   const noNumberColumn: CarriedFields = { ...ALL, memberNumber: false };
   const noEmailColumn: CarriedFields = { ...ALL, email: false };
   const noBirthColumn: CarriedFields = { ...ALL, dateOfBirth: false };
@@ -245,7 +245,7 @@ describe("the same person next month: what real gym software does between two ex
       fields: { phone: 2 },
     },
     {
-      name: "a family address where one name is corrected and the other is the same: the one left over is the corrected one",
+      name: "a family address where one name is corrected: on a SHARED address a new name is a new person, never a guess",
       before: [
         { fullName: "Priya Shah", email: "shah@example.com", phone: "+447700900601" },
         { fullName: "Arjun Shah", email: "shah@example.com", phone: "+447700900602" },
@@ -254,9 +254,64 @@ describe("the same person next month: what real gym software does between two ex
         { fullName: "Arjun Shah", email: "shah@example.com", phone: "+447700900698" },
         { fullName: "Priyah Shah", email: "shah@example.com", phone: "+447700900699" },
       ],
-      expect: ["Arjun Shah → Arjun Shah", "Priyah Shah → Priya Shah"],
+      expect: ["Arjun Shah → Arjun Shah", "Priyah Shah → new"],
+      gone: ["Priya Shah"],
+      fields: { phone: 1 },
+    },
+    {
+      name: "review H1: a new child on a shared family address, no date-of-birth column, does not take the parent's record",
+      before: [
+        { fullName: "Priya Shah", email: "shah.family@example.com", phone: "+447700900201" },
+        { fullName: "Arjun Shah", email: "shah.family@example.com", phone: "+447700900202" },
+      ],
+      file: [
+        { fullName: "Arjun Shah", email: "shah.family@example.com", phone: "+447700900202" },
+        { fullName: "Meera Shah", email: "shah.family@example.com", phone: "+447700900203" },
+      ],
+      carries: noBirthColumn,
+      expect: ["Arjun Shah → Arjun Shah", "Meera Shah → new"],
+      gone: ["Priya Shah"],
+    },
+    {
+      name: "review H2: adding people ('Keep them'), a child on a current member's lone email never takes that member's record",
+      before: [{ fullName: "Mary Jones", email: "jones@example.com", phone: "+447700900501", memberNumber: "501" }],
+      file: [{ fullName: "Tom Jones", email: "jones@example.com", phone: "+447700900502" }],
+      mode: "add",
+      expect: ["Tom Jones → new"],
       gone: [],
-      fields: { phone: 2, fullName: 1 },
+    },
+    {
+      name: "review H3: the same person found by phone and name later in the file beats a different name on her old email",
+      before: [{ fullName: "Mary Jones", email: "jones@example.com", phone: "+447700900501" }],
+      file: [
+        { fullName: "Tom Jones", email: "jones@example.com", phone: "+447700900502" },
+        { fullName: "Mary Jones", email: "mary.new@example.com", phone: "+447700900501" },
+      ],
+      expect: ["Tom Jones → new", "Mary Jones → Mary Jones"],
+      gone: [],
+      fields: { email: 1 },
+    },
+    {
+      name: "review H4: a key fob's number with a different name and a contact missing on one side is still a new person",
+      before: [{ fullName: "Bob Old", email: "bob@example.com", memberNumber: "123" }],
+      file: [{ fullName: "Alice New", phone: "+447700900777", memberNumber: "123" }],
+      expect: ["Alice New → new"],
+      gone: ["Bob Old"],
+    },
+    {
+      name: "review H4: a child with no email on the family landline does not take the parent's record",
+      before: [{ fullName: "Raj Patel", email: "raj@example.com", phone: "+441134960000" }],
+      file: [{ fullName: "Anya Patel", phone: "+441134960000" }],
+      expect: ["Anya Patel → new"],
+      gone: ["Raj Patel"],
+    },
+    {
+      name: "a corrected spelling on a lone address, with a member number that agrees, is still the same person",
+      before: [{ fullName: "Grace Oduya", email: "grace.o@example.com", memberNumber: "M-7" }],
+      file: [{ fullName: "Grace Whitfield", email: "grace.o@example.com", memberNumber: "M-7" }],
+      expect: ["Grace Whitfield → Grace Oduya"],
+      gone: [],
+      fields: { fullName: 1 },
     },
     {
       name: "a family address where neither name matches and two people are on it: nobody is guessed",
@@ -285,13 +340,21 @@ describe("the same person next month: what real gym software does between two ex
       fields: { phone: 1 },
     },
     {
-      name: "a file with no email column: matched by phone, the list's email kept",
+      name: "a file with no email column: matched by phone and name, the list's email kept",
+      before: [{ fullName: "Rahul Verma", email: "rahul@example.com", phone: "+919812345678" }],
+      file: [{ fullName: "Rahul Verma", phone: "+919812345678", memberNumber: "R-1" }],
+      carries: noEmailColumn,
+      expect: ["Rahul Verma → Rahul Verma"],
+      gone: [],
+      fields: { memberNumber: 1 },
+    },
+    {
+      name: "a file with no email column: a phone never joins a different name, even a corrected spelling",
       before: [{ fullName: "Rahul Verma", email: "rahul@example.com", phone: "+919812345678" }],
       file: [{ fullName: "Rahul Varma", phone: "+919812345678" }],
       carries: noEmailColumn,
-      expect: ["Rahul Varma → Rahul Verma"],
-      gone: [],
-      fields: { fullName: 1 },
+      expect: ["Rahul Varma → new"],
+      gone: ["Rahul Verma"],
     },
     {
       name: "a person with no email in the file, the list holding their email: the phone matches",
@@ -361,7 +424,7 @@ describe("the same person next month: what real gym software does between two ex
       const out = run(
         c.file.map((who, i) => row(i + 2, who, carries)),
         entries,
-        { carries },
+        { carries, mode: c.mode ?? "whole_list" },
       );
       expect(pairs(out, entries)).toEqual(c.expect);
       expect(out.gone.map((p) => p.fullName)).toEqual(c.gone);
@@ -431,6 +494,7 @@ describe("the same person next month: the record the upload writes", () => {
       [row(2, { fullName: "Tom Reed", email: "tom@example.com", phone: "+447700900001" }), row(3, { fullName: "Tom Reed", email: "tom@example.com", phone: "+447700900002" })],
       [e],
       ALL,
+      true,
     );
     expect(matches.filter((m) => m !== null)).toHaveLength(1);
   });
