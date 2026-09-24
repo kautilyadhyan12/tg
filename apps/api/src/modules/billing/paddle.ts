@@ -2,6 +2,10 @@
 // 2026-09-24). Every reply is parsed through `@app/shared` before anything reads it, and
 // no body, key or customer detail is ever logged or returned. Paddle's SDK is not used:
 // these are a few plain requests, and Paddle's types stay inside this file.
+//
+// The API key needs, besides what 1a's calls use, `customer_portal_session.write` for
+// Paddle's own page (1c-i); without it Paddle answers 403 and the button says paying
+// online isn't available (found on Kd's sandbox key, 2026-09-24).
 import {
   paddleAdjustmentSchema,
   paddleCustomerIdSchema,

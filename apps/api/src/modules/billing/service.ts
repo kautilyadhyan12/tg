@@ -199,7 +199,9 @@ export async function openBillingPortal(
 
   const session = await paddle.api.createPortalSession(plan.customerRef, [plan.subscriptionRef]);
   if (session.kind !== "ok") {
-    deps.log.warn({ event: "billing.portal_not_opened", result: session.kind }, "Paddle did not open its customer portal");
+    // A 403 here is an API key without the "customer portal session: write" permission.
+    const refusal = session.kind === "refused" ? { status: session.status, code: session.code } : {};
+    deps.log.warn({ event: "billing.portal_not_opened", result: session.kind, ...refusal }, "Paddle did not open its customer portal");
     throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
   }
   const deepLinks = session.value.urls.subscriptions.find((s) => s.id === plan.subscriptionRef);
