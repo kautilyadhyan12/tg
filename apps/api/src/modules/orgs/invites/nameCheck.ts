@@ -9,15 +9,15 @@
 //   the part before the @) is no name at all: a mistyped address is usually built from
 //   the member's own name, so it would read as theirs.
 // - Every part of the signed-up name must be found in the list's name, each in a part
-//   of its own: the same word, a shortening of it of three letters or more ("Rob" for
-//   "Robert", never "Shahani" for "Shah"), or an initial ("J." for "Jimenez", or the
-//   list's "V." for "Velikkakathu").
-// - At least two of the list's parts (its only part, if it has one) must be matched by
-//   whole words or shortenings, one of them the same word: a first name alone, or
-//   initials, name nobody.
+//   of its own: the same word, or an initial ("J." for "Jimenez", or the list's "V."
+//   for "Velikkakathu"). A shortening is not a match: the list keeps one full name, so
+//   "Rob" for "Robert" cannot be told from "Reed" for "Reedman", a stranger's family
+//   name that begins the member's.
+// - At least two of the list's parts (its only part, if it has one) must be the same
+//   words: a first name alone, or initials, name nobody.
 // Order, case, accents and punctuation are ignored; an apostrophe joins a name
-// ("O'Neill"). A nickname, another script, a middle name the list lacks or a first name
-// alone are asked about, which is why staff always see both names.
+// ("O'Neill"). A nickname or a shortening, another script, a middle name the list lacks
+// or a first name alone are asked about, which is why staff always see both names.
 
 export type NameCheck = "matches" | "differs";
 
@@ -46,13 +46,12 @@ export function nameParts(name: string): string[] {
   return folded.split(/[^\p{L}\p{N}]+/u).filter((part) => part.length > 0);
 }
 
-/** How a signed-up part stands for a list part, best first: the same word, a shortening
- *  of it, an initial either way; null when it does not. */
-function partRank(signed: string, listed: string): 0 | 1 | 2 | null {
+/** How a signed-up part stands for a list part, best first: the same word, or an
+ *  initial either way; null when it does not. */
+function partRank(signed: string, listed: string): 0 | 1 | null {
   if (signed === listed) return 0;
-  if (signed.length === 1 && listed.startsWith(signed)) return 2;
-  if (listed.length === 1 && signed.startsWith(listed)) return 2;
-  if (signed.length >= 3 && listed.startsWith(signed)) return 1;
+  if (signed.length === 1 && listed.startsWith(signed)) return 1;
+  if (listed.length === 1 && signed.startsWith(listed)) return 1;
   return null;
 }
 
@@ -75,15 +74,13 @@ export function checkName(listName: string, accountName: string, madeFromAddress
     .sort((x, y) => x.rank - y.rank);
   const pairedAccount = new Set<number>();
   const pairedList = new Set<number>();
-  let words = 0;
   let same = 0;
   for (const pair of pairs) {
     if (pairedAccount.has(pair.i) || pairedList.has(pair.j)) continue;
     pairedAccount.add(pair.i);
     pairedList.add(pair.j);
-    if (pair.rank < 2) words += 1;
     if (pair.rank === 0) same += 1;
   }
   const allFound = pairedAccount.size === account.length;
-  return allFound && same >= 1 && words >= Math.min(2, list.length) ? "matches" : "differs";
+  return allFound && same >= Math.min(2, list.length) ? "matches" : "differs";
 }

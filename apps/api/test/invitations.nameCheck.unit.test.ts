@@ -30,6 +30,13 @@ describe("the worst thing: a stranger at a member's mistyped address looks like 
     ["Priya Shah", "Priya Shahani"],
     ["Ann Lee", "Annabelle Leeson"],
     ["Sam Lee", "Samuel Leeds"],
+    // The re-check's cases: the other way round, the stranger's family name the start of
+    // the member's (the desk typed johnsmith@ for johnsmithson@).
+    ["Priya Shahani", "Priya Shah"],
+    ["Ann Leeson", "Ann Lee"],
+    ["Tom Reedman", "Tom Reed"],
+    ["Maria Garcia", "Maria Gar"],
+    ["John Smithson", "John Smith"],
   ])("list %j, signed up as %j: check this is them", (listName, accountName) => {
     expect(checkName(listName, accountName)).toBe("differs");
   });
@@ -71,9 +78,9 @@ describe("the same person written another way is not flagged", () => {
     // A middle initial left out, or given for a name.
     ["John Q. Public", "John Public"],
     ["Maria Jimenez Go", "Maria J. Go"],
-    // A shortening of the list's name.
-    ["Robert Smith", "Rob Smith"],
-    ["Christopher O'Neill", "Chris ONeill"],
+    // An apostrophe joins a name.
+    ["Christopher O'Neill", "Christopher ONeill"],
+    ["D'Angelo Russell", "Dangelo Russell"],
     // Hyphens and particles.
     ["Anna Smith-Jones", "Anna Smith"],
     ["Muhammad al-Jamil", "Muhammad Al Jamil"],
@@ -91,9 +98,12 @@ describe("what it cannot tell, and so asks about", () => {
     // shares it too often.
     ["Isa bin Osman", "Isa"],
     ["Samantha Lee", "Sam"],
-    // A nickname that is not the start of the name (W3C: Thaksin is "Maew").
+    // A nickname (W3C: Thaksin is "Maew"), or a shortening: "Rob" for "Robert" has the
+    // shape of "Reed" for "Reedman", and the list cannot say which part is the first name.
     ["Thaksin Shinawatra", "Maew"],
     ["Robert Smith", "Bob Smith"],
+    ["Robert Smith", "Rob Smith"],
+    ["Christopher O'Neill", "Chris ONeill"],
     // Another script, or one script split another way.
     ["Mao Zedong", "毛泽东"],
     ["東海林賢蔵", "東海林 賢蔵"],
