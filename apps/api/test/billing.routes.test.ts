@@ -103,7 +103,10 @@ class FakePaddle implements PaddleApi {
     const sub = this.subs.get(id);
     return Promise.resolve<PaddleResult<PaddleSubscription>>(sub === undefined ? { kind: "not_found" } : this.ok(sub));
   }
+  /** Refuse to list transactions, as a key without that permission would. */
+  listRefused = false;
   listSubscriptionTransactions(subscriptionId: string) {
+    if (this.listRefused) return Promise.resolve<PaddleResult<PaddleTransaction[]>>({ kind: "refused", status: 403, code: "forbidden" });
     return Promise.resolve(this.ok([...this.txns.values()].filter((t) => t.subscription_id === subscriptionId)));
   }
   cancelSubscriptionNow(id: string) {
@@ -504,6 +507,27 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       const replay = await checkout(a.gymId, a.cookies, BIG, "still-opening");
       expect(replay.statusCode).toBe(409);
       expect(JSON.parse(replay.body)).toMatchObject({ error: "checkout_in_progress" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a gym's payment is never cancelled because Paddle would not list its transactions",
+    async () => {
+      const a = await owner();
+      const txn = opened(await checkout(a.gymId, a.cookies, BIG));
+      const subId = paddle.pay(txn.transactionId);
+      await signedWebhook(subscriptionEvent(subId));
+      paddle.listRefused = true;
+      try {
+        const run = await runWorker();
+        expect(run.deferred).toBe(1);
+      } finally {
+        paddle.listRefused = false;
+      }
+      expect(paddle.cancelledSubs).not.toContain(subId);
+      await runWorker(2 * 60_000);
+      expect((await paidRows(a.gymId)).map((r) => [r.provider_ref, r.status])).toEqual([[subId, "active"]]);
     },
     TEST_TIMEOUT_MS,
   );

@@ -212,10 +212,10 @@ export async function applyPaddleSubscription(deps: BillingDeps, subscriptionId:
   let gymId = placed?.gymId ?? null;
   let checkoutId: string | null = null;
   if (gymId === null) {
+    // Without the list the gym cannot be known, and "none of ours" would cancel a real payment.
     const listed = await paddle.api.listSubscriptionTransactions(sub.id);
-    if (listed.kind === "unavailable") return "retry";
-    const all = listed.kind === "ok" ? listed.value : [];
-    const ours = await repo.checkoutsForTransactions(deps.sql, all.filter((t) => t.origin === "api").map((t) => t.id));
+    if (listed.kind !== "ok") return "retry";
+    const ours = await repo.checkoutsForTransactions(deps.sql, listed.value.filter((t) => t.origin === "api").map((t) => t.id));
     const first = ours[0];
     if (first !== undefined) {
       gymId = first.gymId;
