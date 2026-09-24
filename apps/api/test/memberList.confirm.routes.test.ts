@@ -609,6 +609,13 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       expect(audit).toHaveLength(1);
       expect(audit[0]?.actor_user_id).toBe(owner.userId);
       expect(audit[0]?.meta.permissionConfirmed).toBe("true");
+
+      // A repeat of an applied upload is the same 200 even without the tick: a screen whose
+      // reply was lost reads its numbers back, and nothing is written twice.
+      const replay = await post(press, {}, owner.cookies);
+      expect(replay.statusCode).toBe(200);
+      expect(confirmed(replay).alreadyConfirmed).toBe(true);
+      expect(confirmed(replay).applied.new).toBe(3);
     },
     TEST_TIMEOUT_MS,
   );

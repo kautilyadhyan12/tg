@@ -130,9 +130,9 @@ describe('what the review shows', () => {
 
   it.each([
     ['nobody missing', pv({ list: list({ new: 30 }) }), null],
-    ['five missing', pv({ list: list({ gone: 5 }), guard: { ...calm, entriesGoing: 5, listSize: 40 } }), { n: 5, listSize: 40, needsTick: false, statuses: [] }],
-    ['app members leaving with no entry gone', pv({ members: { leaving: 2, listedNow: 3 } }), { n: 2, listSize: 0, needsTick: false, statuses: [] }],
-    ['the wrong-file check with nobody counted', pv({ guard: { ...calm, membersLeaving: 12, needsTick: true } }), { n: 12, listSize: 0, needsTick: true, statuses: [] }],
+    ['five missing', pv({ list: list({ gone: 5 }), guard: { ...calm, entriesGoing: 5, listSize: 40 } }), { n: 5, listSize: 40, needsTick: false, statuses: [], group: 'gone' }],
+    ['app members leaving with no entry gone', pv({ members: { leaving: 2, listedNow: 3 } }), { n: 2, listSize: 0, needsTick: false, statuses: [], group: 'members_leaving' }],
+    ['the wrong-file check with nobody counted', pv({ guard: { ...calm, membersLeaving: 12, needsTick: true } }), { n: 12, listSize: 0, needsTick: true, statuses: [], group: 'members_leaving' }],
     ['an add asks nothing', pv({ mode: 'add', list: list({ gone: 5 }) }), null],
   ])('missing: %s', (_name, preview, want) => {
     expect(missingOf(preview)).toEqual(want);
@@ -153,6 +153,8 @@ describe('what the review shows', () => {
 
   it.each([
     [{ n: 1, listSize: 40, needsTick: false }, "1 member isn't in this file"],
+    [{ n: 2, listSize: 0, needsTick: false, group: 'members_leaving' }, "2 members who use the app aren't in this file"],
+    [{ n: 1, listSize: 0, needsTick: false, group: 'members_leaving' }, "1 member who uses the app isn't in this file"],
     [{ n: 5, listSize: 40, needsTick: false }, "5 members aren't in this file"],
     [{ n: 25, listSize: 30, needsTick: true }, "25 of your 30 members aren't in this file"],
     [{ n: 1200, listSize: 1500, needsTick: true }, "1,200 of your 1,500 members aren't in this file"],

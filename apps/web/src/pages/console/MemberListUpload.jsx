@@ -111,7 +111,7 @@ function IconButton({ label, onClick, children }) {
 }
 
 /** One line of the review's list: an icon, a short title, and at most one action. */
-function Line({ icon, tone, title, sub, action, onAction, detail, testId }) {
+function Line({ icon, tone, title, sub, action, onAction, actionDisabled = false, detail, testId }) {
   return (
     <div className="px-4 py-3.5" style={{ borderTop: `1px solid ${C.line}` }} data-testid={testId}>
       <div className="flex items-center gap-3">
@@ -127,7 +127,7 @@ function Line({ icon, tone, title, sub, action, onAction, detail, testId }) {
           ) : null}
         </div>
         {action ? (
-          <button type="button" onClick={onAction} className={LINK} style={{ color: C.orange }}>
+          <button type="button" onClick={onAction} disabled={actionDisabled} className={LINK} style={{ color: C.orange }}>
             {action}
           </button>
         ) : null}
@@ -240,6 +240,8 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
   const fileInput = useRef(null);
   // The preview on screen, so a page of names answered for an older one is dropped.
   const shown = useRef(null);
+  // Which group the missing-people question names ('gone', or 'members_leaving').
+  const missingGroup = useRef(null);
 
   const [stage, setStage] = useState('upload');
   const [tab, setTab] = useState('file');
@@ -313,7 +315,7 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
               error: null,
             },
           }));
-          if (group === 'gone' && cursor === 0) setMissingNames(page.people.slice(0, 3).map((x) => x.fullName || 'No name'));
+          if (group === missingGroup.current && cursor === 0) setMissingNames(page.people.slice(0, 3).map((x) => x.fullName || 'No name'));
         },
         (err) => {
           if (shown.current !== uploadId) return;
@@ -322,10 +324,10 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
       );
   };
 
-  /** Reads a file. A first read is always the whole list; the review asks about anybody
-   *  missing only when there is somebody, and "Keep them" reads the same bytes again as
-   *  people to add. */
-  const read = async (next, mode, map, nextAnswer) => {
+  /** Reads a file. Every read is the whole list except the one "They're still members"
+   *  asks for, which reads the same bytes as people to add. The review asks about anybody
+   *  missing only when there is somebody. */
+  const read = async (next, mode, map, opts = {}) => {
     setBusy('reading');
     setError(null);
     try {
@@ -348,9 +350,16 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
         const m = missingOf(p);
         setMissing(m);
         setMissingNames([]);
-        if (m !== null && p.list.gone > 0) void loadPage(p.uploadId, 'gone', 0);
+        missingGroup.current = m?.group ?? null;
+        if (m !== null) void loadPage(p.uploadId, m.group, 0);
+        // AN ANSWER IS ABOUT THE PEOPLE STAFF WERE SHOWN. A read again can change who is
+        // missing (a colleague's walk-ins, another column choice), so the question is asked
+        // afresh — unless this read IS the answer ("They've left" pressed after "They're
+        // still members") and the number is the one staff answered for.
+        setAnswer(opts.answer === 'left' && m !== null && m.n === opts.answeredFor ? 'left' : null);
+      } else {
+        setAnswer('keep');
       }
-      setAnswer(nextAnswer ?? (mode === 'add' ? 'keep' : null));
       setStage('review');
     } catch (err) {
       setError({ text: errorText(err, "We couldn't read that file."), readAgain: false });
@@ -407,12 +416,15 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
   };
 
   const chooseLeft = () => {
-    if (preview.mode === 'add') void read(source, 'whole_list', mapping, 'left');
+    if (preview.mode === 'add') void read(source, 'whole_list', mapping, { answer: 'left', answeredFor: missing.n });
     else setAnswer('left');
   };
   const chooseKeep = () => {
-    if (preview.mode === 'whole_list') void read(source, 'add', mapping, 'keep');
+    if (preview.mode === 'whole_list') void read(source, 'add', mapping);
   };
+  /** Any other read of the same file — again after a refusal, with other columns, a date
+   *  swapped — is the whole list, and asks about the missing people afresh. */
+  const readAgain = (map) => read(source, 'whole_list', map);
 
   const confirm = async () => {
     setBusy('importing');
@@ -450,7 +462,8 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
         {error.readAgain && source !== null && preview !== null ? (
           <button
             type="button"
-            onClick={() => read(source, preview.mode, mapping, answer)}
+            onClick={() => readAgain(mapping)}
+            disabled={busy !== null}
             className={GHOST}
             style={{ color: C.orange, border: `1px solid ${C.line}` }}
           >
@@ -585,7 +598,9 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
       (missing === null || answer !== null) &&
       (!needsTyping || (answer === 'left' && typedMatches(typed, guard))) &&
       (handEdits.entries === 0 || handTick);
-    const importLabel = summary.hero !== null ? `Import ${count(summary.hero)} ${peopleWord(summary.hero, words)}` : 'Import';
+    // "Import 3 members" only when nobody is moved to past members by the same press.
+    const importLabel =
+      summary.hero !== null && (missing === null || answer === 'keep') ? `Import ${count(summary.hero)} ${peopleWord(summary.hero, words)}` : 'Import';
     const namesFor = (group) => (
       <Names
         page={pages[group]}
@@ -594,7 +609,7 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
         onRetry={() => loadPage(preview.uploadId, group, pages[group].cursor ?? 0)}
       />
     );
-    const swap = (column, order) => read(source, preview.mode, withDateOrder(mapping, column, order === 'dayFirst' ? 'monthFirst' : 'dayFirst'), answer);
+    const swap = (column, order) => readAgain(withDateOrder(mapping, column, order === 'dayFirst' ? 'monthFirst' : 'dayFirst'));
 
     body = (
       <>
@@ -677,7 +692,7 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
           </div>
         )}
 
-        {openGroup !== null && !(openGroup === 'gone' && missing !== null) ? namesFor(openGroup) : null}
+        {openGroup !== null && openGroup !== missing?.group ? namesFor(openGroup) : null}
 
         {missing !== null && !preview.needsMapping ? (
           <div className="rounded-[18px] p-4 flex flex-col gap-3.5" style={{ background: C.card, border: '1px solid rgba(255,138,31,0.45)' }} data-testid="missing">
@@ -690,8 +705,8 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
                 {wholeList ? (
                   <>
                     {missingNames.length > 0 ? ' · ' : ''}
-                    <button type="button" onClick={() => toggleGroup('gone')} className={LINK} style={{ color: C.orange }}>
-                      {openGroup === 'gone' ? 'Hide' : 'See all'}
+                    <button type="button" onClick={() => toggleGroup(missing.group)} className={LINK} style={{ color: C.orange }}>
+                      {openGroup === missing.group ? 'Hide' : 'See all'}
                     </button>
                   </>
                 ) : null}
@@ -703,10 +718,10 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
               ) : null}
             </div>
             <div role="radiogroup" aria-label="What happened to them?" className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <Choice on={answer === 'left'} title="They've left" sub={`Move to past ${words.people}`} onClick={chooseLeft} disabled={busy !== null} />
+              <Choice on={answer === 'left'} title="They've left" sub={missing.group === 'gone' ? `Move to past ${words.people}` : 'Mark them as not on your list'} onClick={chooseLeft} disabled={busy !== null} />
               <Choice on={answer === 'keep'} title={`They're still ${words.people}`} sub="Leave them on the list" onClick={chooseKeep} disabled={busy !== null} />
             </div>
-            {openGroup === 'gone' && wholeList ? namesFor('gone') : null}
+            {openGroup === missing.group && wholeList ? namesFor(missing.group) : null}
             {answer === 'left' && needsTyping ? (
               <label className="flex items-center gap-3 text-[15px]" style={{ color: C.soft }}>
                 <span>
@@ -743,7 +758,7 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
               onAction={() => setColumnsOpen((o) => !o)}
             />
             {dates.map((d) => (
-              <Line key={`date-${String(d.column)}`} icon={CalendarDays} tone="plain" title={d.example} sub={d.columnName} action="Swap" onAction={() => swap(d.column, d.order)} />
+              <Line key={`date-${String(d.column)}`} icon={CalendarDays} tone="plain" title={d.example} sub={d.columnName} action="Swap" onAction={() => swap(d.column, d.order)} actionDisabled={busy !== null} />
             ))}
             {never.map((n) => (
               <Line key={n.reason} icon={Lock} tone="red" title={n.title} sub={n.columns} />
@@ -806,7 +821,7 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
                       <div className="text-[13px] flex items-center gap-1.5 flex-wrap" style={{ color: C.muted }}>
                         <CalendarDays className="w-3.5 h-3.5" />
                         {date.example.raw} = {dayWords(date.example.read)} ·
-                        <button type="button" onClick={() => swap(date.column, date.order)} className={LINK} style={{ color: C.orange }}>
+                        <button type="button" onClick={() => swap(date.column, date.order)} disabled={busy !== null} className={LINK} style={{ color: C.orange }}>
                           Swap
                         </button>
                       </div>
@@ -847,7 +862,7 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
                 </button>
                 <button
                   type="button"
-                  onClick={() => read(source, preview.mode, mapping, answer)}
+                  onClick={() => readAgain(mapping)}
                   disabled={busy !== null}
                   className={`${GHOST} flex-1 font-bold`}
                   style={{ background: C.orange, color: '#000' }}

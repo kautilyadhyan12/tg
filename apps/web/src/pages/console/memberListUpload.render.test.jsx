@@ -221,6 +221,104 @@ describe('the worst thing: a wrong file cannot take people off unseen', () => {
   });
 });
 
+describe('an answer is only ever about the people staff were shown (review of PR #106)', () => {
+  const oneMissing = (over = {}) =>
+    preview({ list: list({ unchanged: 4, gone: 1 }), guard: { ...calm, entriesGoing: 1, listSize: 5 }, ...over });
+  const nineMissing = () =>
+    preview({ uploadId: UPLOAD_ADD, list: list({ unchanged: 4, gone: 9 }), guard: { ...calm, entriesGoing: 9, listSize: 13 } });
+  const radios = () => [screen.getByRole('radio', { name: /They've left/ }), screen.getByRole('radio', { name: /They're still members/ })];
+
+  it('"They\'ve left" is asked again after "Read the file again" finds other people missing', async () => {
+    orgService.getMemberListRows.mockResolvedValue(page('gone', [person('Ben Cole')], 1));
+    await reviewWith(oneMissing());
+    fireEvent.click(screen.getByRole('radio', { name: /They've left/ }));
+    tickPermission();
+    orgService.confirmMemberList.mockRejectedValueOnce(
+      refusal(409, { error: 'list_changed', message: 'Your list changed while you were looking at this preview, so nothing was applied.', baseVersion: 1, version: 2 }),
+    );
+    fireEvent.click(importButton());
+    orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: nineMissing() } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Read the file again' }));
+    await screen.findByText("9 members aren't in this file");
+    expect(orgService.uploadMemberList.mock.calls[1][1].mode).toBe('whole_list');
+    expect(radios().map((r) => r.getAttribute('aria-checked'))).toEqual(['false', 'false']);
+    expect(importButton().disabled).toBe(true);
+  });
+
+  it('"They\'ve left" is asked again after "Apply changes"', async () => {
+    orgService.getMemberListRows.mockResolvedValue(page('gone', [person('Ben Cole')], 1));
+    await reviewWith(oneMissing());
+    fireEvent.click(screen.getByRole('radio', { name: /They've left/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Check' }));
+    fireEvent.change(screen.getByLabelText('Status imports as'), { target: { value: 'membershipType' } });
+    orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: nineMissing() } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply changes' }));
+    await screen.findByText("9 members aren't in this file");
+    tickPermission();
+    expect(radios().map((r) => r.getAttribute('aria-checked'))).toEqual(['false', 'false']);
+    expect(importButton().disabled).toBe(true);
+  });
+
+  it('after "They\'re still members", other columns read the file as the whole list and ask again', async () => {
+    orgService.getMemberListRows.mockResolvedValue(page('gone', [person('Ben Cole')], 1));
+    await reviewWith(oneMissing());
+    orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: preview({ uploadId: UPLOAD_ADD, mode: 'add', list: list({ unchanged: 4 }) }) } });
+    fireEvent.click(screen.getByRole('radio', { name: /They're still members/ }));
+    await waitFor(() => expect(radios()[1].getAttribute('aria-checked')).toBe('true'));
+    fireEvent.click(screen.getByRole('button', { name: 'Check' }));
+    fireEvent.change(screen.getByLabelText('Status imports as'), { target: { value: 'membershipType' } });
+    orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: nineMissing() } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply changes' }));
+    await screen.findByText("9 members aren't in this file");
+    expect(orgService.uploadMemberList.mock.calls[2][1].mode).toBe('whole_list');
+    expect(radios().map((r) => r.getAttribute('aria-checked'))).toEqual(['false', 'false']);
+  });
+
+  it('"They\'ve left" pressed after "They\'re still members" holds only if the same number are missing', async () => {
+    orgService.getMemberListRows.mockResolvedValue(page('gone', [person('Ben Cole')], 1));
+    await reviewWith(oneMissing());
+    orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: preview({ uploadId: UPLOAD_ADD, mode: 'add', list: list({ unchanged: 4 }) }) } });
+    fireEvent.click(screen.getByRole('radio', { name: /They're still members/ }));
+    await waitFor(() => expect(radios()[1].getAttribute('aria-checked')).toBe('true'));
+    // Meanwhile a colleague typed people in: the whole list now leaves nine out, not one.
+    orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: nineMissing() } });
+    fireEvent.click(screen.getByRole('radio', { name: /They've left/ }));
+    await screen.findByText("9 members aren't in this file");
+    expect(radios().map((r) => r.getAttribute('aria-checked'))).toEqual(['false', 'false']);
+  });
+
+  it('app members leaving with nobody else missing: their names, in words true for them', async () => {
+    orgService.getMemberListRows.mockResolvedValueOnce(page('members_leaving', [person('Amy Shaw', { inApp: true })], 2));
+    await reviewWith(preview({ list: list({ unchanged: 5 }), members: { leaving: 2, listedNow: 4 } }));
+    expect(screen.getByText("2 members who use the app aren't in this file")).toBeTruthy();
+    expect(await screen.findByText(/Amy Shaw and 1 more/)).toBeTruthy();
+    expect(orgService.getMemberListRows).toHaveBeenCalledWith(GYM, UPLOAD, 'members_leaving', 0);
+    expect(screen.getByRole('radio', { name: /They've left/ }).textContent).toContain('Mark them as not on your list');
+  });
+
+  it('the button names the new people only when nobody is moved to past members by it', async () => {
+    orgService.getMemberListRows.mockResolvedValue(page('gone', [person('Ben Cole')], 2));
+    await reviewWith(preview({ list: list({ new: 3, unchanged: 5, gone: 2 }), guard: { ...calm, entriesGoing: 2, listSize: 40 } }));
+    fireEvent.click(screen.getByRole('radio', { name: /They've left/ }));
+    expect(importButton().textContent).toBe('Import');
+    orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: preview({ uploadId: UPLOAD_ADD, mode: 'add', list: list({ new: 3, unchanged: 5 }) }) } });
+    fireEvent.click(screen.getByRole('radio', { name: /They're still members/ }));
+    await waitFor(() => expect(importButton().textContent).toBe('Import 3 members'));
+  });
+
+  it('Swap cannot be pressed twice while the file is being read', async () => {
+    await reviewWith(
+      preview({ dateColumns: [{ column: 3, field: 'joinedOn', order: 'dayFirst', from: 'country', example: { raw: '03/04/2026', read: '2026-04-03' }, notRead: 0 }] }),
+    );
+    orgService.uploadMemberList.mockReturnValueOnce(new Promise(() => {}));
+    const swap = screen.getByRole('button', { name: 'Swap' });
+    fireEvent.click(swap);
+    await waitFor(() => expect(swap.disabled).toBe(true));
+    fireEvent.click(swap);
+    expect(orgService.uploadMemberList).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('a first import', () => {
   it('is one big number, asks nothing about missing people, and waits for the permission tick', async () => {
     await reviewWith(preview());

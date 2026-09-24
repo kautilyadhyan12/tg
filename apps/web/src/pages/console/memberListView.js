@@ -146,7 +146,11 @@ export function missingOf(preview) {
   // Kept with the answer: after "They're still members" the file is read again as
   // people to add, and that preview no longer knows who was missing or how many.
   const statuses = preview.statuses.filter((s) => s.gone > 0).map((s) => ({ label: s.label, n: s.gone }));
-  return { n, listSize: guard.listSize, needsTick: guard.needsTick, statuses };
+  // WHOSE NAMES the question shows: the list's own people coming off, or — where none
+  // are — the app members who would no longer be on the list, who are a different group
+  // and are not moved to past members by anything.
+  const group = list.gone > 0 ? 'gone' : 'members_leaving';
+  return { n, listSize: guard.listSize, needsTick: guard.needsTick, statuses, group };
 }
 
 /** The gym's own status words of the people missing from the file: "Frozen 5 · Active 1".
@@ -160,6 +164,9 @@ export function missingStatusLine(missing) {
  *  check is asking, "25 of your 30 members aren't in this file". */
 export function missingTitle(missing, needsTick, words) {
   const verb = missing.n === 1 ? "isn't" : "aren't";
+  if (missing.group === 'members_leaving') {
+    return `${count(missing.n)} ${missing.n === 1 ? `${words.person} who uses` : `${words.people} who use`} the app ${verb} in this file`;
+  }
   if (needsTick && missing.listSize > missing.n) {
     return `${count(missing.n)} of your ${count(missing.listSize)} ${words.people} ${verb} in this file`;
   }
