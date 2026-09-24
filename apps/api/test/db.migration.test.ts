@@ -115,7 +115,8 @@ d("0001_init on a real database", () => {
   //
   // THE BOOK ASSERTED HERE IS THE RULED ONE, and every number is traceable:
   //  · gym bands — RULINGS 2026-09-22 (up to 200 $79 · 500 $129 · 1,000 $199 ·
-  //    1,500 $279 · 2,100 $379) and 2026-09-23 (India's fixed rupees).
+  //    1,500 $279 · 2,000 $379, the top band 2,000 since 2026-09-24) and 2026-09-24 (India's fixed rupees, raised to
+  //    cover GST once registered).
   //  · seat_cap IS the band boundary in code (:17902 §4) — a cap asserted
   //    nowhere was how the old book stayed stale through two rulings.
   //  · individuals — $10 in every country, no trial (RULINGS 2026-09-22);
@@ -236,12 +237,12 @@ d("0001_init on a real database", () => {
       ["org_b2_us_m", 12900, "USD", 500],
       ["org_b3_us_m", 19900, "USD", 1000],
       ["org_b4_us_m", 27900, "USD", 1500],
-      ["org_b5_us_m", 37900, "USD", 2100],
-      ["org_b1_in_m", 750000, "INR", 200],
-      ["org_b2_in_m", 1250000, "INR", 500],
-      ["org_b3_in_m", 1900000, "INR", 1000],
-      ["org_b4_in_m", 2650000, "INR", 1500],
-      ["org_b5_in_m", 3650000, "INR", 2100],
+      ["org_b5_us_m", 37900, "USD", 2000],
+      ["org_b1_in_m", 850000, "INR", 200],
+      ["org_b2_in_m", 1350000, "INR", 500],
+      ["org_b3_in_m", 2250000, "INR", 1000],
+      ["org_b4_in_m", 3150000, "INR", 1500],
+      ["org_b5_in_m", 4300000, "INR", 2000],
     ];
     for (const [code, minor, currency, seatCap] of bands) {
       const r = row(code);

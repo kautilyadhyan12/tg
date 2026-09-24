@@ -281,6 +281,13 @@
       "when": 1788220800023,
       "tag": "0040_join_by_invitation",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1788220800024,
+      "tag": "0041_paddle_billing",
+      "breakpoints": true
     }
   ]
 }

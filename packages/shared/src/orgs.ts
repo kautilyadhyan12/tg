@@ -495,6 +495,12 @@ export const orgSubscriptionSchema = z.object({
   trialEndsAt: z.string().nullable(),
   /** Live members this plan admits, or null for a capless tier. */
   seatCap: z.number().int().positive().nullable(),
+  /** What a PAID plan costs, formatted by the server ("$79"); null during a free trial. */
+  priceLabel: z.string().min(1).nullable().default(null),
+  /** When a paid plan's current month ends: it renews then, or stops if
+   *  `cancelAtPeriodEnd`. Null during a free trial. */
+  currentPeriodEnd: z.string().nullable().default(null),
+  cancelAtPeriodEnd: z.boolean().default(false),
 });
 export type OrgSubscription = z.infer<typeof orgSubscriptionSchema>;
 
@@ -568,6 +574,8 @@ export const orgPlanOfferSchema = z.object({
   currency: z.string().min(1),
   interval: planIntervalSchema,
   seatCap: z.number().int().positive().nullable(),
+  /** False when the gym already has more members than this plan admits. */
+  fits: z.boolean().default(true),
 });
 export type OrgPlanOffer = z.infer<typeof orgPlanOfferSchema>;
 
@@ -601,6 +609,10 @@ export type OrgPlanOffer = z.infer<typeof orgPlanOfferSchema>;
  *  already does one function over. Not decided here (R1.1). */
 export const orgPlansResponseSchema = z.object({
   plans: z.array(orgPlanOfferSchema),
+  /** Whether this gym can pay online now: `available` (Paddle), `coming_soon` (an
+   *  Indian gym, until Razorpay is connected, ROADMAP Stage 3 item 1d) or
+   *  `unavailable` (payments not set up on this server). */
+  payOnline: z.enum(["available", "coming_soon", "unavailable"]).default("unavailable"),
 });
 export type OrgPlansResponse = z.infer<typeof orgPlansResponseSchema>;
 

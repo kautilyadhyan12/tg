@@ -435,6 +435,10 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
       sub_status: string | null;
       sub_trial_ends_at: Date | null;
       sub_seat_cap: number | null;
+      sub_price_minor: number | null;
+      sub_currency: string | null;
+      sub_current_period_end: Date | null;
+      sub_cancel_at_period_end: boolean | null;
       seats_used: number;
       owner_trial_used: boolean;
       postal_address: string | null;
@@ -454,6 +458,10 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
            sub.status AS sub_status,
            sub.trial_ends_at AS sub_trial_ends_at,
            sub.seat_cap AS sub_seat_cap,
+           sub.price_minor AS sub_price_minor,
+           sub.currency AS sub_currency,
+           sub.current_period_end AS sub_current_period_end,
+           sub.cancel_at_period_end AS sub_cancel_at_period_end,
            -- THE SEAT METER'S NUMERATOR, and the three conditions are
            -- claimSeat's own, written out for the third time on purpose.
            --
@@ -583,7 +591,8 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
     -- the LIMIT is what makes that a property of the QUERY rather than a fact
     -- this reader inherits from an index it does not name.
     LEFT JOIN LATERAL (
-      SELECT su.status, su.trial_ends_at, p.seat_cap
+      SELECT su.status, su.trial_ends_at, p.seat_cap, p.price_minor, p.currency,
+             su.current_period_end, su.cancel_at_period_end
       FROM subscriptions su JOIN plans p ON p.id = su.plan_id
       WHERE su.owner_type = 'gym' AND su.owner_id = g.id
         AND su.status IN ('trialing','active','past_due')
@@ -603,6 +612,10 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
             status: r.sub_status,
             trial_ends_at: r.sub_trial_ends_at,
             seat_cap: r.sub_seat_cap,
+            price_minor: r.sub_price_minor ?? 0,
+            currency: r.sub_currency ?? "",
+            current_period_end: r.sub_current_period_end,
+            cancel_at_period_end: r.sub_cancel_at_period_end ?? false,
           }),
     seatsUsed: r.seats_used,
     ownerTrialUsed: r.owner_trial_used,
@@ -1613,6 +1626,11 @@ export interface GymSubscriptionRow {
   status: OrgSubscriptionStatus;
   trialEndsAt: Date | null;
   seatCap: number | null;
+  /** The plan's price: shown for a paid plan, never for a free trial. */
+  priceMinor: number;
+  currency: string;
+  currentPeriodEnd: Date | null;
+  cancelAtPeriodEnd: boolean;
 }
 
 export interface OrgPlanRow {
@@ -1813,8 +1831,9 @@ export async function startGymTrial(
     // treat as granting. Written out rather than shared as a fragment: R3.8
     // forbids the shared-`sql` shape, and :14493 Low-2 is what happens when two
     // readers of one rule drift.
-    const live = await tx<{ status: string; trial_ends_at: Date | null; seat_cap: number | null }[]>`
-      SELECT s.status, s.trial_ends_at, p.seat_cap
+    const live = await tx<RawGymSubscription[]>`
+      SELECT s.status, s.trial_ends_at, p.seat_cap, p.price_minor, p.currency,
+             s.current_period_end, s.cancel_at_period_end
       FROM subscriptions s JOIN plans p ON p.id = s.plan_id
       WHERE s.owner_type = 'gym' AND s.owner_id = ${input.gymId}
         AND s.status IN ('trialing','active','past_due')`;
@@ -1848,8 +1867,8 @@ export async function startGymTrial(
      *  `trial_days > 0` means a book with no trial-bearing plan answers "no plan"
      *  instead of writing a trial that ended the instant it began. `interval =
      *  'month'` keeps a yearly row from being read as a band. */
-    const planRows = await tx<{ id: string; seat_cap: number | null; trial_days: number }[]>`
-      SELECT id, seat_cap, trial_days
+    const planRows = await tx<{ id: string; seat_cap: number | null; trial_days: number; price_minor: number; currency: string }[]>`
+      SELECT id, seat_cap, trial_days, price_minor, currency
       FROM plans
       WHERE audience = 'org'
         AND currency = ${gym.currency_display}
@@ -1873,6 +1892,10 @@ export async function startGymTrial(
       status: row.status,
       trial_ends_at: row.trial_ends_at,
       seat_cap: plan.seat_cap,
+      price_minor: plan.price_minor,
+      currency: plan.currency,
+      current_period_end: null,
+      cancel_at_period_end: false,
     });
 
     await insertAudit(tx, {
@@ -1901,16 +1924,39 @@ export async function startGymTrial(
   });
 }
 
-function toGymSubscription(raw: {
+interface RawGymSubscription {
   status: string;
   trial_ends_at: Date | null;
   seat_cap: number | null;
-}): GymSubscriptionRow {
+  price_minor: number;
+  currency: string;
+  current_period_end: Date | null;
+  cancel_at_period_end: boolean;
+}
+
+function toGymSubscription(raw: RawGymSubscription): GymSubscriptionRow {
   return {
     status: orgSubscriptionStatusSchema.parse(raw.status),
     trialEndsAt: raw.trial_ends_at,
     seatCap: raw.seat_cap,
+    priceMinor: raw.price_minor,
+    currency: raw.currency,
+    currentPeriodEnd: raw.current_period_end,
+    cancelAtPeriodEnd: raw.cancel_at_period_end,
   };
+}
+
+/** The gym's live plan, or null: §4.1's three granting statuses. */
+export async function gymLiveSubscription(sql: SqlOrTx, gymId: string): Promise<GymSubscriptionRow | null> {
+  const rows = await sql<RawGymSubscription[]>`
+    SELECT s.status, s.trial_ends_at, p.seat_cap, p.price_minor, p.currency,
+           s.current_period_end, s.cancel_at_period_end
+    FROM subscriptions s JOIN plans p ON p.id = s.plan_id
+    WHERE s.owner_type = 'gym' AND s.owner_id = ${gymId}
+      AND s.status IN ('trialing','active','past_due')
+    LIMIT 1`;
+  const row = rows[0];
+  return row === undefined ? null : toGymSubscription(row);
 }
 
 export type DecideOutcome =

@@ -33,6 +33,8 @@ export const plans = pgTable(
     entitlements: jsonb("entitlements").notNull(), // what the SUBSCRIBER gets
     memberEntitlements: jsonb("member_entitlements"), // org plans: what each MEMBER gets (Pro-level per v1 §9.2)
     active: boolean("active").notNull().default(true),
+    /** The Paddle price this plan is sold at (`pri_…`), per environment (`tools/paddle-prices.ts`). */
+    paddlePriceId: text("paddle_price_id").unique("plans_paddle_price_id_uq"),
     createdAt: createdAt(),
   },
   (t) => [
@@ -83,6 +85,11 @@ export const subscriptions = pgTable(
     cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
     provider: text("provider").notNull(),
     providerRef: text("provider_ref"),
+    /** The provider's own `updated_at` for the record this row was last written from
+     *  (migration `0041`): an older answer never overwrites a newer one. */
+    providerUpdatedAt: timestamp("provider_updated_at", { withTimezone: true }),
+    /** The provider's customer id (Paddle `ctm_…`). */
+    providerCustomerRef: text("provider_customer_ref"),
     cancelReason: text("cancel_reason"),
     createdAt: createdAt(),
   },
@@ -97,8 +104,11 @@ export const subscriptions = pgTable(
     // of that addendum belongs to the billing card that reads it.
     check(
       "subscriptions_provider_check",
-      sql`${t.provider} IN ('none','pilot','razorpay','stripe','revenuecat')`,
+      sql`${t.provider} IN ('none','pilot','razorpay','stripe','revenuecat','paddle')`,
     ),
+    uniqueIndex("subscriptions_provider_ref_uq")
+      .on(t.provider, t.providerRef)
+      .where(sql`${t.providerRef} IS NOT NULL`),
     // Exactly one live sub per owner — double-charging is unrepresentable.
     uniqueIndex("subs_one_live_uq")
       .on(t.ownerType, t.ownerId)

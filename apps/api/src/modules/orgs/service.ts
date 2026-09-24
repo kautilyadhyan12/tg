@@ -10,6 +10,8 @@ import {
   normaliseJoinCode,
   orgWords,
 } from "@app/shared";
+import * as billingRepo from "../billing/repo.js";
+import { onlinePaymentFor } from "../billing/online.js";
 import { bustEntitlements } from "../entitlements/service.js";
 import { onAttendanceMarked } from "../gamification/service.js";
 import { getUserSyncContext } from "../users/service.js";
@@ -154,6 +156,8 @@ export interface OrgsDeps {
    *  object" was zero objects. Required costs nothing and removes the silent
    *  path. */
   log: { warn: (obj: Record<string, unknown>, msg: string) => void };
+  /** Paddle is set up on this server (ROADMAP Stage 3 item 1a). */
+  onlinePayments: boolean;
 }
 
 /** Part 3 §4.0 step 4 names the first code "Front Desk". */
@@ -1097,11 +1101,16 @@ export async function startOrgTrial(
   }
 }
 
-function toOrgSubscription(row: repo.GymSubscriptionRow): OrgSubscription {
+export function toOrgSubscription(row: repo.GymSubscriptionRow): OrgSubscription {
+  // A free trial has no price and no billing month; a paid plan shows both.
+  const paid = row.status === "active" || row.status === "past_due";
   return {
     status: row.status,
     trialEndsAt: row.trialEndsAt?.toISOString() ?? null,
     seatCap: row.seatCap,
+    priceLabel: paid ? formatPriceMinor(row.priceMinor, row.currency) : null,
+    currentPeriodEnd: paid ? (row.currentPeriodEnd?.toISOString() ?? null) : null,
+    cancelAtPeriodEnd: paid && row.cancelAtPeriodEnd,
   };
 }
 
@@ -1145,7 +1154,7 @@ function toOrgSubscription(row: repo.GymSubscriptionRow): OrgSubscription {
  *  Measured on this Node across every shape that matters: `$35` · `$129` ·
  *  `$1,234.50` · `$34.99` · `₹1,500` · `₹8,500` · `¥1,234` (no minor unit) ·
  *  `KWD 1,234.567` (three of them). */
-function formatPriceMinor(priceMinor: number, currency: string): string {
+export function formatPriceMinor(priceMinor: number, currency: string): string {
   const digits = new Intl.NumberFormat("en-US", {
     style: "currency",
     currency,
@@ -1196,7 +1205,10 @@ export async function listOrgPlans(
   gymId: string,
 ): Promise<OrgPlansResponse> {
   const { org } = await requirePrivilege(deps, gymId, userId, "billing.manage");
-  const rows = await repo.listOrgPlansForCurrency(deps.sql, org.currencyDisplay);
+  const [rows, used] = await Promise.all([
+    repo.listOrgPlansForCurrency(deps.sql, org.currencyDisplay),
+    billingRepo.seatsUsed(deps.sql, gymId),
+  ]);
   return orgPlansResponseSchema.parse({
     plans: rows.map((p) => ({
       code: p.code,
@@ -1204,7 +1216,9 @@ export async function listOrgPlans(
       currency: p.currency,
       interval: p.interval,
       seatCap: p.seatCap,
+      fits: p.seatCap === null || used <= p.seatCap,
     })),
+    payOnline: onlinePaymentFor(org.currencyDisplay, deps.onlinePayments),
   });
 }
 
