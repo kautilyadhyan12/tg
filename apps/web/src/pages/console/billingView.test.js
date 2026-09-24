@@ -584,9 +584,41 @@ describe('bannerFor', () => {
     });
     const b = bannerFor(late, NOW);
     expect(b?.key).toBe('past_due');
-    // It promises no retry and offers no way to update a card, because v1 §10's
-    // dunning is unbuilt and there is no billing screen.
-    expect(b?.text).not.toMatch(/retry|retrying|update/i);
+    // The payment method is updated on Paddle's page from the plan card (1c-i), and the grace is
+    // the worker's 2 days (Kd, RULINGS 2026-09-24); it promises no retry of its own.
+    expect(b?.text).toBe(
+      "A payment for your gym didn't go through. Paddle will try your card again by itself, or you can update your payment method under Plan on the Overview. Your members keep everything for 2 days after a failed payment.",
+    );
+    expect(b?.text).not.toMatch(/retry|retrying/i);
+  });
+
+  it('says a read-only console is owed a payment, not that it has no plan, once the grace has ended', () => {
+    const owed = gym({ subscription: null, consoleReadOnly: true, paymentOverdue: true });
+    expect(bannerFor(owed, NOW)).toMatchObject({
+      key: 'read_only',
+      text: 'A payment for your gym is overdue. Nothing here can be changed and your members get the free app only until it is paid. Update your payment method to pay now; Paddle also tries your card again by itself.',
+    });
+    // Staff who cannot pay are told who can, not to press what they are not shown.
+    const trainer = { ...owed, staffRole: 'trainer', privileges: ['members.read'] };
+    expect(bannerFor(trainer, NOW)?.text).toBe(
+      'A payment for your gym is overdue. Nothing here can be changed and your members get the free app only until it is paid. Whoever manages billing can update the payment method; Paddle also tries the card again by itself.',
+    );
+    const lateForTrainer = gym({ staffRole: 'trainer', privileges: ['members.read'], subscription: { status: 'past_due', seatCap: 100 } });
+    expect(bannerFor(lateForTrainer, NOW)?.text).toBe(
+      "A payment for your gym didn't go through. Paddle will try the card again by itself, or whoever manages billing can update the payment method. Your members keep everything for 2 days after a failed payment.",
+    );
+    // Without the flag (an older api, or a trial that ended) it is the plain read-only line.
+    expect(bannerFor(gym({ subscription: null, consoleReadOnly: true }), NOW)?.text).toMatch(/has no plan/);
+  });
+});
+
+describe('planPromptFor, a payment owed', () => {
+  it('asks for the card, not a plan, and only of whoever can pay', () => {
+    const owed = gym({ subscription: null, consoleReadOnly: true, paymentOverdue: true, ownerTrialUsed: true });
+    expect(planPromptFor(owed)).toBe('overdue');
+    expect(planPromptFor({ ...owed, ownerTrialUsed: false })).toBe('overdue');
+    expect(planPromptFor({ ...owed, privileges: ['members.read'] })).toBeNull();
+    expect(planPromptFor({ ...owed, paymentOverdue: null })).toBe('subscribe');
   });
 });
 

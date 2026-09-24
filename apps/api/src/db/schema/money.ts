@@ -90,6 +90,9 @@ export const subscriptions = pgTable(
     providerUpdatedAt: timestamp("provider_updated_at", { withTimezone: true }),
     /** The provider's customer id (Paddle `ctm_…`). */
     providerCustomerRef: text("provider_customer_ref"),
+    /** When this row last became past_due (migration `0043`); the worker ends the
+     *  grace `PAID_PLAN_GRACE_DAYS` after it. Kept on the row the grace expired. */
+    pastDueSince: timestamp("past_due_since", { withTimezone: true }),
     cancelReason: text("cancel_reason"),
     createdAt: createdAt(),
   },
@@ -114,6 +117,11 @@ export const subscriptions = pgTable(
       .on(t.ownerType, t.ownerId)
       .where(sql`${t.status} IN ('trialing','active','past_due')`),
     index("subscriptions_status_period_idx").on(t.status, t.currentPeriodEnd), // dunning & expiry sweeps
+    check(
+      "subscriptions_past_due_since_check",
+      sql`${t.pastDueSince} IS NULL OR ${t.status} IN ('past_due','expired')`,
+    ),
+    index("subscriptions_grace_idx").on(t.pastDueSince).where(sql`${t.status} = 'past_due'`),
   ],
 );
 

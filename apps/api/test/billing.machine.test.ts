@@ -1,8 +1,9 @@
 // The one rule for a paid subscription (billing/machine.ts), over every class of case:
-// our row (none, or each of five statuses) × Paddle's status (five) × whether the gym
-// already holds another live plan × whether Paddle's record is older than ours.
-// The expected column is written from Part 5 §3 and Paddle's own status list
-// (developer.paddle.com, subscription entity), not read off the code.
+// our row (none, each of five statuses, or expired by the end of its grace) ×
+// Paddle's status (five) × whether the gym already holds another live plan × whether
+// Paddle's record is older than ours. The expected column is written from Part 5 §3
+// and §8 and Paddle's own status list (developer.paddle.com, subscription entity), not
+// read off the code.
 import { describe, expect, it } from "vitest";
 import { decide, targetStatus, type LocalRow, type LocalStatus, type ProviderStatus, type Snapshot } from "../src/modules/billing/machine.js";
 
@@ -26,14 +27,16 @@ const row = (status: LocalStatus, patch: Partial<LocalRow> = {}): LocalRow => ({
   planId: "plan-a",
   currentPeriodEnd: MONTH1,
   cancelAtPeriodEnd: false,
+  graceEnded: false,
   ...patch,
 });
 
+type Local = LocalStatus | "expired_grace";
 const PROVIDER: ProviderStatus[] = ["active", "past_due", "paused", "canceled", "trialing"];
-const LOCAL: (LocalStatus | null)[] = [null, "trialing", "active", "past_due", "canceled", "expired"];
+const LOCAL: (Local | null)[] = [null, "trialing", "active", "past_due", "canceled", "expired", "expired_grace"];
 
 /** What each case must decide, from the rules as written in machine.ts's header. */
-function expected(local: LocalStatus | null, provider: ProviderStatus, otherLive: boolean, stale: boolean): string {
+function expected(local: Local | null, provider: ProviderStatus, otherLive: boolean, stale: boolean): string {
   if (provider === "trialing") return "ignore:trial_not_sold";
   if (local !== null && stale) return "ignore:stale";
   if (local === "trialing" || local === "canceled") return "ignore:not_ours";
@@ -42,9 +45,12 @@ function expected(local: LocalStatus | null, provider: ProviderStatus, otherLive
     if (target === "expired") return "insert:expired:ended";
     return otherLive ? "duplicate" : `insert:${target}:activated`;
   }
-  if (local === "expired") {
-    if (target === "expired") return "ignore:unchanged";
-    return otherLive ? "ignore:conflict" : `update:${target}:reactivated`;
+  if (local === "expired" || local === "expired_grace") {
+    // Paddle ending a plan whose grace ran out is written, so the gym may subscribe afresh.
+    if (target === "expired") return local === "expired_grace" ? "update:expired:ended" : "ignore:unchanged";
+    // Still unpaid never opens an ended plan: only a payment does.
+    if (target === "past_due") return "ignore:unchanged";
+    return otherLive ? "ignore:conflict" : "update:active:reactivated";
   }
   // local is active or past_due
   if (target === "expired") return "update:expired:ended";
@@ -63,13 +69,14 @@ describe("the paid-subscription rule, every class of case", () => {
     ),
   );
 
-  it("covers 110 cases", () => {
-    // 5 providers × 2 (no row) + 5 statuses × 5 providers × 2 × 2.
-    expect(cases).toHaveLength(110);
+  it("covers 130 cases", () => {
+    // 5 providers × 2 (no row) + 6 kinds of row × 5 providers × 2 × 2.
+    expect(cases).toHaveLength(130);
   });
 
   it.each(cases)("row $local · Paddle $provider · other live $otherLive · stale $stale", ({ local, provider, otherLive, stale }) => {
-    const r = local === null ? null : row(local, stale ? { providerUpdatedAt: new Date(T1.getTime() + 1) } : {});
+    const staleness = stale ? { providerUpdatedAt: new Date(T1.getTime() + 1) } : {};
+    const r = local === null ? null : local === "expired_grace" ? row("expired", { ...staleness, graceEnded: true }) : row(local, staleness);
     expect(label(decide({ row: r, otherLive, snapshot: snap(provider) }))).toBe(expected(local, provider, otherLive, stale));
   });
 });

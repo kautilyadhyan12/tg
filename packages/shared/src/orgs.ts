@@ -1070,6 +1070,10 @@ export const myOrgSchema = orgSummarySchema.extend({
    *  everybody: a trainer whose buttons no longer work is owed the sentence
    *  saying why. A plain member is told nothing, on §2.4's boundary. */
   consoleReadOnly: z.boolean().nullable().default(null),
+  /** True when the console is read-only because a paid plan's payment is overdue (its
+   *  grace ended): the fix is the card on Paddle's page, never a new plan. Null
+   *  for a caller who is not staff, or an api too old to send it. */
+  paymentOverdue: z.boolean().nullable().default(null),
   /** The gym's postal address for its invitations (Part 3 §9.12). Staff only; null
    *  for a member, for a gym with none, and from an api too old to send it. */
   postalAddress: z.string().nullable().default(null),

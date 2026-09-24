@@ -514,6 +514,8 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
       // "locked"** — C97's rule, and the reason this is a field of its own rather
       // than `subscription === null` read at the client.
       consoleReadOnly: r.staffRole === null ? null : r.consoleReadOnly,
+      // Why it is read-only, for staff alike: an overdue payment, paid on Paddle's page.
+      paymentOverdue: r.staffRole === null ? null : r.paymentOverdue,
       // A fact about the gym for its staff (the Settings box and the Invite screen).
       postalAddress: r.staffRole === null ? null : r.postalAddress,
       // THE NEWEST CHEER THIS GYM SENT **THIS CALLER** — and it is the one field
@@ -842,6 +844,18 @@ export async function requirePrivilege(
     throw new OrgsError(403, "forbidden", "Your role doesn't allow that.");
   }
   return { org, role: authority.role, privileges };
+}
+
+/** Whether this person holds this privilege on this gym: `requirePrivilege`'s answer
+ *  without the error, for a check over several gyms at once. */
+export async function holdsPrivilege(
+  deps: Pick<OrgsDeps, "sql">,
+  gymId: string,
+  userId: string,
+  privilege: OrgPrivilege,
+): Promise<boolean> {
+  const authority = await repo.getStaffAuthority(deps.sql, gymId, userId);
+  return authority !== null && privilegesFor(authority.role, authority.privileges).includes(privilege);
 }
 
 /** THE 404 EVERY ORG-SCOPED ROUTE ANSWERS — and the one sentence here that

@@ -48,7 +48,7 @@
 // answers with the date its OLD trial ran out. A reader keying on "is this field
 // set" would put "Trial — 0 days left" on a gym that has been paying for a year.
 // Unreachable today only because nothing leaves `trialing`; pinned by a test.
-import { orgWords } from '@app/shared';
+import { orgWords, PAID_PLAN_GRACE_DAYS } from '@app/shared';
 import { calendarDaysBetween } from '../../utils/joinClock';
 import { getItem, setItem } from '../../utils/storage';
 import { viewerPrivileges } from './consoleView';
@@ -166,6 +166,17 @@ export function readOnlyQueueNote(orgType) {
 export function consoleReadOnlyBanner(orgType) {
   const words = orgWords(orgType);
   return `This ${words.it} has no plan. Nothing here can be changed, and your ${words.people} get the free app only.`;
+}
+
+/** The read-only banner when a paid plan's payment is overdue (its grace ended): the fix
+ *  is the payment method, which pays what is owed and opens everything again. Staff who
+ *  cannot manage billing are told who can, never to press a button they are not shown. */
+export function paymentOverdueBanner(orgType, canPay) {
+  const words = orgWords(orgType);
+  const fix = canPay
+    ? 'Update your payment method to pay now; Paddle also tries your card again by itself.'
+    : 'Whoever manages billing can update the payment method; Paddle also tries the card again by itself.';
+  return `A payment for your ${words.it} is overdue. Nothing here can be changed and your ${words.people} get the free app only until it is paid. ${fix}`;
 }
 
 /** Is this gym in its free trial RIGHT NOW?
@@ -318,7 +329,10 @@ export function bannerFor(org, now = Date.now()) {
     return {
       key: 'read_only',
       tone: 'danger',
-      text: consoleReadOnlyBanner(org?.orgType),
+      text:
+        org?.paymentOverdue === true
+          ? paymentOverdueBanner(org?.orgType, canManageBilling(viewerPrivileges(org)))
+          : consoleReadOnlyBanner(org?.orgType),
       // §4.2 gives this row no dismissal and it would be wrong to invent one:
       // the only dismissible state is `trial_info`, where putting the notice
       // away for a day costs the owner nothing. This one is about something the
@@ -328,17 +342,14 @@ export function bannerFor(org, now = Date.now()) {
   }
 
   if (sub?.status === 'past_due') {
-    // TRUE AND NOTHING MORE. §4.2's copy promises "retrying" and offers *Update
-    // payment method*; v1 §10's dunning is unbuilt and there is nowhere to
-    // update a card, so a sentence about retries would be a promise the app
-    // cannot keep (:5807). Unreachable today — nothing writes this status — and
-    // written anyway, because the alternative the day it becomes reachable is
-    // silence, and Kd ruled on silence at :12660: fixing a false sentence by
-    // removing the sentence is a quieter defect, not a fix.
+    // Paddle retries the card by itself; the days are the grace the worker gives a
+    // paying gym before its members lose the plan (Part 5 §8, ROADMAP 1c-i).
     return {
       key: 'past_due',
       tone: 'warn',
-      text: `A payment for your ${words.it} didn't go through.`,
+      text: canManageBilling(viewerPrivileges(org))
+        ? `A payment for your ${words.it} didn't go through. Paddle will try your card again by itself, or you can update your payment method under Plan on the Overview. Your ${words.people} keep everything for ${PAID_PLAN_GRACE_DAYS} days after a failed payment.`
+        : `A payment for your ${words.it} didn't go through. Paddle will try the card again by itself, or whoever manages billing can update the payment method. Your ${words.people} keep everything for ${PAID_PLAN_GRACE_DAYS} days after a failed payment.`,
       dismissible: false,
     };
   }
@@ -450,6 +461,8 @@ export function bannerFor(org, now = Date.now()) {
 export function planPromptFor(org) {
   if (!canManageBilling(viewerPrivileges(org))) return null;
   if (hasLivePlan(org)) return null;
+  // A paid plan owed money: the card pays it, and a new plan would charge twice.
+  if (org?.paymentOverdue === true) return 'overdue';
   if (org?.ownerTrialUsed === false) return 'trial';
   if (org?.ownerTrialUsed === true) return 'subscribe';
   return null;

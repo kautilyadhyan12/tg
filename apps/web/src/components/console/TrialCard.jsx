@@ -1,5 +1,6 @@
 import { orgWords } from '@app/shared';
 import { ConsoleCard } from './ConsoleStates';
+import ManagePaymentButton from './ManagePaymentButton';
 import {
   canManageBilling,
   isTrialing,
@@ -143,6 +144,15 @@ export default function TrialCard({ org }) {
         </div>
       ) : null}
       <SeatLine org={org} />
+      {/* A paid plan is managed on Paddle's own page: the card, cancelling, invoices. */}
+      {!trialing && (org.subscription.status === 'active' || org.subscription.status === 'past_due') ? (
+        <div className="mt-4">
+          <ManagePaymentButton
+            gymId={org.id}
+            label={org.subscription.status === 'past_due' ? 'Update payment method' : 'Manage payment'}
+          />
+        </div>
+      ) : null}
     </ConsoleCard>
   );
 }

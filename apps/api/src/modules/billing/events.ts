@@ -3,7 +3,7 @@
 // (`applyPaddleSubscription`). Safe to run twice: the rule ignores a record it already
 // holds, and every event is leased and finished by its lease.
 import * as webhooks from "../webhooks/repo.js";
-import { applyPaddleSubscription, settleOwedRefunds, type BillingDeps, type RefundsRun } from "./service.js";
+import { applyPaddleSubscription, endExpiredGraces, settleOwedRefunds, type BillingDeps, type RefundsRun } from "./service.js";
 
 export const PADDLE_EVENTS = {
   perRun: 200,
@@ -22,6 +22,8 @@ export interface PaddleEventsRun {
   forgotten: number;
   /** The refunds owed, made or retried this run. */
   refunds: RefundsRun;
+  /** Paid plans whose grace ended this run. */
+  gracesEnded: number;
 }
 
 export async function processPaddleEvents(deps: BillingDeps): Promise<PaddleEventsRun> {
@@ -32,6 +34,7 @@ export async function processPaddleEvents(deps: BillingDeps): Promise<PaddleEven
     givenUp: 0,
     forgotten: 0,
     refunds: { requested: 0, notNeeded: 0, deferred: 0, failed: 0 },
+    gracesEnded: 0,
   };
   for (let taken = 0; taken < PADDLE_EVENTS.perRun; taken++) {
     const event = await webhooks.claimDuePaddleEvent(deps.sql, deps.now(), PADDLE_EVENTS.leaseMs);
@@ -60,6 +63,8 @@ export async function processPaddleEvents(deps: BillingDeps): Promise<PaddleEven
     else run.unchanged += 1;
   }
   run.refunds = await settleOwedRefunds(deps);
+  // After the events, so a payment Paddle took in time is written before the grace ends.
+  run.gracesEnded = await endExpiredGraces(deps);
   const keepSince = new Date(deps.now().getTime() - PADDLE_EVENTS.keepDays * 24 * 60 * 60 * 1000);
   run.forgotten = await webhooks.forgetOldPaddleEvents(deps.sql, keepSince, 1000);
   return run;

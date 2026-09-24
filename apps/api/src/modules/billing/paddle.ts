@@ -2,17 +2,24 @@
 // 2026-09-24). Every reply is parsed through `@app/shared` before anything reads it, and
 // no body, key or customer detail is ever logged or returned. Paddle's SDK is not used:
 // these are a few plain requests, and Paddle's types stay inside this file.
+//
+// The API key needs, besides what 1a's calls use, `customer_portal_session.write` for
+// Paddle's own page (1c-i); without it Paddle answers 403 and the button says paying
+// online isn't available (found on Kd's sandbox key, 2026-09-24).
 import {
   paddleAdjustmentSchema,
+  paddleCustomerIdSchema,
   paddleEnvelope,
   paddleErrorSchema,
   paddleListEnvelope,
+  paddlePortalSessionSchema,
   paddlePriceSchema,
   paddleProductSchema,
   paddleSubscriptionIdSchema,
   paddleSubscriptionSchema,
   paddleTransactionIdSchema,
   paddleTransactionSchema,
+  type PaddlePortalSession,
   type PaddlePrice,
   type PaddleSubscription,
   type PaddleTransaction,
@@ -38,6 +45,9 @@ export interface PaddleApi {
   listSubscriptionTransactions(subscriptionId: string): Promise<PaddleResult<PaddleTransaction[]>>;
   cancelSubscriptionNow(id: string): Promise<PaddleResult<null>>;
   refundTransaction(id: string, reason: string): Promise<PaddleResult<null>>;
+  /** A short-lived sign-in to Paddle's customer portal for one customer, with deep links
+   *  for these subscriptions. Its links are never logged or kept. */
+  createPortalSession(customerId: string, subscriptionIds: readonly string[]): Promise<PaddleResult<PaddlePortalSession>>;
 }
 
 /** The catalogue calls `tools/paddle-prices.ts` makes. */
@@ -161,6 +171,15 @@ export function createPaddleApi(opts: {
           type: "full",
           transaction_id: id,
           reason,
+        }),
+      );
+    },
+    async createPortalSession(customerId, subscriptionIds) {
+      if (!paddleCustomerIdSchema.safeParse(customerId).success) return { kind: "not_found" };
+      if (!subscriptionIds.every((id) => paddleSubscriptionIdSchema.safeParse(id).success)) return { kind: "not_found" };
+      return unwrap(
+        await call("POST", `/customers/${customerId}/portal-sessions`, paddleEnvelope(paddlePortalSessionSchema), {
+          subscription_ids: [...subscriptionIds],
         }),
       );
     },

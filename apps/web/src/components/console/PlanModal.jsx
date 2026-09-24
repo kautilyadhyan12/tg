@@ -6,6 +6,7 @@ import { orgService, errorCode, errorText, isRetryable } from '../../api/orgsApi
 import { applyPaidPlan, applyStartedTrial, refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
 import { closePaddleCheckout, openPaddleCheckout } from '../../utils/paddleCheckout';
 import { planPriceText, planPromptFor, planSeatLabel } from '../../pages/console/billingView';
+import ManagePaymentButton from './ManagePaymentButton';
 
 // THE PROMPT A GYM OWNER CANNOT SKIP — Kd's ruling of 2026-08-28 (:22215), and
 // the correction that fixed its shape at a screen (:22697 §2).
@@ -107,6 +108,10 @@ function PlanRow({ plan, orgType, canPay, busy, working, onSubscribe }) {
  *  the gym before it says the page will catch up by itself. */
 const SYNC_TRIES = 30;
 const SYNC_GAP_MS = 2000;
+/** After Paddle's page opens for an overdue payment: how often, and how long, the gym is
+ *  re-read (ten minutes, enough to type a card and for the worker's next run). */
+const OVERDUE_TRIES = 60;
+const OVERDUE_GAP_MS = 10_000;
 
 export default function PlanModal({ org, onSignOut, signingOut = false }) {
   const titleId = useId();
@@ -129,6 +134,9 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
    *  payment is being confirmed. Null when nothing is under way. */
   const [paying, setPaying] = useState(null);
   const [payNote, setPayNote] = useState(null);
+  /** Said once Paddle's page is open for an overdue payment; null before. */
+  const [overdueNote, setOverdueNote] = useState(null);
+  const watching = useRef(false);
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -264,6 +272,23 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
     refreshConsoleOrgsAfterChange();
   };
 
+  /** Paddle's page is open in another tab: re-read the gym every few seconds, so the
+   *  prompt closes by itself once Paddle's payment reaches the gym (the webhook, then
+   *  the worker's next run, about a minute). */
+  const watchForPayment = () => {
+    setOverdueNote('When the payment goes through, this page opens again by itself. It can take a minute.');
+    if (watching.current) return;
+    watching.current = true;
+    void (async () => {
+      for (let tries = 0; tries < OVERDUE_TRIES && mounted.current; tries += 1) {
+        await new Promise((resolve) => setTimeout(resolve, OVERDUE_GAP_MS));
+        if (!mounted.current) return;
+        refreshConsoleOrgsAfterChange();
+      }
+      watching.current = false;
+    })();
+  };
+
   const subscribe = async (planCode) => {
     if (gymId === null || paying !== null) return;
     setPaying({ planCode, phase: 'opening' });
@@ -345,10 +370,31 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
         <h2 id={titleId} className="text-xl font-bold" style={{ color: '#fff' }}>
           {showing === 'trial'
             ? `Start your ${words.it}'s free trial`
-            : `Choose your ${words.it}'s plan`}
+            : showing === 'overdue'
+              ? 'Update payment method'
+              : `Choose your ${words.it}'s plan`}
         </h2>
 
-        {showing === 'trial' ? (
+        {showing === 'overdue' ? (
+          <>
+            <p className="text-sm mt-3" style={{ color: 'rgba(255,255,255,0.6)' }}>
+              A payment for your {words.it} didn&apos;t go through, so your {words.people} get the free
+              app only and nothing here can be changed.
+            </p>
+            <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.6)' }}>
+              Updating your payment method pays what&apos;s owed and opens everything again. Paddle
+              also tries your card again by itself; if that works, everything opens again on its own.
+            </p>
+            <div className="mt-5">
+              <ManagePaymentButton gymId={gymId} label="Update payment method" onOpened={watchForPayment} />
+            </div>
+            {overdueNote !== null ? (
+              <p className="text-sm mt-4" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                {overdueNote}
+              </p>
+            ) : null}
+          </>
+        ) : showing === 'trial' ? (
           <>
             <p className="text-sm mt-3" style={{ color: 'rgba(255,255,255,0.6)' }}>
               Your {words.people} get nothing extra for being in your {words.it} until it is on a
@@ -458,7 +504,7 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
           </p>
         ) : null}
 
-        {showing === 'trial' ? (
+        {showing === 'overdue' ? null : showing === 'trial' ? (
           <button
             type="button"
             onClick={start}
