@@ -87,6 +87,10 @@ const entry = (who: Person, status: string | null, over: Partial<ListEntry> = {}
  *  a file with a status column, and the rest empty on both sides. A file that carries
  *  LESS is its own class of case and lives in `memberList.wider`. */
 const carriesEverything: CarriedFields = {
+  fullName: true,
+  email: true,
+  phone: true,
+  memberNumber: true,
   status: true,
   membershipType: true,
   joinedOn: true,

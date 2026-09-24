@@ -226,11 +226,12 @@ async function measure(
  *  was actually used — staff's own, where they sent one, and the server's guess
  *  otherwise. A column that was guessed and then disbelieved is not in the mapping, so
  *  it is not carried, which is the answer we want: the file said nothing we trust about
- *  that field.
- *
- *  The four behind the identity key are not here, because two entries sharing a key
- *  cannot differ in them and nothing ever writes them on a change. */
+ *  that field. */
 const carriedFields = (mapping: MemberListMapping): CarriedFields => ({
+  fullName: mapping.fullName !== null || mapping.firstName !== null || mapping.lastName !== null,
+  email: mapping.email.length > 0,
+  phone: mapping.phone.length > 0,
+  memberNumber: mapping.memberNumber !== null,
   status: mapping.status !== null,
   membershipType: mapping.membershipType !== null,
   joinedOn: mapping.joinedOn !== null,
@@ -856,7 +857,19 @@ function toWrite(reconciled: Reconciled, kept: readonly KeptField[], endsOnKind:
   // A FIELD THE FILE DOES NOT CARRY IS NOT WRITTEN AT ALL, and for a fresh INSERT that
   // means the column is left NULL rather than filled from a row that says nothing — the
   // `carries` flags do it for an update, and here there is nothing to preserve.
-  const asChange = (person: ReconciledPerson): repo.EntryChange => ({ ...valuesOf(person), clear: person.moved });
+  const asChange = (person: ReconciledPerson): repo.EntryChange => {
+    const row = rowAt(person);
+    if (person.entryKey === null) raise(`a record the confirm would update has no key (row ${String(person.row)})`);
+    return {
+      ...valuesOf(person),
+      fullName: row.fullName,
+      email: row.email,
+      phone: row.phone,
+      memberNumber: row.memberNumber,
+      entryKey: person.entryKey,
+      clear: person.moved,
+    };
+  };
   return { add, revive: reconciled.returning.map(asChange), change: reconciled.changed.map(asChange), cardsDropped };
 }
 

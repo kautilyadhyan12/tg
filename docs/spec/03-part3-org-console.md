@@ -1962,12 +1962,22 @@ guess or choose "don't keep"; the choice is remembered by the heading fingerprin
 
 ### 11.4 The reconcile rule over the wider row (extends 9.7)
 
-Who is the same person is unchanged — email, else phone. "Changed" is any kept field
+Who is the same person: see "Out of 3a-vi" below (RULINGS 2026-09-24). "Changed" is any kept field
 that differs, and the preview counts the changes field by field. Each entry remembers
 WHICH fields staff edited by hand since the last upload (names, never values); an
 upload that would overwrite one lists them and needs a tick on that request, as the
 wrong-file guard does; after the tick the file wins. "Gone" marks the record former
 (11.1) instead of deleting it, and a returning person is the same record again.
+
+**Out of 3a-vi (built 2026-09-25).** `samePerson.ts`, `matchRows`: pure, one row to one record at most, called by `reconcile`.
+
+- **The order, each step over the whole file before the next.** (1) Every carried field equal. (2) The same name (its words in any order, so "Shah, Priya" is Priya Shah) and the same member number, else email, else phone — a different member number does not part them (Mindbody staff edit a client ID, "SOK1234" → "XSOK1234"), nor a different email on a phone match (a new address). (3) A whole-list upload only: a different name on an email that exactly one record of the list holds and one remaining row brings (a corrected spelling, a married name). Current records are offered before former ones. Round one of the review (4 Highs) moved the rule to this shape: a same-name match anywhere in the file now comes before any rename.
+- **Never one person**: a different name on a member number (GymMaster hands a key fob's number to the next member) or on a phone (a family landline), whatever else is missing; a different name on an email two records share; any different name in an upload that adds people ("Keep them"), where a record missing from the file has not left; a different date of birth on an email or phone match; a different member number on a rename. A split costs a former record the gym can join (§11.6); a wrong join puts one person's details on another's record.
+- **The only cases that still join a different name** (RULINGS 2026-09-25, (3)): in a whole-list upload, a row whose email one record holds, when no other row matched that record — a corrected spelling, a married name, and, with no date-of-birth column, a parent who left and a child new on that parent's lone email ("name 1" on Review). A spelling corrected on a phone-only record, or on a shared family email, is a new record beside a former one.
+- **The record keeps its id**; its name, address, phone and member number are written where the file carries that column (a field the file has no column for is kept), and its key is rebuilt from what is written. The update finds it by its old key. No two records can end with one key: a row whose carried fields equal a record's is matched to it in the first step.
+- **The four identity fields are hand-edit marks too** (§11.6), so a phone staff corrected is asked about before a file writes over it.
+- **Not changed here:** app members are still matched to the list by their proved email or stated phone (ROADMAP 3a-vi-b).
+- **Measured** (2026-09-25, mains, 2,592 MHz): 5a's second month on the real server reads 3 new · 2 missing · phone 2, email 1, name 1, status 4 (was 7 new, 6 missing); the same 20 people as "Surname, First" read 20 updated (was 20 new, 20 missing). At 10,000 people and 2,000 members, a month where every phone changed: confirm's bystander worst 2,909 ms, preview's 641 ms; the same status-only month on master 2,841 ms and 439 ms, on this job 2,920 ms and 559 ms (run-to-run noise is larger). At 200 people, every phone changed: confirm 134 ms, preview 57 ms.
 
 ### 11.5 Filters and Invite
 
@@ -2032,7 +2042,7 @@ and the chips.
 - **An unnamed column is keyed among the unnamed columns** (`unnamed_N`, shown as "Column N"), not by its place in the file, so a column inserted to its left does not make the same cell a second catalogue field. **A refused confirm writes nothing, the catalogue included**: both ticks are asked before the first write, because a `return` from `sql.begin` commits. **An empty end cell has no kind**, so it never reads as changed.
 - **A former record says whether its person is in the app.** `membersAgainstList` leaves former records out of both channels, so a second lateral answers that one question for the page of former records; the counts, the chips and `canBeInvited` still read the set without them.
 
-- **The identity rule is unchanged (§9.5), and that has a cost now that records are durable.** Who is the same person is still the name, address, phone and member number, so a gym that corrects a spelling in its own software gets a FORMER record it can tidy away and a new one beside it. It cost nothing while a list was replaced wholesale; it costs a duplicate now. Matching on the address alone instead would make two family members who share one email into one person, which is worse, and §11.4 says the matching does not change here. Recorded rather than fixed: the person's page (3a-iv) is where a gym would join two records, and this is the case to settle there.
+- *(Superseded by 3a-vi, §11.4.)* **The identity rule is unchanged (§9.5), and that has a cost now that records are durable.** Who is the same person is still the name, address, phone and member number, so a gym that corrects a spelling in its own software gets a FORMER record it can tidy away and a new one beside it. It cost nothing while a list was replaced wholesale; it costs a duplicate now. Matching on the address alone instead would make two family members who share one email into one person, which is worse, and §11.4 says the matching does not change here. Recorded rather than fixed: the person's page (3a-iv) is where a gym would join two records, and this is the case to settle there.
 
 ### 11.9 Where the facts came from (read 2026-09-21)
 

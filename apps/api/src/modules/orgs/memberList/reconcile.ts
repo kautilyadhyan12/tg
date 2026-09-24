@@ -33,6 +33,8 @@ import {
   type MemberListRow,
   type MemberListStatusChange,
 } from "@app/shared";
+import { fold, identityKey } from "./fields.js";
+import { matchRows } from "./samePerson.js";
 
 /** One person the gym's list holds — on it, or FORMER (§11.1).
  *
@@ -40,9 +42,9 @@ import {
  *  Until 3a-v-b the only thing that could differ between a file's row and a stored
  *  entry was the status word; a record now holds the gym's membership and payment
  *  words, three dates and every one of the gym's own columns, and any of them
- *  differing is a change. The four that make up the identity key — name, address,
- *  phone and member number — are NOT here as comparable values, because two entries
- *  sharing a key cannot differ in them (`fields.ts`, `identityKey`). */
+ *  differing is a change. Since 3a-vi the four behind the identity key — name, address,
+ *  phone and member number — can change too: a row is matched to its record by
+ *  `samePerson.ts`, not by the key. */
 export interface ListEntry {
   identityKey: string;
   fullName: string;
@@ -133,6 +135,10 @@ export interface KeptField {
  *  refuses to keep in the first place. So a file with no status column now leaves the
  *  gym's status words where they are, where before 3a-v-b it emptied them. */
 export interface CarriedFields {
+  fullName: boolean;
+  email: boolean;
+  phone: boolean;
+  memberNumber: boolean;
   status: boolean;
   membershipType: boolean;
   joinedOn: boolean;
@@ -184,7 +190,11 @@ export interface ReconciledMember {
  *  null for somebody who is not in the file: an entry coming off the list, or a
  *  member who would be marked as having dropped off it. */
 export interface ReconciledPerson {
+  /** The key this person's record has once the upload is applied. */
   identityKey: string;
+  /** The key the matched record has NOW — what an update finds it by. Null for somebody
+   *  the list does not hold yet. */
+  entryKey: string | null;
   /** WHERE THIS PERSON SITS IN THE ROWS THIS RULE WAS GIVEN, counting from 0, and
    *  null for somebody who is not in the file at all.
    *
@@ -303,9 +313,8 @@ const foldCell = (cell: string | undefined): string => cell ?? "";
 /** WHICH CARRIED FIELDS DIFFER BETWEEN A FILE'S ROW AND THE RECORD IT MATCHED.
  *
  *  **ONLY WHAT THE FILE CARRIES IS EVEN LOOKED AT** (`CarriedFields`), so a file with
- *  no membership-type column can neither change one nor blank one. The four fields
- *  behind the identity key are not looked at either: two entries sharing a key cannot
- *  differ in them.
+ *  no membership-type column can neither change one nor blank one. A name is compared
+ *  folded (case and accents), as the identity key compares it.
  *
  *  `endsOnKind` rides with `endsOn` and is never a change of its own. A gym whose
  *  heading went from "Expiry" to "Renewal date" IS a change worth writing — the screen
@@ -314,6 +323,10 @@ const foldCell = (cell: string | undefined): string => cell ?? "";
  *  really a property of a column. */
 function changedFields(row: MemberListRow, entry: ListEntry, carries: CarriedFields, endsOnKind: "ends" | "renews" | null): MemberListField[] {
   const moved: MemberListField[] = [];
+  if (carries.fullName && fold(row.fullName) !== fold(entry.fullName)) moved.push("fullName");
+  if (carries.email && foldEmail(row.email) !== foldEmail(entry.email)) moved.push("email");
+  if (carries.phone && foldPhone(row.phone) !== foldPhone(entry.phone)) moved.push("phone");
+  if (carries.memberNumber && foldNumber(row.memberNumber) !== foldNumber(entry.memberNumber)) moved.push("memberNumber");
   if (carries.status && foldWord(row.status) !== foldWord(entry.status)) moved.push("status");
   if (carries.membershipType && foldWord(row.membershipType) !== foldWord(entry.membershipType)) moved.push("membershipType");
   if (carries.joinedOn && foldDay(row.joinedOn) !== foldDay(entry.joinedOn)) moved.push("joinedOn");
@@ -358,6 +371,9 @@ const foldPhone = (phone: string | null): string | null => {
   const text = (phone ?? "").trim();
   return text === "" ? null : text;
 };
+
+/** A member number compared as the identity key compares it: case folded. */
+const foldNumber = (memberNumber: string | null): string => (memberNumber ?? "").trim().toLowerCase();
 
 interface Contactable {
   email: string | null;
@@ -512,6 +528,7 @@ export function membersAgainstNewList(
     // wrong or the person really has left.
     membersLeaving.push({
       identityKey: "",
+      entryKey: null,
       at: null,
       row: null,
       fullName: member.fullName,
@@ -586,8 +603,11 @@ export function reconcile(input: ReconcileInput): Reconciled {
     rows.push(row);
   }
 
-  const entriesByKey = new Map<string, ListEntry>();
-  for (const entry of entries) entriesByKey.set(entry.identityKey, entry);
+  // WHICH RECORD EACH ROW IS (RULINGS 2026-09-24, 2026-09-25) — so a new phone, a new
+  // address or a corrected name is an update to the same record, not one person gone
+  // and another new. Only a whole list can say somebody was renamed: in an add, a record
+  // missing from the file has not left.
+  const matched = matchRows(rows, entries, carries, mode === "whole_list");
 
   // How the gym's own members are reached, so "is this person already in the
   // app" is one lookup per person rather than a scan per person. EVERY live member
@@ -642,11 +662,23 @@ export function reconcile(input: ReconcileInput): Reconciled {
   };
 
   for (const [at, row] of rows.entries()) {
-    const entry = entriesByKey.get(row.identityKey);
+    const entry = matched[at]?.entry;
     const moved = entry === undefined ? [] : changedFields(row, entry, carries, endsOnKind);
     const movedExtra = entry === undefined ? [] : changedExtra(row, entry, keptFields);
+    // The key the record will have once written: the file's value for each field it
+    // carries, the record's own for each it does not — exactly what the update writes.
+    const nextKey =
+      entry === undefined
+        ? row.identityKey
+        : identityKey({
+            fullName: carries.fullName ? row.fullName : entry.fullName,
+            email: carries.email ? row.email : entry.email,
+            phone: carries.phone ? row.phone : entry.phone,
+            memberNumber: carries.memberNumber ? row.memberNumber : entry.memberNumber,
+          });
     const person: ReconciledPerson = {
-      identityKey: row.identityKey,
+      identityKey: nextKey,
+      entryKey: entry?.identityKey ?? null,
       at,
       row: row.row,
       fullName: row.fullName,
@@ -673,7 +705,7 @@ export function reconcile(input: ReconcileInput): Reconciled {
       countHandEdits(entry, moved, movedExtra);
       continue;
     }
-    kept.add(row.identityKey);
+    kept.add(entry.identityKey);
     if (moved.length === 0 && movedExtra.length === 0) {
       unchanged.push(person);
       continue;
@@ -699,6 +731,7 @@ export function reconcile(input: ReconcileInput): Reconciled {
           .filter((entry) => !kept.has(entry.identityKey))
           .map((entry) => ({
             identityKey: entry.identityKey,
+            entryKey: entry.identityKey,
             at: null,
             row: null,
             fullName: entry.fullName,
