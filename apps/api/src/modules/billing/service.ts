@@ -203,7 +203,8 @@ export async function openBillingPortal(
       throw new OrgsError(
         409,
         "shared_payer",
-        "This payment account also pays for another gym whose billing you don't manage, so it can't be opened here. The person who pays can open it.",
+        // "organisation": the other one may be a studio or a trainer, whatever this one is.
+        "This payment account also pays for another organisation whose billing you don't manage, so it can't be opened here. The person who pays can open it.",
       );
     }
   }
