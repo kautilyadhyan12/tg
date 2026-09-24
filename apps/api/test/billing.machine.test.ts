@@ -1,5 +1,5 @@
 // The one rule for a paid subscription (billing/machine.ts), over every class of case:
-// our row (none, each of five statuses, or expired by the end of its 5-day grace) ×
+// our row (none, each of five statuses, or expired by the end of its grace) ×
 // Paddle's status (five) × whether the gym already holds another live plan × whether
 // Paddle's record is older than ours. The expected column is written from Part 5 §3
 // and §8 and Paddle's own status list (developer.paddle.com, subscription entity), not

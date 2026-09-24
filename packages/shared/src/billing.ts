@@ -15,6 +15,11 @@ export const paddleCustomerIdSchema = paddleId("ctm");
 
 // ── The console ──────────────────────────────────────────────────────────────
 
+/** How long a paying gym keeps everything after a payment fails, before its members
+ *  drop to the free app and its console goes read-only (Kd, RULINGS 2026-09-24; Part 5
+ *  §8 said 5). The worker ends the grace and the console's banner says the number. */
+export const PAID_PLAN_GRACE_DAYS = 2;
+
 /** Subscribe to one plan of the gym's own price list. The server prices it. */
 export const orgCheckoutRequestSchema = z.object({ planCode: z.string().min(1).max(64) }).strict();
 export type OrgCheckoutRequest = z.infer<typeof orgCheckoutRequestSchema>;

@@ -5,7 +5,7 @@
 // written from Paddle's own record of the subscription, fetched by our server, and
 // the subscription is placed on the gym named in OUR checkout row, never on anything
 // the payment says about itself.
-import type { OrgBillingPortalResponse, OrgCheckoutResponse, OrgCheckoutSyncResponse, PaddleSubscription } from "@app/shared";
+import { PAID_PLAN_GRACE_DAYS, type OrgBillingPortalResponse, type OrgCheckoutResponse, type OrgCheckoutSyncResponse, type PaddleSubscription } from "@app/shared";
 import type { Sql } from "postgres";
 import type { RedisLike } from "../../redis.js";
 import { bustEntitlements } from "../entitlements/service.js";
@@ -213,10 +213,10 @@ export async function openBillingPortal(
   return { url: plan.overdue ? deepLinks.update_subscription_payment_method : session.value.urls.general.overview };
 }
 
-/** A paying gym keeps everything this long after a payment fails (Part 5 §8). */
-export const GRACE_MS = 5 * 24 * 60 * 60 * 1000;
+/** A paying gym keeps everything this long after a payment fails. */
+export const GRACE_MS = PAID_PLAN_GRACE_DAYS * 24 * 60 * 60 * 1000;
 
-/** End the grace of plans past_due for 5 days. Safe to run twice. */
+/** End the grace of plans past_due for that long. Safe to run twice. */
 export async function endExpiredGraces(deps: BillingDeps): Promise<number> {
   const now = deps.now();
   const ended = await repo.endGraces(deps.sql, { cutoff: new Date(now.getTime() - GRACE_MS), now, limit: 200 });

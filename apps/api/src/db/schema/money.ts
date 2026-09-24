@@ -91,7 +91,7 @@ export const subscriptions = pgTable(
     /** The provider's customer id (Paddle `ctm_…`). */
     providerCustomerRef: text("provider_customer_ref"),
     /** When this row last became past_due (migration `0043`); the worker ends the
-     *  grace 5 days after it. Kept on the row the grace expired. */
+     *  grace `PAID_PLAN_GRACE_DAYS` after it. Kept on the row the grace expired. */
     pastDueSince: timestamp("past_due_since", { withTimezone: true }),
     cancelReason: text("cancel_reason"),
     createdAt: createdAt(),

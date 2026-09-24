@@ -1,6 +1,6 @@
 // Managing a gym's paid plan on screen (ROADMAP Stage 3 item 1c-i): the plan card's
 // button to Paddle's own page, the failed-payment banner, and the prompt that asks for
-// the card once the 5-day grace has run out — never a second plan.
+// the card once the 2-day grace has run out — never a second plan.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -173,10 +173,10 @@ describe("the plan card's way to Paddle's page", () => {
 });
 
 describe('a failed payment', () => {
-  it('in the 5 days of grace: the banner says so and the card asks for a new card', async () => {
+  it('in the 2 days of grace: the banner says so and the card asks for a new card', async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: plan({ status: 'past_due' }) }));
     renderOverview();
-    expect(await screen.findByText(/a payment for your gym didn't go through\. update your card under plan on the overview — your members keep everything for 5 days after a failed payment\./i)).toBeTruthy();
+    expect(await screen.findByText(/a payment for your gym didn't go through\. update your card under plan on the overview — your members keep everything for 2 days after a failed payment\./i)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Update your card' })).toBeTruthy();
     // Nothing is locked yet.
     expect(screen.queryByTestId('plan-modal')).toBeNull();

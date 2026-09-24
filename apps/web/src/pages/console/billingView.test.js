@@ -585,9 +585,9 @@ describe('bannerFor', () => {
     const b = bannerFor(late, NOW);
     expect(b?.key).toBe('past_due');
     // The card is updated on Paddle's page from the plan card (1c-i), and the grace is
-    // the worker's 5 days; it promises no retry of its own.
+    // the worker's 2 days (Kd, RULINGS 2026-09-24); it promises no retry of its own.
     expect(b?.text).toBe(
-      "A payment for your gym didn't go through. Update your card under Plan on the Overview — your members keep everything for 5 days after a failed payment.",
+      "A payment for your gym didn't go through. Update your card under Plan on the Overview — your members keep everything for 2 days after a failed payment.",
     );
     expect(b?.text).not.toMatch(/retry|retrying/i);
   });

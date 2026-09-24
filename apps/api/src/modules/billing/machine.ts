@@ -8,7 +8,7 @@
 // our own `canceled` status is not used for a Paddle row (Part 5 §3's `canceled` would
 // stop granting at once in this codebase's live set). Paddle trials are not sold.
 //
-// The 5-day grace (Part 5 §8): the worker moves a row past_due for 5 days to expired
+// The grace (`PAID_PLAN_GRACE_DAYS`, 2 days): the worker moves a row past_due that long to expired
 // with `graceEnded`. Paddle still says past_due while it retries, and that never opens
 // the row again; only a payment (active) does. Paddle ending the subscription clears
 // `graceEnded`, so the gym may then Subscribe afresh.

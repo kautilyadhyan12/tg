@@ -22,7 +22,7 @@ export interface PaddleEventsRun {
   forgotten: number;
   /** The refunds owed, made or retried this run. */
   refunds: RefundsRun;
-  /** Paid plans whose 5-day grace ended this run. */
+  /** Paid plans whose grace ended this run. */
   gracesEnded: number;
 }
 

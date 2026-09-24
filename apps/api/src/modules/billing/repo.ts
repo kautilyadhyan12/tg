@@ -7,7 +7,7 @@ import { decide, type Decision, type LocalStatus, type Snapshot } from "./machin
 
 type SqlOrTx = Sql | TransactionSql;
 
-/** `cancel_reason` of a paid plan whose 5-day grace ran out while Paddle still retries. */
+/** `cancel_reason` of a paid plan whose grace ran out while Paddle still retries. */
 export const GRACE_EXPIRED = "grace_expired";
 
 export type CheckoutState = "creating" | "open" | "superseded" | "failed" | "paid";

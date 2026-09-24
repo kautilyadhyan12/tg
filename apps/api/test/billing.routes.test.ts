@@ -3,7 +3,7 @@
 //
 // THE WORST THING THIS JOB COULD DO: charge an owner twice for one gym, or let their
 // payment switch on a different gym. The first three tests are those. Managing a paid
-// plan (1c-i: Paddle's own page, the 5-day grace) is at the end, with its own.
+// plan (1c-i: Paddle's own page, the 2-day grace) is at the end, with its own.
 import { createHmac, randomBytes } from "node:crypto";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -559,7 +559,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
   // THE WORST THING THIS HALF COULD DO: open one gym's Paddle page — its card, its
   // invoices, its Cancel — for somebody who is not that gym's billing staff.
 
-  const GRACE_MS = 5 * 24 * 60 * 60 * 1000;
+  const GRACE_MS = 2 * 24 * 60 * 60 * 1000; // Kd, RULINGS 2026-09-24
   const openPortal = (gymId: string, cookies: Cookies) => post(`/v1/orgs/${gymId}/billing/portal`, {}, cookies);
   /** A gym on a paid plan: its owner, the Paddle subscription and its customer. */
   const paying = async () => {
@@ -666,7 +666,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
   );
 
   it(
-    "a failed payment: members keep everything for 5 days, then the console goes read-only until the card is updated, and the payment brings it all back",
+    "a failed payment: members keep everything for 2 days, then the console goes read-only until the card is updated, and the payment brings it all back",
     async () => {
       const a = await paying();
       await paddleSays(a.subId, { status: "past_due" });
@@ -683,10 +683,10 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       await paddleSays(a.subId, { current_billing_period: { starts_at: "2026-10-01T00:00:00Z", ends_at: "2026-11-02T00:00:00Z" } }, 24 * 60 * 60 * 1000);
       expect((await graceRow(a.subId))?.past_due_since).toEqual(failed?.past_due_since);
 
-      // A minute short of 5 days: still in grace.
+      // A minute short of 2 days: still in grace.
       await runWorker(GRACE_MS - 60_000);
       expect((await graceRow(a.subId))?.status).toBe("past_due");
-      // Past 5 days: the plan stops, the console is read-only, and the gym is told why.
+      // Past 2 days: the plan stops, the console is read-only, and the gym is told why.
       const run = await runWorker(GRACE_MS + 5000);
       expect(run.gracesEnded).toBe(1);
       expect(await graceRow(a.subId)).toMatchObject({ status: "expired", cancel_reason: "grace_expired" });
@@ -719,7 +719,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
     async () => {
       const a = await paying();
       await paddleSays(a.subId, { status: "past_due" });
-      await paddleSays(a.subId, { status: "active" }, 2 * 24 * 60 * 60 * 1000);
+      await paddleSays(a.subId, { status: "active" }, 24 * 60 * 60 * 1000);
       await runWorker(GRACE_MS + 5000);
       expect(await graceRow(a.subId)).toMatchObject({ status: "active", past_due_since: null });
 

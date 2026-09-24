@@ -1,9 +1,9 @@
--- A paying gym's failed payment and its 5-day grace (ROADMAP Stage 3 item 1c-i; Part 5
+-- A paying gym's failed payment and its 2-day grace (ROADMAP Stage 3 item 1c-i; Part 5
 -- §8). Forward-only. Hand-written, as `0016` onwards are; its journal entry is part of
 -- this commit.
 --
 -- subscriptions.past_due_since  when this row last became past_due; null otherwise. The
---                               worker ends the grace 5 days after it.
+--                               worker ends the grace 2 days after it.
 --
 -- A row whose grace ended carries cancel_reason 'grace_expired' until Paddle collects
 -- the payment or ends the subscription; while it does, the gym's fix is its card on

@@ -48,7 +48,7 @@
 // answers with the date its OLD trial ran out. A reader keying on "is this field
 // set" would put "Trial — 0 days left" on a gym that has been paying for a year.
 // Unreachable today only because nothing leaves `trialing`; pinned by a test.
-import { orgWords } from '@app/shared';
+import { orgWords, PAID_PLAN_GRACE_DAYS } from '@app/shared';
 import { calendarDaysBetween } from '../../utils/joinClock';
 import { getItem, setItem } from '../../utils/storage';
 import { viewerPrivileges } from './consoleView';
@@ -168,7 +168,7 @@ export function consoleReadOnlyBanner(orgType) {
   return `This ${words.it} has no plan. Nothing here can be changed, and your ${words.people} get the free app only.`;
 }
 
-/** The read-only banner when a paid plan's payment is overdue (its 5-day grace ended):
+/** The read-only banner when a paid plan's payment is overdue (its 2-day grace ended):
  *  the fix is the card, which pays what is owed and opens everything again. */
 export function paymentOverdueBanner(orgType) {
   const words = orgWords(orgType);
@@ -335,12 +335,12 @@ export function bannerFor(org, now = Date.now()) {
   }
 
   if (sub?.status === 'past_due') {
-    // Paddle retries the card by itself; the 5 days are the grace the worker gives a
+    // Paddle retries the card by itself; the days are the grace the worker gives a
     // paying gym before its members lose the plan (Part 5 §8, ROADMAP 1c-i).
     return {
       key: 'past_due',
       tone: 'warn',
-      text: `A payment for your ${words.it} didn't go through. Update your card under Plan on the Overview — your ${words.people} keep everything for 5 days after a failed payment.`,
+      text: `A payment for your ${words.it} didn't go through. Update your card under Plan on the Overview — your ${words.people} keep everything for ${PAID_PLAN_GRACE_DAYS} days after a failed payment.`,
       dismissible: false,
     };
   }
