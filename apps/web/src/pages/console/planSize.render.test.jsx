@@ -137,6 +137,23 @@ describe('paying during the free trial', () => {
     expect(openPaddleCheckout).toHaveBeenCalledTimes(1);
   });
 
+  it('says nothing was charged when the server cancelled a trial saved too late', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: freeTrial }));
+    orgService.startCheckout.mockResolvedValue({
+      data: { checkoutId: '22222222-2222-2222-2222-222222222222', provider: 'paddle', environment: 'sandbox', clientToken: 'test_x', transactionId: 'txn_01j7zbyqs3vah3aafp4jf62qaw' },
+    });
+    orgService.syncCheckout.mockResolvedValue({ data: { state: 'trial_ended' } });
+    openPaddleCheckout.mockImplementation(async ({ onEvent }) => {
+      onEvent({ type: 'completed' });
+    });
+    renderOverview();
+    fireEvent.click(await screen.findByRole('button', { name: 'Choose a plan' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click((await within(dialog).findAllByRole('button', { name: 'Subscribe' }))[0]);
+    expect(await within(dialog).findByText(/This plan didn’t start and nothing was charged/)).toBeTruthy();
+    expect(orgService.syncCheckout).toHaveBeenCalledTimes(1);
+  });
+
   it('shows a paid trial’s first payment on the card, and offers a bigger size instead', async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: paidTrial }));
     renderOverview();

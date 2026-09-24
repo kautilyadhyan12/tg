@@ -213,10 +213,12 @@ export async function syncOrgCheckout(
   const paddle = deps.paddle;
   if (paddle === null) throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
 
+  let subscriptionId: string | null = null;
   if (checkout.providerRef !== null && checkout.state !== "failed") {
     const txn = await paddle.api.getTransaction(checkout.providerRef);
     if (txn.kind === "ok" && txn.value.subscription_id !== null && (txn.value.status === "paid" || txn.value.status === "completed")) {
-      await applyPaddleSubscription(deps, txn.value.subscription_id);
+      subscriptionId = txn.value.subscription_id;
+      await applyPaddleSubscription(deps, subscriptionId);
       await bustEntitlements(deps.redis, input.userId);
     }
   }
@@ -225,6 +227,11 @@ export async function syncOrgCheckout(
   const live = await orgsRepo.gymLiveSubscription(deps.sql, input.gymId);
   if (live !== null && live.provider === "paddle") {
     return { state: "paid", subscription: toOrgSubscription(live) };
+  }
+  // A trial saved after the gym's own trial ended was cancelled, nothing charged.
+  const placed = subscriptionId === null ? null : await repo.findPaddleSubscription(deps.sql, subscriptionId);
+  if (placed !== null && placed.gymId === input.gymId && placed.status === "expired" && placed.cancelReason === null) {
+    return { state: "trial_ended" };
   }
   return { state: "waiting" };
 }
@@ -474,7 +481,8 @@ export type ApplyResult =
 
 /** A Paddle trial may end up to this much after the gym's own, never more. */
 const TRIAL_END_SLACK_MS = 60_000;
-/** Paddle refuses changes this close to a charge; a trial ending sooner is activated. */
+/** Paddle refuses changes this close to a charge; a trial ending sooner is charged now, the
+ *  same day its window named. */
 const TRIAL_MOVE_MIN_MS = 60 * 60 * 1000;
 
 /** Fetch one subscription from Paddle and write it onto its gym through the one rule. */
@@ -546,24 +554,61 @@ export async function applyPaddleSubscription(deps: BillingDeps, subscriptionId:
 /** A Paddle trial never runs past the gym's own free trial (1c-ii round one, H2). Paddle
  *  counts whole days from when the card is saved, so a checkout paid late, or rounded up,
  *  would give free days the gym never had: its first charge is moved back to the gym's own
- *  trial end, or taken now if that has passed. Safe to run on every event: once Paddle's
- *  date is the gym's, nothing is asked. */
+ *  trial end. A trial saved after the gym's own had ended is cancelled with nothing charged,
+ *  since its window said nothing was due (re-check N1); one ending within the hour is
+ *  charged now, the day its window named, or cancelled if that charge is refused. Safe to
+ *  run on every event: once Paddle's date is the gym's, nothing is asked. */
 async function alignTrial(deps: BillingDeps, paddle: PaddleSettings, sub: PaddleSubscription, gymId: string): Promise<ApplyResult> {
-  const ownEnd = await repo.ownTrialEnd(deps.sql, gymId);
+  const ownEnd = (await repo.ownTrialEnd(deps.sql, gymId))?.getTime() ?? null;
   const paddleEnd = sub.next_billed_at === null || sub.next_billed_at === undefined ? null : Date.parse(sub.next_billed_at);
   const now = deps.now().getTime();
-  if (ownEnd !== null && paddleEnd !== null && paddleEnd <= ownEnd.getTime() + TRIAL_END_SLACK_MS) return "applied";
-  const changed =
-    ownEnd !== null && ownEnd.getTime() - now >= TRIAL_MOVE_MIN_MS
-      ? await paddle.api.moveTrialEnd(sub.id, ownEnd.toISOString())
-      : await paddle.api.activateTrial(sub.id);
-  if (changed.kind !== "ok") {
-    const refusal = changed.kind === "refused" ? { status: changed.status, code: changed.code } : {};
-    deps.log.error({ event: "billing.trial_not_aligned", gymId, result: changed.kind, ...refusal }, "a Paddle trial runs past the gym's own; retrying");
+  if (ownEnd !== null && ownEnd > now && paddleEnd !== null && paddleEnd <= ownEnd + TRIAL_END_SLACK_MS) return "applied";
+
+  const cancel = async (why: string): Promise<ApplyResult> => {
+    const cancelled = await paddle.api.cancelSubscriptionNow(sub.id);
+    if (cancelled.kind !== "ok") {
+      deps.log.error({ event: "billing.trial_not_cancelled", gymId, result: cancelled.kind }, "a Paddle trial past the gym's own could not be cancelled; retrying");
+      return "retry";
+    }
+    deps.log.info({ event: "billing.trial_cancelled", gymId, why }, "a Paddle trial past the gym's own was cancelled, nothing charged");
+    return await applyPaddleSubscription(deps, sub.id, false);
+  };
+  if (ownEnd === null || ownEnd <= now) return await cancel("own_trial_ended");
+
+  if (ownEnd - now >= TRIAL_MOVE_MIN_MS) {
+    const moved = await paddle.api.moveTrialEnd(sub.id, new Date(ownEnd).toISOString());
+    if (moved.kind !== "ok") {
+      const refusal = moved.kind === "refused" ? { status: moved.status, code: moved.code } : {};
+      deps.log.error({ event: "billing.trial_not_aligned", gymId, result: moved.kind, ...refusal }, "a Paddle trial runs past the gym's own; retrying");
+      return "retry";
+    }
+    deps.log.info({ event: "billing.trial_aligned", gymId }, "a Paddle trial now ends with the gym's own");
+    return await applyPaddleSubscription(deps, sub.id, false);
+  }
+  const activated = await paddle.api.activateTrial(sub.id);
+  if (activated.kind === "refused") return await cancel("first_charge_refused");
+  if (activated.kind !== "ok") {
+    deps.log.error({ event: "billing.trial_not_aligned", gymId, result: activated.kind }, "a Paddle trial ending now was not charged; retrying");
     return "retry";
   }
-  deps.log.info({ event: "billing.trial_aligned", gymId, activated: changed.value.status !== "trialing" }, "a Paddle trial now ends with the gym's own");
+  deps.log.info({ event: "billing.trial_activated", gymId }, "a Paddle trial ending within the hour was charged now");
   return await applyPaddleSubscription(deps, sub.id, false);
+}
+
+/** Cancel at Paddle the trial checkouts whose gym's own trial has ended, so their window can
+ *  no longer be paid (re-check N1). A transaction Paddle will not cancel was paid or closed
+ *  already; either way it is not asked again. Safe to run twice. */
+export async function closeStaleTrialCheckouts(deps: BillingDeps): Promise<number> {
+  const paddle = deps.paddle;
+  if (paddle === null) return 0;
+  let closed = 0;
+  for (const checkout of await repo.staleTrialCheckouts(deps.sql, deps.now(), 50)) {
+    const cancelled = await paddle.api.cancelTransaction(checkout.providerRef);
+    if (cancelled.kind === "unavailable") continue;
+    await repo.closeCheckout(deps.sql, { checkoutId: checkout.id, gymId: checkout.gymId });
+    closed += 1;
+  }
+  return closed;
 }
 
 export function toSnapshot(sub: PaddleSubscription, planId: string): Snapshot {

@@ -33,6 +33,15 @@ export function usePaddleSubscribe(gymId) {
     for (let tries = 0; tries < SYNC_TRIES; tries += 1) {
       try {
         const res = await orgService.syncCheckout(gymId, checkoutId);
+        if (res.data?.state === 'trial_ended') {
+          closePaddleCheckout();
+          refreshConsoleOrgsAfterChange();
+          if (mounted.current) {
+            setPaying(null);
+            setPayError('This plan didn’t start and nothing was charged: your free trial had ended, or its first payment was declined. Choose a plan to carry on.');
+          }
+          return;
+        }
         if (res.data?.state === 'paid') {
           closePaddleCheckout();
           applyPaidPlan(gymId, res.data.subscription);

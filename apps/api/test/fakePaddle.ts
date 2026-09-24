@@ -45,6 +45,8 @@ export class FakePaddle implements PaddleApi {
   /** Trials moved (and to when), and trials ended at once. */
   trialMoves: { subscriptionId: string; at: string }[] = [];
   activations: string[] = [];
+  /** Refuse the next trial's charge-now, as a declined card would. */
+  refuseNextActivation = false;
   static readonly PRODUCT = "pro_" + "0".repeat(26);
 
   constructor(private readonly prices: Record<string, { amount: string; currency: string }>) {}
@@ -232,6 +234,10 @@ export class FakePaddle implements PaddleApi {
     const sub = this.subs.get(subscriptionId);
     if (sub === undefined) return Promise.resolve<PaddleResult<PaddleSubscription>>({ kind: "not_found" });
     if (this.down) return Promise.resolve<PaddleResult<PaddleSubscription>>({ kind: "unavailable", status: 503 });
+    if (this.refuseNextActivation) {
+      this.refuseNextActivation = false;
+      return Promise.resolve<PaddleResult<PaddleSubscription>>({ kind: "refused", status: 400, code: "subscription_payment_declined" });
+    }
     this.activations.push(subscriptionId);
     const amount = Number(sub.items[0]?.price.unit_price?.amount ?? "0");
     this.charges.push({ subscriptionId, amount });

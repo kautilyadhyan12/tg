@@ -136,8 +136,9 @@ export async function beginCheckout(
       WHERE gym_id = ${input.gymId} AND state IN ('creating','open')
       RETURNING provider_ref`;
     const inserted = await tx<RawCheckout[]>`
-      INSERT INTO billing_checkouts (gym_id, plan_id, created_by, idempotency_key, provider)
-      VALUES (${input.gymId}, ${plan.id}, ${input.userId}, ${input.idempotencyKey}, 'paddle')
+      INSERT INTO billing_checkouts (gym_id, plan_id, created_by, idempotency_key, provider, trial_ends_at)
+      VALUES (${input.gymId}, ${plan.id}, ${input.userId}, ${input.idempotencyKey}, 'paddle',
+              ${trialDays === null ? null : trialEnd})
       RETURNING id, gym_id, ${input.planCode}::text AS plan_code, state, provider_ref`;
     const row = inserted[0];
     if (row === undefined) throw new Error("checkout insert returned no row");
@@ -429,6 +430,25 @@ export async function paddlePlans(
 
 export async function setPaddlePriceId(sql: SqlOrTx, code: string, priceId: string): Promise<void> {
   await sql`UPDATE plans SET paddle_price_id = ${priceId} WHERE code = ${code}`;
+}
+
+/** Trial checkouts still open after the gym's own trial ended: their window would sell a
+ *  trial the gym no longer has, so the worker cancels them at Paddle. */
+export async function staleTrialCheckouts(sql: SqlOrTx, now: Date, limit: number): Promise<{ id: string; gymId: string; providerRef: string }[]> {
+  const rows = await sql<{ id: string; gym_id: string; provider_ref: string }[]>`
+    SELECT id, gym_id, provider_ref FROM billing_checkouts
+    WHERE state = 'open' AND trial_ends_at IS NOT NULL AND trial_ends_at <= ${now}
+      AND provider_ref IS NOT NULL
+    ORDER BY trial_ends_at, id
+    LIMIT ${limit}`;
+  return rows.map((r) => ({ id: r.id, gymId: r.gym_id, providerRef: r.provider_ref }));
+}
+
+/** A checkout closed at Paddle: it can no longer be paid. */
+export async function closeCheckout(sql: SqlOrTx, input: { checkoutId: string; gymId: string }): Promise<void> {
+  await sql`
+    UPDATE billing_checkouts SET state = 'superseded', updated_at = now()
+    WHERE id = ${input.checkoutId} AND gym_id = ${input.gymId} AND state = 'open'`;
 }
 
 /** A gym's checkouts still open at Paddle: before another is started, each is asked

@@ -24,6 +24,8 @@ export const billingCheckouts = pgTable(
     /** Paddle's transaction id (`txn_…`), once Paddle has made it. */
     providerRef: text("provider_ref"),
     state: text("state").notNull().default("creating"),
+    /** A trial checkout's gym's own trial end (`0044`): after it, the checkout is cancelled. */
+    trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -43,6 +45,9 @@ export const billingCheckouts = pgTable(
     index("billing_checkouts_gym_open_idx")
       .on(t.gymId)
       .where(sql`${t.state} IN ('creating','open')`),
+    index("billing_checkouts_trial_open_idx")
+      .on(t.trialEndsAt)
+      .where(sql`${t.state} = 'open' AND ${t.trialEndsAt} IS NOT NULL`),
   ],
 );
 

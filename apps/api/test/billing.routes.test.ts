@@ -989,21 +989,68 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
   );
 
   it(
-    "WORST THING: a trial window paid after the gym's own trial ended gives no free days: Paddle is told to charge at once",
+    "WORST THING: a trial window paid after the gym's own trial ended gives no free days and charges nothing: it is cancelled",
     async () => {
       const a = await owner();
       expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
       const txn = opened(await checkout(a.gymId, a.cookies, BIG));
       expect(paddle.trialCheckouts.at(-1)?.trialDays).toBe(10);
-      // The gym's own trial runs out and is swept; the old window is paid afterwards.
+      // The gym's own trial runs out and is swept; the old window, still showing
+      // "Due today $0.00", is paid before the worker closes it.
       await sql`UPDATE subscriptions SET trial_ends_at = now() - interval '1 day' WHERE owner_id = ${a.gymId} AND provider = 'none'`;
       expect((await expireLapsedGymTrials({ sql, log: silent }, { gymIds: [a.gymId] })).expired).toBe(1);
       const subId = paddle.pay(txn.transactionId);
       const synced = await post(`/v1/orgs/${a.gymId}/billing/checkouts/${txn.checkoutId}/sync`, {}, a.cookies);
-      expect(JSON.parse(synced.body)).toMatchObject({ state: "paid", subscription: { status: "active", seatCap: 5000, nextSeatCap: null } });
-      expect(paddle.activations).toContain(subId);
-      expect(chargesFor(subId)).toEqual([{ subscriptionId: subId, amount: 2000 }]);
-      expect(await planOf(subId)).toEqual({ code: BIG, status: "active" });
+      expect(JSON.parse(synced.body)).toEqual({ state: "trial_ended" });
+      expect(paddle.cancelledSubs).toContain(subId);
+      expect(paddle.activations).not.toContain(subId);
+      expect(chargesFor(subId)).toEqual([]);
+      expect(await planOf(subId)).toEqual({ code: BIG, status: "expired" });
+      expect(await gymSeatCap(sql, a.gymId)).toBeNull();
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toBeNull();
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a trial window left open when the gym's own trial ends is closed at Paddle, once",
+    async () => {
+      const a = await owner();
+      expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
+      const txn = opened(await checkout(a.gymId, a.cookies, BIG));
+      await runWorker();
+      expect(paddle.cancelledTxns).not.toContain(txn.transactionId);
+      await sql`UPDATE subscriptions SET trial_ends_at = now() - interval '1 minute' WHERE owner_id = ${a.gymId} AND provider = 'none'`;
+      await sql`UPDATE billing_checkouts SET trial_ends_at = now() - interval '1 minute' WHERE id = ${txn.checkoutId}`;
+      await runWorker();
+      await runWorker();
+      expect(paddle.cancelledTxns.filter((t) => t === txn.transactionId)).toHaveLength(1);
+      const state = await sql<{ state: string }[]>`SELECT state FROM billing_checkouts WHERE id = ${txn.checkoutId}`;
+      expect(state[0]?.state).toBe("superseded");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a trial ending within the hour is charged when saved, the day its window named; a refused charge cancels it",
+    async () => {
+      for (const refused of [false, true]) {
+        const a = await owner();
+        expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
+        const txn = opened(await checkout(a.gymId, a.cookies, BIG));
+        await sql`UPDATE subscriptions SET trial_ends_at = now() + interval '30 minutes' WHERE owner_id = ${a.gymId} AND provider = 'none'`;
+        paddle.refuseNextActivation = refused;
+        const subId = paddle.pay(txn.transactionId);
+        const synced = JSON.parse((await post(`/v1/orgs/${a.gymId}/billing/checkouts/${txn.checkoutId}/sync`, {}, a.cookies)).body) as { state: string };
+        if (refused) {
+          expect(synced).toEqual({ state: "trial_ended" });
+          expect(paddle.cancelledSubs).toContain(subId);
+          expect(chargesFor(subId)).toEqual([]);
+        } else {
+          expect(synced).toMatchObject({ state: "paid", subscription: { status: "active", seatCap: 5000 } });
+          expect(chargesFor(subId)).toEqual([{ subscriptionId: subId, amount: 2000 }]);
+        }
+      }
     },
     TEST_TIMEOUT_MS,
   );

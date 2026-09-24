@@ -5,6 +5,9 @@
 --                        a trial the gym has paid for keeps its free trial's member limit
 --                        until Paddle takes the first payment; the plan's own limit starts
 --                        then (Kd, RULINGS 2026-09-25). Null on every other row.
+-- billing_checkouts.trial_ends_at
+--                        a trial checkout's gym's own trial end: once it passes, the worker
+--                        cancels the checkout at Paddle so its window can no longer be paid.
 -- billing_plan_changes   every size change a gym's billing staff asked for: which plan to
 --                        which, who pressed it, and how it ended. One may be under way per
 --                        gym at a time, so two presses cannot both ask Paddle to charge;
@@ -13,6 +16,10 @@
 ALTER TABLE subscriptions ADD COLUMN trial_seat_cap integer;--> statement-breakpoint
 ALTER TABLE subscriptions ADD CONSTRAINT subscriptions_trial_seat_cap_check
   CHECK (trial_seat_cap IS NULL OR trial_seat_cap > 0);--> statement-breakpoint
+
+ALTER TABLE billing_checkouts ADD COLUMN trial_ends_at timestamptz;--> statement-breakpoint
+CREATE INDEX billing_checkouts_trial_open_idx ON billing_checkouts (trial_ends_at)
+  WHERE state = 'open' AND trial_ends_at IS NOT NULL;--> statement-breakpoint
 
 CREATE TABLE billing_plan_changes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

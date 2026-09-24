@@ -35,9 +35,12 @@ export const orgCheckoutResponseSchema = z.object({
 export type OrgCheckoutResponse = z.infer<typeof orgCheckoutResponseSchema>;
 
 /** After Paddle's window says the payment went: has it reached the gym yet? `waiting`
- *  means ask again in a moment; `paid` carries the gym's plan as it now stands. */
+ *  means ask again in a moment; `paid` carries the gym's plan as it now stands;
+ *  `trial_ended` means a trial window was saved after the gym's own trial had ended, so the
+ *  subscription was cancelled with nothing charged. */
 export const orgCheckoutSyncResponseSchema = z.discriminatedUnion("state", [
   z.object({ state: z.literal("waiting") }),
+  z.object({ state: z.literal("trial_ended") }),
   z.object({ state: z.literal("paid"), subscription: orgSubscriptionSchema }),
 ]);
 export type OrgCheckoutSyncResponse = z.infer<typeof orgCheckoutSyncResponseSchema>;
