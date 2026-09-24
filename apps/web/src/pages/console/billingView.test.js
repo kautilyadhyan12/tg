@@ -23,7 +23,10 @@ import {
   bannerIsDismissed,
   biggerPlans,
   canChooseBiggerSize,
+  canMakeRoomNow,
   canManageBilling,
+  chosenSeatCap,
+  nextSizeText,
   canPayDuringTrial,
   firstPaymentText,
   isSubscribed,
@@ -314,11 +317,10 @@ describe('seatLineText', () => {
     // The banner is a READER of that sentence, not its author. Re-inline a copy
     // here that drifts by one word and this fails; re-inline an identical copy
     // and nothing is lost, which is the honest limit of what this can catch.
-    // Somebody who can pay is also told where to make room (1c-ii); nobody else is.
+    // A trial's limit cannot grow before the first payment (RULINGS 2026-09-25), so a full
+    // trial is told only that it is full.
     const full = trialing(20, { seatsUsed: 300 });
-    expect(bannerFor(full, NOW)?.text).toBe(`${seatLineText(seatMeter(full))} Choose a bigger plan under Plan on the Overview.`);
-    const trainerView = trialing(20, { seatsUsed: 300, staffRole: 'trainer', privileges: ['members.read'] });
-    expect(bannerFor(trainerView, NOW)?.text).toBe(seatLineText(seatMeter(trainerView)));
+    expect(bannerFor(full, NOW)?.text).toBe(seatLineText(seatMeter(full)));
   });
 });
 
@@ -747,6 +749,21 @@ describe('who is offered which choice', () => {
     ['no plan at all', gym(), { subscribed: false, pay: false, bigger: false }],
   ])('%s', (_name, org, want) => {
     expect({ subscribed: isSubscribed(org), pay: canPayDuringTrial(org), bigger: canChooseBiggerSize(org) }).toEqual(want);
+    // Room now only on a plan already paying: a trial, paid or not, keeps its limit.
+    expect(canMakeRoomNow(org)).toBe(want.bigger && org.subscription?.status === 'active');
+  });
+});
+
+describe('a paid trial’s chosen size', () => {
+  const sub = { status: 'trialing', subscribed: true, seatCap: 200, nextSeatCap: 500, priceLabel: '$129', currentPeriodEnd: inDays(6) };
+  it('is the size that starts with the first payment, not the trial’s', () => {
+    expect(chosenSeatCap(sub)).toBe(500);
+    expect(chosenSeatCap({ ...sub, nextSeatCap: null })).toBe(200);
+  });
+  it('says when the chosen size starts, and nothing once it has', () => {
+    expect(nextSizeText(sub, 'gym')).toBe(`Up to 500 members from ${trialEndDateLabel(inDays(6))}, when your first payment is taken.`);
+    expect(nextSizeText({ ...sub, nextSeatCap: null }, 'gym')).toBeNull();
+    expect(nextSizeText({ ...sub, status: 'active' }, 'gym')).toBeNull();
   });
 });
 
@@ -812,6 +829,12 @@ describe('the banner for a trial the gym has paid for', () => {
   it('tells a free trial’s billing staff, near the end, that they can pay now', () => {
     expect(bannerFor(trialing(2), NOW)?.text).toContain('Choose a plan under Plan on the Overview; you pay when the trial ends.');
     expect(bannerFor(trialing(2, { staffRole: 'trainer', privileges: ['members.read'] }), NOW)?.text).not.toContain('Choose a plan');
+  });
+
+  it('never points a full trial at a bigger size, paid for or not', () => {
+    const full = (sub) => gym({ subscription: { status: 'trialing', trialEndsAt: inDays(6), seatCap: 100, ...sub }, seatsUsed: 100 });
+    expect(bannerFor(full({}), NOW)?.text).not.toContain('Choose');
+    expect(bannerFor(full({ subscribed: true, priceLabel: '$79', currentPeriodEnd: inDays(6) }), NOW)?.text).not.toContain('Choose');
   });
 
   it('points a full paying gym at a bigger size', () => {

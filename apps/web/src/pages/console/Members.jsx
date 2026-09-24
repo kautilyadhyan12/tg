@@ -16,8 +16,7 @@ import {
   seatIsFree,
 } from './consoleView';
 import {
-  canChooseBiggerSize,
-  canPayDuringTrial,
+  canMakeRoomNow,
   consoleIsReadOnly,
   readOnlyNote,
   seatLineText,
@@ -317,8 +316,8 @@ export default function Members() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [removingId, setRemovingId] = useState(null);
   const [removeError, setRemoveError] = useState(null);
-  /** The plan choice opened from the "nearly full" line: 'bigger' or 'subscribe'. */
-  const [choosing, setChoosing] = useState(null);
+  /** The bigger size opened from the "nearly full" line. */
+  const [choosing, setChoosing] = useState(false);
   const gymId = org?.id ?? null;
   // §4.3's "Remove hidden" for a trainer. Read off the SAME org row the screen
   // already has, so there is no second read to disagree with the first, and it
@@ -489,18 +488,19 @@ export default function Members() {
             {seatLineText(meter, org?.orgType)}
           </p>
         ) : null}
-        {/* Nearly full: billing staff can make room from here. */}
-        {meter?.pressure === true && (canChooseBiggerSize(org) || canPayDuringTrial(org)) ? (
+        {/* Nearly full: billing staff on a paying plan can make room from here. A trial's
+            limit stays the trial's until the first payment, so it gets no button. */}
+        {meter?.pressure === true && canMakeRoomNow(org) ? (
           <button
             type="button"
-            onClick={() => setChoosing(canChooseBiggerSize(org) ? 'bigger' : 'subscribe')}
+            onClick={() => setChoosing(true)}
             className="mt-2 rounded-xl px-4 py-2.5 text-sm font-semibold"
             style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F', minHeight: 44 }}
           >
-            {canChooseBiggerSize(org) ? 'Choose a bigger size' : 'Choose a plan'}
+            Choose a bigger size
           </button>
         ) : null}
-        {choosing !== null ? <PlanChoiceDialog org={org} mode={choosing} onClose={() => setChoosing(null)} /> : null}
+        {choosing ? <PlanChoiceDialog org={org} mode="bigger" onClose={() => setChoosing(false)} /> : null}
         {/* THE NOTE IS DRAWN WHERE THERE IS A GREYED CONTROL TO EXPLAIN, and on
             this screen that means somebody who may remove people. A trainer has
             no Remove button at all (§4.3), so for them this sentence would

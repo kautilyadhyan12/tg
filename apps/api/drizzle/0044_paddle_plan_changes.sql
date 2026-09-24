@@ -1,10 +1,18 @@
 -- A paying gym moves to a bigger size (ROADMAP Stage 3 item 1c-ii). Forward-only.
 -- Hand-written, as `0016` onwards are; its journal entry is part of this commit.
 --
+-- subscriptions.trial_seat_cap
+--                        a trial the gym has paid for keeps its free trial's member limit
+--                        until Paddle takes the first payment; the plan's own limit starts
+--                        then (Kd, RULINGS 2026-09-25). Null on every other row.
 -- billing_plan_changes   every size change a gym's billing staff asked for: which plan to
 --                        which, who pressed it, and how it ended. One may be under way per
 --                        gym at a time, so two presses cannot both ask Paddle to charge;
 --                        the same Idempotency-Key answers from its row.
+
+ALTER TABLE subscriptions ADD COLUMN trial_seat_cap integer;--> statement-breakpoint
+ALTER TABLE subscriptions ADD CONSTRAINT subscriptions_trial_seat_cap_check
+  CHECK (trial_seat_cap IS NULL OR trial_seat_cap > 0);--> statement-breakpoint
 
 CREATE TABLE billing_plan_changes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

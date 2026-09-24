@@ -200,6 +200,25 @@ export async function checkoutsForTransactions(sql: SqlOrTx, transactionIds: rea
   return rows.map(toCheckout);
 }
 
+/** The member limit of the gym's own free trial: its latest one's plan, or the trial band
+ *  of its price list (the smallest plan with a trial, as starting a trial picks it). */
+async function freeTrialSeatCap(tx: SqlOrTx, gymId: string): Promise<number | null> {
+  const own = await tx<{ seat_cap: number | null }[]>`
+    SELECT p.seat_cap FROM subscriptions s JOIN plans p ON p.id = s.plan_id
+    WHERE s.owner_type = 'gym' AND s.owner_id = ${gymId}
+      AND s.provider IN ('none','pilot') AND s.trial_ends_at IS NOT NULL
+    ORDER BY s.created_at DESC
+    LIMIT 1`;
+  if (own[0] !== undefined) return own[0].seat_cap;
+  const band = await tx<{ seat_cap: number | null }[]>`
+    SELECT p.seat_cap FROM plans p JOIN gyms g ON g.id = ${gymId}
+    WHERE p.audience = 'org' AND p.currency = g.currency_display AND p.active = true
+      AND p.interval = 'month' AND p.trial_days > 0
+    ORDER BY p.seat_cap ASC NULLS LAST, p.price_minor ASC
+    LIMIT 1`;
+  return band[0]?.seat_cap ?? null;
+}
+
 /** The gym's own free trial (no card, nobody charging), as opposed to a Paddle trial. */
 function isLocalTrial(row: { status: string; provider: string }): boolean {
   return row.status === "trialing" && (row.provider === "none" || row.provider === "pilot");
@@ -325,8 +344,10 @@ export async function applySnapshot(
       const status = decision.kind === "insert" ? decision.status : "expired";
       const ended = status === "expired" ? input.now : null;
       const pastDueSince = status === "past_due" ? input.now : null;
-      // A paid trial ends when Paddle takes the first payment.
+      // A paid trial ends when Paddle takes the first payment, and keeps its free trial's
+      // member limit until then (Kd, RULINGS 2026-09-25).
       const trialEndsAt = status === "trialing" ? s.currentPeriodEnd : null;
+      const trialSeatCap = status === "trialing" ? await freeTrialSeatCap(tx, input.gymId) : null;
       if (localTrial !== null && status !== "expired") {
         await tx`
           UPDATE subscriptions SET status = 'expired', ended_at = ${input.now}, cancel_reason = ${TRIAL_SUBSCRIBED}
@@ -341,12 +362,12 @@ export async function applySnapshot(
         });
       }
       const inserted = await tx<{ id: string }[]>`
-        INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, trial_ends_at, current_period_end,
-                                   cancel_at_period_end, provider, provider_ref,
+        INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, trial_ends_at, trial_seat_cap,
+                                   current_period_end, cancel_at_period_end, provider, provider_ref,
                                    provider_customer_ref, provider_updated_at, ended_at, cancel_reason,
                                    past_due_since)
-        VALUES ('gym', ${input.gymId}, ${s.planId}, ${status}, ${trialEndsAt}, ${s.currentPeriodEnd},
-                ${s.cancelAtPeriodEnd}, 'paddle', ${input.subscriptionId}, ${input.customerId},
+        VALUES ('gym', ${input.gymId}, ${s.planId}, ${status}, ${trialEndsAt}, ${trialSeatCap},
+                ${s.currentPeriodEnd}, ${s.cancelAtPeriodEnd}, 'paddle', ${input.subscriptionId}, ${input.customerId},
                 ${s.updatedAt}, ${ended}, ${decision.kind === "duplicate" ? "duplicate" : null},
                 ${pastDueSince})
         RETURNING id`;

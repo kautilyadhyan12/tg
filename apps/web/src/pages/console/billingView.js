@@ -213,6 +213,28 @@ export function canChooseBiggerSize(org) {
   );
 }
 
+/** CAN A BIGGER SIZE MAKE ROOM TODAY? Only on a plan already paying: in a trial, even a
+ *  paid one, the limit stays the trial's until the first payment (Kd, RULINGS 2026-09-25). */
+export function canMakeRoomNow(org) {
+  return canChooseBiggerSize(org) && org?.subscription?.status === 'active';
+}
+
+/** The size the gym has chosen: in a paid trial, the one that starts with the first payment. */
+export function chosenSeatCap(sub) {
+  return Number.isFinite(sub?.nextSeatCap) ? sub.nextSeatCap : (sub?.seatCap ?? null);
+}
+
+/** "Up to 500 members from 5 Oct, when your first payment is taken." for a paid trial whose
+ *  chosen size is bigger than the trial's; null otherwise. */
+export function nextSizeText(sub, orgType) {
+  if (sub?.status !== 'trialing' || !Number.isFinite(sub?.nextSeatCap)) return null;
+  const date = trialEndDateLabel(sub.currentPeriodEnd);
+  const who = orgWords(orgType).people;
+  return date === null
+    ? `Up to ${sub.nextSeatCap} ${who} once your first payment is taken.`
+    : `Up to ${sub.nextSeatCap} ${who} from ${date}, when your first payment is taken.`;
+}
+
 /** The plans bigger than the gym's size, smallest first as the server lists them. None
  *  when the gym's plan has no limit to grow past. */
 export function biggerPlans(plans, seatCap) {
@@ -457,11 +479,7 @@ export function bannerFor(org, now = Date.now()) {
       // readers, not its author.
       text:
         seatLineText(meter, org?.orgType) +
-        (canChooseBiggerSize(org)
-          ? ' Choose a bigger size under Plan on the Overview.'
-          : canPayDuringTrial(org)
-            ? ' Choose a bigger plan under Plan on the Overview.'
-            : ''),
+        (canMakeRoomNow(org) ? ' Choose a bigger size under Plan on the Overview.' : ''),
       dismissible: false,
     };
   }

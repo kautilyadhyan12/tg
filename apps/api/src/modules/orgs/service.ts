@@ -1131,6 +1131,7 @@ export function toOrgSubscription(row: repo.GymSubscriptionRow): OrgSubscription
     currentPeriodEnd: paid ? (row.currentPeriodEnd?.toISOString() ?? null) : null,
     cancelAtPeriodEnd: paid && row.cancelAtPeriodEnd,
     subscribed,
+    nextSeatCap: subscribed && row.status === "trialing" && row.planSeatCap !== row.seatCap ? row.planSeatCap : null,
   };
 }
 

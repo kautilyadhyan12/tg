@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { processPaddleEvents } from "../src/modules/billing/events.js";
+import { gymSeatCap } from "../src/modules/orgs/repo.js";
 import { expireLapsedGymTrials } from "../src/modules/orgs/trialSweep.js";
 import { FakePaddle, paddleId } from "./fakePaddle.js";
 import { createMemoryRedis } from "../src/redis.js";
@@ -882,16 +883,19 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
   );
 
   it(
-    "a gym pays during its free trial: a trial of the days left, nothing charged, the bigger limit at once, and charged when the trial ends",
+    "WORST THING: a gym pays during its free trial: a trial of the days left, nothing charged, the trial's 200 members until the first payment, and the chosen size from then",
     async () => {
       const a = await payingInTrial(BIG);
       // The trial checkout asked for exactly the days left of the gym's own 10.
       expect(paddle.trialCheckouts.at(-1)).toMatchObject({ trialDays: 10, planCode: BIG, amountMinor: 2000, currency: "USD" });
       const trialEnd = paddle.subs.get(a.subId)?.next_billed_at ?? null;
+      // Choosing 5,000 does not open 5,000 places for free: the trial's 200 hold until Paddle is paid
+      // (Kd, RULINGS 2026-09-25), on the screen and where a join is refused.
       expect(a.synced).toMatchObject({
         state: "paid",
-        subscription: { status: "trialing", subscribed: true, priceLabel: "$20", seatCap: 5000, currentPeriodEnd: trialEnd, trialEndsAt: trialEnd },
+        subscription: { status: "trialing", subscribed: true, priceLabel: "$20", seatCap: 200, nextSeatCap: 5000, currentPeriodEnd: trialEnd, trialEndsAt: trialEnd },
       });
+      expect(await gymSeatCap(sql, a.gymId)).toBe(200);
       // Its own free trial gave way to the paid one; the owner's one free trial stays spent.
       const rows = await sql<{ provider: string; status: string; cancel_reason: string | null }[]>`
         SELECT provider, status, cancel_reason FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${a.gymId} ORDER BY created_at`;
@@ -916,7 +920,14 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       expect(await planOf(a.subId)).toEqual({ code: BIG, status: "active" });
       const converted = await sql`SELECT 1 FROM audit_log WHERE gym_id = ${a.gymId} AND action = 'billing.converted'`;
       expect(converted).toHaveLength(1);
-      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ status: "active", currentPeriodEnd: "2026-12-11T00:00:00.000Z", subscribed: true });
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({
+        status: "active",
+        currentPeriodEnd: "2026-12-11T00:00:00.000Z",
+        subscribed: true,
+        seatCap: 5000,
+        nextSeatCap: null,
+      });
+      expect(await gymSeatCap(sql, a.gymId)).toBe(5000);
     },
     TEST_TIMEOUT_MS,
   );
@@ -966,7 +977,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
   );
 
   it(
-    "a bigger size during the paid trial charges nothing now: the new price is the one taken when the trial ends",
+    "a bigger size during the paid trial charges nothing now and opens no places: the new price and size start with the first payment",
     async () => {
       const a = await payingInTrial(SMALL);
       const preview = JSON.parse((await sizePreview(a.gymId, a.cookies, BIG)).body) as { dueNow: unknown; nextPaymentAt: string | null };
@@ -974,7 +985,9 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       expect(preview.nextPaymentAt).toBe(paddle.subs.get(a.subId)?.next_billed_at);
       const res = await sizeChange(a.gymId, a.cookies, BIG);
       expect(res.statusCode).toBe(200);
-      expect(JSON.parse(res.body)).toMatchObject({ subscription: { status: "trialing", seatCap: 5000, priceLabel: "$20", subscribed: true } });
+      // SMALL's 1 place was under the trial's 200; BIG's 5,000 wait for the first payment.
+      expect(JSON.parse(res.body)).toMatchObject({ subscription: { status: "trialing", seatCap: 200, nextSeatCap: 5000, priceLabel: "$20", subscribed: true } });
+      expect(await gymSeatCap(sql, a.gymId)).toBe(200);
       expect(paddle.changeCalls.filter((c) => c.subscriptionId === a.subId)).toEqual([{ subscriptionId: a.subId, priceId: BIG_PRICE, mode: "do_not_bill" }]);
       expect(chargesFor(a.subId)).toEqual([]);
     },

@@ -9,6 +9,7 @@ import {
   canPayDuringTrial,
   firstPaymentText,
   isSubscribed,
+  nextSizeText,
   isTrialing,
   seatLineText,
   seatMeter,
@@ -143,6 +144,7 @@ export default function TrialCard({ org }) {
   // Only a plan in good standing renews; a failed payment says so in the banner instead.
   const periodEnd = org.subscription.status === 'active' ? trialEndDateLabel(org.subscription.currentPeriodEnd) : null;
   const firstPayment = firstPaymentText(org.subscription);
+  const nextSize = nextSizeText(org.subscription, org?.orgType);
   const payNow = canPayDuringTrial(org);
   const bigger = canChooseBiggerSize(org);
 
@@ -175,9 +177,14 @@ export default function TrialCard({ org }) {
         </div>
       ) : null}
       <SeatLine org={org} />
+      {nextSize !== null && !org.subscription.cancelAtPeriodEnd ? (
+        <div className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.6)' }}>
+          {nextSize}
+        </div>
+      ) : null}
       {payNow ? (
         <div className="text-sm mt-3" style={{ color: 'rgba(255,255,255,0.6)' }}>
-          Choose a plan now and keep your free days: the first payment is taken when the trial ends.
+          Choose a plan now and keep your free days: the plan and its first payment start when the trial ends.
         </div>
       ) : null}
       <div className="mt-4 flex flex-col sm:flex-row gap-2">

@@ -121,10 +121,14 @@ describe('paying during the free trial', () => {
       data: { checkoutId: '22222222-2222-2222-2222-222222222222', provider: 'paddle', environment: 'sandbox', clientToken: 'test_x', transactionId: 'txn_01j7zbyqs3vah3aafp4jf62qaw' },
     });
     renderOverview();
-    expect(await screen.findByText(/keep your free days: the first payment is taken when the trial ends/)).toBeTruthy();
+    expect(await screen.findByText(/keep your free days: the plan and its first payment start when the trial ends/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Choose a plan' }));
     const dialog = await screen.findByRole('dialog');
-    expect(within(dialog).getByText(new RegExp(`first payment is taken when the trial ends on ${trialEndDateLabel(TRIAL_END)}`))).toBeTruthy();
+    expect(
+      within(dialog).getByText(
+        new RegExp(`carries on at up to 200 members\\. Your card is saved now; the plan you choose and its first payment start when the trial ends on ${trialEndDateLabel(TRIAL_END)}`),
+      ),
+    ).toBeTruthy();
     const rows = await within(dialog).findAllByRole('button', { name: 'Subscribe' });
     expect(rows).toHaveLength(3);
     fireEvent.click(rows[1]);
@@ -141,6 +145,29 @@ describe('paying during the free trial', () => {
     expect(screen.queryByRole('button', { name: 'Choose a plan' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Choose a bigger size' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Manage payment' })).toBeTruthy();
+  });
+
+  it('keeps the trial’s 200 on the card and says when the chosen size starts', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: { ...paidTrial, priceLabel: '$129', nextSeatCap: 500 } }));
+    renderOverview();
+    expect(await screen.findByText(`Up to 500 members from ${trialEndDateLabel(TRIAL_END)}, when your first payment is taken.`)).toBeTruthy();
+    expect(screen.getAllByText(/190 of 200 places used/).length).toBeGreaterThan(0);
+  });
+
+  it('a bigger size during the trial says it starts with the first payment, not now', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: paidTrial }));
+    orgService.previewSizeChange.mockResolvedValue({ data: { planCode: 'org_b2_us_m', seatCap: 500, priceLabel: '$129', dueNow: null, nextPaymentAt: TRIAL_END } });
+    orgService.changeSize.mockResolvedValue({ data: { subscription: { ...paidTrial, priceLabel: '$129', nextSeatCap: 500 } } });
+    renderOverview();
+    fireEvent.click(await screen.findByRole('button', { name: 'Choose a bigger size' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/The new size starts with your first payment on .*\. Until then your trial allows up to 200 members\./)).toBeTruthy();
+    fireEvent.click((await within(dialog).findAllByRole('button', { name: 'Choose' }))[0]);
+    await within(dialog).findByText(/Nothing to pay now/);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
+    expect(
+      await within(dialog).findByText(`Done. Up to 500 members from ${trialEndDateLabel(TRIAL_END)}, when your first payment is taken.`),
+    ).toBeTruthy();
   });
 });
 

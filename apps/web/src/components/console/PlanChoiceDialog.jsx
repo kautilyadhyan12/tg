@@ -5,6 +5,7 @@ import { orgService, errorText } from '../../api/orgsApi';
 import { applyPaidPlan, refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
 import {
   biggerPlans,
+  chosenSeatCap,
   firstPaymentText,
   planPriceText,
   planSeatLabel,
@@ -97,7 +98,10 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
   };
 
   const trialEnds = trialEndDateLabel(sub?.trialEndsAt);
-  const bigger = mode === 'bigger' ? biggerPlans(plans.list, sub?.seatCap) : [];
+  // In a trial, even a paid one, the limit stays the trial's until the first payment.
+  const inTrial = sub?.status === 'trialing';
+  const firstPaymentOn = trialEndDateLabel(sub?.currentPeriodEnd);
+  const bigger = mode === 'bigger' ? biggerPlans(plans.list, chosenSeatCap(sub)) : [];
 
   return (
     <div
@@ -138,9 +142,11 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
           <>
             <p className="text-sm mt-4" style={{ color: 'rgba(255,255,255,0.85)' }} data-testid="plan-choice-done">
               {changed !== null
-                ? Number.isFinite(changed.seatCap)
-                  ? `Done. Up to ${changed.seatCap} ${words.people} can now join.`
-                  : `Done. Your plan now has no ${words.person} limit.`
+                ? changed.status === 'trialing'
+                  ? `Done. Up to ${chosenSeatCap(changed)} ${words.people} from ${firstPaymentOn ?? 'your first payment'}, when your first payment is taken.`
+                  : Number.isFinite(changed.seatCap)
+                    ? `Done. Up to ${changed.seatCap} ${words.people} can now join.`
+                    : `Done. Your plan now has no ${words.person} limit.`
                 : `Your card is saved. ${firstPaymentText(paid) ?? ''}`.trim()}
             </p>
             <button
@@ -156,8 +162,10 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
           <>
             <p className="text-sm mt-3" style={muted}>
               {mode === 'bigger'
-                ? `More ${words.people} can join as soon as you confirm.`
-                : `Your free trial carries on. Your card is saved now and your first payment is taken when the trial ends${trialEnds === null ? '' : ` on ${trialEnds}`}.`}
+                ? inTrial
+                  ? `The new size starts with your first payment${firstPaymentOn === null ? '' : ` on ${firstPaymentOn}`}. Until then your trial allows up to ${sub?.seatCap} ${words.people}.`
+                  : `More ${words.people} can join as soon as you confirm.`
+                : `Your free trial carries on at up to ${sub?.seatCap} ${words.people}. Your card is saved now; the plan you choose and its first payment start when the trial ends${trialEnds === null ? '' : ` on ${trialEnds}`}.`}
             </p>
 
             {plans.loading ? (
