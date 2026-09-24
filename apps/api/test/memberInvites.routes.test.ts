@@ -228,7 +228,9 @@ d("press Invite (real Postgres)", () => {
       sender,
       transport,
       mailDomain: (domain) => Promise.resolve(domains.get(domain) ?? "accepts"),
-      now: () => new Date(),
+      // A millisecond ahead: a row stamped by the database's now() in this same
+      // millisecond would otherwise read as not yet due (JS keeps whole milliseconds).
+      now: () => new Date(Date.now() + 1),
       sleep: () => Promise.resolve(),
       ...over,
     });
@@ -327,7 +329,7 @@ d("press Invite (real Postgres)", () => {
       preview = await previewOf(gym, owner);
       expect((await press(gym, owner, preview)).statusCode).toBe(200);
       const claimed = await claimNextSend(sql, {
-        now: new Date(),
+        now: new Date(Date.now() + 1),
         leaseMs: 60_000,
         platformPerDay: 2000,
         gymPerDay: 500,
