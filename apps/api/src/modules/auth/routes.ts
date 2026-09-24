@@ -123,6 +123,8 @@ export function registerAuthRoutes(
     emailSender?: EmailSender;
     // null = Google not configured; the routes redirect cleanly (google.ts).
     googleVerifier?: GoogleVerifier | null;
+    /** Tests only: a hasher that can hold a password check open; unset is argon2id. */
+    hasher?: service.PasswordHasher;
   },
 ): void {
   const googleVerifier = deps.googleVerifier ?? null;
@@ -130,7 +132,7 @@ export function registerAuthRoutes(
     sql: deps.sql,
     config: deps.config,
     emailSender: deps.emailSender ?? createLogOnlyEmailSender(app.log),
-    hasher: argon2idHasher,
+    hasher: deps.hasher ?? argon2idHasher,
     log: app.log,
   };
 
@@ -151,6 +153,16 @@ export function registerAuthRoutes(
     max: 5,
     windowMs: HOUR_MS,
     identifier: identifierFrom,
+    redis: deps.redis,
+  });
+  // Each call runs argon2 twice and ends every session: by account, as login's limit
+  // counts by address, with a front desk's shared address well above it.
+  const changePasswordLimit = createDualRateLimit({
+    name: "change_password",
+    max: 10,
+    ipMax: 100,
+    windowMs: HOUR_MS,
+    identifier: (req) => req.authUser?.id ?? null,
     redis: deps.redis,
   });
   // OAuth routes drive an external Google token exchange + a user INSERT, so
@@ -294,7 +306,7 @@ export function registerAuthRoutes(
 
   app.post(
     "/v1/auth/change-password",
-    { preHandler: [app.authenticate] },
+    { preHandler: [app.authenticate, changePasswordLimit] },
     async (req, reply) => {
       const input = parseBody(changePasswordRequestSchema, req, reply);
       if (input === null) return;

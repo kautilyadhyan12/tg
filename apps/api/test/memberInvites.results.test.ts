@@ -251,7 +251,11 @@ d("what comes back (real Postgres)", () => {
     },
   };
   const toldOperator: StoppedGym[] = [];
-  let clock = new Date();
+  /** A millisecond ahead of now. The database stamps microseconds and a JS Date keeps
+   *  whole milliseconds, so a clock read in the same millisecond as a report's stamp reads
+   *  earlier than it, and the report is not yet due (seen only on CI's faster machine). */
+  const justNow = () => new Date(Date.now() + 1);
+  let clock = justNow();
   const processResults = async (): Promise<ResultsRun> =>
     await processInviteResults({
       sql,
@@ -270,7 +274,7 @@ d("what comes back (real Postgres)", () => {
       await processResults();
       clock = new Date(clock.getTime() + 4 * 60 * 60 * 1000);
     }
-    clock = new Date();
+    clock = justNow();
   };
 
   const suppressionsOf = async (email: string) =>
@@ -732,22 +736,36 @@ d("what comes back (real Postgres)", () => {
         await report("email.bounced", id, { bounceType: "Permanent" });
       }
       const told = toldOperator.length;
-      clock = new Date();
+      clock = justNow();
       const runs = await Promise.all([processResults(), processResults(), processResults()]);
-      expect(runs.reduce((n, run) => n + run.stopped, 0)).toBe(1);
-      expect(toldOperator.slice(told).filter((s) => s.gymId === gymH)).toHaveLength(1);
+      // What a failure needs to say: each report's own state beside the clock the runs
+      // used and what each run did (it has failed on CI only, never locally).
+      const state = async () =>
+        JSON.stringify({
+          clock: clock.toISOString(),
+          runs,
+          events: await sql`
+            SELECT status, attempts, tries, not_before, received_at, payload->>'emailId' AS email_id, clock_timestamp() AS db_now
+            FROM webhook_events
+            WHERE provider = 'resend' AND event_id = ANY(${eventIds}::text[]) AND payload->>'emailId' = ANY(${sent}::text[])`,
+          due: await sql`
+            SELECT event_id, status, not_before FROM webhook_events
+            WHERE provider = 'resend' AND status = 'pending' AND not_before <= ${clock}`,
+        });
+      expect(runs.reduce((n, run) => n + run.stopped, 0), await state()).toBe(1);
+      expect(toldOperator.slice(told).filter((s) => s.gymId === gymH), await state()).toHaveLength(1);
       const mine = (await keptEvents()).filter((e) => sent.includes((e.payload as { emailId: string }).emailId));
-      expect(mine.map((e) => e.status)).toEqual(["done", "done", "done"]);
+      expect(mine.map((e) => e.status), await state()).toEqual(["done", "done", "done"]);
     }, TEST_TIMEOUT_MS);
 
     it("a claim that outlived its lease cannot finish the report the next claim took", async () => {
       const providerId = await seedSent(gymA, addr("lease"));
       resendRecords.set(providerId, "delivered");
       await report("email.delivered", providerId);
-      const first = await claimDueEvent(sql, new Date(), 1);
+      const first = await claimDueEvent(sql, justNow(), 1);
       if (first === null) throw new Error("nothing to claim");
       const second = await claimDueEvent(sql, new Date(Date.now() + 10), INVITE_RESULTS.leaseMs);
-      expect(second?.id).toBe(first.id);
+      expect(second?.id, JSON.stringify({ first, second })).toBe(first.id);
       expect(await finishEvent(sql, first, "done", new Date())).toBe(false);
       if (second === null) throw new Error("the second claim took nothing");
       expect(await finishEvent(sql, second, "done", new Date())).toBe(true);
@@ -773,7 +791,7 @@ d("what comes back (real Postgres)", () => {
           clock = new Date(clock.getTime() + 60 * 60 * 1000);
         }
       }
-      clock = new Date();
+      clock = justNow();
       await sql`UPDATE webhook_events SET not_before = now() WHERE status = 'pending' AND event_id = ANY(${eventIds}::text[])`;
       await processAll();
       expect(await suppressionsOf(email)).toEqual([{ gym_id: gymA, reason: "complained" }]);

@@ -1305,9 +1305,14 @@ async function claimSeat(
   input: {
     org: OrgRow;
     userId: string;
-    codeId: string;
-    codeLabel: string;
+    /** Null for a join by invitation (§10.2), which comes through no code. */
+    codeId: string | null;
+    codeLabel: string | null;
     consentAt: Date | null;
+    /** A join by invitation: the list record it was for (null when the list could not
+     *  say whose it was), and the moment the person was on the list. */
+    entryId?: string | null;
+    listedAt?: Date | null;
   },
 ): Promise<ClaimSeatOutcome> {
   // T3 ROUND 1 C/H-1 (carried forward verbatim): the seat check must not run
@@ -1358,8 +1363,9 @@ async function claimSeat(
   }
 
   const inserted = await tx<{ id: string; joined_at: Date }[]>`
-    INSERT INTO gym_members (gym_id, user_id, code_id, consent_at, complimentary)
-    VALUES (${input.org.id}, ${input.userId}, ${input.codeId}, ${input.consentAt}, false)
+    INSERT INTO gym_members (gym_id, user_id, code_id, consent_at, complimentary, entry_id, last_listed_at)
+    VALUES (${input.org.id}, ${input.userId}, ${input.codeId}, ${input.consentAt}, false,
+            ${input.entryId ?? null}, ${input.listedAt ?? null})
     ON CONFLICT (gym_id, user_id) WHERE removed_at IS NULL DO NOTHING
     RETURNING id, joined_at`;
 
@@ -1374,11 +1380,47 @@ async function claimSeat(
     return { kind: "already_member", membership: existing };
   }
 
-  await tx`UPDATE gym_codes SET uses = uses + 1 WHERE id = ${input.codeId}`;
+  if (input.codeId !== null) await tx`UPDATE gym_codes SET uses = uses + 1 WHERE id = ${input.codeId}`;
   return {
     kind: "joined",
     membership: { id: newRow.id, joinedAt: newRow.joined_at, groupLabel: input.codeLabel },
   };
+}
+
+/** The gym's row, locked: every change to a gym's list and seats takes this first. */
+export async function lockOrg(tx: TransactionSql, gymId: string): Promise<OrgRow | null> {
+  const rows = await tx<RawOrg[]>`
+    SELECT id, slug, name, city, country, org_type, timezone, locale,
+         currency_display, clock_format, manual_attendance_enabled, status
+    FROM gyms WHERE id = ${gymId} FOR UPDATE`;
+  const raw = rows[0];
+  return raw === undefined ? null : toOrgRow(raw);
+}
+
+/** A seat taken by accepting an invitation (§10.2): no code, the tap's own consent
+ *  time, the list record it was for. The caller holds the gym's lock (`lockOrg`). A
+ *  person who is already a member keeps their membership, now linked to the record
+ *  where it had none, and stamped as listed. */
+export async function claimSeatByInvitation(
+  tx: TransactionSql,
+  input: { org: OrgRow; userId: string; entryId: string | null; at: Date },
+): Promise<ClaimSeatOutcome> {
+  const claim = await claimSeat(tx, {
+    org: input.org,
+    userId: input.userId,
+    codeId: null,
+    codeLabel: null,
+    consentAt: input.at,
+    entryId: input.entryId,
+    listedAt: input.at,
+  });
+  if (claim.kind === "already_member") {
+    await tx`
+      UPDATE gym_members
+      SET entry_id = coalesce(entry_id, ${input.entryId}::uuid), last_listed_at = ${input.at}
+      WHERE gym_id = ${input.org.id} AND user_id = ${input.userId} AND removed_at IS NULL`;
+  }
+  return claim;
 }
 
 /** The org's seat cap, or null when nothing caps it.
@@ -2406,7 +2448,14 @@ export type RemoveMemberOutcome =
  *  another gym removes nobody. */
 export async function removeMember(
   sql: Sql,
-  input: { gymId: string; userId: string; actorUserId: string },
+  input: {
+    gymId: string;
+    userId: string;
+    actorUserId: string;
+    /** Run in the same transaction once the membership is closed (or was already):
+     *  withdrawing the person's invitation, so signing in again lets nobody back in. */
+    afterClose?: (tx: TransactionSql) => Promise<unknown>;
+  },
 ): Promise<RemoveMemberOutcome> {
   return await sql.begin(async (tx) => {
     // THE ORG LOCK, added by T3 round 1's C/H-2 (2026-08-22). This function
@@ -2438,9 +2487,12 @@ export async function removeMember(
         SELECT id FROM gym_members
         WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
         LIMIT 1`;
-      return everRows[0] === undefined ? { kind: "never_member" } : { kind: "already_removed" };
+      if (everRows[0] === undefined) return { kind: "never_member" };
+      await input.afterClose?.(tx);
+      return { kind: "already_removed" };
     }
 
+    await input.afterClose?.(tx);
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
       gymId: input.gymId,

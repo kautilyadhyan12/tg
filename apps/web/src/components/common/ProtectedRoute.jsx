@@ -1,8 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { landingRoute, readDoor, readJoinCode, rememberJoinCode } from '../../pages/landingRoute';
+import InvitationsGate from '../../pages/InvitationsGate';
 import SignUpNote from '../../pages/SignUpNote';
+import { refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
+import { forgetInvitations, loadInvitations, saidNotNow, sayNotNow, waitingNow } from '../gym/invitationsStore';
 
 const Spinner = () => (
   <div
@@ -40,7 +43,54 @@ const Spinner = () => (
   </div>
 );
 
-export const ProtectedRoute = ({ children, requireOnboarding = true, requireSignUpNote = true }) => {
+// "You're invited" (Part 3 §10.2): after "Before you start" and before setup, for a
+// person with an invitation still to answer. Read once per visit; a read that fails
+// lets the person on, since the invitations are also in Settings → Gym.
+function InvitationsCheck({ userId, children }) {
+  const settled = () => {
+    if (saidNotNow(userId)) return { phase: 'done', waiting: [] };
+    const known = waitingNow(userId);
+    if (known === null) return { phase: 'loading', waiting: [] };
+    return known.length > 0 ? { phase: 'asking', waiting: known } : { phase: 'done', waiting: [] };
+  };
+  const [check, setCheck] = useState(settled);
+
+  useEffect(() => {
+    if (check.phase !== 'loading') return undefined;
+    let live = true;
+    loadInvitations(userId).then(
+      () => {
+        if (live) setCheck(settled());
+      },
+      () => {
+        if (live) setCheck({ phase: 'done', waiting: [] });
+      },
+    );
+    return () => {
+      live = false;
+    };
+    // `settled` reads only `userId` and the store.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [check.phase, userId]);
+
+  if (check.phase === 'loading') return <Spinner />;
+  if (check.phase === 'asking') {
+    return (
+      <InvitationsGate
+        invitations={check.waiting}
+        onDone={() => {
+          sayNotNow(userId);
+          forgetInvitations();
+          refreshConsoleOrgsAfterChange();
+          setCheck({ phase: 'done', waiting: [] });
+        }}
+      />
+    );
+  }
+  return children;
+}
+
+export const ProtectedRoute = ({ children, requireOnboarding = true, requireSignUpNote = true, requireInvitations = true }) => {
   const { user, loading } = useAuth();
   if (loading) return <Spinner />;
   if (!user) return <Navigate to="/login" replace />;
@@ -59,10 +109,14 @@ export const ProtectedRoute = ({ children, requireOnboarding = true, requireSign
   // never ticked it in with no record. It cannot trap anyone the way a
   // finished wizard could: ticking needs only the tap's own request.
   if (requireSignUpNote && user.signUpDisclaimerAgreed !== true) return <SignUpNote />;
-  if (requireOnboarding && user.onboardingCompleted === false) {
-    return <Navigate to="/onboarding" replace />;
-  }
-  return children;
+  const page =
+    requireOnboarding && user.onboardingCompleted === false ? <Navigate to="/onboarding" replace /> : children;
+  if (!requireInvitations) return page;
+  return (
+    <InvitationsCheck key={user.id} userId={user.id}>
+      {page}
+    </InvitationsCheck>
+  );
 };
 
 // A signed-in person who lands back on /login (a bookmark, the browser's back

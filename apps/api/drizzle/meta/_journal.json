@@ -274,6 +274,13 @@
       "when": 1788220800022,
       "tag": "0039_invite_results",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1788220800023,
+      "tag": "0040_join_by_invitation",
+      "breakpoints": true
     }
   ]
 }

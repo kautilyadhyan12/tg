@@ -3,6 +3,7 @@ import { authService } from '../api/authApi';
 import { resetTimezoneSync, syncTimezone, userService } from '../api/userApi';
 import { forgetDoor, forgetJoinCode } from '../pages/landingRoute';
 import { forgetUnsavedScan } from '../components/nutrition/unsavedScan';
+import { resetInvitations } from '../components/gym/invitationsStore';
 import { setCurrentUserId } from '../utils/storage';
 import { flushSyncQueue } from '../sync/syncClient';
 
@@ -184,6 +185,8 @@ export function AuthProvider({ children }) {
       forgetJoinCode();
       // And an unsaved meal scan: its photo and foods are this person's alone.
       forgetUnsavedScan();
+      // And what this sign-in read and answered about invitations ("Not now" too).
+      resetInvitations();
     }
   };
 

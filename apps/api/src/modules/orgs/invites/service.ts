@@ -322,6 +322,10 @@ export async function inviteAgain(
     if (invite === null) throw refuse(409, "not_invited");
     if (invite.state === "accepted") throw refuse(409, "already_joined");
     await mayEmail(tx, gymId, email, hmac);
+    // Sending again re-opens a declined or withdrawn invitation (§10.2), before the check
+    // below: an email still waiting to go would otherwise be skipped by the worker as an
+    // answered invitation, and the person could never join.
+    await repo.reopenInvitation(tx, gymId, invite.id);
     // A second press while the first email is still to go sends nothing more.
     if (await repo.hasOpenSend(tx, gymId, invite.id)) return { outcome: "already_queued" as const, hmac };
     const usage = await repo.againUsage(tx, gymId, invite.id, at, MEMBER_INVITE_AGAIN_PERSON_DAYS);

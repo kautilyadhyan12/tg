@@ -1791,14 +1791,25 @@ export async function setEntryFormer(tx: TransactionSql, gymId: string, entryId:
 }
 
 /** A record deleted for good: a former one deleted, or the one not kept when two
- *  are joined. No table points at a record yet; the last test in
- *  `memberList.byHand.routes.test.ts` fails the day a foreign key does. */
+ *  are joined. A membership linked to it keeps its membership and loses the link (the
+ *  foreign key's ON DELETE SET NULL); the last test in
+ *  `memberList.byHand.routes.test.ts` lists every table that points at a record. */
 export async function deleteEntry(tx: TransactionSql, gymId: string, entryId: string): Promise<boolean> {
   const rows = await tx<{ id: string }[]>`
     DELETE FROM gym_member_list_entries
     WHERE gym_id = ${gymId} AND id = ${entryId}
     RETURNING id`;
   return rows.length === 1;
+}
+
+/** Two records joined: the memberships linked to the one not kept are linked to the
+ *  kept one (§13.2). */
+export async function moveMembershipLinks(tx: TransactionSql, gymId: string, fromEntryId: string, toEntryId: string): Promise<number> {
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_members SET entry_id = ${toEntryId}
+    WHERE gym_id = ${gymId} AND entry_id = ${fromEntryId}
+    RETURNING id`;
+  return rows.length;
 }
 
 /** The list moved by hand: its version up by one, and the list created for a gym
