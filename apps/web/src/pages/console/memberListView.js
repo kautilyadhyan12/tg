@@ -1,10 +1,28 @@
-// The member list upload's plain helpers (ROADMAP 5a; spec Part 3 §9.14, §11.3):
-// which column holds what, the counts in words, and the line after Confirm. No
-// React here, so each rule is tested on its own.
+// The member import's plain helpers (ROADMAP 5a; spec Part 3 §9.14, §11.2–§11.3):
+// which column holds what, what the review shows, and its short words. No React
+// here, so each rule is tested on its own.
 import { MEMBER_LIST_FIELD_WORDS, memberListFieldSchema } from '@app/shared';
 
 export const FIELDS = memberListFieldSchema.options;
 const LIST_FIELDS = ['email', 'phone'];
+
+/** Each field as the column dropdown names it. */
+export const FIELD_LABELS = {
+  fullName: 'Name',
+  firstName: 'First name',
+  lastName: 'Last name',
+  email: 'Email',
+  phone: 'Phone',
+  memberNumber: 'Member number',
+  status: 'Status',
+  membershipType: 'Membership',
+  joinedOn: 'Join date',
+  endsOn: 'End or renewal date',
+  paymentStatus: 'Payment status',
+  dateOfBirth: 'Date of birth',
+};
+
+// ── Columns ─────────────────────────────────────────────────────────────────
 
 /** What a column is used for in a mapping: a field name, 'extra' (kept as the gym's
  *  own column) or 'dontKeep'. */
@@ -44,9 +62,36 @@ export function sameMapping(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-export function fieldWord(field) {
-  const word = MEMBER_LIST_FIELD_WORDS[field];
-  return word.charAt(0).toUpperCase() + word.slice(1);
+export function columnName(column) {
+  return column.header ?? `Column ${String(column.index + 1)}`;
+}
+
+/** A column whose heading named a field its cells did not bear out: staff should look. */
+export function disbelieved(column) {
+  return column.neverKept === null && column.headerSays !== null && column.guess === null;
+}
+
+/** Columns that will be imported, under a field or as the gym's own. */
+export function importedColumnCount(columns, mapping) {
+  return columns.filter((c) => c.neverKept === null && roleOfColumn(mapping, c.index) !== 'dontKeep').length;
+}
+
+const NEVER_KEPT_TITLES = {
+  payment_card: 'Card numbers not imported',
+  bank_details: 'Bank details not imported',
+  government_id: 'ID numbers not imported',
+  password_or_pin: 'Passwords and PINs not imported',
+  medical: 'Health notes not imported',
+};
+
+/** Columns we never keep, one line per reason, each naming its columns. */
+export function neverKeptLines(columns) {
+  const byReason = new Map();
+  for (const c of columns) {
+    if (c.neverKept === null) continue;
+    byReason.set(c.neverKept, [...(byReason.get(c.neverKept) ?? []), columnName(c)]);
+  }
+  return [...byReason].map(([reason, names]) => ({ reason, title: NEVER_KEPT_TITLES[reason], columns: names.join(', ') }));
 }
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -57,46 +102,67 @@ export function dayWords(day) {
   return `${String(d)} ${MONTHS[m - 1]} ${String(y)}`;
 }
 
-const plural = (n, one, many) => `${n.toLocaleString('en')} ${n === 1 ? one : many}`;
+/** Date columns whose day-or-month order nothing in the file settled (the gym's
+ *  country decided, or staff swapped it), so the review shows one example to check. */
+export function datesToCheck(preview) {
+  return preview.dateColumns
+    .filter((d) => d.example !== null && (d.from === 'country' || d.from === 'chosen'))
+    .map((d) => ({
+      column: d.column,
+      order: d.order,
+      example: `${d.example.raw} = ${dayWords(d.example.read)}`,
+      columnName: columnName(preview.columns.find((c) => c.index === d.column) ?? { header: null, index: d.column }),
+    }));
+}
 
-/** The counts in words, each a group whose names can be opened. Groups of nobody are
- *  left out, except "new" so an empty file still says so. */
-export function countLines(preview, words) {
-  const { list, members, mode } = preview;
-  const lines = [];
-  const newDetail = [];
-  if (list.alreadyInApp > 0) newDetail.push(`${list.alreadyInApp.toLocaleString('en')} already in the app`);
-  if (list.canBeInvited > 0) newDetail.push(`${list.canBeInvited.toLocaleString('en')} could be invited`);
-  if (list.noEmail > 0) newDetail.push(`${list.noEmail.toLocaleString('en')} with no email address`);
-  if (list.returning > 0) newDetail.push(`${list.returning.toLocaleString('en')} were on your list before`);
-  lines.push({ group: 'new', count: list.new, text: `${list.new.toLocaleString('en')} new`, detail: newDetail.join(' · ') });
-  if (list.changed > 0) {
-    const fields = [
-      ...preview.fieldChanges.map((c) => `${MEMBER_LIST_FIELD_WORDS[c.field]} ${c.count.toLocaleString('en')}`),
-      ...preview.extraChanges.map((c) => `${c.label} ${c.count.toLocaleString('en')}`),
-    ];
-    lines.push({ group: 'changed', count: list.changed, text: `${list.changed.toLocaleString('en')} changed`, detail: fields.join(' · ') });
+// ── What the review shows ───────────────────────────────────────────────────
+
+const count = (n) => n.toLocaleString('en');
+const of = (n, one, many) => `${count(n)} ${n === 1 ? one : many}`;
+
+export function peopleWord(n, words) {
+  return n === 1 ? words.person : words.people;
+}
+
+/** The numbers worth showing: one big number for a list of only new people, tiles for
+ *  new and updated together, and nothing for a group of nobody. People missing from
+ *  the file are never a tile: the question about them names them (`missingOf`). */
+export function summaryOf(preview) {
+  const { list } = preview;
+  const tiles = [];
+  if (list.new > 0) tiles.push({ group: 'new', n: list.new, label: 'New' });
+  if (list.changed > 0) tiles.push({ group: 'changed', n: list.changed, label: 'Updated' });
+  const onlyNew = tiles.length === 1 && tiles[0].group === 'new';
+  return { tiles, hero: onlyNew ? list.new : null, nothing: tiles.length === 0, unchanged: list.unchanged };
+}
+
+/** People on the gym's list that a whole-list file leaves out — the one question the
+ *  review asks, and only when it arises. Null when nobody would come off. */
+export function missingOf(preview) {
+  if (preview.mode !== 'whole_list') return null;
+  const { list, members, guard } = preview;
+  const n = list.gone > 0 ? list.gone : members.leaving > 0 ? members.leaving : guard.needsTick ? guardNumber(guard) : 0;
+  if (n === 0) return null;
+  // Kept with the answer: after "Keep them" the file is read again as people to add,
+  // and that preview no longer knows how many were missing or whether it was a lot.
+  return { n, listSize: guard.listSize, needsTick: guard.needsTick };
+}
+
+/** The question's heading: "5 members aren't in this file", or, where the wrong-file
+ *  check is asking, "25 of your 30 members aren't in this file". */
+export function missingTitle(missing, needsTick, words) {
+  const verb = missing.n === 1 ? "isn't" : "aren't";
+  if (needsTick && missing.listSize > missing.n) {
+    return `${count(missing.n)} of your ${count(missing.listSize)} ${words.people} ${verb} in this file`;
   }
-  if (list.unchanged > 0) {
-    lines.push({ group: 'unchanged', count: list.unchanged, text: `${list.unchanged.toLocaleString('en')} unchanged`, detail: '' });
-  }
-  if (mode === 'whole_list' && list.gone > 0) {
-    lines.push({
-      group: 'gone',
-      count: list.gone,
-      text: `${list.gone.toLocaleString('en')} no longer on your list`,
-      detail: 'Kept as former records, not deleted.',
-    });
-  }
-  if (members.leaving > 0) {
-    lines.push({
-      group: 'members_leaving',
-      count: members.leaving,
-      text: `${members.leaving.toLocaleString('en')} of your ${words.people} in the app would read “no longer on your list”`,
-      detail: 'They keep the app. Nobody is removed until you choose to.',
-    });
-  }
-  return lines;
+  return `${of(missing.n, words.person, words.people)} ${verb} in this file`;
+}
+
+/** "Ben Cole, Amy Shaw, Raj Patel and 2 more". */
+export function someNames(names, total) {
+  if (names.length === 0) return '';
+  const more = total - names.length;
+  return more > 0 ? `${names.join(', ')} and ${count(more)} more` : names.join(', ');
 }
 
 /** The number staff type to let a large change through: the people coming off the
@@ -111,15 +177,88 @@ export function typedMatches(typed, guard) {
   return /^\d+$/.test(digits) && Number(digits) === guardNumber(guard);
 }
 
-/** The line after Confirm: "12 new · 3 no longer on your list". */
-export function resultLine(confirmed, mode) {
-  const { applied, members } = confirmed;
-  const parts = [`${applied.new.toLocaleString('en')} new`];
-  if (applied.changed > 0) parts.push(`${applied.changed.toLocaleString('en')} changed`);
-  if (mode === 'whole_list' && applied.gone > 0) parts.push(`${applied.gone.toLocaleString('en')} no longer on your list`);
-  if (members.leaving > 0) parts.push(`${plural(members.leaving, 'app member', 'app members')} no longer on your list`);
-  return parts.join(' · ');
+/** The one line above a group's names. */
+export function groupNote(preview, group, words) {
+  const { list } = preview;
+  if (group === 'new') {
+    return [
+      list.alreadyInApp > 0 ? `${count(list.alreadyInApp)} already use the app` : null,
+      list.noEmail > 0 ? `${count(list.noEmail)} have no email` : null,
+      list.returning > 0 ? `${count(list.returning)} were ${words.people} before` : null,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+  }
+  if (group === 'changed') {
+    return [
+      ...preview.fieldChanges.map((c) => `${MEMBER_LIST_FIELD_WORDS[c.field]} ${count(c.count)}`),
+      ...preview.extraChanges.map((c) => `${c.label} ${count(c.count)}`),
+    ].join(' · ');
+  }
+  return '';
 }
+
+/** Each warning as one short line; the server's full sentence sits behind "Why?". */
+export function warningTitle(w) {
+  switch (w.code) {
+    case 'hidden_rows_or_columns':
+      return 'Hidden rows or columns were included';
+    case 'encoding_guessed':
+      return 'Check the names look right';
+    case 'no_header_row':
+      return 'No row of headings found';
+    case 'question_marks_in_names':
+    case 'garbled_names':
+      return `${of(w.rows, 'name has', 'names have')} broken letters`;
+    case 'shortened_by_excel':
+      return `${of(w.rows, 'number was', 'numbers were')} cut short by Excel`;
+    case 'phones_need_country':
+      return `${of(w.rows, 'phone number', 'phone numbers')} left out`;
+    case 'phones_unusual':
+      return `${of(w.rows, 'phone number looks', 'phone numbers look')} unusual`;
+    case 'shared_emails':
+      return `${of(w.rows, 'person shares', 'people share')} an email`;
+    case 'placeholders':
+      return `Front-desk details left out of ${of(w.rows, 'row', 'rows')}`;
+    case 'other_sheets_ignored':
+      return 'Only one sheet was read';
+    case 'cells_cut':
+      return `${of(w.rows, 'long cell was', 'long cells were')} shortened`;
+    case 'dates_not_read':
+      return `${of(w.rows, "date couldn't", "dates couldn't")} be read`;
+    case 'card_cells_dropped':
+      return `${of(w.rows, 'card number', 'card numbers')} removed`;
+    case 'extra_columns_left_out':
+      return `${of(w.columns, 'column', 'columns')} on the right left out`;
+    case 'gym_fields_full':
+      return `${of(w.columns, 'column', 'columns')} not kept`;
+    default:
+      return 'Worth a look';
+  }
+}
+
+const SKIP_WORDS = { no_contact: 'no email or phone', duplicate: 'same person as an earlier row' };
+export function skipWords(reason) {
+  return SKIP_WORDS[reason];
+}
+
+/** The finished screen's heading and line. */
+export function doneWords(confirmed, words) {
+  const { applied } = confirmed;
+  if (confirmed.alreadyConfirmed) return { title: 'Already imported', detail: 'Nothing changed this time.' };
+  const parts = [
+    applied.new > 0 ? `${count(applied.new)} new` : null,
+    applied.changed > 0 ? `${count(applied.changed)} updated` : null,
+    applied.gone > 0 ? `${count(applied.gone)} marked as past ${words.people}` : null,
+  ].filter(Boolean);
+  if (parts.length === 0) return { title: 'Nothing to change', detail: 'Your list already matches this file.' };
+  if (applied.changed === 0 && applied.gone === 0) {
+    return { title: `${of(applied.new, words.person, words.people)} imported`, detail: '' };
+  }
+  return { title: 'Your list is updated', detail: parts.join(' · ') };
+}
+
+// ── Bytes ───────────────────────────────────────────────────────────────────
 
 /** Bytes as base64, in chunks so a 5 MB file does not overflow the call stack. */
 export function bytesToBase64(bytes) {

@@ -1623,16 +1623,23 @@ written as they are (a blanket rule breaks `+44…`, and `-10` → `10` is a doc
 casualty elsewhere); a save-and-reopen test. Members are told when confirmed or
 removed, as a removal tells them today.
 
-**Out of 5a (built 2026-09-24).** Console → Members → "Member list": a file or pasted
-rows (sent as UTF-8 with its byte-order mark) as "my whole list" or "add these people";
-the preview's counts in words, each opening its names 100 at a time; never-kept columns
-always shown with their reason; the other columns folded under "Check the columns", each
-with its samples and a dropdown (a field, "Keep as your own column", "Don't keep"), read
-again with staff's mapping before Confirm is allowed; each date column's reading with a
-flip (the preview now carries `dateColumns`); a large change asks for the number of people
-coming off to be TYPED; the hand-edit tick names the fields. **The permission tick**
-(RULINGS 2026-09-24) is `permissionConfirmed` on the confirm request: without it the
-answer is 409 `permission_needed` and nothing is written; with it the audit row records
+**Out of 5a (built 2026-09-24; redesigned the same day on Kd's click-through, RULINGS
+2026-09-24).** Console → Members → an "Import members" card opens a box of two screens.
+**Upload**: a drop box (or choose a file), or Paste — pasted rows go as UTF-8 with its
+byte-order mark. **Review**: the file; one big number for a list of only new people, else
+tiles for new and updated, each opening its names 100 at a time; one line each for the
+columns ("6 columns matched · Check", which opens every column with a dropdown — a field,
+"Keep as its own column", "Don't import" — applied by reading the file again before Import
+is allowed), for a date column nothing in the file settled ("03/04/2026 = 3 April 2026 ·
+Swap"; the preview now carries `dateColumns`), for each never-stored class of column, and
+for each warning (a short title; "Why?" shows the server's sentence). **The whole-list
+question is asked only when it arises**: every file is read as the whole list first, and
+only when people on the list are missing from it does Review ask, with their names, "They've
+left" (a large change then needs the number TYPED) or "Keep them" (the same bytes read again
+as `add`); nothing is picked for staff. The hand-edit tick names the fields. **The
+permission tick** ("I have permission to store these members' details.") is
+`permissionConfirmed` on the confirm request: without it the answer is 409
+`permission_needed` and nothing is written; with it the audit row records
 `permissionConfirmed` beside the actor. **A page of names unpacks the staged document
 once** (`stagedPage`, a materialised step): written inside the per-person lookup, it was
 unpacked for each of the hundred people, and at 10,000 people × 30 of the gym's own columns

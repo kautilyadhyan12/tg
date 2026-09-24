@@ -1,10 +1,10 @@
-// Bringing a member list in (ROADMAP 5a). The server decides everything; these prove
-// the screen shows its numbers and sends back exactly what staff answered.
+// Importing a member list (ROADMAP 5a). The server decides everything; these prove the
+// box shows what matters and sends back exactly what staff answered.
 //
-// THE WORST THING THIS SCREEN COULD DO: let staff confirm the wrong file and take real
+// THE WORST THING THIS SCREEN COULD DO: let staff import the wrong file and take real
 // people off the gym's list without ever seeing whose names. So the first test: the
-// names coming off can be opened before Confirm, and Confirm stays off until the typed
-// number matches.
+// people missing from the file are named before anything can be imported, nothing is
+// picked for staff, and a large change waits for the typed number.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 import { memberListPreviewSchema, memberListRowsPageSchema, memberListConfirmedSchema } from '@app/shared';
@@ -22,12 +22,15 @@ const MemberListUpload = (await import('./MemberListUpload')).default;
 
 const GYM = '11111111-1111-1111-1111-111111111111';
 const UPLOAD = '22222222-2222-2222-2222-222222222222';
+const UPLOAD_ADD = '33333333-3333-3333-3333-333333333333';
 const WORDS = { people: 'members', person: 'member' };
 
 const counts = (over = {}) => ({
-  dataRows: 3, kept: 3, noContact: 0, duplicates: 0, withEmail: 3, withPhone: 0, withMemberNumber: 0,
-  withStatus: 3, withMembershipType: 0, withJoinedOn: 0, withEndsOn: 0, withPaymentStatus: 0, withDateOfBirth: 0, ...over,
+  dataRows: 30, kept: 30, noContact: 0, duplicates: 0, withEmail: 30, withPhone: 0, withMemberNumber: 0,
+  withStatus: 30, withMembershipType: 0, withJoinedOn: 0, withEndsOn: 0, withPaymentStatus: 0, withDateOfBirth: 0, ...over,
 });
+const list = (over = {}) => ({ new: 0, changed: 0, unchanged: 0, gone: 0, alreadyInApp: 0, canBeInvited: 0, noEmail: 0, returning: 0, ...over });
+const calm = { entriesGoing: 0, listSize: 0, membersLeaving: 0, membersListedNow: 0, needsTick: false, mostOfListWouldGo: false };
 
 const baseMapping = {
   sheet: null, headerRow: 0, fullName: 0, firstName: null, lastName: null, email: [1], phone: [], memberNumber: null,
@@ -55,80 +58,101 @@ function preview(over = {}) {
     mapping: baseMapping,
     needsMapping: false,
     file: counts(),
-    list: { new: 3, changed: 0, unchanged: 0, gone: 0, alreadyInApp: 0, canBeInvited: 3, noEmail: 0, returning: 0 },
-    statuses: [{ label: 'Active', count: 3, new: 3, changed: 0, unchanged: 0, gone: 0 }],
+    list: list({ new: 30, canBeInvited: 30 }),
+    statuses: [],
     members: { leaving: 0, listedNow: 0 },
     skipped: [],
     warnings: [],
     seat: { cap: 200, liveMembers: 0, listSize: 0 },
-    guard: { entriesGoing: 0, listSize: 0, membersLeaving: 0, membersListedNow: 0, needsTick: false, mostOfListWouldGo: false },
+    guard: calm,
     ...over,
   });
 }
-const withDates = () =>
-  preview({
-    dateColumns: [{ column: 3, field: 'joinedOn', order: 'dayFirst', from: 'country', example: { raw: '03/04/2026', read: '2026-04-03' }, notRead: 0 }],
-  });
+
+const person = (fullName, over = {}) => ({
+  row: null, fullName, email: `${fullName.split(' ')[0].toLowerCase()}@members.example`, phone: null, memberNumber: null,
+  status: 'Active', wasStatus: null, inApp: false, ...over,
+});
+const page = (group, people, total, cursor = null) => ({ data: { page: memberListRowsPageSchema.parse({ group, total, people, cursor }) } });
 
 const confirmedAnswer = (over = {}) =>
   memberListConfirmedSchema.parse({
     uploadId: UPLOAD, alreadyConfirmed: false, version: 1, confirmedAt: '2026-09-24T11:00:00.000Z',
-    applied: { new: 3, changed: 0, unchanged: 0, gone: 0, alreadyInApp: 0, canBeInvited: 3, noEmail: 0, returning: 0 },
+    applied: list({ new: 30, canBeInvited: 30 }),
     statuses: [], members: { leaving: 0, listedNow: 0 }, ...over,
   });
 
 const refusal = (status, data) => Object.assign(new Error('refused'), { response: { status, data } });
 
-async function openWith(p) {
-  orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: p } });
-  render(<MemberListUpload gymId={GYM} gymName="Iron House" words={WORDS} readOnly={false} onApplied={vi.fn()} />);
-  fireEvent.change(screen.getByLabelText(/paste them here/), { target: { value: 'Name\tEmail\nAda\tada@members.example' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Read the pasted rows' }));
-  await screen.findByTestId('member-list-preview');
+let onClose;
+let onImported;
+
+function renderBox() {
+  onClose = vi.fn();
+  onImported = vi.fn();
+  render(<MemberListUpload gymId={GYM} words={WORDS} readOnly={false} onClose={onClose} onImported={onImported} />);
 }
 
-const confirmButton = () => screen.getByRole('button', { name: 'Confirm' });
-const tickPermission = () => fireEvent.click(screen.getByLabelText(/allowed to keep these people's details/));
+/** Opens the box, pastes two rows, and waits for Review with `p`. */
+async function reviewWith(p) {
+  orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: p } });
+  renderBox();
+  fireEvent.click(screen.getByRole('tab', { name: 'Paste' }));
+  fireEvent.change(screen.getByLabelText('Paste your rows'), { target: { value: 'Name\tEmail\nAda\tada@members.example' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+  await screen.findByRole('heading', { name: 'Review' });
+}
+
+const importButton = () => screen.getByRole('button', { name: /^Import/ });
+const tickPermission = () => fireEvent.click(screen.getByLabelText("I have permission to store these members' details."));
 
 beforeEach(() => vi.clearAllMocks());
 afterEach(cleanup);
 
 describe('the worst thing: a wrong file cannot take people off unseen', () => {
-  it('shows the names coming off, and Confirm waits for the typed number', async () => {
-    const guard = { entriesGoing: 120, listSize: 150, membersLeaving: 4, membersListedNow: 10, needsTick: true, mostOfListWouldGo: true };
-    await openWith(
-      preview({
-        list: { new: 0, changed: 0, unchanged: 30, gone: 120, alreadyInApp: 0, canBeInvited: 0, noEmail: 0, returning: 0 },
-        members: { leaving: 4, listedNow: 10 },
-        guard,
-      }),
-    );
-    orgService.getMemberListRows.mockResolvedValueOnce({
-      data: {
-        page: memberListRowsPageSchema.parse({
-          group: 'gone', total: 120, cursor: 100,
-          people: [{ row: null, fullName: 'Grace Hopper', email: 'grace@members.example', phone: null, memberNumber: null, status: 'Active', wasStatus: null, inApp: true }],
-        }),
-      },
+  const wrongFile = () =>
+    preview({
+      list: list({ unchanged: 5, gone: 25 }),
+      members: { leaving: 2, listedNow: 4 },
+      guard: { entriesGoing: 25, listSize: 30, membersLeaving: 2, membersListedNow: 4, needsTick: true, mostOfListWouldGo: true },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /120 no longer on your list/ }));
-    const names = await screen.findByTestId('names-gone');
-    expect(within(names).getByText('Grace Hopper')).toBeTruthy();
-    expect(within(names).getByText('In the app')).toBeTruthy();
+  it('names who is missing, picks nothing, and waits for the typed number', async () => {
+    orgService.getMemberListRows.mockResolvedValueOnce(
+      page('gone', [person('Olivia Walker', { inApp: true }), person('Liam Hughes'), person('Emma Price')], 25),
+    );
+    await reviewWith(wrongFile());
+
+    const card = within(screen.getByTestId('missing'));
+    expect(card.getByText("25 of your 30 members aren't in this file")).toBeTruthy();
+    // Said once: no "Missing" tile beside the question, and never "No changes" above it.
+    expect(screen.queryByText('Missing')).toBeNull();
+    expect(screen.queryByText('No changes')).toBeNull();
+    expect(screen.getByText('5 already up to date')).toBeTruthy();
+    expect(await card.findByText(/Olivia Walker, Liam Hughes, Emma Price and 22 more/)).toBeTruthy();
     expect(orgService.getMemberListRows).toHaveBeenCalledWith(GYM, UPLOAD, 'gone', 0);
 
+    // Nothing is chosen for staff.
+    expect(card.getByRole('radio', { name: /They've left/ }).getAttribute('aria-checked')).toBe('false');
+    expect(card.getByRole('radio', { name: /Keep them/ }).getAttribute('aria-checked')).toBe('false');
     tickPermission();
-    expect(confirmButton().disabled).toBe(true);
-    const box = screen.getByLabelText('Type the number to go ahead');
+    expect(importButton().disabled).toBe(true);
+
+    // Every name can be read before answering, and who uses the app is marked.
+    fireEvent.click(card.getByRole('button', { name: 'See all' }));
+    expect(card.getByText('Uses the app')).toBeTruthy();
+
+    fireEvent.click(card.getByRole('radio', { name: /They've left/ }));
+    expect(importButton().disabled).toBe(true);
+    const box = screen.getByLabelText('Type the number to confirm');
     fireEvent.change(box, { target: { value: '12' } });
-    expect(confirmButton().disabled).toBe(true);
-    fireEvent.change(box, { target: { value: '120' } });
-    expect(confirmButton().disabled).toBe(false);
+    expect(importButton().disabled).toBe(true);
+    fireEvent.change(box, { target: { value: '25' } });
+    expect(importButton().disabled).toBe(false);
 
     orgService.confirmMemberList.mockResolvedValueOnce({ data: { confirmed: confirmedAnswer() } });
-    fireEvent.click(confirmButton());
-    await screen.findByTestId('member-list-done');
+    fireEvent.click(importButton());
+    await screen.findByTestId('member-import-done');
     expect(orgService.confirmMemberList).toHaveBeenCalledWith(GYM, UPLOAD, {
       permissionConfirmed: true,
       acknowledgeLargeChange: true,
@@ -136,160 +160,266 @@ describe('the worst thing: a wrong file cannot take people off unseen', () => {
     });
   });
 
-  it('offers "Add these people instead" when most of the list would go, and reads the same rows that way', async () => {
-    const guard = { entriesGoing: 120, listSize: 150, membersLeaving: 0, membersListedNow: 0, needsTick: true, mostOfListWouldGo: true };
-    await openWith(preview({ list: { new: 0, changed: 0, unchanged: 30, gone: 120, alreadyInApp: 0, canBeInvited: 0, noEmail: 0, returning: 0 }, guard }));
+  it('"Keep them" reads the same file again as people to add, and "They\'ve left" goes back', async () => {
+    orgService.getMemberListRows.mockResolvedValueOnce(page('gone', [person('Olivia Walker')], 25));
+    await reviewWith(wrongFile());
     const sent = orgService.uploadMemberList.mock.calls[0][1].contentBase64;
-    orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: preview({ mode: 'add' }) } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add these people instead' }));
+
+    orgService.uploadMemberList.mockResolvedValueOnce({
+      data: { preview: preview({ uploadId: UPLOAD_ADD, mode: 'add', list: list({ unchanged: 5 }), guard: { ...calm, listSize: 30 } }) },
+    });
+    fireEvent.click(screen.getByRole('radio', { name: /Keep them/ }));
     await waitFor(() => expect(orgService.uploadMemberList).toHaveBeenCalledTimes(2));
     expect(orgService.uploadMemberList.mock.calls[1][1]).toMatchObject({ contentBase64: sent, mode: 'add' });
-    expect(await screen.findByText(/as people to add/)).toBeTruthy();
+
+    // The question stays answered, with no number to type, and nobody goes.
+    await waitFor(() => expect(screen.getByRole('radio', { name: /Keep them/ }).getAttribute('aria-checked')).toBe('true'));
+    expect(screen.queryByLabelText('Type the number to confirm')).toBeNull();
+    tickPermission();
+    orgService.confirmMemberList.mockResolvedValueOnce({ data: { confirmed: confirmedAnswer({ uploadId: UPLOAD_ADD }) } });
+    fireEvent.click(importButton());
+    await screen.findByTestId('member-import-done');
+    expect(orgService.confirmMemberList).toHaveBeenCalledWith(GYM, UPLOAD_ADD, {
+      permissionConfirmed: true,
+      acknowledgeLargeChange: false,
+      acknowledgeHandEdits: false,
+    });
   });
 
-  it('a 409 large_change with new numbers asks for the new number, not the old one', async () => {
-    await openWith(preview());
+  it('changing the answer back to "They\'ve left" reads the file as the whole list again', async () => {
+    orgService.getMemberListRows.mockResolvedValue(page('gone', [person('Olivia Walker')], 25));
+    await reviewWith(wrongFile());
+    orgService.uploadMemberList.mockResolvedValueOnce({
+      data: { preview: preview({ uploadId: UPLOAD_ADD, mode: 'add', list: list({ unchanged: 5 }) }) },
+    });
+    fireEvent.click(screen.getByRole('radio', { name: /Keep them/ }));
+    await waitFor(() => expect(screen.getByRole('radio', { name: /Keep them/ }).getAttribute('aria-checked')).toBe('true'));
+
+    orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: wrongFile() } });
+    fireEvent.click(screen.getByRole('radio', { name: /They've left/ }));
+    await waitFor(() => expect(orgService.uploadMemberList).toHaveBeenCalledTimes(3));
+    expect(orgService.uploadMemberList.mock.calls[2][1].mode).toBe('whole_list');
+    await waitFor(() => expect(screen.getByRole('radio', { name: /They've left/ }).getAttribute('aria-checked')).toBe('true'));
+    expect(screen.getByLabelText('Type the number to confirm')).toBeTruthy();
+  });
+
+  it('a few missing still need an answer, but no typed number', async () => {
+    orgService.getMemberListRows.mockResolvedValueOnce(page('gone', [person('Ben Cole'), person('Amy Shaw')], 2));
+    await reviewWith(preview({ list: list({ new: 3, changed: 6, unchanged: 30, gone: 2 }), guard: { ...calm, entriesGoing: 2, listSize: 38 } }));
+    expect(screen.getByText("2 members aren't in this file")).toBeTruthy();
+    expect(await screen.findByText(/Ben Cole, Amy Shaw/)).toBeTruthy();
     tickPermission();
-    orgService.confirmMemberList.mockRejectedValueOnce(
-      refusal(409, {
-        error: 'large_change',
-        message: 'This would change more of your list than we apply without asking. Check the numbers below, then confirm again to go ahead.',
-        guard: { entriesGoing: 40, listSize: 50, membersLeaving: 0, membersListedNow: 0, needsTick: true, mostOfListWouldGo: false },
-      }),
-    );
-    fireEvent.click(confirmButton());
-    expect(await screen.findByText(/change more of your list than we apply without asking/)).toBeTruthy();
-    expect(confirmButton().disabled).toBe(true);
-    fireEvent.change(screen.getByLabelText('Type the number to go ahead'), { target: { value: '40' } });
-    expect(confirmButton().disabled).toBe(false);
+    expect(importButton().disabled).toBe(true);
+    fireEvent.click(screen.getByRole('radio', { name: /They've left/ }));
+    expect(screen.queryByLabelText('Type the number to confirm')).toBeNull();
+    expect(importButton().disabled).toBe(false);
   });
 });
 
-describe('the permission tick', () => {
-  it("names the gym, and Confirm waits for it", async () => {
-    await openWith(preview());
-    expect(screen.getByText("I confirm Iron House is allowed to keep these people's details in AI Home Gym.")).toBeTruthy();
-    expect(confirmButton().disabled).toBe(true);
+describe('a first import', () => {
+  it('is one big number, asks nothing about missing people, and waits for the permission tick', async () => {
+    await reviewWith(preview());
+    const hero = within(screen.getByTestId('hero'));
+    expect(hero.getByText('30')).toBeTruthy();
+    expect(hero.getByText('new members')).toBeTruthy();
+    expect(screen.queryByTestId('missing')).toBeNull();
+    expect(orgService.getMemberListRows).not.toHaveBeenCalled();
+    expect(importButton().textContent).toBe('Import 30 members');
+    expect(importButton().disabled).toBe(true);
     tickPermission();
-    expect(confirmButton().disabled).toBe(false);
+    expect(importButton().disabled).toBe(false);
+  });
+
+  it('"See who" opens the names', async () => {
+    await reviewWith(preview());
+    orgService.getMemberListRows.mockResolvedValueOnce(page('new', [person('Ada Lovelace', { status: null })], 30, 1));
+    fireEvent.click(screen.getByRole('button', { name: 'See who' }));
+    expect(await screen.findByText('Ada Lovelace')).toBeTruthy();
+    expect(orgService.getMemberListRows).toHaveBeenCalledWith(GYM, UPLOAD, 'new', 0);
+    expect(screen.getByRole('button', { name: 'Show more (29)' })).toBeTruthy();
+  });
+
+  it('shows the tiles, not one number, when people are also updated', async () => {
+    await reviewWith(preview({ list: list({ new: 3, changed: 6, unchanged: 30 }), mode: 'add' }));
+    expect(screen.queryByTestId('hero')).toBeNull();
+    expect(screen.getByRole('button', { name: /3\s*New/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /6\s*Updated/ })).toBeTruthy();
+    expect(screen.getByText('30 already up to date')).toBeTruthy();
+    expect(importButton().textContent).toBe('Import');
   });
 });
 
 describe('reading a file or pasted rows', () => {
-  it('sends pasted rows as UTF-8 with its byte-order mark, as the chosen mode', async () => {
-    await openWith(preview());
+  it('sends pasted rows as UTF-8 with its byte-order mark, as the whole list', async () => {
+    await reviewWith(preview());
     const body = orgService.uploadMemberList.mock.calls[0][1];
     expect(body.mode).toBe('whole_list');
     expect(body.mapping).toBeUndefined();
     const bytes = Uint8Array.from(atob(body.contentBase64), (c) => c.charCodeAt(0));
     expect([...bytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
     expect(new TextDecoder().decode(bytes.slice(3))).toBe('Name\tEmail\nAda\tada@members.example');
+    expect(screen.getByText('Pasted rows')).toBeTruthy();
+  });
+
+  it('reads a chosen file', async () => {
+    orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: preview({ file: counts({ dataRows: 3 }) }) } });
+    renderBox();
+    const file = new File(['Name,Email\nAda,ada@members.example'], 'members.csv', { type: 'text/csv' });
+    fireEvent.change(screen.getByTestId('member-file'), { target: { files: [file] } });
+    await screen.findByRole('heading', { name: 'Review' });
+    expect(atob(orgService.uploadMemberList.mock.calls[0][1].contentBase64)).toBe('Name,Email\nAda,ada@members.example');
+    expect(screen.getByText('members.csv')).toBeTruthy();
+    expect(screen.getByText('3 rows')).toBeTruthy();
+  });
+
+  it('reads a file dropped on the box', async () => {
+    orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: preview() } });
+    renderBox();
+    const file = new File(['Name,Email\nBo,bo@members.example'], 'dropped.csv', { type: 'text/csv' });
+    fireEvent.drop(screen.getByTestId('drop-zone'), { dataTransfer: { files: [file] } });
+    await screen.findByRole('heading', { name: 'Review' });
+    expect(atob(orgService.uploadMemberList.mock.calls[0][1].contentBase64)).toBe('Name,Email\nBo,bo@members.example');
   });
 
   it("prints the server's refusal as sent", async () => {
     orgService.uploadMemberList.mockRejectedValueOnce(refusal(422, { error: 'old_excel', message: 'This is an old Excel file (.xls). Save it as .xlsx or CSV and upload that.' }));
-    render(<MemberListUpload gymId={GYM} gymName="Iron House" words={WORDS} readOnly={false} />);
-    fireEvent.change(screen.getByLabelText(/paste them here/), { target: { value: 'x' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Read the pasted rows' }));
+    renderBox();
+    fireEvent.click(screen.getByRole('tab', { name: 'Paste' }));
+    fireEvent.change(screen.getByLabelText('Paste your rows'), { target: { value: 'x' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     expect(await screen.findByText('This is an old Excel file (.xls). Save it as .xlsx or CSV and upload that.')).toBeTruthy();
   });
 
-  it('reads a chosen file', async () => {
-    orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: preview() } });
-    render(<MemberListUpload gymId={GYM} gymName="Iron House" words={WORDS} readOnly={false} />);
-    fireEvent.click(screen.getByLabelText(/Add these people/));
-    const file = new File(['Name,Email\nAda,ada@members.example'], 'members.csv', { type: 'text/csv' });
-    fireEvent.change(screen.getByTestId('member-file'), { target: { files: [file] } });
-    await screen.findByTestId('member-list-preview');
-    const body = orgService.uploadMemberList.mock.calls[0][1];
-    expect(body.mode).toBe('add');
-    expect(atob(body.contentBase64)).toBe('Name,Email\nAda,ada@members.example');
-    expect(screen.getByText(/from members.csv/)).toBeTruthy();
+  it('Back and Change return to Upload with the pasted rows still there', async () => {
+    await reviewWith(preview());
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByRole('heading', { name: 'Import members' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Paste' }));
+    expect(screen.getByLabelText('Paste your rows').value).toBe('Name\tEmail\nAda\tada@members.example');
+  });
+
+  it('the X closes the box', async () => {
+    renderBox();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
 
-describe('the columns', () => {
-  it('names a column that is never kept, with no way to switch it on', async () => {
-    await openWith(preview());
+describe('the checks', () => {
+  it('names a column that is never imported, and it cannot be switched on', async () => {
+    await reviewWith(preview());
+    expect(screen.getByText('Card numbers not imported')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Check' }));
     const card = within(screen.getByTestId('column-4'));
-    expect(card.getByText('Not kept: this looks like payment card numbers. We never store card details.')).toBeTruthy();
+    expect(card.getByText('Never stored')).toBeTruthy();
     expect(card.queryByRole('combobox')).toBeNull();
   });
 
-  it("a changed column is sent back as staff's mapping, and Confirm waits until it is read again", async () => {
-    await openWith(preview());
-    fireEvent.click(screen.getByRole('button', { name: /Check the columns/ }));
-    fireEvent.change(screen.getByLabelText('What Status holds'), { target: { value: 'membershipType' } });
+  it("a changed column is sent back as staff's mapping, and Import waits until it is applied", async () => {
+    await reviewWith(preview());
+    fireEvent.click(screen.getByRole('button', { name: 'Check' }));
+    fireEvent.change(screen.getByLabelText('Status imports as'), { target: { value: 'membershipType' } });
     tickPermission();
-    expect(confirmButton().disabled).toBe(true);
+    expect(importButton().disabled).toBe(true);
+    expect(screen.getByText('Apply your column changes first.')).toBeTruthy();
     orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: preview() } });
-    fireEvent.click(screen.getByRole('button', { name: 'Read again with these columns' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Apply changes' }));
     await waitFor(() => expect(orgService.uploadMemberList).toHaveBeenCalledTimes(2));
     expect(orgService.uploadMemberList.mock.calls[1][1].mapping).toMatchObject({ status: null, membershipType: 2 });
   });
 
-  it('flips a date column and reads it again', async () => {
-    await openWith(withDates());
-    expect(screen.getByText('Join date: we read 03/04/2026 as 3 April 2026.')).toBeTruthy();
+  it('a date nothing in the file settled is shown once, and Swap reads it the other way', async () => {
+    await reviewWith(
+      preview({
+        dateColumns: [{ column: 3, field: 'joinedOn', order: 'dayFirst', from: 'country', example: { raw: '03/04/2026', read: '2026-04-03' }, notRead: 0 }],
+      }),
+    );
+    expect(screen.getByText('03/04/2026 = 3 April 2026')).toBeTruthy();
     orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: preview() } });
-    fireEvent.click(screen.getByRole('button', { name: /Read it the other way/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Swap' }));
     await waitFor(() => expect(orgService.uploadMemberList).toHaveBeenCalledTimes(2));
     expect(orgService.uploadMemberList.mock.calls[1][1].mapping.dateOrder).toEqual([{ column: 3, order: 'monthFirst' }]);
   });
-});
 
-describe('Confirm and its refusals', () => {
-  it('shows the result line and says nobody was emailed', async () => {
-    await openWith(preview());
-    tickPermission();
-    orgService.confirmMemberList.mockResolvedValueOnce({
-      data: {
-        confirmed: confirmedAnswer({
-          applied: { new: 12, changed: 2, unchanged: 5, gone: 3, alreadyInApp: 0, canBeInvited: 12, noEmail: 0, returning: 0 },
-        }),
-      },
-    });
-    fireEvent.click(confirmButton());
-    const done = await screen.findByTestId('member-list-done');
-    expect(within(done).getByText('12 new · 2 changed · 3 no longer on your list')).toBeTruthy();
-    expect(within(done).getByText(/Nobody has been emailed/)).toBeTruthy();
+  it('a date the file itself settled is not asked about', async () => {
+    await reviewWith(
+      preview({
+        dateColumns: [{ column: 3, field: 'joinedOn', order: 'dayFirst', from: 'file', example: { raw: '25/12/2025', read: '2025-12-25' }, notRead: 0 }],
+      }),
+    );
+    expect(screen.queryByText('25/12/2025 = 25 December 2025')).toBeNull();
   });
 
-  it('a 409 hand_edits names the fields and sends the second tick', async () => {
-    await openWith(preview());
+  it('a warning is one short line, with the whole sentence behind "Why?"', async () => {
+    await reviewWith(preview({ warnings: [{ code: 'phones_unusual', rows: 30 }] }));
+    expect(screen.getByText('30 phone numbers look unusual')).toBeTruthy();
+    expect(screen.queryByText(/look like a normal number for their country/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Why?' }));
+    expect(screen.getByText(/look like a normal number for their country/)).toBeTruthy();
+  });
+
+  it('a file with no email or phone column cannot be imported until the columns are picked', async () => {
+    await reviewWith(preview({ needsMapping: true, list: list() }));
+    expect(screen.getByText('No email or phone column found')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Import/ })).toBeNull();
+    expect(screen.getByLabelText('Name imports as')).toBeTruthy();
+  });
+});
+
+describe('Import and its refusals', () => {
+  it('says what was imported, and that nobody was emailed', async () => {
+    await reviewWith(preview());
+    tickPermission();
+    orgService.confirmMemberList.mockResolvedValueOnce({ data: { confirmed: confirmedAnswer() } });
+    fireEvent.click(importButton());
+    const done = within(await screen.findByTestId('member-import-done'));
+    expect(done.getByText('30 members imported')).toBeTruthy();
+    expect(done.getByText('Nobody has been emailed yet.')).toBeTruthy();
+    expect(onImported).toHaveBeenCalledTimes(1);
+    fireEvent.click(done.getByRole('button', { name: 'Done' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('an update says what changed', async () => {
+    await reviewWith(preview({ list: list({ new: 3, changed: 6, unchanged: 30 }), mode: 'add' }));
+    tickPermission();
+    orgService.confirmMemberList.mockResolvedValueOnce({
+      data: { confirmed: confirmedAnswer({ applied: list({ new: 3, changed: 6, unchanged: 30, gone: 2 }) }) },
+    });
+    fireEvent.click(importButton());
+    const done = within(await screen.findByTestId('member-import-done'));
+    expect(done.getByText('Your list is updated')).toBeTruthy();
+    expect(done.getByText('3 new · 6 updated · 2 marked as past members')).toBeTruthy();
+  });
+
+  it('a 409 hand_edits asks the second tick, and sends it', async () => {
+    await reviewWith(preview());
     tickPermission();
     orgService.confirmMemberList.mockRejectedValueOnce(
       refusal(409, { error: 'hand_edits', message: 'This file would replace details your staff typed in here.', handEdits: { entries: 3, fields: ['phone number', 'membership type'] } }),
     );
-    fireEvent.click(confirmButton());
-    const tick = await screen.findByLabelText(/for 3 people: phone number, membership type/);
-    expect(confirmButton().disabled).toBe(true);
+    fireEvent.click(importButton());
+    const tick = await screen.findByLabelText('Replace what staff typed for 3 people (phone number, membership type)');
+    expect(importButton().disabled).toBe(true);
     fireEvent.click(tick);
     orgService.confirmMemberList.mockResolvedValueOnce({ data: { confirmed: confirmedAnswer() } });
-    fireEvent.click(confirmButton());
-    await screen.findByTestId('member-list-done');
+    fireEvent.click(importButton());
+    await screen.findByTestId('member-import-done');
     expect(orgService.confirmMemberList.mock.calls[1][2]).toEqual({ permissionConfirmed: true, acknowledgeLargeChange: false, acknowledgeHandEdits: true });
   });
 
   it('a list changed meanwhile offers to read the same file again', async () => {
-    await openWith(preview());
+    await reviewWith(preview());
     const sent = orgService.uploadMemberList.mock.calls[0][1].contentBase64;
     tickPermission();
     orgService.confirmMemberList.mockRejectedValueOnce(
       refusal(409, { error: 'list_changed', message: 'Your list changed while you were looking at this preview, so nothing was applied.', baseVersion: 1, version: 2 }),
     );
-    fireEvent.click(confirmButton());
+    fireEvent.click(importButton());
     expect(await screen.findByText(/Your list changed while you were looking/)).toBeTruthy();
     orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: preview() } });
     fireEvent.click(screen.getByRole('button', { name: 'Read the file again' }));
     await waitFor(() => expect(orgService.uploadMemberList).toHaveBeenCalledTimes(2));
     expect(orgService.uploadMemberList.mock.calls[1][1].contentBase64).toBe(sent);
-  });
-
-  it('a file with no email or phone column cannot be confirmed', async () => {
-    await openWith(preview({ needsMapping: true }));
-    expect(screen.getByText(/couldn.t find an email or phone column/)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Confirm' })).toBeNull();
-    expect(screen.getByLabelText('What Name holds')).toBeTruthy();
   });
 });

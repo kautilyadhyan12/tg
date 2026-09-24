@@ -1138,8 +1138,9 @@ export const memberListConfirmRequestSchema = z
   })
   .strict();
 
-/** The words of that tick, with the gym's name put in by the screen (Kd, 5a's plan). */
-export const MEMBER_LIST_PERMISSION_WORDS = "I confirm {gym} is allowed to keep these people's details in AI Home Gym.";
+/** The words of that tick (RULINGS 2026-09-24). `{people}` is the organisation's word
+ *  for its people ("members", "clients"), put in by the screen. */
+export const MEMBER_LIST_PERMISSION_WORDS = "I have permission to store these {people}' details.";
 export type MemberListConfirmRequest = z.infer<typeof memberListConfirmRequestSchema>;
 
 /** WHAT PRESSING CONFIRM DID.
@@ -1189,7 +1190,7 @@ export const MEMBER_LIST_CONFIRM_REFUSAL_WORDS = {
     "This would change more of your list than we apply without asking. Check the numbers below, then confirm again to go ahead.",
   hand_edits:
     "This file would replace details your staff typed in here. Check the fields below, then confirm again to let the file win.",
-  permission_needed: "Tick the box to confirm your gym is allowed to keep these people's details here. Nothing was applied.",
+  permission_needed: "Tick the permission box first. Nothing was imported.",
 } as const;
 
 export const memberListHandEditsRefusalSchema = z.object({

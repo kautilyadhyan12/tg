@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { AlertTriangle, Loader2 } from 'lucide-react';
+import { AlertTriangle, Loader2, Upload } from 'lucide-react';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { orgService, errorText, errorCode } from '../../api/orgsApi';
 import { useConsoleOrg } from './useConsoleOrg';
@@ -258,32 +258,43 @@ function NotMeBox({ gymId, words }) {
   );
 }
 
-/** "Member list": closed until staff open it, so the roster stays the first thing seen. */
-function MemberListCard({ gymId, gymName, words, readOnly, onApplied }) {
+/** "Import members" (ROADMAP 5a): one card, one button; the import opens in its own box. */
+function ImportCard({ gymId, words, readOnly, onImported }) {
   const [open, setOpen] = useState(false);
   return (
-    <section className="rounded-2xl p-4 flex flex-col gap-3" style={{ background: '#121110', border: '1px solid rgba(255,255,255,0.06)' }}>
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold" style={{ color: '#fff' }}>
-            Member list
+    <>
+      <section
+        className="rounded-2xl p-4 flex items-center gap-4"
+        style={{ background: '#121110', border: '1px solid rgba(255,255,255,0.06)' }}
+      >
+        <span
+          className="w-11 h-11 rounded-[14px] flex items-center justify-center flex-shrink-0"
+          style={{ background: 'rgba(255,138,31,0.12)', color: '#FF8A1F' }}
+        >
+          <Upload className="w-5 h-5" />
+        </span>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-base font-bold" style={{ color: '#fff' }}>
+            Import {words.people}
           </h2>
-          <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
-            Upload or paste your list of {words.people} from a spreadsheet.
+          <p className="text-[13px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
+            From a spreadsheet
           </p>
         </div>
         <button
           type="button"
-          onClick={() => setOpen((o) => !o)}
+          onClick={() => setOpen(true)}
           disabled={readOnly}
-          className="rounded-xl px-4 min-h-[44px] text-sm font-semibold flex-shrink-0 disabled:opacity-40"
-          style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
+          className="rounded-xl px-5 min-h-[44px] text-[15px] font-bold flex-shrink-0 disabled:opacity-40"
+          style={{ background: '#FF8A1F', color: '#000' }}
         >
-          {open ? 'Close' : 'Bring in your list'}
+          Import
         </button>
-      </div>
-      {open ? <MemberListUpload gymId={gymId} gymName={gymName} words={words} readOnly={readOnly} onApplied={onApplied} /> : null}
-    </section>
+      </section>
+      {open ? (
+        <MemberListUpload gymId={gymId} words={words} readOnly={readOnly} onClose={() => setOpen(false)} onImported={onImported} />
+      ) : null}
+    </>
   );
 }
 
@@ -496,9 +507,7 @@ export default function Members() {
       {canSeeList ? <NotMeBox gymId={gymId} words={words} /> : null}
 
       {/* Bringing the gym's own list in (ROADMAP 5a): the same privilege the server asks. */}
-      {canSeeList ? (
-        <MemberListCard gymId={gymId} gymName={org.name} words={words} readOnly={readOnly} onApplied={reloadRoster} />
-      ) : null}
+      {canSeeList ? <ImportCard gymId={gymId} words={words} readOnly={readOnly} onImported={reloadRoster} /> : null}
 
       {state.loading ? <ConsoleLoading label={`Loading ${words.people}…`} /> : null}
 
