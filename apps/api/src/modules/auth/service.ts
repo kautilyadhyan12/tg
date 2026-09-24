@@ -99,6 +99,8 @@ export interface SessionTokens {
   refreshToken: string; // raw opaque — cookie-bound by the route, never stored raw
 }
 
+const refreshExpiry = (deps: AuthDeps): Date => new Date(Date.now() + deps.config.REFRESH_TTL_DAYS * 24 * 60 * 60 * 1000);
+
 async function issueSession(
   deps: AuthDeps,
   userId: string,
@@ -106,7 +108,7 @@ async function issueSession(
   familyId = newFamilyId(),
 ): Promise<SessionTokens> {
   const refreshToken = mintOpaqueToken();
-  const expiresAt = new Date(Date.now() + deps.config.REFRESH_TTL_DAYS * 24 * 60 * 60 * 1000);
+  const expiresAt = refreshExpiry(deps);
   await repo.insertRefreshToken(deps.sql, {
     userId,
     familyId,
@@ -180,6 +182,7 @@ export async function login(
   }
   const ok = await deps.hasher.verify(input.password, user.passwordHash, user.hashAlgo);
   if (!ok) throw invalidCredentials();
+  const checked = [user.passwordHash];
   // Transparent upgrade to argon2id (v1 §6.1). BEST-EFFORT: a rehash write
   // failure must NEVER fail an already-valid login — swallowed + logged, same
   // pattern as the email sends above (R2.5 exception, deliberate). Awaited so
@@ -187,7 +190,13 @@ export async function login(
   if (deps.hasher.needsRehash(user.hashAlgo)) {
     try {
       const rehashed = await deps.hasher.hash(input.password);
-      await repo.setPasswordHash(deps.sql, user.id, rehashed, deps.hasher.algo);
+      const upgraded = await repo.replacePasswordHash(deps.sql, {
+        userId: user.id,
+        checkedHash: user.passwordHash,
+        newHash: rehashed,
+        algo: deps.hasher.algo,
+      });
+      if (upgraded) checked.push(rehashed);
     } catch (err) {
       deps.log.warn(
         { err, event: "auth.password_rehash_failed", userId: user.id },
@@ -195,7 +204,24 @@ export async function login(
       );
     }
   }
-  return { user: await toAuthUser(deps.sql, user), tokens: await issueSession(deps, user.id, meta) };
+  // The session is written only if the password checked is still the account's: the
+  // address's first proof may have ended it while it was being checked.
+  const familyId = newFamilyId();
+  const refreshToken = mintOpaqueToken();
+  const started = await repo.insertRefreshTokenForPassword(deps.sql, {
+    userId: user.id,
+    checkedHashes: checked,
+    familyId,
+    tokenHash: sha256Hex(refreshToken),
+    expiresAt: refreshExpiry(deps),
+    ip: meta.ip,
+    userAgent: meta.userAgent,
+  });
+  if (!started) throw invalidCredentials();
+  return {
+    user: await toAuthUser(deps.sql, user),
+    tokens: { accessToken: signAccessToken(user.id, deps.config, familyId), refreshToken },
+  };
 }
 
 // ── Google sign-in (google-login card; v1 §6.1) ─────────────────────────────
@@ -480,10 +506,23 @@ export async function changePassword(
   }
   const ok = await deps.hasher.verify(input.currentPassword, user.passwordHash, user.hashAlgo);
   if (!ok) throw new AuthError(401, "invalid_credentials", "Current password is incorrect");
-  await repo.setPasswordHash(deps.sql, userId, await deps.hasher.hash(input.newPassword), deps.hasher.algo);
-  // Revoke every session, then hand the caller a fresh one.
-  await repo.revokeAllRefreshTokens(deps.sql, userId);
-  return await issueSession(deps, userId, meta);
+  // Revoke every session, then hand the caller a fresh one — only if the password
+  // checked is still the account's (the address's first proof may have ended it).
+  const familyId = newFamilyId();
+  const refreshToken = mintOpaqueToken();
+  const changed = await repo.changePasswordIfUnchanged(deps.sql, {
+    userId,
+    checkedHash: user.passwordHash,
+    newHash: await deps.hasher.hash(input.newPassword),
+    algo: deps.hasher.algo,
+    familyId,
+    tokenHash: sha256Hex(refreshToken),
+    expiresAt: refreshExpiry(deps),
+    ip: meta.ip,
+    userAgent: meta.userAgent,
+  });
+  if (!changed) throw new AuthError(401, "invalid_credentials", "Current password is incorrect");
+  return { accessToken: signAccessToken(userId, deps.config, familyId), refreshToken };
 }
 
 // ── narrow service-interface exports for the users module (P2.2, R7.1) ──────

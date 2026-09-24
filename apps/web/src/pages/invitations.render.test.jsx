@@ -36,7 +36,7 @@ const { orgService } = await import('../api/orgsApi');
 const { refreshConsoleOrgsAfterChange } = await import('./console/consoleOrgs');
 const { AuthProvider } = await import('../context/AuthContext');
 const { ProtectedRoute } = await import('../components/common/ProtectedRoute');
-const { forgetInvitations } = await import('../components/gym/invitationsStore');
+const { forgetInvitations, resetInvitations } = await import('../components/gym/invitationsStore');
 const InvitationsPanel = (await import('../components/gym/InvitationsPanel')).default;
 const InvitationLink = (await import('./InvitationLink')).default;
 const { MEMBER_DOOR, GYM_DOOR, readDoor, rememberDoor } = await import('./landingRoute');
@@ -51,7 +51,7 @@ const IRON = {
 const JOINED = { outcome: 'joined', gym: { id: IRON.gym.id, slug: 'iron-house', name: 'Iron House', orgType: 'gym' } };
 
 const waiting = (...invitations) =>
-  orgService.getInvitations.mockResolvedValue({ data: { address: USER.email, invitations } });
+  orgService.getInvitations.mockResolvedValue({ data: { address: USER.email, addressProved: true, invitations } });
 
 const profileSays = (facts) =>
   profile.read.mockResolvedValue({ data: { user: { ...USER, timezone: 'UTC', signUpDisclaimerAgreed: true, ...facts } } });
@@ -86,7 +86,7 @@ const refused = (status, error, message) => Promise.reject(Object.assign(new Err
 beforeEach(() => {
   vi.clearAllMocks();
   window.sessionStorage.clear();
-  forgetInvitations();
+  resetInvitations();
   authService.getMe.mockResolvedValue({ data: { user: USER } });
   authService.logout.mockResolvedValue({});
   profileSays({ onboardingCompleted: true });
@@ -166,6 +166,27 @@ describe("You're invited", () => {
     expect(screen.queryByText("You're invited to Iron House")).toBeNull();
   });
 
+  it('with the browser\'s storage blocked, Not now still holds for the rest of the visit', async () => {
+    const blocked = () => {
+      throw new Error('storage blocked');
+    };
+    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(blocked);
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(blocked);
+    try {
+      waiting(IRON);
+      draw('/dashboard');
+      fireEvent.click(await screen.findByRole('button', { name: 'Not now' }));
+      expect(await screen.findByText('MEMBER APP')).toBeTruthy();
+      cleanup();
+      draw('/dashboard');
+      expect(await screen.findByText('MEMBER APP')).toBeTruthy();
+      expect(screen.queryByText("You're invited to Iron House")).toBeNull();
+    } finally {
+      getItem.mockRestore();
+      setItem.mockRestore();
+    }
+  });
+
   it('a read that fails lets the person on', async () => {
     orgService.getInvitations.mockRejectedValue(new Error('offline'));
     draw('/dashboard');
@@ -232,6 +253,16 @@ describe('Settings → Gym and /invitations', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Join' }));
     expect(await screen.findByText("You're in Iron House.")).toBeTruthy();
     expect(refreshConsoleOrgsAfterChange).toHaveBeenCalled();
+  });
+
+  it('a sign-in that has not proved its address is asked to sign in again, never told there is no invitation', async () => {
+    orgService.getInvitations.mockResolvedValue({ data: { address: USER.email, addressProved: false, invitations: [] } });
+    draw('/invitations');
+    expect(await screen.findByText('To see your invitations, sign in again with a code sent to alice@example.com.')).toBeTruthy();
+    expect(screen.queryByText(/No invitation for/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in again' }));
+    expect(await screen.findByText('SIGN IN PAGE')).toBeTruthy();
+    expect(authService.logout).toHaveBeenCalled();
   });
 
   it('with nothing waiting, /invitations names the address the gym must have', async () => {

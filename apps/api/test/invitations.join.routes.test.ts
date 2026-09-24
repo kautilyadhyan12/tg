@@ -12,6 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
+import { argon2idHasher, type PasswordHasher } from "../src/modules/auth/service.js";
 import { verifyAccessTokenClaims } from "../src/modules/auth/tokens.js";
 import { emailHmac } from "../src/modules/orgs/invites/address.js";
 import { acceptInvitation, type JoinDeps } from "../src/modules/orgs/invites/join.js";
@@ -74,6 +75,35 @@ const nextIp = () => `10.65.${String(Math.floor(ipCounter / 250))}.${String((ipC
 
 const cookieMap = (res: { cookies: { name: string; value: string }[] }) =>
   Object.fromEntries(res.cookies.map((c) => [c.name, c.value]));
+
+/** argon2id, except that the next password check can be held open after it has passed,
+ *  to race a password sign-in that is under way against the address's first proof. */
+let heldCheck: { started: () => void; released: Promise<void> } | null = null;
+const holdNextPasswordCheck = (): { started: Promise<void>; release: () => void } => {
+  let started = (): void => undefined;
+  let release = (): void => undefined;
+  const startedPromise = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  heldCheck = { started, released };
+  return { started: startedPromise, release };
+};
+const gatedHasher: PasswordHasher = {
+  ...argon2idHasher,
+  verify: async (password, hash, algo) => {
+    const ok = await argon2idHasher.verify(password, hash, algo);
+    const held = heldCheck;
+    if (held !== null) {
+      heldCheck = null;
+      held.started();
+      await held.released;
+    }
+    return ok;
+  },
+};
 
 d("join by invitation (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
@@ -224,6 +254,7 @@ d("join by invitation (real Postgres)", () => {
         ON CONFLICT (code) DO UPDATE SET active = true, seat_cap = ${cap}`;
     }
     app = await buildApp(loadConfig(baseEnv), {
+      passwordHasher: gatedHasher,
       emailSender: {
         sendVerificationEmail: (email, _name, rawToken) => {
           verifyTokens.set(email.toLowerCase(), rawToken);
@@ -266,7 +297,7 @@ d("join by invitation (real Postgres)", () => {
       // Bob was forwarded Alice's email. He signs in with his own address.
       const bob = await signIn(addr("bob"));
       const bobSees = await invitationsOf(bob);
-      expect(bobSees).toEqual({ address: addr("bob"), invitations: [] });
+      expect(bobSees).toEqual({ address: addr("bob"), addressProved: true, invitations: [] });
       const bobTries = await accept(bob, aliceInvite);
       expect(bobTries.statusCode).toBe(404);
       expect(errorOf(bobTries).error).toBe("no_invitation");
@@ -307,7 +338,7 @@ d("join by invitation (real Postgres)", () => {
       // Erin signed in with Apple and hid her address: the gym has her iCloud one. The
       // wall names the address she signed in with, which is what explains it to her.
       const erinRelay = await signIn(APPLE_RELAY);
-      expect(await invitationsOf(erinRelay)).toEqual({ address: APPLE_RELAY, invitations: [] });
+      expect(await invitationsOf(erinRelay)).toEqual({ address: APPLE_RELAY, addressProved: true, invitations: [] });
       const erinTries = await accept(erinRelay, await inviteIdOf(iron, ICLOUD));
       expect(erinTries.statusCode).toBe(404);
       expect(errorOf(erinTries).message).toContain(APPLE_RELAY);
@@ -348,8 +379,10 @@ d("join by invitation (real Postgres)", () => {
       const hanaInvite = await inviteIdOf(iron, addr("hana"));
 
       // Unproved, the account finds nothing.
-      expect(await invitationsOf(planted)).toEqual({ address: addr("hana"), invitations: [] });
-      expect((await accept(planted, hanaInvite)).statusCode).toBe(404);
+      expect(await invitationsOf(planted)).toEqual({ address: addr("hana"), addressProved: false, invitations: [] });
+      const unproved = await accept(planted, hanaInvite);
+      expect(unproved.statusCode).toBe(403);
+      expect(errorOf(unproved)).toMatchObject({ error: "address_not_proved", message: `To see your invitations, sign in again with a code sent to ${addr("hana")}.` });
 
       // Hana signs in with a code: the same account, now proved by her.
       const hana = await signIn(addr("hana"));
@@ -362,8 +395,8 @@ d("join by invitation (real Postgres)", () => {
       expect((await get("/v1/auth/me", planted.cookies)).statusCode).toBe(200);
       expect((await invitationsOf(planted)).invitations).toEqual([]);
       const malloryTries = await accept(planted, hanaInvite);
-      expect(malloryTries.statusCode).toBe(404);
-      expect((await decline(planted, hanaInvite)).statusCode).toBe(404);
+      expect(malloryTries.statusCode).toBe(403);
+      expect((await decline(planted, hanaInvite)).statusCode).toBe(403);
       expect((await membershipsOf(iron, hana)).length).toBe(0);
       expect((await inviteStateOf(iron, addr("hana")))?.state).toBe("pending");
 
@@ -391,6 +424,88 @@ d("join by invitation (real Postgres)", () => {
       const ivy = await signIn(email);
       expect((await post("/v1/auth/refresh", {}, cookieMap(clicked))).statusCode).toBe(204);
       expect(ivy.userId).toBe(planted.userId);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  const passwordOf = async (email: string) =>
+    (await sql<{ password_hash: string | null }[]>`SELECT password_hash FROM users WHERE email = ${email}`)[0]?.password_hash ?? null;
+
+  /** Every session a response set opens no invitation. */
+  const opensNothing = async (who: User, res: { cookies: { name: string; value: string }[] }) => {
+    const cookies = cookieMap(res);
+    if (cookies["accessToken"] !== undefined) {
+      expect((await invitationsOf({ ...who, cookies })).invitations).toEqual([]);
+    }
+  };
+
+  it(
+    "a password sign-in already under way when the owner first signs in with a code is refused, and opens nothing",
+    async () => {
+      const gym = await makeGym("Race Login Gym");
+      const planted = await registerWithPassword(addr("olga"));
+      await addInvited(gym, { fullName: "Olga Berg", email: addr("olga") });
+
+      const hold = holdNextPasswordCheck();
+      const login = post("/v1/auth/login", { email: addr("olga"), password: PASSWORD }, {});
+      await hold.started;
+      // The owner proves the address while Mallory's password check has passed and her
+      // session is still to be written.
+      const olga = await signIn(addr("olga"));
+      hold.release();
+      const res = await login;
+
+      expect(res.statusCode).toBe(401);
+      await opensNothing(planted, res);
+      expect(await passwordOf(addr("olga"))).toBeNull();
+      expect((await invitationsOf(olga)).invitations).toHaveLength(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a password change already under way when the owner first signs in is refused: no password is set again and no session opens",
+    async () => {
+      const gym = await makeGym("Race Change Gym");
+      const planted = await registerWithPassword(addr("petra"));
+      await addInvited(gym, { fullName: "Petra Holm", email: addr("petra") });
+
+      const hold = holdNextPasswordCheck();
+      const change = post("/v1/auth/change-password", { currentPassword: PASSWORD, newPassword: "another-Fine-pw-2" }, planted.cookies);
+      await hold.started;
+      const petra = await signIn(addr("petra"));
+      hold.release();
+      const res = await change;
+
+      expect(res.statusCode).toBe(401);
+      await opensNothing(planted, res);
+      expect(await passwordOf(addr("petra"))).toBeNull();
+      expect((await post("/v1/auth/login", { email: addr("petra"), password: "another-Fine-pw-2" }, {})).statusCode).toBe(401);
+      // The owner's own session is untouched.
+      expect((await invitationsOf(petra)).invitations).toHaveLength(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a session begun before the proof stays shut even if a refresh kept its family alive past the proof's sign-out",
+    async () => {
+      const gym = await makeGym("Race Refresh Gym");
+      const planted = await registerWithPassword(addr("quin"));
+      await addInvited(gym, { fullName: "Quin Moor", email: addr("quin") });
+      const quin = await signIn(addr("quin"));
+      // A refresh that rotated inside the planted session as the proof's revocation read
+      // its rows: the family's newest token is live, written after the proof.
+      const token = planted.cookies["accessToken"];
+      if (token === undefined) throw new Error("no access cookie");
+      const family = verifyAccessTokenClaims(token, loadConfig(baseEnv)).familyId;
+      if (family === null) throw new Error("the planted token names no session");
+      await sql`
+        INSERT INTO refresh_tokens (user_id, family_id, token_hash, expires_at)
+        VALUES (${planted.userId}, ${family}, ${"e".repeat(64)}, now() + interval '1 day')`;
+      expect(await invitationsOf(planted)).toEqual({ address: addr("quin"), addressProved: false, invitations: [] });
+      expect((await accept(planted, await inviteIdOf(gym, addr("quin")))).statusCode).toBe(403);
+      expect((await invitationsOf(quin)).invitations).toHaveLength(1);
     },
     TEST_TIMEOUT_MS,
   );

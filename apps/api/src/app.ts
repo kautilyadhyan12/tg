@@ -12,7 +12,7 @@ import { createAnalytics, type Analytics } from "./analytics.js";
 import { createResendTransport } from "./email/resend.js";
 import { createDevEmailSender, createResendEmailSender, type EmailSender } from "./modules/auth/email.js";
 import { registerAuthenticate } from "./modules/auth/plugin.js";
-import { AuthError } from "./modules/auth/service.js";
+import { AuthError, type PasswordHasher } from "./modules/auth/service.js";
 import { registerAuthRoutes } from "./modules/auth/routes.js";
 import { createGoogleVerifier, type GoogleVerifier } from "./modules/auth/google.js";
 import { registerWorkoutRoutes } from "./modules/workouts/routes.js";
@@ -69,6 +69,9 @@ export interface BuildAppOverrides {
   /** Tests read what Sentry would be sent through a transport that records it;
    *  unset, the SDK sends to SENTRY_DSN. */
   sentryTransport?: Sentry.NodeOptions["transport"];
+  /** Tests hold a password check open to race it against an address's first proof;
+   *  unset is argon2id. */
+  passwordHasher?: PasswordHasher;
 }
 
 declare module "fastify" {
@@ -258,6 +261,7 @@ export async function buildApp(
     redis,
     googleVerifier: overrides.googleVerifier ?? createGoogleVerifier(config),
     emailSender,
+    ...(overrides.passwordHasher === undefined ? {} : { hasher: overrides.passwordHasher }),
   });
   registerWorkoutRoutes(app, { sql, redis });
   registerUserRoutes(app, { sql, config, redis, emailSender: usersEmailSender });

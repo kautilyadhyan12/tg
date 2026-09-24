@@ -228,6 +228,89 @@ export async function sessionBegunAfterProof(sql: Sql, userId: string, familyId:
   return rows[0]?.ok === true;
 }
 
+// ── what a checked password may do, under the lock a first proof takes ───────
+//
+// A password is checked (argon2, tens of milliseconds) before anything is written. The
+// address's first proof ends every password set before it (`recordVerifiedEmail`, under
+// the users row lock), so a write that follows a check must hold that same lock and
+// find the checked hash still there; otherwise a check that began before the proof
+// finishes after it, with a session or a password the proof was meant to end.
+
+async function holdsPassword(tx: TransactionSql, userId: string, checked: readonly string[]): Promise<boolean> {
+  const rows = await tx<{ password_hash: string | null }[]>`
+    SELECT password_hash FROM users WHERE id = ${userId} AND status = 'active' FOR UPDATE`;
+  const current = rows[0]?.password_hash ?? null;
+  return current !== null && checked.includes(current);
+}
+
+async function insertRefreshRow(
+  tx: TransactionSql,
+  input: { userId: string; familyId: string; tokenHash: string; expiresAt: Date; ip: string | null; userAgent: string | null },
+): Promise<void> {
+  await tx`
+    INSERT INTO refresh_tokens (user_id, family_id, token_hash, expires_at, ip, user_agent)
+    VALUES (${input.userId}, ${input.familyId}, ${input.tokenHash}, ${input.expiresAt},
+            ${input.ip}, ${input.userAgent})`;
+}
+
+/** Upgrade a checked password's hash, if the account still holds the one checked. */
+export async function replacePasswordHash(
+  sql: Sql,
+  input: { userId: string; checkedHash: string; newHash: string; algo: HashAlgo },
+): Promise<boolean> {
+  return await sql.begin(async (tx) => {
+    if (!(await holdsPassword(tx, input.userId, [input.checkedHash]))) return false;
+    await tx`UPDATE users SET password_hash = ${input.newHash}, hash_algo = ${input.algo} WHERE id = ${input.userId}`;
+    return true;
+  });
+}
+
+/** A password sign-in's session, written only while the account still holds a hash the
+ *  caller checked (or its own upgrade of it). False: it changed since. */
+export async function insertRefreshTokenForPassword(
+  sql: Sql,
+  input: {
+    userId: string;
+    checkedHashes: readonly string[];
+    familyId: string;
+    tokenHash: string;
+    expiresAt: Date;
+    ip: string | null;
+    userAgent: string | null;
+  },
+): Promise<boolean> {
+  return await sql.begin(async (tx) => {
+    if (!(await holdsPassword(tx, input.userId, input.checkedHashes))) return false;
+    await insertRefreshRow(tx, input);
+    return true;
+  });
+}
+
+/** Change a password the caller checked: the new hash, every session ended, one new one
+ *  begun — all only while the account still holds the checked hash. */
+export async function changePasswordIfUnchanged(
+  sql: Sql,
+  input: {
+    userId: string;
+    checkedHash: string;
+    newHash: string;
+    algo: HashAlgo;
+    familyId: string;
+    tokenHash: string;
+    expiresAt: Date;
+    ip: string | null;
+    userAgent: string | null;
+  },
+): Promise<boolean> {
+  return await sql.begin(async (tx) => {
+    if (!(await holdsPassword(tx, input.userId, [input.checkedHash]))) return false;
+    await tx`UPDATE users SET password_hash = ${input.newHash}, hash_algo = ${input.algo} WHERE id = ${input.userId}`;
+    await tx`UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = ${input.userId} AND revoked_at IS NULL`;
+    await insertRefreshRow(tx, input);
+    return true;
+  });
+}
+
 // ── refresh tokens (rotation + reuse detection, v1 §6.1 / Part 4 §3.1) ──────
 
 export async function insertRefreshToken(

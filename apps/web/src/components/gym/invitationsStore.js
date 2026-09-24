@@ -41,7 +41,12 @@ export function forgetInvitations() {
   kept = { userId: null, request: null, result: null };
 }
 
+// Kept here as well as in the tab's storage: with storage blocked, "Not now" still holds
+// until the page is reloaded.
+let notNowFor = null;
+
 export function saidNotNow(userId) {
+  if (notNowFor === userId) return true;
   try {
     return window.sessionStorage.getItem(LATER_KEY) === userId;
   } catch {
@@ -49,10 +54,22 @@ export function saidNotNow(userId) {
   }
 }
 
+/** Sign-out: nothing read or answered here carries over to the next sign-in. */
+export function resetInvitations() {
+  forgetInvitations();
+  notNowFor = null;
+  try {
+    window.sessionStorage.removeItem(LATER_KEY);
+  } catch {
+    // Storage blocked: nothing was kept in it.
+  }
+}
+
 export function sayNotNow(userId) {
+  notNowFor = userId;
   try {
     window.sessionStorage.setItem(LATER_KEY, userId);
   } catch {
-    // Storage blocked: the screen shows again on the next visit, which is harmless.
+    // Storage blocked: the answer lasts until the page is reloaded.
   }
 }

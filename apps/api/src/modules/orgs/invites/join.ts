@@ -41,26 +41,37 @@ export interface Caller {
 
 interface Address {
   email: string;
-  /** Null when the address is not one this session may answer for. */
+  /** This sign-in has proved the address (or there is no account to prove). */
+  proved: boolean;
+  /** Null when there is nothing to look up: not proved, or invitations switched off. */
   hmac: string | null;
 }
 
 async function callerAddress(deps: JoinDeps, caller: Caller): Promise<Address> {
   const account = await accountAddress(deps.sql, caller.id, caller.familyId);
-  if (account === null) return { email: "", hmac: null };
-  if (deps.invites === null || !account.provedForSession) return { email: account.email, hmac: null };
-  return { email: account.email, hmac: emailHmac(deps.invites.hmacKey, account.email) };
+  if (account === null) return { email: "", proved: true, hmac: null };
+  if (!account.provedForSession) return { email: account.email, proved: false, hmac: null };
+  if (deps.invites === null) return { email: account.email, proved: true, hmac: null };
+  return { email: account.email, proved: true, hmac: emailHmac(deps.invites.hmacKey, account.email) };
 }
 
 const noInvitation = (email: string): OrgsError => new OrgsError(404, "no_invitation", INVITATION_WORDS.no_invitation(email));
 
+/** Nothing can be answered for an address this sign-in has not proved. */
+function answerableHmac(address: Address): string {
+  if (!address.proved) throw new OrgsError(403, "address_not_proved", INVITATION_WORDS.address_not_proved(address.email));
+  if (address.hmac === null) throw noInvitation(address.email);
+  return address.hmac;
+}
+
 /** What is waiting for the caller's address. */
 export async function myInvitations(deps: JoinDeps, caller: Caller): Promise<MyInvitationsResponse> {
   const address = await callerAddress(deps, caller);
-  if (address.hmac === null) return { address: address.email, invitations: [] };
+  if (address.hmac === null) return { address: address.email, addressProved: address.proved, invitations: [] };
   const rows = await repo.invitationsForAddress(deps.sql, { hmac: address.hmac, email: address.email, userId: caller.id });
   return {
     address: address.email,
+    addressProved: true,
     invitations: rows.map((row) => ({
       id: row.id,
       state: row.state,
@@ -79,8 +90,7 @@ type AcceptOutcome =
  *  again under the gym's lock at the moment of the tap. */
 export async function acceptInvitation(deps: JoinDeps, caller: Caller, inviteId: string): Promise<AcceptInvitationResponse> {
   const address = await callerAddress(deps, caller);
-  const hmac = address.hmac;
-  if (hmac === null) throw noInvitation(address.email);
+  const hmac = answerableHmac(address);
   const gymId = await repo.invitationGym(deps.sql, inviteId, hmac);
   if (gymId === null) throw noInvitation(address.email);
   const at = deps.now();
@@ -141,8 +151,7 @@ export async function acceptInvitation(deps: JoinDeps, caller: Caller, inviteId:
  *  the gym's list holds them (RULINGS 2026-09-23). */
 export async function declineInvitation(deps: JoinDeps, caller: Caller, inviteId: string): Promise<DeclineInvitationResponse> {
   const address = await callerAddress(deps, caller);
-  const hmac = address.hmac;
-  if (hmac === null) throw noInvitation(address.email);
+  const hmac = answerableHmac(address);
   const gymId = await repo.invitationGym(deps.sql, inviteId, hmac);
   if (gymId === null) throw noInvitation(address.email);
   const at = deps.now();
