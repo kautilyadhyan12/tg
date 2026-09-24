@@ -112,6 +112,14 @@ const envSchema = z.object({
   // Where the app tells its operator that a gym's invitations were stopped (the "have
   // a look" list, until the admin panel). Unset: the log alone says so.
   OPERATOR_EMAIL: z.string().trim().email().max(254).optional(),
+  // Paddle sells our plans (ROADMAP Stage 3 item 1a). Sandbox until Kd's live account is
+  // approved; each key is checked against the environment below at boot. All unset:
+  // paying online answers 503 and the webhook answers 503; the rest of the app runs.
+  PADDLE_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
+  PADDLE_API_KEY: z.string().regex(/^pdl_(live|sdbx)_apikey_[a-z\d]{26}_[a-zA-Z\d]{22}_[a-zA-Z\d]{3}$/, "PADDLE_API_KEY must be a Paddle API key (Paddle's own pattern)").optional(),
+  // Public: sent to the browser to open Paddle's checkout.
+  PADDLE_CLIENT_TOKEN: z.string().regex(/^(test|live)_[a-zA-Z\d]{27}$/, "PADDLE_CLIENT_TOKEN must be a Paddle client-side token").optional(),
+  PADDLE_WEBHOOK_SECRET: z.string().regex(/^pdl_ntfset_[A-Za-z0-9_+/=-]{10,200}$/, "PADDLE_WEBHOOK_SECRET must be a Paddle notification secret").optional(),
 });
 
 export type AppConfig = Readonly<z.infer<typeof envSchema>>;
@@ -134,6 +142,22 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       path: ["RESEND_API_KEY"],
       message: "RESEND_API_KEY is required when INVITE_EMAIL_FROM is set",
     })
+    .refine((c) => (c.PADDLE_API_KEY === undefined) === (c.PADDLE_CLIENT_TOKEN === undefined), {
+      path: ["PADDLE_CLIENT_TOKEN"],
+      message: "PADDLE_API_KEY and PADDLE_CLIENT_TOKEN are set together",
+    })
+    .refine(
+      (c) =>
+        c.PADDLE_API_KEY === undefined ||
+        c.PADDLE_API_KEY.startsWith(c.PADDLE_ENV === "sandbox" ? "pdl_sdbx_" : "pdl_live_"),
+      { path: ["PADDLE_API_KEY"], message: "PADDLE_API_KEY belongs to the other Paddle environment" },
+    )
+    .refine(
+      (c) =>
+        c.PADDLE_CLIENT_TOKEN === undefined ||
+        c.PADDLE_CLIENT_TOKEN.startsWith(c.PADDLE_ENV === "sandbox" ? "test_" : "live_"),
+      { path: ["PADDLE_CLIENT_TOKEN"], message: "PADDLE_CLIENT_TOKEN belongs to the other Paddle environment" },
+    )
     .safeParse(env);
   if (!parsed.success) {
     const issues = parsed.error.issues

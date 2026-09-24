@@ -1,6 +1,6 @@
 // `webhook_events`: every provider event kept once by its own id (Part 4 §3.3), so a
 // webhook answers at once and the worker acts on each event, however often it arrives.
-import { resendEmailEventTypeSchema } from "@app/shared";
+import { paddleSubscriptionIdSchema, resendEmailEventTypeSchema } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { z } from "zod";
 
@@ -44,10 +44,22 @@ export interface ClaimedEvent {
 /** Take the next Resend event that is due and hold it for `leaseMs`: a second worker
  *  skips it until then, and a worker that dies leaves it to be taken again. */
 export async function claimDueEvent(sql: Sql, now: Date, leaseMs: number): Promise<ClaimedEvent | null> {
+  const row = await claimDue(sql, "resend", now, leaseMs);
+  if (row === null) return null;
+  const payload = storedResendEventSchema.safeParse(row.payload);
+  return { ...row, payload: payload.success ? payload.data : null };
+}
+
+async function claimDue(
+  sql: Sql,
+  provider: "resend" | "paddle",
+  now: Date,
+  leaseMs: number,
+): Promise<{ id: string; attempts: number; tries: number; receivedAt: Date; payload: unknown } | null> {
   const rows = await sql<{ id: string; attempts: number; tries: number; received_at: Date; payload: unknown }[]>`
     WITH next AS (
       SELECT id FROM webhook_events
-      WHERE provider = 'resend' AND status = 'pending' AND not_before <= ${now}
+      WHERE provider = ${provider} AND status = 'pending' AND not_before <= ${now}
       ORDER BY not_before, received_at, id
       LIMIT 1
       FOR UPDATE SKIP LOCKED
@@ -58,18 +70,52 @@ export async function claimDueEvent(sql: Sql, now: Date, leaseMs: number): Promi
     RETURNING e.id, e.attempts, e.tries, e.received_at, e.payload`;
   const row = rows[0];
   if (row === undefined) return null;
-  const payload = storedResendEventSchema.safeParse(row.payload);
-  return {
-    id: row.id,
-    attempts: row.attempts,
-    tries: row.tries,
-    receivedAt: row.received_at,
-    payload: payload.success ? payload.data : null,
-  };
+  return { id: row.id, attempts: row.attempts, tries: row.tries, receivedAt: row.received_at, payload: row.payload };
+}
+
+/** What is kept of a Paddle event: its type and the subscription it points at. The
+ *  worker asks Paddle for the subscription itself before acting (Part 5 §0). */
+export const storedPaddleEventSchema = z
+  .object({ type: z.string().min(1).max(100), subscriptionId: paddleSubscriptionIdSchema })
+  .strict();
+export type StoredPaddleEvent = z.infer<typeof storedPaddleEventSchema>;
+
+export async function keepPaddleEvent(sql: SqlOrTx, event: { eventId: string; payload: StoredPaddleEvent }): Promise<void> {
+  await sql`
+    INSERT INTO webhook_events (provider, event_id, payload)
+    VALUES ('paddle', ${event.eventId}, ${sql.json(event.payload)})
+    ON CONFLICT (provider, event_id) DO NOTHING`;
+}
+
+export interface ClaimedPaddleEvent {
+  id: string;
+  attempts: number;
+  tries: number;
+  receivedAt: Date;
+  payload: StoredPaddleEvent | null;
+}
+
+export async function claimDuePaddleEvent(sql: Sql, now: Date, leaseMs: number): Promise<ClaimedPaddleEvent | null> {
+  const row = await claimDue(sql, "paddle", now, leaseMs);
+  if (row === null) return null;
+  const payload = storedPaddleEventSchema.safeParse(row.payload);
+  return { ...row, payload: payload.success ? payload.data : null };
+}
+
+/** Forget Paddle's finished events after 90 days (Part 4 §5.1). */
+export async function forgetOldPaddleEvents(sql: SqlOrTx, before: Date, limit: number): Promise<number> {
+  const rows = await sql<{ id: string }[]>`
+    DELETE FROM webhook_events
+    WHERE id IN (
+      SELECT id FROM webhook_events
+      WHERE provider = 'paddle' AND status <> 'pending' AND processed_at < ${before}
+      LIMIT ${limit})
+    RETURNING id`;
+  return rows.length;
 }
 
 /** Finish an event, done or given up. False when the claim was no longer this run's. */
-export async function finishEvent(sql: SqlOrTx, event: ClaimedEvent, status: "done" | "failed", at: Date): Promise<boolean> {
+export async function finishEvent(sql: SqlOrTx, event: { id: string; attempts: number }, status: "done" | "failed", at: Date): Promise<boolean> {
   const rows = await sql<{ id: string }[]>`
     UPDATE webhook_events SET status = ${status}, processed_at = ${at}
     WHERE id = ${event.id} AND status = 'pending' AND attempts = ${event.attempts}
@@ -80,7 +126,7 @@ export async function finishEvent(sql: SqlOrTx, event: ClaimedEvent, status: "do
 /** Try an event again at `notBefore`. `countTry`: Resend's record was read and did not
  *  confirm it yet. Waiting on anything else (the key, the rate, the email's own row)
  *  spends no try. */
-export async function deferEvent(sql: SqlOrTx, event: ClaimedEvent, notBefore: Date, countTry: boolean): Promise<void> {
+export async function deferEvent(sql: SqlOrTx, event: { id: string; attempts: number }, notBefore: Date, countTry: boolean): Promise<void> {
   await sql`
     UPDATE webhook_events
     SET not_before = ${notBefore}, tries = tries + CASE WHEN ${countTry}::boolean THEN 1 ELSE 0 END

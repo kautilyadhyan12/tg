@@ -93,7 +93,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 
 **Two folders, two terminals, two DIFFERENT features at a time** (RULINGS 2026-09-22). Kd says "build the next thing" once in each folder; a terminal takes the first unticked job of ITS folder's list whose needs are met, and if none is, says so rather than taking the other folder's.
 - **Folder A — `D:\Projects\ai-home-gym`:** 3a-v-a → 3a-v-b → 3a-iv → 3b-i → 3b-ii → 5a → 5b → 4a → 4c → 3c → *the two extra passes over "getting in"* → 16a → 16b → 16c → *passes over check-in* → 17a → 17c → 17d → 17e → 17f → *passes* → 18a → 18b → 18c → 20a → 20b → 20d → 21a → 21b.
-- **Folder B — `D:\Projects\ai-home-gym-b`** (a git worktree with its own local database `aihg_b` and Redis number 1, set up 2026-09-22; its `FOLDER.md` has the ports): 17b-i → 17b-ii-a → 17b-ii-b-i → 17b-ii-w → 17b-ii-b-ii-a → 17b-ii-b-ii-b → Stage 3 item 2a (the price list, the 200-member trial, no individual trial, one free scan) → Stage 3 item 1 (Paddle, in its test mode) → Stage 4 item 1 (the site online, with the prices, terms, privacy and refund pages Paddle asks for) → Stage 4 item 4 (photo storage) → 19a (after 16a) → 19b → 19c → 19d → 20c (after 3b-i) → Stage 4 items 10, 11 and 9 → Stage 1 item 9 → Stage 5, the phone app.
+- **Folder B — `D:\Projects\ai-home-gym-b`** (a git worktree with its own local database `aihg_b` and Redis number 1, set up 2026-09-22; its `FOLDER.md` has the ports): 17b-i → 17b-ii-a → 17b-ii-b-i → 17b-ii-w → 17b-ii-b-ii-a → 17b-ii-b-ii-b → Stage 3 item 2a (the price list, the 200-member trial, no individual trial, one free scan) → Stage 3 item 1 (1a–1d: Paddle in its test mode, then Razorpay for India) → Stage 4 item 1 (the site online, with the prices, terms, privacy and refund pages Paddle asks for) → Stage 4 item 4 (photo storage) → 19a (after 16a) → 19b → 19c → 19d → 20c (after 3b-i) → Stage 4 items 10, 11 and 9 → Stage 1 item 9 → Stage 5, the phone app.
 - **Rules between the folders:** records (RULINGS, this file, HANDOFF) are written on the job's own branch, each job touching only its own lines; jobs merge ONE at a time, and the one that merges second first takes `master` in, re-runs its checks, and — if both added a migration — renames its own to the next free number and re-stamps its journal entry, because Drizzle applies migrations in the journal's time order and would skip an older-stamped one on a database that has already moved past it.
 - **The chat's estimates, agreed as the working plan, never a promise:** a gym's first day on the web (Folder A through 16c) about 29–30 September · the whole gym side about 8–10 October · the phone app's first version with testers about 20–24 October · in the stores late October to early November.
 
@@ -181,7 +181,11 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 
 ## Stage 3 — Money
 
-1. [ ] Paddle checkout for individuals and gyms, ON THE WEB: the phone app's console shows the plan only, no Subscribe button and no link out (RULINGS 2026-09-15); the subscription state machine; webhooks (raw body, dedupe, worker); invoices.
+1. **Paying us, ON THE WEB** (split 2026-09-24 into four jobs; prices + tax, Razorpay for India, RULINGS that day).
+   - 1a. [ ] **A gym pays through Paddle** (test mode): Subscribe on the plan prompt, Paddle's checkout at our price, the signed webhook and worker, the one subscription rule; a second paid plan is cancelled and refunded.
+   - 1b. [ ] **A person outside India pays $10 through Paddle**, from Settings; entitlements from their own plan.
+   - 1c. [ ] **Managing a plan**: change card and cancel (Paddle's own page), invoices (Paddle's), a bigger size as members grow, paying before the trial ends, failed payments and the 5-day grace.
+   - 1d. [ ] **India through Razorpay**, gyms and people, UPI Autopay; GST off until Kd is registered (RULINGS 2026-09-24). Needs Kd's free Razorpay test account.
 2. **Trials enforced** (split 2026-09-08 after Kd's trial-abuse ruling; no approval queue, ever).
    - 2a. [x] **The price list, the 10-day gym trial at 200 members, no individual trial, one free scan a day** — merged 2026-09-24 (PR #101).
    - 2b. [ ] Same person, new spelling: Gmail dots and `+tags` collapse for trial counting; throwaway email domains refused at the Manage door.

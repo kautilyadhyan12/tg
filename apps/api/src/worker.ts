@@ -36,6 +36,10 @@ import { rollUpGymDays } from "./modules/orgs/rollup.js";
 import { sweepJoinApplications } from "./modules/orgs/sweep.js";
 import { expireLapsedGymTrials } from "./modules/orgs/trialSweep.js";
 import { purgeDueUsers, purgeShortfall } from "./modules/privacy/purge.js";
+import { processPaddleEvents } from "./modules/billing/events.js";
+import { paddleSettings } from "./modules/billing/settings.js";
+// The worker busts no entitlement cache: a gym's members pick a change up within the cache's 60 s.
+import { createMemoryRedis } from "./redis.js";
 import { sentryOptions } from "./sentry.js";
 
 const config = loadConfig(process.env);
@@ -413,6 +417,52 @@ if (invites === null || inviteSender === null) {
   });
 }
 
+// PADDLE'S EVENTS (ROADMAP Stage 3 item 1a). Their own queue, every minute: each event
+// the webhook kept is fetched from Paddle and written through the one rule. Only when
+// Paddle is set up.
+export const BILLING_QUEUE = "billing";
+export const BILLING_PADDLE_EVENTS_JOB = "billing.paddle_events";
+
+const paddle = paddleSettings(config);
+let billingQueue: Queue | null = null;
+let billingWorker: Worker | null = null;
+if (paddle === null) {
+  log.warn({ event: "worker.billing_off" }, "Paddle events are not acted on: PADDLE_API_KEY or PADDLE_CLIENT_TOKEN is missing");
+} else {
+  billingQueue = new Queue(BILLING_QUEUE, { connection });
+  try {
+    await billingQueue.upsertJobScheduler(
+      BILLING_PADDLE_EVENTS_JOB,
+      { every: 60_000 },
+      {
+        name: BILLING_PADDLE_EVENTS_JOB,
+        // Each event is leased and finished by its lease, and the rule ignores a record it
+        // already holds, so a retry or a second run at once changes nothing twice.
+        opts: { attempts: 1, removeOnComplete: { count: 50 }, removeOnFail: { count: 200 } },
+      },
+    );
+  } catch (err) {
+    log.fatal({ err }, "failed to register the Paddle events schedule");
+    process.exit(1);
+  }
+  billingWorker = new Worker(
+    BILLING_QUEUE,
+    async (job) => {
+      if (job.name !== BILLING_PADDLE_EVENTS_JOB) throw new Error(`unknown job on ${BILLING_QUEUE}: ${job.name}`);
+      const startedAt = Date.now();
+      const run = await processPaddleEvents({ sql, redis: createMemoryRedis(), paddle, log, now: () => new Date() });
+      if (run.applied + run.unchanged + run.deferred + run.givenUp + run.forgotten > 0) {
+        log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
+      }
+    },
+    { connection },
+  );
+  billingWorker.on("failed", (job, err) => {
+    Sentry.captureException(err, { tags: { job: job?.name ?? "unknown", queue: BILLING_QUEUE } });
+    log.error({ errName: err.name, errMessage: err.message, event: "job.failed", job: job?.name, jobId: job?.id }, "job failed");
+  });
+}
+
 const worker = new Worker(
   ROLLUPS_QUEUE,
   async (job) => {
@@ -574,8 +624,10 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
       // torn down mid-cascade.
       await worker.close();
       await invitesWorker?.close();
+      await billingWorker?.close();
       await queue.close();
       await invitesQueue?.close();
+      await billingQueue?.close();
       await connection.quit();
       await sql.end();
       // T3 round 3 minor: an exception captured moments before SIGTERM would

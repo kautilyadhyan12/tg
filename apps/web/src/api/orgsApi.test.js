@@ -219,6 +219,22 @@ afterEach(() => {
 });
 
 describe('orgService endpoints', () => {
+  it('pays through the gym’s own billing doors, with the press’s key and no amount', async () => {
+    const seen = [];
+    authApi.defaults.adapter = async (config) => {
+      seen.push({ url: config.url, method: config.method, data: config.data, key: config.headers?.['Idempotency-Key'] });
+      const data = config.url.endsWith('/sync')
+        ? { state: 'waiting' }
+        : { checkoutId: '44444444-4444-4444-4444-444444444444', provider: 'paddle', environment: 'sandbox', clientToken: 'test_x', transactionId: `txn_${'a'.repeat(26)}` };
+      return { data, status: 200, statusText: '', headers: {}, config, request: {} };
+    };
+    await orgService.startCheckout('gym-1', 'org_b1_us_m', 'press-1');
+    await orgService.syncCheckout('gym-1', 'c-1');
+    expect(seen[0]).toMatchObject({ url: '/v1/orgs/gym-1/billing/checkout', method: 'post', key: 'press-1' });
+    expect(JSON.parse(seen[0].data)).toEqual({ planCode: 'org_b1_us_m' });
+    expect(seen[1]).toMatchObject({ url: '/v1/orgs/gym-1/billing/checkouts/c-1/sync', method: 'post' });
+  });
+
   it('hits the /v1/orgs surface, and nothing else', async () => {
     const seen = recordRequests(authApi);
     await orgService.createOrg({ name: 'Iron House', country: 'US', timezone: 'America/Chicago' });

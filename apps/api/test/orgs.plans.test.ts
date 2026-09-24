@@ -301,7 +301,7 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
     INR: {
       codes: ["org_b1_in_m", "org_b2_in_m", "org_b3_in_m", "org_b4_in_m", "org_b5_in_m"],
       seatCaps: [200, 500, 1000, 1500, 2100],
-      labels: ["₹7,500", "₹12,500", "₹19,000", "₹26,500", "₹36,500"],
+      labels: ["₹8,500", "₹13,500", "₹22,500", "₹31,500", "₹43,000"],
     },
   };
   const RULED_TRIAL_DAYS = 10;
@@ -406,6 +406,7 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
       expect(Object.keys(book[0] ?? {}).sort()).toEqual([
         "code",
         "currency",
+        "fits",
         "interval",
         "priceLabel",
         "seatCap",
@@ -434,10 +435,10 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
         expect(p.currency).toBe("INR");
         expect(p.priceLabel.startsWith("₹")).toBe(true);
       }
-      // The ruled INR band 1 is ₹7,500 (RULINGS 2026-09-23, `seed.ts`). Named
+      // The ruled INR band 1 is ₹8,500 (RULINGS 2026-09-24, `seed.ts`). Named
       // rather than range-checked: a formatter that dropped the thousands
       // separator or the minor units would still be "greater than zero".
-      expect(book.find((p) => p.code === "org_b1_in_m")?.priceLabel).toBe("₹7,500");
+      expect(book.find((p) => p.code === "org_b1_in_m")?.priceLabel).toBe("₹8,500");
 
       /** A RETIRED BAND IS NEVER QUOTED TO A BUYER — and this assertion exists
        *  because MUTANT O148 SURVIVED WITHOUT IT.

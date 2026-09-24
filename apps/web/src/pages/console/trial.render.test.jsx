@@ -261,6 +261,50 @@ describe('the plan card', () => {
     expect(screen.queryByText(/^Ends /)).toBeNull();
     expect(screen.queryByText(/free trial/i)).toBeNull();
   });
+
+  it('shows a paid plan’s price and the day it renews, never the old trial date', async () => {
+    orgService.getMine.mockResolvedValue(
+      mineIs({
+        ...ORG,
+        subscription: {
+          status: 'active',
+          trialEndsAt: daysFromNow(-200),
+          seatCap: 500,
+          priceLabel: '$129',
+          currentPeriodEnd: '2026-11-01T12:00:00.000Z',
+          cancelAtPeriodEnd: false,
+        },
+        seatsUsed: 40,
+      }),
+    );
+    renderConsole(Overview);
+
+    expect(await screen.findByText('$129 a month')).toBeTruthy();
+    const renews = new Date('2026-11-01T12:00:00.000Z').toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    expect(screen.getByText(`Renews ${renews}`)).toBeTruthy();
+    expect(screen.queryByText(/^Ends /)).toBeNull();
+  });
+
+  it('says a cancelled plan ends, rather than renews', async () => {
+    orgService.getMine.mockResolvedValue(
+      mineIs({
+        ...ORG,
+        subscription: {
+          status: 'active',
+          trialEndsAt: null,
+          seatCap: 500,
+          priceLabel: '$129',
+          currentPeriodEnd: '2026-11-01T12:00:00.000Z',
+          cancelAtPeriodEnd: true,
+        },
+        seatsUsed: 40,
+      }),
+    );
+    renderConsole(Overview);
+
+    expect(await screen.findByText(/^Ends /)).toBeTruthy();
+    expect(screen.queryByText(/^Renews /)).toBeNull();
+  });
 });
 
 // ── §4.2's banner ───────────────────────────────────────────────────────────

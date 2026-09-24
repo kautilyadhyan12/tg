@@ -76,7 +76,7 @@ export interface OrgRouteOverrides {
 
 export function registerOrgRoutes(
   app: FastifyInstance,
-  deps: { sql: Sql; redis: RedisLike; invites: InviteSettings | null },
+  deps: { sql: Sql; redis: RedisLike; invites: InviteSettings | null; onlinePayments: boolean },
   overrides: OrgRouteOverrides = {},
 ): void {
   const orgDeps: service.OrgsDeps = {
@@ -87,6 +87,7 @@ export function registerOrgRoutes(
     // rather than losing a visit that is already committed (R8.5 — the
     // alternative is the empty catch that rule forbids).
     log: app.log,
+    onlinePayments: deps.onlinePayments,
   };
 
   // THE MEMBER LIST (Part 3 §9.9), registered here rather than in `app.ts`: it is

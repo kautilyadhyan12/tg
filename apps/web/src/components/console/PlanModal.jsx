@@ -3,7 +3,8 @@ import { GYM_TRIAL_DAYS, orgWords } from '@app/shared';
 import { Link } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { orgService, errorCode, errorText, isRetryable } from '../../api/orgsApi';
-import { applyStartedTrial, refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
+import { applyPaidPlan, applyStartedTrial, refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
+import { closePaddleCheckout, openPaddleCheckout } from '../../utils/paddleCheckout';
 import { planPriceText, planPromptFor, planSeatLabel } from '../../pages/console/billingView';
 
 // THE PROMPT A GYM OWNER CANNOT SKIP — Kd's ruling of 2026-08-28 (:22215), and
@@ -48,15 +49,10 @@ import { planPriceText, planPromptFor, planSeatLabel } from '../../pages/console
 // (Part 5 §12), so the owner of a second gym must never be shown a button whose
 // only possible answer is a refusal.
 //
-// **THE SUBSCRIBE ARM HAS NO BUTTON, AND THAT IS DELIBERATE RATHER THAN
-// UNFINISHED.** There is nowhere to send anybody: Paddle is unbuilt (:17357),
-// the admin "mark this gym as paid" tool is unbuilt, and the contact channel is
-// owed — Kd was told all three before he ruled, and :22215 §5 step 3 sequences
-// it exactly this way. So the arm says we will be in touch, as a SENTENCE. A
-// button under it would either do nothing when pressed, which is the dead
-// control `billingView.js`'s own rule 1 refuses, or promise a message this
-// product has no way to send — a promise with no code behind it, which is where
-// this project draws Critical (:5807).
+// **THE SUBSCRIBE ARM** (ROADMAP Stage 3 item 1a): each plan the gym fits has a
+// Subscribe button that opens Paddle's own payment window for a payment our server
+// made at our price. Where the gym cannot pay online (rupees until Razorpay, or no
+// Paddle on this server) the arm says so in a sentence and draws no button.
 //
 // **THE WAY OUT IS "YOUR GYMS" AND SIGN OUT — Kd chose this at the plan gate**,
 // against an arm offering sign-out alone. Both are true exits rather than ways
@@ -69,23 +65,48 @@ import { planPriceText, planPromptFor, planSeatLabel } from '../../pages/console
  *  computes neither: `priceLabel` is formatted server-side and is the only money
  *  field on the wire (there is no minor-unit integer to divide — R10.4), and the
  *  cap is the only human fact a plan row carries. */
-function PlanRow({ plan, orgType }) {
+function PlanRow({ plan, orgType, canPay, busy, working, onSubscribe }) {
   const price = planPriceText(plan);
   if (price === null) return null;
+  const fits = plan?.fits !== false;
   return (
     <li
-      className="rounded-xl px-4 py-3 flex items-baseline justify-between gap-4"
+      className="rounded-xl px-4 py-3 flex flex-col gap-2"
       style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
     >
-      <span className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-        {planSeatLabel(plan?.seatCap, orgType)}
-      </span>
-      <span className="font-semibold flex-shrink-0" style={{ color: '#fff' }}>
-        {price}
-      </span>
+      <div className="flex items-baseline justify-between gap-4">
+        <span className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
+          {planSeatLabel(plan?.seatCap, orgType)}
+        </span>
+        <span className="font-semibold flex-shrink-0" style={{ color: '#fff' }}>
+          {price}
+        </span>
+      </div>
+      {canPay && !fits ? (
+        <span className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
+          You have more {orgWords(orgType).people} than this plan allows.
+        </span>
+      ) : null}
+      {canPay && fits ? (
+        <button
+          type="button"
+          onClick={() => onSubscribe(plan.code)}
+          disabled={busy}
+          className="self-stretch rounded-xl px-4 py-2.5 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
+          style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F', minHeight: 44 }}
+        >
+          {working ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+          Subscribe
+        </button>
+      ) : null}
     </li>
   );
 }
+
+/** How many times, two seconds apart, the prompt asks whether a payment has reached
+ *  the gym before it says the page will catch up by itself. */
+const SYNC_TRIES = 30;
+const SYNC_GAP_MS = 2000;
 
 export default function PlanModal({ org, onSignOut, signingOut = false }) {
   const titleId = useId();
@@ -102,8 +123,19 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
    *  button that can only ever refuse, behind a prompt they cannot close** —
    *  :5807 1a's second half, somebody blocked from finishing something. */
   const [trialSpent, setTrialSpent] = useState(false);
-  const [plans, setPlans] = useState({ loading: true, error: null, retryable: true, list: null });
+  const [plans, setPlans] = useState({ loading: true, error: null, retryable: true, list: null, payOnline: 'unavailable' });
   const [attempt, setAttempt] = useState(0);
+  /** A payment under way: which plan, and whether Paddle's window is opening or the
+   *  payment is being confirmed. Null when nothing is under way. */
+  const [paying, setPaying] = useState(null);
+  const [payNote, setPayNote] = useState(null);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const arm = planPromptFor(org);
   const showing = arm === null ? null : trialSpent ? 'subscribe' : arm;
@@ -180,7 +212,13 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
       .getPlans(gymId)
       .then((res) => {
         if (cancelled) return;
-        setPlans({ loading: false, error: null, retryable: true, list: res.data?.plans ?? [] });
+        setPlans({
+          loading: false,
+          error: null,
+          retryable: true,
+          list: res.data?.plans ?? [],
+          payOnline: res.data?.payOnline ?? 'unavailable',
+        });
       })
       .catch((err) => {
         if (cancelled) return;
@@ -192,6 +230,7 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
           error: errorText(err, `We couldn't load your ${words.it}'s plans.`),
           retryable: isRetryable(err),
           list: null,
+          payOnline: 'unavailable',
         });
       });
     return () => {
@@ -200,6 +239,60 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
   }, [showing, gymId, attempt, words]);
 
   if (showing === null) return null;
+
+  /** Ask until the payment is on the gym. The webhook reaches the gym on its own too,
+   *  so running out of tries only means this page stops waiting. */
+  const confirmPayment = async (checkoutId) => {
+    for (let tries = 0; tries < SYNC_TRIES; tries += 1) {
+      try {
+        const res = await orgService.syncCheckout(gymId, checkoutId);
+        if (res.data?.state === 'paid') {
+          closePaddleCheckout();
+          applyPaidPlan(gymId, res.data.subscription);
+          refreshConsoleOrgsAfterChange();
+          return;
+        }
+      } catch {
+        // A failed ask is asked again.
+      }
+      await new Promise((resolve) => setTimeout(resolve, SYNC_GAP_MS));
+      if (!mounted.current) return;
+    }
+    if (!mounted.current) return;
+    setPaying(null);
+    setPayNote("Your payment went through. It can take a minute to show here, and this page will update by itself.");
+    refreshConsoleOrgsAfterChange();
+  };
+
+  const subscribe = async (planCode) => {
+    if (gymId === null || paying !== null) return;
+    setPaying({ planCode, phase: 'opening' });
+    setPayNote(null);
+    setError(null);
+    try {
+      const key = crypto.randomUUID();
+      const res = await orgService.startCheckout(gymId, planCode, key);
+      const { checkoutId } = res.data;
+      await openPaddleCheckout({
+        environment: res.data.environment,
+        clientToken: res.data.clientToken,
+        transactionId: res.data.transactionId,
+        onEvent: (event) => {
+          if (!mounted.current) return;
+          if (event.type === 'completed') {
+            setPaying({ planCode, phase: 'confirming' });
+            void confirmPayment(checkoutId);
+          } else if (event.type === 'closed') {
+            setPaying((now) => (now?.phase === 'confirming' ? now : null));
+          }
+        },
+      });
+      setPaying((now) => (now?.phase === 'opening' ? { planCode, phase: 'paying' } : now));
+    } catch (err) {
+      setPaying(null);
+      setError(errorText(err, "We couldn't open the payment window. Please try again."));
+    }
+  };
 
   const start = async () => {
     if (gymId === null || busy) return;
@@ -319,7 +412,15 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
               plans.list.length > 0 ? (
                 <ul className="flex flex-col gap-2" data-testid="plan-list">
                   {plans.list.map((p) => (
-                    <PlanRow key={p.code} plan={p} orgType={org?.orgType} />
+                    <PlanRow
+                      key={p.code}
+                      plan={p}
+                      orgType={org?.orgType}
+                      canPay={plans.payOnline === 'available'}
+                      busy={paying !== null}
+                      working={paying?.planCode === p.code}
+                      onSubscribe={subscribe}
+                    />
                   ))}
                 </ul>
               ) : (
@@ -370,8 +471,15 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
           </button>
         ) : (
           <p className="text-sm mt-5" style={{ color: 'rgba(255,255,255,0.6)' }}>
-            There&apos;s no way to pay online yet. We&apos;ll be in touch about setting your
-            {' '}{words.it} up.
+            {paying?.phase === 'confirming'
+              ? 'Confirming your payment…'
+              : payNote !== null
+                ? payNote
+                : plans.payOnline === 'available'
+                  ? 'Prices are a month. Tax is added at checkout where it applies.'
+                  : plans.payOnline === 'coming_soon'
+                    ? `Paying online in rupees is coming soon. We'll be in touch about setting your ${words.it} up.`
+                    : `There's no way to pay online yet. We'll be in touch about setting your ${words.it} up.`}
           </p>
         )}
 

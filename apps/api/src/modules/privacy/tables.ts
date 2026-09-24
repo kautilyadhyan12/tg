@@ -358,6 +358,10 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   "gym_class_types",
   "gym_class_schedules",
   "gym_class_sessions",
+  // billing_checkouts.created_by — which member of staff pressed Subscribe for a gym
+  // (migration `0041`). Kept on audit_log's footing: it is the gym's record of a
+  // payment it made, not the person's own data; `ON DELETE set null` if the row goes.
+  "billing_checkouts",
   "api_cost_events",
   "usage_daily",
   "trace_samples",
