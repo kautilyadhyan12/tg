@@ -331,9 +331,9 @@ describe("what a change marks as edited by hand (§11.4)", () => {
     expect(out.ok && out.edited).toEqual(edited);
   });
 
-  it("the four identity fields are never marked, and are reported as identity changes", () => {
+  it("the four identity fields are marked too, since an upload can write over them (3a-vi), and are reported as identity changes", () => {
     const out = typed({ fullName: "Anne Bell", email: "anne@x.example", phone: "07911 123456", memberNumber: "M-1" }, GB, stored);
-    expect(out.ok && out.edited).toEqual([]);
+    expect(out.ok && out.edited).toEqual(["fullName", "email", "phone", "memberNumber"]);
     expect(out.ok && out.identityFields).toEqual(["fullName", "email", "phone", "memberNumber"]);
   });
 

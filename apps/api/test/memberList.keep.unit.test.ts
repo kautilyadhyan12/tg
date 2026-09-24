@@ -104,6 +104,10 @@ const member = (over: Partial<ListMember> & { userId: string }): ListMember => (
 });
 
 const ALL: CarriedFields = {
+  fullName: true,
+  email: true,
+  phone: true,
+  memberNumber: true,
   status: true,
   membershipType: true,
   joinedOn: true,
@@ -620,7 +624,7 @@ describe("changed, field by field", () => {
       members: [],
       mode: "whole_list",
       hasList: true,
-      carries: { status: false, membershipType: false, joinedOn: false, endsOn: false, paymentStatus: false, dateOfBirth: false },
+      carries: { fullName: true, email: true, phone: true, memberNumber: true, status: false, membershipType: false, joinedOn: false, endsOn: false, paymentStatus: false, dateOfBirth: false },
     });
     expect(out.counts).toMatchObject({ changed: 0, unchanged: 1 });
     expect(out.fieldChanges).toEqual([]);

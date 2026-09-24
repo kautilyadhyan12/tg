@@ -987,7 +987,9 @@ export interface EntryToWrite {
  *
  *  `clear` is the hand-edit marks this write has done the work of: the field NAMES this
  *  file really overwrote for this one person (§11.4). Everything else stays marked. */
-export interface EntryChange extends Omit<EntryToWrite, "fullName" | "email" | "phone" | "memberNumber"> {
+export interface EntryChange extends EntryToWrite {
+  /** The key the record has now; `identityKey` is the one it is given. */
+  entryKey: string;
   clear: readonly string[];
 }
 
@@ -1059,11 +1061,10 @@ export async function insertEntries(
 /** THE PEOPLE WHOSE RECORDS MOVE — one statement, in place, and the same statement for
  *  a change and for a FORMER record coming back (§11.1, §11.4).
  *
- *  **THE FOUR FIELDS BEHIND THE IDENTITY KEY ARE STILL NOT WRITTEN** (§9.7). The key is
- *  built from the name, address, phone and member number, so two entries sharing a key
- *  cannot differ in any of them: a person whose NAME changed is honestly a new person
- *  and somebody gone. Writing them here would be four columns that cannot have changed,
- *  and one day one of them would be written from the wrong row.
+ *  **The record is found by the key it has now and given the key the rule worked out**
+ *  (3a-vi): a row is matched to its record by member number, email or phone, so the
+ *  name, address, phone and member number can change like any other carried field. The
+ *  rule never gives two records one key (`samePerson.ts`), so the UNIQUE holds mid-statement.
  *
  *  **A FIELD THE FILE DOES NOT CARRY IS LEFT ALONE, AND THE `carries` FLAGS ARE HOW.**
  *  Each is a boolean PARAMETER inside a CASE, not a SET list built as text: a gym
@@ -1092,7 +1093,12 @@ export async function updateEntries(
 ): Promise<number> {
   if (changes.length === 0) return 0;
   const payload = changes.map((change) => ({
+    entry_key: change.entryKey,
     identity_key: change.identityKey,
+    full_name: change.fullName,
+    email: change.email,
+    phone_e164: change.phone,
+    member_number: change.memberNumber,
     status: change.status,
     membership_type: change.membershipType,
     joined_on: change.joinedOn,
@@ -1105,7 +1111,12 @@ export async function updateEntries(
   }));
   const rows = await tx<{ id: string }[]>`
     UPDATE gym_member_list_entries e
-    SET status         = CASE WHEN ${carries.status} THEN r.status ELSE e.status END,
+    SET full_name      = CASE WHEN ${carries.fullName} THEN r.full_name ELSE e.full_name END,
+        email          = CASE WHEN ${carries.email} THEN r.email::citext ELSE e.email END,
+        phone_e164     = CASE WHEN ${carries.phone} THEN r.phone_e164 ELSE e.phone_e164 END,
+        member_number  = CASE WHEN ${carries.memberNumber} THEN r.member_number ELSE e.member_number END,
+        identity_key   = r.identity_key,
+        status         = CASE WHEN ${carries.status} THEN r.status ELSE e.status END,
         membership_type = CASE WHEN ${carries.membershipType} THEN r.membership_type ELSE e.membership_type END,
         joined_on      = CASE WHEN ${carries.joinedOn} THEN r.joined_on ELSE e.joined_on END,
         ends_on        = CASE WHEN ${carries.endsOn} THEN r.ends_on ELSE e.ends_on END,
@@ -1120,10 +1131,11 @@ export async function updateEntries(
           WHERE name <> ALL(r.clear)
         )
     FROM jsonb_to_recordset(${tx.json(payload)})
-      AS r(identity_key text, status text, membership_type text, joined_on date,
+      AS r(entry_key text, identity_key text, full_name text, email text, phone_e164 text,
+           member_number text, status text, membership_type text, joined_on date,
            ends_on date, ends_on_kind text, payment_status text, date_of_birth date,
            extra jsonb, clear text[])
-    WHERE e.gym_id = ${gymId} AND e.identity_key = r.identity_key
+    WHERE e.gym_id = ${gymId} AND e.identity_key = r.entry_key
     RETURNING e.id`;
   return rows.length;
 }

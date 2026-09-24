@@ -63,8 +63,7 @@ export type Applied =
       ok: true;
       values: EntryValues;
       /** Field names (§11.4) whose value this change really moved, for the hand-edit
-       *  marks. The four identity fields are never here: an upload cannot write over
-       *  them, it can only disagree about who the person is. */
+       *  marks, the four identity fields included. */
       edited: string[];
       /** Which of the four identity fields moved; any of them gives a new key. */
       identityFields: MemberListField[];
@@ -102,15 +101,18 @@ function realDay(text: string): string | null {
   return dayOf(y, m, d) === text ? text : null;
 }
 
-/** The fields the hand-edit marks and the merge are about: everything but the four
- *  that make the identity key. `endsOnKind` rides with `endsOn`. */
+/** The fields a join of two records fills from the other where empty: everything but
+ *  the four that make the identity key. `endsOnKind` rides with `endsOn`. */
 const MARKED_FIELDS = ["status", "membershipType", "joinedOn", "endsOn", "paymentStatus", "dateOfBirth"] as const satisfies readonly MemberListField[];
 
 /** The four fields `identityKey` is built from. */
 const IDENTITY_FIELDS = ["fullName", "email", "phone", "memberNumber"] as const satisfies readonly MemberListField[];
 
+/** Every field an upload can write over — since 3a-vi the four identity fields too — so
+ *  a correction staff typed is asked about before a file replaces it (§11.4). */
 function editedBetween(before: EntryValues, after: EntryValues): string[] {
   const edited: string[] = [];
+  for (const field of IDENTITY_FIELDS) if (before[field] !== after[field]) edited.push(field);
   for (const field of MARKED_FIELDS) {
     const moved = field === "endsOn" ? before.endsOn !== after.endsOn || before.endsOnKind !== after.endsOnKind : before[field] !== after[field];
     if (moved) edited.push(field);
