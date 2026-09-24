@@ -15,7 +15,7 @@ import { z } from "zod";
 import type { Sql } from "postgres";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
-import { cleanGymText, GYM_TEXT_IN_EMAIL_CHARS } from "./gymText.js";
+import { cleanGymText, GYM_TEXT_IN_EMAIL_CHARS, gymNameForEmail } from "./gymText.js";
 import * as repo from "./repo.js";
 import { notMeByLink } from "./join.js";
 import type { InviteSettings } from "./settings.js";
@@ -126,7 +126,8 @@ export function registerUnsubscribeRoutes(
       if (invite === null) {
         return page(reply, 200, "Nothing to do", "<p>This invitation no longer exists.</p>");
       }
-      const gym = cleanGymText(invite.gymName, GYM_TEXT_IN_EMAIL_CHARS);
+      // The name as the email printed it, so a gym named only by a web address is named.
+      const gym = gymNameForEmail(invite.gymName);
       return page(
         reply,
         200,
@@ -142,7 +143,7 @@ export function registerUnsubscribeRoutes(
       if (inviteId === null) return notValid(reply);
       const done = await notMeByLink(deps.sql, inviteId, (deps.now ?? (() => new Date()))());
       if (done.kind === "gone") return page(reply, 200, "Nothing to do", "<p>This invitation no longer exists.</p>");
-      const gym = escapeHtml(cleanGymText(done.gymName, GYM_TEXT_IN_EMAIL_CHARS));
+      const gym = escapeHtml(gymNameForEmail(done.gymName));
       switch (done.kind) {
         case "told":
         case "already_told":

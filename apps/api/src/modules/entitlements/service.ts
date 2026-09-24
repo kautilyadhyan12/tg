@@ -128,15 +128,16 @@ export async function yourPlansAt(sql: Sql, userId: string, gymIds: readonly str
   const own = await repo.getOwnPlans(sql, userId);
   if (own.length === 0 || gymIds.length === 0) return new Map();
   const [freeDoc, gyms] = await Promise.all([repo.getFreePlanDoc(sql), repo.getGymMemberDocs(sql, gymIds)]);
-  const ownMerged = mergeEntitlements(
-    freeDoc,
-    own.map((row) => ({ rank: row.rank, entitlements: row.entitlements ?? {}, memberEntitlements: null })),
-  ).entitlements;
+  const ownCandidates = own.map((row) => ({ rank: row.rank, entitlements: row.entitlements ?? {}, memberEntitlements: null }));
   const cancelAt = own.every((row) => row.provider === "revenuecat") ? "app_store" : "where_bought";
   const plans = new Map<string, YourPlan>();
   for (const [gymId, gym] of gyms) {
-    const gymMerged = mergeEntitlements(freeDoc, [{ rank: gym.rank, entitlements: null, memberEntitlements: gym.memberEntitlements }]).entitlements;
-    plans.set(gymId, { extras: ownPlanExtras(ownMerged, gymMerged), cancelAt });
+    const gymCandidate = { rank: gym.rank, entitlements: null, memberEntitlements: gym.memberEntitlements };
+    // What the person gets with both, as the app itself merges them (a higher rank
+    // replaces a lower one whole), against the gym's alone.
+    const both = mergeEntitlements(freeDoc, [...ownCandidates, gymCandidate]).entitlements;
+    const gymAlone = mergeEntitlements(freeDoc, [gymCandidate]).entitlements;
+    plans.set(gymId, { extras: ownPlanExtras(both, gymAlone), cancelAt });
   }
   return plans;
 }

@@ -95,7 +95,7 @@ describe("the words", () => {
 
   it("with nothing added it says so, and where to cancel", () => {
     expect(yourPlanWords("Iron House", { extras: [], cancelAt: "where_bought" })).toEqual({
-      lead: "You pay for your own plan. Once you join, Iron House gives you everything it does.",
+      lead: "You pay for your own plan. Once you join, Iron House gives you everything your own plan does.",
       cancel: "If you no longer need it, only you can cancel it, where you bought it.",
     });
   });

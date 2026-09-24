@@ -18,6 +18,7 @@ import { codeFromBytes, slugCandidate, slugifyName } from "./codes.js";
 import { cleanGymText } from "./invites/gymText.js";
 import { withdrawForAccounts } from "./invites/join.js";
 import { checkName } from "./invites/nameCheck.js";
+import { displayNameFromEmail } from "../auth/service.js";
 import type { InviteSettings } from "./invites/settings.js";
 import * as repo from "./repo.js";
 import {
@@ -1255,7 +1256,12 @@ export async function listOrgMembers(
       complimentary: m.complimentary,
       takesSeat: m.takesSeat,
       ...(seesList && m.listName !== null
-        ? { onList: { name: m.listName, nameCheck: checkName(m.listName, m.displayName) } }
+        ? {
+            onList: {
+              name: m.listName,
+              nameCheck: checkName(m.listName, m.displayName, m.accountEmail === null ? null : displayNameFromEmail(m.accountEmail)),
+            },
+          }
         : {}),
     })),
     nextCursor:

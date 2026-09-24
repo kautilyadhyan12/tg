@@ -299,8 +299,9 @@ export async function googleSignIn(
 /** The starting display name for an account made by proving an email: the
  *  part before the @, the person's own data rather than an invented one
  *  (RULINGS: no invented defaults). Onboarding v2's "about you" screen is
- *  where they set the real one. Bounded like the OAuth fallback. */
-function displayNameFromEmail(email: string): string {
+ *  where they set the real one. Bounded like the OAuth fallback. Exported for the
+ *  roster's "Check this is them", where such a name is no evidence of who it is. */
+export function displayNameFromEmail(email: string): string {
   const local = email.split("@")[0]?.trim() ?? "";
   return local.length > 0 ? local.slice(0, 100) : "New User";
 }

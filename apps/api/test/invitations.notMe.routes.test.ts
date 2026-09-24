@@ -94,7 +94,7 @@ d("not me, and the edges (real Postgres)", () => {
   if (settings === null) throw new Error("invitations are off in the test config");
 
   const mine = () => sql`
-    SELECT id FROM gyms WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE 'inotme%')`;
+    SELECT id FROM gyms WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE '%inotme-t%')`;
   const cleanup = async () => {
     await sql`DELETE FROM email_suppressions WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_invite_sends WHERE gym_id IN (${mine()})`;
@@ -105,16 +105,16 @@ d("not me, and the edges (real Postgres)", () => {
     await sql`DELETE FROM gym_member_list_fields WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_member_lists WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine()})`;
-    await sql`DELETE FROM subscriptions WHERE owner_type = 'user' AND owner_id IN (SELECT id FROM users WHERE email LIKE 'inotme%')`;
+    await sql`DELETE FROM subscriptions WHERE owner_type = 'user' AND owner_id IN (SELECT id FROM users WHERE email LIKE '%inotme-t%')`;
     await sql`DELETE FROM gym_join_applications WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_staff WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM audit_log WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_codes WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gyms WHERE id IN (${mine()})`;
-    await sql`DELETE FROM gym_members WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'inotme%')`;
-    await sql`DELETE FROM one_time_tokens WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'inotme%')`;
-    await sql`DELETE FROM users WHERE email LIKE 'inotme%'`;
-    await sql`DELETE FROM sign_in_codes WHERE email LIKE 'inotme%'`;
+    await sql`DELETE FROM gym_members WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%inotme-t%')`;
+    await sql`DELETE FROM one_time_tokens WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%inotme-t%')`;
+    await sql`DELETE FROM users WHERE email LIKE '%inotme-t%'`;
+    await sql`DELETE FROM sign_in_codes WHERE email LIKE '%inotme-t%'`;
     await sql`DELETE FROM plans WHERE code IN (${LIVE_PLAN}, ${OWN_PLAN})`;
   };
 
@@ -291,6 +291,29 @@ d("not me, and the edges (real Postgres)", () => {
   );
 
   it(
+    "a stranger who has typed no name yet, holding an address built from the member's name, is 'check this is them' too (round one's C1)",
+    async () => {
+      const gym = await makeGym("Name Gym");
+      // The front desk meant tom.reed@…; the address it typed belongs to somebody else,
+      // who signs in by code and taps Join before setup asks their name.
+      const typo = `tom.reed@${DOMAIN}`;
+      await addInvited(gym, { fullName: "Tom Reed", email: typo });
+      const stranger = await signIn(typo);
+      const named = await sql<{ display_name: string }[]>`SELECT display_name FROM users WHERE id = ${stranger.userId}`;
+      expect(named[0]?.display_name).toBe("tom.reed");
+      expect((await accept(stranger, await inviteIdOf(gym, typo))).statusCode).toBe(200);
+      const row = (await rosterOf(gym, gym.owner)).items.find((m) => m.userId === stranger.userId);
+      expect(row?.onList).toEqual({ name: "Tom Reed", nameCheck: "differs" });
+
+      // The real Tom, once he types his name, matches.
+      await sql`UPDATE users SET display_name = 'Tom Reed' WHERE id = ${stranger.userId}`;
+      const renamed = (await rosterOf(gym, gym.owner)).items.find((m) => m.userId === stranger.userId);
+      expect(renamed?.onList).toEqual({ name: "Tom Reed", nameCheck: "matches" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "the list's name is the gym's list: a trainer, who may read the Members screen but not the list, is not shown it",
     async () => {
       const gym = await makeGym("Trainer Gym");
@@ -356,7 +379,11 @@ d("not me, and the edges (real Postgres)", () => {
         unsubscribeToken(settings.hmacKey, inviteId),
         inviteLinkToken(Buffer.from("not-the-server-key"), "not_me", inviteId),
         "garbage",
-        `${linkToken(inviteId).slice(0, -1)}A`,
+        // Its last character changed — always to a different one.
+        (() => {
+          const real = linkToken(inviteId);
+          return `${real.slice(0, -1)}${real.endsWith("A") ? "B" : "A"}`;
+        })(),
       ];
       for (const token of forged) {
         expect((await pressLink(token)).statusCode, token).toBe(404);
@@ -503,15 +530,29 @@ d("not me, and the edges (real Postgres)", () => {
     async () => {
       const gym = await makeGym("Return Gym");
       const left = await makeGym("Left Gym");
+      const kept = await makeGym("Kept Gym");
+      const ended = await makeGym("Ended Gym");
       await addInvited(gym, { fullName: "Kim Lee", email: addr("kim") });
       await addInvited(left, { fullName: "Kim Lee", email: addr("kim") });
+      const keptEntry = await addInvited(kept, { fullName: "Kim Lee", email: addr("kim") });
+      await addInvited(ended, { fullName: "Kim Lee", email: addr("kim") });
       let kim = await signIn(addr("kim"), "Kim Lee");
       const gymInvite = await inviteIdOf(gym, addr("kim"));
-      expect((await accept(kim, gymInvite)).statusCode).toBe(200);
-      expect((await accept(kim, await inviteIdOf(left, addr("kim")))).statusCode).toBe(200);
+      for (const joinedGym of [gym, left, kept, ended]) {
+        expect((await accept(kim, await inviteIdOf(joinedGym, addr("kim")))).statusCode).toBe(200);
+      }
       // Left Gym removes her: its invitation is withdrawn, and stays so.
       expect((await send("DELETE", `/v1/orgs/${left.id}/members/${kim.userId}`, left.owner.cookies)).statusCode).toBe(200);
       expect((await inviteRow(left, addr("kim")))?.state).toBe("withdrawn");
+      // Kept Gym takes her record off its list by hand: the invitation is withdrawn while
+      // her membership is still live, so the deletion closes that membership too — and
+      // the invitation must stay withdrawn (the statement's state filter).
+      expect((await send("DELETE", `${entriesUrl(kept)}/${keptEntry.entry.entryId}`, kept.owner.cookies)).statusCode).toBe(200);
+      expect((await inviteRow(kept, addr("kim")))?.state).toBe("withdrawn");
+      // Ended Gym's membership ended before the deletion with its invitation still
+      // accepted: that is not this deletion's to re-open (the statement's gym filter).
+      await sql`UPDATE gym_members SET removed_at = now() WHERE gym_id = ${ended.id} AND user_id = ${kim.userId}`;
+      expect((await inviteRow(ended, addr("kim")))?.state).toBe("accepted");
 
       expect((await post("/v1/users/me/delete-code", {}, kim.cookies)).statusCode).toBe(200);
       const code = deleteCodes.get(addr("kim"));
@@ -520,6 +561,8 @@ d("not me, and the edges (real Postgres)", () => {
       expect(deleted.statusCode, deleted.body).toBe(200);
       expect(await inviteRow(gym, addr("kim"))).toMatchObject({ state: "pending", answered_at: null });
       expect((await inviteRow(left, addr("kim")))?.state).toBe("withdrawn");
+      expect((await inviteRow(kept, addr("kim")))?.state).toBe("withdrawn");
+      expect((await inviteRow(ended, addr("kim")))?.state).toBe("accepted");
 
       const token = restoreTokens.get(addr("kim"));
       if (token === undefined) throw new Error("no restore token");
@@ -562,6 +605,29 @@ d("not me, and the edges (real Postgres)", () => {
       await sql`UPDATE plans SET entitlements = ${sql.json(MEMBER_DOC)} WHERE code = ${OWN_PLAN}`;
       expect((await invitationsOf(lea)).invitations[0]?.yourPlan).toEqual({ extras: [], cancelAt: "app_store" });
       await sql`UPDATE plans SET entitlements = ${sql.json(OWN_DOC)} WHERE code = ${OWN_PLAN}`;
+
+      // A gym plan ranked above hers replaces it whole when both apply, as the app merges
+      // them: her plan adds nothing once she joins, whatever its own numbers say.
+      await sql`UPDATE plans SET rank = 20 WHERE code = ${LIVE_PLAN}`;
+      try {
+        expect((await invitationsOf(lea)).invitations[0]?.yourPlan).toEqual({ extras: [], cancelAt: "app_store" });
+      } finally {
+        await sql`UPDATE plans SET rank = 10 WHERE code = ${LIVE_PLAN}`;
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "the Not me pages name a gym whose name is all web address, as its email does",
+    async () => {
+      const gym = await makeGym("Web Name Gym");
+      await addInvited(gym, { fullName: "Uma Rao", email: addr("uma") });
+      await sql`UPDATE gyms SET name = 'www.IronHouse.com' WHERE id = ${gym.id}`;
+      const token = linkToken(await inviteIdOf(gym, addr("uma")));
+      const opened = await openLink(token);
+      expect(opened.body).toContain("<title>Not a member of IronHouse com?</title>");
+      expect((await pressLink(token)).body).toContain("told IronHouse com");
     },
     TEST_TIMEOUT_MS,
   );

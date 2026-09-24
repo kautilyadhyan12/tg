@@ -67,7 +67,7 @@ export function yourPlanWords(gymName: string, plan: YourPlan): { lead: string; 
       : "where you bought it";
   if (plan.extras.length === 0) {
     return {
-      lead: `You pay for your own plan. Once you join, ${gymName} gives you everything it does.`,
+      lead: `You pay for your own plan. Once you join, ${gymName} gives you everything your own plan does.`,
       cancel: `If you no longer need it, only you can cancel it, ${where}.`,
     };
   }

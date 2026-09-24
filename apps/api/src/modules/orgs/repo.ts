@@ -173,6 +173,8 @@ export interface MemberRow {
   /** The name on the gym's list of the record this membership was joined through
    *  (§10.2), or null when it names none. */
   listName: string | null;
+  /** The account's own address, read only to tell a name made from it (never served). */
+  accountEmail: string | null;
 }
 
 export interface CodeRow {
@@ -2552,6 +2554,7 @@ export async function listMembers(
       complimentary: boolean;
       takes_seat: boolean;
       list_name: string | null;
+      account_email: string | null;
     }[]
   >`
     SELECT m.id, m.user_id, u.display_name, m.joined_at,
@@ -2560,7 +2563,7 @@ export async function listMembers(
             AND NOT EXISTS (
               SELECT 1 FROM gym_staff s
               WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)) AS takes_seat,
-           e.full_name AS list_name
+           e.full_name AS list_name, u.email::text AS account_email
     FROM gym_members m
     JOIN users u ON u.id = m.user_id
     LEFT JOIN gym_codes c ON c.id = m.code_id
@@ -2590,6 +2593,7 @@ export async function listMembers(
       complimentary: r.complimentary,
       takesSeat: r.takes_seat,
       listName: r.list_name,
+      accountEmail: r.account_email,
     })),
     nextCursor,
   };
