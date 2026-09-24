@@ -410,6 +410,7 @@ function assemble(input: {
     columns: shell.columns,
     mapping: shell.mapping,
     needsMapping: shell.needsMapping,
+    dateColumns: shell.dateColumns,
     file: measured.counts.file,
     list: measured.counts.list,
     statuses: measured.counts.statuses,
@@ -752,6 +753,8 @@ export type ConfirmAnswer =
    *  (§11.4). The field NAMES so a screen can ask the right question; never a value and
    *  never a person. */
   | { kind: "hand_edits"; handEdits: MemberListHandEdits }
+  /** Staff did not tick that the gym may keep these details (§9.14); nothing applied. */
+  | { kind: "permission_needed" }
   /** The limiter has answered 429 itself and the handler is finished. */
   | { kind: "rate_limited" };
 
@@ -872,7 +875,7 @@ export async function confirmUpload(
   userId: string,
   gymId: string,
   uploadId: string,
-  input: { acknowledgeLargeChange: boolean; acknowledgeHandEdits: boolean },
+  input: { acknowledgeLargeChange: boolean; acknowledgeHandEdits: boolean; permissionConfirmed: boolean },
   limit: () => Promise<boolean>,
 ): Promise<ConfirmAnswer> {
   await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
@@ -894,6 +897,8 @@ export async function confirmUpload(
       const gone = upload.status === "superseded" ? "upload_superseded" : "upload_expired";
       throw new OrgsError(409, gone, MEMBER_LIST_UPLOAD_GONE_WORDS[gone]);
     }
+    // After the replay above, so a retry of an applied upload still reads its answer.
+    if (!input.permissionConfirmed) return { kind: "permission_needed" };
 
     // THE PREVIEW HAS TO BE ABOUT THE LIST THAT IS STILL THERE. Anything that moves
     // the list — an earlier confirm, somebody typed in — moves the version, and what
@@ -1000,6 +1005,7 @@ export async function confirmUpload(
         unchanged: String(reconciled.counts.unchanged),
         membersLeaving: String(reconciled.members.leaving),
         version: String(after),
+        permissionConfirmed: "true",
         ...(input.acknowledgeLargeChange ? { acknowledgedLargeChange: "true" } : {}),
         // THE NAMES OF THE FIELDS, never the values, and only where one was really
         // written over: an audit row of this is read by a human weeks later asking why

@@ -221,7 +221,7 @@ d("a member file reaches no log (real Postgres, the loudest logger)", () => {
             `ALTER TABLE gym_member_list_entries ADD CONSTRAINT mleak_trip_wire ` +
               `CHECK (gym_id <> '${gymId}'::uuid OR full_name NOT LIKE 'Marian %')`,
           );
-          const refusedByCheck = await json(`${uploads}/${tripId}/confirm`, {}, cookies);
+          const refusedByCheck = await json(`${uploads}/${tripId}/confirm`, { permissionConfirmed: true }, cookies);
           // It fails, and it fails as a fault rather than quietly writing a short list.
           expect(refusedByCheck.statusCode).toBe(500);
           // Nothing of the person is in the REPLY either.
@@ -238,7 +238,7 @@ d("a member file reaches no log (real Postgres, the loudest logger)", () => {
         const applied = await json(uploads, body, cookies);
         expect(applied.statusCode).toBe(201);
         const applyId = (JSON.parse(applied.body) as { preview: { uploadId: string } }).preview.uploadId;
-        expect((await json(`${uploads}/${applyId}/confirm`, {}, cookies)).statusCode).toBe(200);
+        expect((await json(`${uploads}/${applyId}/confirm`, { permissionConfirmed: true }, cookies)).statusCode).toBe(200);
 
         const read = (path: string) =>
           app.inject({ method: "GET", url: path, remoteAddress: "10.77.0.3", cookies });
@@ -258,7 +258,7 @@ d("a member file reaches no log (real Postgres, the loudest logger)", () => {
         const again = await json(uploads, body, cookies);
         expect(again.statusCode).toBe(201);
         const editId = (JSON.parse(again.body) as { preview: { uploadId: string } }).preview.uploadId;
-        const handRefusal = await json(`${uploads}/${editId}/confirm`, {}, cookies);
+        const handRefusal = await json(`${uploads}/${editId}/confirm`, { permissionConfirmed: true }, cookies);
         expect(handRefusal.statusCode).toBe(409);
         expect(handRefusal.body).not.toContain(NAME);
         expect(handRefusal.body).not.toContain(ADDRESS);

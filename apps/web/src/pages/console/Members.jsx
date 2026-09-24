@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { AlertTriangle, Loader2 } from 'lucide-react';
+import { AlertTriangle, Loader2, Upload } from 'lucide-react';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { orgService, errorText, errorCode } from '../../api/orgsApi';
 import { useConsoleOrg } from './useConsoleOrg';
 import ApplicationsQueue from './ApplicationsQueue';
+import MemberListUpload from './MemberListUpload';
 import { orgWords } from '@app/shared';
 import {
   canRemoveMembers,
@@ -257,6 +258,46 @@ function NotMeBox({ gymId, words }) {
   );
 }
 
+/** "Import members" (ROADMAP 5a): one card, one button; the import opens in its own box. */
+function ImportCard({ gymId, words, readOnly, onImported }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <section
+        className="rounded-2xl p-4 flex items-center gap-4"
+        style={{ background: '#121110', border: '1px solid rgba(255,255,255,0.06)' }}
+      >
+        <span
+          className="w-11 h-11 rounded-[14px] flex items-center justify-center flex-shrink-0"
+          style={{ background: 'rgba(255,138,31,0.12)', color: '#FF8A1F' }}
+        >
+          <Upload className="w-5 h-5" />
+        </span>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-base font-bold" style={{ color: '#fff' }}>
+            Import {words.people}
+          </h2>
+          <p className="text-[13px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
+            From a spreadsheet
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          disabled={readOnly}
+          className="rounded-xl px-5 min-h-[44px] text-[15px] font-bold flex-shrink-0 disabled:opacity-40"
+          style={{ background: '#FF8A1F', color: '#000' }}
+        >
+          Import
+        </button>
+      </section>
+      {open ? (
+        <MemberListUpload gymId={gymId} words={words} readOnly={readOnly} onClose={() => setOpen(false)} onImported={onImported} />
+      ) : null}
+    </>
+  );
+}
+
 export default function Members() {
   const { orgSlug } = useParams();
   const { loading: orgLoading, error: orgError, org, notFound, reload } = useConsoleOrg(orgSlug);
@@ -464,6 +505,9 @@ export default function Members() {
 
       {/* Invitations that came back "Not me": only for staff who may see the list. */}
       {canSeeList ? <NotMeBox gymId={gymId} words={words} /> : null}
+
+      {/* Bringing the gym's own list in (ROADMAP 5a): the same privilege the server asks. */}
+      {canSeeList ? <ImportCard gymId={gymId} words={words} readOnly={readOnly} onImported={reloadRoster} /> : null}
 
       {state.loading ? <ConsoleLoading label={`Loading ${words.people}…`} /> : null}
 

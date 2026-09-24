@@ -616,19 +616,28 @@ export async function stagedPage(
   // twice, and these are two different questions.
   const inTheFile = group === "new" || group === "changed" || group === "unchanged";
   const key = group === "members_leaving" ? "membersLeaving" : group;
+  // The stored document is taken apart ONCE, in a materialised step: written as
+  // `u.rows -> 'understanding' -> 'rows'` inside the per-person lookup, Postgres
+  // unpacked the whole document again for every one of the hundred people — at 10,000
+  // people with 30 of the gym's own columns that is 2 MB a hundred times, and a page
+  // held the one database connection for seconds.
   const rows = inTheFile
     ? await sql<{ total: number; people: unknown }[]>`
-        SELECT jsonb_array_length(u.rows -> 'groups' -> ${key}) AS total,
+        WITH doc AS MATERIALIZED (
+          SELECT u.rows -> 'groups' -> ${key} AS grp, u.rows -> 'understanding' -> 'rows' AS file
+          FROM gym_member_list_uploads u
+          WHERE u.gym_id = ${gymId} AND u.id = ${uploadId} AND u.rows IS NOT NULL
+        )
+        SELECT jsonb_array_length(doc.grp) AS total,
                COALESCE((
                  SELECT jsonb_agg(
-                          (u.rows -> 'understanding' -> 'rows' -> ((g ->> 'at')::int))
+                          (doc.file -> ((g ->> 'at')::int))
                           || jsonb_build_object('wasStatus', g -> 'wasStatus')
                           ORDER BY ord)
-                 FROM jsonb_array_elements(u.rows -> 'groups' -> ${key}) WITH ORDINALITY AS t(g, ord)
+                 FROM jsonb_array_elements(doc.grp) WITH ORDINALITY AS t(g, ord)
                  WHERE ord > ${cursor}::int AND ord <= ${cursor + limit}::int
                ), '[]'::jsonb) AS people
-        FROM gym_member_list_uploads u
-        WHERE u.gym_id = ${gymId} AND u.id = ${uploadId} AND u.rows IS NOT NULL`
+        FROM doc`
     : await sql<{ total: number; people: unknown }[]>`
         SELECT jsonb_array_length(u.rows -> 'groups' -> ${key}) AS total,
                COALESCE((

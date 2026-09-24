@@ -628,7 +628,7 @@ d("member list: keeping it by hand (real Postgres)", () => {
         const staged = await post(`${listUrl(gym)}/uploads`, { contentBase64: bytes.toString("base64"), mode: "whole_list" }, owner.cookies);
         expect(staged.statusCode).toBe(201);
         const preview = (JSON.parse(staged.body) as { preview: MemberListPreview }).preview;
-        return await post(`${listUrl(gym)}/uploads/${preview.uploadId}/confirm`, tick, owner.cookies);
+        return await post(`${listUrl(gym)}/uploads/${preview.uploadId}/confirm`, { permissionConfirmed: true, ...tick }, owner.cookies);
       };
       expect((await apply()).statusCode).toBe(200);
       const [kay] = await sql<{ id: string }[]>`SELECT id FROM gym_member_list_entries WHERE gym_id = ${gym} AND email = 'mhand-t-kay@example.com'`;
@@ -695,7 +695,7 @@ d("member list: keeping it by hand (real Postgres)", () => {
       const bytes = csv([header, ["Mo Khan", "mhand-t-page-mo@example.com", "Active", "Gold", "L-7", "Sam Khan"]]);
       const staged = await post(`${listUrl(gym)}/uploads`, { contentBase64: bytes.toString("base64"), mode: "whole_list" }, owner.cookies);
       const preview = (JSON.parse(staged.body) as { preview: MemberListPreview }).preview;
-      const confirmed = await post(`${listUrl(gym)}/uploads/${preview.uploadId}/confirm`, {}, owner.cookies);
+      const confirmed = await post(`${listUrl(gym)}/uploads/${preview.uploadId}/confirm`, { permissionConfirmed: true }, owner.cookies);
       expect((JSON.parse(confirmed.body) as { confirmed: MemberListConfirmed }).confirmed.applied.new).toBe(1);
 
       const mo = await makeUser("page-mo");
@@ -772,7 +772,7 @@ d("member list: keeping it by hand (real Postgres)", () => {
         const bytes = csv([header, ...rows]);
         const staged = await post(`${listUrl(gym)}/uploads`, { contentBase64: bytes.toString("base64"), mode: "whole_list" }, owner.cookies);
         const preview = (JSON.parse(staged.body) as { preview: MemberListPreview }).preview;
-        const res = await post(`${listUrl(gym)}/uploads/${preview.uploadId}/confirm`, { acknowledgeLargeChange: true }, owner.cookies);
+        const res = await post(`${listUrl(gym)}/uploads/${preview.uploadId}/confirm`, { permissionConfirmed: true, acknowledgeLargeChange: true }, owner.cookies);
         expect(res.statusCode).toBe(200);
       };
       // The gym's software spelt him wrong, then corrected it: a former record
@@ -850,7 +850,7 @@ d("member list: keeping it by hand (real Postgres)", () => {
       const preview = (JSON.parse(staged.body) as { preview: MemberListPreview }).preview;
       await typeIn(gym, owner, { fullName: "Typed Person", email: "mhand-t-stale-typed@example.com" });
 
-      const refused = await post(`${listUrl(gym)}/uploads/${preview.uploadId}/confirm`, {}, owner.cookies);
+      const refused = await post(`${listUrl(gym)}/uploads/${preview.uploadId}/confirm`, { permissionConfirmed: true }, owner.cookies);
       expect(refused.statusCode).toBe(409);
       expect(errorOf(refused).error).toBe("list_changed");
       const emails = await sql<{ email: string }[]>`SELECT email::text AS email FROM gym_member_list_entries WHERE gym_id = ${gym}`;
