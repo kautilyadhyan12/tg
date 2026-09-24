@@ -82,6 +82,28 @@ export function registerBillingRoutes(
     },
   );
 
+  // Each press opens a fresh Paddle session; a few a minute is more than any owner needs.
+  const portalLimit = createDualRateLimit({
+    name: "billing_portal",
+    max: 30,
+    ipMax: 120,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+
+  app.post(
+    "/v1/orgs/:gymId/billing/portal",
+    { preHandler: [app.authenticate, portalLimit] },
+    async (req, reply) => {
+      const params = parseOr400(gymParams, req.params, req, reply);
+      if (params === null) return;
+      const portal = await service.openBillingPortal(deps, { userId: requireUserId(req), gymId: params.gymId });
+      // The link signs its holder in to the gym's Paddle account: no cache may keep it.
+      return reply.status(200).header("cache-control", "no-store").send(portal);
+    },
+  );
+
   app.post(
     "/v1/orgs/:gymId/billing/checkouts/:checkoutId/sync",
     { preHandler: [app.authenticate, syncLimit] },

@@ -584,9 +584,32 @@ describe('bannerFor', () => {
     });
     const b = bannerFor(late, NOW);
     expect(b?.key).toBe('past_due');
-    // It promises no retry and offers no way to update a card, because v1 §10's
-    // dunning is unbuilt and there is no billing screen.
-    expect(b?.text).not.toMatch(/retry|retrying|update/i);
+    // The card is updated on Paddle's page from the plan card (1c-i), and the grace is
+    // the worker's 5 days; it promises no retry of its own.
+    expect(b?.text).toBe(
+      "A payment for your gym didn't go through. Update your card under Plan on the Overview — your members keep everything for 5 days after a failed payment.",
+    );
+    expect(b?.text).not.toMatch(/retry|retrying/i);
+  });
+
+  it('says a read-only console is owed a payment, not that it has no plan, once the grace has ended', () => {
+    const owed = gym({ subscription: null, consoleReadOnly: true, paymentOverdue: true });
+    expect(bannerFor(owed, NOW)).toMatchObject({
+      key: 'read_only',
+      text: 'A payment for your gym is overdue. Nothing here can be changed and your members get the free app only until your card is updated.',
+    });
+    // Without the flag (an older api, or a trial that ended) it is the plain read-only line.
+    expect(bannerFor(gym({ subscription: null, consoleReadOnly: true }), NOW)?.text).toMatch(/has no plan/);
+  });
+});
+
+describe('planPromptFor, a payment owed', () => {
+  it('asks for the card, not a plan, and only of whoever can pay', () => {
+    const owed = gym({ subscription: null, consoleReadOnly: true, paymentOverdue: true, ownerTrialUsed: true });
+    expect(planPromptFor(owed)).toBe('overdue');
+    expect(planPromptFor({ ...owed, ownerTrialUsed: false })).toBe('overdue');
+    expect(planPromptFor({ ...owed, privileges: ['members.read'] })).toBeNull();
+    expect(planPromptFor({ ...owed, paymentOverdue: null })).toBe('subscribe');
   });
 });
 

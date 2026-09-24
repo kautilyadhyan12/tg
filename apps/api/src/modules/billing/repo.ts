@@ -7,6 +7,9 @@ import { decide, type Decision, type LocalStatus, type Snapshot } from "./machin
 
 type SqlOrTx = Sql | TransactionSql;
 
+/** `cancel_reason` of a paid plan whose 5-day grace ran out while Paddle still retries. */
+export const GRACE_EXPIRED = "grace_expired";
+
 export type CheckoutState = "creating" | "open" | "superseded" | "failed" | "paid";
 
 export interface CheckoutRow {
@@ -52,6 +55,7 @@ export type BeginCheckoutOutcome =
   | { kind: "key_reused" }
   | { kind: "trial_running" }
   | { kind: "already_subscribed" }
+  | { kind: "payment_overdue" }
   | { kind: "no_such_plan" }
   | { kind: "plan_too_small"; seatCap: number; seatsUsed: number }
   | { kind: "not_set_up" }
@@ -87,6 +91,12 @@ export async function beginCheckout(
         AND status IN ('trialing','active','past_due')`;
     const current = live[0];
     if (current !== undefined) return current.status === "trialing" ? { kind: "trial_running" } : { kind: "already_subscribed" };
+    // An unpaid plan Paddle still retries: a new card there pays it, a second plan would double it.
+    const overdue = await tx`
+      SELECT 1 FROM subscriptions
+      WHERE owner_type = 'gym' AND owner_id = ${input.gymId} AND cancel_reason = ${GRACE_EXPIRED}
+      LIMIT 1`;
+    if (overdue.length > 0) return { kind: "payment_overdue" };
 
     const plans = await tx<{ id: string; seat_cap: number | null; paddle_price_id: string | null; price_minor: number; currency: string }[]>`
       SELECT id, seat_cap, paddle_price_id, price_minor, currency FROM plans
@@ -249,6 +259,7 @@ export async function applySnapshot(
               planId: existing.plan_id,
               currentPeriodEnd: existing.current_period_end,
               cancelAtPeriodEnd: existing.cancel_at_period_end,
+              graceEnded: existing.cancel_reason === GRACE_EXPIRED,
             },
       otherLive: others.length > 0,
       snapshot: input.snapshot,
@@ -269,13 +280,16 @@ export async function applySnapshot(
     if (decision.kind === "insert" || decision.kind === "duplicate") {
       const status = decision.kind === "insert" ? decision.status : "expired";
       const ended = status === "expired" ? input.now : null;
+      const pastDueSince = status === "past_due" ? input.now : null;
       const inserted = await tx<{ id: string }[]>`
         INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, current_period_end,
                                    cancel_at_period_end, provider, provider_ref,
-                                   provider_customer_ref, provider_updated_at, ended_at, cancel_reason)
+                                   provider_customer_ref, provider_updated_at, ended_at, cancel_reason,
+                                   past_due_since)
         VALUES ('gym', ${input.gymId}, ${s.planId}, ${status}, ${s.currentPeriodEnd},
                 ${s.cancelAtPeriodEnd}, 'paddle', ${input.subscriptionId}, ${input.customerId},
-                ${s.updatedAt}, ${ended}, ${decision.kind === "duplicate" ? "duplicate" : null})
+                ${s.updatedAt}, ${ended}, ${decision.kind === "duplicate" ? "duplicate" : null},
+                ${pastDueSince})
         RETURNING id`;
       rowId = inserted[0]?.id ?? null;
       if (rowId === null) throw new Error("subscription insert returned no row");
@@ -286,7 +300,11 @@ export async function applySnapshot(
         SET status = ${decision.status}, plan_id = ${s.planId}, current_period_end = ${s.currentPeriodEnd},
             cancel_at_period_end = ${s.cancelAtPeriodEnd}, provider_updated_at = ${s.updatedAt},
             provider_customer_ref = COALESCE(${input.customerId}, provider_customer_ref),
-            ended_at = CASE WHEN ${decision.status} = 'expired' THEN COALESCE(ended_at, ${input.now}) ELSE NULL END
+            ended_at = CASE WHEN ${decision.status} = 'expired' THEN COALESCE(ended_at, ${input.now}) ELSE NULL END,
+            -- The grace counts from the first failed payment, not from each retry's.
+            past_due_since = CASE WHEN ${decision.status} = 'past_due' THEN COALESCE(past_due_since, ${input.now}) ELSE NULL END,
+            -- Paid again, or ended at Paddle: the grace's hold is over either way.
+            cancel_reason = CASE WHEN cancel_reason = ${GRACE_EXPIRED} THEN NULL ELSE cancel_reason END
         WHERE id = ${existing.id}`;
       await audit(existing.id, `billing.${decision.event}`);
     }
@@ -327,6 +345,69 @@ export async function openCheckoutsFor(sql: SqlOrTx, gymId: string): Promise<Che
     ORDER BY c.created_at
     LIMIT 10`;
   return rows.map(toCheckout);
+}
+
+export interface ManagedPlan {
+  subscriptionRef: string;
+  customerRef: string;
+  /** Owed money: Paddle's page should open on the card, not the overview. */
+  overdue: boolean;
+}
+
+/** The gym's Paddle plan its billing staff may manage on Paddle's own page: the live
+ *  one, else one whose grace ran out while Paddle still retries. Only ever this gym's. */
+export async function managedPlanFor(sql: SqlOrTx, gymId: string): Promise<ManagedPlan | null> {
+  const rows = await sql<{ provider_ref: string; provider_customer_ref: string; status: string; cancel_reason: string | null }[]>`
+    SELECT provider_ref, provider_customer_ref, status, cancel_reason FROM subscriptions
+    WHERE owner_type = 'gym' AND owner_id = ${gymId} AND provider = 'paddle'
+      AND provider_ref IS NOT NULL AND provider_customer_ref IS NOT NULL
+      AND (status IN ('active','past_due') OR cancel_reason = ${GRACE_EXPIRED})
+    ORDER BY (status IN ('active','past_due')) DESC, created_at DESC
+    LIMIT 1`;
+  const row = rows[0];
+  if (row === undefined) return null;
+  return {
+    subscriptionRef: row.provider_ref,
+    customerRef: row.provider_customer_ref,
+    overdue: row.status === "past_due" || row.cancel_reason === GRACE_EXPIRED,
+  };
+}
+
+/** End the grace of every paid plan past_due since before `cutoff`: its gym's members
+ *  lose the plan's features and the console goes read-only until Paddle collects.
+ *  Each row under its gym's lock, re-checked there, so a payment written meanwhile
+ *  wins; running it twice changes nothing. Returns the gyms whose grace ended. */
+export async function endGraces(sql: Sql, input: { cutoff: Date; now: Date; limit: number }): Promise<string[]> {
+  const due = await sql<{ id: string; owner_id: string }[]>`
+    SELECT id, owner_id FROM subscriptions
+    WHERE status = 'past_due' AND past_due_since <= ${input.cutoff}
+      AND owner_type = 'gym' AND provider = 'paddle'
+    ORDER BY past_due_since, id
+    LIMIT ${input.limit}`;
+  const ended: string[] = [];
+  for (const row of due) {
+    const done = await sql.begin(async (tx) => {
+      await lockOrgRow(tx, row.owner_id); // subscription-writer lock
+      const moved = await tx<{ id: string }[]>`
+        UPDATE subscriptions
+        SET status = 'expired', ended_at = ${input.now}, cancel_reason = ${GRACE_EXPIRED}
+        WHERE id = ${row.id} AND owner_id = ${row.owner_id} AND status = 'past_due'
+          AND past_due_since <= ${input.cutoff}
+        RETURNING id`;
+      if (moved.length === 0) return false;
+      await insertAudit(tx, {
+        actorUserId: null,
+        gymId: row.owner_id,
+        action: "billing.grace_ended",
+        targetType: "subscription",
+        targetId: row.id,
+        meta: { provider: "paddle" },
+      });
+      return true;
+    });
+    if (done) ended.push(row.owner_id);
+  }
+  return ended;
 }
 
 export type RefundReason = "duplicate" | "unmatched";

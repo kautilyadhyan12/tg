@@ -168,6 +168,13 @@ export function consoleReadOnlyBanner(orgType) {
   return `This ${words.it} has no plan. Nothing here can be changed, and your ${words.people} get the free app only.`;
 }
 
+/** The read-only banner when a paid plan's payment is overdue (its 5-day grace ended):
+ *  the fix is the card, which pays what is owed and opens everything again. */
+export function paymentOverdueBanner(orgType) {
+  const words = orgWords(orgType);
+  return `A payment for your ${words.it} is overdue. Nothing here can be changed and your ${words.people} get the free app only until your card is updated.`;
+}
+
 /** Is this gym in its free trial RIGHT NOW?
  *
  *  The `status` question rule 3 at the top of this file exists for. Everything
@@ -318,7 +325,7 @@ export function bannerFor(org, now = Date.now()) {
     return {
       key: 'read_only',
       tone: 'danger',
-      text: consoleReadOnlyBanner(org?.orgType),
+      text: org?.paymentOverdue === true ? paymentOverdueBanner(org?.orgType) : consoleReadOnlyBanner(org?.orgType),
       // §4.2 gives this row no dismissal and it would be wrong to invent one:
       // the only dismissible state is `trial_info`, where putting the notice
       // away for a day costs the owner nothing. This one is about something the
@@ -328,17 +335,12 @@ export function bannerFor(org, now = Date.now()) {
   }
 
   if (sub?.status === 'past_due') {
-    // TRUE AND NOTHING MORE. §4.2's copy promises "retrying" and offers *Update
-    // payment method*; v1 §10's dunning is unbuilt and there is nowhere to
-    // update a card, so a sentence about retries would be a promise the app
-    // cannot keep (:5807). Unreachable today — nothing writes this status — and
-    // written anyway, because the alternative the day it becomes reachable is
-    // silence, and Kd ruled on silence at :12660: fixing a false sentence by
-    // removing the sentence is a quieter defect, not a fix.
+    // Paddle retries the card by itself; the 5 days are the grace the worker gives a
+    // paying gym before its members lose the plan (Part 5 §8, ROADMAP 1c-i).
     return {
       key: 'past_due',
       tone: 'warn',
-      text: `A payment for your ${words.it} didn't go through.`,
+      text: `A payment for your ${words.it} didn't go through. Update your card under Plan on the Overview — your ${words.people} keep everything for 5 days after a failed payment.`,
       dismissible: false,
     };
   }
@@ -450,6 +452,8 @@ export function bannerFor(org, now = Date.now()) {
 export function planPromptFor(org) {
   if (!canManageBilling(viewerPrivileges(org))) return null;
   if (hasLivePlan(org)) return null;
+  // A paid plan owed money: the card pays it, and a new plan would charge twice.
+  if (org?.paymentOverdue === true) return 'overdue';
   if (org?.ownerTrialUsed === false) return 'trial';
   if (org?.ownerTrialUsed === true) return 'subscribe';
   return null;

@@ -1,16 +1,16 @@
-// A gym pays through Paddle (ROADMAP Stage 3 item 1a), against real Postgres with a
+// A gym pays through Paddle (ROADMAP Stage 3 items 1a and 1c-i), against real Postgres with a
 // fake Paddle in place of Paddle's API. DATABASE_URL-gated.
 //
 // THE WORST THING THIS JOB COULD DO: charge an owner twice for one gym, or let their
-// payment switch on a different gym. The first three tests are those.
+// payment switch on a different gym. The first three tests are those. Managing a paid
+// plan (1c-i: Paddle's own page, the 5-day grace) is at the end, with its own.
 import { createHmac, randomBytes } from "node:crypto";
-import type { PaddleSubscription, PaddleTransaction } from "@app/shared";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { processPaddleEvents } from "../src/modules/billing/events.js";
-import type { PaddleApi, PaddleResult } from "../src/modules/billing/paddle.js";
+import { FakePaddle, paddleId } from "./fakePaddle.js";
 import { createMemoryRedis } from "../src/redis.js";
 
 const url = process.env["DATABASE_URL"];
@@ -37,7 +37,6 @@ const baseEnv = {
 const TEST_TIMEOUT_MS = 60_000;
 const HOOK_TIMEOUT_MS = 60_000;
 
-const paddleId = (prefix: string) => `${prefix}_${randomBytes(20).toString("hex").slice(0, 26)}`;
 
 const SMALL = "zz_billing_small"; // up to 1 member, $10
 const BIG = "zz_billing_big"; // up to 5,000 members, $20
@@ -48,134 +47,9 @@ const PRICES: Record<string, { amount: string; currency: string }> = {
   [BIG_PRICE]: { amount: "2000", currency: "USD" },
 };
 
-/** Paddle as the tests need it: transactions our server makes, and a `pay` that turns
- *  one into an active subscription the way a completed checkout does. */
-class FakePaddle implements PaddleApi {
-  txns = new Map<string, PaddleTransaction>();
-  subs = new Map<string, PaddleSubscription>();
-  customData = new Map<string, Record<string, string>>();
-  cancelledTxns: string[] = [];
-  cancelledSubs: string[] = [];
-  refunds: string[] = [];
-  adjustments = new Map<string, { action: string; status: "pending_approval" | "approved" | "rejected" | "reversed" }[]>();
-  /** Answer this many refund requests with a 503, making nothing. */
-  refundFailures = 0;
-  /** Make the next refund, but lose its answer (a timeout). */
-  loseRefundAnswer = false;
-  created = 0;
-  down = false;
-  /** Make the next transaction carry a different amount than the one asked for. */
-  wrongAmount = false;
-  clock = Date.parse("2026-10-01T00:00:00Z");
-
-  private ok<T>(value: T): PaddleResult<T> {
-    return this.down ? { kind: "unavailable", status: 503 } : { kind: "ok", value };
-  }
-
-  createTransaction(input: { priceId: string; customData: Record<string, string> }) {
-    if (this.down) return Promise.resolve<PaddleResult<PaddleTransaction>>({ kind: "unavailable", status: 503 });
-    this.created += 1;
-    const price = PRICES[input.priceId] ?? { amount: "0", currency: "USD" };
-    const txn: PaddleTransaction = {
-      id: paddleId("txn"),
-      status: "draft",
-      subscription_id: null,
-      origin: "api",
-      currency_code: price.currency,
-      items: [{ quantity: 1, price: { id: input.priceId, unit_price: { amount: this.wrongAmount ? "1" : price.amount, currency_code: price.currency } } }],
-    };
-    this.wrongAmount = false;
-    this.txns.set(txn.id, txn);
-    this.customData.set(txn.id, input.customData);
-    return Promise.resolve(this.ok(txn));
-  }
-  getTransaction(id: string) {
-    const txn = this.txns.get(id);
-    return Promise.resolve<PaddleResult<PaddleTransaction>>(
-      txn === undefined ? { kind: "not_found" } : this.ok({ ...txn, adjustments: this.adjustments.get(id) ?? [] }),
-    );
-  }
-  cancelTransaction(id: string) {
-    this.cancelledTxns.push(id);
-    return Promise.resolve<PaddleResult<null>>(this.ok(null));
-  }
-  getSubscription(id: string) {
-    const sub = this.subs.get(id);
-    return Promise.resolve<PaddleResult<PaddleSubscription>>(sub === undefined ? { kind: "not_found" } : this.ok(sub));
-  }
-  /** Refuse to list transactions, as a key without that permission would. */
-  listRefused = false;
-  listSubscriptionTransactions(subscriptionId: string) {
-    if (this.listRefused) return Promise.resolve<PaddleResult<PaddleTransaction[]>>({ kind: "refused", status: 403, code: "forbidden" });
-    return Promise.resolve(this.ok([...this.txns.values()].filter((t) => t.subscription_id === subscriptionId)));
-  }
-  cancelSubscriptionNow(id: string) {
-    this.cancelledSubs.push(id);
-    this.update(id, { status: "canceled", canceled_at: this.tick() });
-    return Promise.resolve<PaddleResult<null>>(this.ok(null));
-  }
-  refundTransaction(id: string) {
-    if (this.refundFailures > 0) {
-      this.refundFailures -= 1;
-      return Promise.resolve<PaddleResult<null>>({ kind: "unavailable", status: 503 });
-    }
-    // Paddle refunds only a completed transaction.
-    if (this.txns.get(id)?.status !== "completed") {
-      return Promise.resolve<PaddleResult<null>>({ kind: "refused", status: 400, code: "transaction_status_not_completed" });
-    }
-    this.refunds.push(id);
-    this.adjustments.set(id, [...(this.adjustments.get(id) ?? []), { action: "refund", status: "pending_approval" }]);
-    if (this.loseRefundAnswer) {
-      this.loseRefundAnswer = false;
-      return Promise.resolve<PaddleResult<null>>({ kind: "unavailable", status: null });
-    }
-    return Promise.resolve<PaddleResult<null>>(this.ok(null));
-  }
-
-  tick(): string {
-    this.clock += 1000;
-    return new Date(this.clock).toISOString();
-  }
-
-  /** The customer pays a transaction: Paddle makes the subscription and, unless told
-   *  otherwise, completes the transaction at once (in Paddle it stays "paid" for about a
-   *  second first, measured on Kd's sandbox payment by the round-one review). */
-  pay(txnId: string, origin = "api", complete = true): string {
-    const txn = this.txns.get(txnId);
-    if (txn === undefined) throw new Error("no such transaction");
-    const subId = paddleId("sub");
-    this.txns.set(txnId, { ...txn, status: complete ? "completed" : "paid", subscription_id: subId, origin });
-    this.subs.set(subId, {
-      id: subId,
-      status: "active",
-      customer_id: paddleId("ctm"),
-      currency_code: txn.currency_code,
-      updated_at: this.tick(),
-      canceled_at: null,
-      paused_at: null,
-      current_billing_period: { starts_at: "2026-10-01T00:00:00Z", ends_at: "2026-11-01T00:00:00Z" },
-      scheduled_change: null,
-      items: txn.items.map((i) => ({ quantity: i.quantity, price: { id: i.price.id } })),
-    });
-    return subId;
-  }
-
-  complete(txnId: string): void {
-    const txn = this.txns.get(txnId);
-    if (txn === undefined) throw new Error("no such transaction");
-    this.txns.set(txnId, { ...txn, status: "completed" });
-  }
-
-  update(subId: string, patch: Partial<PaddleSubscription>): void {
-    const sub = this.subs.get(subId);
-    if (sub === undefined) throw new Error("no such subscription");
-    this.subs.set(subId, { ...sub, updated_at: this.tick(), ...patch });
-  }
-}
-
 d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
-  const paddle = new FakePaddle();
+  const paddle = new FakePaddle(PRICES);
   let app: Awaited<ReturnType<typeof buildApp>> | undefined;
   const api = () => {
     if (app === undefined) throw new Error("beforeAll did not build the app");
@@ -676,6 +550,189 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       }
       const failed = await sql<{ state: string }[]>`SELECT state FROM billing_checkouts WHERE gym_id = ${a.gymId} ORDER BY created_at`;
       expect(failed.map((r) => r.state)).toEqual(["failed", "failed"]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // ── Managing a paid plan (ROADMAP Stage 3 item 1c-i) ────────────────────────
+  //
+  // THE WORST THING THIS HALF COULD DO: open one gym's Paddle page — its card, its
+  // invoices, its Cancel — for somebody who is not that gym's billing staff.
+
+  const GRACE_MS = 5 * 24 * 60 * 60 * 1000;
+  const openPortal = (gymId: string, cookies: Cookies) => post(`/v1/orgs/${gymId}/billing/portal`, {}, cookies);
+  /** A gym on a paid plan: its owner, the Paddle subscription and its customer. */
+  const paying = async () => {
+    const a = await owner();
+    const txn = opened(await checkout(a.gymId, a.cookies, BIG));
+    const subId = paddle.pay(txn.transactionId);
+    await post(`/v1/orgs/${a.gymId}/billing/checkouts/${txn.checkoutId}/sync`, {}, a.cookies);
+    const customerId = paddle.subs.get(subId)?.customer_id ?? null;
+    if (customerId === null) throw new Error("fake Paddle made no customer");
+    return { ...a, subId, customerId };
+  };
+  const addStaff = async (gymId: string, userId: string, role: "manager" | "trainer", privileges: string[]) => {
+    await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${userId}, ${role}, ${privileges})`;
+  };
+  const myGym = async (gymId: string, cookies: Cookies) => {
+    const res = await get("/v1/orgs/mine", cookies);
+    expect(res.statusCode).toBe(200);
+    return (JSON.parse(res.body) as { orgs: { id: string; subscription: Record<string, unknown> | null; consoleReadOnly: boolean | null; paymentOverdue: boolean | null }[] }).orgs.find(
+      (o) => o.id === gymId,
+    );
+  };
+  /** Paddle says the plan changed, and the worker writes it, as a webhook would have it. */
+  const paddleSays = async (subId: string, patch: Parameters<FakePaddle["update"]>[1], aheadMs = 1000) => {
+    paddle.update(subId, patch);
+    expect((await signedWebhook(subscriptionEvent(subId, "subscription.updated"))).statusCode).toBe(200);
+    return await runWorker(aheadMs);
+  };
+  const graceRow = async (subId: string) =>
+    (await sql<{ status: string; cancel_reason: string | null; past_due_since: Date | null; ended_at: Date | null }[]>`
+      SELECT status, cancel_reason, past_due_since, ended_at FROM subscriptions WHERE provider_ref = ${subId}`)[0];
+
+  it(
+    "WORST THING: only this gym's billing staff open its Paddle page — a stranger, a member, a trainer and a manager without the tick are refused and Paddle is never asked",
+    async () => {
+      const a = await paying();
+      const b = await paying();
+      const trainer = await makeUser();
+      const manager = await makeUser();
+      const billingManager = await makeUser();
+      const member = await makeUser();
+      await addStaff(a.gymId, trainer.userId, "trainer", ["members.read", "codes.invite", "attendance.read"]);
+      await addStaff(a.gymId, manager.userId, "manager", ["members.read", "codes.invite", "codes.manage", "members.confirm", "members.remove", "attendance.read", "schedule.manage"]);
+      await addStaff(a.gymId, billingManager.userId, "manager", ["members.read", "billing.manage"]);
+      await sql`INSERT INTO gym_members (gym_id, user_id) VALUES (${a.gymId}, ${member.userId})`;
+
+      const asked = paddle.portalCalls.length;
+      // Gym B's owner, under A's id: indistinguishable from a gym that does not exist.
+      expect((await openPortal(a.gymId, b.cookies)).statusCode).toBe(404);
+      expect((await openPortal(a.gymId, member.cookies)).statusCode).toBe(404);
+      expect((await openPortal(a.gymId, trainer.cookies)).statusCode).toBe(403);
+      expect((await openPortal(a.gymId, manager.cookies)).statusCode).toBe(403);
+      expect(paddle.portalCalls.length).toBe(asked);
+
+      // A's owner, and a manager given the billing tick, get A's customer and A's plan only.
+      for (const who of [a.cookies, billingManager.cookies]) {
+        const res = await openPortal(a.gymId, who);
+        expect(res.statusCode).toBe(200);
+        expect(res.headers["cache-control"]).toBe("no-store");
+        expect(paddle.portalCalls.at(-1)).toEqual({ customerId: a.customerId, subscriptionIds: [a.subId] });
+        expect((JSON.parse(res.body) as { url: string }).url).toMatch(/^https:\/\/sandbox-customer-portal\.paddle\.com\/.*action=overview/);
+      }
+      // B's owner on B gets B's, never A's.
+      expect((await openPortal(b.gymId, b.cookies)).statusCode).toBe(200);
+      expect(paddle.portalCalls.at(-1)).toEqual({ customerId: b.customerId, subscriptionIds: [b.subId] });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a gym on no paid plan has no Paddle page to open, and a Paddle answer for another customer is never passed on",
+    async () => {
+      const trialling = await owner();
+      expect((await post(`/v1/orgs/${trialling.gymId}/trial`, {}, trialling.cookies)).statusCode).toBeLessThan(300);
+      const asked = paddle.portalCalls.length;
+      const none = await openPortal(trialling.gymId, trialling.cookies);
+      expect(none.statusCode).toBe(404);
+      expect(JSON.parse(none.body)).toMatchObject({ error: "no_paid_plan" });
+      expect(paddle.portalCalls.length).toBe(asked);
+
+      const a = await paying();
+      paddle.portalWrongCustomer = true;
+      const wrong = await openPortal(a.gymId, a.cookies);
+      expect(wrong.statusCode).toBe(503);
+      expect(wrong.body).not.toContain("paddle.com");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a cancel made on Paddle's page keeps the plan to the end of its month and says when it ends",
+    async () => {
+      const a = await paying();
+      await paddleSays(a.subId, { scheduled_change: { action: "cancel", effective_at: "2026-11-01T00:00:00Z" } });
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ status: "active", cancelAtPeriodEnd: true, currentPeriodEnd: "2026-11-01T00:00:00.000Z" });
+      await paddleSays(a.subId, { status: "canceled", scheduled_change: null, canceled_at: paddle.tick() });
+      const gym = await myGym(a.gymId, a.cookies);
+      expect(gym?.subscription).toBeNull();
+      expect(gym?.consoleReadOnly).toBe(true);
+      // Ended by the gym's own choice: nothing is overdue, so Subscribe is open again.
+      expect(gym?.paymentOverdue).toBe(false);
+      expect((await checkout(a.gymId, a.cookies, BIG)).statusCode).toBe(200);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a failed payment: members keep everything for 5 days, then the console goes read-only until the card is updated, and the payment brings it all back",
+    async () => {
+      const a = await paying();
+      await paddleSays(a.subId, { status: "past_due" });
+      const failed = await graceRow(a.subId);
+      expect(failed?.status).toBe("past_due");
+      expect(failed?.past_due_since).not.toBeNull();
+      let gym = await myGym(a.gymId, a.cookies);
+      expect(gym).toMatchObject({ consoleReadOnly: false, paymentOverdue: false, subscription: { status: "past_due" } });
+      // The page opens straight on the card, where Paddle shows what is owed.
+      const onCard = await openPortal(a.gymId, a.cookies);
+      expect((JSON.parse(onCard.body) as { url: string }).url).toContain("action=update_subscription_payment_method");
+
+      // Paddle retries and fails again a day later: the grace does not start over.
+      await paddleSays(a.subId, { current_billing_period: { starts_at: "2026-10-01T00:00:00Z", ends_at: "2026-11-02T00:00:00Z" } }, 24 * 60 * 60 * 1000);
+      expect((await graceRow(a.subId))?.past_due_since).toEqual(failed?.past_due_since);
+
+      // A minute short of 5 days: still in grace.
+      await runWorker(GRACE_MS - 60_000);
+      expect((await graceRow(a.subId))?.status).toBe("past_due");
+      // Past 5 days: the plan stops, the console is read-only, and the gym is told why.
+      const run = await runWorker(GRACE_MS + 5000);
+      expect(run.gracesEnded).toBe(1);
+      expect(await graceRow(a.subId)).toMatchObject({ status: "expired", cancel_reason: "grace_expired" });
+      gym = await myGym(a.gymId, a.cookies);
+      expect(gym).toMatchObject({ subscription: null, consoleReadOnly: true, paymentOverdue: true });
+      // Twice changes nothing.
+      expect((await runWorker(GRACE_MS + 10_000)).gracesEnded).toBe(0);
+      expect(await sql`SELECT 1 FROM audit_log WHERE gym_id = ${a.gymId} AND action = 'billing.grace_ended'`).toHaveLength(1);
+
+      // The fix is the card, never a second plan.
+      const second = await checkout(a.gymId, a.cookies, BIG);
+      expect(second.statusCode).toBe(409);
+      expect(JSON.parse(second.body)).toMatchObject({ error: "payment_overdue" });
+      expect((JSON.parse((await openPortal(a.gymId, a.cookies)).body) as { url: string }).url).toContain("action=update_subscription_payment_method");
+      // Paddle still retrying, still unpaid: nothing opens.
+      await paddleSays(a.subId, { status: "past_due" }, GRACE_MS + 20_000);
+      expect((await graceRow(a.subId))?.status).toBe("expired");
+
+      // The new card pays it: everything is back at once.
+      await paddleSays(a.subId, { status: "active" }, GRACE_MS + 30_000);
+      expect(await graceRow(a.subId)).toMatchObject({ status: "active", cancel_reason: null, past_due_since: null, ended_at: null });
+      gym = await myGym(a.gymId, a.cookies);
+      expect(gym).toMatchObject({ consoleReadOnly: false, paymentOverdue: false, subscription: { status: "active" } });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a payment Paddle collects inside the grace keeps the plan, and an unpaid plan Paddle ends lets the gym subscribe afresh",
+    async () => {
+      const a = await paying();
+      await paddleSays(a.subId, { status: "past_due" });
+      await paddleSays(a.subId, { status: "active" }, 2 * 24 * 60 * 60 * 1000);
+      await runWorker(GRACE_MS + 5000);
+      expect(await graceRow(a.subId)).toMatchObject({ status: "active", past_due_since: null });
+
+      const b = await paying();
+      await paddleSays(b.subId, { status: "past_due" });
+      await runWorker(GRACE_MS + 5000);
+      expect((await myGym(b.gymId, b.cookies))?.paymentOverdue).toBe(true);
+      // Paddle's own retries run out and it cancels: nothing more can be collected.
+      await paddleSays(b.subId, { status: "canceled", canceled_at: paddle.tick() }, GRACE_MS + 60_000);
+      expect(await graceRow(b.subId)).toMatchObject({ status: "expired", cancel_reason: null });
+      expect((await myGym(b.gymId, b.cookies))?.paymentOverdue).toBe(false);
+      expect((await openPortal(b.gymId, b.cookies)).statusCode).toBe(404);
+      expect((await checkout(b.gymId, b.cookies, BIG)).statusCode).toBe(200);
     },
     TEST_TIMEOUT_MS,
   );

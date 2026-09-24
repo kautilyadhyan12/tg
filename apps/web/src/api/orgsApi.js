@@ -33,6 +33,7 @@ import {
   orgApplicationPageSchema,
   orgCodeMutationResponseSchema,
   orgCodesResponseSchema,
+  orgBillingPortalResponseSchema,
   orgCheckoutResponseSchema,
   orgCheckoutSyncResponseSchema,
   orgMemberPageSchema,
@@ -182,6 +183,12 @@ export const orgService = {
       'your payment',
       authApi.post(`/v1/orgs/${gymId}/billing/checkouts/${checkoutId}/sync`, {}),
     ),
+
+  /** POST …/billing/portal — a one-time link to Paddle's own page for this gym's paid
+   *  plan (card, cancel, invoices); on the card when a payment is owed. Opened at once,
+   *  never kept: it signs its holder in to the gym's Paddle account. */
+  openBillingPortal: (gymId) =>
+    readThrough(orgBillingPortalResponseSchema, 'your payment page', authApi.post(`/v1/orgs/${gymId}/billing/portal`, {})),
 
   /** GET /v1/orgs/:gymId/hours — when this gym is open (Kd :26624, :26684).
    *

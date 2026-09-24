@@ -7,6 +7,11 @@
 // active with `cancelAtPeriodEnd`, because the gym has paid to the end of the month;
 // our own `canceled` status is not used for a Paddle row (Part 5 §3's `canceled` would
 // stop granting at once in this codebase's live set). Paddle trials are not sold.
+//
+// The 5-day grace (Part 5 §8): the worker moves a row past_due for 5 days to expired
+// with `graceEnded`. Paddle still says past_due while it retries, and that never opens
+// the row again; only a payment (active) does. Paddle ending the subscription clears
+// `graceEnded`, so the gym may then Subscribe afresh.
 
 export type LocalStatus = "trialing" | "active" | "past_due" | "canceled" | "expired";
 export type ProviderStatus = "active" | "past_due" | "paused" | "canceled" | "trialing";
@@ -19,6 +24,8 @@ export interface LocalRow {
   planId: string;
   currentPeriodEnd: Date | null;
   cancelAtPeriodEnd: boolean;
+  /** Expired by the worker at the end of the grace, while Paddle may still collect. */
+  graceEnded: boolean;
 }
 
 export interface Snapshot {
@@ -81,7 +88,10 @@ export function decide(input: { row: LocalRow | null; otherLive: boolean; snapsh
 
   const rowLive = LIVE.includes(row.status);
   if (!rowLive) {
-    if (target === "expired") return { kind: "ignore", reason: "unchanged" };
+    // Paddle ended a subscription whose grace had already run out: nothing more to collect.
+    if (target === "expired") return row.graceEnded ? { kind: "update", status: "expired", event: "ended" } : { kind: "ignore", reason: "unchanged" };
+    // Still unpaid: an ended row opens again only on a payment.
+    if (target === "past_due") return { kind: "ignore", reason: "unchanged" };
     return otherLive ? { kind: "ignore", reason: "conflict" } : { kind: "update", status: target, event: "reactivated" };
   }
   if (target === "expired") return { kind: "update", status: "expired", event: "ended" };

@@ -5,7 +5,7 @@
 // written from Paddle's own record of the subscription, fetched by our server, and
 // the subscription is placed on the gym named in OUR checkout row, never on anything
 // the payment says about itself.
-import type { OrgCheckoutResponse, OrgCheckoutSyncResponse, PaddleSubscription } from "@app/shared";
+import type { OrgBillingPortalResponse, OrgCheckoutResponse, OrgCheckoutSyncResponse, PaddleSubscription } from "@app/shared";
 import type { Sql } from "postgres";
 import type { RedisLike } from "../../redis.js";
 import { bustEntitlements } from "../entitlements/service.js";
@@ -83,6 +83,8 @@ export async function startOrgCheckout(
       throw new OrgsError(409, "trial_running", "You can choose a plan when your free trial ends.");
     case "already_subscribed":
       throw new OrgsError(409, "already_subscribed", "You're already on a paid plan.");
+    case "payment_overdue":
+      throw new OrgsError(409, "payment_overdue", "A payment is overdue. Update your card to pay it and carry on.");
     case "no_such_plan":
       throw new OrgsError(404, "plan_not_found", "That plan isn't on your price list.");
     case "plan_too_small":
@@ -179,6 +181,45 @@ export async function syncOrgCheckout(
     return { state: "paid", subscription: toOrgSubscription(live) };
   }
   return { state: "waiting" };
+}
+
+/** Paddle's own page for the gym's paid plan (ROADMAP Stage 3 item 1c-i): change the
+ *  card, cancel, invoices. The customer is the one on THIS gym's own row, never one the
+ *  browser names, and only staff who manage billing may open it — read-only or not,
+ *  since paying an overdue plan is how a read-only console opens again. */
+export async function openBillingPortal(
+  deps: BillingDeps,
+  input: { userId: string; gymId: string },
+): Promise<OrgBillingPortalResponse> {
+  await requirePrivilege(deps, input.gymId, input.userId, "billing.manage");
+  const paddle = deps.paddle;
+  if (paddle === null) throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
+  const plan = await repo.managedPlanFor(deps.sql, input.gymId);
+  if (plan === null) throw new OrgsError(404, "no_paid_plan", "This plan isn't paid through us, so there's nothing to manage here.");
+
+  const session = await paddle.api.createPortalSession(plan.customerRef, [plan.subscriptionRef]);
+  if (session.kind !== "ok") {
+    deps.log.warn({ event: "billing.portal_not_opened", result: session.kind }, "Paddle did not open its customer portal");
+    throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
+  }
+  const deepLinks = session.value.urls.subscriptions.find((s) => s.id === plan.subscriptionRef);
+  if (session.value.customer_id !== plan.customerRef || deepLinks === undefined) {
+    deps.log.error({ event: "billing.portal_mismatch" }, "Paddle's portal session is not for this gym's customer");
+    throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
+  }
+  // Money owed: straight to the card, where Paddle shows the overdue amount and takes it.
+  return { url: plan.overdue ? deepLinks.update_subscription_payment_method : session.value.urls.general.overview };
+}
+
+/** A paying gym keeps everything this long after a payment fails (Part 5 §8). */
+export const GRACE_MS = 5 * 24 * 60 * 60 * 1000;
+
+/** End the grace of plans past_due for 5 days. Safe to run twice. */
+export async function endExpiredGraces(deps: BillingDeps): Promise<number> {
+  const now = deps.now();
+  const ended = await repo.endGraces(deps.sql, { cutoff: new Date(now.getTime() - GRACE_MS), now, limit: 200 });
+  for (const gymId of ended) deps.log.info({ event: "billing.grace_ended", gymId }, "a gym's payment grace ended");
+  return ended.length;
 }
 
 export type ApplyResult =

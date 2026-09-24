@@ -121,6 +121,9 @@ export interface MyOrgRow extends OrgRow {
    *  expired — :21580's seat-meter precedent, the same instrument for the same
    *  hazard. */
   consoleReadOnly: boolean;
+  /** The console is read-only because a paid plan's payment is overdue, not because a
+   *  trial ended: the fix is the card on Paddle's page (ROADMAP Stage 3 item 1c-i). */
+  paymentOverdue: boolean;
   /** THE NEWEST CHEER THIS GYM HAS SENT THE CALLER, or null — Kd's :29961
    *  ruling 4 reaching the member, and the whole of its delivery.
    *
@@ -444,6 +447,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
       sub_currency: string | null;
       sub_current_period_end: Date | null;
       sub_cancel_at_period_end: boolean | null;
+      payment_overdue: boolean;
       seats_used: number;
       owner_trial_used: boolean;
       postal_address: string | null;
@@ -467,6 +471,11 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
            sub.currency AS sub_currency,
            sub.current_period_end AS sub_current_period_end,
            sub.cancel_at_period_end AS sub_cancel_at_period_end,
+           -- A paid plan whose 5-day grace ended while Paddle still retries (1c-i).
+           EXISTS (
+             SELECT 1 FROM subscriptions so
+             WHERE so.owner_type = 'gym' AND so.owner_id = g.id AND so.cancel_reason = 'grace_expired'
+           ) AS payment_overdue,
            -- THE SEAT METER'S NUMERATOR, and the three conditions are
            -- claimSeat's own, written out for the third time on purpose.
            --
@@ -639,6 +648,8 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
     // schema defaults it to null for an old api, so a definite `true` is the
     // only thing that ever greys a control out.
     consoleReadOnly: r.sub_status === null,
+    // Only while there is no live plan: a gym on a plan again owes nothing.
+    paymentOverdue: r.sub_status === null && r.payment_overdue,
     // BOTH HALVES OR NEITHER. The lateral either matched a row or did not, so a
     // preset without an instant is impossible — and writing it as two
     // independent `=== null` tests would let a future edit produce a cheer with

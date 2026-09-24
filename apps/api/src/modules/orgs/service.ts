@@ -514,6 +514,8 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
       // "locked"** — C97's rule, and the reason this is a field of its own rather
       // than `subscription === null` read at the client.
       consoleReadOnly: r.staffRole === null ? null : r.consoleReadOnly,
+      // Why it is read-only, for staff alike: an overdue payment, paid on Paddle's page.
+      paymentOverdue: r.staffRole === null ? null : r.paymentOverdue,
       // A fact about the gym for its staff (the Settings box and the Invite screen).
       postalAddress: r.staffRole === null ? null : r.postalAddress,
       // THE NEWEST CHEER THIS GYM SENT **THIS CALLER** — and it is the one field

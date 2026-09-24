@@ -41,6 +41,45 @@ export type OrgCheckoutSyncResponse = z.infer<typeof orgCheckoutSyncResponseSche
 
 const instant = z.string().datetime({ offset: true });
 
+/** A link to Paddle's customer portal: https, on Paddle's own domain, nowhere else. */
+export const paddlePortalUrlSchema = z
+  .string()
+  .max(2000)
+  .url()
+  .refine((value) => {
+    let link: URL;
+    try {
+      link = new URL(value);
+    } catch {
+      return false;
+    }
+    return link.protocol === "https:" && link.username === "" && link.password === "" && (link.hostname === "paddle.com" || link.hostname.endsWith(".paddle.com"));
+  }, "not a Paddle link");
+
+/** Paddle's own page for the gym's plan (card, cancel, invoices), for this press only:
+ *  its link carries a short-lived sign-in, so it is opened at once and never kept. */
+export const orgBillingPortalResponseSchema = z.object({ url: paddlePortalUrlSchema }).strict();
+export type OrgBillingPortalResponse = z.infer<typeof orgBillingPortalResponseSchema>;
+
+/** A customer portal session (`POST /customers/{id}/portal-sessions`, developer.paddle.com,
+ *  read 2026-09-24). */
+export const paddlePortalSessionSchema = z.object({
+  customer_id: paddleCustomerIdSchema,
+  urls: z.object({
+    general: z.object({ overview: paddlePortalUrlSchema }),
+    subscriptions: z
+      .array(
+        z.object({
+          id: paddleSubscriptionIdSchema,
+          cancel_subscription: paddlePortalUrlSchema,
+          update_subscription_payment_method: paddlePortalUrlSchema,
+        }),
+      )
+      .max(25),
+  }),
+});
+export type PaddlePortalSession = z.infer<typeof paddlePortalSessionSchema>;
+
 /** A subscription (`GET /subscriptions/{id}`). */
 export const paddleSubscriptionSchema = z.object({
   id: paddleSubscriptionIdSchema,
