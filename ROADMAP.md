@@ -185,7 +185,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 ## Stage 3 — Money
 
 1. **Paying us, ON THE WEB** (split 2026-09-24 into four jobs; prices + tax, Razorpay for India, RULINGS that day).
-   - 1a. [ ] **A gym pays through Paddle** (test mode): Subscribe on the plan prompt, Paddle's checkout at our price, the signed webhook and worker, the one subscription rule; a second paid plan is cancelled and refunded.
+   - 1a. [x] **A gym pays through Paddle** (test mode) — merged 2026-09-24 (PR #103).
    - 1b. [ ] **A person outside India pays $10 through Paddle**, from Settings; entitlements from their own plan.
    - 1c. [ ] **Managing a plan**: change card and cancel (Paddle's own page), invoices (Paddle's), a bigger size as members grow, paying before the trial ends, failed payments and the 5-day grace.
    - 1d. [ ] **India through Razorpay**, gyms and people, UPI Autopay; GST off until Kd is registered (RULINGS 2026-09-24). Needs Kd's free Razorpay test account.
