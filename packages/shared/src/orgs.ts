@@ -1522,6 +1522,16 @@ export const orgMemberSchema = z.object({
    *  destroyed to add one badge. Absent, the client falls back to
    *  `complimentary`, i.e. exactly the behaviour that shipped before this. */
   takesSeat: z.boolean().optional(),
+  /** The name on the gym's own list at the address this person joined with, and
+   *  whether the name they signed up with plausibly matches it — "matches" or
+   *  "differs" (ROADMAP 3b-ii-b; RULINGS 2026-09-23, gap A: a gym that mistyped an
+   *  address invited a stranger, and a different name is the clue). The gym's own data
+   *  about the person, so only for staff who may see the list (`members.confirm`);
+   *  absent otherwise and when the membership names no list record. */
+  onList: z
+    .object({ name: z.string(), nameCheck: z.enum(["matches", "differs"]) })
+    .strict()
+    .optional(),
 });
 export type OrgMember = z.infer<typeof orgMemberSchema>;
 

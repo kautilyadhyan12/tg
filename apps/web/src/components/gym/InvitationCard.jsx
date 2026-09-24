@@ -1,22 +1,31 @@
 import { useState } from 'react';
-import { INVITATION_WORDS, orgWords } from '@app/shared';
-import { AlertTriangle, CheckCircle2, Loader2, Mail } from 'lucide-react';
+import { INVITATION_WORDS, orgWords, yourPlanWords } from '@app/shared';
+import { AlertTriangle, CheckCircle2, Info, Loader2, Mail } from 'lucide-react';
 import OrgVisibilitySheet from './OrgVisibilitySheet';
 import { errorText, orgService } from '../../api/orgsApi';
 
 // One invitation to one gym (Part 3 §10.2): who invited you, what the gym can see,
 // and under it the ONE tap — Join. No thanks tells the gym; a declined invitation
 // keeps its Join while the gym's list still holds the person (RULINGS 2026-09-23).
+// "Not me" tells the gym its address reached the wrong person (gap A); a person who
+// pays for their own plan is told what the gym gives and what their plan still adds
+// (gap D).
 //
-// `onAnswered({ kind, invitationId })` once the server has answered: `joined` or
-// `declined`.
+// `onAnswered({ kind, invitationId })` once the server has answered: `joined`,
+// `declined` or `not_me`.
 export default function InvitationCard({ invitation, onAnswered }) {
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState(null);
   const [state, setState] = useState(invitation.state);
+  const [notMe, setNotMe] = useState(invitation.notMe === true);
+  // After Not me the card keeps only what was said; a real member who pressed it by
+  // mistake opens the rest again with one tap.
+  const [mistake, setMistake] = useState(false);
+  const collapsed = notMe && !mistake;
   const [joined, setJoined] = useState(null);
   const { gym } = invitation;
   const words = orgWords(gym.orgType);
+  const planWords = invitation.yourPlan && invitation.canTakeMembers ? yourPlanWords(gym.name, invitation.yourPlan) : null;
 
   const answer = async (kind) => {
     setBusy(kind);
@@ -26,6 +35,11 @@ export default function InvitationCard({ invitation, onAnswered }) {
         const res = await orgService.acceptInvitation(invitation.id);
         setJoined(res.data.gym);
         onAnswered?.({ kind: 'joined', invitationId: invitation.id });
+      } else if (kind === 'not_me') {
+        await orgService.notMeInvitation(invitation.id);
+        setState('declined');
+        setNotMe(true);
+        onAnswered?.({ kind: 'not_me', invitationId: invitation.id });
       } else {
         await orgService.declineInvitation(invitation.id);
         setState('declined');
@@ -66,14 +80,18 @@ export default function InvitationCard({ invitation, onAnswered }) {
         <Mail className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: '#FF8A1F' }} />
         <div className="min-w-0">
           <p className="text-base font-semibold" style={{ color: '#fff' }}>
-            You&apos;re invited to {gym.name}
+            {collapsed ? gym.name : <>You&apos;re invited to {gym.name}</>}
           </p>
           {gym.city ? (
             <p className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
               {gym.city}
             </p>
           ) : null}
-          {state === 'declined' ? (
+          {state === 'declined' && notMe ? (
+            <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.75)' }}>
+              {INVITATION_WORDS.said_not_me(gym.name)}
+            </p>
+          ) : state === 'declined' ? (
             <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.75)' }}>
               {invitation.canTakeMembers ? 'You said no thanks. You can still join.' : 'You said no thanks.'}
             </p>
@@ -84,7 +102,18 @@ export default function InvitationCard({ invitation, onAnswered }) {
       {/* What the gym can see sits above Join, the tap it is about. A gym that cannot
           take members has no Join yet, so it says that instead; No thanks is always
           there, so the invitation can be answered either way. */}
-      {invitation.canTakeMembers ? (
+      {collapsed ? (
+        invitation.canTakeMembers ? (
+          <button
+            type="button"
+            onClick={() => setMistake(true)}
+            className="self-start text-sm font-medium underline underline-offset-2"
+            style={{ color: 'rgba(255,255,255,0.85)', minHeight: 44 }}
+          >
+            Pressed this by mistake? Join {gym.name}
+          </button>
+        ) : null
+      ) : invitation.canTakeMembers ? (
         <OrgVisibilitySheet orgName={gym.name} orgType={gym.orgType} />
       ) : (
         <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
@@ -92,7 +121,21 @@ export default function InvitationCard({ invitation, onAnswered }) {
         </p>
       )}
 
-      {invitation.canTakeMembers || state === 'pending' ? (
+      {!collapsed && planWords !== null ? (
+        <div
+          data-testid="your-plan"
+          className="rounded-xl p-4 flex items-start gap-3"
+          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)' }}
+        >
+          <Info className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'rgba(255,255,255,0.6)' }} />
+          <div className="text-sm flex flex-col gap-1" style={{ color: 'rgba(255,255,255,0.8)' }}>
+            <p>{planWords.lead}</p>
+            <p style={{ color: 'rgba(255,255,255,0.6)' }}>{planWords.cancel}</p>
+          </div>
+        </div>
+      ) : null}
+
+      {!collapsed && (invitation.canTakeMembers || state === 'pending') ? (
         <div className="flex flex-wrap items-center gap-3">
           {invitation.canTakeMembers ? (
             <button
@@ -118,6 +161,24 @@ export default function InvitationCard({ invitation, onAnswered }) {
               No thanks
             </button>
           ) : null}
+        </div>
+      ) : null}
+
+      {/* Somebody the gym did not mean to invite: the gym typed a wrong address. Nothing
+          on this card says whom the gym meant. */}
+      {!notMe ? (
+        <div className="flex flex-wrap items-center gap-x-2 text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
+          <span>Not a {words.person} of {gym.name}?</span>
+          <button
+            type="button"
+            onClick={() => answer('not_me')}
+            disabled={busy !== null}
+            className="font-medium underline underline-offset-2 flex items-center gap-1.5 disabled:opacity-50"
+            style={{ color: 'rgba(255,255,255,0.85)', minHeight: 44 }}
+          >
+            {busy === 'not_me' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            Not me
+          </button>
         </div>
       ) : null}
 

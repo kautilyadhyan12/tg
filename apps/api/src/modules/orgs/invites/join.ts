@@ -15,11 +15,12 @@ import {
   type AcceptInvitationResponse,
   type DeclineInvitationResponse,
   type MyInvitationsResponse,
+  type NotMeInvitationResponse,
 } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import type { RedisLike } from "../../../redis.js";
 import { accountAddress } from "../../auth/service.js";
-import { bustEntitlements } from "../../entitlements/service.js";
+import { bustEntitlements, yourPlansAt } from "../../entitlements/service.js";
 import { claimSeatByInvitation, gymHasLivePlan, insertAudit, lockOrg, type OrgRow } from "../repo.js";
 import { OrgsError } from "../service.js";
 import { emailHmac } from "./address.js";
@@ -69,6 +70,11 @@ export async function myInvitations(deps: JoinDeps, caller: Caller): Promise<MyI
   const address = await callerAddress(deps, caller);
   if (address.hmac === null) return { address: address.email, addressProved: address.proved, invitations: [] };
   const rows = await repo.invitationsForAddress(deps.sql, { hmac: address.hmac, email: address.email, userId: caller.id });
+  const plans = await yourPlansAt(
+    deps.sql,
+    caller.id,
+    rows.flatMap((row) => (row.onPlan ? [row.gymId] : [])),
+  );
   return {
     address: address.email,
     addressProved: true,
@@ -77,6 +83,8 @@ export async function myInvitations(deps: JoinDeps, caller: Caller): Promise<MyI
       state: row.state,
       gym: { id: row.gymId, name: row.gymName, city: row.gymCity, orgType: orgTypeSchema.parse(row.orgType) },
       canTakeMembers: row.onPlan,
+      notMe: row.notMe,
+      yourPlan: plans.get(row.gymId) ?? null,
     })),
   };
 }
@@ -182,6 +190,74 @@ export async function declineInvitation(deps: JoinDeps, caller: Caller, inviteId
     throw new OrgsError(409, "already_member", INVITATION_WORDS.already_member(outcome.org.name, outcome.org.orgType));
   }
   return { state: "declined" };
+}
+
+/** "Not me" on the Join screen (RULINGS 2026-09-23, gap A): the invitation is declined
+ *  and marked, so staff check the address they have. The same checks as No thanks. */
+export async function notMeInvitation(deps: JoinDeps, caller: Caller, inviteId: string): Promise<NotMeInvitationResponse> {
+  const address = await callerAddress(deps, caller);
+  const hmac = answerableHmac(address);
+  const gymId = await repo.invitationGym(deps.sql, inviteId, hmac);
+  if (gymId === null) throw noInvitation(address.email);
+  const at = deps.now();
+
+  const outcome = await deps.sql.begin(async (tx): Promise<{ kind: "none" | "done" } | { kind: "member"; org: OrgRow }> => {
+    const org = await lockOrg(tx, gymId);
+    if (org === null || org.status !== "active") return { kind: "none" };
+    const invite = await repo.lockInvitation(tx, { gymId, inviteId, hmac });
+    if (invite === null || invite.state === "withdrawn") return { kind: "none" };
+    if (await repo.isLiveMember(tx, gymId, caller.id)) return { kind: "member", org };
+    if (invite.state === "accepted") return { kind: "none" };
+    if ((await repo.addressHolders(tx, gymId, address.email)).length === 0) return { kind: "none" };
+    await recordNotMe(tx, { gymId, inviteId: invite.id, actorUserId: caller.id, via: "app", at });
+    return { kind: "done" };
+  });
+
+  if (outcome.kind === "none") throw noInvitation(address.email);
+  if (outcome.kind === "member") {
+    throw new OrgsError(409, "already_member", INVITATION_WORDS.already_member(outcome.org.name, outcome.org.orgType));
+  }
+  return { state: "declined", notMe: true };
+}
+
+/** What a "Not me" link did: told the gym, had told it already, found the invitation
+ *  already used to join or taken back by the gym, or found nothing. */
+export type NotMeByLink =
+  | { kind: "told" | "already_told" | "joined" | "withdrawn"; gymName: string }
+  | { kind: "gone" };
+
+/** "Not me" from the invitation email's link, whose MAC has proved the invitation id.
+ *  Nobody is signed in, so it can only ever decline and mark: it never touches a
+ *  membership, and the page it answers with names the gym and nothing else. */
+export async function notMeByLink(sql: Sql, inviteId: string, at: Date): Promise<NotMeByLink> {
+  const found = await repo.inviteForUnsubscribe(sql, inviteId);
+  if (found === null) return { kind: "gone" };
+  return await sql.begin(async (tx): Promise<NotMeByLink> => {
+    const org = await lockOrg(tx, found.gymId);
+    if (org === null) return { kind: "gone" };
+    const invite = await repo.lockInvitationById(tx, found.gymId, inviteId);
+    if (invite === null) return { kind: "gone" };
+    if (invite.state === "accepted") return { kind: "joined", gymName: org.name };
+    if (invite.state === "withdrawn") return { kind: "withdrawn", gymName: org.name };
+    if (invite.notMe) return { kind: "already_told", gymName: org.name };
+    await recordNotMe(tx, { gymId: found.gymId, inviteId, actorUserId: null, via: "email", at });
+    return { kind: "told", gymName: org.name };
+  });
+}
+
+async function recordNotMe(
+  tx: TransactionSql,
+  input: { gymId: string; inviteId: string; actorUserId: string | null; via: "app" | "email"; at: Date },
+): Promise<void> {
+  if (!(await repo.markNotMe(tx, { gymId: input.gymId, inviteId: input.inviteId, at: input.at }))) return;
+  await insertAudit(tx, {
+    actorUserId: input.actorUserId,
+    gymId: input.gymId,
+    action: "org.invitation_not_me",
+    targetType: "gym_invite",
+    targetId: input.inviteId,
+    meta: { via: input.via },
+  });
 }
 
 /** Withdraw the invitations of these accounts' addresses at this gym, inside the

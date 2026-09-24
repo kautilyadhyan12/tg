@@ -456,6 +456,15 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     }
   });
 
+  // Invitations that came back "Not me" (3b-ii-b; §10.2): the addresses to check.
+  app.get("/v1/orgs/:gymId/member-list/not-me", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const items = await invites.notMeList(listDeps, requireUserId(req), params.gymId, readGate(req, reply));
+    if (items === null) return;
+    return reply.status(200).send({ items });
+  });
+
   app.post("/v1/orgs/:gymId/member-list/entries/:entryId/invite", { preHandler: [app.authenticate] }, async (req, reply) => {
     const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
     if (params === null) return;

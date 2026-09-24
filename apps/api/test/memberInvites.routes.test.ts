@@ -1111,7 +1111,9 @@ d("press Invite (real Postgres)", () => {
       expect(email.text).toContain(`http://localhost:5173/join/${org.org.slug}`);
       expect(email.headers["List-Unsubscribe-Post"]).toBe("List-Unsubscribe=One-Click");
       expect(email.headers["List-Unsubscribe"]).toMatch(/^<http:\/\/localhost:3000\/v1\/email\/unsubscribe\?t=[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{22}>$/);
-      expect(email.text.match(/https?:\/\//g)).toHaveLength(2);
+      // The join link, "Not me" (3b-ii-b) and the unsubscribe link, and nothing else.
+      expect(email.text).toMatch(/\nhttp:\/\/localhost:3000\/v1\/email\/not-me\?t=[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{22}\n/);
+      expect(email.text.match(/https?:\/\//g)).toHaveLength(3);
       expect(JSON.stringify(logged)).not.toContain("minv-t-");
 
       // A name that is all web address is still named, never left blank.

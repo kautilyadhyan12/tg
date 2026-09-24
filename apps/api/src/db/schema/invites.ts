@@ -23,6 +23,8 @@ export const gymInvites = pgTable(
     answeredAt: timestamp("answered_at", { withTimezone: true }),
     /** A Join refused because the gym had no free place: "waiting for a place". */
     waitingSince: timestamp("waiting_since", { withTimezone: true }),
+    /** The person it reached said it is not theirs ("Not me"): only on a declined one. */
+    notMeAt: timestamp("not_me_at", { withTimezone: true }),
   },
   (t) => [
     unique("gym_invites_address_uq").on(t.gymId, t.emailHmac),
@@ -31,6 +33,8 @@ export const gymInvites = pgTable(
     check("gym_invites_state_check", sql`${t.state} IN ('pending','accepted','declined','withdrawn')`),
     check("gym_invites_answered_check", sql`(${t.state} = 'pending') = (${t.answeredAt} IS NULL)`),
     check("gym_invites_waiting_check", sql`${t.waitingSince} IS NULL OR ${t.state} = 'pending'`),
+    check("gym_invites_not_me_check", sql`${t.notMeAt} IS NULL OR ${t.state} = 'declined'`),
+    index("gym_invites_not_me_idx").on(t.gymId).where(sql`${t.notMeAt} IS NOT NULL`),
   ],
 );
 

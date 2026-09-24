@@ -31,6 +31,29 @@ export async function getCandidates(sql: Sql, userId: string): Promise<Candidate
   }));
 }
 
+/** The person's OWN live plans (not a gym's), with where each was bought: what the Join
+ *  screen compares with a gym's (ROADMAP 3b-ii-b). */
+export async function getOwnPlans(sql: Sql, userId: string): Promise<{ rank: number; entitlements: unknown; provider: string }[]> {
+  return await sql<{ rank: number; entitlements: unknown; provider: string }[]>`
+    SELECT p.rank, p.entitlements, s.provider
+    FROM subscriptions s JOIN plans p ON p.id = s.plan_id
+    WHERE s.owner_type='user' AND s.owner_id=${userId} AND s.status IN
+    ('trialing','active','past_due')`;
+}
+
+/** What a member of each of these gyms gets, from the gym's live plan; a gym with none
+ *  is left out. */
+export async function getGymMemberDocs(sql: Sql, gymIds: readonly string[]): Promise<Map<string, { rank: number; memberEntitlements: unknown }>> {
+  if (gymIds.length === 0) return new Map();
+  const rows = await sql<{ owner_id: string; rank: number; member_entitlements: unknown }[]>`
+    SELECT DISTINCT ON (s.owner_id) s.owner_id, p.rank, p.member_entitlements
+    FROM subscriptions s JOIN plans p ON p.id = s.plan_id
+    WHERE s.owner_type='gym' AND s.owner_id = ANY(${[...gymIds]}::uuid[])
+      AND s.status IN ('trialing','active','past_due')
+    ORDER BY s.owner_id, p.rank DESC`;
+  return new Map(rows.map((row) => [row.owner_id, { rank: row.rank, memberEntitlements: row.member_entitlements }]));
+}
+
 /** The free plan document — the merge base (§4.1 "start from the `free`
  *  plan document"). Seeded by Part 4 §8; absence is a boot-order bug. */
 export async function getFreePlanDoc(sql: Sql): Promise<unknown> {

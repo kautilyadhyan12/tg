@@ -25,7 +25,7 @@ vi.mock('../context/TransitionContext', () => ({
 }));
 vi.mock('../api/orgsApi', async (importOriginal) => ({
   ...(await importOriginal()),
-  orgService: { getInvitations: vi.fn(), acceptInvitation: vi.fn(), declineInvitation: vi.fn() },
+  orgService: { getInvitations: vi.fn(), acceptInvitation: vi.fn(), declineInvitation: vi.fn(), notMeInvitation: vi.fn() },
 }));
 vi.mock('./console/consoleOrgs', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -291,5 +291,76 @@ describe("the invitation email's link", () => {
     draw('/join/iron-house');
     expect(await screen.findByText("You're invited to Iron House")).toBeTruthy();
     await waitFor(() => expect(orgService.getInvitations).toHaveBeenCalled());
+  });
+});
+
+describe('Not me, and a plan of your own (ROADMAP 3b-ii-b)', () => {
+  it('Not me tells the gym, says so on the card, and counts as an answer', async () => {
+    waiting(IRON);
+    orgService.notMeInvitation.mockResolvedValue({ data: { state: 'declined', notMe: true } });
+    draw('/dashboard');
+    expect(await screen.findByText('Not a member of Iron House?')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Not me' }));
+    expect(await screen.findByText("You told Iron House this invitation isn't for you. They'll check the address they have.")).toBeTruthy();
+    expect(orgService.notMeInvitation).toHaveBeenCalledWith(IRON.id);
+    expect(orgService.declineInvitation).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Not me' })).toBeNull();
+    expect(screen.queryByText('You said no thanks. You can still join.')).toBeNull();
+    // The card shrinks: no invitation to a gym they said is not theirs, no sheet, no Join.
+    expect(screen.queryByText("You're invited to Iron House")).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'What Iron House can see' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Join' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(await screen.findByText('MEMBER APP')).toBeTruthy();
+  });
+
+  it('Settings shows an invitation already answered Not me as that; a mis-tap opens Join again with one tap', async () => {
+    waiting({ ...IRON, state: 'declined', notMe: true });
+    orgService.acceptInvitation.mockResolvedValue({ data: JOINED });
+    draw('/settings');
+    expect(await screen.findByText("You told Iron House this invitation isn't for you. They'll check the address they have.")).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Not me' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Join' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Pressed this by mistake? Join Iron House' }));
+    expect(screen.getByRole('heading', { name: 'What Iron House can see' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Join' }));
+    expect(await screen.findByText("You're in Iron House.")).toBeTruthy();
+  });
+
+  it('a gym that cannot take members offers no Join after Not me, even by mistake', async () => {
+    waiting({ ...IRON, state: 'declined', notMe: true, canTakeMembers: false });
+    draw('/settings');
+    expect(await screen.findByText("You told Iron House this invitation isn't for you. They'll check the address they have.")).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Pressed this by mistake/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Join' })).toBeNull();
+  });
+
+  it('a person paying for their own plan is told what the gym gives and what their plan still adds, never "the gym covers it"', async () => {
+    waiting({
+      ...IRON,
+      yourPlan: {
+        extras: [{ feature: 'meal_scan', own: { window: 'day', limit: 20 }, gym: { window: 'day', limit: 7 } }],
+        cancelAt: 'app_store',
+      },
+    });
+    draw('/dashboard');
+    const box = await screen.findByTestId('your-plan');
+    expect(box.textContent).toContain(
+      "You pay for your own plan. Once you join, Iron House gives you the app's features, and your own plan still adds 20 meal scans a day instead of 7.",
+    );
+    expect(box.textContent).toContain("If you don't need that, only you can cancel it, in your phone's App Store or Google Play subscriptions.");
+  });
+
+  it('nothing about a plan for somebody with none, or at a gym that cannot take members', async () => {
+    waiting(IRON);
+    draw('/dashboard');
+    expect(await screen.findByText("You're invited to Iron House")).toBeTruthy();
+    expect(screen.queryByTestId('your-plan')).toBeNull();
+    cleanup();
+    forgetInvitations();
+    waiting({ ...IRON, canTakeMembers: false, yourPlan: { extras: [], cancelAt: 'where_bought' } });
+    draw('/settings');
+    expect(await screen.findByText("You're invited to Iron House")).toBeTruthy();
+    expect(screen.queryByTestId('your-plan')).toBeNull();
   });
 });

@@ -32,6 +32,8 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getMembers: vi.fn(),
       getCodes: vi.fn(),
       getApplications: vi.fn(),
+      // The Members screen's "Not me" box reads on mount (3b-ii-b); nothing came back.
+      getNotMe: vi.fn(() => Promise.resolve({ data: { items: [] } })),
       getOverview: vi.fn(),
       getAttendanceDay: vi.fn(),
       getStaff: vi.fn(),

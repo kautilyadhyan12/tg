@@ -34,6 +34,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       confirmApplication: vi.fn(),
       rejectApplication: vi.fn(),
       removeMember: vi.fn(),
+      getNotMe: vi.fn(),
     },
   };
 });
@@ -200,6 +201,8 @@ beforeEach(() => {
   // Nobody waiting, by default: every test that is not about the queue should
   // see the screen it saw before the queue existed.
   orgService.getApplications.mockResolvedValue(queue([]));
+  // Nothing came back "Not me", by default.
+  orgService.getNotMe.mockResolvedValue({ data: { items: [] } });
   // THE NUMBERS ARE QUIET BY DEFAULT, AND THAT IS THE TRUTHFUL DEFAULT FOR
   // THESE FIXTURES rather than a convenience. `ORG`'s only seat is `ownerSeat`,
   // which is `complimentary` — and `month.members` counts current
@@ -1142,6 +1145,54 @@ describe('Members', () => {
     expect(screen.queryByText(/cheer/i)).toBeNull();
     expect(screen.queryByLabelText(/cheer/i)).toBeNull();
     expect(screen.queryByTitle(/keep it going/i)).toBeNull();
+  });
+
+  // ROADMAP 3b-ii-b: a gym that mistyped an address invited a stranger, and the
+  // stranger's own name is the clue (RULINGS 2026-09-23, gap A).
+  it("shows the name on the gym's list beside the one somebody signed up with, and 'Check this is them' where they differ", async () => {
+    const stranger = { ...joinedMemberWithForbiddenExtras, userId: 'u5', displayName: 'Priya Sharma', onList: { name: 'Priya Shah', nameCheck: 'differs' } };
+    const member = { ...joinedMemberWithForbiddenExtras, userId: 'u6', displayName: 'Jose Alvarez', onList: { name: 'José Álvarez', nameCheck: 'matches' } };
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, stranger, member]));
+    drawMembers();
+
+    expect(await screen.findByText('Priya Sharma')).toBeTruthy();
+    expect(screen.getByText('On your list as Priya Shah')).toBeTruthy();
+    expect(screen.getByText('On your list as José Álvarez')).toBeTruthy();
+    const checks = screen.getAllByTestId('check-this-is-them');
+    expect(checks).toHaveLength(1);
+    // The mark sits on the stranger's row, next to its Remove.
+    const row = checks[0].closest('.rounded-2xl');
+    expect(within(row).getByText('Priya Sharma')).toBeTruthy();
+    expect(within(row).getByRole('button', { name: 'Remove' })).toBeTruthy();
+  });
+
+  it("lists the invitations that came back 'Not me', with the address to check", async () => {
+    orgService.getNotMe.mockResolvedValue({
+      data: { items: [{ entryId: 'e1', fullName: 'Hana Kim', email: 'hana-typo@example.com', notMeAt: '2026-09-24T09:00:00.000Z' }] },
+    });
+    drawMembers();
+    const box = await screen.findByTestId('not-me-box');
+    expect(within(box).getByText('An invitation reached the wrong person')).toBeTruthy();
+    expect(within(box).getByText('Hana Kim')).toBeTruthy();
+    expect(within(box).getByText('hana-typo@example.com')).toBeTruthy();
+    expect(orgService.getNotMe).toHaveBeenCalledWith(ORG.id);
+  });
+
+  it("draws no 'Not me' box when nothing came back, and a trainer, who may not see the list, never asks", async () => {
+    drawMembers();
+    expect(await screen.findByText('Kd Owner')).toBeTruthy();
+    await waitFor(() => expect(orgService.getNotMe).toHaveBeenCalled());
+    expect(screen.queryByTestId('not-me-box')).toBeNull();
+
+    cleanup();
+    resetConsoleOrgs();
+    vi.clearAllMocks();
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'trainer' }] } });
+    orgService.getMembers.mockResolvedValue(page([ownerSeat]));
+    orgService.getApplications.mockResolvedValue(queue([]));
+    drawMembers();
+    expect(await screen.findByText('Kd Owner')).toBeTruthy();
+    expect(orgService.getNotMe).not.toHaveBeenCalled();
   });
 });
 

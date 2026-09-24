@@ -57,6 +57,8 @@ export function memberInviteEmail(words: {
   gymCity: string | null;
   postalAddress: string;
   joinLink: string;
+  /** "Not me": a page that tells the gym this address is not its member's. */
+  notMeLink: string;
   unsubscribeLink: string;
 }): EmailMessage {
   const gym = words.gymName;
@@ -65,18 +67,20 @@ export function memberInviteEmail(words: {
     lead: `${where} has invited you to ${APP_NAME}, the app its members use.`,
     how: `To join ${gym} in the app, sign in with this email address, ${words.to}:`,
     only: "The invitation works only for someone who signs in with this address.",
+    notMe: `Not a member of ${gym}? Tell them it's not you:`,
     why: `You are getting this email because ${gym} has you on its member list and asked us to invite you. We won't send you another unless you ask ${gym} for one.`,
     footer: `Sent by ${APP_NAME} on behalf of ${gym}, ${words.postalAddress}.`,
     stop: `Stop emails from ${gym} through ${APP_NAME}:`,
   };
   const text =
-    `${lines.lead}\n\n${lines.how}\n${words.joinLink}\n\n${lines.only}\n\n${lines.why}\n\n` +
+    `${lines.lead}\n\n${lines.how}\n${words.joinLink}\n\n${lines.only}\n\n${lines.notMe}\n${words.notMeLink}\n\n${lines.why}\n\n` +
     `${lines.footer}\n${lines.stop} ${words.unsubscribeLink}\n`;
   const link = (href: string) => `<a href="${escapeHtml(href)}">${escapeHtml(href)}</a>`;
   const html =
     `<p>${escapeHtml(lines.lead)}</p>` +
     `<p>${escapeHtml(lines.how)}<br>${link(words.joinLink)}</p>` +
     `<p>${escapeHtml(lines.only)}</p>` +
+    `<p>${escapeHtml(lines.notMe)}<br>${link(words.notMeLink)}</p>` +
     `<p>${escapeHtml(lines.why)}</p>` +
     `<p style="color:#666;font-size:12px">${escapeHtml(lines.footer)}<br>${escapeHtml(lines.stop)} ${link(words.unsubscribeLink)}</p>`;
   return { to: words.to, subject: `You're a member of ${gym} — get the app`, text, html };
