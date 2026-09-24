@@ -23,7 +23,7 @@ import { addressInApp } from "./inApp.js";
 import type { MailDomainCheck } from "./mailDomain.js";
 import * as repo from "./repo.js";
 import type { InviteSender, InviteSettings } from "./settings.js";
-import { unsubscribeToken } from "./token.js";
+import { inviteLinkToken, unsubscribeToken } from "./token.js";
 
 /** The caps and pacing. A gym may send 500 invitations in any 24 hours, 200 while on
  *  trial (its whole member cap); the whole app is capped by INVITE_EMAILS_PER_DAY. */
@@ -223,6 +223,7 @@ function inviteMessage(
     gymCity: city === "" ? null : city,
     postalAddress: cleanGymText(gym.postalAddress ?? "", GYM_POSTAL_ADDRESS_MAX_CHARS),
     joinLink: `${settings.webOrigin}/join/${encodeURIComponent(gym.slug)}`,
+    notMeLink: `${sender.apiOrigin}/v1/email/not-me?t=${inviteLinkToken(settings.hmacKey, "not_me", claim.inviteId)}`,
     unsubscribeLink,
   });
   return {

@@ -527,6 +527,8 @@ d("join by invitation (real Postgres)", () => {
           state: "pending",
           gym: { id: gym.id, name: "Join Gym", city: "Leeds", orgType: "gym" },
           canTakeMembers: true,
+          notMe: false,
+          yourPlan: null,
         },
       ]);
       const inviteId = sees.invitations[0]?.id ?? "";

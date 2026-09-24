@@ -14,7 +14,9 @@ import {
   confirmApplicationResponseSchema,
   createOrgResponseSchema,
   declineInvitationResponseSchema,
+  memberListNotMeResponseSchema,
   myInvitationsResponseSchema,
+  notMeInvitationResponseSchema,
   gymClassesResponseSchema,
   gymClassMutationResponseSchema,
   gymClassWeekResponseSchema,
@@ -453,6 +455,24 @@ export const orgService = {
       declineInvitationResponseSchema,
       'your answer',
       authApi.post(`/v1/orgs/invitations/${encodeURIComponent(invitationId)}/decline`, {}),
+    ),
+
+  /** POST /v1/orgs/invitations/:invitationId/not-me — Not me: declined, and the gym
+   *  told its address reached the wrong person (ROADMAP 3b-ii-b). */
+  notMeInvitation: (invitationId) =>
+    readThrough(
+      notMeInvitationResponseSchema,
+      'your answer',
+      authApi.post(`/v1/orgs/invitations/${encodeURIComponent(invitationId)}/not-me`, {}),
+    ),
+
+  /** GET /v1/orgs/:gymId/member-list/not-me — invitations that came back "Not me",
+   *  each with the list's person and the address to check. */
+  getNotMe: (gymId) =>
+    readThrough(
+      memberListNotMeResponseSchema,
+      'the addresses to check',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/not-me`),
     ),
 
   /** GET /v1/orgs/applications/mine — the caller's own waiting list: everything

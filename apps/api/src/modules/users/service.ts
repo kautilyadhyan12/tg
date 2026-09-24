@@ -15,6 +15,8 @@ import {
 import type { AppConfig } from "../../config.js";
 import type { RedisLike } from "../../redis.js";
 import { bustEntitlements } from "../entitlements/service.js";
+import { emailHmac } from "../orgs/invites/address.js";
+import { inviteSettings } from "../orgs/invites/settings.js";
 // THE repo-wide "what day is it there" helper. Imported rather than copied: a
 // second definition of a calendar day would be a second answer to the only
 // question a finish date depends on.
@@ -603,7 +605,8 @@ export async function deleteAccount(
     { sql: deps.sql, config: deps.config, log: deps.log },
     { email: row.email, purpose: "delete_account", code },
   );
-  const deleted = await repo.softDeleteUser(deps.sql, userId);
+  const invites = inviteSettings(deps.config);
+  const deleted = await repo.softDeleteUser(deps.sql, userId, invites === null ? null : emailHmac(invites.hmacKey, row.email));
   // null = the row stopped being active between the profile read above and
   // this write (a racing second tap): quiet success, no second undo email.
   // A repeat DELETE from a deleted session never gets here — authenticate

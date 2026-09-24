@@ -5,7 +5,7 @@
 // Redis outage degrades to per-request DB resolution, never an error.
 import type { Sql } from "postgres";
 import { z } from "zod";
-import { entitlementsSchema, type Entitlements, type EntitlementsMe } from "@app/shared";
+import { entitlementsSchema, type Entitlements, type EntitlementsMe, type OwnPlanExtra, type YourPlan } from "@app/shared";
 import type { RedisLike } from "../../redis.js";
 import * as repo from "./repo.js";
 
@@ -99,6 +99,46 @@ export async function getEntitlements(
   const resolved = mergeEntitlements(freeDoc, candidates);
   await deps.redis.setex(cacheKey(userId), CACHE_TTL_S, JSON.stringify(resolved));
   return resolved;
+}
+
+const meterBeats = (own: Entitlements["meal_scan"], gym: Entitlements["meal_scan"]): boolean =>
+  own.window === gym.window ? own.limit > gym.limit : own.window === "day" && own.limit > 0;
+
+/** What a person's own plan gives beyond a gym's member plan — each feature where the
+ *  own one is better, in the terms `mergeEqualRank` uses to call one better. The chat
+ *  coach is left out: it is switched off (RULINGS 2026-08-18), so naming it would be a
+ *  feature nobody can use. Pure; exported for its table test. */
+export function ownPlanExtras(own: Entitlements, gym: Entitlements): OwnPlanExtra[] {
+  const extras: OwnPlanExtra[] = [];
+  if (meterBeats(own.meal_scan, gym.meal_scan)) extras.push({ feature: "meal_scan", own: own.meal_scan, gym: gym.meal_scan });
+  if (meterBeats(own.route_gen, gym.route_gen)) extras.push({ feature: "route_gen", own: own.route_gen, gym: gym.route_gen });
+  if (gym.history_days !== -1 && (own.history_days === -1 || own.history_days > gym.history_days)) {
+    extras.push({ feature: "history", ownDays: own.history_days === -1 ? null : own.history_days, gymDays: gym.history_days });
+  }
+  if (own.exercises.mode === "all" && gym.exercises.mode !== "all") extras.push({ feature: "all_exercises" });
+  if (own.programs === "all" && gym.programs !== "all") extras.push({ feature: "all_programs" });
+  if (own.global_leaderboards && !gym.global_leaderboards) extras.push({ feature: "global_leaderboards" });
+  if (!own.share_watermark && gym.share_watermark) extras.push({ feature: "no_watermark" });
+  return extras;
+}
+
+/** For each gym, what the person's own plan still adds once they join it; null for a
+ *  person with no plan of their own, and no entry for a gym with no live plan. */
+export async function yourPlansAt(sql: Sql, userId: string, gymIds: readonly string[]): Promise<Map<string, YourPlan>> {
+  const own = await repo.getOwnPlans(sql, userId);
+  if (own.length === 0 || gymIds.length === 0) return new Map();
+  const [freeDoc, gyms] = await Promise.all([repo.getFreePlanDoc(sql), repo.getGymMemberDocs(sql, gymIds)]);
+  const ownMerged = mergeEntitlements(
+    freeDoc,
+    own.map((row) => ({ rank: row.rank, entitlements: row.entitlements ?? {}, memberEntitlements: null })),
+  ).entitlements;
+  const cancelAt = own.every((row) => row.provider === "revenuecat") ? "app_store" : "where_bought";
+  const plans = new Map<string, YourPlan>();
+  for (const [gymId, gym] of gyms) {
+    const gymMerged = mergeEntitlements(freeDoc, [{ rank: gym.rank, entitlements: null, memberEntitlements: gym.memberEntitlements }]).entitlements;
+    plans.set(gymId, { extras: ownPlanExtras(ownMerged, gymMerged), cancelAt });
+  }
+  return plans;
 }
 
 /** §4.1/§10 bust seam — call on ANY billing or membership change. Today's

@@ -1,22 +1,27 @@
 import { useState } from 'react';
-import { INVITATION_WORDS, orgWords } from '@app/shared';
-import { AlertTriangle, CheckCircle2, Loader2, Mail } from 'lucide-react';
+import { INVITATION_WORDS, orgWords, yourPlanWords } from '@app/shared';
+import { AlertTriangle, CheckCircle2, Info, Loader2, Mail } from 'lucide-react';
 import OrgVisibilitySheet from './OrgVisibilitySheet';
 import { errorText, orgService } from '../../api/orgsApi';
 
 // One invitation to one gym (Part 3 §10.2): who invited you, what the gym can see,
 // and under it the ONE tap — Join. No thanks tells the gym; a declined invitation
 // keeps its Join while the gym's list still holds the person (RULINGS 2026-09-23).
+// "Not me" tells the gym its address reached the wrong person (gap A); a person who
+// pays for their own plan is told what the gym gives and what their plan still adds
+// (gap D).
 //
-// `onAnswered({ kind, invitationId })` once the server has answered: `joined` or
-// `declined`.
+// `onAnswered({ kind, invitationId })` once the server has answered: `joined`,
+// `declined` or `not_me`.
 export default function InvitationCard({ invitation, onAnswered }) {
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState(null);
   const [state, setState] = useState(invitation.state);
+  const [notMe, setNotMe] = useState(invitation.notMe === true);
   const [joined, setJoined] = useState(null);
   const { gym } = invitation;
   const words = orgWords(gym.orgType);
+  const planWords = invitation.yourPlan && invitation.canTakeMembers ? yourPlanWords(gym.name, invitation.yourPlan) : null;
 
   const answer = async (kind) => {
     setBusy(kind);
@@ -26,6 +31,11 @@ export default function InvitationCard({ invitation, onAnswered }) {
         const res = await orgService.acceptInvitation(invitation.id);
         setJoined(res.data.gym);
         onAnswered?.({ kind: 'joined', invitationId: invitation.id });
+      } else if (kind === 'not_me') {
+        await orgService.notMeInvitation(invitation.id);
+        setState('declined');
+        setNotMe(true);
+        onAnswered?.({ kind: 'not_me', invitationId: invitation.id });
       } else {
         await orgService.declineInvitation(invitation.id);
         setState('declined');
@@ -73,7 +83,11 @@ export default function InvitationCard({ invitation, onAnswered }) {
               {gym.city}
             </p>
           ) : null}
-          {state === 'declined' ? (
+          {state === 'declined' && notMe ? (
+            <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.75)' }}>
+              {INVITATION_WORDS.said_not_me(gym.name)}
+            </p>
+          ) : state === 'declined' ? (
             <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.75)' }}>
               {invitation.canTakeMembers ? 'You said no thanks. You can still join.' : 'You said no thanks.'}
             </p>
@@ -91,6 +105,20 @@ export default function InvitationCard({ invitation, onAnswered }) {
           {INVITATION_WORDS.gym_not_taking_members(gym.name, gym.orgType)}
         </p>
       )}
+
+      {planWords !== null ? (
+        <div
+          data-testid="your-plan"
+          className="rounded-xl p-4 flex items-start gap-3"
+          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)' }}
+        >
+          <Info className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'rgba(255,255,255,0.6)' }} />
+          <div className="text-sm flex flex-col gap-1" style={{ color: 'rgba(255,255,255,0.8)' }}>
+            <p>{planWords.lead}</p>
+            <p style={{ color: 'rgba(255,255,255,0.6)' }}>{planWords.cancel}</p>
+          </div>
+        </div>
+      ) : null}
 
       {invitation.canTakeMembers || state === 'pending' ? (
         <div className="flex flex-wrap items-center gap-3">
@@ -118,6 +146,24 @@ export default function InvitationCard({ invitation, onAnswered }) {
               No thanks
             </button>
           ) : null}
+        </div>
+      ) : null}
+
+      {/* Somebody the gym did not mean to invite: the gym typed a wrong address. Nothing
+          on this card says whom the gym meant. */}
+      {!notMe ? (
+        <div className="flex flex-wrap items-center gap-x-2 text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
+          <span>Not a {words.person} of {gym.name}?</span>
+          <button
+            type="button"
+            onClick={() => answer('not_me')}
+            disabled={busy !== null}
+            className="font-medium underline underline-offset-2 flex items-center gap-1.5 disabled:opacity-50"
+            style={{ color: 'rgba(255,255,255,0.85)', minHeight: 44 }}
+          >
+            {busy === 'not_me' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            Not me
+          </button>
         </div>
       ) : null}
 

@@ -22,6 +22,7 @@ import {
   type MemberInviteSkipped,
   type MemberInvited,
   type MemberListInvitation,
+  type MemberListNotMe,
 } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { gymHasLivePlan, insertAudit } from "../repo.js";
@@ -321,6 +322,9 @@ export async function inviteAgain(
     const { email, hmac, invite } = await inviteable(tx, settings, gymId, entryId);
     if (invite === null) throw refuse(409, "not_invited");
     if (invite.state === "accepted") throw refuse(409, "already_joined");
+    // Whoever reads this address said it is not theirs: sending it again would email the
+    // same stranger. A corrected address is a different invitation.
+    if (invite.state === "declined" && (await repo.saidNotMe(tx, gymId, invite.id))) throw refuse(409, "said_not_me");
     await mayEmail(tx, gymId, email, hmac);
     // Sending again re-opens a declined or withdrawn invitation (§10.2), before the check
     // below: an email still waiting to go would otherwise be skipped by the worker as an
@@ -362,6 +366,42 @@ export async function invitationsOf(
   );
   return hmacs.map((hmac) => (hmac === null ? null : (views.get(hmac) ?? null)));
 }
+
+/** The invitations that came back "Not me", each with the list's current people at
+ *  that address, newest first. Only a gym that has any hashes its list's addresses. */
+export async function notMeList(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  limit: () => Promise<boolean>,
+): Promise<MemberListNotMe[] | null> {
+  await requirePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return null;
+  const settings = deps.invites ?? null;
+  if (settings === null) return [];
+  const notMe = await repo.notMeInvitations(deps.sql, gymId);
+  if (notMe.size === 0) return [];
+  const people = await repo.currentEntryAddresses(deps.sql, gymId);
+  const found: { entryId: string; email: string; at: Date }[] = [];
+  // Hashed a slice at a time, other requests answered in between: in one go, a list of
+  // 10,000 held the server for about 50 ms (measured; spec §10.2's notes). Not read by a
+  // cursor: that holds the api's one database connection for the whole walk, and every
+  // other request waited longer (measured too).
+  for (let from = 0; from < people.length; from += HASH_SLICE) {
+    if (from > 0) await new Promise((resolve) => setImmediate(resolve));
+    for (const person of people.slice(from, from + HASH_SLICE)) {
+      const at = notMe.get(emailHmac(settings.hmacKey, person.email));
+      if (at !== undefined) found.push({ ...person, at });
+    }
+  }
+  const names = await repo.entryNames(deps.sql, gymId, found.map((person) => person.entryId));
+  return found
+    .sort((a, b) => b.at.getTime() - a.at.getTime())
+    .map((person) => ({ entryId: person.entryId, fullName: names.get(person.entryId) ?? "", email: person.email, notMeAt: person.at.toISOString() }));
+}
+
+/** How many addresses are hashed before other requests get a turn. */
+const HASH_SLICE = 500;
 
 /** The entry ids whose address's invitation is in `state`, or, for `not_invited`, the
  *  ids whose address has an invitation — to be left out. Every entry with an address

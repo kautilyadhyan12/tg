@@ -17,6 +17,7 @@ import type { RedisLike } from "../../redis.js";
 import { codeFromBytes, slugCandidate, slugifyName } from "./codes.js";
 import { cleanGymText } from "./invites/gymText.js";
 import { withdrawForAccounts } from "./invites/join.js";
+import { checkName } from "./invites/nameCheck.js";
 import type { InviteSettings } from "./invites/settings.js";
 import * as repo from "./repo.js";
 import {
@@ -820,7 +821,7 @@ export async function requirePrivilege(
   gymId: string,
   userId: string,
   privilege: OrgPrivilege,
-): Promise<{ org: repo.OrgRow; role: OrgRole }> {
+): Promise<{ org: repo.OrgRow; role: OrgRole; privileges: readonly OrgPrivilege[] }> {
   const [org, authority] = await Promise.all([
     repo.getOrgById(deps.sql, gymId),
     repo.getStaffAuthority(deps.sql, gymId, userId),
@@ -828,13 +829,14 @@ export async function requirePrivilege(
   if (org === null || authority === null) {
     throw new OrgsError(404, "org_not_found", ORG_NOT_FOUND_MESSAGE);
   }
-  if (!privilegesFor(authority.role, authority.privileges).includes(privilege)) {
+  const privileges = privilegesFor(authority.role, authority.privileges);
+  if (!privileges.includes(privilege)) {
     // The message says ROLE because that is what a person understands, and it
     // stays true of a ticked-down manager: what their account is allowed to do
     // here does not cover this.
     throw new OrgsError(403, "forbidden", "Your role doesn't allow that.");
   }
-  return { org, role: authority.role };
+  return { org, role: authority.role, privileges };
 }
 
 /** THE 404 EVERY ORG-SCOPED ROUTE ANSWERS — and the one sentence here that
@@ -1214,7 +1216,9 @@ export async function listOrgMembers(
   gymId: string,
   query: OrgMemberListQuery,
 ): Promise<OrgMemberPage> {
-  const { org, role } = await requirePrivilege(deps, gymId, userId, "members.read");
+  const { org, role, privileges } = await requirePrivilege(deps, gymId, userId, "members.read");
+  // The list's names are the gym's list, which `members.read` alone does not open.
+  const seesList = privileges.includes("members.confirm");
 
   // §2.2 gives trainers the member list "assigned/group only (gym: all)", and
   // §2.3 makes group scoping CORE for studios and clinics. Nothing assigns a
@@ -1250,6 +1254,9 @@ export async function listOrgMembers(
       groupLabel: m.groupLabel,
       complimentary: m.complimentary,
       takesSeat: m.takesSeat,
+      ...(seesList && m.listName !== null
+        ? { onList: { name: m.listName, nameCheck: checkName(m.listName, m.displayName) } }
+        : {}),
     })),
     nextCursor:
       page.nextCursor === null

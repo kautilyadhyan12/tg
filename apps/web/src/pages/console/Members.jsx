@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
+import { AlertTriangle, Loader2 } from 'lucide-react';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { orgService, errorText, errorCode } from '../../api/orgsApi';
 import { useConsoleOrg } from './useConsoleOrg';
@@ -23,7 +23,8 @@ import { consoleIsReadOnly, readOnlyNote, seatLineText, seatMeter } from './bill
 // label of the code that brought them in, whether their seat is complimentary,
 // and whether they occupy one of the gym's paid places at all. That is the
 // whole of what the endpoint returns, and it is the whole of what §2.4 lets a
-// gym see about somebody.
+// gym see about somebody. Staff who may see the gym's own list also get the name
+// that list holds for the person (3b-ii-b): the gym's data, not the member's.
 //
 // **The fifth was added 2026-08-22 (:14953), and T3 L-1 corrected the argument
 // for it — see `orgMemberSchema`, which carries the corrected version.** In
@@ -129,6 +130,24 @@ function MemberRow({ member, busy, canRemove, readOnly, words, onRemove }) {
         <div className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
           Joined {formatJoinedAt(member.joinedAt)} · {groupLabelText(member)}
         </div>
+        {/* The name on the gym's own list at the address they joined with, beside the
+            name they signed up with: a gym that mistyped an address invited a
+            stranger, and a different name is the clue (RULINGS 2026-09-23, gap A). */}
+        {member.onList ? (
+          <div className="text-xs mt-1 flex flex-wrap items-center gap-2" style={{ color: 'rgba(255,255,255,0.6)' }}>
+            <span className="truncate">On your list as {member.onList.name}</span>
+            {member.onList.nameCheck === 'differs' ? (
+              <span
+                data-testid="check-this-is-them"
+                className="rounded-md px-1.5 py-0.5 font-medium flex items-center gap-1"
+                style={{ background: 'rgba(255,138,31,0.12)', color: '#FF8A1F' }}
+              >
+                <AlertTriangle className="w-3 h-3" />
+                Check this is them
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </div>
       {seatIsFree(member) ? (
         /* A place the gym is not charged for: the owner's own §4.0-step-6 seat,
@@ -170,6 +189,74 @@ function MemberRow({ member, busy, canRemove, readOnly, words, onRemove }) {
   );
 }
 
+/** Invitations whose person said "Not me" (RULINGS 2026-09-23, gap A): the gym has the
+ *  wrong address for somebody on its list. Reads its own endpoint and owns its own
+ *  failure, like the queue above; with nothing to check it draws nothing. */
+function NotMeBox({ gymId, words }) {
+  const [items, setItems] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (gymId === null) return undefined;
+    let live = true;
+    // Inside a promise, so even a call that throws at once is a failed read.
+    Promise.resolve()
+      .then(() => orgService.getNotMe(gymId))
+      .then(
+      (res) => {
+        if (live) setItems(res.data?.items ?? []);
+      },
+      (err) => {
+        if (live) setError(errorText(err, "We couldn't check your invitations."));
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [gymId]);
+
+  if (error !== null) {
+    return (
+      <p className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
+        {error}
+      </p>
+    );
+  }
+  if (items === null || items.length === 0) return null;
+  return (
+    <section
+      data-testid="not-me-box"
+      className="rounded-2xl p-4 flex flex-col gap-3"
+      style={{ background: 'rgba(255,138,31,0.06)', border: '1px solid rgba(255,138,31,0.25)' }}
+    >
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: '#FF8A1F' }} />
+        <div>
+          <h2 className="text-sm font-semibold" style={{ color: '#fff' }}>
+            {items.length === 1 ? 'An invitation reached the wrong person' : `${String(items.length)} invitations reached the wrong person`}
+          </h2>
+          <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.65)' }}>
+            Whoever gets email at these addresses said they aren&apos;t your {words.person}. Check the email address you have
+            for them.
+          </p>
+        </div>
+      </div>
+      <ul className="flex flex-col gap-2">
+        {items.map((item) => (
+          <li key={item.entryId} className="rounded-xl px-3 py-2 text-sm" style={{ background: '#121110' }}>
+            <span className="font-medium" style={{ color: '#fff' }}>
+              {item.fullName || 'No name'}
+            </span>
+            <span className="block truncate" style={{ color: 'rgba(255,255,255,0.55)' }}>
+              {item.email}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export default function Members() {
   const { orgSlug } = useParams();
   const { loading: orgLoading, error: orgError, org, notFound, reload } = useConsoleOrg(orgSlug);
@@ -187,6 +274,8 @@ export default function Members() {
   // is false while the org is still loading — the roster cannot be on screen
   // before then anyway.
   const canRemove = canRemoveMembers(viewerPrivileges(org));
+  // The gym's own list (and so what came back "Not me") is `members.confirm`'s.
+  const canSeeList = viewerPrivileges(org).includes('members.confirm');
   // Part 3 §4.2's read-only console, off the org row this screen already holds
   // — no read of its own, and false while the org is still loading, which is
   // the safe direction: a screen with no roster on it yet has no control to
@@ -372,6 +461,9 @@ export default function Members() {
         readOnly={readOnly}
         onRosterChanged={reloadRoster}
       />
+
+      {/* Invitations that came back "Not me": only for staff who may see the list. */}
+      {canSeeList ? <NotMeBox gymId={gymId} words={words} /> : null}
 
       {state.loading ? <ConsoleLoading label={`Loading ${words.people}…`} /> : null}
 

@@ -170,6 +170,9 @@ export interface MemberRow {
   /** Does this person occupy one of the gym's paid places? Derived, never
    *  stored — see `listMembers`, which writes out `claimSeat`'s count rule. */
   takesSeat: boolean;
+  /** The name on the gym's list of the record this membership was joined through
+   *  (§10.2), or null when it names none. */
+  listName: string | null;
 }
 
 export interface CodeRow {
@@ -2548,6 +2551,7 @@ export async function listMembers(
       group_label: string | null;
       complimentary: boolean;
       takes_seat: boolean;
+      list_name: string | null;
     }[]
   >`
     SELECT m.id, m.user_id, u.display_name, m.joined_at,
@@ -2555,10 +2559,12 @@ export async function listMembers(
            (m.complimentary = false
             AND NOT EXISTS (
               SELECT 1 FROM gym_staff s
-              WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)) AS takes_seat
+              WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)) AS takes_seat,
+           e.full_name AS list_name
     FROM gym_members m
     JOIN users u ON u.id = m.user_id
     LEFT JOIN gym_codes c ON c.id = m.code_id
+    LEFT JOIN gym_member_list_entries e ON e.gym_id = m.gym_id AND e.id = m.entry_id
     WHERE m.gym_id = ${input.gymId}
       AND m.removed_at IS NULL
       AND (
@@ -2583,6 +2589,7 @@ export async function listMembers(
       groupLabel: r.group_label,
       complimentary: r.complimentary,
       takesSeat: r.takes_seat,
+      listName: r.list_name,
     })),
     nextCursor,
   };

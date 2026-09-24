@@ -631,7 +631,13 @@ export interface DeletedUserRow {
  *  close memberships, delete push tokens. Refresh-token revocation is the
  *  auth module's (service call, in users/service.ts). Returns null when the
  *  user was not active (already deleted → idempotent no-op). */
-export async function softDeleteUser(sql: Sql, userId: string): Promise<DeletedUserRow | null> {
+export async function softDeleteUser(
+  sql: Sql,
+  userId: string,
+  /** The HMAC the account's address is invited under, or null while invitations are
+   *  switched off. */
+  inviteHmac: string | null = null,
+): Promise<DeletedUserRow | null> {
   return await sql.begin(async (tx) => {
     const rows = await tx<{ email: string | null; display_name: string }[]>`
       UPDATE users SET status = 'deleted', deleted_at = now()
@@ -669,9 +675,22 @@ export async function softDeleteUser(sql: Sql, userId: string): Promise<DeletedU
     // inline. The orgs repo's own header claim to be "the ONLY file that
     // touches" these tables was already false because of it; that sentence is
     // corrected there rather than left to read as a rule these two break.
-    await tx`
+    const closed = await tx<{ gym_id: string }[]>`
       UPDATE gym_members SET removed_at = now()
-      WHERE user_id = ${userId} AND removed_at IS NULL`;
+      WHERE user_id = ${userId} AND removed_at IS NULL
+      RETURNING gym_id`;
+    // RULINGS 2026-09-23, gap B: the invitations this account used to join the gyms it
+    // has just left wait again, so the account restored, or a new one proved at the same
+    // address, can tap Join. Only those gyms: an invitation staff withdrew stays
+    // withdrawn, and one whose membership had already ended is not this deletion's.
+    // Inline for the reason the statement above is.
+    if (inviteHmac !== null && closed.length > 0) {
+      await tx`
+        UPDATE gym_invites
+        SET state = 'pending', answered_at = NULL, waiting_since = NULL, not_me_at = NULL
+        WHERE email_hmac = ${inviteHmac} AND state = 'accepted'
+          AND gym_id = ANY(${closed.map((row) => row.gym_id)}::uuid[])`;
+    }
     await tx`DELETE FROM push_tokens WHERE user_id = ${userId}`;
     return { email: row.email, displayName: row.display_name };
   });
@@ -680,9 +699,9 @@ export async function softDeleteUser(sql: Sql, userId: string): Promise<DeletedU
 /** Undo inside the §5.2 window (Part 4 §5.2): only a soft-deleted row whose
  *  deleted_at is younger than the retention window flips back. The window is
  *  enforced HERE as well as by the token TTL — belt and braces. Gym
- *  memberships closed at Day 0 deliberately STAY closed (rejoin by code) —
- *  auto-reopen could exceed seat caps (DECISIONS 2026-07-11, T3 finding 4;
- *  revisit at P3.10).
+ *  memberships closed at Day 0 deliberately STAY closed — auto-reopen could
+ *  exceed seat caps (DECISIONS 2026-07-11, T3 finding 4). The person taps Join
+ *  on the invitation Day 0 put back to waiting (RULINGS 2026-09-23, gap B).
  *  The window comes from src/retention.ts so the undo window, the restore
  *  token's TTL, the user-facing copy and the Day-14 purge can never disagree
  *  — an interval literal cannot be parameterised, hence the multiplication. */

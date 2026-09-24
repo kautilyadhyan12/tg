@@ -125,9 +125,27 @@ export const memberListInvitationSchema = z
     /** Since when the person has been waiting: they tapped Join and the gym had no free
      *  place ("invited · waiting for a place"). */
     waitingSince: z.string().nullable().default(null),
+    /** When the person the invitation reached said it is not theirs ("Not me"): the gym
+     *  has the wrong address for somebody. Only on a declined invitation. */
+    notMeAt: z.string().nullable().default(null),
   })
   .strict();
 export type MemberListInvitation = z.infer<typeof memberListInvitationSchema>;
+
+/** One invitation that came back "Not me", with the list's person at that address, for
+ *  staff to check the address they have. */
+export const memberListNotMeSchema = z
+  .object({
+    entryId: z.string().uuid(),
+    fullName: z.string(),
+    email: z.string(),
+    notMeAt: z.string(),
+  })
+  .strict();
+export type MemberListNotMe = z.infer<typeof memberListNotMeSchema>;
+
+export const memberListNotMeResponseSchema = z.object({ items: z.array(memberListNotMeSchema) }).strict();
+export type MemberListNotMeResponse = z.infer<typeof memberListNotMeResponseSchema>;
 
 /** The list page's filter by invitation (§11.5). */
 export const memberListInvitationFilterSchema = z.enum(["not_invited", "pending", "accepted", "declined", "withdrawn"]);
@@ -165,6 +183,7 @@ export const MEMBER_INVITE_WORDS = {
   shared_address: "This is a shared address such as info@ or support@. Ask the person for their own.",
   not_invited: "This person hasn't been invited yet. Invite them first.",
   already_joined: "This person has already joined.",
+  said_not_me: "Whoever gets email at this address said the invitation isn't for them. Check the address with the person, then change it.",
   again_person_limit: `An invitation can be sent again ${String(MEMBER_INVITE_AGAIN_PER_PERSON)} times in ${String(MEMBER_INVITE_AGAIN_PERSON_DAYS)} days. Try again later.`,
   again_gym_limit: `Your gym can send ${String(MEMBER_INVITE_AGAIN_PER_GYM_DAY)} invitations again a day. Try again tomorrow.`,
 } as const;

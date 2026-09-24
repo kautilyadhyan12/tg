@@ -352,18 +352,21 @@ describe("the invitation email", () => {
     gymCity: "Leeds",
     postalAddress: "12 High Street, Leeds LS1 1AA",
     joinLink: "https://app.example.com/join/iron-house",
+    notMeLink: "https://api.example.com/v1/email/not-me?t=ghi.jkl",
     unsubscribeLink: "https://api.example.com/v1/email/unsubscribe/abc.def",
   };
-  it("has the ruled subject, both links, the gym's postal address, and no other link", () => {
+  it("has the ruled subject, the three links, the gym's postal address, and no other link", () => {
     const email = memberInviteEmail(words);
     expect(email.subject).toBe("You're a member of Iron House — get the app");
     expect(email.to).toBe("ann@example.org");
     expect(email.text).toContain(words.joinLink);
+    expect(email.text).toContain(`Not a member of Iron House? Tell them it's not you:\n${words.notMeLink}`);
+    expect(email.html).toContain(`href="${words.notMeLink}"`);
     expect(email.text).toContain(words.unsubscribeLink);
     expect(email.text).toContain("12 High Street, Leeds LS1 1AA");
     expect(email.text).toContain("Iron House in Leeds");
-    expect(email.text.match(/https?:\/\//g)).toHaveLength(2);
-    expect(email.html.match(/href=/g)).toHaveLength(2);
+    expect(email.text.match(/https?:\/\//g)).toHaveLength(3);
+    expect(email.html.match(/href=/g)).toHaveLength(3);
   });
   it("escapes the gym's words in the HTML", () => {
     const email = memberInviteEmail({ ...words, gymName: "<b>Iron</b> & \"House\"" });

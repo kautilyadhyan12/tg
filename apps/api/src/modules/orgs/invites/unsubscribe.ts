@@ -1,4 +1,7 @@
-// The unsubscribe link in every invitation (Part 3 §9.12; RFC 8058). Public: no
+// The two public links in every invitation: "Not me" (§10.2), below the unsubscribe
+// handlers, and the unsubscribe link.
+//
+// The unsubscribe link (Part 3 §9.12; RFC 8058). Public: no
 // cookie, no sign-in, no redirect. The token names the invitation and carries a MAC,
 // so only a link we made can unsubscribe anybody, and it keeps that address from THIS
 // gym's invitations only.
@@ -14,8 +17,9 @@ import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { cleanGymText, GYM_TEXT_IN_EMAIL_CHARS } from "./gymText.js";
 import * as repo from "./repo.js";
+import { notMeByLink } from "./join.js";
 import type { InviteSettings } from "./settings.js";
-import { readUnsubscribeToken } from "./token.js";
+import { readInviteLinkToken, readUnsubscribeToken } from "./token.js";
 
 const APP_NAME = "AI Home Gym";
 
@@ -61,7 +65,7 @@ function isOneClick(contentType: string | undefined, body: unknown): boolean {
 
 export function registerUnsubscribeRoutes(
   app: FastifyInstance,
-  deps: { sql: Sql; redis: RedisLike; settings: InviteSettings | null },
+  deps: { sql: Sql; redis: RedisLike; settings: InviteSettings | null; now?: () => Date },
 ): void {
   const settings = deps.settings;
   // Mail providers send one-click POSTs from their own servers, so many people's
@@ -69,6 +73,15 @@ export function registerUnsubscribeRoutes(
   // the real limit is per link.
   const limit = createDualRateLimit({
     name: "invite_unsubscribe",
+    max: 20,
+    ipMax: 5000,
+    windowMs: 60 * 60 * 1000,
+    identifier: tokenOf,
+    redis: deps.redis,
+  });
+  // Pressed by a person in a browser, never by a mail program: the same ceilings.
+  const notMeLimit = createDualRateLimit({
+    name: "invite_not_me",
     max: 20,
     ipMax: 5000,
     windowMs: 60 * 60 * 1000,
@@ -99,6 +112,51 @@ export function registerUnsubscribeRoutes(
         `<p>${gym} won't be able to email you through ${APP_NAME} again.</p>` +
           `<form method="post"><button type="submit">Unsubscribe</button></form>`,
       );
+    });
+
+    // "Not me" (§10.2; RULINGS 2026-09-23, gap A): the same shape as the unsubscribe
+    // link — a GET that shows one button and changes nothing, a POST that acts — with a
+    // token of its own purpose. Its pages name the gym and nothing else: never whom the
+    // gym thought it was inviting.
+    scope.get("/v1/email/not-me", { preHandler: [notMeLimit] }, async (req, reply) => {
+      const token = tokenOf(req);
+      const inviteId = settings === null || token === null ? null : readInviteLinkToken(settings.hmacKey, "not_me", token);
+      if (inviteId === null) return notValid(reply);
+      const invite = await repo.inviteForUnsubscribe(deps.sql, inviteId);
+      if (invite === null) {
+        return page(reply, 200, "Nothing to do", "<p>This invitation no longer exists.</p>");
+      }
+      const gym = cleanGymText(invite.gymName, GYM_TEXT_IN_EMAIL_CHARS);
+      return page(
+        reply,
+        200,
+        `Not a member of ${gym}?`,
+        `<p>If ${escapeHtml(gym)} invited you by mistake, tell them. They'll check the email address they have, and won't send you this invitation again.</p>` +
+          `<form method="post"><button type="submit">It's not me</button></form>`,
+      );
+    });
+
+    scope.post("/v1/email/not-me", { preHandler: [notMeLimit] }, async (req, reply) => {
+      const token = tokenOf(req);
+      const inviteId = settings === null || token === null ? null : readInviteLinkToken(settings.hmacKey, "not_me", token);
+      if (inviteId === null) return notValid(reply);
+      const done = await notMeByLink(deps.sql, inviteId, (deps.now ?? (() => new Date()))());
+      if (done.kind === "gone") return page(reply, 200, "Nothing to do", "<p>This invitation no longer exists.</p>");
+      const gym = escapeHtml(cleanGymText(done.gymName, GYM_TEXT_IN_EMAIL_CHARS));
+      switch (done.kind) {
+        case "told":
+        case "already_told":
+          return page(reply, 200, "Thank you", `<p>We've told ${gym} this invitation isn't for you. You don't need to do anything else.</p>`);
+        case "joined":
+          return page(
+            reply,
+            200,
+            "This invitation has been used",
+            `<p>Somebody has already joined ${gym} by signing in with this email address. If that wasn't you, contact ${gym}.</p>`,
+          );
+        case "withdrawn":
+          return page(reply, 200, "Nothing to do", `<p>${gym} has already taken this invitation back.</p>`);
+      }
     });
 
     scope.post("/v1/email/unsubscribe", { preHandler: [limit] }, async (req, reply) => {

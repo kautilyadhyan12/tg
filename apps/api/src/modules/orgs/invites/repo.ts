@@ -61,6 +61,31 @@ export async function entryAddresses(sql: SqlOrTx, gymId: string): Promise<{ ent
   return rows.map((row) => ({ entryId: row.id, email: row.email }));
 }
 
+/** The gym's current entries that have an address: only the id and the address, since
+ *  every one is read to be hashed and a few are kept. */
+export async function currentEntryAddresses(sql: SqlOrTx, gymId: string): Promise<{ entryId: string; email: string }[]> {
+  const rows = await sql<{ id: string; email: string }[]>`
+    SELECT e.id, e.email::text AS email
+    FROM gym_member_list_entries e
+    WHERE e.gym_id = ${gymId} AND e.former_at IS NULL AND e.email IS NOT NULL`;
+  return rows.map((row) => ({ entryId: row.id, email: row.email }));
+}
+
+/** These entries' names, by id. */
+export async function entryNames(sql: SqlOrTx, gymId: string, entryIds: readonly string[]): Promise<Map<string, string>> {
+  if (entryIds.length === 0) return new Map();
+  const rows = await sql<{ id: string; full_name: string }[]>`
+    SELECT id, full_name FROM gym_member_list_entries WHERE gym_id = ${gymId} AND id = ANY(${[...entryIds]}::uuid[])`;
+  return new Map(rows.map((row) => [row.id, row.full_name]));
+}
+
+/** The gym's invitations that came back "Not me", by HMAC, with when. */
+export async function notMeInvitations(sql: SqlOrTx, gymId: string): Promise<Map<string, Date>> {
+  const rows = await sql<{ email_hmac: string; not_me_at: Date }[]>`
+    SELECT email_hmac, not_me_at FROM gym_invites WHERE gym_id = ${gymId} AND not_me_at IS NOT NULL`;
+  return new Map(rows.map((row) => [row.email_hmac, row.not_me_at]));
+}
+
 /** The addresses of these entries of the gym, lower-cased. */
 export async function emailsOfEntries(sql: SqlOrTx, gymId: string, entryIds: readonly string[]): Promise<Set<string>> {
   if (entryIds.length === 0) return new Set();
@@ -210,8 +235,15 @@ export async function queueFirst(
  *  re-opens it). */
 export async function reopenInvitation(tx: TransactionSql, gymId: string, inviteId: string): Promise<void> {
   await tx`
-    UPDATE gym_invites SET state = 'pending', answered_at = NULL
+    UPDATE gym_invites SET state = 'pending', answered_at = NULL, not_me_at = NULL
     WHERE gym_id = ${gymId} AND id = ${inviteId} AND state IN ('declined','withdrawn')`;
+}
+
+/** Has the person this invitation reached said it is not theirs? */
+export async function saidNotMe(sql: SqlOrTx, gymId: string, inviteId: string): Promise<boolean> {
+  const rows = await sql<{ not_me: boolean }[]>`
+    SELECT not_me_at IS NOT NULL AS not_me FROM gym_invites WHERE gym_id = ${gymId} AND id = ${inviteId}`;
+  return rows[0]?.not_me ?? false;
 }
 
 /** Queue one more email for an invitation, at the person's request. */
@@ -274,9 +306,10 @@ export async function invitationViews(
       email_result: string | null;
       again: number;
       waiting_since: Date | null;
+      not_me_at: Date | null;
     }[]
   >`
-    SELECT i.id, i.email_hmac, i.state, i.created_at, i.waiting_since,
+    SELECT i.id, i.email_hmac, i.state, i.created_at, i.waiting_since, i.not_me_at,
            l.state AS email_state,
            l.reason AS email_reason,
            coalesce(l.finished_at, l.created_at) AS email_at,
@@ -315,6 +348,7 @@ export async function invitationViews(
       email,
       sentAgain: row.again,
       waitingSince: row.waiting_since?.toISOString() ?? null,
+      notMeAt: row.not_me_at?.toISOString() ?? null,
     });
   }
   return views;
@@ -333,6 +367,20 @@ export async function inviteForUnsubscribe(
     WHERE i.id = ${inviteId}`;
   const row = rows[0];
   return row === undefined ? null : { gymId: row.gym_id, hmac: row.email_hmac, gymName: row.name };
+}
+
+/** The invitation a "Not me" link names, locked, under the caller's lock on its gym. */
+export async function lockInvitationById(
+  tx: TransactionSql,
+  gymId: string,
+  inviteId: string,
+): Promise<{ id: string; state: MemberInviteState; notMe: boolean } | null> {
+  const rows = await tx<{ id: string; state: string; not_me: boolean }[]>`
+    SELECT id, state, not_me_at IS NOT NULL AS not_me FROM gym_invites
+    WHERE gym_id = ${gymId} AND id = ${inviteId}
+    FOR UPDATE`;
+  const row = rows[0];
+  return row === undefined ? null : { id: row.id, state: parseState(row.state, row.id), notMe: row.not_me };
 }
 
 /** Keep this address from this gym's invitations. Twice is once. */
@@ -785,6 +833,8 @@ export interface WaitingInvitationRow {
   gymCity: string | null;
   orgType: string;
   onPlan: boolean;
+  /** Its person said it is not theirs. */
+  notMe: boolean;
 }
 
 /** The invitations this address may answer: waiting or declined, at an active gym whose
@@ -794,9 +844,18 @@ export async function invitationsForAddress(
   input: { hmac: string; email: string; userId: string },
 ): Promise<WaitingInvitationRow[]> {
   const rows = await sql<
-    { id: string; state: string; gym_id: string; name: string; city: string | null; org_type: string; on_plan: boolean }[]
+    {
+      id: string;
+      state: string;
+      gym_id: string;
+      name: string;
+      city: string | null;
+      org_type: string;
+      on_plan: boolean;
+      not_me: boolean;
+    }[]
   >`
-    SELECT i.id, i.state, g.id AS gym_id, g.name, g.city, g.org_type,
+    SELECT i.id, i.state, g.id AS gym_id, g.name, g.city, g.org_type, i.not_me_at IS NOT NULL AS not_me,
            EXISTS (
              SELECT 1 FROM subscriptions s
              WHERE s.owner_type = 'gym' AND s.owner_id = g.id
@@ -824,6 +883,7 @@ export async function invitationsForAddress(
       gymCity: row.city,
       orgType: row.org_type,
       onPlan: row.on_plan,
+      notMe: row.not_me,
     };
   });
 }
@@ -839,13 +899,13 @@ export async function invitationGym(sql: SqlOrTx, inviteId: string, hmac: string
 export async function lockInvitation(
   tx: TransactionSql,
   input: { gymId: string; inviteId: string; hmac: string },
-): Promise<{ id: string; state: MemberInviteState } | null> {
-  const rows = await tx<{ id: string; state: string }[]>`
-    SELECT id, state FROM gym_invites
+): Promise<{ id: string; state: MemberInviteState; notMe: boolean } | null> {
+  const rows = await tx<{ id: string; state: string; not_me: boolean }[]>`
+    SELECT id, state, not_me_at IS NOT NULL AS not_me FROM gym_invites
     WHERE gym_id = ${input.gymId} AND id = ${input.inviteId} AND email_hmac = ${input.hmac}
     FOR UPDATE`;
   const row = rows[0];
-  return row === undefined ? null : { id: row.id, state: parseState(row.state, row.id) };
+  return row === undefined ? null : { id: row.id, state: parseState(row.state, row.id), notMe: row.not_me };
 }
 
 /** Joined or declined. */
@@ -854,15 +914,26 @@ export async function answerInvitation(
   input: { gymId: string; inviteId: string; state: "accepted" | "declined"; at: Date },
 ): Promise<void> {
   await tx`
-    UPDATE gym_invites SET state = ${input.state}, answered_at = ${input.at}, waiting_since = NULL
+    UPDATE gym_invites SET state = ${input.state}, answered_at = ${input.at}, waiting_since = NULL, not_me_at = NULL
     WHERE gym_id = ${input.gymId} AND id = ${input.inviteId}`;
+}
+
+/** "Not me": declined, and marked as reaching the wrong person, so staff check the
+ *  address they have. Answers false when it already said so. */
+export async function markNotMe(tx: TransactionSql, input: { gymId: string; inviteId: string; at: Date }): Promise<boolean> {
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_invites SET state = 'declined', answered_at = ${input.at}, waiting_since = NULL, not_me_at = ${input.at}
+    WHERE gym_id = ${input.gymId} AND id = ${input.inviteId} AND state IN ('pending','declined') AND not_me_at IS NULL
+    RETURNING id`;
+  return rows.length === 1;
 }
 
 /** A Join the gym had no place for: the invitation waits (a declined one too, since the
  *  person has now asked to join), and staff see since when. */
 export async function markWaitingForPlace(tx: TransactionSql, input: { gymId: string; inviteId: string; at: Date }): Promise<void> {
   await tx`
-    UPDATE gym_invites SET state = 'pending', answered_at = NULL, waiting_since = coalesce(waiting_since, ${input.at})
+    UPDATE gym_invites SET state = 'pending', answered_at = NULL, not_me_at = NULL,
+                           waiting_since = coalesce(waiting_since, ${input.at})
     WHERE gym_id = ${input.gymId} AND id = ${input.inviteId}`;
 }
 
@@ -874,7 +945,7 @@ export async function withdrawInvitations(
 ): Promise<number> {
   if (input.hmacs.length === 0) return 0;
   const rows = await tx<{ id: string }[]>`
-    UPDATE gym_invites SET state = 'withdrawn', answered_at = ${input.at}, waiting_since = NULL
+    UPDATE gym_invites SET state = 'withdrawn', answered_at = ${input.at}, waiting_since = NULL, not_me_at = NULL
     WHERE gym_id = ${input.gymId} AND email_hmac = ANY(${[...input.hmacs]}::text[]) AND state <> 'withdrawn'
     RETURNING id`;
   return rows.length;

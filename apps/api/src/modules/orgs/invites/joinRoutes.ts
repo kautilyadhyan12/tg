@@ -2,6 +2,7 @@
 //   GET  /v1/orgs/invitations                     what is waiting for my address
 //   POST /v1/orgs/invitations/:invitationId/accept   Join
 //   POST /v1/orgs/invitations/:invitationId/decline  No thanks
+//   POST /v1/orgs/invitations/:invitationId/not-me   Not me
 // Authenticate, then the rate limit, then the handler; there is no privilege to hold,
 // since the caller's own proved address is the whole credential.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -9,7 +10,7 @@ import { invitationParamsSchema } from "@app/shared";
 import type { Sql } from "postgres";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
-import { acceptInvitation, declineInvitation, myInvitations, type Caller, type JoinDeps } from "./join.js";
+import { acceptInvitation, declineInvitation, myInvitations, notMeInvitation, type Caller, type JoinDeps } from "./join.js";
 import type { InviteSettings } from "./settings.js";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -78,5 +79,11 @@ export function registerInvitationRoutes(
     const invitationId = invitationIdOf(req, reply);
     if (invitationId === null) return;
     return reply.status(200).send(await declineInvitation(joinDeps, callerOf(req), invitationId));
+  });
+
+  app.post("/v1/orgs/invitations/:invitationId/not-me", { preHandler: [app.authenticate, answerLimit] }, async (req, reply) => {
+    const invitationId = invitationIdOf(req, reply);
+    if (invitationId === null) return;
+    return reply.status(200).send(await notMeInvitation(joinDeps, callerOf(req), invitationId));
   });
 }
