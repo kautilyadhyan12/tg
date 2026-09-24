@@ -19,11 +19,18 @@ export const gymInvites = pgTable(
     emailHmac: text("email_hmac").notNull(),
     state: text("state").notNull().default("pending"),
     createdAt: createdAt(),
+    /** When it was accepted, declined or withdrawn (§10.2). */
+    answeredAt: timestamp("answered_at", { withTimezone: true }),
+    /** A Join refused because the gym had no free place: "waiting for a place". */
+    waitingSince: timestamp("waiting_since", { withTimezone: true }),
   },
   (t) => [
     unique("gym_invites_address_uq").on(t.gymId, t.emailHmac),
+    index("gym_invites_email_hmac_idx").on(t.emailHmac),
     check("gym_invites_email_hmac_check", sql`${t.emailHmac} ~ '^[0-9a-f]{64}$'`),
     check("gym_invites_state_check", sql`${t.state} IN ('pending','accepted','declined','withdrawn')`),
+    check("gym_invites_answered_check", sql`(${t.state} = 'pending') = (${t.answeredAt} IS NULL)`),
+    check("gym_invites_waiting_check", sql`${t.waitingSince} IS NULL OR ${t.state} = 'pending'`),
   ],
 );
 

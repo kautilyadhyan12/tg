@@ -181,6 +181,9 @@ export const gymMemberListEntries = pgTable(
   },
   (t) => [
     unique("gym_member_list_entries_identity_uq").on(t.gymId, t.identityKey),
+    // What a membership's `entry_id` points at, with its gym, so it cannot name another
+    // gym's record (0040).
+    unique("gym_member_list_entries_gym_id_uq").on(t.gymId, t.id),
     index("gym_member_list_entries_gym_email_idx").on(t.gymId, t.email),
     index("gym_member_list_entries_gym_phone_idx").on(t.gymId, t.phoneE164),
     // "how many Active, how many Frozen" — read once per console load, and the

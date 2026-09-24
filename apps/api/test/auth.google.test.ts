@@ -2,9 +2,9 @@
 // mocks). DATABASE_URL-gated like the other db-backed suites; requires
 // migrations 0001+ applied. A FAKE GoogleVerifier drives the full flow so no
 // test ever calls Google (the emailSender test-seam precedent). Covers: new
-// user, returning identity (idempotent), same-email account linking (password
-// untouched), state/exchange failures, the redirect + cookie contract, and the
-// not-configured guard.
+// user, returning identity (idempotent), same-email account linking (a password
+// set before the address was proved ends; one set after it stays), state/exchange
+// failures, the redirect + cookie contract, and the not-configured guard.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
@@ -147,11 +147,17 @@ d("google oauth routes (real Postgres)", () => {
     expect(idents[0]?.n).toBe(1); // link is idempotent (ON CONFLICT DO NOTHING)
   });
 
-  it("existing password account: Google links to it and the password still works", { timeout: 30_000 }, async () => {
+  // Anyone can register a password account under an address they do not hold. When the
+  // address's owner signs in with Google, the account becomes theirs, so the password
+  // set before and the session begun with it end there (pre-account hijacking).
+  it("an unproved password account: Google links to it, and the earlier password and its session end", { timeout: 30_000 }, async () => {
     const email = "glogin-link@example.com";
     const reg = await post(api(), "/v1/auth/register", { email, password: PASSWORD, displayName: "Pw Person" });
     expect(reg.statusCode).toBe(201);
     const registeredId = reg.json<{ userId: string }>().userId;
+    const before = await post(api(), "/v1/auth/login", { email, password: PASSWORD });
+    expect(before.statusCode).toBe(200);
+    const planted = cookieMap(before);
 
     const res = await googleLogin({ subject: "glogin-sub-link", email, name: "Google Name" }, "code-link");
     expect(res.statusCode).toBe(302);
@@ -159,12 +165,28 @@ d("google oauth routes (real Postgres)", () => {
     const me = await meWith(access ?? "");
     expect(me.json<{ user: { id: string } }>().user.id).toBe(registeredId); // same account, linked
 
-    // Password login STILL works — linking never touched the password.
     const pwLogin = await post(api(), "/v1/auth/login", { email, password: PASSWORD });
-    expect(pwLogin.statusCode).toBe(200);
+    expect(pwLogin.statusCode).toBe(401);
+    const refreshed = await api().inject({ method: "POST", url: "/v1/auth/refresh", remoteAddress: nextIp(), cookies: planted });
+    expect(refreshed.statusCode).toBe(401);
 
     const users = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM users WHERE email = ${email}`;
     expect(users[0]?.n).toBe(1); // linked, not duplicated
+  });
+
+  it("a password account whose address was proved first keeps its password when Google links", { timeout: 30_000 }, async () => {
+    const email = "glogin-proved@example.com";
+    const reg = await post(api(), "/v1/auth/register", { email, password: PASSWORD, displayName: "Proved Person" });
+    expect(reg.statusCode).toBe(201);
+    const registeredId = reg.json<{ userId: string }>().userId;
+    await sql`
+      INSERT INTO one_time_tokens (user_id, purpose, token_hash, expires_at, used_at)
+      VALUES (${registeredId}, 'verify_email', ${"f".repeat(64)}, now(), now())`;
+
+    const res = await googleLogin({ subject: "glogin-sub-proved", email, name: "Google Name" }, "code-proved");
+    expect(res.statusCode).toBe(302);
+    const pwLogin = await post(api(), "/v1/auth/login", { email, password: PASSWORD });
+    expect(pwLogin.statusCode).toBe(200);
   });
 
   it("exchange failure (bad code) → clean login redirect, no 500", { timeout: 30_000 }, async () => {

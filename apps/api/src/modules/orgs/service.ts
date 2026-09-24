@@ -18,6 +18,8 @@ import { getUserSyncContext } from "../users/service.js";
 import type { RedisLike } from "../../redis.js";
 import { codeFromBytes, slugCandidate, slugifyName } from "./codes.js";
 import { cleanGymText } from "./invites/gymText.js";
+import { withdrawForAccounts } from "./invites/join.js";
+import type { InviteSettings } from "./invites/settings.js";
 import * as repo from "./repo.js";
 import {
   ORG_PRIVILEGES,
@@ -134,6 +136,9 @@ export interface OrgsDeps {
    *  waiting for a 1-in-a-billion coincidence. Production passes
    *  `crypto.randomBytes`. */
   randomBytes: (n: number) => Uint8Array;
+  /** The invitations' key, so removing a member can withdraw their invitation; null
+   *  when invitations are switched off. */
+  invites: InviteSettings | null;
   /** REQUIRED, and the one caller that needs it is the attendance hook.
    *
    *  A streak that fails to recompute must not lose the attendance (the row IS
@@ -1710,6 +1715,7 @@ export async function removeOrgMember(
     gymId,
     userId: targetUserId,
     actorUserId: userId,
+    afterClose: (tx) => withdrawForAccounts(tx, deps.invites, { gymId, userIds: [targetUserId], at: new Date() }),
   });
 
   switch (outcome.kind) {

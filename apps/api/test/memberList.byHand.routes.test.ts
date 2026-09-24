@@ -1009,21 +1009,22 @@ d("member list: keeping it by hand (real Postgres)", () => {
   // WHAT POINTS AT A RECORD
   // =========================================================================
 
-  // Joining two records deletes one, and so does deleting a former record. Nothing points
-  // at a record yet, so neither has anything to move. The day a migration adds a foreign
-  // key to a record (invitations, visits, memberships), this fails: that job must make
-  // the join move those rows onto the kept record, decide what deleting does to them,
-  // and drive both with a referencing row.
-  it("no table points at a list record yet, so joining and deleting one move nothing", async () => {
-    const refs = await sql<{ table: string; column: string }[]>`
-      SELECT tc.table_name AS table, kcu.column_name AS column
+  // Joining two records deletes one, and so does deleting a former record. The one table
+  // that points at a record is a membership, by the record its invitation was for (3b-ii,
+  // §13.2): the join moves it onto the kept record and deleting clears it, both driven
+  // with a real membership in `invitations.join.routes.test.ts`. The day another table
+  // points at a record (visits, bookings), this fails: that job must make the join move
+  // its rows too, decide what deleting does to them, and drive both.
+  it("the one table that points at a list record is the membership, with its gym", async () => {
+    const refs = await sql<{ ref: string }[]>`
+      SELECT DISTINCT tc.table_name || '.' || kcu.column_name AS ref
       FROM information_schema.table_constraints tc
       JOIN information_schema.key_column_usage kcu
         ON kcu.constraint_name = tc.constraint_name AND kcu.table_schema = tc.table_schema
       JOIN information_schema.constraint_column_usage ccu
         ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
       WHERE tc.constraint_type = 'FOREIGN KEY' AND ccu.table_name = 'gym_member_list_entries'
-      ORDER BY 1, 2`;
-    expect(refs.map((r) => `${r.table}.${r.column}`)).toEqual([]);
+      ORDER BY 1`;
+    expect(refs.map((r) => r.ref)).toEqual(["gym_members.entry_id", "gym_members.gym_id"]);
   });
 });

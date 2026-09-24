@@ -213,8 +213,8 @@ const MUTANTS = [
     suite: UNIT_SUITE,
     why: "ONE ROUTE UNDOES THE AMENDMENT: a console route loses its onboarding opt-out, so ProtectedRoute's default bounces an un-onboarded owner into the questionnaire on that route alone — the kind of drift an added or edited route ships silently",
     expect: 'opts every console route out of the onboarding requirement',
-    from: '            <Route path="/console" element={\n              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false}>',
-    to: '            <Route path="/console" element={\n              <ProtectedRoute requireSignUpNote={false}>',
+    from: '            <Route path="/console" element={\n              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>',
+    to: '            <Route path="/console" element={\n              <ProtectedRoute requireSignUpNote={false} requireInvitations={false}>',
   },
 
   // D12-D16 — KD'S 2026-08-19 RULING: THE CROSSING IS CLOSED IN BOTH
@@ -437,8 +437,8 @@ const MUTANTS = [
     suite: UNIT_SUITE,
     why: 'ONE ROUTE PUTS IT BACK: a console route loses its sign-up note opt-out, so a gym owner is stopped by the note on that screen alone',
     expect: 'opts every console route out of the sign-up note',
-    from: '            <Route path="/console/new" element={\n              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false}>',
-    to: '            <Route path="/console/new" element={\n              <ProtectedRoute requireOnboarding={false}>',
+    from: '            <Route path="/console/new" element={\n              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>',
+    to: '            <Route path="/console/new" element={\n              <ProtectedRoute requireOnboarding={false} requireInvitations={false}>',
   },
 ];
 

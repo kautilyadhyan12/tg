@@ -532,9 +532,17 @@ export const gymMembers = pgTable(
      *  OR the new one holds, so what a preview called "no longer listed" reads
      *  the same after the confirm. */
     lastListedAt: timestamp("last_listed_at", { withTimezone: true }),
+    /** The list record the invitation was for, written when the person taps Join
+     *  (Part 3 §10.2, §13.2). Null for a membership from a code, or when more than one
+     *  current record held the address and the list could not say whose it was. The
+     *  foreign key is `(gym_id, entry_id)` → the record's `(gym_id, id)`, ON DELETE SET
+     *  NULL (entry_id) — written in `0040_join_by_invitation.sql`, which Drizzle's
+     *  builder cannot express. */
+    entryId: uuid("entry_id"),
     createdAt: createdAt(),
   },
   (t) => [
+    index("gym_members_entry_idx").on(t.entryId).where(sql`${t.entryId} IS NOT NULL`),
     // The leave/rejoin design: one LIVE membership per (gym,user); history rows stack.
     uniqueIndex("gym_members_live_uq")
       .on(t.gymId, t.userId)

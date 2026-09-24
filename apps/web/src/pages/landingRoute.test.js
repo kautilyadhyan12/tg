@@ -289,6 +289,24 @@ describe('the console routes and sign-out honour the amendment', () => {
     expect(src.match(/requireSignUpNote=\{false\}/g) ?? []).toHaveLength(consoleRoutes.length);
   });
 
+  it('opts every console route out of "You\'re invited", and of the training routes only the invitations page', () => {
+    // An invitation is to the member app (Part 3 §10.2): the console must never stop an
+    // owner with one, and a training route that opted out would let a person set up
+    // without being asked. The invitations page shows them itself.
+    const src = read('../App.jsx').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+    const consoleRoutes = src.match(
+      /path="\/console[^"]*"[\s\S]{0,120}?<ProtectedRoute([^>]*)>/g,
+    ) ?? [];
+    expect(consoleRoutes.length).toBe(7);
+    for (const route of consoleRoutes) {
+      expect(route).toContain('requireInvitations={false}');
+    }
+    const invitationsRoute = src.match(/path="\/invitations"[\s\S]{0,120}?<ProtectedRoute([^>]*)>/g) ?? [];
+    expect(invitationsRoute).toHaveLength(1);
+    expect(invitationsRoute[0]).toContain('requireInvitations={false}');
+    expect(src.match(/requireInvitations=\{false\}/g) ?? []).toHaveLength(consoleRoutes.length + 1);
+  });
+
   it('clears the door on sign-out, so a shared browser does not inherit one', () => {
     const src = read('../context/AuthContext.jsx');
     expect(src).toMatch(/forgetDoor\(\)/);
