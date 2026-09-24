@@ -629,6 +629,34 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
   );
 
   it(
+    "WORST THING: one Paddle account paying for two gyms opens only for somebody who manages the billing of both",
+    async () => {
+      // Paddle keeps one customer per email and reuses it at checkout, and its page shows
+      // everything that customer pays for: here gym B was paid for with gym A's email.
+      const a = await paying();
+      const b = await paying();
+      await sql`UPDATE subscriptions SET provider_customer_ref = ${a.customerId} WHERE provider_ref = ${b.subId}`;
+      const bookkeeper = await makeUser();
+      await addStaff(a.gymId, bookkeeper.userId, "manager", ["members.read", "billing.manage"]);
+
+      const asked = paddle.portalCalls.length;
+      for (const who of [bookkeeper.cookies, a.cookies]) {
+        const refused = await openPortal(a.gymId, who);
+        expect(refused.statusCode).toBe(409);
+        expect(JSON.parse(refused.body)).toMatchObject({ error: "shared_payer" });
+      }
+      expect(paddle.portalCalls.length).toBe(asked);
+
+      // A's owner given B's billing too manages everything on that page: it opens.
+      await addStaff(b.gymId, a.userId, "manager", ["members.read", "billing.manage"]);
+      expect((await openPortal(a.gymId, a.cookies)).statusCode).toBe(200);
+      expect(paddle.portalCalls.at(-1)).toEqual({ customerId: a.customerId, subscriptionIds: [a.subId] });
+      expect((await openPortal(a.gymId, bookkeeper.cookies)).statusCode).toBe(409);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "a gym on no paid plan has no Paddle page to open, and a Paddle answer for another customer is never passed on",
     async () => {
       const trialling = await owner();

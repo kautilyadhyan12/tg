@@ -471,7 +471,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
            sub.currency AS sub_currency,
            sub.current_period_end AS sub_current_period_end,
            sub.cancel_at_period_end AS sub_cancel_at_period_end,
-           -- A paid plan whose 5-day grace ended while Paddle still retries (1c-i).
+           -- A paid plan whose grace ended while Paddle still retries (1c-i).
            EXISTS (
              SELECT 1 FROM subscriptions so
              WHERE so.owner_type = 'gym' AND so.owner_id = g.id AND so.cancel_reason = 'grace_expired'

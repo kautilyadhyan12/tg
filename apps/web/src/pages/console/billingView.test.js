@@ -598,6 +598,15 @@ describe('bannerFor', () => {
       key: 'read_only',
       text: 'A payment for your gym is overdue. Nothing here can be changed and your members get the free app only until it is paid. Update your payment method to pay now; Paddle also tries your card again by itself.',
     });
+    // Staff who cannot pay are told who can, not to press what they are not shown.
+    const trainer = { ...owed, staffRole: 'trainer', privileges: ['members.read'] };
+    expect(bannerFor(trainer, NOW)?.text).toBe(
+      'A payment for your gym is overdue. Nothing here can be changed and your members get the free app only until it is paid. Whoever manages billing can update the payment method; Paddle also tries the card again by itself.',
+    );
+    const lateForTrainer = gym({ staffRole: 'trainer', privileges: ['members.read'], subscription: { status: 'past_due', seatCap: 100 } });
+    expect(bannerFor(lateForTrainer, NOW)?.text).toBe(
+      "A payment for your gym didn't go through. Paddle will try the card again by itself, or whoever manages billing can update the payment method. Your members keep everything for 2 days after a failed payment.",
+    );
     // Without the flag (an older api, or a trial that ended) it is the plain read-only line.
     expect(bannerFor(gym({ subscription: null, consoleReadOnly: true }), NOW)?.text).toMatch(/has no plan/);
   });

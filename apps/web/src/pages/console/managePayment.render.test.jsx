@@ -219,7 +219,7 @@ describe('a failed payment', () => {
     renderOverview();
     expect(
       await screen.findByText(
-        /a payment for your gym is overdue\. nothing here can be changed and your members get the free app only until it is paid\. update your payment method to pay now; paddle also tries your card again by itself\./i,
+        /a payment for your gym is overdue\. nothing here can be changed and your members get the free app only until it is paid\. whoever manages billing can update the payment method; paddle also tries the card again by itself\./i,
       ),
     ).toBeTruthy();
     expect(screen.queryByTestId('plan-modal')).toBeNull();

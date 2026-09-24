@@ -10,7 +10,7 @@ import type { Sql } from "postgres";
 import type { RedisLike } from "../../redis.js";
 import { bustEntitlements } from "../entitlements/service.js";
 import * as orgsRepo from "../orgs/repo.js";
-import { OrgsError, requirePrivilege, toOrgSubscription } from "../orgs/service.js";
+import { holdsPrivilege, OrgsError, requirePrivilege, toOrgSubscription } from "../orgs/service.js";
 import type { Snapshot } from "./machine.js";
 import { onlinePaymentFor } from "./online.js";
 import type { PaddleApi, PaddleEnvironment } from "./paddle.js";
@@ -196,6 +196,17 @@ export async function openBillingPortal(
   if (paddle === null) throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
   const plan = await repo.managedPlanFor(deps.sql, input.gymId);
   if (plan === null) throw new OrgsError(404, "no_paid_plan", "This plan isn't paid through us, so there's nothing to manage here.");
+  // Paddle's page shows everything its customer pays for: it opens only for somebody
+  // who manages the billing of every gym that customer pays for.
+  for (const otherGymId of await repo.otherGymsOfCustomer(deps.sql, { customerRef: plan.customerRef, gymId: input.gymId })) {
+    if (!(await holdsPrivilege(deps, otherGymId, input.userId, "billing.manage"))) {
+      throw new OrgsError(
+        409,
+        "shared_payer",
+        "This payment account also pays for another gym whose billing you don't manage, so it can't be opened here. The person who pays can open it.",
+      );
+    }
+  }
 
   const session = await paddle.api.createPortalSession(plan.customerRef, [plan.subscriptionRef]);
   if (session.kind !== "ok") {

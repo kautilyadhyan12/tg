@@ -846,6 +846,18 @@ export async function requirePrivilege(
   return { org, role: authority.role, privileges };
 }
 
+/** Whether this person holds this privilege on this gym: `requirePrivilege`'s answer
+ *  without the error, for a check over several gyms at once. */
+export async function holdsPrivilege(
+  deps: Pick<OrgsDeps, "sql">,
+  gymId: string,
+  userId: string,
+  privilege: OrgPrivilege,
+): Promise<boolean> {
+  const authority = await repo.getStaffAuthority(deps.sql, gymId, userId);
+  return authority !== null && privilegesFor(authority.role, authority.privileges).includes(privilege);
+}
+
 /** THE 404 EVERY ORG-SCOPED ROUTE ANSWERS — and the one sentence here that
  *  CANNOT name a type, which is why it names none.
  *

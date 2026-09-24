@@ -168,11 +168,15 @@ export function consoleReadOnlyBanner(orgType) {
   return `This ${words.it} has no plan. Nothing here can be changed, and your ${words.people} get the free app only.`;
 }
 
-/** The read-only banner when a paid plan's payment is overdue (its 2-day grace ended):
- *  the fix is the card, which pays what is owed and opens everything again. */
-export function paymentOverdueBanner(orgType) {
+/** The read-only banner when a paid plan's payment is overdue (its grace ended): the fix
+ *  is the payment method, which pays what is owed and opens everything again. Staff who
+ *  cannot manage billing are told who can, never to press a button they are not shown. */
+export function paymentOverdueBanner(orgType, canPay) {
   const words = orgWords(orgType);
-  return `A payment for your ${words.it} is overdue. Nothing here can be changed and your ${words.people} get the free app only until it is paid. Update your payment method to pay now; Paddle also tries your card again by itself.`;
+  const fix = canPay
+    ? 'Update your payment method to pay now; Paddle also tries your card again by itself.'
+    : 'Whoever manages billing can update the payment method; Paddle also tries the card again by itself.';
+  return `A payment for your ${words.it} is overdue. Nothing here can be changed and your ${words.people} get the free app only until it is paid. ${fix}`;
 }
 
 /** Is this gym in its free trial RIGHT NOW?
@@ -325,7 +329,10 @@ export function bannerFor(org, now = Date.now()) {
     return {
       key: 'read_only',
       tone: 'danger',
-      text: org?.paymentOverdue === true ? paymentOverdueBanner(org?.orgType) : consoleReadOnlyBanner(org?.orgType),
+      text:
+        org?.paymentOverdue === true
+          ? paymentOverdueBanner(org?.orgType, canManageBilling(viewerPrivileges(org)))
+          : consoleReadOnlyBanner(org?.orgType),
       // §4.2 gives this row no dismissal and it would be wrong to invent one:
       // the only dismissible state is `trial_info`, where putting the notice
       // away for a day costs the owner nothing. This one is about something the
@@ -340,7 +347,9 @@ export function bannerFor(org, now = Date.now()) {
     return {
       key: 'past_due',
       tone: 'warn',
-      text: `A payment for your ${words.it} didn't go through. Paddle will try your card again by itself, or you can update your payment method under Plan on the Overview. Your ${words.people} keep everything for ${PAID_PLAN_GRACE_DAYS} days after a failed payment.`,
+      text: canManageBilling(viewerPrivileges(org))
+        ? `A payment for your ${words.it} didn't go through. Paddle will try your card again by itself, or you can update your payment method under Plan on the Overview. Your ${words.people} keep everything for ${PAID_PLAN_GRACE_DAYS} days after a failed payment.`
+        : `A payment for your ${words.it} didn't go through. Paddle will try the card again by itself, or whoever manages billing can update the payment method. Your ${words.people} keep everything for ${PAID_PLAN_GRACE_DAYS} days after a failed payment.`,
       dismissible: false,
     };
   }

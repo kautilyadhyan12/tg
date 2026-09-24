@@ -373,6 +373,17 @@ export async function managedPlanFor(sql: SqlOrTx, gymId: string): Promise<Manag
   };
 }
 
+/** The other gyms paid by this Paddle customer. Paddle keeps one customer per email and
+ *  reuses it at checkout, and its portal signs in as the whole customer, so every one of
+ *  these gyms' plans, invoices and card is on the page this gym's staff would open. */
+export async function otherGymsOfCustomer(sql: SqlOrTx, input: { customerRef: string; gymId: string }): Promise<string[]> {
+  const rows = await sql<{ owner_id: string }[]>`
+    SELECT DISTINCT owner_id FROM subscriptions
+    WHERE provider = 'paddle' AND provider_customer_ref = ${input.customerRef}
+      AND owner_type = 'gym' AND owner_id <> ${input.gymId}`;
+  return rows.map((r) => r.owner_id);
+}
+
 /** End the grace of every paid plan past_due since before `cutoff`: its gym's members
  *  lose the plan's features and the console goes read-only until Paddle collects.
  *  Each row under its gym's lock, re-checked there, so a payment written meanwhile
