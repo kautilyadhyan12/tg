@@ -140,3 +140,5 @@ stage. History, never a rule: RULINGS wins where they differ.
 ## Stage 3 — Money
 
 1a. [x] **A gym pays through Paddle** (test mode). Subscribe on the plan prompt, Paddle's checkout at our price (tax added on top), the signed webhook and worker, the one subscription rule; a second paid plan, or one no checkout of ours made, is cancelled at Paddle and refunded, the refund retried until Paddle holds it (`billing_refunds`). Run against Kd's Paddle sandbox (prices, checkout, his payment, the webhook on Paddle's real record); the top band became 2,000 members at his click-through. Merged 2026-09-24 on Kd's word (*"merge"*; PR #103, CI green).
+
+1c-i. [x] **Paddle's own page, and a failed payment**: Manage payment (card, cancel, invoices) on Paddle's customer portal, opened only for staff with billing.manage on every gym that Paddle customer pays for; "Ends" after a cancel; a 2-day grace (Kd's number), then the console read-only with "Update payment method" (Paddle's words) until Paddle collects, never a second plan. Run against Kd's Paddle sandbox (a real portal session; his real cancel applied). Merged 2026-09-25 on Kd's word (*"merge"*; PR #105, CI green).
