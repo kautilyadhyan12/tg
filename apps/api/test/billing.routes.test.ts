@@ -182,8 +182,11 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
     return app;
   };
   const silent = { info: () => undefined, warn: () => undefined, error: () => undefined };
-  /** One run of the worker's job; `aheadMs` runs it that far in the future, past a wait. */
-  const runWorker = (aheadMs = 0) =>
+  /** One run of the worker's job; `aheadMs` runs it that far in the future, past a wait.
+   *  At least a second: an event's `not_before` is Postgres's microsecond clock and this
+   *  one counts milliseconds, so a run in the same millisecond as the webhook (CI is that
+   *  fast) reads the event as not yet due. The real worker runs a minute apart. */
+  const runWorker = (aheadMs = 1000) =>
     processPaddleEvents({
       sql,
       redis: createMemoryRedis(),
