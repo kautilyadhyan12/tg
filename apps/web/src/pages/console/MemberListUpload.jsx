@@ -327,7 +327,7 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
   /** Reads a file. Every read is the whole list except the one "They're still members"
    *  asks for, which reads the same bytes as people to add. The review asks about anybody
    *  missing only when there is somebody. */
-  const read = async (next, mode, map, opts = {}) => {
+  const read = async (next, mode, map) => {
     setBusy('reading');
     setError(null);
     try {
@@ -352,11 +352,10 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
         setMissingNames([]);
         missingGroup.current = m?.group ?? null;
         if (m !== null) void loadPage(p.uploadId, m.group, 0);
-        // AN ANSWER IS ABOUT THE PEOPLE STAFF WERE SHOWN. A read again can change who is
-        // missing (a colleague's walk-ins, another column choice), so the question is asked
-        // afresh — unless this read IS the answer ("They've left" pressed after "They're
-        // still members") and the number is the one staff answered for.
-        setAnswer(opts.answer === 'left' && m !== null && m.n === opts.answeredFor ? 'left' : null);
+        // AN ANSWER IS ABOUT THE PEOPLE STAFF WERE SHOWN. Any read of the whole list can
+        // change who is missing (a colleague's walk-ins, another column choice), so the
+        // question is always asked afresh, with nothing picked.
+        setAnswer(null);
       } else {
         setAnswer('keep');
       }
@@ -416,7 +415,9 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
   };
 
   const chooseLeft = () => {
-    if (preview.mode === 'add') void read(source, 'whole_list', mapping, { answer: 'left', answeredFor: missing.n });
+    // From an add read the file is read as the whole list again, and the fresh question
+    // is answered on its own names.
+    if (preview.mode === 'add') void read(source, 'whole_list', mapping);
     else setAnswer('left');
   };
   const chooseKeep = () => {

@@ -204,7 +204,13 @@ describe('the worst thing: a wrong file cannot take people off unseen', () => {
     fireEvent.click(screen.getByRole('radio', { name: /They've left/ }));
     await waitFor(() => expect(orgService.uploadMemberList).toHaveBeenCalledTimes(3));
     expect(orgService.uploadMemberList.mock.calls[2][1].mode).toBe('whole_list');
-    await waitFor(() => expect(screen.getByRole('radio', { name: /They've left/ }).getAttribute('aria-checked')).toBe('true'));
+    // The fresh question is answered on its own names, even with the same number missing
+    // (review of PR #106, L-5): the people could be different ones.
+    await waitFor(() => expect(screen.getByRole('radio', { name: /They're still members/ }).getAttribute('aria-checked')).toBe('false'));
+    expect(screen.getByRole('radio', { name: /They've left/ }).getAttribute('aria-checked')).toBe('false');
+    expect(screen.queryByLabelText('Type the number to confirm')).toBeNull();
+    fireEvent.click(screen.getByRole('radio', { name: /They've left/ }));
+    expect(screen.getByRole('radio', { name: /They've left/ }).getAttribute('aria-checked')).toBe('true');
     expect(screen.getByLabelText('Type the number to confirm')).toBeTruthy();
   });
 
@@ -274,7 +280,7 @@ describe('an answer is only ever about the people staff were shown (review of PR
     expect(radios().map((r) => r.getAttribute('aria-checked'))).toEqual(['false', 'false']);
   });
 
-  it('"They\'ve left" pressed after "They\'re still members" holds only if the same number are missing', async () => {
+  it('"They\'ve left" pressed after "They\'re still members" reads the list again and asks afresh', async () => {
     orgService.getMemberListRows.mockResolvedValue(page('gone', [person('Ben Cole')], 1));
     await reviewWith(oneMissing());
     orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: preview({ uploadId: UPLOAD_ADD, mode: 'add', list: list({ unchanged: 4 }) }) } });
