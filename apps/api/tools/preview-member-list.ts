@@ -219,10 +219,13 @@ try {
       {
         acknowledgeLargeChange: process.argv.includes("--acknowledge-large-change"),
         acknowledgeHandEdits: process.argv.includes("--acknowledge-hand-edits"),
+        // Whoever runs --confirm is the one saying the gym may keep this list.
+        permissionConfirmed: true,
       },
       () => Promise.resolve(true),
     );
     if (answer.kind === "rate_limited") throw new Error("the rate limiter refused, which this tool cannot happen upon");
+    if (answer.kind === "permission_needed") throw new Error("the permission tick was refused, which this tool always sends");
     if (answer.kind === "list_changed") {
       console.log(
         `REFUSED (list_changed): the preview was measured against version ${String(answer.baseVersion)} and the list is on ${String(answer.version)}.\nNOTHING was changed.`,

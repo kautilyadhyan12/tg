@@ -344,7 +344,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
         [press, trainer.cookies, 403],
       ];
       for (const [target, cookies, code] of refusals) {
-        expect((await post(target, {}, cookies)).statusCode).toBe(code);
+        expect((await post(target, { permissionConfirmed: true }, cookies)).statusCode).toBe(code);
         expect(await stateOf(org.org.id)).toEqual(before);
         expect(await stateOf(rivalOrg.org.id)).toEqual({ entries: 0, former: 0, version: 0, staged: 0, confirmed: 0 });
       }
@@ -363,7 +363,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
 
       // THE POSITIVE CONTROL, and it is what makes every 404 above a statement
       // about tenancy rather than about a route that does not exist.
-      const applied = await post(press, {}, owner.cookies);
+      const applied = await post(press, { permissionConfirmed: true }, owner.cookies);
       expect(applied.statusCode).toBe(200);
       expect(confirmed(applied).applied.new).toBe(4);
       expect(await stateOf(org.org.id)).toEqual({ entries: 4, former: 0, version: 1, staged: 0, confirmed: 1 });
@@ -399,7 +399,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
 
       // A list of four, applied.
       const first = await stage(org.org.id, owner.cookies, file(many(1, 4, "Active")));
-      expect((await post(confirmUrl(org.org.id, first.uploadId), {}, owner.cookies)).statusCode).toBe(200);
+      expect((await post(confirmUrl(org.org.id, first.uploadId), { permissionConfirmed: true }, owner.cookies)).statusCode).toBe(200);
 
       // A second file staged against version 1 — it would take two people off.
       const second = await stage(org.org.id, owner.cookies, file(many(1, 2, "Active")));
@@ -413,7 +413,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       await sql`UPDATE gym_member_lists SET version = version + 1 WHERE gym_id = ${org.org.id}`;
       const before = await stateOf(org.org.id);
 
-      const refused = await post(confirmUrl(org.org.id, second.uploadId), {}, owner.cookies);
+      const refused = await post(confirmUrl(org.org.id, second.uploadId), { permissionConfirmed: true }, owner.cookies);
       expect(refused.statusCode).toBe(409);
       const answer = JSON.parse(refused.body) as { error: string; baseVersion: number; version: number };
       expect(answer.error).toBe("list_changed");
@@ -444,7 +444,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
 
       const month1 = [person(1, "Active"), person(2, "Active"), person(3, "Frozen"), person(4, "Expired")];
       const first = await stage(org.org.id, owner.cookies, file(month1));
-      const applied1 = await post(confirmUrl(org.org.id, first.uploadId), {}, owner.cookies);
+      const applied1 = await post(confirmUrl(org.org.id, first.uploadId), { permissionConfirmed: true }, owner.cookies);
       expect(applied1.statusCode).toBe(200);
       expect(await statusesOn(org.org.id)).toEqual(["Active:2", "Expired:1", "Frozen:1"]);
 
@@ -459,7 +459,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       // 5 new.
       const month2 = [person(1, "Active"), person(2, "Frozen"), person(3, "Frozen"), person(5, "Active")];
       const second = await stage(org.org.id, owner.cookies, file(month2));
-      const applied2 = await post(confirmUrl(org.org.id, second.uploadId), {}, owner.cookies);
+      const applied2 = await post(confirmUrl(org.org.id, second.uploadId), { permissionConfirmed: true }, owner.cookies);
       expect(applied2.statusCode).toBe(200);
       const answer = confirmed(applied2);
       expect(answer.alreadyConfirmed).toBe(false);
@@ -543,7 +543,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       const month1 = [asPerson(1, stays.email, "Active"), asPerson(2, leaves.email, "Active"), person(3, "Active")];
       const first = await stage(org.org.id, owner.cookies, file(month1));
       expect(first.list.alreadyInApp).toBe(2);
-      expect((await post(confirmUrl(org.org.id, first.uploadId), {}, owner.cookies)).statusCode).toBe(200);
+      expect((await post(confirmUrl(org.org.id, first.uploadId), { permissionConfirmed: true }, owner.cookies)).statusCode).toBe(200);
 
       // A GYM'S FIRST CONFIRM STAMPS EVERYBODY THE FILE REACHES, though there were
       // no marks to print before it: the rule computes that set outside the
@@ -563,7 +563,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       const before = await sql<{ at: Date | null }[]>`
         SELECT last_listed_at AS at FROM gym_members
         WHERE gym_id = ${org.org.id} AND user_id = ${leaves.userId}`;
-      expect((await post(confirmUrl(org.org.id, second.uploadId), {}, owner.cookies)).statusCode).toBe(200);
+      expect((await post(confirmUrl(org.org.id, second.uploadId), { permissionConfirmed: true }, owner.cookies)).statusCode).toBe(200);
 
       // THE MEMBER COMING OFF IS STAMPED ON THE WAY OUT, which is what makes them
       // read "no longer listed" afterwards instead of "never listed" — the gym
@@ -583,6 +583,43 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
     TEST_TIMEOUT_MS,
   );
 
+  it(
+    "without the permission tick nothing is applied; with it the audit row records who ticked",
+    async () => {
+      const owner = await makeUser("tick-owner");
+      const org = await makeOrg(owner.cookies, "Tick Gym");
+      const preview = await stage(org.org.id, owner.cookies, file(many(1, 3, "Active")));
+      const press = confirmUrl(org.org.id, preview.uploadId);
+      const before = await stateOf(org.org.id);
+
+      for (const body of [{}, { permissionConfirmed: false }, { acknowledgeLargeChange: true, acknowledgeHandEdits: true }]) {
+        const refused = await post(press, body, owner.cookies);
+        expect(refused.statusCode).toBe(409);
+        expect((JSON.parse(refused.body) as { error: string }).error).toBe("permission_needed");
+        expect(await stateOf(org.org.id)).toEqual(before);
+      }
+      expect((await post(press, { permissionConfirmed: "yes" }, owner.cookies)).statusCode).toBe(400);
+
+      const applied = await post(press, { permissionConfirmed: true }, owner.cookies);
+      expect(applied.statusCode).toBe(200);
+      expect(confirmed(applied).applied.new).toBe(3);
+      const audit = await sql<{ actor_user_id: string; meta: Record<string, string> }[]>`
+        SELECT actor_user_id, meta FROM audit_log
+        WHERE gym_id = ${org.org.id} AND action = 'org.member_list_confirmed'`;
+      expect(audit).toHaveLength(1);
+      expect(audit[0]?.actor_user_id).toBe(owner.userId);
+      expect(audit[0]?.meta.permissionConfirmed).toBe("true");
+
+      // A repeat of an applied upload is the same 200 even without the tick: a screen whose
+      // reply was lost reads its numbers back, and nothing is written twice.
+      const replay = await post(press, {}, owner.cookies);
+      expect(replay.statusCode).toBe(200);
+      expect(confirmed(replay).alreadyConfirmed).toBe(true);
+      expect(confirmed(replay).applied.new).toBe(3);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   // =========================================================================
   // TWICE, AND AT THE SAME INSTANT
   // =========================================================================
@@ -595,12 +632,12 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       const preview = await stage(org.org.id, owner.cookies, file(many(1, 5, "Active")));
       const press = confirmUrl(org.org.id, preview.uploadId);
 
-      const first = await post(press, {}, owner.cookies);
+      const first = await post(press, { permissionConfirmed: true }, owner.cookies);
       expect(first.statusCode).toBe(200);
       const one = confirmed(first);
       expect(one.alreadyConfirmed).toBe(false);
 
-      const second = await post(press, {}, owner.cookies);
+      const second = await post(press, { permissionConfirmed: true }, owner.cookies);
       expect(second.statusCode).toBe(200);
       const two = confirmed(second);
       // A 200 AND THE SAME SENTENCE, not a refusal: a screen whose reply was lost,
@@ -632,7 +669,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
           remoteAddress: nextIp(),
           headers: { "content-type": "application/json" },
           cookies: owner.cookies,
-          payload: "{}",
+          payload: JSON.stringify({ permissionConfirmed: true }),
         });
 
       const twin = await buildApp(loadConfig(baseEnv));
@@ -657,7 +694,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       const bytes = file(many(1, 6, "Active"));
 
       const first = await stage(org.org.id, owner.cookies, bytes);
-      expect((await post(confirmUrl(org.org.id, first.uploadId), {}, owner.cookies)).statusCode).toBe(200);
+      expect((await post(confirmUrl(org.org.id, first.uploadId), { permissionConfirmed: true }, owner.cookies)).statusCode).toBe(200);
       // `xmin` IS THE SYSTEM COLUMN THAT SAYS WHICH TRANSACTION LAST WROTE A ROW.
       // Counting rows would pass for a confirm that deleted all six and inserted
       // six identical ones; this cannot.
@@ -667,7 +704,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
 
       const second = await stage(org.org.id, owner.cookies, bytes);
       expect(second.sameAsLastUpload).toBe(true);
-      const applied = await post(confirmUrl(org.org.id, second.uploadId), {}, owner.cookies);
+      const applied = await post(confirmUrl(org.org.id, second.uploadId), { permissionConfirmed: true }, owner.cookies);
       expect(applied.statusCode).toBe(200);
       expect(confirmed(applied).applied).toMatchObject({ new: 0, changed: 0, unchanged: 6, gone: 0 });
 
@@ -691,7 +728,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
 
       const first = await stage(org.org.id, owner.cookies, file(many(1, 3, "Active")));
       const second = await stage(org.org.id, owner.cookies, file(many(1, 4, "Active")));
-      const superseded = await post(confirmUrl(org.org.id, first.uploadId), {}, owner.cookies);
+      const superseded = await post(confirmUrl(org.org.id, first.uploadId), { permissionConfirmed: true }, owner.cookies);
       expect(superseded.statusCode).toBe(409);
       expect((JSON.parse(superseded.body) as { error: string }).error).toBe("upload_superseded");
       expect(await stateOf(org.org.id)).toMatchObject({ entries: 0, version: 0 });
@@ -706,7 +743,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       // the cross-suite class this repository has been bitten by more than once.
       const later = new Date(Date.now() + 61 * 60 * 1000);
       await expireStagedMemberListUploads({ sql, log: silent }, { now: later, gymIds: [org.org.id] });
-      const expired = await post(confirmUrl(org.org.id, second.uploadId), {}, owner.cookies);
+      const expired = await post(confirmUrl(org.org.id, second.uploadId), { permissionConfirmed: true }, owner.cookies);
       expect(expired.statusCode).toBe(409);
       expect((JSON.parse(expired.body) as { error: string }).error).toBe("upload_expired");
       expect(await stateOf(org.org.id)).toMatchObject({ entries: 0, version: 0, confirmed: 0 });
@@ -727,7 +764,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       // Thirty people on the list: ten per cent is three, so the floor of ten is
       // what decides, which is the whole reason a share alone is useless here.
       const first = await stage(org.org.id, owner.cookies, file(many(1, 30, "Active")));
-      expect((await post(confirmUrl(org.org.id, first.uploadId), {}, owner.cookies)).statusCode).toBe(200);
+      expect((await post(confirmUrl(org.org.id, first.uploadId), { permissionConfirmed: true }, owner.cookies)).statusCode).toBe(200);
       expect((await stateOf(org.org.id)).entries).toBe(30);
 
       // TEN OFF IS NOT LARGE — the rule is "more than", and the edge belongs to
@@ -735,7 +772,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       const ten = await stage(org.org.id, owner.cookies, file(many(1, 20, "Active")));
       expect(ten.guard.entriesGoing).toBe(10);
       expect(ten.guard.needsTick).toBe(false);
-      expect((await post(confirmUrl(org.org.id, ten.uploadId), {}, owner.cookies)).statusCode).toBe(200);
+      expect((await post(confirmUrl(org.org.id, ten.uploadId), { permissionConfirmed: true }, owner.cookies)).statusCode).toBe(200);
       expect((await stateOf(org.org.id)).entries).toBe(20);
 
       // ELEVEN OFF A LIST OF TWENTY IS. Refused with the numbers, and NOTHING is
@@ -744,7 +781,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       const big = await stage(org.org.id, owner.cookies, file(many(1, 9, "Active")));
       expect(big.guard.needsTick).toBe(true);
       const before = await stateOf(org.org.id);
-      const refused = await post(confirmUrl(org.org.id, big.uploadId), {}, owner.cookies);
+      const refused = await post(confirmUrl(org.org.id, big.uploadId), { permissionConfirmed: true }, owner.cookies);
       expect(refused.statusCode).toBe(409);
       const answer = JSON.parse(refused.body) as { error: string; guard: { entriesGoing: number; listSize: number } };
       expect(answer.error).toBe("large_change");
@@ -755,12 +792,12 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       // request and nothing about the first refusal is remembered — a gym that
       // acknowledged a large change a moment ago has acknowledged nothing about
       // this press.
-      expect((await post(confirmUrl(org.org.id, big.uploadId), {}, owner.cookies)).statusCode).toBe(409);
-      expect((await post(confirmUrl(org.org.id, big.uploadId), { acknowledgeLargeChange: false }, owner.cookies)).statusCode).toBe(409);
+      expect((await post(confirmUrl(org.org.id, big.uploadId), { permissionConfirmed: true }, owner.cookies)).statusCode).toBe(409);
+      expect((await post(confirmUrl(org.org.id, big.uploadId), { permissionConfirmed: true, acknowledgeLargeChange: false }, owner.cookies)).statusCode).toBe(409);
       expect(await stateOf(org.org.id)).toEqual(before);
 
       // WITH THE TICK, ON THIS REQUEST.
-      const ticked = await post(confirmUrl(org.org.id, big.uploadId), { acknowledgeLargeChange: true }, owner.cookies);
+      const ticked = await post(confirmUrl(org.org.id, big.uploadId), { permissionConfirmed: true, acknowledgeLargeChange: true }, owner.cookies);
       expect(ticked.statusCode).toBe(200);
       expect(confirmed(ticked).applied.gone).toBe(11);
       expect((await stateOf(org.org.id)).entries).toBe(9);
@@ -771,7 +808,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       expect(added.list.new).toBe(50);
       expect(added.list.gone).toBe(0);
       expect(added.guard.needsTick).toBe(false);
-      expect((await post(confirmUrl(org.org.id, added.uploadId), {}, owner.cookies)).statusCode).toBe(200);
+      expect((await post(confirmUrl(org.org.id, added.uploadId), { permissionConfirmed: true }, owner.cookies)).statusCode).toBe(200);
       expect((await stateOf(org.org.id)).entries).toBe(59);
     },
     TEST_TIMEOUT_MS,
@@ -807,7 +844,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
         { ...person(5, "Frozen"), email: "" },
       ];
       const preview = await stage(org.org.id, owner.cookies, file(people));
-      expect((await post(confirmUrl(org.org.id, preview.uploadId), {}, owner.cookies)).statusCode).toBe(200);
+      expect((await post(confirmUrl(org.org.id, preview.uploadId), { permissionConfirmed: true }, owner.cookies)).statusCode).toBe(200);
 
       const list = listOf(await get(listUrl(org.org.id), owner.cookies));
       expect(list.hasList).toBe(true);
@@ -888,7 +925,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
         await held;
 
         let settled = false;
-        const pressing = post(confirmUrl(org.org.id, staged.uploadId), {}, owner.cookies).then((res) => {
+        const pressing = post(confirmUrl(org.org.id, staged.uploadId), { permissionConfirmed: true }, owner.cookies).then((res) => {
           settled = true;
           return res;
         });
@@ -940,7 +977,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       const before = await lastAnalyze();
 
       const preview = await stage(org.org.id, owner.cookies, file(many(1, 4, "Active")));
-      expect((await post(confirmUrl(org.org.id, preview.uploadId), {}, owner.cookies)).statusCode).toBe(200);
+      expect((await post(confirmUrl(org.org.id, preview.uploadId), { permissionConfirmed: true }, owner.cookies)).statusCode).toBe(200);
 
       // It runs AFTER the commit and the statistics collector is not instant, so this
       // waits for it rather than reading once and hoping.
@@ -1010,13 +1047,13 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
         owner.cookies,
         file([{ ...person(1, "Frozen") }, { ...person(2, "FROZEN") }, person(3, "Active")]),
       );
-      expect((await post(confirmUrl(org.org.id, first.uploadId), {}, owner.cookies)).statusCode).toBe(200);
+      expect((await post(confirmUrl(org.org.id, first.uploadId), { permissionConfirmed: true }, owner.cookies)).statusCode).toBe(200);
 
       // Next month's file keeps only the third person, so both of the others are
       // GONE and "frozen" is now a word the FILE never mentions — the only place
       // left to read its spelling is the stored list, in the stored list's order.
       const second = await stage(org.org.id, owner.cookies, file([person(3, "Active")]));
-      const applied = confirmed(await post(confirmUrl(org.org.id, second.uploadId), {}, owner.cookies));
+      const applied = confirmed(await post(confirmUrl(org.org.id, second.uploadId), { permissionConfirmed: true }, owner.cookies));
       const words = Object.fromEntries(applied.statuses.map((status) => [status.label, status]));
       expect(Object.keys(words).sort()).toEqual(["Active", "Frozen"]);
       expect(words["Frozen"]).toMatchObject({ gone: 2, count: 2 });
@@ -1068,7 +1105,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       // the LIST and none of them is new to the APP, so there is nobody to invite. The
       // staging read had the same fault and would have offered three invites here.
       expect(preview.list).toMatchObject({ new: 4, alreadyInApp: 4, canBeInvited: 0, noEmail: 0 });
-      expect((await post(confirmUrl(org.org.id, preview.uploadId), {}, owner.cookies)).statusCode).toBe(200);
+      expect((await post(confirmUrl(org.org.id, preview.uploadId), { permissionConfirmed: true }, owner.cookies)).statusCode).toBe(200);
 
       const page = pageOf(await get(`${listUrl(org.org.id)}/entries`, owner.cookies));
       const numbered = (number: string) => page.entries.find((entry) => entry.memberNumber === number);
@@ -1118,7 +1155,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
         person(3, "Pending"),
       ];
       const preview = await stage(org.org.id, owner.cookies, file(people));
-      expect((await post(confirmUrl(org.org.id, preview.uploadId), {}, owner.cookies)).statusCode).toBe(200);
+      expect((await post(confirmUrl(org.org.id, preview.uploadId), { permissionConfirmed: true }, owner.cookies)).statusCode).toBe(200);
 
       // THE FIRST OF THE TWO IS THE ONE SHOWN AS BEING IN THE APP. Marking the
       // second says the wrong person of a household has the app, on the screen
@@ -1158,7 +1195,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
         { ...person(302, ""), status: "" },
       ];
       const preview = await stage(org.org.id, owner.cookies, file(people));
-      expect((await post(confirmUrl(org.org.id, preview.uploadId), {}, owner.cookies)).statusCode).toBe(200);
+      expect((await post(confirmUrl(org.org.id, preview.uploadId), { permissionConfirmed: true }, owner.cookies)).statusCode).toBe(200);
       const total = people.length;
 
       // PAGE ONE: a hundred, with a cursor, and the TOTAL is the whole filtered
@@ -1240,10 +1277,10 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       const owner = await makeUser("gates-owner");
       const org = await makeOrg(owner.cookies, "Gates Gym");
       const preview = await stage(org.org.id, owner.cookies, file(many(1, 3, "Active")));
-      expect((await post(confirmUrl(org.org.id, preview.uploadId), {}, owner.cookies)).statusCode).toBe(200);
+      expect((await post(confirmUrl(org.org.id, preview.uploadId), { permissionConfirmed: true }, owner.cookies)).statusCode).toBe(200);
 
       // VALIDATION FAILURES on every new door (CLAUDE.md §4's own list).
-      const bad = await post(confirmUrl(org.org.id, preview.uploadId), { acknowledgeLargeChange: "yes" }, owner.cookies);
+      const bad = await post(confirmUrl(org.org.id, preview.uploadId), { permissionConfirmed: true, acknowledgeLargeChange: "yes" }, owner.cookies);
       expect(bad.statusCode).toBe(400);
       expect((JSON.parse(bad.body) as { error: string }).error).toBe("validation_error");
       expect((await post(`${uploadsUrl(org.org.id)}/not-a-uuid/confirm`, {}, owner.cookies)).statusCode).toBe(400);
@@ -1251,14 +1288,14 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       expect((await get(`${listUrl(org.org.id)}/entries?nonsense=1`, owner.cookies)).statusCode).toBe(400);
       // An upload id of the right shape that is nobody's.
       expect(
-        (await post(confirmUrl(org.org.id, "11111111-2222-3333-4444-555555555555"), {}, owner.cookies)).statusCode,
+        (await post(confirmUrl(org.org.id, "11111111-2222-3333-4444-555555555555"), { permissionConfirmed: true }, owner.cookies)).statusCode,
       ).toBe(404);
 
       // A GYM WITH NO LIVE PLAN IS READ-ONLY, NOT BLIND (§4.2). Its staff cannot
       // apply a file and can still read every person on the list they already have.
       const staged = await stage(org.org.id, owner.cookies, file(many(1, 4, "Active")));
       await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${org.org.id}`;
-      const refused = await post(confirmUrl(org.org.id, staged.uploadId), {}, owner.cookies);
+      const refused = await post(confirmUrl(org.org.id, staged.uploadId), { permissionConfirmed: true }, owner.cookies);
       expect(refused.statusCode).toBe(409);
       expect((JSON.parse(refused.body) as { error: string }).error).toBe("gym_not_on_plan");
       expect((await stateOf(org.org.id)).entries).toBe(3);
@@ -1291,13 +1328,13 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       // Spend the OWNER's thirty from that address.
       let owner429 = 0;
       for (let i = 0; i < 31; i += 1) {
-        const res = await post(press, {}, owner.cookies, desk);
+        const res = await post(press, { permissionConfirmed: true }, owner.cookies, desk);
         if (res.statusCode === 429) owner429 += 1;
       }
       expect(owner429).toBeGreaterThan(0);
 
       // THE COLLEAGUE, ON THE SAME ADDRESS, IS STILL SERVED.
-      const theirs = await post(press, {}, mate.cookies, desk);
+      const theirs = await post(press, { permissionConfirmed: true }, mate.cookies, desk);
       expect(theirs.statusCode).toBe(200);
     },
     TEST_TIMEOUT_MS,
@@ -1337,7 +1374,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
             remoteAddress: nextIp(),
             headers: { "content-type": "application/json" },
             cookies: owner.cookies,
-            payload: "{}",
+            payload: JSON.stringify({ permissionConfirmed: true }),
           }),
           post(`/v1/orgs/${org.org.id}/applications/${applicationId}/confirm`, {}, owner.cookies),
         ]);

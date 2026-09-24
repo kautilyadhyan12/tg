@@ -666,7 +666,7 @@ export function memberListWarningWords(warning: MemberListWarning): string {
     case "phones_unusual":
       return `${numberWords(warning.rows, "phone number doesn't", "phone numbers don't")} look like a normal number for their country. They have been kept — check them before you invite anyone.`;
     case "shared_emails":
-      return `${numberWords(warning.rows, "person shares", "people share")} an email address with someone else on the list, as a family often does. Everyone is kept.`;
+      return `${numberWords(warning.rows, "person shares", "people share")} an email address with someone else on the list, as a family often does. Everyone is kept, but only one person can join the app with each address — add the others' own email to invite them.`;
     case "placeholders":
       return `The same contact details sit on more than ${String(MEMBER_LIST_PLACEHOLDER_ROWS)} rows, so they are the gym's own, not a member's: ${warning.values.join(", ")}. They were left out of ${numberWords(warning.rows, "row", "rows")}.`;
     case "other_sheets_ignored":
@@ -889,6 +889,8 @@ export const memberListPreviewSchema = z.object({
   columns: z.array(memberListColumnSchema),
   mapping: memberListMappingSchema,
   needsMapping: z.boolean(),
+  /** How each date column was read, so staff can check it and flip it (§11.3). */
+  dateColumns: z.array(memberListDateColumnSchema).default([]),
   /** What the FILE held, as understanding it counted (§9.5). */
   file: memberListUnderstandingSchema.shape.counts,
   /** What it would do to the LIST. */
@@ -1127,8 +1129,18 @@ export type MemberListRowsResponse = z.infer<typeof memberListRowsResponseSchema
  *  the file being right and somebody's work being lost anyway. A screen that asked
  *  them together would let a yes to either stand for a yes to both. */
 export const memberListConfirmRequestSchema = z
-  .object({ acknowledgeLargeChange: z.boolean().optional(), acknowledgeHandEdits: z.boolean().optional() })
+  .object({
+    acknowledgeLargeChange: z.boolean().optional(),
+    acknowledgeHandEdits: z.boolean().optional(),
+    /** Staff's tick that the gym may keep these people's details here (§9.14). Asked
+     *  of every confirm, and recorded on its audit row with who pressed it. */
+    permissionConfirmed: z.boolean().optional(),
+  })
   .strict();
+
+/** The words of that tick (RULINGS 2026-09-24). `{people}` is the organisation's word
+ *  for its people ("members", "clients"), put in by the screen. */
+export const MEMBER_LIST_PERMISSION_WORDS = "I have permission to store these {people}' details.";
 export type MemberListConfirmRequest = z.infer<typeof memberListConfirmRequestSchema>;
 
 /** WHAT PRESSING CONFIRM DID.
@@ -1178,6 +1190,7 @@ export const MEMBER_LIST_CONFIRM_REFUSAL_WORDS = {
     "This would change more of your list than we apply without asking. Check the numbers below, then confirm again to go ahead.",
   hand_edits:
     "This file would replace details your staff typed in here. Check the fields below, then confirm again to let the file win.",
+  permission_needed: "Tick the permission box first. Nothing was imported.",
 } as const;
 
 export const memberListHandEditsRefusalSchema = z.object({
