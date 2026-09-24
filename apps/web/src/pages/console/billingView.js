@@ -179,6 +179,72 @@ export function paymentOverdueBanner(orgType, canPay) {
   return `A payment for your ${words.it} is overdue. Nothing here can be changed and your ${words.people} get the free app only until it is paid. ${fix}`;
 }
 
+/** HAS THIS GYM CHOSEN AND PAID FOR A PLAN THROUGH US? During a free trial that means its
+ *  card is saved and the first payment is taken when the trial ends (Kd, RULINGS
+ *  2026-09-25); the server says so, and an api too old to say reads as no. */
+export function isSubscribed(org) {
+  return org?.subscription?.subscribed === true;
+}
+
+/** MAY THIS VIEWER PAY NOW, DURING THE FREE TRIAL? Only billing staff, only in the gym's
+ *  own trial (not one already paid for), never on a read-only console, and not in rupees
+ *  yet (Razorpay, ROADMAP Stage 3 item 1d). The server refuses anyone else; this only
+ *  stops a button it would refuse. */
+export function canPayDuringTrial(org) {
+  return (
+    canManageBilling(viewerPrivileges(org)) &&
+    isTrialing(org) &&
+    !isSubscribed(org) &&
+    !consoleIsReadOnly(org) &&
+    org?.currencyDisplay !== 'INR'
+  );
+}
+
+/** MAY THIS VIEWER CHOOSE A BIGGER SIZE? A plan paid through us, in good standing (a paid
+ *  trial counts), not set to end. */
+export function canChooseBiggerSize(org) {
+  const sub = org?.subscription;
+  return (
+    canManageBilling(viewerPrivileges(org)) &&
+    isSubscribed(org) &&
+    (sub?.status === 'active' || sub?.status === 'trialing') &&
+    sub?.cancelAtPeriodEnd !== true &&
+    !consoleIsReadOnly(org)
+  );
+}
+
+/** The plans bigger than the gym's size, smallest first as the server lists them. None
+ *  when the gym's plan has no limit to grow past. */
+export function biggerPlans(plans, seatCap) {
+  if (!Array.isArray(plans) || !Number.isFinite(seatCap)) return [];
+  return plans.filter((p) => p?.seatCap === null || (Number.isFinite(p?.seatCap) && p.seatCap > seatCap));
+}
+
+/** A PAID TRIAL'S NEXT STEP: "Your first payment of $79 is on 3 Oct." Null for anything
+ *  else, or when the server has not said the price or the date. */
+export function firstPaymentText(sub) {
+  if (sub?.status !== 'trialing' || sub?.subscribed !== true) return null;
+  const date = trialEndDateLabel(sub.currentPeriodEnd);
+  const price = typeof sub.priceLabel === 'string' && sub.priceLabel !== '' ? sub.priceLabel : null;
+  if (date === null || price === null) return null;
+  return `Your first payment of ${price} is on ${date}.`;
+}
+
+/** WHAT A BIGGER SIZE COSTS, IN ONE SENTENCE, from the server's preview of Paddle's own
+ *  sums: now (with the tax shown when there is some) and from when. */
+export function sizeChargeText(preview) {
+  if (preview == null) return null;
+  const price = `${preview.priceLabel} a month`;
+  const due = preview.dueNow;
+  const from = trialEndDateLabel(preview.nextPaymentAt);
+  if (due == null) {
+    return from === null ? `Nothing to pay now. Then ${price}.` : `Nothing to pay now. ${price} from ${from}.`;
+  }
+  const breakdown = due.taxLabel === null ? '' : ` (${due.subtotalLabel} plus ${due.taxLabel} tax)`;
+  const then = from === null ? `then ${price}` : `then ${price} from ${from}`;
+  return `You pay ${due.totalLabel} now${breakdown} for the rest of this month, ${then}.`;
+}
+
 /** Is this gym in its free trial RIGHT NOW?
  *
  *  The `status` question rule 3 at the top of this file exists for. Everything
@@ -354,7 +420,8 @@ export function bannerFor(org, now = Date.now()) {
     };
   }
 
-  if (isTrialing(org)) {
+  // A trial the gym has paid for needs no warning: the plan it chose starts by itself.
+  if (isTrialing(org) && !isSubscribed(org)) {
     const days = trialDaysLeft(sub.trialEndsAt, now);
     if (days !== null && days <= TRIAL_URGENT_DAYS) {
       const date = trialEndDateLabel(sub.trialEndsAt);
@@ -376,7 +443,8 @@ export function bannerFor(org, now = Date.now()) {
       const text =
         days < 0
           ? `Your trial is past its end date. Your ${words.people} keep your ${words.it}'s features while it is still running.`
-          : `Trial ends ${date ?? 'soon'}. Your ${words.people} keep your ${words.it}'s features only while a plan is active.`;
+          : `Trial ends ${date ?? 'soon'}. Your ${words.people} keep your ${words.it}'s features only while a plan is active.` +
+            (canPayDuringTrial(org) ? ' Choose a plan under Plan on the Overview; you pay when the trial ends.' : '');
       return { key: 'trial_urgent', tone: 'warn', text, dismissible: false };
     }
   }
@@ -387,7 +455,13 @@ export function bannerFor(org, now = Date.now()) {
       tone: 'warn',
       // The sentence comes from `seatLineText` — the banner is one of its three
       // readers, not its author.
-      text: seatLineText(meter, org?.orgType),
+      text:
+        seatLineText(meter, org?.orgType) +
+        (canChooseBiggerSize(org)
+          ? ' Choose a bigger size under Plan on the Overview.'
+          : canPayDuringTrial(org)
+            ? ' Choose a bigger plan under Plan on the Overview.'
+            : ''),
       dismissible: false,
     };
   }
@@ -399,18 +473,14 @@ export function bannerFor(org, now = Date.now()) {
     // where dismissing is honest — the other three are about something the
     // owner is losing or is already unable to do.
     //
-    // **NO SINGULAR, AND THE FIRST DRAFT HAD ONE.** `days === 1 ? '1 day left'`
-    // looks obviously right and is unreachable: anything at or under
-    // `TRIAL_URGENT_DAYS` has already returned above, so the smallest number
-    // that reaches this line is four. Found by the test written for it going
-    // red, and DELETED rather than kept as belt-and-braces — a branch that
-    // cannot fire is a claim nothing can check (:17676's standard). Restoring
-    // it means the urgent threshold has moved, and then the guard below it
-    // needs re-reading too.
+    // A free trial's last three days returned above; a paid trial's reach here, so
+    // one day and the last day have their own words.
+    const left = days <= 0 ? 'Free trial — last day.' : days === 1 ? 'Free trial — 1 day left.' : `Free trial — ${days} days left.`;
+    const first = firstPaymentText(sub);
     return {
       key: 'trial_info',
       tone: 'info',
-      text: `Free trial — ${days} days left.`,
+      text: first === null ? left : `${left} ${first}`,
       dismissible: true,
     };
   }

@@ -447,6 +447,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
       sub_currency: string | null;
       sub_current_period_end: Date | null;
       sub_cancel_at_period_end: boolean | null;
+      sub_provider: string | null;
       payment_overdue: boolean;
       seats_used: number;
       owner_trial_used: boolean;
@@ -471,6 +472,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
            sub.currency AS sub_currency,
            sub.current_period_end AS sub_current_period_end,
            sub.cancel_at_period_end AS sub_cancel_at_period_end,
+           sub.provider AS sub_provider,
            -- A paid plan whose grace ended while Paddle still retries (1c-i).
            EXISTS (
              SELECT 1 FROM subscriptions so
@@ -606,7 +608,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
     -- this reader inherits from an index it does not name.
     LEFT JOIN LATERAL (
       SELECT su.status, su.trial_ends_at, p.seat_cap, p.price_minor, p.currency,
-             su.current_period_end, su.cancel_at_period_end
+             su.current_period_end, su.cancel_at_period_end, su.provider
       FROM subscriptions su JOIN plans p ON p.id = su.plan_id
       WHERE su.owner_type = 'gym' AND su.owner_id = g.id
         AND su.status IN ('trialing','active','past_due')
@@ -630,6 +632,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
             currency: r.sub_currency ?? "",
             current_period_end: r.sub_current_period_end,
             cancel_at_period_end: r.sub_cancel_at_period_end ?? false,
+            provider: r.sub_provider ?? "none",
           }),
     seatsUsed: r.seats_used,
     ownerTrialUsed: r.owner_trial_used,
@@ -924,7 +927,7 @@ export async function updateOrg(
         SELECT count(*)::int AS n FROM subscriptions
         WHERE owner_type = 'gym'
           AND owner_id = ${input.gymId}
-          AND status <> 'trialing'`;
+          AND (status <> 'trialing' OR provider = 'paddle')`;
       if ((billed[0]?.n ?? 0) > 0) return { kind: "currency_locked" };
     }
 
@@ -1647,6 +1650,8 @@ export interface GymSubscriptionRow {
   currency: string;
   currentPeriodEnd: Date | null;
   cancelAtPeriodEnd: boolean;
+  /** Who charges for it: `paddle` for a plan the gym paid for, `none` for its own free trial. */
+  provider: string;
 }
 
 export interface OrgPlanRow {
@@ -1849,7 +1854,7 @@ export async function startGymTrial(
     // readers of one rule drift.
     const live = await tx<RawGymSubscription[]>`
       SELECT s.status, s.trial_ends_at, p.seat_cap, p.price_minor, p.currency,
-             s.current_period_end, s.cancel_at_period_end
+             s.current_period_end, s.cancel_at_period_end, s.provider
       FROM subscriptions s JOIN plans p ON p.id = s.plan_id
       WHERE s.owner_type = 'gym' AND s.owner_id = ${input.gymId}
         AND s.status IN ('trialing','active','past_due')`;
@@ -1912,6 +1917,7 @@ export async function startGymTrial(
       currency: plan.currency,
       current_period_end: null,
       cancel_at_period_end: false,
+      provider: "none",
     });
 
     await insertAudit(tx, {
@@ -1948,6 +1954,7 @@ interface RawGymSubscription {
   currency: string;
   current_period_end: Date | null;
   cancel_at_period_end: boolean;
+  provider: string;
 }
 
 function toGymSubscription(raw: RawGymSubscription): GymSubscriptionRow {
@@ -1959,6 +1966,7 @@ function toGymSubscription(raw: RawGymSubscription): GymSubscriptionRow {
     currency: raw.currency,
     currentPeriodEnd: raw.current_period_end,
     cancelAtPeriodEnd: raw.cancel_at_period_end,
+    provider: raw.provider,
   };
 }
 
@@ -1966,7 +1974,7 @@ function toGymSubscription(raw: RawGymSubscription): GymSubscriptionRow {
 export async function gymLiveSubscription(sql: SqlOrTx, gymId: string): Promise<GymSubscriptionRow | null> {
   const rows = await sql<RawGymSubscription[]>`
     SELECT s.status, s.trial_ends_at, p.seat_cap, p.price_minor, p.currency,
-           s.current_period_end, s.cancel_at_period_end
+           s.current_period_end, s.cancel_at_period_end, s.provider
     FROM subscriptions s JOIN plans p ON p.id = s.plan_id
     WHERE s.owner_type = 'gym' AND s.owner_id = ${gymId}
       AND s.status IN ('trialing','active','past_due')

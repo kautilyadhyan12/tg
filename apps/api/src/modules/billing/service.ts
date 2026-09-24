@@ -5,15 +5,29 @@
 // written from Paddle's own record of the subscription, fetched by our server, and
 // the subscription is placed on the gym named in OUR checkout row, never on anything
 // the payment says about itself.
-import { PAID_PLAN_GRACE_DAYS, type OrgBillingPortalResponse, type OrgCheckoutResponse, type OrgCheckoutSyncResponse, type PaddleSubscription } from "@app/shared";
+//
+// During the gym's own free trial the checkout sells a Paddle trial of the days left, so
+// the card is saved now and the first payment is taken when the trial ends (1c-ii; Kd,
+// RULINGS 2026-09-25). A paying gym may move to a bigger size: Paddle charges the rest of
+// the month at once, and changes nothing if that charge fails.
+import {
+  PAID_PLAN_GRACE_DAYS,
+  type OrgBillingPortalResponse,
+  type OrgCheckoutResponse,
+  type OrgCheckoutSyncResponse,
+  type OrgPlanChangePreview,
+  type OrgPlanChangeResponse,
+  type PaddleSubscription,
+  type PaddleTransaction,
+} from "@app/shared";
 import type { Sql } from "postgres";
 import type { RedisLike } from "../../redis.js";
 import { bustEntitlements } from "../entitlements/service.js";
 import * as orgsRepo from "../orgs/repo.js";
-import { holdsPrivilege, OrgsError, requirePrivilege, toOrgSubscription } from "../orgs/service.js";
+import { formatPriceMinor, holdsPrivilege, OrgsError, requirePrivilege, toOrgSubscription } from "../orgs/service.js";
 import type { Snapshot } from "./machine.js";
 import { onlinePaymentFor } from "./online.js";
-import type { PaddleApi, PaddleEnvironment } from "./paddle.js";
+import type { PaddleApi, PaddleEnvironment, ProrationMode, TrialCheckout } from "./paddle.js";
 import * as repo from "./repo.js";
 
 export interface PaddleSettings {
@@ -66,7 +80,7 @@ export async function startOrgCheckout(
     }
   }
 
-  const outcome = await repo.beginCheckout(deps.sql, { ...input, currency: org.currencyDisplay });
+  const outcome = await repo.beginCheckout(deps.sql, { ...input, currency: org.currencyDisplay, now: deps.now() });
   switch (outcome.kind) {
     case "replay": {
       const { checkout } = outcome;
@@ -79,8 +93,6 @@ export async function startOrgCheckout(
     }
     case "key_reused":
       throw new OrgsError(422, "idempotency_key_reused", "This Idempotency-Key was already used for a different plan.");
-    case "trial_running":
-      throw new OrgsError(409, "trial_running", "You can choose a plan when your free trial ends.");
     case "already_subscribed":
       throw new OrgsError(409, "already_subscribed", "You're already on a paid plan.");
     case "payment_overdue":
@@ -113,9 +125,29 @@ export async function startOrgCheckout(
   }
 
   const checkoutId = outcome.checkout.id;
+  const trialDays = outcome.trialDays;
+  let trial: TrialCheckout | undefined;
+  if (trialDays !== null) {
+    // The trial's own price copies the catalogue price's product and name.
+    const catalogue = await paddle.api.getPrice(outcome.priceId);
+    if (catalogue.kind !== "ok") {
+      await repo.failCheckout(deps.sql, { checkoutId, gymId: input.gymId });
+      deps.log.warn({ event: "billing.price_not_read", result: catalogue.kind }, "Paddle did not return a plan's price");
+      throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
+    }
+    trial = {
+      trialDays,
+      planCode: input.planCode,
+      productId: catalogue.value.product_id,
+      name: catalogue.value.name ?? input.planCode,
+      amountMinor: outcome.priceMinor,
+      currency: outcome.currency,
+    };
+  }
   const created = await paddle.api.createTransaction({
     priceId: outcome.priceId,
     customData: { gym_id: input.gymId, checkout_id: checkoutId },
+    ...(trial === undefined ? {} : { trial }),
   });
   if (created.kind !== "ok") {
     await repo.failCheckout(deps.sql, { checkoutId, gymId: input.gymId });
@@ -129,7 +161,7 @@ export async function startOrgCheckout(
     txn.items.length === 1 &&
     item !== undefined &&
     item.quantity === 1 &&
-    item.price.id === outcome.priceId &&
+    (trialDays === null ? item.price.id === outcome.priceId : isTrialPrice(item, input.planCode, trialDays)) &&
     item.price.unit_price.amount === String(outcome.priceMinor) &&
     item.price.unit_price.currency_code === outcome.currency &&
     txn.subscription_id === null &&
@@ -145,6 +177,18 @@ export async function startOrgCheckout(
     throw new OrgsError(409, "checkout_replaced", "That payment window has closed. Press Subscribe again.");
   }
   return checkoutResponse(paddle, checkoutId, txn.id);
+}
+
+/** A trial checkout's own price: exactly the days asked for, marked with the plan's code. */
+function isTrialPrice(item: PaddleTransaction["items"][number], planCode: string, trialDays: number): boolean {
+  const trial = item.price.trial_period;
+  return (
+    item.price.custom_data?.["plan_code"] === planCode &&
+    trial !== null &&
+    trial !== undefined &&
+    trial.interval === "day" &&
+    trial.frequency === trialDays
+  );
 }
 
 function checkoutResponse(paddle: PaddleSettings, checkoutId: string, transactionId: string): OrgCheckoutResponse {
@@ -176,8 +220,10 @@ export async function syncOrgCheckout(
       await bustEntitlements(deps.redis, input.userId);
     }
   }
+  // Paid means a plan paid through Paddle is on the gym, a paid trial included; the gym's
+  // own free trial is not one.
   const live = await orgsRepo.gymLiveSubscription(deps.sql, input.gymId);
-  if (live !== null && (live.status === "active" || live.status === "past_due")) {
+  if (live !== null && live.provider === "paddle") {
     return { state: "paid", subscription: toOrgSubscription(live) };
   }
   return { state: "waiting" };
@@ -225,6 +271,184 @@ export async function openBillingPortal(
   return { url: plan.overdue ? deepLinks.update_subscription_payment_method : session.value.urls.general.overview };
 }
 
+// ── A bigger size (1c-ii) ─────────────────────────────────────────────────────
+
+/** Why a size change was refused, as the console is told. Kept on a failed change's row,
+ *  so the same Idempotency-Key answers the same. */
+const SIZE_REFUSALS: Record<string, { status: number; message: string }> = {
+  no_paid_plan_trial: {
+    status: 409,
+    message: "Your free trial isn't paid for yet. Choose a plan with Subscribe; you're charged when the trial ends.",
+  },
+  no_paid_plan: { status: 409, message: "This plan isn't paid through us, so its size can't be changed here." },
+  payment_overdue: { status: 409, message: "A payment is overdue. Update your payment method to pay it, then change your size." },
+  plan_ending: { status: 409, message: "Your plan is set to end, so its size can't be changed." },
+  plan_not_found: { status: 404, message: "That plan isn't on your price list." },
+  not_bigger: { status: 409, message: "Choose a bigger size than the one you're on." },
+  payments_unavailable: { status: 503, message: UNAVAILABLE },
+  change_declined: {
+    status: 409,
+    message:
+      "Paddle couldn't take the payment for the bigger size, so nothing was charged and your size is the same. If your card was declined, update it in Manage payment and try again.",
+  },
+  change_unconfirmed: {
+    status: 503,
+    message: "We couldn't confirm the change with Paddle. Reload the page in a minute to see your size before trying again.",
+  },
+  plan_changed_meanwhile: { status: 409, message: "Your plan changed meanwhile. Reload the page and try again." },
+  interrupted: { status: 503, message: "That change was cut off. Reload the page to see your size before trying again." },
+};
+
+function sizeRefusal(code: string): OrgsError {
+  const refusal = SIZE_REFUSALS[code] ?? { status: 503, message: UNAVAILABLE };
+  return new OrgsError(refusal.status, code === "no_paid_plan_trial" ? "no_paid_plan" : code, refusal.message);
+}
+
+function refusalCode(outcome: Exclude<repo.SizeTargetOutcome, { kind: "ok" }>): string {
+  switch (outcome.kind) {
+    case "no_paid_plan":
+      return outcome.trialing ? "no_paid_plan_trial" : "no_paid_plan";
+    case "payment_overdue":
+    case "plan_ending":
+    case "not_bigger":
+      return outcome.kind;
+    case "no_such_plan":
+      return "plan_not_found";
+    case "not_set_up":
+      return "payments_unavailable";
+  }
+}
+
+/** Paddle's amounts are strings of minor units; ours are integers. */
+function minor(amount: string): number {
+  const n = Number.parseInt(amount, 10);
+  if (!Number.isSafeInteger(n)) throw new Error("Paddle amount out of range");
+  return n;
+}
+
+function prorationFor(trialing: boolean): ProrationMode {
+  // Nothing is charged in a trial: the new price is the one taken when it ends.
+  return trialing ? "do_not_bill" : "prorated_immediately";
+}
+
+/** What a bigger size would cost now and from when, as Paddle works it out. Changes nothing. */
+export async function previewSizeChange(
+  deps: BillingDeps,
+  input: { userId: string; gymId: string; planCode: string },
+): Promise<OrgPlanChangePreview> {
+  await requirePrivilege(deps, input.gymId, input.userId, "billing.manage");
+  const paddle = deps.paddle;
+  if (paddle === null) throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
+  const found = await repo.sizeTarget(deps.sql, input);
+  if (found.kind !== "ok") {
+    if (found.kind === "not_set_up") deps.log.error({ event: "billing.price_not_set_up", plan: input.planCode }, "a plan has no Paddle price");
+    throw sizeRefusal(refusalCode(found));
+  }
+  const target = found.target;
+  const preview = await paddle.api.previewPriceChange(target.subscriptionRef, target.priceId, prorationFor(target.trialing));
+  if (preview.kind !== "ok") {
+    const refusal = preview.kind === "refused" ? { status: preview.status, code: preview.code } : {};
+    deps.log.warn({ event: "billing.size_preview_failed", result: preview.kind, ...refusal }, "Paddle did not preview a size change");
+    throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
+  }
+  const totals = preview.value.immediate_transaction?.details.totals ?? null;
+  const dueNow =
+    totals === null || minor(totals.grand_total) <= 0
+      ? null
+      : {
+          totalLabel: formatPriceMinor(minor(totals.grand_total), totals.currency_code),
+          subtotalLabel: formatPriceMinor(minor(totals.subtotal), totals.currency_code),
+          taxLabel: minor(totals.tax) > 0 ? formatPriceMinor(minor(totals.tax), totals.currency_code) : null,
+        };
+  return {
+    planCode: target.planCode,
+    seatCap: target.seatCap,
+    priceLabel: formatPriceMinor(target.priceMinor, target.currency),
+    dueNow,
+    nextPaymentAt: preview.value.next_billed_at === null ? null : new Date(preview.value.next_billed_at).toISOString(),
+  };
+}
+
+/** Move a paying gym to a bigger size. Recorded first under the gym's lock, so two presses
+ *  cannot both ask Paddle; Paddle's subscription is read first, so a change that already
+ *  landed is never asked for (or charged) twice; the gym's plan is written from Paddle's own
+ *  record of it afterwards, through the one rule. */
+export async function changeSize(
+  deps: BillingDeps,
+  input: { userId: string; gymId: string; planCode: string; idempotencyKey: string },
+): Promise<OrgPlanChangeResponse> {
+  await requirePrivilege(deps, input.gymId, input.userId, "billing.manage");
+  const paddle = deps.paddle;
+  if (paddle === null) throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
+
+  const begun = await repo.beginPlanChange(deps.sql, { ...input, now: deps.now() });
+  switch (begun.kind) {
+    case "replay":
+      if (begun.change.state === "done") return await currentPlan(deps, input.gymId);
+      if (begun.change.state === "pending") throw new OrgsError(409, "change_in_progress", "Your size is being changed. Try again in a moment.");
+      throw sizeRefusal(begun.change.failure ?? "payments_unavailable");
+    case "key_reused":
+      throw new OrgsError(422, "idempotency_key_reused", "This Idempotency-Key was already used for a different plan.");
+    case "in_progress":
+      throw new OrgsError(409, "change_in_progress", "Your size is being changed. Try again in a moment.");
+    case "org_archived":
+      throw new OrgsError(409, "org_archived", "This organisation is archived.");
+    case "not_found":
+      throw new OrgsError(404, "org_not_found", "Organisation not found.");
+    case "refused":
+      if (begun.outcome.kind === "not_set_up") deps.log.error({ event: "billing.price_not_set_up", plan: input.planCode }, "a plan has no Paddle price");
+      throw sizeRefusal(refusalCode(begun.outcome));
+    case "created":
+      break;
+  }
+  const { changeId, target } = begun;
+  const fail = async (code: string): Promise<never> => {
+    await repo.finishPlanChange(deps.sql, { changeId, gymId: input.gymId, state: "failed", failure: code });
+    throw sizeRefusal(code);
+  };
+
+  const fetched = await paddle.api.getSubscription(target.subscriptionRef);
+  if (fetched.kind !== "ok") {
+    deps.log.warn({ event: "billing.size_read_failed", result: fetched.kind }, "Paddle did not return a subscription before a size change");
+    return await fail("payments_unavailable");
+  }
+  const sub = fetched.value;
+  const item = sub.items[0];
+  const onPaddle = sub.items.length === 1 && item !== undefined ? await repo.planForPaddleItem(deps.sql, item) : null;
+  if (onPaddle?.id === target.toPlanId) {
+    // Already on the bigger size (a change cut off before it was written): write it, charge nothing.
+    await applyPaddleSubscription(deps, sub.id);
+    await repo.finishPlanChange(deps.sql, { changeId, gymId: input.gymId, state: "done", failure: null });
+    return await currentPlan(deps, input.gymId);
+  }
+  const expected = target.trialing ? "trialing" : "active";
+  if (onPaddle?.id !== target.fromPlanId || sub.status !== expected || sub.scheduled_change !== null) {
+    await applyPaddleSubscription(deps, sub.id);
+    return await fail("plan_changed_meanwhile");
+  }
+
+  const changed = await paddle.api.changePrice(sub.id, target.priceId, prorationFor(target.trialing));
+  if (changed.kind === "refused") {
+    deps.log.warn({ event: "billing.size_change_refused", status: changed.status, code: changed.code }, "Paddle refused a size change");
+    return await fail("change_declined");
+  }
+  if (changed.kind !== "ok") {
+    // No clear answer: Paddle may have made it. Its webhook will say; a press again first reads Paddle.
+    deps.log.warn({ event: "billing.size_change_unconfirmed", result: changed.kind }, "a size change's answer was lost");
+    return await fail("change_unconfirmed");
+  }
+  await applyPaddleSubscription(deps, sub.id);
+  await repo.finishPlanChange(deps.sql, { changeId, gymId: input.gymId, state: "done", failure: null });
+  deps.log.info({ event: "billing.size_changed", gymId: input.gymId, plan: target.planCode }, "a gym moved to a bigger size");
+  return await currentPlan(deps, input.gymId);
+}
+
+async function currentPlan(deps: BillingDeps, gymId: string): Promise<OrgPlanChangeResponse> {
+  const live = await orgsRepo.gymLiveSubscription(deps.sql, gymId);
+  if (live === null) throw new OrgsError(409, "plan_changed_meanwhile", "Your plan changed meanwhile. Reload the page and try again.");
+  return { subscription: toOrgSubscription(live) };
+}
+
 /** A paying gym keeps everything this long after a payment fails. */
 export const GRACE_MS = PAID_PLAN_GRACE_DAYS * 24 * 60 * 60 * 1000;
 
@@ -259,7 +483,7 @@ export async function applyPaddleSubscription(deps: BillingDeps, subscriptionId:
 
   const item = sub.items[0];
   const plan = sub.items.length === 1 && item !== undefined && item.quantity === 1
-    ? await repo.planForPaddlePrice(deps.sql, item.price.id)
+    ? await repo.planForPaddleItem(deps.sql, item)
     : null;
 
   // Which gym: the row already placed, else the checkout our server made for it.
@@ -304,7 +528,7 @@ export async function applyPaddleSubscription(deps: BillingDeps, subscriptionId:
     return await setAside(deps, paddle, sub, gymId, "duplicate");
   }
   if (outcome.decision.kind === "ignore") {
-    if (outcome.decision.reason === "conflict" || outcome.decision.reason === "not_ours" || outcome.decision.reason === "trial_not_sold") {
+    if (outcome.decision.reason === "conflict" || outcome.decision.reason === "not_ours") {
       deps.log.error({ event: "billing.illegal_transition", reason: outcome.decision.reason, gymId }, "a Paddle subscription change was not applied");
     }
     return "unchanged";
@@ -314,11 +538,13 @@ export async function applyPaddleSubscription(deps: BillingDeps, subscriptionId:
 }
 
 export function toSnapshot(sub: PaddleSubscription, planId: string): Snapshot {
+  // In a trial the date that matters is the first payment.
+  const periodEnd = sub.status === "trialing" ? (sub.next_billed_at ?? sub.current_billing_period?.ends_at ?? null) : (sub.current_billing_period?.ends_at ?? null);
   return {
     status: sub.status,
     updatedAt: new Date(sub.updated_at),
     planId,
-    currentPeriodEnd: sub.current_billing_period === null ? null : new Date(sub.current_billing_period.ends_at),
+    currentPeriodEnd: periodEnd === null ? null : new Date(periodEnd),
     cancelAtPeriodEnd: sub.scheduled_change?.action === "cancel",
   };
 }
@@ -345,7 +571,8 @@ async function setAside(
     gymId,
     subscriptionRef: sub.id,
     reason,
-    transactionRefs: listed.value.filter((t) => MONEY_TAKEN.has(t.status)).map((t) => t.id),
+    // A trial's checkout charged nothing, so there is nothing to give back.
+    transactionRefs: listed.value.filter((t) => MONEY_TAKEN.has(t.status) && t.details?.totals?.grand_total !== "0").map((t) => t.id),
   });
   return "set_aside";
 }

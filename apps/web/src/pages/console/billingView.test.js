@@ -21,7 +21,13 @@ import {
   TRIAL_URGENT_DAYS,
   bannerFor,
   bannerIsDismissed,
+  biggerPlans,
+  canChooseBiggerSize,
   canManageBilling,
+  canPayDuringTrial,
+  firstPaymentText,
+  isSubscribed,
+  sizeChargeText,
   consoleIsReadOnly,
   dismissBanner,
   hasLivePlan,
@@ -308,8 +314,11 @@ describe('seatLineText', () => {
     // The banner is a READER of that sentence, not its author. Re-inline a copy
     // here that drifts by one word and this fails; re-inline an identical copy
     // and nothing is lost, which is the honest limit of what this can catch.
+    // Somebody who can pay is also told where to make room (1c-ii); nobody else is.
     const full = trialing(20, { seatsUsed: 300 });
-    expect(bannerFor(full, NOW)?.text).toBe(seatLineText(seatMeter(full)));
+    expect(bannerFor(full, NOW)?.text).toBe(`${seatLineText(seatMeter(full))} Choose a bigger plan under Plan on the Overview.`);
+    const trainerView = trialing(20, { seatsUsed: 300, staffRole: 'trainer', privileges: ['members.read'] });
+    expect(bannerFor(trainerView, NOW)?.text).toBe(seatLineText(seatMeter(trainerView)));
   });
 });
 
@@ -709,5 +718,104 @@ describe('dismissal', () => {
   it('does nothing at all without a gym', () => {
     expect(() => dismissBanner(null, 'trial_info', NOW)).not.toThrow();
     expect(bannerIsDismissed(null, 'trial_info', NOW)).toBe(false);
+  });
+});
+
+// ── Paying during the trial, and a bigger size (ROADMAP Stage 3 item 1c-ii) ─────
+
+describe('who is offered which choice', () => {
+  const paidTrial = (over = {}) =>
+    trialing(6, {
+      ...over,
+      subscription: { status: 'trialing', trialEndsAt: inDays(6), seatCap: 500, subscribed: true, priceLabel: '$129', currentPeriodEnd: inDays(6), ...over.subscription },
+    });
+  const paying = (sub = {}, over = {}) =>
+    gym({ subscription: { status: 'active', trialEndsAt: null, seatCap: 500, subscribed: true, priceLabel: '$129', currentPeriodEnd: inDays(20), ...sub }, seatsUsed: 20, ...over });
+  const trainer = { staffRole: 'trainer', privileges: ['members.read'] };
+
+  it.each([
+    ['the gym’s own free trial', trialing(6), { subscribed: false, pay: true, bigger: false }],
+    ['a free trial in rupees (Razorpay is not built)', trialing(6, { currencyDisplay: 'INR' }), { subscribed: false, pay: false, bigger: false }],
+    ['a trial the gym has paid for', paidTrial(), { subscribed: true, pay: false, bigger: true }],
+    ['a paid plan in good standing', paying(), { subscribed: true, pay: false, bigger: true }],
+    ['a paid plan set to end', paying({ cancelAtPeriodEnd: true }), { subscribed: true, pay: false, bigger: false }],
+    ['a failed payment', paying({ status: 'past_due' }), { subscribed: true, pay: false, bigger: false }],
+    ['a read-only console', paying({}, { consoleReadOnly: true }), { subscribed: true, pay: false, bigger: false }],
+    ['a trainer at a paying gym', paying({}, trainer), { subscribed: true, pay: false, bigger: false }],
+    ['a trainer in a free trial', trialing(6, trainer), { subscribed: false, pay: false, bigger: false }],
+    ['an api too old to say it was paid for', trialing(6, { subscription: { status: 'trialing', trialEndsAt: inDays(6), seatCap: 200 } }), { subscribed: false, pay: true, bigger: false }],
+    ['no plan at all', gym(), { subscribed: false, pay: false, bigger: false }],
+  ])('%s', (_name, org, want) => {
+    expect({ subscribed: isSubscribed(org), pay: canPayDuringTrial(org), bigger: canChooseBiggerSize(org) }).toEqual(want);
+  });
+});
+
+describe('biggerPlans', () => {
+  const list = [
+    { code: 'b1', seatCap: 200 },
+    { code: 'b2', seatCap: 500 },
+    { code: 'b3', seatCap: 1000 },
+    { code: 'custom', seatCap: null },
+  ];
+  it('lists only the sizes above the gym’s own, a capless one included', () => {
+    expect(biggerPlans(list, 500).map((p) => p.code)).toEqual(['b3', 'custom']);
+    expect(biggerPlans(list, 200).map((p) => p.code)).toEqual(['b2', 'b3', 'custom']);
+  });
+  it('lists nothing past no limit, or for a list it cannot read', () => {
+    expect(biggerPlans(list, null)).toEqual([]);
+    expect(biggerPlans(null, 200)).toEqual([]);
+  });
+});
+
+describe('the words for money', () => {
+  it('names the first payment of a paid trial, and nothing for a free one', () => {
+    const on = trialEndDateLabel(inDays(6));
+    expect(firstPaymentText({ status: 'trialing', subscribed: true, priceLabel: '$129', currentPeriodEnd: inDays(6) })).toBe(`Your first payment of $129 is on ${on}.`);
+    expect(firstPaymentText({ status: 'trialing', trialEndsAt: inDays(6) })).toBeNull();
+    expect(firstPaymentText({ status: 'active', subscribed: true, priceLabel: '$129', currentPeriodEnd: inDays(6) })).toBeNull();
+    expect(firstPaymentText({ status: 'trialing', subscribed: true, priceLabel: null, currentPeriodEnd: inDays(6) })).toBeNull();
+  });
+
+  it('says what a bigger size costs now, with the tax shown, and from when', () => {
+    const from = trialEndDateLabel(inDays(20));
+    expect(
+      sizeChargeText({ priceLabel: '$129', dueNow: { totalLabel: '$53.52', subtotalLabel: '$49.15', taxLabel: '$4.37' }, nextPaymentAt: inDays(20) }),
+    ).toBe(`You pay $53.52 now ($49.15 plus $4.37 tax) for the rest of this month, then $129 a month from ${from}.`);
+    expect(sizeChargeText({ priceLabel: '$129', dueNow: { totalLabel: '$49.15', subtotalLabel: '$49.15', taxLabel: null }, nextPaymentAt: inDays(20) })).toBe(
+      `You pay $49.15 now for the rest of this month, then $129 a month from ${from}.`,
+    );
+  });
+
+  it('says nothing is charged during a trial', () => {
+    expect(sizeChargeText({ priceLabel: '$129', dueNow: null, nextPaymentAt: inDays(6) })).toBe(`Nothing to pay now. $129 a month from ${trialEndDateLabel(inDays(6))}.`);
+    expect(sizeChargeText(null)).toBeNull();
+  });
+});
+
+describe('the banner for a trial the gym has paid for', () => {
+  const paidTrial = (days) =>
+    trialing(days, { subscription: { status: 'trialing', trialEndsAt: inDays(days), seatCap: 500, subscribed: true, priceLabel: '$129', currentPeriodEnd: inDays(days) } });
+
+  it('is never urgent: the plan it chose starts by itself', () => {
+    for (const days of [3, 1, 0]) {
+      expect(bannerFor(paidTrial(days), NOW)?.key).toBe('trial_info');
+    }
+  });
+
+  it('counts down in good English and names the first payment', () => {
+    const on = (days) => trialEndDateLabel(inDays(days));
+    expect(bannerFor(paidTrial(6), NOW)?.text).toBe(`Free trial — 6 days left. Your first payment of $129 is on ${on(6)}.`);
+    expect(bannerFor(paidTrial(1), NOW)?.text).toBe(`Free trial — 1 day left. Your first payment of $129 is on ${on(1)}.`);
+    expect(bannerFor(paidTrial(0), NOW)?.text).toBe(`Free trial — last day. Your first payment of $129 is on ${on(0)}.`);
+  });
+
+  it('tells a free trial’s billing staff, near the end, that they can pay now', () => {
+    expect(bannerFor(trialing(2), NOW)?.text).toContain('Choose a plan under Plan on the Overview; you pay when the trial ends.');
+    expect(bannerFor(trialing(2, { staffRole: 'trainer', privileges: ['members.read'] }), NOW)?.text).not.toContain('Choose a plan');
+  });
+
+  it('points a full paying gym at a bigger size', () => {
+    const full = gym({ subscription: { status: 'active', trialEndsAt: null, seatCap: 100, subscribed: true, priceLabel: '$79', currentPeriodEnd: inDays(20) }, seatsUsed: 95 });
+    expect(bannerFor(full, NOW)?.text).toBe('95 of 100 places used. Choose a bigger size under Plan on the Overview.');
   });
 });

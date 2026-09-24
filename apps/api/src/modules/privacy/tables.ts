@@ -362,6 +362,9 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // (migration `0041`). Kept on audit_log's footing: it is the gym's record of a
   // payment it made, not the person's own data; `ON DELETE set null` if the row goes.
   "billing_checkouts",
+  // billing_plan_changes.created_by — who pressed Choose a bigger size (`0044`), on the
+  // same footing as billing_checkouts above.
+  "billing_plan_changes",
   "api_cost_events",
   "usage_daily",
   "trace_samples",

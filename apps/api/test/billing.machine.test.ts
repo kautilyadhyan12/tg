@@ -3,7 +3,9 @@
 // Paddle's status (five) × whether the gym already holds another live plan × whether
 // Paddle's record is older than ours. The expected column is written from Part 5 §3
 // and §8 and Paddle's own status list (developer.paddle.com, subscription entity), not
-// read off the code.
+// read off the code. A trialing row is a gym that paid during its free trial (1c-ii):
+// Paddle's trials page says the subscription is `trialing` until the first charge, then
+// `active`, or `past_due` when that charge fails, or `canceled` if cancelled first.
 import { describe, expect, it } from "vitest";
 import { decide, targetStatus, type LocalRow, type LocalStatus, type ProviderStatus, type Snapshot } from "../src/modules/billing/machine.js";
 
@@ -37,24 +39,28 @@ const LOCAL: (Local | null)[] = [null, "trialing", "active", "past_due", "cancel
 
 /** What each case must decide, from the rules as written in machine.ts's header. */
 function expected(local: Local | null, provider: ProviderStatus, otherLive: boolean, stale: boolean): string {
-  if (provider === "trialing") return "ignore:trial_not_sold";
   if (local !== null && stale) return "ignore:stale";
-  if (local === "trialing" || local === "canceled") return "ignore:not_ours";
-  const target = provider === "active" ? "active" : provider === "past_due" ? "past_due" : "expired";
+  if (local === "canceled") return "ignore:not_ours";
+  const target = provider === "trialing" ? "trialing" : provider === "active" ? "active" : provider === "past_due" ? "past_due" : "expired";
   if (local === null) {
     if (target === "expired") return "insert:expired:ended";
-    return otherLive ? "duplicate" : `insert:${target}:activated`;
+    if (otherLive) return "duplicate";
+    return target === "trialing" ? "insert:trialing:trial_started" : `insert:${target}:activated`;
   }
   if (local === "expired" || local === "expired_grace") {
     // Paddle ending a plan whose grace ran out is written, so the gym may subscribe afresh.
     if (target === "expired") return local === "expired_grace" ? "update:expired:ended" : "ignore:unchanged";
     // Still unpaid never opens an ended plan: only a payment does.
     if (target === "past_due") return "ignore:unchanged";
+    // Nothing goes back into a trial.
+    if (target === "trialing") return "ignore:conflict";
     return otherLive ? "ignore:conflict" : "update:active:reactivated";
   }
-  // local is active or past_due
+  // local is trialing, active or past_due
   if (target === "expired") return "update:expired:ended";
-  if (local === "active" && target === "past_due") return "update:past_due:payment_failed";
+  if (target === "trialing") return local === "trialing" ? "ignore:unchanged" : "ignore:conflict";
+  if (local === "trialing" && target === "active") return "update:active:converted";
+  if (local !== "past_due" && target === "past_due") return "update:past_due:payment_failed";
   if (local === "past_due" && target === "active") return "update:active:recovered";
   return "ignore:unchanged";
 }
@@ -102,6 +108,15 @@ describe("what changed on a live plan", () => {
       "update:active:renewed",
     );
   });
+  it("a trial's own changes: a bigger size, a cancel before it ends, the day moved", () => {
+    const trial = (s: Partial<Snapshot>) => label(decide({ row: row("trialing"), otherLive: false, snapshot: snap("trialing", s) }));
+    expect(trial({ planId: "plan-b" })).toBe("update:trialing:plan_changed");
+    expect(trial({ cancelAtPeriodEnd: true })).toBe("update:trialing:cancel_scheduled");
+    expect(trial({ currentPeriodEnd: new Date("2026-10-05T00:00:00Z") })).toBe("update:trialing:updated");
+  });
+  it("the trial's first payment is a conversion, whatever else changed with it", () => {
+    expect(label(decide({ row: row("trialing"), otherLive: false, snapshot: snap("active", { currentPeriodEnd: MONTH2 }) }))).toBe("update:active:converted");
+  });
   it("a row with no Paddle time yet takes any record", () => {
     expect(label(decide({ row: row("active", { providerUpdatedAt: null }), otherLive: false, snapshot: snap("canceled") }))).toBe("update:expired:ended");
   });
@@ -113,7 +128,7 @@ describe("Paddle's statuses onto ours", () => {
     ["past_due", "past_due"],
     ["paused", "expired"],
     ["canceled", "expired"],
-    ["trialing", null],
+    ["trialing", "trialing"],
   ] as const)("%s → %s", (provider, ours) => {
     expect(targetStatus(provider)).toBe(ours);
   });

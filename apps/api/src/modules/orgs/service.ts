@@ -1119,8 +1119,10 @@ export async function startOrgTrial(
 }
 
 export function toOrgSubscription(row: repo.GymSubscriptionRow): OrgSubscription {
-  // A free trial has no price and no billing month; a paid plan shows both.
-  const paid = row.status === "active" || row.status === "past_due";
+  // A free trial has no price and no billing month; a paid plan shows both, and so does a
+  // trial the gym has paid for (its month starts when the trial ends).
+  const subscribed = row.provider === "paddle";
+  const paid = row.status === "active" || row.status === "past_due" || (subscribed && row.status === "trialing");
   return {
     status: row.status,
     trialEndsAt: row.trialEndsAt?.toISOString() ?? null,
@@ -1128,6 +1130,7 @@ export function toOrgSubscription(row: repo.GymSubscriptionRow): OrgSubscription
     priceLabel: paid ? formatPriceMinor(row.priceMinor, row.currency) : null,
     currentPeriodEnd: paid ? (row.currentPeriodEnd?.toISOString() ?? null) : null,
     cancelAtPeriodEnd: paid && row.cancelAtPeriodEnd,
+    subscribed,
   };
 }
 
