@@ -500,10 +500,10 @@ export default function Members() {
             className="mt-2 rounded-xl px-4 py-2.5 text-sm font-semibold"
             style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F', minHeight: 44 }}
           >
-            Choose a bigger size
+            Change size
           </button>
         ) : null}
-        {choosing ? <PlanChoiceDialog org={org} mode="bigger" onClose={() => setChoosing(false)} /> : null}
+        {choosing ? <PlanChoiceDialog org={org} mode="size" onClose={() => setChoosing(false)} /> : null}
         {/* THE NOTE IS DRAWN WHERE THERE IS A GREYED CONTROL TO EXPLAIN, and on
             this screen that means somebody who may remove people. A trainer has
             no Remove button at all (§4.3), so for them this sentence would

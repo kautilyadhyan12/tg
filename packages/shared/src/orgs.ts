@@ -495,6 +495,10 @@ export const orgSubscriptionSchema = z.object({
   trialEndsAt: z.string().nullable(),
   /** Live members this plan admits, or null for a capless tier. */
   seatCap: z.number().int().positive().nullable(),
+  /** The size of the plan the gym is on and paying for: what the Plan card heads with. It is
+   *  `seatCap` except while a smaller limit holds (a paid trial's, or a smaller size being
+   *  made at Paddle this minute). */
+  planSeatCap: z.number().int().positive().nullable().default(null),
   /** What a PAID plan costs, formatted by the server ("$79"); null during a free trial. */
   priceLabel: z.string().min(1).nullable().default(null),
   /** When a paid plan's current month ends: it renews then, or stops if
@@ -509,7 +513,53 @@ export const orgSubscriptionSchema = z.object({
    *  is taken, a failed first charge included; this is the chosen plan's, from then. Null
    *  otherwise. */
   nextSeatCap: z.number().int().positive().nullable().default(null),
+  /** A smaller size the gym chose (1c-iii; Kd, RULINGS 2026-09-25), due at `from`, the end of
+   *  the month already paid; the gym keeps its whole size (`seatCap`) until then. Its members
+   *  are counted at `decideAt`: if they fit it moves; if not, it moves to `ifTooMany`, the
+   *  smallest size that holds the members it has now, or stays when that is null. Null when
+   *  none waits. */
+  pendingSize: z
+    .object({
+      seatCap: z.number().int().positive(),
+      priceLabel: z.string().min(1),
+      from: z.string(),
+      decideAt: z.string(),
+      ifTooMany: z
+        .object({ planCode: z.string().min(1).max(64), seatCap: z.number().int().positive(), priceLabel: z.string().min(1) })
+        .strict()
+        .nullable(),
+    })
+    .strict()
+    .nullable()
+    .default(null),
+  /** The smaller size last chosen was not made: the gym had more members than it holds when
+   *  they were counted, so it stayed on its size. Null otherwise, and once another size is
+   *  chosen. */
+  sizeKept: z
+    .object({
+      seatCap: z.number().int().positive(),
+      members: z.number().int().nonnegative(),
+    })
+    .strict()
+    .nullable()
+    .default(null),
+  /** The smaller size last chosen was held by more members than it allows, so the smallest
+   *  size that held them (`seatCap`) was made instead. Null otherwise, and once another size
+   *  is chosen. */
+  sizeFitted: z
+    .object({
+      askedSeatCap: z.number().int().positive(),
+      members: z.number().int().nonnegative(),
+    })
+    .strict()
+    .nullable()
+    .default(null),
 });
+
+/** A smaller size waiting is decided this long before the next payment: the members are
+ *  counted and Paddle's price changed then (Paddle takes no change within 30 minutes of a
+ *  charge). */
+export const SMALLER_SIZE_DECIDE_HOURS = 3;
 export type OrgSubscription = z.infer<typeof orgSubscriptionSchema>;
 
 /** How long a gym's free trial lasts (Kd, RULINGS 2026-09-23). The seed writes

@@ -445,14 +445,19 @@ if (paddle === null) {
     log.fatal({ err }, "failed to register the Paddle events schedule");
     process.exit(1);
   }
+  // A gym's billing staff are emailed about a smaller size through the sign-in codes' sender.
+  const billingMail =
+    config.RESEND_API_KEY !== undefined && config.EMAIL_FROM !== undefined
+      ? { transport: createResendTransport({ apiKey: config.RESEND_API_KEY, from: config.EMAIL_FROM }), webOrigin: config.WEB_ORIGIN }
+      : null;
   billingWorker = new Worker(
     BILLING_QUEUE,
     async (job) => {
       if (job.name !== BILLING_PADDLE_EVENTS_JOB) throw new Error(`unknown job on ${BILLING_QUEUE}: ${job.name}`);
       const startedAt = Date.now();
-      const run = await processPaddleEvents({ sql, redis: createMemoryRedis(), paddle, log, now: () => new Date() });
+      const run = await processPaddleEvents({ sql, redis: createMemoryRedis(), paddle, log, now: () => new Date(), mail: billingMail });
       const refunds = run.refunds.requested + run.refunds.notNeeded + run.refunds.deferred + run.refunds.failed;
-      if (run.applied + run.unchanged + run.deferred + run.givenUp + run.forgotten + refunds > 0) {
+      if (run.applied + run.unchanged + run.deferred + run.givenUp + run.forgotten + refunds + run.pendingSizes.applied + run.pendingSizes.waiting + run.pendingSizes.kept + run.pendingSizes.warned > 0) {
         log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
       }
     },

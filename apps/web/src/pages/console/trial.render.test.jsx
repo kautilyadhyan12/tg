@@ -195,7 +195,7 @@ describe('the plan card', () => {
 
     await screen.findByText('Iron House');
     expect(screen.queryByText('Plan')).toBeNull();
-    expect(screen.queryByText(/places used/)).toBeNull();
+    expect(screen.queryByText(/ of \d+ members/)).toBeNull();
     // THE ONLY TRIAL BUTTON ON SCREEN IS THE PROMPT'S, and asserting WHERE it
     // lives is the point: this used to assert there was none at all, which
     // stopped being true the moment the fixture said "never trialled" — and a
@@ -231,7 +231,7 @@ describe('the plan card', () => {
     await screen.findByText('Iron House');
     expect(screen.queryByText('Plan')).toBeNull();
     expect(screen.queryByText('Free trial')).toBeNull();
-    expect(screen.queryByText(/places used/)).toBeNull();
+    expect(screen.queryByText(/ of \d+ members/)).toBeNull();
   });
 
   it('shows a trial already running, with its end date and its meter', async () => {
@@ -240,7 +240,7 @@ describe('the plan card', () => {
 
     expect(await screen.findByText('Free trial')).toBeTruthy();
     expect(screen.getByText(/^Ends /)).toBeTruthy();
-    expect(screen.getByText(/12 of 300 places used/)).toBeTruthy();
+    expect(screen.getByText(/12 of 300 members/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: /start your 10-day free trial/i })).toBeNull();
   });
 
@@ -262,7 +262,7 @@ describe('the plan card', () => {
     expect(screen.queryByText(/free trial/i)).toBeNull();
   });
 
-  it('shows a paid plan’s price and the day it renews, never the old trial date', async () => {
+  it('shows a paid plan’s size, price and next payment, never the old trial date', async () => {
     orgService.getMine.mockResolvedValue(
       mineIs({
         ...ORG,
@@ -279,13 +279,13 @@ describe('the plan card', () => {
     );
     renderConsole(Overview);
 
-    expect(await screen.findByText('$129 a month')).toBeTruthy();
+    expect(await screen.findByText('Up to 500 members · $129 a month')).toBeTruthy();
     const renews = new Date('2026-11-01T12:00:00.000Z').toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-    expect(screen.getByText(`Renews ${renews}`)).toBeTruthy();
+    expect(screen.getByText(`Next payment $129 on ${renews}`)).toBeTruthy();
     expect(screen.queryByText(/^Ends /)).toBeNull();
   });
 
-  it('promises no renewal while a payment has failed', async () => {
+  it('promises no next payment while a payment has failed', async () => {
     orgService.getMine.mockResolvedValue(
       mineIs({
         ...ORG,
@@ -302,8 +302,8 @@ describe('the plan card', () => {
     );
     renderConsole(Overview);
 
-    expect(await screen.findByText('$129 a month')).toBeTruthy();
-    expect(screen.queryByText(/^Renews /)).toBeNull();
+    expect(await screen.findByText('Up to 500 members · $129 a month')).toBeTruthy();
+    expect(screen.queryByText(/^Next payment /)).toBeNull();
     expect(screen.getByText(/didn't go through/)).toBeTruthy();
   });
 
@@ -419,7 +419,7 @@ describe('the seat meter', () => {
     orgService.getMine.mockResolvedValue(mineIs(onTrial({ seatsUsed: 42 })));
     renderConsole(Members, '/console/iron-house/members');
 
-    expect((await screen.findByTestId('seat-meter')).textContent).toMatch(/42 of 300 places used/);
+    expect((await screen.findByTestId('seat-meter')).textContent).toMatch(/42 of 300 members/);
   });
 
   it('is NOT the length of the roster page', async () => {

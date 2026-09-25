@@ -34,10 +34,14 @@ export class FakePaddle implements PaddleApi {
   charges: { subscriptionId: string; amount: number }[] = [];
   /** Refuse the next change as a declined card would (Paddle changes nothing). */
   declineNextChange = false;
+  /** Refuse the next change to this subscription only. */
+  declineChangeFor: string | null = null;
   /** Make the next change, but lose its answer (a timeout). */
   loseChangeAnswer = false;
   /** Hold each change this long before answering, so two presses overlap. */
   changeDelayMs = 0;
+  /** Run once while the next change is being made, before it lands (something else at that instant). */
+  duringNextChange: (() => Promise<unknown>) | null = null;
   /** The trial checkouts asked for. */
   trialCheckouts: TrialCheckout[] = [];
   /** Make the next trial checkout's price carry another plan's code, or another length. */
@@ -196,11 +200,15 @@ export class FakePaddle implements PaddleApi {
   async changePrice(subscriptionId: string, priceId: string, mode: ProrationMode): Promise<PaddleResult<PaddleSubscription>> {
     this.changeCalls.push({ subscriptionId, priceId, mode });
     if (this.changeDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, this.changeDelayMs));
+    const during = this.duringNextChange;
+    this.duringNextChange = null;
+    if (during !== null) await during();
     if (this.down) return { kind: "unavailable", status: 503 };
     const sub = this.subs.get(subscriptionId);
     if (sub === undefined) return { kind: "not_found" };
-    if (this.declineNextChange) {
+    if (this.declineNextChange || this.declineChangeFor === subscriptionId) {
       this.declineNextChange = false;
+      if (this.declineChangeFor === subscriptionId) this.declineChangeFor = null;
       return { kind: "refused", status: 400, code: "subscription_payment_declined" };
     }
     if (mode === "prorated_immediately") this.charges.push({ subscriptionId, amount: this.proration(sub, priceId) });

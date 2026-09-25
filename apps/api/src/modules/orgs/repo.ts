@@ -449,6 +449,14 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
       sub_current_period_end: Date | null;
       sub_cancel_at_period_end: boolean | null;
       sub_provider: string | null;
+      sub_pending_seat_cap: number | null;
+      sub_pending_price_minor: number | null;
+      sub_pending_from: Date | null;
+      sub_trial_seat_cap: number | null;
+      sub_kept_seat_cap: number | null;
+      sub_kept_members: number | null;
+      sub_fitted_asked_seat_cap: number | null;
+      sub_fitted_members: number | null;
       payment_overdue: boolean;
       seats_used: number;
       owner_trial_used: boolean;
@@ -475,6 +483,14 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
            sub.current_period_end AS sub_current_period_end,
            sub.cancel_at_period_end AS sub_cancel_at_period_end,
            sub.provider AS sub_provider,
+           sub.pending_seat_cap AS sub_pending_seat_cap,
+           sub.pending_price_minor AS sub_pending_price_minor,
+           sub.pending_from AS sub_pending_from,
+           sub.trial_seat_cap AS sub_trial_seat_cap,
+           sub.kept_seat_cap AS sub_kept_seat_cap,
+           sub.kept_members AS sub_kept_members,
+           sub.fitted_asked_seat_cap AS sub_fitted_asked_seat_cap,
+           sub.fitted_members AS sub_fitted_members,
            -- A paid plan whose grace ended while Paddle still retries (1c-i).
            EXISTS (
              SELECT 1 FROM subscriptions so
@@ -609,10 +625,30 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
     -- the LIMIT is what makes that a property of the QUERY rather than a fact
     -- this reader inherits from an index it does not name.
     LEFT JOIN LATERAL (
-      SELECT su.status, su.trial_ends_at, LEAST(p.seat_cap, su.trial_seat_cap) AS seat_cap,
-             p.seat_cap AS plan_seat_cap, p.price_minor, p.currency,
-             su.current_period_end, su.cancel_at_period_end, su.provider
+      SELECT su.status, su.trial_ends_at,
+             LEAST(p.seat_cap, su.trial_seat_cap, CASE WHEN su.pending_held_at IS NOT NULL THEN np.seat_cap END) AS seat_cap,
+             p.seat_cap AS plan_seat_cap, su.trial_seat_cap, p.price_minor, p.currency,
+             su.current_period_end, su.cancel_at_period_end, su.provider,
+             ap.seat_cap AS pending_seat_cap, ap.price_minor AS pending_price_minor, su.pending_from,
+             CASE WHEN lc.failure = 'too_many_members' AND su.pending_plan_id IS NULL AND lc.recent THEN lc.seat_cap END AS kept_seat_cap,
+             CASE WHEN lc.failure = 'too_many_members' AND su.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS kept_members,
+             CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND su.pending_plan_id IS NULL AND lc.recent THEN lc.asked_seat_cap END AS fitted_asked_seat_cap,
+             CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND su.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS fitted_members
       FROM subscriptions su JOIN plans p ON p.id = su.plan_id
+      LEFT JOIN plans np ON np.id = su.pending_plan_id
+      -- The size asked for, which the card names; np is what is being made.
+      LEFT JOIN plans ap ON ap.id = COALESCE(su.pending_requested_plan_id, su.pending_plan_id)
+      -- The last size change: a smaller size the members did not fit is said on the card.
+      LEFT JOIN LATERAL (
+        SELECT c.state, c.failure, c.members_counted, kp.seat_cap, rp.seat_cap AS asked_seat_cap,
+               -- Said until the payment after the one it was decided for.
+               c.created_at > su.current_period_end - interval '32 days' AS recent
+        FROM billing_plan_changes c JOIN plans kp ON kp.id = c.to_plan_id
+        LEFT JOIN plans rp ON rp.id = c.requested_plan_id
+        WHERE c.gym_id = su.owner_id AND c.subscription_id = su.id
+        ORDER BY c.created_at DESC
+        LIMIT 1
+      ) lc ON true
       WHERE su.owner_type = 'gym' AND su.owner_id = g.id
         AND su.status IN ('trialing','active','past_due')
       LIMIT 1
@@ -637,6 +673,14 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
             current_period_end: r.sub_current_period_end,
             cancel_at_period_end: r.sub_cancel_at_period_end ?? false,
             provider: r.sub_provider ?? "none",
+            pending_seat_cap: r.sub_pending_seat_cap,
+            pending_price_minor: r.sub_pending_price_minor,
+            pending_from: r.sub_pending_from,
+            trial_seat_cap: r.sub_trial_seat_cap,
+            kept_seat_cap: r.sub_kept_seat_cap,
+            kept_members: r.sub_kept_members,
+            fitted_asked_seat_cap: r.sub_fitted_asked_seat_cap,
+            fitted_members: r.sub_fitted_members,
           }),
     seatsUsed: r.seats_used,
     ownerTrialUsed: r.owner_trial_used,
@@ -1470,11 +1514,12 @@ export async function claimSeatByInvitation(
  *
  *  Status set is §4.1's, so `past_due` still grants during v1 §10's grace. */
 async function seatCapFor(tx: SqlOrTx, gymId: string): Promise<number | null> {
-  // A trial the gym has paid for keeps its free trial's limit until a payment is taken
-  // (LEAST ignores the null every other row has).
+  // A trial the gym has paid for keeps its free trial's limit until a payment is taken, and
+  // a smaller size holds for joins once its switch has begun (LEAST ignores the nulls).
   const rows = await tx<{ seat_cap: number | null }[]>`
-    SELECT LEAST(p.seat_cap, s.trial_seat_cap) AS seat_cap
+    SELECT LEAST(p.seat_cap, s.trial_seat_cap, CASE WHEN s.pending_held_at IS NOT NULL THEN np.seat_cap END) AS seat_cap
     FROM subscriptions s JOIN plans p ON p.id = s.plan_id
+    LEFT JOIN plans np ON np.id = s.pending_plan_id
     WHERE s.owner_type = 'gym' AND s.owner_id = ${gymId}
       AND s.status IN ('trialing','active','past_due')`;
   return rows[0]?.seat_cap ?? null;
@@ -1661,6 +1706,14 @@ export interface GymSubscriptionRow {
   cancelAtPeriodEnd: boolean;
   /** Who charges for it: `paddle` for a plan the gym paid for, `none` for its own free trial. */
   provider: string;
+  /** A paid trial's free-trial limit, held until the first payment; null otherwise. */
+  trialSeatCap: number | null;
+  /** A smaller size waiting, due at `from` (the end of the month paid). */
+  pending: { seatCap: number; priceMinor: number; from: Date } | null;
+  /** The smaller size last chosen was not made: the members counted did not fit it. */
+  kept: { seatCap: number; members: number } | null;
+  /** A bigger size than the one asked for was made: the members counted did not fit that. */
+  fitted: { askedSeatCap: number; members: number } | null;
 }
 
 export interface OrgPlanRow {
@@ -1862,10 +1915,29 @@ export async function startGymTrial(
     // forbids the shared-`sql` shape, and :14493 Low-2 is what happens when two
     // readers of one rule drift.
     const live = await tx<RawGymSubscription[]>`
-      SELECT s.status, s.trial_ends_at, LEAST(p.seat_cap, s.trial_seat_cap) AS seat_cap,
-             p.seat_cap AS plan_seat_cap, p.price_minor, p.currency,
-             s.current_period_end, s.cancel_at_period_end, s.provider
+      SELECT s.status, s.trial_ends_at,
+             LEAST(p.seat_cap, s.trial_seat_cap, CASE WHEN s.pending_held_at IS NOT NULL THEN np.seat_cap END) AS seat_cap,
+             p.seat_cap AS plan_seat_cap, s.trial_seat_cap, p.price_minor, p.currency,
+             s.current_period_end, s.cancel_at_period_end, s.provider,
+             ap.seat_cap AS pending_seat_cap, ap.price_minor AS pending_price_minor, s.pending_from,
+             CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL AND lc.recent THEN lc.seat_cap END AS kept_seat_cap,
+             CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS kept_members,
+             CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND s.pending_plan_id IS NULL AND lc.recent THEN lc.asked_seat_cap END AS fitted_asked_seat_cap,
+             CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND s.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS fitted_members
       FROM subscriptions s JOIN plans p ON p.id = s.plan_id
+      LEFT JOIN plans np ON np.id = s.pending_plan_id
+      -- The size asked for, which the card names; np is what is being made.
+      LEFT JOIN plans ap ON ap.id = COALESCE(s.pending_requested_plan_id, s.pending_plan_id)
+      LEFT JOIN LATERAL (
+        SELECT c.state, c.failure, c.members_counted, kp.seat_cap, rp.seat_cap AS asked_seat_cap,
+               -- Said until the payment after the one it was decided for.
+               c.created_at > s.current_period_end - interval '32 days' AS recent
+        FROM billing_plan_changes c JOIN plans kp ON kp.id = c.to_plan_id
+        LEFT JOIN plans rp ON rp.id = c.requested_plan_id
+        WHERE c.gym_id = s.owner_id AND c.subscription_id = s.id
+        ORDER BY c.created_at DESC
+        LIMIT 1
+      ) lc ON true
       WHERE s.owner_type = 'gym' AND s.owner_id = ${input.gymId}
         AND s.status IN ('trialing','active','past_due')`;
     const existing = live[0];
@@ -1929,6 +2001,14 @@ export async function startGymTrial(
       current_period_end: null,
       cancel_at_period_end: false,
       provider: "none",
+      pending_seat_cap: null,
+      pending_price_minor: null,
+      pending_from: null,
+      trial_seat_cap: null,
+      kept_seat_cap: null,
+      kept_members: null,
+      fitted_asked_seat_cap: null,
+      fitted_members: null,
     });
 
     await insertAudit(tx, {
@@ -1968,6 +2048,14 @@ interface RawGymSubscription {
   current_period_end: Date | null;
   cancel_at_period_end: boolean;
   provider: string;
+  pending_seat_cap: number | null;
+  pending_price_minor: number | null;
+  pending_from: Date | null;
+  trial_seat_cap: number | null;
+  kept_seat_cap: number | null;
+  kept_members: number | null;
+  fitted_asked_seat_cap: number | null;
+  fitted_members: number | null;
 }
 
 function toGymSubscription(raw: RawGymSubscription): GymSubscriptionRow {
@@ -1981,16 +2069,45 @@ function toGymSubscription(raw: RawGymSubscription): GymSubscriptionRow {
     currentPeriodEnd: raw.current_period_end,
     cancelAtPeriodEnd: raw.cancel_at_period_end,
     provider: raw.provider,
+    trialSeatCap: raw.trial_seat_cap,
+    pending:
+      raw.pending_from === null || raw.pending_price_minor === null || raw.pending_seat_cap === null
+        ? null
+        : { seatCap: raw.pending_seat_cap, priceMinor: raw.pending_price_minor, from: raw.pending_from },
+    kept: raw.kept_seat_cap === null || raw.kept_members === null ? null : { seatCap: raw.kept_seat_cap, members: raw.kept_members },
+    fitted:
+      raw.fitted_asked_seat_cap === null || raw.fitted_members === null
+        ? null
+        : { askedSeatCap: raw.fitted_asked_seat_cap, members: raw.fitted_members },
   };
 }
 
 /** The gym's live plan, or null: §4.1's three granting statuses. */
 export async function gymLiveSubscription(sql: SqlOrTx, gymId: string): Promise<GymSubscriptionRow | null> {
   const rows = await sql<RawGymSubscription[]>`
-    SELECT s.status, s.trial_ends_at, LEAST(p.seat_cap, s.trial_seat_cap) AS seat_cap,
-           p.seat_cap AS plan_seat_cap, p.price_minor, p.currency,
-           s.current_period_end, s.cancel_at_period_end, s.provider
+    SELECT s.status, s.trial_ends_at,
+           LEAST(p.seat_cap, s.trial_seat_cap, CASE WHEN s.pending_held_at IS NOT NULL THEN np.seat_cap END) AS seat_cap,
+           p.seat_cap AS plan_seat_cap, s.trial_seat_cap, p.price_minor, p.currency,
+           s.current_period_end, s.cancel_at_period_end, s.provider,
+           ap.seat_cap AS pending_seat_cap, ap.price_minor AS pending_price_minor, s.pending_from,
+           CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL AND lc.recent THEN lc.seat_cap END AS kept_seat_cap,
+           CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS kept_members,
+           CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND s.pending_plan_id IS NULL AND lc.recent THEN lc.asked_seat_cap END AS fitted_asked_seat_cap,
+           CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND s.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS fitted_members
     FROM subscriptions s JOIN plans p ON p.id = s.plan_id
+    LEFT JOIN plans np ON np.id = s.pending_plan_id
+    -- The size asked for, which the card names; np is what is being made.
+    LEFT JOIN plans ap ON ap.id = COALESCE(s.pending_requested_plan_id, s.pending_plan_id)
+    LEFT JOIN LATERAL (
+      SELECT c.state, c.failure, c.members_counted, kp.seat_cap, rp.seat_cap AS asked_seat_cap,
+             -- Said until the payment after the one it was decided for.
+             c.created_at > s.current_period_end - interval '32 days' AS recent
+      FROM billing_plan_changes c JOIN plans kp ON kp.id = c.to_plan_id
+      LEFT JOIN plans rp ON rp.id = c.requested_plan_id
+      WHERE c.gym_id = s.owner_id AND c.subscription_id = s.id
+      ORDER BY c.created_at DESC
+      LIMIT 1
+    ) lc ON true
     WHERE s.owner_type = 'gym' AND s.owner_id = ${gymId}
       AND s.status IN ('trialing','active','past_due')
     LIMIT 1`;

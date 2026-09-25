@@ -308,7 +308,7 @@ describe('walking from one gym to another', () => {
 
     // Gym B is on no plan, so nothing on screen says it is on one…
     expect(screen.queryByText('Free trial')).toBeNull();
-    expect(screen.queryByText(/places used/)).toBeNull();
+    expect(screen.queryByText(/ of \d+ members/)).toBeNull();
     // …and gym B gets its OWN prompt, about gym B: the trial is spent now, so
     // the honest arm is the price list rather than a button that would 409.
     expect(await screen.findByTestId('plan-modal')).toBeTruthy();
