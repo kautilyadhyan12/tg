@@ -501,6 +501,14 @@ export const orgSubscriptionSchema = z.object({
    *  `cancelAtPeriodEnd`. Null during a free trial. */
   currentPeriodEnd: z.string().nullable().default(null),
   cancelAtPeriodEnd: z.boolean().default(false),
+  /** The gym has chosen a plan and paid for it through us (Paddle). During a free trial
+   *  this means its card is saved and the first payment is taken when the trial ends
+   *  (`currentPeriodEnd`); `priceLabel` is then the plan's price (Kd, RULINGS 2026-09-25). */
+  subscribed: z.boolean().default(false),
+  /** A trial the gym has paid for keeps its free trial's limit (`seatCap`) until a payment
+   *  is taken, a failed first charge included; this is the chosen plan's, from then. Null
+   *  otherwise. */
+  nextSeatCap: z.number().int().positive().nullable().default(null),
 });
 export type OrgSubscription = z.infer<typeof orgSubscriptionSchema>;
 

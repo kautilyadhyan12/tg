@@ -3,10 +3,10 @@ import { GYM_TRIAL_DAYS, orgWords } from '@app/shared';
 import { Link } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { orgService, errorCode, errorText, isRetryable } from '../../api/orgsApi';
-import { applyPaidPlan, applyStartedTrial, refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
-import { closePaddleCheckout, openPaddleCheckout } from '../../utils/paddleCheckout';
+import { applyStartedTrial, refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
 import { planPriceText, planPromptFor, planSeatLabel } from '../../pages/console/billingView';
 import ManagePaymentButton from './ManagePaymentButton';
+import { usePaddleSubscribe } from './usePaddleSubscribe';
 
 // THE PROMPT A GYM OWNER CANNOT SKIP — Kd's ruling of 2026-08-28 (:22215), and
 // the correction that fixed its shape at a screen (:22697 §2).
@@ -66,7 +66,7 @@ import ManagePaymentButton from './ManagePaymentButton';
  *  computes neither: `priceLabel` is formatted server-side and is the only money
  *  field on the wire (there is no minor-unit integer to divide — R10.4), and the
  *  cap is the only human fact a plan row carries. */
-function PlanRow({ plan, orgType, canPay, busy, working, onSubscribe }) {
+export function PlanRow({ plan, orgType, canPay, busy, working, onSubscribe }) {
   const price = planPriceText(plan);
   if (price === null) return null;
   const fits = plan?.fits !== false;
@@ -104,10 +104,6 @@ function PlanRow({ plan, orgType, canPay, busy, working, onSubscribe }) {
   );
 }
 
-/** How many times, two seconds apart, the prompt asks whether a payment has reached
- *  the gym before it says the page will catch up by itself. */
-const SYNC_TRIES = 30;
-const SYNC_GAP_MS = 2000;
 /** After Paddle's page opens for an overdue payment: how often, and how long, the gym is
  *  re-read (ten minutes, enough to type a card and for the worker's next run). */
 const OVERDUE_TRIES = 60;
@@ -130,10 +126,9 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
   const [trialSpent, setTrialSpent] = useState(false);
   const [plans, setPlans] = useState({ loading: true, error: null, retryable: true, list: null, payOnline: 'unavailable' });
   const [attempt, setAttempt] = useState(0);
-  /** A payment under way: which plan, and whether Paddle's window is opening or the
-   *  payment is being confirmed. Null when nothing is under way. */
-  const [paying, setPaying] = useState(null);
-  const [payNote, setPayNote] = useState(null);
+  const gymId = org?.id ?? null;
+  /** A payment under way, in Paddle's window; the prompt closes once it is on the gym. */
+  const { paying, payNote, payError, subscribe } = usePaddleSubscribe(gymId);
   /** Said once Paddle's page is open for an overdue payment; null before. */
   const [overdueNote, setOverdueNote] = useState(null);
   const watching = useRef(false);
@@ -147,7 +142,6 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
 
   const arm = planPromptFor(org);
   const showing = arm === null ? null : trialSpent ? 'subscribe' : arm;
-  const gymId = org?.id ?? null;
 
   /** THE PROMPT HAS TO CONTAIN THE KEYBOARD, NOT ONLY COVER THE SCREEN — T3
    *  round 1, Low-1, and it is the only finding that touched the ruling itself.
@@ -248,30 +242,6 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
 
   if (showing === null) return null;
 
-  /** Ask until the payment is on the gym. The webhook reaches the gym on its own too,
-   *  so running out of tries only means this page stops waiting. */
-  const confirmPayment = async (checkoutId) => {
-    for (let tries = 0; tries < SYNC_TRIES; tries += 1) {
-      try {
-        const res = await orgService.syncCheckout(gymId, checkoutId);
-        if (res.data?.state === 'paid') {
-          closePaddleCheckout();
-          applyPaidPlan(gymId, res.data.subscription);
-          refreshConsoleOrgsAfterChange();
-          return;
-        }
-      } catch {
-        // A failed ask is asked again.
-      }
-      await new Promise((resolve) => setTimeout(resolve, SYNC_GAP_MS));
-      if (!mounted.current) return;
-    }
-    if (!mounted.current) return;
-    setPaying(null);
-    setPayNote("Your payment went through. It can take a minute to show here, and this page will update by itself.");
-    refreshConsoleOrgsAfterChange();
-  };
-
   /** Paddle's page is open in another tab: re-read the gym every few seconds, so the
    *  prompt closes by itself once Paddle's payment reaches the gym (the webhook, then
    *  the worker's next run, about a minute). */
@@ -287,36 +257,6 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
       }
       watching.current = false;
     })();
-  };
-
-  const subscribe = async (planCode) => {
-    if (gymId === null || paying !== null) return;
-    setPaying({ planCode, phase: 'opening' });
-    setPayNote(null);
-    setError(null);
-    try {
-      const key = crypto.randomUUID();
-      const res = await orgService.startCheckout(gymId, planCode, key);
-      const { checkoutId } = res.data;
-      await openPaddleCheckout({
-        environment: res.data.environment,
-        clientToken: res.data.clientToken,
-        transactionId: res.data.transactionId,
-        onEvent: (event) => {
-          if (!mounted.current) return;
-          if (event.type === 'completed') {
-            setPaying({ planCode, phase: 'confirming' });
-            void confirmPayment(checkoutId);
-          } else if (event.type === 'closed') {
-            setPaying((now) => (now?.phase === 'confirming' ? now : null));
-          }
-        },
-      });
-      setPaying((now) => (now?.phase === 'opening' ? { planCode, phase: 'paying' } : now));
-    } catch (err) {
-      setPaying(null);
-      setError(errorText(err, "We couldn't open the payment window. Please try again."));
-    }
   };
 
   const start = async () => {
@@ -498,9 +438,9 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
             permanent (the owner's one trial is spent; their currency has no
             price book), so a retry button would promise that pressing again
             might work. */}
-        {error !== null ? (
+        {(error ?? payError) !== null ? (
           <p className="text-sm mt-4" style={{ color: '#ef4444' }}>
-            {error}
+            {error ?? payError}
           </p>
         ) : null}
 

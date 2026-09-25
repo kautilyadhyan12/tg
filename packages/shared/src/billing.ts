@@ -35,12 +35,48 @@ export const orgCheckoutResponseSchema = z.object({
 export type OrgCheckoutResponse = z.infer<typeof orgCheckoutResponseSchema>;
 
 /** After Paddle's window says the payment went: has it reached the gym yet? `waiting`
- *  means ask again in a moment; `paid` carries the gym's plan as it now stands. */
+ *  means ask again in a moment; `paid` carries the gym's plan as it now stands;
+ *  `trial_ended` means a trial window was saved after the gym's own trial had ended, so the
+ *  subscription was cancelled with nothing charged. */
 export const orgCheckoutSyncResponseSchema = z.discriminatedUnion("state", [
   z.object({ state: z.literal("waiting") }),
+  z.object({ state: z.literal("trial_ended") }),
   z.object({ state: z.literal("paid"), subscription: orgSubscriptionSchema }),
 ]);
 export type OrgCheckoutSyncResponse = z.infer<typeof orgCheckoutSyncResponseSchema>;
+
+/** A bigger size for a gym's paid plan (ROADMAP Stage 3 item 1c-ii). The server prices it. */
+export const orgPlanChangeRequestSchema = z.object({ planCode: z.string().min(1).max(64) }).strict();
+export type OrgPlanChangeRequest = z.infer<typeof orgPlanChangeRequestSchema>;
+
+/** What a bigger size costs, as Paddle works it out, before the gym confirms. Money is
+ *  formatted by the server. `dueNow` is null when nothing is charged now (a free trial:
+ *  the new price is taken when the trial ends). */
+export const orgPlanChangePreviewSchema = z
+  .object({
+    planCode: z.string().min(1).max(64),
+    seatCap: z.number().int().positive().nullable(),
+    /** The new monthly price, before tax ("$129"). */
+    priceLabel: z.string().min(1).max(40),
+    dueNow: z
+      .object({
+        /** What is charged now, tax included ("$53.52"). */
+        totalLabel: z.string().min(1).max(40),
+        /** Before tax ("$49.15"), and the tax ("$4.37"); tax null when there is none. */
+        subtotalLabel: z.string().min(1).max(40),
+        taxLabel: z.string().min(1).max(40).nullable(),
+      })
+      .strict()
+      .nullable(),
+    /** When the new monthly price is next charged. */
+    nextPaymentAt: z.string().datetime().nullable(),
+  })
+  .strict();
+export type OrgPlanChangePreview = z.infer<typeof orgPlanChangePreviewSchema>;
+
+/** The size changed: the gym's plan as it now stands. */
+export const orgPlanChangeResponseSchema = z.object({ subscription: orgSubscriptionSchema }).strict();
+export type OrgPlanChangeResponse = z.infer<typeof orgPlanChangeResponseSchema>;
 
 // ── Paddle ───────────────────────────────────────────────────────────────────
 
@@ -95,11 +131,25 @@ export const paddleSubscriptionSchema = z.object({
   canceled_at: instant.nullable(),
   paused_at: instant.nullable(),
   current_billing_period: z.object({ starts_at: instant, ends_at: instant }).nullable(),
+  /** When Paddle next charges: during a trial, the day the trial ends. */
+  next_billed_at: instant.nullable().optional(),
   scheduled_change: z
     .object({ action: z.enum(["cancel", "pause", "resume"]), effective_at: instant })
     .nullable(),
   items: z
-    .array(z.object({ quantity: z.number().int(), price: z.object({ id: paddlePriceIdSchema }) }))
+    .array(
+      z.object({
+        quantity: z.number().int(),
+        price: z.object({
+          id: paddlePriceIdSchema,
+          /** `custom`: a price made for one checkout (a trial of the days left). */
+          type: z.enum(["standard", "custom"]).optional(),
+          unit_price: z.object({ amount: z.string().regex(/^\d{1,12}$/), currency_code: z.string().length(3) }).optional(),
+          billing_cycle: z.object({ interval: z.enum(["day", "week", "month", "year"]), frequency: z.number().int() }).nullable().optional(),
+          custom_data: z.record(z.unknown()).nullable().optional(),
+        }),
+      }),
+    )
     .max(100),
 });
 export type PaddleSubscription = z.infer<typeof paddleSubscriptionSchema>;
@@ -118,10 +168,17 @@ export const paddleTransactionSchema = z.object({
         price: z.object({
           id: paddlePriceIdSchema,
           unit_price: z.object({ amount: z.string().regex(/^\d{1,12}$/), currency_code: z.string().length(3) }),
+          trial_period: z.object({ interval: z.enum(["day", "week", "month", "year"]), frequency: z.number().int() }).nullable().optional(),
+          custom_data: z.record(z.unknown()).nullable().optional(),
         }),
       }),
     )
     .max(100),
+  /** What it charges; a free trial's checkout charges 0. */
+  details: z
+    .object({ totals: z.object({ grand_total: z.string().regex(/^-?\d{1,12}$/) }).nullable().optional() })
+    .nullable()
+    .optional(),
   /** With `include=adjustments`: its refunds and credits, and each one's state. */
   adjustments: z
     .array(z.object({ action: z.string().max(40), status: z.enum(["pending_approval", "approved", "rejected", "reversed"]) }))
@@ -157,6 +214,21 @@ export const paddleListEnvelope = <T extends z.ZodTypeAny>(entity: T) =>
       .object({ pagination: z.object({ has_more: z.boolean(), next: z.string().url().nullable().optional() }).optional() })
       .optional(),
   });
+
+const paddleTotals = z.object({
+  subtotal: z.string().regex(/^-?\d{1,12}$/),
+  tax: z.string().regex(/^-?\d{1,12}$/),
+  grand_total: z.string().regex(/^-?\d{1,12}$/),
+  currency_code: z.string().length(3),
+});
+
+/** A subscription change previewed (`PATCH /subscriptions/{id}/preview`, read 2026-09-25 and
+ *  run on Kd's sandbox): what is charged now and when the next payment falls. */
+export const paddleSubscriptionPreviewSchema = z.object({
+  next_billed_at: instant.nullable(),
+  immediate_transaction: z.object({ details: z.object({ totals: paddleTotals }) }).nullable(),
+});
+export type PaddleSubscriptionPreview = z.infer<typeof paddleSubscriptionPreviewSchema>;
 
 /** Paddle's error body. */
 export const paddleErrorSchema = z.object({

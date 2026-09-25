@@ -41,6 +41,8 @@ import {
   orgCheckoutResponseSchema,
   orgCheckoutSyncResponseSchema,
   orgMemberPageSchema,
+  orgPlanChangePreviewSchema,
+  orgPlanChangeResponseSchema,
   orgOverviewResponseSchema,
   orgPlansResponseSchema,
   orgStaffMutationResponseSchema,
@@ -193,6 +195,24 @@ export const orgService = {
    *  never kept: it signs its holder in to the gym's Paddle account. */
   openBillingPortal: (gymId) =>
     readThrough(orgBillingPortalResponseSchema, 'your payment page', authApi.post(`/v1/orgs/${gymId}/billing/portal`, {})),
+
+  /** POST …/billing/size/preview — what a bigger size costs now and from when, as Paddle
+   *  works it out. Changes nothing. */
+  previewSizeChange: (gymId, planCode) =>
+    readThrough(
+      orgPlanChangePreviewSchema,
+      'the price of that size',
+      authApi.post(`/v1/orgs/${gymId}/billing/size/preview`, { planCode }),
+    ),
+
+  /** POST …/billing/size — move the gym's paid plan to a bigger size. `key` is the
+   *  confirm's Idempotency-Key: the same key again never changes or charges twice. */
+  changeSize: (gymId, planCode, key) =>
+    readThrough(
+      orgPlanChangeResponseSchema,
+      'your new size',
+      authApi.post(`/v1/orgs/${gymId}/billing/size`, { planCode }, { headers: { 'Idempotency-Key': key } }),
+    ),
 
   /** GET /v1/orgs/:gymId/hours — when this gym is open (Kd :26624, :26684).
    *

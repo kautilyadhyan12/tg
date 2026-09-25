@@ -1,8 +1,15 @@
+import { useState } from 'react';
 import { orgWords } from '@app/shared';
 import { ConsoleCard } from './ConsoleStates';
 import ManagePaymentButton from './ManagePaymentButton';
+import PlanChoiceDialog from './PlanChoiceDialog';
 import {
+  canChooseBiggerSize,
   canManageBilling,
+  canPayDuringTrial,
+  firstPaymentText,
+  isSubscribed,
+  nextSizeText,
   isTrialing,
   seatLineText,
   seatMeter,
@@ -49,10 +56,10 @@ import { viewerPrivileges } from '../../pages/console/consoleView';
 // recalled rather than quoted (Part 0 rule 4) and would go quietly wrong the day
 // the book moves.
 //
-// **It does not promise what happens at the end of the trial.** The sweep ends
-// one now (:22341) — what it does NOT say is what a gym moves to, because
-// nothing can be paid for yet. "You'll move to a paid plan" would be a promise
-// with no code behind it.
+// **A free trial offers "Choose a plan"** (1c-ii; Kd, RULINGS 2026-09-25): paying now
+// saves the card and takes the first payment when the trial ends, so the trial's days
+// are kept. Once paid, the card says when that first payment falls, and a plan paid
+// through us offers "Choose a bigger size".
 //
 // **It is not drawn for somebody who cannot use it.** §2.2's Billing row is the
 // owner's alone by default, and `billing.manage` is a tick they may hand over.
@@ -71,7 +78,23 @@ function SeatLine({ org }) {
   );
 }
 
+/** A secondary action on the card: the same look as Manage payment. */
+function CardButton({ onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="self-stretch sm:self-start rounded-xl px-4 py-2.5 text-sm font-semibold flex items-center justify-center gap-2"
+      style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F', minHeight: 44 }}
+    >
+      {children}
+    </button>
+  );
+}
+
 export default function TrialCard({ org }) {
+  /** Which choice is open: 'subscribe' during a free trial, 'bigger' on a paid plan. */
+  const [choosing, setChoosing] = useState(null);
   // `viewerPrivileges`, not `org.privileges` — absent means "this api is older
   // than this bundle" and the honest fallback is the ROLE's own defaults, never
   // "no powers" (:16101). Reading the raw field would hide the button from every
@@ -114,11 +137,16 @@ export default function TrialCard({ org }) {
   }
 
   const trialing = isTrialing(org);
+  const subscribed = isSubscribed(org);
   const endsOn = trialing ? trialEndDateLabel(org.subscription.trialEndsAt) : null;
   // A paid plan: its price and its month, both the server's.
   const price = trialing ? null : org.subscription.priceLabel ?? null;
   // Only a plan in good standing renews; a failed payment says so in the banner instead.
   const periodEnd = org.subscription.status === 'active' ? trialEndDateLabel(org.subscription.currentPeriodEnd) : null;
+  const firstPayment = firstPaymentText(org.subscription);
+  const nextSize = nextSizeText(org.subscription, org?.orgType);
+  const payNow = canPayDuringTrial(org);
+  const bigger = canChooseBiggerSize(org);
 
   return (
     <ConsoleCard>
@@ -143,16 +171,34 @@ export default function TrialCard({ org }) {
           Ends {endsOn}
         </div>
       ) : null}
+      {firstPayment !== null ? (
+        <div className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.6)' }}>
+          {org.subscription.cancelAtPeriodEnd ? `Your plan ends with the trial, on ${endsOn ?? 'its last day'}.` : firstPayment}
+        </div>
+      ) : null}
       <SeatLine org={org} />
-      {/* A paid plan is managed on Paddle's own page: the card, cancelling, invoices. */}
-      {!trialing && (org.subscription.status === 'active' || org.subscription.status === 'past_due') ? (
-        <div className="mt-4">
+      {nextSize !== null && !org.subscription.cancelAtPeriodEnd ? (
+        <div className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.6)' }}>
+          {nextSize}
+        </div>
+      ) : null}
+      {payNow ? (
+        <div className="text-sm mt-3" style={{ color: 'rgba(255,255,255,0.6)' }}>
+          Choose a plan now and keep your free days: the plan and its first payment start when the trial ends.
+        </div>
+      ) : null}
+      <div className="mt-4 flex flex-col sm:flex-row gap-2">
+        {payNow ? <CardButton onClick={() => setChoosing('subscribe')}>Choose a plan</CardButton> : null}
+        {bigger ? <CardButton onClick={() => setChoosing('bigger')}>Choose a bigger size</CardButton> : null}
+        {/* A plan paid through us is managed on Paddle's own page: the card, cancelling, invoices. */}
+        {subscribed || org.subscription.status === 'active' || org.subscription.status === 'past_due' ? (
           <ManagePaymentButton
             gymId={org.id}
             label={org.subscription.status === 'past_due' ? 'Update payment method' : 'Manage payment'}
           />
-        </div>
-      ) : null}
+        ) : null}
+      </div>
+      {choosing !== null ? <PlanChoiceDialog org={org} mode={choosing} onClose={() => setChoosing(null)} /> : null}
     </ConsoleCard>
   );
 }
