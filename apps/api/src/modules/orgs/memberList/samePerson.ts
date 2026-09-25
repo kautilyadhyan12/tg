@@ -52,10 +52,18 @@ const phoneOf = (who: WhoFields): string | null => text(who.phone);
 const numberOf = (who: WhoFields): string | null => text(who.memberNumber)?.toLowerCase() ?? null;
 const birthOf = (who: WhoFields): string | null => text(who.dateOfBirth);
 /** The words of a name in any order, so "Shah, Priya" and "Priya Shah" are one name. */
-const nameWordsOf = (who: WhoFields): string | null => {
-  const parts = nameParts(who.fullName);
+const nameWords = (fullName: string): string | null => {
+  const parts = nameParts(fullName);
   return parts.length === 0 ? null : [...parts].sort().join(" ");
 };
+const nameWordsOf = (who: WhoFields): string | null => nameWords(who.fullName);
+
+/** Step 2's test of a name, for the rest of the module: the same words in any order,
+ *  and an empty name is nobody's. */
+export function sameName(a: string, b: string): boolean {
+  const words = nameWords(a);
+  return words !== null && words === nameWords(b);
+}
 
 /** The carried fields exactly as the identity key sees them (`fields.ts`), so two people
  *  equal here would be given the same key once the record is updated. */

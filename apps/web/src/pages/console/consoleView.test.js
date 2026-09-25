@@ -599,6 +599,9 @@ describe('offListView', () => {
     expect(view.button).toBe('Put back on list');
   });
   it('somebody who dropped off without a record of their own taken off was on an earlier list', () => {
-    expect(offListView({ reason: 'no_longer_listed', at: null, sameEmailName: null }).line).toBe('Not on your list · was on an earlier list');
+    const view = offListView({ reason: 'no_longer_listed', at: null, sameEmailName: null });
+    expect(view.line).toBe('Not on your list · was on an earlier list');
+    // Nothing of theirs was taken off, so there is nothing to put back.
+    expect(view.button).toBe('Add to list');
   });
 });

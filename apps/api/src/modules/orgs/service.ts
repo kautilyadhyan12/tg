@@ -1256,14 +1256,21 @@ async function offListOf(sql: Sql, gymId: string, userIds: readonly string[]): P
   if (userIds.length === 0 || (await listRepo.listState(sql, gymId)) === null) return out;
   const members = await listRepo.membersAgainstList(sql, gymId, { email: null, phone: null, userIds });
   const off = members.filter((m) => m.seatCounted && !m.onList);
+  // "Taken off" is only ever about the record they joined with: a former record found
+  // by their email or phone can be a relative's on a shared family address.
+  const ownRecord = (m: listRepo.MemberAgainstList): string | null => (m.joinedFormer ? m.joinedEntryId : null);
   const facts = await listRepo.offListFacts(
     sql,
     gymId,
-    off.flatMap((m) => (m.formerEntryId === null ? [] : [m.formerEntryId])),
+    off.flatMap((m) => {
+      const id = ownRecord(m);
+      return id === null ? [] : [id];
+    }),
     off.flatMap((m) => (m.email === null ? [] : [m.email])),
   );
   for (const m of off) {
-    const at = m.formerEntryId === null ? undefined : facts.takenOffAt.get(m.formerEntryId);
+    const own = ownRecord(m);
+    const at = own === null ? undefined : facts.takenOffAt.get(own);
     out.set(m.userId, {
       reason: at !== undefined ? "taken_off" : m.everListed ? "no_longer_listed" : "never_listed",
       at: at?.toISOString() ?? null,

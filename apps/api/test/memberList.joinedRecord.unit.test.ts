@@ -239,6 +239,48 @@ describe("an app member follows the record they joined with", () => {
     },
   ];
 
+  // Round one, H1: staff take Emma's record off and type her back in by hand (her own
+  // email, a new phone). The reviewer ran it on the real routes: she was named for Remove
+  // all, and "Put back on list" made two of her.
+  const emmaTyped: Who = { ...emma, phone: "+447700900999" };
+  cases.push(
+    {
+      label: "H1: joined record former, staff typed her back in with her own email and name: on, not leaving",
+      rows: [row(2, emmaTyped)],
+      entries: [entry("r1", emma, { former: true }), entry("r2", emmaTyped)],
+      member: { email: emma.email ?? null, joinedEntryId: "r1" },
+      expect: { mark: "on_list", leaving: false },
+    },
+    {
+      label: "H1: the typed-in record written 'Clarke, Emma' is the same name",
+      rows: [row(2, { ...emmaTyped, fullName: "Clarke, Emma" })],
+      entries: [entry("r1", emma, { former: true }), entry("r2", { ...emmaTyped, fullName: "Clarke, Emma" })],
+      member: { email: emma.email ?? null, joinedEntryId: "r1" },
+      expect: { mark: "on_list", leaving: false },
+    },
+    {
+      label: "H1: the typed-in record on her phone only, same name: on",
+      rows: [row(2, { fullName: "Emma Clarke", phone: "+447700900101" })],
+      entries: [entry("r1", emma, { former: true }), entry("r2", { fullName: "Emma Clarke", phone: "+447700900101" })],
+      member: { email: emma.email ?? null, statedPhone: "+447700900101", joinedEntryId: "r1" },
+      expect: { mark: "on_list", leaving: false },
+    },
+    {
+      label: "H1: typed back in, and next month's file drops that record too: leaving",
+      rows: [row(2, arjun)],
+      entries: [entry("r1", emma, { former: true }), entry("r2", emmaTyped)],
+      member: { email: emma.email ?? null, joinedEntryId: "r1" },
+      expect: { mark: "no_longer_listed", leaving: true },
+    },
+    {
+      label: "H1: two current records of her, the file keeps only the typed one: still on through the name",
+      rows: [row(2, emmaTyped)],
+      entries: [entry("r1", emma), entry("r2", emmaTyped)],
+      member: { email: emma.email ?? null, joinedEntryId: "r1" },
+      expect: { mark: "on_list", leaving: false },
+    },
+  );
+
   for (const c of cases) {
     it(c.label, () => {
       const out = run({ rows: c.rows, entries: c.entries, members: [member("u1", c.member)], ...(c.mode === undefined ? {} : { mode: c.mode }) });
@@ -260,6 +302,20 @@ describe("an app member follows the record they joined with", () => {
     expect(markOf(out, "u-emma")).toEqual({ mark: "on_list", leaving: false });
     expect(markOf(out, "u-priya")).toEqual({ mark: "no_longer_listed", leaving: false });
     expect(out.members).toEqual({ leaving: 0, listedNow: 1 });
+  });
+
+  it("H1 on today's list: the typed-in Emma holds her, a relative on her address does not", () => {
+    const out = run({
+      rows: [],
+      entries: [entry("r-emma", emma, { former: true }), entry("r-typed", { ...emma, phone: "+447700900999" }), entry("r-priya", priya, { former: true }), entry("r-arjun", arjun)],
+      members: [
+        member("u-emma", { email: emma.email ?? null, joinedEntryId: "r-emma" }),
+        member("u-priya", { email: priya.email ?? null, joinedEntryId: "r-priya" }),
+      ],
+      mode: "add",
+    });
+    expect(markOf(out, "u-emma")).toEqual({ mark: "on_list", leaving: false });
+    expect(markOf(out, "u-priya")).toEqual({ mark: "no_longer_listed", leaving: false });
   });
 
   it("the owner who joined with a record is never marked, and still makes the record's row read 'in the app'", () => {
@@ -299,12 +355,18 @@ describe("an app member follows the record they joined with", () => {
 describe("onListOf", () => {
   const yes = () => true;
   const no = () => false;
-  it("a joined member is answered by their record alone", () => {
-    expect(onListOf({ joinedEntryId: "r1" }, (id) => id === "r1", no)).toBe(true);
-    expect(onListOf({ joinedEntryId: "r1" }, no, yes)).toBe(false);
+  const emmaRecord = { id: "r1", fullName: "Emma Clarke" };
+  it("a joined member is on while the list holds their record", () => {
+    expect(onListOf(emmaRecord, (id) => id === "r1", no)).toBe(true);
   });
-  it("a member with no record is answered by their email or phone", () => {
-    expect(onListOf({ joinedEntryId: null }, yes, no)).toBe(false);
-    expect(onListOf({ joinedEntryId: null }, no, yes)).toBe(true);
+  it("once it has not, only a contact match carrying that record's name counts", () => {
+    const asked: (string | null)[] = [];
+    expect(onListOf(emmaRecord, no, (name) => (asked.push(name), name === "Emma Clarke"))).toBe(true);
+    expect(asked).toEqual(["Emma Clarke"]);
+    expect(onListOf(emmaRecord, no, (name) => name === null)).toBe(false);
+  });
+  it("a member with no record is answered by any contact match", () => {
+    expect(onListOf(null, yes, (name) => name === null)).toBe(true);
+    expect(onListOf(null, yes, no)).toBe(false);
   });
 });

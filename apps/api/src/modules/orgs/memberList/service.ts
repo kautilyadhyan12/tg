@@ -71,7 +71,9 @@ import { understandMemberFile } from "./parseMemberFile.js";
 import {
   inviteCounts,
   membersAgainstNewList,
+  namedContacts,
   onListOf,
+  reachesNamed,
   reconcile,
   type CarriedFields,
   type KeptField,
@@ -334,19 +336,20 @@ async function freshMemberSide(
   ]);
   if (contacts === null) return null;
   const inApp = reachedBy(members);
-  const personAt = (place: { at: number; entryId: string | null }) => ({
+  const personAt = (place: { at: number; entryId?: string | null | undefined }) => ({
     email: contacts.emails[place.at] ?? null,
     phone: contacts.phones[place.at] ?? null,
-    entryId: place.entryId,
+    entryId: place.entryId ?? null,
   });
   // A member is on the list AFTER this upload when the file reaches them — or, for an
   // add, when the list already did, because an add takes nobody off. Exactly what
   // `reconcile` derives from the rows it holds; here the rows are two arrays of strings
   // and the records the groups matched.
-  const fileEmails = new Set(contacts.emails.flatMap((e) => (e === null ? [] : [e.trim().toLowerCase()])));
-  const filePhones = new Set(contacts.phones.flatMap((p) => (p === null ? [] : [p.trim()])));
+  const fileContacts = namedContacts(
+    contacts.emails.map((email, at) => ({ email, phone: contacts.phones[at] ?? null, fullName: contacts.names[at] ?? "" })),
+  );
   const listedAfter = new Set(
-    [...groups.new, ...groups.changed, ...groups.unchanged].flatMap((place) => (place.entryId === null ? [] : [place.entryId])),
+    [...groups.new, ...groups.changed, ...groups.unchanged].flatMap((place) => (place.entryId == null ? [] : [place.entryId])),
   );
   const side = membersAgainstNewList(
     // The seat rule's own set: §9.7 keeps the owner and the staff out of "no longer
@@ -355,14 +358,9 @@ async function freshMemberSide(
     (member) =>
       (upload.mode === "add" && member.onList) ||
       onListOf(
-        member,
+        member.joinedEntryId === null || member.joinedFullName === null ? null : { id: member.joinedEntryId, fullName: member.joinedFullName },
         (id) => listedAfter.has(id),
-        () => {
-          const email = (member.email ?? "").trim().toLowerCase();
-          if (email !== "" && fileEmails.has(email)) return true;
-          const phone = (member.statedPhone ?? "").trim();
-          return phone !== "" && filePhones.has(phone);
-        },
+        (name) => reachesNamed(fileContacts, { email: member.email, phone: member.statedPhone }, name),
       ),
     state !== null,
   );
@@ -606,15 +604,16 @@ interface Read {
 async function readStaged(deps: MemberListDeps, gymId: string, upload: repo.UploadRow): Promise<Read> {
   const state = await repo.listState(deps.sql, gymId);
   const moved = (state?.version ?? 0) !== upload.baseVersion;
-  if (!moved) {
+  // A grouping stored before rows carried their record's id cannot answer who the
+  // members joined with; it is worked out again like a moved list (3a-vi-b).
+  const groups = moved ? null : await repo.stagedGroups(deps.sql, gymId, upload.id);
+  const withIds = groups !== null && [...groups.new, ...groups.changed, ...groups.unchanged].every((place) => place.entryId !== undefined);
+  if (!moved && withIds) {
     // THE FAST PATH, and the one every screen takes: everything but the rows, which the
     // database drops before the answer crosses to this process, plus the members' half
     // worked out fresh from two small statements.
-    const [shell, groups] = await Promise.all([
-      repo.stagedShell(deps.sql, gymId, upload.id),
-      repo.stagedGroups(deps.sql, gymId, upload.id),
-    ]);
-    if (shell === null || groups === null) throw expired();
+    const shell = await repo.stagedShell(deps.sql, gymId, upload.id);
+    if (shell === null) throw expired();
     const side = await freshMemberSide(deps, gymId, upload, groups, upload.summary, state);
     if (side === null) throw expired();
     return {
@@ -627,20 +626,21 @@ async function readStaged(deps: MemberListDeps, gymId: string, upload: repo.Uplo
       lastFileSha256: state?.lastFileSha256 ?? null,
     };
   }
-  // THE LIST HAS MOVED, so the stored file-versus-list answer is about a list that no
-  // longer exists and the whole comparison runs again over the stored rows.
+  // THE LIST HAS MOVED (or the grouping is older than its record ids), so the whole
+  // comparison runs again over the stored rows.
+  if (!moved && groups === null) throw expired();
   const file = await repo.stagedFile(deps.sql, gymId, upload.id);
   if (file === null) throw expired();
   // The gym's catalogue as it WOULD be after this file, by the same pure rule the stage
   // and the confirm use: the file's columns are compared only where the gym keeps them.
   const catalogue = growFields(await repo.listFields(deps.sql, gymId), file.understanding.extraFields, MEMBER_LIST_MAX_EXTRA_FIELDS).catalogue;
   const { measured, reconciled } = await measure(deps.sql, gymId, file.understanding, upload.mode, state, catalogue);
-  const groups = groupsOf(reconciled);
-  const side = await freshMemberSide(deps, gymId, upload, groups, measured.counts, state);
+  const regrouped = groupsOf(reconciled);
+  const side = await freshMemberSide(deps, gymId, upload, regrouped, measured.counts, state);
   if (side === null) throw expired();
   return {
     shell: shellOf(file),
-    groups,
+    groups: regrouped,
     file,
     counts: side.counts,
     membersLeaving: side.membersLeaving,
@@ -741,7 +741,7 @@ export async function readPreviewRows(
   // number, whichever group they came from, so one answer serves all four groups and
   // nothing has to be looked up by place.
   // The record's id decides the tick and stays here: a page shows the file's people.
-  const people = picked.people.map(({ entryId, ...person }) => ({ ...person, inApp: read.inApp({ ...person, entryId }) }));
+  const people = picked.people.map(({ entryId, ...person }) => ({ ...person, inApp: read.inApp({ ...person, entryId: entryId ?? null }) }));
   return {
     group,
     total: picked.total,

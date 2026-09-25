@@ -44,6 +44,7 @@ import {
 } from "@app/shared";
 import type { EntryValues } from "./byHand.js";
 import type { CarriedFields, ListEntry, ListMember } from "./reconcile.js";
+import { sameName } from "./samePerson.js";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -106,6 +107,10 @@ export interface MemberAgainstList extends ListMember {
    *  records, and by NOTHING else: not the marks, not `leaving`, not the guard, not a
    *  chip, not `canBeInvited`. */
   formerEntryId: string | null;
+  /** The name on the record they joined with, and whether it has come off — what a
+   *  read needs to ask `onListOf` about a list after an upload. */
+  joinedFullName: string | null;
+  joinedFormer: boolean;
   /** When this membership began, for a screen naming the person. */
   joinedAt: Date;
 }
@@ -705,19 +710,20 @@ export async function stagedContacts(
   sql: SqlOrTx,
   gymId: string,
   uploadId: string,
-): Promise<{ emails: (string | null)[]; phones: (string | null)[] } | null> {
-  const rows = await sql<{ emails: unknown; phones: unknown }[]>`
+): Promise<{ emails: (string | null)[]; phones: (string | null)[]; names: string[] } | null> {
+  const rows = await sql<{ emails: unknown; phones: unknown; names: unknown }[]>`
     SELECT jsonb_path_query_array(rows, '$.understanding.rows[*].email') AS emails,
-           jsonb_path_query_array(rows, '$.understanding.rows[*].phone') AS phones
+           jsonb_path_query_array(rows, '$.understanding.rows[*].phone') AS phones,
+           jsonb_path_query_array(rows, '$.understanding.rows[*].fullName') AS names
     FROM gym_member_list_uploads
     WHERE gym_id = ${gymId} AND id = ${uploadId} AND rows IS NOT NULL`;
   const row = rows[0];
   if (row === undefined) return null;
   const parsed = z
-    .object({ emails: z.array(z.string().nullable()), phones: z.array(z.string().nullable()) })
-    .safeParse({ emails: row.emails, phones: row.phones });
+    .object({ emails: z.array(z.string().nullable()), phones: z.array(z.string().nullable()), names: z.array(z.string()) })
+    .safeParse({ emails: row.emails, phones: row.phones, names: row.names });
   if (!parsed.success) throw new Error(`member-list upload ${uploadId} holds rows that no longer parse`);
-  if (parsed.data.emails.length !== parsed.data.phones.length) {
+  if (parsed.data.emails.length !== parsed.data.phones.length || parsed.data.names.length !== parsed.data.emails.length) {
     throw new Error(`member-list upload ${uploadId} holds ${String(parsed.data.emails.length)} emails and ${String(parsed.data.phones.length)} phones`);
   }
   return parsed.data;
@@ -811,6 +817,9 @@ export async function membersAgainstList(
       on_list: boolean;
       former_entry_id: string | null;
       joined_entry_id: string | null;
+      joined_full_name: string | null;
+      joined_former: boolean;
+      same_contact: unknown;
       joined_at: Date;
     }[]
   >`
@@ -828,7 +837,10 @@ export async function membersAgainstList(
            e.member_number AS entry_member_number,
            (e.id IS NOT NULL) AS on_list,
            f.id            AS former_entry_id,
-           j.id            AS joined_entry_id
+           j.id            AS joined_entry_id,
+           j.full_name     AS joined_full_name,
+           (j.former_at IS NOT NULL) AS joined_former,
+           alt.list        AS same_contact
     FROM gym_members m
     JOIN users u ON u.id = m.user_id
     LEFT JOIN gym_member_list_entries j ON j.gym_id = m.gym_id AND j.id = m.entry_id
@@ -886,6 +898,26 @@ export async function membersAgainstList(
       ORDER BY c.channel, c.listed_seq
       LIMIT 1
     ) f ON true
+    -- A JOINED RECORD THAT HAS COME OFF: the current records on the member's proved
+    -- email or stated phone, email first, for the same-name test below (onListOf).
+    LEFT JOIN LATERAL (
+      SELECT jsonb_agg(jsonb_build_object('id', c.id, 'status', c.status, 'memberNumber', c.member_number, 'fullName', c.full_name)
+                       ORDER BY c.channel, c.listed_seq) AS list
+      FROM (
+        (SELECT x.id, x.status, x.member_number, x.full_name, x.listed_seq, 1 AS channel
+         FROM gym_member_list_entries x
+         WHERE x.gym_id = m.gym_id AND x.former_at IS NULL AND j.former_at IS NOT NULL AND v.proved AND x.email = u.email
+         ORDER BY x.listed_seq
+         LIMIT 20)
+        UNION ALL
+        (SELECT x.id, x.status, x.member_number, x.full_name, x.listed_seq, 2 AS channel
+         FROM gym_member_list_entries x
+         WHERE x.gym_id = m.gym_id AND x.former_at IS NULL AND j.former_at IS NOT NULL
+           AND m.stated_phone_e164 IS NOT NULL AND x.phone_e164 = m.stated_phone_e164
+         ORDER BY x.listed_seq
+         LIMIT 20)
+      ) c
+    ) alt ON true
     WHERE m.gym_id = ${gymId}
       AND m.removed_at IS NULL
       -- On the plain columns, so the members are narrowed before the laterals run; an
@@ -896,22 +928,36 @@ export async function membersAgainstList(
            OR m.entry_id = ANY(${reachEntries}::uuid[])
            OR m.user_id = ANY(${reachUsers}::uuid[]))
     ORDER BY m.joined_at, m.user_id`;
-  return rows.map((row) => ({
-    userId: row.user_id,
-    fullName: row.display_name,
-    email: row.email,
-    statedPhone: row.stated_phone_e164,
-    everListed: row.ever_listed,
-    seatCounted: row.seat_counted,
-    onList: row.on_list,
-    entryId: row.entry_id,
-    entryStatus: row.entry_status,
-    entryMemberNumber: row.entry_member_number,
-    formerEntryId: row.former_entry_id ?? null,
-    joinedEntryId: row.joined_entry_id,
-    joinedAt: row.joined_at,
-  }));
+  return rows.map((row) => {
+    // Joined record off the list: a current record on their contact with its name is them.
+    const joinedName = row.joined_full_name;
+    const alt =
+      row.joined_former && joinedName !== null
+        ? sameContactSchema.parse(row.same_contact ?? []).find((entry) => sameName(entry.fullName, joinedName))
+        : undefined;
+    return {
+      userId: row.user_id,
+      fullName: row.display_name,
+      email: row.email,
+      statedPhone: row.stated_phone_e164,
+      everListed: row.ever_listed,
+      seatCounted: row.seat_counted,
+      onList: row.on_list || alt !== undefined,
+      entryId: alt?.id ?? row.entry_id,
+      entryStatus: alt === undefined ? row.entry_status : alt.status,
+      entryMemberNumber: alt === undefined ? row.entry_member_number : alt.memberNumber,
+      formerEntryId: row.former_entry_id ?? null,
+      joinedEntryId: row.joined_entry_id,
+      joinedFullName: joinedName,
+      joinedFormer: row.joined_former,
+      joinedAt: row.joined_at,
+    };
+  });
 }
+
+const sameContactSchema = z.array(
+  z.object({ id: z.string().uuid(), status: z.string().nullable(), memberNumber: z.string().nullable(), fullName: z.string() }).strict(),
+);
 
 /** WHY SOME OF THE GYM'S MEMBERS ARE NOT ON ITS LIST, for the roster (3a-vi-b): when
  *  each FORMER record came off, and the name on the first current record holding each

@@ -1545,8 +1545,8 @@ export const orgMemberSchema = z.object({
     .strict()
     .optional(),
   /** WHY THIS MEMBER IS NOT ON THE GYM'S LIST (ROADMAP 3a-vi-b), so staff can put it
-   *  right: their record was taken off (`at`), they dropped off without one of their
-   *  own being taken off, or they were never on a list the gym imported. `sameEmailName`
+   *  right: the record they joined with was taken off (`at`), they dropped off without
+   *  that, or they were never on a list the gym imported. `sameEmailName`
    *  is the name on a current record holding their address — a relative who stayed on
    *  it, the usual reason a gym is puzzled. Only for staff who may see the list, only
    *  for paid places, only once the gym has a list; absent otherwise. */

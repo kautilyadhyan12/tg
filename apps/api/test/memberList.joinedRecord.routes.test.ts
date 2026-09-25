@@ -254,6 +254,19 @@ d("member list: an app member follows their record (real Postgres)", () => {
       const again = await get(`/v1/orgs/${gymId}/member-list/uploads/${preview.uploadId}`, cookies);
       expect(again.statusCode, again.body).toBe(200);
       expect((JSON.parse(again.body) as { preview: MemberListPreview }).preview.members).toEqual({ leaving: 1, listedNow: 2 });
+      // Round one L1: a grouping stored before rows carried their record's id is worked
+      // out again, not read as every joined member leaving.
+      await sql`
+        UPDATE gym_member_list_uploads
+        SET rows = jsonb_set(rows, '{groups}', (
+          SELECT jsonb_object_agg(k, CASE WHEN k = 'gone' THEN v
+                                          ELSE COALESCE((SELECT jsonb_agg(e - 'entryId') FROM jsonb_array_elements(v) AS e), '[]'::jsonb) END)
+          FROM jsonb_each(rows -> 'groups') AS g(k, v)))
+        WHERE id = ${preview.uploadId}`;
+      const old = await get(`/v1/orgs/${gymId}/member-list/uploads/${preview.uploadId}`, cookies);
+      expect(old.statusCode, old.body).toBe(200);
+      expect((JSON.parse(old.body) as { preview: MemberListPreview }).preview.members).toEqual({ leaving: 1, listedNow: 2 });
+      expect((await rowsPage(gymId, cookies, preview.uploadId, "changed")).map((person) => [person.email, person.inApp])).toEqual([[emmaMoved.email, true]]);
 
       await confirm(gymId, cookies, preview.uploadId);
       expect(await recordOf(gymId, emma.name)).toEqual({ id: emmaRecord.id, former: false });
@@ -337,6 +350,64 @@ d("member list: an app member follows their record (real Postgres)", () => {
       await confirm(gymId, cookies, (await stage(gymId, cookies, csv([emma, ...others]))).uploadId);
       const niaRow = (await roster(gymId, cookies)).find((item) => item.userId === nia);
       expect(niaRow?.offList).toEqual({ reason: "never_listed", at: null, sameEmailName: null });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "round one H1: Emma taken off and typed back in by hand with her own email is on the list; Put back makes no second Emma",
+    async () => {
+      const { cookies, gymId } = await makeOwner("f");
+      const { emma, others } = castOf("f");
+      await confirm(gymId, cookies, (await stage(gymId, cookies, csv([emma, ...others]))).uploadId);
+      const emmaUser = await joinByInvitation(gymId, emma.email);
+      const emmaRecord = await recordOf(gymId, emma.name);
+      const off = await api().inject({ method: "DELETE", url: `/v1/orgs/${gymId}/member-list/entries/${emmaRecord.id}`, remoteAddress: nextIp(), cookies });
+      expect(off.statusCode, off.body).toBe(200);
+      const typed = await post(`/v1/orgs/${gymId}/member-list/entries`, { fullName: emma.name, email: emma.email, phone: "07700 900999" }, cookies);
+      expect(typed.statusCode, typed.body).toBe(201);
+      const typedId = memberListEntryWrittenSchema.parse(JSON.parse(typed.body)).entry.entryId;
+
+      expect(await unlisted(gymId, cookies)).toEqual([]);
+      expect((await roster(gymId, cookies)).find((item) => item.userId === emmaUser.userId)?.offList).toBeUndefined();
+      const back = await post(`/v1/orgs/${gymId}/member-list/entries/from-member/${emmaUser.userId}`, {}, cookies);
+      expect(back.statusCode, back.body).toBeLessThan(300);
+      const written = memberListEntryWrittenSchema.parse(JSON.parse(back.body));
+      expect({ outcome: written.outcome, entryId: written.entry.entryId }).toEqual({ outcome: "already_on_list", entryId: typedId });
+      const current = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM gym_member_list_entries WHERE gym_id = ${gymId} AND full_name = ${emma.name} AND former_at IS NULL`;
+      expect(current[0]?.n).toBe(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a member with no joined record who drops off reads 'was on an earlier list', never 'taken off'; a trainer without the list sees no reasons",
+    async () => {
+      const { cookies, gymId } = await makeOwner("g");
+      const { others } = castOf("g");
+      const first = others[0];
+      if (first === undefined) throw new Error("no people");
+      // On month one's list by her own address, but she never joined with its record.
+      const walker = await walkIn(gymId, first.email);
+      await confirm(gymId, cookies, (await stage(gymId, cookies, csv(others))).uploadId);
+      expect((await roster(gymId, cookies)).find((item) => item.userId === walker)?.offList).toBeUndefined();
+      await confirm(gymId, cookies, (await stage(gymId, cookies, csv(others.slice(1)))).uploadId);
+      expect((await roster(gymId, cookies)).find((item) => item.userId === walker)?.offList).toEqual({
+        reason: "no_longer_listed",
+        at: null,
+        sameEmailName: null,
+      });
+
+      const trainerEmail = addr("g-trainer");
+      expect((await post("/v1/auth/register", { email: trainerEmail, password: PASSWORD, displayName: "Tom Trainer" })).statusCode).toBe(201);
+      const login = await post("/v1/auth/login", { email: trainerEmail, password: PASSWORD });
+      const trainerId = (await sql<{ id: string }[]>`SELECT id FROM users WHERE email = ${trainerEmail}`)[0]?.id;
+      if (trainerId === undefined) throw new Error("no trainer");
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${trainerId}, 'trainer', ARRAY['members.read'])`;
+      const seen = await roster(gymId, cookieMap(login));
+      expect(seen.some((item) => item.userId === walker)).toBe(true);
+      expect(seen.filter((item) => item.offList !== undefined || item.onList !== undefined)).toEqual([]);
     },
     TEST_TIMEOUT_MS,
   );

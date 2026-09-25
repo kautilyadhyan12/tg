@@ -997,8 +997,8 @@ export type MemberListRowsPage = z.infer<typeof memberListRowsPageSchema>;
  *
  *  `entryId` is the record the row matched (null for somebody new): a fact about the
  *  LIST, which is what a read compares with a member's joined record (ROADMAP 3a-vi-b).
- *  An upload staged before it existed reads null. */
-const memberListStagedEntryIdSchema = z.string().uuid().nullable().default(null);
+ *  Absent on an upload staged before it existed, which a read then works out again. */
+const memberListStagedEntryIdSchema = z.string().uuid().nullable().optional();
 const memberListGroupedRowSchema = z
   .object({ at: z.number().int().min(0), wasStatus: z.string().nullable(), entryId: memberListStagedEntryIdSchema })
   .strict();

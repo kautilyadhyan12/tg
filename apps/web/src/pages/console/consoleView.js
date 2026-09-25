@@ -356,7 +356,8 @@ export function offListView(offList) {
   return {
     line: `Not on your list · ${reason}`,
     sameEmail: offList.sameEmailName ? `${offList.sameEmailName} on your list has the same email` : null,
-    button: offList.reason === 'never_listed' ? 'Add to list' : 'Put back on list',
+    // Only their own record taken off can be put back; otherwise a record is made.
+    button: offList.reason === 'taken_off' ? 'Put back on list' : 'Add to list',
   };
 }
 
