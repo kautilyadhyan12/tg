@@ -29,7 +29,7 @@ import { insertAudit } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { applyTyped, EMPTY_VALUES, holdsCard } from "../memberList/byHand.js";
 import { placeLeadInTx } from "../memberList/byHandService.js";
-import { lockGym } from "../memberList/repo.js";
+import { entryFor, lockGym } from "../memberList/repo.js";
 import { readCountry } from "../memberList/phone.js";
 import { leadJoinDecision, sharesContact, type ListRecord } from "./joinRule.js";
 import * as repo from "./repo.js";
@@ -318,6 +318,19 @@ const toCandidate = (record: ListRecord): LeadJoinCandidate => ({
   former: record.former,
 });
 
+/** The record holding a lead's exact details, read on its own. */
+async function heldRecord(tx: Parameters<typeof entryFor>[0], gymId: string, entryId: string): Promise<ListRecord> {
+  const stored = await entryFor(tx, gymId, entryId);
+  if (stored === null) throw new Error(`member-list entry ${entryId} vanished under the gym's lock`);
+  return {
+    entryId: stored.id,
+    fullName: stored.values.fullName,
+    email: stored.values.email,
+    phone: stored.values.phone,
+    former: stored.formerAt !== null,
+  };
+}
+
 /** Joined: the lead is put on the member list as the record that is this person, or
  *  as a new one, in one transaction under the gym's lock (the lock every list write
  *  takes), and marked joined. */
@@ -367,8 +380,8 @@ export async function joinLead(
     const placed = await placeLeadInTx(tx, { gymId, userId, at, country: org.country, entryId, lead });
     if (placed.outcome === "held") {
       // "Someone new", and a record holds exactly these details: shown, never taken.
-      const held = shared.find((record) => record.entryId === placed.entryId);
-      if (held === undefined) throw new Error("a record with the lead's exact details shares none of its contact");
+      // Among the records read, or past them when more than RECORDS_READ share the contact.
+      const held = shared.find((record) => record.entryId === placed.entryId) ?? (await heldRecord(tx, gymId, placed.entryId));
       return { kind: "choose", error: LEAD_JOIN_CHOOSE_ERROR, message: LEAD_WORDS.join_exact, candidates: [toCandidate(held)] };
     }
     const written = await repo.writeLead(

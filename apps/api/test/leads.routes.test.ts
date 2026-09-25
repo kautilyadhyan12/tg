@@ -699,6 +699,26 @@ d("a gym's leads (real Postgres)", () => {
   );
 
   it(
+    "\"someone new\" names the record holding the lead's exact details even when more than fifty share its email",
+    async () => {
+      const owner = await makeUser("asnew-many-owner");
+      const org = await makeOrg(owner.cookies, "As New Many Gym");
+      const gym = org.org.id;
+      // Fifty-one records on one shared address, all sorting before the lead's own name.
+      await sql`
+        INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source)
+        SELECT ${gym}, 'Aaron ' || n, 'office@example.com', encode(sha256(('many' || n)::bytea), 'hex'), 'upload'
+        FROM generate_series(1, 51) AS n`;
+      const exact = await addEntry(gym, owner.cookies, { fullName: "Zoe Young", email: "office@example.com" });
+      const lead = await addLead(gym, owner.cookies, { fullName: "Zoe Young", email: "office@example.com" });
+      const res = await post(joinUrl(gym, lead.id), { asNew: true }, owner.cookies);
+      expect(res.statusCode).toBe(409);
+      expect((JSON.parse(res.body) as { candidates: { entryId: string }[] }).candidates.map((c) => c.entryId)).toEqual([exact]);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
     "a joined lead whose record was taken off the list says so, and Joined puts the record back",
     async () => {
       const owner = await makeUser("offlist-owner");
