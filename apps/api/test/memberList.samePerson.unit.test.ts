@@ -67,6 +67,7 @@ const row = (at: number, who: Who, carries: CarriedFields = ALL): MemberListRow 
 const entry = (who: Who, over: Partial<ListEntry> = {}): ListEntry => {
   const fields = { fullName: who.fullName, email: who.email ?? null, phone: who.phone ?? null, memberNumber: who.memberNumber ?? null };
   return {
+    id: identityKey(fields),
     identityKey: identityKey(fields),
     ...fields,
     status: "Active",

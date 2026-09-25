@@ -35,6 +35,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       rejectApplication: vi.fn(),
       removeMember: vi.fn(),
       getNotMe: vi.fn(),
+      putMemberOnList: vi.fn(),
     },
   };
 });
@@ -1164,6 +1165,39 @@ describe('Members', () => {
     const row = checks[0].closest('.rounded-2xl');
     expect(within(row).getByText('Priya Sharma')).toBeTruthy();
     expect(within(row).getByRole('button', { name: 'Remove' })).toBeTruthy();
+  });
+
+  // ROADMAP 3a-vi-b: an app member the gym's list does not hold looks different, says
+  // why, and can be put back; somebody on it looks as before.
+  it("marks a member who is not on the list, says why and who else holds the address, and puts them back", async () => {
+    const priya = {
+      ...joinedMemberWithForbiddenExtras,
+      userId: 'u7',
+      displayName: 'Priya Shah',
+      offList: { reason: 'taken_off', at: '2026-09-25T09:00:00.000Z', sameEmailName: 'Arjun Shah' },
+    };
+    const newcomer = { ...joinedMemberWithForbiddenExtras, userId: 'u8', displayName: 'Nia Cole', offList: { reason: 'never_listed', at: null, sameEmailName: null } };
+    const emma = { ...joinedMemberWithForbiddenExtras, userId: 'u9', displayName: 'Emma Clarke', onList: { name: 'Emma Clarke', nameCheck: 'matches' } };
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, priya, newcomer, emma]));
+    orgService.putMemberOnList.mockResolvedValue({ data: {} });
+    drawMembers();
+
+    expect(await screen.findByText('Priya Shah')).toBeTruthy();
+    const marked = screen.getAllByTestId('member-off-list');
+    expect(marked).toHaveLength(2);
+    const priyaRow = marked.find((row) => within(row).queryByText('Priya Shah') !== null);
+    expect(within(priyaRow).getByText(/^Not on your list · taken off /)).toBeTruthy();
+    expect(within(priyaRow).getByText('Arjun Shah on your list has the same email')).toBeTruthy();
+    const nia = marked.find((row) => within(row).queryByText('Nia Cole') !== null);
+    expect(within(nia).getByText('Not on your list · not on any list you have imported')).toBeTruthy();
+    expect(within(nia).queryByText(/taken off/)).toBeNull();
+    expect(within(nia).getByRole('button', { name: 'Add to list' })).toBeTruthy();
+    // Emma is on the list: no mark, no button.
+    expect(screen.getByText('On your list as Emma Clarke').closest('[data-testid=member-off-list]')).toBeNull();
+
+    fireEvent.click(within(priyaRow).getByRole('button', { name: 'Put back on list' }));
+    await waitFor(() => expect(orgService.putMemberOnList).toHaveBeenCalledWith(ORG.id, 'u7'));
+    await waitFor(() => expect(orgService.getMembers.mock.calls.length).toBeGreaterThan(1));
   });
 
   it("lists the invitations that came back 'Not me', with the address to check", async () => {

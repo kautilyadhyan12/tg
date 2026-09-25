@@ -44,6 +44,7 @@ import {
 } from "@app/shared";
 import type { EntryValues } from "./byHand.js";
 import type { CarriedFields, ListEntry, ListMember } from "./reconcile.js";
+import { sameName } from "./samePerson.js";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -79,7 +80,8 @@ export interface ListState {
 
 /** One of the gym's own app members, and what its list says about them today. */
 export interface MemberAgainstList extends ListMember {
-  /** An entry of this gym matches their verified email, else their stated phone. */
+  /** The record they joined with is current; with no such record, a current entry of
+   *  this gym matches their verified email, else their stated phone. */
   onList: boolean;
   /** WHICH entry, so a read of the kept list can say which of its people are already
    *  members here. Null where no entry matches.
@@ -105,6 +107,12 @@ export interface MemberAgainstList extends ListMember {
    *  records, and by NOTHING else: not the marks, not `leaving`, not the guard, not a
    *  chip, not `canBeInvited`. */
   formerEntryId: string | null;
+  /** The name on the record they joined with, and whether it has come off — what a
+   *  read needs to ask `onListOf` about a list after an upload. */
+  joinedFullName: string | null;
+  joinedFormer: boolean;
+  /** The name on the record they are on the list through, or null. */
+  entryFullName: string | null;
   /** When this membership began, for a screen naming the person. */
   joinedAt: Date;
 }
@@ -164,6 +172,7 @@ export async function listState(sql: SqlOrTx, gymId: string): Promise<ListState 
 export async function listEntries(sql: SqlOrTx, gymId: string): Promise<ListEntry[]> {
   const rows = await sql<
     {
+      id: string;
       identity_key: string;
       full_name: string;
       email: string | null;
@@ -181,7 +190,7 @@ export async function listEntries(sql: SqlOrTx, gymId: string): Promise<ListEntr
       former: boolean;
     }[]
   >`
-    SELECT identity_key, full_name, email::text AS email, phone_e164, member_number, status,
+    SELECT id, identity_key, full_name, email::text AS email, phone_e164, member_number, status,
            membership_type,
            joined_on::text     AS joined_on,
            ends_on::text       AS ends_on,
@@ -195,6 +204,7 @@ export async function listEntries(sql: SqlOrTx, gymId: string): Promise<ListEntr
     WHERE gym_id = ${gymId}
     ORDER BY listed_seq`;
   return rows.map((row) => ({
+    id: row.id,
     identityKey: row.identity_key,
     fullName: row.full_name,
     email: row.email,
@@ -331,6 +341,7 @@ export async function listMembers(sql: SqlOrTx, gymId: string): Promise<ListMemb
       stated_phone_e164: string | null;
       ever_listed: boolean;
       seat_counted: boolean;
+      joined_entry_id: string | null;
     }[]
   >`
     SELECT m.user_id,
@@ -346,9 +357,12 @@ export async function listMembers(sql: SqlOrTx, gymId: string): Promise<ListMemb
              ELSE NULL
            END AS email,
            m.stated_phone_e164,
-           (m.last_listed_at IS NOT NULL) AS ever_listed
+           (m.last_listed_at IS NOT NULL) AS ever_listed,
+           j.id AS joined_entry_id
     FROM gym_members m
     JOIN users u ON u.id = m.user_id
+    -- The record the member joined with (membersAgainstList has the rule).
+    LEFT JOIN gym_member_list_entries j ON j.gym_id = m.gym_id AND j.id = m.entry_id
     WHERE m.gym_id = ${gymId}
       AND m.removed_at IS NULL
     ORDER BY m.joined_at, m.user_id`;
@@ -359,6 +373,7 @@ export async function listMembers(sql: SqlOrTx, gymId: string): Promise<ListMemb
     statedPhone: row.stated_phone_e164,
     everListed: row.ever_listed,
     seatCounted: row.seat_counted,
+    joinedEntryId: row.joined_entry_id,
   }));
 }
 
@@ -632,7 +647,7 @@ export async function stagedPage(
                COALESCE((
                  SELECT jsonb_agg(
                           (doc.file -> ((g ->> 'at')::int))
-                          || jsonb_build_object('wasStatus', g -> 'wasStatus')
+                          || jsonb_build_object('wasStatus', g -> 'wasStatus', 'entryId', g -> 'entryId')
                           ORDER BY ord)
                  FROM jsonb_array_elements(doc.grp) WITH ORDINALITY AS t(g, ord)
                  WHERE ord > ${cursor}::int AND ord <= ${cursor + limit}::int
@@ -697,19 +712,20 @@ export async function stagedContacts(
   sql: SqlOrTx,
   gymId: string,
   uploadId: string,
-): Promise<{ emails: (string | null)[]; phones: (string | null)[] } | null> {
-  const rows = await sql<{ emails: unknown; phones: unknown }[]>`
+): Promise<{ emails: (string | null)[]; phones: (string | null)[]; names: string[] } | null> {
+  const rows = await sql<{ emails: unknown; phones: unknown; names: unknown }[]>`
     SELECT jsonb_path_query_array(rows, '$.understanding.rows[*].email') AS emails,
-           jsonb_path_query_array(rows, '$.understanding.rows[*].phone') AS phones
+           jsonb_path_query_array(rows, '$.understanding.rows[*].phone') AS phones,
+           jsonb_path_query_array(rows, '$.understanding.rows[*].fullName') AS names
     FROM gym_member_list_uploads
     WHERE gym_id = ${gymId} AND id = ${uploadId} AND rows IS NOT NULL`;
   const row = rows[0];
   if (row === undefined) return null;
   const parsed = z
-    .object({ emails: z.array(z.string().nullable()), phones: z.array(z.string().nullable()) })
-    .safeParse({ emails: row.emails, phones: row.phones });
+    .object({ emails: z.array(z.string().nullable()), phones: z.array(z.string().nullable()), names: z.array(z.string()) })
+    .safeParse({ emails: row.emails, phones: row.phones, names: row.names });
   if (!parsed.success) throw new Error(`member-list upload ${uploadId} holds rows that no longer parse`);
-  if (parsed.data.emails.length !== parsed.data.phones.length) {
+  if (parsed.data.emails.length !== parsed.data.phones.length || parsed.data.names.length !== parsed.data.emails.length) {
     throw new Error(`member-list upload ${uploadId} holds ${String(parsed.data.emails.length)} emails and ${String(parsed.data.phones.length)} phones`);
   }
   return parsed.data;
@@ -747,7 +763,7 @@ export async function stagedContacts(
  *
  *  **THE EMAIL CHANNEL WINS, AND ONLY THEN THE FIRST ENTRY ON THE LIST.** §9.7 matches
  *  on the verified address first and falls to the phone only when there is none, which is
- *  what `reconcile`'s `entryFor` does in this process — so `by_email DESC` comes before
+ *  what `reconcile`'s `entryFor` does in this process — so the channel comes before
  *  the list's own order. Ordering by age alone answered a different person's row:
  *  a member whose proved address matches a NEWER entry and whose stated phone matches an
  *  OLDER one was shown with the older entry's status word and member number ("was
@@ -768,18 +784,27 @@ export async function stagedContacts(
  *  the words shown against them, and the tick that says they are already in the app
  *  would all come off a record the gym believes it has removed. It is the same two
  *  conditions `reconcile` applies in this process by measuring everything against the
- *  current records, which is why one function still answers for both. */
+ *  current records, which is why one function still answers for both.
+ *
+ *  **A MEMBER WHO JOINED BY INVITATION IS THE RECORD THEY JOINED WITH** (RULINGS
+ *  2026-09-25, ROADMAP 3a-vi-b; `reconcile`'s `onListOf`). `j` is that record; while it
+ *  exists neither contact channel runs, so a changed email keeps them on the list and a
+ *  relative still listed on their address does not keep somebody whose own record has
+ *  come off. */
 export async function membersAgainstList(
   sql: SqlOrTx,
   gymId: string,
-  /** Only the members this email or phone could reach (one person's page). Each is
-   *  still matched against the whole list, so the answer is the same one the full
-   *  read gives for them. */
-  reaching?: { email: string | null; phone: string | null },
+  /** Only the members this email or phone could reach, who joined with one of these
+   *  records, or who are these users (one person's page, one address's holders, one
+   *  roster page). Each is still matched against the whole list, so the answer is the
+   *  same one the full read gives for them. */
+  reaching?: { email: string | null; phone: string | null; entryIds?: readonly string[]; userIds?: readonly string[] },
 ): Promise<MemberAgainstList[]> {
   const narrowed = reaching !== undefined;
   const reachEmail = reaching?.email ?? null;
   const reachPhone = reaching?.phone ?? null;
+  const reachEntries = [...(reaching?.entryIds ?? [])];
+  const reachUsers = [...(reaching?.userIds ?? [])];
   const rows = await sql<
     {
       user_id: string;
@@ -791,8 +816,13 @@ export async function membersAgainstList(
       entry_id: string | null;
       entry_status: string | null;
       entry_member_number: string | null;
+      entry_full_name: string | null;
       on_list: boolean;
       former_entry_id: string | null;
+      joined_entry_id: string | null;
+      joined_full_name: string | null;
+      joined_former: boolean;
+      same_contact: unknown;
       joined_at: Date;
     }[]
   >`
@@ -808,32 +838,41 @@ export async function membersAgainstList(
            e.id            AS entry_id,
            e.status        AS entry_status,
            e.member_number AS entry_member_number,
+           e.full_name     AS entry_full_name,
            (e.id IS NOT NULL) AS on_list,
-           f.id            AS former_entry_id
+           f.id            AS former_entry_id,
+           j.id            AS joined_entry_id,
+           j.full_name     AS joined_full_name,
+           (j.former_at IS NOT NULL) AS joined_former,
+           alt.list        AS same_contact
     FROM gym_members m
     JOIN users u ON u.id = m.user_id
+    LEFT JOIN gym_member_list_entries j ON j.gym_id = m.gym_id AND j.id = m.entry_id
     CROSS JOIN LATERAL (
       SELECT EXISTS (
                SELECT 1 FROM one_time_tokens t
                WHERE t.user_id = m.user_id AND t.purpose = 'verify_email' AND t.used_at IS NOT NULL) AS proved
     ) v
     LEFT JOIN LATERAL (
-      SELECT c.id, c.status, c.member_number
+      SELECT c.id, c.status, c.member_number, c.full_name
       FROM (
-        (SELECT x.id, x.status, x.member_number, x.listed_seq, true AS by_email
+        (SELECT j.id, j.status, j.member_number, j.full_name, j.listed_seq, 0 AS channel
+         WHERE j.id IS NOT NULL AND j.former_at IS NULL)
+        UNION ALL
+        (SELECT x.id, x.status, x.member_number, x.full_name, x.listed_seq, 1 AS channel
          FROM gym_member_list_entries x
-         WHERE x.gym_id = m.gym_id AND x.former_at IS NULL AND v.proved AND x.email = u.email
+         WHERE x.gym_id = m.gym_id AND x.former_at IS NULL AND j.id IS NULL AND v.proved AND x.email = u.email
          ORDER BY x.listed_seq
          LIMIT 1)
         UNION ALL
-        (SELECT x.id, x.status, x.member_number, x.listed_seq, false AS by_email
+        (SELECT x.id, x.status, x.member_number, x.full_name, x.listed_seq, 2 AS channel
          FROM gym_member_list_entries x
-         WHERE x.gym_id = m.gym_id AND x.former_at IS NULL
+         WHERE x.gym_id = m.gym_id AND x.former_at IS NULL AND j.id IS NULL
            AND m.stated_phone_e164 IS NOT NULL AND x.phone_e164 = m.stated_phone_e164
          ORDER BY x.listed_seq
          LIMIT 1)
       ) c
-      ORDER BY c.by_email DESC, c.listed_seq
+      ORDER BY c.channel, c.listed_seq
       LIMIT 1
     ) e ON true
     -- THE SAME MATCH OVER THE FORMER RECORDS, ANSWERING ONE QUESTION ONLY: which former
@@ -844,44 +883,114 @@ export async function membersAgainstList(
     LEFT JOIN LATERAL (
       SELECT c.id
       FROM (
-        (SELECT x.id, x.listed_seq, true AS by_email
+        (SELECT j.id, j.listed_seq, 0 AS channel
+         WHERE j.id IS NOT NULL AND j.former_at IS NOT NULL)
+        UNION ALL
+        (SELECT x.id, x.listed_seq, 1 AS channel
          FROM gym_member_list_entries x
-         WHERE x.gym_id = m.gym_id AND x.former_at IS NOT NULL AND v.proved AND x.email = u.email
+         WHERE x.gym_id = m.gym_id AND x.former_at IS NOT NULL AND j.id IS NULL AND v.proved AND x.email = u.email
          ORDER BY x.listed_seq
          LIMIT 1)
         UNION ALL
-        (SELECT x.id, x.listed_seq, false AS by_email
+        (SELECT x.id, x.listed_seq, 2 AS channel
          FROM gym_member_list_entries x
-         WHERE x.gym_id = m.gym_id AND x.former_at IS NOT NULL
+         WHERE x.gym_id = m.gym_id AND x.former_at IS NOT NULL AND j.id IS NULL
            AND m.stated_phone_e164 IS NOT NULL AND x.phone_e164 = m.stated_phone_e164
          ORDER BY x.listed_seq
          LIMIT 1)
       ) c
-      ORDER BY c.by_email DESC, c.listed_seq
+      ORDER BY c.channel, c.listed_seq
       LIMIT 1
     ) f ON true
+    -- A JOINED RECORD THAT HAS COME OFF: the current records on the member's proved
+    -- email or stated phone, email first, for the same-name test below (onListOf).
+    LEFT JOIN LATERAL (
+      SELECT jsonb_agg(jsonb_build_object('id', c.id, 'status', c.status, 'memberNumber', c.member_number, 'fullName', c.full_name)
+                       ORDER BY c.channel, c.listed_seq) AS list
+      FROM (
+        (SELECT x.id, x.status, x.member_number, x.full_name, x.listed_seq, 1 AS channel
+         FROM gym_member_list_entries x
+         WHERE x.gym_id = m.gym_id AND x.former_at IS NULL AND j.former_at IS NOT NULL AND v.proved AND x.email = u.email
+         ORDER BY x.listed_seq
+         LIMIT 20)
+        UNION ALL
+        (SELECT x.id, x.status, x.member_number, x.full_name, x.listed_seq, 2 AS channel
+         FROM gym_member_list_entries x
+         WHERE x.gym_id = m.gym_id AND x.former_at IS NULL AND j.former_at IS NOT NULL
+           AND m.stated_phone_e164 IS NOT NULL AND x.phone_e164 = m.stated_phone_e164
+         ORDER BY x.listed_seq
+         LIMIT 20)
+      ) c
+    ) alt ON true
     WHERE m.gym_id = ${gymId}
       AND m.removed_at IS NULL
       -- On the plain columns, so the members are narrowed before the laterals run; an
       -- unproved address still matches no entry (the lateral asks v.proved).
       AND (NOT ${narrowed}::boolean
            OR u.email = ${reachEmail}::citext
-           OR (m.stated_phone_e164 IS NOT NULL AND m.stated_phone_e164 = ${reachPhone}::text))
+           OR (m.stated_phone_e164 IS NOT NULL AND m.stated_phone_e164 = ${reachPhone}::text)
+           OR m.entry_id = ANY(${reachEntries}::uuid[])
+           OR m.user_id = ANY(${reachUsers}::uuid[]))
     ORDER BY m.joined_at, m.user_id`;
-  return rows.map((row) => ({
-    userId: row.user_id,
-    fullName: row.display_name,
-    email: row.email,
-    statedPhone: row.stated_phone_e164,
-    everListed: row.ever_listed,
-    seatCounted: row.seat_counted,
-    onList: row.on_list,
-    entryId: row.entry_id,
-    entryStatus: row.entry_status,
-    entryMemberNumber: row.entry_member_number,
-    formerEntryId: row.former_entry_id ?? null,
-    joinedAt: row.joined_at,
-  }));
+  return rows.map((row) => {
+    // Joined record off the list: a current record on their contact with its name is them.
+    const joinedName = row.joined_full_name;
+    const alt =
+      row.joined_former && joinedName !== null
+        ? sameContactSchema.parse(row.same_contact ?? []).find((entry) => sameName(entry.fullName, joinedName))
+        : undefined;
+    return {
+      userId: row.user_id,
+      fullName: row.display_name,
+      email: row.email,
+      statedPhone: row.stated_phone_e164,
+      everListed: row.ever_listed,
+      seatCounted: row.seat_counted,
+      onList: row.on_list || alt !== undefined,
+      entryId: alt?.id ?? row.entry_id,
+      entryStatus: alt === undefined ? row.entry_status : alt.status,
+      entryMemberNumber: alt === undefined ? row.entry_member_number : alt.memberNumber,
+      entryFullName: alt === undefined ? row.entry_full_name : alt.fullName,
+      formerEntryId: row.former_entry_id ?? null,
+      joinedEntryId: row.joined_entry_id,
+      joinedFullName: joinedName,
+      joinedFormer: row.joined_former,
+      joinedAt: row.joined_at,
+    };
+  });
+}
+
+const sameContactSchema = z.array(
+  z.object({ id: z.string().uuid(), status: z.string().nullable(), memberNumber: z.string().nullable(), fullName: z.string() }).strict(),
+);
+
+/** WHY SOME OF THE GYM'S MEMBERS ARE NOT ON ITS LIST, for the roster (3a-vi-b): when
+ *  each FORMER record came off, and the name on the first current record holding each
+ *  address. Both are the gym's own data about its list, asked by id and address in
+ *  this gym only. */
+export async function offListFacts(
+  sql: SqlOrTx,
+  gymId: string,
+  formerEntryIds: readonly string[],
+  emails: readonly string[],
+): Promise<{ takenOffAt: Map<string, Date>; nameByEmail: Map<string, string> }> {
+  const takenOffAt = new Map<string, Date>();
+  const nameByEmail = new Map<string, string>();
+  if (formerEntryIds.length > 0) {
+    const rows = await sql<{ id: string; former_at: Date }[]>`
+      SELECT id, former_at FROM gym_member_list_entries
+      WHERE gym_id = ${gymId} AND id = ANY(${[...formerEntryIds]}::uuid[]) AND former_at IS NOT NULL`;
+    for (const row of rows) takenOffAt.set(row.id, row.former_at);
+  }
+  if (emails.length > 0) {
+    const rows = await sql<{ email: string; full_name: string }[]>`
+      SELECT DISTINCT ON (lower(email::text)) lower(email::text) AS email, full_name
+      FROM gym_member_list_entries
+      WHERE gym_id = ${gymId} AND former_at IS NULL AND email = ANY(${[...emails]}::citext[])
+      ORDER BY lower(email::text), listed_seq`;
+    for (const row of rows) nameByEmail.set(row.email, row.full_name);
+  }
+  return { takenOffAt, nameByEmail };
 }
 
 /** THE WHOLE DOCUMENT, rows and all — the expensive read, and the only caller is a
@@ -1853,11 +1962,13 @@ export async function stampListedByContact(
   tx: TransactionSql,
   gymId: string,
   contacts: readonly { email: string | null; phone: string | null }[],
+  /** Records whose members joined with them: listed whatever their contact says (3a-vi-b). */
+  entryIds: readonly string[],
   at: Date,
 ): Promise<number> {
   const emails = contacts.flatMap((c) => (c.email === null ? [] : [c.email]));
   const phones = contacts.flatMap((c) => (c.phone === null ? [] : [c.phone]));
-  if (emails.length === 0 && phones.length === 0) return 0;
+  if (emails.length === 0 && phones.length === 0 && entryIds.length === 0) return 0;
   const rows = await tx<{ user_id: string }[]>`
     UPDATE gym_members m
     SET last_listed_at = ${at}
@@ -1869,7 +1980,8 @@ export async function stampListedByContact(
             AND EXISTS (
               SELECT 1 FROM one_time_tokens t
               WHERE t.user_id = m.user_id AND t.purpose = 'verify_email' AND t.used_at IS NOT NULL))
-           OR (m.stated_phone_e164 IS NOT NULL AND m.stated_phone_e164 = ANY(${phones}::text[])))
+           OR (m.stated_phone_e164 IS NOT NULL AND m.stated_phone_e164 = ANY(${phones}::text[]))
+           OR m.entry_id = ANY(${[...entryIds]}::uuid[]))
     RETURNING m.user_id`;
   return rows.length;
 }

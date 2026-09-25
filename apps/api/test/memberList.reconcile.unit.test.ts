@@ -65,6 +65,7 @@ const row = (at: number, who: Person, status: string | null, wider: Partial<Memb
  *  file are about WHO is new, changed, gone or leaving, and `memberList.wider` covers
  *  the wider record's own comparisons. */
 const entry = (who: Person, status: string | null, over: Partial<ListEntry> = {}): ListEntry => ({
+  id: identityKey(who),
   identityKey: identityKey(who),
   fullName: who.fullName,
   email: who.email,
@@ -113,6 +114,7 @@ const member = (over: Partial<ListMember> & { userId: string }): ListMember => (
   // A paid seat unless a case says otherwise, which is what every case here was
   // written against; the owner-and-staff case sets it false explicitly.
   seatCounted: true,
+  joinedEntryId: null,
   ...over,
 });
 

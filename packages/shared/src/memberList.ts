@@ -993,15 +993,22 @@ export type MemberListRowsPage = z.infer<typeof memberListRowsPageSchema>;
  *  "Amara Okafor, not in the app" for the preview's whole hour while she was, which is
  *  exactly the burst RULINGS 2026-09-20 describes. So no fact about a member is ever
  *  stored: every one of them is worked out again on every read, which cannot go stale
- *  by construction, where a longer freshness check could miss a case and go quiet. */
+ *  by construction, where a longer freshness check could miss a case and go quiet.
+ *
+ *  `entryId` is the record the row matched (null for somebody new): a fact about the
+ *  LIST, which is what a read compares with a member's joined record (ROADMAP 3a-vi-b).
+ *  Absent on an upload staged before it existed, which a read then works out again. */
+const memberListStagedEntryIdSchema = z.string().uuid().nullable().optional();
 const memberListGroupedRowSchema = z
-  .object({ at: z.number().int().min(0), wasStatus: z.string().nullable() })
+  .object({ at: z.number().int().min(0), wasStatus: z.string().nullable(), entryId: memberListStagedEntryIdSchema })
   .strict();
 
 /** Somebody the gym's list holds who is not in the file — stored as the GYM's own
  *  record of them, which is what the list is. `inApp` is filled in on every read, for
- *  the reason above. */
-export const memberListStoredPersonSchema = memberListPreviewPersonSchema.omit({ inApp: true });
+ *  the reason above. `entryId` never reaches a screen. */
+export const memberListStoredPersonSchema = memberListPreviewPersonSchema
+  .omit({ inApp: true })
+  .extend({ entryId: memberListStagedEntryIdSchema });
 export type MemberListStoredPerson = z.infer<typeof memberListStoredPersonSchema>;
 
 export const memberListGroupsSchema = z

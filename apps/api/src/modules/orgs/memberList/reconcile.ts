@@ -34,7 +34,7 @@ import {
   type MemberListStatusChange,
 } from "@app/shared";
 import { fold, identityKey } from "./fields.js";
-import { matchRows } from "./samePerson.js";
+import { matchRows, sameName } from "./samePerson.js";
 
 /** One person the gym's list holds — on it, or FORMER (§11.1).
  *
@@ -46,6 +46,8 @@ import { matchRows } from "./samePerson.js";
  *  phone and member number — can change too: a row is matched to its record by
  *  `samePerson.ts`, not by the key. */
 export interface ListEntry {
+  /** The record's own id: what a membership's `entry_id` names. */
+  id: string;
   identityKey: string;
   fullName: string;
   email: string | null;
@@ -106,6 +108,10 @@ export interface ListMember {
    *  The marks, `leaving`, the guard and the seat count use only these; "already in
    *  the app" uses every live member. */
   seatCounted: boolean;
+  /** The record the invitation they joined with was for (`gym_members.entry_id`), or
+   *  null: joined by a code, or a family address at the time. When set, THAT record
+   *  alone decides whether they are on the list (`onListOf`). */
+  joinedEntryId: string | null;
 }
 
 /** ONE OF THE GYM'S OWN COLUMNS AS THIS FILE BRINGS IT (§11.1): the catalogue key an
@@ -192,6 +198,9 @@ export interface ReconciledMember {
 export interface ReconciledPerson {
   /** The key this person's record has once the upload is applied. */
   identityKey: string;
+  /** The id of the record this person is, or null for somebody the list does not hold
+   *  yet — what a member's `joinedEntryId` is compared with on a read. */
+  entryId: string | null;
   /** The key the matched record has NOW — what an update finds it by. Null for somebody
    *  the list does not hold yet. */
   entryKey: string | null;
@@ -396,6 +405,59 @@ const addContact = (person: Contactable, emails: Set<string>, phones: Set<string
   if (phone !== null) phones.add(phone);
 };
 
+/** WHETHER A MEMBER IS ON A LIST (RULINGS 2026-09-25; ROADMAP 3a-vi-b).
+ *
+ *  A member who joined by invitation is the record that invitation was for: on the list
+ *  while the list holds it, whatever the gym's software has since done to its email or
+ *  phone. Once it has come off, only a record on their email or phone WITH THAT
+ *  RECORD'S NAME is still them (3a-vi's same-name test) — staff who took Emma off and
+ *  typed her back in; never a relative on the same address (a parent who left, a child
+ *  who stays). A member with no such record is matched by proved email, then stated
+ *  phone (§9.7).
+ *
+ *  `joined` is their record, or null (none, or deleted: deleting clears the link);
+ *  `holds` says whether the list in question holds it; `reaches` asks the contact
+ *  question of the same list, with a name the match must carry or null for any. */
+export function onListOf(
+  joined: { id: string; fullName: string } | null,
+  holds: (id: string) => boolean,
+  reaches: (name: string | null) => boolean,
+): boolean {
+  if (joined === null) return reaches(null);
+  return holds(joined.id) || reaches(joined.fullName);
+}
+
+/** Emails and phones of a list's people, with the names under each. */
+export interface NamedContacts {
+  byEmail: Map<string, string[]>;
+  byPhone: Map<string, string[]>;
+}
+
+export function namedContacts(people: Iterable<{ email: string | null; phone: string | null; fullName: string }>): NamedContacts {
+  const index: NamedContacts = { byEmail: new Map(), byPhone: new Map() };
+  const put = (map: Map<string, string[]>, key: string | null, name: string): void => {
+    if (key === null) return;
+    const names = map.get(key);
+    if (names === undefined) map.set(key, [name]);
+    else names.push(name);
+  };
+  for (const person of people) {
+    put(index.byEmail, foldEmail(person.email), person.fullName);
+    put(index.byPhone, foldPhone(person.phone), person.fullName);
+  }
+  return index;
+}
+
+/** Whether a person's email or phone is among `index`, with `name` if one is given. */
+export function reachesNamed(index: NamedContacts, person: Contactable, name: string | null): boolean {
+  const fits = (names: readonly string[] | undefined): boolean =>
+    names !== undefined && (name === null || names.some((other) => sameName(other, name)));
+  const email = foldEmail(person.email);
+  if (email !== null && fits(index.byEmail.get(email))) return true;
+  const phone = foldPhone(person.phone);
+  return phone !== null && fits(index.byPhone.get(phone));
+}
+
 /** Every status word the upload touches, with what it does to the people carrying
  *  it.
  *
@@ -498,10 +560,11 @@ export interface MembersSide {
  *
  *  `reachesNewList` is the one thing the caller supplies: whether the list AFTER this
  *  upload can reach this member. `reconcile` answers it from the file's rows it holds; a
- *  read answers it from the staged file's contacts (`repo.stagedContacts`). */
-export function membersAgainstNewList(
-  members: readonly MemberOnList[],
-  reachesNewList: (member: MemberOnList) => boolean,
+ *  read answers it from the staged file's contacts (`repo.stagedContacts`) and the
+ *  records its groups matched. Both ask `onListOf`. */
+export function membersAgainstNewList<M extends MemberOnList>(
+  members: readonly M[],
+  reachesNewList: (member: M) => boolean,
   hasList: boolean,
 ): MembersSide {
   const marks: ReconciledMember[] = [];
@@ -528,6 +591,7 @@ export function membersAgainstNewList(
     // wrong or the person really has left.
     membersLeaving.push({
       identityKey: "",
+      entryId: null,
       entryKey: null,
       at: null,
       row: null,
@@ -615,16 +679,16 @@ export function reconcile(input: ReconcileInput): Reconciled {
   const memberEmails = new Set<string>();
   const memberPhones = new Set<string>();
   for (const member of members) addContact({ email: member.email, phone: member.statedPhone }, memberEmails, memberPhones);
-  const inApp = (person: Contactable): boolean => reaches(person, memberEmails, memberPhones);
+  // A record somebody joined with is in the app whatever its email says now.
+  const joinedIds = new Set(members.flatMap((member) => (member.joinedEntryId === null ? [] : [member.joinedEntryId])));
+  const inApp = (person: Contactable, entry: ListEntry | undefined): boolean =>
+    (entry !== undefined && joinedIds.has(entry.id)) || reaches(person, memberEmails, memberPhones);
 
   // THE LIST AS IT WOULD BE. A whole-list upload IS the file; an add keeps
   // everybody already on the list beside it. Every "would this member still be
   // listed" question below is asked of this, which is what makes `add` mode take
   // nobody off without a single branch saying so.
-  const newEmails = new Set<string>();
-  const newPhones = new Set<string>();
-  for (const row of rows) addContact(row, newEmails, newPhones);
-  if (mode === "add") for (const entry of current) addContact(entry, newEmails, newPhones);
+  const newList = namedContacts(mode === "add" ? [...rows, ...current] : rows);
 
   const fresh: ReconciledPerson[] = [];
   const added: ReconciledPerson[] = [];
@@ -678,6 +742,7 @@ export function reconcile(input: ReconcileInput): Reconciled {
           });
     const person: ReconciledPerson = {
       identityKey: nextKey,
+      entryId: entry?.id ?? null,
       entryKey: entry?.identityKey ?? null,
       at,
       row: row.row,
@@ -687,7 +752,7 @@ export function reconcile(input: ReconcileInput): Reconciled {
       memberNumber: row.memberNumber,
       status: row.status,
       wasStatus: entry?.status ?? null,
-      inApp: inApp(row),
+      inApp: inApp(row, entry),
       moved: [...moved, ...movedExtra.map((field) => `${MEMBER_LIST_EXTRA_FIELD_PREFIX}${field.key}`)],
     };
     if (entry === undefined) {
@@ -731,6 +796,7 @@ export function reconcile(input: ReconcileInput): Reconciled {
           .filter((entry) => !kept.has(entry.identityKey))
           .map((entry) => ({
             identityKey: entry.identityKey,
+            entryId: entry.id,
             entryKey: entry.identityKey,
             at: null,
             row: null,
@@ -740,7 +806,7 @@ export function reconcile(input: ReconcileInput): Reconciled {
             memberNumber: entry.memberNumber,
             status: null,
             wasStatus: entry.status,
-            inApp: inApp(entry),
+            inApp: inApp(entry, entry),
             // Nothing of theirs is written: they come OFF the list, and what happens
             // to them is a date on their own record (§11.1).
             moved: [],
@@ -757,20 +823,27 @@ export function reconcile(input: ReconcileInput): Reconciled {
   // admitting anybody (§11.1, §10.2). A member matched to somebody the gym took off
   // its list would read "on your list", hold a seat's worth of the gym's trust, and
   // be counted where an invite is decided.
-  const entryByEmail = new Map<string, ListEntry>();
-  const entryByPhone = new Map<string, ListEntry>();
+  const entriesByEmail = new Map<string, ListEntry[]>();
+  const entriesByPhone = new Map<string, ListEntry[]>();
+  const file = (map: Map<string, ListEntry[]>, key: string | null, entry: ListEntry): void => {
+    if (key === null) return;
+    const list = map.get(key);
+    if (list === undefined) map.set(key, [entry]);
+    else list.push(entry);
+  };
   for (const entry of current) {
-    const email = foldEmail(entry.email);
-    if (email !== null && !entryByEmail.has(email)) entryByEmail.set(email, entry);
-    const phone = foldPhone(entry.phone);
-    if (phone !== null && !entryByPhone.has(phone)) entryByPhone.set(phone, entry);
+    file(entriesByEmail, foldEmail(entry.email), entry);
+    file(entriesByPhone, foldPhone(entry.phone), entry);
   }
-  const entryFor = (person: Contactable): ListEntry | null => {
+  /** The first current record on this email, else phone — carrying `name` if given. */
+  const entryFor = (person: Contactable, name: string | null): ListEntry | null => {
+    const pick = (list: readonly ListEntry[] | undefined): ListEntry | undefined =>
+      list?.find((entry) => name === null || sameName(entry.fullName, name));
     const email = foldEmail(person.email);
-    const byEmail = email === null ? undefined : entryByEmail.get(email);
+    const byEmail = email === null ? undefined : pick(entriesByEmail.get(email));
     if (byEmail !== undefined) return byEmail;
     const phone = foldPhone(person.phone);
-    return (phone === null ? undefined : entryByPhone.get(phone)) ?? null;
+    return (phone === null ? undefined : pick(entriesByPhone.get(phone))) ?? null;
   };
   // THE MEMBERS' SIDE IS THE SAME RULE A READ USES, called here with the entries
   // this function was handed and there with one statement's answer. One function,
@@ -779,10 +852,21 @@ export function reconcile(input: ReconcileInput): Reconciled {
   // ...and THIS half is the seat rule's own set, because a mark, a leaver and the
   // guard's numbers are about the paid places, and because §9.7 keeps the owner out
   // of "no longer listed".
+  const entryById = new Map(entries.map((entry) => [entry.id, entry]));
+  const joinedOf = (member: ListMember): ListEntry | null =>
+    member.joinedEntryId === null ? null : (entryById.get(member.joinedEntryId) ?? null);
+  // The records the list holds once this upload is applied: every row's record
+  // (kept or coming back), and for an add everybody already on it.
+  const listedAfter = new Set<string>();
+  for (const match of matched) if (match !== null) listedAfter.add(match.entry.id);
+  if (mode === "add") for (const entry of current) listedAfter.add(entry.id);
   const onTheList = members
     .filter((member) => member.seatCounted)
     .map((member) => {
-      const entry = entryFor({ email: member.email, phone: member.statedPhone });
+      // `onListOf` over today's list, keeping the record it lands on.
+      const contact = { email: member.email, phone: member.statedPhone };
+      const joined = joinedOf(member);
+      const entry = joined === null ? entryFor(contact, null) : !joined.former ? joined : entryFor(contact, joined.fullName);
       return {
         ...member,
         onList: entry !== null,
@@ -790,7 +874,16 @@ export function reconcile(input: ReconcileInput): Reconciled {
         entryMemberNumber: entry?.memberNumber ?? null,
       };
     });
-  const side = membersAgainstNewList(onTheList, (member) => reaches({ email: member.email, phone: member.statedPhone }, newEmails, newPhones), hasList);
+  const side = membersAgainstNewList(
+    onTheList,
+    (member) =>
+      onListOf(
+        joinedOf(member),
+        (id) => listedAfter.has(id),
+        (name) => reachesNamed(newList, { email: member.email, phone: member.statedPhone }, name),
+      ),
+    hasList,
+  );
   const { marks, membersLeaving, listedNow, onEitherList } = side;
 
   const counts: MemberListChangeCounts = {
