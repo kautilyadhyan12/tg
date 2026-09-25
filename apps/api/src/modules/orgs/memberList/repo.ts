@@ -786,15 +786,17 @@ export async function stagedContacts(
 export async function membersAgainstList(
   sql: SqlOrTx,
   gymId: string,
-  /** Only the members this email or phone could reach, or who joined with one of these
-   *  records (one person's page, one address's holders). Each is still matched against
-   *  the whole list, so the answer is the same one the full read gives for them. */
-  reaching?: { email: string | null; phone: string | null; entryIds?: readonly string[] },
+  /** Only the members this email or phone could reach, who joined with one of these
+   *  records, or who are these users (one person's page, one address's holders, one
+   *  roster page). Each is still matched against the whole list, so the answer is the
+   *  same one the full read gives for them. */
+  reaching?: { email: string | null; phone: string | null; entryIds?: readonly string[]; userIds?: readonly string[] },
 ): Promise<MemberAgainstList[]> {
   const narrowed = reaching !== undefined;
   const reachEmail = reaching?.email ?? null;
   const reachPhone = reaching?.phone ?? null;
   const reachEntries = [...(reaching?.entryIds ?? [])];
+  const reachUsers = [...(reaching?.userIds ?? [])];
   const rows = await sql<
     {
       user_id: string;
@@ -891,7 +893,8 @@ export async function membersAgainstList(
       AND (NOT ${narrowed}::boolean
            OR u.email = ${reachEmail}::citext
            OR (m.stated_phone_e164 IS NOT NULL AND m.stated_phone_e164 = ${reachPhone}::text)
-           OR m.entry_id = ANY(${reachEntries}::uuid[]))
+           OR m.entry_id = ANY(${reachEntries}::uuid[])
+           OR m.user_id = ANY(${reachUsers}::uuid[]))
     ORDER BY m.joined_at, m.user_id`;
   return rows.map((row) => ({
     userId: row.user_id,
@@ -908,6 +911,35 @@ export async function membersAgainstList(
     joinedEntryId: row.joined_entry_id,
     joinedAt: row.joined_at,
   }));
+}
+
+/** WHY SOME OF THE GYM'S MEMBERS ARE NOT ON ITS LIST, for the roster (3a-vi-b): when
+ *  each FORMER record came off, and the name on the first current record holding each
+ *  address. Both are the gym's own data about its list, asked by id and address in
+ *  this gym only. */
+export async function offListFacts(
+  sql: SqlOrTx,
+  gymId: string,
+  formerEntryIds: readonly string[],
+  emails: readonly string[],
+): Promise<{ takenOffAt: Map<string, Date>; nameByEmail: Map<string, string> }> {
+  const takenOffAt = new Map<string, Date>();
+  const nameByEmail = new Map<string, string>();
+  if (formerEntryIds.length > 0) {
+    const rows = await sql<{ id: string; former_at: Date }[]>`
+      SELECT id, former_at FROM gym_member_list_entries
+      WHERE gym_id = ${gymId} AND id = ANY(${[...formerEntryIds]}::uuid[]) AND former_at IS NOT NULL`;
+    for (const row of rows) takenOffAt.set(row.id, row.former_at);
+  }
+  if (emails.length > 0) {
+    const rows = await sql<{ email: string; full_name: string }[]>`
+      SELECT DISTINCT ON (lower(email::text)) lower(email::text) AS email, full_name
+      FROM gym_member_list_entries
+      WHERE gym_id = ${gymId} AND former_at IS NULL AND email = ANY(${[...emails]}::citext[])
+      ORDER BY lower(email::text), listed_seq`;
+    for (const row of rows) nameByEmail.set(row.email, row.full_name);
+  }
+  return { takenOffAt, nameByEmail };
 }
 
 /** THE WHOLE DOCUMENT, rows and all — the expensive read, and the only caller is a

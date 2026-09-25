@@ -1,6 +1,7 @@
 // An app member follows their record, on the real routes and real Postgres (ROADMAP
 // 3a-vi-b; RULINGS 2026-09-25). Two people join through real invitations; next month's
 // file changes one's email and drops the other while her son stays on her address.
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
@@ -175,6 +176,23 @@ d("member list: an app member follows their record (real Postgres)", () => {
     (await sql<{ entry_id: string | null }[]>`
       SELECT entry_id FROM gym_members WHERE gym_id = ${gymId} AND user_id = ${userId} AND removed_at IS NULL`)[0]?.entry_id;
 
+  const roster = async (gymId: string, cookies: Record<string, string>) => {
+    const res = await get(`/v1/orgs/${gymId}/members`, cookies);
+    expect(res.statusCode, res.body).toBe(200);
+    return orgMemberPageSchema.parse(JSON.parse(res.body)).items;
+  };
+  /** A member who joined without an invitation (a code, before invitations), with a
+   *  proved address and never on a list. */
+  const walkIn = async (gymId: string, email: string) => {
+    const userId = randomUUID();
+    await sql`INSERT INTO users (id, email, display_name, password_hash) VALUES (${userId}, ${email}, 'Nia Cole', 'x')`;
+    await sql`
+      INSERT INTO one_time_tokens (user_id, purpose, token_hash, expires_at, used_at)
+      VALUES (${userId}, 'verify_email', ${randomUUID()}, now() + interval '1 day', now())`;
+    await sql`INSERT INTO gym_members (gym_id, user_id, complimentary) VALUES (${gymId}, ${userId}, false)`;
+    return userId;
+  };
+
   const unlisted = async (gymId: string, cookies: Record<string, string>) => {
     const res = await get(`/v1/orgs/${gymId}/member-list/unlisted?group=no_longer_listed`, cookies);
     expect(res.statusCode, res.body).toBe(200);
@@ -255,12 +273,16 @@ d("member list: an app member follows their record (real Postgres)", () => {
       const detail = memberListEntryDetailSchema.parse((JSON.parse(page.body) as { entry: unknown }).entry);
       expect({ inApp: detail.inApp, members: detail.members.map((m) => m.userId) }).toEqual({ inApp: true, members: [emmaUser.userId] });
 
-      // The roster: "On your list as Emma Clarke"; nothing beside Priya.
-      const roster = await get(`/v1/orgs/${gymId}/members`, cookies);
-      expect(roster.statusCode, roster.body).toBe(200);
-      const items = orgMemberPageSchema.parse(JSON.parse(roster.body)).items;
-      expect(items.find((item) => item.userId === emmaUser.userId)?.onList?.name).toBe(emma.name);
-      expect(items.find((item) => item.userId === priyaUser.userId)?.onList).toBeUndefined();
+      // The roster: "On your list as Emma Clarke"; Priya marked, with why and who else
+      // holds her address; the owner never.
+      const items = await roster(gymId, cookies);
+      const emmaRow = items.find((item) => item.userId === emmaUser.userId);
+      expect({ onList: emmaRow?.onList?.name, offList: emmaRow?.offList }).toEqual({ onList: emma.name, offList: undefined });
+      const priyaRow = items.find((item) => item.userId === priyaUser.userId);
+      expect(priyaRow?.onList).toBeUndefined();
+      expect(priyaRow?.offList).toMatchObject({ reason: "taken_off", sameEmailName: arjun.name });
+      expect(Number.isNaN(Date.parse(priyaRow?.offList?.at ?? ""))).toBe(false);
+      expect(items.filter((item) => item.offList !== undefined).map((item) => item.userId)).toEqual([priyaUser.userId]);
 
       // Invite does not email Emma's new address: she is in the app.
       const invite = await get(`/v1/orgs/${gymId}/member-list/invites/preview`, cookies);
@@ -297,7 +319,24 @@ d("member list: an app member follows their record (real Postgres)", () => {
       expect({ outcome: written.outcome, entryId: written.entry.entryId }).toEqual({ outcome: "restored", entryId: priyaRecord.id });
       expect(await recordOf(gymId, priya.name)).toEqual({ id: priyaRecord.id, former: false });
       expect(await unlisted(gymId, cookies)).toEqual([]);
+      expect((await roster(gymId, cookies)).filter((item) => item.offList !== undefined)).toEqual([]);
       expect(await linkOf(gymId, emmaUser.userId)).toBe(emmaRecord.id);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "the worst thing on the roster: somebody never on a list is never 'taken off', and a gym with no list marks nobody",
+    async () => {
+      const { cookies, gymId } = await makeOwner("e");
+      const nia = await walkIn(gymId, addr("e-nia"));
+      // No list yet: nobody is missing from a list that does not exist.
+      expect((await roster(gymId, cookies)).filter((item) => item.offList !== undefined)).toEqual([]);
+
+      const { emma, others } = castOf("e");
+      await confirm(gymId, cookies, (await stage(gymId, cookies, csv([emma, ...others]))).uploadId);
+      const niaRow = (await roster(gymId, cookies)).find((item) => item.userId === nia);
+      expect(niaRow?.offList).toEqual({ reason: "never_listed", at: null, sameEmailName: null });
     },
     TEST_TIMEOUT_MS,
   );
@@ -309,6 +348,7 @@ d("member list: an app member follows their record (real Postgres)", () => {
       const b = await makeOwner("d");
       const res = await get(`/v1/orgs/${a.gymId}/member-list/unlisted?group=no_longer_listed`, b.cookies);
       expect([403, 404]).toContain(res.statusCode);
+      expect([403, 404]).toContain((await get(`/v1/orgs/${a.gymId}/members`, b.cookies)).statusCode);
     },
     TEST_TIMEOUT_MS,
   );

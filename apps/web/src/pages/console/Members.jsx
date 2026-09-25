@@ -13,6 +13,7 @@ import {
   formatJoinedAt,
   groupLabelText,
   memberCountLabel,
+  offListView,
   seatIsFree,
 } from './consoleView';
 import { consoleIsReadOnly, readOnlyNote, seatLineText, seatMeter } from './billingView';
@@ -118,11 +119,15 @@ function RemoveControl({ member, busy, readOnly, words, onRemove }) {
   );
 }
 
-function MemberRow({ member, busy, canRemove, readOnly, words, onRemove }) {
+function MemberRow({ member, busy, canRemove, readOnly, words, onRemove, onPutOnList }) {
+  // An app member the gym's list does not hold (3a-vi-b): an amber edge, the reason,
+  // and the button that puts it right. Only staff who may see the list are sent it.
+  const off = offListView(member.offList);
   return (
     <div
+      data-testid={off ? 'member-off-list' : undefined}
       className="rounded-2xl p-4 flex items-center gap-4"
-      style={{ background: '#121110', border: '1px solid rgba(255,255,255,0.06)' }}
+      style={{ background: '#121110', border: off ? '1px solid rgba(255,138,31,0.45)' : '1px solid rgba(255,255,255,0.06)' }}
     >
       <div className="flex-1 min-w-0">
         <div className="font-semibold truncate" style={{ color: '#fff' }}>
@@ -149,7 +154,27 @@ function MemberRow({ member, busy, canRemove, readOnly, words, onRemove }) {
             ) : null}
           </div>
         ) : null}
+        {off ? (
+          <div className="text-xs mt-1.5 flex flex-col gap-0.5">
+            <span className="flex items-center gap-1 font-medium" style={{ color: '#FF8A1F' }}>
+              <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+              {off.line}
+            </span>
+            {off.sameEmail ? <span style={{ color: 'rgba(255,255,255,0.6)' }}>{off.sameEmail}</span> : null}
+          </div>
+        ) : null}
       </div>
+      {off ? (
+        <button
+          type="button"
+          onClick={onPutOnList}
+          disabled={busy || readOnly}
+          className="text-xs rounded-lg px-3 py-1.5 font-semibold flex-shrink-0 disabled:opacity-40"
+          style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
+        >
+          {off.button}
+        </button>
+      ) : null}
       {seatIsFree(member) ? (
         /* A place the gym is not charged for: the owner's own §4.0-step-6 seat,
            and — since Kd's finding at the staff re-smoke (:14953) — anybody
@@ -373,6 +398,20 @@ export default function Members() {
     retry();
   };
 
+  const putOnList = async (member) => {
+    if (gymId === null) return;
+    setRemovingId(member.userId);
+    setRemoveError(null);
+    try {
+      await orgService.putMemberOnList(gymId, member.userId);
+      reloadRoster();
+    } catch (err) {
+      setRemoveError(errorText(err, "We couldn't put them on your list. Please try again."));
+    } finally {
+      setRemovingId(null);
+    }
+  };
+
   const removeMember = async (member) => {
     if (gymId === null) return;
     setRemovingId(member.userId);
@@ -546,6 +585,7 @@ export default function Members() {
               canRemove={canRemove}
               readOnly={readOnly}
               onRemove={() => removeMember(m)}
+              onPutOnList={() => putOnList(m)}
             />
           ))}
         </div>

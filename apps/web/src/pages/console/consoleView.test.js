@@ -15,6 +15,7 @@ import {
   findOrgBySlug,
   formatJoinedAt,
   groupLabelText,
+  offListView,
   joinedCount,
   nudgedLabel,
   manageableOrgs,
@@ -579,5 +580,25 @@ describe('viewerPrivileges', () => {
     expect(viewerPrivileges({ staffRole: null })).toEqual([]);
     expect(viewerPrivileges(null)).toEqual([]);
     expect(viewerPrivileges(undefined)).toEqual([]);
+  });
+});
+
+// ROADMAP 3a-vi-b: why a member is not on the gym's list, in the gym's words.
+describe('offListView', () => {
+  it('says nothing about somebody who is on the list', () => {
+    expect(offListView(undefined)).toBeNull();
+  });
+  it("never says 'taken off' about somebody who was never on a list", () => {
+    const view = offListView({ reason: 'never_listed', at: null, sameEmailName: null });
+    expect(view).toEqual({ line: 'Not on your list · not on any list you have imported', sameEmail: null, button: 'Add to list' });
+  });
+  it('says when their record came off, and who else on the list has their address', () => {
+    const view = offListView({ reason: 'taken_off', at: '2026-09-25T09:00:00.000Z', sameEmailName: 'Arjun Shah' });
+    expect(view.line).toBe(`Not on your list · taken off ${formatJoinedAt('2026-09-25T09:00:00.000Z')}`);
+    expect(view.sameEmail).toBe('Arjun Shah on your list has the same email');
+    expect(view.button).toBe('Put back on list');
+  });
+  it('somebody who dropped off without a record of their own taken off was on an earlier list', () => {
+    expect(offListView({ reason: 'no_longer_listed', at: null, sameEmailName: null }).line).toBe('Not on your list · was on an earlier list');
   });
 });

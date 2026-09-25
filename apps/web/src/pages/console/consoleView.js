@@ -342,6 +342,24 @@ export function formatJoinedAt(iso) {
   return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+/** WHY A MEMBER IS NOT ON THE GYM'S LIST, in the gym's words (ROADMAP 3a-vi-b), from
+ *  the server's `offList`: the reason, the other name on their address if there is
+ *  one, and what the button that puts it right says. Null when they are not off it. */
+export function offListView(offList) {
+  if (!offList) return null;
+  const reason =
+    offList.reason === 'taken_off' && offList.at
+      ? `taken off ${formatJoinedAt(offList.at)}`
+      : offList.reason === 'never_listed'
+        ? 'not on any list you have imported'
+        : 'was on an earlier list';
+  return {
+    line: `Not on your list · ${reason}`,
+    sameEmail: offList.sameEmailName ? `${offList.sameEmailName} on your list has the same email` : null,
+    button: offList.reason === 'never_listed' ? 'Add to list' : 'Put back on list',
+  };
+}
+
 /** The label of the code somebody joined through — Part 3 §2.1's group
  *  mechanism. Nullable in the contract, so an em dash rather than a fabricated
  *  "Front Desk". */

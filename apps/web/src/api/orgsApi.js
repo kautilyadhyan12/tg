@@ -15,6 +15,7 @@ import {
   createOrgResponseSchema,
   declineInvitationResponseSchema,
   memberListConfirmResponseSchema,
+  memberListEntryWrittenSchema,
   memberListNotMeResponseSchema,
   memberListPreviewResponseSchema,
   memberListRowsResponseSchema,
@@ -504,6 +505,18 @@ export const orgService = {
       memberListNotMeResponseSchema,
       'the addresses to check',
       authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/not-me`),
+    ),
+
+  /** POST …/member-list/entries/from-member/:userId — put an app member on the list:
+   *  their own record back if it was taken off, else a record from their details. */
+  putMemberOnList: (gymId, userId) =>
+    readThrough(
+      memberListEntryWrittenSchema,
+      'your list',
+      authApi.post(
+        `/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/from-member/${encodeURIComponent(userId)}`,
+        {},
+      ),
     ),
 
   /** POST /v1/orgs/:gymId/member-list/uploads — read a file (or pasted rows) and
