@@ -11,6 +11,7 @@ import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { InviteEmail, InviteSendResult, InviteTransport } from "../src/email/resend.js";
+import { dayInTz } from "../src/modules/gamification/streak.js";
 import { emailHmac } from "../src/modules/orgs/invites/address.js";
 import type { MailCheck } from "../src/modules/orgs/invites/decide.js";
 import { claimNextSend } from "../src/modules/orgs/invites/repo.js";
@@ -22,6 +23,7 @@ import { registerUnsubscribeRoutes } from "../src/modules/orgs/invites/unsubscri
 import { createMemoryRedis } from "../src/redis.js";
 import {
   MEMBER_INVITE_EMAIL_REASON_WORDS,
+  MEMBER_INVITE_WORDS,
   memberInviteOneSchema,
   memberInvitePreviewSchema,
   memberInvitedSchema,
@@ -185,7 +187,7 @@ d("press Invite (real Postgres)", () => {
   };
 
   const press = (gymId: string, who: User, preview: MemberInvitePreview, filter: Record<string, unknown> = {}, ip?: string) =>
-    post(`${listUrl(gymId)}/invites`, { ...filter, version: preview.version, expectedCount: preview.reach }, who.cookies, ip);
+    post(`${listUrl(gymId)}/invites`, { ...filter, version: preview.version, expectedCount: preview.reach, permissionConfirmed: true }, who.cookies, ip);
 
   const errorOf = (res: { body: string }) => JSON.parse(res.body) as { error: string; message: string };
 
@@ -593,7 +595,7 @@ d("press Invite (real Postgres)", () => {
         },
       };
       await expect(
-        pressInvite(deps, owner.userId, gym, { version: seen.version, expectedCount: seen.reach }, () => Promise.resolve(true)),
+        pressInvite(deps, owner.userId, gym, { version: seen.version, expectedCount: seen.reach, permissionConfirmed: true }, () => Promise.resolve(true)),
       ).rejects.toBeInstanceOf(InviteChanged);
       const invited = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_invites WHERE gym_id = ${gym}`;
       expect(invited[0]?.n).toBe(0);
@@ -614,7 +616,7 @@ d("press Invite (real Postgres)", () => {
         await appoint(manager, org, owner, "manager");
         staff.push(manager);
       }
-      const stale = { version: 999, reach: 0, skipped: { noEmail: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, refused: 0, sharedAddress: 0 }, blocked: null };
+      const stale = { version: 999, reach: 0, skipped: { noEmail: 0, underAge: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, refused: 0, sharedAddress: 0 }, blocked: null };
       const desk = "10.64.0.1";
       // Five people, 24 presses each, at one address: all answered (the list moved).
       for (const who of staff) {
@@ -674,7 +676,7 @@ d("press Invite (real Postgres)", () => {
       const all = await previewOf(gym, owner);
       expect(all).toMatchObject({
         reach: 1,
-        skipped: { noEmail: 1, inApp: 2, alreadyInvited: 0, unsubscribed: 1, bounced: 0, refused: 0, sharedAddress: 1 },
+        skipped: { noEmail: 1, underAge: 0, inApp: 2, alreadyInvited: 0, unsubscribed: 1, bounced: 0, refused: 0, sharedAddress: 1 },
         blocked: null,
       });
       const active = await previewOf(gym, owner, "?status=active");
@@ -1333,4 +1335,168 @@ d("press Invite (real Postgres)", () => {
       UPDATE gym_invite_sends SET state = 'queued', finished_at = NULL, provider_id = NULL
       WHERE gym_id = ${gym} AND provider_id = 're_gate_0'`).rejects.toMatchObject({ code: "23514" });
   }, TEST_TIMEOUT_MS);
+
+  // =========================================================================
+  // NOBODY THE LIST SAYS IS UNDER 18 IS INVITED (RULINGS 2026-09-24; ROADMAP 5b-ii)
+  // =========================================================================
+  // The worst thing 5b-ii could do to a real person: email a 16-year-old on a family
+  // plan an invitation into an app that is for 18 and over. The birthdays are worked
+  // out from the gym's own today (Europe/London), so these hold on any date. In this
+  // file, not their own: the worker sends every due email in the database, so two
+  // files running it side by side take each other's.
+
+  describe("nobody under 18 is invited", () => {
+    /** The day `years` years and `days` days before the gym's today, 'YYYY-MM-DD'. */
+    const bornBefore = (years: number, days = 0): string => {
+      const [y, m, dd] = dayInTz(new Date(), "Europe/London").split("-").map(Number) as [number, number, number];
+      return new Date(Date.UTC(y - years, m - 1, dd - days)).toISOString().slice(0, 10);
+    };
+    let owner: User;
+    let gym = "";
+    const idOf = async (name: string): Promise<string> => {
+      const res = await get(`${entriesUrl(gym)}?query=${encodeURIComponent(name)}`, owner.cookies);
+      const found = memberListEntriesPageSchema.parse((JSON.parse(res.body) as { page: unknown }).page).entries[0];
+      if (found === undefined) throw new Error(`${name} is not on the list`);
+      return found.entryId;
+    };
+
+    beforeAll(async () => {
+      owner = await makeUser("age-owner");
+      gym = (await makeGym(owner, "Family Fitness")).org.id;
+    }, HOOK_TIMEOUT_MS);
+
+    it(
+      "Invite skips the children of a family plan and anyone turning 18 tomorrow, and says how many",
+      async () => {
+        // A family plan as a gym's software exports it: the son listed first, both at the
+        // parent's address; a junior at an address of their own; the rest adults or unknown.
+        await typeIn(gym, owner, { fullName: "Arjun Shah", email: addr("age-family"), status: "Family", dateOfBirth: bornBefore(16) });
+        await typeIn(gym, owner, { fullName: "Priya Shah", email: addr("age-family"), status: "Family", dateOfBirth: "1979-06-02" });
+        await typeIn(gym, owner, { fullName: "Leo Park", email: addr("age-leo"), status: "Junior", dateOfBirth: bornBefore(16, 40) });
+        await typeIn(gym, owner, { fullName: "Maya Cole", email: addr("age-maya"), status: "Active", dateOfBirth: bornBefore(18, -1) });
+        await typeIn(gym, owner, { fullName: "Sam Reid", email: addr("age-sam"), status: "Active", dateOfBirth: bornBefore(18) });
+        await typeIn(gym, owner, { fullName: "Noah Hill", email: addr("age-noah"), status: "Active" });
+
+        const preview = await previewOf(gym, owner);
+        expect(preview.reach).toBe(3);
+        expect(preview.skipped.underAge).toBe(3);
+        expect(preview.skipped.alreadyInvited).toBe(0);
+        expect(await previewOf(gym, owner, "?status=Junior")).toMatchObject({ reach: 0, skipped: { underAge: 1 } });
+
+        const pressed = await press(gym, owner, preview);
+        expect(pressed.statusCode, pressed.body).toBe(200);
+        expect(memberInvitedSchema.parse((JSON.parse(pressed.body) as { invited: unknown }).invited)).toMatchObject({
+          queued: 3,
+          skipped: { underAge: 3 },
+        });
+        await runSender();
+        expect(emailsTo(addr("age-family"))).toHaveLength(1);
+        expect(emailsTo(addr("age-sam"))).toHaveLength(1);
+        expect(emailsTo(addr("age-noah"))).toHaveLength(1);
+        expect(emailsTo(addr("age-leo"))).toHaveLength(0);
+        expect(emailsTo(addr("age-maya"))).toHaveLength(0);
+        const [none] = await sql`
+          SELECT count(*)::int AS n FROM gym_invites
+          WHERE gym_id = ${gym}
+            AND email_hmac IN (${emailHmac(settings.hmacKey, addr("age-leo"))}, ${emailHmac(settings.hmacKey, addr("age-maya"))})`;
+        expect(none).toEqual({ n: 0 });
+      },
+      TEST_TIMEOUT_MS,
+    );
+
+    it(
+      "inviting one person, and Add and invite, refuse somebody under 18 and write nothing",
+      async () => {
+        const one = await post(`${entryUrl(gym, await idOf("Leo Park"))}/invite`, {}, owner.cookies);
+        expect(one.statusCode, one.body).toBe(409);
+        expect(errorOf(one).error).toBe("under_age");
+
+        const walkIn = await post(entriesUrl(gym), { fullName: "Zoe Walk", email: addr("age-zoe"), dateOfBirth: bornBefore(17), invite: true }, owner.cookies);
+        expect(walkIn.statusCode, walkIn.body).toBe(409);
+        expect(errorOf(walkIn).error).toBe("under_age");
+        const [zoe] = await sql`SELECT 1 FROM gym_member_list_entries WHERE gym_id = ${gym} AND email = ${addr("age-zoe")}`;
+        expect(zoe).toBeUndefined();
+        const [invites] = await sql`
+          SELECT count(*)::int AS n FROM gym_invites
+          WHERE gym_id = ${gym}
+            AND email_hmac IN (${emailHmac(settings.hmacKey, addr("age-leo"))}, ${emailHmac(settings.hmacKey, addr("age-zoe"))})`;
+        expect(invites).toEqual({ n: 0 });
+      },
+      TEST_TIMEOUT_MS,
+    );
+
+    it(
+      "Send again refuses once the list's date of birth says under 18",
+      async () => {
+        const noah = await idOf("Noah Hill");
+        expect((await patch(entryUrl(gym, noah), { dateOfBirth: bornBefore(15) }, owner.cookies)).statusCode).toBe(200);
+        const again = await post(`${entryUrl(gym, noah)}/invite/resend`, {}, owner.cookies);
+        expect(again.statusCode, again.body).toBe(409);
+        expect(errorOf(again).error).toBe("under_age");
+      },
+      TEST_TIMEOUT_MS,
+    );
+
+    it(
+      "an email queued for an adult is not sent once the only record at its address is under 18",
+      async () => {
+        const ella = await typeIn(gym, owner, { fullName: "Ella Rose", email: addr("age-ella"), dateOfBirth: "1990-01-01", invite: true });
+        expect(ella.invite?.outcome).toBe("queued");
+        // A typo corrected before the worker's turn: the date of birth was her daughter's.
+        expect((await patch(entryUrl(gym, ella.entry.entryId), { dateOfBirth: bornBefore(14) }, owner.cookies)).statusCode).toBe(200);
+        await runSender();
+        expect(emailsTo(addr("age-ella"))).toHaveLength(0);
+        const page = memberListEntryDetailSchema.parse(
+          (JSON.parse((await get(entryUrl(gym, ella.entry.entryId), owner.cookies)).body) as { entry: unknown }).entry,
+        );
+        expect(page.invitation?.email).toMatchObject({ state: "skipped", reason: "under_age" });
+      },
+      TEST_TIMEOUT_MS,
+    );
+
+    it(
+      "a parent's record at the shared address keeps the family's email going when a child's record is there too",
+      async () => {
+        const kim = await typeIn(gym, owner, { fullName: "Kim Lowe", email: addr("age-lowe"), dateOfBirth: "1985-04-04", invite: true });
+        await typeIn(gym, owner, { fullName: "Tom Lowe", email: addr("age-lowe"), dateOfBirth: bornBefore(12) });
+        expect(kim.invite?.outcome).toBe("queued");
+        await runSender();
+        expect(emailsTo(addr("age-lowe"))).toHaveLength(1);
+      },
+      TEST_TIMEOUT_MS,
+    );
+
+    it(
+      "a press without the permission tick invites nobody, and a press with it is recorded with who ticked",
+      async () => {
+        await typeIn(gym, owner, { fullName: "Tia Moss", email: addr("age-tia"), dateOfBirth: "1992-02-02" });
+        const preview = await previewOf(gym, owner);
+        const unticked = await post(`${listUrl(gym)}/invites`, { version: preview.version, expectedCount: preview.reach }, owner.cookies);
+        expect(unticked.statusCode, unticked.body).toBe(409);
+        expect(errorOf(unticked)).toMatchObject({ error: "permission_needed", message: MEMBER_INVITE_WORDS.permission_needed });
+        const refused = await post(`${listUrl(gym)}/invites`, { version: preview.version, expectedCount: preview.reach, permissionConfirmed: false }, owner.cookies);
+        expect(errorOf(refused).error).toBe("permission_needed");
+        const [none] = await sql`SELECT count(*)::int AS n FROM gym_invites WHERE gym_id = ${gym} AND email_hmac = ${emailHmac(settings.hmacKey, addr("age-tia"))}`;
+        expect(none).toEqual({ n: 0 });
+        // Refused before the rate limit: an unticked press spends none of the desk's allowance.
+        let limited = 0;
+        const deps = { sql, redis: createMemoryRedis(), log: { warn: () => undefined }, now: () => new Date(), invites: settings };
+        const counted = () => {
+          limited += 1;
+          return Promise.resolve(true);
+        };
+        await expect(
+          pressInvite(deps, owner.userId, gym, { version: preview.version, expectedCount: preview.reach }, counted),
+        ).rejects.toMatchObject({ code: "permission_needed" });
+        expect(limited).toBe(0);
+
+        expect((await press(gym, owner, preview)).statusCode).toBe(200);
+        const [audit] = await sql<{ actor: string; ticked: string }[]>`
+          SELECT actor_user_id::text AS actor, meta->>'permissionConfirmed' AS ticked FROM audit_log
+          WHERE gym_id = ${gym} AND action = 'org.member_list_invited' ORDER BY id DESC LIMIT 1`;
+        expect(audit).toEqual({ actor: owner.userId, ticked: "true" });
+      },
+      TEST_TIMEOUT_MS,
+    );
+  });
 });

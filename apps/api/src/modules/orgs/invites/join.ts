@@ -24,6 +24,7 @@ import { bustEntitlements, yourPlansAt } from "../../entitlements/service.js";
 import { claimSeatByInvitation, gymHasLivePlan, insertAudit, lockOrg, type OrgRow } from "../repo.js";
 import { OrgsError } from "../service.js";
 import { emailHmac } from "./address.js";
+import { underAgeAt } from "./age.js";
 import * as repo from "./repo.js";
 import type { InviteSettings } from "./settings.js";
 
@@ -92,7 +93,7 @@ export async function myInvitations(deps: JoinDeps, caller: Caller): Promise<MyI
 type AcceptOutcome =
   | { kind: "none" }
   | { kind: "joined" | "already_member"; org: OrgRow }
-  | { kind: "full" | "not_taking"; org: OrgRow };
+  | { kind: "full" | "not_taking" | "under_age"; org: OrgRow };
 
 /** Join: the ONE tap, on "What {gym} can see". Everything that decides it is checked
  *  again under the gym's lock at the moment of the tap. */
@@ -115,6 +116,9 @@ export async function acceptInvitation(deps: JoinDeps, caller: Caller, inviteId:
     // nothing, and is let in again the moment a record holds it.
     const holders = await repo.addressHolders(tx, gymId, address.email);
     if (holders.length === 0) return { kind: "none" };
+    // The worker's rule, at the moment that admits: an email may have gone before a date
+    // of birth was corrected, or been passed on by hand.
+    if (holders.every((holder) => underAgeAt(holder.dateOfBirth, at, org.timezone))) return { kind: "under_age", org };
     if (!(await gymHasLivePlan(tx, gymId))) return { kind: "not_taking", org };
     // A family sharing one address has several records; which of them this person is,
     // the list cannot say, so the membership is linked to none of them.
@@ -143,6 +147,8 @@ export async function acceptInvitation(deps: JoinDeps, caller: Caller, inviteId:
       throw new OrgsError(409, "gym_full", INVITATION_WORDS.gym_full(outcome.org.name));
     case "not_taking":
       throw new OrgsError(409, "gym_not_taking_members", INVITATION_WORDS.gym_not_taking_members(outcome.org.name, outcome.org.orgType));
+    case "under_age":
+      throw new OrgsError(409, "under_age", INVITATION_WORDS.under_age(outcome.org.name));
     case "joined":
     case "already_member":
       // The gym's member features follow the membership; the cached answer must not

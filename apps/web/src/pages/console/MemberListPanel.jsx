@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ChevronRight, Loader2, Search, SlidersHorizontal, Upload, UserPlus, X } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Loader2, Mail, Search, SlidersHorizontal, Upload, UserPlus, X } from 'lucide-react';
 import { MEMBER_LIST_QUERY_MAX_CHARS } from '@app/shared';
 import { orgService, errorText } from '../../api/orgsApi';
+import MemberListInvite from './MemberListInvite';
 import MemberListPerson, { Tag } from './MemberListPerson';
 import MemberListUpload from './MemberListUpload';
 import {
@@ -13,7 +14,9 @@ import {
   entriesQueryString,
   filtersAreEmpty,
   invitationView,
+  inviteQueryString,
   isTicked,
+  gymToday,
   rowWords,
   toggleWord,
 } from './memberListPeople';
@@ -162,7 +165,7 @@ function FilterBox({ list, filters, words, total, onChange, onClear, onClose }) 
 
 // `onRosterChanged` tells the Members screen that the list moved, so "Using the app",
 // whose "not on your list" marks read the list, is read again.
-export default function MemberListPanel({ gymId, words, readOnly, refreshKey, onRosterChanged = () => undefined }) {
+export default function MemberListPanel({ gymId, gym, words, readOnly, refreshKey, onRosterChanged = () => undefined }) {
   const [list, setList] = useState(null);
   const [listError, setListError] = useState(null);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
@@ -174,6 +177,9 @@ export default function MemberListPanel({ gymId, words, readOnly, refreshKey, on
   const [openId, setOpenId] = useState(undefined);
   const [filtering, setFiltering] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [inviting, setInviting] = useState(false);
+  /** Invite's count for the words ticked now, or null while it is asked. */
+  const [invitePreview, setInvitePreview] = useState(null);
   /** The newest request for a page: an answer to an older one is dropped. */
   const latest = useRef(0);
   /** How many names were loaded when a change asked for the list again, so the re-read
@@ -240,6 +246,29 @@ export default function MemberListPanel({ gymId, words, readOnly, refreshKey, on
     return undefined;
   }, [gymId, filters, refreshKey, tick]);
 
+  // Invite's number follows the gym's own words ticked; the search and the app filter
+  // do not choose who is invited, so they do not ask again.
+  const inviteKey = inviteQueryString(filters);
+  const pastShown = filters.records !== 'current';
+  useEffect(() => {
+    if (gymId === null || pastShown) return undefined;
+    let live = true;
+    setInvitePreview(null);
+    Promise.resolve()
+      .then(() => orgService.getInvitePreview(gymId, inviteKey))
+      .then((res) => res.data.preview)
+      .then(
+        (got) => {
+          if (live) setInvitePreview(got);
+        },
+        // The button then reads "Invite", and the box asks again when it opens.
+        () => undefined,
+      );
+    return () => {
+      live = false;
+    };
+  }, [gymId, inviteKey, pastShown, refreshKey, tick]);
+
   const change = (next) => {
     setPage((p) => ({ ...p, loading: true }));
     setFilters(next);
@@ -271,6 +300,7 @@ export default function MemberListPanel({ gymId, words, readOnly, refreshKey, on
     change({ ...EMPTY_FILTERS });
   };
   const noList = list !== null && !list.hasList && list.counts.entries === 0 && former === 0;
+  const today = gymToday(gym?.timezone);
 
   return (
     <div className="flex flex-col gap-4" data-testid="member-list-panel">
@@ -353,10 +383,43 @@ export default function MemberListPanel({ gymId, words, readOnly, refreshKey, on
       ) : null}
 
       {!page.loading && page.error === null && !noList ? (
-        <p className="text-sm" style={{ color: C.muted }} data-testid="list-total">
-          {count(page.total)} {page.total === 1 ? words.person : words.people}
-          {!current ? ' removed from your list' : empty ? '' : ' match'}
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm" style={{ color: C.muted }} data-testid="list-total">
+            {count(page.total)} {page.total === 1 ? words.person : words.people}
+            {!current ? ' removed from your list' : empty ? '' : ' match'}
+          </p>
+          {current ? (
+            <button
+              type="button"
+              onClick={() => setInviting(true)}
+              disabled={readOnly}
+              data-testid="invite-button"
+              className="rounded-xl px-4 min-h-[44px] text-sm font-bold flex items-center gap-2 disabled:opacity-40"
+              style={{ background: C.orangeBg, color: C.orange }}
+            >
+              <Mail className="w-4 h-4" />
+              {invitePreview === null
+                ? 'Invite'
+                : `Invite ${count(invitePreview.reach)} ${invitePreview.reach === 1 ? words.person : words.people}`}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {inviting ? (
+        <MemberListInvite
+          gymId={gymId}
+          gym={gym}
+          filters={filters}
+          words={words}
+          readOnly={readOnly}
+          preview={invitePreview}
+          onSent={() => {
+            keepLoaded.current = page.entries.length;
+            setTick((n) => n + 1);
+          }}
+          onClose={() => setInviting(false)}
+        />
       ) : null}
 
       {filtering ? (
@@ -415,7 +478,7 @@ export default function MemberListPanel({ gymId, words, readOnly, refreshKey, on
       {!page.loading && page.entries.length > 0 ? (
         <ul className="flex flex-col gap-2">
           {page.entries.map((e) => {
-            const inv = invitationView(e);
+            const inv = invitationView(e, today);
             return (
               <li key={e.entryId}>
                 <button
@@ -482,6 +545,7 @@ export default function MemberListPanel({ gymId, words, readOnly, refreshKey, on
         <MemberListPerson
           key={openId ?? 'new'}
           gymId={gymId}
+          gym={gym}
           entryId={openId}
           list={list}
           words={words}

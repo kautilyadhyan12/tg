@@ -6,6 +6,23 @@
 // The filters an Invite takes are the list's own, so the preview and the press are in
 // memberList.ts beside them; this file imports nothing from it.
 import { z } from "zod";
+import { ADULT_AGE } from "./plan.js";
+
+/** Whether a date of birth ('YYYY-MM-DD', or null) on a gym's list makes the person
+ *  under 18 on `today` ('YYYY-MM-DD'): nobody under 18 is invited (RULINGS 2026-09-24).
+ *  Someone born on 29 February turns 18 on 1 March, since 18 years after a leap year is
+ *  never one. A date of birth in the future is a typo and is not taken as an adult. No
+ *  date of birth: invited as before. */
+export function underAgeOn(dateOfBirth: string | null, today: string): boolean {
+  if (dateOfBirth === null) return false;
+  // A date in any other shape cannot be judged, and is never taken as an adult.
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) return true;
+  const year = Number(dateOfBirth.slice(0, 4)) + ADULT_AGE;
+  const monthDay = dateOfBirth.slice(5);
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const birthday = monthDay === "02-29" && !leap ? `${String(year)}-03-01` : `${String(year)}-${monthDay}`;
+  return today < birthday;
+}
 
 /** The longest postal address a gym may keep for its invitations' footer. */
 export const GYM_POSTAL_ADDRESS_MAX_CHARS = 200;
@@ -22,6 +39,7 @@ export type MemberInviteEmailState = z.infer<typeof memberInviteEmailStateSchema
 /** Why an email was not sent, decided just before it would have gone. */
 export const memberInviteEmailReasonSchema = z.enum([
   "not_on_list",
+  "under_age",
   "in_app",
   "unsubscribed",
   "complained",
@@ -46,6 +64,7 @@ export type MemberInviteEmailReason = z.infer<typeof memberInviteEmailReasonSche
 /** The sentence staff read beside an email that did not go. */
 export const MEMBER_INVITE_EMAIL_REASON_WORDS: Readonly<Record<MemberInviteEmailReason, string>> = {
   not_on_list: "Not sent: this address was no longer on your list when it was due to go.",
+  under_age: "Not sent: your list says this person is under 18, and the app is for 18 and over.",
   in_app: "Not sent: this person is already a member in the app.",
   unsubscribed: "Not sent: this person unsubscribed from your emails.",
   complained: "Not sent: this person marked an earlier email from you as spam.",
@@ -81,7 +100,7 @@ export const MEMBER_INVITE_EMAIL_RESULT_WORDS: Readonly<Record<Exclude<MemberInv
 };
 
 /** Why somebody in the chosen group is not invited by a press. */
-export const memberInviteSkipReasonSchema = z.enum(["no_email", "in_app", "already_invited", "unsubscribed", "bounced", "refused", "shared_address"]);
+export const memberInviteSkipReasonSchema = z.enum(["no_email", "under_age", "in_app", "already_invited", "unsubscribed", "bounced", "refused", "shared_address"]);
 export type MemberInviteSkipReason = z.infer<typeof memberInviteSkipReasonSchema>;
 
 /** How many of the group each reason leaves out. They partition the group with
@@ -89,6 +108,8 @@ export type MemberInviteSkipReason = z.infer<typeof memberInviteSkipReasonSchema
 export const memberInviteSkippedSchema = z
   .object({
     noEmail: z.number().int().min(0),
+    /** The list's date of birth makes them under 18 today (RULINGS 2026-09-24). */
+    underAge: z.number().int().min(0),
     inApp: z.number().int().min(0),
     alreadyInvited: z.number().int().min(0),
     unsubscribed: z.number().int().min(0),
@@ -167,14 +188,20 @@ export const MEMBER_INVITE_AGAIN_PER_PERSON = 3;
 export const MEMBER_INVITE_AGAIN_PERSON_DAYS = 30;
 export const MEMBER_INVITE_AGAIN_PER_GYM_DAY = 20;
 
+/** The tick staff make before pressing Invite (Kd, 5b-ii's click-through, 2026-09-25),
+ *  recorded with who pressed. `{people}` is the organisation's word for its people. */
+export const MEMBER_INVITE_PERMISSION_WORDS = "I have permission to email these {people}.";
+
 /** The server's sentences for invitations, printed as sent. */
 export const MEMBER_INVITE_WORDS = {
   invite_changed: "Your list changed while you were looking, so nobody was invited. Check the number again.",
+  permission_needed: "Tick the permission box first. Nobody was invited.",
   no_postal_address: "Add your gym's postal address in Settings first. Every invitation shows it, as the law requires.",
   invites_off: "Invitations can't be sent yet.",
   sending_stopped:
     "Your gym's invitations are stopped because too many bounced or one was marked as spam. Contact us to start them again.",
   no_email: "This person has no email address. Add one to invite them.",
+  under_age: "Your list says this person is under 18. The app is for 18 and over, so they can't be invited.",
   not_on_list: "This person has been taken off your list.",
   in_app: "This person is already a member in the app.",
   unsubscribed: "This person asked not to get your emails, so they can't be invited again.",

@@ -29,6 +29,8 @@ export interface WordFilters {
 export interface Candidate {
   entryId: string;
   email: string | null;
+  /** 'YYYY-MM-DD', or null. */
+  dateOfBirth: string | null;
 }
 
 /** The list's current people an Invite with these filters is for, in the list's order.
@@ -37,8 +39,8 @@ export async function inviteCandidates(sql: SqlOrTx, gymId: string, filters: Wor
   const statuses = filters.statuses === null ? null : [...filters.statuses];
   const membershipTypes = filters.membershipTypes === null ? null : [...filters.membershipTypes];
   const paymentStatuses = filters.paymentStatuses === null ? null : [...filters.paymentStatuses];
-  const rows = await sql<{ id: string; email: string | null }[]>`
-    SELECT e.id, e.email::text AS email
+  const rows = await sql<{ id: string; email: string | null; date_of_birth: string | null }[]>`
+    SELECT e.id, e.email::text AS email, e.date_of_birth::text AS date_of_birth
     FROM gym_member_list_entries e
     WHERE e.gym_id = ${gymId}
       AND e.former_at IS NULL
@@ -48,7 +50,7 @@ export async function inviteCandidates(sql: SqlOrTx, gymId: string, filters: Wor
       AND (${paymentStatuses}::text[] IS NULL
            OR lower(coalesce(e.payment_status, '')) = ANY(${paymentStatuses}::text[]))
     ORDER BY e.listed_seq`;
-  return rows.map((row) => ({ entryId: row.id, email: row.email }));
+  return rows.map((row) => ({ entryId: row.id, email: row.email, dateOfBirth: row.date_of_birth }));
 }
 
 /** Every entry of the gym that has an address, current or former, for the list's
@@ -96,12 +98,27 @@ export async function emailsOfEntries(sql: SqlOrTx, gymId: string, entryIds: rea
   return new Set(rows.map((row) => row.email));
 }
 
+export interface AddressHolder {
+  entryId: string;
+  phone: string | null;
+  /** 'YYYY-MM-DD', or null. */
+  dateOfBirth: string | null;
+}
+
 /** The gym's current entries holding exactly this address. */
-export async function addressHolders(sql: SqlOrTx, gymId: string, email: string): Promise<{ entryId: string; phone: string | null }[]> {
-  const rows = await sql<{ id: string; phone_e164: string | null }[]>`
-    SELECT id, phone_e164 FROM gym_member_list_entries
+export async function addressHolders(sql: SqlOrTx, gymId: string, email: string): Promise<AddressHolder[]> {
+  const rows = await sql<{ id: string; phone_e164: string | null; date_of_birth: string | null }[]>`
+    SELECT id, phone_e164, date_of_birth::text AS date_of_birth FROM gym_member_list_entries
     WHERE gym_id = ${gymId} AND former_at IS NULL AND email = ${email}::citext`;
-  return rows.map((row) => ({ entryId: row.id, phone: row.phone_e164 }));
+  return rows.map((row) => ({ entryId: row.id, phone: row.phone_e164, dateOfBirth: row.date_of_birth }));
+}
+
+/** The gym's time zone, for its own calendar day. */
+export async function gymTimeZone(sql: SqlOrTx, gymId: string): Promise<string> {
+  const rows = await sql<{ timezone: string }[]>`SELECT timezone FROM gyms WHERE id = ${gymId}`;
+  const found = rows[0];
+  if (found === undefined) throw new Error("a gym vanished while its invitation was checked");
+  return found.timezone;
 }
 
 /** The gym's postal address, for the check before anything is queued. */
@@ -576,12 +593,13 @@ export interface SendContext {
     city: string | null;
     slug: string;
     postalAddress: string | null;
+    timezone: string;
     active: boolean;
     onPlan: boolean;
     stopped: boolean;
   } | null;
   /** The gym's current entries holding exactly this address. */
-  holders: { entryId: string; phone: string | null }[];
+  holders: AddressHolder[];
 }
 
 export async function sendContext(sql: SqlOrTx, send: ClaimedSend): Promise<SendContext> {
@@ -593,12 +611,13 @@ export async function sendContext(sql: SqlOrTx, send: ClaimedSend): Promise<Send
       city: string | null;
       slug: string;
       postal_address: string | null;
+      timezone: string;
       status: string;
       on_plan: boolean;
       stopped: boolean;
     }[]
   >`
-    SELECT g.name, g.city, g.slug, g.postal_address, g.status, g.invites_stopped_at IS NOT NULL AS stopped,
+    SELECT g.name, g.city, g.slug, g.postal_address, g.timezone, g.status, g.invites_stopped_at IS NOT NULL AS stopped,
            EXISTS (
              SELECT 1 FROM subscriptions s
              WHERE s.owner_type = 'gym' AND s.owner_id = g.id
@@ -617,6 +636,7 @@ export async function sendContext(sql: SqlOrTx, send: ClaimedSend): Promise<Send
             city: gym.city,
             slug: gym.slug,
             postalAddress: gym.postal_address,
+            timezone: gym.timezone,
             active: gym.status === "active",
             onPlan: gym.on_plan,
             stopped: gym.stopped,

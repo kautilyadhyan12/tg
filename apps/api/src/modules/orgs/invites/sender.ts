@@ -16,7 +16,9 @@ import { authEmailSchema, GYM_POSTAL_ADDRESS_MAX_CHARS, INVITE_SEND_TAG, type Me
 import type { Sql } from "postgres";
 import { memberInviteEmail, memberInviteFrom } from "../../../email/templates.js";
 import type { InviteEmail, InviteTransport } from "../../../email/resend.js";
+import { dayInTz } from "../../gamification/streak.js";
 import { emailDomain, emailHmac, isSharedAddress } from "./address.js";
+import { underAgeOn } from "./age.js";
 import { decideSend, type SendFacts } from "./decide.js";
 import { cleanGymText, GYM_TEXT_IN_EMAIL_CHARS, gymNameForEmail } from "./gymText.js";
 import { addressInApp } from "./inApp.js";
@@ -145,6 +147,7 @@ async function sendOne(deps: SenderDeps, claim: repo.ClaimedSend): Promise<Tally
   const hmac = emailHmac(deps.settings.hmacKey, email);
   const suppression = (await repo.suppressionsFor(deps.sql, claim.gymId, [hmac])).get(hmac) ?? null;
   const gymName = ctx.gym === null ? "" : gymNameForEmail(ctx.gym.name);
+  const today = ctx.gym === null ? null : dayInTz(now, ctx.gym.timezone);
   const facts: SendFacts = {
     inviteState: ctx.invite?.state ?? null,
     addressMatchesInvite: ctx.invite?.hmac === hmac,
@@ -159,6 +162,7 @@ async function sendOne(deps: SenderDeps, claim: repo.ClaimedSend): Promise<Tally
             named: gymName !== "",
           },
     onList: ctx.holders.length > 0,
+    onlyUnderAge: today !== null && ctx.holders.length > 0 && ctx.holders.every((holder) => underAgeOn(holder.dateOfBirth, today)),
     inApp: await addressInApp(deps.sql, claim.gymId, email, ctx.holders),
     suppression,
     addressValid: authEmailSchema.safeParse(email).success,

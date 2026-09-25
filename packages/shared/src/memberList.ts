@@ -1455,9 +1455,15 @@ export const memberInvitePreviewResponseSchema = z.object({ preview: memberInvit
 export type MemberInvitePreviewResponse = z.infer<typeof memberInvitePreviewResponseSchema>;
 
 /** Press Invite. If the list's version or the number the preview showed has moved,
- *  nobody is invited and the answer carries the new preview. */
+ *  nobody is invited and the answer carries the new preview. `permissionConfirmed` is
+ *  the tick (`MEMBER_INVITE_PERMISSION_WORDS`); without it nobody is invited. */
 export const memberInviteRequestSchema = z
-  .object({ ...inviteFilterShape, version: z.number().int().min(0), expectedCount: z.number().int().min(0) })
+  .object({
+    ...inviteFilterShape,
+    version: z.number().int().min(0),
+    expectedCount: z.number().int().min(0),
+    permissionConfirmed: z.boolean().optional(),
+  })
   .strict();
 export type MemberInviteRequest = z.infer<typeof memberInviteRequestSchema>;
 

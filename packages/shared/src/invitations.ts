@@ -155,6 +155,10 @@ export const INVITATION_WORDS = {
   gym_not_taking_members: (gymName: string, orgType: unknown): string =>
     `${gymName} can't take new ${orgWords(orgType).people} in the app right now — tell the front desk.`,
   already_member: (gymName: string, orgType: unknown): string => `You're already a ${orgWords(orgType).person} of ${gymName}.`,
+  /** Join, when every record the gym has at this address is somebody under 18
+   *  (RULINGS 2026-09-24). */
+  under_age: (gymName: string): string =>
+    `${gymName}'s list has this email address for someone under 18, and the app is for 18 and over. If that's not right, ask ${gymName} to check your date of birth.`,
   /** On the card after "Not me". */
   said_not_me: (gymName: string): string => `You told ${gymName} this invitation isn't for you. They'll check the address they have.`,
 } as const;

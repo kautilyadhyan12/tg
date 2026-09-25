@@ -17,6 +17,8 @@ export interface SendFacts {
   gym: { active: boolean; onPlan: boolean; stopped: boolean; hasPostalAddress: boolean; named: boolean } | null;
   /** A current entry of the gym holds exactly this address. */
   onList: boolean;
+  /** Every current entry holding it is somebody the list says is under 18 today. */
+  onlyUnderAge: boolean;
   /** A member of the gym is matched to one of those entries (§9.7). */
   inApp: boolean;
   suppression: SuppressionReason | null;
@@ -44,6 +46,7 @@ export function decideSend(facts: SendFacts): SendDecision {
   if (facts.inviteState === "withdrawn") return { kind: "skip", reason: "invitation_withdrawn" };
   if (facts.inviteState === null || facts.inviteState !== "pending") return { kind: "skip", reason: "invitation_closed" };
   if (!facts.addressMatchesInvite || !facts.onList) return { kind: "skip", reason: "not_on_list" };
+  if (facts.onlyUnderAge) return { kind: "skip", reason: "under_age" };
   if (facts.inApp) return { kind: "skip", reason: "in_app" };
   if (facts.suppression !== null) return { kind: "skip", reason: facts.suppression };
   if (!facts.addressValid) return { kind: "skip", reason: "bad_address" };

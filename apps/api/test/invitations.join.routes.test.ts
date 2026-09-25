@@ -20,6 +20,7 @@ import { inviteSettings } from "../src/modules/orgs/invites/settings.js";
 import { createMemoryRedis } from "../src/redis.js";
 import {
   acceptInvitationResponseSchema,
+  INVITATION_WORDS,
   memberListEntryDetailSchema,
   memberListEntryWrittenSchema,
   memberListUnlistedPageSchema,
@@ -365,6 +366,30 @@ d("join by invitation (real Postgres)", () => {
       // Nothing let anybody else into either gym.
       expect(await liveMembers(iron)).toBe(2);
       expect(await liveMembers(studio)).toBe(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "Join refuses an address every record of which the list says is under 18 — an email that went before the date was corrected, or a link passed on by hand (RULINGS 2026-09-24)",
+    async () => {
+      const gym = await makeGym("Family Club");
+      const fourteen = `${String(new Date().getUTCFullYear() - 14)}-05-05`;
+      // Ella was invited as an adult; her date of birth is then corrected to her daughter's.
+      const ella = await addInvited(gym, { fullName: "Ella Rose", email: addr("ella") });
+      expect((await send("PATCH", entryUrl(gym, ella.entry.entryId), gym.owner.cookies, { dateOfBirth: fourteen })).statusCode).toBe(200);
+      const signedIn = await signIn(addr("ella"));
+      const refused = await accept(signedIn, await inviteIdOf(gym, addr("ella")));
+      expect(refused.statusCode, refused.body).toBe(409);
+      expect(errorOf(refused)).toEqual(expect.objectContaining({ error: "under_age", message: INVITATION_WORDS.under_age("Family Club") }));
+      expect(await membershipsOf(gym, signedIn)).toEqual([]);
+      expect((await inviteStateOf(gym, addr("ella")))?.state).toBe("pending");
+
+      // A parent's record at the same address: the parent signs in with it, and joins.
+      await post(entriesUrl(gym), { fullName: "Kim Rose", email: addr("ella"), dateOfBirth: "1985-04-04" }, gym.owner.cookies);
+      const joined = await accept(signedIn, await inviteIdOf(gym, addr("ella")));
+      expect(joined.statusCode, joined.body).toBe(200);
+      expect(acceptInvitationResponseSchema.parse(JSON.parse(joined.body)).outcome).toBe("joined");
     },
     TEST_TIMEOUT_MS,
   );

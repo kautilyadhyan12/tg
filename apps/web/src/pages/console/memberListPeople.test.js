@@ -1,18 +1,29 @@
 // The gym's own list on the Members screen (ROADMAP 5b-i): what a filter sends, what a
 // row says about an invitation, and what a form sends back.
 import { describe, expect, it } from 'vitest';
-import { memberListEntryDetailSchema, memberListEntriesQuerySchema, MEMBER_INVITE_EMAIL_REASON_WORDS } from '@app/shared';
+import {
+  memberInvitePreviewQuerySchema,
+  memberInviteRequestSchema,
+  memberListEntryDetailSchema,
+  memberListEntriesQuerySchema,
+  MEMBER_INVITE_EMAIL_REASON_WORDS,
+} from '@app/shared';
 import {
   EMPTY_FILTERS,
   activeFilters,
   compareRecords,
   entriesQueryString,
   formFrom,
+  gymToday,
   handEditedWords,
   inputFrom,
   invitationView,
+  inviteBody,
+  inviteQueryString,
   patchFrom,
+  personInviteAction,
   rowWords,
+  skippedLines,
   toggleWord,
 } from './memberListPeople';
 import { FIELD_LABELS } from './memberListView';
@@ -243,5 +254,104 @@ describe("Merge duplicate's side-by-side view", () => {
     expect(row('extra:locker')).toMatchObject({ keep: '12', remove: '—', differs: true });
     // A custom field neither record holds is left out.
     expect(row('extra:notes_2')).toBeUndefined();
+  });
+});
+describe("what a person's page offers about the invitation — every class", () => {
+  const inv = (over = {}, email = { state: 'sent', reason: null, at: '2026-09-20T10:01:00.000Z', result: 'delivered' }) => ({
+    state: 'pending',
+    invitedAt: '2026-09-20T10:00:00.000Z',
+    email,
+    sentAgain: 0,
+    waitingSince: null,
+    notMeAt: null,
+    ...over,
+  });
+  const at = '2026-09-20T10:01:00.000Z';
+  it.each([
+    ['never invited', {}, 'invite'],
+    ['no email', { email: null }, null],
+    ['a past member', { formerAt: '2026-09-01T10:00:00.000Z' }, null],
+    ['already in the app', { inApp: true }, null],
+    ['invited, email went', { invitation: inv() }, 'again'],
+    ['invited, email waiting to go', { invitation: inv({}, { state: 'queued', reason: null, at, result: null }) }, null],
+    ['invited, email being sent', { invitation: inv({}, { state: 'sending', reason: null, at, result: null }) }, null],
+    ['invited, email skipped: invite queues the first email again', { invitation: inv({}, { state: 'skipped', reason: 'under_age', at, result: null }) }, 'invite'],
+    ['invited, email given up after a week', { invitation: inv({}, { state: 'failed', reason: 'provider_unavailable', at, result: null }) }, 'invite'],
+    ['invited, email may have gone', { invitation: inv({}, { state: 'failed', reason: 'send_unknown', at, result: null }) }, 'again'],
+    ['invited, email bounced', { invitation: inv({}, { state: 'sent', reason: null, at, result: 'bounced' }) }, 'again'],
+    ['invited, no email yet', { invitation: inv({}, null) }, 'invite'],
+    ['waiting for a place', { invitation: inv({ waitingSince: at }) }, 'again'],
+    ['joined', { invitation: inv({ state: 'accepted' }) }, null],
+    ['declined', { invitation: inv({ state: 'declined' }) }, 'again'],
+    ['said "Not me"', { invitation: inv({ state: 'declined', notMeAt: at }) }, null],
+    ['invitation stopped', { invitation: inv({ state: 'withdrawn' }) }, 'again'],
+    ['16 by the list, never invited', { dateOfBirth: '2010-03-14' }, 'under_age'],
+    ['turns 18 tomorrow', { dateOfBirth: '2008-09-26' }, 'under_age'],
+    ['turned 18 today', { dateOfBirth: '2008-09-25' }, 'invite'],
+    ['16 by the list, invited before the date was corrected', { dateOfBirth: '2010-03-14', invitation: inv() }, 'under_age'],
+    ['16 by the list, but already joined', { dateOfBirth: '2010-03-14', invitation: inv({ state: 'accepted' }) }, null],
+  ])('%s', (_name, over, action) => {
+    expect(personInviteAction(entry(over), '2026-09-25')).toBe(action);
+  });
+});
+
+describe('Invite: what the count asks and the press sends', () => {
+  const ticked = { ...EMPTY_FILTERS, status: ['Active', ''], membershipType: ['Gold'], app: 'not_in_app', query: 'ada' };
+  it("asks only by the gym's own words, the search and the app filter left out", () => {
+    const read = memberInvitePreviewQuerySchema.parse(Object.fromEntries(
+      [...new URLSearchParams(inviteQueryString(ticked)).keys()].map((key) => [key, new URLSearchParams(inviteQueryString(ticked)).getAll(key)]),
+    ));
+    expect(read).toEqual({ status: ['Active', ''], membershipType: ['Gold'] });
+  });
+  it('sends the same words, the version and the number shown, and the server takes it', () => {
+    const body = inviteBody(ticked, { version: 9, reach: 214 }, true);
+    expect(body).toEqual({ status: ['Active', ''], membershipType: ['Gold'], version: 9, expectedCount: 214, permissionConfirmed: true });
+    expect(memberInviteRequestSchema.safeParse(body).success).toBe(true);
+  });
+  it('with nothing ticked, everyone: no words at all', () => {
+    expect(inviteQueryString(EMPTY_FILTERS)).toBe('');
+    expect(inviteBody(EMPTY_FILTERS, { version: 1, reach: 3 }, false)).toEqual({ version: 1, expectedCount: 3, permissionConfirmed: false });
+  });
+});
+
+describe('who an Invite leaves out, in words', () => {
+  it('one line a reason, zeros left out, one person said as one', () => {
+    const lines = skippedLines({ noEmail: 1, underAge: 3, inApp: 0, alreadyInvited: 2, unsubscribed: 0, bounced: 1, refused: 0, sharedAddress: 1 });
+    expect(lines.map((line) => line.text)).toEqual([
+      '1 has no email address',
+      '3 are under 18 by the date of birth on your list',
+      '2 were invited before',
+      '1 has an address that bounces',
+      '1 has a shared address such as info@',
+    ]);
+  });
+});
+describe('a row for somebody the list says is under 18', () => {
+  it('reads "Under 18" when never invited, and as before without a date to judge by', () => {
+    expect(invitationView(entry({ dateOfBirth: '2010-03-14' }), '2026-09-25')?.tag).toBe('Under 18');
+    expect(invitationView(entry({ dateOfBirth: '2008-09-25' }), '2026-09-25')?.tag).toBe('Not invited');
+    expect(invitationView(entry({ dateOfBirth: '2010-03-14' }))?.tag).toBe('Not invited');
+  });
+
+  const pending = { state: 'pending', invitedAt: '2026-09-20T10:00:00.000Z', email: { state: 'sent', reason: null, at: '2026-09-20T10:01:00.000Z', result: 'delivered' }, sentAgain: 0, waitingSince: null, notMeAt: null };
+  it("reads \"Under 18\" even when the address's invitation is a parent's, or came before the date was corrected", () => {
+    expect(invitationView(entry({ dateOfBirth: '2010-03-14', invitation: pending }), '2026-09-25')?.tag).toBe('Under 18');
+    expect(invitationView(entry({ dateOfBirth: '2010-03-14', invitation: { ...pending, state: 'withdrawn' } }), '2026-09-25')?.tag).toBe('Under 18');
+  });
+  it('still says Joined, or Uses the app, for somebody already in', () => {
+    expect(invitationView(entry({ dateOfBirth: '2010-03-14', invitation: { ...pending, state: 'accepted' } }), '2026-09-25')?.tag).toBe('Joined');
+    expect(invitationView(entry({ dateOfBirth: '2010-03-14', inApp: true }), '2026-09-25')?.tag).toBe('Uses the app');
+  });
+});
+
+describe("the gym's own day for a birthday", () => {
+  // 20:00 on 24 September in London is already 25 September in Auckland.
+  const at = new Date('2026-09-24T20:00:00Z');
+  it('is the gym\'s calendar day, not the reader\'s', () => {
+    expect(gymToday('Pacific/Auckland', at)).toBe('2026-09-25');
+    expect(gymToday('America/Los_Angeles', at)).toBe('2026-09-24');
+  });
+  it('falls back to the reader\'s own day for a zone it cannot read', () => {
+    expect(gymToday('Not/AZone', at)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });
