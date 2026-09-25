@@ -16,7 +16,7 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Known edge, by 3a-vi's rule (3):** another name on a joined member's lone old address is read as their record renamed, and the member follows it; the roster's "Check this is them" then flags it.
 - **Kd's click-through passed** (*"all passed"*, steps 1–8 on the demo gym, the off-list mark and Put back on list included).
 - **Round one: 1 High, 3 Low, 4 weak tests, all fixed.** H1 (the reviewer ran it): staff took Emma off and typed her back in with her own email, and she was named for Remove all, marked off the list, and Put back made two of her. Now a joined member whose record is off is on through a current record on their email or phone WITH THAT RECORD'S NAME (3a-vi's same-name test), in all four places; Priya stays off (Arjun's name differs). L1: a grouping staged without record ids is worked out again. L2: "Put back on list" only for their own record taken off. L3: "taken off" only for the joined record. Six breaks RED, restored identical. Suites 37 files, 2,074 passed. With all 2,000 joined records off and copies on: Remove all 116 ms, the list 129 ms (bystander worst 96–106 ms).
-- **Open**: the re-check (`reviews/3a-vi-b-3-recheck.md`); ROADMAP 3a-vi-b ticks on merge. Next in Folder A: 5b.
+- **The re-check closed the round** (all four closed, nothing Critical/High); its one new Low fixed after (the roster now says "On your list as" the typed-in record she is on the list through; red without it). ROADMAP 3a-vi-b ticks on merge. Next in Folder A: 5b.
 
 ## 2026-09-25 · Stage 3 item 1c-ii (Folder B): a bigger size, and paying during the trial (branch `paddle-size-and-trial-pay`)
 

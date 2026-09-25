@@ -369,7 +369,9 @@ d("member list: an app member follows their record (real Postgres)", () => {
       const typedId = memberListEntryWrittenSchema.parse(JSON.parse(typed.body)).entry.entryId;
 
       expect(await unlisted(gymId, cookies)).toEqual([]);
-      expect((await roster(gymId, cookies)).find((item) => item.userId === emmaUser.userId)?.offList).toBeUndefined();
+      const emmaRow = (await roster(gymId, cookies)).find((item) => item.userId === emmaUser.userId);
+      // Re-check Low: the roster names the typed-in record she is on the list through.
+      expect({ offList: emmaRow?.offList, onList: emmaRow?.onList?.name }).toEqual({ offList: undefined, onList: emma.name });
       const back = await post(`/v1/orgs/${gymId}/member-list/entries/from-member/${emmaUser.userId}`, {}, cookies);
       expect(back.statusCode, back.body).toBeLessThan(300);
       const written = memberListEntryWrittenSchema.parse(JSON.parse(back.body));

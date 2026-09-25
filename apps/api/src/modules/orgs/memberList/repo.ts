@@ -111,6 +111,8 @@ export interface MemberAgainstList extends ListMember {
    *  read needs to ask `onListOf` about a list after an upload. */
   joinedFullName: string | null;
   joinedFormer: boolean;
+  /** The name on the record they are on the list through, or null. */
+  entryFullName: string | null;
   /** When this membership began, for a screen naming the person. */
   joinedAt: Date;
 }
@@ -814,6 +816,7 @@ export async function membersAgainstList(
       entry_id: string | null;
       entry_status: string | null;
       entry_member_number: string | null;
+      entry_full_name: string | null;
       on_list: boolean;
       former_entry_id: string | null;
       joined_entry_id: string | null;
@@ -835,6 +838,7 @@ export async function membersAgainstList(
            e.id            AS entry_id,
            e.status        AS entry_status,
            e.member_number AS entry_member_number,
+           e.full_name     AS entry_full_name,
            (e.id IS NOT NULL) AS on_list,
            f.id            AS former_entry_id,
            j.id            AS joined_entry_id,
@@ -850,18 +854,18 @@ export async function membersAgainstList(
                WHERE t.user_id = m.user_id AND t.purpose = 'verify_email' AND t.used_at IS NOT NULL) AS proved
     ) v
     LEFT JOIN LATERAL (
-      SELECT c.id, c.status, c.member_number
+      SELECT c.id, c.status, c.member_number, c.full_name
       FROM (
-        (SELECT j.id, j.status, j.member_number, j.listed_seq, 0 AS channel
+        (SELECT j.id, j.status, j.member_number, j.full_name, j.listed_seq, 0 AS channel
          WHERE j.id IS NOT NULL AND j.former_at IS NULL)
         UNION ALL
-        (SELECT x.id, x.status, x.member_number, x.listed_seq, 1 AS channel
+        (SELECT x.id, x.status, x.member_number, x.full_name, x.listed_seq, 1 AS channel
          FROM gym_member_list_entries x
          WHERE x.gym_id = m.gym_id AND x.former_at IS NULL AND j.id IS NULL AND v.proved AND x.email = u.email
          ORDER BY x.listed_seq
          LIMIT 1)
         UNION ALL
-        (SELECT x.id, x.status, x.member_number, x.listed_seq, 2 AS channel
+        (SELECT x.id, x.status, x.member_number, x.full_name, x.listed_seq, 2 AS channel
          FROM gym_member_list_entries x
          WHERE x.gym_id = m.gym_id AND x.former_at IS NULL AND j.id IS NULL
            AND m.stated_phone_e164 IS NOT NULL AND x.phone_e164 = m.stated_phone_e164
@@ -946,6 +950,7 @@ export async function membersAgainstList(
       entryId: alt?.id ?? row.entry_id,
       entryStatus: alt === undefined ? row.entry_status : alt.status,
       entryMemberNumber: alt === undefined ? row.entry_member_number : alt.memberNumber,
+      entryFullName: alt === undefined ? row.entry_full_name : alt.fullName,
       formerEntryId: row.former_entry_id ?? null,
       joinedEntryId: row.joined_entry_id,
       joinedFullName: joinedName,

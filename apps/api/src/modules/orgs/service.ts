@@ -1251,10 +1251,18 @@ type OffList = NonNullable<OrgMember["offList"]>;
 /** WHY THE PAGE'S PAID-PLACE MEMBERS ARE NOT ON THE GYM'S LIST (3a-vi-b), by the one
  *  rule every screen uses (`membersAgainstList`). Nothing for a gym with no list: nobody
  *  is missing from a list that does not exist. */
-async function offListOf(sql: Sql, gymId: string, userIds: readonly string[]): Promise<Map<string, OffList>> {
+async function offListOf(
+  sql: Sql,
+  gymId: string,
+  userIds: readonly string[],
+): Promise<{ offList: Map<string, OffList>; typedInName: Map<string, string> }> {
   const out = new Map<string, OffList>();
-  if (userIds.length === 0 || (await listRepo.listState(sql, gymId)) === null) return out;
+  const typedInName = new Map<string, string>();
+  if (userIds.length === 0 || (await listRepo.listState(sql, gymId)) === null) return { offList: out, typedInName };
   const members = await listRepo.membersAgainstList(sql, gymId, { email: null, phone: null, userIds });
+  // On the list through a current record with their joined record's name, their own
+  // having come off: "On your list as" names that record.
+  for (const m of members) if (m.joinedFormer && m.onList && m.entryFullName !== null) typedInName.set(m.userId, m.entryFullName);
   const off = members.filter((m) => m.seatCounted && !m.onList);
   // "Taken off" is only ever about the record they joined with: a former record found
   // by their email or phone can be a relative's on a shared family address.
@@ -1277,7 +1285,7 @@ async function offListOf(sql: Sql, gymId: string, userIds: readonly string[]): P
       sameEmailName: m.email === null ? null : (facts.nameByEmail.get(m.email.toLowerCase()) ?? null),
     });
   }
-  return out;
+  return { offList: out, typedInName };
 }
 
 export async function listOrgMembers(
@@ -1313,28 +1321,33 @@ export async function listOrgMembers(
     limit: query.limit,
     cursor: parseCursor(query.cursor),
   });
-  const offList = seesList ? await offListOf(deps.sql, gymId, page.items.map((m) => m.userId)) : new Map<string, OffList>();
+  const { offList, typedInName } = seesList
+    ? await offListOf(deps.sql, gymId, page.items.map((m) => m.userId))
+    : { offList: new Map<string, OffList>(), typedInName: new Map<string, string>() };
   // Parsed on the way out, and this one carries the most weight: the roster
   // shape IS Part 3 §2.4's visibility boundary, so a field added to the row
   // without being added to the schema is dropped here rather than served.
   return orgMemberPageSchema.parse({
-    items: page.items.map((m) => ({
-      userId: m.userId,
-      displayName: m.displayName,
-      joinedAt: m.joinedAt.toISOString(),
-      groupLabel: m.groupLabel,
-      complimentary: m.complimentary,
-      takesSeat: m.takesSeat,
-      ...(seesList && m.listName !== null
-        ? {
-            onList: {
-              name: m.listName,
-              nameCheck: checkName(m.listName, m.displayName, m.accountEmail === null ? null : displayNameFromEmail(m.accountEmail)),
-            },
-          }
-        : {}),
-      ...(offList.has(m.userId) ? { offList: offList.get(m.userId) } : {}),
-    })),
+    items: page.items.map((m) => {
+      const listName = m.listName ?? typedInName.get(m.userId) ?? null;
+      return {
+        userId: m.userId,
+        displayName: m.displayName,
+        joinedAt: m.joinedAt.toISOString(),
+        groupLabel: m.groupLabel,
+        complimentary: m.complimentary,
+        takesSeat: m.takesSeat,
+        ...(seesList && listName !== null
+          ? {
+              onList: {
+                name: listName,
+                nameCheck: checkName(listName, m.displayName, m.accountEmail === null ? null : displayNameFromEmail(m.accountEmail)),
+              },
+            }
+          : {}),
+        ...(offList.has(m.userId) ? { offList: offList.get(m.userId) } : {}),
+      };
+    }),
     nextCursor:
       page.nextCursor === null
         ? null
