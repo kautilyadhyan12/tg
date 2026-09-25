@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { AlertTriangle, ArrowLeftRight, Check, Loader2, MoreHorizontal, Search, Smartphone, Trash2, UserMinus, UserPlus, X } from 'lucide-react';
+import { MEMBER_LIST_QUERY_MAX_CHARS } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import DatePick from '../../components/console/DatePick';
 import { FIELD_LABELS, dayWords } from './memberListView';
@@ -402,7 +403,7 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
     }
   };
 
-  const save = async (acknowledge = false) => {
+  const save = async () => {
     if (shown === null) {
       await run(null, () => orgService.addMemberListEntry(gymId, inputFrom(form)), "We couldn't add this person.");
       return;
@@ -414,11 +415,18 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
       setNotice(outcomeWords('unchanged'));
       return;
     }
-    const body = acknowledge ? { ...patch, acknowledgeLeavesList: true } : patch;
-    await run(asked, () => orgService.changeMemberListEntry(gymId, asked, body), "We couldn't save the change.", {
-      ack: () => save(true),
-    });
+    await sendChange(asked, patch, false);
   };
+
+  /** A change, and its confirm: "Go ahead anyway" sends exactly the change that was refused,
+   *  never the form as it is by then; changing a box takes the confirm away. */
+  const sendChange = (asked, patch, acknowledge) =>
+    run(
+      asked,
+      () => orgService.changeMemberListEntry(gymId, asked, acknowledge ? { ...patch, acknowledgeLeavesList: true } : patch),
+      "We couldn't save the change.",
+      { ack: () => sendChange(asked, patch, true) },
+    );
 
   const takeOff = () => {
     const asked = shown.entryId;
@@ -434,6 +442,7 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
     const asked = shown.entryId;
     const name = shown.fullName;
     setBusy(true);
+    setNotice(null);
     setRefusal(null);
     try {
       await orgService.deleteFormerMemberListEntry(gymId, asked);
@@ -473,16 +482,20 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
    *  "Keep" is the one it keeps — worked out once, here, from what is on screen. */
   const joinRoles = () => (keepThis ? { keep: shown, remove: joinPick } : { keep: joinPick, remove: shown });
 
-  const join = async (acknowledge = false) => {
-    const asked = shown.entryId;
+  const join = async () => {
     const { keep, remove } = joinRoles();
-    await run(
-      asked,
-      () => orgService.mergeMemberListEntries(gymId, remove.entryId, keep.entryId, acknowledge),
-      "We couldn't join the two records.",
-      { ack: () => join(true) },
-    );
+    await sendMerge(shown.entryId, remove.entryId, keep.entryId, false);
   };
+
+  /** A merge, and its confirm: "Go ahead anyway" sends exactly the merge that was refused,
+   *  the same record removed and the same kept; Swap, Back or another pick takes it away. */
+  const sendMerge = (asked, removeId, keepId, acknowledge) =>
+    run(
+      asked,
+      () => orgService.mergeMemberListEntries(gymId, removeId, keepId, acknowledge),
+      "We couldn't join the two records.",
+      { ack: () => sendMerge(asked, removeId, keepId, true) },
+    );
 
   /** Merge duplicate starts with this person's name already searched, so a second record
    *  under the same name shows at once. */
@@ -502,8 +515,21 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
     setMode('edit');
   };
 
-  const setField = (key, value) => setForm((f) => ({ ...f, [key]: value }));
-  const setExtra = (key, value) => setForm((f) => ({ ...f, extra: { ...f.extra, [key]: value } }));
+  // A box changed after a refusal takes its confirm away: the confirm was for the change
+  // as it stood, and Save sends the form as it is now.
+  const setField = (key, value) => {
+    setRefusal(null);
+    setForm((f) => ({ ...f, [key]: value }));
+  };
+  const setExtra = (key, value) => {
+    setRefusal(null);
+    setForm((f) => ({ ...f, extra: { ...f.extra, [key]: value } }));
+  };
+  /** Leave a step (Back, Swap): a refusal about what was on screen goes with it. */
+  const backTo = (next) => {
+    setRefusal(null);
+    setMode(next);
+  };
 
   const title = deleted !== null ? 'Record deleted' : id === null ? `Add ${words.person}` : shown?.fullName || (shown ? 'No name' : '');
 
@@ -612,7 +638,7 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
           {id === null ? `Add ${words.person}` : 'Save'}
         </button>
         {id !== null ? (
-          <button type="button" onClick={() => setMode('view')} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
+          <button type="button" onClick={() => backTo('view')} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
             Back
           </button>
         ) : null}
@@ -746,7 +772,7 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
             <button type="button" onClick={() => void takeOff()} disabled={busy || readOnly} className={BUTTON} style={{ background: C.orange, color: '#000' }}>
               Remove from list
             </button>
-            <button type="button" onClick={() => setMode('view')} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
+            <button type="button" onClick={() => backTo('view')} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
               Keep on list
             </button>
           </div>
@@ -765,7 +791,7 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
           <button type="button" onClick={() => void deleteForGood()} disabled={busy || readOnly} className={BUTTON} style={{ background: C.redBg, color: C.red }}>
             Delete for good
           </button>
-          <button type="button" onClick={() => setMode('view')} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
+          <button type="button" onClick={() => backTo('view')} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
             Keep the record
           </button>
         </div>
@@ -788,11 +814,17 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
               {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
               Merge
             </button>
-            <button type="button" onClick={() => setKeepThis((k) => !k)} disabled={busy} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
+            <button type="button" onClick={() => {
+                setRefusal(null);
+                setKeepThis((k) => !k);
+              }} disabled={busy} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
               <ArrowLeftRight className="w-4 h-4" />
               Swap
             </button>
-            <button type="button" onClick={() => setJoinPick(null)} disabled={busy} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
+            <button type="button" onClick={() => {
+                setRefusal(null);
+                setJoinPick(null);
+              }} disabled={busy} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
               Back
             </button>
           </div>
@@ -811,6 +843,7 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
           <input
             type="search"
             aria-label="Find the other record"
+            maxLength={MEMBER_LIST_QUERY_MAX_CHARS}
             placeholder="Name, email or phone"
             value={joinQuery}
             onChange={(e) => setJoinQuery(e.target.value)}

@@ -1261,6 +1261,12 @@ describe('Members: the two tabs (5b-i)', () => {
     expect(screen.queryByText('Lena List')).toBeNull();
   });
 
+  it('L2: shows the people waiting to join above both tabs, so the list tab opening first never hides them', async () => {
+    orgService.getApplications.mockResolvedValue(queue([waitingApplicant]));
+    drawAt('/console/iron-house/members', <Members />, '/console/:orgSlug/members');
+    expect(await screen.findByText('Anil Bora')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Your list' }).getAttribute('aria-selected')).toBe('true');
+  });
   it('shows a trainer, who may not see the list, the roster and no tabs', async () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'trainer', privileges: ['members.read'] }] } });
     orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));

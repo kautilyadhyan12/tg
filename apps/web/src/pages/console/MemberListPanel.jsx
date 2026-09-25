@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ChevronRight, Loader2, Search, SlidersHorizontal, Upload, UserPlus, X } from 'lucide-react';
+import { MEMBER_LIST_QUERY_MAX_CHARS } from '@app/shared';
 import { orgService, errorText } from '../../api/orgsApi';
 import MemberListPerson, { Tag } from './MemberListPerson';
 import MemberListUpload from './MemberListUpload';
@@ -155,7 +156,9 @@ function FilterBox({ list, filters, words, total, onChange, onClear, onClose }) 
   );
 }
 
-export default function MemberListPanel({ gymId, words, readOnly, refreshKey, onImported = () => undefined }) {
+// `onRosterChanged` tells the Members screen that the list moved, so "Using the app",
+// whose "not on your list" marks read the list, is read again.
+export default function MemberListPanel({ gymId, words, readOnly, refreshKey, onRosterChanged = () => undefined }) {
   const [list, setList] = useState(null);
   const [listError, setListError] = useState(null);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
@@ -169,6 +172,9 @@ export default function MemberListPanel({ gymId, words, readOnly, refreshKey, on
   const [importing, setImporting] = useState(false);
   /** The newest request for a page: an answer to an older one is dropped. */
   const latest = useRef(0);
+  /** How many names were loaded when a change asked for the list again, so the re-read
+   *  walks as many pages and staff keep their place. Zero for a new filter. */
+  const keepLoaded = useRef(0);
 
   useEffect(() => {
     if (gymId === null) return undefined;
@@ -202,13 +208,23 @@ export default function MemberListPanel({ gymId, words, readOnly, refreshKey, on
     if (gymId === null) return undefined;
     latest.current += 1;
     const asked = latest.current;
+    const want = keepLoaded.current;
+    keepLoaded.current = 0;
+    const read = async () => {
+      let p = (await orgService.getMemberListEntries(gymId, entriesQueryString(filters))).data.page;
+      let entries = p.entries;
+      while (entries.length < want && p.cursor !== null && latest.current === asked) {
+        p = (await orgService.getMemberListEntries(gymId, entriesQueryString(filters, p.cursor))).data.page;
+        entries = [...entries, ...p.entries];
+      }
+      return { entries, total: p.total, cursor: p.cursor };
+    };
     Promise.resolve()
-      .then(() => orgService.getMemberListEntries(gymId, entriesQueryString(filters)))
+      .then(read)
       .then(
-        (res) => {
+        (got) => {
           if (latest.current !== asked) return;
-          const p = res.data.page;
-          setPage({ loading: false, error: null, entries: p.entries, total: p.total, cursor: p.cursor });
+          setPage({ loading: false, error: null, ...got });
         },
         (err) => {
           if (latest.current !== asked) return;
@@ -258,6 +274,7 @@ export default function MemberListPanel({ gymId, words, readOnly, refreshKey, on
           <input
             type="search"
             aria-label={`Search your ${words.people}`}
+            maxLength={MEMBER_LIST_QUERY_MAX_CHARS}
             placeholder="Search"
             value={typed}
             onChange={(e) => {
@@ -356,7 +373,7 @@ export default function MemberListPanel({ gymId, words, readOnly, refreshKey, on
           onClose={() => setImporting(false)}
           onImported={() => {
             setTick((n) => n + 1);
-            onImported();
+            onRosterChanged();
           }}
         />
       ) : null}
@@ -464,7 +481,11 @@ export default function MemberListPanel({ gymId, words, readOnly, refreshKey, on
           words={words}
           readOnly={readOnly}
           onClose={() => setOpenId(undefined)}
-          onChanged={() => setTick((n) => n + 1)}
+          onChanged={() => {
+            keepLoaded.current = page.entries.length;
+            setTick((n) => n + 1);
+            onRosterChanged();
+          }}
         />
       ) : null}
     </div>

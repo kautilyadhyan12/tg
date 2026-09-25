@@ -517,6 +517,17 @@ export default function Members() {
         ) : null}
       </div>
 
+      {/* WAITING TO JOIN, above both tabs, where it sat before the tabs: the list tab opens
+          first, and people at the door must not be hidden behind the other one. It reads its
+          own endpoint and owns its own failure, and a trainer, who may read the roster and
+          may not confirm, sees no section rather than a refusal. */}
+      <ApplicationsQueue
+        gymId={gymId}
+        orgType={org?.orgType}
+        readOnly={readOnly}
+        onRosterChanged={reloadRoster}
+      />
+
       {canSeeList ? (
         <div className="grid grid-cols-2 gap-1 rounded-2xl p-1" role="tablist" style={{ background: 'rgba(255,255,255,0.06)' }}>
           {[
@@ -542,21 +553,8 @@ export default function Members() {
         <>
           {/* Invitations that came back "Not me". */}
           <NotMeBox gymId={gymId} words={words} />
-          <MemberListPanel gymId={gymId} words={words} readOnly={readOnly} onImported={reloadRoster} />
+          <MemberListPanel gymId={gymId} words={words} readOnly={readOnly} onRosterChanged={reloadRoster} />
         </>
-      ) : null}
-
-      {/* WAITING TO JOIN, above the roster. It reads its own endpoint and owns
-          its own failure: a queue that cannot be read must never take the
-          member list down with it, and a trainer — who may read the roster and
-          may not confirm — sees no section rather than a refusal. */}
-      {tab === 'app' ? (
-        <ApplicationsQueue
-          gymId={gymId}
-          orgType={org?.orgType}
-          readOnly={readOnly}
-          onRosterChanged={reloadRoster}
-        />
       ) : null}
 
       {tab === 'app' && state.loading ? <ConsoleLoading label={`Loading ${words.people}…`} /> : null}

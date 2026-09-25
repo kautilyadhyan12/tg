@@ -5,7 +5,7 @@
 // shown under a newer one.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
-import { memberListEntriesPageSchema, memberListViewSchema, MEMBER_INVITE_EMAIL_REASON_WORDS } from '@app/shared';
+import { memberListEntriesPageSchema, memberListViewSchema, MEMBER_INVITE_EMAIL_REASON_WORDS, MEMBER_LIST_QUERY_MAX_CHARS } from '@app/shared';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -16,6 +16,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getMemberListEntries: vi.fn(),
       getMemberListEntry: vi.fn(),
       uploadMemberList: vi.fn(),
+      changeMemberListEntry: vi.fn(),
     },
   };
 });
@@ -85,7 +86,8 @@ const filterBox = () => within(screen.getByRole('dialog', { name: 'Filter' }));
 const names = () => screen.queryAllByTestId('list-row').map((r) => r.textContent);
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  // Reset, not clear: a queued answer a failed test never used must not reach the next test.
+  vi.resetAllMocks();
   orgService.getMemberList.mockResolvedValue({ data: { list: view() } });
   orgService.getMemberListEntries.mockResolvedValue(pageOf([entry('Ada Lovelace'), entry('Bea Hart')], 312));
 });
@@ -247,5 +249,50 @@ describe("the gym's own list", () => {
     draw({ readOnly: true });
     expect((await screen.findByRole('button', { name: 'Add member' })).disabled).toBe(true);
     expect(screen.getByRole('button', { name: 'Import' }).disabled).toBe(true);
+  });
+});
+
+describe('round one: after a change', () => {
+  const detail = (e) => ({ ...e, extra: [], handEdited: [], members: [] });
+
+  it('H2: a change on the list tells the Members screen, so "Using the app" is read again', async () => {
+    const ada = entry('Ada Lovelace');
+    orgService.getMemberListEntries.mockResolvedValue(pageOf([ada]));
+    orgService.getMemberListEntry.mockResolvedValue({ data: { entry: detail(ada) } });
+    orgService.changeMemberListEntry.mockResolvedValue({ data: { outcome: 'changed', entry: detail({ ...ada, phone: '+447700900555' }), version: 2 } });
+    const onRosterChanged = vi.fn();
+    draw({ onRosterChanged });
+    fireEvent.click(await screen.findByTestId('list-row'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '+447700900555' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(onRosterChanged).toHaveBeenCalledTimes(1));
+  });
+
+  it('L3: a change keeps the pages already loaded, so staff keep their place', async () => {
+    const ada = entry('Ada Lovelace');
+    const bea = entry('Bea Hart');
+    orgService.getMemberListEntries.mockImplementation((_gym, qs) =>
+      Promise.resolve(qs === 'cursor=next-1' ? pageOf([bea], 2, null) : pageOf([ada], 2, 'next-1')),
+    );
+    orgService.getMemberListEntry.mockResolvedValue({ data: { entry: detail(bea) } });
+    orgService.changeMemberListEntry.mockResolvedValue({ data: { outcome: 'changed', entry: detail(bea), version: 2 } });
+    draw();
+    fireEvent.click(await screen.findByRole('button', { name: 'Load more' }));
+    await waitFor(() => expect(names()).toHaveLength(2));
+    fireEvent.click(screen.getAllByTestId('list-row')[1]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '+447700900555' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(orgService.changeMemberListEntry).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(orgService.getMemberListEntries.mock.calls.length).toBe(4));
+    await waitFor(() => expect(names()).toHaveLength(2));
+    expect(names()[1]).toContain('Bea Hart');
+  });
+
+  it('L1: the search takes no more than the server reads', async () => {
+    draw();
+    expect((await screen.findByLabelText('Search your members')).getAttribute('maxLength')).toBe(String(MEMBER_LIST_QUERY_MAX_CHARS));
   });
 });

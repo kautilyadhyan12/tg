@@ -9,7 +9,7 @@
 // refused; and Join removes exactly the record shown under "Remove".
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
-import { memberListEntryDetailSchema, memberListEntriesPageSchema, memberListViewSchema } from '@app/shared';
+import { MEMBER_LIST_QUERY_MAX_CHARS, memberListEntryDetailSchema, memberListEntriesPageSchema, memberListViewSchema } from '@app/shared';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -119,7 +119,8 @@ const pickMore = async (name) => {
 };
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  // Reset, not clear: a queued answer a failed test never used must not reach the next test.
+  vi.resetAllMocks();
   onClose = vi.fn();
   onChanged = vi.fn();
   orgService.getMemberList.mockResolvedValue({ data: { list: LIST } });
@@ -244,6 +245,83 @@ describe('the worst thing: one person tapped, another shown or changed', () => {
   });
 });
 
+describe('round one: a confirm only ever sends what was refused', () => {
+  const leaves = () => refusal(409, { error: 'leaves_list', message: 'This would leave people who use the app off your list.', members: 1 });
+
+  it('C1: after a refused merge, Swap takes the old confirm away, and Merge then sends the records as now shown', async () => {
+    orgService.getMemberListEntries.mockResolvedValue(pageOf([adaOld]));
+    orgService.mergeMemberListEntries.mockRejectedValueOnce(leaves()).mockResolvedValueOnce(written('merged', ada));
+    openBox(ADA);
+    await pickMore('Merge duplicate');
+    fireEvent.click(await dialog().findByRole('button', { name: /ada\.old@members\.example/ }));
+    fireEvent.click(await dialog().findByRole('button', { name: 'Merge' }));
+    expect(await dialog().findByRole('button', { name: 'Go ahead anyway' })).toBeTruthy();
+    expect(orgService.mergeMemberListEntries).toHaveBeenLastCalledWith(GYM, ADA, ADA_OLD, false);
+
+    fireEvent.click(dialog().getByRole('button', { name: 'Swap' }));
+    expect(dialog().queryByRole('button', { name: 'Go ahead anyway' })).toBeNull();
+    expect(screen.getByTestId('join-keep-email').textContent).toBe('ada@members.example');
+    fireEvent.click(dialog().getByRole('button', { name: 'Merge' }));
+    await waitFor(() => expect(orgService.mergeMemberListEntries).toHaveBeenCalledTimes(2));
+    expect(orgService.mergeMemberListEntries).toHaveBeenLastCalledWith(GYM, ADA_OLD, ADA, false);
+  });
+
+  it('C1: "Go ahead anyway" sends exactly the merge that was refused', async () => {
+    orgService.getMemberListEntries.mockResolvedValue(pageOf([adaOld]));
+    orgService.mergeMemberListEntries.mockRejectedValueOnce(leaves()).mockResolvedValueOnce(written('merged', adaOld));
+    openBox(ADA);
+    await pickMore('Merge duplicate');
+    fireEvent.click(await dialog().findByRole('button', { name: /ada\.old@members\.example/ }));
+    fireEvent.click(await dialog().findByRole('button', { name: 'Merge' }));
+    fireEvent.click(await dialog().findByRole('button', { name: 'Go ahead anyway' }));
+    await waitFor(() => expect(orgService.mergeMemberListEntries).toHaveBeenCalledTimes(2));
+    expect(orgService.mergeMemberListEntries).toHaveBeenLastCalledWith(GYM, ADA, ADA_OLD, true);
+  });
+
+  it('H1: a box changed after a refused save takes the old confirm away, and Save sends the form as it is now', async () => {
+    orgService.changeMemberListEntry.mockRejectedValueOnce(leaves()).mockResolvedValueOnce(written('changed', ada));
+    openBox(ADA);
+    fireEvent.click(await dialog().findByRole('button', { name: 'Edit' }));
+    fireEvent.change(dialog().getByLabelText('Email'), { target: { value: 'new@members.example' } });
+    fireEvent.click(dialog().getByRole('button', { name: 'Save' }));
+    expect(await dialog().findByRole('button', { name: 'Go ahead anyway' })).toBeTruthy();
+    fireEvent.change(dialog().getByLabelText('Status'), { target: { value: 'Frozen' } });
+    expect(dialog().queryByRole('button', { name: 'Go ahead anyway' })).toBeNull();
+    fireEvent.click(dialog().getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(orgService.changeMemberListEntry).toHaveBeenCalledTimes(2));
+    expect(orgService.changeMemberListEntry).toHaveBeenLastCalledWith(GYM, ADA, { email: 'new@members.example', status: 'Frozen' });
+  });
+
+  it('H1: "Go ahead anyway" sends exactly the change that was refused', async () => {
+    orgService.changeMemberListEntry.mockRejectedValueOnce(leaves()).mockResolvedValueOnce(written('changed', ada));
+    openBox(ADA);
+    fireEvent.click(await dialog().findByRole('button', { name: 'Edit' }));
+    fireEvent.change(dialog().getByLabelText('Email'), { target: { value: 'new@members.example' } });
+    fireEvent.click(dialog().getByRole('button', { name: 'Save' }));
+    fireEvent.click(await dialog().findByRole('button', { name: 'Go ahead anyway' }));
+    await waitFor(() => expect(orgService.changeMemberListEntry).toHaveBeenCalledTimes(2));
+    expect(orgService.changeMemberListEntry).toHaveBeenLastCalledWith(GYM, ADA, { email: 'new@members.example', acknowledgeLeavesList: true });
+  });
+
+  it('H3: after Remove from list then Delete for good, nothing still says the record is kept', async () => {
+    orgService.takeOffMemberListEntry.mockResolvedValue(written('taken_off', { ...ada, formerAt: '2026-09-25T10:00:00.000Z' }));
+    orgService.deleteFormerMemberListEntry.mockResolvedValue({ data: { deleted: true, version: 6 } });
+    openBox(ADA);
+    await pickMore('Remove from list');
+    fireEvent.click(within(screen.getByTestId('confirm-take-off')).getByRole('button', { name: 'Remove from list' }));
+    expect(await dialog().findByText(/kept as a past member/)).toBeTruthy();
+    await pickMore('Delete for good');
+    fireEvent.click(within(screen.getByTestId('confirm-delete')).getByRole('button', { name: 'Delete for good' }));
+    await screen.findByTestId('deleted-note');
+    expect(dialog().queryByText(/kept as a past member/)).toBeNull();
+  });
+
+  it('L1: the Merge search takes no more than the server reads', async () => {
+    openBox(ADA);
+    await pickMore('Merge duplicate');
+    expect(dialog().getByLabelText('Find the other record').getAttribute('maxLength')).toBe(String(MEMBER_LIST_QUERY_MAX_CHARS));
+  });
+});
 describe('a person on the list', () => {
   it('shows both records side by side, every field, the ones that differ marked, so two different people can be told apart', async () => {
     const liam = person(ADA, 'Liam Hughes', { email: 'liam.hughes@members.example', phone: '+447700900302', memberNumber: 'M-103', dateOfBirth: '1990-03-12', joinedOn: '2025-03-03', status: 'Frozen', inApp: true, extra: [{ key: 'locker', label: 'Locker', value: '4' }] });
