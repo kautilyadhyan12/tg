@@ -104,6 +104,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
     await sql`DELETE FROM audit_log WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gyms WHERE id IN (${mine})`;
     await sql`DELETE FROM users WHERE email LIKE 'billing-t-%@example.com'`;
+    await sql`DELETE FROM users WHERE display_name LIKE 'billing-n1-%'`;
   };
 
   beforeAll(async () => {
@@ -1734,6 +1735,45 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       expect(await pendingOf(a.subId)).toEqual({ code: null, pending_from: null });
       // A bigger size is not affected: it is charged now, whatever the month's end.
       expect((await sizePreview(a.gymId, a.cookies, BIG)).statusCode).toBe(200);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "re-check N1: a paid trial's smaller size is counted again on every attempt, so members who joined after a failed one keep it from being made",
+    async () => {
+      const a = await payingInTrial(BIG);
+      const row = (await sql<{ id: string; plan_id: string }[]>`
+        SELECT id, plan_id FROM subscriptions WHERE provider_ref = ${a.subId}`)[0];
+      if (row === undefined) throw new Error("no paid plan");
+      // The press for 50 was cut off; its size holds for joins.
+      await sql`
+        UPDATE subscriptions SET pending_plan_id = (SELECT id FROM plans WHERE code = ${MID}),
+               pending_from = now() - interval '5 minutes', pending_held_at = now() - interval '5 minutes'
+        WHERE id = ${row.id}`;
+      await sql`
+        INSERT INTO billing_plan_changes (gym_id, subscription_id, from_plan_id, to_plan_id, idempotency_key, provider, created_at)
+        VALUES (${a.gymId}, ${row.id}, ${row.plan_id}, (SELECT id FROM plans WHERE code = ${MID}), 'cut-off-n1', 'paddle', now() - interval '5 minutes')`;
+      expect(await gymSeatCap(sql, a.gymId)).toBe(50);
+      // The worker's attempt fails at Paddle: the trial's 200 hold again.
+      paddle.down = true;
+      try {
+        await runWorker();
+      } finally {
+        paddle.down = false;
+      }
+      expect(await gymSeatCap(sql, a.gymId)).toBe(200);
+      // 51 people join meanwhile.
+      await sql`
+        WITH u AS (INSERT INTO users (display_name) SELECT 'billing-n1-' || n FROM generate_series(1, 51) n RETURNING id)
+        INSERT INTO gym_members (gym_id, user_id) SELECT ${a.gymId}, id FROM u`;
+      expect(await seatsOf(a.gymId)).toBe(51);
+      // The next attempt counts 51 against 50: the size is dropped, Paddle is not asked for it.
+      await runWorker(11 * 60 * 1000);
+      expect(await planOf(a.subId)).toEqual({ code: BIG, status: "trialing" });
+      expect(await pendingOf(a.subId)).toEqual({ code: null, pending_from: null });
+      expect(paddle.changeCalls.filter((c) => c.subscriptionId === a.subId && c.priceId === MID_PRICE)).toEqual([]);
+      expect(await seatsOf(a.gymId)).toBeLessThanOrEqual((await gymSeatCap(sql, a.gymId)) ?? 0);
     },
     TEST_TIMEOUT_MS,
   );

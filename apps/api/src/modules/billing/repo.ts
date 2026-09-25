@@ -981,10 +981,13 @@ export async function claimPendingPlan(
     const tried = await tx`SELECT 1 FROM billing_plan_changes WHERE gym_id = ${input.gymId} AND idempotency_key = ${key}`;
     if (tried.length > 0) return null;
 
-    // A paid trial's was counted when it was chosen and has held since.
-    const members = row.status === "trialing" ? null : await seatsUsed(tx, input.gymId);
-    const fitted = members !== null && members > row.seat_cap ? await smallestFittingPlan(tx, { gymId: input.gymId, members }) : null;
-    if (members !== null && members > row.seat_cap && fitted === null) {
+    // Counted on every attempt: a failed one lets go of the hold, so members may have joined
+    // since, a paid trial's included. A trial's is made at once, as its press was, so it has no
+    // bigger size to fall back to: too many, and it is dropped.
+    const members = await seatsUsed(tx, input.gymId);
+    const trialing = row.status === "trialing";
+    const fitted = members > row.seat_cap && !trialing ? await smallestFittingPlan(tx, { gymId: input.gymId, members }) : null;
+    if (members > row.seat_cap && fitted === null) {
       await tx`
         UPDATE subscriptions SET pending_plan_id = NULL, pending_from = NULL, pending_requested_plan_id = NULL,
                                  pending_held_at = NULL, pending_warned_at = NULL
@@ -1042,7 +1045,7 @@ export async function claimPendingPlan(
         planCode: to.code,
         priceId: to.priceId,
         pendingFrom: row.pending_from,
-        fitted: fitted === null || members === null ? null : { askedSeatCap: row.seat_cap, members },
+        fitted: fitted === null ? null : { askedSeatCap: row.seat_cap, members },
       },
     };
   });

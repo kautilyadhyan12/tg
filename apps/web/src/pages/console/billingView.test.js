@@ -1005,3 +1005,14 @@ describe('round one (1c-iii): the paid size heads the card, and one member is on
     expect(pendingChangeText(sub, 'gym')).toMatch(/^Changing to 1 member \(\$10 a month\)/);
   });
 });
+
+describe('re-check N2 (1c-iii): no remove-by time once it has passed', () => {
+  it('names the time before it, and none after it', () => {
+    const pending = { seatCap: 50, priceLabel: '$15', from: '2026-11-01T00:00:00.000Z', decideAt: '2026-10-31T21:00:00.000Z', ifTooMany: null };
+    const org = { orgType: 'gym', seatsUsed: 52, subscription: { status: 'active', seatCap: 5000, planSeatCap: 5000, priceLabel: '$20', pendingSize: pending } };
+    expect(pendingFit(org, Date.parse('2026-10-31T20:00:00.000Z'))?.text).toMatch(/^You have 52 members\. Remove 2 by .+ to move to 50\. /);
+    expect(pendingFit(org, Date.parse('2026-10-31T21:05:00.000Z'))?.text).toBe(
+      `You have 52 members. Remove 2 to move to 50. Otherwise you'll stay on ${(5000).toLocaleString()} members at $20 a month.`,
+    );
+  });
+});

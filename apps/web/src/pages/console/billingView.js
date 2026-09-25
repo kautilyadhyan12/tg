@@ -301,7 +301,7 @@ export function pendingChangeText(sub, orgType) {
  *  moves otherwise (the smallest size that fits, or its own), or that it is ready. The members
  *  are counted at `decideAt`; until then the gym keeps its whole size. Null when none waits or
  *  the count is not known. */
-export function pendingFit(org) {
+export function pendingFit(org, now = Date.now()) {
   const sub = org?.subscription;
   const pending = sub?.pendingSize;
   const used = org?.seatsUsed;
@@ -310,13 +310,16 @@ export function pendingFit(org) {
     const date = trialEndDateLabel(pending.from);
     return { tooMany: false, text: `You're ready: you'll move to ${countOf(pending.seatCap, org?.orgType)}${date === null ? '' : ` on ${date}`}.` };
   }
-  return { tooMany: true, text: tooManyWarning(used, pending.seatCap, pending.decideAt, sub, pending.ifTooMany ?? null, org?.orgType) };
+  return { tooMany: true, text: tooManyWarning(used, pending.seatCap, pending.decideAt, sub, pending.ifTooMany ?? null, org?.orgType, now) };
 }
 
 /** "You have 250 members. Remove 50 by 24 Oct, 11:30 pm to move to 200. Otherwise you'll move
  *  to 500 members at $129 a month." — or stay on the gym's own size when nothing smaller fits. */
-function tooManyWarning(used, targetCap, decideAt, sub, fallback, orgType) {
-  const by = momentLabel(decideAt);
+function tooManyWarning(used, targetCap, decideAt, sub, fallback, orgType, now = Date.now()) {
+  // Once the time has passed (an attempt at Paddle failed and is tried again), none is named:
+  // the next attempt counts again.
+  const at = new Date(decideAt ?? '').getTime();
+  const by = Number.isNaN(at) || at <= now ? null : momentLabel(decideAt);
   const stayCap = paidSeatCap(sub);
   const otherwise =
     fallback != null
