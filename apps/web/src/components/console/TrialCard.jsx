@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { orgWords } from '@app/shared';
 import { Loader2 } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
@@ -7,23 +8,26 @@ import { ConsoleCard } from './ConsoleStates';
 import ManagePaymentButton from './ManagePaymentButton';
 import PlanChoiceDialog from './PlanChoiceDialog';
 import {
-  canChooseBiggerSize,
+  canChangeSize,
   canManageBilling,
   canPayDuringTrial,
   firstPaymentText,
   isSubscribed,
-  keepSizeLabel,
+  nextPaymentText,
   nextSizeText,
   isTrialing,
-  pendingSizeText,
+  pendingChangeText,
+  pendingFit,
+  planHeadline,
   seatLineText,
   seatMeter,
+  sizeKeptText,
   trialEndDateLabel,
 } from '../../pages/console/billingView';
 import { viewerPrivileges } from '../../pages/console/consoleView';
 
-// THE GYM'S PLAN, ON THE OVERVIEW. What it is, when the trial ends, and how many
-// places are used.
+// THE GYM'S PLAN, ON THE OVERVIEW. What it is, when the trial ends or the next payment
+// falls, and how many members it holds.
 //
 // ── THE PRE-TRIAL BUTTON WAS DELETED FROM THIS FILE, AND IT WAS AUTHORISED ──
 //
@@ -64,23 +68,31 @@ import { viewerPrivileges } from '../../pages/console/consoleView';
 // **A free trial offers "Choose a plan"** (1c-ii; Kd, RULINGS 2026-09-25): paying now
 // saves the card and takes the first payment when the trial ends, so the trial's days
 // are kept. Once paid, the card says when that first payment falls, and a plan paid
-// through us offers "Choose a bigger size" and "Choose a smaller size" (1c-iii). A smaller
-// size waits for the end of the month paid; until then the card says so and offers to keep
-// the current one, and new members can join only up to the smaller size.
+// through us offers "Change size" (1c-ii, 1c-iii). A smaller size waits for the end of the
+// month paid and the gym keeps its whole size until then; the card says what will change,
+// whether the members fit it and by when to remove any, offers "Cancel this change", and
+// says so if it was not made (Kd, RULINGS 2026-09-25).
 //
 // **It is not drawn for somebody who cannot use it.** §2.2's Billing row is the
 // owner's alone by default, and `billing.manage` is a tick they may hand over.
 // A trainer sees no billing card at all rather than a disabled one.
 
-/** `used of cap places used`, or null when there is no meter to draw. The
- *  numbers are the server's — the same count the seat cap refuses joins by, and
- *  the WORDS are `seatLineText`'s, which is the only place they are written. */
+/** A bar and `used of cap members`, or null when there is no meter to draw. The numbers are
+ *  the server's — the same count the seat cap refuses joins by, and the WORDS are
+ *  `seatLineText`'s, which is the only place they are written. */
 function SeatLine({ org }) {
   const meter = seatMeter(org);
   if (meter === null) return null;
+  const colour = meter.pressure ? '#FF8A1F' : 'rgba(255,255,255,0.45)';
+  const share = meter.cap > 0 ? Math.min(1, meter.used / meter.cap) : 0;
   return (
-    <div className="text-sm mt-1" style={{ color: meter.pressure ? '#FF8A1F' : 'rgba(255,255,255,0.45)' }}>
-      {seatLineText(meter, org?.orgType)}
+    <div className="mt-3">
+      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }} aria-hidden="true">
+        <div className="h-full rounded-full" style={{ width: `${Math.round(share * 100)}%`, background: meter.pressure ? '#FF8A1F' : 'rgba(255,255,255,0.35)' }} />
+      </div>
+      <div className="text-sm mt-1" style={{ color: colour }}>
+        {seatLineText(meter, org?.orgType)}
+      </div>
     </div>
   );
 }
@@ -101,10 +113,10 @@ function CardButton({ onClick, disabled = false, children }) {
 }
 
 export default function TrialCard({ org }) {
-  /** Which choice is open: 'subscribe' during a free trial, 'bigger' or 'smaller' on a paid plan. */
+  /** Which choice is open: 'subscribe' during a free trial, 'size' on a paid plan. */
   const [choosing, setChoosing] = useState(null);
-  const [keeping, setKeeping] = useState(false);
-  const [keepError, setKeepError] = useState(null);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState(null);
   // `viewerPrivileges`, not `org.privileges` — absent means "this api is older
   // than this bundle" and the honest fallback is the ROLE's own defaults, never
   // "no powers" (:16101). Reading the raw field would hide the button from every
@@ -146,32 +158,33 @@ export default function TrialCard({ org }) {
     ) : null;
   }
 
+  const sub = org.subscription;
+  const words = orgWords(org?.orgType);
   const trialing = isTrialing(org);
   const subscribed = isSubscribed(org);
-  const endsOn = trialing ? trialEndDateLabel(org.subscription.trialEndsAt) : null;
-  // A paid plan: its price and its month, both the server's.
-  const price = trialing ? null : org.subscription.priceLabel ?? null;
-  // Only a plan in good standing renews; a failed payment says so in the banner instead.
-  const periodEnd = org.subscription.status === 'active' ? trialEndDateLabel(org.subscription.currentPeriodEnd) : null;
-  const firstPayment = firstPaymentText(org.subscription);
-  const nextSize = nextSizeText(org.subscription, org?.orgType);
+  const endsOn = trialing ? trialEndDateLabel(sub.trialEndsAt) : null;
+  const firstPayment = firstPaymentText(sub);
+  const nextSize = nextSizeText(sub, org?.orgType);
+  const nextPayment = nextPaymentText(sub);
   const payNow = canPayDuringTrial(org);
-  // A bigger and a smaller size are offered on the same plans.
-  const resize = canChooseBiggerSize(org);
-  const waiting = pendingSizeText(org.subscription, org?.orgType);
+  const resize = canChangeSize(org);
+  const change = pendingChangeText(sub, org?.orgType);
+  const fit = pendingFit(org);
+  const kept = sizeKeptText(sub, org?.orgType);
+  const muted = { color: 'rgba(255,255,255,0.6)' };
 
-  const keep = async () => {
-    if (keeping) return;
-    setKeeping(true);
-    setKeepError(null);
+  const cancelChange = async () => {
+    if (cancelling) return;
+    setCancelling(true);
+    setCancelError(null);
     try {
       const res = await orgService.keepSize(org.id);
       applyPaidPlan(org.id, res.data.subscription);
       refreshConsoleOrgsAfterChange();
     } catch (err) {
-      setKeepError(errorText(err, "We couldn't keep your size. Please try again."));
+      setCancelError(errorText(err, "We couldn't cancel the change. Please try again."));
     } finally {
-      setKeeping(false);
+      setCancelling(false);
     }
   };
 
@@ -181,11 +194,11 @@ export default function TrialCard({ org }) {
         Plan
       </div>
       <div className="font-semibold" style={{ color: '#fff' }}>
-        {trialing ? 'Free trial' : price !== null ? `${price} a month` : 'On a plan'}
+        {trialing ? 'Free trial' : sub.priceLabel != null ? planHeadline(sub, org?.orgType) : 'On a plan'}
       </div>
-      {periodEnd !== null ? (
-        <div className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.6)' }}>
-          {org.subscription.cancelAtPeriodEnd ? `Ends ${periodEnd}` : `Renews ${periodEnd}`}
+      {nextPayment !== null ? (
+        <div className="text-sm mt-1" style={muted}>
+          {nextPayment}
         </div>
       ) : null}
       {/* The end date is stated only while the gym is actually TRIALLING.
@@ -194,52 +207,81 @@ export default function TrialCard({ org }) {
           it would put a stale date under a live plan. The shared schema says
           this in as many words; gate on the status. */}
       {trialing && endsOn !== null ? (
-        <div className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.6)' }}>
+        <div className="text-sm mt-1" style={muted}>
           Ends {endsOn}
         </div>
       ) : null}
       {firstPayment !== null ? (
-        <div className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.6)' }}>
-          {org.subscription.cancelAtPeriodEnd ? `Your plan ends with the trial, on ${endsOn ?? 'its last day'}.` : firstPayment}
+        <div className="text-sm mt-1" style={muted}>
+          {sub.cancelAtPeriodEnd ? `Your plan ends with the trial, on ${endsOn ?? 'its last day'}.` : firstPayment}
         </div>
       ) : null}
-      <SeatLine org={org} />
-      {nextSize !== null && !org.subscription.cancelAtPeriodEnd ? (
-        <div className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.6)' }}>
+      {nextSize !== null && !sub.cancelAtPeriodEnd ? (
+        <div className="text-sm mt-1" style={muted}>
           {nextSize}
         </div>
       ) : null}
-      {waiting !== null ? (
-        <div className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.6)' }} data-testid="pending-size">
-          {waiting}
+
+      {/* ── A smaller size waiting ─────────────────────────────────────────── */}
+      {change !== null ? (
+        <div
+          className="mt-3 rounded-xl px-4 py-3 flex flex-col gap-2"
+          style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}
+          data-testid="pending-size"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <span className="text-sm" style={{ color: 'rgba(255,255,255,0.85)' }}>
+              {change}
+            </span>
+            <button
+              type="button"
+              onClick={() => void cancelChange()}
+              disabled={cancelling}
+              className="self-start rounded-lg px-3 py-2 text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
+              style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)', minHeight: 40 }}
+            >
+              {cancelling ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              Cancel this change
+            </button>
+          </div>
+          {fit !== null ? (
+            <div className="text-sm" style={{ color: fit.tooMany ? '#FF8A1F' : 'rgba(255,255,255,0.6)' }} data-testid="pending-fit">
+              {fit.text}
+              {fit.tooMany && typeof org.slug === 'string' ? (
+                <>
+                  {' '}
+                  <Link to={`/console/${org.slug}/members`} className="underline font-semibold" style={{ color: '#FF8A1F' }}>
+                    Go to {words.people}
+                  </Link>
+                </>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
+      {kept !== null ? (
+        <div className="text-sm mt-3" style={{ color: '#FF8A1F' }} data-testid="size-kept">
+          {kept}
+        </div>
+      ) : null}
+
+      <SeatLine org={org} />
       {payNow ? (
-        <div className="text-sm mt-3" style={{ color: 'rgba(255,255,255,0.6)' }}>
+        <div className="text-sm mt-3" style={muted}>
           Choose a plan now and keep your free days: the plan and its first payment start when the trial ends.
         </div>
       ) : null}
       <div className="mt-4 flex flex-col sm:flex-row gap-2">
         {payNow ? <CardButton onClick={() => setChoosing('subscribe')}>Choose a plan</CardButton> : null}
-        {resize ? <CardButton onClick={() => setChoosing('bigger')}>Choose a bigger size</CardButton> : null}
-        {resize ? <CardButton onClick={() => setChoosing('smaller')}>Choose a smaller size</CardButton> : null}
-        {waiting !== null ? (
-          <CardButton onClick={() => void keep()} disabled={keeping}>
-            {keeping ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            {keepSizeLabel(org.subscription, org?.orgType)}
-          </CardButton>
-        ) : null}
+        {resize ? <CardButton onClick={() => setChoosing('size')}>Change size</CardButton> : null}
         {/* A plan paid through us is managed on Paddle's own page: the card, cancelling, invoices. */}
-        {subscribed || org.subscription.status === 'active' || org.subscription.status === 'past_due' ? (
-          <ManagePaymentButton
-            gymId={org.id}
-            label={org.subscription.status === 'past_due' ? 'Update payment method' : 'Manage payment'}
-          />
+        {subscribed || sub.status === 'active' || sub.status === 'past_due' ? (
+          <ManagePaymentButton gymId={org.id} label={sub.status === 'past_due' ? 'Update payment method' : 'Manage payment'} />
         ) : null}
       </div>
-      {keepError !== null ? (
+      {cancelError !== null ? (
         <p className="text-sm mt-3" style={{ color: '#ef4444' }}>
-          {keepError}
+          {cancelError}
         </p>
       ) : null}
       {choosing !== null ? <PlanChoiceDialog org={org} mode={choosing} onClose={() => setChoosing(null)} /> : null}

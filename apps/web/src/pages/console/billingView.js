@@ -48,7 +48,7 @@
 // answers with the date its OLD trial ran out. A reader keying on "is this field
 // set" would put "Trial — 0 days left" on a gym that has been paying for a year.
 // Unreachable today only because nothing leaves `trialing`; pinned by a test.
-import { orgWords, PAID_PLAN_GRACE_DAYS } from '@app/shared';
+import { orgWords, PAID_PLAN_GRACE_DAYS, SMALLER_SIZE_DECIDE_HOURS } from '@app/shared';
 import { calendarDaysBetween } from '../../utils/joinClock';
 import { getItem, setItem } from '../../utils/storage';
 import { viewerPrivileges } from './consoleView';
@@ -200,9 +200,9 @@ export function canPayDuringTrial(org) {
   );
 }
 
-/** MAY THIS VIEWER CHOOSE A BIGGER SIZE? A plan paid through us, in good standing (a paid
- *  trial counts), not set to end. */
-export function canChooseBiggerSize(org) {
+/** MAY THIS VIEWER CHANGE SIZE (bigger or smaller)? A plan paid through us, in good standing
+ *  (a paid trial counts), not set to end. */
+export function canChangeSize(org) {
   const sub = org?.subscription;
   return (
     canManageBilling(viewerPrivileges(org)) &&
@@ -216,7 +216,7 @@ export function canChooseBiggerSize(org) {
 /** CAN A BIGGER SIZE MAKE ROOM TODAY? Only on a plan already paying: in a trial, even a
  *  paid one, the limit stays the trial's until the first payment (Kd, RULINGS 2026-09-25). */
 export function canMakeRoomNow(org) {
-  return canChooseBiggerSize(org) && org?.subscription?.status === 'active';
+  return canChangeSize(org) && org?.subscription?.status === 'active';
 }
 
 /** The size the gym has chosen: in a paid trial, the one that starts with the first payment. */
@@ -243,42 +243,131 @@ export function biggerPlans(plans, seatCap) {
   return plans.filter((p) => p?.seatCap === null || (Number.isFinite(p?.seatCap) && p.seatCap > seatCap));
 }
 
-/** The plans smaller than the gym's size (every capped one, under a plan with no limit),
- *  leaving out a smaller size already waiting. */
-export function smallerPlans(plans, seatCap, waitingSeatCap = null) {
-  if (!Array.isArray(plans)) return [];
-  return plans.filter(
-    (p) => Number.isFinite(p?.seatCap) && (seatCap === null || p.seatCap < seatCap) && p.seatCap !== waitingSeatCap,
-  );
+/** A count as a person reads it: "1,000". */
+function count(n) {
+  return Number(n).toLocaleString();
 }
 
-/** The size the gym is on and paying for: the one a smaller size waiting would replace. */
-export function currentPlanSeatCap(sub) {
-  return sub?.pendingSize != null ? sub.pendingSize.currentSeatCap : chosenSeatCap(sub);
+/** "25 Oct, 10:07 pm" in the viewer's own locale, or null. */
+function momentLabel(iso) {
+  const at = new Date(iso ?? '');
+  if (Number.isNaN(at.getTime())) return null;
+  return at.toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 }
 
-/** A smaller size waiting (Kd, RULINGS 2026-09-25): when it starts and what it costs, and
- *  that new people can join only up to it already. Null when none waits. */
-export function pendingSizeText(sub, orgType) {
+/** A PAID PLAN'S HEADLINE: "Up to 1,000 members · $199 a month". */
+export function planHeadline(sub, orgType) {
+  const words = orgWords(orgType);
+  const size = Number.isFinite(sub?.seatCap) ? `Up to ${count(sub.seatCap)} ${words.people}` : `No ${words.person} limit`;
+  const price = typeof sub?.priceLabel === 'string' && sub.priceLabel !== '' ? sub.priceLabel : null;
+  return price === null ? size : `${size} · ${price} a month`;
+}
+
+/** "Next payment $199 on 25 Oct" for a plan in good standing, "Ends 25 Oct" for one set to
+ *  end; null when a smaller size is waiting (that line says what comes next) or there is no
+ *  date. */
+export function nextPaymentText(sub) {
+  if (sub?.status !== 'active') return null;
+  const date = trialEndDateLabel(sub.currentPeriodEnd);
+  if (date === null) return null;
+  if (sub.cancelAtPeriodEnd === true) return `Ends ${date}`;
+  if (sub.pendingSize != null || typeof sub.priceLabel !== 'string') return null;
+  return `Next payment ${sub.priceLabel} on ${date}`;
+}
+
+/** A smaller size waiting (Kd, RULINGS 2026-09-25): "Changing to 500 members ($129 a month)
+ *  on 25 Oct". Null when none waits. */
+export function pendingChangeText(sub, orgType) {
   const pending = sub?.pendingSize;
   if (pending == null) return null;
-  const who = orgWords(orgType).people;
   const date = trialEndDateLabel(pending.from);
-  const when = date === null ? 'From your next payment' : `From ${date}`;
-  return `${when}: up to ${pending.seatCap} ${who}, ${pending.priceLabel} a month. New ${who} can join only up to ${pending.seatCap} from now.`;
+  const when = date === null ? 'at your next payment' : `on ${date}`;
+  return `Changing to ${count(pending.seatCap)} ${orgWords(orgType).people} (${pending.priceLabel} a month) ${when}`;
 }
 
-/** The Keep button's words: the size the gym stays on. */
-export function keepSizeLabel(sub, orgType) {
-  const cap = sub?.pendingSize?.currentSeatCap;
-  return Number.isFinite(cap) ? `Keep up to ${cap} ${orgWords(orgType).people}` : 'Keep my current size';
+/** Whether the gym fits the smaller size waiting: how many to remove and by when, or that it
+ *  is ready. The members are counted at `decideAt`; until then the gym keeps its whole size.
+ *  Null when none waits or the count is not known. */
+export function pendingFit(org) {
+  const sub = org?.subscription;
+  const pending = sub?.pendingSize;
+  const used = org?.seatsUsed;
+  if (pending == null || !Number.isFinite(used)) return null;
+  const who = orgWords(org?.orgType).people;
+  if (used <= pending.seatCap) {
+    const date = trialEndDateLabel(pending.from);
+    return { tooMany: false, text: `You're ready: you'll move to ${count(pending.seatCap)} ${who}${date === null ? '' : ` on ${date}`}.` };
+  }
+  return { tooMany: true, text: tooManyWarning(used, pending.seatCap, pending.decideAt, sub, org?.orgType) };
 }
 
-/** Why a smaller size cannot be chosen yet: more people than it holds. Null when it fits. */
-export function tooManyText(seatsUsed, seatCap, orgType) {
-  if (!Number.isFinite(seatsUsed) || !Number.isFinite(seatCap) || seatsUsed <= seatCap) return null;
+function tooManyWarning(used, targetCap, decideAt, sub, orgType) {
   const who = orgWords(orgType).people;
-  return `You have ${seatsUsed} ${who}. Remove ${seatsUsed - seatCap} to choose this size.`;
+  const by = momentLabel(decideAt);
+  const stay = Number.isFinite(sub?.seatCap) ? `${count(sub.seatCap)} ${who}` : 'your size';
+  const price = typeof sub?.priceLabel === 'string' ? ` at ${sub.priceLabel} a month` : '';
+  return `You have ${count(used)} ${who}. Remove ${count(used - targetCap)}${by === null ? '' : ` by ${by}`}, or you'll stay on ${stay}${price}.`;
+}
+
+/** The smaller size last chosen was not made: the gym had too many members when it was due. */
+export function sizeKeptText(sub, orgType) {
+  const kept = sub?.sizeKept;
+  if (kept == null) return null;
+  const who = orgWords(orgType).people;
+  const size = Number.isFinite(sub?.seatCap) ? `${count(sub.seatCap)} ${who}` : 'your size';
+  const price = typeof sub?.priceLabel === 'string' ? `, so you pay ${sub.priceLabel} a month` : '';
+  return `Your size stayed at ${size}: you had ${count(kept.members)} when it was due to change, more than ${count(kept.seatCap)}${price}. Change size again whenever you're ready.`;
+}
+
+/** Every size on the gym's price list, as Change size lists them: the gym's own, one waiting,
+ *  and what choosing each other one does. A smaller size on a paying plan starts with the next
+ *  payment, and its note says how many members to remove first; in a paid trial it is made at
+ *  once, so it cannot be chosen while the gym has more members than it holds. */
+export function sizeRows(plans, org) {
+  const sub = org?.subscription;
+  if (!Array.isArray(plans) || sub == null) return [];
+  const trialing = sub.status === 'trialing';
+  const onSize = trialing ? chosenSeatCap(sub) : (sub.seatCap ?? null);
+  const waiting = sub.pendingSize?.seatCap ?? null;
+  const used = org?.seatsUsed;
+  const who = orgWords(org?.orgType).people;
+  const nextOn = trialEndDateLabel(sub.currentPeriodEnd);
+  return plans.map((plan) => {
+    const cap = Number.isFinite(plan?.seatCap) ? plan.seatCap : null;
+    if (cap === onSize) return { plan, kind: 'current', note: 'Your size', warning: null, disabled: true };
+    if (cap !== null && cap === waiting) {
+      const on = trialEndDateLabel(sub.pendingSize.from);
+      return { plan, kind: 'waiting', note: on === null ? 'Changing to this' : `Changing to this on ${on}`, warning: null, disabled: true };
+    }
+    if (cap === null || (onSize !== null && cap > onSize)) {
+      return { plan, kind: 'bigger', note: trialing ? 'From your first payment' : 'Pay the difference now', warning: null, disabled: false };
+    }
+    const over = Number.isFinite(used) && used > cap;
+    if (trialing) {
+      return {
+        plan,
+        kind: 'smaller',
+        note: 'Nothing to pay now',
+        warning: over ? `You have ${count(used)} ${who}. Remove ${count(used - cap)} to choose this size.` : null,
+        disabled: over,
+      };
+    }
+    const decideAt = nextDecideAt(sub.currentPeriodEnd);
+    return {
+      plan,
+      kind: 'smaller',
+      note: nextOn === null ? 'From your next payment' : `From ${nextOn}`,
+      warning: over ? tooManyWarning(used, cap, decideAt, sub, org?.orgType) : null,
+      disabled: false,
+    };
+  });
+}
+
+/** When a smaller size chosen now would be decided: its members counted, before the next payment. */
+function nextDecideAt(periodEnd) {
+  const at = new Date(periodEnd ?? '');
+  if (Number.isNaN(at.getTime())) return null;
+  return new Date(at.getTime() - SMALLER_SIZE_DECIDE_HOURS * 60 * 60 * 1000).toISOString();
 }
 
 /** A PAID TRIAL'S NEXT STEP: "Your first payment of $79 is on 3 Oct." Null for anything
@@ -408,13 +497,13 @@ export function seatMeter(org) {
  *
  *  **The trailing full stop now appears on all three surfaces.** Two of them
  *  had none; unifying the sentence is what makes one owner possible, and a
- *  meter that reads "42 of 300 places used." on the roster and in the banner
+ *  meter that reads "42 of 300 members." on the roster and in the banner
  *  is the same true sentence in both places. */
 export function seatLineText(meter, orgType) {
   if (meter === null || meter === undefined) return null;
   return meter.full
-    ? `${meter.used} of ${meter.cap} places used — your ${orgWords(orgType).it} is full, so nobody else can join yet.`
-    : `${meter.used} of ${meter.cap} places used.`;
+    ? `${meter.used.toLocaleString()} of ${meter.cap.toLocaleString()} ${orgWords(orgType).people} — your ${orgWords(orgType).it} is full, so nobody else can join yet.`
+    : `${meter.used.toLocaleString()} of ${meter.cap.toLocaleString()} ${orgWords(orgType).people}.`;
 }
 
 /** Part 3 §4.2, the persistent slot above every console screen. One banner or
@@ -518,7 +607,7 @@ export function bannerFor(org, now = Date.now()) {
       // readers, not its author.
       text:
         seatLineText(meter, org?.orgType) +
-        (canMakeRoomNow(org) ? ' Choose a bigger size under Plan on the Overview.' : ''),
+        (canMakeRoomNow(org) ? ' Press Change size under Plan on the Overview.' : ''),
       dismissible: false,
     };
   }
@@ -608,7 +697,7 @@ export function planPromptFor(org) {
 export function planSeatLabel(seatCap, orgType) {
   const words = orgWords(orgType);
   if (!Number.isFinite(seatCap) || seatCap <= 0) return `No ${words.person} limit`;
-  return `Up to ${seatCap} ${words.people}`;
+  return `Up to ${seatCap.toLocaleString()} ${words.people}`;
 }
 
 /** THE PRICE, AS THE SERVER WROTE IT, PLUS HOW OFTEN IT IS CHARGED.

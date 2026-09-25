@@ -12,6 +12,7 @@
 // the month at once, and changes nothing if that charge fails.
 import {
   PAID_PLAN_GRACE_DAYS,
+  SMALLER_SIZE_DECIDE_HOURS,
   type OrgBillingPortalResponse,
   type OrgCheckoutResponse,
   type OrgCheckoutSyncResponse,
@@ -21,10 +22,12 @@ import {
   type PaddleTransaction,
 } from "@app/shared";
 import type { Sql } from "postgres";
+import type { EmailTransport } from "../../email/resend.js";
 import type { RedisLike } from "../../redis.js";
 import { bustEntitlements } from "../entitlements/service.js";
 import * as orgsRepo from "../orgs/repo.js";
 import { formatPriceMinor, holdsPrivilege, OrgsError, requirePrivilege, toOrgSubscription } from "../orgs/service.js";
+import { dayLabel, momentLabel, sizeKeptEmail, sizeWarningEmail } from "./emails.js";
 import type { Snapshot } from "./machine.js";
 import { onlinePaymentFor } from "./online.js";
 import type { PaddleApi, PaddleEnvironment, ProrationMode, TrialCheckout } from "./paddle.js";
@@ -47,6 +50,15 @@ export interface BillingDeps {
     error: (obj: object, msg: string) => void;
   };
   now: () => Date;
+  /** How the worker emails a gym's billing staff about a smaller size; absent or null: not
+   *  sent (a laptop with no Resend key), and the Plan card still says it. */
+  mail?: BillingMail | null;
+}
+
+export interface BillingMail {
+  transport: EmailTransport;
+  /** The console's origin, for the links in the emails. */
+  webOrigin: string;
 }
 
 /** Paddle's transaction states in which the customer's money has been taken. */
@@ -400,8 +412,8 @@ export async function previewSizeChange(
  *  cannot both ask Paddle; Paddle's subscription is read first, so a change that already
  *  landed is never asked for (or charged) twice; the gym's plan is written from Paddle's own
  *  record of it afterwards, through the one rule. A smaller size on a plan already paying is
- *  only written down here: its limit holds at once, and the worker makes it at Paddle
- *  shortly before the month paid ends (`applyPendingSizes`). */
+ *  only written down here: the gym keeps its whole size, and the worker decides it shortly
+ *  before the month paid ends (`applyPendingSizes`). */
 export async function changeSize(
   deps: BillingDeps,
   input: { userId: string; gymId: string; planCode: string; idempotencyKey: string },
@@ -480,7 +492,7 @@ export async function changeSize(
   return await currentPlan(deps, input.gymId);
 }
 
-/** "Keep my current size": the smaller size waiting is dropped; nothing is asked of Paddle,
+/** "Cancel this change": the smaller size waiting is dropped; nothing is asked of Paddle,
  *  which still bills the size the gym is on. Safe to press twice. */
 export async function keepSize(deps: BillingDeps, input: { userId: string; gymId: string }): Promise<OrgPlanChangeResponse> {
   await requirePrivilege(deps, input.gymId, input.userId, "billing.manage");
@@ -506,8 +518,12 @@ async function currentPlan(deps: BillingDeps, gymId: string): Promise<OrgPlanCha
   return { subscription: toOrgSubscription(live) };
 }
 
-/** A smaller size is made at Paddle this long before the month paid ends. */
-export const PENDING_SIZE_LEAD_MS = 3 * 60 * 60 * 1000;
+/** A smaller size is decided this long before the month paid ends: the members counted and,
+ *  if they fit, Paddle's price changed. */
+export const PENDING_SIZE_LEAD_MS = SMALLER_SIZE_DECIDE_HOURS * 60 * 60 * 1000;
+/** Billing staff are emailed this long before a smaller size is due, if the gym still has
+ *  more members than it holds. */
+export const SIZE_WARNING_WITHIN_MS = 3 * 24 * 60 * 60 * 1000;
 /** Paddle refuses a change within 30 minutes of a charge (developer.paddle.com, "Upgrade or
  *  downgrade subscriptions", read 2026-09-25); this leaves a margin. */
 const PADDLE_CHANGE_CUTOFF_MS = 35 * 60 * 1000;
@@ -518,32 +534,130 @@ export interface PendingSizesRun {
   applied: number;
   /** Not made this run: Paddle refused, could not be asked, or the charge is too close. */
   waiting: number;
+  /** Not made at all: more members than the smaller size holds, so the gym stays on its size. */
+  kept: number;
+  /** Warning emails sent: a smaller size due soon, and too many members for it. */
+  warned: number;
 }
 
-/** Make at Paddle each smaller size that is due: a paid trial's at once, a paying plan's in
- *  the hours before its month ends, with nothing billed or credited, so the next bill is the
- *  smaller price. If the month renewed at the old price first (the worker was down, or Paddle
- *  refused until then), the rest of the new month is credited back by Paddle's proration, so
- *  the gym still pays the size it chose. Safe to run twice: each plan is claimed under its
- *  gym's lock as that gym's one pending change, and Paddle is read before it is asked. */
+/** Decide each smaller size that is due: a paid trial's at once, a paying plan's in the hours
+ *  before its month ends. The members are counted; if more than it holds, the gym stays on its
+ *  size and its billing staff are told (Kd, RULINGS 2026-09-25). If they fit, Paddle's price is
+ *  changed with nothing billed or credited, so the next bill is the smaller price; if the month
+ *  renewed at the old price first (the worker was down, or Paddle refused until then), the
+ *  rest of the new month is credited back by Paddle's proration. Safe to run twice: each plan
+ *  is claimed under its gym's lock as that gym's one pending change, and Paddle is read before
+ *  it is asked. */
 export async function applyPendingSizes(deps: BillingDeps): Promise<PendingSizesRun> {
-  const run: PendingSizesRun = { applied: 0, waiting: 0 };
+  const run: PendingSizesRun = { applied: 0, waiting: 0, kept: 0, warned: 0 };
   const paddle = deps.paddle;
   if (paddle === null) return run;
   const now = deps.now();
   const due = await repo.duePendingPlans(deps.sql, { until: new Date(now.getTime() + PENDING_SIZE_LEAD_MS), limit: 50 });
   for (const row of due) {
-    const claim = await repo.claimPendingPlan(deps.sql, {
+    const outcome = await repo.claimPendingPlan(deps.sql, {
       gymId: row.gymId,
       subscriptionRowId: row.id,
       now,
       bucket: Math.floor(now.getTime() / PENDING_SIZE_RETRY_MS),
     });
-    if (claim === null) continue;
-    if (await applyPendingSize(deps, paddle, row.gymId, claim)) run.applied += 1;
+    if (outcome === null) continue;
+    if (outcome.kind === "kept") {
+      run.kept += 1;
+      deps.log.info({ event: "billing.size_kept_too_many", gymId: row.gymId }, "a smaller size was not made: too many members");
+      await emailSizeKept(deps, row.gymId, row.id, outcome.members);
+      continue;
+    }
+    if (await applyPendingSize(deps, paddle, row.gymId, outcome.claim)) run.applied += 1;
     else run.waiting += 1;
   }
+  run.warned = await sendSizeWarnings(deps);
   return run;
+}
+
+function consoleLinks(mail: BillingMail, slug: string): { plan: string; members: string } {
+  const plan = `${mail.webOrigin}/console/${encodeURIComponent(slug)}`;
+  return { plan, members: `${plan}/members` };
+}
+
+/** Email the billing staff of each gym with a smaller size due within three days that still
+ *  has more members than it holds. Once per choice: marked before it is sent, so a second run
+ *  never sends it again (and one lost in sending is not retried; the Plan card says it too). */
+async function sendSizeWarnings(deps: BillingDeps): Promise<number> {
+  const mail = deps.mail ?? null;
+  if (mail === null) return 0;
+  const now = deps.now();
+  let sent = 0;
+  for (const due of await repo.dueSizeWarnings(deps.sql, { now, within: SIZE_WARNING_WITHIN_MS, limit: 500 })) {
+    const facts = await repo.sizeNoticeFacts(deps.sql, { ...due, targetPlan: "pending" });
+    if (facts === null || facts.pendingFrom === null || facts.members <= facts.targetSeatCap) continue;
+    if (!(await repo.claimSizeWarning(deps.sql, { ...due, now }))) continue;
+    const links = consoleLinks(mail, facts.gymSlug);
+    const decideAt = new Date(facts.pendingFrom.getTime() - PENDING_SIZE_LEAD_MS);
+    for (const to of await repo.billingRecipients(deps.sql, due.gymId)) {
+      await sendBillingEmail(
+        deps,
+        mail,
+        sizeWarningEmail({
+          to,
+          gymName: facts.gymName,
+          orgType: facts.orgType,
+          members: facts.members,
+          currentSeatCap: facts.currentSeatCap,
+          currentPriceLabel: formatPriceMinor(facts.currentPriceMinor, facts.currency),
+          targetSeatCap: facts.targetSeatCap,
+          targetPriceLabel: formatPriceMinor(facts.targetPriceMinor, facts.currency),
+          due: dayLabel(facts.pendingFrom, facts.timezone),
+          decideBy: momentLabel(decideAt, facts.timezone),
+          membersLink: links.members,
+          planLink: links.plan,
+        }),
+        due.gymId,
+        "size_warning",
+      );
+    }
+    sent += 1;
+  }
+  return sent;
+}
+
+/** Tell a gym's billing staff its smaller size was not made. Sent once: the decision is
+ *  written once (its Idempotency-Key), and this runs only on that write. */
+async function emailSizeKept(deps: BillingDeps, gymId: string, subscriptionRowId: string, members: number): Promise<void> {
+  const mail = deps.mail ?? null;
+  if (mail === null) return;
+  const facts = await repo.sizeNoticeFacts(deps.sql, { gymId, subscriptionRowId, targetPlan: "last_kept" });
+  if (facts === null) return;
+  const links = consoleLinks(mail, facts.gymSlug);
+  for (const to of await repo.billingRecipients(deps.sql, gymId)) {
+    await sendBillingEmail(
+      deps,
+      mail,
+      sizeKeptEmail({
+        to,
+        gymName: facts.gymName,
+        orgType: facts.orgType,
+        // The count the decision was made on, not one taken since.
+        members,
+        currentSeatCap: facts.currentSeatCap,
+        currentPriceLabel: formatPriceMinor(facts.currentPriceMinor, facts.currency),
+        targetSeatCap: facts.targetSeatCap,
+        planLink: links.plan,
+      }),
+      gymId,
+      "size_kept",
+    );
+  }
+}
+
+/** One email; a failure is logged (never the address) and never stops the worker. */
+async function sendBillingEmail(deps: BillingDeps, mail: BillingMail, message: Parameters<EmailTransport["send"]>[0], gymId: string, kind: string): Promise<void> {
+  try {
+    await mail.transport.send(message);
+    deps.log.info({ event: "billing.email_sent", kind, gymId }, "a billing email was sent");
+  } catch (err) {
+    deps.log.error({ event: "billing.email_failed", kind, gymId, errName: err instanceof Error ? err.name : typeof err }, "a billing email could not be sent");
+  }
 }
 
 async function applyPendingSize(deps: BillingDeps, paddle: PaddleSettings, gymId: string, claim: repo.PendingClaim): Promise<boolean> {

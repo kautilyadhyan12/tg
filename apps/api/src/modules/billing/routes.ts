@@ -156,7 +156,7 @@ export function registerBillingRoutes(
     },
   );
 
-  // "Keep my current size": drops a smaller size waiting. Undoing it again is idempotent, so
+  // "Cancel this change": drops a smaller size waiting. Undoing it again is idempotent, so
   // it takes no key.
   app.delete(
     "/v1/orgs/:gymId/billing/size/pending",

@@ -35,7 +35,7 @@ export interface PaddleEventsRun {
   gracesEnded: number;
   /** Trial checkouts closed at Paddle because the gym's own trial ended. */
   trialCheckoutsClosed: number;
-  /** Smaller sizes made at Paddle this run, and those still waiting. */
+  /** Smaller sizes decided this run: made at Paddle, still waiting, or not made; warnings sent. */
   pendingSizes: PendingSizesRun;
 }
 
@@ -49,7 +49,7 @@ export async function processPaddleEvents(deps: BillingDeps): Promise<PaddleEven
     refunds: { requested: 0, notNeeded: 0, deferred: 0, failed: 0 },
     gracesEnded: 0,
     trialCheckoutsClosed: 0,
-    pendingSizes: { applied: 0, waiting: 0 },
+    pendingSizes: { applied: 0, waiting: 0, kept: 0, warned: 0 },
   };
   for (let taken = 0; taken < PADDLE_EVENTS.perRun; taken++) {
     const event = await webhooks.claimDuePaddleEvent(deps.sql, deps.now(), PADDLE_EVENTS.leaseMs);

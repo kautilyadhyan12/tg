@@ -22,12 +22,13 @@ import {
   bannerFor,
   bannerIsDismissed,
   biggerPlans,
-  currentPlanSeatCap,
-  keepSizeLabel,
-  pendingSizeText,
-  smallerPlans,
-  tooManyText,
-  canChooseBiggerSize,
+  nextPaymentText,
+  pendingChangeText,
+  pendingFit,
+  planHeadline,
+  sizeKeptText,
+  sizeRows,
+  canChangeSize,
   canMakeRoomNow,
   canManageBilling,
   chosenSeatCap,
@@ -305,9 +306,9 @@ describe('seatLineText', () => {
     // An assertion made only against its own source moves whenever the source
     // does and proves nothing — :19960's tautological-golden-string finding,
     // which cost that round a second fix.
-    expect(seatLineText(seatMeter(trialing(20, { seatsUsed: 42 })))).toBe('42 of 300 places used.');
+    expect(seatLineText(seatMeter(trialing(20, { seatsUsed: 42 })))).toBe('42 of 300 members.');
     expect(seatLineText(seatMeter(trialing(20, { seatsUsed: 300 })))).toBe(
-      '300 of 300 places used — your gym is full, so nobody else can join yet.',
+      '300 of 300 members — your gym is full, so nobody else can join yet.',
     );
   });
 
@@ -464,7 +465,7 @@ describe('the read-only sentences at a studio', () => {
 
   it('says a studio is full in its own word', () => {
     expect(seatLineText({ used: 3, cap: 3, full: true, pressure: true }, 'studio')).toBe(
-      '3 of 3 places used — your studio is full, so nobody else can join yet.',
+      '3 of 3 clients — your studio is full, so nobody else can join yet.',
     );
   });
 });
@@ -571,7 +572,7 @@ describe('bannerFor', () => {
     });
     const b = bannerFor(full, NOW);
     expect(b?.key).toBe('seat_pressure');
-    expect(b?.text).toContain('95 of 100 places used');
+    expect(b?.text).toContain('95 of 100 members');
   });
 
   it('says why nobody else can join once the gym is full', () => {
@@ -753,7 +754,7 @@ describe('who is offered which choice', () => {
     ['an api too old to say it was paid for', trialing(6, { subscription: { status: 'trialing', trialEndsAt: inDays(6), seatCap: 200 } }), { subscribed: false, pay: true, bigger: false }],
     ['no plan at all', gym(), { subscribed: false, pay: false, bigger: false }],
   ])('%s', (_name, org, want) => {
-    expect({ subscribed: isSubscribed(org), pay: canPayDuringTrial(org), bigger: canChooseBiggerSize(org) }).toEqual(want);
+    expect({ subscribed: isSubscribed(org), pay: canPayDuringTrial(org), bigger: canChangeSize(org) }).toEqual(want);
     // Room now only on a plan already paying: a trial, paid or not, keeps its limit.
     expect(canMakeRoomNow(org)).toBe(want.bigger && org.subscription?.status === 'active');
   });
@@ -846,42 +847,83 @@ describe('the banner for a trial the gym has paid for', () => {
 
   it('points a full paying gym at a bigger size', () => {
     const full = gym({ subscription: { status: 'active', trialEndsAt: null, seatCap: 100, subscribed: true, priceLabel: '$79', currentPeriodEnd: inDays(20) }, seatsUsed: 95 });
-    expect(bannerFor(full, NOW)?.text).toBe('95 of 100 places used. Choose a bigger size under Plan on the Overview.');
+    expect(bannerFor(full, NOW)?.text).toBe('95 of 100 members. Press Change size under Plan on the Overview.');
   });
 });
 
-describe('a smaller size (1c-iii)', () => {
-  const plans = [{ seatCap: 200 }, { seatCap: 500 }, { seatCap: 1000 }, { seatCap: null }];
-  const waiting = { status: 'active', seatCap: 200, pendingSize: { seatCap: 200, priceLabel: '$79', from: '2026-11-01T12:00:00.000Z', currentSeatCap: 1000 } };
+describe('a smaller size and the Plan card (1c-iii)', () => {
+  const PLANS = [
+    { code: 'b1', seatCap: 200, priceLabel: '$79' },
+    { code: 'b2', seatCap: 500, priceLabel: '$129' },
+    { code: 'b3', seatCap: 1000, priceLabel: '$199' },
+  ];
+  const END = '2026-10-25T06:00:00.000Z';
+  const paying = { status: 'active', seatCap: 1000, priceLabel: '$199', currentPeriodEnd: END, cancelAtPeriodEnd: false, subscribed: true, pendingSize: null, sizeKept: null };
+  const waiting = {
+    ...paying,
+    pendingSize: { seatCap: 500, priceLabel: '$129', from: END, decideAt: '2026-10-25T03:00:00.000Z' },
+  };
+  const gym = (sub, seatsUsed) => ({ orgType: 'gym', seatsUsed, subscription: sub });
 
-  it('lists only capped plans smaller than the size paid for, leaving out the one waiting', () => {
-    expect(smallerPlans(plans, 1000).map((p) => p.seatCap)).toEqual([200, 500]);
-    expect(smallerPlans(plans, 1000, 200).map((p) => p.seatCap)).toEqual([500]);
-    expect(smallerPlans(plans, 200)).toEqual([]);
-    // Under a plan with no limit every capped plan is smaller.
-    expect(smallerPlans(plans, null).map((p) => p.seatCap)).toEqual([200, 500, 1000]);
-    expect(smallerPlans(null, 500)).toEqual([]);
+  it('heads the card with the size and the price, and says the next payment', () => {
+    expect(planHeadline(paying, 'gym')).toBe(`Up to ${(1000).toLocaleString()} members · $199 a month`);
+    expect(planHeadline({ ...paying, seatCap: null }, 'gym')).toBe('No member limit · $199 a month');
+    expect(nextPaymentText(paying)).toBe(`Next payment $199 on ${trialEndDateLabel(END)}`);
+    expect(nextPaymentText({ ...paying, cancelAtPeriodEnd: true })).toBe(`Ends ${trialEndDateLabel(END)}`);
+    // With a smaller size waiting, the change's own line says what comes next.
+    expect(nextPaymentText(waiting)).toBeNull();
+    expect(nextPaymentText({ ...paying, status: 'past_due' })).toBeNull();
   });
 
-  it('the size paid for is the one a waiting smaller size replaces, else the chosen one', () => {
-    expect(currentPlanSeatCap(waiting)).toBe(1000);
-    expect(currentPlanSeatCap({ status: 'active', seatCap: 500, pendingSize: null })).toBe(500);
-    expect(currentPlanSeatCap({ status: 'trialing', seatCap: 200, nextSeatCap: 500 })).toBe(500);
+  it('says what will change and whether the members fit, with how many to remove and by when', () => {
+    expect(pendingChangeText(waiting, 'gym')).toBe(`Changing to 500 members ($129 a month) on ${trialEndDateLabel(END)}`);
+    expect(pendingChangeText(paying, 'gym')).toBeNull();
+    const by = new Date('2026-10-25T03:00:00.000Z').toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+    expect(pendingFit(gym(waiting, 620))).toEqual({
+      tooMany: true,
+      text: `You have 620 members. Remove 120 by ${by}, or you'll stay on ${(1000).toLocaleString()} members at $199 a month.`,
+    });
+    expect(pendingFit(gym(waiting, 500))).toEqual({ tooMany: false, text: `You're ready: you'll move to 500 members on ${trialEndDateLabel(END)}.` });
+    expect(pendingFit(gym(waiting, undefined))).toBeNull();
+    expect(pendingFit(gym(paying, 620))).toBeNull();
   });
 
-  it('says when a waiting size starts, its price, and that joins stop at it now; nothing when none waits', () => {
-    expect(pendingSizeText(waiting, 'gym')).toBe(
-      `From ${trialEndDateLabel('2026-11-01T12:00:00.000Z')}: up to 200 members, $79 a month. New members can join only up to 200 from now.`,
+  it('says a size that was not made, and why', () => {
+    expect(sizeKeptText({ ...paying, sizeKept: { seatCap: 500, members: 620 } }, 'gym')).toBe(
+      `Your size stayed at ${(1000).toLocaleString()} members: you had 620 when it was due to change, more than 500, so you pay $199 a month. Change size again whenever you're ready.`,
     );
-    expect(pendingSizeText({ ...waiting, pendingSize: null }, 'gym')).toBeNull();
-    expect(keepSizeLabel(waiting, 'gym')).toBe('Keep up to 1000 members');
-    expect(keepSizeLabel({ ...waiting, pendingSize: { ...waiting.pendingSize, currentSeatCap: null } }, 'gym')).toBe('Keep my current size');
+    expect(sizeKeptText(paying, 'gym')).toBeNull();
   });
 
-  it('names how many to remove only when there are more than the size holds', () => {
-    expect(tooManyText(300, 200, 'gym')).toBe('You have 300 members. Remove 100 to choose this size.');
-    expect(tooManyText(200, 200, 'gym')).toBeNull();
-    expect(tooManyText(199, 200, 'gym')).toBeNull();
-    expect(tooManyText(undefined, 200, 'gym')).toBeNull();
+  it('lists every size: the gym’s own, one waiting, bigger paid now, smaller from the next payment with how many to remove', () => {
+    const rows = sizeRows(PLANS, gym(waiting, 620));
+    expect(rows.map((r) => [r.plan.code, r.kind, r.note, r.disabled])).toEqual([
+      ['b1', 'smaller', `From ${trialEndDateLabel(END)}`, false],
+      ['b2', 'waiting', `Changing to this on ${trialEndDateLabel(END)}`, true],
+      ['b3', 'current', 'Your size', true],
+    ]);
+    expect(rows[0]?.warning).toMatch(/^You have 620 members\. Remove 420 by .*, or you'll stay on/);
+    const fits = sizeRows(PLANS, gym({ ...paying, seatCap: 500 }, 100));
+    expect(fits.map((r) => [r.kind, r.note, r.warning])).toEqual([
+      ['smaller', `From ${trialEndDateLabel(END)}`, null],
+      ['current', 'Your size', null],
+      ['bigger', 'Pay the difference now', null],
+    ]);
+  });
+
+  it('in a paid trial a smaller size is made at once, so one the members do not fit cannot be chosen', () => {
+    const trial = { status: 'trialing', subscribed: true, seatCap: 200, nextSeatCap: 1000, priceLabel: '$199', currentPeriodEnd: END };
+    const rows = sizeRows(PLANS, gym(trial, 300));
+    expect(rows.map((r) => [r.kind, r.note, r.disabled])).toEqual([
+      ['smaller', 'Nothing to pay now', true],
+      ['smaller', 'Nothing to pay now', false],
+      ['current', 'Your size', true],
+    ]);
+    expect(rows[0]?.warning).toBe('You have 300 members. Remove 100 to choose this size.');
+    expect(sizeRows(PLANS, gym({ ...trial, nextSeatCap: 200 }, 10)).map((r) => [r.kind, r.note])).toEqual([
+      ['current', 'Your size'],
+      ['bigger', 'From your first payment'],
+      ['bigger', 'From your first payment'],
+    ]);
   });
 });

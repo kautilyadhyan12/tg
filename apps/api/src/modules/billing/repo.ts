@@ -409,7 +409,13 @@ export async function applySnapshot(
                                    THEN NULL ELSE pending_plan_id END,
             pending_from = CASE WHEN plan_id IS DISTINCT FROM ${s.planId}::uuid
                                   OR ${decision.status} NOT IN ('trialing','active','past_due')
-                                THEN NULL ELSE pending_from END
+                                THEN NULL ELSE pending_from END,
+            pending_held_at = CASE WHEN plan_id IS DISTINCT FROM ${s.planId}::uuid
+                                     OR ${decision.status} NOT IN ('trialing','active','past_due')
+                                   THEN NULL ELSE pending_held_at END,
+            pending_warned_at = CASE WHEN plan_id IS DISTINCT FROM ${s.planId}::uuid
+                                       OR ${decision.status} NOT IN ('trialing','active','past_due')
+                                     THEN NULL ELSE pending_warned_at END
         WHERE id = ${existing.id}`;
       await audit(existing.id, `billing.${decision.event}`);
     }
@@ -611,7 +617,8 @@ export interface SizeTarget {
   /** In the paid trial: nothing is charged now, the new price when the trial ends. */
   trialing: boolean;
   /** Bigger: charged for the rest of the month at once. Smaller: never charged or credited;
-   *  on a plan already paying it waits for the end of the month paid (Kd, RULINGS 2026-09-25). */
+   *  on a plan already paying it waits for the end of the month paid, when the members are
+   *  counted (Kd, RULINGS 2026-09-25). */
   direction: "bigger" | "smaller";
   /** When the month paid ends (in a trial, when the first payment is taken). */
   periodEnd: Date | null;
@@ -632,15 +639,16 @@ export type SizeTargetOutcome =
   | { kind: "plan_ending"; endsAt: Date | null }
   | { kind: "no_such_plan" }
   | { kind: "same_size" }
-  /** A smaller size than the members the gym already has. */
+  /** In a paid trial, where a smaller size is made at once: more members than it holds. */
   | { kind: "too_many_members"; seatsUsed: number; seatCap: number }
   | { kind: "not_set_up" };
 
 /** Which plan a size change would move this gym to, or why it cannot: another size of the
  *  gym's own price list, only on a plan paid through Paddle that is in good standing and not
- *  set to end, and a smaller one only when the gym's members fit in it. Read with the gym in
- *  every WHERE; a caller about to act holds the gym's lock, so no member joins between the
- *  count and the change. */
+ *  set to end. A smaller one in a paid trial is made at once, so there the members must fit
+ *  now; on a paying plan they are counted when it is due. Read with the gym in every WHERE; a
+ *  caller about to act holds the gym's lock, so no member joins between the count and the
+ *  change. */
 export async function sizeTarget(sql: SqlOrTx, input: { gymId: string; planCode: string }): Promise<SizeTargetOutcome> {
   const live = await sql<
     {
@@ -683,7 +691,7 @@ export async function sizeTarget(sql: SqlOrTx, input: { gymId: string; planCode:
   const bigger = row.seat_cap !== null && (plan.seat_cap === null || plan.seat_cap > row.seat_cap);
   const smaller = plan.seat_cap !== null && (row.seat_cap === null || plan.seat_cap < row.seat_cap);
   if (plan.id === row.plan_id || (!bigger && !smaller)) return { kind: "same_size" };
-  if (smaller && plan.seat_cap !== null) {
+  if (smaller && row.status === "trialing" && plan.seat_cap !== null) {
     const used = await seatsUsed(sql, input.gymId);
     if (used > plan.seat_cap) return { kind: "too_many_members", seatsUsed: used, seatCap: plan.seat_cap };
   }
@@ -737,7 +745,8 @@ const CHANGE_STATES: readonly PlanChangeState[] = ["pending", "done", "failed"];
 
 /** Record a size change before Paddle is asked, under the gym's lock: one pending change a gym
  *  (and a unique index behind it), and the same Idempotency-Key answers from its row. A
- *  smaller size is written onto the plan here, so its limit holds for joins from this moment. */
+ *  smaller size on a paying plan is only written onto the plan here, for the worker to decide
+ *  when it is due. */
 export async function beginPlanChange(
   sql: Sql,
   input: { gymId: string; userId: string; planCode: string; idempotencyKey: string; now: Date },
@@ -776,9 +785,12 @@ export async function beginPlanChange(
     const scheduled = target.direction === "smaller" && !target.trialing;
     if (scheduled && target.periodEnd === null) return { kind: "refused", outcome: { kind: "not_set_up" } };
     if (target.direction === "smaller") {
+      // A paid trial's holds for joins at once, as it is made at Paddle now; a paying plan's
+      // only when its switch begins.
       await tx`
         UPDATE subscriptions
-        SET pending_plan_id = ${target.toPlanId}, pending_from = ${scheduled ? target.periodEnd : input.now}
+        SET pending_plan_id = ${target.toPlanId}, pending_from = ${scheduled ? target.periodEnd : input.now},
+            pending_held_at = ${scheduled ? null : input.now}, pending_warned_at = NULL
         WHERE id = ${target.subscriptionRowId} AND owner_type = 'gym' AND owner_id = ${input.gymId}`;
     }
     const inserted = await tx<{ id: string }[]>`
@@ -814,14 +826,14 @@ export async function finishPlanChange(
 /** A smaller size that was not made at Paddle: the plan's own limit again. Only that size. */
 export async function dropPendingPlan(sql: SqlOrTx, input: { gymId: string; subscriptionRowId: string; planId: string }): Promise<void> {
   await sql`
-    UPDATE subscriptions SET pending_plan_id = NULL, pending_from = NULL
+    UPDATE subscriptions SET pending_plan_id = NULL, pending_from = NULL, pending_held_at = NULL, pending_warned_at = NULL
     WHERE id = ${input.subscriptionRowId} AND owner_type = 'gym' AND owner_id = ${input.gymId}
       AND pending_plan_id = ${input.planId}`;
 }
 
 export type KeepSizeOutcome = { kind: "kept" } | { kind: "nothing_waiting" } | { kind: "in_progress" } | { kind: "org_archived" } | { kind: "not_found" };
 
-/** "Keep my current size": the smaller size waiting is dropped, under the gym's lock, so it
+/** "Cancel this change": the smaller size waiting is dropped, under the gym's lock, so it
  *  cannot cross the worker making it at Paddle (which holds a pending change meanwhile). */
 export async function keepSize(sql: Sql, input: { gymId: string; userId: string }): Promise<KeepSizeOutcome> {
   return await sql.begin(async (tx) => {
@@ -833,7 +845,7 @@ export async function keepSize(sql: Sql, input: { gymId: string; userId: string 
     const pending = await tx`SELECT 1 FROM billing_plan_changes WHERE gym_id = ${input.gymId} AND state = 'pending'`;
     if (pending.length > 0) return { kind: "in_progress" };
     const kept = await tx<{ id: string; code: string }[]>`
-      UPDATE subscriptions s SET pending_plan_id = NULL, pending_from = NULL
+      UPDATE subscriptions s SET pending_plan_id = NULL, pending_from = NULL, pending_held_at = NULL, pending_warned_at = NULL
       FROM plans p
       WHERE p.id = s.pending_plan_id AND s.owner_type = 'gym' AND s.owner_id = ${input.gymId}
         AND s.status IN ('active','past_due')
@@ -876,26 +888,44 @@ export interface PendingClaim {
   pendingFrom: Date;
 }
 
-/** Take one plan's waiting smaller size to make it at Paddle: under the gym's lock, recorded
- *  as that gym's one pending change (so no press crosses it), and at most once per `bucket`
- *  (the Idempotency-Key carries it), so a refusing Paddle is asked every few minutes, not
- *  every run. Null when there is nothing to do now. */
+export type PendingClaimOutcome =
+  /** The members fit: the smaller size now holds for joins, and Paddle is to be asked. */
+  | { kind: "claimed"; claim: PendingClaim }
+  /** More members than the smaller size holds: it was dropped and the gym stays on its size. */
+  | { kind: "kept"; members: number; seatCap: number };
+
+/** Take one plan's waiting smaller size to decide it: under the gym's lock, the members are
+ *  counted; if they do not fit, the size is dropped and the count kept for the Plan card; if
+ *  they do, the smaller limit holds for joins from now and a pending change is recorded (so
+ *  no press crosses it). At most once per `bucket` (the Idempotency-Key carries it), so a
+ *  refusing Paddle is asked every few minutes, not every run. Null when there is nothing to
+ *  do now. */
 export async function claimPendingPlan(
   sql: Sql,
   input: { gymId: string; subscriptionRowId: string; now: Date; bucket: number },
-): Promise<PendingClaim | null> {
+): Promise<PendingClaimOutcome | null> {
   return await sql.begin(async (tx) => {
     await lockOrgRow(tx, input.gymId); // subscription-writer lock
     const rows = await tx<
-      { status: string; provider_ref: string; plan_id: string; pending_plan_id: string; pending_from: Date; code: string; paddle_price_id: string | null }[]
+      {
+        status: string;
+        provider_ref: string;
+        plan_id: string;
+        pending_plan_id: string;
+        pending_from: Date;
+        code: string;
+        paddle_price_id: string | null;
+        seat_cap: number | null;
+      }[]
     >`
-      SELECT s.status, s.provider_ref, s.plan_id, s.pending_plan_id, s.pending_from, p.code, p.paddle_price_id
+      SELECT s.status, s.provider_ref, s.plan_id, s.pending_plan_id, s.pending_from,
+             p.code, p.paddle_price_id, p.seat_cap
       FROM subscriptions s JOIN plans p ON p.id = s.pending_plan_id
       WHERE s.id = ${input.subscriptionRowId} AND s.owner_type = 'gym' AND s.owner_id = ${input.gymId}
         AND s.provider = 'paddle' AND s.provider_ref IS NOT NULL
         AND s.status IN ('trialing','active') AND s.cancel_at_period_end = false`;
     const row = rows[0];
-    if (row === undefined || row.paddle_price_id === null) return null;
+    if (row === undefined || row.paddle_price_id === null || row.seat_cap === null) return null;
     // A change cut off mid-way would otherwise hold this gym until somebody pressed again.
     await tx`
       UPDATE billing_plan_changes SET state = 'failed', failure = 'interrupted', updated_at = now()
@@ -904,24 +934,160 @@ export async function claimPendingPlan(
     const pending = await tx`SELECT 1 FROM billing_plan_changes WHERE gym_id = ${input.gymId} AND state = 'pending'`;
     if (pending.length > 0) return null;
     const key = `pending:${row.pending_from.toISOString()}:${String(input.bucket)}`;
+    const tried = await tx`SELECT 1 FROM billing_plan_changes WHERE gym_id = ${input.gymId} AND idempotency_key = ${key}`;
+    if (tried.length > 0) return null;
+
+    // A paid trial's was counted when it was chosen and has held since.
+    const members = row.status === "trialing" ? null : await seatsUsed(tx, input.gymId);
+    if (members !== null && members > row.seat_cap) {
+      await tx`
+        UPDATE subscriptions SET pending_plan_id = NULL, pending_from = NULL, pending_held_at = NULL, pending_warned_at = NULL
+        WHERE id = ${input.subscriptionRowId} AND owner_type = 'gym' AND owner_id = ${input.gymId}`;
+      const kept = await tx<{ id: string }[]>`
+        INSERT INTO billing_plan_changes (gym_id, subscription_id, from_plan_id, to_plan_id, created_by,
+                                          idempotency_key, provider, state, failure, members_counted, created_at)
+        VALUES (${input.gymId}, ${input.subscriptionRowId}, ${row.plan_id}, ${row.pending_plan_id}, NULL,
+                ${key}, 'paddle', 'failed', 'too_many_members', ${members}, ${input.now})
+        RETURNING id`;
+      await insertAudit(tx, {
+        actorUserId: null,
+        gymId: input.gymId,
+        action: "billing.size_change_not_made",
+        targetType: "billing_plan_change",
+        targetId: kept[0]?.id ?? input.subscriptionRowId,
+        meta: { plan: row.code, members: String(members) },
+      });
+      return { kind: "kept", members, seatCap: row.seat_cap };
+    }
+    await tx`
+      UPDATE subscriptions SET pending_held_at = COALESCE(pending_held_at, ${input.now})
+      WHERE id = ${input.subscriptionRowId} AND owner_type = 'gym' AND owner_id = ${input.gymId}`;
     const inserted = await tx<{ id: string }[]>`
       INSERT INTO billing_plan_changes (gym_id, subscription_id, from_plan_id, to_plan_id, created_by,
-                                        idempotency_key, provider, created_at)
+                                        idempotency_key, provider, members_counted, created_at)
       VALUES (${input.gymId}, ${input.subscriptionRowId}, ${row.plan_id}, ${row.pending_plan_id}, NULL,
-              ${key}, 'paddle', ${input.now})
-      ON CONFLICT (gym_id, idempotency_key) DO NOTHING
+              ${key}, 'paddle', ${members}, ${input.now})
       RETURNING id`;
     const changeId = inserted[0]?.id;
-    if (changeId === undefined) return null;
+    if (changeId === undefined) throw new Error("plan change insert returned no row");
     return {
-      changeId,
-      subscriptionRef: row.provider_ref,
-      trialing: row.status === "trialing",
-      fromPlanId: row.plan_id,
-      toPlanId: row.pending_plan_id,
-      planCode: row.code,
-      priceId: row.paddle_price_id,
-      pendingFrom: row.pending_from,
+      kind: "claimed",
+      claim: {
+        changeId,
+        subscriptionRef: row.provider_ref,
+        trialing: row.status === "trialing",
+        fromPlanId: row.plan_id,
+        toPlanId: row.pending_plan_id,
+        planCode: row.code,
+        priceId: row.paddle_price_id,
+        pendingFrom: row.pending_from,
+      },
     };
   });
+}
+
+export interface SizeWarningDue {
+  subscriptionRowId: string;
+  gymId: string;
+}
+
+/** Paying plans with a smaller size due within `within` whose billing staff have not been
+ *  told about too many members yet, and whose switch has not begun. */
+export async function dueSizeWarnings(sql: SqlOrTx, input: { now: Date; within: number; limit: number }): Promise<SizeWarningDue[]> {
+  const rows = await sql<{ id: string; owner_id: string }[]>`
+    SELECT id, owner_id FROM subscriptions
+    WHERE pending_plan_id IS NOT NULL AND pending_warned_at IS NULL AND pending_held_at IS NULL
+      AND pending_from <= ${new Date(input.now.getTime() + input.within)} AND pending_from > ${input.now}
+      AND owner_type = 'gym' AND provider = 'paddle' AND status = 'active' AND cancel_at_period_end = false
+    ORDER BY pending_from, id
+    LIMIT ${input.limit}`;
+  return rows.map((r) => ({ subscriptionRowId: r.id, gymId: r.owner_id }));
+}
+
+/** What a smaller-size email says, read with the gym in the WHERE: the gym, the size it is on
+ *  and the one waiting (or last not made), and the members now. */
+export interface SizeNoticeFacts {
+  gymName: string;
+  gymSlug: string;
+  orgType: string;
+  timezone: string;
+  members: number;
+  currentSeatCap: number | null;
+  currentPriceMinor: number;
+  currency: string;
+  targetSeatCap: number;
+  targetPriceMinor: number;
+  /** When the smaller size was due (a warning), or null (a size kept). */
+  pendingFrom: Date | null;
+}
+
+export async function sizeNoticeFacts(
+  sql: SqlOrTx,
+  input: { gymId: string; subscriptionRowId: string; targetPlan: "pending" | "last_kept" },
+): Promise<SizeNoticeFacts | null> {
+  const rows = await sql<
+    {
+      name: string;
+      slug: string;
+      org_type: string;
+      timezone: string;
+      seat_cap: number | null;
+      price_minor: number;
+      currency: string;
+      target_seat_cap: number | null;
+      target_price_minor: number | null;
+      pending_from: Date | null;
+    }[]
+  >`
+    SELECT g.name, g.slug, g.org_type, g.timezone, p.seat_cap, p.price_minor, p.currency,
+           tp.seat_cap AS target_seat_cap, tp.price_minor AS target_price_minor, s.pending_from
+    FROM subscriptions s
+    JOIN gyms g ON g.id = s.owner_id
+    JOIN plans p ON p.id = s.plan_id
+    LEFT JOIN plans tp ON tp.id = CASE
+      WHEN ${input.targetPlan} = 'pending' THEN s.pending_plan_id
+      ELSE (SELECT c.to_plan_id FROM billing_plan_changes c
+            WHERE c.gym_id = s.owner_id AND c.subscription_id = s.id
+            ORDER BY c.created_at DESC LIMIT 1)
+    END
+    WHERE s.id = ${input.subscriptionRowId} AND s.owner_type = 'gym' AND s.owner_id = ${input.gymId}`;
+  const row = rows[0];
+  if (row === undefined || row.target_seat_cap === null || row.target_price_minor === null) return null;
+  return {
+    gymName: row.name,
+    gymSlug: row.slug,
+    orgType: row.org_type,
+    timezone: row.timezone,
+    members: await seatsUsed(sql, input.gymId),
+    currentSeatCap: row.seat_cap,
+    currentPriceMinor: row.price_minor,
+    currency: row.currency,
+    targetSeatCap: row.target_seat_cap,
+    targetPriceMinor: row.target_price_minor,
+    pendingFrom: row.pending_from,
+  };
+}
+
+/** Mark the warning sent for this choice; false when another run marked it first. Marked
+ *  before it is sent, so two runs never send it twice. */
+export async function claimSizeWarning(sql: SqlOrTx, input: { gymId: string; subscriptionRowId: string; now: Date }): Promise<boolean> {
+  const rows = await sql`
+    UPDATE subscriptions SET pending_warned_at = ${input.now}
+    WHERE id = ${input.subscriptionRowId} AND owner_type = 'gym' AND owner_id = ${input.gymId}
+      AND pending_plan_id IS NOT NULL AND pending_warned_at IS NULL
+    RETURNING id`;
+  return rows.length > 0;
+}
+
+/** Who a gym's billing emails go to: its owner and the staff it gave the billing tick, each
+ *  once, only active accounts with an email. */
+export async function billingRecipients(sql: SqlOrTx, gymId: string): Promise<string[]> {
+  const rows = await sql<{ email: string }[]>`
+    SELECT DISTINCT u.email FROM users u
+    WHERE u.status = 'active' AND u.email IS NOT NULL
+      AND (u.id = (SELECT owner_user_id FROM gyms WHERE id = ${gymId})
+           OR u.id IN (SELECT st.user_id FROM gym_staff st
+                       WHERE st.gym_id = ${gymId} AND 'billing.manage' = ANY(st.privileges)))
+    ORDER BY u.email`;
+  return rows.map((r) => r.email);
 }

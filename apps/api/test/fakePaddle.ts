@@ -40,6 +40,8 @@ export class FakePaddle implements PaddleApi {
   loseChangeAnswer = false;
   /** Hold each change this long before answering, so two presses overlap. */
   changeDelayMs = 0;
+  /** Run once while the next change is being made, before it lands (something else at that instant). */
+  duringNextChange: (() => Promise<unknown>) | null = null;
   /** The trial checkouts asked for. */
   trialCheckouts: TrialCheckout[] = [];
   /** Make the next trial checkout's price carry another plan's code, or another length. */
@@ -198,6 +200,9 @@ export class FakePaddle implements PaddleApi {
   async changePrice(subscriptionId: string, priceId: string, mode: ProrationMode): Promise<PaddleResult<PaddleSubscription>> {
     this.changeCalls.push({ subscriptionId, priceId, mode });
     if (this.changeDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, this.changeDelayMs));
+    const during = this.duringNextChange;
+    this.duringNextChange = null;
+    if (during !== null) await during();
     if (this.down) return { kind: "unavailable", status: 503 };
     const sub = this.subs.get(subscriptionId);
     if (sub === undefined) return { kind: "not_found" };
