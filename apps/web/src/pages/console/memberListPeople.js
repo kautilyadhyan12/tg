@@ -219,10 +219,10 @@ export function handEditedWords(entry, fields, labels) {
 /** Merge duplicate's side-by-side view: every field of the two records in the same
  *  order, "—" where a record has none, and whether the two differ, so staff can tell
  *  one person on the list twice from two different people. The gym's custom fields
- *  follow, under their own headings. */
+ *  follow, under their own headings; a detail neither record holds is left out. */
 export function compareRecords(keep, remove, fields) {
   const day = (d) => (d === null ? null : dayWords(d));
-  const onList = (r) => (r.formerAt === null ? 'On your list' : `Past member · removed ${whenWords(r.formerAt)}`);
+  const onList = (r) => (r.formerAt === null ? 'On the list' : 'Past member');
   const extra = (r, key) => r.extra?.find((x) => x.key === key)?.value || null;
   const rows = [
     ['fullName', 'Name', (r) => r.fullName || null],
@@ -245,7 +245,7 @@ export function compareRecords(keep, remove, fields) {
       const r = read(remove) || null;
       return { key, label, keep: k ?? '—', remove: r ?? '—', differs: k !== r, empty: k === null && r === null };
     })
-    .filter((row) => !row.empty || !row.key.startsWith('extra:'));
+    .filter((row) => !row.empty);
 }
 
 /** What a write did, in a line for the top of the person's page. */

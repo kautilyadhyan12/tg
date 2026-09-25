@@ -260,9 +260,13 @@ describe('a person on the list', () => {
     expect([cell('keep', 'joinedOn'), cell('remove', 'joinedOn')]).toEqual(['1 September 2026', '3 March 2025']);
     expect([cell('keep', 'phone'), cell('remove', 'phone')]).toEqual(['—', '+447700900302']);
     expect([cell('keep', 'app'), cell('remove', 'app')]).toEqual(['No', 'Yes']);
-    expect(cell('keep', 'list')).toBe('Past member · removed 1 August 2026');
+    expect([cell('keep', 'list'), cell('remove', 'list')]).toEqual(['Past member', 'On the list']);
     expect([cell('keep', 'extra:locker'), cell('remove', 'extra:locker')]).toEqual(['—', '4']);
-    expect(within(compare).getAllByText('differs').length).toBeGreaterThanOrEqual(8);
+    const shaded = [...compare.querySelectorAll('tr[data-differs=true]')].map((r) => r.querySelector('th').textContent);
+    expect(shaded).toEqual(['Email', 'Phone', 'Member number', 'Date of birth', 'Join date', 'Status', 'On the list', 'Uses the app', 'Locker']);
+    expect(within(compare).getByText('9 of 10 details differ.')).toBeTruthy();
+    // Nothing either record holds is not a row.
+    expect(within(compare).queryByTestId('join-keep-endsOn')).toBeNull();
     // The name is the same, so it is not marked.
     expect(within(compare).getByTestId('join-keep-fullName').textContent).toBe('Liam Hughes');
   });

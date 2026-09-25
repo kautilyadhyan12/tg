@@ -171,55 +171,78 @@ function MoreMenu({ items, disabled }) {
   );
 }
 
-/** Merge duplicate: the two records side by side, every field in the same order, the
- *  ones that differ marked, so staff can see whether this is one person twice or two
- *  different people. Each value cell names its side and field for the tests. */
+/** Merge duplicate: the two records as a table, one row a detail, Keep and Remove as
+ *  its columns, as merge dialogs lay it out. A row whose values differ is shaded, and
+ *  the line above says how many differ, so staff can see at a glance whether this is
+ *  one person twice or two different people. Each value cell names its side and field
+ *  for the tests. */
 function CompareRecords({ keep, remove, fields }) {
   const rows = compareRecords(keep, remove, fields);
-  const head = (side) => (
-    <div
-      className="text-xs font-bold uppercase tracking-wide rounded-lg px-2 py-1.5 text-center"
-      style={side === 'keep' ? { background: C.greenBg, color: C.green } : { background: C.redBg, color: C.red }}
-    >
-      {side === 'keep' ? 'Keep' : 'Remove'}
-    </div>
-  );
+  const differ = rows.filter((row) => row.differs).length;
   return (
-    <div className="rounded-2xl p-3" style={{ background: C.card, border: `1px solid ${C.line}` }} data-testid="merge-compare">
-      <div className="grid grid-cols-2 gap-2 mb-1">
-        {head('keep')}
-        {head('remove')}
-      </div>
-      {rows.map((row) => (
-        <div key={row.key} className="py-2" style={{ borderTop: `1px solid ${C.line}` }}>
-          <div className="text-xs flex items-center gap-1.5" style={{ color: C.muted }}>
-            {row.label}
-            {row.differs ? (
-              <span className="rounded px-1.5 font-semibold" style={{ background: C.orangeBg, color: C.orange }}>
-                differs
-              </span>
-            ) : null}
-          </div>
-          <div className="grid grid-cols-2 gap-2 mt-0.5 text-sm">
-            {[
-              ['keep', row.keep],
-              ['remove', row.remove],
-            ].map(([side, value]) => (
-              <div
-                key={side}
-                data-testid={`join-${side}-${row.key}`}
-                className="break-words min-w-0"
-                style={{ color: value === '—' ? C.muted : row.differs ? C.orange : '#fff' }}
+    <div data-testid="merge-compare" className="flex flex-col gap-2">
+      <p className="text-sm" style={{ color: C.soft }}>
+        {differ === 0 ? 'Every detail is the same.' : `${String(differ)} of ${String(rows.length)} details differ.`}
+      </p>
+      <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${C.line}` }}>
+        <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
+          <colgroup>
+            <col style={{ width: '28%' }} />
+            <col style={{ width: '36%' }} />
+            <col style={{ width: '36%' }} />
+          </colgroup>
+          <thead>
+            <tr style={{ background: C.card }}>
+              <th />
+              <th className="text-left px-2 py-2 text-xs font-bold uppercase tracking-wide" style={{ color: C.green }}>
+                Keep
+              </th>
+              <th className="text-left px-2 py-2 text-xs font-bold uppercase tracking-wide" style={{ color: C.red }}>
+                Remove
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr
+                key={row.key}
+                data-differs={row.differs ? 'true' : 'false'}
+                style={{ borderTop: `1px solid ${C.line}`, background: row.differs ? 'rgba(255,138,31,0.07)' : 'transparent' }}
               >
-                {value}
-              </div>
+                <th scope="row" className="text-left font-normal px-1.5 sm:px-2 py-2 align-top text-xs sm:text-sm" style={{ color: C.muted }}>
+                  {row.label}
+                </th>
+                {[
+                  ['keep', row.keep],
+                  ['remove', row.remove],
+                ].map(([side, value]) => (
+                  <td
+                    key={side}
+                    data-testid={`join-${side}-${row.key}`}
+                    className="px-1.5 sm:px-2 py-2 align-top text-[13px] sm:text-sm"
+                    style={{ color: value === '—' ? C.muted : '#fff', overflowWrap: 'break-word' }}
+                  >
+                    {/* An address may wrap at its @, never in the middle of a word. */}
+                    {value.includes('@') ? (
+                      <>
+                        {value.slice(0, value.indexOf('@'))}
+                        <wbr />
+                        {value.slice(value.indexOf('@'))}
+                      </>
+                    ) : (
+                      value
+                    )}
+                  </td>
+                ))}
+              </tr>
             ))}
-          </div>
-        </div>
-      ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
+
 export default function MemberListPerson({ gymId, entryId, list, words, readOnly, onClose, onChanged }) {
   const titleId = useId();
   const dialogRef = useRef(null);
