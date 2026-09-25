@@ -1321,7 +1321,13 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       await workerAt("2026-10-31T21:30:00.000Z");
       expect(mailTo(await emailOf(a.userId))).toHaveLength(1);
       expect(changesAsked(a.subId)).toBe(0);
-      // Choosing again clears the note.
+      // Still said after the first payment on the size kept; gone after the one after it.
+      await paddleSays(a.subId, { current_billing_period: { starts_at: "2026-11-01T00:00:00Z", ends_at: "2026-12-01T00:00:00Z" }, next_billed_at: "2026-12-01T00:00:00Z" });
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ sizeKept: { seatCap: 1, members: 3 } });
+      await paddleSays(a.subId, { current_billing_period: { starts_at: "2026-12-01T00:00:00Z", ends_at: "2027-01-01T00:00:00Z" }, next_billed_at: "2027-01-01T00:00:00Z" });
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ sizeKept: null });
+      // And choosing again clears it at once.
+      await paddleSays(a.subId, { current_billing_period: { starts_at: "2026-10-01T00:00:00Z", ends_at: "2026-11-01T00:00:00Z" }, next_billed_at: "2026-11-01T00:00:00Z" });
       expect((await sizeChange(a.gymId, a.cookies, SMALL)).statusCode).toBe(200);
       expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ sizeKept: null, pendingSize: { seatCap: 1 } });
       expect(changesAsked(b.subId)).toBe(0);
@@ -1449,7 +1455,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       const sent = mailTo(await emailOf(a.userId));
       expect(sent).toHaveLength(1);
       expect(sent[0]?.text).toMatch(/has 2 members now\. If you do nothing, on 31 Oct Billing Gym \d+ will stay on up to 50 members at \$15 a month\./);
-      expect(sent[0]?.text).toContain("To move to 1, remove 1 members before 31 Oct,");
+      expect(sent[0]?.text).toContain("To move to 1, remove 1 member before 31 Oct,");
       expect(sent[0]?.text).toContain(`http://localhost:5173/console/`);
       expect(mailTo(await emailOf(fits.userId))).toEqual([]);
       expect(changesAsked(a.subId) + changesAsked(fits.subId)).toBe(0);
@@ -1626,6 +1632,108 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       expect(chargesFor(a.subId)).toEqual([]);
       expect(await planOf(a.subId)).toEqual({ code: MID, status: "trialing" });
       expect(await pendingOf(a.subId)).toEqual({ code: null, pending_from: null });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "round one H1/H2: a fitted size whose first attempt fails keeps the whole size meanwhile, names the size asked for, and is told when made",
+    async () => {
+      const a = await payingOn(BIG);
+      await addMember(a.gymId);
+      await addMember(a.gymId);
+      await addMember(a.gymId);
+      expect((await sizeChange(a.gymId, a.cookies, SMALL)).statusCode).toBe(200);
+      paddle.down = true;
+      try {
+        await workerAt(DECIDE_AT);
+      } finally {
+        paddle.down = false;
+      }
+      // The attempt failed: the gym keeps all 5,000, and the card still names the size asked for.
+      expect(await gymSeatCap(sql, a.gymId)).toBe(5000);
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({
+        seatCap: 5000,
+        planSeatCap: 5000,
+        priceLabel: "$20",
+        pendingSize: { seatCap: 1, priceLabel: "$10", ifTooMany: { planCode: MID, seatCap: 50 } },
+        sizeFitted: null,
+      });
+      expect(await planOf(a.subId)).toEqual({ code: BIG, status: "active" });
+
+      // Ten minutes on it is made, and the gym is told it moved to 50 instead of 1.
+      await workerAt("2026-10-31T21:11:00.000Z");
+      expect(await planOf(a.subId)).toEqual({ code: MID, status: "active" });
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({
+        seatCap: 50,
+        pendingSize: null,
+        sizeFitted: { askedSeatCap: 1, members: 3 },
+      });
+      const sent = mailTo(await emailOf(a.userId));
+      expect(sent.map((m) => m.subject)).toEqual([expect.stringMatching(/ moved to up to 50 members$/)]);
+      expect(chargesFor(a.subId)).toEqual([]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "round one H2: a refused attempt lets go of the smaller limit; joins go on up to the whole size until the next attempt",
+    async () => {
+      const a = await payingOn(MID);
+      expect((await sizeChange(a.gymId, a.cookies, SMALL)).statusCode).toBe(200);
+      paddle.declineChangeFor = a.subId;
+      await workerAt(DECIDE_AT);
+      expect(changesAsked(a.subId)).toBe(1);
+      expect(await gymSeatCap(sql, a.gymId)).toBe(50);
+      const first = await applyToJoin(a.gymId);
+      const second = await applyToJoin(a.gymId);
+      expect((await confirmJoin(a.gymId, first.applicationId, a.cookies)).statusCode).toBe(200);
+      expect((await confirmJoin(a.gymId, second.applicationId, a.cookies)).statusCode).toBe(200);
+      // The next attempt recounts: two members do not fit 1, and nothing between fits them, so it stays.
+      await workerAt("2026-10-31T21:11:00.000Z");
+      expect(await planOf(a.subId)).toEqual({ code: MID, status: "active" });
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ seatCap: 50, sizeKept: { seatCap: 1, members: 2 } });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "round one H3: a former billing manager (membership closed, staff row left) is sent nothing; the owner and a current one are",
+    async () => {
+      const a = await payingOn(MID);
+      const ghost = await makeUser();
+      const current = await makeUser();
+      await addStaff(a.gymId, ghost.userId, "manager", ["members.read", "billing.manage"]);
+      await sql`INSERT INTO gym_members (gym_id, user_id, removed_at) VALUES (${a.gymId}, ${ghost.userId}, now())`;
+      await addStaff(a.gymId, current.userId, "manager", ["members.read", "billing.manage"]);
+      expect((await cancelChange(a.gymId, ghost.cookies)).statusCode).toBe(404);
+      await addMember(a.gymId);
+      await addMember(a.gymId);
+      expect((await sizeChange(a.gymId, a.cookies, SMALL)).statusCode).toBe(200);
+      await workerAt("2026-10-29T01:00:00Z");
+      await workerAt(DECIDE_AT);
+      expect(mailTo(await emailOf(ghost.userId))).toEqual([]);
+      expect(mailTo(await emailOf(current.userId)).map((m) => m.subject)).toEqual([
+        expect.stringMatching(/: you have more members than your new size allows$/),
+        expect.stringMatching(/ stays on up to 50 members$/),
+      ]);
+      expect(mailTo(await emailOf(a.userId))).toHaveLength(2);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "round one L2: a smaller size is refused while a renewal Paddle has made is not yet written",
+    async () => {
+      const a = await payingOn(MID);
+      await sql`UPDATE subscriptions SET current_period_end = now() - interval '5 minutes' WHERE provider_ref = ${a.subId}`;
+      for (const res of [await sizeChange(a.gymId, a.cookies, SMALL), await sizePreview(a.gymId, a.cookies, SMALL)]) {
+        expect(res.statusCode).toBe(409);
+        expect(JSON.parse(res.body)).toMatchObject({ error: "renewing" });
+      }
+      expect(await pendingOf(a.subId)).toEqual({ code: null, pending_from: null });
+      // A bigger size is not affected: it is charged now, whatever the month's end.
+      expect((await sizePreview(a.gymId, a.cookies, BIG)).statusCode).toBe(200);
     },
     TEST_TIMEOUT_MS,
   );

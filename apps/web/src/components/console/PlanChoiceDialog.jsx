@@ -36,7 +36,8 @@ function doneText(changed, words, firstPaymentOn) {
   const pending = changed.pendingSize;
   if (pending != null) {
     const on = trialEndDateLabel(pending.from);
-    const keep = Number.isFinite(changed.seatCap) ? ` Until then you keep all ${changed.seatCap.toLocaleString()}.` : '';
+    const paidCap = Number.isFinite(changed.planSeatCap) ? changed.planSeatCap : changed.seatCap;
+    const keep = Number.isFinite(paidCap) ? ` Until then you keep all ${paidCap.toLocaleString()}.` : '';
     return `Done. You'll move to ${pending.seatCap.toLocaleString()} ${words.people} (${pending.priceLabel} a month)${on === null ? ' at your next payment' : ` on ${on}`}.${keep}`;
   }
   if (changed.status === 'trialing') {

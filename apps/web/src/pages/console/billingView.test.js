@@ -978,3 +978,30 @@ describe('the last days’ question (1c-iii)', () => {
     expect(sizeFittedText({ seatCap: 500, sizeFitted: null }, 'gym')).toBeNull();
   });
 });
+
+describe('round one (1c-iii): the paid size heads the card, and one member is one member', () => {
+  it('heads with the plan the gym pays for while a smaller limit holds for a moment', () => {
+    const held = { status: 'active', seatCap: 50, planSeatCap: 5000, priceLabel: '$20', currentPeriodEnd: '2026-11-01T00:00:00.000Z' };
+    expect(planHeadline(held, 'gym')).toBe(`Up to ${(5000).toLocaleString()} members · $20 a month`);
+    // The Change size list marks the plan it pays for as its own, not as a bigger size.
+    const rows = sizeRows([{ code: 'a', seatCap: 50 }, { code: 'b', seatCap: 5000 }], { orgType: 'gym', seatsUsed: 3, subscription: held });
+    expect(rows.map((r) => r.kind)).toEqual(['smaller', 'current']);
+  });
+
+  it('says "1 member", not "1 members"', () => {
+    const now = Date.parse('2026-10-23T12:00:00.000Z');
+    const sub = {
+      status: 'active',
+      subscribed: true,
+      seatCap: 50,
+      priceLabel: '$15',
+      currentPeriodEnd: '2026-10-25T06:00:00.000Z',
+      cancelAtPeriodEnd: false,
+      pendingSize: { seatCap: 1, priceLabel: '$10', from: '2026-10-25T06:00:00.000Z', decideAt: '2026-10-25T03:00:00.000Z', ifTooMany: null },
+    };
+    const d = sizeDecision({ orgType: 'gym', staffRole: 'owner', privileges: ['billing.manage'], seatsUsed: 2, consoleReadOnly: false, subscription: sub }, now);
+    expect(d?.remove).toBe('Remove 1 member');
+    expect(d?.question).toMatch(/^You asked to move to 1 member on /);
+    expect(pendingChangeText(sub, 'gym')).toMatch(/^Changing to 1 member \(\$10 a month\)/);
+  });
+});

@@ -1143,6 +1143,7 @@ export function toOrgSubscription(row: repo.GymSubscriptionRow, fallback: { code
     status: row.status,
     trialEndsAt: row.trialEndsAt?.toISOString() ?? null,
     seatCap: row.seatCap,
+    planSeatCap: row.planSeatCap,
     priceLabel: paid ? formatPriceMinor(row.priceMinor, row.currency) : null,
     currentPeriodEnd: paid ? (row.currentPeriodEnd?.toISOString() ?? null) : null,
     cancelAtPeriodEnd: paid && row.cancelAtPeriodEnd,

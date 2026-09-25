@@ -100,6 +100,8 @@ export const subscriptions = pgTable(
      *  (`pendingFrom`); the gym keeps its whole size until then. */
     pendingPlanId: uuid("pending_plan_id").references(() => plans.id),
     pendingFrom: timestamp("pending_from", { withTimezone: true }),
+    /** The size asked for, while a bigger one the members fit is made instead. */
+    pendingRequestedPlanId: uuid("pending_requested_plan_id").references(() => plans.id),
     /** When the smaller size's limit started to hold for joins: as its switch begins. */
     pendingHeldAt: timestamp("pending_held_at", { withTimezone: true }),
     /** When billing staff were emailed that the gym has too many members for it. */
@@ -136,7 +138,7 @@ export const subscriptions = pgTable(
     index("subscriptions_grace_idx").on(t.pastDueSince).where(sql`${t.status} = 'past_due'`),
     check(
       "subscriptions_pending_plan_check",
-      sql`(${t.pendingPlanId} IS NULL) = (${t.pendingFrom} IS NULL) AND (${t.pendingPlanId} IS NOT NULL OR (${t.pendingHeldAt} IS NULL AND ${t.pendingWarnedAt} IS NULL))`,
+      sql`(${t.pendingPlanId} IS NULL) = (${t.pendingFrom} IS NULL) AND (${t.pendingPlanId} IS NOT NULL OR (${t.pendingHeldAt} IS NULL AND ${t.pendingWarnedAt} IS NULL AND ${t.pendingRequestedPlanId} IS NULL))`,
     ),
     index("subscriptions_pending_plan_idx").on(t.pendingFrom).where(sql`${t.pendingPlanId} IS NOT NULL`),
   ],

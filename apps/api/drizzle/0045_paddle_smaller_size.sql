@@ -6,6 +6,9 @@
 --                        (pending_from). The gym keeps its whole size until then; the worker
 --                        counts its members shortly before and moves it only if they fit
 --                        (Kd, RULINGS 2026-09-25).
+-- subscriptions.pending_requested_plan_id
+--                        the size the gym asked for, while a bigger one its members fit is
+--                        being made instead (pending_plan_id); null otherwise.
 -- subscriptions.pending_held_at
 --                        when the smaller size's limit started to hold for joins: set as the
 --                        switch begins (and at once for a paid trial, which moves at once).
@@ -19,11 +22,13 @@
 
 ALTER TABLE subscriptions ADD COLUMN pending_plan_id uuid REFERENCES plans(id);--> statement-breakpoint
 ALTER TABLE subscriptions ADD COLUMN pending_from timestamptz;--> statement-breakpoint
+ALTER TABLE subscriptions ADD COLUMN pending_requested_plan_id uuid REFERENCES plans(id);--> statement-breakpoint
 ALTER TABLE subscriptions ADD COLUMN pending_held_at timestamptz;--> statement-breakpoint
 ALTER TABLE subscriptions ADD COLUMN pending_warned_at timestamptz;--> statement-breakpoint
 ALTER TABLE subscriptions ADD CONSTRAINT subscriptions_pending_plan_check
   CHECK ((pending_plan_id IS NULL) = (pending_from IS NULL)
-     AND (pending_plan_id IS NOT NULL OR (pending_held_at IS NULL AND pending_warned_at IS NULL)));--> statement-breakpoint
+     AND (pending_plan_id IS NOT NULL
+          OR (pending_held_at IS NULL AND pending_warned_at IS NULL AND pending_requested_plan_id IS NULL)));--> statement-breakpoint
 CREATE INDEX subscriptions_pending_plan_idx ON subscriptions (pending_from)
   WHERE pending_plan_id IS NOT NULL;--> statement-breakpoint
 

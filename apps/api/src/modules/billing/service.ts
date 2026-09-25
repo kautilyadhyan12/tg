@@ -305,6 +305,7 @@ const SIZE_REFUSALS: Record<string, { status: number; message: string }> = {
   plan_not_found: { status: 404, message: "That plan isn't on your price list." },
   same_size: { status: 409, message: "That's the size you're on." },
   too_many_members: { status: 409, message: "You have more members than that size allows. Remove some first, or keep your size." },
+  renewing: { status: 409, message: "Your plan is renewing right now. Try again in a few minutes." },
   payments_unavailable: { status: 503, message: UNAVAILABLE },
   change_declined: {
     status: 409,
@@ -331,6 +332,7 @@ function refusalCode(outcome: Exclude<repo.SizeTargetOutcome, { kind: "ok" }>): 
     case "payment_overdue":
     case "plan_ending":
     case "same_size":
+    case "renewing":
       return outcome.kind;
     case "no_such_plan":
       return "plan_not_found";
@@ -372,7 +374,7 @@ export async function previewSizeChange(
   await requirePrivilege(deps, input.gymId, input.userId, "billing.manage");
   const paddle = deps.paddle;
   if (paddle === null) throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
-  const found = await repo.sizeTarget(deps.sql, input);
+  const found = await repo.sizeTarget(deps.sql, { ...input, now: deps.now() });
   if (found.kind !== "ok") {
     if (found.kind === "not_set_up") deps.log.error({ event: "billing.price_not_set_up", plan: input.planCode }, "a plan has no Paddle price");
     throw refusalFor(found);
@@ -573,7 +575,7 @@ export async function applyPendingSizes(deps: BillingDeps): Promise<PendingSizes
       await emailSizeKept(deps, row.gymId, row.id, outcome.members);
       continue;
     }
-    if (await applyPendingSize(deps, paddle, row.gymId, outcome.claim)) run.applied += 1;
+    if (await applyPendingSize(deps, paddle, { gymId: row.gymId, subscriptionRowId: row.id }, outcome.claim)) run.applied += 1;
     else run.waiting += 1;
   }
   run.warned = await sendSizeWarnings(deps);
@@ -593,14 +595,14 @@ async function sendSizeWarnings(deps: BillingDeps): Promise<number> {
   if (mail === null) return 0;
   const now = deps.now();
   let sent = 0;
-  for (const due of await repo.dueSizeWarnings(deps.sql, { now, within: SIZE_WARNING_WITHIN_MS, limit: 500 })) {
+  for (const due of await repo.dueSizeWarnings(deps.sql, { now, within: SIZE_WARNING_WITHIN_MS, lead: PENDING_SIZE_LEAD_MS, limit: 500 })) {
     const facts = await repo.sizeNoticeFacts(deps.sql, { ...due, targetPlan: "pending" });
     if (facts === null || facts.pendingFrom === null || facts.members <= facts.targetSeatCap) continue;
     if (!(await repo.claimSizeWarning(deps.sql, { ...due, now }))) continue;
     const fallback = await repo.smallestFittingPlan(deps.sql, { gymId: due.gymId, members: facts.members });
     const links = consoleLinks(mail, facts.gymSlug);
     const decideAt = new Date(facts.pendingFrom.getTime() - PENDING_SIZE_LEAD_MS);
-    for (const to of await repo.billingRecipients(deps.sql, due.gymId)) {
+    for (const to of await billingRecipients(deps, due.gymId)) {
       await sendBillingEmail(
         deps,
         mail,
@@ -636,7 +638,7 @@ async function emailSizeKept(deps: BillingDeps, gymId: string, subscriptionRowId
   const facts = await repo.sizeNoticeFacts(deps.sql, { gymId, subscriptionRowId, targetPlan: "last_kept" });
   if (facts === null) return;
   const links = consoleLinks(mail, facts.gymSlug);
-  for (const to of await repo.billingRecipients(deps.sql, gymId)) {
+  for (const to of await billingRecipients(deps, gymId)) {
     await sendBillingEmail(
       deps,
       mail,
@@ -657,6 +659,16 @@ async function emailSizeKept(deps: BillingDeps, gymId: string, subscriptionRowId
   }
 }
 
+/** Who a gym's billing emails go to: its staff who may manage billing now, by the same check
+ *  as every billing route, so nobody the gym no longer counts as staff is told its figures. */
+async function billingRecipients(deps: BillingDeps, gymId: string): Promise<string[]> {
+  const out: string[] = [];
+  for (const staff of await repo.staffWithEmail(deps.sql, gymId)) {
+    if (await holdsPrivilege(deps, gymId, staff.userId, "billing.manage")) out.push(staff.email);
+  }
+  return out;
+}
+
 /** One email; a failure is logged (never the address) and never stops the worker. */
 async function sendBillingEmail(deps: BillingDeps, mail: BillingMail, message: Parameters<EmailTransport["send"]>[0], gymId: string, kind: string): Promise<void> {
   try {
@@ -667,9 +679,18 @@ async function sendBillingEmail(deps: BillingDeps, mail: BillingMail, message: P
   }
 }
 
-async function applyPendingSize(deps: BillingDeps, paddle: PaddleSettings, gymId: string, claim: repo.PendingClaim): Promise<boolean> {
+async function applyPendingSize(
+  deps: BillingDeps,
+  paddle: PaddleSettings,
+  gym: { gymId: string; subscriptionRowId: string },
+  claim: repo.PendingClaim,
+): Promise<boolean> {
+  const gymId = gym.gymId;
   const finish = async (failure: string | null): Promise<boolean> => {
     await repo.finishPlanChange(deps.sql, { changeId: claim.changeId, gymId, state: failure === null ? "done" : "failed", failure });
+    // Not made: the gym keeps its whole size until the next attempt. A lost answer keeps the
+    // hold, as Paddle may have made it; its webhook, or the next attempt's read, settles it.
+    if (failure !== null && failure !== "change_unconfirmed") await repo.releaseHold(deps.sql, gym);
     return failure === null;
   };
   const fetched = await paddle.api.getSubscription(claim.subscriptionRef);
@@ -724,7 +745,7 @@ async function emailSizeFitted(deps: BillingDeps, gymId: string, fitted: { asked
   const facts = await repo.gymEmailFacts(deps.sql, gymId);
   if (live === null || facts === null) return;
   const links = consoleLinks(mail, facts.gymSlug);
-  for (const to of await repo.billingRecipients(deps.sql, gymId)) {
+  for (const to of await billingRecipients(deps, gymId)) {
     await sendBillingEmail(
       deps,
       mail,

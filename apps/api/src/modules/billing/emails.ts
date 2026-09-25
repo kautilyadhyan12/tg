@@ -45,7 +45,12 @@ function message(to: string, subject: string, lines: string[], links: Record<num
   return { to, subject, text, html };
 }
 
-const size = (cap: number | null, people: string): string => (cap === null ? `no ${people} limit` : `up to ${cap.toLocaleString("en-US")} ${people}`);
+/** "1 member", "250 members", in the organisation's own words. */
+const countOf = (n: number, words: { person: string; people: string }): string =>
+  `${n.toLocaleString("en-US")} ${n === 1 ? words.person : words.people}`;
+
+const size = (cap: number | null, words: { person: string; people: string }): string =>
+  cap === null ? `no ${words.person} limit` : `up to ${countOf(cap, words)}`;
 
 export interface SizeWarningWords {
   to: string;
@@ -73,12 +78,12 @@ export function sizeWarningEmail(w: SizeWarningWords): EmailMessage {
   const remove = w.members - w.targetSeatCap;
   const otherwise =
     w.fallback === null
-      ? `${gym} will stay on ${size(w.currentSeatCap, words.people)} at ${w.currentPriceLabel} a month`
-      : `${gym} will move to ${size(w.fallback.seatCap, words.people)} (${w.fallback.priceLabel} a month), the smallest size that fits`;
+      ? `${gym} will stay on ${size(w.currentSeatCap, words)} at ${w.currentPriceLabel} a month`
+      : `${gym} will move to ${size(w.fallback.seatCap, words)} (${w.fallback.priceLabel} a month), the smallest size that fits`;
   const lines = [
-    `You chose to move ${gym} to ${size(w.targetSeatCap, words.people)} (${w.targetPriceLabel} a month) from ${w.due}.`,
-    `${gym} has ${w.members.toLocaleString("en-US")} ${words.people} now. If you do nothing, on ${w.due} ${otherwise}.`,
-    `To move to ${w.targetSeatCap.toLocaleString("en-US")}, remove ${remove.toLocaleString("en-US")} ${words.people} before ${w.decideBy}:`,
+    `You chose to move ${gym} to ${size(w.targetSeatCap, words)} (${w.targetPriceLabel} a month) from ${w.due}.`,
+    `${gym} has ${countOf(w.members, words)} now. If you do nothing, on ${w.due} ${otherwise}.`,
+    `To move to ${w.targetSeatCap.toLocaleString("en-US")}, remove ${countOf(remove, words)} before ${w.decideBy}:`,
     `Or choose another size, or stay on the one you have, from your plan:`,
   ];
   return message(w.to, `${gym}: you have more ${words.people} than your new size allows`, lines, { 2: w.membersLink, 3: w.planLink });
@@ -100,10 +105,10 @@ export function sizeFittedEmail(w: SizeFittedWords): EmailMessage {
   const words = orgWords(w.orgType);
   const gym = oneLine(w.gymName) || `Your ${words.it}`;
   const lines = [
-    `${gym} had ${w.members.toLocaleString("en-US")} ${words.people} when its smaller size was due, more than the ${w.askedSeatCap.toLocaleString("en-US")} it allows. So ${gym} moved to ${size(w.seatCap, words.people)} at ${w.priceLabel} a month, the smallest size that fits. Nobody was removed.`,
+    `${gym} had ${w.members.toLocaleString("en-US")} ${words.people} when its smaller size was due, more than the ${w.askedSeatCap.toLocaleString("en-US")} it allows. So ${gym} moved to ${size(w.seatCap, words)} at ${w.priceLabel} a month, the smallest size that fits. Nobody was removed.`,
     `You can change size again whenever you like:`,
   ];
-  return message(w.to, `${gym} moved to ${size(w.seatCap, words.people)}`, lines, { 1: w.planLink });
+  return message(w.to, `${gym} moved to ${size(w.seatCap, words)}`, lines, { 1: w.planLink });
 }
 
 export interface SizeKeptWords {
@@ -122,8 +127,8 @@ export function sizeKeptEmail(w: SizeKeptWords): EmailMessage {
   const words = orgWords(w.orgType);
   const gym = oneLine(w.gymName) || `Your ${words.it}`;
   const lines = [
-    `${gym} had ${w.members.toLocaleString("en-US")} ${words.people} when its smaller size was due, more than the ${w.targetSeatCap.toLocaleString("en-US")} it allows. So ${gym} stays on ${size(w.currentSeatCap, words.people)} at ${w.currentPriceLabel} a month. Nobody was removed.`,
+    `${gym} had ${w.members.toLocaleString("en-US")} ${words.people} when its smaller size was due, more than the ${w.targetSeatCap.toLocaleString("en-US")} it allows. So ${gym} stays on ${size(w.currentSeatCap, words)} at ${w.currentPriceLabel} a month. Nobody was removed.`,
     `You can choose a smaller size again whenever ${gym} has ${w.targetSeatCap.toLocaleString("en-US")} ${words.people} or fewer:`,
   ];
-  return message(w.to, `${gym} stays on ${size(w.currentSeatCap, words.people)}`, lines, { 1: w.planLink });
+  return message(w.to, `${gym} stays on ${size(w.currentSeatCap, words)}`, lines, { 1: w.planLink });
 }

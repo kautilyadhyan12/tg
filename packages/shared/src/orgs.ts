@@ -495,6 +495,10 @@ export const orgSubscriptionSchema = z.object({
   trialEndsAt: z.string().nullable(),
   /** Live members this plan admits, or null for a capless tier. */
   seatCap: z.number().int().positive().nullable(),
+  /** The size of the plan the gym is on and paying for: what the Plan card heads with. It is
+   *  `seatCap` except while a smaller limit holds (a paid trial's, or a smaller size being
+   *  made at Paddle this minute). */
+  planSeatCap: z.number().int().positive().nullable().default(null),
   /** What a PAID plan costs, formatted by the server ("$79"); null during a free trial. */
   priceLabel: z.string().min(1).nullable().default(null),
   /** When a paid plan's current month ends: it renews then, or stops if
