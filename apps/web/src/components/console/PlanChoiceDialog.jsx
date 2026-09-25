@@ -4,27 +4,49 @@ import { Loader2, X } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import { applyPaidPlan, refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
 import {
-  biggerPlans,
   chosenSeatCap,
   firstPaymentText,
   planPriceText,
   planSeatLabel,
   sizeChargeText,
+  sizeRows,
   trialEndDateLabel,
 } from '../../pages/console/billingView';
 import { PlanRow } from './PlanModal';
 import { usePaddleSubscribe } from './usePaddleSubscribe';
 
-// CHOOSING A PLAN FROM THE PLAN CARD (ROADMAP Stage 3 item 1c-ii; Kd, RULINGS 2026-09-25).
+// CHOOSING A PLAN FROM THE PLAN CARD (ROADMAP Stage 3 items 1c-ii and 1c-iii; Kd, RULINGS
+// 2026-09-25).
 //
 // `subscribe`: a gym in its own free trial pays now in Paddle's window; its card is
-// saved and the first payment is taken when the trial ends. `bigger`: a gym on a plan
-// paid through us picks a bigger size, sees what Paddle will charge, and confirms.
+// saved and the first payment is taken when the trial ends. `size`: a gym on a plan paid
+// through us sees every size, its own marked. A bigger one shows what Paddle will charge
+// now; a smaller one starts with the next payment, nothing charged or given back, and the
+// gym keeps its whole size until then; if it has more members than the smaller size holds,
+// it is told how many to remove and by when, or it stays on its size.
 //
 // Unlike the prompt a gym on no plan meets (`PlanModal`), this one closes: the gym
 // already has a plan, and nothing here is owed.
 
 const muted = { color: 'rgba(255,255,255,0.6)' };
+const warn = { color: '#FF8A1F' };
+
+/** What the dialog says once a size is changed or chosen. */
+function doneText(changed, words, firstPaymentOn) {
+  const pending = changed.pendingSize;
+  if (pending != null) {
+    const on = trialEndDateLabel(pending.from);
+    const paidCap = Number.isFinite(changed.planSeatCap) ? changed.planSeatCap : changed.seatCap;
+    const keep = Number.isFinite(paidCap) ? ` Until then you keep all ${paidCap.toLocaleString()}.` : '';
+    return `Done. You'll move to ${pending.seatCap.toLocaleString()} ${words.people} (${pending.priceLabel} a month)${on === null ? ' at your next payment' : ` on ${on}`}.${keep}`;
+  }
+  if (changed.status === 'trialing') {
+    return `Done. Up to ${chosenSeatCap(changed)} ${words.people} from ${firstPaymentOn ?? 'your first payment'}, when your first payment is taken.`;
+  }
+  return Number.isFinite(changed.seatCap)
+    ? `Done. Up to ${changed.seatCap.toLocaleString()} ${words.people} can now join.`
+    : `Done. Your plan now has no ${words.person} limit.`;
+}
 
 export default function PlanChoiceDialog({ org, mode, onClose }) {
   const titleId = useId();
@@ -32,7 +54,7 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
   const gymId = org?.id ?? null;
   const sub = org?.subscription ?? null;
   const [plans, setPlans] = useState({ loading: true, error: null, list: null, payOnline: 'unavailable' });
-  /** The bigger size picked, and Paddle's price for it. */
+  /** The size row picked, and its price. */
   const [picked, setPicked] = useState(null);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState(null);
@@ -67,12 +89,12 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
     if (!busy) onClose();
   };
 
-  const pick = async (plan) => {
+  const pick = async (row) => {
     setError(null);
-    setPicked({ plan, preview: null });
+    setPicked({ row, preview: null });
     try {
-      const res = await orgService.previewSizeChange(gymId, plan.code);
-      setPicked((now) => (now?.plan.code === plan.code ? { ...now, preview: res.data } : now));
+      const res = await orgService.previewSizeChange(gymId, row.plan.code);
+      setPicked((now) => (now?.row.plan.code === row.plan.code ? { ...now, preview: res.data } : now));
     } catch (err) {
       setPicked(null);
       setError(errorText(err, "We couldn't work out the price of that size. Please try again."));
@@ -86,7 +108,7 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
     try {
       // A key per press: a press after a refusal is a new request, and the server reads
       // Paddle before asking again, so it never charges twice.
-      const res = await orgService.changeSize(gymId, picked.plan.code, crypto.randomUUID());
+      const res = await orgService.changeSize(gymId, picked.row.plan.code, crypto.randomUUID());
       applyPaidPlan(gymId, res.data.subscription);
       refreshConsoleOrgsAfterChange();
       setChanged(res.data.subscription);
@@ -101,7 +123,9 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
   // In a trial, even a paid one, the limit stays the trial's until the first payment.
   const inTrial = sub?.status === 'trialing';
   const firstPaymentOn = trialEndDateLabel(sub?.currentPeriodEnd);
-  const bigger = mode === 'bigger' ? biggerPlans(plans.list, chosenSeatCap(sub)) : [];
+  const rows = mode === 'size' ? sizeRows(plans.list, org) : [];
+  // A smaller size chosen with too many members: the warning stays on the last screen too.
+  const doneWarning = changed?.pendingSize != null ? (picked?.row.warning ?? null) : null;
 
   return (
     <div
@@ -123,7 +147,7 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
       >
         <div className="flex items-start justify-between gap-4">
           <h2 id={titleId} className="text-xl font-bold" style={{ color: '#fff' }}>
-            {mode === 'bigger' ? 'Choose a bigger size' : `Choose your ${words.it}'s plan`}
+            {mode === 'size' ? 'Change size' : `Choose your ${words.it}'s plan`}
           </h2>
           <button
             type="button"
@@ -141,14 +165,13 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
         {changed !== null || paid !== null ? (
           <>
             <p className="text-sm mt-4" style={{ color: 'rgba(255,255,255,0.85)' }} data-testid="plan-choice-done">
-              {changed !== null
-                ? changed.status === 'trialing'
-                  ? `Done. Up to ${chosenSeatCap(changed)} ${words.people} from ${firstPaymentOn ?? 'your first payment'}, when your first payment is taken.`
-                  : Number.isFinite(changed.seatCap)
-                    ? `Done. Up to ${changed.seatCap} ${words.people} can now join.`
-                    : `Done. Your plan now has no ${words.person} limit.`
-                : `Your card is saved. ${firstPaymentText(paid) ?? ''}`.trim()}
+              {changed !== null ? doneText(changed, words, firstPaymentOn) : `Your card is saved. ${firstPaymentText(paid) ?? ''}`.trim()}
             </p>
+            {doneWarning !== null ? (
+              <p className="text-sm mt-2" style={warn}>
+                {doneWarning}
+              </p>
+            ) : null}
             <button
               type="button"
               onClick={onClose}
@@ -161,10 +184,10 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
         ) : (
           <>
             <p className="text-sm mt-3" style={muted}>
-              {mode === 'bigger'
+              {mode === 'size'
                 ? inTrial
-                  ? `The new size starts with your first payment${firstPaymentOn === null ? '' : ` on ${firstPaymentOn}`}. Until then your trial allows up to ${sub?.seatCap} ${words.people}.`
-                  : `More ${words.people} can join as soon as you confirm.`
+                  ? `Your trial allows up to ${sub?.seatCap} ${words.people} until your first payment${firstPaymentOn === null ? '' : ` on ${firstPaymentOn}`}; the size you choose starts then. Nothing is charged now.`
+                  : `A bigger size starts at once and you pay the difference for the rest of this month. A smaller one starts with your next payment${firstPaymentOn === null ? '' : ` on ${firstPaymentOn}`}; until then you keep your whole size.`
                 : `Your free trial carries on at up to ${sub?.seatCap} ${words.people}. Your card is saved now; the plan you choose and its first payment start when the trial ends${trialEnds === null ? '' : ` on ${trialEnds}`}.`}
             </p>
 
@@ -197,43 +220,52 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
               </ul>
             ) : null}
 
-            {/* ── A bigger size ─────────────────────────────────────────────── */}
-            {mode === 'bigger' && plans.list !== null && picked === null ? (
-              bigger.length > 0 ? (
-                <ul className="flex flex-col gap-2 mt-4" data-testid="bigger-list">
-                  {bigger.map((p) => (
-                    <li
-                      key={p.code}
-                      className="rounded-xl px-4 py-3 flex items-center justify-between gap-4"
-                      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
-                    >
-                      <div className="flex flex-col">
-                        <span className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                          {planSeatLabel(p.seatCap, org?.orgType)}
+            {/* ── Every size ────────────────────────────────────────────────── */}
+            {mode === 'size' && plans.list !== null && picked === null ? (
+              <ul className="flex flex-col gap-2 mt-4" data-testid="size-list">
+                {rows.map((row) => (
+                  <li
+                    key={row.plan.code}
+                    className="rounded-xl px-4 py-3 flex items-center justify-between gap-4"
+                    style={{
+                      background: row.kind === 'current' ? 'rgba(255,138,31,0.06)' : 'rgba(255,255,255,0.03)',
+                      border: row.kind === 'current' ? '1px solid rgba(255,138,31,0.35)' : '1px solid rgba(255,255,255,0.06)',
+                    }}
+                    data-kind={row.kind}
+                  >
+                    <div className="flex flex-col">
+                      <span className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                        {planSeatLabel(row.plan.seatCap, org?.orgType)}
+                      </span>
+                      <span className="font-semibold" style={{ color: '#fff' }}>
+                        {planPriceText(row.plan)}
+                      </span>
+                      <span className="text-xs mt-1" style={muted}>
+                        {row.note}
+                      </span>
+                      {row.warning !== null ? (
+                        <span className="text-sm mt-1" style={warn}>
+                          {row.warning}
                         </span>
-                        <span className="font-semibold" style={{ color: '#fff' }}>
-                          {planPriceText(p)}
-                        </span>
-                      </div>
+                      ) : null}
+                    </div>
+                    {row.kind === 'current' || row.kind === 'waiting' ? null : (
                       <button
                         type="button"
-                        onClick={() => void pick(p)}
-                        className="rounded-xl px-4 py-2.5 text-sm font-semibold"
+                        onClick={() => void pick(row)}
+                        disabled={row.disabled}
+                        className="rounded-xl px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
                         style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F', minHeight: 44 }}
                       >
                         Choose
                       </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm mt-4" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                  You&apos;re on the biggest size there is.
-                </p>
-              )
+                    )}
+                  </li>
+                ))}
+              </ul>
             ) : null}
 
-            {mode === 'bigger' && picked !== null ? (
+            {mode === 'size' && picked !== null ? (
               <div
                 className="rounded-xl px-4 py-4 mt-4 flex flex-col gap-3"
                 style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
@@ -241,10 +273,10 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
               >
                 <div className="flex items-baseline justify-between gap-4">
                   <span className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                    {planSeatLabel(picked.plan.seatCap, org?.orgType)}
+                    {planSeatLabel(picked.row.plan.seatCap, org?.orgType)}
                   </span>
                   <span className="font-semibold" style={{ color: '#fff' }}>
-                    {planPriceText(picked.plan)}
+                    {planPriceText(picked.row.plan)}
                   </span>
                 </div>
                 {picked.preview === null ? (
@@ -257,6 +289,11 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
                     {sizeChargeText(picked.preview)}
                   </p>
                 )}
+                {picked.row.warning !== null ? (
+                  <p className="text-sm" style={warn}>
+                    {picked.row.warning}
+                  </p>
+                ) : null}
                 <div className="flex gap-2">
                   <button
                     type="button"

@@ -1,4 +1,5 @@
-// A gym paying us (ROADMAP Stage 3 items 1a and 1c-ii). Mirrors `0041_paddle_billing.sql` and `0044_paddle_plan_changes.sql`.
+// A gym paying us (ROADMAP Stage 3 items 1a, 1c-ii and 1c-iii). Mirrors `0041_paddle_billing.sql`,
+// `0044_paddle_plan_changes.sql` and `0045_paddle_smaller_size.sql`.
 import { sql } from "drizzle-orm";
 import { check, index, integer, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAt } from "./common.js";
@@ -103,6 +104,10 @@ export const billingPlanChanges = pgTable(
     state: text("state").notNull().default("pending"),
     /** Why a failed change failed: the code the console was answered with. */
     failure: text("failure"),
+    /** The members counted when a smaller size waiting was decided (`0045`). */
+    membersCounted: integer("members_counted"),
+    /** The smaller size asked for, when a bigger one the members fit was made instead. */
+    requestedPlanId: uuid("requested_plan_id").references(() => plans.id),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -115,5 +120,7 @@ export const billingPlanChanges = pgTable(
     uniqueIndex("billing_plan_changes_one_pending_uq")
       .on(t.gymId)
       .where(sql`${t.state} = 'pending'`),
+    check("billing_plan_changes_members_counted_check", sql`${t.membersCounted} IS NULL OR ${t.membersCounted} >= 0`),
+    index("billing_plan_changes_subscription_idx").on(t.subscriptionId, t.createdAt),
   ],
 );

@@ -1,4 +1,4 @@
-// A gym pays through Paddle (ROADMAP Stage 3 items 1a, 1c-i and 1c-ii), against real Postgres with a
+// A gym pays through Paddle (ROADMAP Stage 3 items 1a, 1c-i, 1c-ii and 1c-iii), against real Postgres with a
 // fake Paddle in place of Paddle's API. DATABASE_URL-gated.
 //
 // THE WORST THING THIS JOB COULD DO: charge an owner twice for one gym, or let their
@@ -9,6 +9,7 @@ import { createHmac, randomBytes } from "node:crypto";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
+import type { EmailMessage } from "../src/email/resend.js";
 import { loadConfig } from "../src/config.js";
 import { processPaddleEvents } from "../src/modules/billing/events.js";
 import { gymSeatCap } from "../src/modules/orgs/repo.js";
@@ -62,6 +63,8 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
     return app;
   };
   const silent = { info: () => undefined, warn: () => undefined, error: () => undefined };
+  /** Every billing email the worker sent. */
+  const mails = { sent: [] as EmailMessage[] };
   /** One run of the worker's job; `aheadMs` runs it that far in the future, past a wait.
    *  At least a second: an event's `not_before` is Postgres's microsecond clock and this
    *  one counts milliseconds, so a run in the same millisecond as the webhook (CI is that
@@ -73,6 +76,15 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       paddle: { api: paddle, environment: "sandbox", clientToken: CLIENT_TOKEN },
       log: silent,
       now: () => new Date(Date.now() + aheadMs),
+      mail: {
+        transport: {
+          send: (message: EmailMessage) => {
+            mails.sent.push(message);
+            return Promise.resolve();
+          },
+        },
+        webOrigin: "http://localhost:5173",
+      },
     });
 
   let ip = 0;
@@ -86,11 +98,13 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
     await sql`DELETE FROM billing_checkouts WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM billing_plan_changes WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine})`;
+    await sql`DELETE FROM gym_join_applications WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_members WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_staff WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM audit_log WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gyms WHERE id IN (${mine})`;
     await sql`DELETE FROM users WHERE email LIKE 'billing-t-%@example.com'`;
+    await sql`DELETE FROM users WHERE display_name LIKE 'billing-n1-%'`;
   };
 
   beforeAll(async () => {
@@ -1186,14 +1200,12 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
   );
 
   it(
-    "refused: the same or a smaller size, a free trial with no card, an overdue plan, a plan set to end, an unknown plan, no key",
+    "refused: the same size, a free trial with no card, an overdue plan, a plan set to end, an unknown plan, no key",
     async () => {
       const a = await payingOn(MID);
-      for (const code of [MID, SMALL]) {
-        const res = await sizeChange(a.gymId, a.cookies, code);
-        expect(res.statusCode).toBe(409);
-        expect(JSON.parse(res.body)).toMatchObject({ error: "not_bigger" });
-      }
+      const res = await sizeChange(a.gymId, a.cookies, MID);
+      expect(res.statusCode).toBe(409);
+      expect(JSON.parse(res.body)).toMatchObject({ error: "same_size" });
       expect((await sizeChange(a.gymId, a.cookies, "org_nope")).statusCode).toBe(404);
       expect((await post(`/v1/orgs/${a.gymId}/billing/size`, { planCode: BIG }, a.cookies)).statusCode).toBe(400);
 
@@ -1209,6 +1221,563 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       await paddleSays(ending.subId, { scheduled_change: { action: "cancel", effective_at: "2026-11-01T00:00:00Z" } });
       expect(JSON.parse((await sizeChange(ending.gymId, ending.cookies, BIG)).body)).toMatchObject({ error: "plan_ending" });
       expect(changesAsked(a.subId) + changesAsked(overdue.subId) + changesAsked(ending.subId)).toBe(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // ── A smaller size (ROADMAP Stage 3 item 1c-iii) ──────────────────────────────
+  //
+  // THE WORST THING THIS HALF COULD DO: somebody who is not this gym's billing staff shrinks
+  // its plan, a gym ends up on a size smaller than the members it has, or a gym loses the size
+  // it paid for before its month ends (Kd, RULINGS 2026-09-25).
+
+  const cancelChange = (gymId: string, cookies: Cookies) =>
+    api().inject({ method: "DELETE", url: `/v1/orgs/${gymId}/billing/size/pending`, remoteAddress: nextIp(), cookies });
+  const seatsOf = async (gymId: string) =>
+    (await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM gym_members m
+      WHERE m.gym_id = ${gymId} AND m.removed_at IS NULL AND m.complimentary = false
+        AND NOT EXISTS (SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)`)[0]?.n ?? 0;
+  const addMember = async (gymId: string) => {
+    const person = await makeUser();
+    await sql`INSERT INTO gym_members (gym_id, user_id) VALUES (${gymId}, ${person.userId})`;
+  };
+  /** Somebody applies with the gym's code; the owner confirms them (the seat is taken there). */
+  const applyToJoin = async (gymId: string): Promise<{ applicationId: string }> => {
+    const person = await makeUser();
+    const code = (await sql<{ code: string }[]>`SELECT code FROM gym_codes WHERE gym_id = ${gymId} AND removed_at IS NULL LIMIT 1`)[0]?.code;
+    if (code === undefined) throw new Error("the gym has no code");
+    const res = await post("/v1/orgs/join", { code }, person.cookies);
+    expect(res.statusCode).toBe(200);
+    const id = (JSON.parse(res.body) as { application?: { id: string } }).application?.id;
+    if (id === undefined) throw new Error("apply returned no application");
+    return { applicationId: id };
+  };
+  const confirmJoin = (gymId: string, applicationId: string, cookies: Cookies) =>
+    post(`/v1/orgs/${gymId}/applications/${applicationId}/confirm`, {}, cookies);
+  const pendingOf = async (subId: string) =>
+    (await sql<{ code: string | null; pending_from: Date | null }[]>`
+      SELECT p.code, s.pending_from FROM subscriptions s LEFT JOIN plans p ON p.id = s.pending_plan_id
+      WHERE s.provider_ref = ${subId}`)[0];
+  /** Run the worker at this instant (the fake's paid month ends 2026-11-01). */
+  const workerAt = (at: string) => runWorker(Date.parse(at) - Date.now());
+  const PERIOD_END = "2026-11-01T00:00:00.000Z";
+  /** Three hours before it: when a smaller size is decided. */
+  const DECIDE_AT = "2026-10-31T21:00:00.000Z";
+  const mailTo = (to: string) => mails.sent.filter((m) => m.to === to);
+  const emailOf = async (userId: string) => (await sql<{ email: string }[]>`SELECT email FROM users WHERE id = ${userId}`)[0]?.email ?? "";
+
+  it(
+    "WORST THING: only this gym's billing staff choose or cancel a smaller size; the gym keeps its whole size until the date; too many members then keeps it, with nobody removed",
+    async () => {
+      const a = await payingOn(MID);
+      const b = await payingOn(MID);
+      const trainer = await makeUser();
+      const manager = await makeUser();
+      const billing = await makeUser();
+      const member = await makeUser();
+      await addStaff(a.gymId, trainer.userId, "trainer", ["members.read", "codes.invite", "attendance.read"]);
+      await addStaff(a.gymId, manager.userId, "manager", ["members.read", "codes.invite", "members.confirm", "schedule.manage"]);
+      await addStaff(a.gymId, billing.userId, "manager", ["members.read", "billing.manage"]);
+      await sql`INSERT INTO gym_members (gym_id, user_id) VALUES (${a.gymId}, ${member.userId})`;
+
+      // Another gym's owner, a member, a trainer and a manager without the tick: refused, nothing written.
+      for (const [who, status] of [
+        [b.cookies, 404],
+        [member.cookies, 404],
+        [trainer.cookies, 403],
+        [manager.cookies, 403],
+      ] as const) {
+        expect((await sizeChange(a.gymId, who, SMALL)).statusCode).toBe(status);
+        expect((await sizePreview(a.gymId, who, SMALL)).statusCode).toBe(status);
+        expect((await cancelChange(a.gymId, who)).statusCode).toBe(status);
+      }
+      expect(await pendingOf(a.subId)).toEqual({ code: null, pending_from: null });
+
+      // Two members and a size for one: it may be chosen; the gym keeps all 50 places meanwhile.
+      await addMember(a.gymId);
+      expect(await seatsOf(a.gymId)).toBe(2);
+      expect((await sizeChange(a.gymId, a.cookies, SMALL)).statusCode).toBe(200);
+      expect(await gymSeatCap(sql, a.gymId)).toBe(50);
+      const third = await applyToJoin(a.gymId);
+      expect((await confirmJoin(a.gymId, third.applicationId, a.cookies)).statusCode).toBe(200);
+      expect(await seatsOf(a.gymId)).toBe(3);
+
+      // Decided with three members: it stays on 50, nothing asked of Paddle, nobody removed.
+      await workerAt(DECIDE_AT);
+      expect(changesAsked(a.subId)).toBe(0);
+      expect(await planOf(a.subId)).toEqual({ code: MID, status: "active" });
+      expect(await pendingOf(a.subId)).toEqual({ code: null, pending_from: null });
+      expect(await seatsOf(a.gymId)).toBe(3);
+      expect(await gymSeatCap(sql, a.gymId)).toBe(50);
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ seatCap: 50, priceLabel: "$15", pendingSize: null, sizeKept: { seatCap: 1, members: 3 } });
+      // Told by email: the owner and the manager with the billing tick, once each; nobody else.
+      const ownerMail = mailTo(await emailOf(a.userId));
+      expect(ownerMail.map((m) => m.subject)).toEqual([expect.stringMatching(/ stays on up to 50 members$/)]);
+      expect(ownerMail[0]?.text).toContain("had 3 members when its smaller size was due, more than the 1 it allows");
+      expect(ownerMail[0]?.text).toContain("Nobody was removed.");
+      expect(mailTo(await emailOf(billing.userId))).toHaveLength(1);
+      for (const other of [trainer, manager, member]) expect(mailTo(await emailOf(other.userId))).toEqual([]);
+      // Another run: no second email, nothing more.
+      await workerAt("2026-10-31T21:30:00.000Z");
+      expect(mailTo(await emailOf(a.userId))).toHaveLength(1);
+      expect(changesAsked(a.subId)).toBe(0);
+      // Still said after the first payment on the size kept; gone after the one after it.
+      await paddleSays(a.subId, { current_billing_period: { starts_at: "2026-11-01T00:00:00Z", ends_at: "2026-12-01T00:00:00Z" }, next_billed_at: "2026-12-01T00:00:00Z" });
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ sizeKept: { seatCap: 1, members: 3 } });
+      await paddleSays(a.subId, { current_billing_period: { starts_at: "2026-12-01T00:00:00Z", ends_at: "2027-01-01T00:00:00Z" }, next_billed_at: "2027-01-01T00:00:00Z" });
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ sizeKept: null });
+      // And choosing again clears it at once.
+      await paddleSays(a.subId, { current_billing_period: { starts_at: "2026-10-01T00:00:00Z", ends_at: "2026-11-01T00:00:00Z" }, next_billed_at: "2026-11-01T00:00:00Z" });
+      expect((await sizeChange(a.gymId, a.cookies, SMALL)).statusCode).toBe(200);
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ sizeKept: null, pendingSize: { seatCap: 1 } });
+      expect(changesAsked(b.subId)).toBe(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "WORST THING: a join at the same instant as the size is decided: whichever comes first wins, and a gym never has more members than its limit",
+    async () => {
+      // The join lands while Paddle is making the change: the smaller limit already holds.
+      const c = await payingOn(MID);
+      await addMember(c.gymId);
+      expect((await sizeChange(c.gymId, c.cookies, SMALL)).statusCode).toBe(200);
+      const waiting = await applyToJoin(c.gymId);
+      const joined: { body: string | null } = { body: null };
+      paddle.duringNextChange = async () => {
+        joined.body = (await confirmJoin(c.gymId, waiting.applicationId, c.cookies)).body;
+      };
+      await workerAt(DECIDE_AT);
+      expect(JSON.parse(joined.body ?? "null")).toMatchObject({ error: "seat_cap_reached" });
+      expect(await planOf(c.subId)).toEqual({ code: SMALL, status: "active" });
+      expect(await seatsOf(c.gymId)).toBe(1);
+
+      // The join comes first: two members, so the smaller size is not made.
+      const d = await payingOn(MID);
+      await addMember(d.gymId);
+      expect((await sizeChange(d.gymId, d.cookies, SMALL)).statusCode).toBe(200);
+      const early = await applyToJoin(d.gymId);
+      expect((await confirmJoin(d.gymId, early.applicationId, d.cookies)).statusCode).toBe(200);
+      await workerAt(DECIDE_AT);
+      expect(await planOf(d.subId)).toEqual({ code: MID, status: "active" });
+      expect(changesAsked(d.subId)).toBe(0);
+
+      // At the same instant, several times: never more members than the limit.
+      for (let round = 0; round < 4; round++) {
+        const e = await payingOn(MID);
+        await addMember(e.gymId);
+        expect((await sizeChange(e.gymId, e.cookies, SMALL)).statusCode).toBe(200);
+        const at = await applyToJoin(e.gymId);
+        await Promise.all([workerAt(DECIDE_AT), confirmJoin(e.gymId, at.applicationId, e.cookies)]);
+        const cap = await gymSeatCap(sql, e.gymId);
+        expect(await seatsOf(e.gymId), `round ${String(round)}`).toBeLessThanOrEqual(cap ?? 0);
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+  it(
+    "a smaller size on a paying plan: nothing charged or asked of Paddle, the whole size kept, its price from the end of the month paid, and Cancel undoes it",
+    async () => {
+      const a = await payingOn(MID);
+      const preview = await sizePreview(a.gymId, a.cookies, SMALL);
+      expect(preview.statusCode).toBe(200);
+      expect(JSON.parse(preview.body)).toEqual({ planCode: SMALL, seatCap: 1, priceLabel: "$10", dueNow: null, nextPaymentAt: PERIOD_END });
+
+      const res = await sizeChange(a.gymId, a.cookies, SMALL, "smaller-1");
+      expect(res.statusCode).toBe(200);
+      const waiting = { seatCap: 1, priceLabel: "$10", from: PERIOD_END, decideAt: DECIDE_AT };
+      expect(JSON.parse(res.body)).toMatchObject({ subscription: { status: "active", priceLabel: "$15", seatCap: 50, nextSeatCap: null, pendingSize: waiting, sizeKept: null } });
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ seatCap: 50, pendingSize: waiting });
+      expect(await gymSeatCap(sql, a.gymId)).toBe(50);
+      expect(changesAsked(a.subId)).toBe(0);
+      expect(chargesFor(a.subId)).toEqual([]);
+      expect(await planOf(a.subId)).toEqual({ code: MID, status: "active" });
+
+      // The same press again answers the same; the size it is on is refused.
+      expect((await sizeChange(a.gymId, a.cookies, SMALL, "smaller-1")).statusCode).toBe(200);
+      expect(JSON.parse((await sizeChange(a.gymId, a.cookies, MID)).body)).toMatchObject({ error: "same_size" });
+      const scheduled = await sql`SELECT 1 FROM audit_log WHERE gym_id = ${a.gymId} AND action = 'billing.size_change_scheduled'`;
+      expect(scheduled).toHaveLength(1);
+
+      // Cancel this change: nothing waits, still nothing asked of Paddle; twice is fine.
+      for (let i = 0; i < 2; i++) {
+        const cancelled = await cancelChange(a.gymId, a.cookies);
+        expect(cancelled.statusCode).toBe(200);
+        expect(JSON.parse(cancelled.body)).toMatchObject({ subscription: { seatCap: 50, priceLabel: "$15", pendingSize: null } });
+      }
+      await workerAt(DECIDE_AT);
+      expect(changesAsked(a.subId)).toBe(0);
+      expect(await planOf(a.subId)).toEqual({ code: MID, status: "active" });
+      expect(mailTo(await emailOf(a.userId))).toEqual([]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "when the members fit, the worker makes the smaller size at Paddle hours before the month ends, billing and crediting nothing, once",
+    async () => {
+      const a = await payingOn(MID);
+      await addMember(a.gymId);
+      expect((await sizeChange(a.gymId, a.cookies, SMALL)).statusCode).toBe(200);
+      // Days before the end: nothing yet.
+      await workerAt("2026-10-20T00:00:00Z");
+      expect(changesAsked(a.subId)).toBe(0);
+      // At the decide time: one member fits the size for one; made with nothing billed now.
+      await workerAt(DECIDE_AT);
+      expect(paddle.changeCalls.filter((c) => c.subscriptionId === a.subId)).toEqual([{ subscriptionId: a.subId, priceId: SMALL_PRICE, mode: "do_not_bill" }]);
+      expect(chargesFor(a.subId)).toEqual([]);
+      expect(await planOf(a.subId)).toEqual({ code: SMALL, status: "active" });
+      expect(await pendingOf(a.subId)).toEqual({ code: null, pending_from: null });
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ seatCap: 1, priceLabel: "$10", pendingSize: null, sizeKept: null, currentPeriodEnd: PERIOD_END });
+      // Again, and again later: nothing more asked, nobody emailed.
+      await workerAt("2026-10-31T21:30:00Z");
+      await workerAt("2026-10-31T22:00:00Z");
+      expect(changesAsked(a.subId)).toBe(1);
+      expect(mailTo(await emailOf(a.userId))).toEqual([]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "three days before, billing staff are emailed once if the gym still has too many members; never when it fits",
+    async () => {
+      const a = await payingOn(MID);
+      await addMember(a.gymId);
+      await addMember(a.gymId);
+      expect((await sizeChange(a.gymId, a.cookies, SMALL)).statusCode).toBe(200);
+      const fits = await payingOn(MID);
+      expect((await sizeChange(fits.gymId, fits.cookies, SMALL)).statusCode).toBe(200);
+
+      await workerAt("2026-10-28T12:00:00Z");
+      expect(mailTo(await emailOf(a.userId))).toEqual([]);
+      await workerAt("2026-10-29T01:00:00Z");
+      await workerAt("2026-10-29T02:00:00Z");
+      const sent = mailTo(await emailOf(a.userId));
+      expect(sent).toHaveLength(1);
+      expect(sent[0]?.text).toMatch(/has 2 members now\. If you do nothing, on 31 Oct Billing Gym \d+ will stay on up to 50 members at \$15 a month\./);
+      expect(sent[0]?.text).toContain("To move to 1, remove 1 member before 31 Oct,");
+      expect(sent[0]?.text).toContain(`http://localhost:5173/console/`);
+      expect(mailTo(await emailOf(fits.userId))).toEqual([]);
+      expect(changesAsked(a.subId) + changesAsked(fits.subId)).toBe(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "too many members for the size asked for, and a smaller one fits them: the smallest that fits is made instead, and the gym is told",
+    async () => {
+      const a = await payingOn(BIG);
+      await addMember(a.gymId);
+      await addMember(a.gymId);
+      await addMember(a.gymId);
+      expect((await sizeChange(a.gymId, a.cookies, SMALL)).statusCode).toBe(200);
+      // Before the day, the card says where it will move if nothing is done.
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({
+        seatCap: 5000,
+        pendingSize: { seatCap: 1, ifTooMany: { planCode: MID, seatCap: 50, priceLabel: "$15" } },
+      });
+      await workerAt(DECIDE_AT);
+      expect(paddle.changeCalls.filter((c) => c.subscriptionId === a.subId)).toEqual([{ subscriptionId: a.subId, priceId: MID_PRICE, mode: "do_not_bill" }]);
+      expect(chargesFor(a.subId)).toEqual([]);
+      expect(await planOf(a.subId)).toEqual({ code: MID, status: "active" });
+      expect(await seatsOf(a.gymId)).toBe(3);
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({
+        seatCap: 50,
+        priceLabel: "$15",
+        pendingSize: null,
+        sizeKept: null,
+        sizeFitted: { askedSeatCap: 1, members: 3 },
+      });
+      const sent = mailTo(await emailOf(a.userId));
+      expect(sent.map((m) => m.subject)).toEqual([expect.stringMatching(/ moved to up to 50 members$/)]);
+      expect(sent[0]?.text).toContain("had 3 members when its smaller size was due, more than the 1 it allows");
+      const audit = await sql`SELECT 1 FROM audit_log WHERE gym_id = ${a.gymId} AND action = 'billing.size_change_fitted'`;
+      expect(audit).toHaveLength(1);
+      // Still said after the first payment at the new size; gone after the one after it.
+      await paddleSays(a.subId, { current_billing_period: { starts_at: "2026-11-01T00:00:00Z", ends_at: "2026-12-01T00:00:00Z" }, next_billed_at: "2026-12-01T00:00:00Z" });
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ sizeFitted: { askedSeatCap: 1, members: 3 } });
+      await paddleSays(a.subId, { current_billing_period: { starts_at: "2026-12-01T00:00:00Z", ends_at: "2027-01-01T00:00:00Z" }, next_billed_at: "2027-01-01T00:00:00Z" });
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ sizeFitted: null });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "too close to the charge the worker waits, and a month renewed at the old price is credited back by Paddle's proration",
+    async () => {
+      const a = await payingOn(MID);
+      expect((await sizeChange(a.gymId, a.cookies, SMALL)).statusCode).toBe(200);
+      // Twenty minutes before the charge Paddle takes no change: nothing is asked.
+      await workerAt("2026-10-31T23:40:00Z");
+      expect(changesAsked(a.subId)).toBe(0);
+      expect(await pendingOf(a.subId)).toMatchObject({ code: SMALL });
+
+      // Paddle renews at $15 for November.
+      await paddleSays(
+        a.subId,
+        { current_billing_period: { starts_at: "2026-11-01T00:00:00Z", ends_at: "2026-12-01T00:00:00Z" }, next_billed_at: "2026-12-01T00:00:00Z" },
+        Date.parse("2026-11-01T00:05:00Z") - Date.now(),
+      );
+      // The worker ran with that event: the smaller size is made with the rest of November
+      // credited (the fake: half the $5 difference back).
+      expect(paddle.changeCalls.filter((c) => c.subscriptionId === a.subId)).toEqual([
+        { subscriptionId: a.subId, priceId: SMALL_PRICE, mode: "prorated_immediately" },
+      ]);
+      expect(chargesFor(a.subId)).toEqual([{ subscriptionId: a.subId, amount: -250 }]);
+      expect(await planOf(a.subId)).toEqual({ code: SMALL, status: "active" });
+      expect(await pendingOf(a.subId)).toEqual({ code: null, pending_from: null });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a refusing Paddle is asked again later, not every run; Cancel waits while the worker is at Paddle",
+    async () => {
+      const a = await payingOn(MID);
+      expect((await sizeChange(a.gymId, a.cookies, SMALL)).statusCode).toBe(200);
+      paddle.declineChangeFor = a.subId;
+      await workerAt("2026-10-31T21:00:00Z");
+      await workerAt("2026-10-31T21:01:00Z");
+      expect(changesAsked(a.subId)).toBe(1);
+      expect(await pendingOf(a.subId)).toMatchObject({ code: SMALL });
+      // Ten minutes on it is asked again, and made.
+      await workerAt("2026-10-31T21:11:00Z");
+      expect(changesAsked(a.subId)).toBe(2);
+      expect(await planOf(a.subId)).toEqual({ code: SMALL, status: "active" });
+
+      // A change under way at Paddle: Cancel is told to wait, and drops nothing.
+      const c = await payingOn(MID);
+      expect((await sizeChange(c.gymId, c.cookies, SMALL)).statusCode).toBe(200);
+      const row = (await sql<{ id: string; plan_id: string; pending_plan_id: string }[]>`
+        SELECT id, plan_id, pending_plan_id FROM subscriptions WHERE provider_ref = ${c.subId}`)[0];
+      if (row === undefined) throw new Error("no paid plan");
+      await sql`
+        INSERT INTO billing_plan_changes (gym_id, subscription_id, from_plan_id, to_plan_id, idempotency_key, provider)
+        VALUES (${c.gymId}, ${row.id}, ${row.plan_id}, ${row.pending_plan_id}, 'worker-holds', 'paddle')`;
+      const cancelled = await cancelChange(c.gymId, c.cookies);
+      expect(cancelled.statusCode).toBe(409);
+      expect(JSON.parse(cancelled.body)).toMatchObject({ error: "change_in_progress" });
+      expect(await pendingOf(c.subId)).toMatchObject({ code: SMALL });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a bigger size while a smaller one waits is charged from the size paid for, and the smaller one is dropped",
+    async () => {
+      const a = await payingOn(MID);
+      expect((await sizeChange(a.gymId, a.cookies, SMALL)).statusCode).toBe(200);
+      const res = await sizeChange(a.gymId, a.cookies, BIG);
+      expect(res.statusCode).toBe(200);
+      // $15 → $20 for half a month: $2.50, the fake's sum from what Paddle still bills.
+      expect(chargesFor(a.subId)).toEqual([{ subscriptionId: a.subId, amount: 250 }]);
+      expect(JSON.parse(res.body)).toMatchObject({ subscription: { seatCap: 5000, priceLabel: "$20", pendingSize: null } });
+      expect(await pendingOf(a.subId)).toEqual({ code: null, pending_from: null });
+      await workerAt(DECIDE_AT);
+      expect(changesAsked(a.subId)).toBe(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a smaller size in the paid trial is made at once with nothing charged; too many members, or a refusal, leaves the limit as it was",
+    async () => {
+      const a = await payingInTrial(BIG);
+      const preview = JSON.parse((await sizePreview(a.gymId, a.cookies, MID)).body) as { dueNow: unknown; nextPaymentAt: string | null };
+      expect(preview).toMatchObject({ dueNow: null, nextPaymentAt: paddle.subs.get(a.subId)?.next_billed_at });
+      const res = await sizeChange(a.gymId, a.cookies, MID);
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body)).toMatchObject({ subscription: { status: "trialing", seatCap: 50, nextSeatCap: null, priceLabel: "$15", pendingSize: null } });
+      expect(paddle.changeCalls.filter((c) => c.subscriptionId === a.subId).at(-1)).toEqual({ subscriptionId: a.subId, priceId: MID_PRICE, mode: "do_not_bill" });
+      expect(chargesFor(a.subId)).toEqual([]);
+      expect(await pendingOf(a.subId)).toEqual({ code: null, pending_from: null });
+
+      // Two members and a size for one, in a trial where it would be made now: refused.
+      await addMember(a.gymId);
+      await addMember(a.gymId);
+      const tooMany = await sizeChange(a.gymId, a.cookies, SMALL);
+      expect(tooMany.statusCode).toBe(409);
+      expect(JSON.parse(tooMany.body)).toMatchObject({
+        error: "too_many_members",
+        message: "You have 2 members, and that size is for up to 1. Remove 1 first, or keep your size.",
+      });
+
+      const b = await payingInTrial(BIG);
+      paddle.declineNextChange = true;
+      expect(JSON.parse((await sizeChange(b.gymId, b.cookies, MID)).body)).toMatchObject({ error: "change_declined" });
+      expect(await pendingOf(b.subId)).toEqual({ code: null, pending_from: null });
+      expect(await gymSeatCap(sql, b.gymId)).toBe(200);
+      expect(await planOf(b.subId)).toEqual({ code: BIG, status: "trialing" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a paid trial's smaller size cut off mid-way is finished by the worker, not left holding the gym",
+    async () => {
+      const a = await payingInTrial(BIG);
+      const row = (await sql<{ id: string; plan_id: string }[]>`
+        SELECT id, plan_id FROM subscriptions WHERE provider_ref = ${a.subId}`)[0];
+      if (row === undefined) throw new Error("no paid plan");
+      // The press recorded the smaller size and its change, then the server stopped.
+      await sql`
+        UPDATE subscriptions SET pending_plan_id = (SELECT id FROM plans WHERE code = ${MID}),
+               pending_from = now() - interval '5 minutes', pending_held_at = now() - interval '5 minutes'
+        WHERE id = ${row.id}`;
+      await sql`
+        INSERT INTO billing_plan_changes (gym_id, subscription_id, from_plan_id, to_plan_id, idempotency_key, provider, created_at)
+        VALUES (${a.gymId}, ${row.id}, ${row.plan_id}, (SELECT id FROM plans WHERE code = ${MID}), 'cut-off', 'paddle', now() - interval '5 minutes')`;
+      await runWorker();
+      expect(paddle.changeCalls.filter((c) => c.subscriptionId === a.subId)).toEqual([{ subscriptionId: a.subId, priceId: MID_PRICE, mode: "do_not_bill" }]);
+      expect(chargesFor(a.subId)).toEqual([]);
+      expect(await planOf(a.subId)).toEqual({ code: MID, status: "trialing" });
+      expect(await pendingOf(a.subId)).toEqual({ code: null, pending_from: null });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "round one H1/H2: a fitted size whose first attempt fails keeps the whole size meanwhile, names the size asked for, and is told when made",
+    async () => {
+      const a = await payingOn(BIG);
+      await addMember(a.gymId);
+      await addMember(a.gymId);
+      await addMember(a.gymId);
+      expect((await sizeChange(a.gymId, a.cookies, SMALL)).statusCode).toBe(200);
+      paddle.down = true;
+      try {
+        await workerAt(DECIDE_AT);
+      } finally {
+        paddle.down = false;
+      }
+      // The attempt failed: the gym keeps all 5,000, and the card still names the size asked for.
+      expect(await gymSeatCap(sql, a.gymId)).toBe(5000);
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({
+        seatCap: 5000,
+        planSeatCap: 5000,
+        priceLabel: "$20",
+        pendingSize: { seatCap: 1, priceLabel: "$10", ifTooMany: { planCode: MID, seatCap: 50 } },
+        sizeFitted: null,
+      });
+      expect(await planOf(a.subId)).toEqual({ code: BIG, status: "active" });
+
+      // Ten minutes on it is made, and the gym is told it moved to 50 instead of 1.
+      await workerAt("2026-10-31T21:11:00.000Z");
+      expect(await planOf(a.subId)).toEqual({ code: MID, status: "active" });
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({
+        seatCap: 50,
+        pendingSize: null,
+        sizeFitted: { askedSeatCap: 1, members: 3 },
+      });
+      const sent = mailTo(await emailOf(a.userId));
+      expect(sent.map((m) => m.subject)).toEqual([expect.stringMatching(/ moved to up to 50 members$/)]);
+      expect(chargesFor(a.subId)).toEqual([]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "round one H2: a refused attempt lets go of the smaller limit; joins go on up to the whole size until the next attempt",
+    async () => {
+      const a = await payingOn(MID);
+      expect((await sizeChange(a.gymId, a.cookies, SMALL)).statusCode).toBe(200);
+      paddle.declineChangeFor = a.subId;
+      await workerAt(DECIDE_AT);
+      expect(changesAsked(a.subId)).toBe(1);
+      expect(await gymSeatCap(sql, a.gymId)).toBe(50);
+      const first = await applyToJoin(a.gymId);
+      const second = await applyToJoin(a.gymId);
+      expect((await confirmJoin(a.gymId, first.applicationId, a.cookies)).statusCode).toBe(200);
+      expect((await confirmJoin(a.gymId, second.applicationId, a.cookies)).statusCode).toBe(200);
+      // The next attempt recounts: two members do not fit 1, and nothing between fits them, so it stays.
+      await workerAt("2026-10-31T21:11:00.000Z");
+      expect(await planOf(a.subId)).toEqual({ code: MID, status: "active" });
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ seatCap: 50, sizeKept: { seatCap: 1, members: 2 } });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "round one H3: a former billing manager (membership closed, staff row left) is sent nothing; the owner and a current one are",
+    async () => {
+      const a = await payingOn(MID);
+      const ghost = await makeUser();
+      const current = await makeUser();
+      await addStaff(a.gymId, ghost.userId, "manager", ["members.read", "billing.manage"]);
+      await sql`INSERT INTO gym_members (gym_id, user_id, removed_at) VALUES (${a.gymId}, ${ghost.userId}, now())`;
+      await addStaff(a.gymId, current.userId, "manager", ["members.read", "billing.manage"]);
+      expect((await cancelChange(a.gymId, ghost.cookies)).statusCode).toBe(404);
+      await addMember(a.gymId);
+      await addMember(a.gymId);
+      expect((await sizeChange(a.gymId, a.cookies, SMALL)).statusCode).toBe(200);
+      await workerAt("2026-10-29T01:00:00Z");
+      await workerAt(DECIDE_AT);
+      expect(mailTo(await emailOf(ghost.userId))).toEqual([]);
+      expect(mailTo(await emailOf(current.userId)).map((m) => m.subject)).toEqual([
+        expect.stringMatching(/: you have more members than your new size allows$/),
+        expect.stringMatching(/ stays on up to 50 members$/),
+      ]);
+      expect(mailTo(await emailOf(a.userId))).toHaveLength(2);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "round one L2: a smaller size is refused while a renewal Paddle has made is not yet written",
+    async () => {
+      const a = await payingOn(MID);
+      await sql`UPDATE subscriptions SET current_period_end = now() - interval '5 minutes' WHERE provider_ref = ${a.subId}`;
+      for (const res of [await sizeChange(a.gymId, a.cookies, SMALL), await sizePreview(a.gymId, a.cookies, SMALL)]) {
+        expect(res.statusCode).toBe(409);
+        expect(JSON.parse(res.body)).toMatchObject({ error: "renewing" });
+      }
+      expect(await pendingOf(a.subId)).toEqual({ code: null, pending_from: null });
+      // A bigger size is not affected: it is charged now, whatever the month's end.
+      expect((await sizePreview(a.gymId, a.cookies, BIG)).statusCode).toBe(200);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "re-check N1: a paid trial's smaller size is counted again on every attempt, so members who joined after a failed one keep it from being made",
+    async () => {
+      const a = await payingInTrial(BIG);
+      const row = (await sql<{ id: string; plan_id: string }[]>`
+        SELECT id, plan_id FROM subscriptions WHERE provider_ref = ${a.subId}`)[0];
+      if (row === undefined) throw new Error("no paid plan");
+      // The press for 50 was cut off; its size holds for joins.
+      await sql`
+        UPDATE subscriptions SET pending_plan_id = (SELECT id FROM plans WHERE code = ${MID}),
+               pending_from = now() - interval '5 minutes', pending_held_at = now() - interval '5 minutes'
+        WHERE id = ${row.id}`;
+      await sql`
+        INSERT INTO billing_plan_changes (gym_id, subscription_id, from_plan_id, to_plan_id, idempotency_key, provider, created_at)
+        VALUES (${a.gymId}, ${row.id}, ${row.plan_id}, (SELECT id FROM plans WHERE code = ${MID}), 'cut-off-n1', 'paddle', now() - interval '5 minutes')`;
+      expect(await gymSeatCap(sql, a.gymId)).toBe(50);
+      // The worker's attempt fails at Paddle: the trial's 200 hold again.
+      paddle.down = true;
+      try {
+        await runWorker();
+      } finally {
+        paddle.down = false;
+      }
+      expect(await gymSeatCap(sql, a.gymId)).toBe(200);
+      // 51 people join meanwhile.
+      await sql`
+        WITH u AS (INSERT INTO users (display_name) SELECT 'billing-n1-' || n FROM generate_series(1, 51) n RETURNING id)
+        INSERT INTO gym_members (gym_id, user_id) SELECT ${a.gymId}, id FROM u`;
+      expect(await seatsOf(a.gymId)).toBe(51);
+      // The next attempt counts 51 against 50: the size is dropped, Paddle is not asked for it.
+      await runWorker(11 * 60 * 1000);
+      expect(await planOf(a.subId)).toEqual({ code: BIG, status: "trialing" });
+      expect(await pendingOf(a.subId)).toEqual({ code: null, pending_from: null });
+      expect(paddle.changeCalls.filter((c) => c.subscriptionId === a.subId && c.priceId === MID_PRICE)).toEqual([]);
+      expect(await seatsOf(a.gymId)).toBeLessThanOrEqual((await gymSeatCap(sql, a.gymId)) ?? 0);
+      // Told in a trial's words: nothing is charged until the first payment.
+      const told = mailTo(await emailOf(a.userId)).at(-1)?.text ?? "";
+      expect(told).toContain("had 51 members when its smaller size was due, more than the 50 it allows");
+      expect(told).toContain(", and $20 a month from its first payment. Nobody was removed.");
     },
     TEST_TIMEOUT_MS,
   );

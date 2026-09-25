@@ -127,7 +127,7 @@ describe("the plan card's way to Paddle's page", () => {
     openSpy.mockReturnValue(tab);
     renderOverview();
 
-    expect(await screen.findByText(/^Renews /)).toBeTruthy();
+    expect(await screen.findByText(/^Next payment /)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Manage payment' }));
     // The tab opens on the press itself, before the link is asked for.
     expect(openSpy).toHaveBeenCalledWith('', '_blank');

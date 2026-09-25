@@ -6,6 +6,7 @@ import {
   GYM_POSTAL_ADDRESS_MAX_CHARS,
   JOIN_CODE_LENGTH,
   ORG_TYPES_PHRASE,
+  SMALLER_SIZE_DECIDE_HOURS,
   currencyForCountry,
   normaliseJoinCode,
   orgWords,
@@ -439,6 +440,14 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
     rows: await repo.listOrgsForUser(tx, userId),
     former: await repo.listFormerOrgsForUser(tx, userId),
   }));
+  // Where a gym with too many members for the smaller size it chose would move instead: read
+  // only for such a gym, for its billing card.
+  const fallbacks = new Map<string, billingRepo.FittingPlan | null>();
+  for (const r of rows) {
+    const pending = r.subscription?.pending ?? null;
+    if (r.staffRole === null || pending === null || r.seatsUsed <= pending.seatCap) continue;
+    fallbacks.set(r.id, await billingRepo.smallestFittingPlan(deps.sql, { gymId: r.id, members: r.seatsUsed }));
+  }
   return myOrgsResponseSchema.parse({
     orgs: rows.map((r) => {
       // COMPUTED ONCE PER ROW because two fields below now need it, and calling
@@ -472,7 +481,7 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
       subscription:
         r.staffRole === null || r.subscription === null
           ? null
-          : toOrgSubscription(r.subscription),
+          : toOrgSubscription(r.subscription, fallbacks.get(r.id) ?? null),
       seatsUsed: r.staffRole === null ? null : r.seatsUsed,
       // WHETHER THIS GYM'S OWNER HAS ALREADY SPENT THEIR ONE FREE TRIAL — the
       // fact that decides which face the unskippable prompt shows (:22697).
@@ -1120,21 +1129,42 @@ export async function startOrgTrial(
   }
 }
 
-export function toOrgSubscription(row: repo.GymSubscriptionRow): OrgSubscription {
+/** `fallback`: for a smaller size waiting that the members do not fit, the smallest size that
+ *  holds them (`billingRepo.smallestFittingPlan`), or null when none does. */
+export function toOrgSubscription(row: repo.GymSubscriptionRow, fallback: { code: string; seatCap: number; priceMinor: number } | null = null): OrgSubscription {
   // A free trial has no price and no billing month; a paid plan shows both, and so does a
   // trial the gym has paid for (its month starts when the trial ends).
   const subscribed = row.provider === "paddle";
   const paid = row.status === "active" || row.status === "past_due" || (subscribed && row.status === "trialing");
+  // A smaller size waiting, and one that was not made, are a paying plan's: in a paid trial
+  // a smaller size is made at once.
+  const paying = row.status === "active" || row.status === "past_due";
   return {
     status: row.status,
     trialEndsAt: row.trialEndsAt?.toISOString() ?? null,
     seatCap: row.seatCap,
+    planSeatCap: row.planSeatCap,
     priceLabel: paid ? formatPriceMinor(row.priceMinor, row.currency) : null,
     currentPeriodEnd: paid ? (row.currentPeriodEnd?.toISOString() ?? null) : null,
     cancelAtPeriodEnd: paid && row.cancelAtPeriodEnd,
     subscribed,
     // The chosen size waits for the first payment: through the trial, and a failed charge.
-    nextSeatCap: subscribed && row.planSeatCap !== row.seatCap ? row.planSeatCap : null,
+    nextSeatCap: subscribed && row.trialSeatCap !== null && row.planSeatCap !== row.seatCap ? row.planSeatCap : null,
+    pendingSize:
+      paying && row.pending !== null
+        ? {
+            seatCap: row.pending.seatCap,
+            priceLabel: formatPriceMinor(row.pending.priceMinor, row.currency),
+            from: row.pending.from.toISOString(),
+            decideAt: new Date(row.pending.from.getTime() - SMALLER_SIZE_DECIDE_HOURS * 60 * 60 * 1000).toISOString(),
+            ifTooMany:
+              fallback === null
+                ? null
+                : { planCode: fallback.code, seatCap: fallback.seatCap, priceLabel: formatPriceMinor(fallback.priceMinor, row.currency) },
+          }
+        : null,
+    sizeKept: paying ? row.kept : null,
+    sizeFitted: paying ? row.fitted : null,
   };
 }
 

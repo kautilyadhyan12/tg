@@ -341,7 +341,7 @@ describe('the forced trial prompt', () => {
     expect(orgService.startTrial).toHaveBeenCalledWith(GYM_ID);
     // …and the screen behind it now states the plan the server just created.
     expect(screen.getByText('Free trial')).toBeTruthy();
-    expect(screen.getByText(/0 of 300 places used/)).toBeTruthy();
+    expect(screen.getByText(/0 of 300 members/)).toBeTruthy();
   });
 
   it('STAYS GONE when the background re-read never confirms it', async () => {
@@ -561,7 +561,7 @@ describe('the forced subscribe prompt', () => {
     expect(screen.getByText('$35 a month')).toBeTruthy();
     expect(screen.getByText('Up to 300 members')).toBeTruthy();
     expect(screen.getByText('$129 a month')).toBeTruthy();
-    expect(screen.getByText('Up to 2100 members')).toBeTruthy();
+    expect(screen.getByText(`Up to ${(2100).toLocaleString()} members`)).toBeTruthy();
 
     // No trial button — that owner's one trial is spent, and a button whose only
     // answer is a 409 is the brick wall the ruling exists to remove.
