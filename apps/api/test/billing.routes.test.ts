@@ -1487,8 +1487,10 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       expect(sent[0]?.text).toContain("had 3 members when its smaller size was due, more than the 1 it allows");
       const audit = await sql`SELECT 1 FROM audit_log WHERE gym_id = ${a.gymId} AND action = 'billing.size_change_fitted'`;
       expect(audit).toHaveLength(1);
-      // Choosing again clears the note.
-      expect((await sizeChange(a.gymId, a.cookies, SMALL)).statusCode).toBe(200);
+      // Still said after the first payment at the new size; gone after the one after it.
+      await paddleSays(a.subId, { current_billing_period: { starts_at: "2026-11-01T00:00:00Z", ends_at: "2026-12-01T00:00:00Z" }, next_billed_at: "2026-12-01T00:00:00Z" });
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ sizeFitted: { askedSeatCap: 1, members: 3 } });
+      await paddleSays(a.subId, { current_billing_period: { starts_at: "2026-12-01T00:00:00Z", ends_at: "2027-01-01T00:00:00Z" }, next_billed_at: "2027-01-01T00:00:00Z" });
       expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ sizeFitted: null });
     },
     TEST_TIMEOUT_MS,

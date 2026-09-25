@@ -630,15 +630,17 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
              p.seat_cap AS plan_seat_cap, su.trial_seat_cap, p.price_minor, p.currency,
              su.current_period_end, su.cancel_at_period_end, su.provider,
              np.seat_cap AS pending_seat_cap, np.price_minor AS pending_price_minor, su.pending_from,
-             CASE WHEN lc.failure = 'too_many_members' AND su.pending_plan_id IS NULL THEN lc.seat_cap END AS kept_seat_cap,
-             CASE WHEN lc.failure = 'too_many_members' AND su.pending_plan_id IS NULL THEN lc.members_counted END AS kept_members,
-             CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND su.pending_plan_id IS NULL THEN lc.asked_seat_cap END AS fitted_asked_seat_cap,
-             CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND su.pending_plan_id IS NULL THEN lc.members_counted END AS fitted_members
+             CASE WHEN lc.failure = 'too_many_members' AND su.pending_plan_id IS NULL AND lc.recent THEN lc.seat_cap END AS kept_seat_cap,
+             CASE WHEN lc.failure = 'too_many_members' AND su.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS kept_members,
+             CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND su.pending_plan_id IS NULL AND lc.recent THEN lc.asked_seat_cap END AS fitted_asked_seat_cap,
+             CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND su.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS fitted_members
       FROM subscriptions su JOIN plans p ON p.id = su.plan_id
       LEFT JOIN plans np ON np.id = su.pending_plan_id
       -- The last size change: a smaller size the members did not fit is said on the card.
       LEFT JOIN LATERAL (
-        SELECT c.state, c.failure, c.members_counted, kp.seat_cap, rp.seat_cap AS asked_seat_cap
+        SELECT c.state, c.failure, c.members_counted, kp.seat_cap, rp.seat_cap AS asked_seat_cap,
+               -- Said until the payment after the one it was decided for.
+               c.created_at > su.current_period_end - interval '32 days' AS recent
         FROM billing_plan_changes c JOIN plans kp ON kp.id = c.to_plan_id
         LEFT JOIN plans rp ON rp.id = c.requested_plan_id
         WHERE c.gym_id = su.owner_id AND c.subscription_id = su.id
@@ -1916,14 +1918,16 @@ export async function startGymTrial(
              p.seat_cap AS plan_seat_cap, s.trial_seat_cap, p.price_minor, p.currency,
              s.current_period_end, s.cancel_at_period_end, s.provider,
              np.seat_cap AS pending_seat_cap, np.price_minor AS pending_price_minor, s.pending_from,
-             CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL THEN lc.seat_cap END AS kept_seat_cap,
-             CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL THEN lc.members_counted END AS kept_members,
-             CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND s.pending_plan_id IS NULL THEN lc.asked_seat_cap END AS fitted_asked_seat_cap,
-             CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND s.pending_plan_id IS NULL THEN lc.members_counted END AS fitted_members
+             CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL AND lc.recent THEN lc.seat_cap END AS kept_seat_cap,
+             CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS kept_members,
+             CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND s.pending_plan_id IS NULL AND lc.recent THEN lc.asked_seat_cap END AS fitted_asked_seat_cap,
+             CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND s.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS fitted_members
       FROM subscriptions s JOIN plans p ON p.id = s.plan_id
       LEFT JOIN plans np ON np.id = s.pending_plan_id
       LEFT JOIN LATERAL (
-        SELECT c.state, c.failure, c.members_counted, kp.seat_cap, rp.seat_cap AS asked_seat_cap
+        SELECT c.state, c.failure, c.members_counted, kp.seat_cap, rp.seat_cap AS asked_seat_cap,
+               -- Said until the payment after the one it was decided for.
+               c.created_at > s.current_period_end - interval '32 days' AS recent
         FROM billing_plan_changes c JOIN plans kp ON kp.id = c.to_plan_id
         LEFT JOIN plans rp ON rp.id = c.requested_plan_id
         WHERE c.gym_id = s.owner_id AND c.subscription_id = s.id
@@ -2082,14 +2086,16 @@ export async function gymLiveSubscription(sql: SqlOrTx, gymId: string): Promise<
            p.seat_cap AS plan_seat_cap, s.trial_seat_cap, p.price_minor, p.currency,
            s.current_period_end, s.cancel_at_period_end, s.provider,
            np.seat_cap AS pending_seat_cap, np.price_minor AS pending_price_minor, s.pending_from,
-           CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL THEN lc.seat_cap END AS kept_seat_cap,
-           CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL THEN lc.members_counted END AS kept_members,
-           CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND s.pending_plan_id IS NULL THEN lc.asked_seat_cap END AS fitted_asked_seat_cap,
-           CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND s.pending_plan_id IS NULL THEN lc.members_counted END AS fitted_members
+           CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL AND lc.recent THEN lc.seat_cap END AS kept_seat_cap,
+           CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS kept_members,
+           CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND s.pending_plan_id IS NULL AND lc.recent THEN lc.asked_seat_cap END AS fitted_asked_seat_cap,
+           CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND s.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS fitted_members
     FROM subscriptions s JOIN plans p ON p.id = s.plan_id
     LEFT JOIN plans np ON np.id = s.pending_plan_id
     LEFT JOIN LATERAL (
-      SELECT c.state, c.failure, c.members_counted, kp.seat_cap, rp.seat_cap AS asked_seat_cap
+      SELECT c.state, c.failure, c.members_counted, kp.seat_cap, rp.seat_cap AS asked_seat_cap,
+             -- Said until the payment after the one it was decided for.
+             c.created_at > s.current_period_end - interval '32 days' AS recent
       FROM billing_plan_changes c JOIN plans kp ON kp.id = c.to_plan_id
       LEFT JOIN plans rp ON rp.id = c.requested_plan_id
       WHERE c.gym_id = s.owner_id AND c.subscription_id = s.id
