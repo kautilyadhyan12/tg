@@ -22,6 +22,11 @@ import {
   bannerFor,
   bannerIsDismissed,
   biggerPlans,
+  currentPlanSeatCap,
+  keepSizeLabel,
+  pendingSizeText,
+  smallerPlans,
+  tooManyText,
   canChooseBiggerSize,
   canMakeRoomNow,
   canManageBilling,
@@ -842,5 +847,41 @@ describe('the banner for a trial the gym has paid for', () => {
   it('points a full paying gym at a bigger size', () => {
     const full = gym({ subscription: { status: 'active', trialEndsAt: null, seatCap: 100, subscribed: true, priceLabel: '$79', currentPeriodEnd: inDays(20) }, seatsUsed: 95 });
     expect(bannerFor(full, NOW)?.text).toBe('95 of 100 places used. Choose a bigger size under Plan on the Overview.');
+  });
+});
+
+describe('a smaller size (1c-iii)', () => {
+  const plans = [{ seatCap: 200 }, { seatCap: 500 }, { seatCap: 1000 }, { seatCap: null }];
+  const waiting = { status: 'active', seatCap: 200, pendingSize: { seatCap: 200, priceLabel: '$79', from: '2026-11-01T12:00:00.000Z', currentSeatCap: 1000 } };
+
+  it('lists only capped plans smaller than the size paid for, leaving out the one waiting', () => {
+    expect(smallerPlans(plans, 1000).map((p) => p.seatCap)).toEqual([200, 500]);
+    expect(smallerPlans(plans, 1000, 200).map((p) => p.seatCap)).toEqual([500]);
+    expect(smallerPlans(plans, 200)).toEqual([]);
+    // Under a plan with no limit every capped plan is smaller.
+    expect(smallerPlans(plans, null).map((p) => p.seatCap)).toEqual([200, 500, 1000]);
+    expect(smallerPlans(null, 500)).toEqual([]);
+  });
+
+  it('the size paid for is the one a waiting smaller size replaces, else the chosen one', () => {
+    expect(currentPlanSeatCap(waiting)).toBe(1000);
+    expect(currentPlanSeatCap({ status: 'active', seatCap: 500, pendingSize: null })).toBe(500);
+    expect(currentPlanSeatCap({ status: 'trialing', seatCap: 200, nextSeatCap: 500 })).toBe(500);
+  });
+
+  it('says when a waiting size starts, its price, and that joins stop at it now; nothing when none waits', () => {
+    expect(pendingSizeText(waiting, 'gym')).toBe(
+      `From ${trialEndDateLabel('2026-11-01T12:00:00.000Z')}: up to 200 members, $79 a month. New members can join only up to 200 from now.`,
+    );
+    expect(pendingSizeText({ ...waiting, pendingSize: null }, 'gym')).toBeNull();
+    expect(keepSizeLabel(waiting, 'gym')).toBe('Keep up to 1000 members');
+    expect(keepSizeLabel({ ...waiting, pendingSize: { ...waiting.pendingSize, currentSeatCap: null } }, 'gym')).toBe('Keep my current size');
+  });
+
+  it('names how many to remove only when there are more than the size holds', () => {
+    expect(tooManyText(300, 200, 'gym')).toBe('You have 300 members. Remove 100 to choose this size.');
+    expect(tooManyText(200, 200, 'gym')).toBeNull();
+    expect(tooManyText(199, 200, 'gym')).toBeNull();
+    expect(tooManyText(undefined, 200, 'gym')).toBeNull();
   });
 });

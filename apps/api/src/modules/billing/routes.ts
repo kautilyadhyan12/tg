@@ -1,4 +1,4 @@
-// A gym paying us (ROADMAP Stage 3 items 1a, 1c-i and 1c-ii). Order per CLAUDE.md §4: authenticate →
+// A gym paying us (ROADMAP Stage 3 items 1a, 1c-i, 1c-ii and 1c-iii). Order per CLAUDE.md §4: authenticate →
 // rate limit → parse → service (which checks `billing.manage` on the gym) → repo.
 // Paddle's webhook: signature on the raw body, kept once by Paddle's event id, 200;
 // the worker asks Paddle for the subscription before anything changes.
@@ -104,8 +104,8 @@ export function registerBillingRoutes(
     },
   );
 
-  // A bigger size: each preview asks Paddle, so it is limited like the portal; a change is
-  // pressed once or twice.
+  // Another size: a bigger one's preview asks Paddle, so it is limited like the portal; a
+  // change is pressed once or twice.
   const sizePreviewLimit = createDualRateLimit({
     name: "billing_size_preview",
     max: 60,
@@ -153,6 +153,19 @@ export function registerBillingRoutes(
         idempotencyKey: key,
       });
       return reply.status(200).send(changed);
+    },
+  );
+
+  // "Keep my current size": drops a smaller size waiting. Undoing it again is idempotent, so
+  // it takes no key.
+  app.delete(
+    "/v1/orgs/:gymId/billing/size/pending",
+    { preHandler: [app.authenticate, sizeChangeLimit] },
+    async (req, reply) => {
+      const params = parseOr400(gymParams, req.params, req, reply);
+      if (params === null) return;
+      const kept = await service.keepSize(deps, { userId: requireUserId(req), gymId: params.gymId });
+      return reply.status(200).send(kept);
     },
   );
 

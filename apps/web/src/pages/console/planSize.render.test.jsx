@@ -1,6 +1,7 @@
-// Choosing a plan from the plan card (ROADMAP Stage 3 item 1c-ii): a gym in its free
-// trial pays now and is charged when the trial ends; a paying gym moves to a bigger size
-// after seeing what Paddle will charge. The worst thing on screen: a size changed that
+// Choosing a plan from the plan card (ROADMAP Stage 3 items 1c-ii and 1c-iii): a gym in its
+// free trial pays now and is charged when the trial ends; a paying gym moves to a bigger size
+// after seeing what Paddle will charge, or to a smaller one its members fit in, from its next
+// payment. The worst thing on screen: a size changed that
 // nobody confirmed, or one confirm sent as two changes.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
@@ -25,6 +26,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       openBillingPortal: vi.fn(),
       previewSizeChange: vi.fn(),
       changeSize: vi.fn(),
+      keepSize: vi.fn(),
     },
   };
 });
@@ -252,11 +254,99 @@ describe('a bigger size', () => {
     renderOverview();
     await screen.findByText('Iron House');
     expect(screen.queryByRole('button', { name: 'Choose a bigger size' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Choose a smaller size' })).toBeNull();
     cleanup();
     resetConsoleOrgs();
     orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: { ...paying, cancelAtPeriodEnd: true } }));
     renderOverview();
     await screen.findByRole('button', { name: 'Manage payment' });
     expect(screen.queryByRole('button', { name: 'Choose a bigger size' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Choose a smaller size' })).toBeNull();
+  });
+});
+
+describe('a smaller size', () => {
+  const on500 = { ...paying, seatCap: 500, priceLabel: '$129' };
+  const NEXT = trialEndDateLabel('2026-11-01T00:00:00.000Z');
+  const waiting = { ...on500, seatCap: 200, pendingSize: { seatCap: 200, priceLabel: '$79', from: '2026-11-01T00:00:00.000Z', currentSeatCap: 500 } };
+
+  it('lists only smaller sizes, says nothing is charged and when the new price starts, and changes nothing until Confirm — then once', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: on500 }));
+    orgService.previewSizeChange.mockResolvedValue({
+      data: { planCode: 'org_b1_us_m', seatCap: 200, priceLabel: '$79', dueNow: null, nextPaymentAt: '2026-11-01T00:00:00.000Z' },
+    });
+    orgService.changeSize.mockResolvedValue({ data: { subscription: waiting } });
+    renderOverview();
+    fireEvent.click(await screen.findByRole('button', { name: 'Choose a smaller size' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(new RegExp(`start with your next payment on ${NEXT}; nothing is charged or given back now\\. From the moment you confirm, new members can join only up to the new size\\.`))).toBeTruthy();
+    const list = await within(dialog).findByTestId('smaller-list');
+    expect(within(list).getByText('Up to 200 members')).toBeTruthy();
+    expect(within(list).queryByText('Up to 500 members')).toBeNull();
+    expect(within(list).queryByText('Up to 1000 members')).toBeNull();
+
+    fireEvent.click(within(list).getByRole('button', { name: 'Choose' }));
+    expect(await within(dialog).findByText(`Nothing to pay now. $79 a month from ${NEXT}.`)).toBeTruthy();
+    expect(orgService.changeSize).not.toHaveBeenCalled();
+    const confirm = within(dialog).getByRole('button', { name: 'Confirm' });
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+    expect(
+      await within(dialog).findByText(`Done. Up to 200 members from ${NEXT}, at $79 a month. New members can join only up to 200 from now.`),
+    ).toBeTruthy();
+    expect(orgService.changeSize).toHaveBeenCalledTimes(1);
+    expect(orgService.changeSize.mock.calls[0].slice(0, 2)).toEqual([GYM_ID, 'org_b1_us_m']);
+  });
+
+  it('will not choose a size smaller than the members the gym has, and says how many to remove', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, seatsUsed: 300, subscription: on500 }));
+    renderOverview();
+    fireEvent.click(await screen.findByRole('button', { name: 'Choose a smaller size' }));
+    const dialog = await screen.findByRole('dialog');
+    const list = await within(dialog).findByTestId('smaller-list');
+    expect(within(list).getByText('You have 300 members. Remove 100 to choose this size.')).toBeTruthy();
+    const choose = within(list).getByRole('button', { name: 'Choose' });
+    expect(choose.disabled).toBe(true);
+    fireEvent.click(choose);
+    expect(orgService.previewSizeChange).not.toHaveBeenCalled();
+  });
+
+  it('shows the size waiting on the card, and Keep undoes it once', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: waiting }));
+    let answer;
+    orgService.keepSize.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    renderOverview();
+    expect(
+      await screen.findByText(`From ${NEXT}: up to 200 members, $79 a month. New members can join only up to 200 from now.`),
+    ).toBeTruthy();
+    const keep = screen.getByRole('button', { name: 'Keep up to 500 members' });
+    fireEvent.click(keep);
+    fireEvent.click(keep);
+    await waitFor(() => expect(orgService.keepSize).toHaveBeenCalledTimes(1));
+    expect(orgService.keepSize).toHaveBeenCalledWith(GYM_ID);
+    // The card is then re-read, and the server no longer has a size waiting.
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: on500 }));
+    answer({ data: { subscription: on500 } });
+    await waitFor(() => expect(screen.queryByTestId('pending-size')).toBeNull());
+    expect(screen.queryByRole('button', { name: /Keep up to/ })).toBeNull();
+  });
+
+  it('while a smaller size waits, the smaller list leaves it out and the bigger list starts above the size paid for', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: { ...waiting, pendingSize: { ...waiting.pendingSize, currentSeatCap: 1000 } } }));
+    renderOverview();
+    fireEvent.click(await screen.findByRole('button', { name: 'Choose a bigger size' }));
+    let dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText("You're on the biggest size there is.")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose a smaller size' }));
+    dialog = await screen.findByRole('dialog');
+    const list = await within(dialog).findByTestId('smaller-list');
+    expect(within(list).getByText('Up to 500 members')).toBeTruthy();
+    expect(within(list).queryByText('Up to 200 members')).toBeNull();
   });
 });

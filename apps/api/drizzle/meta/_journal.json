@@ -309,6 +309,13 @@
       "when": 1788220800027,
       "tag": "0044_paddle_plan_changes",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1788220800028,
+      "tag": "0045_paddle_smaller_size",
+      "breakpoints": true
     }
   ]
 }

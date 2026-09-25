@@ -1123,6 +1123,9 @@ export function toOrgSubscription(row: repo.GymSubscriptionRow): OrgSubscription
   // trial the gym has paid for (its month starts when the trial ends).
   const subscribed = row.provider === "paddle";
   const paid = row.status === "active" || row.status === "past_due" || (subscribed && row.status === "trialing");
+  // The size chosen: the plan's, or a smaller one waiting (both capped when either is).
+  const pendingCap = row.pending?.seatCap ?? null;
+  const chosen = row.planSeatCap === null ? pendingCap : pendingCap === null ? row.planSeatCap : Math.min(row.planSeatCap, pendingCap);
   return {
     status: row.status,
     trialEndsAt: row.trialEndsAt?.toISOString() ?? null,
@@ -1132,7 +1135,17 @@ export function toOrgSubscription(row: repo.GymSubscriptionRow): OrgSubscription
     cancelAtPeriodEnd: paid && row.cancelAtPeriodEnd,
     subscribed,
     // The chosen size waits for the first payment: through the trial, and a failed charge.
-    nextSeatCap: subscribed && row.planSeatCap !== row.seatCap ? row.planSeatCap : null,
+    nextSeatCap: subscribed && chosen !== row.seatCap ? chosen : null,
+    // Shown only on a plan already paying: in a paid trial a smaller size applies at once.
+    pendingSize:
+      row.pending !== null && (row.status === "active" || row.status === "past_due")
+        ? {
+            seatCap: row.pending.seatCap,
+            priceLabel: formatPriceMinor(row.pending.priceMinor, row.currency),
+            from: row.pending.from.toISOString(),
+            currentSeatCap: row.planSeatCap,
+          }
+        : null,
   };
 }
 

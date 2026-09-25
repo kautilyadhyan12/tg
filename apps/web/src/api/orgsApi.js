@@ -195,8 +195,8 @@ export const orgService = {
   openBillingPortal: (gymId) =>
     readThrough(orgBillingPortalResponseSchema, 'your payment page', authApi.post(`/v1/orgs/${gymId}/billing/portal`, {})),
 
-  /** POST …/billing/size/preview — what a bigger size costs now and from when, as Paddle
-   *  works it out. Changes nothing. */
+  /** POST …/billing/size/preview — what another size costs now and from when: a bigger one
+   *  as Paddle works it out, a smaller one from the end of the month paid. Changes nothing. */
   previewSizeChange: (gymId, planCode) =>
     readThrough(
       orgPlanChangePreviewSchema,
@@ -204,14 +204,20 @@ export const orgService = {
       authApi.post(`/v1/orgs/${gymId}/billing/size/preview`, { planCode }),
     ),
 
-  /** POST …/billing/size — move the gym's paid plan to a bigger size. `key` is the
-   *  confirm's Idempotency-Key: the same key again never changes or charges twice. */
+  /** POST …/billing/size — move the gym's paid plan to another size (a smaller one waits for
+   *  the end of the month paid). `key` is the confirm's Idempotency-Key: the same key again
+   *  never changes or charges twice. */
   changeSize: (gymId, planCode, key) =>
     readThrough(
       orgPlanChangeResponseSchema,
       'your new size',
       authApi.post(`/v1/orgs/${gymId}/billing/size`, { planCode }, { headers: { 'Idempotency-Key': key } }),
     ),
+
+  /** DELETE …/billing/size/pending — keep the current size: the smaller size waiting is
+   *  dropped. Pressing it twice is harmless. */
+  keepSize: (gymId) =>
+    readThrough(orgPlanChangeResponseSchema, 'your size', authApi.delete(`/v1/orgs/${gymId}/billing/size/pending`)),
 
   /** GET /v1/orgs/:gymId/hours — when this gym is open (Kd :26624, :26684).
    *

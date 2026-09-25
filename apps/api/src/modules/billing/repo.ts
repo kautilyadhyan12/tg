@@ -1,5 +1,5 @@
 // A gym paying us: its checkouts, its paid subscription and its size changes (ROADMAP
-// Stage 3 items 1a, 1c-i and 1c-ii).
+// Stage 3 items 1a, 1c-i, 1c-ii and 1c-iii).
 // Every checkout is read with its gym in the WHERE; a Paddle subscription is placed on
 // a gym only through a checkout row our server wrote.
 import type { PaddleSubscription } from "@app/shared";
@@ -401,7 +401,15 @@ export async function applySnapshot(
             -- The grace counts from the first failed payment, not from each retry's.
             past_due_since = CASE WHEN ${decision.status} = 'past_due' THEN COALESCE(past_due_since, ${input.now}) ELSE NULL END,
             -- Paid again, or ended at Paddle: the grace's hold is over either way.
-            cancel_reason = CASE WHEN cancel_reason = ${GRACE_EXPIRED} THEN NULL ELSE cancel_reason END
+            cancel_reason = CASE WHEN cancel_reason = ${GRACE_EXPIRED} THEN NULL ELSE cancel_reason END,
+            -- A smaller size waits until Paddle's plan changes (to it, or to a size chosen
+            -- since), or the plan ends.
+            pending_plan_id = CASE WHEN plan_id IS DISTINCT FROM ${s.planId}::uuid
+                                     OR ${decision.status} NOT IN ('trialing','active','past_due')
+                                   THEN NULL ELSE pending_plan_id END,
+            pending_from = CASE WHEN plan_id IS DISTINCT FROM ${s.planId}::uuid
+                                  OR ${decision.status} NOT IN ('trialing','active','past_due')
+                                THEN NULL ELSE pending_from END
         WHERE id = ${existing.id}`;
       await audit(existing.id, `billing.${decision.event}`);
     }
@@ -595,13 +603,18 @@ export async function deferRefund(sql: SqlOrTx, id: string, notBefore: Date, cou
     WHERE id = ${id} AND state = 'owed'`;
 }
 
-// ── A bigger size (1c-ii) ─────────────────────────────────────────────────────
+// ── A size change: bigger (1c-ii) or smaller (1c-iii) ─────────────────────────
 
 export interface SizeTarget {
   subscriptionRowId: string;
   subscriptionRef: string;
   /** In the paid trial: nothing is charged now, the new price when the trial ends. */
   trialing: boolean;
+  /** Bigger: charged for the rest of the month at once. Smaller: never charged or credited;
+   *  on a plan already paying it waits for the end of the month paid (Kd, RULINGS 2026-09-25). */
+  direction: "bigger" | "smaller";
+  /** When the month paid ends (in a trial, when the first payment is taken). */
+  periodEnd: Date | null;
   fromPlanId: string;
   toPlanId: string;
   planCode: string;
@@ -618,12 +631,16 @@ export type SizeTargetOutcome =
   | { kind: "payment_overdue" }
   | { kind: "plan_ending"; endsAt: Date | null }
   | { kind: "no_such_plan" }
-  | { kind: "not_bigger" }
+  | { kind: "same_size" }
+  /** A smaller size than the members the gym already has. */
+  | { kind: "too_many_members"; seatsUsed: number; seatCap: number }
   | { kind: "not_set_up" };
 
-/** Which plan a size change would move this gym to, or why it cannot: only a bigger size of
- *  the gym's own price list, only on a plan paid through Paddle that is in good standing and
- *  not set to end. Read with the gym in every WHERE. */
+/** Which plan a size change would move this gym to, or why it cannot: another size of the
+ *  gym's own price list, only on a plan paid through Paddle that is in good standing and not
+ *  set to end, and a smaller one only when the gym's members fit in it. Read with the gym in
+ *  every WHERE; a caller about to act holds the gym's lock, so no member joins between the
+ *  count and the change. */
 export async function sizeTarget(sql: SqlOrTx, input: { gymId: string; planCode: string }): Promise<SizeTargetOutcome> {
   const live = await sql<
     {
@@ -664,7 +681,12 @@ export async function sizeTarget(sql: SqlOrTx, input: { gymId: string; planCode:
   if (plan === undefined) return { kind: "no_such_plan" };
   // Bigger means more members: a capless plan is bigger than any capped one.
   const bigger = row.seat_cap !== null && (plan.seat_cap === null || plan.seat_cap > row.seat_cap);
-  if (!bigger || plan.id === row.plan_id) return { kind: "not_bigger" };
+  const smaller = plan.seat_cap !== null && (row.seat_cap === null || plan.seat_cap < row.seat_cap);
+  if (plan.id === row.plan_id || (!bigger && !smaller)) return { kind: "same_size" };
+  if (smaller && plan.seat_cap !== null) {
+    const used = await seatsUsed(sql, input.gymId);
+    if (used > plan.seat_cap) return { kind: "too_many_members", seatsUsed: used, seatCap: plan.seat_cap };
+  }
   if (plan.paddle_price_id === null) return { kind: "not_set_up" };
   return {
     kind: "ok",
@@ -672,6 +694,8 @@ export async function sizeTarget(sql: SqlOrTx, input: { gymId: string; planCode:
       subscriptionRowId: row.id,
       subscriptionRef: row.provider_ref,
       trialing: row.status === "trialing",
+      direction: bigger ? "bigger" : "smaller",
+      periodEnd: row.current_period_end,
       fromPlanId: row.plan_id,
       toPlanId: plan.id,
       planCode: plan.code,
@@ -693,7 +717,11 @@ export interface PlanChangeRow {
 }
 
 export type BeginPlanChangeOutcome =
+  /** Recorded as pending: Paddle is to be asked now. */
   | { kind: "created"; changeId: string; target: SizeTarget }
+  /** A smaller size on a plan already paying: written onto the plan, for Paddle to bill from
+   *  the end of the month paid. Nothing more to ask now. */
+  | { kind: "scheduled" }
   | { kind: "replay"; change: PlanChangeRow }
   | { kind: "key_reused" }
   | { kind: "in_progress" }
@@ -708,7 +736,8 @@ export const PLAN_CHANGE_STALE_MS = 2 * 60 * 1000;
 const CHANGE_STATES: readonly PlanChangeState[] = ["pending", "done", "failed"];
 
 /** Record a size change before Paddle is asked, under the gym's lock: one pending change a gym
- *  (and a unique index behind it), and the same Idempotency-Key answers from its row. */
+ *  (and a unique index behind it), and the same Idempotency-Key answers from its row. A
+ *  smaller size is written onto the plan here, so its limit holds for joins from this moment. */
 export async function beginPlanChange(
   sql: Sql,
   input: { gymId: string; userId: string; planCode: string; idempotencyKey: string; now: Date },
@@ -742,23 +771,33 @@ export async function beginPlanChange(
     const found = await sizeTarget(tx, input);
     if (found.kind !== "ok") return { kind: "refused", outcome: found };
     const target = found.target;
+    // A smaller size on a plan already paying waits for the end of the month paid; one in a
+    // paid trial is made at Paddle now (nothing has been paid yet).
+    const scheduled = target.direction === "smaller" && !target.trialing;
+    if (scheduled && target.periodEnd === null) return { kind: "refused", outcome: { kind: "not_set_up" } };
+    if (target.direction === "smaller") {
+      await tx`
+        UPDATE subscriptions
+        SET pending_plan_id = ${target.toPlanId}, pending_from = ${scheduled ? target.periodEnd : input.now}
+        WHERE id = ${target.subscriptionRowId} AND owner_type = 'gym' AND owner_id = ${input.gymId}`;
+    }
     const inserted = await tx<{ id: string }[]>`
       INSERT INTO billing_plan_changes (gym_id, subscription_id, from_plan_id, to_plan_id, created_by,
-                                        idempotency_key, provider, created_at)
+                                        idempotency_key, provider, state, created_at)
       VALUES (${input.gymId}, ${target.subscriptionRowId}, ${target.fromPlanId}, ${target.toPlanId},
-              ${input.userId}, ${input.idempotencyKey}, 'paddle', ${input.now})
+              ${input.userId}, ${input.idempotencyKey}, 'paddle', ${scheduled ? "done" : "pending"}, ${input.now})
       RETURNING id`;
     const changeId = inserted[0]?.id;
     if (changeId === undefined) throw new Error("plan change insert returned no row");
     await insertAudit(tx, {
       actorUserId: input.userId,
       gymId: input.gymId,
-      action: "billing.size_change_started",
+      action: scheduled ? "billing.size_change_scheduled" : "billing.size_change_started",
       targetType: "billing_plan_change",
       targetId: changeId,
       meta: { plan: input.planCode, ...(target.trialing ? { during: "trial" } : {}) },
     });
-    return { kind: "created", changeId, target };
+    return scheduled ? { kind: "scheduled" } : { kind: "created", changeId, target };
   });
 }
 
@@ -770,4 +809,119 @@ export async function finishPlanChange(
   await sql`
     UPDATE billing_plan_changes SET state = ${input.state}, failure = ${input.failure}, updated_at = now()
     WHERE id = ${input.changeId} AND gym_id = ${input.gymId} AND state = 'pending'`;
+}
+
+/** A smaller size that was not made at Paddle: the plan's own limit again. Only that size. */
+export async function dropPendingPlan(sql: SqlOrTx, input: { gymId: string; subscriptionRowId: string; planId: string }): Promise<void> {
+  await sql`
+    UPDATE subscriptions SET pending_plan_id = NULL, pending_from = NULL
+    WHERE id = ${input.subscriptionRowId} AND owner_type = 'gym' AND owner_id = ${input.gymId}
+      AND pending_plan_id = ${input.planId}`;
+}
+
+export type KeepSizeOutcome = { kind: "kept" } | { kind: "nothing_waiting" } | { kind: "in_progress" } | { kind: "org_archived" } | { kind: "not_found" };
+
+/** "Keep my current size": the smaller size waiting is dropped, under the gym's lock, so it
+ *  cannot cross the worker making it at Paddle (which holds a pending change meanwhile). */
+export async function keepSize(sql: Sql, input: { gymId: string; userId: string }): Promise<KeepSizeOutcome> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId); // subscription-writer lock
+    const gyms = await tx<{ status: string }[]>`SELECT status FROM gyms WHERE id = ${input.gymId}`;
+    const gym = gyms[0];
+    if (gym === undefined) return { kind: "not_found" };
+    if (gym.status !== "active") return { kind: "org_archived" };
+    const pending = await tx`SELECT 1 FROM billing_plan_changes WHERE gym_id = ${input.gymId} AND state = 'pending'`;
+    if (pending.length > 0) return { kind: "in_progress" };
+    const kept = await tx<{ id: string; code: string }[]>`
+      UPDATE subscriptions s SET pending_plan_id = NULL, pending_from = NULL
+      FROM plans p
+      WHERE p.id = s.pending_plan_id AND s.owner_type = 'gym' AND s.owner_id = ${input.gymId}
+        AND s.status IN ('active','past_due')
+      RETURNING s.id, p.code`;
+    const row = kept[0];
+    if (row === undefined) return { kind: "nothing_waiting" };
+    await insertAudit(tx, {
+      actorUserId: input.userId,
+      gymId: input.gymId,
+      action: "billing.size_change_kept",
+      targetType: "subscription",
+      targetId: row.id,
+      meta: { dropped: row.code },
+    });
+    return { kind: "kept" };
+  });
+}
+
+/** Plans with a smaller size due at Paddle by `until`: a paid trial's at once, a paying plan's
+ *  shortly before the month paid ends (or after it, if that was missed). */
+export async function duePendingPlans(sql: SqlOrTx, input: { until: Date; limit: number }): Promise<{ id: string; gymId: string }[]> {
+  const rows = await sql<{ id: string; owner_id: string }[]>`
+    SELECT id, owner_id FROM subscriptions
+    WHERE pending_plan_id IS NOT NULL AND pending_from <= ${input.until}
+      AND owner_type = 'gym' AND provider = 'paddle' AND provider_ref IS NOT NULL
+      AND status IN ('trialing','active') AND cancel_at_period_end = false
+    ORDER BY pending_from, id
+    LIMIT ${input.limit}`;
+  return rows.map((r) => ({ id: r.id, gymId: r.owner_id }));
+}
+
+export interface PendingClaim {
+  changeId: string;
+  subscriptionRef: string;
+  trialing: boolean;
+  fromPlanId: string;
+  toPlanId: string;
+  planCode: string;
+  priceId: string;
+  pendingFrom: Date;
+}
+
+/** Take one plan's waiting smaller size to make it at Paddle: under the gym's lock, recorded
+ *  as that gym's one pending change (so no press crosses it), and at most once per `bucket`
+ *  (the Idempotency-Key carries it), so a refusing Paddle is asked every few minutes, not
+ *  every run. Null when there is nothing to do now. */
+export async function claimPendingPlan(
+  sql: Sql,
+  input: { gymId: string; subscriptionRowId: string; now: Date; bucket: number },
+): Promise<PendingClaim | null> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId); // subscription-writer lock
+    const rows = await tx<
+      { status: string; provider_ref: string; plan_id: string; pending_plan_id: string; pending_from: Date; code: string; paddle_price_id: string | null }[]
+    >`
+      SELECT s.status, s.provider_ref, s.plan_id, s.pending_plan_id, s.pending_from, p.code, p.paddle_price_id
+      FROM subscriptions s JOIN plans p ON p.id = s.pending_plan_id
+      WHERE s.id = ${input.subscriptionRowId} AND s.owner_type = 'gym' AND s.owner_id = ${input.gymId}
+        AND s.provider = 'paddle' AND s.provider_ref IS NOT NULL
+        AND s.status IN ('trialing','active') AND s.cancel_at_period_end = false`;
+    const row = rows[0];
+    if (row === undefined || row.paddle_price_id === null) return null;
+    // A change cut off mid-way would otherwise hold this gym until somebody pressed again.
+    await tx`
+      UPDATE billing_plan_changes SET state = 'failed', failure = 'interrupted', updated_at = now()
+      WHERE gym_id = ${input.gymId} AND state = 'pending'
+        AND created_at < ${new Date(input.now.getTime() - PLAN_CHANGE_STALE_MS)}`;
+    const pending = await tx`SELECT 1 FROM billing_plan_changes WHERE gym_id = ${input.gymId} AND state = 'pending'`;
+    if (pending.length > 0) return null;
+    const key = `pending:${row.pending_from.toISOString()}:${String(input.bucket)}`;
+    const inserted = await tx<{ id: string }[]>`
+      INSERT INTO billing_plan_changes (gym_id, subscription_id, from_plan_id, to_plan_id, created_by,
+                                        idempotency_key, provider, created_at)
+      VALUES (${input.gymId}, ${input.subscriptionRowId}, ${row.plan_id}, ${row.pending_plan_id}, NULL,
+              ${key}, 'paddle', ${input.now})
+      ON CONFLICT (gym_id, idempotency_key) DO NOTHING
+      RETURNING id`;
+    const changeId = inserted[0]?.id;
+    if (changeId === undefined) return null;
+    return {
+      changeId,
+      subscriptionRef: row.provider_ref,
+      trialing: row.status === "trialing",
+      fromPlanId: row.plan_id,
+      toPlanId: row.pending_plan_id,
+      planCode: row.code,
+      priceId: row.paddle_price_id,
+      pendingFrom: row.pending_from,
+    };
+  });
 }

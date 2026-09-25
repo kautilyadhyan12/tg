@@ -509,6 +509,20 @@ export const orgSubscriptionSchema = z.object({
    *  is taken, a failed first charge included; this is the chosen plan's, from then. Null
    *  otherwise. */
   nextSeatCap: z.number().int().positive().nullable().default(null),
+  /** A smaller size the gym chose (1c-iii; Kd, RULINGS 2026-09-25): new members join only up
+   *  to its limit already (`seatCap`), and its price is charged from `from`, the end of the
+   *  month already paid. Null when none is waiting. */
+  pendingSize: z
+    .object({
+      seatCap: z.number().int().positive().nullable(),
+      priceLabel: z.string().min(1),
+      from: z.string(),
+      /** The size paid for until then, which "Keep my current size" stays on. */
+      currentSeatCap: z.number().int().positive().nullable(),
+    })
+    .strict()
+    .nullable()
+    .default(null),
 });
 export type OrgSubscription = z.infer<typeof orgSubscriptionSchema>;
 

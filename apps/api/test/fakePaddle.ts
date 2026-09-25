@@ -34,6 +34,8 @@ export class FakePaddle implements PaddleApi {
   charges: { subscriptionId: string; amount: number }[] = [];
   /** Refuse the next change as a declined card would (Paddle changes nothing). */
   declineNextChange = false;
+  /** Refuse the next change to this subscription only. */
+  declineChangeFor: string | null = null;
   /** Make the next change, but lose its answer (a timeout). */
   loseChangeAnswer = false;
   /** Hold each change this long before answering, so two presses overlap. */
@@ -199,8 +201,9 @@ export class FakePaddle implements PaddleApi {
     if (this.down) return { kind: "unavailable", status: 503 };
     const sub = this.subs.get(subscriptionId);
     if (sub === undefined) return { kind: "not_found" };
-    if (this.declineNextChange) {
+    if (this.declineNextChange || this.declineChangeFor === subscriptionId) {
       this.declineNextChange = false;
+      if (this.declineChangeFor === subscriptionId) this.declineChangeFor = null;
       return { kind: "refused", status: 400, code: "subscription_payment_declined" };
     }
     if (mode === "prorated_immediately") this.charges.push({ subscriptionId, amount: this.proration(sub, priceId) });

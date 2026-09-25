@@ -3,7 +3,16 @@
 // (`applyPaddleSubscription`). Safe to run twice: the rule ignores a record it already
 // holds, and every event is leased and finished by its lease.
 import * as webhooks from "../webhooks/repo.js";
-import { applyPaddleSubscription, closeStaleTrialCheckouts, endExpiredGraces, settleOwedRefunds, type BillingDeps, type RefundsRun } from "./service.js";
+import {
+  applyPaddleSubscription,
+  applyPendingSizes,
+  closeStaleTrialCheckouts,
+  endExpiredGraces,
+  settleOwedRefunds,
+  type BillingDeps,
+  type PendingSizesRun,
+  type RefundsRun,
+} from "./service.js";
 
 export const PADDLE_EVENTS = {
   perRun: 200,
@@ -26,6 +35,8 @@ export interface PaddleEventsRun {
   gracesEnded: number;
   /** Trial checkouts closed at Paddle because the gym's own trial ended. */
   trialCheckoutsClosed: number;
+  /** Smaller sizes made at Paddle this run, and those still waiting. */
+  pendingSizes: PendingSizesRun;
 }
 
 export async function processPaddleEvents(deps: BillingDeps): Promise<PaddleEventsRun> {
@@ -38,6 +49,7 @@ export async function processPaddleEvents(deps: BillingDeps): Promise<PaddleEven
     refunds: { requested: 0, notNeeded: 0, deferred: 0, failed: 0 },
     gracesEnded: 0,
     trialCheckoutsClosed: 0,
+    pendingSizes: { applied: 0, waiting: 0 },
   };
   for (let taken = 0; taken < PADDLE_EVENTS.perRun; taken++) {
     const event = await webhooks.claimDuePaddleEvent(deps.sql, deps.now(), PADDLE_EVENTS.leaseMs);
@@ -69,6 +81,8 @@ export async function processPaddleEvents(deps: BillingDeps): Promise<PaddleEven
   // After the events, so a payment Paddle took in time is written before the grace ends.
   run.gracesEnded = await endExpiredGraces(deps);
   run.trialCheckoutsClosed = await closeStaleTrialCheckouts(deps);
+  // After the events, so Paddle's latest record of each plan is written first.
+  run.pendingSizes = await applyPendingSizes(deps);
   const keepSince = new Date(deps.now().getTime() - PADDLE_EVENTS.keepDays * 24 * 60 * 60 * 1000);
   run.forgotten = await webhooks.forgetOldPaddleEvents(deps.sql, keepSince, 1000);
   return run;

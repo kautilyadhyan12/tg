@@ -1,5 +1,8 @@
 import { useState } from 'react';
 import { orgWords } from '@app/shared';
+import { Loader2 } from 'lucide-react';
+import { orgService, errorText } from '../../api/orgsApi';
+import { applyPaidPlan, refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
 import { ConsoleCard } from './ConsoleStates';
 import ManagePaymentButton from './ManagePaymentButton';
 import PlanChoiceDialog from './PlanChoiceDialog';
@@ -9,8 +12,10 @@ import {
   canPayDuringTrial,
   firstPaymentText,
   isSubscribed,
+  keepSizeLabel,
   nextSizeText,
   isTrialing,
+  pendingSizeText,
   seatLineText,
   seatMeter,
   trialEndDateLabel,
@@ -59,7 +64,9 @@ import { viewerPrivileges } from '../../pages/console/consoleView';
 // **A free trial offers "Choose a plan"** (1c-ii; Kd, RULINGS 2026-09-25): paying now
 // saves the card and takes the first payment when the trial ends, so the trial's days
 // are kept. Once paid, the card says when that first payment falls, and a plan paid
-// through us offers "Choose a bigger size".
+// through us offers "Choose a bigger size" and "Choose a smaller size" (1c-iii). A smaller
+// size waits for the end of the month paid; until then the card says so and offers to keep
+// the current one, and new members can join only up to the smaller size.
 //
 // **It is not drawn for somebody who cannot use it.** §2.2's Billing row is the
 // owner's alone by default, and `billing.manage` is a tick they may hand over.
@@ -79,12 +86,13 @@ function SeatLine({ org }) {
 }
 
 /** A secondary action on the card: the same look as Manage payment. */
-function CardButton({ onClick, children }) {
+function CardButton({ onClick, disabled = false, children }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="self-stretch sm:self-start rounded-xl px-4 py-2.5 text-sm font-semibold flex items-center justify-center gap-2"
+      disabled={disabled}
+      className="self-stretch sm:self-start rounded-xl px-4 py-2.5 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
       style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F', minHeight: 44 }}
     >
       {children}
@@ -93,8 +101,10 @@ function CardButton({ onClick, children }) {
 }
 
 export default function TrialCard({ org }) {
-  /** Which choice is open: 'subscribe' during a free trial, 'bigger' on a paid plan. */
+  /** Which choice is open: 'subscribe' during a free trial, 'bigger' or 'smaller' on a paid plan. */
   const [choosing, setChoosing] = useState(null);
+  const [keeping, setKeeping] = useState(false);
+  const [keepError, setKeepError] = useState(null);
   // `viewerPrivileges`, not `org.privileges` — absent means "this api is older
   // than this bundle" and the honest fallback is the ROLE's own defaults, never
   // "no powers" (:16101). Reading the raw field would hide the button from every
@@ -146,7 +156,24 @@ export default function TrialCard({ org }) {
   const firstPayment = firstPaymentText(org.subscription);
   const nextSize = nextSizeText(org.subscription, org?.orgType);
   const payNow = canPayDuringTrial(org);
-  const bigger = canChooseBiggerSize(org);
+  // A bigger and a smaller size are offered on the same plans.
+  const resize = canChooseBiggerSize(org);
+  const waiting = pendingSizeText(org.subscription, org?.orgType);
+
+  const keep = async () => {
+    if (keeping) return;
+    setKeeping(true);
+    setKeepError(null);
+    try {
+      const res = await orgService.keepSize(org.id);
+      applyPaidPlan(org.id, res.data.subscription);
+      refreshConsoleOrgsAfterChange();
+    } catch (err) {
+      setKeepError(errorText(err, "We couldn't keep your size. Please try again."));
+    } finally {
+      setKeeping(false);
+    }
+  };
 
   return (
     <ConsoleCard>
@@ -182,6 +209,11 @@ export default function TrialCard({ org }) {
           {nextSize}
         </div>
       ) : null}
+      {waiting !== null ? (
+        <div className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.6)' }} data-testid="pending-size">
+          {waiting}
+        </div>
+      ) : null}
       {payNow ? (
         <div className="text-sm mt-3" style={{ color: 'rgba(255,255,255,0.6)' }}>
           Choose a plan now and keep your free days: the plan and its first payment start when the trial ends.
@@ -189,7 +221,14 @@ export default function TrialCard({ org }) {
       ) : null}
       <div className="mt-4 flex flex-col sm:flex-row gap-2">
         {payNow ? <CardButton onClick={() => setChoosing('subscribe')}>Choose a plan</CardButton> : null}
-        {bigger ? <CardButton onClick={() => setChoosing('bigger')}>Choose a bigger size</CardButton> : null}
+        {resize ? <CardButton onClick={() => setChoosing('bigger')}>Choose a bigger size</CardButton> : null}
+        {resize ? <CardButton onClick={() => setChoosing('smaller')}>Choose a smaller size</CardButton> : null}
+        {waiting !== null ? (
+          <CardButton onClick={() => void keep()} disabled={keeping}>
+            {keeping ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            {keepSizeLabel(org.subscription, org?.orgType)}
+          </CardButton>
+        ) : null}
         {/* A plan paid through us is managed on Paddle's own page: the card, cancelling, invoices. */}
         {subscribed || org.subscription.status === 'active' || org.subscription.status === 'past_due' ? (
           <ManagePaymentButton
@@ -198,6 +237,11 @@ export default function TrialCard({ org }) {
           />
         ) : null}
       </div>
+      {keepError !== null ? (
+        <p className="text-sm mt-3" style={{ color: '#ef4444' }}>
+          {keepError}
+        </p>
+      ) : null}
       {choosing !== null ? <PlanChoiceDialog org={org} mode={choosing} onClose={() => setChoosing(null)} /> : null}
     </ConsoleCard>
   );

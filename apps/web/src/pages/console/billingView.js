@@ -243,6 +243,44 @@ export function biggerPlans(plans, seatCap) {
   return plans.filter((p) => p?.seatCap === null || (Number.isFinite(p?.seatCap) && p.seatCap > seatCap));
 }
 
+/** The plans smaller than the gym's size (every capped one, under a plan with no limit),
+ *  leaving out a smaller size already waiting. */
+export function smallerPlans(plans, seatCap, waitingSeatCap = null) {
+  if (!Array.isArray(plans)) return [];
+  return plans.filter(
+    (p) => Number.isFinite(p?.seatCap) && (seatCap === null || p.seatCap < seatCap) && p.seatCap !== waitingSeatCap,
+  );
+}
+
+/** The size the gym is on and paying for: the one a smaller size waiting would replace. */
+export function currentPlanSeatCap(sub) {
+  return sub?.pendingSize != null ? sub.pendingSize.currentSeatCap : chosenSeatCap(sub);
+}
+
+/** A smaller size waiting (Kd, RULINGS 2026-09-25): when it starts and what it costs, and
+ *  that new people can join only up to it already. Null when none waits. */
+export function pendingSizeText(sub, orgType) {
+  const pending = sub?.pendingSize;
+  if (pending == null) return null;
+  const who = orgWords(orgType).people;
+  const date = trialEndDateLabel(pending.from);
+  const when = date === null ? 'From your next payment' : `From ${date}`;
+  return `${when}: up to ${pending.seatCap} ${who}, ${pending.priceLabel} a month. New ${who} can join only up to ${pending.seatCap} from now.`;
+}
+
+/** The Keep button's words: the size the gym stays on. */
+export function keepSizeLabel(sub, orgType) {
+  const cap = sub?.pendingSize?.currentSeatCap;
+  return Number.isFinite(cap) ? `Keep up to ${cap} ${orgWords(orgType).people}` : 'Keep my current size';
+}
+
+/** Why a smaller size cannot be chosen yet: more people than it holds. Null when it fits. */
+export function tooManyText(seatsUsed, seatCap, orgType) {
+  if (!Number.isFinite(seatsUsed) || !Number.isFinite(seatCap) || seatsUsed <= seatCap) return null;
+  const who = orgWords(orgType).people;
+  return `You have ${seatsUsed} ${who}. Remove ${seatsUsed - seatCap} to choose this size.`;
+}
+
 /** A PAID TRIAL'S NEXT STEP: "Your first payment of $79 is on 3 Oct." Null for anything
  *  else, or when the server has not said the price or the date. */
 export function firstPaymentText(sub) {

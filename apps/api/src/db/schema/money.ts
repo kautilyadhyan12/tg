@@ -96,6 +96,10 @@ export const subscriptions = pgTable(
     /** A trial the gym paid for keeps its free trial's member limit until the first
      *  payment (migration `0044`); null on every other row. */
     trialSeatCap: integer("trial_seat_cap"),
+    /** A smaller size the gym chose (migration `0045`): its limit holds for new joins at
+     *  once, and Paddle bills it from `pendingFrom`, the end of the month already paid. */
+    pendingPlanId: uuid("pending_plan_id").references(() => plans.id),
+    pendingFrom: timestamp("pending_from", { withTimezone: true }),
     cancelReason: text("cancel_reason"),
     createdAt: createdAt(),
   },
@@ -126,6 +130,8 @@ export const subscriptions = pgTable(
     ),
     check("subscriptions_trial_seat_cap_check", sql`${t.trialSeatCap} IS NULL OR ${t.trialSeatCap} > 0`),
     index("subscriptions_grace_idx").on(t.pastDueSince).where(sql`${t.status} = 'past_due'`),
+    check("subscriptions_pending_plan_check", sql`(${t.pendingPlanId} IS NULL) = (${t.pendingFrom} IS NULL)`),
+    index("subscriptions_pending_plan_idx").on(t.pendingFrom).where(sql`${t.pendingPlanId} IS NOT NULL`),
   ],
 );
 

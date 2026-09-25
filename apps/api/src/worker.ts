@@ -452,7 +452,7 @@ if (paddle === null) {
       const startedAt = Date.now();
       const run = await processPaddleEvents({ sql, redis: createMemoryRedis(), paddle, log, now: () => new Date() });
       const refunds = run.refunds.requested + run.refunds.notNeeded + run.refunds.deferred + run.refunds.failed;
-      if (run.applied + run.unchanged + run.deferred + run.givenUp + run.forgotten + refunds > 0) {
+      if (run.applied + run.unchanged + run.deferred + run.givenUp + run.forgotten + refunds + run.pendingSizes.applied + run.pendingSizes.waiting > 0) {
         log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
       }
     },

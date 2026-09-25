@@ -278,7 +278,7 @@ export async function openBillingPortal(
   return { url: plan.overdue ? deepLinks.update_subscription_payment_method : session.value.urls.general.overview };
 }
 
-// ── A bigger size (1c-ii) ─────────────────────────────────────────────────────
+// ── A size change: bigger (1c-ii) or smaller (1c-iii) ─────────────────────────
 
 /** Why a size change was refused, as the console is told. Kept on a failed change's row,
  *  so the same Idempotency-Key answers the same. */
@@ -291,7 +291,8 @@ const SIZE_REFUSALS: Record<string, { status: number; message: string }> = {
   payment_overdue: { status: 409, message: "A payment is overdue. Update your payment method to pay it, then change your size." },
   plan_ending: { status: 409, message: "Your plan is set to end, so its size can't be changed." },
   plan_not_found: { status: 404, message: "That plan isn't on your price list." },
-  not_bigger: { status: 409, message: "Choose a bigger size than the one you're on." },
+  same_size: { status: 409, message: "That's the size you're on." },
+  too_many_members: { status: 409, message: "You have more members than that size allows. Remove some first, or keep your size." },
   payments_unavailable: { status: 503, message: UNAVAILABLE },
   change_declined: {
     status: 409,
@@ -317,13 +318,24 @@ function refusalCode(outcome: Exclude<repo.SizeTargetOutcome, { kind: "ok" }>): 
       return outcome.trialing ? "no_paid_plan_trial" : "no_paid_plan";
     case "payment_overdue":
     case "plan_ending":
-    case "not_bigger":
+    case "same_size":
       return outcome.kind;
     case "no_such_plan":
       return "plan_not_found";
     case "not_set_up":
       return "payments_unavailable";
+    case "too_many_members":
+      return "too_many_members";
   }
+}
+
+function refusalFor(outcome: Exclude<repo.SizeTargetOutcome, { kind: "ok" }>): OrgsError {
+  if (outcome.kind !== "too_many_members") return sizeRefusal(refusalCode(outcome));
+  return new OrgsError(
+    409,
+    "too_many_members",
+    `You have ${String(outcome.seatsUsed)} members, and that size is for up to ${String(outcome.seatCap)}. Remove ${String(outcome.seatsUsed - outcome.seatCap)} first, or keep your size.`,
+  );
 }
 
 /** Paddle's amounts are strings of minor units; ours are integers. */
@@ -334,11 +346,13 @@ function minor(amount: string): number {
 }
 
 function prorationFor(trialing: boolean): ProrationMode {
-  // Nothing is charged in a trial: the new price is the one taken when it ends.
+  // Nothing is charged in a trial: the new price is the one taken when the trial ends.
   return trialing ? "do_not_bill" : "prorated_immediately";
 }
 
-/** What a bigger size would cost now and from when, as Paddle works it out. Changes nothing. */
+/** What a size change would cost now and from when. A bigger one as Paddle works it out; a
+ *  smaller one charges and credits nothing, and its price starts when the month paid ends.
+ *  Changes nothing. */
 export async function previewSizeChange(
   deps: BillingDeps,
   input: { userId: string; gymId: string; planCode: string },
@@ -349,9 +363,17 @@ export async function previewSizeChange(
   const found = await repo.sizeTarget(deps.sql, input);
   if (found.kind !== "ok") {
     if (found.kind === "not_set_up") deps.log.error({ event: "billing.price_not_set_up", plan: input.planCode }, "a plan has no Paddle price");
-    throw sizeRefusal(refusalCode(found));
+    throw refusalFor(found);
   }
   const target = found.target;
+  const summary = {
+    planCode: target.planCode,
+    seatCap: target.seatCap,
+    priceLabel: formatPriceMinor(target.priceMinor, target.currency),
+  };
+  if (target.direction === "smaller") {
+    return { ...summary, dueNow: null, nextPaymentAt: target.periodEnd?.toISOString() ?? null };
+  }
   const preview = await paddle.api.previewPriceChange(target.subscriptionRef, target.priceId, prorationFor(target.trialing));
   if (preview.kind !== "ok") {
     const refusal = preview.kind === "refused" ? { status: preview.status, code: preview.code } : {};
@@ -368,18 +390,18 @@ export async function previewSizeChange(
           taxLabel: minor(totals.tax) > 0 ? formatPriceMinor(minor(totals.tax), totals.currency_code) : null,
         };
   return {
-    planCode: target.planCode,
-    seatCap: target.seatCap,
-    priceLabel: formatPriceMinor(target.priceMinor, target.currency),
+    ...summary,
     dueNow,
     nextPaymentAt: preview.value.next_billed_at === null ? null : new Date(preview.value.next_billed_at).toISOString(),
   };
 }
 
-/** Move a paying gym to a bigger size. Recorded first under the gym's lock, so two presses
+/** Move a paying gym to another size. Recorded first under the gym's lock, so two presses
  *  cannot both ask Paddle; Paddle's subscription is read first, so a change that already
  *  landed is never asked for (or charged) twice; the gym's plan is written from Paddle's own
- *  record of it afterwards, through the one rule. */
+ *  record of it afterwards, through the one rule. A smaller size on a plan already paying is
+ *  only written down here: its limit holds at once, and the worker makes it at Paddle
+ *  shortly before the month paid ends (`applyPendingSizes`). */
 export async function changeSize(
   deps: BillingDeps,
   input: { userId: string; gymId: string; planCode: string; idempotencyKey: string },
@@ -404,12 +426,20 @@ export async function changeSize(
       throw new OrgsError(404, "org_not_found", "Organisation not found.");
     case "refused":
       if (begun.outcome.kind === "not_set_up") deps.log.error({ event: "billing.price_not_set_up", plan: input.planCode }, "a plan has no Paddle price");
-      throw sizeRefusal(refusalCode(begun.outcome));
+      throw refusalFor(begun.outcome);
+    case "scheduled":
+      deps.log.info({ event: "billing.size_scheduled", gymId: input.gymId, plan: input.planCode }, "a gym chose a smaller size from its next bill");
+      return await currentPlan(deps, input.gymId);
     case "created":
       break;
   }
   const { changeId, target } = begun;
   const fail = async (code: string): Promise<never> => {
+    // A smaller size not made at Paddle stops holding the limit. A lost answer keeps it: Paddle
+    // may have made it, and the worker reads Paddle and finishes the job.
+    if (target.direction === "smaller" && code !== "change_unconfirmed") {
+      await repo.dropPendingPlan(deps.sql, { gymId: input.gymId, subscriptionRowId: target.subscriptionRowId, planId: target.toPlanId });
+    }
     await repo.finishPlanChange(deps.sql, { changeId, gymId: input.gymId, state: "failed", failure: code });
     throw sizeRefusal(code);
   };
@@ -423,7 +453,7 @@ export async function changeSize(
   const item = sub.items[0];
   const onPaddle = sub.items.length === 1 && item !== undefined ? await repo.planForPaddleItem(deps.sql, item) : null;
   if (onPaddle?.id === target.toPlanId) {
-    // Already on the bigger size (a change cut off before it was written): write it, charge nothing.
+    // Already on that size (a change cut off before it was written): write it, charge nothing.
     await applyPaddleSubscription(deps, sub.id);
     await repo.finishPlanChange(deps.sql, { changeId, gymId: input.gymId, state: "done", failure: null });
     return await currentPlan(deps, input.gymId);
@@ -446,14 +476,120 @@ export async function changeSize(
   }
   await applyPaddleSubscription(deps, sub.id);
   await repo.finishPlanChange(deps.sql, { changeId, gymId: input.gymId, state: "done", failure: null });
-  deps.log.info({ event: "billing.size_changed", gymId: input.gymId, plan: target.planCode }, "a gym moved to a bigger size");
+  deps.log.info({ event: "billing.size_changed", gymId: input.gymId, plan: target.planCode, direction: target.direction }, "a gym changed size");
   return await currentPlan(deps, input.gymId);
+}
+
+/** "Keep my current size": the smaller size waiting is dropped; nothing is asked of Paddle,
+ *  which still bills the size the gym is on. Safe to press twice. */
+export async function keepSize(deps: BillingDeps, input: { userId: string; gymId: string }): Promise<OrgPlanChangeResponse> {
+  await requirePrivilege(deps, input.gymId, input.userId, "billing.manage");
+  const kept = await repo.keepSize(deps.sql, input);
+  switch (kept.kind) {
+    case "kept":
+      deps.log.info({ event: "billing.size_kept", gymId: input.gymId }, "a gym kept its size");
+      return await currentPlan(deps, input.gymId);
+    case "nothing_waiting":
+      return await currentPlan(deps, input.gymId);
+    case "in_progress":
+      throw new OrgsError(409, "change_in_progress", "Your size is being changed. Try again in a moment.");
+    case "org_archived":
+      throw new OrgsError(409, "org_archived", "This organisation is archived.");
+    case "not_found":
+      throw new OrgsError(404, "org_not_found", "Organisation not found.");
+  }
 }
 
 async function currentPlan(deps: BillingDeps, gymId: string): Promise<OrgPlanChangeResponse> {
   const live = await orgsRepo.gymLiveSubscription(deps.sql, gymId);
   if (live === null) throw new OrgsError(409, "plan_changed_meanwhile", "Your plan changed meanwhile. Reload the page and try again.");
   return { subscription: toOrgSubscription(live) };
+}
+
+/** A smaller size is made at Paddle this long before the month paid ends. */
+export const PENDING_SIZE_LEAD_MS = 3 * 60 * 60 * 1000;
+/** Paddle refuses a change within 30 minutes of a charge (developer.paddle.com, "Upgrade or
+ *  downgrade subscriptions", read 2026-09-25); this leaves a margin. */
+const PADDLE_CHANGE_CUTOFF_MS = 35 * 60 * 1000;
+/** A plan whose smaller size Paddle refused is asked again after this long. */
+export const PENDING_SIZE_RETRY_MS = 10 * 60 * 1000;
+
+export interface PendingSizesRun {
+  applied: number;
+  /** Not made this run: Paddle refused, could not be asked, or the charge is too close. */
+  waiting: number;
+}
+
+/** Make at Paddle each smaller size that is due: a paid trial's at once, a paying plan's in
+ *  the hours before its month ends, with nothing billed or credited, so the next bill is the
+ *  smaller price. If the month renewed at the old price first (the worker was down, or Paddle
+ *  refused until then), the rest of the new month is credited back by Paddle's proration, so
+ *  the gym still pays the size it chose. Safe to run twice: each plan is claimed under its
+ *  gym's lock as that gym's one pending change, and Paddle is read before it is asked. */
+export async function applyPendingSizes(deps: BillingDeps): Promise<PendingSizesRun> {
+  const run: PendingSizesRun = { applied: 0, waiting: 0 };
+  const paddle = deps.paddle;
+  if (paddle === null) return run;
+  const now = deps.now();
+  const due = await repo.duePendingPlans(deps.sql, { until: new Date(now.getTime() + PENDING_SIZE_LEAD_MS), limit: 50 });
+  for (const row of due) {
+    const claim = await repo.claimPendingPlan(deps.sql, {
+      gymId: row.gymId,
+      subscriptionRowId: row.id,
+      now,
+      bucket: Math.floor(now.getTime() / PENDING_SIZE_RETRY_MS),
+    });
+    if (claim === null) continue;
+    if (await applyPendingSize(deps, paddle, row.gymId, claim)) run.applied += 1;
+    else run.waiting += 1;
+  }
+  return run;
+}
+
+async function applyPendingSize(deps: BillingDeps, paddle: PaddleSettings, gymId: string, claim: repo.PendingClaim): Promise<boolean> {
+  const finish = async (failure: string | null): Promise<boolean> => {
+    await repo.finishPlanChange(deps.sql, { changeId: claim.changeId, gymId, state: failure === null ? "done" : "failed", failure });
+    return failure === null;
+  };
+  const fetched = await paddle.api.getSubscription(claim.subscriptionRef);
+  if (fetched.kind !== "ok") {
+    deps.log.warn({ event: "billing.pending_size_read_failed", gymId, result: fetched.kind }, "Paddle did not return a subscription for a smaller size");
+    return await finish("payments_unavailable");
+  }
+  const sub = fetched.value;
+  const item = sub.items[0];
+  const onPaddle = sub.items.length === 1 && item !== undefined ? await repo.planForPaddleItem(deps.sql, item) : null;
+  if (onPaddle?.id === claim.toPlanId) {
+    await applyPaddleSubscription(deps, sub.id);
+    return await finish(null);
+  }
+  if (onPaddle?.id !== claim.fromPlanId || (sub.status !== "active" && sub.status !== "trialing") || sub.scheduled_change !== null) {
+    // Something else changed at Paddle: written through the one rule, which settles the size
+    // waiting if the plan moved; otherwise it is tried again once the plan is in good standing.
+    await applyPaddleSubscription(deps, sub.id);
+    return await finish("plan_changed_meanwhile");
+  }
+
+  let mode: ProrationMode = "do_not_bill";
+  if (sub.status === "active") {
+    const started = sub.current_billing_period === null ? null : Date.parse(sub.current_billing_period.starts_at);
+    const renewed = started !== null && started >= claim.pendingFrom.getTime() - 60_000;
+    const nextCharge = sub.next_billed_at === null || sub.next_billed_at === undefined ? null : Date.parse(sub.next_billed_at);
+    if (renewed) mode = "prorated_immediately";
+    else if (nextCharge !== null && nextCharge - deps.now().getTime() < PADDLE_CHANGE_CUTOFF_MS) return await finish("too_close");
+  }
+  const changed = await paddle.api.changePrice(sub.id, claim.priceId, mode);
+  if (changed.kind === "refused") {
+    deps.log.error({ event: "billing.pending_size_refused", gymId, status: changed.status, code: changed.code }, "Paddle refused a smaller size; retrying");
+    return await finish("change_declined");
+  }
+  if (changed.kind !== "ok") {
+    deps.log.warn({ event: "billing.pending_size_unconfirmed", gymId, result: changed.kind }, "a smaller size's answer was lost; Paddle is read first next time");
+    return await finish("change_unconfirmed");
+  }
+  await applyPaddleSubscription(deps, sub.id);
+  deps.log.info({ event: "billing.pending_size_applied", gymId, plan: claim.planCode, mode }, "a gym's smaller size was made at Paddle");
+  return await finish(null);
 }
 
 /** A paying gym keeps everything this long after a payment fails. */
