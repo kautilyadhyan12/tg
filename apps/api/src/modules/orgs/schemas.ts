@@ -393,6 +393,10 @@ export const classSessionParamsSchema = z
   .strict();
 export type ClassSessionParams = z.infer<typeof classSessionParamsSchema>;
 
+/** A gym and one of its leads (20c-i), always together. */
+export const leadParamsSchema = z.object({ gymId: z.string().uuid(), leadId: z.string().uuid() }).strict();
+export type LeadParams = z.infer<typeof leadParamsSchema>;
+
 /** The gym id AND the date being un-closed.
  *
  *  **The date is shape-checked here and NOT calendar-checked**, deliberately:

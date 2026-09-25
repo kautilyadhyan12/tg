@@ -16,3 +16,4 @@ export * from "./memberList.js";
 export * from "./classes.js";
 export * from "./invites.js";
 export * from "./billing.js";
+export * from "./leads.js";

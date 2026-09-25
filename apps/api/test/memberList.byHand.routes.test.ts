@@ -1009,13 +1009,14 @@ d("member list: keeping it by hand (real Postgres)", () => {
   // WHAT POINTS AT A RECORD
   // =========================================================================
 
-  // Joining two records deletes one, and so does deleting a former record. The one table
-  // that points at a record is a membership, by the record its invitation was for (3b-ii,
-  // §13.2): the join moves it onto the kept record and deleting clears it, both driven
-  // with a real membership in `invitations.join.routes.test.ts`. The day another table
-  // points at a record (visits, bookings), this fails: that job must make the join move
-  // its rows too, decide what deleting does to them, and drive both.
-  it("the one table that points at a list record is the membership, with its gym", async () => {
+  // Joining two records deletes one, and so does deleting a former record. Two tables
+  // point at a record, each with its gym: a membership, by the record its invitation was
+  // for (3b-ii, §13.2), driven in `invitations.join.routes.test.ts`; and a joined lead
+  // (20c-i), driven in `leads.routes.test.ts`. The join moves both onto the kept record
+  // and deleting clears both. The day another table points at a record (visits,
+  // bookings), this fails: that job must make the join move its rows too, decide what
+  // deleting does to them, and drive both.
+  it("the tables that point at a list record are the membership and the joined lead, each with its gym", async () => {
     const refs = await sql<{ ref: string }[]>`
       SELECT DISTINCT tc.table_name || '.' || kcu.column_name AS ref
       FROM information_schema.table_constraints tc
@@ -1025,6 +1026,11 @@ d("member list: keeping it by hand (real Postgres)", () => {
         ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
       WHERE tc.constraint_type = 'FOREIGN KEY' AND ccu.table_name = 'gym_member_list_entries'
       ORDER BY 1`;
-    expect(refs.map((r) => r.ref)).toEqual(["gym_members.entry_id", "gym_members.gym_id"]);
+    expect(refs.map((r) => r.ref)).toEqual([
+      "gym_leads.entry_id",
+      "gym_leads.gym_id",
+      "gym_members.entry_id",
+      "gym_members.gym_id",
+    ]);
   });
 });

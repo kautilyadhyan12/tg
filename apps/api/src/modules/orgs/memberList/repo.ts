@@ -1942,6 +1942,16 @@ export async function moveMembershipLinks(tx: TransactionSql, gymId: string, fro
   return rows.length;
 }
 
+/** Two records joined: a joined lead linked to the one not kept is linked to the kept
+ *  one (20c-i). */
+export async function moveLeadLinks(tx: TransactionSql, gymId: string, fromEntryId: string, toEntryId: string): Promise<number> {
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_leads SET entry_id = ${toEntryId}
+    WHERE gym_id = ${gymId} AND entry_id = ${fromEntryId}
+    RETURNING id`;
+  return rows.length;
+}
+
 /** The list moved by hand: its version up by one, and the list created for a gym
  *  whose first change is a typed person. */
 export async function bumpListVersion(tx: TransactionSql, gymId: string): Promise<number> {

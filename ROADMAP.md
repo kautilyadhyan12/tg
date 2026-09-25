@@ -185,7 +185,10 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 20. **Messages, in the app** (RULINGS 2026-09-22, Part 7 of the re-plan; spec Part 3 §16.1–16.4) — it takes in item 2. Every card Opus xhigh (it sends data out to real people).
    - 20a. [ ] **The inbox and the message rule**: a gym's messages to a member as an inbox on the gym's page (a phone notification once the phone app has push); ONE pure rule that decides what is due, its table test first — every kind × every reason NOT to send (former · removed · switched off · already sent for this occasion · another that day · night by the gym's clock · the gym lapsed); one row an occasion, so a second run sends nothing. **First tests: a job run twice sends once; a former or removed member gets nothing.**
    - 20b. [ ] **The eight automatic messages and their switches** (Settings → Messages; every number the gym's; the gym's ONE own line, no links): Welcome · Trial check-in · Trial ending · We miss you · Membership ending · Payment overdue (after 18a) · Birthday · Milestone.
-   - 20c. [ ] **Leads**: the small list, and three follow-up EMAILS through 3b-i's checks, caps and unsubscribe.
+   - 20c. **Leads** (split 2026-09-25 in three, RULINGS that day): the small list, and three follow-up EMAILS through 3b-i's checks, caps and unsubscribe.
+     - 20c-i. [ ] **The Leads list**: add by hand, status in a tap, notes, search; Joined puts the person on the member list as the record already there or a new one.
+     - 20c-ii. [ ] **The three follow-up emails** (at once, day 3, day 7), stopped when the status moves; the "Happy to hear from us" tick if Kd rules it.
+     - 20c-iii. [ ] **Leads from a file**: the member upload's reader, its own columns and preview.
    - 20d. [ ] **At risk, and the owner's weekly summary** — it takes the place of item 2's "slipping away"; it reads visits (after 16a).
 21. **Reports** (RULINGS 2026-09-22; spec Part 3 §16.5) — it takes in item 12's reports. Opus xhigh (a rule that thresholds, other people's data).
    - 21a. [ ] **Members and attendance**: active, new, left, churn, retention, average stay; visits by day and week, busiest hours, visits a member, how full classes are, no-shows; every figure with how it is worked out; "not enough data yet" before three full months; the CSV; the cost measured at 2,000 members.
@@ -200,7 +203,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 1c-i. [x] **Paddle's own page, and a failed payment** — merged 2026-09-25 (PR #105).
      - 1c-ii. [x] **A bigger size as members grow, and paying before the trial ends** — merged 2026-09-25 (PR #109).
      - 1c-iii. [x] **A smaller size** — merged 2026-09-25 (PR #112).
-   - 1d. [ ] **Indian gyms through Razorpay**, UPI Autopay; GST off until Kd is registered (RULINGS 2026-09-24). Needs Kd's free Razorpay test account.
+   - 1d. [ ] **Indian gyms through Razorpay**, UPI Autopay; GST off until Kd is registered (RULINGS 2026-09-24). Needs Kd's free Razorpay test account (made 2026-09-25) to have Subscriptions switched on by Razorpay (asked that day).
 2. **Trials enforced** (split 2026-09-08 after Kd's trial-abuse ruling; no approval queue, ever).
    - 2a. [x] **The price list, the 10-day gym trial at 200 members, no individual trial, one free scan a day** — merged 2026-09-24 (PR #101).
    - 2b. [ ] Same person, new spelling: Gmail dots and `+tags` collapse for trial counting; throwaway email domains refused at the Manage door.

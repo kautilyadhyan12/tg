@@ -1,7 +1,7 @@
 import { Fragment } from 'react';
 import { orgWords } from '@app/shared';
 import { NavLink, Link, useParams } from 'react-router-dom';
-import { Building2, Users, Settings, CalendarClock, ChevronLeft, ClipboardCheck, LogOut } from 'lucide-react';
+import { Building2, Users, Settings, CalendarClock, ChevronLeft, ClipboardCheck, LogOut, UserSearch } from 'lucide-react';
 import ConsoleBanner from './ConsoleBanner';
 import PlanModal from './PlanModal';
 import SizeDecisionPrompt from './SizeDecisionPrompt';
@@ -131,6 +131,11 @@ export default function ConsoleLayout({ children }) {
           icon: Users,
           label: words.peopleCap,
         },
+        // PEOPLE WHO HAVE NOT JOINED YET (20c-i), beside the people who have. Gated on
+        // `members.confirm`, the gym's own list's tick; the server refuses anyone else.
+        ...(viewerPrivileges(org).includes('members.confirm')
+          ? [{ to: `/console/${orgSlug}/leads`, end: false, icon: UserSearch, label: 'Leads' }]
+          : []),
         // ATTENDANCE IS A SECTION OF ITS OWN — Kd's ruling 2026-09-01 (:28107):
         // *"it should not be in settings but in a section call attandance a new
         // option besides gym memebr settings etc"*. **Settings is where a gym
@@ -371,7 +376,7 @@ export default function ConsoleLayout({ children }) {
       {/* ── Mobile tab bar ────────────────────────────────────────────────── */}
       {tabs.length > 0 ? (
         <nav
-          className="md:hidden fixed bottom-0 left-0 right-0 flex z-20"
+          className="md:hidden fixed bottom-0 left-0 right-0 flex z-20 overflow-x-auto"
           style={{ background: '#0D0C0B', borderTop: '1px solid rgba(255,255,255,0.06)' }}
         >
           {tabs.map((t) => (
@@ -379,7 +384,7 @@ export default function ConsoleLayout({ children }) {
               key={t.to}
               to={t.to}
               end={t.end}
-              className="flex-1 flex flex-col items-center gap-1 py-3 text-xs"
+              className="flex-1 min-w-[76px] flex flex-col items-center gap-1 py-3 px-1 text-xs whitespace-nowrap"
               style={({ isActive }) => ({ color: isActive ? '#FF8A1F' : 'rgba(255,255,255,0.55)' })}
             >
               <t.icon className="w-5 h-5" />
@@ -388,7 +393,7 @@ export default function ConsoleLayout({ children }) {
           ))}
           <Link
             to="/console"
-            className="flex-1 flex flex-col items-center gap-1 py-3 text-xs"
+            className="flex-1 min-w-[76px] flex flex-col items-center gap-1 py-3 px-1 text-xs whitespace-nowrap"
             style={{ color: 'rgba(255,255,255,0.55)' }}
           >
             <ChevronLeft className="w-5 h-5" />

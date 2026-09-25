@@ -365,6 +365,10 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // billing_plan_changes.created_by — who pressed Choose a bigger size (`0044`), on the
   // same footing as billing_checkouts above.
   "billing_plan_changes",
+  // gym_leads.added_by — which member of staff added a lead (`0046`), on
+  // gym_member_list_uploads' footing: the gym's record, and the lead itself is a
+  // person the gym told us about, not an account. Deleted when the gym closes.
+  "gym_leads",
   "api_cost_events",
   "usage_daily",
   "trace_samples",
