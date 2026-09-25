@@ -4,6 +4,16 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-25 · 5b-i: see and keep your list (Folder A, branch `member-list-screen`)
+
+- **Risky (other people's details), Opus xhigh; Kd said *"go"*** to the plan and to 5b's split in three (5b-i, 5b-ii, 5b-iii; ROADMAP, RULINGS 2026-09-25). Web only: no server change, no migration, no new package.
+- **Built**: Members' tabs "Your list" (first) and "Using the app" (`?view=app`), for `members.confirm` staff; `MemberListPanel.jsx` (chips for status, membership and payment with the server's counts, in the app or not, search after a 300 ms pause, past members, 100 at a time); `MemberListPerson.jsx` (every field, the gym's columns, the app members, the invitation and its email's reason; Change, Take off, Put back, Delete for good, Join with Keep and Remove cards and a swap; Add); helpers `memberListPeople.js`; nine client calls in `orgsApi.js`; `DatePick` gains `yearSelect` (a date of birth).
+- **Worst thing, first tests** (`memberListPerson.render`): a late answer for somebody tapped earlier is never shown and a save goes to the person on screen; an answer for another record is refused; Join removes exactly the record under "Remove", both ways round. **Breaks, each RED, restored sha256-identical**: any answer shown (1 red), the record not checked (1 red), Join's ids swapped (2 red), the swap ignored by the request (1 red), the list showing an older filter's page (1 red).
+- **Verified**: web full suite 2,727 of 2,728 and 104 of 106 files: `poseAssets.contract` (local Node 24 only) and `settingsHealth` (ROADMAP item 10's flake, 9/9 alone). New files 56 tests; changed files eslint 0. Four suites that draw Members as an owner now open `?view=app`.
+- **Looked at in headless Edge** on the real app (`.cost/look-5b-i.mjs`, throwaway gym, cleaned up), computer and phone width: chips, a person's page, Change, Join's cards, and Take off then Delete for good through the screen (0 records left).
+- **Cost** (`.cost/cost-5b-i.ts`, 2,592 MHz on battery, the api's one connection; bystander's worst, three runs): 10,000 × 2,000 — opening the tab (list + page at once) 266–298 ms, a chip or search 75–201 ms, past members 124–139 ms, Load more 101–177 ms, one person's page 38–43 ms, a change / take off / put back 109–319 ms. A gym of 200: reads 19–48 ms, a write by hand 167–253 ms (the server's own write, not touched here).
+- **Open**: Kd's click-through; round one by file (`reviews/5b-i-1-review.md`). Next in Folder A: 5b-ii.
+
 ## 2026-09-25 · 3a-vi-b: an app member follows their record (Folder A, branch `member-follows-record`, PR #111)
 
 - **Risky (other people's records, a rule that picks), Opus xhigh; Kd said *"go"*.** A member who joined by invitation is matched to that invitation's record (`gym_members.entry_id`) before their email or phone: the upload's preview and confirm (`reconcile`'s `onListOf`), `membersAgainstList` (the list, Remove all, the person's page, Invite), the roster's "On your list as …" (current records only), the listed stamp. No migration, no new package. Spec §11.4 "Out of 3a-vi-b".

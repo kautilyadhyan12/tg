@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { closureDateLabel } from '../../pages/console/hoursView';
-import { dayAllowed, monthGrid, monthOf, monthTitle, openingMonth, shiftMonth } from './datePickView';
+import { dayAllowed, monthGrid, monthOf, monthTitle, openingMonth, shiftMonth, withYear, yearsBetween } from './datePickView';
 
 // A date, picked from a month calendar in the console's colours and never
 // typed (Kd, 17b-ii-b-ii-b's click-through). The button's value is the picked
@@ -16,9 +16,12 @@ const boxStyle = {
   color: '#fff',
 };
 
-export default function DatePick({ label, value, min, max, today, onChange, disabled, emptyText, onClear }) {
+// `yearSelect` adds a list of the years between `min` and `max`, for a date many
+// years back such as a date of birth; with it, an empty calendar opens on today's
+// month rather than on the earliest allowed one.
+export default function DatePick({ label, value, min, max, today, onChange, disabled, emptyText, onClear, yearSelect }) {
   const [open, setOpen] = useState(false);
-  const [month, setMonth] = useState(() => openingMonth(value, min, today));
+  const [month, setMonth] = useState(() => openingMonth(value, yearSelect ? '' : min, today));
   const wrap = useRef(null);
 
   useEffect(() => {
@@ -39,7 +42,7 @@ export default function DatePick({ label, value, min, max, today, onChange, disa
 
   const show = () => {
     if (disabled) return;
-    setMonth(openingMonth(value, min, today));
+    setMonth(openingMonth(value, yearSelect ? '' : min, today));
     setOpen(!open);
   };
   const canBack = !min || shiftMonth(month, -1) >= monthOf(min);
@@ -81,8 +84,23 @@ export default function DatePick({ label, value, min, max, today, onChange, disa
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="text-sm font-semibold" style={{ color: '#fff' }}>
-              {monthTitle(month)}
+            <span className="text-sm font-semibold flex items-center gap-2" style={{ color: '#fff' }}>
+              {yearSelect ? monthTitle(month).split(' ')[0] : monthTitle(month)}
+              {yearSelect ? (
+                <select
+                  aria-label="Year"
+                  value={Number(month.slice(0, 4))}
+                  onChange={(e) => setMonth(withYear(month, e.target.value))}
+                  className="rounded-md px-1 py-0.5 text-sm"
+                  style={boxStyle}
+                >
+                  {yearsBetween(min, max).map((year) => (
+                    <option key={year} value={year}>
+                      {year}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
             </span>
             <button
               type="button"

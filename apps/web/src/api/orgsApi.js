@@ -15,7 +15,11 @@ import {
   createOrgResponseSchema,
   declineInvitationResponseSchema,
   memberListConfirmResponseSchema,
+  memberListEntriesResponseSchema,
+  memberListEntryDeletedSchema,
+  memberListEntryResponseSchema,
   memberListEntryWrittenSchema,
+  memberListViewResponseSchema,
   memberListNotMeResponseSchema,
   memberListPreviewResponseSchema,
   memberListRowsResponseSchema,
@@ -537,6 +541,85 @@ export const orgService = {
         `/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/from-member/${encodeURIComponent(userId)}`,
         {},
       ),
+    ),
+
+  /** GET /v1/orgs/:gymId/member-list — the list as it stands: its counts, the gym's
+   *  own words as chips, and its own columns. */
+  getMemberList: (gymId) =>
+    readThrough(
+      memberListViewResponseSchema,
+      'your list',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list`),
+    ),
+
+  /** GET …/member-list/entries — one page of the list. `query` is already a query
+   *  string (`entriesQueryString`), so a filter given twice goes as two keys. */
+  getMemberListEntries: (gymId, query) =>
+    readThrough(
+      memberListEntriesResponseSchema,
+      'your list',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries${query ? `?${query}` : ''}`),
+    ),
+
+  /** GET …/member-list/entries/:entryId — one person's page. */
+  getMemberListEntry: (gymId, entryId) =>
+    readThrough(
+      memberListEntryResponseSchema,
+      'this person',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}`),
+    ),
+
+  /** POST …/member-list/entries — add one person by hand. */
+  addMemberListEntry: (gymId, body) =>
+    readThrough(
+      memberListEntryWrittenSchema,
+      'this person',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries`, body),
+    ),
+
+  /** PATCH …/member-list/entries/:entryId — change one person. */
+  changeMemberListEntry: (gymId, entryId, body) =>
+    readThrough(
+      memberListEntryWrittenSchema,
+      'this person',
+      authApi.patch(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}`, body),
+    ),
+
+  /** DELETE …/member-list/entries/:entryId — take one person off; their record is kept
+   *  as a past member. */
+  takeOffMemberListEntry: (gymId, entryId) =>
+    readThrough(
+      memberListEntryWrittenSchema,
+      'this person',
+      authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}`),
+    ),
+
+  /** POST …/entries/:entryId/restore — put a past member back on the list. */
+  restoreMemberListEntry: (gymId, entryId) =>
+    readThrough(
+      memberListEntryWrittenSchema,
+      'this person',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/restore`, {}),
+    ),
+
+  /** POST …/entries/:removeEntryId/merge — join two records: the one in the path is
+   *  removed, `keepEntryId` stays. */
+  mergeMemberListEntries: (gymId, removeEntryId, keepEntryId, acknowledgeLeavesList) =>
+    readThrough(
+      memberListEntryWrittenSchema,
+      'this person',
+      authApi.post(
+        `/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(removeEntryId)}/merge`,
+        acknowledgeLeavesList ? { keepEntryId, acknowledgeLeavesList: true } : { keepEntryId },
+      ),
+    ),
+
+  /** DELETE …/member-list/former/:entryId — delete a past member's record for good. */
+  deleteFormerMemberListEntry: (gymId, entryId) =>
+    readThrough(
+      memberListEntryDeletedSchema,
+      'this person',
+      authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/former/${encodeURIComponent(entryId)}`),
     ),
 
   /** POST /v1/orgs/:gymId/member-list/uploads — read a file (or pasted rows) and

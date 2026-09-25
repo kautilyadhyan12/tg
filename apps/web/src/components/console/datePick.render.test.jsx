@@ -110,3 +110,14 @@ describe('the picker', () => {
     expect(screen.getByRole('button', { name: 'End date (optional)' }).textContent).toBe('No end date');
   });
 });
+
+describe('a date many years back (5b-i: a date of birth)', () => {
+  it('jumps to another year from the year list, and picks a day in it', () => {
+    const onChange = vi.fn();
+    render(<DatePick label="Date of birth" value="" min="1900-01-01" max="2026-09-25" today="2026-09-25" yearSelect onChange={onChange} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Date of birth' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Year' }), { target: { value: '1988' } });
+    fireEvent.click(screen.getByRole('button', { name: /\b14 Sep/ }));
+    expect(onChange).toHaveBeenCalledWith('1988-09-14');
+  });
+});

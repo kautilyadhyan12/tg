@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, Loader2, Upload } from 'lucide-react';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { orgService, errorText, errorCode } from '../../api/orgsApi';
 import { useConsoleOrg } from './useConsoleOrg';
 import ApplicationsQueue from './ApplicationsQueue';
 import MemberListUpload from './MemberListUpload';
+import MemberListPanel from './MemberListPanel';
 import { orgWords } from '@app/shared';
 import {
   canRemoveMembers,
@@ -59,8 +60,8 @@ import PlanChoiceDialog from '../../components/console/PlanChoiceDialog';
 // is fifty rows at a time, so `items.length` would read "50 of 300" at a gym of
 // six hundred.
 //
-// Search, the group filter, remove/restore and CSV export are §4.3 features
-// with no routes behind them yet; each has its own owed line.
+// Staff who may see the gym's own list get two tabs: "Your list" (the list the gym
+// keeps, ROADMAP 5b-i) and "Using the app" (this roster). Everyone else sees the roster.
 
 /** REMOVING A MEMBER — Part 3 §4.3, and it exists because Kd asked what happens
  *  when a gym confirms the wrong person. Until this shipped, nothing in the
@@ -351,6 +352,12 @@ export default function Members() {
   const canRemove = canRemoveMembers(viewerPrivileges(org));
   // The gym's own list (and so what came back "Not me") is `members.confirm`'s.
   const canSeeList = viewerPrivileges(org).includes('members.confirm');
+  // Which tab, kept in the address so a reload stays on it.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = canSeeList && searchParams.get('view') !== 'app' ? 'list' : 'app';
+  const showTab = (next) => setSearchParams(next === 'app' ? { view: 'app' } : {}, { replace: true });
+  /** Bumped by an import, so the list tab reads the list again. */
+  const [listKey, setListKey] = useState(0);
   // Part 3 §4.2's read-only console, off the org row this screen already holds
   // — no read of its own, and false while the org is still loading, which is
   // the safe direction: a screen with no roster on it yet has no control to
@@ -508,7 +515,7 @@ export default function Members() {
         </h1>
         {!state.loading && state.error === null ? (
           <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
-            {org.name} · {countLabel}
+            {tab === 'app' ? `${org.name} · ${countLabel}` : org.name}
           </p>
         ) : null}
         {meter !== null ? (
@@ -553,39 +560,74 @@ export default function Members() {
         ) : null}
       </div>
 
+      {canSeeList ? (
+        <div className="grid grid-cols-2 gap-1 rounded-2xl p-1" role="tablist" style={{ background: 'rgba(255,255,255,0.06)' }}>
+          {[
+            ['list', 'Your list'],
+            ['app', 'Using the app'],
+          ].map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
+              onClick={() => showTab(key)}
+              className="rounded-xl min-h-[44px] text-sm font-semibold"
+              style={tab === key ? { background: '#FF8A1F', color: '#000' } : { color: 'rgba(255,255,255,0.7)' }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {tab === 'list' ? (
+        <>
+          {/* Invitations that came back "Not me". */}
+          <NotMeBox gymId={gymId} words={words} />
+          {/* Bringing the gym's own list in (ROADMAP 5a). */}
+          <ImportCard
+            gymId={gymId}
+            words={words}
+            readOnly={readOnly}
+            onImported={() => {
+              reloadRoster();
+              setListKey((n) => n + 1);
+            }}
+          />
+          <MemberListPanel gymId={gymId} words={words} readOnly={readOnly} refreshKey={listKey} />
+        </>
+      ) : null}
+
       {/* WAITING TO JOIN, above the roster. It reads its own endpoint and owns
           its own failure: a queue that cannot be read must never take the
           member list down with it, and a trainer — who may read the roster and
           may not confirm — sees no section rather than a refusal. */}
-      <ApplicationsQueue
-        gymId={gymId}
-        orgType={org?.orgType}
-        readOnly={readOnly}
-        onRosterChanged={reloadRoster}
-      />
+      {tab === 'app' ? (
+        <ApplicationsQueue
+          gymId={gymId}
+          orgType={org?.orgType}
+          readOnly={readOnly}
+          onRosterChanged={reloadRoster}
+        />
+      ) : null}
 
-      {/* Invitations that came back "Not me": only for staff who may see the list. */}
-      {canSeeList ? <NotMeBox gymId={gymId} words={words} /> : null}
-
-      {/* Bringing the gym's own list in (ROADMAP 5a): the same privilege the server asks. */}
-      {canSeeList ? <ImportCard gymId={gymId} words={words} readOnly={readOnly} onImported={reloadRoster} /> : null}
-
-      {state.loading ? <ConsoleLoading label={`Loading ${words.people}…`} /> : null}
+      {tab === 'app' && state.loading ? <ConsoleLoading label={`Loading ${words.people}…`} /> : null}
 
       {/* T3 r1 L-3: `ConsoleFailed`'s own contract is "a failure ALWAYS offers a
           way out", and this one dead-ended. The way out of a failed removal is
           to re-read the roster — the person is still on it, their own Remove
           control is still there, and the fresh read settles whether the removal
           landed before the error did. */}
-      {removeError !== null ? (
+      {tab === 'app' && removeError !== null ? (
         <ConsoleFailed message={removeError} onRetry={reloadRoster} />
       ) : null}
 
-      {!state.loading && state.error !== null ? (
+      {tab === 'app' && !state.loading && state.error !== null ? (
         <ConsoleFailed message={state.error} onRetry={retry} />
       ) : null}
 
-      {!state.loading && state.error === null && state.items.length === 0 ? (
+      {tab === 'app' && !state.loading && state.error === null && state.items.length === 0 ? (
         <ConsoleCard>
           <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
             Nobody has joined yet.
@@ -596,7 +638,7 @@ export default function Members() {
         </ConsoleCard>
       ) : null}
 
-      {state.items.length > 0 ? (
+      {tab === 'app' && state.items.length > 0 ? (
         <div className="flex flex-col gap-3">
           {state.items.map((m) => (
             <MemberRow
@@ -613,7 +655,7 @@ export default function Members() {
         </div>
       ) : null}
 
-      {state.nextCursor !== null ? (
+      {tab === 'app' && state.nextCursor !== null ? (
         <button
           type="button"
           onClick={loadMore}

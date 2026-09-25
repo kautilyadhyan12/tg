@@ -388,7 +388,7 @@ afterEach(() => {
 describe('the read-only banner', () => {
   it('tells a lapsed gym’s manager what is wrong, on every console screen', async () => {
     orgService.getMine.mockResolvedValue(mineIs(LAPSED));
-    renderConsole(Members, '/console/iron-house/members');
+    renderConsole(Members, '/console/iron-house/members?view=app');
 
     const banner = await screen.findByTestId('console-banner');
     expect(banner.textContent).toBe(CONSOLE_READ_ONLY_BANNER);
@@ -400,7 +400,7 @@ describe('the read-only banner', () => {
 
   it('is NOT drawn on a paying gym — the control that makes the case above mean something', async () => {
     orgService.getMine.mockResolvedValue(mineIs(PAYING));
-    renderConsole(Members, '/console/iron-house/members');
+    renderConsole(Members, '/console/iron-house/members?view=app');
 
     await screen.findByText('Rahul Das');
     expect(screen.queryByTestId('console-banner')).toBeNull();
@@ -411,7 +411,7 @@ describe('the read-only banner', () => {
     // api is the real-world case. Drawing a red "this gym has no plan" over a
     // gym that is paying perfectly well is the defect this direction prevents.
     orgService.getMine.mockResolvedValue(mineIs(UNKNOWN));
-    renderConsole(Members, '/console/iron-house/members');
+    renderConsole(Members, '/console/iron-house/members?view=app');
 
     await screen.findByText('Rahul Das');
     expect(screen.queryByTestId('console-banner')).toBeNull();
@@ -484,7 +484,7 @@ describe('the join codes', () => {
 describe('the waiting queue', () => {
   it('says nobody can be let in, and stops telling the desk to confirm anyone', async () => {
     orgService.getMine.mockResolvedValue(mineIs(LAPSED));
-    renderConsole(Members, '/console/iron-house/members');
+    renderConsole(Members, '/console/iron-house/members?view=app');
 
     expect(await screen.findByText(READ_ONLY_QUEUE_NOTE)).toBeTruthy();
     // The standing sentence tells the front desk to do the one thing the server
@@ -495,7 +495,7 @@ describe('the waiting queue', () => {
 
   it('greys BOTH taps, because refusing somebody is refused too', async () => {
     orgService.getMine.mockResolvedValue(mineIs(LAPSED));
-    renderConsole(Members, '/console/iron-house/members');
+    renderConsole(Members, '/console/iron-house/members?view=app');
 
     await screen.findByText('Priya Sharma');
     // `members.confirm` gates confirm AND reject on the server (:23711), so a
@@ -506,7 +506,7 @@ describe('the waiting queue', () => {
 
   it('is untouched on a paying gym — the positive control', async () => {
     orgService.getMine.mockResolvedValue(mineIs(PAYING));
-    renderConsole(Members, '/console/iron-house/members');
+    renderConsole(Members, '/console/iron-house/members?view=app');
 
     await screen.findByText('Priya Sharma');
     expect(screen.getByRole('button', { name: /^confirm$/i }).disabled).toBe(false);
@@ -532,7 +532,7 @@ describe('the waiting queue', () => {
     orgService.getApplications.mockResolvedValue({
       data: { items: [APPLICANT, OVERDUE_APPLICANT], nextCursor: null, pendingCount: 2 },
     });
-    renderConsole(Members, '/console/iron-house/members');
+    renderConsole(Members, '/console/iron-house/members?view=app');
 
     // Both people are still listed — the hold keeps their place, it does not
     // hide them. The countdown is the only thing that goes.
@@ -561,7 +561,7 @@ describe('the waiting queue', () => {
     orgService.getApplications.mockResolvedValue({
       data: { items: [APPLICANT, OVERDUE_APPLICANT], nextCursor: null, pendingCount: 2 },
     });
-    renderConsole(Members, '/console/iron-house/members');
+    renderConsole(Members, '/console/iron-house/members?view=app');
 
     await screen.findByText('Priya Sharma');
     // **BOTH BRANCHES ARE NAMED, and that is the half the count below cannot
@@ -590,7 +590,7 @@ describe('the waiting queue', () => {
     // the panel renders rather than the constant — so a reassurance added
     // anywhere else on the screen still goes red.
     orgService.getMine.mockResolvedValue(mineIs(LAPSED));
-    renderConsole(Members, '/console/iron-house/members');
+    renderConsole(Members, '/console/iron-house/members?view=app');
 
     await screen.findByText(READ_ONLY_QUEUE_NOTE);
     expect(screen.getByText(/keep their place/i)).toBeTruthy();
@@ -605,7 +605,7 @@ describe('the waiting queue', () => {
 describe('the roster', () => {
   it('still lists everybody, and greys Remove', async () => {
     orgService.getMine.mockResolvedValue(mineIs(LAPSED));
-    renderConsole(Members, '/console/iron-house/members');
+    renderConsole(Members, '/console/iron-house/members?view=app');
 
     expect(await screen.findByText('Rahul Das')).toBeTruthy();
     expect(screen.getByRole('button', { name: /^remove$/i }).disabled).toBe(true);
@@ -614,7 +614,7 @@ describe('the roster', () => {
 
   it('keeps Remove live on a paying gym — the positive control', async () => {
     orgService.getMine.mockResolvedValue(mineIs(PAYING));
-    renderConsole(Members, '/console/iron-house/members');
+    renderConsole(Members, '/console/iron-house/members?view=app');
 
     await screen.findByText('Rahul Das');
     expect(screen.getByRole('button', { name: /^remove$/i }).disabled).toBe(false);
@@ -623,7 +623,7 @@ describe('the roster', () => {
 
   it('still draws the seat meter — a fact, not a control', async () => {
     orgService.getMine.mockResolvedValue(mineIs(PAYING));
-    renderConsole(Members, '/console/iron-house/members');
+    renderConsole(Members, '/console/iron-house/members?view=app');
 
     expect(await screen.findByTestId('seat-meter')).toBeTruthy();
   });

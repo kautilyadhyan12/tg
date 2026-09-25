@@ -203,8 +203,8 @@ function renderConsole(initial = '/console/gym-a') {
     <MemoryRouter initialEntries={[initial]}>
       <Link to="/console/gym-a">go to A</Link>
       <Link to="/console/gym-b">go to B</Link>
-      <Link to="/console/gym-a/members">members A</Link>
-      <Link to="/console/gym-b/members">members B</Link>
+      <Link to="/console/gym-a/members?view=app">members A</Link>
+      <Link to="/console/gym-b/members?view=app">members B</Link>
       <Routes>
         <Route
           path="/console/:orgSlug"
@@ -562,7 +562,7 @@ describe('walking from one gym to another', () => {
       gymId === A_ID ? Promise.resolve(A_ROSTER) : heldMembersForB(),
     );
 
-    renderConsole('/console/gym-a/members');
+    renderConsole('/console/gym-a/members?view=app');
     await screen.findByText('Alice Anderson');
 
     fireEvent.click(screen.getByText('members B'));
