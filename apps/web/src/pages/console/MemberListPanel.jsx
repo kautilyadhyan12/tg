@@ -35,6 +35,10 @@ const C = {
 
 const count = (n) => n.toLocaleString('en');
 
+/** The most pages a re-read after a change walks to keep staff's place (500 names);
+ *  past that, "Load more" brings the rest, so one change is never a hundred requests. */
+const RELOAD_PAGES_MAX = 5;
+
 function Chip({ pressed, onClick, children, testId }) {
   return (
     <button
@@ -213,7 +217,9 @@ export default function MemberListPanel({ gymId, words, readOnly, refreshKey, on
     const read = async () => {
       let p = (await orgService.getMemberListEntries(gymId, entriesQueryString(filters))).data.page;
       let entries = p.entries;
-      while (entries.length < want && p.cursor !== null && latest.current === asked) {
+      let pages = 1;
+      while (entries.length < want && pages < RELOAD_PAGES_MAX && p.cursor !== null && latest.current === asked) {
+        pages += 1;
         p = (await orgService.getMemberListEntries(gymId, entriesQueryString(filters, p.cursor))).data.page;
         entries = [...entries, ...p.entries];
       }

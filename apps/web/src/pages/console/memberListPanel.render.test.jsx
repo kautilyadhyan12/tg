@@ -295,4 +295,28 @@ describe('round one: after a change', () => {
     draw();
     expect((await screen.findByLabelText('Search your members')).getAttribute('maxLength')).toBe(String(MEMBER_LIST_QUERY_MAX_CHARS));
   });
+
+  it('L4: the re-read after a change walks at most five pages, and leaves Load more for the rest', async () => {
+    const people = Array.from({ length: 7 }, (_, i) => entry(`Person ${String(i)}`));
+    orgService.getMemberListEntries.mockImplementation((_gym, qs) => {
+      const at = qs === '' ? 0 : Number(qs.replace('cursor=p', ''));
+      return Promise.resolve(pageOf([people[at]], 7, at < 6 ? `p${String(at + 1)}` : null));
+    });
+    orgService.getMemberListEntry.mockResolvedValue({ data: { entry: { ...people[0], extra: [], handEdited: [], members: [] } } });
+    orgService.changeMemberListEntry.mockResolvedValue({ data: { outcome: 'changed', entry: { ...people[0], extra: [], handEdited: [], members: [] }, version: 2 } });
+    draw();
+    for (let i = 1; i <= 6; i += 1) {
+      fireEvent.click(await screen.findByRole('button', { name: 'Load more' }));
+      await waitFor(() => expect(names()).toHaveLength(i + 1));
+    }
+    const before = orgService.getMemberListEntries.mock.calls.length;
+    fireEvent.click(screen.getAllByTestId('list-row')[0]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '+447700900555' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(names()).toHaveLength(5));
+    expect(orgService.getMemberListEntries.mock.calls.length - before).toBe(5);
+    expect(screen.getByRole('button', { name: 'Load more' })).toBeTruthy();
+  });
 });
