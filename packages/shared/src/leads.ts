@@ -64,6 +64,8 @@ export const leadSchema = z
     /** The member record a joined lead is on the list as; null otherwise, and null
      *  when that record has since been deleted. */
     entryId: z.string().uuid().nullable(),
+    /** That record is on the list now: false when it was taken off or deleted. */
+    onList: z.boolean(),
     createdAt: z.string().datetime({ offset: true }),
     statusChangedAt: z.string().datetime({ offset: true }),
   })
@@ -196,4 +198,6 @@ export const LEAD_WORDS = {
   notes_card: "The notes look like they hold a payment card number. We never store card details, so nothing was saved.",
   join_choose: "Somebody on your list has the same email or phone. Choose the record that is this person, or add them as someone new.",
   join_stale: "Your list changed while you were choosing. Choose again.",
+  join_exact:
+    "Your list already has a record with exactly this name and contact. If it is this person, choose it. If not, change the lead's name, email or phone first.",
 } as const;

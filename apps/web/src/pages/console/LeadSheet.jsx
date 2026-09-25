@@ -451,14 +451,18 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
 
               {joined ? (
                 <p className="text-sm" style={{ color: C.muted }}>
-                  {lead.entryId !== null ? `On your list of ${words.people}. ` : `Their record has since been deleted from your list. `}
+                  {lead.onList
+                    ? `On your list of ${words.people}. `
+                    : lead.entryId !== null
+                      ? `Their record was taken off your list of ${words.people}. `
+                      : `Their record has since been deleted from your list. `}
                   <Link to={`/console/${orgSlug}/members`} className="font-semibold" style={{ color: C.orange }}>
                     Go to {words.peopleCap}
                   </Link>
                 </p>
               ) : null}
 
-              {!joined || lead.entryId === null ? (
+              {!joined || !lead.onList ? (
                 choice !== null ? (
                   <ChooseRecord
                     name={lead.fullName}
@@ -478,7 +482,7 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
                     style={{ background: C.orange, color: '#000' }}
                   >
                     <UserCheck className="w-4 h-4" />
-                    {`Joined · add to your ${words.people}`}
+                    {joined && lead.entryId !== null ? `Put back on your list of ${words.people}` : `Joined · add to your ${words.people}`}
                   </button>
                 )
               ) : null}

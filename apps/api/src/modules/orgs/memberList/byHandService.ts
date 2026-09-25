@@ -275,8 +275,10 @@ export async function addEntry(
 
 /** A lead who joined (ROADMAP 20c-i), inside the caller's transaction and under the
  *  gym's lock. `entryId` is the record staff or the join rule said is this person: kept
- *  as it is, or put back when it was taken off. Null makes a record from the lead's
- *  details, as "Add member" does. */
+ *  as it is, or put back when it was taken off. Null makes a NEW record from the lead's
+ *  details: a record already holding exactly those details is never linked or put back
+ *  in its place (staff said none of the records shown is this person), and `held`
+ *  names it. */
 export async function placeLeadInTx(
   tx: TransactionSql,
   input: {
@@ -287,7 +289,7 @@ export async function placeLeadInTx(
     entryId: string | null;
     lead: { fullName: string; email: string | null; phone: string | null };
   },
-): Promise<{ outcome: "linked" | "added" | "restored"; entryId: string }> {
+): Promise<{ outcome: "linked" | "added" | "restored" | "held"; entryId: string }> {
   const { gymId, userId, at } = input;
   if (input.entryId !== null) {
     const stored = await repo.entryFor(tx, gymId, input.entryId);
@@ -302,20 +304,20 @@ export async function placeLeadInTx(
   const context = await typedContext(tx, gymId, input.country);
   const applied = applyTyped(EMPTY_VALUES, typed, context);
   if (!applied.ok) throw new OrgsError(400, applied.refusal.code, applied.refusal.message);
+  const holder = await repo.entryHolding(tx, gymId, identityKey(applied.values));
+  if (holder !== null) return { outcome: "held", entryId: holder.id };
   const placed = await placeOnList(tx, {
     gymId,
     userId,
     at,
     values: applied.values,
     source: "typed",
-    revive: (stored) => {
-      const again = applyTyped(stored.values, typed, context);
-      if (!again.ok) throw new OrgsError(400, again.refusal.code, again.refusal.message);
-      return again.values;
+    revive: () => {
+      throw new Error("a lead's new record found a holder after the check under the same lock");
     },
   });
-  const outcome = placed.outcome === "added" ? "added" : placed.outcome === "revived" ? "restored" : "linked";
-  return { outcome, entryId: placed.entryId };
+  if (placed.outcome !== "added") throw new Error(`a lead's new record answered ${placed.outcome}`);
+  return { outcome: "added", entryId: placed.entryId };
 }
 
 /** Change one person (§11.6). Fields staff change are remembered by NAME, so a later

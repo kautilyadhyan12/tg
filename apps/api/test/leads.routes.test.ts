@@ -372,6 +372,136 @@ d("a gym's leads (real Postgres)", () => {
   );
 
   it(
+    "Load more reaches every lead when many were added in the same instant, or microseconds apart",
+    async () => {
+      const owner = await makeUser("instant-owner");
+      const org = await makeOrg(owner.cookies, "Instant Leads Gym");
+      const gym = org.org.id;
+      // One statement: one now() for every row, as a file import writes them.
+      await sql`
+        INSERT INTO gym_leads (gym_id, full_name, email, source)
+        SELECT ${gym}, 'Same ' || n, 'same' || n || '@example.com', 'website' FROM generate_series(1, ${LEADS_PAGE + 5}) AS n`;
+      // And a second set a microsecond apart inside one millisecond.
+      await sql`
+        INSERT INTO gym_leads (gym_id, full_name, email, source, created_at)
+        SELECT ${gym}, 'Micro ' || n, 'micro' || n || '@example.com', 'website',
+               date_trunc('milliseconds', now()) - interval '1 hour' + (n || ' microseconds')::interval
+        FROM generate_series(1, ${LEADS_PAGE + 5}) AS n`;
+      const seen = new Set<string>();
+      let cursor: string | null = null;
+      let pages = 0;
+      do {
+        const page = pageOf(await get(`${leadsUrl(gym)}${cursor === null ? "" : `?cursor=${encodeURIComponent(cursor)}`}`, owner.cookies));
+        for (const l of page.leads) seen.add(l.id);
+        cursor = page.cursor;
+        pages += 1;
+      } while (cursor !== null && pages < 10);
+      expect(seen.size).toBe(2 * (LEADS_PAGE + 5));
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "a phone number is found the way staff type it",
+    async () => {
+      const owner = await makeUser("phone-search-owner");
+      const org = await makeOrg(owner.cookies, "Phone Search Gym");
+      const gym = org.org.id;
+      const tom = await addLead(gym, owner.cookies, { fullName: "Tom Reid", email: undefined, phone: "07700 900456" });
+      await addLead(gym, owner.cookies, { fullName: "Ana Silva", email: "ana@example.com", phone: "+14155550100" });
+      for (const q of ["07700 900456", "07700900456", "+44 7700 900456", "+447700900456", "900456", "7700-900-456"]) {
+        const found = pageOf(await get(`${leadsUrl(gym)}?q=${encodeURIComponent(q)}`, owner.cookies)).leads.map((l) => l.id);
+        expect({ q, found }).toEqual({ q, found: [tom.id] });
+      }
+      // A short number is not a phone search: "12" matches nobody's phone by accident.
+      expect(pageOf(await get(`${leadsUrl(gym)}?q=00`, owner.cookies)).total).toBe(0);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "a gym at 10,000 leads is told so, and one fewer can still add",
+    async () => {
+      const owner = await makeUser("full-owner");
+      const org = await makeOrg(owner.cookies, "Full Leads Gym");
+      const gym = org.org.id;
+      await sql`
+        INSERT INTO gym_leads (gym_id, full_name, email, source)
+        SELECT ${gym}, 'Lead ' || n, 'full' || n || '@example.com', 'website' FROM generate_series(1, 9999) AS n`;
+      await addLead(gym, owner.cookies, { email: "last.one@example.com" });
+      const refused = await post(leadsUrl(gym), { fullName: "One Too Many", email: "too.many@example.com", source: "walk_in" }, owner.cookies);
+      expect({ status: refused.statusCode, error: (JSON.parse(refused.body) as { error: string }).error }).toEqual({ status: 409, error: "leads_full" });
+      expect((await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_leads WHERE gym_id = ${gym}`)[0]?.n).toBe(10000);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "each worker has their own allowance: one worker at the limit does not stop another at the same desk",
+    async () => {
+      const owner = await makeUser("limit-owner");
+      const org = await makeOrg(owner.cookies, "Limit Leads Gym");
+      const gym = org.org.id;
+      const manager = await makeStaff(org, owner.cookies, "limit-manager", "manager");
+      const lead = await addLead(gym, owner.cookies);
+      // The owner spends their 300 writes an hour (addLead above was one), each from a new
+      // address so that only the leads limiter can answer.
+      let refused = 0;
+      for (let i = 0; i < 300; i += 1) {
+        const res = await patch(leadUrl(gym, lead.id), { notes: `n${String(i)}` }, owner.cookies);
+        if (res.statusCode === 429) refused += 1;
+      }
+      expect(refused).toBe(1);
+      // One front desk: both workers from ONE address. The owner is still refused; the manager is not.
+      const desk = "10.63.0.1";
+      const at = (cookies: Record<string, string>, body: unknown) =>
+        api().inject({ method: "PATCH", url: leadUrl(gym, lead.id), remoteAddress: desk, cookies, headers: { "content-type": "application/json" }, payload: JSON.stringify(body) });
+      expect((await at(owner.cookies, { notes: "owner again" })).statusCode).toBe(429);
+      for (let i = 0; i < 20; i += 1) expect((await at(manager.cookies, { notes: `m${String(i)}` })).statusCode).toBe(200);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "two workers pressing at once, on two servers: one lead for one email, one record for one Joined",
+    async () => {
+      const second = await buildApp(loadConfig(baseEnv), {
+        emailSender: {
+          sendVerificationEmail: () => Promise.resolve(),
+          sendPasswordResetEmail: () => Promise.resolve(),
+          sendSignInCodeEmail: () => Promise.resolve(),
+        },
+      });
+      await second.ready();
+      try {
+        const owner = await makeUser("race-owner");
+        const org = await makeOrg(owner.cookies, "Race Leads Gym");
+        const gym = org.org.id;
+        const both = (method: "POST", url: string, body: unknown) =>
+          Promise.all(
+            [api(), second].map((server) =>
+              server.inject({ method, url, remoteAddress: nextIp(), cookies: owner.cookies, headers: { "content-type": "application/json" }, payload: JSON.stringify(body) }),
+            ),
+          );
+        for (let round = 0; round < 5; round += 1) {
+          const added = await both("POST", leadsUrl(gym), { fullName: `Race ${String(round)}`, email: `race${String(round)}@example.com`, source: "walk_in" });
+          const answers = added.map((r) => `${String(r.statusCode)} ${r.statusCode === 201 ? "" : (JSON.parse(r.body) as { error: string }).error}`.trim()).sort();
+          expect(answers).toEqual(["201", "409 lead_exists"]);
+          const leadId = (JSON.parse((added.find((r) => r.statusCode === 201) ?? added[0])?.body ?? "{}") as { lead: { id: string } }).lead.id;
+          const joined = await both("POST", joinUrl(gym, leadId), {});
+          expect(joined.map((r) => r.statusCode)).toEqual([200, 200]);
+          expect(joined.map((r) => (JSON.parse(r.body) as { outcome: string }).outcome).sort()).toEqual(["added", "already_joined"]);
+        }
+        expect(await storedEntries(gym)).toHaveLength(5);
+        expect(await storedLeads(gym)).toHaveLength(5);
+      } finally {
+        await second.close();
+      }
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
     "refuses what cannot be kept, and says why",
     async () => {
       const owner = await makeUser("refuse-owner");
@@ -528,6 +658,63 @@ d("a gym's leads (real Postgres)", () => {
       expect(back.statusCode).toBe(200);
       expect((JSON.parse(back.body) as { outcome: string }).outcome).toBe("restored");
       expect((await storedEntries(gym)).find((e) => e.id === former)?.former).toBe(false);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "\"Someone new\" never links or brings back a record staff said is not them, even one with exactly the lead's details",
+    async () => {
+      const owner = await makeUser("asnew-owner");
+      const org = await makeOrg(owner.cookies, "As New Gym");
+      const gym = org.org.id;
+      // A past member with exactly the lead's name and email.
+      const past = await addEntry(gym, owner.cookies, { fullName: "Priya Shah", email: "priya@example.com" });
+      expect((await del(`/v1/orgs/${gym}/member-list/entries/${past}`, owner.cookies)).statusCode).toBe(200);
+      const lead = await addLead(gym, owner.cookies);
+      expect((await post(joinUrl(gym, lead.id), {}, owner.cookies)).statusCode).toBe(409);
+      const refused = await post(joinUrl(gym, lead.id), { asNew: true }, owner.cookies);
+      expect(refused.statusCode).toBe(409);
+      const body = JSON.parse(refused.body) as { error: string; message: string; candidates: { entryId: string }[] };
+      expect(body.error).toBe("lead_join_choose");
+      expect(body.message).toMatch(/exactly this name/);
+      expect(body.candidates.map((c) => c.entryId)).toEqual([past]);
+      expect((await storedEntries(gym)).find((e) => e.id === past)?.former).toBe(true);
+      expect((await storedLeads(gym))[0]).toMatchObject({ status: "new", entry_id: null });
+
+      // Two current records with the lead's name and email (one with a member number): the one
+      // with exactly the lead's details is not linked either.
+      const exact = await addEntry(gym, owner.cookies, { fullName: "Tom Reid", email: "tom@example.com" });
+      await addEntry(gym, owner.cookies, { fullName: "Tom Reid", email: "tom@example.com", memberNumber: "M7" });
+      const tom = await addLead(gym, owner.cookies, { fullName: "Tom Reid", email: "tom@example.com" });
+      expect((await post(joinUrl(gym, tom.id), {}, owner.cookies)).statusCode).toBe(409);
+      const again = await post(joinUrl(gym, tom.id), { asNew: true }, owner.cookies);
+      expect(again.statusCode).toBe(409);
+      expect((JSON.parse(again.body) as { candidates: { entryId: string }[] }).candidates.map((c) => c.entryId)).toEqual([exact]);
+      expect((await storedLeads(gym)).find((l) => l.id === tom.id)).toMatchObject({ status: "new", entry_id: null });
+      // Choosing that record is still allowed.
+      expect(JSON.parse((await post(joinUrl(gym, tom.id), { entryId: exact }, owner.cookies)).body)).toMatchObject({ outcome: "linked" });
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "a joined lead whose record was taken off the list says so, and Joined puts the record back",
+    async () => {
+      const owner = await makeUser("offlist-owner");
+      const org = await makeOrg(owner.cookies, "Off List Gym");
+      const gym = org.org.id;
+      const lead = await addLead(gym, owner.cookies);
+      const joined = JSON.parse((await post(joinUrl(gym, lead.id), {}, owner.cookies)).body) as { lead: Lead };
+      expect(joined.lead).toMatchObject({ status: "joined", onList: true });
+      const entryId = joined.lead.entryId ?? "";
+      expect((await del(`/v1/orgs/${gym}/member-list/entries/${entryId}`, owner.cookies)).statusCode).toBe(200);
+      expect(leadOf(await get(leadUrl(gym, lead.id), owner.cookies))).toMatchObject({ status: "joined", entryId, onList: false });
+      expect(pageOf(await get(leadsUrl(gym), owner.cookies)).leads[0]).toMatchObject({ onList: false });
+      const back = await post(joinUrl(gym, lead.id), {}, owner.cookies);
+      expect(JSON.parse(back.body)).toMatchObject({ outcome: "restored", lead: { entryId, onList: true } });
+      expect((await storedEntries(gym)).find((e) => e.id === entryId)?.former).toBe(false);
+      expect(JSON.parse((await post(joinUrl(gym, lead.id), {}, owner.cookies)).body)).toMatchObject({ outcome: "already_joined" });
     },
     TIMEOUT_MS,
   );

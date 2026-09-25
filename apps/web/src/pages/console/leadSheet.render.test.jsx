@@ -45,6 +45,7 @@ const lead = (id, fullName, over = {}) =>
     notes: '',
     mayEmail: false,
     entryId: null,
+    onList: false,
     createdAt: '2026-09-20T10:00:00.000Z',
     statusChangedAt: '2026-09-20T10:00:00.000Z',
     ...over,
@@ -216,12 +217,26 @@ describe('adding and keeping a lead', () => {
     expect((await screen.findByRole('alert')).textContent).toBe('This person is already one of your leads.');
   });
 
-  it('a joined lead says so and offers no second Joined', async () => {
-    orgService.getLead.mockResolvedValue({ data: { lead: { ...tom, status: 'joined', entryId: OWN } } });
+  it('a joined lead on the list says so and offers no second Joined', async () => {
+    orgService.getLead.mockResolvedValue({ data: { lead: { ...tom, status: 'joined', entryId: OWN, onList: true } } });
     render(sheet(TOM));
     await screen.findByRole('heading', { name: 'Tom Reid' });
     expect(screen.getByText(/On your list of members/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Joined · add to your members' })).toBeNull();
+  });
+
+  it('a joined lead whose record was taken off says so, and Put back sends Joined for that lead', async () => {
+    const off = { ...tom, status: 'joined', entryId: OWN, onList: false };
+    orgService.getLead.mockResolvedValue({ data: { lead: off } });
+    orgService.joinLead.mockResolvedValue({ data: { lead: { ...off, onList: true }, outcome: 'restored' } });
+    render(sheet(TOM));
+    await screen.findByRole('heading', { name: 'Tom Reid' });
+    expect(screen.getByText(/Their record was taken off your list of members/)).toBeTruthy();
+    expect(screen.queryByText(/On your list of members/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Put back on your list of members' }));
+    await waitFor(() => expect(orgService.joinLead).toHaveBeenCalledWith(GYM, TOM, {}));
+    await screen.findByText("Tom Reid's record is back on your list of members.");
+    expect(screen.getByText(/On your list of members/)).toBeTruthy();
   });
 
   it('Delete asks first, and says the member list is not changed', async () => {

@@ -55,6 +55,7 @@ function toLead(row: repo.LeadRow): Lead {
     notes: row.notes,
     mayEmail: row.emailOkAt !== null,
     entryId: row.entryId,
+    onList: row.onList,
     createdAt: row.createdAt.toISOString(),
     statusChangedAt: row.statusChangedAt.toISOString(),
   };
@@ -103,7 +104,17 @@ function emailOkAt(
 
 const escapeLike = (text: string): string => text.replace(/[\\%_]/g, (char) => `\\${char}`);
 
-const cursorSchema = z.object({ at: z.string().datetime({ offset: true }), id: z.string().uuid() }).strict();
+const cursorSchema = z
+  .object({ at: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/), id: z.string().uuid() })
+  .strict();
+
+/** The digits of a search that could be a phone number (at least four), with a
+ *  leading 0 or 00 dropped so "07700 900456" and "+44 7700 900456" both reach
+ *  +447700900456. Null for anything else. */
+function phoneDigits(typed: string): string | null {
+  const digits = typed.replace(/\D/g, "").replace(/^0+/, "");
+  return digits.length >= 4 ? digits : null;
+}
 
 function encodeCursor(cursor: repo.LeadCursor): string {
   return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
@@ -141,6 +152,7 @@ export async function listLeads(
       gymId,
       status: query.status ?? null,
       like: typed === "" ? null : `%${escapeLike(typed)}%`,
+      digits: phoneDigits(typed),
       cursor,
       limit: LEADS_PAGE + 1,
     }),
@@ -151,7 +163,7 @@ export async function listLeads(
   return {
     leads: shown.map(toLead),
     total: page.total,
-    cursor: last === undefined ? null : encodeCursor({ at: last.createdAt.toISOString(), id: last.id }),
+    cursor: last === undefined ? null : encodeCursor({ at: last.cursorAt, id: last.id }),
     counts,
   };
 }
@@ -162,6 +174,17 @@ export async function getLead(deps: LeadsDeps, userId: string, gymId: string, le
   const row = await repo.leadFor(deps.sql, gymId, leadId);
   if (row === null) throw notFound();
   return toLead(row);
+}
+
+/** Two requests past the check at once (two servers): the database's UNIQUE answers,
+ *  and the caller hears the same 409 as the check gives. */
+async function clashIsExists<T>(write: Promise<T>): Promise<T> {
+  try {
+    return await write;
+  } catch (err) {
+    if (repo.isLeadClash(err)) throw new OrgsError(409, "lead_exists", LEAD_WORDS.lead_exists);
+    throw err;
+  }
 }
 
 async function refuseHeld(
@@ -187,7 +210,7 @@ export async function createLead(
   const contact = cleanContact({ fullName: body.fullName, email: body.email ?? null, phone: body.phone ?? null }, org.country);
   const notes = cleanNotes(body.notes ?? "");
   const okAt = emailOkAt(body.mayEmail, contact.email, null, deps.now());
-  const row = await deps.sql.begin(async (tx) => {
+  const row = await clashIsExists(deps.sql.begin(async (tx) => {
     await lockGym(tx, gymId);
     if ((await repo.countLeads(tx, gymId)) >= LEADS_MAX_PER_GYM) {
       throw new OrgsError(409, "leads_full", LEAD_WORDS.leads_full);
@@ -203,7 +226,7 @@ export async function createLead(
       meta: { source: body.source, mayEmail: okAt === null ? "false" : "true" },
     });
     return inserted;
-  });
+  }));
   return toLead(row);
 }
 
@@ -218,7 +241,7 @@ export async function updateLead(
   const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
   const at = deps.now();
-  const row = await deps.sql.begin(async (tx) => {
+  const row = await clashIsExists(deps.sql.begin(async (tx) => {
     await lockGym(tx, gymId);
     const stored = await repo.lockLead(tx, gymId, leadId);
     if (stored === null) throw notFound();
@@ -256,7 +279,7 @@ export async function updateLead(
       meta: { fields: Object.keys(body).sort(), status },
     });
     return written;
-  });
+  }));
   return toLead(row);
 }
 
@@ -313,7 +336,7 @@ export async function joinLead(
     await lockGym(tx, gymId);
     const stored = await repo.lockLead(tx, gymId, leadId);
     if (stored === null) throw notFound();
-    if (stored.status === "joined" && stored.entryId !== null) {
+    if (stored.status === "joined" && stored.entryId !== null && stored.onList) {
       return { kind: "joined", body: { lead: toLead(stored), outcome: "already_joined" } };
     }
     const lead = { fullName: stored.fullName, email: stored.email, phone: stored.phone };
@@ -323,7 +346,10 @@ export async function joinLead(
     const candidates = shared.slice(0, LEAD_JOIN_MAX_CANDIDATES).map(toCandidate);
 
     let entryId: string | null;
-    if (body.entryId !== undefined) {
+    if (stored.status === "joined" && stored.entryId !== null) {
+      // Joined before, and that record was taken off the list since: it is put back.
+      entryId = stored.entryId;
+    } else if (body.entryId !== undefined) {
       // Only a record the screen could have shown: one of this gym's that shares the
       // lead's email or phone now.
       if (!shared.some((record) => record.entryId === body.entryId)) {
@@ -339,6 +365,12 @@ export async function joinLead(
     }
 
     const placed = await placeLeadInTx(tx, { gymId, userId, at, country: org.country, entryId, lead });
+    if (placed.outcome === "held") {
+      // "Someone new", and a record holds exactly these details: shown, never taken.
+      const held = shared.find((record) => record.entryId === placed.entryId);
+      if (held === undefined) throw new Error("a record with the lead's exact details shares none of its contact");
+      return { kind: "choose", error: LEAD_JOIN_CHOOSE_ERROR, message: LEAD_WORDS.join_exact, candidates: [toCandidate(held)] };
+    }
     const written = await repo.writeLead(
       tx,
       gymId,
