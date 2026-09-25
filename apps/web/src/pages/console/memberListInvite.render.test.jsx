@@ -279,6 +279,20 @@ describe('Add and invite', () => {
     expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Cy Walker', email: 'cy@members.example', invite: true });
   });
 
+  it('Status takes a word the list has never used, and says so under the box', async () => {
+    addBox();
+    fill();
+    const status = page().getByLabelText('Status');
+    const hint = document.getElementById(status.getAttribute('aria-describedby'));
+    expect(hint.textContent).toBe('Pick one of your words, or type a new one.');
+    fireEvent.change(status, { target: { value: 'Paused' } });
+    orgService.addMemberListEntry.mockResolvedValue(added(null));
+    fireEvent.click(page().getByRole('button', { name: 'Add member' }));
+    await waitFor(() =>
+      expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Cy Walker', email: 'cy@members.example', status: 'Paused' }),
+    );
+  });
+
   it('Add alone invites nobody', async () => {
     addBox();
     fill();

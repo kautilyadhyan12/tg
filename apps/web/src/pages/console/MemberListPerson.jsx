@@ -607,27 +607,37 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       {WORD_FIELDS.map((f) => {
         const listId = `${titleId}-${f.key}`;
         const known = (list?.[f.from] ?? []).map((w) => w.label).filter((w) => w !== '');
+        // The box takes any word; the suggestions are the gym's own, so a word is not
+        // spelled two ways. The hint says so, since a browser draws it like a dropdown.
         return (
-          <label key={f.key} className="flex flex-col gap-1">
-            <span className="text-sm" style={{ color: C.soft }}>
-              {f.label}
-            </span>
-            <input
-              type="text"
-              list={known.length > 0 ? listId : undefined}
-              value={form[f.key]}
-              onChange={(e) => setField(f.key, e.target.value)}
-              className={INPUT}
-              style={inputStyle}
-            />
+          <div key={f.key} className="flex flex-col gap-1">
+            <label className="flex flex-col gap-1">
+              <span className="text-sm" style={{ color: C.soft }}>
+                {f.label}
+              </span>
+              <input
+                type="text"
+                list={known.length > 0 ? listId : undefined}
+                aria-describedby={known.length > 0 ? `${listId}-hint` : undefined}
+                value={form[f.key]}
+                onChange={(e) => setField(f.key, e.target.value)}
+                className={INPUT}
+                style={inputStyle}
+              />
+            </label>
             {known.length > 0 ? (
-              <datalist id={listId}>
-                {known.map((w) => (
-                  <option key={w} value={w} />
-                ))}
-              </datalist>
+              <>
+                <span id={`${listId}-hint`} className="text-xs" style={{ color: C.muted }}>
+                  Pick one of your words, or type a new one.
+                </span>
+                <datalist id={listId}>
+                  {known.map((w) => (
+                    <option key={w} value={w} />
+                  ))}
+                </datalist>
+              </>
             ) : null}
-          </label>
+          </div>
         );
       })}
       {DAY_FIELDS.map((f) => (
