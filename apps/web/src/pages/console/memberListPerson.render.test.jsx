@@ -203,13 +203,14 @@ describe('the worst thing: one person tapped, another shown or changed', () => {
     fireEvent.click(pick);
 
     // Started from the record they do not want, as PushPress does: this one goes.
-    expect(within(screen.getByTestId('join-keep')).getByText(/ada\.old@members\.example/)).toBeTruthy();
-    expect(within(screen.getByTestId('join-remove')).getByText(/^ada@members\.example/)).toBeTruthy();
+    expect((await screen.findByTestId('join-keep-email')).textContent).toBe('ada.old@members.example');
+    expect(screen.getByTestId('join-remove-email').textContent).toBe('ada@members.example');
+    expect(orgService.getMemberListEntry).toHaveBeenLastCalledWith(GYM, ADA_OLD);
 
     // Swapped: now this one stays and the other goes, and the request follows the cards.
     fireEvent.click(dialog().getByRole('button', { name: 'Swap' }));
-    expect(within(screen.getByTestId('join-keep')).getByText(/^ada@members\.example/)).toBeTruthy();
-    expect(within(screen.getByTestId('join-remove')).getByText(/ada\.old@members\.example/)).toBeTruthy();
+    expect(screen.getByTestId('join-keep-email').textContent).toBe('ada@members.example');
+    expect(screen.getByTestId('join-remove-email').textContent).toBe('ada.old@members.example');
     orgService.mergeMemberListEntries.mockResolvedValue(written('merged', ada));
     fireEvent.click(dialog().getByRole('button', { name: 'Merge' }));
     await waitFor(() => expect(orgService.mergeMemberListEntries).toHaveBeenCalledTimes(1));
@@ -230,7 +231,7 @@ describe('the worst thing: one person tapped, another shown or changed', () => {
     await pickMore('Merge duplicate');
     fireEvent.change(dialog().getByLabelText('Find the other record'), { target: { value: 'ada' } });
     fireEvent.click(await dialog().findByRole('button', { name: /ada\.old@members\.example/ }));
-    fireEvent.click(dialog().getByRole('button', { name: 'Merge' }));
+    fireEvent.click(await dialog().findByRole('button', { name: 'Merge' }));
     await waitFor(() => expect(orgService.mergeMemberListEntries).toHaveBeenCalledWith(GYM, ADA, ADA_OLD, false));
     expect(await dialog().findByText(/Merged\. This is the record you kept/)).toBeTruthy();
     expect(dialog().getByText('ada.old@members.example')).toBeTruthy();
@@ -244,6 +245,27 @@ describe('the worst thing: one person tapped, another shown or changed', () => {
 });
 
 describe('a person on the list', () => {
+  it('shows both records side by side, every field, the ones that differ marked, so two different people can be told apart', async () => {
+    const liam = person(ADA, 'Liam Hughes', { email: 'liam.hughes@members.example', phone: '+447700900302', memberNumber: 'M-103', dateOfBirth: '1990-03-12', joinedOn: '2025-03-03', status: 'Frozen', inApp: true, extra: [{ key: 'locker', label: 'Locker', value: '4' }] });
+    const other = person(ADA_OLD, 'Liam Hughes', { email: 'liam.h@members.example', phone: null, memberNumber: null, dateOfBirth: '2008-07-01', joinedOn: '2026-09-01', status: 'Active', formerAt: '2026-08-01T10:00:00.000Z' });
+    orgService.getMemberListEntry.mockImplementation((_gym, id) => Promise.resolve(entryAnswer(id === ADA ? liam : other)));
+    orgService.getMemberListEntries.mockResolvedValue(pageOf([other]));
+    openBox(ADA);
+    await pickMore('Merge duplicate');
+    fireEvent.click(await dialog().findByRole('button', { name: /liam\.h@members\.example/ }));
+    const compare = await screen.findByTestId('merge-compare');
+    const cell = (side, key) => within(compare).getByTestId(`join-${side}-${key}`).textContent;
+    // Picked record kept, this one removed, as first offered.
+    expect([cell('keep', 'dateOfBirth'), cell('remove', 'dateOfBirth')]).toEqual(['1 July 2008', '12 March 1990']);
+    expect([cell('keep', 'joinedOn'), cell('remove', 'joinedOn')]).toEqual(['1 September 2026', '3 March 2025']);
+    expect([cell('keep', 'phone'), cell('remove', 'phone')]).toEqual(['—', '+447700900302']);
+    expect([cell('keep', 'app'), cell('remove', 'app')]).toEqual(['No', 'Yes']);
+    expect(cell('keep', 'list')).toBe('Past member · removed 1 August 2026');
+    expect([cell('keep', 'extra:locker'), cell('remove', 'extra:locker')]).toEqual(['—', '4']);
+    expect(within(compare).getAllByText('differs').length).toBeGreaterThanOrEqual(8);
+    // The name is the same, so it is not marked.
+    expect(within(compare).getByTestId('join-keep-fullName').textContent).toBe('Liam Hughes');
+  });
   it("shows every kept field, the gym's own columns and who uses the app", async () => {
     orgService.getMemberListEntry.mockResolvedValue(
       entryAnswer(

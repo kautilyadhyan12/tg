@@ -17,7 +17,7 @@ import {
   invitationView,
   outcomeWords,
   patchFrom,
-  rowWords,
+  compareRecords,
   whenWords,
 } from './memberListPeople';
 
@@ -171,30 +171,55 @@ function MoreMenu({ items, disabled }) {
   );
 }
 
-/** A short summary of a record, for the Keep and Remove cards of a join. */function RecordCard({ record, role }) {
-  const keep = role === 'keep';
-  return (
+/** Merge duplicate: the two records side by side, every field in the same order, the
+ *  ones that differ marked, so staff can see whether this is one person twice or two
+ *  different people. Each value cell names its side and field for the tests. */
+function CompareRecords({ keep, remove, fields }) {
+  const rows = compareRecords(keep, remove, fields);
+  const head = (side) => (
     <div
-      data-testid={keep ? 'join-keep' : 'join-remove'}
-      className="rounded-2xl p-4"
-      style={{ background: C.card, border: `1px solid ${keep ? 'rgba(52,211,153,0.4)' : 'rgba(248,113,113,0.4)'}` }}
+      className="text-xs font-bold uppercase tracking-wide rounded-lg px-2 py-1.5 text-center"
+      style={side === 'keep' ? { background: C.greenBg, color: C.green } : { background: C.redBg, color: C.red }}
     >
-      <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: keep ? C.green : C.red }}>
-        {keep ? 'Keep' : 'Remove'}
+      {side === 'keep' ? 'Keep' : 'Remove'}
+    </div>
+  );
+  return (
+    <div className="rounded-2xl p-3" style={{ background: C.card, border: `1px solid ${C.line}` }} data-testid="merge-compare">
+      <div className="grid grid-cols-2 gap-2 mb-1">
+        {head('keep')}
+        {head('remove')}
       </div>
-      <div className="font-semibold mt-1" style={{ color: '#fff' }}>
-        {record.fullName || 'No name'}
-      </div>
-      <div className="text-sm" style={{ color: C.soft }}>
-        {[record.email, record.phone, record.memberNumber].filter((v) => v !== null).join(' · ') || 'No email or phone'}
-      </div>
-      <div className="text-xs mt-1" style={{ color: C.muted }}>
-        {rowWords(record).join(' · ')}
-      </div>
+      {rows.map((row) => (
+        <div key={row.key} className="py-2" style={{ borderTop: `1px solid ${C.line}` }}>
+          <div className="text-xs flex items-center gap-1.5" style={{ color: C.muted }}>
+            {row.label}
+            {row.differs ? (
+              <span className="rounded px-1.5 font-semibold" style={{ background: C.orangeBg, color: C.orange }}>
+                differs
+              </span>
+            ) : null}
+          </div>
+          <div className="grid grid-cols-2 gap-2 mt-0.5 text-sm">
+            {[
+              ['keep', row.keep],
+              ['remove', row.remove],
+            ].map(([side, value]) => (
+              <div
+                key={side}
+                data-testid={`join-${side}-${row.key}`}
+                className="break-words min-w-0"
+                style={{ color: value === '—' ? C.muted : row.differs ? C.orange : '#fff' }}
+              >
+                {value}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
-
 export default function MemberListPerson({ gymId, entryId, list, words, readOnly, onClose, onChanged }) {
   const titleId = useId();
   const dialogRef = useRef(null);
@@ -219,6 +244,8 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
   const [joinResults, setJoinResults] = useState(null);
   const [joinPick, setJoinPick] = useState(null);
   const [keepThis, setKeepThis] = useState(false);
+  /** The record being opened to compare, while its whole page is read. */
+  const [picking, setPicking] = useState(null);
 
   const ranges = dayRanges();
 
@@ -397,6 +424,27 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
       setBusy(false);
     }
   };
+
+  /** The other record's whole page is read before the two are compared, so the
+   *  comparison has every field, custom fields included. The answer is used only if the
+   *  box still has the same record open and it is the record picked. */
+  const pickRecord = async (otherId) => {
+    const asked = shown.entryId;
+    setPicking(otherId);
+    setRefusal(null);
+    try {
+      const res = await orgService.getMemberListEntry(gymId, otherId);
+      if (wanted.current !== asked || res.data.entry.entryId !== otherId) return;
+      setKeepThis(false);
+      setJoinPick(res.data.entry);
+    } catch (err) {
+      if (wanted.current === asked) refused(err, "We couldn't open that record.");
+    } finally {
+      setPicking(null);
+    }
+  };
+
+  const onPick = (e) => void pickRecord(e.currentTarget.dataset.entryId);
 
   /** Join: the record under "Remove" is the one the request removes, and the one under
    *  "Keep" is the one it keeps — worked out once, here, from what is on screen. */
@@ -711,8 +759,7 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
             Merge duplicate: the two records become one. The one you <b>keep</b> keeps everything it has, and takes the other&apos;s
             details only where its own are empty. The other is removed.
           </p>
-          <RecordCard record={keep} role="keep" />
-          <RecordCard record={remove} role="remove" />
+          <CompareRecords keep={keep} remove={remove} fields={fields} />
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => void join()} disabled={busy || readOnly} className={BUTTON} style={{ background: C.orange, color: '#000' }}>
               {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
@@ -764,10 +811,9 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
               <li key={r.entryId}>
                 <button
                   type="button"
-                  onClick={() => {
-                    setKeepThis(false);
-                    setJoinPick(r);
-                  }}
+                  data-entry-id={r.entryId}
+                  onClick={onPick}
+                  disabled={picking !== null}
                   className="w-full text-left rounded-xl px-3 py-2.5"
                   style={{ background: C.card, border: `1px solid ${C.line}` }}
                 >
@@ -777,6 +823,7 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
                   <span className="block text-sm truncate" style={{ color: C.muted }}>
                     {contactWords(r)}
                     {r.formerAt !== null ? ' · past member' : ''}
+                    {picking === r.entryId ? ' · opening…' : ''}
                   </span>
                 </button>
               </li>

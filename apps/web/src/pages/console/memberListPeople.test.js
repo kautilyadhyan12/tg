@@ -5,6 +5,7 @@ import { memberListEntryDetailSchema, memberListEntriesQuerySchema, MEMBER_INVIT
 import {
   EMPTY_FILTERS,
   activeFilters,
+  compareRecords,
   entriesQueryString,
   formFrom,
   handEditedWords,
@@ -219,5 +220,28 @@ describe('the "Showing:" line', () => {
 
   it('shows nothing for the whole list, a search alone included', () => {
     expect(activeFilters({ ...EMPTY_FILTERS, query: 'ada' }, WORDS)).toEqual([]);
+  });
+});
+
+describe("Merge duplicate's side-by-side view", () => {
+  it('lists every field of both records in one order, "—" for none, and marks what differs', () => {
+    const a = entry({ memberNumber: 'M-1', dateOfBirth: '1990-03-12', inApp: true });
+    const b = entry({ entryId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', email: 'ada.old@members.example', phone: null, dateOfBirth: '1990-03-12', formerAt: '2026-08-01T10:00:00.000Z', extra: [] });
+    const rows = compareRecords(a, b, FIELDS);
+    const row = (key) => rows.find((r) => r.key === key);
+    expect(rows.map((r) => r.label).slice(0, 12)).toEqual([
+      'Name', 'Email', 'Phone', 'Member number', 'Date of birth', 'Join date', 'Status', 'Membership', 'End or renewal date', 'Payment status', 'On the list', 'Uses the app',
+    ]);
+    expect(row('fullName')).toMatchObject({ keep: 'Ada Lovelace', remove: 'Ada Lovelace', differs: false });
+    expect(row('dateOfBirth')).toMatchObject({ keep: '12 March 1990', remove: '12 March 1990', differs: false });
+    expect(row('email')).toMatchObject({ remove: 'ada.old@members.example', differs: true });
+    expect(row('phone')).toMatchObject({ keep: '+447700900123', remove: '—', differs: true });
+    expect(row('memberNumber')).toMatchObject({ keep: 'M-1', remove: '—', differs: true });
+    expect(row('list')).toMatchObject({ keep: 'On your list', remove: 'Past member · removed 1 August 2026', differs: true });
+    expect(row('app')).toMatchObject({ keep: 'Yes', remove: 'No', differs: true });
+    expect(row('paymentStatus')).toMatchObject({ keep: '—', remove: '—', differs: false });
+    expect(row('extra:locker')).toMatchObject({ keep: '12', remove: '—', differs: true });
+    // A custom field neither record holds is left out.
+    expect(row('extra:notes_2')).toBeUndefined();
   });
 });
