@@ -55,6 +55,24 @@ export function entriesQueryString(filters, cursor) {
   return params.toString();
 }
 
+/** What is ticked, one pill each for the "Showing:" line, each with the filters as
+ *  they would be without it. The search is not here: it has its own box. */
+export function activeFilters(filters, words) {
+  if (filters.records === 'former') {
+    return [{ key: 'records', text: `Past ${words.people}`, without: { ...filters, records: 'current' } }];
+  }
+  const out = [];
+  for (const { kind, none } of CHIP_KINDS) {
+    for (const label of filters[kind]) {
+      out.push({ key: `${kind}:${label}`, text: chipText(label, none), without: toggleWord(filters, kind, label) });
+    }
+  }
+  if (filters.app !== 'all') {
+    out.push({ key: 'app', text: filters.app === 'in_app' ? 'In the app' : 'Not in the app', without: { ...filters, app: 'all' } });
+  }
+  return out;
+}
+
 export function filtersAreEmpty(filters) {
   return (
     filters.app === 'all' &&
@@ -78,7 +96,7 @@ export function endsWords(entry) {
 
 /** The row's second line: the gym's own words about the person. */
 export function rowWords(entry) {
-  if (entry.formerAt !== null) return [`Taken off ${whenWords(entry.formerAt)}`];
+  if (entry.formerAt !== null) return [`Removed from list ${whenWords(entry.formerAt)}`];
   return [entry.status, entry.membershipType, endsWords(entry)].filter((w) => w !== null && w !== '');
 }
 
@@ -212,13 +230,13 @@ export function outcomeWords(outcome) {
     case 'unchanged':
       return 'Nothing changed.';
     case 'taken_off':
-      return 'Taken off your list. The record is kept as a past member.';
+      return 'Removed from your list. The record is kept as a past member.';
     case 'already_taken_off':
-      return 'This person was already taken off your list.';
+      return 'This person was already removed from your list.';
     case 'restored':
       return 'Back on your list.';
     case 'merged':
-      return 'The two records are joined. This is the one you kept.';
+      return 'Merged. This is the record you kept.';
     default:
       return null;
   }

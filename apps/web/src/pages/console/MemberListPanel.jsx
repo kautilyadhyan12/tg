@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ChevronRight, Loader2, Search, UserPlus } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Loader2, Search, SlidersHorizontal, Upload, UserPlus, X } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import MemberListPerson, { Tag } from './MemberListPerson';
+import MemberListUpload from './MemberListUpload';
 import {
   CHIP_KINDS,
   EMPTY_FILTERS,
+  activeFilters,
   chipText,
   contactWords,
   entriesQueryString,
@@ -16,8 +18,9 @@ import {
 } from './memberListPeople';
 
 // The gym's own list on the Members screen (ROADMAP 5b-i; spec Part 3 §9.14, §11.5):
-// the gym's words as chips with their counts, in the app or not, a search, past
-// members, and each person's page. Every number is the server's.
+// Search, Filter, Import and Add over the list, as Gymdesk lays it out. Filter opens a
+// box of the gym's own words with their counts, in the app or not, and past members;
+// what is ticked shows as one "Showing:" line. Every number is the server's.
 
 const C = {
   card: '#121110',
@@ -50,7 +53,109 @@ function Chip({ pressed, onClick, children, testId }) {
   );
 }
 
-export default function MemberListPanel({ gymId, words, readOnly, refreshKey }) {
+/** The Filter box: the gym's own words with their counts, in the app or not, and past
+ *  members. A tap applies at once; "Show" closes the box on the list it chose. */
+function FilterBox({ list, filters, words, total, onChange, onClear, onClose }) {
+  const past = filters.records === 'former';
+  const former = list?.counts.former ?? 0;
+  const group = (title, children) => (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: C.muted }}>
+        {title}
+      </span>
+      <div className="flex flex-wrap gap-2" role="group" aria-label={title}>
+        {children}
+      </div>
+    </div>
+  );
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto" style={{ background: 'rgba(10,9,8,0.88)' }}>
+      <div className="min-h-full flex items-end sm:items-center justify-center sm:p-6">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Filter"
+          className="w-full sm:max-w-[560px] rounded-t-[28px] sm:rounded-[28px] p-5 sm:p-6 flex flex-col gap-4"
+          style={{ background: '#0f0e0d', border: '1px solid rgba(255,255,255,0.07)' }}
+        >
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold" style={{ color: '#fff' }}>
+              Filter
+            </h2>
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={onClose}
+              className="w-10 h-10 rounded-full flex items-center justify-center"
+              style={{ background: C.plain, color: C.soft }}
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          {list !== null && !past
+            ? CHIP_KINDS.map(({ kind, from, title, none }) => {
+                const chips = list[from];
+                if (!chips.some((c) => c.label !== '')) return null;
+                return (
+                  <div key={kind}>
+                    {group(
+                      title,
+                      chips.map((c) => (
+                        <Chip key={`${kind}-${c.label}`} pressed={isTicked(filters, kind, c.label)} onClick={() => onChange(toggleWord(filters, kind, c.label))}>
+                          {chipText(c.label, none)} {count(c.count)}
+                        </Chip>
+                      )),
+                    )}
+                  </div>
+                );
+              })
+            : null}
+          {list !== null && !past && list.counts.entries > 0
+            ? group(
+                'App',
+                <>
+                  <Chip pressed={filters.app === 'in_app'} onClick={() => onChange({ ...filters, app: filters.app === 'in_app' ? 'all' : 'in_app' })}>
+                    In the app {count(list.counts.inApp)}
+                  </Chip>
+                  <Chip pressed={filters.app === 'not_in_app'} onClick={() => onChange({ ...filters, app: filters.app === 'not_in_app' ? 'all' : 'not_in_app' })}>
+                    Not in the app {count(list.counts.entries - list.counts.inApp)}
+                  </Chip>
+                </>,
+              )
+            : null}
+          {former > 0 || past
+            ? group(
+                'Show',
+                <Chip pressed={past} onClick={() => onChange({ ...filters, records: past ? 'current' : 'former' })}>
+                  Past {words.people} {count(former)}
+                </Chip>,
+              )
+            : null}
+          {past ? (
+            <p className="text-sm" style={{ color: C.muted }}>
+              Past {words.people} are shown on their own.
+            </p>
+          ) : null}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 rounded-xl min-h-[48px] text-[15px] font-bold"
+              style={{ background: C.orange, color: '#000' }}
+            >
+              {total === null ? `Show ${words.people}` : `Show ${count(total)} ${total === 1 ? words.person : words.people}`}
+            </button>
+            <button type="button" onClick={onClear} className="rounded-xl px-5 min-h-[48px] text-sm font-semibold" style={{ background: C.plain, color: C.soft }}>
+              Clear
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function MemberListPanel({ gymId, words, readOnly, refreshKey, onImported = () => undefined }) {
   const [list, setList] = useState(null);
   const [listError, setListError] = useState(null);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
@@ -60,6 +165,8 @@ export default function MemberListPanel({ gymId, words, readOnly, refreshKey }) 
   const [tick, setTick] = useState(0);
   /** undefined: no box open · null: adding somebody · an id: that person's page. */
   const [openId, setOpenId] = useState(undefined);
+  const [filtering, setFiltering] = useState(false);
+  const [importing, setImporting] = useState(false);
   /** The newest request for a page: an answer to an older one is dropped. */
   const latest = useRef(0);
 
@@ -135,12 +242,18 @@ export default function MemberListPanel({ gymId, words, readOnly, refreshKey }) 
   const current = filters.records === 'current';
   const former = list?.counts.former ?? 0;
   const empty = filtersAreEmpty(filters);
+  // What is ticked, as the "Showing:" line; the search has its own box.
+  const shown = activeFilters(filters, words);
+  const clearAll = () => {
+    setTyped('');
+    change({ ...EMPTY_FILTERS });
+  };
   const noList = list !== null && !list.hasList && list.counts.entries === 0 && former === 0;
 
   return (
     <div className="flex flex-col gap-4" data-testid="member-list-panel">
       <div className="flex flex-wrap items-center gap-2">
-        <label className="relative flex-1 min-w-[200px]">
+        <label className="relative flex-1 min-w-[160px]">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: C.muted }} />
           <input
             type="search"
@@ -156,14 +269,36 @@ export default function MemberListPanel({ gymId, words, readOnly, refreshKey }) 
         </label>
         <button
           type="button"
-          onClick={() => setOpenId(null)}
-          disabled={readOnly}
-          className="rounded-xl px-4 min-h-[44px] text-sm font-bold flex items-center gap-2 disabled:opacity-40"
-          style={{ background: C.orange, color: '#000' }}
+          aria-haspopup="dialog"
+          onClick={() => setFiltering(true)}
+          className="rounded-xl px-4 min-h-[44px] text-sm font-bold flex items-center gap-2"
+          style={{ background: C.plain, color: C.soft, border: '1px solid rgba(255,255,255,0.08)' }}
         >
-          <UserPlus className="w-4 h-4" />
-          Add {words.person}
+          <SlidersHorizontal className="w-4 h-4" />
+          {shown.length > 0 ? `Filter · ${String(shown.length)}` : 'Filter'}
         </button>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={() => setImporting(true)}
+            disabled={readOnly}
+            className="flex-1 sm:flex-none rounded-xl px-4 min-h-[44px] text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-40"
+            style={{ background: C.plain, color: C.soft, border: '1px solid rgba(255,255,255,0.08)' }}
+          >
+            <Upload className="w-4 h-4" />
+            Import
+          </button>
+          <button
+            type="button"
+            onClick={() => setOpenId(null)}
+            disabled={readOnly}
+            className="flex-1 sm:flex-none rounded-xl px-4 min-h-[44px] text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-40"
+            style={{ background: C.orange, color: '#000' }}
+          >
+            <UserPlus className="w-4 h-4" />
+            Add {words.person}
+          </button>
+        </div>
       </div>
 
       {listError !== null ? (
@@ -172,77 +307,58 @@ export default function MemberListPanel({ gymId, words, readOnly, refreshKey }) 
         </p>
       ) : null}
 
-      {former > 0 || !current ? (
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Which records">
-          <Chip pressed={current} onClick={() => change({ ...filters, records: 'current' })}>
-            On your list{list !== null ? ` ${count(list.counts.entries)}` : ''}
-          </Chip>
-          <Chip pressed={!current} onClick={() => change({ ...filters, records: 'former' })}>
-            Past {words.people} {count(former)}
-          </Chip>
+      {shown.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 text-sm" data-testid="showing">
+          <span style={{ color: C.muted }}>Showing:</span>
+          {shown.map((f) => (
+            <button
+              key={f.key}
+              type="button"
+              aria-label={`Stop showing only ${f.text}`}
+              onClick={() => change(f.without)}
+              className="rounded-full px-3 min-h-[32px] font-semibold flex items-center gap-1"
+              style={{ background: C.orange, color: '#000' }}
+            >
+              {f.text}
+              <X className="w-3.5 h-3.5" />
+            </button>
+          ))}
+          <button type="button" onClick={clearAll} className="font-semibold px-1" style={{ color: C.orange }}>
+            Clear
+          </button>
         </div>
       ) : null}
-
-      {current && list !== null && list.counts.entries > 0 ? (
-        <div className="flex flex-wrap gap-2" role="group" aria-label="In the app">
-          <Chip pressed={filters.app === 'all'} onClick={() => change({ ...filters, app: 'all' })}>
-            Everyone
-          </Chip>
-          <Chip pressed={filters.app === 'in_app'} onClick={() => change({ ...filters, app: 'in_app' })}>
-            In the app {count(list.counts.inApp)}
-          </Chip>
-          <Chip pressed={filters.app === 'not_in_app'} onClick={() => change({ ...filters, app: 'not_in_app' })}>
-            Not in the app {count(list.counts.entries - list.counts.inApp)}
-          </Chip>
-        </div>
-      ) : null}
-
-      {current && list !== null
-        ? CHIP_KINDS.map(({ kind, from, title, none }) => {
-            const chips = list[from];
-            if (!chips.some((c) => c.label !== '')) return null;
-            return (
-              <div key={kind} className="flex flex-col gap-1.5">
-                <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: C.muted }}>
-                  {title}
-                </span>
-                <div className="flex flex-wrap gap-2" role="group" aria-label={title}>
-                  {chips.map((c) => (
-                    <Chip
-                      key={`${kind}-${c.label}`}
-                      testId={`chip-${kind}`}
-                      pressed={isTicked(filters, kind, c.label)}
-                      onClick={() => change(toggleWord(filters, kind, c.label))}
-                    >
-                      {chipText(c.label, none)} {count(c.count)}
-                    </Chip>
-                  ))}
-                </div>
-              </div>
-            );
-          })
-        : null}
 
       {!page.loading && page.error === null && !noList ? (
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm" style={{ color: C.muted }} data-testid="list-total">
-            {count(page.total)} {page.total === 1 ? words.person : words.people}
-            {!current ? ' taken off your list' : empty ? '' : ' match'}
-          </p>
-          {!empty ? (
-            <button
-              type="button"
-              onClick={() => {
-                setTyped('');
-                change({ ...EMPTY_FILTERS, records: filters.records });
-              }}
-              className="text-sm font-semibold"
-              style={{ color: C.orange }}
-            >
-              Clear filters
-            </button>
-          ) : null}
-        </div>
+        <p className="text-sm" style={{ color: C.muted }} data-testid="list-total">
+          {count(page.total)} {page.total === 1 ? words.person : words.people}
+          {!current ? ' removed from your list' : empty ? '' : ' match'}
+        </p>
+      ) : null}
+
+      {filtering ? (
+        <FilterBox
+          list={list}
+          filters={filters}
+          words={words}
+          total={page.loading ? null : page.total}
+          onChange={change}
+          onClear={clearAll}
+          onClose={() => setFiltering(false)}
+        />
+      ) : null}
+
+      {importing ? (
+        <MemberListUpload
+          gymId={gymId}
+          words={words}
+          readOnly={readOnly}
+          onClose={() => setImporting(false)}
+          onImported={() => {
+            setTick((n) => n + 1);
+            onImported();
+          }}
+        />
       ) : null}
 
       {page.loading ? (
@@ -287,20 +403,21 @@ export default function MemberListPanel({ gymId, words, readOnly, refreshKey }) 
                   style={{ background: C.card, border: `1px solid ${inv?.tone === 'orange' || inv?.tone === 'red' ? 'rgba(255,138,31,0.35)' : C.line}` }}
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold truncate" style={{ color: '#fff' }}>
-                        {e.fullName || 'No name'}
-                      </span>
-                      <Tag view={inv} />
+                    <div className="font-semibold truncate" style={{ color: '#fff' }}>
+                      {e.fullName || 'No name'}
                     </div>
-                    <div className="text-sm truncate mt-0.5" style={{ color: C.soft }}>
-                      {contactWords(e)}
+                    {/* One line: the contact (left off on a phone when the gym's words
+                        are there to show), then the gym's own words. */}
+                    <div className="text-[13px] truncate mt-0.5" style={{ color: C.muted }}>
+                      {rowWords(e).length === 0 ? (
+                        contactWords(e)
+                      ) : (
+                        <>
+                          <span className="hidden sm:inline">{contactWords(e)} · </span>
+                          {rowWords(e).join(' · ')}
+                        </>
+                      )}
                     </div>
-                    {rowWords(e).length > 0 ? (
-                      <div className="text-xs mt-0.5 truncate" style={{ color: C.muted }}>
-                        {rowWords(e).join(' · ')}
-                      </div>
-                    ) : null}
                     {inv?.detail ? (
                       <div className="text-xs mt-1 flex gap-1" style={{ color: C.orange }}>
                         <AlertTriangle className="w-3 h-3 flex-shrink-0 mt-0.5" />
@@ -308,6 +425,9 @@ export default function MemberListPanel({ gymId, words, readOnly, refreshKey }) 
                       </div>
                     ) : null}
                   </div>
+                  <span className="flex-shrink-0">
+                    <Tag view={inv} />
+                  </span>
                   <ChevronRight className="w-5 h-5 flex-shrink-0" style={{ color: C.muted }} />
                 </button>
               </li>

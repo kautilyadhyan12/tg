@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, Loader2, Upload } from 'lucide-react';
+import { AlertTriangle, Loader2 } from 'lucide-react';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { orgService, errorText, errorCode } from '../../api/orgsApi';
 import { useConsoleOrg } from './useConsoleOrg';
 import ApplicationsQueue from './ApplicationsQueue';
-import MemberListUpload from './MemberListUpload';
 import MemberListPanel from './MemberListPanel';
 import { orgWords } from '@app/shared';
 import {
@@ -291,46 +290,6 @@ function NotMeBox({ gymId, words }) {
   );
 }
 
-/** "Import members" (ROADMAP 5a): one card, one button; the import opens in its own box. */
-function ImportCard({ gymId, words, readOnly, onImported }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <section
-        className="rounded-2xl p-4 flex items-center gap-4"
-        style={{ background: '#121110', border: '1px solid rgba(255,255,255,0.06)' }}
-      >
-        <span
-          className="w-11 h-11 rounded-[14px] flex items-center justify-center flex-shrink-0"
-          style={{ background: 'rgba(255,138,31,0.12)', color: '#FF8A1F' }}
-        >
-          <Upload className="w-5 h-5" />
-        </span>
-        <div className="flex-1 min-w-0">
-          <h2 className="text-base font-bold" style={{ color: '#fff' }}>
-            Import {words.people}
-          </h2>
-          <p className="text-[13px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
-            From a spreadsheet
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          disabled={readOnly}
-          className="rounded-xl px-5 min-h-[44px] text-[15px] font-bold flex-shrink-0 disabled:opacity-40"
-          style={{ background: '#FF8A1F', color: '#000' }}
-        >
-          Import
-        </button>
-      </section>
-      {open ? (
-        <MemberListUpload gymId={gymId} words={words} readOnly={readOnly} onClose={() => setOpen(false)} onImported={onImported} />
-      ) : null}
-    </>
-  );
-}
-
 export default function Members() {
   const { orgSlug } = useParams();
   const { loading: orgLoading, error: orgError, org, notFound, reload } = useConsoleOrg(orgSlug);
@@ -356,8 +315,6 @@ export default function Members() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = canSeeList && searchParams.get('view') !== 'app' ? 'list' : 'app';
   const showTab = (next) => setSearchParams(next === 'app' ? { view: 'app' } : {}, { replace: true });
-  /** Bumped by an import, so the list tab reads the list again. */
-  const [listKey, setListKey] = useState(0);
   // Part 3 §4.2's read-only console, off the org row this screen already holds
   // — no read of its own, and false while the org is still loading, which is
   // the safe direction: a screen with no roster on it yet has no control to
@@ -585,17 +542,7 @@ export default function Members() {
         <>
           {/* Invitations that came back "Not me". */}
           <NotMeBox gymId={gymId} words={words} />
-          {/* Bringing the gym's own list in (ROADMAP 5a). */}
-          <ImportCard
-            gymId={gymId}
-            words={words}
-            readOnly={readOnly}
-            onImported={() => {
-              reloadRoster();
-              setListKey((n) => n + 1);
-            }}
-          />
-          <MemberListPanel gymId={gymId} words={words} readOnly={readOnly} refreshKey={listKey} />
+          <MemberListPanel gymId={gymId} words={words} readOnly={readOnly} onImported={reloadRoster} />
         </>
       ) : null}
 

@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { AlertTriangle, ArrowLeftRight, Check, Loader2, Search, Smartphone, Trash2, UserMinus, UserPlus, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeftRight, Check, Loader2, MoreHorizontal, Search, Smartphone, Trash2, UserMinus, UserPlus, X } from 'lucide-react';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import DatePick from '../../components/console/DatePick';
 import { FIELD_LABELS, dayWords } from './memberListView';
@@ -22,7 +22,8 @@ import {
 } from './memberListPeople';
 
 // One person on the gym's own list (ROADMAP 5b-i; spec Part 3 §11.6): everything kept
-// about them, and Change, Take off, Put back, Delete for good and Join. "Add person" is
+// about them, and Edit; under More, Remove from list, Merge duplicate and (for a past member)
+// Delete for good, as gym software keeps its rarer actions. "Add member" is
 // the same box with an empty form. It closes only by its X, as the import box does.
 //
 // Every answer is shown only for the record it was asked about: the box draws a
@@ -96,19 +97,81 @@ function Fact({ label, value, edited }) {
   );
 }
 
-function Section({ title, children }) {
+function Section({ title, note, children }) {
   return (
     <section>
       <h3 className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>
         {title}
+        {note ? <span className="normal-case font-normal tracking-normal"> ({note})</span> : null}
       </h3>
       <dl>{children}</dl>
     </section>
   );
 }
 
-/** A short summary of a record, for the Keep and Remove cards of a join. */
-function RecordCard({ record, role }) {
+/** "More ⋯": the rarer actions of a person's page, as gym software keeps them out of
+ *  the way. Each item runs once and closes the menu. */
+function MoreMenu({ items, disabled }) {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const away = (e) => {
+      if (wrap.current !== null && !wrap.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', away);
+    return () => document.removeEventListener('mousedown', away);
+  }, [open]);
+  return (
+    <div ref={wrap} className="relative">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        disabled={disabled}
+        className={BUTTON}
+        style={{ background: C.plain, color: C.soft }}
+      >
+        More
+        <MoreHorizontal className="w-4 h-4" />
+      </button>
+      {open ? (
+        <div
+          role="menu"
+          className="absolute right-0 sm:right-auto sm:left-0 bottom-full sm:bottom-auto sm:top-full mb-2 sm:mb-0 sm:mt-2 w-64 rounded-2xl p-1.5 z-10"
+          style={{ background: '#1a1816', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 12px 40px rgba(0,0,0,0.6)' }}
+        >
+          {items.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                item.onPick();
+              }}
+              className="w-full text-left rounded-xl px-3 py-2.5 flex items-start gap-2.5"
+              style={{ color: item.danger ? C.red : '#fff' }}
+            >
+              {item.icon ? <item.icon className="w-4 h-4 mt-0.5 flex-shrink-0" /> : <span className="w-4 flex-shrink-0" />}
+              <span>
+                <span className="block text-sm font-medium">{item.label}</span>
+                {item.hint ? (
+                  <span className="block text-xs" style={{ color: C.muted }}>
+                    {item.hint}
+                  </span>
+                ) : null}
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** A short summary of a record, for the Keep and Remove cards of a join. */function RecordCard({ record, role }) {
   const keep = role === 'keep';
   return (
     <div
@@ -350,6 +413,17 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
     );
   };
 
+  /** Merge duplicate starts with this person's name already searched, so a second record
+   *  under the same name shows at once. */
+  const startJoin = () => {
+    setJoinQuery(shown?.fullName ?? '');
+    setJoinPick(null);
+    setKeepThis(false);
+    setNotice(null);
+    setRefusal(null);
+    setMode('join');
+  };
+
   const startEdit = () => {
     setForm(formFrom(shown, fields));
     setNotice(null);
@@ -498,7 +572,7 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
         <div className="flex flex-wrap items-center gap-2">
           {p.formerAt !== null ? (
             <span className="rounded-md px-2 py-0.5 text-xs font-medium" style={{ background: C.plain, color: C.soft }}>
-              Past member · taken off {whenWords(p.formerAt)}
+              Past member · removed {whenWords(p.formerAt)}
             </span>
           ) : null}
           <Tag view={inv} />
@@ -523,7 +597,7 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
           </Section>
         ) : null}
         {extra.length > 0 ? (
-          <Section title="Your own columns">
+          <Section title="Custom fields" note="extra columns from your file">
             {extra.map((x) => (
               <Fact key={x.key} label={x.label} value={x.value} edited={edited.has(`extra:${x.key}`)} />
             ))}
@@ -551,36 +625,32 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
           </p>
         ) : null}
         {p.formerAt === null ? (
-          <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={startEdit} disabled={busy || readOnly} className={BUTTON} style={{ background: C.orange, color: '#000' }}>
-              Change
+          <div className="flex gap-2">
+            <button type="button" onClick={startEdit} disabled={busy || readOnly} className={`${BUTTON} flex-1 sm:flex-none`} style={{ background: C.orange, color: '#000' }}>
+              Edit
             </button>
-            <button type="button" onClick={() => setMode('takeOff')} disabled={busy || readOnly} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
-              <UserMinus className="w-4 h-4" />
-              Take off the list
-            </button>
-            <button type="button" onClick={() => setMode('join')} disabled={busy || readOnly} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
-              <ArrowLeftRight className="w-4 h-4" />
-              Join with another record
-            </button>
+            <MoreMenu
+              disabled={busy || readOnly}
+              items={[
+                { label: 'Remove from list', icon: UserMinus, onPick: () => setMode('takeOff') },
+                { label: 'Merge duplicate', hint: 'When this person is on your list twice', icon: ArrowLeftRight, onPick: startJoin },
+              ]}
+            />
           </div>
         ) : (
-          <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => void putBack()} disabled={busy || readOnly} className={BUTTON} style={{ background: C.orange, color: '#000' }}>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => void putBack()} disabled={busy || readOnly} className={`${BUTTON} flex-1 sm:flex-none`} style={{ background: C.orange, color: '#000' }}>
               <UserPlus className="w-4 h-4" />
               Put back on list
             </button>
-            <button type="button" onClick={startEdit} disabled={busy || readOnly} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
-              Change
-            </button>
-            <button type="button" onClick={() => setMode('join')} disabled={busy || readOnly} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
-              <ArrowLeftRight className="w-4 h-4" />
-              Join with another record
-            </button>
-            <button type="button" onClick={() => setMode('delete')} disabled={busy || readOnly} className={BUTTON} style={{ background: C.redBg, color: C.red }}>
-              <Trash2 className="w-4 h-4" />
-              Delete for good
-            </button>
+            <MoreMenu
+              disabled={busy || readOnly}
+              items={[
+                { label: 'Edit', onPick: startEdit },
+                { label: 'Merge duplicate', hint: 'When this person is on your list twice', icon: ArrowLeftRight, onPick: startJoin },
+                { label: 'Delete for good', icon: Trash2, danger: true, onPick: () => setMode('delete') },
+              ]}
+            />
           </div>
         )}
       </div>
@@ -594,7 +664,7 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
       return (
         <div className="flex flex-col gap-3" data-testid="confirm-take-off">
           <p className="text-[15px]" style={{ color: '#fff' }}>
-            Take {name} off your list?
+            Remove {name} from your list?
           </p>
           <p className="text-sm" style={{ color: C.soft }}>
             Their record is kept as a past member, and you can put it back.
@@ -603,7 +673,7 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
           </p>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => void takeOff()} disabled={busy || readOnly} className={BUTTON} style={{ background: C.orange, color: '#000' }}>
-              Take off the list
+              Remove from list
             </button>
             <button type="button" onClick={() => setMode('view')} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
               Keep on list
@@ -638,19 +708,19 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
       return (
         <div className="flex flex-col gap-3">
           <p className="text-sm" style={{ color: C.soft }}>
-            The record you keep keeps everything it has, and takes the other one&apos;s details only where its own are empty.
-            The other record is removed.
+            Merge duplicate: the two records become one. The one you <b>keep</b> keeps everything it has, and takes the other&apos;s
+            details only where its own are empty. The other is removed.
           </p>
           <RecordCard record={keep} role="keep" />
           <RecordCard record={remove} role="remove" />
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => void join()} disabled={busy || readOnly} className={BUTTON} style={{ background: C.orange, color: '#000' }}>
               {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-              Join the records
+              Merge
             </button>
             <button type="button" onClick={() => setKeepThis((k) => !k)} disabled={busy} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
               <ArrowLeftRight className="w-4 h-4" />
-              Keep the other one instead
+              Swap
             </button>
             <button type="button" onClick={() => setJoinPick(null)} disabled={busy} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
               Back
@@ -664,7 +734,7 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
     return (
       <div className="flex flex-col gap-3">
         <p className="text-sm" style={{ color: C.soft }}>
-          Find the other record of {p.fullName || 'this person'}. You choose which one to keep next.
+          Merge duplicate: find the other record of {p.fullName || 'this person'}. You choose which one to keep next.
         </p>
         <label className="relative block">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: C.muted }} />

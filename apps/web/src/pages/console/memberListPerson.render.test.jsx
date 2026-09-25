@@ -111,7 +111,12 @@ function openBox(entryId, extra = {}) {
   );
 }
 
-const dialog = () => within(screen.getByRole('dialog'));
+const dialog = () => within(screen.getAllByRole('dialog')[0]);
+/** Open "More" on a person's page and pick one of its items. */
+const pickMore = async (name) => {
+  fireEvent.click(await dialog().findByRole('button', { name: /^More/ }));
+  fireEvent.click(await dialog().findByRole('menuitem', { name: new RegExp(`^${name}`) }));
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -152,7 +157,7 @@ describe('the worst thing: one person tapped, another shown or changed', () => {
     expect(dialog().queryByText('ada@members.example')).toBeNull();
 
     orgService.changeMemberListEntry.mockResolvedValue(written('changed', { ...bea, phone: '+447700900555' }));
-    fireEvent.click(dialog().getByRole('button', { name: 'Change' }));
+    fireEvent.click(dialog().getByRole('button', { name: 'Edit' }));
     fireEvent.change(dialog().getByLabelText('Phone'), { target: { value: '+447700900555' } });
     fireEvent.click(dialog().getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(orgService.changeMemberListEntry).toHaveBeenCalledTimes(1));
@@ -174,7 +179,7 @@ describe('the worst thing: one person tapped, another shown or changed', () => {
       refusal(409, { error: 'already_on_list', message: 'This person is already on your list.', entryId: BEA }),
     );
     openBox(ADA);
-    fireEvent.click(await dialog().findByRole('button', { name: 'Change' }));
+    fireEvent.click(await dialog().findByRole('button', { name: 'Edit' }));
     fireEvent.change(dialog().getByLabelText('Email'), { target: { value: 'bea@members.example' } });
     fireEvent.click(dialog().getByRole('button', { name: 'Save' }));
     fireEvent.click(await dialog().findByRole('button', { name: 'Open that record' }));
@@ -190,7 +195,7 @@ describe('the worst thing: one person tapped, another shown or changed', () => {
     orgService.getMemberListEntries.mockResolvedValue(pageOf([ada, adaOld]));
     orgService.mergeMemberListEntries.mockResolvedValue(written('merged', { ...adaOld, formerAt: null }));
     openBox(ADA);
-    fireEvent.click(await dialog().findByRole('button', { name: 'Join with another record' }));
+    await pickMore('Merge duplicate');
     fireEvent.change(dialog().getByLabelText('Find the other record'), { target: { value: 'ada' } });
     // The record the page is open on is never offered as its own other half.
     const pick = await dialog().findByRole('button', { name: /ada\.old@members\.example/ });
@@ -202,30 +207,36 @@ describe('the worst thing: one person tapped, another shown or changed', () => {
     expect(within(screen.getByTestId('join-remove')).getByText(/^ada@members\.example/)).toBeTruthy();
 
     // Swapped: now this one stays and the other goes, and the request follows the cards.
-    fireEvent.click(dialog().getByRole('button', { name: 'Keep the other one instead' }));
+    fireEvent.click(dialog().getByRole('button', { name: 'Swap' }));
     expect(within(screen.getByTestId('join-keep')).getByText(/^ada@members\.example/)).toBeTruthy();
     expect(within(screen.getByTestId('join-remove')).getByText(/ada\.old@members\.example/)).toBeTruthy();
     orgService.mergeMemberListEntries.mockResolvedValue(written('merged', ada));
-    fireEvent.click(dialog().getByRole('button', { name: 'Join the records' }));
+    fireEvent.click(dialog().getByRole('button', { name: 'Merge' }));
     await waitFor(() => expect(orgService.mergeMemberListEntries).toHaveBeenCalledTimes(1));
     expect(orgService.mergeMemberListEntries).toHaveBeenCalledWith(GYM, ADA_OLD, ADA, false);
-    expect(await dialog().findByText(/two records are joined/i)).toBeTruthy();
+    expect(await dialog().findByText(/Merged\. This is the record you kept/)).toBeTruthy();
     expect(onChanged).toHaveBeenCalled();
   });
 
   it('Join as first offered removes this record and keeps the one picked, then shows the kept one', async () => {
+    const merged = { ...adaOld, formerAt: null };
     orgService.getMemberListEntries.mockResolvedValue(pageOf([adaOld]));
-    orgService.mergeMemberListEntries.mockResolvedValue(written('merged', { ...adaOld, formerAt: null }));
+    orgService.mergeMemberListEntries.mockImplementation(() => {
+      // The server now holds the kept record back on the list.
+      orgService.getMemberListEntry.mockImplementation((_gym, id) => Promise.resolve(entryAnswer(id === ADA_OLD ? merged : ada)));
+      return Promise.resolve(written('merged', merged));
+    });
     openBox(ADA);
-    fireEvent.click(await dialog().findByRole('button', { name: 'Join with another record' }));
+    await pickMore('Merge duplicate');
     fireEvent.change(dialog().getByLabelText('Find the other record'), { target: { value: 'ada' } });
     fireEvent.click(await dialog().findByRole('button', { name: /ada\.old@members\.example/ }));
-    fireEvent.click(dialog().getByRole('button', { name: 'Join the records' }));
+    fireEvent.click(dialog().getByRole('button', { name: 'Merge' }));
     await waitFor(() => expect(orgService.mergeMemberListEntries).toHaveBeenCalledWith(GYM, ADA, ADA_OLD, false));
-    expect(await dialog().findByText('ada.old@members.example')).toBeTruthy();
+    expect(await dialog().findByText(/Merged\. This is the record you kept/)).toBeTruthy();
+    expect(dialog().getByText('ada.old@members.example')).toBeTruthy();
     // A later change goes to the kept record, never to the one removed.
     orgService.changeMemberListEntry.mockResolvedValue(written('changed', adaOld));
-    fireEvent.click(dialog().getByRole('button', { name: 'Change' }));
+    fireEvent.click(dialog().getByRole('button', { name: 'Edit' }));
     fireEvent.change(dialog().getByLabelText('Member number'), { target: { value: 'M-1' } });
     fireEvent.click(dialog().getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(orgService.changeMemberListEntry).toHaveBeenCalledWith(GYM, ADA_OLD, { memberNumber: 'M-1' }));
@@ -259,23 +270,24 @@ describe('a person on the list', () => {
     expect(dialog().getByText(/Changed by hand: Phone/)).toBeTruthy();
   });
 
-  it('asks before taking somebody off, then shows them as a past member with Put back and Delete for good', async () => {
+  it('asks before removing somebody from the list, then shows them as a past member with Put back, and Delete for good under More', async () => {
     const off = { ...ada, formerAt: '2026-09-25T10:00:00.000Z' };
     orgService.takeOffMemberListEntry.mockResolvedValue(written('taken_off', off));
     openBox(ADA);
-    fireEvent.click(await dialog().findByRole('button', { name: 'Take off the list' }));
+    await pickMore('Remove from list');
     expect(screen.getByTestId('confirm-take-off')).toBeTruthy();
     expect(orgService.takeOffMemberListEntry).not.toHaveBeenCalled();
     fireEvent.click(dialog().getByRole('button', { name: 'Keep on list' }));
     expect(orgService.takeOffMemberListEntry).not.toHaveBeenCalled();
 
-    fireEvent.click(dialog().getByRole('button', { name: 'Take off the list' }));
-    fireEvent.click(within(screen.getByTestId('confirm-take-off')).getByRole('button', { name: 'Take off the list' }));
+    await pickMore('Remove from list');
+    fireEvent.click(within(screen.getByTestId('confirm-take-off')).getByRole('button', { name: 'Remove from list' }));
     await waitFor(() => expect(orgService.takeOffMemberListEntry).toHaveBeenCalledWith(GYM, ADA));
-    expect(await dialog().findByText(/Past member · taken off 25 September 2026/)).toBeTruthy();
+    expect(await dialog().findByText(/Past member · removed 25 September 2026/)).toBeTruthy();
     expect(dialog().getByRole('button', { name: 'Put back on list' })).toBeTruthy();
-    expect(dialog().getByRole('button', { name: 'Delete for good' })).toBeTruthy();
-    expect(dialog().queryByRole('button', { name: 'Take off the list' })).toBeNull();
+    fireEvent.click(dialog().getByRole('button', { name: /^More/ }));
+    expect(dialog().getByRole('menuitem', { name: /^Delete for good/ })).toBeTruthy();
+    expect(dialog().queryByRole('menuitem', { name: /^Remove from list/ })).toBeNull();
 
     orgService.restoreMemberListEntry.mockResolvedValue(written('restored', ada));
     fireEvent.click(dialog().getByRole('button', { name: 'Put back on list' }));
@@ -283,25 +295,35 @@ describe('a person on the list', () => {
     expect(await dialog().findByText('Back on your list.')).toBeTruthy();
   });
 
-  it('says an invitation stops working when somebody invited is taken off', async () => {
+  it('says an invitation stops working when somebody invited is removed from the list', async () => {
     orgService.getMemberListEntry.mockResolvedValue(
       entryAnswer(person(ADA, 'Ada Lovelace', { invitation: { state: 'pending', invitedAt: '2026-09-20T10:00:00.000Z', email: null, sentAgain: 0, waitingSince: null, notMeAt: null } })),
     );
     openBox(ADA);
-    fireEvent.click(await dialog().findByRole('button', { name: 'Take off the list' }));
+    await pickMore('Remove from list');
     expect(within(screen.getByTestId('confirm-take-off')).getByText(/invitation stops working/)).toBeTruthy();
   });
 
   it('offers no Delete for good on somebody still on the list', async () => {
     openBox(ADA);
-    await dialog().findByRole('button', { name: 'Change' });
-    expect(dialog().queryByRole('button', { name: 'Delete for good' })).toBeNull();
+    fireEvent.click(await dialog().findByRole('button', { name: /^More/ }));
+    expect(dialog().getByRole('menuitem', { name: /^Merge duplicate/ })).toBeTruthy();
+    expect(dialog().queryByRole('menuitem', { name: /^Delete for good/ })).toBeNull();
+  });
+
+  it('starts Merge duplicate with the name already searched, so a second record under it shows at once', async () => {
+    orgService.getMemberListEntries.mockResolvedValue(pageOf([ada, adaOld]));
+    openBox(ADA);
+    await pickMore('Merge duplicate');
+    expect(dialog().getByLabelText('Find the other record').value).toBe('Ada Lovelace');
+    expect(await dialog().findByRole('button', { name: /ada\.old@members\.example/ })).toBeTruthy();
+    expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'records=all&query=Ada+Lovelace');
   });
 
   it('deletes a past member for good only on the second tap, and says it was done', async () => {
     orgService.deleteFormerMemberListEntry.mockResolvedValue({ data: { deleted: true, version: 5 } });
     openBox(ADA_OLD);
-    fireEvent.click(await dialog().findByRole('button', { name: 'Delete for good' }));
+    await pickMore('Delete for good');
     expect(orgService.deleteFormerMemberListEntry).not.toHaveBeenCalled();
     fireEvent.click(within(screen.getByTestId('confirm-delete')).getByRole('button', { name: 'Delete for good' }));
     await waitFor(() => expect(orgService.deleteFormerMemberListEntry).toHaveBeenCalledWith(GYM, ADA_OLD));
@@ -314,7 +336,7 @@ describe('a person on the list', () => {
       .mockRejectedValueOnce(refusal(409, { error: 'leaves_list', message: 'This would leave people who use the app off your list.', members: 1 }))
       .mockResolvedValueOnce(written('changed', { ...ada, email: 'new@members.example' }));
     openBox(ADA);
-    fireEvent.click(await dialog().findByRole('button', { name: 'Change' }));
+    fireEvent.click(await dialog().findByRole('button', { name: 'Edit' }));
     fireEvent.change(dialog().getByLabelText('Email'), { target: { value: 'new@members.example' } });
     fireEvent.click(dialog().getByRole('button', { name: 'Save' }));
     expect(await dialog().findByText(/leave people who use the app off your list/)).toBeTruthy();
@@ -329,7 +351,7 @@ describe('a person on the list', () => {
   it("prints the server's own sentence when a change is refused", async () => {
     orgService.changeMemberListEntry.mockRejectedValue(refusal(400, { error: 'bad_email', message: "That email address doesn't look right. Check it and try again." }));
     openBox(ADA);
-    fireEvent.click(await dialog().findByRole('button', { name: 'Change' }));
+    fireEvent.click(await dialog().findByRole('button', { name: 'Edit' }));
     fireEvent.change(dialog().getByLabelText('Email'), { target: { value: 'nope' } });
     fireEvent.click(dialog().getByRole('button', { name: 'Save' }));
     expect(await dialog().findByText(/doesn't look right/)).toBeTruthy();
@@ -337,9 +359,8 @@ describe('a person on the list', () => {
 
   it('greys every change on a gym whose plan has lapsed', async () => {
     openBox(ADA, { readOnly: true });
-    expect((await dialog().findByRole('button', { name: 'Change' })).disabled).toBe(true);
-    expect(dialog().getByRole('button', { name: 'Take off the list' }).disabled).toBe(true);
-    expect(dialog().getByRole('button', { name: 'Join with another record' }).disabled).toBe(true);
+    expect((await dialog().findByRole('button', { name: 'Edit' })).disabled).toBe(true);
+    expect(dialog().getByRole('button', { name: /^More/ }).disabled).toBe(true);
   });
 
   it('closes only by its X', async () => {

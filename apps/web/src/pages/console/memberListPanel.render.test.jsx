@@ -1,5 +1,6 @@
-// The gym's own list on the Members screen (ROADMAP 5b-i): chips in the gym's own
-// words with the server's counts, in the app or not, a search, past members, and rows
+// The gym's own list on the Members screen (ROADMAP 5b-i): Search, Filter, Import and
+// Add over the list; Filter holds the gym's own words with the server's counts, in the
+// app or not, and past members; what is ticked shows as one "Showing:" line; and rows
 // that say where each person stands. A page answered for an older filter is never
 // shown under a newer one.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
@@ -14,6 +15,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getMemberList: vi.fn(),
       getMemberListEntries: vi.fn(),
       getMemberListEntry: vi.fn(),
+      uploadMemberList: vi.fn(),
     },
   };
 });
@@ -77,6 +79,9 @@ function later() {
 }
 
 const draw = (props = {}) => render(<MemberListPanel gymId={GYM} words={WORDS} readOnly={false} refreshKey={0} {...props} />);
+/** Open the Filter box. */
+const openFilter = async () => fireEvent.click(await screen.findByRole('button', { name: /^Filter/ }));
+const filterBox = () => within(screen.getByRole('dialog', { name: 'Filter' }));
 const names = () => screen.queryAllByTestId('list-row').map((r) => r.textContent);
 
 beforeEach(() => {
@@ -88,30 +93,52 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("the gym's own list", () => {
-  it("shows the gym's own words as chips with the server's counts", async () => {
+  it('shows Search, Filter, Import and Add over the list, and no chips until Filter is pressed', async () => {
     draw();
-    const status = await screen.findByRole('group', { name: 'Status' });
+    expect((await screen.findByTestId('list-total')).textContent).toBe('312 members');
+    expect(screen.getByRole('button', { name: 'Filter' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Import' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Add member' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Active 300' })).toBeNull();
+    expect(screen.queryByTestId('showing')).toBeNull();
+  });
+
+  it("holds the gym's own words in the Filter box, with the server's counts", async () => {
+    draw();
+    await openFilter();
+    const status = filterBox().getByRole('group', { name: 'Status' });
     expect(within(status).getByRole('button', { name: 'Active 300' })).toBeTruthy();
     expect(within(status).getByRole('button', { name: 'Expired 7' })).toBeTruthy();
     expect(within(status).getByRole('button', { name: 'No status 5' })).toBeTruthy();
-    expect(within(screen.getByRole('group', { name: 'Membership' })).getByRole('button', { name: 'Gold 12' })).toBeTruthy();
-    expect(screen.queryByRole('group', { name: 'Payment' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'In the app 40' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Not in the app 272' })).toBeTruthy();
-    expect((await screen.findByTestId('list-total')).textContent).toBe('312 members');
+    expect(within(filterBox().getByRole('group', { name: 'Membership' })).getByRole('button', { name: 'Gold 12' })).toBeTruthy();
+    expect(filterBox().queryByRole('group', { name: 'Payment' })).toBeNull();
+    expect(filterBox().getByRole('button', { name: 'In the app 40' })).toBeTruthy();
+    expect(filterBox().getByRole('button', { name: 'Not in the app 272' })).toBeTruthy();
   });
 
-  it('asks for the ticked words, and "no status" as the people with none', async () => {
+  it('asks for the ticked words, and "no status" as the people with none, then shows them on one line', async () => {
     draw();
-    fireEvent.click(await screen.findByRole('button', { name: 'Active 300' }));
+    await openFilter();
+    fireEvent.click(filterBox().getByRole('button', { name: 'Active 300' }));
     await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'status=Active'));
-    fireEvent.click(screen.getByRole('button', { name: 'No status 5' }));
+    fireEvent.click(filterBox().getByRole('button', { name: 'No status 5' }));
     await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'status=Active&status='));
-    expect(screen.getByRole('button', { name: 'Active 300' }).getAttribute('aria-pressed')).toBe('true');
-    fireEvent.click(screen.getByRole('button', { name: 'Not in the app 272' }));
+    fireEvent.click(filterBox().getByRole('button', { name: 'Not in the app 272' }));
     await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'filter=not_in_app&status=Active&status='));
-    fireEvent.click(await screen.findByRole('button', { name: 'Clear filters' }));
+    expect(filterBox().getByRole('button', { name: 'Active 300' }).getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.click(await filterBox().findByRole('button', { name: /^Show \d+ members?$/ }));
+    expect(screen.queryByRole('dialog', { name: 'Filter' })).toBeNull();
+    const showing = screen.getByTestId('showing');
+    expect(within(showing).getAllByRole('button').map((b) => b.textContent)).toEqual(['Active', 'No status', 'Not in the app', 'Clear']);
+    expect(screen.getByRole('button', { name: 'Filter · 3' })).toBeTruthy();
+
+    // A pill takes off only itself.
+    fireEvent.click(within(showing).getByRole('button', { name: 'Stop showing only No status' }));
+    await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'filter=not_in_app&status=Active'));
+    fireEvent.click(within(screen.getByTestId('showing')).getByRole('button', { name: 'Clear' }));
     await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, ''));
+    expect(screen.queryByTestId('showing')).toBeNull();
   });
 
   it('never shows a page answered for an older filter under a newer one', async () => {
@@ -120,7 +147,8 @@ describe("the gym's own list", () => {
       qs === '' ? whole.promise : Promise.resolve(pageOf([entry('Eve Expired', { status: 'Expired' })], 7)),
     );
     draw();
-    fireEvent.click(await screen.findByRole('button', { name: 'Expired 7' }));
+    await openFilter();
+    fireEvent.click(filterBox().getByRole('button', { name: 'Expired 7' }));
     await waitFor(() => expect(names().some((t) => t.includes('Eve Expired'))).toBe(true));
     whole.resolve(pageOf([entry('Ada Lovelace')], 312));
     await new Promise((r) => setTimeout(r, 0));
@@ -135,19 +163,22 @@ describe("the gym's own list", () => {
     await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'query=ada'));
   });
 
-  it('shows past members on their own, without the chips that count the list', async () => {
+  it('shows past members on their own, without the words that count the list', async () => {
     orgService.getMemberList.mockResolvedValue({ data: { list: view({ counts: { entries: 312, inApp: 40, canBeInvited: 250, noEmail: 22, former: 4 } }) } });
     draw();
-    fireEvent.click(await screen.findByRole('button', { name: 'Past members 4' }));
+    await openFilter();
+    fireEvent.click(filterBox().getByRole('button', { name: 'Past members 4' }));
     await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'records=former'));
-    expect(screen.queryByRole('group', { name: 'Status' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'In the app 40' })).toBeNull();
+    expect(filterBox().queryByRole('group', { name: 'Status' })).toBeNull();
+    expect(filterBox().queryByRole('button', { name: 'In the app 40' })).toBeNull();
+    fireEvent.click(filterBox().getByRole('button', { name: 'Close' }));
+    expect(within(screen.getByTestId('showing')).getByRole('button', { name: 'Stop showing only Past members' })).toBeTruthy();
   });
 
-  it('offers no past-members switch to a gym that has none', async () => {
+  it('offers no past-members choice to a gym that has none', async () => {
     draw();
-    await screen.findByRole('group', { name: 'Status' });
-    expect(screen.queryByRole('button', { name: /Past members/ })).toBeNull();
+    await openFilter();
+    expect(filterBox().queryByRole('button', { name: /Past members/ })).toBeNull();
   });
 
   it("says where each person stands, with the server's reason for an email that did not go", async () => {
@@ -187,6 +218,12 @@ describe("the gym's own list", () => {
     expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull();
   });
 
+  it('opens the import box from the Import button', async () => {
+    draw();
+    fireEvent.click(await screen.findByRole('button', { name: 'Import' }));
+    expect(await screen.findByTestId('member-import')).toBeTruthy();
+  });
+
   it('says the list is empty, and how to fill it, for a gym with no list', async () => {
     orgService.getMemberList.mockResolvedValue({
       data: { list: view({ hasList: false, counts: { entries: 0, inApp: 0, canBeInvited: 0, noEmail: 0, former: 0 }, statuses: [], membershipTypes: [] }) },
@@ -206,8 +243,9 @@ describe("the gym's own list", () => {
     expect(await screen.findByText(/Ada Lovelace/)).toBeTruthy();
   });
 
-  it('greys Add on a gym whose plan has lapsed', async () => {
+  it('greys Import and Add on a gym whose plan has lapsed', async () => {
     draw({ readOnly: true });
     expect((await screen.findByRole('button', { name: 'Add member' })).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Import' }).disabled).toBe(true);
   });
 });

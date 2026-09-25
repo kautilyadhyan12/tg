@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { memberListEntryDetailSchema, memberListEntriesQuerySchema, MEMBER_INVITE_EMAIL_REASON_WORDS } from '@app/shared';
 import {
   EMPTY_FILTERS,
+  activeFilters,
   entriesQueryString,
   formFrom,
   handEditedWords,
@@ -141,7 +142,7 @@ describe('what a row says about the app and the invitation', () => {
 
   it("names the gym's own words on the row, and when a past member was taken off", () => {
     expect(rowWords(entry())).toEqual(['Active', 'Gold', 'Renews 3 October 2026']);
-    expect(rowWords(entry({ formerAt: '2026-09-01T10:00:00.000Z' }))).toEqual(['Taken off 1 September 2026']);
+    expect(rowWords(entry({ formerAt: '2026-09-01T10:00:00.000Z' }))).toEqual(['Removed from list 1 September 2026']);
   });
 });
 
@@ -191,5 +192,32 @@ describe('what the form sends', () => {
 
   it('names the fields changed by hand, the gym columns under their own heading', () => {
     expect(handEditedWords(entry({ handEdited: ['phone', 'extra:locker'] }), FIELDS, FIELD_LABELS)).toEqual(['Phone', 'Locker']);
+  });
+});
+
+describe('the "Showing:" line', () => {
+  const WORDS = { people: 'members', person: 'member' };
+
+  it('names each ticked word, "no status" in words, and the app choice; each pill takes off only itself', () => {
+    let f = toggleWord(EMPTY_FILTERS, 'status', 'Frozen');
+    f = toggleWord(f, 'status', '');
+    f = { ...toggleWord(f, 'membershipType', 'Gold'), app: 'not_in_app', query: 'ada' };
+    const pills = activeFilters(f, WORDS);
+    expect(pills.map((p) => p.text)).toEqual(['Frozen', 'No status', 'Gold', 'Not in the app']);
+    expect(pills[0].without.status).toEqual(['']);
+    expect(pills[0].without.membershipType).toEqual(['Gold']);
+    expect(pills[3].without.app).toBe('all');
+    expect(pills[3].without.query).toBe('ada');
+  });
+
+  it('shows past members as the one pill, since the other filters do not apply to them', () => {
+    const f = { ...toggleWord(EMPTY_FILTERS, 'status', 'Frozen'), records: 'former' };
+    const pills = activeFilters(f, WORDS);
+    expect(pills.map((p) => p.text)).toEqual(['Past members']);
+    expect(pills[0].without.records).toBe('current');
+  });
+
+  it('shows nothing for the whole list, a search alone included', () => {
+    expect(activeFilters({ ...EMPTY_FILTERS, query: 'ada' }, WORDS)).toEqual([]);
   });
 });
