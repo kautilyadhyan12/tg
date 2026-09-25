@@ -16,7 +16,7 @@ import {
   invitationView,
   inviteQueryString,
   isTicked,
-  localToday,
+  gymToday,
   rowWords,
   toggleWord,
 } from './memberListPeople';
@@ -300,7 +300,7 @@ export default function MemberListPanel({ gymId, gym, words, readOnly, refreshKe
     change({ ...EMPTY_FILTERS });
   };
   const noList = list !== null && !list.hasList && list.counts.entries === 0 && former === 0;
-  const today = localToday();
+  const today = gymToday(gym?.timezone);
 
   return (
     <div className="flex flex-col gap-4" data-testid="member-list-panel">

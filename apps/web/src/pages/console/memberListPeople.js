@@ -81,10 +81,15 @@ export function filtersAreEmpty(filters) {
   );
 }
 
-/** Today in the reader's own calendar, 'YYYY-MM-DD'. */
-export function localToday(now = new Date()) {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${String(now.getFullYear())}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+/** Today in the gym's own time zone, 'YYYY-MM-DD', as the server decides a birthday; the
+ *  reader's own calendar if the zone cannot be read. */
+export function gymToday(timeZone, now = new Date()) {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+  } catch {
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${String(now.getFullYear())}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  }
 }
 
 /** "3 October 2026" from a timestamp, in the reader's own calendar. */
@@ -116,10 +121,14 @@ export function contactWords(entry) {
 export function invitationView(entry, today = null) {
   const inv = entry.invitation;
   if (entry.inApp) return { tag: 'Uses the app', tone: 'green', detail: null };
+  // An invitation hangs on the ADDRESS, so a child at a parent's invited address, or one
+  // whose date of birth was corrected after inviting, carries one: the row still says
+  // what the list says about them.
+  const under = today !== null && entry.formerAt === null && entry.email !== null && underAgeOn(entry.dateOfBirth, today);
+  if (under && (inv === null || inv.state !== 'accepted')) return { tag: 'Under 18', tone: 'plain', detail: null };
   if (inv === null) {
     if (entry.formerAt !== null) return null;
     if (entry.email === null) return { tag: 'No email', tone: 'plain', detail: null };
-    if (today !== null && underAgeOn(entry.dateOfBirth, today)) return { tag: 'Under 18', tone: 'plain', detail: null };
     return { tag: 'Not invited', tone: 'plain', detail: null };
   }
   if (inv.state === 'accepted') return { tag: 'Joined', tone: 'green', detail: null };

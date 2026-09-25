@@ -103,7 +103,11 @@ export default function MemberListInvite({ gymId, gym, filters, words, readOnly,
       onSent();
     } catch (err) {
       const fresh = inviteChangedPreview(err);
-      if (fresh !== null) setPreview(fresh);
+      if (fresh !== null) {
+        setPreview(fresh);
+        // The tick was for the group staff saw; a new group is ticked again.
+        setPermission(false);
+      }
       setError(errorText(err, "We couldn't send the invitations. Please try again."));
     } finally {
       setSending(false);

@@ -25,6 +25,9 @@ describe("underAgeOn — the list's date of birth against the gym's today", () =
     ["a date of birth of today (a typo) is not an adult", "2026-09-25", "2026-09-25", true],
     ["born in 1900", "1900-01-01", "2026-09-25", false],
     ["no date of birth on the list: invited as before", null, "2026-09-25", false],
+    // The database writes ISO dates; any other shape (a changed DateStyle) cannot be judged.
+    ["a date in another shape is not taken as an adult", "14/03/1990", "2026-09-25", true],
+    ["a date with a time on it is not taken as an adult", "1990-03-14 00:00:00", "2026-09-25", true],
   ];
   for (const [name, dateOfBirth, today, under] of cases) {
     it(name, () => {

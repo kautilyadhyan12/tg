@@ -30,6 +30,7 @@ import {
   formFrom,
   handEditedWords,
   inputFrom,
+  gymToday,
   invitationView,
   inviteOutcomeWords,
   outcomeWords,
@@ -705,8 +706,10 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   );
 
   const renderDetails = (p) => {
-    const inv = invitationView(p, ranges.today);
-    const action = personInviteAction(p, ranges.today);
+    // A birthday is the gym's day, as the server decides it.
+    const today = gymToday(gym?.timezone);
+    const inv = invitationView(p, today);
+    const action = personInviteAction(p, today);
     const edited = new Set(p.handEdited);
     const contact = [
       ['email', p.email],
@@ -805,7 +808,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             <MoreMenu
               disabled={busy || readOnly}
               items={[
-                ...(p.invitation?.state === 'pending'
+                ...(p.invitation?.state === 'pending' && action !== 'under_age'
                   ? [{ label: 'Share the invitation', hint: 'Its words and link, to send yourself', icon: Copy, onPick: () => backTo('share') }]
                   : []),
                 { label: 'Remove from list', icon: UserMinus, onPick: () => setMode('takeOff') },

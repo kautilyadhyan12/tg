@@ -15,6 +15,8 @@ import { ADULT_AGE } from "./plan.js";
  *  date of birth: invited as before. */
 export function underAgeOn(dateOfBirth: string | null, today: string): boolean {
   if (dateOfBirth === null) return false;
+  // A date in any other shape cannot be judged, and is never taken as an adult.
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) return true;
   const year = Number(dateOfBirth.slice(0, 4)) + ADULT_AGE;
   const monthDay = dateOfBirth.slice(5);
   const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;

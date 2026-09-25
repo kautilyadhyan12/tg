@@ -1478,6 +1478,17 @@ d("press Invite (real Postgres)", () => {
         expect(errorOf(refused).error).toBe("permission_needed");
         const [none] = await sql`SELECT count(*)::int AS n FROM gym_invites WHERE gym_id = ${gym} AND email_hmac = ${emailHmac(settings.hmacKey, addr("age-tia"))}`;
         expect(none).toEqual({ n: 0 });
+        // Refused before the rate limit: an unticked press spends none of the desk's allowance.
+        let limited = 0;
+        const deps = { sql, redis: createMemoryRedis(), log: { warn: () => undefined }, now: () => new Date(), invites: settings };
+        const counted = () => {
+          limited += 1;
+          return Promise.resolve(true);
+        };
+        await expect(
+          pressInvite(deps, owner.userId, gym, { version: preview.version, expectedCount: preview.reach }, counted),
+        ).rejects.toMatchObject({ code: "permission_needed" });
+        expect(limited).toBe(0);
 
         expect((await press(gym, owner, preview)).statusCode).toBe(200);
         const [audit] = await sql<{ actor: string; ticked: string }[]>`

@@ -138,6 +138,10 @@ describe('the worst thing: nobody the gym did not choose is emailed', () => {
     expect(box().queryByText(/on the way/)).toBeNull();
     expect(onSent).not.toHaveBeenCalled();
 
+    // The tick was for the old group: it is asked again for the new one.
+    expect(box().getByLabelText('I have permission to email these members.').checked).toBe(false);
+    expect(box().getByRole('button', { name: 'Send 1 invitation' }).disabled).toBe(true);
+    tick();
     orgService.pressInvite.mockResolvedValue({ data: { invited: { queued: 1, skipped: NONE, version: 8 } } });
     fireEvent.click(box().getByRole('button', { name: 'Send 1 invitation' }));
     await waitFor(() => expect(orgService.pressInvite).toHaveBeenLastCalledWith(GYM, { status: ['Active'], version: 8, expectedCount: 1, permissionConfirmed: true }));
@@ -214,6 +218,18 @@ describe("a person's page", () => {
     expect(page().getByText('Under 18')).toBeTruthy();
     expect(page().queryByRole('button', { name: 'Invite' })).toBeNull();
     expect(page().queryByRole('button', { name: 'Send again' })).toBeNull();
+  });
+
+  it('a child at a parent\'s invited address, or one corrected after inviting, is offered nothing to send or share', async () => {
+    // The invitation hangs on the address, so the child's page carries the parent's.
+    openPerson(person({ dateOfBirth: '2010-03-14', invitation: invitation(wentEmail) }));
+    expect((await page().findByTestId('under-age-note')).textContent).toBe(MEMBER_INVITE_WORDS.under_age);
+    expect(page().getByText('Under 18')).toBeTruthy();
+    expect(page().queryByText(/^Invited/)).toBeNull();
+    expect(page().queryByRole('button', { name: 'Send again' })).toBeNull();
+    fireEvent.click(page().getByRole('button', { name: /^More/ }));
+    expect(page().queryByRole('menuitem', { name: /^Share the invitation/ })).toBeNull();
+    expect(page().getByRole('menuitem', { name: /^Remove from list/ })).toBeTruthy();
   });
 
   it("shows the server's refusal when the gym's own day says under 18", async () => {

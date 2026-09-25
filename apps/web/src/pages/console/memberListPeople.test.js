@@ -14,6 +14,7 @@ import {
   compareRecords,
   entriesQueryString,
   formFrom,
+  gymToday,
   handEditedWords,
   inputFrom,
   invitationView,
@@ -330,5 +331,27 @@ describe('a row for somebody the list says is under 18', () => {
     expect(invitationView(entry({ dateOfBirth: '2010-03-14' }), '2026-09-25')?.tag).toBe('Under 18');
     expect(invitationView(entry({ dateOfBirth: '2008-09-25' }), '2026-09-25')?.tag).toBe('Not invited');
     expect(invitationView(entry({ dateOfBirth: '2010-03-14' }))?.tag).toBe('Not invited');
+  });
+
+  const pending = { state: 'pending', invitedAt: '2026-09-20T10:00:00.000Z', email: { state: 'sent', reason: null, at: '2026-09-20T10:01:00.000Z', result: 'delivered' }, sentAgain: 0, waitingSince: null, notMeAt: null };
+  it("reads \"Under 18\" even when the address's invitation is a parent's, or came before the date was corrected", () => {
+    expect(invitationView(entry({ dateOfBirth: '2010-03-14', invitation: pending }), '2026-09-25')?.tag).toBe('Under 18');
+    expect(invitationView(entry({ dateOfBirth: '2010-03-14', invitation: { ...pending, state: 'withdrawn' } }), '2026-09-25')?.tag).toBe('Under 18');
+  });
+  it('still says Joined, or Uses the app, for somebody already in', () => {
+    expect(invitationView(entry({ dateOfBirth: '2010-03-14', invitation: { ...pending, state: 'accepted' } }), '2026-09-25')?.tag).toBe('Joined');
+    expect(invitationView(entry({ dateOfBirth: '2010-03-14', inApp: true }), '2026-09-25')?.tag).toBe('Uses the app');
+  });
+});
+
+describe("the gym's own day for a birthday", () => {
+  // 20:00 on 24 September in London is already 25 September in Auckland.
+  const at = new Date('2026-09-24T20:00:00Z');
+  it('is the gym\'s calendar day, not the reader\'s', () => {
+    expect(gymToday('Pacific/Auckland', at)).toBe('2026-09-25');
+    expect(gymToday('America/Los_Angeles', at)).toBe('2026-09-24');
+  });
+  it('falls back to the reader\'s own day for a zone it cannot read', () => {
+    expect(gymToday('Not/AZone', at)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });

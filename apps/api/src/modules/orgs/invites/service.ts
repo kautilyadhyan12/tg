@@ -192,8 +192,9 @@ export async function pressInvite(
 ): Promise<MemberInvited | null> {
   const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   const settings = await readyToSend(deps, gymId);
-  if (!(await limit())) return null;
+  // Before the rate limit: a press refused for its tick spends none of the desk's allowance.
   if (request.permissionConfirmed !== true) throw refuse(409, "permission_needed");
+  if (!(await limit())) return null;
   const at = deps.now();
   const today = dayInTz(at, org.timezone);
   const filters = filtersOf(request);
