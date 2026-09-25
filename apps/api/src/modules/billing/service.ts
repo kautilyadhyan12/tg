@@ -562,7 +562,9 @@ async function alignTrial(deps: BillingDeps, paddle: PaddleSettings, sub: Paddle
   const ownEnd = (await repo.ownTrialEnd(deps.sql, gymId))?.getTime() ?? null;
   const paddleEnd = sub.next_billed_at === null || sub.next_billed_at === undefined ? null : Date.parse(sub.next_billed_at);
   const now = deps.now().getTime();
-  if (ownEnd !== null && ownEnd > now && paddleEnd !== null && paddleEnd <= ownEnd + TRIAL_END_SLACK_MS) return "applied";
+  // Lined up with the gym's own trial: left alone, even after that end has passed and before
+  // Paddle has taken the first charge (re-check N2). A window paid late always ends later.
+  if (ownEnd !== null && paddleEnd !== null && paddleEnd <= ownEnd + TRIAL_END_SLACK_MS) return "applied";
 
   const cancel = async (why: string): Promise<ApplyResult> => {
     const cancelled = await paddle.api.cancelSubscriptionNow(sub.id);

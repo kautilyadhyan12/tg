@@ -1013,6 +1013,25 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
   );
 
   it(
+    "WORST THING: a paid trial lined up with the gym's own is never cancelled in the gap before Paddle's first charge",
+    async () => {
+      const a = await payingInTrial(SMALL);
+      expect(paddle.trialMoves.filter((m) => m.subscriptionId === a.subId)).toHaveLength(1);
+      // Both ends passed two minutes ago; Paddle has not taken the first charge yet.
+      const ended = new Date(Date.now() - 2 * 60 * 1000);
+      await sql`UPDATE subscriptions SET trial_ends_at = ${ended} WHERE owner_id = ${a.gymId} AND provider = 'none'`;
+      paddle.update(a.subId, { next_billed_at: ended.toISOString() });
+      expect((await signedWebhook(subscriptionEvent(a.subId, "subscription.updated"))).statusCode).toBe(200);
+      await runWorker();
+      expect((await sizeChange(a.gymId, a.cookies, BIG)).statusCode).toBe(200);
+      expect(paddle.cancelledSubs).not.toContain(a.subId);
+      expect(paddle.activations).not.toContain(a.subId);
+      expect(await planOf(a.subId)).toEqual({ code: BIG, status: "trialing" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "a trial window left open when the gym's own trial ends is closed at Paddle, once",
     async () => {
       const a = await owner();
