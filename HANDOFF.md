@@ -4,6 +4,17 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-25 · 3a-vi-b: an app member follows their record (Folder A, branch `member-follows-record`, PR #111)
+
+- **Risky (other people's records, a rule that picks), Opus xhigh; Kd said *"go"*.** A member who joined by invitation is matched to that invitation's record (`gym_members.entry_id`) before their email or phone: the upload's preview and confirm (`reconcile`'s `onListOf`), `membersAgainstList` (the list, Remove all, the person's page, Invite), the roster's "On your list as …" (current records only), the listed stamp. No migration, no new package. Spec §11.4 "Out of 3a-vi-b".
+- **Built beside it (engineering, stated to Kd):** "Put on the list" for a member whose joined record is former brings that record back instead of making a second one (which would have left them off the list); a staged upload's groups keep each row's record id, so a second look at a preview agrees with the first.
+- **Worst thing, first tests** (`memberList.joinedRecord.unit`, `.routes` with real invitations on real Postgres): Emma, email changed by the gym's software, stays on the list, out of Remove all, "Uses the app", not emailed by Invite; Priya, whose record left while her son stays on her address, is off it. **Three breaks, each RED, restored sha256-identical**: the rule ignoring the link (11 red), the database read not reading it (2 red), email matching despite it (1 red).
+- **Changed on purpose:** `invitations.join.routes`' Remove-all case made Wes unlisted by changing his record's email, which no longer takes a joined member off; it now marks his record former, as a confirm does.
+- **Verified**: api tsc 0 · eslint 0 · shared tsc 0 · lint 0 · 232/232 · member-list + invitation suites 36 files, 1,911 passed · full api suite 119 files, 3,697 passed, 2 failed: the Wes case (fixed, 21/21 alone) and orgs "currency with no price book" (the shared-seed clash, passed alone). Second month on the real server unchanged: 3 new · 2 missing; "Surname, First" 20 updated. Looked at in headless Edge on the real app.
+- **Cost** (mains, 2,592 MHz; 10,000 × 2,000, every member's email changed): master names all 2,000 members as leaving, this job 0. Preview read again 184–568 ms over ten reads (master 344 ms; one 2,377 ms stall), Remove all's group 69–124 ms (master 224 ms), confirm's bystander worst 2.5–3.8 s (master 3.5 s), staged document 2.48 MB (master 2.09 MB: the record ids). At 200: preview read 40 ms, confirm 175 ms.
+- **Known edge, by 3a-vi's rule (3):** another name on a joined member's lone old address is read as their record renamed, and the member follows it; the roster's "Check this is them" then flags it.
+- **Open**: review round one (`reviews/3a-vi-b-1-review.md`); ROADMAP 3a-vi-b ticks on merge. Next in Folder A: 5b.
+
 ## 2026-09-25 · 3a-vi: the same person next month (Folder A, branch `same-person-next-month`)
 
 - **Risky (other people's records, a rule that picks), Opus xhigh; Kd said *"go and i agree recommendation"*** — the recommendation being 3a-vi-b, an app member matched by the invitation they joined with, as its own job before 5b (RULINGS 2026-09-25, ROADMAP).
