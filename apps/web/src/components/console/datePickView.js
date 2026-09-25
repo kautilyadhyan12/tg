@@ -52,6 +52,20 @@ export function dayAllowed(day, min, max) {
   return true;
 }
 
+/** The years between `min` and `max`, newest first, for the year list; empty
+ *  unless both are dates. */
+export function yearsBetween(min, max) {
+  if (!isDay(min) || !isDay(max)) return [];
+  const years = [];
+  for (let y = Number(max.slice(0, 4)); y >= Number(min.slice(0, 4)); y -= 1) years.push(y);
+  return years;
+}
+
+/** The same month in another year. */
+export function withYear(monthStart, year) {
+  return isDay(monthStart) ? `${String(year).padStart(4, '0')}${monthStart.slice(4)}` : monthStart;
+}
+
 /** The month the calendar opens on: the picked date's, else the first date
  *  that can be picked, else `today`'s. */
 export function openingMonth(value, min, today) {

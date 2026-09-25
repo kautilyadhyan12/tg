@@ -36,6 +36,8 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       removeMember: vi.fn(),
       getNotMe: vi.fn(),
       putMemberOnList: vi.fn(),
+      getMemberList: vi.fn(),
+      getMemberListEntries: vi.fn(),
     },
   };
 });
@@ -191,7 +193,9 @@ const chooseCountry = async (name) => {
 };
 
 const drawOverview = () => drawAt('/console/iron-house', <Overview />, '/console/:orgSlug');
-const drawMembers = () => drawAt('/console/iron-house/members', <Members />, '/console/:orgSlug/members');
+const drawMembers = () => drawAt('/console/iron-house/members?view=app', <Members />, '/console/:orgSlug/members');
+/** The Members screen's first tab, the gym's own list (5b-i). */
+const drawListTab = () => drawAt('/console/iron-house/members', <Members />, '/console/:orgSlug/members');
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -204,6 +208,11 @@ beforeEach(() => {
   orgService.getApplications.mockResolvedValue(queue([]));
   // Nothing came back "Not me", by default.
   orgService.getNotMe.mockResolvedValue({ data: { items: [] } });
+  // The gym's own list is empty, by default (5b-i's tab).
+  orgService.getMemberList.mockResolvedValue({
+    data: { list: { hasList: false, version: 0, lastConfirmedAt: null, counts: { entries: 0, inApp: 0, canBeInvited: 0, noEmail: 0, former: 0 }, statuses: [], membershipTypes: [], paymentStatuses: [], fields: [] } },
+  });
+  orgService.getMemberListEntries.mockResolvedValue({ data: { page: { total: 0, entries: [], cursor: null } } });
   // THE NUMBERS ARE QUIET BY DEFAULT, AND THAT IS THE TRUTHFUL DEFAULT FOR
   // THESE FIXTURES rather than a convenience. `ORG`'s only seat is `ownerSeat`,
   // which is `complimentary` — and `month.members` counts current
@@ -1204,7 +1213,7 @@ describe('Members', () => {
     orgService.getNotMe.mockResolvedValue({
       data: { items: [{ entryId: 'e1', fullName: 'Hana Kim', email: 'hana-typo@example.com', notMeAt: '2026-09-24T09:00:00.000Z' }] },
     });
-    drawMembers();
+    drawListTab();
     const box = await screen.findByTestId('not-me-box');
     expect(within(box).getByText('An invitation reached the wrong person')).toBeTruthy();
     expect(within(box).getByText('Hana Kim')).toBeTruthy();
@@ -1213,9 +1222,9 @@ describe('Members', () => {
   });
 
   it("draws no 'Not me' box when nothing came back, and a trainer, who may not see the list, never asks", async () => {
-    drawMembers();
-    expect(await screen.findByText('Kd Owner')).toBeTruthy();
+    drawListTab();
     await waitFor(() => expect(orgService.getNotMe).toHaveBeenCalled());
+    expect(await screen.findByTestId('member-list-panel')).toBeTruthy();
     expect(screen.queryByTestId('not-me-box')).toBeNull();
 
     cleanup();
@@ -1231,6 +1240,44 @@ describe('Members', () => {
 });
 
 // ── Waiting to join ─────────────────────────────────────────────────────────
+
+describe('Members: the two tabs (5b-i)', () => {
+  const listPage = { data: { page: { total: 1, entries: [{ entryId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', fullName: 'Lena List', email: 'lena@members.example', phone: null, memberNumber: null, status: 'Active', membershipType: null, joinedOn: null, endsOn: null, endsOnKind: null, paymentStatus: null, dateOfBirth: null, formerAt: null, source: 'upload', inApp: false, invitation: null }], cursor: null } } };
+  const listView = { data: { list: { hasList: true, version: 1, lastConfirmedAt: null, counts: { entries: 1, inApp: 0, canBeInvited: 1, noEmail: 0, former: 0 }, statuses: [], membershipTypes: [], paymentStatuses: [], fields: [] } } };
+
+  it("opens on the gym's own list for staff who may see it, and the roster is one tap away", async () => {
+    orgService.getMemberList.mockResolvedValue(listView);
+    orgService.getMemberListEntries.mockResolvedValue(listPage);
+    orgService.getNotMe.mockResolvedValue({ data: { items: [] } });
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
+    drawAt('/console/iron-house/members', <Members />, '/console/:orgSlug/members');
+
+    expect(await screen.findByText('Lena List')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Your list' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.queryByText('Rita Sen')).toBeNull();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Using the app' }));
+    expect(await screen.findByText('Rita Sen')).toBeTruthy();
+    expect(screen.queryByText('Lena List')).toBeNull();
+  });
+
+  it('L2: shows the people waiting to join above both tabs, so the list tab opening first never hides them', async () => {
+    orgService.getApplications.mockResolvedValue(queue([waitingApplicant]));
+    drawAt('/console/iron-house/members', <Members />, '/console/:orgSlug/members');
+    expect(await screen.findByText('Anil Bora')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Your list' }).getAttribute('aria-selected')).toBe('true');
+  });
+  it('shows a trainer, who may not see the list, the roster and no tabs', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'trainer', privileges: ['members.read'] }] } });
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
+    drawAt('/console/iron-house/members', <Members />, '/console/:orgSlug/members');
+
+    expect(await screen.findByText('Rita Sen')).toBeTruthy();
+    expect(screen.queryByRole('tab')).toBeNull();
+    expect(orgService.getMemberList).not.toHaveBeenCalled();
+    expect(orgService.getMemberListEntries).not.toHaveBeenCalled();
+  });
+});
 
 describe('Waiting to join', () => {
   it("shows an applicant's four facts AND NOTHING ELSE (Part 3 §2.4)", async () => {
@@ -1644,7 +1691,7 @@ const clickBackIn = () => fireEvent(window, new Event('focus'));
 describe('what may I do here', () => {
   it('is asked ONCE for the shell and the screen inside it', async () => {
     orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
-    drawShellAround(<Members />, '/console/iron-house/members', '/console/:orgSlug/members');
+    drawShellAround(<Members />, '/console/iron-house/members?view=app', '/console/:orgSlug/members');
 
     expect(await screen.findByText('Rita Sen')).toBeTruthy();
     // Both read the same answer. Before this card the shell asked for the nav

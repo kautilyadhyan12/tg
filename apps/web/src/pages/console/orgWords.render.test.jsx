@@ -138,7 +138,7 @@ const mountAs = (orgType, path, element, pattern) => {
 const overviewAs = (orgType) =>
   mountAs(orgType, '/console/flow-studio', <Overview />, '/console/:orgSlug');
 const membersAs = (orgType) =>
-  mountAs(orgType, '/console/flow-studio/members', <Members />, '/console/:orgSlug/members');
+  mountAs(orgType, '/console/flow-studio/members?view=app', <Members />, '/console/:orgSlug/members');
 const settingsAs = (orgType) =>
   mountAs(orgType, '/console/flow-studio/settings', <ConsoleSettings />, '/console/:orgSlug/settings');
 
