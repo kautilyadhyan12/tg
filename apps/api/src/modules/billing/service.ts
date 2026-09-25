@@ -572,7 +572,7 @@ export async function applyPendingSizes(deps: BillingDeps): Promise<PendingSizes
     if (outcome.kind === "kept") {
       run.kept += 1;
       deps.log.info({ event: "billing.size_kept_too_many", gymId: row.gymId }, "a smaller size was not made: too many members");
-      await emailSizeKept(deps, row.gymId, row.id, outcome.members);
+      await emailSizeKept(deps, row.gymId, row.id, outcome.members, outcome.trialing);
       continue;
     }
     if (await applyPendingSize(deps, paddle, { gymId: row.gymId, subscriptionRowId: row.id }, outcome.claim)) run.applied += 1;
@@ -632,7 +632,7 @@ async function sendSizeWarnings(deps: BillingDeps): Promise<number> {
 
 /** Tell a gym's billing staff its smaller size was not made. Sent once: the decision is
  *  written once (its Idempotency-Key), and this runs only on that write. */
-async function emailSizeKept(deps: BillingDeps, gymId: string, subscriptionRowId: string, members: number): Promise<void> {
+async function emailSizeKept(deps: BillingDeps, gymId: string, subscriptionRowId: string, members: number, trialing: boolean): Promise<void> {
   const mail = deps.mail ?? null;
   if (mail === null) return;
   const facts = await repo.sizeNoticeFacts(deps.sql, { gymId, subscriptionRowId, targetPlan: "last_kept" });
@@ -648,6 +648,7 @@ async function emailSizeKept(deps: BillingDeps, gymId: string, subscriptionRowId
         orgType: facts.orgType,
         // The count the decision was made on, not one taken since.
         members,
+        trialing,
         currentSeatCap: facts.currentSeatCap,
         currentPriceLabel: formatPriceMinor(facts.currentPriceMinor, facts.currency),
         targetSeatCap: facts.targetSeatCap,

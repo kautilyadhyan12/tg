@@ -1774,6 +1774,10 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       expect(await pendingOf(a.subId)).toEqual({ code: null, pending_from: null });
       expect(paddle.changeCalls.filter((c) => c.subscriptionId === a.subId && c.priceId === MID_PRICE)).toEqual([]);
       expect(await seatsOf(a.gymId)).toBeLessThanOrEqual((await gymSeatCap(sql, a.gymId)) ?? 0);
+      // Told in a trial's words: nothing is charged until the first payment.
+      const told = mailTo(await emailOf(a.userId)).at(-1)?.text ?? "";
+      expect(told).toContain("had 51 members when its smaller size was due, more than the 50 it allows");
+      expect(told).toContain(", and $20 a month from its first payment. Nobody was removed.");
     },
     TEST_TIMEOUT_MS,
   );

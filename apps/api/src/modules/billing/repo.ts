@@ -934,7 +934,7 @@ export type PendingClaimOutcome =
    *  for joins, and Paddle is to be asked. */
   | { kind: "claimed"; claim: PendingClaim }
   /** No smaller size holds the members: the size asked for was dropped and the gym stays. */
-  | { kind: "kept"; members: number; seatCap: number };
+  | { kind: "kept"; members: number; seatCap: number; trialing: boolean };
 
 /** Take one plan's waiting smaller size to decide it: under the gym's lock, the members are
  *  counted. If they do not fit the size asked for, the smallest size smaller than the plan
@@ -1006,7 +1006,7 @@ export async function claimPendingPlan(
         targetId: kept[0]?.id ?? input.subscriptionRowId,
         meta: { plan: row.code, members: String(members) },
       });
-      return { kind: "kept", members, seatCap: row.seat_cap };
+      return { kind: "kept", members, seatCap: row.seat_cap, trialing };
     }
     const to = fitted === null ? { id: row.asked_plan_id, code: row.code, priceId: row.paddle_price_id } : { id: fitted.id, code: fitted.code, priceId: fitted.priceId };
     // What is made holds for joins until Paddle has it or the attempt fails; the size asked

@@ -120,6 +120,8 @@ export interface SizeKeptWords {
   currentSeatCap: number | null;
   currentPriceLabel: string;
   targetSeatCap: number;
+  /** In a paid trial: nothing is charged, and the size starts with the first payment. */
+  trialing: boolean;
   planLink: string;
 }
 
@@ -127,7 +129,7 @@ export function sizeKeptEmail(w: SizeKeptWords): EmailMessage {
   const words = orgWords(w.orgType);
   const gym = oneLine(w.gymName) || `Your ${words.it}`;
   const lines = [
-    `${gym} had ${w.members.toLocaleString("en-US")} ${words.people} when its smaller size was due, more than the ${w.targetSeatCap.toLocaleString("en-US")} it allows. So ${gym} stays on ${size(w.currentSeatCap, words)} at ${w.currentPriceLabel} a month. Nobody was removed.`,
+    `${gym} had ${w.members.toLocaleString("en-US")} ${words.people} when its smaller size was due, more than the ${w.targetSeatCap.toLocaleString("en-US")} it allows. So ${gym} stays on ${size(w.currentSeatCap, words)}${w.trialing ? `, and ${w.currentPriceLabel} a month from its first payment` : ` at ${w.currentPriceLabel} a month`}. Nobody was removed.`,
     `You can choose a smaller size again whenever ${gym} has ${w.targetSeatCap.toLocaleString("en-US")} ${words.people} or fewer:`,
   ];
   return message(w.to, `${gym} stays on ${size(w.currentSeatCap, words)}`, lines, { 1: w.planLink });
