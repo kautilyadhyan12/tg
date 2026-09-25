@@ -71,6 +71,7 @@ import { understandMemberFile } from "./parseMemberFile.js";
 import {
   inviteCounts,
   membersAgainstNewList,
+  onListOf,
   reconcile,
   type CarriedFields,
   type KeptField,
@@ -259,6 +260,7 @@ function groupsOf(reconciled: Reconciled): MemberListGroups {
       // place, so a missing one is a fault of this module and says so.
       at: person.at ?? raise(`a person of the file has no place in it (upload's ${String(person.row)})`),
       wasStatus: person.wasStatus,
+      entryId: person.entryId,
     }));
   // Somebody coming off the list is the GYM's own record of them, and is stored. Not
   // `inApp`: that is a fact about one of the gym's members and is filled in on every
@@ -275,23 +277,30 @@ function groupsOf(reconciled: Reconciled): MemberListGroups {
       memberNumber: person.memberNumber,
       status: person.status,
       wasStatus: person.wasStatus,
+      entryId: person.entryId,
     })),
   };
 }
 
 /** WHETHER SOMEBODY IS ALREADY IN THE APP, worked out from the gym's own members as
- *  they are right now. Two sets and a lookup: the one question every count about the
- *  app's side of a preview turns on. */
-function reachedBy(members: readonly repo.MemberAgainstList[]): (person: { email: string | null; phone: string | null }) => boolean {
+ *  they are right now. Three sets and a lookup: the one question every count about the
+ *  app's side of a preview turns on. A record somebody joined with is in the app
+ *  whatever its email says now (`reconcile`'s own `inApp`). */
+type InApp = (person: { email: string | null; phone: string | null; entryId: string | null }) => boolean;
+
+function reachedBy(members: readonly repo.MemberAgainstList[]): InApp {
   const emails = new Set<string>();
   const phones = new Set<string>();
+  const joined = new Set<string>();
   for (const member of members) {
+    if (member.joinedEntryId !== null) joined.add(member.joinedEntryId);
     const email = (member.email ?? "").trim().toLowerCase();
     if (email !== "") emails.add(email);
     const phone = (member.statedPhone ?? "").trim();
     if (phone !== "") phones.add(phone);
   }
   return (person) => {
+    if (person.entryId !== null && joined.has(person.entryId)) return true;
     const email = (person.email ?? "").trim().toLowerCase();
     if (email !== "" && emails.has(email)) return true;
     const phone = (person.phone ?? "").trim();
@@ -316,7 +325,7 @@ async function freshMemberSide(
 ): Promise<{
   counts: MemberListUploadSummary;
   membersLeaving: MemberListPreviewPerson[];
-  inApp: (person: { email: string | null; phone: string | null }) => boolean;
+  inApp: InApp;
 } | null> {
   const [contacts, members, seatCap] = await Promise.all([
     repo.stagedContacts(deps.sql, gymId, upload.id),
@@ -325,23 +334,36 @@ async function freshMemberSide(
   ]);
   if (contacts === null) return null;
   const inApp = reachedBy(members);
-  const personAt = (at: number) => ({ email: contacts.emails[at] ?? null, phone: contacts.phones[at] ?? null });
+  const personAt = (place: { at: number; entryId: string | null }) => ({
+    email: contacts.emails[place.at] ?? null,
+    phone: contacts.phones[place.at] ?? null,
+    entryId: place.entryId,
+  });
   // A member is on the list AFTER this upload when the file reaches them — or, for an
   // add, when the list already did, because an add takes nobody off. Exactly what
-  // `reconcile` derives from the rows it holds; here the rows are two arrays of strings.
+  // `reconcile` derives from the rows it holds; here the rows are two arrays of strings
+  // and the records the groups matched.
   const fileEmails = new Set(contacts.emails.flatMap((e) => (e === null ? [] : [e.trim().toLowerCase()])));
   const filePhones = new Set(contacts.phones.flatMap((p) => (p === null ? [] : [p.trim()])));
+  const listedAfter = new Set(
+    [...groups.new, ...groups.changed, ...groups.unchanged].flatMap((place) => (place.entryId === null ? [] : [place.entryId])),
+  );
   const side = membersAgainstNewList(
     // The seat rule's own set: §9.7 keeps the owner and the staff out of "no longer
     // listed". "Already in the app" is asked of every live member, just above.
     members.filter((member) => member.seatCounted),
-    (member) => {
-      const email = (member.email ?? "").trim().toLowerCase();
-      if (email !== "" && fileEmails.has(email)) return true;
-      const phone = (member.statedPhone ?? "").trim();
-      if (phone !== "" && filePhones.has(phone)) return true;
-      return upload.mode === "add" && member.onList;
-    },
+    (member) =>
+      (upload.mode === "add" && member.onList) ||
+      onListOf(
+        member,
+        (id) => listedAfter.has(id),
+        () => {
+          const email = (member.email ?? "").trim().toLowerCase();
+          if (email !== "" && fileEmails.has(email)) return true;
+          const phone = (member.statedPhone ?? "").trim();
+          return phone !== "" && filePhones.has(phone);
+        },
+      ),
     state !== null,
   );
   // THE SAME RULE THE STAGING USED, not a second way of counting the same people
@@ -352,8 +374,8 @@ async function freshMemberSide(
     list: {
       ...stored.list,
       ...inviteCounts(
-        groups.new.map((row) => {
-          const person = personAt(row.at);
+        groups.new.map((place) => {
+          const person = personAt(place);
           return { email: person.email, inApp: inApp(person) };
         }),
       ),
@@ -577,7 +599,7 @@ interface Read {
   file: MemberListStagedFile | null;
   counts: MemberListUploadSummary;
   membersLeaving: MemberListPreviewPerson[];
-  inApp: (person: { email: string | null; phone: string | null }) => boolean;
+  inApp: InApp;
   lastFileSha256: string | null;
 }
 
@@ -671,6 +693,7 @@ function cutHere(read: Read, group: MemberListRowGroup, cursor: number): { total
       memberNumber: row.memberNumber,
       status: row.status,
       wasStatus: place.wasStatus,
+      entryId: place.entryId,
     };
   });
   return { total: places.length, people };
@@ -717,7 +740,8 @@ export async function readPreviewRows(
   // gym's members AS THEY ARE NOW. Every person on a page carries their own address and
   // number, whichever group they came from, so one answer serves all four groups and
   // nothing has to be looked up by place.
-  const people = picked.people.map((person) => ({ ...person, inApp: read.inApp(person) }));
+  // The record's id decides the tick and stays here: a page shows the file's people.
+  const people = picked.people.map(({ entryId, ...person }) => ({ ...person, inApp: read.inApp({ ...person, entryId }) }));
   return {
     group,
     total: picked.total,

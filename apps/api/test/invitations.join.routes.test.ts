@@ -755,11 +755,13 @@ d("join by invitation (real Postgres)", () => {
       expect((await accept(vic, await inviteIdOf(gym, vic.email))).statusCode).toBe(404);
       expect((await membershipsOf(gym, vic)).filter((row) => row.removed_at === null)).toHaveLength(0);
 
-      // Wes drops off the list (his record's address changed), and Remove all takes him out.
+      // Wes drops off the list: the record he joined with goes former, as a confirm that
+      // no longer holds him writes it (a changed address alone keeps him on it since
+      // 3a-vi-b; staff taking it off would withdraw the invitation itself). Remove all
+      // takes him out.
       const wesEntry = (await sql<{ id: string }[]>`SELECT id FROM gym_member_list_entries WHERE gym_id = ${gym.id} AND email = ${wes.email}`)[0];
       if (wesEntry === undefined) throw new Error("Wes has no record");
-      const moved = await send("PATCH", entryUrl(gym, wesEntry.id), gym.owner.cookies, { email: addr("wes.old"), acknowledgeLeavesList: true });
-      expect(moved.statusCode, moved.body).toBe(200);
+      await sql`UPDATE gym_member_list_entries SET former_at = now() WHERE id = ${wesEntry.id}`;
       const pageRes = await get(`/v1/orgs/${gym.id}/member-list/unlisted?group=no_longer_listed`, gym.owner.cookies);
       expect(pageRes.statusCode, pageRes.body).toBe(200);
       const page = memberListUnlistedPageSchema.parse((JSON.parse(pageRes.body) as { page: unknown }).page);
@@ -771,8 +773,8 @@ d("join by invitation (real Postgres)", () => {
       );
       expect(removed.statusCode, removed.body).toBe(200);
       expect((await inviteStateOf(gym, wes.email))?.state).toBe("withdrawn");
-      // The list holds his address again; he is still not let back in on his own.
-      expect((await send("PATCH", entryUrl(gym, wesEntry.id), gym.owner.cookies, { email: wes.email })).statusCode).toBe(200);
+      // The list holds him again; he is still not let back in on his own.
+      expect((await post(`${entryUrl(gym, wesEntry.id)}/restore`, {}, gym.owner.cookies)).statusCode).toBe(200);
       expect((await accept(wes, await inviteIdOf(gym, wes.email))).statusCode).toBe(404);
     },
     TEST_TIMEOUT_MS,
