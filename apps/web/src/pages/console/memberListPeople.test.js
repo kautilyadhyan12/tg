@@ -303,13 +303,13 @@ describe('Invite: what the count asks and the press sends', () => {
     expect(read).toEqual({ status: ['Active', ''], membershipType: ['Gold'] });
   });
   it('sends the same words, the version and the number shown, and the server takes it', () => {
-    const body = inviteBody(ticked, { version: 9, reach: 214 });
-    expect(body).toEqual({ status: ['Active', ''], membershipType: ['Gold'], version: 9, expectedCount: 214 });
+    const body = inviteBody(ticked, { version: 9, reach: 214 }, true);
+    expect(body).toEqual({ status: ['Active', ''], membershipType: ['Gold'], version: 9, expectedCount: 214, permissionConfirmed: true });
     expect(memberInviteRequestSchema.safeParse(body).success).toBe(true);
   });
   it('with nothing ticked, everyone: no words at all', () => {
     expect(inviteQueryString(EMPTY_FILTERS)).toBe('');
-    expect(inviteBody(EMPTY_FILTERS, { version: 1, reach: 3 })).toEqual({ version: 1, expectedCount: 3 });
+    expect(inviteBody(EMPTY_FILTERS, { version: 1, reach: 3 }, false)).toEqual({ version: 1, expectedCount: 3, permissionConfirmed: false });
   });
 });
 

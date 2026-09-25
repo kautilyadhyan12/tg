@@ -108,17 +108,21 @@ function openInvite(p, filters = FILTERS) {
   );
 }
 const box = () => within(screen.getByTestId('invite-box'));
+const tick = () => fireEvent.click(box().getByLabelText('I have permission to email these members.'));
 
 describe('the worst thing: nobody the gym did not choose is emailed', () => {
   it('the press carries exactly the words on screen and the number shown', async () => {
     openInvite(preview());
     orgService.pressInvite.mockResolvedValue({ data: { invited: { queued: 2, skipped: NONE, version: 7 } } });
     const send = await box().findByRole('button', { name: 'Send 2 invitations' });
+    expect(send.disabled).toBe(true);
+    tick();
+    expect(send.disabled).toBe(false);
     expect(box().getByTestId('invite-who').textContent).toBe('Status: Active');
     expect(orgService.getInvitePreview).toHaveBeenCalledWith(GYM, 'status=Active');
     fireEvent.click(send);
     await waitFor(() => expect(orgService.pressInvite).toHaveBeenCalledTimes(1));
-    expect(orgService.pressInvite).toHaveBeenCalledWith(GYM, { status: ['Active'], version: 7, expectedCount: 2 });
+    expect(orgService.pressInvite).toHaveBeenCalledWith(GYM, { status: ['Active'], version: 7, expectedCount: 2, permissionConfirmed: true });
   });
 
   it('a list that changed meanwhile invites nobody, says so, and shows the new number to send', async () => {
@@ -126,7 +130,9 @@ describe('the worst thing: nobody the gym did not choose is emailed', () => {
     orgService.pressInvite.mockRejectedValueOnce(
       refusal(409, { error: 'invite_changed', message: MEMBER_INVITE_WORDS.invite_changed, preview: preview({ version: 8, reach: 1 }) }),
     );
-    fireEvent.click(await box().findByRole('button', { name: 'Send 2 invitations' }));
+    const button = await box().findByRole('button', { name: 'Send 2 invitations' });
+    tick();
+    fireEvent.click(button);
     expect(await box().findByText(MEMBER_INVITE_WORDS.invite_changed)).toBeTruthy();
     expect(box().getByTestId('invite-reach').textContent).toBe('1');
     expect(box().queryByText(/on the way/)).toBeNull();
@@ -134,7 +140,7 @@ describe('the worst thing: nobody the gym did not choose is emailed', () => {
 
     orgService.pressInvite.mockResolvedValue({ data: { invited: { queued: 1, skipped: NONE, version: 8 } } });
     fireEvent.click(box().getByRole('button', { name: 'Send 1 invitation' }));
-    await waitFor(() => expect(orgService.pressInvite).toHaveBeenLastCalledWith(GYM, { status: ['Active'], version: 8, expectedCount: 1 }));
+    await waitFor(() => expect(orgService.pressInvite).toHaveBeenLastCalledWith(GYM, { status: ['Active'], version: 8, expectedCount: 1, permissionConfirmed: true }));
   });
 
   it('says how many are left out for being under 18, and why each of the rest is', async () => {
@@ -169,7 +175,9 @@ describe('the Invite box', () => {
   it('afterwards: how many are on the way, and the words and link to share', async () => {
     openInvite(preview());
     orgService.pressInvite.mockResolvedValue({ data: { invited: { queued: 2, skipped: NONE, version: 7 } } });
-    fireEvent.click(await box().findByRole('button', { name: 'Send 2 invitations' }));
+    const button = await box().findByRole('button', { name: 'Send 2 invitations' });
+    tick();
+    fireEvent.click(button);
     expect(await box().findByText('2 invitations are on the way.')).toBeTruthy();
     expect(onSent).toHaveBeenCalledTimes(1);
     const words = box().getByLabelText("The invitation's words").value;

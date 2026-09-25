@@ -193,6 +193,7 @@ export async function pressInvite(
   const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   const settings = await readyToSend(deps, gymId);
   if (!(await limit())) return null;
+  if (request.permissionConfirmed !== true) throw refuse(409, "permission_needed");
   const at = deps.now();
   const today = dayInTz(at, org.timezone);
   const filters = filtersOf(request);
@@ -225,6 +226,7 @@ export async function pressInvite(
       meta: {
         reach: String(group.reach.length),
         version: String(version),
+        permissionConfirmed: "true",
         noEmail: String(group.skipped.noEmail),
         underAge: String(group.skipped.underAge),
         inApp: String(group.skipped.inApp),

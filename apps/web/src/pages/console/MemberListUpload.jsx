@@ -217,7 +217,7 @@ function Choice({ on, title, sub, onClick, disabled }) {
 
 /** A tick box drawn in the console's colours; the real checkbox underneath keeps the
  *  label, the keyboard and screen readers working. */
-function Tick({ checked, onChange, children, tone = 'plain' }) {
+export function Tick({ checked, onChange, children, tone = 'plain' }) {
   return (
     <label className="flex items-center gap-3 cursor-pointer min-h-[44px] text-[15px]" style={{ color: tone === 'orange' ? C.orange : C.soft }}>
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="sr-only peer" />

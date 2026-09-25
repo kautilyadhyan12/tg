@@ -23,6 +23,7 @@ import { registerUnsubscribeRoutes } from "../src/modules/orgs/invites/unsubscri
 import { createMemoryRedis } from "../src/redis.js";
 import {
   MEMBER_INVITE_EMAIL_REASON_WORDS,
+  MEMBER_INVITE_WORDS,
   memberInviteOneSchema,
   memberInvitePreviewSchema,
   memberInvitedSchema,
@@ -186,7 +187,7 @@ d("press Invite (real Postgres)", () => {
   };
 
   const press = (gymId: string, who: User, preview: MemberInvitePreview, filter: Record<string, unknown> = {}, ip?: string) =>
-    post(`${listUrl(gymId)}/invites`, { ...filter, version: preview.version, expectedCount: preview.reach }, who.cookies, ip);
+    post(`${listUrl(gymId)}/invites`, { ...filter, version: preview.version, expectedCount: preview.reach, permissionConfirmed: true }, who.cookies, ip);
 
   const errorOf = (res: { body: string }) => JSON.parse(res.body) as { error: string; message: string };
 
@@ -594,7 +595,7 @@ d("press Invite (real Postgres)", () => {
         },
       };
       await expect(
-        pressInvite(deps, owner.userId, gym, { version: seen.version, expectedCount: seen.reach }, () => Promise.resolve(true)),
+        pressInvite(deps, owner.userId, gym, { version: seen.version, expectedCount: seen.reach, permissionConfirmed: true }, () => Promise.resolve(true)),
       ).rejects.toBeInstanceOf(InviteChanged);
       const invited = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_invites WHERE gym_id = ${gym}`;
       expect(invited[0]?.n).toBe(0);
@@ -1461,6 +1462,28 @@ d("press Invite (real Postgres)", () => {
         expect(kim.invite?.outcome).toBe("queued");
         await runSender();
         expect(emailsTo(addr("age-lowe"))).toHaveLength(1);
+      },
+      TEST_TIMEOUT_MS,
+    );
+
+    it(
+      "a press without the permission tick invites nobody, and a press with it is recorded with who ticked",
+      async () => {
+        await typeIn(gym, owner, { fullName: "Tia Moss", email: addr("age-tia"), dateOfBirth: "1992-02-02" });
+        const preview = await previewOf(gym, owner);
+        const unticked = await post(`${listUrl(gym)}/invites`, { version: preview.version, expectedCount: preview.reach }, owner.cookies);
+        expect(unticked.statusCode, unticked.body).toBe(409);
+        expect(errorOf(unticked)).toMatchObject({ error: "permission_needed", message: MEMBER_INVITE_WORDS.permission_needed });
+        const refused = await post(`${listUrl(gym)}/invites`, { version: preview.version, expectedCount: preview.reach, permissionConfirmed: false }, owner.cookies);
+        expect(errorOf(refused).error).toBe("permission_needed");
+        const [none] = await sql`SELECT count(*)::int AS n FROM gym_invites WHERE gym_id = ${gym} AND email_hmac = ${emailHmac(settings.hmacKey, addr("age-tia"))}`;
+        expect(none).toEqual({ n: 0 });
+
+        expect((await press(gym, owner, preview)).statusCode).toBe(200);
+        const [audit] = await sql<{ actor: string; ticked: string }[]>`
+          SELECT actor_user_id::text AS actor, meta->>'permissionConfirmed' AS ticked FROM audit_log
+          WHERE gym_id = ${gym} AND action = 'org.member_list_invited' ORDER BY id DESC LIMIT 1`;
+        expect(audit).toEqual({ actor: owner.userId, ticked: "true" });
       },
       TEST_TIMEOUT_MS,
     );

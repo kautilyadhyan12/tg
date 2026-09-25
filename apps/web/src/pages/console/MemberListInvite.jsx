@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, Check, Copy, Loader2, Mail, X } from 'lucide-react';
+import { MEMBER_INVITE_PERMISSION_WORDS } from '@app/shared';
 import { orgService, errorText, inviteChangedPreview } from '../../api/orgsApi';
+import { Tick } from './MemberListUpload';
 import {
   inviteBlockedWords,
   inviteBody,
@@ -70,6 +72,7 @@ export default function MemberListInvite({ gymId, gym, filters, words, readOnly,
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
   const [sent, setSent] = useState(null);
+  const [permission, setPermission] = useState(false);
 
   // Counted again as the box opens: the button's number may be minutes old.
   useEffect(() => {
@@ -91,11 +94,11 @@ export default function MemberListInvite({ gymId, gym, filters, words, readOnly,
   }, [gymId, filters]);
 
   const send = async () => {
-    if (preview === null || sending) return;
+    if (preview === null || sending || !permission) return;
     setSending(true);
     setError(null);
     try {
-      const res = await orgService.pressInvite(gymId, inviteBody(filters, preview));
+      const res = await orgService.pressInvite(gymId, inviteBody(filters, preview, permission));
       setSent(res.data.invited);
       onSent();
     } catch (err) {
@@ -200,6 +203,11 @@ export default function MemberListInvite({ gymId, gym, filters, words, readOnly,
           They get one email from {gym.name} via AI Home Gym with a link to the app. Only someone who signs in with that email address can
           join.
         </p>
+        {reach > 0 && blocked === null ? (
+          <Tick checked={permission} onChange={setPermission}>
+            {MEMBER_INVITE_PERMISSION_WORDS.replace('{people}', words.people)}
+          </Tick>
+        ) : null}
         {error !== null ? (
           <p className="text-sm" style={{ color: '#fff' }} role="alert">
             {error}
@@ -209,7 +217,7 @@ export default function MemberListInvite({ gymId, gym, filters, words, readOnly,
           <button
             type="button"
             onClick={() => void send()}
-            disabled={reach === 0 || blocked !== null || readOnly || sending}
+            disabled={reach === 0 || blocked !== null || !permission || readOnly || sending}
             className={`${BUTTON} flex-1 sm:flex-none`}
             style={{ background: C.orange, color: '#000' }}
           >

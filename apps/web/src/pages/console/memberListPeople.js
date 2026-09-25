@@ -154,10 +154,10 @@ export function inviteQueryString(filters) {
   return params.toString();
 }
 
-/** The press: the same words, and the version and number the count showed, so a list
- *  that moved in between invites nobody. */
-export function inviteBody(filters, preview) {
-  const body = { version: preview.version, expectedCount: preview.reach };
+/** The press: the same words, the version and number the count showed, so a list that
+ *  moved in between invites nobody, and staff's permission tick. */
+export function inviteBody(filters, preview, permissionConfirmed) {
+  const body = { version: preview.version, expectedCount: preview.reach, permissionConfirmed };
   for (const { kind } of CHIP_KINDS) if (filters[kind].length > 0) body[kind] = [...filters[kind]];
   return body;
 }

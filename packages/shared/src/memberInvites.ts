@@ -186,9 +186,14 @@ export const MEMBER_INVITE_AGAIN_PER_PERSON = 3;
 export const MEMBER_INVITE_AGAIN_PERSON_DAYS = 30;
 export const MEMBER_INVITE_AGAIN_PER_GYM_DAY = 20;
 
+/** The tick staff make before pressing Invite (Kd, 5b-ii's click-through, 2026-09-25),
+ *  recorded with who pressed. `{people}` is the organisation's word for its people. */
+export const MEMBER_INVITE_PERMISSION_WORDS = "I have permission to email these {people}.";
+
 /** The server's sentences for invitations, printed as sent. */
 export const MEMBER_INVITE_WORDS = {
   invite_changed: "Your list changed while you were looking, so nobody was invited. Check the number again.",
+  permission_needed: "Tick the permission box first. Nobody was invited.",
   no_postal_address: "Add your gym's postal address in Settings first. Every invitation shows it, as the law requires.",
   invites_off: "Invitations can't be sent yet.",
   sending_stopped:
