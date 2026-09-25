@@ -186,7 +186,7 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
               {mode === 'size'
                 ? inTrial
                   ? `Your trial allows up to ${sub?.seatCap} ${words.people} until your first payment${firstPaymentOn === null ? '' : ` on ${firstPaymentOn}`}; the size you choose starts then. Nothing is charged now.`
-                  : `A bigger size starts at once and you pay the difference for the rest of this month. A smaller one starts with your next payment${firstPaymentOn === null ? '' : ` on ${firstPaymentOn}`}; until then you keep your whole size, and nothing is given back.`
+                  : `A bigger size starts at once and you pay the difference for the rest of this month. A smaller one starts with your next payment${firstPaymentOn === null ? '' : ` on ${firstPaymentOn}`}; until then you keep your whole size.`
                 : `Your free trial carries on at up to ${sub?.seatCap} ${words.people}. Your card is saved now; the plan you choose and its first payment start when the trial ends${trialEnds === null ? '' : ` on ${trialEnds}`}.`}
             </p>
 

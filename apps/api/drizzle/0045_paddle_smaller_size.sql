@@ -12,9 +12,10 @@
 -- subscriptions.pending_warned_at
 --                        when the gym's billing staff were emailed that it has too many
 --                        members for the size waiting; once per choice.
--- billing_plan_changes.members_counted
---                        the members counted when a size waiting was decided, kept for the
---                        Plan card's "your size stayed" line.
+-- billing_plan_changes.members_counted / requested_plan_id
+--                        the members counted when a size waiting was decided, and the size
+--                        asked for when a bigger one they fit was made instead (Kd, RULINGS
+--                        2026-09-25): the Plan card says which.
 
 ALTER TABLE subscriptions ADD COLUMN pending_plan_id uuid REFERENCES plans(id);--> statement-breakpoint
 ALTER TABLE subscriptions ADD COLUMN pending_from timestamptz;--> statement-breakpoint
@@ -27,6 +28,7 @@ CREATE INDEX subscriptions_pending_plan_idx ON subscriptions (pending_from)
   WHERE pending_plan_id IS NOT NULL;--> statement-breakpoint
 
 ALTER TABLE billing_plan_changes ADD COLUMN members_counted integer;--> statement-breakpoint
+ALTER TABLE billing_plan_changes ADD COLUMN requested_plan_id uuid REFERENCES plans(id);--> statement-breakpoint
 ALTER TABLE billing_plan_changes ADD CONSTRAINT billing_plan_changes_members_counted_check
   CHECK (members_counted IS NULL OR members_counted >= 0);--> statement-breakpoint
 CREATE INDEX billing_plan_changes_subscription_idx ON billing_plan_changes (subscription_id, created_at);

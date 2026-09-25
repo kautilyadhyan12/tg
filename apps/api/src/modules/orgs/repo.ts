@@ -455,6 +455,8 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
       sub_trial_seat_cap: number | null;
       sub_kept_seat_cap: number | null;
       sub_kept_members: number | null;
+      sub_fitted_asked_seat_cap: number | null;
+      sub_fitted_members: number | null;
       payment_overdue: boolean;
       seats_used: number;
       owner_trial_used: boolean;
@@ -487,6 +489,8 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
            sub.trial_seat_cap AS sub_trial_seat_cap,
            sub.kept_seat_cap AS sub_kept_seat_cap,
            sub.kept_members AS sub_kept_members,
+           sub.fitted_asked_seat_cap AS sub_fitted_asked_seat_cap,
+           sub.fitted_members AS sub_fitted_members,
            -- A paid plan whose grace ended while Paddle still retries (1c-i).
            EXISTS (
              SELECT 1 FROM subscriptions so
@@ -627,13 +631,16 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
              su.current_period_end, su.cancel_at_period_end, su.provider,
              np.seat_cap AS pending_seat_cap, np.price_minor AS pending_price_minor, su.pending_from,
              CASE WHEN lc.failure = 'too_many_members' AND su.pending_plan_id IS NULL THEN lc.seat_cap END AS kept_seat_cap,
-             CASE WHEN lc.failure = 'too_many_members' AND su.pending_plan_id IS NULL THEN lc.members_counted END AS kept_members
+             CASE WHEN lc.failure = 'too_many_members' AND su.pending_plan_id IS NULL THEN lc.members_counted END AS kept_members,
+             CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND su.pending_plan_id IS NULL THEN lc.asked_seat_cap END AS fitted_asked_seat_cap,
+             CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND su.pending_plan_id IS NULL THEN lc.members_counted END AS fitted_members
       FROM subscriptions su JOIN plans p ON p.id = su.plan_id
       LEFT JOIN plans np ON np.id = su.pending_plan_id
       -- The last size change: a smaller size the members did not fit is said on the card.
       LEFT JOIN LATERAL (
-        SELECT c.failure, c.members_counted, kp.seat_cap
+        SELECT c.state, c.failure, c.members_counted, kp.seat_cap, rp.seat_cap AS asked_seat_cap
         FROM billing_plan_changes c JOIN plans kp ON kp.id = c.to_plan_id
+        LEFT JOIN plans rp ON rp.id = c.requested_plan_id
         WHERE c.gym_id = su.owner_id AND c.subscription_id = su.id
         ORDER BY c.created_at DESC
         LIMIT 1
@@ -668,6 +675,8 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
             trial_seat_cap: r.sub_trial_seat_cap,
             kept_seat_cap: r.sub_kept_seat_cap,
             kept_members: r.sub_kept_members,
+            fitted_asked_seat_cap: r.sub_fitted_asked_seat_cap,
+            fitted_members: r.sub_fitted_members,
           }),
     seatsUsed: r.seats_used,
     ownerTrialUsed: r.owner_trial_used,
@@ -1699,6 +1708,8 @@ export interface GymSubscriptionRow {
   pending: { seatCap: number; priceMinor: number; from: Date } | null;
   /** The smaller size last chosen was not made: the members counted did not fit it. */
   kept: { seatCap: number; members: number } | null;
+  /** A bigger size than the one asked for was made: the members counted did not fit that. */
+  fitted: { askedSeatCap: number; members: number } | null;
 }
 
 export interface OrgPlanRow {
@@ -1906,12 +1917,15 @@ export async function startGymTrial(
              s.current_period_end, s.cancel_at_period_end, s.provider,
              np.seat_cap AS pending_seat_cap, np.price_minor AS pending_price_minor, s.pending_from,
              CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL THEN lc.seat_cap END AS kept_seat_cap,
-             CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL THEN lc.members_counted END AS kept_members
+             CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL THEN lc.members_counted END AS kept_members,
+             CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND s.pending_plan_id IS NULL THEN lc.asked_seat_cap END AS fitted_asked_seat_cap,
+             CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND s.pending_plan_id IS NULL THEN lc.members_counted END AS fitted_members
       FROM subscriptions s JOIN plans p ON p.id = s.plan_id
       LEFT JOIN plans np ON np.id = s.pending_plan_id
       LEFT JOIN LATERAL (
-        SELECT c.failure, c.members_counted, kp.seat_cap
+        SELECT c.state, c.failure, c.members_counted, kp.seat_cap, rp.seat_cap AS asked_seat_cap
         FROM billing_plan_changes c JOIN plans kp ON kp.id = c.to_plan_id
+        LEFT JOIN plans rp ON rp.id = c.requested_plan_id
         WHERE c.gym_id = s.owner_id AND c.subscription_id = s.id
         ORDER BY c.created_at DESC
         LIMIT 1
@@ -1985,6 +1999,8 @@ export async function startGymTrial(
       trial_seat_cap: null,
       kept_seat_cap: null,
       kept_members: null,
+      fitted_asked_seat_cap: null,
+      fitted_members: null,
     });
 
     await insertAudit(tx, {
@@ -2030,6 +2046,8 @@ interface RawGymSubscription {
   trial_seat_cap: number | null;
   kept_seat_cap: number | null;
   kept_members: number | null;
+  fitted_asked_seat_cap: number | null;
+  fitted_members: number | null;
 }
 
 function toGymSubscription(raw: RawGymSubscription): GymSubscriptionRow {
@@ -2049,6 +2067,10 @@ function toGymSubscription(raw: RawGymSubscription): GymSubscriptionRow {
         ? null
         : { seatCap: raw.pending_seat_cap, priceMinor: raw.pending_price_minor, from: raw.pending_from },
     kept: raw.kept_seat_cap === null || raw.kept_members === null ? null : { seatCap: raw.kept_seat_cap, members: raw.kept_members },
+    fitted:
+      raw.fitted_asked_seat_cap === null || raw.fitted_members === null
+        ? null
+        : { askedSeatCap: raw.fitted_asked_seat_cap, members: raw.fitted_members },
   };
 }
 
@@ -2061,12 +2083,15 @@ export async function gymLiveSubscription(sql: SqlOrTx, gymId: string): Promise<
            s.current_period_end, s.cancel_at_period_end, s.provider,
            np.seat_cap AS pending_seat_cap, np.price_minor AS pending_price_minor, s.pending_from,
            CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL THEN lc.seat_cap END AS kept_seat_cap,
-           CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL THEN lc.members_counted END AS kept_members
+           CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL THEN lc.members_counted END AS kept_members,
+           CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND s.pending_plan_id IS NULL THEN lc.asked_seat_cap END AS fitted_asked_seat_cap,
+           CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND s.pending_plan_id IS NULL THEN lc.members_counted END AS fitted_members
     FROM subscriptions s JOIN plans p ON p.id = s.plan_id
     LEFT JOIN plans np ON np.id = s.pending_plan_id
     LEFT JOIN LATERAL (
-      SELECT c.failure, c.members_counted, kp.seat_cap
+      SELECT c.state, c.failure, c.members_counted, kp.seat_cap, rp.seat_cap AS asked_seat_cap
       FROM billing_plan_changes c JOIN plans kp ON kp.id = c.to_plan_id
+      LEFT JOIN plans rp ON rp.id = c.requested_plan_id
       WHERE c.gym_id = s.owner_id AND c.subscription_id = s.id
       ORDER BY c.created_at DESC
       LIMIT 1

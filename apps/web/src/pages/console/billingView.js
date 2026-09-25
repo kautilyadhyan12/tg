@@ -285,9 +285,10 @@ export function pendingChangeText(sub, orgType) {
   return `Changing to ${count(pending.seatCap)} ${orgWords(orgType).people} (${pending.priceLabel} a month) ${when}`;
 }
 
-/** Whether the gym fits the smaller size waiting: how many to remove and by when, or that it
- *  is ready. The members are counted at `decideAt`; until then the gym keeps its whole size.
- *  Null when none waits or the count is not known. */
+/** Whether the gym fits the smaller size waiting: how many to remove and by when, and where it
+ *  moves otherwise (the smallest size that fits, or its own), or that it is ready. The members
+ *  are counted at `decideAt`; until then the gym keeps its whole size. Null when none waits or
+ *  the count is not known. */
 export function pendingFit(org) {
   const sub = org?.subscription;
   const pending = sub?.pendingSize;
@@ -298,15 +299,64 @@ export function pendingFit(org) {
     const date = trialEndDateLabel(pending.from);
     return { tooMany: false, text: `You're ready: you'll move to ${count(pending.seatCap)} ${who}${date === null ? '' : ` on ${date}`}.` };
   }
-  return { tooMany: true, text: tooManyWarning(used, pending.seatCap, pending.decideAt, sub, org?.orgType) };
+  return { tooMany: true, text: tooManyWarning(used, pending.seatCap, pending.decideAt, sub, pending.ifTooMany ?? null, org?.orgType) };
 }
 
-function tooManyWarning(used, targetCap, decideAt, sub, orgType) {
+/** "You have 250 members. Remove 50 by 24 Oct, 11:30 pm to move to 200. Otherwise you'll move
+ *  to 500 members at $129 a month." — or stay on the gym's own size when nothing smaller fits. */
+function tooManyWarning(used, targetCap, decideAt, sub, fallback, orgType) {
   const who = orgWords(orgType).people;
   const by = momentLabel(decideAt);
-  const stay = Number.isFinite(sub?.seatCap) ? `${count(sub.seatCap)} ${who}` : 'your size';
-  const price = typeof sub?.priceLabel === 'string' ? ` at ${sub.priceLabel} a month` : '';
-  return `You have ${count(used)} ${who}. Remove ${count(used - targetCap)}${by === null ? '' : ` by ${by}`}, or you'll stay on ${stay}${price}.`;
+  const otherwise =
+    fallback != null
+      ? `move to ${count(fallback.seatCap)} ${who} at ${fallback.priceLabel} a month`
+      : `stay on ${Number.isFinite(sub?.seatCap) ? `${count(sub.seatCap)} ${who}` : 'your size'}${typeof sub?.priceLabel === 'string' ? ` at ${sub.priceLabel} a month` : ''}`;
+  return `You have ${count(used)} ${who}. Remove ${count(used - targetCap)}${by === null ? '' : ` by ${by}`} to move to ${count(targetCap)}. Otherwise you'll ${otherwise}.`;
+}
+
+/** Where a gym with `used` members would move from `onSize` if too many for what it asks: the
+ *  smallest plan that holds them and is smaller than its own, as the server decides it. */
+function fallbackPlan(plans, used, onSize) {
+  const fits = plans.filter((p) => Number.isFinite(p?.seatCap) && p.seatCap >= used && (onSize === null || p.seatCap < onSize));
+  fits.sort((a, b) => a.seatCap - b.seatCap);
+  const plan = fits[0];
+  return plan === undefined ? null : { seatCap: plan.seatCap, priceLabel: plan.priceLabel };
+}
+
+/** A bigger size than the one asked for was made: the gym had too many members for it. */
+export function sizeFittedText(sub, orgType) {
+  const fitted = sub?.sizeFitted;
+  if (fitted == null) return null;
+  const who = orgWords(orgType).people;
+  const size = Number.isFinite(sub?.seatCap) ? `${count(sub.seatCap)} ${who}` : 'a bigger size';
+  return `You had ${count(fitted.members)} ${who} when your size changed, more than ${count(fitted.askedSeatCap)}, so you moved to ${size}, the smallest size that fits. Change size again whenever you're ready.`;
+}
+
+/** THE LAST DAYS' QUESTION (Kd, RULINGS 2026-09-25): in the 3 days before a smaller size is
+ *  decided, billing staff of a gym with too many members for it are asked to choose. What the
+ *  pop-up says, or null when it has nothing to ask. */
+export const SIZE_DECISION_DAYS = 3;
+export function sizeDecision(org, now = Date.now()) {
+  const sub = org?.subscription;
+  const pending = sub?.pendingSize;
+  const used = org?.seatsUsed;
+  if (!canChangeSize(org) || pending == null || !Number.isFinite(used) || used <= pending.seatCap) return null;
+  const decideAt = new Date(pending.decideAt ?? '').getTime();
+  if (Number.isNaN(decideAt) || now >= decideAt || now < decideAt - SIZE_DECISION_DAYS * 24 * 60 * 60 * 1000) return null;
+  const who = orgWords(org?.orgType).people;
+  const on = trialEndDateLabel(pending.from);
+  const fallback = pending.ifTooMany ?? null;
+  const stay = { seatCap: sub.seatCap ?? null, priceLabel: sub.priceLabel ?? null };
+  return {
+    question: `You asked to move to ${count(pending.seatCap)} ${who}${on === null ? '' : ` on ${on}`}, but you have ${count(used)}. What would you like to do?`,
+    remove: `Remove ${count(used - pending.seatCap)} ${who}`,
+    moveInstead: fallback === null ? null : { planCode: fallback.planCode, label: `Move to ${count(fallback.seatCap)} instead (${fallback.priceLabel} a month)` },
+    stay: `Stay on ${Number.isFinite(stay.seatCap) ? count(stay.seatCap) : 'your size'}${stay.priceLabel === null ? '' : ` (${stay.priceLabel} a month)`}`,
+    ifNothing:
+      fallback === null
+        ? `If you don't choose, you'll stay on ${Number.isFinite(stay.seatCap) ? `${count(stay.seatCap)} ${who}` : 'your size'}.`
+        : `If you don't choose, ${on === null ? 'at your next payment' : `on ${on}`} you'll move to ${count(fallback.seatCap)} ${who} (${fallback.priceLabel} a month).`,
+  };
 }
 
 /** The smaller size last chosen was not made: the gym had too many members when it was due. */
@@ -357,7 +407,7 @@ export function sizeRows(plans, org) {
       plan,
       kind: 'smaller',
       note: nextOn === null ? 'From your next payment' : `From ${nextOn}`,
-      warning: over ? tooManyWarning(used, cap, decideAt, sub, org?.orgType) : null,
+      warning: over ? tooManyWarning(used, cap, decideAt, sub, fallbackPlan(plans, used, onSize), org?.orgType) : null,
       disabled: false,
     };
   });

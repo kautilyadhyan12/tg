@@ -195,7 +195,7 @@ describe('paying during the free trial', () => {
 describe('Change size', () => {
   const NEXT = trialEndDateLabel('2026-11-01T00:00:00.000Z');
   const on1000 = { ...paying, seatCap: 1000, priceLabel: '$199' };
-  const waiting = { ...on1000, pendingSize: { seatCap: 500, priceLabel: '$129', from: '2026-11-01T00:00:00.000Z', decideAt: '2026-10-31T21:00:00.000Z' } };
+  const waiting = { ...on1000, pendingSize: { seatCap: 500, priceLabel: '$129', from: '2026-11-01T00:00:00.000Z', decideAt: '2026-10-31T21:00:00.000Z', ifTooMany: null } };
   const rowOf = (list, text) => within(list).getByText(text).closest('li');
 
   it('heads the card with the size and price, lists every size with the gym’s own marked, and a bigger one changes once on Confirm', async () => {
@@ -285,7 +285,7 @@ describe('Change size', () => {
     renderOverview();
     fireEvent.click(await screen.findByRole('button', { name: 'Change size' }));
     const dialog = await screen.findByRole('dialog');
-    expect(within(dialog).getByText(new RegExp(`A smaller one starts with your next payment on ${NEXT}; until then you keep your whole size, and nothing is given back\\.`))).toBeTruthy();
+    expect(within(dialog).getByText(new RegExp(`A smaller one starts with your next payment on ${NEXT}; until then you keep your whole size\\.$`))).toBeTruthy();
     const list = await within(dialog).findByTestId('size-list');
     const smaller = rowOf(list, 'Up to 500 members');
     expect(within(smaller).getByText(`From ${NEXT}`)).toBeTruthy();
@@ -312,7 +312,7 @@ describe('Change size', () => {
     const dialog = await screen.findByRole('dialog');
     const list = await within(dialog).findByTestId('size-list');
     const smaller = rowOf(list, 'Up to 500 members');
-    const warning = new RegExp(`^You have 620 members\\. Remove 120 by .+, or you'll stay on ${(1000).toLocaleString()} members at \\$199 a month\\.$`);
+    const warning = new RegExp(`^You have 620 members\\. Remove 120 by .+ to move to 500\\. Otherwise you'll stay on ${(1000).toLocaleString()} members at \\$199 a month\\.$`);
     expect(within(smaller).getByText(warning)).toBeTruthy();
     fireEvent.click(within(smaller).getByRole('button', { name: 'Choose' }));
     await within(dialog).findByText(`Nothing to pay now. $129 a month from ${NEXT}.`);
@@ -335,7 +335,7 @@ describe('Change size', () => {
     expect(await screen.findByText(`Changing to 500 members ($129 a month) on ${NEXT}`)).toBeTruthy();
     expect(screen.queryByText(/Next payment/)).toBeNull();
     const fit = screen.getByTestId('pending-fit');
-    expect(fit.textContent).toMatch(/^You have 620 members\. Remove 120 by .+, or you'll stay on .+ members at \$199 a month\. Go to members$/);
+    expect(fit.textContent).toMatch(/^You have 620 members\. Remove 120 by .+ to move to 500\. Otherwise you'll stay on .+ members at \$199 a month\. Go to members$/);
     expect(within(fit).getByRole('link', { name: 'Go to members' }).getAttribute('href')).toBe('/console/iron-house/members');
     expect(screen.getAllByText(`620 of ${(1000).toLocaleString()} members.`).length).toBeGreaterThan(0);
 
@@ -365,5 +365,124 @@ describe('Change size', () => {
         `Your size stayed at ${(1000).toLocaleString()} members: you had 620 when it was due to change, more than 500, so you pay $199 a month. Change size again whenever you're ready.`,
       ),
     ).toBeTruthy();
+  });
+});
+
+describe('the last days’ question', () => {
+  const on1000 = { ...paying, seatCap: 1000, priceLabel: '$199', currentPeriodEnd: new Date(Date.now() + 2 * 86_400_000).toISOString() };
+  const soon = (ifTooMany, seatCap = 200, priceLabel = '$79') => ({
+    ...on1000,
+    pendingSize: {
+      seatCap,
+      priceLabel,
+      from: on1000.currentPeriodEnd,
+      decideAt: new Date(Date.now() + 2 * 86_400_000 - 3 * 3_600_000).toISOString(),
+      ifTooMany,
+    },
+  });
+  const FALLBACK = { planCode: 'org_b2_us_m', seatCap: 500, priceLabel: '$129' };
+  beforeEach(() => {
+    window.sessionStorage.clear();
+  });
+
+  it('asks billing staff with too many members to choose, and Move instead chooses the size that fits, once', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, seatsUsed: 250, subscription: soon(FALLBACK) }));
+    let answer;
+    orgService.changeSize.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    renderOverview();
+    const prompt = await screen.findByTestId('size-decision');
+    expect(within(prompt).getByText(/^You asked to move to 200 members on .+, but you have 250\. What would you like to do\?$/)).toBeTruthy();
+    expect(within(prompt).getByRole('button', { name: 'Remove 50 members' })).toBeTruthy();
+    expect(within(prompt).getByRole('button', { name: `Stay on ${(1000).toLocaleString()} ($199 a month)` })).toBeTruthy();
+    expect(within(prompt).getByText(/^If you don't choose, on .+ you'll move to 500 members \(\$129 a month\)\.$/)).toBeTruthy();
+    const move = within(prompt).getByRole('button', { name: 'Move to 500 instead ($129 a month)' });
+    fireEvent.click(move);
+    fireEvent.click(move);
+    await waitFor(() => expect(orgService.changeSize).toHaveBeenCalledTimes(1));
+    expect(orgService.changeSize.mock.calls[0].slice(0, 2)).toEqual([GYM_ID, 'org_b2_us_m']);
+    // The server now has 500 waiting, which the 250 fit: nothing more to ask.
+    const now500 = soon(null, 500, '$129');
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, seatsUsed: 250, subscription: now500 }));
+    answer({ data: { subscription: now500 } });
+    await waitFor(() => expect(screen.queryByTestId('size-decision')).toBeNull());
+  });
+
+  it('Remove members goes to the members page', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, seatsUsed: 250, subscription: soon(FALLBACK) }));
+    render(
+      <MemoryRouter initialEntries={['/console/iron-house']}>
+        <Routes>
+          <Route
+            path="/console/:orgSlug"
+            element={
+              <ConsoleLayout>
+                <Overview />
+              </ConsoleLayout>
+            }
+          />
+          <Route path="/console/:orgSlug/members" element={<div>the members page</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const prompt = await screen.findByTestId('size-decision');
+    fireEvent.click(within(prompt).getByRole('button', { name: 'Remove 50 members' }));
+    expect(await screen.findByText('the members page')).toBeTruthy();
+    expect(orgService.changeSize).not.toHaveBeenCalled();
+    expect(orgService.keepSize).not.toHaveBeenCalled();
+  });
+
+  it('Stay cancels the change; closing it answers nothing, and it stays closed for this visit', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, seatsUsed: 250, subscription: soon(null) }));
+    orgService.keepSize.mockResolvedValue({ data: { subscription: on1000 } });
+    renderOverview();
+    let prompt = await screen.findByTestId('size-decision');
+    expect(within(prompt).queryByRole('button', { name: /instead/ })).toBeNull();
+    expect(within(prompt).getByText(`If you don't choose, you'll stay on ${(1000).toLocaleString()} members.`)).toBeTruthy();
+    fireEvent.click(within(prompt).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByTestId('size-decision')).toBeNull();
+    expect(orgService.keepSize).not.toHaveBeenCalled();
+    expect(orgService.changeSize).not.toHaveBeenCalled();
+    cleanup();
+    resetConsoleOrgs();
+    renderOverview();
+    await screen.findByText(/^Changing to 200 members/);
+    expect(screen.queryByTestId('size-decision')).toBeNull();
+
+    // A new visit asks again; Stay cancels the change.
+    cleanup();
+    resetConsoleOrgs();
+    window.sessionStorage.clear();
+    renderOverview();
+    prompt = await screen.findByTestId('size-decision');
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, seatsUsed: 250, subscription: on1000 }));
+    fireEvent.click(within(prompt).getByRole('button', { name: `Stay on ${(1000).toLocaleString()} ($199 a month)` }));
+    await waitFor(() => expect(orgService.keepSize).toHaveBeenCalledWith(GYM_ID));
+    await waitFor(() => expect(screen.queryByTestId('size-decision')).toBeNull());
+  });
+
+  it('asks nobody when the members fit, when it is more than 3 days away, or a trainer', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, seatsUsed: 150, subscription: soon(FALLBACK) }));
+    renderOverview();
+    await screen.findByText(/^Changing to 200 members/);
+    expect(screen.queryByTestId('size-decision')).toBeNull();
+    cleanup();
+    resetConsoleOrgs();
+    const far = soon(FALLBACK);
+    far.pendingSize = { ...far.pendingSize, decideAt: new Date(Date.now() + 5 * 86_400_000).toISOString() };
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, seatsUsed: 250, subscription: far }));
+    renderOverview();
+    await screen.findByText(/^Changing to 200 members/);
+    expect(screen.queryByTestId('size-decision')).toBeNull();
+    cleanup();
+    resetConsoleOrgs();
+    orgService.getMine.mockResolvedValue(mineIs({ ...TRAINER, seatsUsed: 250, subscription: soon(FALLBACK) }));
+    renderOverview();
+    await screen.findByText('Iron House');
+    expect(screen.queryByTestId('size-decision')).toBeNull();
   });
 });

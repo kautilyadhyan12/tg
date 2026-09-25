@@ -886,18 +886,50 @@ export interface PendingClaim {
   planCode: string;
   priceId: string;
   pendingFrom: Date;
+  /** Made instead of the size asked for, which the members did not fit. */
+  fitted: { askedSeatCap: number; members: number } | null;
+}
+
+export interface FittingPlan {
+  id: string;
+  code: string;
+  seatCap: number;
+  priceMinor: number;
+  priceId: string;
+}
+
+/** The smallest size of the gym's own price list that holds `members` and is smaller than
+ *  the plan it is on: where a gym with too many members for the size it asked for moves
+ *  instead (Kd, RULINGS 2026-09-25). Null when nothing smaller holds them. */
+export async function smallestFittingPlan(sql: SqlOrTx, input: { gymId: string; members: number }): Promise<FittingPlan | null> {
+  const rows = await sql<{ id: string; code: string; seat_cap: number; price_minor: number; paddle_price_id: string }[]>`
+    SELECT fp.id, fp.code, fp.seat_cap, fp.price_minor, fp.paddle_price_id
+    FROM subscriptions s
+    JOIN plans p ON p.id = s.plan_id
+    JOIN plans fp ON fp.audience = 'org' AND fp.active = true AND fp.interval = 'month'
+                 AND fp.currency = p.currency AND fp.paddle_price_id IS NOT NULL
+    WHERE s.owner_type = 'gym' AND s.owner_id = ${input.gymId}
+      AND s.status IN ('trialing','active','past_due')
+      AND fp.seat_cap IS NOT NULL AND fp.seat_cap >= ${input.members}
+      AND (p.seat_cap IS NULL OR fp.seat_cap < p.seat_cap)
+    ORDER BY fp.seat_cap, fp.price_minor
+    LIMIT 1`;
+  const row = rows[0];
+  return row === undefined ? null : { id: row.id, code: row.code, seatCap: row.seat_cap, priceMinor: row.price_minor, priceId: row.paddle_price_id };
 }
 
 export type PendingClaimOutcome =
-  /** The members fit: the smaller size now holds for joins, and Paddle is to be asked. */
+  /** The members fit the size asked for, or a bigger one smaller than the plan: it now holds
+   *  for joins, and Paddle is to be asked. */
   | { kind: "claimed"; claim: PendingClaim }
-  /** More members than the smaller size holds: it was dropped and the gym stays on its size. */
+  /** No smaller size holds the members: the size asked for was dropped and the gym stays. */
   | { kind: "kept"; members: number; seatCap: number };
 
 /** Take one plan's waiting smaller size to decide it: under the gym's lock, the members are
- *  counted; if they do not fit, the size is dropped and the count kept for the Plan card; if
- *  they do, the smaller limit holds for joins from now and a pending change is recorded (so
- *  no press crosses it). At most once per `bucket` (the Idempotency-Key carries it), so a
+ *  counted. If they do not fit the size asked for, the smallest size smaller than the plan
+ *  that holds them is made instead; if none does, the size is dropped and the count kept for
+ *  the Plan card. Whatever is made holds for joins from now, and a pending change is
+ *  recorded (so no press crosses it). At most once per `bucket` (the Idempotency-Key carries it), so a
  *  refusing Paddle is asked every few minutes, not every run. Null when there is nothing to
  *  do now. */
 export async function claimPendingPlan(
@@ -939,7 +971,8 @@ export async function claimPendingPlan(
 
     // A paid trial's was counted when it was chosen and has held since.
     const members = row.status === "trialing" ? null : await seatsUsed(tx, input.gymId);
-    if (members !== null && members > row.seat_cap) {
+    const fitted = members !== null && members > row.seat_cap ? await smallestFittingPlan(tx, { gymId: input.gymId, members }) : null;
+    if (members !== null && members > row.seat_cap && fitted === null) {
       await tx`
         UPDATE subscriptions SET pending_plan_id = NULL, pending_from = NULL, pending_held_at = NULL, pending_warned_at = NULL
         WHERE id = ${input.subscriptionRowId} AND owner_type = 'gym' AND owner_id = ${input.gymId}`;
@@ -959,17 +992,28 @@ export async function claimPendingPlan(
       });
       return { kind: "kept", members, seatCap: row.seat_cap };
     }
+    const to = fitted === null ? { id: row.pending_plan_id, code: row.code, priceId: row.paddle_price_id } : { id: fitted.id, code: fitted.code, priceId: fitted.priceId };
     await tx`
-      UPDATE subscriptions SET pending_held_at = COALESCE(pending_held_at, ${input.now})
+      UPDATE subscriptions SET pending_plan_id = ${to.id}, pending_held_at = COALESCE(pending_held_at, ${input.now})
       WHERE id = ${input.subscriptionRowId} AND owner_type = 'gym' AND owner_id = ${input.gymId}`;
     const inserted = await tx<{ id: string }[]>`
-      INSERT INTO billing_plan_changes (gym_id, subscription_id, from_plan_id, to_plan_id, created_by,
+      INSERT INTO billing_plan_changes (gym_id, subscription_id, from_plan_id, to_plan_id, requested_plan_id, created_by,
                                         idempotency_key, provider, members_counted, created_at)
-      VALUES (${input.gymId}, ${input.subscriptionRowId}, ${row.plan_id}, ${row.pending_plan_id}, NULL,
-              ${key}, 'paddle', ${members}, ${input.now})
+      VALUES (${input.gymId}, ${input.subscriptionRowId}, ${row.plan_id}, ${to.id},
+              ${fitted === null ? null : row.pending_plan_id}, NULL, ${key}, 'paddle', ${members}, ${input.now})
       RETURNING id`;
     const changeId = inserted[0]?.id;
     if (changeId === undefined) throw new Error("plan change insert returned no row");
+    if (fitted !== null) {
+      await insertAudit(tx, {
+        actorUserId: null,
+        gymId: input.gymId,
+        action: "billing.size_change_fitted",
+        targetType: "billing_plan_change",
+        targetId: changeId,
+        meta: { asked: row.code, made: fitted.code, members: String(members) },
+      });
+    }
     return {
       kind: "claimed",
       claim: {
@@ -977,10 +1021,11 @@ export async function claimPendingPlan(
         subscriptionRef: row.provider_ref,
         trialing: row.status === "trialing",
         fromPlanId: row.plan_id,
-        toPlanId: row.pending_plan_id,
-        planCode: row.code,
-        priceId: row.paddle_price_id,
+        toPlanId: to.id,
+        planCode: to.code,
+        priceId: to.priceId,
         pendingFrom: row.pending_from,
+        fitted: fitted === null || members === null ? null : { askedSeatCap: row.seat_cap, members },
       },
     };
   });
@@ -1066,6 +1111,13 @@ export async function sizeNoticeFacts(
     targetPriceMinor: row.target_price_minor,
     pendingFrom: row.pending_from,
   };
+}
+
+/** A gym's name, console address and kind, for an email to its billing staff. */
+export async function gymEmailFacts(sql: SqlOrTx, gymId: string): Promise<{ gymName: string; gymSlug: string; orgType: string } | null> {
+  const rows = await sql<{ name: string; slug: string; org_type: string }[]>`SELECT name, slug, org_type FROM gyms WHERE id = ${gymId}`;
+  const row = rows[0];
+  return row === undefined ? null : { gymName: row.name, gymSlug: row.slug, orgType: row.org_type };
 }
 
 /** Mark the warning sent for this choice; false when another run marked it first. Marked

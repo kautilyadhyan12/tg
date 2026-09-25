@@ -27,7 +27,7 @@ import type { RedisLike } from "../../redis.js";
 import { bustEntitlements } from "../entitlements/service.js";
 import * as orgsRepo from "../orgs/repo.js";
 import { formatPriceMinor, holdsPrivilege, OrgsError, requirePrivilege, toOrgSubscription } from "../orgs/service.js";
-import { dayLabel, momentLabel, sizeKeptEmail, sizeWarningEmail } from "./emails.js";
+import { dayLabel, momentLabel, sizeFittedEmail, sizeKeptEmail, sizeWarningEmail } from "./emails.js";
 import type { Snapshot } from "./machine.js";
 import { onlinePaymentFor } from "./online.js";
 import type { PaddleApi, PaddleEnvironment, ProrationMode, TrialCheckout } from "./paddle.js";
@@ -515,7 +515,12 @@ export async function keepSize(deps: BillingDeps, input: { userId: string; gymId
 async function currentPlan(deps: BillingDeps, gymId: string): Promise<OrgPlanChangeResponse> {
   const live = await orgsRepo.gymLiveSubscription(deps.sql, gymId);
   if (live === null) throw new OrgsError(409, "plan_changed_meanwhile", "Your plan changed meanwhile. Reload the page and try again.");
-  return { subscription: toOrgSubscription(live) };
+  let fallback: repo.FittingPlan | null = null;
+  if (live.pending !== null) {
+    const members = await repo.seatsUsed(deps.sql, gymId);
+    if (members > live.pending.seatCap) fallback = await repo.smallestFittingPlan(deps.sql, { gymId, members });
+  }
+  return { subscription: toOrgSubscription(live, fallback) };
 }
 
 /** A smaller size is decided this long before the month paid ends: the members counted and,
@@ -592,6 +597,7 @@ async function sendSizeWarnings(deps: BillingDeps): Promise<number> {
     const facts = await repo.sizeNoticeFacts(deps.sql, { ...due, targetPlan: "pending" });
     if (facts === null || facts.pendingFrom === null || facts.members <= facts.targetSeatCap) continue;
     if (!(await repo.claimSizeWarning(deps.sql, { ...due, now }))) continue;
+    const fallback = await repo.smallestFittingPlan(deps.sql, { gymId: due.gymId, members: facts.members });
     const links = consoleLinks(mail, facts.gymSlug);
     const decideAt = new Date(facts.pendingFrom.getTime() - PENDING_SIZE_LEAD_MS);
     for (const to of await repo.billingRecipients(deps.sql, due.gymId)) {
@@ -607,6 +613,7 @@ async function sendSizeWarnings(deps: BillingDeps): Promise<number> {
           currentPriceLabel: formatPriceMinor(facts.currentPriceMinor, facts.currency),
           targetSeatCap: facts.targetSeatCap,
           targetPriceLabel: formatPriceMinor(facts.targetPriceMinor, facts.currency),
+          fallback: fallback === null ? null : { seatCap: fallback.seatCap, priceLabel: formatPriceMinor(fallback.priceMinor, facts.currency) },
           due: dayLabel(facts.pendingFrom, facts.timezone),
           decideBy: momentLabel(decideAt, facts.timezone),
           membersLink: links.members,
@@ -702,8 +709,39 @@ async function applyPendingSize(deps: BillingDeps, paddle: PaddleSettings, gymId
     return await finish("change_unconfirmed");
   }
   await applyPaddleSubscription(deps, sub.id);
-  deps.log.info({ event: "billing.pending_size_applied", gymId, plan: claim.planCode, mode }, "a gym's smaller size was made at Paddle");
-  return await finish(null);
+  deps.log.info({ event: "billing.pending_size_applied", gymId, plan: claim.planCode, mode, fitted: claim.fitted !== null }, "a gym's smaller size was made at Paddle");
+  const done = await finish(null);
+  if (claim.fitted !== null) await emailSizeFitted(deps, gymId, claim.fitted);
+  return done;
+}
+
+/** Tell a gym's billing staff a bigger size than the one they asked for was made: the members
+ *  did not fit it. Sent once, after the one change that made it. */
+async function emailSizeFitted(deps: BillingDeps, gymId: string, fitted: { askedSeatCap: number; members: number }): Promise<void> {
+  const mail = deps.mail ?? null;
+  if (mail === null) return;
+  const live = await orgsRepo.gymLiveSubscription(deps.sql, gymId);
+  const facts = await repo.gymEmailFacts(deps.sql, gymId);
+  if (live === null || facts === null) return;
+  const links = consoleLinks(mail, facts.gymSlug);
+  for (const to of await repo.billingRecipients(deps.sql, gymId)) {
+    await sendBillingEmail(
+      deps,
+      mail,
+      sizeFittedEmail({
+        to,
+        gymName: facts.gymName,
+        orgType: facts.orgType,
+        members: fitted.members,
+        askedSeatCap: fitted.askedSeatCap,
+        seatCap: live.planSeatCap,
+        priceLabel: formatPriceMinor(live.priceMinor, live.currency),
+        planLink: links.plan,
+      }),
+      gymId,
+      "size_fitted",
+    );
+  }
 }
 
 /** A paying gym keeps everything this long after a payment fails. */

@@ -1448,11 +1448,48 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       await workerAt("2026-10-29T02:00:00Z");
       const sent = mailTo(await emailOf(a.userId));
       expect(sent).toHaveLength(1);
-      expect(sent[0]?.text).toContain("has 2 members now. Remove 1 of them before");
-      expect(sent[0]?.text).toContain("or Billing Gym");
+      expect(sent[0]?.text).toMatch(/has 2 members now\. If you do nothing, on 31 Oct Billing Gym \d+ will stay on up to 50 members at \$15 a month\./);
+      expect(sent[0]?.text).toContain("To move to 1, remove 1 members before 31 Oct,");
       expect(sent[0]?.text).toContain(`http://localhost:5173/console/`);
       expect(mailTo(await emailOf(fits.userId))).toEqual([]);
       expect(changesAsked(a.subId) + changesAsked(fits.subId)).toBe(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "too many members for the size asked for, and a smaller one fits them: the smallest that fits is made instead, and the gym is told",
+    async () => {
+      const a = await payingOn(BIG);
+      await addMember(a.gymId);
+      await addMember(a.gymId);
+      await addMember(a.gymId);
+      expect((await sizeChange(a.gymId, a.cookies, SMALL)).statusCode).toBe(200);
+      // Before the day, the card says where it will move if nothing is done.
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({
+        seatCap: 5000,
+        pendingSize: { seatCap: 1, ifTooMany: { planCode: MID, seatCap: 50, priceLabel: "$15" } },
+      });
+      await workerAt(DECIDE_AT);
+      expect(paddle.changeCalls.filter((c) => c.subscriptionId === a.subId)).toEqual([{ subscriptionId: a.subId, priceId: MID_PRICE, mode: "do_not_bill" }]);
+      expect(chargesFor(a.subId)).toEqual([]);
+      expect(await planOf(a.subId)).toEqual({ code: MID, status: "active" });
+      expect(await seatsOf(a.gymId)).toBe(3);
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({
+        seatCap: 50,
+        priceLabel: "$15",
+        pendingSize: null,
+        sizeKept: null,
+        sizeFitted: { askedSeatCap: 1, members: 3 },
+      });
+      const sent = mailTo(await emailOf(a.userId));
+      expect(sent.map((m) => m.subject)).toEqual([expect.stringMatching(/ moved to up to 50 members$/)]);
+      expect(sent[0]?.text).toContain("had 3 members when its smaller size was due, more than the 1 it allows");
+      const audit = await sql`SELECT 1 FROM audit_log WHERE gym_id = ${a.gymId} AND action = 'billing.size_change_fitted'`;
+      expect(audit).toHaveLength(1);
+      // Choosing again clears the note.
+      expect((await sizeChange(a.gymId, a.cookies, SMALL)).statusCode).toBe(200);
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ sizeFitted: null });
     },
     TEST_TIMEOUT_MS,
   );

@@ -106,6 +106,8 @@ export const billingPlanChanges = pgTable(
     failure: text("failure"),
     /** The members counted when a smaller size waiting was decided (`0045`). */
     membersCounted: integer("members_counted"),
+    /** The smaller size asked for, when a bigger one the members fit was made instead. */
+    requestedPlanId: uuid("requested_plan_id").references(() => plans.id),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

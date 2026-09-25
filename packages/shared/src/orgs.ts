@@ -511,13 +511,19 @@ export const orgSubscriptionSchema = z.object({
   nextSeatCap: z.number().int().positive().nullable().default(null),
   /** A smaller size the gym chose (1c-iii; Kd, RULINGS 2026-09-25), due at `from`, the end of
    *  the month already paid; the gym keeps its whole size (`seatCap`) until then. Its members
-   *  are counted at `decideAt`: if they fit it moves, if not it stays. Null when none waits. */
+   *  are counted at `decideAt`: if they fit it moves; if not, it moves to `ifTooMany`, the
+   *  smallest size that holds the members it has now, or stays when that is null. Null when
+   *  none waits. */
   pendingSize: z
     .object({
       seatCap: z.number().int().positive(),
       priceLabel: z.string().min(1),
       from: z.string(),
       decideAt: z.string(),
+      ifTooMany: z
+        .object({ planCode: z.string().min(1).max(64), seatCap: z.number().int().positive(), priceLabel: z.string().min(1) })
+        .strict()
+        .nullable(),
     })
     .strict()
     .nullable()
@@ -528,6 +534,17 @@ export const orgSubscriptionSchema = z.object({
   sizeKept: z
     .object({
       seatCap: z.number().int().positive(),
+      members: z.number().int().nonnegative(),
+    })
+    .strict()
+    .nullable()
+    .default(null),
+  /** The smaller size last chosen was held by more members than it allows, so the smallest
+   *  size that held them (`seatCap`) was made instead. Null otherwise, and once another size
+   *  is chosen. */
+  sizeFitted: z
+    .object({
+      askedSeatCap: z.number().int().positive(),
       members: z.number().int().nonnegative(),
     })
     .strict()

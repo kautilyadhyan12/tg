@@ -4,6 +4,7 @@ import { NavLink, Link, useParams } from 'react-router-dom';
 import { Building2, Users, Settings, CalendarClock, ChevronLeft, ClipboardCheck, LogOut } from 'lucide-react';
 import ConsoleBanner from './ConsoleBanner';
 import PlanModal from './PlanModal';
+import SizeDecisionPrompt from './SizeDecisionPrompt';
 import { useConsoleOrg } from '../../pages/console/useConsoleOrg';
 import { useConsoleSignOut } from '../../pages/console/consoleSignOut';
 import { canManageStaff } from '../../pages/console/staffView';
@@ -364,6 +365,8 @@ export default function ConsoleLayout({ children }) {
         onSignOut={handleSignOut}
         signingOut={signingOut}
       />
+      {/* A smaller size due soon that the gym's members do not fit: its billing staff choose. */}
+      <SizeDecisionPrompt key={`size-decision:${org?.id ?? 'no-gym'}`} org={org} />
 
       {/* ── Mobile tab bar ────────────────────────────────────────────────── */}
       {tabs.length > 0 ? (

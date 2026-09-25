@@ -21,6 +21,7 @@ import {
   planHeadline,
   seatLineText,
   seatMeter,
+  sizeFittedText,
   sizeKeptText,
   trialEndDateLabel,
 } from '../../pages/console/billingView';
@@ -170,7 +171,7 @@ export default function TrialCard({ org }) {
   const resize = canChangeSize(org);
   const change = pendingChangeText(sub, org?.orgType);
   const fit = pendingFit(org);
-  const kept = sizeKeptText(sub, org?.orgType);
+  const kept = sizeKeptText(sub, org?.orgType) ?? sizeFittedText(sub, org?.orgType);
   const muted = { color: 'rgba(255,255,255,0.6)' };
 
   const cancelChange = async () => {
