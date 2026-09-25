@@ -17,6 +17,10 @@ import {
   joinLeadResponseSchema,
   leadResponseSchema,
   leadsResponseSchema,
+  memberInviteChangedSchema,
+  memberInvitedResponseSchema,
+  memberInviteOneResponseSchema,
+  memberInvitePreviewResponseSchema,
   memberListConfirmResponseSchema,
   memberListEntriesResponseSchema,
   memberListEntryDeletedSchema,
@@ -586,6 +590,42 @@ export const orgService = {
       authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries`, body),
     ),
 
+  /** GET …/member-list/invites/preview — who an Invite for these words would reach,
+   *  who it leaves out and why, and whether the gym can send at all. `query` is
+   *  `inviteQueryString`'s. */
+  getInvitePreview: (gymId, query) =>
+    readThrough(
+      memberInvitePreviewResponseSchema,
+      'who would be invited',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/invites/preview${query ? `?${query}` : ''}`),
+    ),
+
+  /** POST …/member-list/invites — press Invite. A 409 `invite_changed` carries the new
+   *  preview (`inviteChangedPreview`) and nobody was invited. */
+  pressInvite: (gymId, body) =>
+    readThrough(
+      memberInvitedResponseSchema,
+      'the invitations',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/invites`, body),
+    ),
+
+  /** POST …/member-list/entries/:entryId/invite — invite one person. */
+  inviteMemberListEntry: (gymId, entryId) =>
+    readThrough(
+      memberInviteOneResponseSchema,
+      'the invitation',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/invite`, {}),
+    ),
+
+  /** POST …/member-list/entries/:entryId/invite/resend — send one person's invitation
+   *  again because they asked. */
+  resendMemberListInvite: (gymId, entryId) =>
+    readThrough(
+      memberInviteOneResponseSchema,
+      'the invitation',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/invite/resend`, {}),
+    ),
+
   /** PATCH …/member-list/entries/:entryId — change one person. */
   changeMemberListEntry: (gymId, entryId, body) =>
     readThrough(
@@ -1090,6 +1130,13 @@ export function errorText(err, fallback) {
 export function errorCode(err) {
   const code = err?.response?.data?.error;
   return typeof code === 'string' ? code : null;
+}
+
+/** The fresh preview a refused Invite press answers with (409 `invite_changed`), or
+ *  null for any other failure. */
+export function inviteChangedPreview(err) {
+  const parsed = memberInviteChangedSchema.safeParse(err?.response?.data);
+  return parsed.success ? parsed.data.preview : null;
 }
 
 /** HTTP status, or null offline. Kept beside `errorCode` so a caller cannot

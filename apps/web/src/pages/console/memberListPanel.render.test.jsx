@@ -17,6 +17,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getMemberListEntry: vi.fn(),
       uploadMemberList: vi.fn(),
       changeMemberListEntry: vi.fn(),
+      getInvitePreview: vi.fn(),
     },
   };
 });
@@ -318,5 +319,37 @@ describe('round one: after a change', () => {
     await waitFor(() => expect(names()).toHaveLength(5));
     expect(orgService.getMemberListEntries.mock.calls.length - before).toBe(5);
     expect(screen.getByRole('button', { name: 'Load more' })).toBeTruthy();
+  });
+});
+describe('the Invite button', () => {
+  const preview = (reach) => ({ data: { preview: { version: 3, reach, skipped: { noEmail: 0, underAge: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, refused: 0, sharedAddress: 0 }, blocked: null } } });
+
+  it("says the server's number, and asks again for the gym's own words but not for a search", async () => {
+    orgService.getInvitePreview.mockResolvedValue(preview(214));
+    draw();
+    expect((await screen.findByTestId('invite-button')).textContent).toBe('Invite 214 members');
+    expect(orgService.getInvitePreview).toHaveBeenLastCalledWith(GYM, '');
+
+    orgService.getInvitePreview.mockResolvedValue(preview(1));
+    await openFilter();
+    fireEvent.click(filterBox().getByRole('button', { name: 'Active 300' }));
+    await waitFor(() => expect(screen.getByTestId('invite-button').textContent).toBe('Invite 1 member'));
+    expect(orgService.getInvitePreview).toHaveBeenLastCalledWith(GYM, 'status=Active');
+    const asked = orgService.getInvitePreview.mock.calls.length;
+
+    fireEvent.click(filterBox().getByRole('button', { name: 'Close' }));
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search your members' }), { target: { value: 'ada' } });
+    await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'status=Active&query=ada'));
+    expect(orgService.getInvitePreview.mock.calls.length).toBe(asked);
+  });
+
+  it('is not offered on past members', async () => {
+    orgService.getMemberList.mockResolvedValue({ data: { list: view({ counts: { entries: 312, inApp: 40, canBeInvited: 250, noEmail: 22, former: 4 } }) } });
+    orgService.getInvitePreview.mockResolvedValue(preview(2));
+    draw();
+    await screen.findByTestId('invite-button');
+    await openFilter();
+    fireEvent.click(filterBox().getByRole('button', { name: 'Past members 4' }));
+    await waitFor(() => expect(screen.queryByTestId('invite-button')).toBeNull());
   });
 });

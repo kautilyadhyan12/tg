@@ -50,6 +50,7 @@ export function gymDetailsDraft(org) {
     city: text(org?.city),
     country: text(org?.country),
     timezone: text(org?.timezone),
+    postalAddress: text(org?.postalAddress),
   };
 }
 
@@ -75,7 +76,8 @@ export function sameGymDetails(a, b) {
     a.name === b.name &&
     a.city === b.city &&
     a.country === b.country &&
-    a.timezone === b.timezone
+    a.timezone === b.timezone &&
+    (a.postalAddress ?? '') === (b.postalAddress ?? '')
   );
 }
 
@@ -208,6 +210,13 @@ export function gymDetailsPatch(draft, org) {
   if (timezone !== '' && timezone !== (typeof org?.timezone === 'string' ? org.timezone : '')) {
     patch.timezone = timezone;
   }
+
+  // The address every invitation prints (Part 3 §9.12). Emptied, it is cleared, and
+  // the gym cannot invite until it has one again.
+  const typedAddress = (draft?.postalAddress ?? '').trim();
+  const nextAddress = typedAddress === '' ? null : typedAddress;
+  const storedAddress = typeof org?.postalAddress === 'string' ? org.postalAddress : null;
+  if (nextAddress !== storedAddress) patch.postalAddress = nextAddress;
 
   return Object.keys(patch).length === 0 ? null : patch;
 }
