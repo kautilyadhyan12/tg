@@ -43,6 +43,7 @@ import ConsoleOverview from './pages/console/Overview';
 import ConsoleMembers  from './pages/console/Members';
 import ConsoleAttendance from './pages/console/Attendance';
 import ConsoleClasses  from './pages/console/Classes';
+import ConsoleLeads    from './pages/console/Leads';
 import ConsoleSettings from './pages/console/Settings';
 
 export default function App() {
@@ -242,6 +243,13 @@ export default function App() {
                 somebody holding `attendance.read`, and this route is reachable
                 by typing the address either way — the server is the enforcement
                 (R3.3) and the screen prints its refusal. */}
+            {/* A GYM'S LEADS (20c-i): people interested in joining. The nav draws the tab
+                for `members.confirm`; the server is the enforcement. */}
+            <Route path="/console/:orgSlug/leads" element={
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
+                <ConsoleLayout><ConsoleLeads /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
             <Route path="/console/:orgSlug/attendance" element={
               <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
                 <ConsoleLayout><ConsoleAttendance /></ConsoleLayout>

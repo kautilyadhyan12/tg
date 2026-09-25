@@ -37,6 +37,7 @@ import {
   updateOrgStaffRequestSchema,
 } from "./schemas.js";
 import { registerClassRoutes } from "./classes/routes.js";
+import { registerLeadRoutes } from "./leads/routes.js";
 import { registerInvitationRoutes } from "./invites/joinRoutes.js";
 import type { InviteSettings } from "./invites/settings.js";
 import { registerMemberListRoutes } from "./memberList/routes.js";
@@ -100,6 +101,9 @@ export function registerOrgRoutes(
   // THE GYM'S TIMETABLE (Part 3 §13.3), registered here for the same reason the
   // member list is: the same console, the same gates, the same deps.
   registerClassRoutes(app, { sql: deps.sql, redis: deps.redis });
+
+  // A gym's leads (Part 3 §16.3).
+  registerLeadRoutes(app, { sql: deps.sql, redis: deps.redis });
 
   // A person's own invitations: what is waiting for their address, Join, No thanks
   // (Part 3 §10.2).

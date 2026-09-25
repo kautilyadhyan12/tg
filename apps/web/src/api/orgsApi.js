@@ -14,6 +14,9 @@ import {
   confirmApplicationResponseSchema,
   createOrgResponseSchema,
   declineInvitationResponseSchema,
+  joinLeadResponseSchema,
+  leadResponseSchema,
+  leadsResponseSchema,
   memberInviteChangedSchema,
   memberInvitedResponseSchema,
   memberInviteOneResponseSchema,
@@ -666,6 +669,42 @@ export const orgService = {
       memberListEntryDeletedSchema,
       'this person',
       authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/former/${encodeURIComponent(entryId)}`),
+    ),
+
+  /** GET …/leads — one page of the gym's leads (20c-i). `query` is a query string. */
+  getLeads: (gymId, query) =>
+    readThrough(
+      leadsResponseSchema,
+      'your leads',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/leads${query ? `?${query}` : ''}`),
+    ),
+
+  getLead: (gymId, leadId) =>
+    readThrough(
+      leadResponseSchema,
+      'this lead',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/leads/${encodeURIComponent(leadId)}`),
+    ),
+
+  createLead: (gymId, body) =>
+    readThrough(leadResponseSchema, 'this lead', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/leads`, body)),
+
+  updateLead: (gymId, leadId, body) =>
+    readThrough(
+      leadResponseSchema,
+      'this lead',
+      authApi.patch(`/v1/orgs/${encodeURIComponent(gymId)}/leads/${encodeURIComponent(leadId)}`, body),
+    ),
+
+  deleteLead: (gymId, leadId) => authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/leads/${encodeURIComponent(leadId)}`),
+
+  /** POST …/leads/:leadId/join — Joined. `choice` is {}, { entryId } or { asNew: true };
+   *  a 409 `lead_join_choose` or `lead_join_stale` carries the records to choose from. */
+  joinLead: (gymId, leadId, choice) =>
+    readThrough(
+      joinLeadResponseSchema,
+      'this lead',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/leads/${encodeURIComponent(leadId)}/join`, choice),
     ),
 
   /** POST /v1/orgs/:gymId/member-list/uploads — read a file (or pasted rows) and

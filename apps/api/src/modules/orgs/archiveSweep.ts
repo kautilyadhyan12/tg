@@ -110,6 +110,7 @@
 // excludes the state it produces, so a second run in the same second changes
 // nothing and a retried job is free.
 import type { Sql } from "postgres";
+import { deleteLeadsForGym } from "./leads/repo.js";
 import { deleteListForGym as deleteMemberListForGym } from "./memberList/repo.js";
 import { insertAudit } from "./repo.js";
 
@@ -315,6 +316,7 @@ export async function archiveLapsedGyms(
       // INSIDE THE TRANSACTION, not after it, and that is the whole point: "gym
       // archived, list kept" is a state nothing else in the system would ever
       // notice, and a separate statement is one timeout away from producing it.
+      await deleteLeadsForGym(tx, row.id);
       await deleteMemberListForGym(tx, row.id);
     }
     return rows;

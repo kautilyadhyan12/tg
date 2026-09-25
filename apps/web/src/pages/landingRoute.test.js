@@ -267,7 +267,7 @@ describe('the console routes and sign-out honour the amendment', () => {
     // ROADMAP 17b-i), and moving it is the correct response to adding a route —
     // the loop below is the guarantee, this number is only the proof that the
     // loop saw everything.
-    expect(consoleRoutes.length).toBe(7);
+    expect(consoleRoutes.length).toBe(8);
     for (const route of consoleRoutes) {
       expect(route).toContain('requireOnboarding={false}');
     }
@@ -282,7 +282,7 @@ describe('the console routes and sign-out honour the amendment', () => {
     const consoleRoutes = src.match(
       /path="\/console[^"]*"[\s\S]{0,120}?<ProtectedRoute([^>]*)>/g,
     ) ?? [];
-    expect(consoleRoutes.length).toBe(7);
+    expect(consoleRoutes.length).toBe(8);
     for (const route of consoleRoutes) {
       expect(route).toContain('requireSignUpNote={false}');
     }
@@ -297,7 +297,7 @@ describe('the console routes and sign-out honour the amendment', () => {
     const consoleRoutes = src.match(
       /path="\/console[^"]*"[\s\S]{0,120}?<ProtectedRoute([^>]*)>/g,
     ) ?? [];
-    expect(consoleRoutes.length).toBe(7);
+    expect(consoleRoutes.length).toBe(8);
     for (const route of consoleRoutes) {
       expect(route).toContain('requireInvitations={false}');
     }

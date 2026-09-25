@@ -273,6 +273,53 @@ export async function addEntry(
   return await finish(deps, gymId, done);
 }
 
+/** A lead who joined (ROADMAP 20c-i), inside the caller's transaction and under the
+ *  gym's lock. `entryId` is the record staff or the join rule said is this person: kept
+ *  as it is, or put back when it was taken off. Null makes a NEW record from the lead's
+ *  details: a record already holding exactly those details is never linked or put back
+ *  in its place (staff said none of the records shown is this person), and `held`
+ *  names it. */
+export async function placeLeadInTx(
+  tx: TransactionSql,
+  input: {
+    gymId: string;
+    userId: string;
+    at: Date;
+    country: string | null;
+    entryId: string | null;
+    lead: { fullName: string; email: string | null; phone: string | null };
+  },
+): Promise<{ outcome: "linked" | "added" | "restored" | "held"; entryId: string }> {
+  const { gymId, userId, at } = input;
+  if (input.entryId !== null) {
+    const stored = await repo.entryFor(tx, gymId, input.entryId);
+    if (stored === null) throw notFound();
+    if (stored.formerAt === null) return { outcome: "linked", entryId: stored.id };
+    await setOnListIn(tx, { invites: null }, { userId, gymId, entryId: stored.id, on: true, at });
+    return { outcome: "restored", entryId: stored.id };
+  }
+  const typed: MemberListEntryInput = { fullName: input.lead.fullName };
+  if (input.lead.email !== null) typed.email = input.lead.email;
+  if (input.lead.phone !== null) typed.phone = input.lead.phone;
+  const context = await typedContext(tx, gymId, input.country);
+  const applied = applyTyped(EMPTY_VALUES, typed, context);
+  if (!applied.ok) throw new OrgsError(400, applied.refusal.code, applied.refusal.message);
+  const holder = await repo.entryHolding(tx, gymId, identityKey(applied.values));
+  if (holder !== null) return { outcome: "held", entryId: holder.id };
+  const placed = await placeOnList(tx, {
+    gymId,
+    userId,
+    at,
+    values: applied.values,
+    source: "typed",
+    revive: () => {
+      throw new Error("a lead's new record found a holder after the check under the same lock");
+    },
+  });
+  if (placed.outcome !== "added") throw new Error(`a lead's new record answered ${placed.outcome}`);
+  return { outcome: "added", entryId: placed.entryId };
+}
+
 /** Change one person (§11.6). Fields staff change are remembered by NAME, so a later
  *  upload asks before it writes over them (§11.4). */
 export async function changeEntry(
@@ -374,7 +421,7 @@ async function setOnList(
 /** `setOnList`'s work, inside the caller's transaction and under its lock. */
 async function setOnListIn(
   tx: TransactionSql,
-  deps: MemberListDeps,
+  deps: Pick<MemberListDeps, "invites">,
   input: { userId: string; gymId: string; entryId: string; on: boolean; at: Date },
 ): Promise<Done> {
   const { userId, gymId, entryId, on, at } = input;
@@ -464,6 +511,7 @@ export async function mergeEntries(
     // What points at the record not kept moves onto the kept one before it is deleted
     // (the reference test lists every table that does).
     await repo.moveMembershipLinks(tx, gymId, goneId, keepId);
+    await repo.moveLeadLinks(tx, gymId, goneId, keepId);
     await repo.deleteEntry(tx, gymId, goneId);
     const lost = await leftOff(tx, gymId, gone.values, [keepId], reached);
     if (lost > 0 && !acknowledgeLeavesList) throw new LeavesList(lost, "merge");
