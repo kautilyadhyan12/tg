@@ -44,7 +44,7 @@ export function addedWords(iso, now = new Date()) {
   return `Added ${day}`;
 }
 
-export const emptyLeadDraft = () => ({ fullName: '', email: '', phone: '', source: '', notes: '' });
+export const emptyLeadDraft = () => ({ fullName: '', email: '', phone: '', source: '', notes: '', mayEmail: false });
 
 export const leadDraft = (lead) => ({
   fullName: lead.fullName,
@@ -52,6 +52,7 @@ export const leadDraft = (lead) => ({
   phone: lead.phone ?? '',
   source: lead.source,
   notes: lead.notes,
+  mayEmail: lead.mayEmail,
 });
 
 /** What stops a save before it is sent, in the screen's words; null when it can go.
@@ -69,6 +70,7 @@ export function createLeadRequest(draft) {
   if (draft.email.trim() !== '') body.email = draft.email.trim();
   if (draft.phone.trim() !== '') body.phone = draft.phone.trim();
   if (draft.notes.trim() !== '') body.notes = draft.notes.trim();
+  if (draft.mayEmail && body.email !== undefined) body.mayEmail = true;
   return body;
 }
 
@@ -84,6 +86,10 @@ export function updateLeadRequest(lead, draft) {
   if (draft.notes.trim() !== lead.notes) body.notes = draft.notes.trim();
   return body;
 }
+
+/** The words beside the "Happy to hear from us" tick. */
+export const MAY_EMAIL_LABEL = 'Happy to hear from us by email';
+export const MAY_EMAIL_HINT = 'Tick only if they said yes. The follow-up emails go only to people who did.';
 
 /** What Joined did, in one sentence. */
 export function joinedWords(outcome, name, words) {

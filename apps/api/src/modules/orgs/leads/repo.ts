@@ -14,6 +14,7 @@ export interface LeadRow {
   source: string;
   status: string;
   notes: string;
+  emailOkAt: Date | null;
   entryId: string | null;
   createdAt: Date;
   statusChangedAt: Date;
@@ -27,6 +28,7 @@ interface DbLead {
   source: string;
   status: string;
   notes: string;
+  email_ok_at: Date | null;
   entry_id: string | null;
   created_at: Date;
   status_changed_at: Date;
@@ -40,6 +42,7 @@ const toRow = (row: DbLead): LeadRow => ({
   source: row.source,
   status: row.status,
   notes: row.notes,
+  emailOkAt: row.email_ok_at,
   entryId: row.entry_id,
   createdAt: row.created_at,
   statusChangedAt: row.status_changed_at,
@@ -51,6 +54,7 @@ export interface LeadValues {
   phone: string | null;
   source: LeadSource;
   notes: string;
+  emailOkAt: Date | null;
 }
 
 export async function countLeads(tx: TransactionSql, gymId: string): Promise<number> {
@@ -77,9 +81,9 @@ export async function leadHolding(
 
 export async function insertLead(tx: TransactionSql, gymId: string, values: LeadValues, addedBy: string): Promise<LeadRow> {
   const rows = await tx<DbLead[]>`
-    INSERT INTO gym_leads (gym_id, full_name, email, phone_e164, source, notes, added_by)
-    VALUES (${gymId}, ${values.fullName}, ${values.email}, ${values.phone}, ${values.source}, ${values.notes}, ${addedBy})
-    RETURNING id, full_name, email, phone_e164, source, status, notes, entry_id, created_at, status_changed_at`;
+    INSERT INTO gym_leads (gym_id, full_name, email, phone_e164, source, notes, email_ok_at, added_by)
+    VALUES (${gymId}, ${values.fullName}, ${values.email}, ${values.phone}, ${values.source}, ${values.notes}, ${values.emailOkAt}, ${addedBy})
+    RETURNING id, full_name, email, phone_e164, source, status, notes, email_ok_at, entry_id, created_at, status_changed_at`;
   const row = rows[0];
   if (row === undefined) throw new Error("inserting a lead returned no row");
   return toRow(row);
@@ -87,7 +91,7 @@ export async function insertLead(tx: TransactionSql, gymId: string, values: Lead
 
 export async function leadFor(sql: SqlOrTx, gymId: string, leadId: string): Promise<LeadRow | null> {
   const rows = await sql<DbLead[]>`
-    SELECT id, full_name, email, phone_e164, source, status, notes, entry_id, created_at, status_changed_at
+    SELECT id, full_name, email, phone_e164, source, status, notes, email_ok_at, entry_id, created_at, status_changed_at
     FROM gym_leads WHERE gym_id = ${gymId} AND id = ${leadId}`;
   const row = rows[0];
   return row === undefined ? null : toRow(row);
@@ -96,7 +100,7 @@ export async function leadFor(sql: SqlOrTx, gymId: string, leadId: string): Prom
 /** The lead, locked for the rest of the caller's transaction. */
 export async function lockLead(tx: TransactionSql, gymId: string, leadId: string): Promise<LeadRow | null> {
   const rows = await tx<DbLead[]>`
-    SELECT id, full_name, email, phone_e164, source, status, notes, entry_id, created_at, status_changed_at
+    SELECT id, full_name, email, phone_e164, source, status, notes, email_ok_at, entry_id, created_at, status_changed_at
     FROM gym_leads WHERE gym_id = ${gymId} AND id = ${leadId} FOR UPDATE`;
   const row = rows[0];
   return row === undefined ? null : toRow(row);
@@ -118,12 +122,13 @@ export async function writeLead(
         phone_e164 = ${values.phone},
         source = ${values.source},
         notes = ${values.notes},
+        email_ok_at = ${values.emailOkAt},
         status_changed_at = CASE WHEN status = ${values.status} THEN status_changed_at ELSE ${at} END,
         status = ${values.status},
         entry_id = ${values.entryId},
         updated_at = ${at}
     WHERE gym_id = ${gymId} AND id = ${leadId}
-    RETURNING id, full_name, email, phone_e164, source, status, notes, entry_id, created_at, status_changed_at`;
+    RETURNING id, full_name, email, phone_e164, source, status, notes, email_ok_at, entry_id, created_at, status_changed_at`;
   const row = rows[0];
   if (row === undefined) throw new Error(`lead ${leadId} vanished under its lock`);
   return toRow(row);
@@ -151,7 +156,7 @@ export async function leadsPage(
 ): Promise<{ rows: LeadRow[]; total: number }> {
   const { gymId, status, like, cursor } = input;
   const rows = await sql<DbLead[]>`
-    SELECT id, full_name, email, phone_e164, source, status, notes, entry_id, created_at, status_changed_at
+    SELECT id, full_name, email, phone_e164, source, status, notes, email_ok_at, entry_id, created_at, status_changed_at
     FROM gym_leads
     WHERE gym_id = ${gymId}
       AND (${status}::text IS NULL OR status = ${status}::text)

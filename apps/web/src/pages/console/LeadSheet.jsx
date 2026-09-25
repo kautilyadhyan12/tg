@@ -13,6 +13,8 @@ import {
   createLeadRequest,
   emptyLeadDraft,
   joinedWords,
+  MAY_EMAIL_HINT,
+  MAY_EMAIL_LABEL,
   leadDraft,
   leadProblem,
   sourceWord,
@@ -95,6 +97,35 @@ function DetailsForm({ draft, setDraft, disabled }) {
   );
 }
 
+/** "Happy to hear from us by email": a yes to one address, so it needs one. */
+function MayEmailTick({ checked, hasEmail, disabled, onChange }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={checked}
+        aria-label={MAY_EMAIL_LABEL}
+        disabled={disabled || !hasEmail}
+        onClick={() => onChange(!checked)}
+        className="self-start flex items-center gap-2.5 min-h-[44px] text-sm font-medium disabled:opacity-40"
+        style={{ color: C.soft }}
+      >
+        <span
+          className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0"
+          style={checked ? { background: C.orange } : { border: '1.5px solid rgba(255,255,255,0.35)' }}
+        >
+          {checked ? <Check className="w-3.5 h-3.5" style={{ color: '#000' }} /> : null}
+        </span>
+        {MAY_EMAIL_LABEL}
+      </button>
+      <p className="text-xs" style={{ color: C.muted }}>
+        {hasEmail ? MAY_EMAIL_HINT : 'Add their email address to ask.'}
+      </p>
+    </div>
+  );
+}
+
 function NotesBox({ value, onChange, disabled }) {
   return (
     <Box label="Notes">
@@ -162,7 +193,7 @@ function ChooseRecord({ name, choice, busy, onPick, onNew, onCancel, words }) {
   );
 }
 
-export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onClose, onChanged }) {
+export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onClose, onChanged, onAdded = () => undefined }) {
   const adding = leadId === null;
   const [lead, setLead] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -229,11 +260,8 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
     }
     return run(async () => {
       const res = await orgService.createLead(gymId, createLeadRequest(draft));
-      onChanged();
-      shown.current = res.data.lead.id;
-      take(res.data.lead);
-      setEditing(false);
-      setDone(`${res.data.lead.fullName} is on your leads.`);
+      // Back to the list, which says who was added (as Wodify does).
+      onAdded(res.data.lead);
     }, "We couldn't add this lead. Please try again.");
   };
 
@@ -344,7 +372,17 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
           {editing ? (
             <>
               <DetailsForm draft={draft} setDraft={setDraft} disabled={busy || readOnly} />
-              {lead === null ? <NotesBox value={draft.notes} onChange={(v) => setDraft((d) => ({ ...d, notes: v }))} disabled={busy || readOnly} /> : null}
+              {lead === null ? (
+                <>
+                  <MayEmailTick
+                    checked={draft.mayEmail && draft.email.trim() !== ''}
+                    hasEmail={draft.email.trim() !== ''}
+                    disabled={busy || readOnly}
+                    onChange={(v) => setDraft((d) => ({ ...d, mayEmail: v }))}
+                  />
+                  <NotesBox value={draft.notes} onChange={(v) => setDraft((d) => ({ ...d, notes: v }))} disabled={busy || readOnly} />
+                </>
+              ) : null}
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -444,6 +482,13 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
                   </button>
                 )
               ) : null}
+
+              <MayEmailTick
+                checked={lead.mayEmail}
+                hasEmail={lead.email !== null}
+                disabled={busy || readOnly}
+                onChange={(v) => save({ mayEmail: v }, null)}
+              />
 
               <NotesBox value={notes} onChange={setNotes} disabled={busy || readOnly} />
               {notes.trim() !== lead.notes ? (

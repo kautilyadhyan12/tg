@@ -19,6 +19,7 @@ const lead = {
   source: 'walk_in',
   status: 'new',
   notes: 'Mornings',
+  mayEmail: false,
   entryId: null,
   createdAt: '2026-09-20T10:00:00.000Z',
   statusChangedAt: '2026-09-20T10:00:00.000Z',
@@ -51,7 +52,14 @@ describe('the Leads screen', () => {
   });
 
   it('sends only what was typed, and only what moved', () => {
-    expect(createLeadRequest({ fullName: ' Tom ', email: '', phone: ' 07700 ', source: 'friend', notes: ' ' })).toEqual({
+    // A tick with no email is not sent: it is a yes to an address.
+    expect(createLeadRequest({ fullName: 'Tom', email: '', phone: '07700', source: 'friend', notes: '', mayEmail: true })).toEqual({
+      fullName: 'Tom',
+      phone: '07700',
+      source: 'friend',
+    });
+    expect(createLeadRequest({ fullName: 'Tom', email: 't@example.com', phone: '', source: 'friend', notes: '', mayEmail: true }).mayEmail).toBe(true);
+    expect(createLeadRequest({ fullName: ' Tom ', email: '', phone: ' 07700 ', source: 'friend', notes: ' ', mayEmail: false })).toEqual({
       fullName: 'Tom',
       phone: '07700',
       source: 'friend',

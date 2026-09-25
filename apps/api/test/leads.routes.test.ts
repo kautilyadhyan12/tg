@@ -309,6 +309,45 @@ d("a gym's leads (real Postgres)", () => {
   );
 
   it(
+    "\"Happy to hear from us\" is a yes to one email address: refused without one, kept while it stays, cleared when it changes",
+    async () => {
+      const owner = await makeUser("tick-lead-owner");
+      const org = await makeOrg(owner.cookies, "Tick Lead Gym");
+      const gym = org.org.id;
+      const okAt = async (id: string) =>
+        (await sql<{ at: Date | null }[]>`SELECT email_ok_at AS at FROM gym_leads WHERE gym_id = ${gym} AND id = ${id}`)[0]?.at ?? null;
+
+      const noEmail = await post(leadsUrl(gym), { fullName: "Tom Reid", phone: "07700900456", source: "friend", mayEmail: true }, owner.cookies);
+      expect({ status: noEmail.statusCode, error: (JSON.parse(noEmail.body) as { error: string }).error }).toEqual({ status: 400, error: "needs_email" });
+
+      const unticked = await addLead(gym, owner.cookies, { fullName: "Ana Silva", email: "ana@example.com" });
+      expect(unticked.mayEmail).toBe(false);
+      expect(await okAt(unticked.id)).toBeNull();
+
+      const ticked = await addLead(gym, owner.cookies, { mayEmail: true });
+      expect(ticked.mayEmail).toBe(true);
+      const first = await okAt(ticked.id);
+      expect(first).not.toBeNull();
+
+      // A note or a status leaves it, and the same address in another case is the same address.
+      expect(leadOf(await patch(leadUrl(gym, ticked.id), { notes: "Evenings", status: "contacted" }, owner.cookies)).mayEmail).toBe(true);
+      expect(leadOf(await patch(leadUrl(gym, ticked.id), { email: "PRIYA@example.com" }, owner.cookies)).mayEmail).toBe(true);
+      expect(await okAt(ticked.id)).toEqual(first);
+      // A new address was never said yes to.
+      expect(leadOf(await patch(leadUrl(gym, ticked.id), { email: "priya.new@example.com" }, owner.cookies)).mayEmail).toBe(false);
+      // Ticked again with the new address, then unticked.
+      expect(leadOf(await patch(leadUrl(gym, ticked.id), { mayEmail: true }, owner.cookies)).mayEmail).toBe(true);
+      expect(leadOf(await patch(leadUrl(gym, ticked.id), { mayEmail: false }, owner.cookies)).mayEmail).toBe(false);
+      // The email removed takes the tick with it, and a tick with no email is refused.
+      await patch(leadUrl(gym, ticked.id), { mayEmail: true, phone: "07700900999" }, owner.cookies);
+      expect(leadOf(await patch(leadUrl(gym, ticked.id), { email: null }, owner.cookies)).mayEmail).toBe(false);
+      expect((await patch(leadUrl(gym, ticked.id), { mayEmail: true }, owner.cookies)).statusCode).toBe(400);
+      expect(await okAt(ticked.id)).toBeNull();
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
     "a page holds 100, and the cursor brings the rest without repeats",
     async () => {
       const owner = await makeUser("page-owner");

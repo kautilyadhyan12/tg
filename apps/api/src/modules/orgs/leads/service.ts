@@ -53,6 +53,7 @@ function toLead(row: repo.LeadRow): Lead {
     source: leadSourceSchema.parse(row.source),
     status: leadStatusSchema.parse(row.status),
     notes: row.notes,
+    mayEmail: row.emailOkAt !== null,
     entryId: row.entryId,
     createdAt: row.createdAt.toISOString(),
     statusChangedAt: row.statusChangedAt.toISOString(),
@@ -80,6 +81,24 @@ function cleanNotes(notes: string): string {
   const text = notes.trim();
   if (holdsCard(text)) throw new OrgsError(400, "notes_card", LEAD_WORDS.notes_card);
   return text;
+}
+
+/** When "Happy to hear from us" was ticked, or null. The tick is a yes to one
+ *  address: refused without an email, kept while the email stays, cleared when it
+ *  changes. `wanted` undefined leaves it as it was. */
+function emailOkAt(
+  wanted: boolean | undefined,
+  email: string | null,
+  stored: { email: string | null; emailOkAt: Date | null } | null,
+  at: Date,
+): Date | null {
+  const sameEmail = stored !== null && email !== null && stored.email !== null && stored.email.toLowerCase() === email.toLowerCase();
+  if (wanted === true) {
+    if (email === null) throw new OrgsError(400, "needs_email", LEAD_WORDS.needs_email);
+    return sameEmail && stored.emailOkAt !== null ? stored.emailOkAt : at;
+  }
+  if (wanted === false || !sameEmail) return null;
+  return stored.emailOkAt;
 }
 
 const escapeLike = (text: string): string => text.replace(/[\\%_]/g, (char) => `\\${char}`);
@@ -167,20 +186,21 @@ export async function createLead(
   if (!(await limit())) return null;
   const contact = cleanContact({ fullName: body.fullName, email: body.email ?? null, phone: body.phone ?? null }, org.country);
   const notes = cleanNotes(body.notes ?? "");
+  const okAt = emailOkAt(body.mayEmail, contact.email, null, deps.now());
   const row = await deps.sql.begin(async (tx) => {
     await lockGym(tx, gymId);
     if ((await repo.countLeads(tx, gymId)) >= LEADS_MAX_PER_GYM) {
       throw new OrgsError(409, "leads_full", LEAD_WORDS.leads_full);
     }
     await refuseHeld(tx, gymId, contact, null);
-    const inserted = await repo.insertLead(tx, gymId, { ...contact, source: body.source, notes }, userId);
+    const inserted = await repo.insertLead(tx, gymId, { ...contact, source: body.source, notes, emailOkAt: okAt }, userId);
     await insertAudit(tx, {
       actorUserId: userId,
       gymId,
       action: "org.lead_added",
       targetType: "lead",
       targetId: inserted.id,
-      meta: { source: body.source },
+      meta: { source: body.source, mayEmail: okAt === null ? "false" : "true" },
     });
     return inserted;
   });
@@ -220,6 +240,7 @@ export async function updateLead(
         ...contact,
         source: body.source ?? leadSourceSchema.parse(stored.source),
         notes: body.notes === undefined ? stored.notes : cleanNotes(body.notes),
+        emailOkAt: emailOkAt(body.mayEmail, contact.email, stored, at),
         status,
         // A lead moved off "joined" is no longer anybody on the list.
         entryId: status === "joined" ? stored.entryId : null,
@@ -326,6 +347,7 @@ export async function joinLead(
         ...lead,
         source: leadSourceSchema.parse(stored.source),
         notes: stored.notes,
+        emailOkAt: stored.emailOkAt,
         status: "joined",
         entryId: placed.entryId,
       },

@@ -24,6 +24,8 @@ export const gymLeads = pgTable(
     source: text("source").notNull(),
     status: text("status").notNull().default("new"),
     notes: text("notes").notNull().default(""),
+    /** When staff ticked "Happy to hear from us"; only with an email. */
+    emailOkAt: timestamp("email_ok_at", { withTimezone: true }),
     /** The member record a joined lead is on the list as. Set only with "joined";
      *  a record deleted later leaves the lead joined with no link. The foreign key is
      *  `(gym_id, entry_id)` → the record's `(gym_id, id)`, ON DELETE SET NULL
@@ -41,6 +43,7 @@ export const gymLeads = pgTable(
     check("gym_leads_source_check", sql`${t.source} IN ('walk_in','website','social','friend','other')`),
     check("gym_leads_status_check", sql`${t.status} IN ('new','contacted','on_trial','joined','lost')`),
     check("gym_leads_notes_len_check", sql`char_length(${t.notes}) <= 2000`),
+    check("gym_leads_email_ok_check", sql`${t.emailOkAt} IS NULL OR ${t.email} IS NOT NULL`),
     check("gym_leads_entry_check", sql`${t.entryId} IS NULL OR ${t.status} = 'joined'`),
     uniqueIndex("gym_leads_gym_email_uq").on(t.gymId, t.email).where(sql`${t.email} IS NOT NULL`),
     uniqueIndex("gym_leads_gym_phone_uq").on(t.gymId, t.phoneE164).where(sql`${t.phoneE164} IS NOT NULL`),

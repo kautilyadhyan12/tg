@@ -50,6 +50,8 @@ export default function Leads() {
   const [tick, setTick] = useState(0);
   /** undefined: no sheet · null: adding · an id: that lead. */
   const [openId, setOpenId] = useState(undefined);
+  /** "Tom Reid is on your leads.", after Add lead closes. */
+  const [notice, setNotice] = useState(null);
   /** The newest request for a page: an answer to an older one is dropped. */
   const latest = useRef(0);
 
@@ -179,7 +181,10 @@ export default function Leads() {
             </label>
             <button
               type="button"
-              onClick={() => setOpenId(null)}
+              onClick={() => {
+                setNotice(null);
+                setOpenId(null);
+              }}
               disabled={readOnly}
               className="w-full sm:w-auto rounded-xl px-4 min-h-[44px] text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-40"
               style={{ background: C.orange, color: '#000' }}
@@ -188,6 +193,12 @@ export default function Leads() {
               Add lead
             </button>
           </div>
+
+          {notice !== null ? (
+            <p className="text-sm" role="status" style={{ color: '#34d399' }}>
+              {notice}
+            </p>
+          ) : null}
 
           {page.counts !== null && !noLeads ? (
             <div className="flex flex-wrap gap-2" role="group" aria-label="Status">
@@ -251,7 +262,10 @@ export default function Leads() {
                   <button
                     type="button"
                     data-testid="lead-row"
-                    onClick={() => setOpenId(lead.id)}
+                    onClick={() => {
+                      setNotice(null);
+                      setOpenId(lead.id);
+                    }}
                     className="w-full text-left rounded-2xl p-4 flex items-center gap-3"
                     style={{ background: C.card, border: `1px solid ${C.line}` }}
                   >
@@ -307,6 +321,11 @@ export default function Leads() {
           readOnly={readOnly}
           onClose={() => setOpenId(undefined)}
           onChanged={() => setTick((n) => n + 1)}
+          onAdded={(lead) => {
+            setOpenId(undefined);
+            setNotice(`${lead.fullName} is on your leads.`);
+            setTick((n) => n + 1);
+          }}
         />
       ) : null}
     </div>

@@ -57,6 +57,10 @@ export const leadSchema = z
     source: leadSourceSchema,
     status: leadStatusSchema,
     notes: z.string().max(LEAD_MAX_NOTES_CHARS),
+    /** The person said the gym may email them ("Happy to hear from us"). Only a
+     *  lead with an email has it; changing the email clears it. The follow-up
+     *  emails (20c-ii) go only to these leads. */
+    mayEmail: z.boolean(),
     /** The member record a joined lead is on the list as; null otherwise, and null
      *  when that record has since been deleted. */
     entryId: z.string().uuid().nullable(),
@@ -109,6 +113,7 @@ export const createLeadRequestSchema = z
     phone: z.string().max(MEMBER_LIST_MAX_TYPED_PHONE_CHARS).optional(),
     source: leadSourceSchema,
     notes: z.string().max(LEAD_MAX_NOTES_CHARS).optional(),
+    mayEmail: z.boolean().optional(),
   })
   .strict();
 export type CreateLeadRequest = z.infer<typeof createLeadRequestSchema>;
@@ -122,6 +127,7 @@ export const updateLeadRequestSchema = z
     source: leadSourceSchema.optional(),
     notes: z.string().max(LEAD_MAX_NOTES_CHARS).optional(),
     status: leadSettableStatusSchema.optional(),
+    mayEmail: z.boolean().optional(),
   })
   .strict()
   .refine((body) => Object.keys(body).length > 0, { message: "nothing to change" });
@@ -184,6 +190,7 @@ export const LEAD_WORDS = {
   lead_not_found: "That lead could not be found.",
   needs_name: "Add the person's name.",
   needs_contact: "Add an email address or a phone number, so you can reach them.",
+  needs_email: "Add their email address first. The tick is their yes to being emailed at it.",
   lead_exists: "This person is already one of your leads.",
   leads_full: `You have ${LEADS_MAX_PER_GYM.toLocaleString("en")} leads, the most a gym can keep. Delete the ones you no longer need, then add this one.`,
   notes_card: "The notes look like they hold a payment card number. We never store card details, so nothing was saved.",

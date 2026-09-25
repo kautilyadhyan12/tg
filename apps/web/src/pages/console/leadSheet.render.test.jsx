@@ -43,6 +43,7 @@ const lead = (id, fullName, over = {}) =>
     source: 'walk_in',
     status: 'new',
     notes: '',
+    mayEmail: false,
     entryId: null,
     createdAt: '2026-09-20T10:00:00.000Z',
     statusChangedAt: '2026-09-20T10:00:00.000Z',
@@ -159,8 +160,8 @@ describe('adding and keeping a lead', () => {
   it('Add lead says what is missing before sending, then sends only what was typed', async () => {
     const made = lead(TOM, 'Tom Reid', { email: null, phone: '+447700900456', source: 'friend' });
     orgService.createLead.mockResolvedValue({ data: { lead: made } });
-    const changed = vi.fn();
-    render(sheet(null, { onChanged: changed }));
+    const added = vi.fn();
+    render(sheet(null, { onAdded: added }));
     fireEvent.click(screen.getByRole('button', { name: 'Add lead' }));
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', "Add the person's name.");
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: ' Tom Reid ' } });
@@ -170,12 +171,37 @@ describe('adding and keeping a lead', () => {
     fireEvent.click(within(screen.getByRole('group', { name: 'Heard of you from' })).getByRole('button', { name: 'A friend' }));
     fireEvent.click(screen.getByRole('button', { name: 'Add lead' }));
     await waitFor(() => expect(orgService.createLead).toHaveBeenCalledWith(GYM, { fullName: 'Tom Reid', phone: '07700 900456', source: 'friend' }));
-    await screen.findByText('Tom Reid is on your leads.');
-    expect(changed).toHaveBeenCalled();
-    // The sheet now acts on the lead it made.
-    orgService.updateLead.mockResolvedValue({ data: { lead: { ...made, status: 'on_trial' } } });
-    fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'On trial' }));
-    await waitFor(() => expect(orgService.updateLead).toHaveBeenCalledWith(GYM, TOM, { status: 'on_trial' }));
+    // Back to the list, which names who was added.
+    await waitFor(() => expect(added).toHaveBeenCalledWith(made));
+  });
+
+  it('the tick asks for an email first, and a tick goes with the new lead', async () => {
+    const made = lead(TOM, 'Tom Reid', { email: 'tom@example.com', mayEmail: true });
+    orgService.createLead.mockResolvedValue({ data: { lead: made } });
+    render(sheet(null));
+    const tick = screen.getByRole('checkbox', { name: 'Happy to hear from us by email' });
+    expect(tick.disabled).toBe(true);
+    expect(screen.getByText('Add their email address to ask.')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Tom Reid' } });
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'tom@example.com' } });
+    expect(tick.disabled).toBe(false);
+    fireEvent.click(tick);
+    expect(tick.getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(within(screen.getByRole('group', { name: 'Heard of you from' })).getByRole('button', { name: 'Website' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add lead' }));
+    await waitFor(() =>
+      expect(orgService.createLead).toHaveBeenCalledWith(GYM, { fullName: 'Tom Reid', email: 'tom@example.com', source: 'website', mayEmail: true }),
+    );
+  });
+
+  it('on a lead, the tick is saved for that lead', async () => {
+    orgService.getLead.mockResolvedValue({ data: { lead: tom } });
+    orgService.updateLead.mockResolvedValue({ data: { lead: { ...tom, mayEmail: true } } });
+    render(sheet(TOM));
+    await screen.findByRole('heading', { name: 'Tom Reid' });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Happy to hear from us by email' }));
+    await waitFor(() => expect(orgService.updateLead).toHaveBeenCalledWith(GYM, TOM, { mayEmail: true }));
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Happy to hear from us by email' }).getAttribute('aria-checked')).toBe('true'));
   });
 
   it("the server's refusal is shown in its own words", async () => {

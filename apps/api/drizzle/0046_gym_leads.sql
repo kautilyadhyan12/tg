@@ -8,7 +8,9 @@
 --            the list as, and only a joined lead has one: held with the gym in the
 --            key, as `gym_members.entry_id` is (0040), so a lead can only point at its
 --            own gym's record; a record deleted for good clears it, and joining two
---            records moves it. `added_by` is the only user link (privacy/tables.ts).
+--            records moves it. `email_ok_at` is when staff ticked "Happy to hear from
+--            us": only with an email, and cleared when the email changes. `added_by`
+--            is the only user link (privacy/tables.ts).
 
 CREATE TABLE gym_leads (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -19,6 +21,7 @@ CREATE TABLE gym_leads (
   source text NOT NULL,
   status text NOT NULL DEFAULT 'new',
   notes text NOT NULL DEFAULT '',
+  email_ok_at timestamptz,
   entry_id uuid,
   added_by uuid REFERENCES users(id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -29,6 +32,7 @@ CREATE TABLE gym_leads (
   CONSTRAINT gym_leads_source_check CHECK (source IN ('walk_in','website','social','friend','other')),
   CONSTRAINT gym_leads_status_check CHECK (status IN ('new','contacted','on_trial','joined','lost')),
   CONSTRAINT gym_leads_notes_len_check CHECK (char_length(notes) <= 2000),
+  CONSTRAINT gym_leads_email_ok_check CHECK (email_ok_at IS NULL OR email IS NOT NULL),
   CONSTRAINT gym_leads_entry_check CHECK (entry_id IS NULL OR status = 'joined'),
   CONSTRAINT gym_leads_entry_fk FOREIGN KEY (gym_id, entry_id)
     REFERENCES gym_member_list_entries (gym_id, id) ON DELETE SET NULL (entry_id)
