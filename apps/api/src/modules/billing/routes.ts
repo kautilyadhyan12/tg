@@ -1,8 +1,8 @@
-// A gym paying us (ROADMAP Stage 3 item 1a). Order per CLAUDE.md §4: authenticate →
+// A gym paying us (ROADMAP Stage 3 items 1a, 1c-i and 1c-ii). Order per CLAUDE.md §4: authenticate →
 // rate limit → parse → service (which checks `billing.manage` on the gym) → repo.
 // Paddle's webhook: signature on the raw body, kept once by Paddle's event id, 200;
 // the worker asks Paddle for the subscription before anything changes.
-import { orgCheckoutRequestSchema, paddleSubscriptionIdSchema, paddleWebhookBodySchema } from "@app/shared";
+import { orgCheckoutRequestSchema, orgPlanChangeRequestSchema, paddleSubscriptionIdSchema, paddleWebhookBodySchema } from "@app/shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { RedisLike } from "../../redis.js";
@@ -101,6 +101,58 @@ export function registerBillingRoutes(
       const portal = await service.openBillingPortal(deps, { userId: requireUserId(req), gymId: params.gymId });
       // The link signs its holder in to the gym's Paddle account: no cache may keep it.
       return reply.status(200).header("cache-control", "no-store").send(portal);
+    },
+  );
+
+  // A bigger size: each preview asks Paddle, so it is limited like the portal; a change is
+  // pressed once or twice.
+  const sizePreviewLimit = createDualRateLimit({
+    name: "billing_size_preview",
+    max: 60,
+    ipMax: 240,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+  const sizeChangeLimit = createDualRateLimit({
+    name: "billing_size_change",
+    max: 20,
+    ipMax: 120,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+
+  app.post(
+    "/v1/orgs/:gymId/billing/size/preview",
+    { preHandler: [app.authenticate, sizePreviewLimit] },
+    async (req, reply) => {
+      const params = parseOr400(gymParams, req.params, req, reply);
+      if (params === null) return;
+      const body = parseOr400(orgPlanChangeRequestSchema, req.body, req, reply);
+      if (body === null) return;
+      const preview = await service.previewSizeChange(deps, { userId: requireUserId(req), gymId: params.gymId, planCode: body.planCode });
+      return reply.status(200).send(preview);
+    },
+  );
+
+  app.post(
+    "/v1/orgs/:gymId/billing/size",
+    { preHandler: [app.authenticate, sizeChangeLimit] },
+    async (req, reply) => {
+      const params = parseOr400(gymParams, req.params, req, reply);
+      if (params === null) return;
+      const key = parseOr400(idempotencyKey, req.headers["idempotency-key"], req, reply);
+      if (key === null) return;
+      const body = parseOr400(orgPlanChangeRequestSchema, req.body, req, reply);
+      if (body === null) return;
+      const changed = await service.changeSize(deps, {
+        userId: requireUserId(req),
+        gymId: params.gymId,
+        planCode: body.planCode,
+        idempotencyKey: key,
+      });
+      return reply.status(200).send(changed);
     },
   );
 

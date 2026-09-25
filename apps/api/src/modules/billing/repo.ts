@@ -1,6 +1,8 @@
-// A gym paying us: its checkouts and its paid subscription (ROADMAP Stage 3 item 1a).
+// A gym paying us: its checkouts, its paid subscription and its size changes (ROADMAP
+// Stage 3 items 1a, 1c-i and 1c-ii).
 // Every checkout is read with its gym in the WHERE; a Paddle subscription is placed on
 // a gym only through a checkout row our server wrote.
+import type { PaddleSubscription } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { insertAudit, lockOrgRow } from "../orgs/repo.js";
 import { decide, type Decision, type LocalStatus, type Snapshot } from "./machine.js";
@@ -9,6 +11,13 @@ type SqlOrTx = Sql | TransactionSql;
 
 /** `cancel_reason` of a paid plan whose grace ran out while Paddle still retries. */
 export const GRACE_EXPIRED = "grace_expired";
+/** `cancel_reason` of a free trial ended because the gym paid during it (1c-ii). */
+export const TRIAL_SUBSCRIBED = "subscribed";
+
+/** A trial checkout is sold only while this much of the gym's own trial is left; with less,
+ *  the checkout charges at once. */
+export const TRIAL_CHECKOUT_MIN_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type CheckoutState = "creating" | "open" | "superseded" | "failed" | "paid";
 
@@ -50,10 +59,19 @@ export async function seatsUsed(sql: SqlOrTx, gymId: string): Promise<number> {
 }
 
 export type BeginCheckoutOutcome =
-  | { kind: "created"; checkout: CheckoutRow; priceId: string; priceMinor: number; currency: string; superseded: string[] }
+  | {
+      kind: "created";
+      checkout: CheckoutRow;
+      priceId: string;
+      priceMinor: number;
+      currency: string;
+      superseded: string[];
+      /** During the gym's own free trial: the whole days left, rounded up (Paddle's trial
+       *  counts days), so the first payment falls when the trial ends. */
+      trialDays: number | null;
+    }
   | { kind: "replay"; checkout: CheckoutRow }
   | { kind: "key_reused" }
-  | { kind: "trial_running" }
   | { kind: "already_subscribed" }
   | { kind: "payment_overdue" }
   | { kind: "no_such_plan" }
@@ -67,7 +85,7 @@ export type BeginCheckoutOutcome =
  *  Paddle transaction is cancelled by the caller) so only one can be paid. */
 export async function beginCheckout(
   sql: Sql,
-  input: { gymId: string; userId: string; planCode: string; idempotencyKey: string; currency: string },
+  input: { gymId: string; userId: string; planCode: string; idempotencyKey: string; currency: string; now: Date },
 ): Promise<BeginCheckoutOutcome> {
   return await sql.begin(async (tx) => {
     await lockOrgRow(tx, input.gymId); // subscription-writer lock
@@ -85,12 +103,17 @@ export async function beginCheckout(
       return replay.plan_code === input.planCode ? { kind: "replay", checkout: toCheckout(replay) } : { kind: "key_reused" };
     }
 
-    const live = await tx<{ status: string }[]>`
-      SELECT status FROM subscriptions
+    const live = await tx<{ status: string; provider: string; trial_ends_at: Date | null }[]>`
+      SELECT status, provider, trial_ends_at FROM subscriptions
       WHERE owner_type = 'gym' AND owner_id = ${input.gymId}
         AND status IN ('trialing','active','past_due')`;
     const current = live[0];
-    if (current !== undefined) return current.status === "trialing" ? { kind: "trial_running" } : { kind: "already_subscribed" };
+    // The gym's own free trial may be paid for now, charged when it ends (Kd, RULINGS
+    // 2026-09-25); anything else live is a plan already chosen.
+    if (current !== undefined && !isLocalTrial(current)) return { kind: "already_subscribed" };
+    const trialEnd = current?.trial_ends_at ?? null;
+    const trialLeftMs = trialEnd === null ? 0 : trialEnd.getTime() - input.now.getTime();
+    const trialDays = trialLeftMs >= TRIAL_CHECKOUT_MIN_MS ? Math.ceil(trialLeftMs / DAY_MS) : null;
     // An unpaid plan Paddle still retries: a new card there pays it, a second plan would double it.
     const overdue = await tx`
       SELECT 1 FROM subscriptions
@@ -113,8 +136,9 @@ export async function beginCheckout(
       WHERE gym_id = ${input.gymId} AND state IN ('creating','open')
       RETURNING provider_ref`;
     const inserted = await tx<RawCheckout[]>`
-      INSERT INTO billing_checkouts (gym_id, plan_id, created_by, idempotency_key, provider)
-      VALUES (${input.gymId}, ${plan.id}, ${input.userId}, ${input.idempotencyKey}, 'paddle')
+      INSERT INTO billing_checkouts (gym_id, plan_id, created_by, idempotency_key, provider, trial_ends_at)
+      VALUES (${input.gymId}, ${plan.id}, ${input.userId}, ${input.idempotencyKey}, 'paddle',
+              ${trialDays === null ? null : trialEnd})
       RETURNING id, gym_id, ${input.planCode}::text AS plan_code, state, provider_ref`;
     const row = inserted[0];
     if (row === undefined) throw new Error("checkout insert returned no row");
@@ -124,7 +148,7 @@ export async function beginCheckout(
       action: "billing.checkout_started",
       targetType: "billing_checkout",
       targetId: row.id,
-      meta: { plan: input.planCode },
+      meta: { plan: input.planCode, ...(trialDays === null ? {} : { trialDays: String(trialDays) }) },
     });
     return {
       kind: "created",
@@ -133,6 +157,7 @@ export async function beginCheckout(
       priceMinor: plan.price_minor,
       currency: plan.currency,
       superseded: superseded.flatMap((s) => (s.provider_ref === null ? [] : [s.provider_ref])),
+      trialDays,
     };
   });
 }
@@ -176,9 +201,59 @@ export async function checkoutsForTransactions(sql: SqlOrTx, transactionIds: rea
   return rows.map(toCheckout);
 }
 
-export async function planForPaddlePrice(sql: SqlOrTx, priceId: string): Promise<{ id: string } | null> {
+/** The member limit of the gym's own free trial: its latest one's plan, or the trial band
+ *  of its price list (the smallest plan with a trial, as starting a trial picks it). */
+async function freeTrialSeatCap(tx: SqlOrTx, gymId: string): Promise<number | null> {
+  const own = await tx<{ seat_cap: number | null }[]>`
+    SELECT p.seat_cap FROM subscriptions s JOIN plans p ON p.id = s.plan_id
+    WHERE s.owner_type = 'gym' AND s.owner_id = ${gymId}
+      AND s.provider IN ('none','pilot') AND s.trial_ends_at IS NOT NULL
+    ORDER BY s.created_at DESC
+    LIMIT 1`;
+  if (own[0] !== undefined) return own[0].seat_cap;
+  const band = await tx<{ seat_cap: number | null }[]>`
+    SELECT p.seat_cap FROM plans p JOIN gyms g ON g.id = ${gymId}
+    WHERE p.audience = 'org' AND p.currency = g.currency_display AND p.active = true
+      AND p.interval = 'month' AND p.trial_days > 0
+    ORDER BY p.seat_cap ASC NULLS LAST, p.price_minor ASC
+    LIMIT 1`;
+  return band[0]?.seat_cap ?? null;
+}
+
+/** When the gym's own free trial ends, or null if it never had one: a Paddle trial it paid
+ *  for may not run past it (1c-ii round one, H2). */
+export async function ownTrialEnd(sql: SqlOrTx, gymId: string): Promise<Date | null> {
+  const rows = await sql<{ trial_ends_at: Date }[]>`
+    SELECT trial_ends_at FROM subscriptions
+    WHERE owner_type = 'gym' AND owner_id = ${gymId}
+      AND provider IN ('none','pilot') AND trial_ends_at IS NOT NULL
+    ORDER BY created_at DESC
+    LIMIT 1`;
+  return rows[0]?.trial_ends_at ?? null;
+}
+
+/** The gym's own free trial (no card, nobody charging), as opposed to a Paddle trial. */
+function isLocalTrial(row: { status: string; provider: string }): boolean {
+  return row.status === "trialing" && (row.provider === "none" || row.provider === "pilot");
+}
+
+type PaddleItem = PaddleSubscription["items"][number];
+
+/** Which of our plans a Paddle subscription's one item is: a catalogue price by its id, or
+ *  a trial checkout's own price (only our API key can make one) by the plan code it
+ *  carries, and only at exactly that plan's amount, currency and month. */
+export async function planForPaddleItem(sql: SqlOrTx, item: PaddleItem): Promise<{ id: string } | null> {
+  const byId = await sql<{ id: string }[]>`
+    SELECT id FROM plans WHERE paddle_price_id = ${item.price.id} AND audience = 'org'`;
+  if (byId[0] !== undefined) return byId[0];
+  const price = item.price;
+  const code = price.custom_data?.["plan_code"];
+  if (price.type !== "custom" || typeof code !== "string" || price.unit_price === undefined) return null;
+  if (price.billing_cycle?.interval !== "month" || price.billing_cycle.frequency !== 1) return null;
   const rows = await sql<{ id: string }[]>`
-    SELECT id FROM plans WHERE paddle_price_id = ${priceId} AND audience = 'org'`;
+    SELECT id FROM plans
+    WHERE code = ${code} AND audience = 'org' AND interval = 'month' AND paddle_price_id IS NOT NULL
+      AND price_minor::text = ${price.unit_price.amount} AND currency = ${price.unit_price.currency_code}`;
   return rows[0] ?? null;
 }
 
@@ -243,12 +318,13 @@ export async function applySnapshot(
     if (existing !== null && existing.owner_id !== input.gymId) {
       return { decision: { kind: "ignore", reason: "not_ours" }, rowId: existing.id, duplicate: false };
     }
-    const others = await tx<{ one: number }[]>`
-      SELECT 1 AS one FROM subscriptions
+    const others = await tx<{ id: string; status: string; provider: string }[]>`
+      SELECT id, status, provider FROM subscriptions
       WHERE owner_type = 'gym' AND owner_id = ${input.gymId}
         AND status IN ('trialing','active','past_due')
-        AND (${existing?.id ?? null}::uuid IS NULL OR id <> ${existing?.id ?? null}::uuid)
-      LIMIT 1`;
+        AND (${existing?.id ?? null}::uuid IS NULL OR id <> ${existing?.id ?? null}::uuid)`;
+    // The gym's own free trial gives way to the plan it paid for during it.
+    const localTrial = others.find(isLocalTrial) ?? null;
     const decision = decide({
       row:
         existing === null
@@ -261,7 +337,7 @@ export async function applySnapshot(
               cancelAtPeriodEnd: existing.cancel_at_period_end,
               graceEnded: existing.cancel_reason === GRACE_EXPIRED,
             },
-      otherLive: others.length > 0,
+      otherLive: others.some((o) => !isLocalTrial(o)),
       snapshot: input.snapshot,
     });
     const s = input.snapshot;
@@ -281,13 +357,30 @@ export async function applySnapshot(
       const status = decision.kind === "insert" ? decision.status : "expired";
       const ended = status === "expired" ? input.now : null;
       const pastDueSince = status === "past_due" ? input.now : null;
+      // A paid trial ends when Paddle takes the first payment, and keeps its free trial's
+      // member limit until then (Kd, RULINGS 2026-09-25).
+      const trialEndsAt = status === "trialing" ? s.currentPeriodEnd : null;
+      const trialSeatCap = status === "trialing" ? await freeTrialSeatCap(tx, input.gymId) : null;
+      if (localTrial !== null && status !== "expired") {
+        await tx`
+          UPDATE subscriptions SET status = 'expired', ended_at = ${input.now}, cancel_reason = ${TRIAL_SUBSCRIBED}
+          WHERE id = ${localTrial.id} AND owner_id = ${input.gymId} AND status = 'trialing'`;
+        await insertAudit(tx, {
+          actorUserId: null,
+          gymId: input.gymId,
+          action: "billing.trial_replaced",
+          targetType: "subscription",
+          targetId: localTrial.id,
+          meta: { provider: "paddle", via: "paddle" },
+        });
+      }
       const inserted = await tx<{ id: string }[]>`
-        INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, current_period_end,
-                                   cancel_at_period_end, provider, provider_ref,
+        INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, trial_ends_at, trial_seat_cap,
+                                   current_period_end, cancel_at_period_end, provider, provider_ref,
                                    provider_customer_ref, provider_updated_at, ended_at, cancel_reason,
                                    past_due_since)
-        VALUES ('gym', ${input.gymId}, ${s.planId}, ${status}, ${s.currentPeriodEnd},
-                ${s.cancelAtPeriodEnd}, 'paddle', ${input.subscriptionId}, ${input.customerId},
+        VALUES ('gym', ${input.gymId}, ${s.planId}, ${status}, ${trialEndsAt}, ${trialSeatCap},
+                ${s.currentPeriodEnd}, ${s.cancelAtPeriodEnd}, 'paddle', ${input.subscriptionId}, ${input.customerId},
                 ${s.updatedAt}, ${ended}, ${decision.kind === "duplicate" ? "duplicate" : null},
                 ${pastDueSince})
         RETURNING id`;
@@ -298,6 +391,10 @@ export async function applySnapshot(
       await tx`
         UPDATE subscriptions
         SET status = ${decision.status}, plan_id = ${s.planId}, current_period_end = ${s.currentPeriodEnd},
+            -- Still in the paid trial: it ends the day Paddle charges.
+            trial_ends_at = CASE WHEN ${decision.status} = 'trialing' THEN ${s.currentPeriodEnd}::timestamptz ELSE trial_ends_at END,
+            -- A payment taken: the chosen size starts; a failed first charge keeps the trial's.
+            trial_seat_cap = CASE WHEN ${decision.status} = 'active' THEN NULL ELSE trial_seat_cap END,
             cancel_at_period_end = ${s.cancelAtPeriodEnd}, provider_updated_at = ${s.updatedAt},
             provider_customer_ref = COALESCE(${input.customerId}, provider_customer_ref),
             ended_at = CASE WHEN ${decision.status} = 'expired' THEN COALESCE(ended_at, ${input.now}) ELSE NULL END,
@@ -335,6 +432,25 @@ export async function setPaddlePriceId(sql: SqlOrTx, code: string, priceId: stri
   await sql`UPDATE plans SET paddle_price_id = ${priceId} WHERE code = ${code}`;
 }
 
+/** Trial checkouts still open after the gym's own trial ended: their window would sell a
+ *  trial the gym no longer has, so the worker cancels them at Paddle. */
+export async function staleTrialCheckouts(sql: SqlOrTx, now: Date, limit: number): Promise<{ id: string; gymId: string; providerRef: string }[]> {
+  const rows = await sql<{ id: string; gym_id: string; provider_ref: string }[]>`
+    SELECT id, gym_id, provider_ref FROM billing_checkouts
+    WHERE state = 'open' AND trial_ends_at IS NOT NULL AND trial_ends_at <= ${now}
+      AND provider_ref IS NOT NULL
+    ORDER BY trial_ends_at, id
+    LIMIT ${limit}`;
+  return rows.map((r) => ({ id: r.id, gymId: r.gym_id, providerRef: r.provider_ref }));
+}
+
+/** A checkout closed at Paddle: it can no longer be paid. */
+export async function closeCheckout(sql: SqlOrTx, input: { checkoutId: string; gymId: string }): Promise<void> {
+  await sql`
+    UPDATE billing_checkouts SET state = 'superseded', updated_at = now()
+    WHERE id = ${input.checkoutId} AND gym_id = ${input.gymId} AND state = 'open'`;
+}
+
 /** A gym's checkouts still open at Paddle: before another is started, each is asked
  *  whether it was paid meanwhile. */
 export async function openCheckoutsFor(sql: SqlOrTx, gymId: string): Promise<CheckoutRow[]> {
@@ -361,8 +477,8 @@ export async function managedPlanFor(sql: SqlOrTx, gymId: string): Promise<Manag
     SELECT provider_ref, provider_customer_ref, status, cancel_reason FROM subscriptions
     WHERE owner_type = 'gym' AND owner_id = ${gymId} AND provider = 'paddle'
       AND provider_ref IS NOT NULL AND provider_customer_ref IS NOT NULL
-      AND (status IN ('active','past_due') OR cancel_reason = ${GRACE_EXPIRED})
-    ORDER BY (status IN ('active','past_due')) DESC, created_at DESC
+      AND (status IN ('trialing','active','past_due') OR cancel_reason = ${GRACE_EXPIRED})
+    ORDER BY (status IN ('trialing','active','past_due')) DESC, created_at DESC
     LIMIT 1`;
   const row = rows[0];
   if (row === undefined) return null;
@@ -477,4 +593,181 @@ export async function deferRefund(sql: SqlOrTx, id: string, notBefore: Date, cou
     UPDATE billing_refunds
     SET not_before = ${notBefore}, tries = tries + CASE WHEN ${countTry}::boolean THEN 1 ELSE 0 END, updated_at = now()
     WHERE id = ${id} AND state = 'owed'`;
+}
+
+// ── A bigger size (1c-ii) ─────────────────────────────────────────────────────
+
+export interface SizeTarget {
+  subscriptionRowId: string;
+  subscriptionRef: string;
+  /** In the paid trial: nothing is charged now, the new price when the trial ends. */
+  trialing: boolean;
+  fromPlanId: string;
+  toPlanId: string;
+  planCode: string;
+  priceId: string;
+  priceMinor: number;
+  currency: string;
+  seatCap: number | null;
+}
+
+export type SizeTargetOutcome =
+  | { kind: "ok"; target: SizeTarget }
+  /** No plan paid through us: a free trial chooses one with Subscribe. */
+  | { kind: "no_paid_plan"; trialing: boolean }
+  | { kind: "payment_overdue" }
+  | { kind: "plan_ending"; endsAt: Date | null }
+  | { kind: "no_such_plan" }
+  | { kind: "not_bigger" }
+  | { kind: "not_set_up" };
+
+/** Which plan a size change would move this gym to, or why it cannot: only a bigger size of
+ *  the gym's own price list, only on a plan paid through Paddle that is in good standing and
+ *  not set to end. Read with the gym in every WHERE. */
+export async function sizeTarget(sql: SqlOrTx, input: { gymId: string; planCode: string }): Promise<SizeTargetOutcome> {
+  const live = await sql<
+    {
+      id: string;
+      status: string;
+      provider: string;
+      provider_ref: string | null;
+      cancel_at_period_end: boolean;
+      current_period_end: Date | null;
+      plan_id: string;
+      seat_cap: number | null;
+      currency: string;
+    }[]
+  >`
+    SELECT s.id, s.status, s.provider, s.provider_ref, s.cancel_at_period_end, s.current_period_end,
+           s.plan_id, p.seat_cap, p.currency
+    FROM subscriptions s JOIN plans p ON p.id = s.plan_id
+    WHERE s.owner_type = 'gym' AND s.owner_id = ${input.gymId}
+      AND s.status IN ('trialing','active','past_due')
+    LIMIT 1`;
+  const row = live[0];
+  if (row === undefined) {
+    const overdue = await sql`
+      SELECT 1 FROM subscriptions
+      WHERE owner_type = 'gym' AND owner_id = ${input.gymId} AND cancel_reason = ${GRACE_EXPIRED}
+      LIMIT 1`;
+    return overdue.length > 0 ? { kind: "payment_overdue" } : { kind: "no_paid_plan", trialing: false };
+  }
+  if (row.provider !== "paddle" || row.provider_ref === null) return { kind: "no_paid_plan", trialing: row.status === "trialing" };
+  if (row.status === "past_due") return { kind: "payment_overdue" };
+  if (row.cancel_at_period_end) return { kind: "plan_ending", endsAt: row.current_period_end };
+
+  const plans = await sql<{ id: string; code: string; seat_cap: number | null; paddle_price_id: string | null; price_minor: number; currency: string }[]>`
+    SELECT id, code, seat_cap, paddle_price_id, price_minor, currency FROM plans
+    WHERE code = ${input.planCode} AND audience = 'org' AND active = true
+      AND interval = 'month' AND currency = ${row.currency}`;
+  const plan = plans[0];
+  if (plan === undefined) return { kind: "no_such_plan" };
+  // Bigger means more members: a capless plan is bigger than any capped one.
+  const bigger = row.seat_cap !== null && (plan.seat_cap === null || plan.seat_cap > row.seat_cap);
+  if (!bigger || plan.id === row.plan_id) return { kind: "not_bigger" };
+  if (plan.paddle_price_id === null) return { kind: "not_set_up" };
+  return {
+    kind: "ok",
+    target: {
+      subscriptionRowId: row.id,
+      subscriptionRef: row.provider_ref,
+      trialing: row.status === "trialing",
+      fromPlanId: row.plan_id,
+      toPlanId: plan.id,
+      planCode: plan.code,
+      priceId: plan.paddle_price_id,
+      priceMinor: plan.price_minor,
+      currency: plan.currency,
+      seatCap: plan.seat_cap,
+    },
+  };
+}
+
+export type PlanChangeState = "pending" | "done" | "failed";
+
+export interface PlanChangeRow {
+  id: string;
+  planCode: string;
+  state: PlanChangeState;
+  failure: string | null;
+}
+
+export type BeginPlanChangeOutcome =
+  | { kind: "created"; changeId: string; target: SizeTarget }
+  | { kind: "replay"; change: PlanChangeRow }
+  | { kind: "key_reused" }
+  | { kind: "in_progress" }
+  | { kind: "org_archived" }
+  | { kind: "not_found" }
+  | { kind: "refused"; outcome: Exclude<SizeTargetOutcome, { kind: "ok" }> };
+
+/** A change still pending after this long was cut off before it finished; the next press may
+ *  go ahead, because it first asks Paddle what the subscription is now. */
+export const PLAN_CHANGE_STALE_MS = 2 * 60 * 1000;
+
+const CHANGE_STATES: readonly PlanChangeState[] = ["pending", "done", "failed"];
+
+/** Record a size change before Paddle is asked, under the gym's lock: one pending change a gym
+ *  (and a unique index behind it), and the same Idempotency-Key answers from its row. */
+export async function beginPlanChange(
+  sql: Sql,
+  input: { gymId: string; userId: string; planCode: string; idempotencyKey: string; now: Date },
+): Promise<BeginPlanChangeOutcome> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId); // subscription-writer lock
+    const gyms = await tx<{ status: string }[]>`SELECT status FROM gyms WHERE id = ${input.gymId}`;
+    const gym = gyms[0];
+    if (gym === undefined) return { kind: "not_found" };
+    if (gym.status !== "active") return { kind: "org_archived" };
+
+    const earlier = await tx<{ id: string; plan_code: string; state: string; failure: string | null }[]>`
+      SELECT c.id, p.code AS plan_code, c.state, c.failure
+      FROM billing_plan_changes c JOIN plans p ON p.id = c.to_plan_id
+      WHERE c.gym_id = ${input.gymId} AND c.idempotency_key = ${input.idempotencyKey}`;
+    const replay = earlier[0];
+    if (replay !== undefined) {
+      if (replay.plan_code !== input.planCode) return { kind: "key_reused" };
+      const state = CHANGE_STATES.find((st) => st === replay.state);
+      if (state === undefined) throw new Error(`unknown plan change state ${replay.state}`);
+      return { kind: "replay", change: { id: replay.id, planCode: replay.plan_code, state, failure: replay.failure } };
+    }
+
+    const staleBefore = new Date(input.now.getTime() - PLAN_CHANGE_STALE_MS);
+    await tx`
+      UPDATE billing_plan_changes SET state = 'failed', failure = 'interrupted', updated_at = now()
+      WHERE gym_id = ${input.gymId} AND state = 'pending' AND created_at < ${staleBefore}`;
+    const pending = await tx`SELECT 1 FROM billing_plan_changes WHERE gym_id = ${input.gymId} AND state = 'pending'`;
+    if (pending.length > 0) return { kind: "in_progress" };
+
+    const found = await sizeTarget(tx, input);
+    if (found.kind !== "ok") return { kind: "refused", outcome: found };
+    const target = found.target;
+    const inserted = await tx<{ id: string }[]>`
+      INSERT INTO billing_plan_changes (gym_id, subscription_id, from_plan_id, to_plan_id, created_by,
+                                        idempotency_key, provider, created_at)
+      VALUES (${input.gymId}, ${target.subscriptionRowId}, ${target.fromPlanId}, ${target.toPlanId},
+              ${input.userId}, ${input.idempotencyKey}, 'paddle', ${input.now})
+      RETURNING id`;
+    const changeId = inserted[0]?.id;
+    if (changeId === undefined) throw new Error("plan change insert returned no row");
+    await insertAudit(tx, {
+      actorUserId: input.userId,
+      gymId: input.gymId,
+      action: "billing.size_change_started",
+      targetType: "billing_plan_change",
+      targetId: changeId,
+      meta: { plan: input.planCode, ...(target.trialing ? { during: "trial" } : {}) },
+    });
+    return { kind: "created", changeId, target };
+  });
+}
+
+/** A size change's end: done, or failed with the code the console was answered with. */
+export async function finishPlanChange(
+  sql: SqlOrTx,
+  input: { changeId: string; gymId: string; state: "done" | "failed"; failure: string | null },
+): Promise<void> {
+  await sql`
+    UPDATE billing_plan_changes SET state = ${input.state}, failure = ${input.failure}, updated_at = now()
+    WHERE id = ${input.changeId} AND gym_id = ${input.gymId} AND state = 'pending'`;
 }

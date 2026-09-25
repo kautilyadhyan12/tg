@@ -153,6 +153,8 @@ export async function expireLapsedGymTrials(
       SET status = 'expired', ended_at = ${now}
       WHERE owner_type = 'gym'
         AND status = 'trialing'
+        -- A trial the gym paid for ends at Paddle, with its first payment.
+        AND provider <> 'paddle'
         AND (${scope}::uuid[] IS NULL OR owner_id = ANY(${scope}::uuid[]))
         AND trial_ends_at IS NOT NULL
         AND trial_ends_at <= ${now}

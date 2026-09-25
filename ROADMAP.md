@@ -194,6 +194,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 1c. **Managing a gym's plan** — split 2026-09-24 in two, built back to back.
      - 1c-i. [x] **Paddle's own page, and a failed payment** — merged 2026-09-25 (PR #105).
      - 1c-ii. [ ] **A bigger size as members grow, and paying before the trial ends.**
+     - 1c-iii. [ ] **A smaller size**, at the end of the month the gym has paid for (Part 5 §7), refused while it has more members than the smaller size allows. Added 2026-09-25 by 1c-ii's plan.
    - 1d. [ ] **Indian gyms through Razorpay**, UPI Autopay; GST off until Kd is registered (RULINGS 2026-09-24). Needs Kd's free Razorpay test account.
 2. **Trials enforced** (split 2026-09-08 after Kd's trial-abuse ruling; no approval queue, ever).
    - 2a. [x] **The price list, the 10-day gym trial at 200 members, no individual trial, one free scan a day** — merged 2026-09-24 (PR #101).
