@@ -22,6 +22,7 @@ import { withdrawForAccounts } from "./invites/join.js";
 import { checkName } from "./invites/nameCheck.js";
 import { displayNameFromEmail } from "../auth/service.js";
 import type { InviteSettings } from "./invites/settings.js";
+import * as listRepo from "./memberList/repo.js";
 import * as repo from "./repo.js";
 import {
   ORG_PRIVILEGES,
@@ -95,6 +96,7 @@ import type {
   OrgCode,
   OrgCodeMutationResponse,
   OrgCodesResponse,
+  OrgMember,
   OrgMemberListQuery,
   OrgMemberPage,
   OrgPlansResponse,
@@ -1244,6 +1246,48 @@ export async function listOrgPlans(
   });
 }
 
+type OffList = NonNullable<OrgMember["offList"]>;
+
+/** WHY THE PAGE'S PAID-PLACE MEMBERS ARE NOT ON THE GYM'S LIST (3a-vi-b), by the one
+ *  rule every screen uses (`membersAgainstList`). Nothing for a gym with no list: nobody
+ *  is missing from a list that does not exist. */
+async function offListOf(
+  sql: Sql,
+  gymId: string,
+  userIds: readonly string[],
+): Promise<{ offList: Map<string, OffList>; typedInName: Map<string, string> }> {
+  const out = new Map<string, OffList>();
+  const typedInName = new Map<string, string>();
+  if (userIds.length === 0 || (await listRepo.listState(sql, gymId)) === null) return { offList: out, typedInName };
+  const members = await listRepo.membersAgainstList(sql, gymId, { email: null, phone: null, userIds });
+  // On the list through a current record with their joined record's name, their own
+  // having come off: "On your list as" names that record.
+  for (const m of members) if (m.joinedFormer && m.onList && m.entryFullName !== null) typedInName.set(m.userId, m.entryFullName);
+  const off = members.filter((m) => m.seatCounted && !m.onList);
+  // "Taken off" is only ever about the record they joined with: a former record found
+  // by their email or phone can be a relative's on a shared family address.
+  const ownRecord = (m: listRepo.MemberAgainstList): string | null => (m.joinedFormer ? m.joinedEntryId : null);
+  const facts = await listRepo.offListFacts(
+    sql,
+    gymId,
+    off.flatMap((m) => {
+      const id = ownRecord(m);
+      return id === null ? [] : [id];
+    }),
+    off.flatMap((m) => (m.email === null ? [] : [m.email])),
+  );
+  for (const m of off) {
+    const own = ownRecord(m);
+    const at = own === null ? undefined : facts.takenOffAt.get(own);
+    out.set(m.userId, {
+      reason: at !== undefined ? "taken_off" : m.everListed ? "no_longer_listed" : "never_listed",
+      at: at?.toISOString() ?? null,
+      sameEmailName: m.email === null ? null : (facts.nameByEmail.get(m.email.toLowerCase()) ?? null),
+    });
+  }
+  return { offList: out, typedInName };
+}
+
 export async function listOrgMembers(
   deps: OrgsDeps,
   userId: string,
@@ -1277,26 +1321,33 @@ export async function listOrgMembers(
     limit: query.limit,
     cursor: parseCursor(query.cursor),
   });
+  const { offList, typedInName } = seesList
+    ? await offListOf(deps.sql, gymId, page.items.map((m) => m.userId))
+    : { offList: new Map<string, OffList>(), typedInName: new Map<string, string>() };
   // Parsed on the way out, and this one carries the most weight: the roster
   // shape IS Part 3 §2.4's visibility boundary, so a field added to the row
   // without being added to the schema is dropped here rather than served.
   return orgMemberPageSchema.parse({
-    items: page.items.map((m) => ({
-      userId: m.userId,
-      displayName: m.displayName,
-      joinedAt: m.joinedAt.toISOString(),
-      groupLabel: m.groupLabel,
-      complimentary: m.complimentary,
-      takesSeat: m.takesSeat,
-      ...(seesList && m.listName !== null
-        ? {
-            onList: {
-              name: m.listName,
-              nameCheck: checkName(m.listName, m.displayName, m.accountEmail === null ? null : displayNameFromEmail(m.accountEmail)),
-            },
-          }
-        : {}),
-    })),
+    items: page.items.map((m) => {
+      const listName = m.listName ?? typedInName.get(m.userId) ?? null;
+      return {
+        userId: m.userId,
+        displayName: m.displayName,
+        joinedAt: m.joinedAt.toISOString(),
+        groupLabel: m.groupLabel,
+        complimentary: m.complimentary,
+        takesSeat: m.takesSeat,
+        ...(seesList && listName !== null
+          ? {
+              onList: {
+                name: listName,
+                nameCheck: checkName(listName, m.displayName, m.accountEmail === null ? null : displayNameFromEmail(m.accountEmail)),
+              },
+            }
+          : {}),
+        ...(offList.has(m.userId) ? { offList: offList.get(m.userId) } : {}),
+      };
+    }),
     nextCursor:
       page.nextCursor === null
         ? null

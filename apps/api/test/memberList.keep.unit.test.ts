@@ -76,6 +76,7 @@ const row = (who: Who, over: Partial<MemberListRow> = {}): MemberListRow => ({
 });
 
 const entry = (who: Who, over: Partial<ListEntry> = {}): ListEntry => ({
+  id: identityKey(who),
   identityKey: identityKey(who),
   fullName: who.fullName,
   email: who.email,
@@ -100,6 +101,7 @@ const member = (over: Partial<ListMember> & { userId: string }): ListMember => (
   statedPhone: null,
   everListed: false,
   seatCounted: true,
+  joinedEntryId: null,
   ...over,
 });
 

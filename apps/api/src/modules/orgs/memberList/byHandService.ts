@@ -55,7 +55,7 @@ async function detailOf(
 ): Promise<MemberListEntryDetail> {
   const [fields, reached, invitation] = await Promise.all([
     repo.listFields(sql, gymId),
-    repo.membersAgainstList(sql, gymId, { email: entry.values.email, phone: entry.values.phone }),
+    repo.membersAgainstList(sql, gymId, { email: entry.values.email, phone: entry.values.phone, entryIds: [entry.id] }),
     invitationsOf(sql, settings, gymId, [{ email: entry.values.email }]),
   ]);
   // A member belongs to this record when §9.7's match takes them to it: the current
@@ -122,15 +122,21 @@ class LeavesList extends Error {
  *  list" because of it. A former record reaches nobody. */
 async function membersOf(tx: TransactionSql, gymId: string, entry: repo.StoredEntry): Promise<string[]> {
   if (entry.formerAt !== null) return [];
-  const reached = await repo.membersAgainstList(tx, gymId, { email: entry.values.email, phone: entry.values.phone });
+  const reached = await repo.membersAgainstList(tx, gymId, { email: entry.values.email, phone: entry.values.phone, entryIds: [entry.id] });
   return reached.filter((member) => member.seatCounted && member.entryId === entry.id).map((member) => member.userId);
 }
 
 /** How many of `userIds` no current record reaches any more, asked after the write and
  *  inside the same transaction, by the same match every read uses. */
-async function leftOff(tx: TransactionSql, gymId: string, contact: EntryValues, userIds: readonly string[]): Promise<number> {
+async function leftOff(
+  tx: TransactionSql,
+  gymId: string,
+  contact: EntryValues,
+  entryIds: readonly string[],
+  userIds: readonly string[],
+): Promise<number> {
   if (userIds.length === 0) return 0;
-  const after = await repo.membersAgainstList(tx, gymId, { email: contact.email, phone: contact.phone });
+  const after = await repo.membersAgainstList(tx, gymId, { email: contact.email, phone: contact.phone, entryIds });
   const listed = new Set(after.filter((member) => member.onList).map((member) => member.userId));
   return userIds.filter((userId) => !listed.has(userId)).length;
 }
@@ -213,7 +219,7 @@ async function placeOnList(
     entryId = holder.id;
     await repo.writeEntry(tx, gymId, entryId, { values: written, identityKey: key, handEdited: stored.handEdited, formerAt: null });
   }
-  await repo.stampListedByContact(tx, gymId, currentContacts({ values: written, current: true }), at);
+  await repo.stampListedByContact(tx, gymId, currentContacts({ values: written, current: true }), [entryId], at);
   const version = await repo.bumpListVersion(tx, gymId);
   await insertAudit(tx, {
     actorUserId: input.userId,
@@ -299,13 +305,14 @@ export async function changeEntry(
     const reached = contactMoved ? await membersOf(tx, gymId, stored) : [];
     const handEdited = [...new Set([...stored.handEdited, ...applied.edited])].slice(0, MEMBER_LIST_MAX_EDITED_FIELDS);
     await repo.writeEntry(tx, gymId, entryId, { values: applied.values, identityKey: key, handEdited, formerAt: stored.formerAt });
-    const lost = await leftOff(tx, gymId, stored.values, reached);
+    const lost = await leftOff(tx, gymId, stored.values, [entryId], reached);
     if (lost > 0 && patch.acknowledgeLeavesList !== true) throw new LeavesList(lost, "change");
     const current = stored.formerAt === null;
     await repo.stampListedByContact(
       tx,
       gymId,
       currentContacts({ values: stored.values, current }, { values: applied.values, current }),
+      current ? [entryId] : [],
       at,
     );
     const version = await repo.bumpListVersion(tx, gymId);
@@ -359,29 +366,39 @@ async function setOnList(
   const at = deps.now();
   const done = await deps.sql.begin(async (tx): Promise<Done> => {
     await repo.lockGym(tx, gymId);
-    const stored = await repo.entryFor(tx, gymId, entryId);
-    if (stored === null) throw notFound();
-    const moved = await repo.setEntryFormer(tx, gymId, entryId, on ? null : at);
-    if (!moved) return { outcome: on ? "already_on_list" : "already_taken_off", entryId, version: await listVersion(tx, gymId) };
-    // The members this record reached were on the list (taking off) or are now
-    // (putting back); either way they have been listed.
-    await repo.stampListedByContact(tx, gymId, currentContacts({ values: stored.values, current: true }), at);
-    // Taken off by staff: signing in with the address must not let them in, even if a
-    // later upload holds them again, until staff send the invitation again (§10.2).
-    // Putting back re-opens nothing.
-    if (!on) await withdrawForAddress(tx, deps.invites ?? null, { gymId, email: stored.values.email, at });
-    const version = await repo.bumpListVersion(tx, gymId);
-    await insertAudit(tx, {
-      actorUserId: userId,
-      gymId,
-      action: on ? "org.member_list_entry_restored" : "org.member_list_entry_taken_off",
-      targetType: "member_list_entry",
-      targetId: entryId,
-      meta: {},
-    });
-    return { outcome: on ? "restored" : "taken_off", entryId, version };
+    return await setOnListIn(tx, deps, { userId, gymId, entryId, on, at });
   });
   return await finish(deps, gymId, done);
+}
+
+/** `setOnList`'s work, inside the caller's transaction and under its lock. */
+async function setOnListIn(
+  tx: TransactionSql,
+  deps: MemberListDeps,
+  input: { userId: string; gymId: string; entryId: string; on: boolean; at: Date },
+): Promise<Done> {
+  const { userId, gymId, entryId, on, at } = input;
+  const stored = await repo.entryFor(tx, gymId, entryId);
+  if (stored === null) throw notFound();
+  const moved = await repo.setEntryFormer(tx, gymId, entryId, on ? null : at);
+  if (!moved) return { outcome: on ? "already_on_list" : "already_taken_off", entryId, version: await listVersion(tx, gymId) };
+  // The members this record reached were on the list (taking off) or are now
+  // (putting back); either way they have been listed.
+  await repo.stampListedByContact(tx, gymId, currentContacts({ values: stored.values, current: true }), [entryId], at);
+  // Taken off by staff: signing in with the address must not let them in, even if a
+  // later upload holds them again, until staff send the invitation again (§10.2).
+  // Putting back re-opens nothing.
+  if (!on) await withdrawForAddress(tx, deps.invites ?? null, { gymId, email: stored.values.email, at });
+  const version = await repo.bumpListVersion(tx, gymId);
+  await insertAudit(tx, {
+    actorUserId: userId,
+    gymId,
+    action: on ? "org.member_list_entry_restored" : "org.member_list_entry_taken_off",
+    targetType: "member_list_entry",
+    targetId: entryId,
+    meta: {},
+  });
+  return { outcome: on ? "restored" : "taken_off", entryId, version };
 }
 
 /** Delete a FORMER record for good (§11.1). A current one has to be taken off first. */
@@ -448,12 +465,13 @@ export async function mergeEntries(
     // (the reference test lists every table that does).
     await repo.moveMembershipLinks(tx, gymId, goneId, keepId);
     await repo.deleteEntry(tx, gymId, goneId);
-    const lost = await leftOff(tx, gymId, gone.values, reached);
+    const lost = await leftOff(tx, gymId, gone.values, [keepId], reached);
     if (lost > 0 && !acknowledgeLeavesList) throw new LeavesList(lost, "merge");
     await repo.stampListedByContact(
       tx,
       gymId,
       currentContacts({ values: gone.values, current: gone.formerAt === null }, { values, current }),
+      current ? [keepId] : [],
       at,
     );
     const version = await repo.bumpListVersion(tx, gymId);
@@ -495,6 +513,11 @@ export async function putMemberOnList(
     const self = reached.find((member) => member.userId === memberUserId);
     if (self !== undefined && self.entryId !== null) {
       return { outcome: "already_on_list", entryId: self.entryId, version: await listVersion(tx, gymId) };
+    }
+    // Joined with a record the gym has since taken off: that record is theirs, so it
+    // comes back. A new one beside it would leave them off the list (3a-vi-b).
+    if (self !== undefined && self.joinedEntryId !== null) {
+      return await setOnListIn(tx, deps, { userId, gymId, entryId: self.joinedEntryId, on: true, at });
     }
     const values: EntryValues = {
       ...EMPTY_VALUES,

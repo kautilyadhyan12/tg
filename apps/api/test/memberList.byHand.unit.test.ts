@@ -24,6 +24,7 @@ const member = (userId: string, fullName: string, over: Partial<MemberOnList> = 
   statedPhone: null,
   everListed: false,
   seatCounted: true,
+  joinedEntryId: null,
   onList: false,
   entryStatus: null,
   entryMemberNumber: null,

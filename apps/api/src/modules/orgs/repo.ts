@@ -2647,7 +2647,8 @@ export async function listMembers(
     FROM gym_members m
     JOIN users u ON u.id = m.user_id
     LEFT JOIN gym_codes c ON c.id = m.code_id
-    LEFT JOIN gym_member_list_entries e ON e.gym_id = m.gym_id AND e.id = m.entry_id
+    -- "On your list as ..." only while the record they joined with is on it (3a-vi-b).
+    LEFT JOIN gym_member_list_entries e ON e.gym_id = m.gym_id AND e.id = m.entry_id AND e.former_at IS NULL
     WHERE m.gym_id = ${input.gymId}
       AND m.removed_at IS NULL
       AND (
