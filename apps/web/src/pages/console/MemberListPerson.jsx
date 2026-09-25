@@ -1,8 +1,23 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { AlertTriangle, ArrowLeftRight, Check, Loader2, MoreHorizontal, Search, Smartphone, Trash2, UserMinus, UserPlus, X } from 'lucide-react';
-import { MEMBER_LIST_QUERY_MAX_CHARS } from '@app/shared';
+import {
+  AlertTriangle,
+  ArrowLeftRight,
+  Check,
+  Copy,
+  Loader2,
+  Mail,
+  MoreHorizontal,
+  Search,
+  Smartphone,
+  Trash2,
+  UserMinus,
+  UserPlus,
+  X,
+} from 'lucide-react';
+import { MEMBER_INVITE_AGAIN_PER_PERSON, MEMBER_INVITE_AGAIN_PERSON_DAYS, MEMBER_INVITE_WORDS, MEMBER_LIST_QUERY_MAX_CHARS } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import DatePick from '../../components/console/DatePick';
+import { ShareInvite } from './MemberListInvite';
 import { FIELD_LABELS, dayWords } from './memberListView';
 import {
   DAY_FIELDS,
@@ -16,7 +31,9 @@ import {
   handEditedWords,
   inputFrom,
   invitationView,
+  inviteOutcomeWords,
   outcomeWords,
+  personInviteAction,
   patchFrom,
   compareRecords,
   whenWords,
@@ -244,7 +261,7 @@ function CompareRecords({ keep, remove, fields }) {
   );
 }
 
-export default function MemberListPerson({ gymId, entryId, list, words, readOnly, onClose, onChanged }) {
+export default function MemberListPerson({ gymId, gym, entryId, list, words, readOnly, onClose, onChanged }) {
   const titleId = useId();
   const dialogRef = useRef(null);
   const fields = list?.fields ?? [];
@@ -374,7 +391,8 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
     setId(next.entryId);
     setEntry(next);
     setMode('view');
-    setNotice(outcomeWords(res.data.outcome));
+    const invited = res.data.invite === undefined ? null : inviteOutcomeWords(res.data.invite.outcome, false);
+    setNotice([outcomeWords(res.data.outcome), invited].filter((line) => line !== null).join(' '));
     setRefusal(null);
     onChanged();
   };
@@ -403,9 +421,11 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
     }
   };
 
-  const save = async () => {
+  /** Save the form. Adding, `invite` is "Add and invite": both happen, or neither. */
+  const save = async (invite = false) => {
     if (shown === null) {
-      await run(null, () => orgService.addMemberListEntry(gymId, inputFrom(form)), "We couldn't add this person.");
+      const input = invite ? { ...inputFrom(form), invite: true } : inputFrom(form);
+      await run(null, () => orgService.addMemberListEntry(gymId, input), "We couldn't add this person.");
       return;
     }
     const asked = shown.entryId;
@@ -431,6 +451,28 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
   const takeOff = () => {
     const asked = shown.entryId;
     return run(asked, () => orgService.takeOffMemberListEntry(gymId, asked), "We couldn't take this person off.");
+  };
+
+  /** Invite this person, or send their invitation again because they asked. The
+   *  answer's invitation replaces the one on screen only if the box still has them open. */
+  const sendInvite = async (again) => {
+    const asked = shown.entryId;
+    setBusy(true);
+    setNotice(null);
+    setRefusal(null);
+    try {
+      const res = again ? await orgService.resendMemberListInvite(gymId, asked) : await orgService.inviteMemberListEntry(gymId, asked);
+      if (wanted.current !== asked) return;
+      const { outcome, invitation } = res.data.invite;
+      setEntry((e) => (e !== null && e.entryId === asked ? { ...e, invitation } : e));
+      setMode('view');
+      setNotice(inviteOutcomeWords(outcome, again));
+      onChanged();
+    } catch (err) {
+      if (wanted.current === asked) refused(err, again ? "We couldn't send the invitation again." : "We couldn't invite this person.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const putBack = () => {
@@ -637,6 +679,12 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
           {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
           {id === null ? `Add ${words.person}` : 'Save'}
         </button>
+        {id === null ? (
+          <button type="button" onClick={() => void save(true)} disabled={busy || readOnly} className={BUTTON} style={{ background: C.orangeBg, color: C.orange }}>
+            <Mail className="w-4 h-4" />
+            Add and invite
+          </button>
+        ) : null}
         {id !== null ? (
           <button type="button" onClick={() => backTo('view')} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
             Back
@@ -647,7 +695,8 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
   );
 
   const renderDetails = (p) => {
-    const inv = invitationView(p);
+    const inv = invitationView(p, ranges.today);
+    const action = personInviteAction(p, ranges.today);
     const edited = new Set(p.handEdited);
     const contact = [
       ['email', p.email],
@@ -678,6 +727,11 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
           <p className="text-sm flex gap-2" style={{ color: C.orange }}>
             <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             {inv.detail}
+          </p>
+        ) : null}
+        {action === 'under_age' ? (
+          <p className="text-sm" style={{ color: C.muted }} data-testid="under-age-note">
+            {MEMBER_INVITE_WORDS.under_age}
           </p>
         ) : null}
         <Section title="Contact">
@@ -722,13 +776,28 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
           </p>
         ) : null}
         {p.formerAt === null ? (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button type="button" onClick={startEdit} disabled={busy || readOnly} className={`${BUTTON} flex-1 sm:flex-none`} style={{ background: C.orange, color: '#000' }}>
               Edit
             </button>
+            {action === 'invite' ? (
+              <button type="button" onClick={() => void sendInvite(false)} disabled={busy || readOnly} className={`${BUTTON} flex-1 sm:flex-none whitespace-nowrap`} style={{ background: C.orangeBg, color: C.orange }}>
+                <Mail className="w-4 h-4" />
+                Invite
+              </button>
+            ) : null}
+            {action === 'again' ? (
+              <button type="button" onClick={() => backTo('again')} disabled={busy || readOnly} className={`${BUTTON} flex-1 sm:flex-none whitespace-nowrap`} style={{ background: C.plain, color: C.soft }}>
+                <Mail className="w-4 h-4" />
+                Send again
+              </button>
+            ) : null}
             <MoreMenu
               disabled={busy || readOnly}
               items={[
+                ...(p.invitation?.state === 'pending'
+                  ? [{ label: 'Share the invitation', hint: 'Its words and link, to send yourself', icon: Copy, onPick: () => backTo('share') }]
+                  : []),
                 { label: 'Remove from list', icon: UserMinus, onPick: () => setMode('takeOff') },
                 { label: 'Merge duplicate', hint: 'When this person is on your list twice', icon: ArrowLeftRight, onPick: startJoin },
               ]}
@@ -756,6 +825,42 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
 
   const renderConfirm = (p) => {
     const name = p.fullName || 'this person';
+    if (mode === 'again') {
+      return (
+        <div className="flex flex-col gap-3" data-testid="confirm-again">
+          <p className="text-[15px]" style={{ color: '#fff' }}>
+            Send {name}&apos;s invitation again?
+          </p>
+          <p className="text-sm" style={{ color: C.soft }}>
+            Only when they ask for it, for example when they can&apos;t find the email. It goes to {p.email}. An invitation can be
+            sent again {String(MEMBER_INVITE_AGAIN_PER_PERSON)} times in {String(MEMBER_INVITE_AGAIN_PERSON_DAYS)} days.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => void sendInvite(true)} disabled={busy || readOnly} className={BUTTON} style={{ background: C.orange, color: '#000' }}>
+              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+              Send again
+            </button>
+            <button type="button" onClick={() => backTo('view')} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
+              Back
+            </button>
+          </div>
+        </div>
+      );
+    }
+    if (mode === 'share') {
+      return (
+        <div className="flex flex-col gap-3">
+          <p className="text-sm" style={{ color: C.soft }}>
+            Send these words to {name} by WhatsApp, text or your own email. The link only lets them in when they sign in with{' '}
+            {p.email}.
+          </p>
+          <ShareInvite gymName={gym.name} slug={gym.slug} email={p.email} />
+          <button type="button" onClick={() => backTo('view')} className={`${BUTTON} self-start`} style={{ background: C.plain, color: C.soft }}>
+            Back
+          </button>
+        </div>
+      );
+    }
     if (mode === 'takeOff') {
       const pending = p.invitation?.state === 'pending';
       return (
@@ -927,7 +1032,7 @@ export default function MemberListPerson({ gymId, entryId, list, words, readOnly
         <Loader2 className="w-4 h-4 animate-spin" /> Loading…
       </p>
     );
-  } else if (mode === 'takeOff' || mode === 'delete') {
+  } else if (mode === 'takeOff' || mode === 'delete' || mode === 'again' || mode === 'share') {
     body = renderConfirm(shown);
   } else if (mode === 'join') {
     body = renderJoin(shown);

@@ -1220,6 +1220,16 @@ describe('the gym’s own details', () => {
     expect(orgService.updateOrg).toHaveBeenCalledWith(ORG.id, { timezone: 'Europe/Paris' });
   });
 
+  it('saves the postal address and keeps it in the box, from the answer beside the gym', async () => {
+    orgService.updateOrg.mockResolvedValue({ data: { org: ORG, postalAddress: '12 High Street, Leeds LS1 1AA' } });
+    await openSettings();
+    fireEvent.change(screen.getByLabelText('Postal address'), { target: { value: '12 High Street\nLeeds LS1 1AA' } });
+    fireEvent.click(screen.getByText('Save changes'));
+    await waitFor(() => expect(orgService.updateOrg).toHaveBeenCalledWith(ORG.id, { postalAddress: '12 High Street\nLeeds LS1 1AA' }));
+    expect(await screen.findByText('Saved.')).toBeTruthy();
+    expect(screen.getByLabelText('Postal address').value).toBe('12 High Street, Leeds LS1 1AA');
+  });
+
   it('clears a city with null rather than an empty string', async () => {
     await openSettings();
     fireEvent.change(screen.getByLabelText('City'), { target: { value: '' } });

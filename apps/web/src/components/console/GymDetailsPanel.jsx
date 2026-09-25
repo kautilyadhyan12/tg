@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { orgWords } from '@app/shared';
+import { GYM_POSTAL_ADDRESS_MAX_CHARS, orgWords } from '@app/shared';
 import { Loader2 } from 'lucide-react';
 import Select from '../common/Select';
 import { ConsoleFailed, ConsoleSection } from './ConsoleStates';
@@ -216,7 +216,8 @@ export default function GymDetailsPanel({ org, privileges, readOnly = false }) {
       // it tracks the PROP, the prop has not changed yet, and the quiet re-read
       // that follows will bring it level. Moving it here is what made the first
       // version of this fix revert the boxes to the pre-save row.
-      setDraft(gymDetailsDraft(res.data?.org));
+      // The postal address rides beside the gym on this answer, as members never read it.
+      setDraft(gymDetailsDraft({ ...res.data?.org, postalAddress: res.data?.postalAddress ?? null }));
       setSaved(true);
       // AND THE REST OF THE CONSOLE FOLLOWS. The shell's gym name, "Your gyms"
       // and the Overview header all read the same kept answer, and without this
@@ -251,7 +252,7 @@ export default function GymDetailsPanel({ org, privileges, readOnly = false }) {
        case and passes the flag. */
     <ConsoleSection
       title={`${words.itCap} details`}
-      summary={`Your ${words.it}'s name, where it is, and the time zone its day ends on.`}
+      summary={`Your ${words.it}'s name, where it is, the time zone its day ends on, and the postal address your invitations show.`}
     >
       <form onSubmit={save} className="flex flex-col gap-5">
         {/* ABOVE THE BOXES, NOT BESIDE THE BUTTON, so it is read BEFORE somebody
@@ -359,6 +360,19 @@ export default function GymDetailsPanel({ org, privileges, readOnly = false }) {
               style={inputStyle}
             />
           )}
+        </Field>
+
+        <Field label="Postal address" hint={`Printed at the foot of every invitation email, as the law asks. You can't invite ${words.people} until it's here.`}>
+          <textarea
+            value={draft.postalAddress}
+            onChange={(e) => edit('postalAddress', e.target.value)}
+            maxLength={GYM_POSTAL_ADDRESS_MAX_CHARS}
+            rows={3}
+            placeholder={'12 High Street\nLeeds LS1 1AA'}
+            aria-label="Postal address"
+            className="w-full rounded-xl px-4 py-3 text-base sm:text-sm resize-none"
+            style={inputStyle}
+          />
         </Field>
 
         {problem !== null ? (

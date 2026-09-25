@@ -553,7 +553,7 @@ export default function Members() {
         <>
           {/* Invitations that came back "Not me". */}
           <NotMeBox gymId={gymId} words={words} />
-          <MemberListPanel gymId={gymId} words={words} readOnly={readOnly} onRosterChanged={reloadRoster} />
+          <MemberListPanel gymId={gymId} gym={org} words={words} readOnly={readOnly} onRosterChanged={reloadRoster} />
         </>
       ) : null}
 

@@ -1,4 +1,4 @@
-import { MEMBER_INVITE_EMAIL_REASON_WORDS, MEMBER_INVITE_EMAIL_RESULT_WORDS, MEMBER_INVITE_WORDS } from '@app/shared';
+import { MEMBER_INVITE_EMAIL_REASON_WORDS, MEMBER_INVITE_EMAIL_RESULT_WORDS, MEMBER_INVITE_WORDS, underAgeOn } from '@app/shared';
 import { dayWords } from './memberListView';
 
 // The gym's own list on the Members screen (ROADMAP 5b-i; spec Part 3 §9.14, §11.5,
@@ -81,6 +81,12 @@ export function filtersAreEmpty(filters) {
   );
 }
 
+/** Today in the reader's own calendar, 'YYYY-MM-DD'. */
+export function localToday(now = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${String(now.getFullYear())}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
 /** "3 October 2026" from a timestamp, in the reader's own calendar. */
 export function whenWords(iso) {
   const d = new Date(iso);
@@ -105,15 +111,16 @@ export function contactWords(entry) {
 }
 
 /** Where the person stands with the app, as a short tag and, when something went
- *  wrong with an email, the server's own sentence about it. */
-export function invitationView(entry) {
+ *  wrong with an email, the server's own sentence about it. With `today`, somebody
+ *  never invited whom the list says is under 18 reads "Under 18". */
+export function invitationView(entry, today = null) {
   const inv = entry.invitation;
   if (entry.inApp) return { tag: 'Uses the app', tone: 'green', detail: null };
   if (inv === null) {
     if (entry.formerAt !== null) return null;
-    return entry.email === null
-      ? { tag: 'No email', tone: 'plain', detail: null }
-      : { tag: 'Not invited', tone: 'plain', detail: null };
+    if (entry.email === null) return { tag: 'No email', tone: 'plain', detail: null };
+    if (today !== null && underAgeOn(entry.dateOfBirth, today)) return { tag: 'Under 18', tone: 'plain', detail: null };
+    return { tag: 'Not invited', tone: 'plain', detail: null };
   }
   if (inv.state === 'accepted') return { tag: 'Joined', tone: 'green', detail: null };
   if (inv.state === 'declined') {
@@ -133,6 +140,126 @@ export function invitationView(entry) {
   }
   const detail = email.reason === null ? null : MEMBER_INVITE_EMAIL_REASON_WORDS[email.reason];
   return { tag: 'Invited · email not sent', tone: 'orange', detail };
+}
+
+// ── Invite (5b-ii; §9.12, §11.5) ─────────────────────────────────────────────
+
+const n = (x) => x.toLocaleString('en');
+
+/** The query string for Invite's count: only the gym's own words choose who is
+ *  invited, as the server's Invite reads them. */
+export function inviteQueryString(filters) {
+  const params = new URLSearchParams();
+  for (const { kind } of CHIP_KINDS) for (const word of filters[kind]) params.append(kind, word);
+  return params.toString();
+}
+
+/** The press: the same words, and the version and number the count showed, so a list
+ *  that moved in between invites nobody. */
+export function inviteBody(filters, preview) {
+  const body = { version: preview.version, expectedCount: preview.reach };
+  for (const { kind } of CHIP_KINDS) if (filters[kind].length > 0) body[kind] = [...filters[kind]];
+  return body;
+}
+
+/** Who an Invite is for, in the gym's own words. */
+export function inviteWho(filters) {
+  const parts = CHIP_KINDS.filter(({ kind }) => filters[kind].length > 0).map(
+    ({ kind, title, none }) => `${title}: ${filters[kind].map((w) => chipText(w, none)).join(' or ')}`,
+  );
+  return parts.length === 0 ? 'Everyone on your list' : parts.join(' · ');
+}
+
+/** Said when the list on screen is narrowed by something Invite does not read. */
+export function inviteIgnores(filters) {
+  return filters.query.trim() !== '' || filters.app !== 'all'
+    ? "Only Status, Membership and Payment choose who is invited. The search and the app filter don't."
+    : null;
+}
+
+/** Who an Invite leaves out, one line a reason, in the server's order; none for a zero. */
+export function skippedLines(skipped) {
+  const lines = [
+    ['noEmail', skipped.noEmail, (k) => `${n(k)} ${k === 1 ? 'has' : 'have'} no email address`],
+    ['underAge', skipped.underAge, (k) => `${n(k)} ${k === 1 ? 'is' : 'are'} under 18 by the date of birth on your list`],
+    ['inApp', skipped.inApp, (k) => `${n(k)} already ${k === 1 ? 'uses' : 'use'} the app`],
+    ['alreadyInvited', skipped.alreadyInvited, (k) => `${n(k)} ${k === 1 ? 'was' : 'were'} invited before`],
+    ['unsubscribed', skipped.unsubscribed, (k) => `${n(k)} asked not to get your emails`],
+    ['bounced', skipped.bounced, (k) => (k === 1 ? '1 has an address that bounces' : `${n(k)} have addresses that bounce`)],
+    ['refused', skipped.refused, (k) => `${n(k)} ${k === 1 ? 'has an address' : 'have addresses'} our email service won't deliver to`],
+    ['sharedAddress', skipped.sharedAddress, (k) => `${n(k)} ${k === 1 ? 'has a shared address' : 'have shared addresses'} such as info@`],
+  ];
+  return lines.filter(([, count]) => count > 0).map(([key, count, words]) => ({ key, text: words(count) }));
+}
+
+/** Why the gym cannot send at all yet, in words. */
+export function inviteBlockedWords(blocked, words) {
+  switch (blocked) {
+    case 'no_postal_address':
+      return `Add your ${words.it}'s postal address in Settings first. Every invitation shows it, as the law requires.`;
+    case 'gym_not_on_plan':
+      return `Your ${words.it} needs an active plan to send invitations.`;
+    case 'gym_archived':
+      return `This ${words.it} is closed, so it can't send invitations.`;
+    case 'invites_off':
+      return MEMBER_INVITE_WORDS.invites_off;
+    case 'sending_stopped':
+      return MEMBER_INVITE_WORDS.sending_stopped;
+    default:
+      return null;
+  }
+}
+
+/** What a person's page offers about the invitation on `today` (the staff member's
+ *  'YYYY-MM-DD'): `invite` (never invited, or every email so far was not sent), `again`
+ *  (invited; for when the person asks), `under_age` (the list's date of birth says under
+ *  18: nothing to press), or null. The server checks everything again on the gym's day. */
+export function personInviteAction(entry, today) {
+  if (entry.formerAt !== null || entry.inApp || entry.email === null) return null;
+  const inv = entry.invitation;
+  if (inv !== null && inv.state === 'accepted') return null;
+  // The server refuses them whatever the button; the page says why instead.
+  if (underAgeOn(entry.dateOfBirth, today)) return 'under_age';
+  if (inv === null) return 'invite';
+  if (inv.state === 'declined' && inv.notMeAt !== null) return null;
+  const email = inv.email;
+  if (inv.state === 'pending') {
+    if (email === null) return 'invite';
+    if (email.state === 'queued' || email.state === 'sending') return null;
+    if (email.state === 'skipped' || (email.state === 'failed' && email.reason !== 'send_unknown')) return 'invite';
+  }
+  return 'again';
+}
+
+/** What inviting one person did, in a line for the top of their page. */
+export function inviteOutcomeWords(outcome, again) {
+  switch (outcome) {
+    case 'queued':
+      return again ? 'Invitation sent again. It goes out within a few minutes.' : 'Invited. The email goes out within a few minutes.';
+    case 'already_invited':
+      return 'This person was already invited.';
+    case 'already_queued':
+      return 'An email to them is already waiting to go.';
+    default:
+      return null;
+  }
+}
+
+/** The link in every invitation: it opens the app, and joining still needs a sign-in
+ *  with the invited address. */
+export function joinLink(origin, slug) {
+  return `${origin}/join/${encodeURIComponent(slug)}`;
+}
+
+/** The invitation's words, to send another way (WhatsApp, a text, the gym's own email).
+ *  They say what the email says: only the invited address gets in. */
+export function inviteShareText({ gymName, link, email = null }) {
+  const address = email === null ? `the email address ${gymName} has for you` : `this email address, ${email}`;
+  return (
+    `${gymName} has invited you to AI Home Gym, the app its members use.\n\n` +
+    `To join ${gymName} in the app, open this link and sign in with ${address}:\n${link}\n\n` +
+    `The invitation works only for someone who signs in with that address.`
+  );
 }
 
 // ── The form ─────────────────────────────────────────────────────────────────

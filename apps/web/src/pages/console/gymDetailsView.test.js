@@ -62,7 +62,13 @@ describe('the boxes the form opens with', () => {
       city: 'Austin',
       country: 'US',
       timezone: 'America/Chicago',
+      postalAddress: '',
     });
+  });
+
+  it('shows the postal address the gym holds, and an empty box for none', () => {
+    expect(gymDetailsDraft({ ...ORG, postalAddress: '12 High Street, Leeds LS1 1AA' }).postalAddress).toBe('12 High Street, Leeds LS1 1AA');
+    expect(gymDetailsDraft({ ...ORG, postalAddress: null }).postalAddress).toBe('');
   });
 
   /** The pre-`0014` gyms. An empty country box is TRUE for them — the wizard
@@ -210,6 +216,24 @@ describe('what the form refuses to send at all', () => {
   it('does NOT treat an unrecorded country as a problem', () => {
     const draft = gymDetailsDraft({ ...ORG, country: null });
     expect(gymDetailsProblem(draft)).toBeNull();
+  });
+});
+
+describe('the postal address invitations print', () => {
+  const HELD = { ...ORG, postalAddress: '12 High Street, Leeds LS1 1AA' };
+  it('sends a typed address, trimmed', () => {
+    expect(gymDetailsPatch({ ...gymDetailsDraft(ORG), postalAddress: '  4 Mill Lane\nYork YO1 7HH ' }, ORG)).toEqual({
+      postalAddress: '4 Mill Lane\nYork YO1 7HH',
+    });
+  });
+  it('sends nothing when the address is untouched', () => {
+    expect(gymDetailsPatch(gymDetailsDraft(HELD), HELD)).toBeNull();
+  });
+  it('clears it with null when the box is emptied', () => {
+    expect(gymDetailsPatch({ ...gymDetailsDraft(HELD), postalAddress: '   ' }, HELD)).toEqual({ postalAddress: null });
+  });
+  it('a new address from elsewhere is a change the untouched form follows', () => {
+    expect(sameGymDetails(gymDetailsDraft(ORG), gymDetailsDraft(HELD))).toBe(false);
   });
 });
 

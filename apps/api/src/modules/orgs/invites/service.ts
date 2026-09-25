@@ -29,7 +29,9 @@ import { gymHasLivePlan, insertAudit } from "../repo.js";
 import * as listRepo from "../memberList/repo.js";
 import type { MemberListDeps } from "../memberList/service.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
+import { dayInTz } from "../../gamification/streak.js";
 import { emailHmac, isSharedAddress } from "./address.js";
+import { underAgeAt, underAgeOn } from "./age.js";
 import { addressInApp } from "./inApp.js";
 import * as repo from "./repo.js";
 import type { InviteSettings } from "./settings.js";
@@ -66,8 +68,15 @@ interface Group {
 /** Who of the filtered group an Invite would queue, and why each of the rest is left
  *  out — each person under the first reason that applies, in the order the counts are
  *  listed. Two people sharing one address are one invitation: the first in the list's
- *  order is reached and the others count as already invited. */
-async function workOutGroup(sql: SqlOrTx, settings: InviteSettings, gymId: string, filters: repo.WordFilters): Promise<Group> {
+ *  order is reached and the others count as already invited. `today` is the gym's own
+ *  calendar day, for the list's dates of birth. */
+async function workOutGroup(
+  sql: SqlOrTx,
+  settings: InviteSettings,
+  gymId: string,
+  filters: repo.WordFilters,
+  today: string,
+): Promise<Group> {
   const candidates = await repo.inviteCandidates(sql, gymId, filters);
   const members = await listRepo.membersAgainstList(sql, gymId);
   const inAppEntryIds = members.flatMap((member) => (member.entryId === null ? [] : [member.entryId]));
@@ -83,7 +92,7 @@ async function workOutGroup(sql: SqlOrTx, settings: InviteSettings, gymId: strin
     repo.invitesFor(sql, gymId, hmacs),
     repo.suppressionsFor(sql, gymId, hmacs),
   ]);
-  const skipped: MemberInviteSkipped = { noEmail: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, refused: 0, sharedAddress: 0 };
+  const skipped = noneSkipped();
   const reach: Group["reach"] = [];
   const taken = new Set<string>();
   let next = 0;
@@ -95,7 +104,10 @@ async function workOutGroup(sql: SqlOrTx, settings: InviteSettings, gymId: strin
     const person = withEmail[next++];
     if (person === undefined) throw new Error("an address fell out of the invite group");
     const invite = invites.get(person.hmac);
-    if (inAppAddresses.has(person.email.toLowerCase())) skipped.inApp += 1;
+    // Before the address is taken: a parent later in the list who shares it is still
+    // reached, and a child alone at it is not.
+    if (underAgeOn(candidate.dateOfBirth, today)) skipped.underAge += 1;
+    else if (inAppAddresses.has(person.email.toLowerCase())) skipped.inApp += 1;
     else if ((invite !== undefined && repo.alreadyInvited(invite)) || taken.has(person.hmac)) skipped.alreadyInvited += 1;
     else if (suppressions.get(person.hmac) === "bounced") skipped.bounced += 1;
     else if (suppressions.get(person.hmac) === "refused") skipped.refused += 1;
@@ -108,6 +120,17 @@ async function workOutGroup(sql: SqlOrTx, settings: InviteSettings, gymId: strin
   }
   return { reach, skipped };
 }
+
+const noneSkipped = (): MemberInviteSkipped => ({
+  noEmail: 0,
+  underAge: 0,
+  inApp: 0,
+  alreadyInvited: 0,
+  unsubscribed: 0,
+  bounced: 0,
+  refused: 0,
+  sharedAddress: 0,
+});
 
 /** Why this gym cannot send at all yet, or null. */
 async function blockedFor(sql: SqlOrTx, settings: InviteSettings | null, gymId: string, status: string): Promise<MemberInviteBlocked | null> {
@@ -141,15 +164,8 @@ export async function previewInvite(
   const settings = deps.invites ?? null;
   const state = await listRepo.listState(deps.sql, gymId);
   const blocked = await blockedFor(deps.sql, settings, gymId, org.status);
-  if (settings === null) {
-    return {
-      version: state?.version ?? 0,
-      reach: 0,
-      skipped: { noEmail: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, refused: 0, sharedAddress: 0 },
-      blocked,
-    };
-  }
-  const group = await workOutGroup(deps.sql, settings, gymId, filtersOf(query));
+  if (settings === null) return { version: state?.version ?? 0, reach: 0, skipped: noneSkipped(), blocked };
+  const group = await workOutGroup(deps.sql, settings, gymId, filtersOf(query), dayInTz(deps.now(), org.timezone));
   return { version: state?.version ?? 0, reach: group.reach.length, skipped: group.skipped, blocked };
 }
 
@@ -174,19 +190,20 @@ export async function pressInvite(
   request: MemberInviteRequest,
   limit: () => Promise<boolean>,
 ): Promise<MemberInvited | null> {
-  await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
+  const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   const settings = await readyToSend(deps, gymId);
   if (!(await limit())) return null;
   const at = deps.now();
+  const today = dayInTz(at, org.timezone);
   const filters = filtersOf(request);
   const changed = async (): Promise<InviteChanged> => {
     const version = (await listRepo.listState(deps.sql, gymId))?.version ?? 0;
-    const group = await workOutGroup(deps.sql, settings, gymId, filters);
+    const group = await workOutGroup(deps.sql, settings, gymId, filters, today);
     return new InviteChanged({ version, reach: group.reach.length, skipped: group.skipped, blocked: null });
   };
 
   const version = (await listRepo.listState(deps.sql, gymId))?.version ?? 0;
-  const group = await workOutGroup(deps.sql, settings, gymId, filters);
+  const group = await workOutGroup(deps.sql, settings, gymId, filters, today);
   if (version !== request.version || group.reach.length !== request.expectedCount) {
     throw new InviteChanged({ version, reach: group.reach.length, skipped: group.skipped, blocked: null });
   }
@@ -209,6 +226,7 @@ export async function pressInvite(
         reach: String(group.reach.length),
         version: String(version),
         noEmail: String(group.skipped.noEmail),
+        underAge: String(group.skipped.underAge),
         inApp: String(group.skipped.inApp),
         alreadyInvited: String(group.skipped.alreadyInvited),
         unsubscribed: String(group.skipped.unsubscribed),
@@ -235,12 +253,14 @@ async function inviteable(
   settings: InviteSettings,
   gymId: string,
   entryId: string,
+  at: Date,
 ): Promise<{ email: string; hmac: string; invite: repo.InviteRow | null }> {
   const entry = await listRepo.entryFor(tx, gymId, entryId);
   if (entry === null) throw new OrgsError(404, "entry_not_found", MEMBER_LIST_BY_HAND_WORDS.entry_not_found);
   if (entry.formerAt !== null) throw refuse(409, "not_on_list");
   const email = entry.values.email;
   if (email === null) throw refuse(409, "no_email");
+  if (underAgeAt(entry.values.dateOfBirth, at, await repo.gymTimeZone(tx, gymId))) throw refuse(409, "under_age");
   if (await addressInApp(tx, gymId, email, await repo.addressHolders(tx, gymId, email))) throw refuse(409, "in_app");
   const hmac = emailHmac(settings.hmacKey, email);
   const invite = (await repo.invitesFor(tx, gymId, [hmac])).get(hmac) ?? null;
@@ -263,7 +283,7 @@ export async function inviteEntryInTx(
   settings: InviteSettings,
   input: { gymId: string; entryId: string; userId: string; at: Date },
 ): Promise<{ outcome: "queued" | "already_invited"; hmac: string }> {
-  const { email, hmac, invite } = await inviteable(tx, settings, input.gymId, input.entryId);
+  const { email, hmac, invite } = await inviteable(tx, settings, input.gymId, input.entryId, input.at);
   if (invite !== null && repo.alreadyInvited(invite)) return { outcome: "already_invited", hmac };
   await mayEmail(tx, input.gymId, email, hmac);
   const queued = await repo.queueFirst(tx, input.gymId, [{ hmac, email }], input.at);
@@ -319,7 +339,7 @@ export async function inviteAgain(
   const at = deps.now();
   const done = await deps.sql.begin(async (tx) => {
     await listRepo.lockGym(tx, gymId);
-    const { email, hmac, invite } = await inviteable(tx, settings, gymId, entryId);
+    const { email, hmac, invite } = await inviteable(tx, settings, gymId, entryId, at);
     if (invite === null) throw refuse(409, "not_invited");
     if (invite.state === "accepted") throw refuse(409, "already_joined");
     // Whoever reads this address said it is not theirs: sending it again would email the
