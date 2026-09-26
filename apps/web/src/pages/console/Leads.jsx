@@ -3,37 +3,20 @@ import { Link, useParams } from 'react-router-dom';
 import { ChevronRight, Loader2, Search, UserPlus } from 'lucide-react';
 import { LEAD_QUERY_MAX_CHARS } from '@app/shared';
 import { orgService, errorStatus, errorText } from '../../api/orgsApi';
-import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
+import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import LeadSheet from './LeadSheet';
 import { useConsoleOrg } from './useConsoleOrg';
 import { orgWords, viewerPrivileges } from './consoleView';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
-import { addedWords, leadLine, leadsQueryString, statusChips, statusWord } from './leadsView';
+import { STATUS_TAG, addedDay, addedWords, candidateLine, leadsQueryString, sourceWord, statusChips, statusWord } from './leadsView';
 
 // A gym's leads (ROADMAP 20c-i; spec Part 3 §16.3): people who asked about the gym and
 // have not joined. Search, the status chips with the server's counts, Add lead, and
-// one lead's sheet. `members.confirm`'s, like the gym's own list; the server refuses
-// anyone else whatever this screen shows.
-
-const C = {
-  card: '#121110',
-  line: 'rgba(255,255,255,0.06)',
-  muted: 'rgba(255,255,255,0.5)',
-  soft: 'rgba(255,255,255,0.8)',
-  orange: '#FF8A1F',
-  orangeBg: 'rgba(255,138,31,0.15)',
-  plain: 'rgba(255,255,255,0.06)',
-};
+// one lead's panel. `members.confirm`'s, like the gym's own list; the server refuses
+// anyone else whatever this screen shows. Drawn from `console.css` (R3; spec Part 3 §17):
+// a table on a computer, a row per lead on a phone.
 
 const count = (n) => n.toLocaleString('en');
-
-const TAG_STYLE = {
-  new: { background: C.orangeBg, color: C.orange },
-  contacted: { background: 'rgba(96,165,250,0.14)', color: '#93c5fd' },
-  on_trial: { background: 'rgba(250,204,21,0.14)', color: '#fde047' },
-  joined: { background: 'rgba(52,211,153,0.12)', color: '#34d399' },
-  lost: { background: C.plain, color: C.muted },
-};
 
 export default function Leads() {
   const { orgSlug } = useParams();
@@ -48,7 +31,7 @@ export default function Leads() {
   const [page, setPage] = useState({ loading: true, error: null, refused: false, leads: [], total: 0, cursor: null, counts: null });
   const [loadingMore, setLoadingMore] = useState(false);
   const [tick, setTick] = useState(0);
-  /** undefined: no sheet · null: adding · an id: that lead. */
+  /** undefined: no panel · null: adding · an id: that lead. */
   const [openId, setOpenId] = useState(undefined);
   /** "Tom Reid is on your leads.", after Add lead closes. */
   const [notice, setNotice] = useState(null);
@@ -111,63 +94,69 @@ export default function Leads() {
 
   if (orgLoading) {
     return (
-      <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
-        <ConsoleLoading label="Loading your organisation…" />
+      <div className="c-page">
+        <ConsoleLoading label="Loading your organisation…" newLook />
       </div>
     );
   }
   if (orgError !== null) {
     return (
-      <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
-        <ConsoleFailed message={orgError} onRetry={reload} />
+      <div className="c-page">
+        <ConsoleFailed message={orgError} onRetry={reload} newLook />
       </div>
     );
   }
   if (notFound) {
     return (
-      <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
-        <ConsoleCard>
-          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-            We couldn&apos;t find an organisation you run at this address.
-          </p>
-          <Link to="/console" className="text-sm inline-block mt-3" style={{ color: C.orange }}>
+      <div className="c-page">
+        <section className="c-card p-5 md:p-6 flex flex-col gap-3">
+          <p className="c-s15 c-t2">We couldn&apos;t find an organisation you run at this address.</p>
+          <Link to="/console" className="c-s15 c-w6 c-lk self-start">
             Your organisations
           </Link>
-        </ConsoleCard>
+        </section>
       </div>
     );
   }
 
   const noLeads = page.counts !== null && page.counts.all === 0;
   const searching = filters.query.trim() !== '' || filters.status !== 'all';
+  const openLead = (id) => {
+    setNotice(null);
+    setOpenId(id);
+  };
 
   return (
-    <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 flex flex-col gap-4">
-      <div>
-        <h1 className="text-2xl font-bold" style={{ color: '#fff' }}>
-          Leads
-        </h1>
-        <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          People interested in joining {org.name}
-        </p>
-        {readOnly && mayKeep ? (
-          <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
-            {readOnlyNote(org?.orgType)}
-          </p>
+    <div className="c-page">
+      <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between md:gap-6">
+        <div className="flex flex-col gap-1.5 min-w-0">
+          <h1 className="c-h1">Leads</h1>
+          <p className="c-sub">People interested in joining {org.name}</p>
+        </div>
+        {!page.refused ? (
+          <button type="button" onClick={() => openLead(null)} disabled={readOnly} className="c-btn c-btn-p w-full md:w-auto">
+            <UserPlus aria-hidden="true" className="w-4 h-4" />
+            Add lead
+          </button>
         ) : null}
-      </div>
+      </header>
+
+      {/* A lapsed gym's staff see everything and change nothing (§4.2). */}
+      {readOnly && mayKeep ? (
+        <section className="c-card p-5 md:p-6">
+          <p className="c-s15 c-t2">{readOnlyNote(org?.orgType)}</p>
+        </section>
+      ) : null}
 
       {page.refused ? (
-        <ConsoleCard>
-          <p className="text-sm" style={{ color: C.soft }}>
-            {page.error}
-          </p>
-        </ConsoleCard>
+        <section className="c-card p-5 md:p-6">
+          <p className="c-s15 c-t2">{page.error}</p>
+        </section>
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="relative flex-1 min-w-[160px]">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: C.muted }} />
+          <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:gap-4">
+            <label className="c-search w-full md:w-[340px]">
+              <Search aria-hidden="true" className="w-[18px] h-[18px]" />
               <input
                 type="search"
                 aria-label="Search your leads"
@@ -175,136 +164,96 @@ export default function Leads() {
                 placeholder="Search"
                 value={typed}
                 onChange={(e) => setTyped(e.target.value)}
-                className="w-full rounded-xl pl-9 pr-3 min-h-[44px] text-base"
-                style={{ background: '#0A0908', border: '1px solid rgba(255,255,255,0.10)', color: '#fff' }}
+                className="c-input"
               />
             </label>
-            <button
-              type="button"
-              onClick={() => {
-                setNotice(null);
-                setOpenId(null);
-              }}
-              disabled={readOnly}
-              className="w-full sm:w-auto rounded-xl px-4 min-h-[44px] text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-40"
-              style={{ background: C.orange, color: '#000' }}
-            >
-              <UserPlus className="w-4 h-4" />
-              Add lead
-            </button>
+            {page.counts !== null && !noLeads ? (
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Status">
+                {statusChips(page.counts).map((chip) => (
+                  <button
+                    key={chip.key}
+                    type="button"
+                    aria-pressed={filters.status === chip.key}
+                    onClick={() => change({ ...filters, status: chip.key })}
+                    className={filters.status === chip.key ? 'c-chip c-chip-on' : 'c-chip'}
+                  >
+                    {chip.label} <span className="c-n">{count(chip.count)}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {!page.loading && page.error === null && !noLeads && searching ? (
+              <p className="c-s14 c-t2 md:ml-auto" data-testid="leads-total">
+                {count(page.total)} {page.total === 1 ? 'lead' : 'leads'} match
+              </p>
+            ) : null}
           </div>
 
           {notice !== null ? (
-            <p className="text-sm" role="status" style={{ color: '#34d399' }}>
+            <p className="c-s14 c-w6" role="status" style={{ color: 'var(--good)' }}>
               {notice}
             </p>
           ) : null}
 
-          {page.counts !== null && !noLeads ? (
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Status">
-              {statusChips(page.counts).map((chip) => (
-                <button
-                  key={chip.key}
-                  type="button"
-                  aria-pressed={filters.status === chip.key}
-                  onClick={() => change({ ...filters, status: chip.key })}
-                  className="rounded-full px-3.5 min-h-[36px] text-sm font-medium whitespace-nowrap"
-                  style={
-                    filters.status === chip.key
-                      ? { background: C.orange, color: '#000' }
-                      : { background: C.plain, color: C.soft, border: '1px solid rgba(255,255,255,0.08)' }
-                  }
-                >
-                  {chip.label} {count(chip.count)}
-                </button>
-              ))}
-            </div>
-          ) : null}
+          {page.loading ? <ConsoleLoading label="Loading your leads…" newLook /> : null}
 
-          {page.loading ? (
-            <p className="text-sm flex items-center gap-2" style={{ color: C.muted }}>
-              <Loader2 className="w-4 h-4 animate-spin" /> Loading your leads…
-            </p>
-          ) : null}
-
-          {!page.loading && page.error !== null ? (
-            <div className="flex items-center gap-3">
-              <p className="text-sm" style={{ color: C.soft }}>
-                {page.error}
-              </p>
-              <button type="button" onClick={() => setTick((n) => n + 1)} className="text-sm font-semibold" style={{ color: C.orange }}>
-                Try again
-              </button>
-            </div>
-          ) : null}
+          {!page.loading && page.error !== null ? <ConsoleFailed message={page.error} onRetry={() => setTick((n) => n + 1)} newLook /> : null}
 
           {!page.loading && page.error === null && noLeads ? (
-            <div className="rounded-2xl p-4" style={{ background: C.card, border: `1px solid ${C.line}` }}>
-              <p className="text-sm" style={{ color: C.soft }}>
-                No leads yet.
-              </p>
-              <p className="text-sm mt-1" style={{ color: C.muted }}>
+            <section className="c-card p-5 md:p-6 flex flex-col gap-1">
+              <p className="c-s15 c-w6 c-t1">No leads yet.</p>
+              <p className="c-s14 c-t2">
                 When somebody asks about joining, add them here with how to reach them, and keep track of them until they join.
               </p>
-            </div>
-          ) : null}
-
-          {!page.loading && page.error === null && !noLeads && searching ? (
-            <p className="text-sm" style={{ color: C.muted }} data-testid="leads-total">
-              {count(page.total)} {page.total === 1 ? 'lead' : 'leads'} match
-            </p>
+            </section>
           ) : null}
 
           {!page.loading && page.leads.length > 0 ? (
-            <ul className="flex flex-col gap-2">
-              {page.leads.map((lead) => (
-                <li key={lead.id}>
-                  <button
-                    type="button"
-                    data-testid="lead-row"
-                    onClick={() => {
-                      setNotice(null);
-                      setOpenId(lead.id);
-                    }}
-                    className="w-full text-left rounded-2xl p-4 flex items-center gap-3"
-                    style={{ background: C.card, border: `1px solid ${C.line}` }}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold truncate" style={{ color: '#fff' }}>
-                        {lead.fullName}
-                      </div>
-                      <div className="text-[13px] truncate mt-0.5" style={{ color: C.muted }}>
-                        {leadLine(lead)}
-                      </div>
-                      <div className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                        {addedWords(lead.createdAt)}
-                      </div>
-                    </div>
-                    <span className="flex-shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold" style={TAG_STYLE[lead.status]}>
-                      {statusWord(lead.status)}
-                    </span>
-                    <ChevronRight className="w-5 h-5 flex-shrink-0" style={{ color: C.muted }} />
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <section className="c-card overflow-hidden">
+              <div className="c-lead-grid c-th hidden md:grid px-5 py-3" data-testid="leads-head">
+                <span style={{ gridArea: 'who' }}>Name</span>
+                <span style={{ gridArea: 'src' }}>Heard of you from</span>
+                <span style={{ gridArea: 'added' }}>Added</span>
+                <span style={{ gridArea: 'tag' }}>Status</span>
+              </div>
+              <ul>
+                {page.leads.map((lead, i) => (
+                  <li key={lead.id} className={i > 0 ? 'border-t' : 'md:border-t'} style={{ borderColor: 'var(--line)' }}>
+                    <button
+                      type="button"
+                      data-testid="lead-row"
+                      onClick={() => openLead(lead.id)}
+                      className="c-lead-grid grid w-full text-left min-h-11 px-4 py-3.5 md:px-5"
+                    >
+                      <span className="flex flex-col gap-0.5 min-w-0" style={{ gridArea: 'who' }}>
+                        <span className="c-s15 c-w6 c-t1 c-ell">{lead.fullName}</span>
+                        <span className="c-s13 c-t2 c-ell">{candidateLine(lead)}</span>
+                      </span>
+                      <span className="hidden md:block c-s14 c-t1 c-ell" style={{ gridArea: 'src' }}>
+                        {sourceWord(lead.source)}
+                      </span>
+                      <span className="hidden md:block c-s14 c-t2 c-ell" style={{ gridArea: 'added' }}>
+                        {addedDay(lead.createdAt)}
+                      </span>
+                      <span className="md:hidden c-s13 c-t3 c-ell" style={{ gridArea: 'meta' }}>
+                        {sourceWord(lead.source)} · {addedWords(lead.createdAt)}
+                      </span>
+                      <span className="self-start md:self-center justify-self-end md:justify-self-start" style={{ gridArea: 'tag' }}>
+                        <span className={`c-tag ${STATUS_TAG[lead.status] ?? 'c-tag-plain'}`}>{statusWord(lead.status)}</span>
+                      </span>
+                      <ChevronRight aria-hidden="true" className="w-[18px] h-[18px] c-t3" style={{ gridArea: 'go' }} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
           ) : null}
 
-          {!page.loading && page.error === null && page.leads.length === 0 && !noLeads ? (
-            <p className="text-sm" style={{ color: C.muted }}>
-              No leads match.
-            </p>
-          ) : null}
+          {!page.loading && page.error === null && page.leads.length === 0 && !noLeads ? <p className="c-s14 c-t2">No leads match.</p> : null}
 
           {!page.loading && page.cursor !== null ? (
-            <button
-              type="button"
-              onClick={loadMore}
-              disabled={loadingMore}
-              className="self-start rounded-xl px-4 min-h-[44px] text-sm font-medium flex items-center gap-2"
-              style={{ background: C.orangeBg, color: C.orange }}
-            >
-              {loadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            <button type="button" onClick={loadMore} disabled={loadingMore} className="c-btn c-btn-s w-full md:w-auto md:self-start">
+              {loadingMore ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
               {loadingMore ? 'Loading…' : 'Load more'}
             </button>
           ) : null}

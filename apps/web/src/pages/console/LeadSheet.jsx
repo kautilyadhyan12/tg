@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, Loader2, Trash2, UserCheck, X } from 'lucide-react';
+import { Check, Loader2, UserCheck, X } from 'lucide-react';
 import { LEAD_JOIN_CHOOSE_ERROR, LEAD_JOIN_STALE_ERROR, LEAD_MAX_NOTES_CHARS } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import { ConfirmInline } from '../../components/console/ConsoleStates';
-import { inputStyle, labelStyle } from './classStyles';
 import {
   SOURCE_CHOICES,
   STATUS_CHOICES,
   addedWords,
   candidateLine,
   createLeadRequest,
+  detailsRequest,
   emptyLeadDraft,
   joinedWords,
   MAY_EMAIL_HINT,
@@ -18,73 +18,43 @@ import {
   leadDraft,
   leadProblem,
   sourceWord,
-  updateLeadRequest,
 } from './leadsView';
 
 // One lead (ROADMAP 20c-i): add a new one, or open one to change its status in a tap,
-// keep notes, edit, delete, and mark them joined. `leadId` null is "Add lead". Every
-// answer is checked against the lead on screen, so a late answer for somebody opened
-// earlier is never shown here.
-
-const C = {
-  line: 'rgba(255,255,255,0.06)',
-  muted: 'rgba(255,255,255,0.5)',
-  soft: 'rgba(255,255,255,0.8)',
-  orange: '#FF8A1F',
-  orangeBg: 'rgba(255,138,31,0.15)',
-  plain: 'rgba(255,255,255,0.06)',
-  green: '#34d399',
-  greenBg: 'rgba(52,211,153,0.12)',
-};
+// change its details, keep notes, delete, and mark them joined. `leadId` null is "Add
+// lead". Every answer is checked against the lead on screen, so a late answer for
+// somebody opened earlier is never shown here. A side panel on a computer, its top and
+// bottom fixed; on a phone the whole screen, scrolled as one page (R3; spec Part 3 §17.2
+// rule 9).
 
 function Choice({ pressed, onClick, children, disabled = false }) {
   return (
-    <button
-      type="button"
-      aria-pressed={pressed}
-      onClick={onClick}
-      disabled={disabled}
-      className="rounded-full px-3.5 min-h-[40px] text-sm font-medium whitespace-nowrap disabled:opacity-40"
-      style={
-        pressed
-          ? { background: C.orange, color: '#000' }
-          : { background: C.plain, color: C.soft, border: '1px solid rgba(255,255,255,0.08)' }
-      }
-    >
+    <button type="button" aria-pressed={pressed} onClick={onClick} disabled={disabled} className={pressed ? 'c-chip c-chip-on' : 'c-chip'}>
       {children}
     </button>
   );
 }
 
-function Box({ label, children }) {
-  return (
-    <label className="flex flex-col gap-1.5">
-      <span className="text-xs font-semibold uppercase tracking-wide" style={labelStyle}>
-        {label}
-      </span>
-      {children}
-    </label>
-  );
-}
-
 function DetailsForm({ draft, setDraft, disabled }) {
   const set = (key) => (e) => setDraft((d) => ({ ...d, [key]: e.target.value }));
-  const box = 'w-full rounded-xl px-3 min-h-[44px] text-base';
   return (
-    <div className="flex flex-col gap-3">
-      <Box label="Name">
-        <input aria-label="Name" value={draft.fullName} onChange={set('fullName')} maxLength={120} disabled={disabled} className={box} style={inputStyle} />
-      </Box>
-      <Box label="Email">
-        <input aria-label="Email" type="email" value={draft.email} onChange={set('email')} maxLength={254} disabled={disabled} className={box} style={inputStyle} />
-      </Box>
-      <Box label="Phone">
-        <input aria-label="Phone" type="tel" value={draft.phone} onChange={set('phone')} maxLength={40} disabled={disabled} className={box} style={inputStyle} />
-      </Box>
-      <div className="flex flex-col gap-1.5">
-        <span className="text-xs font-semibold uppercase tracking-wide" style={labelStyle}>
-          Heard of you from
-        </span>
+    <div className="flex flex-col gap-4">
+      <label className="c-field">
+        <span className="c-label">Name</span>
+        <input aria-label="Name" value={draft.fullName} onChange={set('fullName')} maxLength={120} disabled={disabled} className="c-input" />
+      </label>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <label className="c-field">
+          <span className="c-label">Email</span>
+          <input aria-label="Email" type="email" value={draft.email} onChange={set('email')} maxLength={254} disabled={disabled} className="c-input" />
+        </label>
+        <label className="c-field">
+          <span className="c-label">Phone</span>
+          <input aria-label="Phone" type="tel" value={draft.phone} onChange={set('phone')} maxLength={40} disabled={disabled} className="c-input" />
+        </label>
+      </div>
+      <div className="c-field">
+        <span className="c-label">Heard of you from</span>
         <div className="flex flex-wrap gap-2" role="group" aria-label="Heard of you from">
           {SOURCE_CHOICES.map((s) => (
             <Choice key={s.key} pressed={draft.source === s.key} disabled={disabled} onClick={() => setDraft((d) => ({ ...d, source: s.key }))}>
@@ -100,35 +70,30 @@ function DetailsForm({ draft, setDraft, disabled }) {
 /** "Happy to hear from us by email": a yes to one address, so it needs one. */
 function MayEmailTick({ checked, hasEmail, disabled, onChange }) {
   return (
-    <div className="flex flex-col gap-1">
-      <button
-        type="button"
-        role="checkbox"
-        aria-checked={checked}
-        aria-label={MAY_EMAIL_LABEL}
-        disabled={disabled || !hasEmail}
-        onClick={() => onChange(!checked)}
-        className="self-start flex items-center gap-2.5 min-h-[44px] text-sm font-medium disabled:opacity-40"
-        style={{ color: C.soft }}
-      >
-        <span
-          className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0"
-          style={checked ? { background: C.orange } : { border: '1.5px solid rgba(255,255,255,0.35)' }}
-        >
-          {checked ? <Check className="w-3.5 h-3.5" style={{ color: '#000' }} /> : null}
-        </span>
-        {MAY_EMAIL_LABEL}
-      </button>
-      <p className="text-xs" style={{ color: C.muted }}>
-        {hasEmail ? MAY_EMAIL_HINT : 'Add their email address to ask.'}
-      </p>
-    </div>
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      aria-label={MAY_EMAIL_LABEL}
+      disabled={disabled || !hasEmail}
+      onClick={() => onChange(!checked)}
+      className="self-start flex items-start gap-3 min-h-11 text-left disabled:opacity-50"
+    >
+      <span className={checked ? 'c-check c-check-on mt-px' : 'c-check mt-px'}>
+        {checked ? <Check aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={3} /> : null}
+      </span>
+      <span className="flex flex-col gap-0.5">
+        <span className="c-s15 c-w5 c-t1">{MAY_EMAIL_LABEL}</span>
+        <span className="c-hint">{hasEmail ? MAY_EMAIL_HINT : 'Add their email address to ask.'}</span>
+      </span>
+    </button>
   );
 }
 
 function NotesBox({ value, onChange, disabled }) {
   return (
-    <Box label="Notes">
+    <label className="c-field">
+      <span className="c-label">Notes</span>
       <textarea
         aria-label="Notes"
         value={value}
@@ -137,55 +102,38 @@ function NotesBox({ value, onChange, disabled }) {
         rows={3}
         disabled={disabled}
         placeholder="What they asked about, when to call back"
-        className="w-full rounded-xl px-3 py-2.5 text-base"
-        style={inputStyle}
+        className="c-area"
       />
-    </Box>
+    </label>
   );
 }
 
 /** The records that share the lead's email or phone, to say which is this person. */
 function ChooseRecord({ name, choice, busy, onPick, onNew, onCancel, words }) {
   return (
-    <div className="flex flex-col gap-3 rounded-2xl p-4" style={{ background: C.orangeBg }} data-testid="join-choose">
-      <p className="text-sm" style={{ color: '#fff' }}>
-        {choice.message}
-      </p>
-      <ul className="flex flex-col gap-2">
+    <div className="c-callout flex-col max-h-[50vh] overflow-y-auto" data-testid="join-choose">
+      <p className="c-s14 c-t1">{choice.message}</p>
+      <ul className="c-card overflow-hidden">
         {choice.candidates.map((c) => (
-          <li key={c.entryId} className="rounded-xl p-3 flex items-center gap-3" style={{ background: '#121110', border: `1px solid ${C.line}` }}>
+          <li key={c.entryId} className="c-row flex-wrap">
             <div className="flex-1 min-w-0">
-              <div className="font-semibold truncate" style={{ color: '#fff' }}>
-                {c.fullName || 'No name'}
-              </div>
-              <div className="text-[13px] truncate" style={{ color: C.muted }}>
+              <div className="c-s15 c-w6 c-t1 c-ell">{c.fullName || 'No name'}</div>
+              <div className="c-s13 c-t2 c-ell">
                 {candidateLine(c)}
                 {c.former ? ` · Past ${words.person}` : ''}
               </div>
             </div>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => onPick(c.entryId)}
-              className="rounded-xl px-3 min-h-[40px] text-sm font-bold flex-shrink-0 disabled:opacity-40"
-              style={{ background: C.orange, color: '#000' }}
-            >
+            <button type="button" disabled={busy} onClick={() => onPick(c.entryId)} className="c-btn c-btn-sm c-btn-p">
               {c.former ? 'This is them · put back' : 'This is them'}
             </button>
           </li>
         ))}
       </ul>
       <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={onNew}
-          className="rounded-xl px-4 min-h-[44px] text-sm font-bold disabled:opacity-40"
-          style={{ background: C.plain, color: C.soft, border: '1px solid rgba(255,255,255,0.08)' }}
-        >
+        <button type="button" disabled={busy} onClick={onNew} className="c-btn c-btn-s">
           {`Add ${name} as someone new`}
         </button>
-        <button type="button" disabled={busy} onClick={onCancel} className="rounded-xl px-4 min-h-[44px] text-sm font-semibold disabled:opacity-40" style={{ color: C.muted }}>
+        <button type="button" disabled={busy} onClick={onCancel} className="c-btn c-btn-ghost">
           Cancel
         </button>
       </div>
@@ -199,13 +147,12 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
   const [loadError, setLoadError] = useState(null);
   const [draft, setDraft] = useState(emptyLeadDraft);
   const [notes, setNotes] = useState('');
-  const [editing, setEditing] = useState(adding);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [done, setDone] = useState(null);
   const [choice, setChoice] = useState(null);
   const [deleting, setDeleting] = useState(false);
-  /** The lead this sheet is for; an answer about any other is dropped. */
+  /** The lead this panel is for; an answer about any other is dropped. */
   const shown = useRef(leadId);
 
   useEffect(() => {
@@ -230,12 +177,13 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
     };
   }, [gymId, leadId, adding]);
 
-  /** A lead from the server, shown only if it is the one on screen. */
-  const take = (next) => {
+  /** A lead from the server, shown only if it is the one on screen. The details and the
+   *  notes are open to typing beside the status, so only the part just saved is reset. */
+  const take = (next, saved) => {
     if (next.id !== shown.current) return false;
     setLead(next);
-    setDraft(leadDraft(next));
-    setNotes(next.notes);
+    if (saved === 'details') setDraft(leadDraft(next));
+    if (saved === 'notes') setNotes(next.notes);
     return true;
   };
 
@@ -265,16 +213,12 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
     }, "We couldn't add this lead. Please try again.");
   };
 
-  const save = (body, said) =>
+  const save = (body, said, saved) =>
     run(async () => {
-      if (Object.keys(body).length === 0) {
-        setEditing(false);
-        return;
-      }
+      if (Object.keys(body).length === 0) return;
       const res = await orgService.updateLead(gymId, lead.id, body);
-      if (!take(res.data.lead)) return;
+      if (!take(res.data.lead, saved)) return;
       onChanged();
-      setEditing(false);
       if (said !== null) setDone(said);
     }, "We couldn't save that. Please try again.");
 
@@ -284,7 +228,7 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
       setError(problem);
       return;
     }
-    return save(updateLeadRequest(lead, draft), 'Saved.');
+    return save(detailsRequest(lead, draft), 'Saved.', 'details');
   };
 
   const join = (body) => {
@@ -292,7 +236,7 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
     return run(async () => {
       try {
         const res = await orgService.joinLead(gymId, asked, body);
-        if (!take(res.data.lead)) return;
+        if (!take(res.data.lead, null)) return;
         setChoice(null);
         onChanged();
         setDone(joinedWords(res.data.outcome, res.data.lead.fullName, words));
@@ -323,223 +267,196 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
     }, "We couldn't delete this lead. Please try again.");
 
   const joined = lead?.status === 'joined';
+  const mayJoin = lead !== null && (!joined || !lead.onList);
+  const changed = lead !== null && Object.keys(detailsRequest(lead, draft)).length > 0;
   const title = adding && lead === null ? 'Add lead' : (lead?.fullName ?? '');
+  const off = busy || readOnly;
+
+  const messages = (
+    <>
+      {error !== null ? (
+        <p className="c-s14 c-w5" role="alert" style={{ color: 'var(--bad)' }}>
+          {error}
+        </p>
+      ) : null}
+      {done !== null ? (
+        <p className="c-s14 c-w5" role="status" style={{ color: 'var(--good)' }}>
+          {done}
+        </p>
+      ) : null}
+    </>
+  );
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto" style={{ background: 'rgba(10,9,8,0.88)' }}>
-      <div className="min-h-full flex items-end sm:items-center justify-center sm:p-6">
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={adding && lead === null ? 'Add lead' : 'Lead'}
-          className="w-full sm:max-w-[560px] rounded-t-[28px] sm:rounded-[28px] p-5 sm:p-6 flex flex-col gap-4"
-          style={{ background: '#0f0e0d', border: '1px solid rgba(255,255,255,0.07)' }}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h2 className="text-lg font-bold truncate" style={{ color: '#fff' }}>
+    <div className="fixed inset-0 z-50" style={{ background: 'var(--scrim)' }}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={adding && lead === null ? 'Add lead' : 'Lead'}
+        className="c-sheet absolute inset-0 md:left-auto md:w-[540px] md:border-l flex flex-col overflow-y-auto md:overflow-hidden"
+        style={{ borderColor: 'var(--card-line)' }}
+      >
+        <div className="flex flex-col gap-4 px-4 pt-5 pb-4 md:px-7 md:pt-7 md:pb-5 border-b" style={{ borderColor: 'var(--line)' }}>
+          <div className="flex items-start gap-3">
+            <div className="flex flex-col gap-1 flex-grow min-w-0">
+              <h2 className="c-h1 c-ell" style={{ fontSize: 28, lineHeight: '34px' }}>
                 {title}
               </h2>
               {lead !== null ? (
-                <p className="text-[13px] mt-0.5" style={{ color: C.muted }}>
+                <span className="c-s14 c-t2">
                   {addedWords(lead.createdAt)} · {sourceWord(lead.source)}
-                </p>
+                </span>
               ) : null}
             </div>
-            <button
-              type="button"
-              aria-label="Close"
-              onClick={onClose}
-              className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-              style={{ background: C.plain, color: C.soft }}
-            >
-              <X className="w-5 h-5" />
+            <button type="button" aria-label="Close" onClick={onClose} className="c-icon-btn">
+              <X aria-hidden="true" className="w-5 h-5" />
             </button>
           </div>
 
-          {loadError !== null ? (
-            <p className="text-sm" style={{ color: C.soft }}>
-              {loadError}
+          {lead !== null ? (
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Status">
+              {STATUS_CHOICES.map((s) => (
+                <Choice
+                  key={s.key}
+                  pressed={lead.status === s.key}
+                  disabled={off}
+                  onClick={() => {
+                    if (lead.status !== s.key) void save({ status: s.key }, null, null);
+                  }}
+                >
+                  {s.label}
+                </Choice>
+              ))}
+              <Choice
+                pressed={joined}
+                disabled={off}
+                onClick={() => {
+                  if (!joined && choice === null) void join({});
+                }}
+              >
+                Joined
+              </Choice>
+            </div>
+          ) : null}
+
+          {joined ? (
+            <p className="c-s14 c-t2">
+              {lead.onList
+                ? `On your list of ${words.people}. `
+                : lead.entryId !== null
+                  ? `Their record was taken off your list of ${words.people}. `
+                  : `Their record has since been deleted from your list. `}
+              <Link to={`/console/${orgSlug}/members`} className="c-w6 c-lk">
+                Go to {words.peopleCap}
+              </Link>
             </p>
           ) : null}
+        </div>
+
+        <div className="md:flex-grow md:overflow-y-auto flex flex-col gap-4 px-4 py-5 md:px-7">
+          {loadError !== null ? <p className="c-s15 c-t2">{loadError}</p> : null}
 
           {!adding && lead === null && loadError === null ? (
-            <p className="text-sm flex items-center gap-2" style={{ color: C.muted }}>
-              <Loader2 className="w-4 h-4 animate-spin" /> Loading…
+            <p className="c-s14 c-t3 flex items-center gap-2">
+              <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> Loading…
             </p>
           ) : null}
 
-          {editing ? (
+          {adding && lead === null ? (
             <>
-              <DetailsForm draft={draft} setDraft={setDraft} disabled={busy || readOnly} />
-              {lead === null ? (
-                <>
-                  <MayEmailTick
-                    checked={draft.mayEmail && draft.email.trim() !== ''}
-                    hasEmail={draft.email.trim() !== ''}
-                    disabled={busy || readOnly}
-                    onChange={(v) => setDraft((d) => ({ ...d, mayEmail: v }))}
-                  />
-                  <NotesBox value={draft.notes} onChange={(v) => setDraft((d) => ({ ...d, notes: v }))} disabled={busy || readOnly} />
-                </>
-              ) : null}
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={lead === null ? add : saveDetails}
-                  disabled={busy || readOnly}
-                  className="flex-1 rounded-xl min-h-[48px] text-[15px] font-bold flex items-center justify-center gap-2 disabled:opacity-40"
-                  style={{ background: C.orange, color: '#000' }}
-                >
-                  {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                  {lead === null ? 'Add lead' : 'Save'}
+              <DetailsForm draft={draft} setDraft={setDraft} disabled={off} />
+              <MayEmailTick
+                checked={draft.mayEmail && draft.email.trim() !== ''}
+                hasEmail={draft.email.trim() !== ''}
+                disabled={off}
+                onChange={(v) => setDraft((d) => ({ ...d, mayEmail: v }))}
+              />
+              <NotesBox value={draft.notes} onChange={(v) => setDraft((d) => ({ ...d, notes: v }))} disabled={off} />
+            </>
+          ) : null}
+
+          {lead !== null ? (
+            <>
+              <DetailsForm draft={draft} setDraft={setDraft} disabled={off} />
+              <MayEmailTick checked={lead.mayEmail} hasEmail={lead.email !== null} disabled={off} onChange={(v) => save({ mayEmail: v }, null, null)} />
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={saveDetails} disabled={off} className="c-btn c-btn-p">
+                  {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+                  Save
                 </button>
-                {lead !== null ? (
+                {changed ? (
                   <button
                     type="button"
                     onClick={() => {
                       setDraft(leadDraft(lead));
-                      setEditing(false);
                       setError(null);
                     }}
                     disabled={busy}
-                    className="rounded-xl px-5 min-h-[48px] text-sm font-semibold"
-                    style={{ background: C.plain, color: C.soft }}
+                    className="c-btn c-btn-s"
                   >
                     Cancel
                   </button>
                 ) : null}
               </div>
-            </>
-          ) : null}
 
-          {lead !== null && !editing ? (
-            <>
-              <div className="flex items-start justify-between gap-3">
-                <p className="text-sm break-words" style={{ color: C.soft }} data-testid="lead-contact">
-                  {candidateLine(lead)}
-                </p>
-                <button type="button" onClick={() => setEditing(true)} disabled={readOnly} className="text-sm font-semibold flex-shrink-0 disabled:opacity-40" style={{ color: C.orange }}>
-                  Edit
-                </button>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <span className="text-xs font-semibold uppercase tracking-wide" style={labelStyle}>
-                  Status
-                </span>
-                <div className="flex flex-wrap gap-2" role="group" aria-label="Status">
-                  {STATUS_CHOICES.map((s) => (
-                    <Choice
-                      key={s.key}
-                      pressed={lead.status === s.key}
-                      disabled={busy || readOnly}
-                      onClick={() => {
-                        if (lead.status !== s.key) void save({ status: s.key }, null);
-                      }}
-                    >
-                      {s.label}
-                    </Choice>
-                  ))}
-                  {joined ? (
-                    <span className="rounded-full px-3.5 min-h-[40px] text-sm font-semibold flex items-center gap-1.5" style={{ background: C.greenBg, color: C.green }}>
-                      <Check className="w-4 h-4" /> Joined
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-
-              {joined ? (
-                <p className="text-sm" style={{ color: C.muted }}>
-                  {lead.onList
-                    ? `On your list of ${words.people}. `
-                    : lead.entryId !== null
-                      ? `Their record was taken off your list of ${words.people}. `
-                      : `Their record has since been deleted from your list. `}
-                  <Link to={`/console/${orgSlug}/members`} className="font-semibold" style={{ color: C.orange }}>
-                    Go to {words.peopleCap}
-                  </Link>
-                </p>
-              ) : null}
-
-              {!joined || !lead.onList ? (
-                choice !== null ? (
-                  <ChooseRecord
-                    name={lead.fullName}
-                    choice={choice}
-                    busy={busy}
-                    words={words}
-                    onPick={(entryId) => join({ entryId })}
-                    onNew={() => join({ asNew: true })}
-                    onCancel={() => setChoice(null)}
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => join({})}
-                    disabled={busy || readOnly}
-                    className="rounded-xl min-h-[48px] text-[15px] font-bold flex items-center justify-center gap-2 disabled:opacity-40"
-                    style={{ background: C.orange, color: '#000' }}
-                  >
-                    <UserCheck className="w-4 h-4" />
-                    {joined && lead.entryId !== null ? `Put back on your list of ${words.people}` : `Joined · add to your ${words.people}`}
+              <div className="flex flex-col gap-2 pt-4 border-t" style={{ borderColor: 'var(--line)' }}>
+                <NotesBox value={notes} onChange={setNotes} disabled={off} />
+                {notes.trim() !== lead.notes ? (
+                  <button type="button" onClick={() => save({ notes: notes.trim() }, 'Notes saved.', 'notes')} disabled={off} className="c-btn c-btn-s self-start">
+                    Save notes
                   </button>
-                )
-              ) : null}
-
-              <MayEmailTick
-                checked={lead.mayEmail}
-                hasEmail={lead.email !== null}
-                disabled={busy || readOnly}
-                onChange={(v) => save({ mayEmail: v }, null)}
-              />
-
-              <NotesBox value={notes} onChange={setNotes} disabled={busy || readOnly} />
-              {notes.trim() !== lead.notes ? (
-                <button
-                  type="button"
-                  onClick={() => save({ notes: notes.trim() }, 'Notes saved.')}
-                  disabled={busy || readOnly}
-                  className="self-start rounded-xl px-4 min-h-[44px] text-sm font-bold disabled:opacity-40"
-                  style={{ background: C.orangeBg, color: C.orange }}
-                >
-                  Save notes
-                </button>
-              ) : null}
-
-              <div className="pt-2" style={{ borderTop: `1px solid ${C.line}` }}>
-                {deleting ? (
-                  <ConfirmInline
-                    question={`Delete ${lead.fullName} from your leads? Their name, contact and notes are removed. Your list of ${words.people} is not changed.`}
-                    confirmLabel="Delete lead"
-                    onConfirm={remove}
-                    onCancel={() => setDeleting(false)}
-                    busy={busy}
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setDeleting(true)}
-                    disabled={readOnly}
-                    className="text-sm font-semibold flex items-center gap-1.5 disabled:opacity-40"
-                    style={{ color: '#ef4444' }}
-                  >
-                    <Trash2 className="w-4 h-4" /> Delete lead
-                  </button>
-                )}
+                ) : null}
               </div>
             </>
           ) : null}
+        </div>
 
-          {error !== null ? (
-            <p className="text-sm" role="alert" style={{ color: '#fca5a5' }}>
-              {error}
-            </p>
+        <div className="flex flex-col gap-3 px-4 py-4 md:px-7 border-t" style={{ borderColor: 'var(--line)' }}>
+          {messages}
+
+          {adding && lead === null ? (
+            <button type="button" onClick={add} disabled={off} className="c-btn c-btn-p c-btn-lg w-full md:w-auto md:self-start">
+              {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+              Add lead
+            </button>
           ) : null}
-          {done !== null ? (
-            <p className="text-sm" role="status" style={{ color: C.green }}>
-              {done}
-            </p>
+
+          {lead !== null && choice !== null ? (
+            <ChooseRecord
+              name={lead.fullName}
+              choice={choice}
+              busy={busy}
+              words={words}
+              onPick={(entryId) => join({ entryId })}
+              onNew={() => join({ asNew: true })}
+              onCancel={() => setChoice(null)}
+            />
+          ) : null}
+
+          {lead !== null && deleting ? (
+            <ConfirmInline
+              question={`Delete ${lead.fullName} from your leads? Their name, contact and notes are removed. Your list of ${words.people} is not changed.`}
+              confirmLabel="Delete lead"
+              onConfirm={remove}
+              onCancel={() => setDeleting(false)}
+              busy={busy}
+              newLook
+            />
+          ) : null}
+
+          {lead !== null && !deleting ? (
+            <div className="flex flex-wrap items-center gap-3">
+              {mayJoin && choice === null ? (
+                <button type="button" onClick={() => join({})} disabled={off} className="c-btn c-btn-soft">
+                  <UserCheck aria-hidden="true" className="w-4 h-4" />
+                  {joined && lead.entryId !== null ? `Put back on your list of ${words.people}` : `Joined · add to your ${words.people}`}
+                </button>
+              ) : null}
+              <div className="flex-grow" />
+              <button type="button" onClick={() => setDeleting(true)} disabled={readOnly} className="c-btn" style={{ color: 'var(--bad)' }}>
+                Delete lead
+              </button>
+            </div>
           ) : null}
         </div>
       </div>

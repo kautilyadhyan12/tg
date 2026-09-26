@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addedDay,
   addedWords,
+  detailsRequest,
   createLeadRequest,
   joinedWords,
-  leadLine,
   leadProblem,
   leadsQueryString,
   statusChips,
@@ -72,11 +73,24 @@ describe('the Leads screen', () => {
     expect(updateLeadRequest(lead, { fullName: 'Priya Shah', email: 'priya@example.com', phone: '', source: 'walk_in', notes: 'Mornings' })).toEqual({});
   });
 
-  it('writes a row line and the date added', () => {
-    expect(leadLine(lead)).toBe('priya@example.com · Walked in');
-    expect(leadLine({ ...lead, email: null, phone: '+447700900123', source: 'social' })).toBe('+447700900123 · Social media');
+  it("writes the day added in the viewer's own calendar: Today, Yesterday, then the date", () => {
+    const now = new Date(2026, 8, 26, 0, 10);
+    expect(addedDay(new Date(2026, 8, 26, 0, 1).toISOString(), now)).toBe('Today');
+    expect(addedDay(new Date(2026, 8, 25, 23, 30).toISOString(), now)).toBe('Yesterday');
+    expect(addedDay(new Date(2026, 8, 24, 23, 59).toISOString(), now)).toBe('24 Sept');
+    expect(addedDay(new Date(2025, 11, 31, 22, 0).toISOString(), new Date(2026, 0, 1, 8, 0))).toBe('Yesterday');
+    expect(addedDay(new Date(2025, 11, 30, 22, 0).toISOString(), new Date(2026, 0, 1, 8, 0))).toBe('30 Dec 2025');
+    expect(addedDay('not a date', now)).toBe('');
+    expect(addedWords(new Date(2026, 8, 26, 9, 0).toISOString(), new Date(2026, 8, 26, 18, 0))).toBe('Added today');
+    expect(addedWords(new Date(2026, 8, 25, 9, 0).toISOString(), new Date(2026, 8, 26, 18, 0))).toBe('Added yesterday');
     expect(addedWords('2026-09-20T10:00:00.000Z', new Date('2026-10-01T10:00:00.000Z'))).toBe('Added 20 Sept');
     expect(addedWords('2025-09-20T10:00:00.000Z', new Date('2026-10-01T10:00:00.000Z'))).toBe('Added 20 Sept 2025');
+  });
+
+  it("saves an open lead's details without its notes, which save on their own", () => {
+    const draft = { fullName: 'Priya Shah', email: 'priya@example.com', phone: '', source: 'website', notes: 'stale', mayEmail: false };
+    expect(detailsRequest({ ...lead, notes: 'Mornings' }, draft)).toEqual({ source: 'website' });
+    expect(detailsRequest({ ...lead, notes: 'Mornings' }, { ...draft, source: 'walk_in' })).toEqual({});
   });
 
   it('says what Joined did in the gym words', () => {

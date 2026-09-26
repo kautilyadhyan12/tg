@@ -253,3 +253,58 @@ describe('adding and keeping a lead', () => {
     await waitFor(() => expect(closed).toHaveBeenCalled());
   });
 });
+
+describe('the details open beside the status (R3)', () => {
+  it('the Joined status does what "Joined · add to your members" does', async () => {
+    orgService.getLead.mockResolvedValue({ data: { lead: tom } });
+    orgService.joinLead.mockResolvedValue({ data: { lead: { ...tom, status: 'joined', entryId: OWN, onList: true }, outcome: 'added' } });
+    render(sheet(TOM));
+    await screen.findByRole('heading', { name: 'Tom Reid' });
+    fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Joined' }));
+    await waitFor(() => expect(orgService.joinLead).toHaveBeenCalledWith(GYM, TOM, {}));
+    await screen.findByText('Tom Reid is on your list of members now.');
+    expect(orgService.updateLead).not.toHaveBeenCalled();
+    // Pressed now, and a second tap asks nothing more.
+    fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Joined' }));
+    expect(orgService.joinLead).toHaveBeenCalledTimes(1);
+  });
+
+  it('a status tap keeps what was typed in the details and the notes', async () => {
+    orgService.getLead.mockResolvedValue({ data: { lead: tom } });
+    orgService.updateLead.mockResolvedValue({ data: { lead: { ...tom, status: 'contacted' } } });
+    render(sheet(TOM));
+    await screen.findByRole('heading', { name: 'Tom Reid' });
+    fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '07700 900456' } });
+    fireEvent.change(screen.getByLabelText('Notes'), { target: { value: 'Call on Friday' } });
+    fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Contacted' }));
+    await waitFor(() => expect(orgService.updateLead).toHaveBeenCalledWith(GYM, TOM, { status: 'contacted' }));
+    await waitFor(() =>
+      expect(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Contacted' }).getAttribute('aria-pressed')).toBe('true'),
+    );
+    expect(screen.getByLabelText('Phone').value).toBe('07700 900456');
+    expect(screen.getByLabelText('Notes').value).toBe('Call on Friday');
+  });
+
+  it('Save sends only the details that moved, never the notes; Cancel puts the typing back', async () => {
+    orgService.getLead.mockResolvedValue({ data: { lead: tom } });
+    orgService.updateLead
+      .mockResolvedValueOnce({ data: { lead: { ...tom, notes: 'Call on Friday' } } })
+      .mockResolvedValueOnce({ data: { lead: { ...tom, notes: 'Call on Friday', phone: '07700 900456' } } });
+    render(sheet(TOM));
+    await screen.findByRole('heading', { name: 'Tom Reid' });
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    fireEvent.change(screen.getByLabelText('Notes'), { target: { value: 'Call on Friday' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save notes' }));
+    await screen.findByText('Notes saved.');
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '07700 900456' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(orgService.updateLead).toHaveBeenLastCalledWith(GYM, TOM, { phone: '07700 900456' }));
+    await screen.findByText('Saved.');
+    expect(screen.getByLabelText('Notes').value).toBe('Call on Friday');
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Tommy Reid' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByLabelText('Name').value).toBe('Tom Reid');
+    expect(orgService.updateLead).toHaveBeenCalledTimes(2);
+  });
+});

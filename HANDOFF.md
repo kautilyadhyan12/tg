@@ -4,6 +4,16 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-26 · R3 (Folder B): Leads and a lead's panel in the new look (branch `console-look-r3`)
+
+- **Why this job:** next on Folder B's list after R2. **Screen job, Opus high, no review; Kd said *"go"*.** No server change, no migration, no new package.
+- **Built:** `Leads.jsx` and `LeadSheet.jsx` drawn from `console.css` as `LeadsList`, `LeadsPhone` and `LeadBox` show them. **Add lead** top right (under the title on a phone); search and the status chips with counts in one row, "N leads match" on the right; on a computer a table (Name and contact · Heard of you from · Added · Status), on a phone a row per lead ("Walked in · Added today"); tags coloured as drawn. "Today" and "Yesterday" in the viewer's calendar (`addedDay`). A lead opens in a side panel on a computer (top and bottom fixed) and a full page on a phone (one scroll). New block `c-lead-grid`.
+- **Two changes Kd took with the plan (RULINGS 2026-09-26):** the details are open to typing (Edit gone; Save, and Cancel when something changed); the Joined status runs Joined's own step. Because details, notes and status now sit together, an answer resets only the part just saved, and Save sends the details without the notes (`detailsRequest`).
+- **Worst thing, first test:** `leadsLook.render.test.jsx`: two leads opened one after the other, the first answering late, shows only the second in every box; a refused role gets its refusal and no lead, search or Add lead; every control for an owner and a lapsed gym (all disabled); 7 of 12 RED on the old page, then 12/12. Three more in `leadSheet.render.test.jsx`, each RED under its break (restored identical): every answer resetting the typing, Save sending the notes too, the Joined status only setting the word.
+- **Verified:** web 2,942 of 2,942 (`poseAssets.contract` local Node 24 only); eslint 0 on every changed file; `vite build` green.
+- **Looked at in headless Edge** on the real app (throwaway gym with seven leads, removed): list, panel, Add lead, a joined lead with Delete asked, a filtered list, at 1440 and 390, dark and `?look=light`; nothing wider than the screen, every phone button 44 px or more. Fixed there: the table's heading row showed on a phone; the phone panel's fixed bottom bar hid the form.
+- **Next:** Kd's click-through, then merge on his word. Then in Folder B: 20c-ii while R4–R8 wait for Folder A.
+
 ## 2026-09-26 · R2 (Folder B): Classes and the Calendar in the new look (branch `console-look-r2`)
 
 - **Why this job:** next on Folder B's list after R1. **Screen job, Opus high, no review; Kd said *"go"*.** No server change, no migration, no new package.
