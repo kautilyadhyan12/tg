@@ -3,7 +3,7 @@
 // THE WORST THING THIS SCREEN COULD DO: show or change the wrong person — an answer for
 // a lead opened a moment earlier landing under another's name, or Joined putting a lead
 // on the list as a record staff did not choose. So the first tests: a late answer for
-// another lead is never shown; a status tap goes to the lead on screen; and "This is
+// another lead is never shown; a status saved goes to the lead on screen; and "This is
 // them" sends exactly the record it sits beside.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
@@ -94,12 +94,13 @@ describe('the worst thing: the wrong person', () => {
     expect(screen.queryByText('Tom Reid')).toBeNull();
   });
 
-  it('a status tap changes the lead on screen, and only that lead', async () => {
+  it('a status saved changes the lead on screen, and only that lead', async () => {
     orgService.getLead.mockResolvedValue({ data: { lead: tom } });
     orgService.updateLead.mockResolvedValue({ data: { lead: { ...tom, status: 'contacted' } } });
     render(sheet(TOM));
     await screen.findByRole('heading', { name: 'Tom Reid' });
     fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Contacted' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(orgService.updateLead).toHaveBeenCalledWith(GYM, TOM, { status: 'contacted' }));
     await waitFor(() =>
       expect(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Contacted' }).getAttribute('aria-pressed')).toBe('true'),
@@ -195,12 +196,15 @@ describe('adding and keeping a lead', () => {
     );
   });
 
-  it('on a lead, the tick is saved for that lead', async () => {
+  it('on a lead, the tick is saved with Save, for that lead', async () => {
     orgService.getLead.mockResolvedValue({ data: { lead: tom } });
     orgService.updateLead.mockResolvedValue({ data: { lead: { ...tom, mayEmail: true } } });
     render(sheet(TOM));
     await screen.findByRole('heading', { name: 'Tom Reid' });
     fireEvent.click(screen.getByRole('checkbox', { name: 'Happy to hear from us by email' }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(orgService.updateLead).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(orgService.updateLead).toHaveBeenCalledWith(GYM, TOM, { mayEmail: true }));
     await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Happy to hear from us by email' }).getAttribute('aria-checked')).toBe('true'));
   });
@@ -251,5 +255,199 @@ describe('adding and keeping a lead', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete lead' }));
     await waitFor(() => expect(orgService.deleteLead).toHaveBeenCalledWith(GYM, TOM));
     await waitFor(() => expect(closed).toHaveBeenCalled());
+  });
+});
+
+describe('the details open beside the status (R3)', () => {
+  it('the Joined status asks first, and Keep as a lead changes nothing', async () => {
+    orgService.getLead.mockResolvedValue({ data: { lead: tom } });
+    render(sheet(TOM));
+    await screen.findByRole('heading', { name: 'Tom Reid' });
+    fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Joined' }));
+    expect(screen.getByText('Add Tom Reid to your members?')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Keep as a lead' }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByTestId('ask-join')).toBeNull();
+    expect(orgService.joinLead).not.toHaveBeenCalled();
+    expect(orgService.updateLead).not.toHaveBeenCalled();
+  });
+
+  it('the Joined status, once asked, does what "Joined · add to your members" does', async () => {
+    orgService.getLead.mockResolvedValue({ data: { lead: tom } });
+    orgService.joinLead.mockResolvedValue({ data: { lead: { ...tom, status: 'joined', entryId: OWN, onList: true }, outcome: 'added' } });
+    render(sheet(TOM));
+    await screen.findByRole('heading', { name: 'Tom Reid' });
+    fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Joined' }));
+    expect(orgService.joinLead).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Add to members' }));
+    await waitFor(() => expect(orgService.joinLead).toHaveBeenCalledWith(GYM, TOM, {}));
+    await screen.findByText('Tom Reid is on your list of members now.');
+    expect(orgService.updateLead).not.toHaveBeenCalled();
+    // Pressed now, and a second tap asks nothing more.
+    fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Joined' }));
+    expect(orgService.joinLead).toHaveBeenCalledTimes(1);
+  });
+
+  it('a status waits for Save, goes with the details, and Cancel puts it back', async () => {
+    orgService.getLead.mockResolvedValue({ data: { lead: tom } });
+    orgService.updateLead.mockResolvedValue({ data: { lead: { ...tom, status: 'contacted', phone: '+447700900456' } } });
+    render(sheet(TOM));
+    await screen.findByRole('heading', { name: 'Tom Reid' });
+    const status = (name) => within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name });
+    fireEvent.click(status('Lost'));
+    expect(status('Lost').getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(status('New').getAttribute('aria-pressed')).toBe('true');
+    fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '07700 900456' } });
+    fireEvent.change(screen.getByLabelText('Notes'), { target: { value: 'Call on Friday' } });
+    fireEvent.click(status('Contacted'));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(orgService.updateLead).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(orgService.updateLead).toHaveBeenCalledWith(GYM, TOM, { phone: '07700 900456', status: 'contacted' }));
+    await screen.findByText('Saved.');
+    expect(status('Contacted').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByLabelText('Notes').value).toBe('Call on Friday');
+  });
+
+  it('Save sends only the details that moved, never the notes; Cancel puts the typing back', async () => {
+    orgService.getLead.mockResolvedValue({ data: { lead: tom } });
+    orgService.updateLead
+      .mockResolvedValueOnce({ data: { lead: { ...tom, notes: 'Call on Friday' } } })
+      .mockResolvedValueOnce({ data: { lead: { ...tom, notes: 'Call on Friday', phone: '07700 900456' } } });
+    render(sheet(TOM));
+    await screen.findByRole('heading', { name: 'Tom Reid' });
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    fireEvent.change(screen.getByLabelText('Notes'), { target: { value: 'Call on Friday' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save notes' }));
+    await screen.findByText('Notes saved.');
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '07700 900456' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(orgService.updateLead).toHaveBeenLastCalledWith(GYM, TOM, { phone: '07700 900456' }));
+    await screen.findByText('Saved.');
+    expect(screen.getByLabelText('Notes').value).toBe('Call on Friday');
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Tommy Reid' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByLabelText('Name').value).toBe('Tom Reid');
+    expect(orgService.updateLead).toHaveBeenCalledTimes(2);
+  });
+
+  it('a new email address unticks the tick until staff ask again', async () => {
+    orgService.getLead.mockResolvedValue({ data: { lead: { ...tom, mayEmail: true } } });
+    orgService.updateLead.mockResolvedValue({ data: { lead: { ...tom, email: 'tom.reid@example.com', mayEmail: false } } });
+    render(sheet(TOM));
+    await screen.findByRole('heading', { name: 'Tom Reid' });
+    const tick = screen.getByRole('checkbox', { name: 'Happy to hear from us by email' });
+    expect(tick.getAttribute('aria-checked')).toBe('true');
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'tom.reid@example.com' } });
+    expect(tick.getAttribute('aria-checked')).toBe('false');
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(orgService.updateLead).toHaveBeenCalledWith(GYM, TOM, { email: 'tom.reid@example.com', mayEmail: false }));
+  });
+});
+
+describe('round one: nothing typed is lost or sent without Save', () => {
+  it('Joined waits while the details on screen differ from the saved ones (H1)', async () => {
+    orgService.getLead.mockResolvedValue({ data: { lead: tom } });
+    render(sheet(TOM));
+    await screen.findByRole('heading', { name: 'Tom Reid' });
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Thomas Reid' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Joined · add to your members' }));
+    expect(screen.getByRole('alert').textContent).toBe('Save or cancel your changes first.');
+    // The Joined status says so under the status buttons, where a phone can see it.
+    fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Joined' }));
+    expect(screen.queryByTestId('ask-join')).toBeNull();
+    const said = screen.getAllByRole('alert');
+    expect(said).toHaveLength(2);
+    expect(said[0].compareDocumentPosition(screen.getByLabelText('Name')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(said[0].textContent).toBe('Save or cancel your changes first.');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryAllByRole('alert')).toHaveLength(0);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(orgService.joinLead).not.toHaveBeenCalled();
+  });
+
+  it('Close with a status picked and not saved asks first; Keep editing keeps it (H2)', async () => {
+    orgService.getLead.mockResolvedValue({ data: { lead: tom } });
+    const closed = vi.fn();
+    render(sheet(TOM, { onClose: closed }));
+    await screen.findByRole('heading', { name: 'Tom Reid' });
+    fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Lost' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(closed).not.toHaveBeenCalled();
+    expect(screen.getByText('Your changes to Tom Reid are not saved.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+    expect(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Lost' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }));
+    expect(closed).toHaveBeenCalledTimes(1);
+    expect(orgService.updateLead).not.toHaveBeenCalled();
+  });
+
+  it('Go to Members with notes not saved asks first too (H2)', async () => {
+    orgService.getLead.mockResolvedValue({ data: { lead: { ...tom, status: 'joined', entryId: OWN, onList: true } } });
+    render(sheet(TOM));
+    await screen.findByRole('heading', { name: 'Tom Reid' });
+    fireEvent.change(screen.getByLabelText('Notes'), { target: { value: 'Call on Friday' } });
+    fireEvent.click(screen.getByRole('link', { name: 'Go to Members' }));
+    expect(screen.getByText('Your changes to Tom Reid are not saved.')).toBeTruthy();
+  });
+
+  it('Close on Add lead with something typed asks first', async () => {
+    const closed = vi.fn();
+    render(sheet(null, { onClose: closed }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(closed).toHaveBeenCalledTimes(1);
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Tom Reid' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(closed).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('This lead is not added yet.')).toBeTruthy();
+  });
+
+  it('Close with nothing changed closes at once', async () => {
+    orgService.getLead.mockResolvedValue({ data: { lead: tom } });
+    const closed = vi.fn();
+    render(sheet(TOM, { onClose: closed }));
+    await screen.findByRole('heading', { name: 'Tom Reid' });
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(closed).toHaveBeenCalledTimes(1);
+  });
+
+  it('Save is offered only when something changed (L4)', async () => {
+    orgService.getLead.mockResolvedValue({ data: { lead: tom } });
+    render(sheet(TOM));
+    await screen.findByRole('heading', { name: 'Tom Reid' });
+    expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(true);
+    fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Lost' }));
+    expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(false);
+  });
+
+  it('typing the email away and back gives the tick back (L1)', async () => {
+    orgService.getLead.mockResolvedValue({ data: { lead: { ...tom, mayEmail: true } } });
+    render(sheet(TOM));
+    await screen.findByRole('heading', { name: 'Tom Reid' });
+    const tick = screen.getByRole('checkbox', { name: 'Happy to hear from us by email' });
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'tom@example.co' } });
+    expect(tick.getAttribute('aria-checked')).toBe('false');
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'tom@example.com' } });
+    expect(tick.getAttribute('aria-checked')).toBe('true');
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+  });
+
+  it('a late Save answer for a lead opened earlier is never shown under another (T1)', async () => {
+    const late = deferred();
+    orgService.getLead.mockImplementation((_gym, id) => answer({ lead: id === TOM ? tom : arjun }));
+    orgService.updateLead.mockReturnValue(late.promise);
+    const { rerender } = render(sheet(TOM));
+    await screen.findByRole('heading', { name: 'Tom Reid' });
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Tom Reid-Hall' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    rerender(sheet(ARJUN));
+    await screen.findByRole('heading', { name: 'Arjun Shah' });
+    late.resolve({ data: { lead: { ...tom, fullName: 'Tom Reid-Hall' } } });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByText(/Tom Reid/)).toBeNull();
+    expect(screen.getByLabelText('Name').value).toBe('Arjun Shah');
   });
 });

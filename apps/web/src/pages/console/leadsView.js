@@ -20,7 +20,7 @@ export function leadsQueryString({ status, query }, cursor = null) {
 
 export const SOURCE_CHOICES = LEAD_SOURCES.map((source) => ({ key: source, label: LEAD_SOURCE_WORDS[source] }));
 
-/** The statuses staff tap; Joined has its own button. */
+/** The statuses Save sets; Joined runs the Joined button's own step. */
 export const STATUS_CHOICES = ['new', 'contacted', 'on_trial', 'lost'].map((status) => ({
   key: status,
   label: LEAD_STATUS_WORDS[status],
@@ -29,24 +29,37 @@ export const STATUS_CHOICES = ['new', 'contacted', 'on_trial', 'lost'].map((stat
 export const statusWord = (status) => LEAD_STATUS_WORDS[status] ?? status;
 export const sourceWord = (source) => LEAD_SOURCE_WORDS[source] ?? source;
 
-/** A lead's row line: how to reach them, then where they heard of the gym. */
-export function leadLine(lead) {
-  const contact = [lead.email, lead.phone].filter((part) => part !== null && part !== '').join(' · ');
-  return [contact, sourceWord(lead.source)].filter((part) => part !== '').join(' · ');
-}
-
-/** "Added 3 Sep" (this year) or "Added 3 Sep 2025", in the viewer's own calendar. */
-export function addedWords(iso, now = new Date()) {
+/** The day a lead was added, in the viewer's own calendar: "Today", "Yesterday",
+ *  "3 Sept" (this year) or "3 Sept 2025". */
+export function addedDay(iso, now = new Date()) {
   const at = new Date(iso);
   if (Number.isNaN(at.getTime())) return '';
+  const day = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const daysAgo = Math.round((day(now) - day(at)) / 86_400_000);
+  if (daysAgo === 0) return 'Today';
+  if (daysAgo === 1) return 'Yesterday';
   const sameYear = at.getFullYear() === now.getFullYear();
-  const day = at.toLocaleDateString('en-GB', sameYear ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' });
-  return `Added ${day}`;
+  return at.toLocaleDateString('en-GB', sameYear ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' });
 }
+
+/** "Added today", "Added yesterday", "Added 3 Sept". */
+export function addedWords(iso, now = new Date()) {
+  const day = addedDay(iso, now);
+  if (day === '') return '';
+  return `Added ${day === 'Today' || day === 'Yesterday' ? day.toLowerCase() : day}`;
+}
+
+/** Each status's tag, as the drawing colours it. */
+export const STATUS_TAG = { new: 'c-tag-soft', contacted: 'c-tag-plain', on_trial: 'c-tag-warn', joined: 'c-tag-good', lost: 'c-tag-plain' };
 
 export const emptyLeadDraft = () => ({ fullName: '', email: '', phone: '', source: '', notes: '', mayEmail: false });
 
+/** Whether anything has been typed or picked on Add lead. */
+export const draftStarted = (draft) =>
+  [draft.fullName, draft.email, draft.phone, draft.notes].some((v) => v.trim() !== '') || draft.source !== '' || draft.mayEmail;
+
 export const leadDraft = (lead) => ({
+  status: lead.status,
   fullName: lead.fullName,
   email: lead.email ?? '',
   phone: lead.phone ?? '',
@@ -84,6 +97,18 @@ export function updateLeadRequest(lead, draft) {
   if (phone !== lead.phone) body.phone = phone;
   if (draft.source !== lead.source) body.source = draft.source;
   if (draft.notes.trim() !== lead.notes) body.notes = draft.notes.trim();
+  return body;
+}
+
+/** What Save sends for an open lead: the status, details and email tick that moved,
+ *  without the notes, which save on their own. A tick needs an address, so an emptied
+ *  email sends no tick. */
+export function detailsRequest(lead, draft) {
+  const body = updateLeadRequest(lead, draft);
+  delete body.notes;
+  if (draft.status !== lead.status) body.status = draft.status;
+  const mayEmail = draft.mayEmail && draft.email.trim() !== '';
+  if (mayEmail !== lead.mayEmail) body.mayEmail = mayEmail;
   return body;
 }
 
