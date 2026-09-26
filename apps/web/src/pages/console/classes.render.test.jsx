@@ -271,7 +271,7 @@ describe('reading the timetable', () => {
   it('marks each class with its own colour, and names its buttons as the class s', async () => {
     drawScreen();
     await screen.findByText('Sunrise Yoga');
-    expect(screen.getByTestId('class-colour').style.background).toBe('rgb(76, 141, 255)');
+    expect(screen.getByTestId('class-colour').style.background).toBe('var(--cl-blue)');
     expect(screen.getByRole('heading', { name: 'Sunrise Yoga' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Edit Sunrise Yoga' }).textContent).toBe('Edit class');
     expect(screen.getByText('Time slots')).toBeTruthy();

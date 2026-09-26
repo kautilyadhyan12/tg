@@ -4,7 +4,6 @@ import { Clock, Loader2, Plus, RotateCcw } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import {
   ConfirmInline,
-  ConsoleCard,
   ConsoleFailed,
   ConsoleLoading,
   ConsoleSection,
@@ -18,8 +17,8 @@ import {
   RunFields,
   SizeField,
   StartTimePick,
+  Tick,
 } from './ClassFields';
-import { inputStyle, labelStyle } from './classStyles';
 import ClassWeek from './ClassWeek';
 import { useConsoleOrg } from './useConsoleOrg';
 import { viewerPrivileges } from './consoleView';
@@ -71,26 +70,16 @@ import {
 // "Cancel" on this screen only ever takes classes off the calendar, and it asks
 // first, in place (Kd, 2026-09-22). Forms close with "Close".
 
-const primaryStyle = (dim) => ({
-  background: 'rgba(255,138,31,0.15)',
-  color: '#FF8A1F',
-  opacity: dim ? 0.5 : 1,
-});
-
+// The page is drawn from `console.css` (spec Part 3 §17; ROADMAP R2): a form's Save is
+// its box's one orange button.
 function FormButtons({ saveLabel, onSave, onClose, saving, blocked }) {
   return (
-    <div className="flex items-center gap-3">
-      <button
-        type="button"
-        onClick={onSave}
-        disabled={saving || blocked}
-        className="rounded-xl px-4 py-2 text-sm font-medium inline-flex items-center gap-2"
-        style={primaryStyle(saving || blocked)}
-      >
-        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+    <div className="flex flex-wrap items-center gap-2">
+      <button type="button" onClick={onSave} disabled={saving || blocked} className="c-btn c-btn-p">
+        {saving ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
         {saveLabel}
       </button>
-      <button type="button" onClick={onClose} className="text-sm" style={labelStyle}>
+      <button type="button" onClick={onClose} className="c-btn c-btn-ghost">
         Close
       </button>
     </div>
@@ -99,7 +88,7 @@ function FormButtons({ saveLabel, onSave, onClose, saving, blocked }) {
 
 function Problem({ text }) {
   return text === null ? null : (
-    <p className="text-sm" style={{ color: '#FBBF24' }}>
+    <p className="c-s14 c-w5" style={{ color: 'var(--warn)' }}>
       {text}
     </p>
   );
@@ -110,7 +99,7 @@ function Problem({ text }) {
 function ClassForm({ draft, setDraft, staff, disabled, onSave, onClose, saving, problem, saveLabel }) {
   const set = (patch) => setDraft({ ...draft, ...patch });
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5">
       <Field label="Name">
         <input
           value={draft.name}
@@ -118,8 +107,7 @@ function ClassForm({ draft, setDraft, staff, disabled, onSave, onClose, saving, 
           disabled={disabled}
           maxLength={80}
           placeholder="Sunrise Yoga"
-          className="rounded-lg px-3 py-2 text-sm"
-          style={inputStyle}
+          className="c-input"
         />
       </Field>
 
@@ -130,17 +118,14 @@ function ClassForm({ draft, setDraft, staff, disabled, onSave, onClose, saving, 
           disabled={disabled}
           maxLength={500}
           rows={2}
-          className="rounded-lg px-3 py-2 text-sm"
-          style={inputStyle}
+          className="c-area"
         />
       </Field>
 
       <RunFields draft={draft} set={set} staff={staff} disabled={disabled} forClass />
 
-      <div className="flex flex-col gap-2">
-        <span className="text-xs uppercase tracking-wider" style={labelStyle}>
-          Colour
-        </span>
+      <div className="c-field">
+        <span className="c-label">Colour</span>
         <div className="flex flex-wrap gap-2">
           {CLASS_COLOUR_CHOICES.map((choice) => (
             <button
@@ -150,10 +135,10 @@ function ClassForm({ draft, setDraft, staff, disabled, onSave, onClose, saving, 
               disabled={disabled}
               aria-label={choice.name}
               aria-pressed={draft.colour === choice.name}
-              className="w-8 h-8 rounded-full"
+              className="w-11 h-11 md:w-8 md:h-8 rounded-full"
               style={{
                 background: choice.swatch ?? 'transparent',
-                outline: draft.colour === choice.name ? '2px solid #fff' : 'none',
+                outline: draft.colour === choice.name ? '2px solid var(--t1)' : 'none',
                 outlineOffset: '2px',
               }}
             />
@@ -161,15 +146,9 @@ function ClassForm({ draft, setDraft, staff, disabled, onSave, onClose, saving, 
         </div>
       </div>
 
-      <label className="flex items-center gap-2 text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-        <input
-          type="checkbox"
-          checked={draft.openGym}
-          onChange={(e) => set({ openGym: e.target.checked })}
-          disabled={disabled}
-        />
+      <Tick checked={draft.openGym} onChange={(on) => set({ openGym: on })} disabled={disabled}>
         Open gym (not a taught class)
-      </label>
+      </Tick>
 
       <Problem text={problem} />
       <FormButtons
@@ -189,10 +168,8 @@ function RepeatForm({ draft, setDraft, staff, clockFormat, today, disabled, savi
   const problem = repeatProblem(draft);
   const set = (patch) => setDraft({ ...draft, ...patch });
   return (
-    <div className="flex flex-col gap-4">
-      <div className="text-xs uppercase tracking-wider" style={labelStyle}>
-        New time slot
-      </div>
+    <div className="flex flex-col gap-5">
+      <h3 className="c-h3">New time slot</h3>
 
       <DaysPick
         weekdays={draft.weekdays}
@@ -206,7 +183,9 @@ function RepeatForm({ draft, setDraft, staff, clockFormat, today, disabled, savi
         disabled={disabled}
       />
 
-      <div className="grid gap-4 md:grid-cols-2">
+      {/* One above the other: side by side inside a class box, each calendar would be
+          squeezed to half the box. */}
+      <div className="grid gap-5">
         <DateField
           label="Start date"
           value={draft.startsOn}
@@ -265,7 +244,7 @@ function RepeatEditForm({
   const problem = repeatEditProblem(draft, bounds);
   const set = (patch) => setDraft({ ...draft, ...patch });
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5">
       <DaysPick
         weekdays={draft.weekdays}
         onToggle={(iso) => setDraft(toggleWeekday(draft, iso))}
@@ -287,9 +266,7 @@ function RepeatEditForm({
         onChange={(updateFrom) => set({ updateFrom })}
         disabled={disabled}
       />
-      <p className="text-xs" style={labelStyle}>
-        {repeatEditNote(repeatEditMoves(schedule, draft))}
-      </p>
+      <p className="c-hint">{repeatEditNote(repeatEditMoves(schedule, draft))}</p>
       <Problem text={problem} />
       {question === null ? (
         <FormButtons
@@ -305,6 +282,7 @@ function RepeatEditForm({
           confirmLabel="Move anyway"
           cancelLabel="Go back"
           busy={saving}
+          newLook
           onConfirm={onMove}
           onCancel={onBack}
         />
@@ -317,11 +295,10 @@ function RepeatEditForm({
 function BulkChange({ label, on, onToggle, disabled, children }) {
   return (
     <div className="flex flex-col gap-2">
-      <label className="flex items-center gap-2 text-sm" style={{ color: '#fff' }}>
-        <input type="checkbox" checked={on} onChange={onToggle} disabled={disabled} />
+      <Tick checked={on} onChange={onToggle} disabled={disabled}>
         {label}
-      </label>
-      {on ? <div className="pl-6">{children}</div> : null}
+      </Tick>
+      {on ? <div className="pl-7">{children}</div> : null}
     </div>
   );
 }
@@ -344,16 +321,15 @@ function BulkEditForm({
   const problem = bulkEditProblem(draft, bounds);
   const set = (patch) => setDraft({ ...draft, ...patch });
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2">
-        <span className="text-xs uppercase tracking-wider" style={labelStyle}>
-          Time slots
-        </span>
+    <div className="flex flex-col gap-5">
+      <div className="c-field">
+        <span className="c-label">Time slots</span>
         {slots.map((slot) => (
-          <label key={slot.id} className="flex items-start gap-2 text-sm" style={{ color: '#fff' }}>
+          <label key={slot.id} className="flex items-start gap-2.5 py-1.5 c-s15 c-w6 c-t1">
             <input
               type="checkbox"
-              className="mt-1"
+              className="mt-0.5 w-[18px] h-[18px] flex-shrink-0"
+              style={{ accentColor: 'var(--accent)' }}
               checked={draft.ticked.includes(slot.id)}
               onChange={() => setDraft(toggleBulkSlot(draft, slot.id))}
               disabled={disabled}
@@ -363,14 +339,10 @@ function BulkEditForm({
               <span className="whitespace-nowrap">
                 {timeRange(slot.startMinute, slot.minutes, clockFormat)}
               </span>
-              <span className="block text-xs" style={labelStyle}>
-                {peopleLine(slot)}
-              </span>
+              <span className="block c-s14 c-w5 c-t2">{peopleLine(slot)}</span>
               {/* Its dates, so the two halves of a time slot changed from a
                   date can be told apart (round one, L-1). */}
-              <span className="block text-xs" style={labelStyle}>
-                {repeatDatesLine(slot)}
-              </span>
+              <span className="block c-s13 c-w5 c-t3">{repeatDatesLine(slot)}</span>
             </span>
           </label>
         ))}
@@ -408,9 +380,7 @@ function BulkEditForm({
         onChange={(updateFrom) => set({ updateFrom })}
         disabled={disabled}
       />
-      <p className="text-xs" style={labelStyle}>
-        {repeatEditNote(false)}
-      </p>
+      <p className="c-hint">{repeatEditNote(false)}</p>
       <Problem text={problem} />
       <FormButtons
         saveLabel="Save"
@@ -510,29 +480,27 @@ export default function Classes() {
 
   if (orgLoading) {
     return (
-      <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
-        <ConsoleLoading label="Loading your organisation…" />
+      <div className="c-page">
+        <ConsoleLoading label="Loading your organisation…" newLook />
       </div>
     );
   }
   if (orgError !== null) {
     return (
-      <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
-        <ConsoleFailed message={orgError} onRetry={reload} />
+      <div className="c-page">
+        <ConsoleFailed message={orgError} onRetry={reload} newLook />
       </div>
     );
   }
   if (notFound) {
     return (
-      <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
-        <ConsoleCard>
-          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-            We couldn&apos;t find an organisation you run at this address.
-          </p>
-          <Link to="/console" className="text-sm inline-block mt-3" style={{ color: '#FF8A1F' }}>
+      <div className="c-page">
+        <section className="c-card p-5 md:p-6 flex flex-col gap-3">
+          <p className="c-s15 c-t2">We couldn&apos;t find an organisation you run at this address.</p>
+          <Link to="/console" className="c-s15 c-w6 c-lk self-start">
             Your organisations
           </Link>
-        </ConsoleCard>
+        </section>
       </div>
     );
   }
@@ -650,39 +618,50 @@ export default function Classes() {
   };
   const weekShown = view === 'week' && allowed;
 
+  const listReady = !loading && failed === null;
+  // The page's one main button, top right (spec Part 3 §17.2 rule 1). It gives way to the
+  // form, whose own button has the same words; from the Calendar it opens the form on the
+  // Classes tab.
+  const showAdd = !locked && !adding && (weekShown || listReady);
+  const openAdd = () => {
+    showView('list');
+    setAdding(true);
+    setAddDraft(emptyClassDraft());
+  };
+
   return (
-    <div
-      className={`${weekShown ? 'max-w-6xl' : 'max-w-3xl'} mx-auto px-4 md:px-8 py-8 flex flex-col gap-4`}
-    >
-      <div>
-        <h1 className="text-2xl font-bold" style={{ color: '#fff' }}>
-          Classes
-        </h1>
-        <p className="text-sm mt-1" style={labelStyle}>
-          {org.name}
-          {timezone ? ` · ${timezone} time` : ''}
-        </p>
-      </div>
+    <div className="c-page">
+      <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between md:gap-6">
+        <div className="flex flex-col gap-1.5 min-w-0">
+          <h1 className="c-h1">Classes</h1>
+          <p className="c-sub">
+            {org.name}
+            {timezone ? ` · ${timezone} time` : ''}
+          </p>
+        </div>
+        {showAdd ? (
+          <button type="button" onClick={openAdd} className="c-btn c-btn-p w-full md:w-auto">
+            <Plus aria-hidden="true" className="w-4 h-4" />
+            Add class
+          </button>
+        ) : null}
+      </header>
 
       {/* A lapsed gym's staff see everything and change nothing (§4.2). */}
       {readOnly && allowed ? (
-        <ConsoleCard>
-          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-            {readOnlyNote(org.orgType)}
-          </p>
-        </ConsoleCard>
+        <section className="c-card p-5 md:p-6">
+          <p className="c-s15 c-t2">{readOnlyNote(org.orgType)}</p>
+        </section>
       ) : null}
 
       {!allowed ? (
-        <ConsoleCard>
-          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-            Your role doesn&apos;t allow you to set the timetable.
-          </p>
-        </ConsoleCard>
+        <section className="c-card p-5 md:p-6">
+          <p className="c-s15 c-t2">Your role doesn&apos;t allow you to set the timetable.</p>
+        </section>
       ) : null}
 
       {allowed ? (
-        <div className="flex gap-2" role="tablist" aria-label="How to show your classes">
+        <div className="c-utabs" role="tablist" aria-label="How to show your classes">
           {[
             ['list', 'Classes'],
             ['week', 'Calendar'],
@@ -693,11 +672,7 @@ export default function Classes() {
               role="tab"
               aria-selected={view === key}
               onClick={() => showView(key)}
-              className="rounded-lg px-4 py-2 text-sm font-medium"
-              style={{
-                background: view === key ? 'rgba(255,138,31,0.15)' : 'rgba(255,255,255,0.04)',
-                color: view === key ? '#FF8A1F' : 'rgba(255,255,255,0.65)',
-              }}
+              className={view === key ? 'c-utab c-utab-on' : 'c-utab'}
             >
               {label}
             </button>
@@ -707,333 +682,18 @@ export default function Classes() {
 
       {weekShown ? <ClassWeek gymId={gymId} staff={staff} locked={locked} /> : null}
 
-      {!weekShown && actionError !== null ? <ConsoleFailed message={actionError} /> : null}
+      {!weekShown && actionError !== null ? <ConsoleFailed message={actionError} newLook /> : null}
 
-      {!weekShown && loading ? <ConsoleLoading label="Loading your timetable…" /> : null}
+      {!weekShown && loading ? <ConsoleLoading label="Loading your timetable…" newLook /> : null}
       {!weekShown && !loading && failed !== null ? (
-        <ConsoleFailed message={failed} onRetry={retry} />
+        <ConsoleFailed message={failed} onRetry={retry} newLook />
       ) : null}
 
-      {!weekShown && !loading && failed === null ? (
+      {!weekShown && listReady ? (
         <>
-          {lists.entries.length === 0 ? (
-            <ConsoleCard>
-              <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                No classes yet.
-              </p>
-            </ConsoleCard>
-          ) : null}
-
-          {lists.entries.map((entry) => {
-            const type = entry.type;
-            const swatch = classSwatch(type.colour);
-            const isEditing = editing === type.id;
-            const asking = confirming === `archive:${type.id}`;
-            const bulkSlots = bulkEditSlots(entry.schedules, today, lists.horizonDays);
-            const isBulk = bulkFor === type.id;
-            return (
-              <ConsoleCard key={type.id} className="relative overflow-hidden">
-                {/* The class's own colour down its edge, as its classes carry
-                    it on the Calendar (Kd, RULINGS 2026-09-23). */}
-                {swatch === null ? null : (
-                  <span
-                    aria-hidden="true"
-                    data-testid="class-colour"
-                    className="absolute left-0 top-0 bottom-0 w-1"
-                    style={{ background: swatch }}
-                  />
-                )}
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-base font-semibold" style={{ color: '#fff' }}>
-                        {type.name}
-                      </h2>
-                      {type.openGym ? (
-                        <span
-                          className="text-xs rounded-md px-1.5 py-0.5 whitespace-nowrap"
-                          style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.65)' }}
-                        >
-                          Open gym
-                        </span>
-                      ) : null}
-                    </div>
-                    {type.description === null || type.description === '' ? null : (
-                      <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.65)' }}>
-                        {type.description}
-                      </p>
-                    )}
-                  </div>
-                  {/* Buttons for the class, links for its time slots, so the
-                      two levels never look alike. */}
-                  {locked || isEditing || asking || isBulk ? null : (
-                    <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditing(type.id);
-                          setEditDraft(classDraft(type));
-                        }}
-                        aria-label={`Edit ${type.name}`}
-                        className="text-sm rounded-lg px-3 py-1.5"
-                        style={{ border: '1px solid rgba(255,138,31,0.35)', color: '#FF8A1F' }}
-                      >
-                        Edit class
-                      </button>
-                      {bulkSlots.length >= 2 ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setBulkFor(type.id);
-                            setBulkState(bulkEditDraft(bulkSlots, today));
-                          }}
-                          aria-label={`Bulk edit the time slots of ${type.name}`}
-                          className="text-sm rounded-lg px-3 py-1.5"
-                          style={{ border: '1px solid rgba(255,138,31,0.35)', color: '#FF8A1F' }}
-                        >
-                          Bulk edit
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        onClick={() => setConfirming(`archive:${type.id}`)}
-                        disabled={busy !== null}
-                        aria-label={`Archive ${type.name}`}
-                        className="text-sm rounded-lg px-3 py-1.5 inline-flex items-center gap-1"
-                        style={{ border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.65)' }}
-                      >
-                        {busy === `archive:${type.id}` ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : null}
-                        Archive
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {asking ? (
-                  <div className="mt-3">
-                    <ConfirmInline
-                      question={`Archive ${type.name}? Its time slots are cancelled and its upcoming classes come off the calendar. You can restore the class later and add its time slots again.`}
-                      confirmLabel="Archive"
-                      cancelLabel="Keep it"
-                      busy={busy !== null}
-                      onCancel={() => setConfirming(null)}
-                      onConfirm={() => {
-                        setConfirming(null);
-                        void run(`archive:${type.id}`, () => orgService.archiveClass(gymId, type.id));
-                      }}
-                    />
-                  </div>
-                ) : null}
-
-                {isEditing ? (
-                  <div className="mt-4">
-                    <ClassForm
-                      key={type.id}
-                      draft={editDraft}
-                      setDraft={setEditDraft}
-                      staff={staff}
-                      disabled={locked}
-                      saving={busy === `edit:${type.id}`}
-                      problem={classProblem(editDraft)}
-                      saveLabel="Save"
-                      onSave={() => void saveEdit(type.id)}
-                      onClose={() => setEditing(null)}
-                    />
-                  </div>
-                ) : null}
-
-                {isBulk ? (
-                  <div className="mt-4">
-                    <BulkEditForm
-                      key={type.id}
-                      slots={bulkSlots}
-                      draft={bulkState}
-                      setDraft={setBulkState}
-                      bounds={bulkBounds(bulkSlots)}
-                      today={today}
-                      staff={staff}
-                      clockFormat={lists.clockFormat}
-                      disabled={locked}
-                      saving={busy === `bulk:${type.id}`}
-                      onSave={() => void saveBulk(type.id, bulkSlots)}
-                      onClose={() => setBulkFor(null)}
-                    />
-                  </div>
-                ) : null}
-
-                <div className="mt-4 flex flex-col gap-2">
-                  <div className="text-xs uppercase tracking-wider" style={labelStyle}>
-                    Time slots
-                  </div>
-                  {entry.schedules.length === 0 ? (
-                    <p className="text-sm" style={labelStyle}>
-                      No time slots yet.
-                    </p>
-                  ) : null}
-                  {entry.schedules.map((schedule) => {
-                    const days = weekdayLine(schedule.weekdays);
-                    const startsAt = clockLabel(schedule.startMinute, lists.clockFormat);
-                    const editingThis = editingRepeat === schedule.id;
-                    const askingThis = confirming === `stop:${schedule.id}`;
-                    return (
-                      <div
-                        key={schedule.id}
-                        className="rounded-xl px-3.5 py-3 flex flex-col gap-3"
-                        style={{
-                          background: 'rgba(255,255,255,0.05)',
-                          border: '1px solid rgba(255,255,255,0.07)',
-                        }}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0 flex items-start gap-2.5">
-                            <Clock
-                              aria-hidden="true"
-                              className="w-4 h-4 mt-0.5 flex-shrink-0"
-                              style={{ color: swatch ?? 'rgba(255,255,255,0.45)' }}
-                            />
-                            <div className="min-w-0">
-                              <div className="text-sm font-semibold" style={{ color: '#fff' }}>
-                                {days} ·{' '}
-                                {/* The time range never breaks across lines. */}
-                                <span className="whitespace-nowrap">
-                                  {timeRange(schedule.startMinute, schedule.minutes, lists.clockFormat)}
-                                </span>
-                              </div>
-                              <div className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.7)' }}>
-                                {peopleLine(schedule)}
-                              </div>
-                              {editingThis ? null : (
-                                <div className="text-xs mt-1" style={labelStyle}>
-                                  {repeatDatesLine(schedule)}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          {locked || editingThis || askingThis ? null : (
-                            <div className="flex items-center gap-4 flex-shrink-0">
-                              {/* No date is left to change an ended time slot from. */}
-                              {slotEditable(schedule, editBounds(schedule)) ? (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setEditingRepeat(schedule.id);
-                                    setReplaceAsk(null);
-                                    setRepeatEditState(repeatEditDraft(schedule, editBounds(schedule)));
-                                  }}
-                                  aria-label={`Edit the ${days} ${startsAt} time slot of ${type.name}`}
-                                  className="text-sm"
-                                  style={{ color: '#FF8A1F' }}
-                                >
-                                  Edit
-                                </button>
-                              ) : null}
-                              <button
-                                type="button"
-                                onClick={() => setConfirming(`stop:${schedule.id}`)}
-                                disabled={busy !== null}
-                                aria-label={`Cancel the ${days} ${startsAt} time slot of ${type.name}`}
-                                className="text-sm"
-                                style={{ color: 'rgba(255,255,255,0.5)' }}
-                              >
-                                {busy === `stop:${schedule.id}` ? 'Cancelling…' : 'Cancel'}
-                              </button>
-                            </div>
-                          )}
-                        </div>
-
-                        {editingThis ? (
-                          <RepeatEditForm
-                            key={schedule.id}
-                            schedule={schedule}
-                            draft={repeatEditState}
-                            setDraft={(next) => {
-                              setReplaceAsk(null);
-                              setRepeatEditState(next);
-                            }}
-                            bounds={editBounds(schedule)}
-                            today={today}
-                            staff={staff}
-                            clockFormat={lists.clockFormat}
-                            disabled={locked}
-                            saving={busy === `repeatEdit:${schedule.id}`}
-                            question={
-                              replaceAsk === null
-                                ? null
-                                : replaceQuestion(replaceAsk.count, replaceAsk.from)
-                            }
-                            onSave={() => void saveRepeatEdit(schedule)}
-                            onClose={() => {
-                              setReplaceAsk(null);
-                              setEditingRepeat(null);
-                            }}
-                            onMove={() => {
-                              if (replaceAsk !== null) void saveRepeatEdit(schedule, replaceAsk.count);
-                            }}
-                            onBack={() => setReplaceAsk(null)}
-                          />
-                        ) : null}
-                        {askingThis ? (
-                          <ConfirmInline
-                            question={`Cancel the ${days} ${startsAt} time slot? Its upcoming classes come off the calendar.`}
-                            confirmLabel="Cancel time slot"
-                            cancelLabel="Keep it"
-                            busy={busy !== null}
-                            onCancel={() => setConfirming(null)}
-                            onConfirm={() => {
-                              setConfirming(null);
-                              void run(`stop:${schedule.id}`, () =>
-                                orgService.stopClassRepeat(gymId, schedule.id),
-                              );
-                            }}
-                          />
-                        ) : null}
-                      </div>
-                    );
-                  })}
-
-                  {locked ? null : repeatFor === type.id ? (
-                    <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)' }}>
-                      <RepeatForm
-                        key={type.id}
-                        draft={repeatDraftState}
-                        setDraft={setRepeatDraftState}
-                        staff={staff}
-                        clockFormat={lists.clockFormat}
-                        today={today}
-                        disabled={locked}
-                        saving={busy === `repeat:${type.id}`}
-                        onSave={() => void saveRepeat(type.id)}
-                        onClose={() => setRepeatFor(null)}
-                      />
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setRepeatFor(type.id);
-                        // Filled in from the class's defaults, here and nowhere
-                        // else (Kd, RULINGS 2026-09-22).
-                        setRepeatDraftState(repeatDraft(type, today));
-                      }}
-                      className="self-start text-sm inline-flex items-center gap-1"
-                      style={{ color: '#FF8A1F' }}
-                    >
-                      <Plus className="w-4 h-4" />
-                      Add time slot
-                    </button>
-                  )}
-                </div>
-              </ConsoleCard>
-            );
-          })}
-
-          {locked ? null : adding ? (
-            <ConsoleCard>
-              <div className="text-xs uppercase tracking-wider mb-4" style={labelStyle}>
-                New class
-              </div>
+          {!locked && adding ? (
+            <section className="c-card c-narrow p-5 md:p-6 flex flex-col gap-5">
+              <h2 className="c-h2">New class</h2>
               <ClassForm
                 draft={addDraft}
                 setDraft={setAddDraft}
@@ -1045,20 +705,289 @@ export default function Classes() {
                 onSave={() => void saveNew()}
                 onClose={() => setAdding(false)}
               />
-            </ConsoleCard>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                setAdding(true);
-                setAddDraft(emptyClassDraft());
-              }}
-              className="self-start rounded-xl px-4 py-2 text-sm font-medium inline-flex items-center gap-2"
-              style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
-            >
-              <Plus className="w-4 h-4" />
-              Add class
-            </button>
+            </section>
+          ) : null}
+
+          {lists.entries.length === 0 ? (
+            <section className="c-card p-5 md:p-6">
+              <p className="c-s15 c-t2">No classes yet.</p>
+            </section>
+          ) : null}
+
+          {/* Two columns on a wide screen, as drawn; one below 1280 px, where two would
+              leave a class too narrow for its three buttons. */}
+          {lists.entries.length === 0 ? null : (
+            <div className="grid gap-5 md:gap-6 xl:grid-cols-2 items-start">
+              {lists.entries.map((entry) => {
+                const type = entry.type;
+                const swatch = classSwatch(type.colour);
+                const isEditing = editing === type.id;
+                const asking = confirming === `archive:${type.id}`;
+                const bulkSlots = bulkEditSlots(entry.schedules, today, lists.horizonDays);
+                const isBulk = bulkFor === type.id;
+                return (
+                  <section
+                    key={type.id}
+                    className="c-card relative overflow-hidden flex flex-col gap-4 py-5 pr-5 pl-[25px] md:py-6 md:pr-6 md:pl-[29px] min-w-0"
+                  >
+                    {/* The class's own colour down its edge, as its classes carry
+                        it on the Calendar (Kd, RULINGS 2026-09-23). */}
+                    {swatch === null ? null : (
+                      <span
+                        aria-hidden="true"
+                        data-testid="class-colour"
+                        className="absolute left-0 top-0 bottom-0 w-[5px]"
+                        style={{ background: swatch }}
+                      />
+                    )}
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div className="flex flex-col gap-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h2 className="c-h2">{type.name}</h2>
+                          {type.openGym ? <span className="c-tag c-tag-plain">Open gym</span> : null}
+                        </div>
+                        {type.description === null || type.description === '' ? null : (
+                          <p className="c-s14 c-t2">{type.description}</p>
+                        )}
+                      </div>
+                      {/* Buttons for the class, words for its time slots, so the
+                          two levels never look alike. */}
+                      {locked || isEditing || asking || isBulk ? null : (
+                        <div className="flex flex-wrap items-center gap-1.5 flex-shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditing(type.id);
+                              setEditDraft(classDraft(type));
+                            }}
+                            aria-label={`Edit ${type.name}`}
+                            className="c-btn c-btn-sm c-btn-s"
+                          >
+                            Edit class
+                          </button>
+                          {bulkSlots.length >= 2 ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setBulkFor(type.id);
+                                setBulkState(bulkEditDraft(bulkSlots, today));
+                              }}
+                              aria-label={`Bulk edit the time slots of ${type.name}`}
+                              className="c-btn c-btn-sm c-btn-s"
+                            >
+                              Bulk edit
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => setConfirming(`archive:${type.id}`)}
+                            disabled={busy !== null}
+                            aria-label={`Archive ${type.name}`}
+                            className="c-btn c-btn-sm c-btn-ghost"
+                          >
+                            {busy === `archive:${type.id}` ? (
+                              <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
+                            ) : null}
+                            Archive
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {asking ? (
+                      <ConfirmInline
+                        question={`Archive ${type.name}? Its time slots are cancelled and its upcoming classes come off the calendar. You can restore the class later and add its time slots again.`}
+                        confirmLabel="Archive"
+                        cancelLabel="Keep it"
+                        busy={busy !== null}
+                        newLook
+                        onCancel={() => setConfirming(null)}
+                        onConfirm={() => {
+                          setConfirming(null);
+                          void run(`archive:${type.id}`, () => orgService.archiveClass(gymId, type.id));
+                        }}
+                      />
+                    ) : null}
+
+                    {isEditing ? (
+                      <ClassForm
+                        key={type.id}
+                        draft={editDraft}
+                        setDraft={setEditDraft}
+                        staff={staff}
+                        disabled={locked}
+                        saving={busy === `edit:${type.id}`}
+                        problem={classProblem(editDraft)}
+                        saveLabel="Save"
+                        onSave={() => void saveEdit(type.id)}
+                        onClose={() => setEditing(null)}
+                      />
+                    ) : null}
+
+                    {isBulk ? (
+                      <BulkEditForm
+                        key={type.id}
+                        slots={bulkSlots}
+                        draft={bulkState}
+                        setDraft={setBulkState}
+                        bounds={bulkBounds(bulkSlots)}
+                        today={today}
+                        staff={staff}
+                        clockFormat={lists.clockFormat}
+                        disabled={locked}
+                        saving={busy === `bulk:${type.id}`}
+                        onSave={() => void saveBulk(type.id, bulkSlots)}
+                        onClose={() => setBulkFor(null)}
+                      />
+                    ) : null}
+
+                    <div className="flex flex-col gap-2">
+                      <span className="c-s13 c-w6 c-t3">Time slots</span>
+                      {entry.schedules.length === 0 ? <p className="c-s14 c-t3">No time slots yet.</p> : null}
+                      {entry.schedules.map((schedule) => {
+                        const days = weekdayLine(schedule.weekdays);
+                        const startsAt = clockLabel(schedule.startMinute, lists.clockFormat);
+                        const editingThis = editingRepeat === schedule.id;
+                        const askingThis = confirming === `stop:${schedule.id}`;
+                        return (
+                          <div
+                            key={schedule.id}
+                            className="rounded-xl px-3 py-3 md:px-3.5 flex flex-col gap-3"
+                            style={{ border: '1px solid var(--card-line)' }}
+                          >
+                            <div className="flex flex-col gap-1 md:flex-row md:items-start md:gap-3">
+                              <div className="min-w-0 flex items-start gap-2.5 md:gap-3 flex-grow">
+                                <Clock
+                                  aria-hidden="true"
+                                  className="w-[18px] h-[18px] mt-0.5 flex-shrink-0"
+                                  style={{ color: swatch ?? 'var(--t3)' }}
+                                />
+                                <div className="min-w-0 flex flex-col gap-0.5">
+                                  <div className="c-s15 c-w6 c-t1">
+                                    {days} ·{' '}
+                                    {/* The time range never breaks across lines. */}
+                                    <span className="whitespace-nowrap">
+                                      {timeRange(schedule.startMinute, schedule.minutes, lists.clockFormat)}
+                                    </span>
+                                  </div>
+                                  <div className="c-s14 c-t2">{peopleLine(schedule)}</div>
+                                  {editingThis ? null : (
+                                    <div className="c-s13 c-t3">{repeatDatesLine(schedule)}</div>
+                                  )}
+                                </div>
+                              </div>
+                              {locked || editingThis || askingThis ? null : (
+                                <div className="flex items-center gap-5 md:gap-3.5 flex-shrink-0 pl-7 md:pl-0">
+                                  {/* No date is left to change an ended time slot from. */}
+                                  {slotEditable(schedule, editBounds(schedule)) ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingRepeat(schedule.id);
+                                        setReplaceAsk(null);
+                                        setRepeatEditState(repeatEditDraft(schedule, editBounds(schedule)));
+                                      }}
+                                      aria-label={`Edit the ${days} ${startsAt} time slot of ${type.name}`}
+                                      className="c-btn c-btn-link"
+                                    >
+                                      Edit
+                                    </button>
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirming(`stop:${schedule.id}`)}
+                                    disabled={busy !== null}
+                                    aria-label={`Cancel the ${days} ${startsAt} time slot of ${type.name}`}
+                                    className="c-btn c-btn-quiet"
+                                  >
+                                    {busy === `stop:${schedule.id}` ? 'Cancelling…' : 'Cancel'}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+
+                            {editingThis ? (
+                              <RepeatEditForm
+                                key={schedule.id}
+                                schedule={schedule}
+                                draft={repeatEditState}
+                                setDraft={(next) => {
+                                  setReplaceAsk(null);
+                                  setRepeatEditState(next);
+                                }}
+                                bounds={editBounds(schedule)}
+                                today={today}
+                                staff={staff}
+                                clockFormat={lists.clockFormat}
+                                disabled={locked}
+                                saving={busy === `repeatEdit:${schedule.id}`}
+                                question={
+                                  replaceAsk === null ? null : replaceQuestion(replaceAsk.count, replaceAsk.from)
+                                }
+                                onSave={() => void saveRepeatEdit(schedule)}
+                                onClose={() => {
+                                  setReplaceAsk(null);
+                                  setEditingRepeat(null);
+                                }}
+                                onMove={() => {
+                                  if (replaceAsk !== null) void saveRepeatEdit(schedule, replaceAsk.count);
+                                }}
+                                onBack={() => setReplaceAsk(null)}
+                              />
+                            ) : null}
+                            {askingThis ? (
+                              <ConfirmInline
+                                question={`Cancel the ${days} ${startsAt} time slot? Its upcoming classes come off the calendar.`}
+                                confirmLabel="Cancel time slot"
+                                cancelLabel="Keep it"
+                                busy={busy !== null}
+                                newLook
+                                onCancel={() => setConfirming(null)}
+                                onConfirm={() => {
+                                  setConfirming(null);
+                                  void run(`stop:${schedule.id}`, () => orgService.stopClassRepeat(gymId, schedule.id));
+                                }}
+                              />
+                            ) : null}
+                          </div>
+                        );
+                      })}
+
+                      {locked ? null : repeatFor === type.id ? (
+                        <div className="rounded-xl p-4" style={{ background: 'var(--raise)' }}>
+                          <RepeatForm
+                            key={type.id}
+                            draft={repeatDraftState}
+                            setDraft={setRepeatDraftState}
+                            staff={staff}
+                            clockFormat={lists.clockFormat}
+                            today={today}
+                            disabled={locked}
+                            saving={busy === `repeat:${type.id}`}
+                            onSave={() => void saveRepeat(type.id)}
+                            onClose={() => setRepeatFor(null)}
+                          />
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRepeatFor(type.id);
+                            // Filled in from the class's defaults, here and nowhere
+                            // else (Kd, RULINGS 2026-09-22).
+                            setRepeatDraftState(repeatDraft(type, today));
+                          }}
+                          className="c-btn c-btn-link self-start gap-1.5 mt-1"
+                        >
+                          <Plus aria-hidden="true" className="w-4 h-4" />
+                          Add time slot
+                        </button>
+                      )}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
           )}
 
           {lists.archived.length === 0 ? null : (
@@ -1066,37 +995,33 @@ export default function Classes() {
               title="Archived classes"
               // The gym's real total, not the length of the page.
               aside={String(lists.archivedTotal)}
+              newLook
             >
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col">
                 {archivedPageNote(lists.archived.length, lists.archivedTotal) === null ? null : (
-                  <p className="text-xs" style={labelStyle}>
-                    {archivedPageNote(lists.archived.length, lists.archivedTotal)}
-                  </p>
+                  <p className="c-s13 c-t3 pb-2">{archivedPageNote(lists.archived.length, lists.archivedTotal)}</p>
                 )}
                 {lists.archived.map((type) => (
                   <div
                     key={type.id}
-                    className="text-sm flex items-center justify-between gap-3"
-                    style={{ color: 'rgba(255,255,255,0.65)' }}
+                    className="flex items-center justify-between gap-3 min-h-11 py-1"
+                    style={{ borderTop: '1px solid var(--line)' }}
                   >
-                    <span className="min-w-0 truncate">{type.name}</span>
+                    <span className="c-s15 c-t2 min-w-0 truncate">{type.name}</span>
                     {/* Restore takes nothing away, so it asks nothing (Kd,
                         2026-09-22, Mindbody's behaviour). */}
                     {locked ? null : (
                       <button
                         type="button"
-                        onClick={() =>
-                          void run(`restore:${type.id}`, () => orgService.restoreClass(gymId, type.id))
-                        }
+                        onClick={() => void run(`restore:${type.id}`, () => orgService.restoreClass(gymId, type.id))}
                         disabled={busy !== null}
                         aria-label={`Restore ${type.name}`}
-                        className="text-sm inline-flex items-center gap-1 flex-shrink-0"
-                        style={{ color: '#FF8A1F' }}
+                        className="c-btn c-btn-link gap-1.5 flex-shrink-0"
                       >
                         {busy === `restore:${type.id}` ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
                         ) : (
-                          <RotateCcw className="w-4 h-4" />
+                          <RotateCcw aria-hidden="true" className="w-4 h-4" />
                         )}
                         Restore
                       </button>

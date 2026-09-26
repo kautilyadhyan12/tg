@@ -5,6 +5,9 @@
 // number on a calendar — `classRequest`'s handling of "no limit", and
 // `repeatRequest`'s of a blank end date — and both are checked by their EFFECT
 // (what the body contains) rather than by calling them and eyeballing.
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import postcss from 'postcss';
 import { describe, expect, it } from 'vitest';
 import { CLASS_ARCHIVED_PAGE, CLASS_COLOURS, CLASS_FILL_HORIZON_DAYS } from '@app/shared';
 import {
@@ -65,9 +68,26 @@ describe('the colours', () => {
   // A colour added to the shared list and forgotten here must be VISIBLE, not
   // silently swapped for a default — so `classSwatch` answers null and the dot
   // is simply not drawn.
-  it('paints every colour the wire can carry, and nothing it cannot', () => {
+  // Each is a colour's name, and both looks give that name a colour (spec Part 3
+  // §17.3), so no class goes blank in the light look.
+  it('paints every colour the wire can carry, in both looks, and nothing it cannot', () => {
+    const css = postcss.parse(
+      readFileSync(fileURLToPath(new URL('../../components/console/console.css', import.meta.url)), 'utf8'),
+    );
+    const colours = { '.t-dark': {}, '.t-light': {} };
+    css.walkRules((rule) => {
+      for (const look of Object.keys(colours)) {
+        if (!rule.selectors.includes(look)) continue;
+        rule.walkDecls((d) => {
+          colours[look][d.prop] = d.value;
+        });
+      }
+    });
     expect(CLASS_COLOUR_CHOICES.map((c) => c.name)).toEqual([...CLASS_COLOURS]);
-    for (const choice of CLASS_COLOUR_CHOICES) expect(choice.swatch).toMatch(/^#[0-9A-Fa-f]{6}$/);
+    for (const choice of CLASS_COLOUR_CHOICES) {
+      expect(choice.swatch).toBe(`var(--cl-${choice.name})`);
+      for (const look of Object.values(colours)) expect(look[`--cl-${choice.name}`]).toMatch(/^#[0-9A-Fa-f]{6}$/);
+    }
     expect(classSwatch('chartreuse')).toBeNull();
     expect(classSwatch(undefined)).toBeNull();
   });

@@ -1,18 +1,32 @@
 import DatePick from '../../components/console/DatePick';
 import TimePick from '../../components/console/TimePick';
 import { coachChoices } from './classesView';
-import { inputStyle, labelStyle } from './classStyles';
 import { WEEKDAYS } from './hoursView';
 
 // The fields the Classes screen's forms share: a class, a time slot, and one
-// class on the calendar.
+// class on the calendar. Drawn from `console.css` (spec Part 3 §17.6).
+
+/** A tick with its words, 44 px tall so a thumb finds it. */
+export function Tick({ checked, onChange, disabled, children }) {
+  return (
+    <label className="flex items-center gap-2.5 min-h-11 c-s15 c-t1">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        disabled={disabled}
+        className="w-[18px] h-[18px] flex-shrink-0"
+        style={{ accentColor: 'var(--accent)' }}
+      />
+      {children}
+    </label>
+  );
+}
 
 export function Field({ label, children }) {
   return (
-    <label className="flex flex-col gap-1.5 text-sm">
-      <span className="text-xs uppercase tracking-wider" style={labelStyle}>
-        {label}
-      </span>
+    <label className="c-field">
+      <span className="c-label">{label}</span>
       {children}
     </label>
   );
@@ -22,10 +36,8 @@ export function Field({ label, children }) {
  *  it, and a <label> around a calendar would click its button again. */
 export function DateField({ label, value, min, max, today, onChange, disabled, emptyText, onClear }) {
   return (
-    <div className="flex flex-col gap-1.5 text-sm">
-      <span className="text-xs uppercase tracking-wider" style={labelStyle}>
-        {label}
-      </span>
+    <div className="c-field">
+      <span className="c-label">{label}</span>
       <DatePick
         label={label}
         value={value}
@@ -36,6 +48,7 @@ export function DateField({ label, value, min, max, today, onChange, disabled, e
         disabled={disabled}
         emptyText={emptyText}
         onClear={onClear}
+        newLook
       />
     </div>
   );
@@ -45,10 +58,8 @@ export function DateField({ label, value, min, max, today, onChange, disabled, e
 export function DaysPick({ weekdays, onToggle, disabled }) {
   const on = Array.isArray(weekdays) ? weekdays : [];
   return (
-    <div className="flex flex-col gap-2">
-      <span className="text-xs uppercase tracking-wider" style={labelStyle}>
-        Days
-      </span>
+    <div className="c-field">
+      <span className="c-label">Days</span>
       <div className="flex flex-wrap gap-2">
         {WEEKDAYS.map((day) => {
           const picked = on.includes(day.iso);
@@ -59,11 +70,7 @@ export function DaysPick({ weekdays, onToggle, disabled }) {
               onClick={() => onToggle(day.iso)}
               disabled={disabled}
               aria-pressed={picked}
-              className="rounded-lg px-3 py-1.5 text-sm"
-              style={{
-                background: picked ? 'rgba(255,138,31,0.15)' : 'rgba(255,255,255,0.04)',
-                color: picked ? '#FF8A1F' : 'rgba(255,255,255,0.65)',
-              }}
+              className={picked ? 'c-chip c-chip-on' : 'c-chip'}
             >
               {day.short}
             </button>
@@ -77,10 +84,8 @@ export function DaysPick({ weekdays, onToggle, disabled }) {
 /** A class's start time, on the gym's clock. */
 export function StartTimePick({ value, clockFormat, onChange, disabled }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-xs uppercase tracking-wider" style={labelStyle}>
-        Start time
-      </span>
+    <div className="c-field">
+      <span className="c-label">Start time</span>
       <TimePick
         label="Start time"
         kind="opens"
@@ -88,6 +93,7 @@ export function StartTimePick({ value, clockFormat, onChange, disabled }) {
         clockFormat={clockFormat}
         onChange={onChange}
         disabled={disabled}
+        newLook
       />
     </div>
   );
@@ -101,8 +107,7 @@ export function LengthField({ draft, set, disabled, label = 'Length (minutes)' }
         onChange={(e) => set({ minutes: e.target.value })}
         disabled={disabled}
         inputMode="numeric"
-        className="rounded-lg px-3 py-2 text-sm"
-        style={inputStyle}
+        className="c-input"
       />
     </Field>
   );
@@ -115,8 +120,7 @@ export function CoachField({ draft, set, staff, disabled, label = 'Coach (option
         value={draft.coachUserId}
         onChange={(e) => set({ coachUserId: e.target.value })}
         disabled={disabled}
-        className="rounded-lg px-3 py-2 text-sm"
-        style={inputStyle}
+        className="c-input"
       >
         <option value="">No coach</option>
         {/* Whoever is already set is always an option: a select whose value
@@ -136,11 +140,9 @@ export function CoachField({ draft, set, staff, disabled, label = 'Coach (option
  *  the tick each carry their own. */
 export function SizeField({ draft, set, disabled, label = 'Class size' }) {
   return (
-    <div className="flex flex-col gap-1.5 text-sm">
-      <span className="text-xs uppercase tracking-wider" style={labelStyle}>
-        {label}
-      </span>
-      <div className="flex items-center gap-3">
+    <div className="c-field">
+      <span className="c-label">{label}</span>
+      <div className="flex items-center gap-4">
         <input
           value={draft.places}
           onChange={(e) => set({ places: e.target.value })}
@@ -149,18 +151,12 @@ export function SizeField({ draft, set, disabled, label = 'Class size' }) {
           // brings the number back.
           disabled={disabled || draft.unlimited}
           inputMode="numeric"
-          className="rounded-lg px-3 py-2 text-sm w-24"
-          style={{ ...inputStyle, opacity: draft.unlimited ? 0.5 : 1 }}
+          className="c-input"
+          style={{ width: 104, opacity: draft.unlimited ? 0.5 : 1 }}
         />
-        <label className="flex items-center gap-2 text-sm" style={labelStyle}>
-          <input
-            type="checkbox"
-            checked={draft.unlimited}
-            onChange={(e) => set({ unlimited: e.target.checked })}
-            disabled={disabled}
-          />
+        <Tick checked={draft.unlimited} onChange={(on) => set({ unlimited: on })} disabled={disabled}>
           No limit
-        </label>
+        </Tick>
       </div>
     </div>
   );

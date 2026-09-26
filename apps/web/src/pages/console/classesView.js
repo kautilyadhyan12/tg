@@ -36,16 +36,18 @@ import {
  *
  *  Built FROM the shared list rather than beside it, so a colour added there
  *  and forgotten here is a visible blank rather than a silent fallback —
- *  `classSwatch` returns null for an unknown name and the dot is not drawn. */
+ *  `classSwatch` returns null for an unknown name and the dot is not drawn.
+ *  Each is a colour's name in `console.css`, so a class keeps its colour in
+ *  both looks (spec Part 3 §17.3). */
 const SWATCHES = {
-  orange: '#FF8A1F',
-  blue: '#4C8DFF',
-  green: '#34C77B',
-  purple: '#A78BFA',
-  red: '#F2544B',
-  teal: '#2DD4BF',
-  amber: '#FBBF24',
-  slate: '#94A3B8',
+  orange: 'var(--cl-orange)',
+  blue: 'var(--cl-blue)',
+  green: 'var(--cl-green)',
+  purple: 'var(--cl-purple)',
+  red: 'var(--cl-red)',
+  teal: 'var(--cl-teal)',
+  amber: 'var(--cl-amber)',
+  slate: 'var(--cl-slate)',
 };
 
 export const CLASS_COLOUR_CHOICES = CLASS_COLOURS.map((name) => ({
