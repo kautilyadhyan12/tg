@@ -1716,6 +1716,70 @@ export const memberListRemoveLargeSchema = z.object({
   requestId: z.string().optional(),
 });
 
+// ── Remove by status (5b-iii; RULINGS 2026-09-23) ───────────────────────────
+
+/** At least one of the gym's words must be ticked: removing "everybody" is not a
+ *  status, and an empty list of words is no word at all. */
+type WordsTicked = string | string[] | undefined;
+
+const tickedAWord = (words: { status?: WordsTicked; membershipType?: WordsTicked; paymentStatus?: WordsTicked }) =>
+  [words.status, words.membershipType, words.paymentStatus].some((w) => w !== undefined && (!Array.isArray(w) || w.length > 0));
+
+const NO_WORD_TICKED = "Tick at least one word in Filter.";
+
+/** The app members whose record carries the words ticked, a page at a time. The words
+ *  are the Filter's own, folded as `GET /entries` folds them. */
+export const memberListByWordsQuerySchema = z
+  .object({ ...inviteFilterShape, cursor: z.string().max(512).optional() })
+  .strict()
+  .refine(tickedAWord, { message: NO_WORD_TICKED });
+export type MemberListByWordsQuery = z.infer<typeof memberListByWordsQuerySchema>;
+
+/** `total`, `version` and `digest` describe the WHOLE group and are sent back with the
+ *  removal, which is refused unless the group is still exactly this one. */
+export const memberListByWordsPageSchema = z
+  .object({
+    version: z.number().int().min(0),
+    total: z.number().int().min(0),
+    digest: sha256Schema,
+    people: z.array(memberListUnlistedPersonSchema).max(MEMBER_LIST_ENTRIES_PAGE),
+    cursor: z.string().nullable(),
+  })
+  .strict();
+export type MemberListByWordsPage = z.infer<typeof memberListByWordsPageSchema>;
+
+export const memberListByWordsResponseSchema = z.object({ page: memberListByWordsPageSchema });
+export type MemberListByWordsResponse = z.infer<typeof memberListByWordsResponseSchema>;
+
+/** Remove the group from the gym in the app. Their records stay on the list. */
+export const memberListRemoveByWordsRequestSchema = z
+  .object({
+    ...inviteFilterShape,
+    version: z.number().int().min(0),
+    expectedCount: z.number().int().min(0),
+    digest: sha256Schema,
+    acknowledgeLargeChange: z.boolean().optional(),
+  })
+  .strict()
+  .refine(tickedAWord, { message: NO_WORD_TICKED });
+export type MemberListRemoveByWordsRequest = z.infer<typeof memberListRemoveByWordsRequestSchema>;
+
+/** `alreadyRemoved` answers the same press again: nobody was removed now. */
+export const memberListRemovedByWordsSchema = z
+  .object({ removed: z.number().int().min(0), alreadyRemoved: z.boolean() })
+  .strict();
+export type MemberListRemovedByWords = z.infer<typeof memberListRemovedByWordsSchema>;
+
+export const memberListRemovedByWordsResponseSchema = z.object({ removed: memberListRemovedByWordsSchema });
+export type MemberListRemovedByWordsResponse = z.infer<typeof memberListRemovedByWordsResponseSchema>;
+
+// ── The CSV export (5b-iii; Part 3 §9.9) ────────────────────────────────────
+
+/** What the download holds: the list as the screen shows it — the same filters and
+ *  search as `GET /entries`, every page at once. */
+export const memberListExportQuerySchema = memberListEntriesQuerySchema.omit({ cursor: true });
+export type MemberListExportQuery = z.infer<typeof memberListExportQuerySchema>;
+
 /** The server's sentences for writes by hand, printed as sent (§9.9). */
 export const MEMBER_LIST_BY_HAND_WORDS = {
   needs_contact: "Add an email address or a phone number. The list needs one of them to tell people apart.",

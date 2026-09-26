@@ -20,6 +20,9 @@ import {
   type MemberListEntryOutcome,
   type MemberListEntryPatch,
   type MemberListEntryWritten,
+  type MemberListByWordsPage,
+  type MemberListByWordsQuery,
+  type MemberListRemoveByWordsRequest,
   type MemberListRemoveUnlistedRequest,
   type MemberListUnlistedGroup,
   type MemberListUnlistedPage,
@@ -34,12 +37,13 @@ import type { InviteSettings } from "../invites/settings.js";
 import { insertAudit } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { applyTyped, EMPTY_VALUES, mergeValues, type EntryValues, type TypedContext } from "./byHand.js";
+import { byWordsDigest, byWordsGroup } from "./byWords.js";
 import { tidyCell } from "./cells.js";
 import { cut, identityKey } from "./fields.js";
 import { withoutCardNumbers } from "./neverKeep.js";
 import { readCountry } from "./phone.js";
 import * as repo from "./repo.js";
-import type { MemberListDeps } from "./service.js";
+import { foldedFilter, type MemberListDeps } from "./service.js";
 import { unlistedDigest, unlistedGroup, unlistedPage } from "./unlisted.js";
 
 type Sql = MemberListDeps["sql"];
@@ -631,41 +635,55 @@ export type RemoveAnswer =
   | { kind: "large_change"; removing: number; of: number }
   | { kind: "rate_limited" };
 
-/** "Remove all": every member of the group taken out of the gym in one call, as a
- *  single removal does it — the membership closed, an audit row each, their gym
- *  perks dropped at once. Refused unless the group is still exactly the one the page
- *  showed; a large removal needs the tick on this request. */
-export async function removeUnlisted(
-  deps: MemberListDeps,
-  userId: string,
-  gymId: string,
-  input: MemberListRemoveUnlistedRequest,
-  limit: () => Promise<boolean>,
-): Promise<RemoveAnswer> {
-  await requireWritablePrivilege(deps, gymId, userId, "members.remove");
-  // It acts on the list's marks, so it needs the list's own tick as well.
-  await requirePrivilege(deps, gymId, userId, "members.confirm");
-  if (!(await limit())) return { kind: "rate_limited" };
+/** What a removal of a set acts on, worked out again under the gym's lock. */
+interface RemovalSet {
+  version: number;
+  userIds: string[];
+  digest: string;
+  /** Every paid seat of the gym: what a large removal is measured against. */
+  seats: number;
+}
+
+interface RemovalSpec {
+  /** The set as it stands now, read inside the transaction. */
+  work: (tx: TransactionSql) => Promise<RemovalSet>;
+  input: { version: number; expectedCount: number; digest: string; acknowledgeLargeChange?: boolean | undefined };
+  action: repo.RemovalAction;
+  /** The group the audit rows name: a mark, or "by_words". */
+  group: string;
+  via: "remove_unlisted" | "remove_by_words";
+  /** More of the summary audit row: what chose the set. */
+  meta: Record<string, string>;
+}
+
+type SetAnswer =
+  | { kind: "removed"; removed: number; alreadyRemoved: boolean }
+  | { kind: "list_changed"; version: number; total: number; digest: string }
+  | { kind: "large_change"; removing: number; of: number }
+  | { kind: "rate_limited" };
+
+/** Take a set of members out of the gym in one call, as a single removal does it — the
+ *  membership closed, an audit row each, their invitations withdrawn, their gym perks
+ *  dropped at once. Refused unless the set is still exactly the one the page showed; a
+ *  large removal needs the tick on this request. The gates are the caller's. */
+async function removeSet(deps: MemberListDeps, userId: string, gymId: string, spec: RemovalSpec): Promise<SetAnswer> {
   const at = deps.now();
   const removedUsers: string[] = [];
-  const answer = await deps.sql.begin(async (tx): Promise<RemoveAnswer> => {
+  const answer = await deps.sql.begin(async (tx): Promise<SetAnswer> => {
     await repo.lockGym(tx, gymId);
-    const [state, members] = await Promise.all([repo.listState(tx, gymId), repo.membersAgainstList(tx, gymId)]);
-    const version = state?.version ?? 0;
-    const people = unlistedGroup(members, state !== null, input.group);
-    const ids = people.map((person) => person.userId);
-    const digest = unlistedDigest(gymId, input.group, ids);
+    const { version, userIds: ids, digest, seats } = await spec.work(tx);
+    const { input } = spec;
     if (version !== input.version || ids.length !== input.expectedCount || digest !== input.digest) {
       // The same press again (a retry, or the second of two staff): the set shown is gone
       // because that press removed it, so say so rather than "nobody was removed". Only
       // when the set really moved: the same set with a moved version is a list_changed.
       if (digest !== input.digest) {
-        const earlier = await repo.unlistedRemovalByDigest(tx, gymId, input.group, input.digest, new Date(at.getTime() - REMOVAL_REPLAY_MS));
-        if (earlier !== null) return { kind: "removed", group: input.group, removed: earlier, alreadyRemoved: true };
+        const since = new Date(at.getTime() - REMOVAL_REPLAY_MS);
+        const earlier = await repo.unlistedRemovalByDigest(tx, gymId, spec.group, input.digest, since, spec.action);
+        if (earlier !== null) return { kind: "removed", removed: earlier, alreadyRemoved: true };
       }
       return { kind: "list_changed", version, total: ids.length, digest };
     }
-    const seats = members.filter((member) => member.seatCounted).length;
     if (isLargeMemberListChange(ids.length, seats) && input.acknowledgeLargeChange !== true) {
       return { kind: "large_change", removing: ids.length, of: seats };
     }
@@ -673,21 +691,21 @@ export async function removeUnlisted(
     // Under the gym's lock the set cannot move between the rule and the write, so a
     // difference is a fault of ours and nothing is committed.
     if (closed.length !== ids.length) {
-      throw new Error(`remove-unlisted closed ${String(closed.length)} memberships where the rule chose ${String(ids.length)}`);
+      throw new Error(`${spec.via} closed ${String(closed.length)} memberships where the rule chose ${String(ids.length)}`);
     }
-    await repo.insertRemovalAudits(tx, { actorUserId: userId, gymId, group: input.group, removed: closed });
+    await repo.insertRemovalAudits(tx, { actorUserId: userId, gymId, group: spec.group, removed: closed, via: spec.via });
     await withdrawForAccounts(tx, deps.invites ?? null, { gymId, userIds: closed.map((row) => row.userId), at });
     await insertAudit(tx, {
       actorUserId: userId,
       gymId,
-      action: "org.member_list_unlisted_removed",
+      action: spec.action,
       targetType: "member_list",
       targetId: gymId,
       // The digest names the set, which is how the same press sent again is recognised.
-      meta: { group: input.group, removed: String(closed.length), version: String(version), digest },
+      meta: { ...spec.meta, group: spec.group, removed: String(closed.length), version: String(version), digest },
     });
     removedUsers.push(...closed.map((row) => row.userId));
-    return { kind: "removed", group: input.group, removed: closed.length, alreadyRemoved: false };
+    return { kind: "removed", removed: closed.length, alreadyRemoved: false };
   });
 
   if (answer.kind === "removed" && !answer.alreadyRemoved && removedUsers.length > 0) {
@@ -700,4 +718,119 @@ export async function removeUnlisted(
     }
   }
   return answer;
+}
+
+/** "Remove all": every member of the group taken out of the gym in one call. */
+export async function removeUnlisted(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  input: MemberListRemoveUnlistedRequest,
+  limit: () => Promise<boolean>,
+): Promise<RemoveAnswer> {
+  await requireWritablePrivilege(deps, gymId, userId, "members.remove");
+  // It acts on the list's marks, so it needs the list's own tick as well.
+  await requirePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return { kind: "rate_limited" };
+  const answer = await removeSet(deps, userId, gymId, {
+    work: async (tx) => {
+      const [state, members] = await Promise.all([repo.listState(tx, gymId), repo.membersAgainstList(tx, gymId)]);
+      const ids = unlistedGroup(members, state !== null, input.group).map((person) => person.userId);
+      return {
+        version: state?.version ?? 0,
+        userIds: ids,
+        digest: unlistedDigest(gymId, input.group, ids),
+        seats: members.filter((member) => member.seatCounted).length,
+      };
+    },
+    input,
+    action: "org.member_list_unlisted_removed",
+    group: input.group,
+    via: "remove_unlisted",
+    meta: {},
+  });
+  return answer.kind === "removed" ? { ...answer, group: input.group } : answer;
+}
+
+// ── Remove by status (5b-iii; RULINGS 2026-09-23) ───────────────────────────
+
+type WordsAsked = string | string[] | undefined;
+
+const wordsOf = (words: { status?: WordsAsked; membershipType?: WordsAsked; paymentStatus?: WordsAsked }) => ({
+  statuses: foldedFilter(words.status),
+  membershipTypes: foldedFilter(words.membershipType),
+  paymentStatuses: foldedFilter(words.paymentStatus),
+});
+
+/** The app members the words ticked would remove, a page at a time, with the numbers
+ *  the removal must send back. */
+export async function readByWords(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  query: MemberListByWordsQuery,
+  limit: () => Promise<boolean>,
+): Promise<MemberListByWordsPage | null> {
+  await requirePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return null;
+  const filters = wordsOf(query);
+  const [state, members] = await Promise.all([repo.listState(deps.sql, gymId), repo.membersForWords(deps.sql, gymId)]);
+  const people = byWordsGroup(members, filters);
+  let cursor: { name: string; id: string } | null = null;
+  if (query.cursor !== undefined) {
+    const id = cursorSchema.safeParse(query.cursor);
+    const last = id.success ? people.find((person) => person.userId === id.data) : undefined;
+    if (last === undefined) throw new OrgsError(400, "bad_cursor", "That page of names could not be read. Open the list again.");
+    cursor = { name: last.fullName, id: last.userId };
+  }
+  const page = unlistedPage(people, cursor, MEMBER_LIST_ENTRIES_PAGE);
+  return {
+    version: state?.version ?? 0,
+    total: people.length,
+    digest: byWordsDigest(gymId, filters, people.map((person) => person.userId)),
+    people: page.shown.map((person) => ({
+      userId: person.userId,
+      displayName: person.fullName,
+      email: person.email,
+      joinedAt: person.joinedAt.toISOString(),
+    })),
+    cursor: page.last?.userId ?? null,
+  };
+}
+
+/** Remove by status: the app members whose record carries the words ticked, taken out
+ *  of the gym in the app. Their records stay on the list with their words. */
+export async function removeByWords(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  input: MemberListRemoveByWordsRequest,
+  limit: () => Promise<boolean>,
+): Promise<SetAnswer> {
+  await requireWritablePrivilege(deps, gymId, userId, "members.remove");
+  await requirePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return { kind: "rate_limited" };
+  const filters = wordsOf(input);
+  return await removeSet(deps, userId, gymId, {
+    work: async (tx) => {
+      const [state, members] = await Promise.all([repo.listState(tx, gymId), repo.membersForWords(tx, gymId)]);
+      const ids = byWordsGroup(members, filters).map((person) => person.userId);
+      return {
+        version: state?.version ?? 0,
+        userIds: ids,
+        digest: byWordsDigest(gymId, filters, ids),
+        seats: members.filter((member) => member.seatCounted).length,
+      };
+    },
+    input,
+    action: "org.member_list_words_removed",
+    group: "by_words",
+    via: "remove_by_words",
+    // Which words chose the set, never the people.
+    meta: {
+      statuses: JSON.stringify(filters.statuses),
+      membershipTypes: JSON.stringify(filters.membershipTypes),
+      paymentStatuses: JSON.stringify(filters.paymentStatuses),
+    },
+  });
 }

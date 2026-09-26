@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ChevronRight, Loader2, Mail, Search, SlidersHorizontal, Upload, UserPlus, X } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Download, Loader2, Mail, Search, SlidersHorizontal, Upload, UserMinus, UserPlus, X } from 'lucide-react';
 import { MEMBER_LIST_QUERY_MAX_CHARS } from '@app/shared';
 import { orgService, errorText } from '../../api/orgsApi';
 import MemberListInvite from './MemberListInvite';
 import MemberListPerson, { Tag } from './MemberListPerson';
+import MemberListRemove from './MemberListRemove';
 import MemberListUpload from './MemberListUpload';
 import {
   CHIP_KINDS,
@@ -19,6 +20,7 @@ import {
   gymToday,
   rowWords,
   toggleWord,
+  wordsTicked,
 } from './memberListPeople';
 
 // The gym's own list on the Members screen (ROADMAP 5b-i; spec Part 3 §9.14, §11.5):
@@ -163,9 +165,22 @@ function FilterBox({ list, filters, words, total, onChange, onClear, onClose }) 
   );
 }
 
+/** Save a downloaded file under its name. */
+function saveFile({ blob, filename }) {
+  const href = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = href;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(href);
+}
+
 // `onRosterChanged` tells the Members screen that the list moved, so "Using the app",
-// whose "not on your list" marks read the list, is read again.
-export default function MemberListPanel({ gymId, gym, words, readOnly, refreshKey, onRosterChanged = () => undefined }) {
+// whose "not on your list" marks read the list, is read again. `canRemove` is the
+// viewer's `members.remove`: Remove from the app is drawn only for them.
+export default function MemberListPanel({ gymId, gym, words, readOnly, canRemove = false, refreshKey, onRosterChanged = () => undefined }) {
   const [list, setList] = useState(null);
   const [listError, setListError] = useState(null);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
@@ -180,6 +195,12 @@ export default function MemberListPanel({ gymId, gym, words, readOnly, refreshKe
   const [inviting, setInviting] = useState(false);
   /** Invite's count for the words ticked now, or null while it is asked. */
   const [invitePreview, setInvitePreview] = useState(null);
+  /** How many app members the words ticked would remove, or null. */
+  const [removeCount, setRemoveCount] = useState(null);
+  /** The Remove box's words, fixed as it opens, or null when it is shut. */
+  const [removing, setRemoving] = useState(null);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState(null);
   /** The newest request for a page: an answer to an older one is dropped. */
   const latest = useRef(0);
   /** How many names were loaded when a change asked for the list again, so the re-read
@@ -268,6 +289,39 @@ export default function MemberListPanel({ gymId, gym, words, readOnly, refreshKe
       live = false;
     };
   }, [gymId, inviteKey, pastShown, refreshKey, tick]);
+
+  // Remove from the app follows the same words, and only once one is ticked.
+  const removable = canRemove && wordsTicked(filters);
+  useEffect(() => {
+    if (gymId === null || !removable) return undefined;
+    let live = true;
+    setRemoveCount(null);
+    Promise.resolve()
+      // The words' own query: the same one Invite counts with.
+      .then(() => orgService.getRemoveByWords(gymId, inviteKey))
+      .then(
+        (res) => {
+          if (live) setRemoveCount(res.data.page.total);
+        },
+        () => undefined,
+      );
+    return () => {
+      live = false;
+    };
+  }, [gymId, inviteKey, removable, refreshKey, tick]);
+
+  const download = async () => {
+    if (downloading) return;
+    setDownloading(true);
+    setDownloadError(null);
+    try {
+      saveFile(await orgService.downloadMemberList(gymId, entriesQueryString(filters)));
+    } catch (err) {
+      setDownloadError(errorText(err, "We couldn't make the file. Please try again."));
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const change = (next) => {
     setPage((p) => ({ ...p, loading: true }));
@@ -388,22 +442,72 @@ export default function MemberListPanel({ gymId, gym, words, readOnly, refreshKe
             {count(page.total)} {page.total === 1 ? words.person : words.people}
             {!current ? ' removed from your list' : empty ? '' : ' match'}
           </p>
-          {current ? (
-            <button
-              type="button"
-              onClick={() => setInviting(true)}
-              disabled={readOnly}
-              data-testid="invite-button"
-              className="rounded-xl px-4 min-h-[44px] text-sm font-bold flex items-center gap-2 disabled:opacity-40"
-              style={{ background: C.orangeBg, color: C.orange }}
-            >
-              <Mail className="w-4 h-4" />
-              {invitePreview === null
-                ? 'Invite'
-                : `Invite ${count(invitePreview.reach)} ${invitePreview.reach === 1 ? words.person : words.people}`}
-            </button>
-          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            {page.total > 0 ? (
+              <button
+                type="button"
+                onClick={() => void download()}
+                disabled={downloading}
+                data-testid="download-button"
+                className="rounded-xl px-3 min-h-[44px] text-sm font-semibold flex items-center gap-2 disabled:opacity-40"
+                style={{ color: C.soft }}
+              >
+                {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                Download CSV
+              </button>
+            ) : null}
+            {current && removable && removeCount !== null && removeCount > 0 ? (
+              <button
+                type="button"
+                onClick={() => setRemoving({ kind: 'words', filters })}
+                disabled={readOnly}
+                data-testid="remove-button"
+                className="rounded-xl px-4 min-h-[44px] text-sm font-bold flex items-center gap-2 disabled:opacity-40"
+                style={{ background: 'rgba(248,113,113,0.12)', color: '#f87171' }}
+              >
+                <UserMinus className="w-4 h-4" />
+                Remove {count(removeCount)} from the app
+              </button>
+            ) : null}
+            {current ? (
+              <button
+                type="button"
+                onClick={() => setInviting(true)}
+                disabled={readOnly}
+                data-testid="invite-button"
+                className="rounded-xl px-4 min-h-[44px] text-sm font-bold flex items-center gap-2 disabled:opacity-40"
+                style={{ background: C.orangeBg, color: C.orange }}
+              >
+                <Mail className="w-4 h-4" />
+                {invitePreview === null
+                  ? 'Invite'
+                  : `Invite ${count(invitePreview.reach)} ${invitePreview.reach === 1 ? words.person : words.people}`}
+              </button>
+            ) : null}
+          </div>
         </div>
+      ) : null}
+
+      {downloadError !== null ? (
+        <p className="text-sm" style={{ color: C.soft }} role="alert">
+          {downloadError}
+        </p>
+      ) : null}
+
+      {removing !== null ? (
+        <MemberListRemove
+          gymId={gymId}
+          gym={gym}
+          words={words}
+          readOnly={readOnly}
+          source={removing}
+          onRemoved={() => {
+            keepLoaded.current = page.entries.length;
+            setTick((n) => n + 1);
+            onRosterChanged();
+          }}
+          onClose={() => setRemoving(null)}
+        />
       ) : null}
 
       {inviting ? (

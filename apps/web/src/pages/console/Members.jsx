@@ -6,6 +6,7 @@ import { orgService, errorText, errorCode } from '../../api/orgsApi';
 import { useConsoleOrg } from './useConsoleOrg';
 import ApplicationsQueue from './ApplicationsQueue';
 import MemberListPanel from './MemberListPanel';
+import { NotOnListRemove } from './MemberListRemove';
 import { orgWords } from '@app/shared';
 import {
   canRemoveMembers,
@@ -553,8 +554,14 @@ export default function Members() {
         <>
           {/* Invitations that came back "Not me". */}
           <NotMeBox gymId={gymId} words={words} />
-          <MemberListPanel gymId={gymId} gym={org} words={words} readOnly={readOnly} onRosterChanged={reloadRoster} />
+          <MemberListPanel gymId={gymId} gym={org} words={words} readOnly={readOnly} canRemove={canRemove} onRosterChanged={reloadRoster} />
         </>
+      ) : null}
+
+      {/* App members the list does not hold, each group removed in one press: staff who may
+          see the list and remove people. */}
+      {tab === 'app' && canSeeList && canRemove ? (
+        <NotOnListRemove gymId={gymId} gym={org} words={words} readOnly={readOnly} refreshKey={attempt} onRemoved={reloadRoster} />
       ) : null}
 
       {tab === 'app' && state.loading ? <ConsoleLoading label={`Loading ${words.people}…`} /> : null}

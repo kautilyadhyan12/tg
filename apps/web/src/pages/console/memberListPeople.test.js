@@ -6,6 +6,9 @@ import {
   memberInviteRequestSchema,
   memberListEntryDetailSchema,
   memberListEntriesQuerySchema,
+  memberListByWordsQuerySchema,
+  memberListExportQuerySchema,
+  memberListRemoveByWordsRequestSchema,
   MEMBER_INVITE_EMAIL_REASON_WORDS,
 } from '@app/shared';
 import {
@@ -22,9 +25,13 @@ import {
   inviteQueryString,
   patchFrom,
   personInviteAction,
+  removeBody,
+  removeIgnores,
+  removeQueryString,
   rowWords,
   skippedLines,
   toggleWord,
+  wordsTicked,
 } from './memberListPeople';
 import { FIELD_LABELS } from './memberListView';
 
@@ -353,5 +360,41 @@ describe("the gym's own day for a birthday", () => {
   });
   it('falls back to the reader\'s own day for a zone it cannot read', () => {
     expect(gymToday('Not/AZone', at)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+/** A query string as the server's querystring parser reads it: a repeated key is a list. */
+const asQuery = (qs) => {
+  const out = {};
+  for (const [k, v] of new URLSearchParams(qs)) out[k] = k in out ? [].concat(out[k], v) : v;
+  return out;
+};
+
+describe('remove by status and the download (5b-iii)', () => {
+  const ticked = { ...EMPTY_FILTERS, status: ['Cancelled', ''], paymentStatus: ['Overdue'], query: 'ann', app: 'in_app' };
+  it('needs a word ticked, on the current list', () => {
+    expect(wordsTicked(EMPTY_FILTERS)).toBe(false);
+    expect(wordsTicked({ ...EMPTY_FILTERS, app: 'in_app', query: 'x' })).toBe(false);
+    expect(wordsTicked({ ...EMPTY_FILTERS, membershipType: ['Gold'] })).toBe(true);
+    expect(wordsTicked({ ...EMPTY_FILTERS, status: ['Cancelled'], records: 'former' })).toBe(false);
+  });
+  it('the look sends the words alone, as the server reads them, and the next page', () => {
+    const qs = removeQueryString(ticked, 'cccccccc-cccc-4ccc-8ccc-cccccccccccc');
+    expect(asQuery(qs)).toEqual({ status: ['Cancelled', ''], paymentStatus: 'Overdue', cursor: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' });
+    expect(memberListByWordsQuerySchema.safeParse(asQuery(qs)).success).toBe(true);
+  });
+  it('the press carries the words and the numbers, and the tick only when asked', () => {
+    const page = { version: 3, total: 9, digest: 'd'.repeat(64) };
+    const body = removeBody(ticked, page, false);
+    expect(body).toEqual({ version: 3, expectedCount: 9, digest: 'd'.repeat(64), status: ['Cancelled', ''], paymentStatus: ['Overdue'] });
+    expect(memberListRemoveByWordsRequestSchema.safeParse(body).success).toBe(true);
+    expect(removeBody(ticked, page, true).acknowledgeLargeChange).toBe(true);
+  });
+  it('says when the search or the app filter does not choose who is removed', () => {
+    expect(removeIgnores(ticked)).toMatch(/choose who is removed/);
+    expect(removeIgnores({ ...EMPTY_FILTERS, status: ['Cancelled'] })).toBeNull();
+  });
+  it('the download asks for what the list shows, which the server accepts', () => {
+    expect(memberListExportQuerySchema.safeParse(asQuery(entriesQueryString(ticked))).success).toBe(true);
+    expect(memberListExportQuerySchema.safeParse(asQuery(entriesQueryString({ ...EMPTY_FILTERS, records: 'former' }))).success).toBe(true);
   });
 });

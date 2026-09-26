@@ -186,6 +186,35 @@ export function inviteIgnores(filters) {
     : null;
 }
 
+// ── Remove by status (5b-iii) ────────────────────────────────────────────────
+
+/** Whether any of the gym's words is ticked: removing by status needs one. */
+export function wordsTicked(filters) {
+  return filters.records === 'current' && CHIP_KINDS.some(({ kind }) => filters[kind].length > 0);
+}
+
+/** The query for `GET …/remove-by-words`: the words, and the next page's cursor. */
+export function removeQueryString(filters, cursor = null) {
+  const params = new URLSearchParams(inviteQueryString(filters));
+  if (cursor) params.append('cursor', cursor);
+  return params.toString();
+}
+
+/** The press: the same words, the numbers the look showed, and the tick if asked for. */
+export function removeBody(filters, page, acknowledgeLargeChange) {
+  const body = { version: page.version, expectedCount: page.total, digest: page.digest };
+  for (const { kind } of CHIP_KINDS) if (filters[kind].length > 0) body[kind] = [...filters[kind]];
+  if (acknowledgeLargeChange) body.acknowledgeLargeChange = true;
+  return body;
+}
+
+/** Said when the list on screen is narrowed by something removal does not read. */
+export function removeIgnores(filters) {
+  return filters.query.trim() !== '' || filters.app !== 'all'
+    ? "Only Status, Membership and Payment choose who is removed. The search and the app filter don't."
+    : null;
+}
+
 /** Who an Invite leaves out, one line a reason, in the server's order; none for a zero. */
 export function skippedLines(skipped) {
   const lines = [

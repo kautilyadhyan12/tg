@@ -971,6 +971,25 @@ export async function withdrawInvitations(
   return rows.length;
 }
 
+/** Staff removed these members: each address's invitation is stopped, and an address the
+ *  gym never invited gets a stopped one, so no Invite reaches a person the gym has just
+ *  removed. Send again starts it again. Answers how many changed. */
+export async function stopInvitations(
+  tx: TransactionSql,
+  input: { gymId: string; hmacs: readonly string[]; at: Date },
+): Promise<number> {
+  if (input.hmacs.length === 0) return 0;
+  const rows = await tx<{ id: string }[]>`
+    INSERT INTO gym_invites (gym_id, email_hmac, state, answered_at, created_at)
+    SELECT ${input.gymId}, h, 'withdrawn', ${input.at}, ${input.at}
+    FROM unnest(${[...input.hmacs]}::text[]) AS h
+    ON CONFLICT (gym_id, email_hmac) DO UPDATE
+      SET state = 'withdrawn', answered_at = ${input.at}, waiting_since = NULL, not_me_at = NULL
+      WHERE gym_invites.state <> 'withdrawn'
+    RETURNING id`;
+  return rows.length;
+}
+
 /** Is this person a live member of the gym? */
 export async function isLiveMember(sql: SqlOrTx, gymId: string, userId: string): Promise<boolean> {
   const rows = await sql<{ live: boolean }[]>`
