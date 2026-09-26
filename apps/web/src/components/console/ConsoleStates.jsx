@@ -9,8 +9,19 @@ import { Loader2, AlertTriangle, ChevronDown } from 'lucide-react';
 // the same shape reads "nobody has joined your gym" at an owner whose Wi-Fi
 // dropped. Sharing the components is what makes the three arms provably
 // different: each carries its own text and a failure always carries a retry.
+//
+// `newLook` draws them from `console.css` (spec Part 3 §17) on a page already
+// restyled; every other page keeps the old look until its own R-job.
 
-export function ConsoleLoading({ label = 'Loading…' }) {
+export function ConsoleLoading({ label = 'Loading…', newLook = false }) {
+  if (newLook) {
+    return (
+      <div className="flex items-center gap-3 py-10 c-t3">
+        <Loader2 className="w-4 h-4 animate-spin" />
+        <span className="c-s14">{label}</span>
+      </div>
+    );
+  }
   return (
     <div className="flex items-center gap-3 py-10" style={{ color: 'rgba(255,255,255,0.45)' }}>
       <Loader2 className="w-4 h-4 animate-spin" />
@@ -22,7 +33,22 @@ export function ConsoleLoading({ label = 'Loading…' }) {
 /** A failure ALWAYS offers a way out (Part 3 §4: "every error state has a retry
  *  and never dead-ends"). `message` is the server's own sentence where there is
  *  one — see `errorText`. */
-export function ConsoleFailed({ message, onRetry }) {
+export function ConsoleFailed({ message, onRetry, newLook = false }) {
+  if (newLook) {
+    return (
+      <div className="c-card flex flex-col gap-3 p-5" style={{ background: 'var(--bad-bg)', borderColor: 'transparent' }}>
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--bad)' }} />
+          <p className="c-s15 c-t1">{message}</p>
+        </div>
+        {onRetry ? (
+          <button type="button" onClick={onRetry} className="c-btn c-btn-s self-start">
+            Try again
+          </button>
+        ) : null}
+      </div>
+    );
+  }
   return (
     <div
       className="rounded-2xl p-5 flex flex-col gap-3"
@@ -70,7 +96,30 @@ export function ConsoleFailed({ message, onRetry }) {
  *  `JoinCodesPanel` has two hand-built copies of this shape and predates it;
  *  they are the reason it exists as a component rather than a third copy, and
  *  they should move here the next time anybody touches that file. */
-export function ConfirmInline({ question, confirmLabel, cancelLabel = 'Keep it', onConfirm, onCancel, busy = false }) {
+export function ConfirmInline({
+  question,
+  confirmLabel,
+  cancelLabel = 'Keep it',
+  onConfirm,
+  onCancel,
+  busy = false,
+  newLook = false,
+}) {
+  if (newLook) {
+    return (
+      <div className="flex flex-col gap-3">
+        <p className="c-s14 c-t1">{question}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={onConfirm} disabled={busy} className="c-btn c-btn-sm c-btn-danger">
+            {confirmLabel}
+          </button>
+          <button type="button" onClick={onCancel} disabled={busy} className="c-btn c-btn-sm c-btn-s">
+            {cancelLabel}
+          </button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col gap-2">
       <p className="text-xs" style={{ color: 'rgba(255,255,255,0.7)' }}>
@@ -161,6 +210,7 @@ export function ConsoleSection({
   children,
   forceOpen = false,
   defaultOpen = false,
+  newLook = false,
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const bodyId = useId();
@@ -178,6 +228,43 @@ export function ConsoleSection({
   // dismissed over something the owner has to see), and afterwards the section
   // is simply open, closable like any other.
   if (forceOpen && !open) setOpen(true);
+
+  if (newLook) {
+    return (
+      <section className="c-card">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={isOpen}
+          aria-controls={isOpen ? bodyId : undefined}
+          className="w-full text-left flex items-center gap-3 px-5 py-4 min-h-11"
+        >
+          <span className="c-s15 c-w6 c-t1 flex-grow min-w-0">
+            {title}
+            {aside ? (
+              <>
+                <span aria-hidden="true" className="c-t3 c-w5">
+                  {' · '}
+                </span>
+                <span className="c-t3 c-w5">{aside}</span>
+              </>
+            ) : null}
+            {summary ? <span className="block c-s14 c-w5 c-t2 mt-1">{summary}</span> : null}
+          </span>
+          <ChevronDown
+            aria-hidden="true"
+            className="w-[18px] h-[18px] c-t3 transition-transform flex-shrink-0"
+            style={{ transform: isOpen ? 'rotate(180deg)' : 'none' }}
+          />
+        </button>
+        {isOpen ? (
+          <div id={bodyId} className="px-5 pb-5">
+            {children}
+          </div>
+        ) : null}
+      </section>
+    );
+  }
 
   return (
     <ConsoleCard>

@@ -2774,7 +2774,8 @@ in a narrow one; one column on a phone. A page's padding is `c-page`: 48 at the 
 24 between boxes on a computer, 16 and 20 on a phone. The building blocks, in
 `console.css`: `c-card` (a box) and `c-row` (a row in it, 44 px or more) · `c-btn` with
 `c-btn-p` (orange, one a box), `c-btn-soft` (pale orange), `c-btn-s` (outlined),
-`c-btn-danger`, `c-btn-ghost`, `c-btn-lg`, `c-btn-sm` · `c-icon-btn` · `c-chip` and
+`c-btn-danger`, `c-btn-ghost`, `c-btn-lg`, `c-btn-sm`, and `c-btn-link` and `c-btn-quiet`
+(an action written as a word, orange or grey: a time slot's Edit and Cancel) · `c-icon-btn` · `c-chip` and
 `c-chip-on`, with `c-n` for its count · `c-tag` with `-good`, `-warn`, `-bad`, `-plain`,
 `-soft` · `c-tc` (a time in a grey box) · `c-field`, `c-label`, `c-hint`, `c-input`,
 `c-sel`, `c-area`, `c-search` · `c-check`, `c-switch` · `c-utabs` and `c-utab` (tabs
@@ -2807,6 +2808,10 @@ shows a finished page in light.
 - From R1 on, a NEW console page, or a new box on a page already restyled, is built in the
   new look in both folders. A new box on a page not yet restyled follows that page's
   current look, and its page's R-job restyles it with the rest.
+- The pieces several pages share — the loading and failed boxes, the "are you sure" line,
+  a folding section (`ConsoleStates.jsx`) and the date and time pickers — draw the new look
+  when a restyled page passes `newLook`, and the old one otherwise, so a page not yet
+  restyled keeps its look until its own R-job (R2, 2026-09-26).
 
 ### 17.9 Where the facts came from
 

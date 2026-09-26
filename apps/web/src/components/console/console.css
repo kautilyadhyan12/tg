@@ -494,6 +494,17 @@
 .c-btn-ghost { color: var(--t2); }
 .c-btn-lg { height: 44px; font-size: 15px; }
 .c-btn-sm { height: 32px; padding: 0 12px; font-size: 13px; border-radius: 8px; }
+/* An action written as a word, with no box: a time slot's Edit and Cancel, Add time slot.
+   `c-btn-link` is orange text, `c-btn-quiet` grey; still 44 px tall on a phone. */
+.c-btn-link,
+.c-btn-quiet {
+  height: auto;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+}
+.c-btn-link { color: var(--link); }
+.c-btn-quiet { color: var(--t2); font-weight: 500; }
 
 .c-icon-btn {
   display: inline-flex;

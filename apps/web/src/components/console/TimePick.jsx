@@ -27,7 +27,14 @@ const inputStyle = {
 /** The word under a box. Kd, at 17b-ii-b-i's click-through: *"there is no hour"* —
  *  the two boxes showed `18` and `00` and nothing said which was which. Hidden
  *  from screen readers, which already hear each box's own label. */
-function Caption({ children }) {
+function Caption({ children, newLook }) {
+  if (newLook) {
+    return (
+      <span aria-hidden="true" className="c-s12 c-t3">
+        {children}
+      </span>
+    );
+  }
   return (
     <span aria-hidden="true" className="text-[11px]" style={{ color: 'rgba(255,255,255,0.45)' }}>
       {children}
@@ -51,8 +58,11 @@ function Caption({ children }) {
  *
  *  **24:00 lives in the HOUR list on the closing end only**, spelled out as
  *  midnight at the end of the day, and its minute is fixed at `00` because there
- *  is no 24:15. */
-export default function TimePick({ label, kind, value, clockFormat, onChange, disabled }) {
+ *  is no 24:15.
+ *
+ *  `newLook` draws the boxes from `console.css` (spec Part 3 §17) on a page
+ *  already restyled; Settings keeps the old look until R6. */
+export default function TimePick({ label, kind, value, clockFormat, onChange, disabled, newLook = false }) {
   /** **THE THREE BOXES HOLD THEIR OWN HALF-FINISHED STATE, and they have to.**
    *
    *  The draft stores one string per end (`"06:30"`), which cannot express
@@ -93,7 +103,13 @@ export default function TimePick({ label, kind, value, clockFormat, onChange, di
     onChange(joined);
   };
 
-  const boxStyle = { ...inputStyle, opacity: disabled ? 0.5 : 1 };
+  // The new look sets its widths inline: `c-input` is 100% wide, and which of
+  // two one-class rules wins depends on the order the stylesheets load in.
+  const box = (width) => (newLook ? 'c-input c-num' : `${width} rounded-lg px-2 py-1.5 text-sm`);
+  const skin = (width, dim) =>
+    newLook
+      ? { width: width === 'w-20' ? 88 : 72, padding: '0 8px', opacity: dim ? 0.5 : 1 }
+      : { ...inputStyle, opacity: dim ? 0.5 : 1 };
 
   return (
     // `flex-nowrap` and `shrink-0`: the three boxes are ONE control and must
@@ -112,8 +128,8 @@ export default function TimePick({ label, kind, value, clockFormat, onChange, di
           }}
           disabled={disabled}
           aria-label={`${label} hour`}
-          className="w-16 rounded-lg px-2 py-1.5 text-sm"
-          style={boxStyle}
+          className={box('w-16')}
+          style={skin('w-16', disabled)}
         >
           <option value="">--</option>
           {hours.map((h) => (
@@ -122,12 +138,16 @@ export default function TimePick({ label, kind, value, clockFormat, onChange, di
             </option>
           ))}
         </select>
-        <Caption>Hour</Caption>
+        <Caption newLook={newLook}>Hour</Caption>
       </span>
 
-      <span className="text-sm py-1.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
-        :
-      </span>
+      {newLook ? (
+        <span className="c-s15 c-t3 h-11 flex items-center">:</span>
+      ) : (
+        <span className="text-sm py-1.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
+          :
+        </span>
+      )}
 
       <span className="inline-flex flex-col items-center gap-0.5">
         <select
@@ -135,8 +155,8 @@ export default function TimePick({ label, kind, value, clockFormat, onChange, di
           onChange={(e) => emit({ minute: e.target.value === '' ? null : Number(e.target.value) })}
           disabled={disabled || endOfDay}
           aria-label={`${label} minute`}
-          className="w-16 rounded-lg px-2 py-1.5 text-sm"
-          style={{ ...boxStyle, opacity: disabled || endOfDay ? 0.5 : 1 }}
+          className={box('w-16')}
+          style={skin('w-16', disabled || endOfDay)}
         >
           <option value="">--</option>
           {minutes.map((m) => (
@@ -145,7 +165,7 @@ export default function TimePick({ label, kind, value, clockFormat, onChange, di
             </option>
           ))}
         </select>
-        <Caption>Minute</Caption>
+        <Caption newLook={newLook}>Minute</Caption>
       </span>
 
       {/* AM/PM ONLY ON THE 12-HOUR CLOCK — it is meaningless on the other one,
@@ -156,8 +176,8 @@ export default function TimePick({ label, kind, value, clockFormat, onChange, di
           onChange={(e) => emit({ meridiem: e.target.value === '' ? null : e.target.value })}
           disabled={disabled}
           aria-label={`${label} AM or PM`}
-          className="w-20 rounded-lg px-2 py-1.5 text-sm"
-          style={boxStyle}
+          className={box('w-20')}
+          style={skin('w-20', disabled)}
         >
           <option value="">--</option>
           <option value="AM">AM</option>

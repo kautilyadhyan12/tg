@@ -4,6 +4,17 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-26 · R2 (Folder B): Classes and the Calendar in the new look (branch `console-look-r2`)
+
+- **Why this job:** next on Folder B's list after R1. **Screen job, Opus high, no review; Kd said *"go"*.** No server change, no migration, no new package.
+- **Built:** `Classes.jsx`, `ClassWeek.jsx` and `ClassFields.jsx` drawn from `console.css` as the drawings `Classes`, `ClassesCalendar` and `ClassesPhone` show them: **Add class** top right (under the title on a phone), two columns from 1280 px, each class's colour down its edge, time slots as bordered rows with Edit and Cancel as words, Archived classes folded at the bottom; the Calendar's arrows, filters and seven days with today underlined, Changed and Cancelled as words. Every button, form, question and message kept; the forms (not drawn) still open where they did, in the new look. A class's colour is its name in the look (`var(--cl-blue)`), so it holds in dark and light.
+- **Shared pieces:** `ConsoleStates.jsx` (loading, failed, "are you sure", folding section), `DatePick` and `TimePick` take `newLook`; only Classes passes it, so Settings, Members and the rest keep their look until their own R-job (spec §17.8). Two new building blocks, `c-btn-link` and `c-btn-quiet` (spec §17.6).
+- **Worst thing, first test:** `classesLook.render.test.jsx` lists every control the page had, for an owner, a lapsed gym and a role without `schedule.manage`, on both tabs; the two look checks were RED on the old page (Add class at the bottom, the old colour), then 7/7. `classesView.test.js` checks every class colour is named in both looks. One old check moved: the stripe's colour is `var(--cl-blue)`, not `rgb(76, 141, 255)`.
+- **Verified:** web 2,924 of 2,924 (`poseAssets.contract` local Node 24 only); eslint 0 on every changed file; `vite build` green.
+- **Looked at in headless Edge** on the real app (throwaway gym, removed): both tabs and every form at 1440 and 390 wide, dark and `?look=light`; nothing wider than the screen, and every phone button 44 px or more. Fixed there: the date picker's days were 40 px on a phone, the Calendar's opened class stretched its form across the page, the ":" between hour and minute sat high.
+- **Click-through data:** Kd's local test gym Iron House Leeds (`kd-classes@example.com`) got HIIT Blast, Strength Club, Open floor and an archived Old Pilates, with HIIT cancelled on 29 Sep and Strength changed on 28 Sep.
+- **Next:** Kd's click-through, then merge on his word. Then R3 (Leads) in Folder B.
+
 ## 2026-09-26 · R1 (Folder B): the console's new menu, font and colours (branch `console-look-r1`)
 
 - **Why this job:** Kd approved the console redesign (56 drawings, dark and light; RULINGS 2026-09-26) and chose to start it now, ahead of 20c-ii, adding *"do not delete the exsiting features and buttons etc"*. **Screen job, Opus high, no review; Kd said *"go"*.** No server change, no migration, no new package.
