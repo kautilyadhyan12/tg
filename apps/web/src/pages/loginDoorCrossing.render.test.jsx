@@ -16,7 +16,7 @@
 // grep is satisfied by spelling the link differently, and the point of 1 and 3
 // is that a real click really ends the session.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 // One mutable auth object serves all three subjects. `logout` is the thing under
@@ -90,6 +90,7 @@ vi.mock('../api/onboardingApi', () => ({
 }));
 
 const ConsoleLayout = (await import('../components/console/ConsoleLayout')).default;
+const More = (await import('./console/More')).default;
 const Sidebar = (await import('../components/common/Sidebar')).default;
 const Onboarding = (await import('./Onboarding')).default;
 const { resetConsoleOrgs } = await import('./console/consoleOrgs');
@@ -106,14 +107,13 @@ const MEMBER_OF = {
 // Landing markers rather than a spied `useNavigate`: the real router resolves
 // the real path, so a destination that is not a route fails here instead of
 // passing as a string comparison.
-const drawConsole = () =>
+const drawConsole = (path = '/console/iron-house') =>
   render(
-    <MemoryRouter initialEntries={['/console/iron-house']}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route
-          path="/console/:orgSlug"
-          element={<ConsoleLayout><p>GYM CONSOLE</p></ConsoleLayout>}
-        />
+        <Route path="/console" element={<ConsoleLayout><p>YOUR ORGANISATIONS</p></ConsoleLayout>} />
+        <Route path="/console/:orgSlug" element={<ConsoleLayout><p>GYM CONSOLE</p></ConsoleLayout>} />
+        <Route path="/console/:orgSlug/more" element={<ConsoleLayout><More /></ConsoleLayout>} />
         <Route path="/login" element={<p>THE LOGIN PAGE</p>} />
         <Route path="/dashboard" element={<p>MEMBER APP</p>} />
       </Routes>
@@ -152,54 +152,52 @@ afterEach(() => {
 });
 
 describe('the gym console', () => {
-  // TWO exits render, and the count is the assertion. The shell draws a desktop
-  // rail and a phone top bar, each with its own control, and CSS hides one —
-  // which jsdom does not apply, so both are in the tree here. Pinning the count
-  // is what stops a later edit turning ONE of them back into a link into the
-  // member app: on a phone that is the only control there is, so half the
-  // ruling would be undone on the surface Kd asked to work from a phone.
-  it('offers Sign out on BOTH the desktop rail and the phone bar', () => {
-    drawConsole();
-    expect(screen.getAllByRole('button', { name: /sign out/i })).toHaveLength(2);
-  });
-
-  it('offers NO way into the member app', () => {
-    drawConsole();
-    // The removed link read "Back to the app" and pointed at /dashboard. Both
-    // halves are asserted: the words, and any anchor to the member app at all,
-    // so re-adding it under a friendlier name still fails.
-    expect(screen.queryByText(/back to the app/i)).toBeNull();
-    const toMemberApp = Array.from(document.querySelectorAll('a[href]')).filter((a) =>
-      a.getAttribute('href').startsWith('/dashboard'),
-    );
-    expect(toMemberApp).toHaveLength(0);
-  });
-
-  // Each control is driven separately. One test clicking "the first one" would
-  // leave the phone bar — the only exit at phone width — unexercised.
-  //
-  // THE CONTROLS ARE FOUND BY WHERE THEY LIVE, NOT BY INDEX (T3 round 1, L2).
-  // With `[0]`/`[1]`, the D12 mutant — which turns the RAIL into a link — made
-  // the case named "from the desktop rail" silently drive the phone bar and
-  // PASS, while `[1]` came back undefined and the OTHER case caught it. Nothing
-  // was hidden, but a case that does not drive what its name says is a case that
-  // will mislead the next person to read a red run.
-  const signOutIn = (where) => {
-    const buttons = screen.getAllByRole('button', { name: /sign out/i });
-    const found = buttons.find((b) => (where === 'rail' ? b.closest('aside') !== null : b.closest('aside') === null));
-    if (!found) throw new Error(`no Sign out control in the ${where} — it is not a button any more`);
-    return found;
+  // On a gym's pages Sign out is in the computer's menu and, on a phone, under More (R1,
+  // spec Part 3 §17.5); where there is no gym yet (your organisations, create) the phone's
+  // top bar carries it. jsdom applies no CSS, so the menu and the phone's bars are all in
+  // the tree here, and each control is found by where it lives.
+  const openMoreOnAPhone = async () => {
+    fireEvent.click(within(screen.getByTestId('console-tabbar')).getByRole('link', { name: 'More' }));
+    return within(await screen.findByTestId('console-more-you')).getByRole('button', { name: /sign out/i });
   };
 
-  it.each([
-    ['desktop rail', 'rail'],
-    ['phone bar', 'bar'],
-  ])('ends the session and returns to the login page from the %s', async (_label, where) => {
+  it('offers Sign out in the computer menu, and under More on a phone', async () => {
     drawConsole();
-    fireEvent.click(signOutIn(where));
+    const inMenu = within(screen.getByTestId('console-rail')).getAllByRole('button', { name: /sign out/i });
+    expect(inMenu).toHaveLength(1);
+    expect(await openMoreOnAPhone()).toBeTruthy();
+  });
+
+  it('offers Sign out in the menu and the phone’s top bar where there is no gym', () => {
+    drawConsole('/console');
+    expect(within(screen.getByTestId('console-rail')).getByRole('button', { name: /sign out/i })).toBeTruthy();
+    expect(within(screen.getByTestId('console-topbar')).getByRole('button', { name: /sign out/i })).toBeTruthy();
+  });
+
+  it('offers NO way into the member app, on a gym page or under More', async () => {
+    drawConsole();
+    // The removed link read "Back to the app" and pointed at /dashboard. Both halves are
+    // asserted: the words, and any anchor to the member app at all, so re-adding it under
+    // a friendlier name still fails.
+    const toMemberApp = () =>
+      Array.from(document.querySelectorAll('a[href]')).filter((a) => a.getAttribute('href').startsWith('/dashboard'));
+    expect(screen.queryByText(/back to the app/i)).toBeNull();
+    expect(toMemberApp()).toHaveLength(0);
+    await openMoreOnAPhone();
+    expect(screen.queryByText(/back to the app/i)).toBeNull();
+    expect(toMemberApp()).toHaveLength(0);
+  });
+
+  it.each([
+    ['the computer menu', '/console/iron-house', async () => within(screen.getByTestId('console-rail')).getByRole('button', { name: /sign out/i })],
+    ['More, on a phone', '/console/iron-house', openMoreOnAPhone],
+    ['the phone’s top bar, with no gym', '/console', async () => within(screen.getByTestId('console-topbar')).getByRole('button', { name: /sign out/i })],
+  ])('ends the session and returns to the login page from %s', async (_where, path, find) => {
+    drawConsole(path);
+    fireEvent.click(await find());
     await waitFor(() => expect(screen.getByText('THE LOGIN PAGE')).toBeTruthy());
-    // Landing on /login is not enough on its own — a link would do that while
-    // leaving the person signed in. The session must actually end.
+    // Landing on /login is not enough on its own — a link would do that while leaving the
+    // person signed in. The session must actually end.
     expect(authState.logout).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,0 +1,796 @@
+/* The gym console's look (spec Part 3 §17). Both looks use the same names: a page is drawn
+   once and `.t-dark` or `.t-light` on the console's root decides the colours. The menu is
+   dark in both. Classes carry a `c-` prefix because the member pages already use `.card`,
+   `.btn` and `.label` for other things. */
+
+/* Archivo, kept in the app (SIL Open Font License, assets/fonts/archivo/OFL.txt). The files
+   and character ranges are the ones Google Fonts serves; the width axis is what titles and
+   big numbers use (font-stretch 108%). */
+/* vietnamese */
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-display: swap;
+  src: url('../../assets/fonts/archivo/archivo-vietnamese.woff2') format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-display: swap;
+  src: url('../../assets/fonts/archivo/archivo-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-display: swap;
+  src: url('../../assets/fonts/archivo/archivo-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ── Colours ────────────────────────────────────────────────────────────── */
+
+/* The menu, the same in both looks. */
+.t-dark,
+.t-light {
+  --rail-bg: #0F0E0C;
+  --rail-line: #1F1C19;
+  --rail-t1: #F4F1EC;
+  --rail-t2: #B8B0A6;
+  --rail-t3: #8B847B;
+  --rail-tab: #9A9288;
+  --rail-card: #171513;
+  --rail-card-line: #26231F;
+  --rail-on: #2A1A0C;
+  --rail-on-t: #FF9F45;
+  --rail-seg: #2C2824;
+  --rail-gym: #2E1D0E;
+}
+
+.t-dark {
+  --page: #0C0B0A;
+  --card: #151311;
+  --card-line: #25221E;
+  --line: #25221E;
+  --raise: #1D1A17;
+  --raise-line: #2E2A26;
+  --ctl-line: #3A3530;
+  --input: #0F0E0C;
+  --input-line: #6B645C;
+  --t1: #F4F1EC;
+  --t2: #B8B0A6;
+  --t3: #8B847B;
+  --link: #FF9F45;
+  --accent: #FF8A1F;
+  --on-accent: #140C04;
+  --soft: #2A1A0C;
+  --soft-t: #FF9F45;
+  --good: #46D993;
+  --good-bg: #10291C;
+  --warn: #F2C35B;
+  --warn-bg: #33290F;
+  --bad: #FF7B6E;
+  --bad-bg: #3A1714;
+  --sel: #F4F1EC;
+  --on-sel: #0C0B0A;
+  --shadow: none;
+  --pop: 0 24px 64px rgba(0, 0, 0, 0.6);
+  --scrim: rgba(0, 0, 0, 0.62);
+  --sheet: #171513;
+  --cl-orange: #FF8A1F;
+  --cl-blue: #4C8DFF;
+  --cl-green: #34C77B;
+  --cl-purple: #A78BFA;
+  --cl-red: #F2544B;
+  --cl-teal: #2DD4BF;
+  --cl-amber: #FBBF24;
+  --cl-slate: #94A3B8;
+}
+
+.t-light {
+  --page: #F5F3EF;
+  --card: #FFFFFF;
+  --card-line: #E4DED6;
+  --line: #ECE7E0;
+  --raise: #F3F0EB;
+  --raise-line: #E1DBD2;
+  --ctl-line: #D6CFC5;
+  --input: #FFFFFF;
+  --input-line: #948C83;
+  --t1: #1B1815;
+  --t2: #57504A;
+  --t3: #736C64;
+  /* The drawing's #B45309 measured 4.42:1 on --raise; this shade passes 4.5 on every
+     surface (spec Part 3 §17.3). */
+  --link: #A84D08;
+  --accent: #FF8A1F;
+  --on-accent: #140C04;
+  --soft: #FFE9D2;
+  --soft-t: #9A4508;
+  --good: #177A48;
+  --good-bg: #E3F4EA;
+  --warn: #7A5600;
+  --warn-bg: #FDF1D6;
+  --bad: #C23A2E;
+  --bad-bg: #FCE9E6;
+  --sel: #1B1815;
+  --on-sel: #FFFFFF;
+  --shadow: 0 1px 2px rgba(28, 24, 20, 0.05);
+  --pop: 0 24px 64px rgba(28, 24, 20, 0.2);
+  --scrim: rgba(20, 18, 16, 0.45);
+  --sheet: #FFFFFF;
+  --cl-orange: #E8700A;
+  --cl-blue: #2F6FD6;
+  --cl-green: #1E9A5B;
+  --cl-purple: #7C5CD6;
+  --cl-red: #D6453B;
+  --cl-teal: #159A8C;
+  --cl-amber: #B87E00;
+  --cl-slate: #64748B;
+}
+
+/* ── The shell: menu on the left from 768 px, gym name on top and tabs below under it ── */
+
+.c-console {
+  min-height: 100vh;
+  background: var(--page);
+  color: var(--t1);
+  font-family: 'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.c-main {
+  min-height: 100vh;
+  padding-bottom: 96px;
+}
+
+.c-rail {
+  display: none;
+}
+
+.c-rail-title {
+  padding: 10px 12px;
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 600;
+  color: var(--rail-t2);
+}
+
+.c-rail-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.c-rail-fill {
+  flex-grow: 1;
+}
+
+.c-rail-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rail-line);
+}
+
+.c-rail-you {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 12px;
+  min-width: 0;
+}
+
+.c-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 44px;
+  padding: 0 12px;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--rail-t2);
+  font-size: 15px;
+  font-weight: 500;
+  text-align: left;
+}
+.c-nav:hover {
+  color: var(--rail-t1);
+}
+.c-nav:disabled {
+  opacity: 0.5;
+}
+.c-nav-on,
+.c-nav-on:hover {
+  background: var(--rail-on);
+  color: var(--rail-on-t);
+  font-weight: 600;
+}
+
+.c-switcher {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--rail-card);
+  border: 1px solid var(--rail-card-line);
+  color: var(--rail-t1);
+  min-width: 0;
+}
+
+.c-switcher-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-grow: 1;
+  min-width: 0;
+}
+
+.c-gymicon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--rail-gym);
+  color: var(--rail-on-t);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.c-topbar {
+  height: 60px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  padding: 0 12px 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--rail-bg);
+  border-bottom: 1px solid var(--rail-line);
+  color: var(--rail-t1);
+}
+
+.c-topbar-gym {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  min-width: 0;
+  color: var(--rail-t1);
+}
+.c-topbar-gym .c-gymicon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+}
+
+.c-tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  height: 64px;
+  display: flex;
+  background: var(--rail-bg);
+  border-top: 1px solid var(--rail-line);
+}
+
+.c-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: var(--rail-tab);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+}
+.c-tab-on {
+  color: var(--rail-on-t);
+  font-weight: 600;
+}
+
+@media (min-width: 768px) {
+  .c-rail {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 20;
+    width: 248px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    padding: 20px 16px;
+    overflow-y: auto;
+    background: var(--rail-bg);
+    border-right: 1px solid var(--rail-line);
+    color: var(--rail-t1);
+  }
+  .c-main {
+    margin-left: 248px;
+    padding-bottom: 0;
+  }
+  .c-topbar,
+  .c-tabbar {
+    display: none;
+  }
+}
+
+/* ── A page: 16 px at the sides on a phone, 48 on a computer; 20 and 24 between boxes ── */
+
+.c-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px 16px 24px;
+  box-sizing: border-box;
+}
+.c-narrow {
+  width: 100%;
+  max-width: 760px;
+}
+@media (min-width: 768px) {
+  .c-page {
+    gap: 24px;
+    padding: 36px 48px 48px;
+  }
+}
+
+/* ── Text: one font, a fixed set of sizes, three greys ── */
+
+/* The titles carry their own colour and spacing: index.css gives every h1–h6 white text
+   and tighter letters, which would vanish on the light look's pale page. */
+.c-h1 {
+  margin: 0;
+  font-size: 28px;
+  line-height: 34px;
+  font-weight: 700;
+  font-stretch: 108%;
+  letter-spacing: -0.01em;
+  color: var(--t1);
+}
+.c-big {
+  font-size: 44px;
+  line-height: 48px;
+  font-weight: 700;
+  font-stretch: 108%;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+@media (min-width: 768px) {
+  .c-h1 {
+    font-size: 34px;
+    line-height: 40px;
+  }
+  .c-big {
+    font-size: 48px;
+    line-height: 52px;
+  }
+}
+.c-big-sm {
+  font-size: 40px;
+  line-height: 44px;
+  font-weight: 700;
+  font-stretch: 108%;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.c-h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 600;
+  letter-spacing: normal;
+  color: var(--t1);
+}
+.c-h3 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 600;
+  letter-spacing: normal;
+  color: var(--t1);
+}
+.c-sub {
+  margin: 0;
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--t2);
+}
+.c-eyebrow {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--t3);
+}
+.c-t1 { color: var(--t1); }
+.c-t2 { color: var(--t2); }
+.c-t3 { color: var(--t3); }
+.c-lk { color: var(--link); }
+.c-s12 { font-size: 12px; line-height: 16px; }
+.c-s13 { font-size: 13px; line-height: 18px; }
+.c-s14 { font-size: 14px; line-height: 20px; }
+.c-s15 { font-size: 15px; line-height: 22px; }
+.c-s16 { font-size: 16px; line-height: 22px; }
+.c-w5 { font-weight: 500; }
+.c-w6 { font-weight: 600; }
+.c-w7 { font-weight: 700; }
+.c-num { font-variant-numeric: tabular-nums; }
+.c-ell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Boxes, buttons and controls ── */
+
+.c-card {
+  background: var(--card);
+  border: 1px solid var(--card-line);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+}
+
+/* One row of a list inside a box: at least 44 px, the next row under a line. */
+.c-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 44px;
+  padding: 16px;
+  box-sizing: border-box;
+  color: var(--t1);
+}
+.c-row + .c-row {
+  border-top: 1px solid var(--line);
+}
+
+/* Orange means "press here": one `c-btn-p` a box at most; `c-btn-soft` is the second
+   action; `c-btn-s` is outlined. */
+.c-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--t1);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.c-btn:disabled {
+  opacity: 0.5;
+}
+.c-btn-p { background: var(--accent); color: var(--on-accent); }
+.c-btn-s { border-color: var(--ctl-line); }
+.c-btn-soft { background: var(--soft); color: var(--soft-t); }
+.c-btn-danger { background: var(--bad-bg); color: var(--bad); }
+.c-btn-ghost { color: var(--t2); }
+.c-btn-lg { height: 44px; font-size: 15px; }
+.c-btn-sm { height: 32px; padding: 0 12px; font-size: 13px; border-radius: 8px; }
+
+.c-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--t2);
+}
+
+.c-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  box-sizing: border-box;
+  border: 1px solid var(--ctl-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--t2);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.c-chip-on {
+  background: var(--sel);
+  border-color: var(--sel);
+  color: var(--on-sel);
+  font-weight: 600;
+}
+/* A count inside a chip. */
+.c-n {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.72;
+}
+
+/* Colour always has a meaning, and always comes with a word. */
+.c-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.c-tag-good { background: var(--good-bg); color: var(--good); }
+.c-tag-warn { background: var(--warn-bg); color: var(--warn); }
+.c-tag-bad { background: var(--bad-bg); color: var(--bad); }
+.c-tag-plain { background: var(--raise); color: var(--t2); }
+.c-tag-soft { background: var(--soft); color: var(--soft-t); }
+
+/* A time or small fact in a grey box. */
+.c-tc {
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--raise);
+  color: var(--t2);
+  font-size: 13px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.c-tc-warn { background: var(--warn-bg); color: var(--warn); }
+
+.c-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.c-label {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--t1);
+}
+.c-hint {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--t3);
+}
+.c-input,
+.c-sel {
+  width: 100%;
+  height: 44px;
+  padding: 0 14px;
+  box-sizing: border-box;
+  border: 1px solid var(--input-line);
+  border-radius: 10px;
+  background: var(--input);
+  color: var(--t1);
+  font-size: 15px;
+}
+.c-sel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.c-area {
+  width: 100%;
+  padding: 10px 14px;
+  box-sizing: border-box;
+  border: 1px solid var(--input-line);
+  border-radius: 10px;
+  background: var(--input);
+  color: var(--t1);
+  font-size: 15px;
+  line-height: 22px;
+  resize: none;
+}
+.c-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.c-search > svg {
+  position: absolute;
+  left: 14px;
+  color: var(--t3);
+}
+.c-search .c-input {
+  padding-left: 42px;
+}
+
+.c-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  border: 1.5px solid var(--input-line);
+  border-radius: 6px;
+  background: var(--input);
+}
+.c-check-on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.c-switch {
+  position: relative;
+  width: 44px;
+  height: 26px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--raise-line);
+}
+.c-switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #FFFFFF;
+}
+.c-switch-on {
+  background: var(--accent);
+}
+.c-switch-on::after {
+  left: 21px;
+}
+
+/* Tabs across the top of a page (Members: Your list · Using the app). */
+.c-utabs {
+  display: flex;
+  gap: 28px;
+  border-bottom: 1px solid var(--line);
+}
+.c-utab {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 0;
+  box-sizing: border-box;
+  margin-bottom: -1px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--t2);
+  font-size: 15px;
+  font-weight: 500;
+}
+.c-utab-on {
+  color: var(--t1);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+
+.c-th {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  color: var(--t3);
+}
+
+/* A panel or pop-up, and the "look at this" box. */
+.c-sheet {
+  background: var(--sheet);
+  box-shadow: var(--pop);
+}
+.c-callout {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--warn-bg);
+  color: var(--t1);
+}
+
+/* The banner above every page (Part 3 §4.2): a problem, a deadline or a wall, news. */
+.c-banner-danger { background: var(--bad-bg); color: var(--bad); }
+.c-banner-warn { background: var(--warn-bg); color: var(--warn); }
+.c-banner-info { background: var(--raise); color: var(--t2); }
+
+/* Rule 8: on a phone every button is at least 44 px, whatever size a drawing gave it. */
+@media (max-width: 767px) {
+  .c-btn,
+  .c-chip {
+    min-height: 44px;
+  }
+  .c-icon-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* Light · Dark · Auto, in the menu (`c-seg`) and on More (`c-seg2`). */
+.c-seg {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--rail-card);
+  border: 1px solid var(--rail-card-line);
+}
+.c-seg button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--rail-t3);
+  font-size: 13px;
+  font-weight: 500;
+}
+.c-seg button[aria-checked='true'] {
+  background: var(--rail-seg);
+  color: var(--rail-t1);
+  font-weight: 600;
+}
+.c-seg2 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  padding: 3px;
+  border-radius: 12px;
+  border: 1px solid var(--ctl-line);
+  background: var(--card);
+}
+.c-seg2 button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--t2);
+  font-size: 14px;
+  font-weight: 500;
+}
+.c-seg2 button[aria-checked='true'] {
+  background: var(--sel);
+  color: var(--on-sel);
+  font-weight: 600;
+}

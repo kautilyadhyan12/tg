@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A lead — dark, computer</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<div data-root="1" data-fixed-h="1000" class="t-dark" style="width: 1440px; height: %H%px; display: flex; box-sizing: border-box; overflow: hidden; position: relative">
+<!--RAIL:leads-->
+<main style="flex-grow: 1; min-width: 0; box-sizing: border-box; padding: 36px 48px 48px; display: flex; flex-direction: column; gap: 24px">
+<header style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px">
+<div style="display: flex; flex-direction: column; gap: 6px"><h1 class="h1">Leads</h1><p class="sub">People interested in joining Iron House Gym</p></div>
+<span class="btn btn-p">Add lead</span>
+</header>
+<div class="card" style="height: 700px"></div>
+</main>
+
+<div style="position: absolute; inset: 0; background: var(--scrim)"></div>
+
+<aside role="dialog" aria-modal="true" aria-labelledby="lead-name" class="sheet" style="position: absolute; top: 0; right: 0; bottom: 0; width: 540px; box-sizing: border-box; border-left: 1px solid var(--card-line); display: flex; flex-direction: column">
+<div style="padding: 28px 28px 20px; display: flex; flex-direction: column; gap: 16px; border-bottom: 1px solid var(--line)">
+<div style="display: flex; align-items: flex-start; gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 4px; flex-grow: 1; min-width: 0">
+<h2 id="lead-name" style="margin: 0; font-size: 26px; line-height: 32px; font-weight: 700; font-stretch: 106%">Tom Nguyen</h2>
+<span class="s14 t2">Added 20 Sep · A friend</span>
+</div>
+<button type="button" class="icon-btn" aria-label="Close"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
+</div>
+<div role="group" aria-label="Status" style="display: flex; gap: 8px; flex-wrap: wrap">
+<button type="button" class="chip" aria-pressed="false">New</button>
+<button type="button" class="chip" aria-pressed="false">Contacted</button>
+<button type="button" class="chip chip-on" aria-pressed="true">On trial</button>
+<button type="button" class="chip" aria-pressed="false">Joined</button>
+<button type="button" class="chip" aria-pressed="false">Lost</button>
+</div>
+</div>
+
+<div style="padding: 20px 28px; display: flex; flex-direction: column; gap: 16px; flex-grow: 1">
+<div class="field"><label class="label" for="ln">Name</label><input id="ln" class="input" value="Tom Nguyen"></div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+<div class="field"><label class="label" for="le">Email</label><input id="le" class="input" type="email" value="tom.nguyen@example.com"></div>
+<div class="field"><label class="label" for="lp">Phone</label><input id="lp" class="input" type="tel" value="+1 512 555 0163"></div>
+</div>
+<div class="field">
+<span class="label">Heard of you from</span>
+<div role="group" aria-label="Heard of you from" style="display: flex; gap: 8px; flex-wrap: wrap">
+<button type="button" class="chip" aria-pressed="false">Walked in</button>
+<button type="button" class="chip" aria-pressed="false">Website</button>
+<button type="button" class="chip" aria-pressed="false">Social media</button>
+<button type="button" class="chip chip-on" aria-pressed="true">A friend</button>
+<button type="button" class="chip" aria-pressed="false">Other</button>
+</div>
+</div>
+<label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer">
+<span class="check check-on" style="margin-top: 1px"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" style="stroke-width: 3"><path d="M20 6 9 17l-5-5"></path></svg></span>
+<span style="display: flex; flex-direction: column; gap: 2px"><span class="s15 w5">Happy to hear from us by email</span><span class="hint">Tick only if they said yes. The follow-up emails go only to people who did.</span></span>
+</label>
+<div><button type="button" class="btn btn-p">Save</button></div>
+
+<div style="border-top: 1px solid var(--line); padding-top: 16px; display: flex; flex-direction: column; gap: 8px">
+<label class="label" for="notes">Notes</label>
+<textarea id="notes" class="area" rows="3">Asked about personal training. Call back on Friday.</textarea>
+<div><button type="button" class="btn btn-s">Save notes</button></div>
+</div>
+</div>
+
+<div style="padding: 16px 28px; display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--line)">
+<button type="button" class="btn btn-soft"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><polyline points="16 11 18 13 22 9"></polyline></svg>Joined · add to your members</button>
+<div style="flex-grow: 1"></div>
+<button type="button" class="btn" style="color: var(--bad)">Delete lead</button>
+</div>
+</aside>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

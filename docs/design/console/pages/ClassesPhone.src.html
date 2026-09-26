@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Classes — dark, phone</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<div data-root="1" class="t-dark" style="width: 390px; height: %H%px; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden">
+<!--TOPBAR-->
+<main style="flex-grow: 1; box-sizing: border-box; padding: 20px 16px 24px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<h1 class="h1p">Classes</h1>
+<p class="sub">America/Chicago time</p>
+</div>
+<button type="button" class="btn btn-p btn-lg"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>Add class</button>
+<div class="utabs" role="tablist" aria-label="How to show your classes">
+<button type="button" role="tab" aria-selected="true" class="utab utab-on">Classes</button>
+<button type="button" role="tab" aria-selected="false" class="utab">Calendar</button>
+</div>
+
+<section class="card" style="position: relative; overflow: hidden; padding: 20px 20px 20px 25px; display: flex; flex-direction: column; gap: 14px">
+<span aria-hidden="true" style="position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--cl-blue)"></span>
+<div style="display: flex; flex-direction: column; gap: 4px"><h2 style="margin: 0; font-size: 20px; line-height: 26px; font-weight: 700">Sunrise Yoga</h2><p class="s14 t2" style="margin: 0">A gentle flow to start the day.</p></div>
+<div style="display: flex; gap: 8px; flex-wrap: wrap"><button type="button" class="btn btn-s">Edit class</button><button type="button" class="btn btn-s">Bulk edit</button><button type="button" class="btn btn-ghost">Archive</button></div>
+<span class="s13 w6 t3">Time slots</span>
+<div style="border: 1px solid var(--card-line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; gap: 10px"><span style="color: var(--cl-blue); display: flex; padding-top: 2px"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></span><div style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span class="s15 w6">Mon, Wed &amp; Fri · 6:30–7:15 AM</span><span class="s14 t2">16 places · Priya Sharma</span><span class="s13 t3">From 1 Sep 2026 · Next: Mon 28 Sep, Wed 30 Sep</span></div></div>
+<div style="display: flex; gap: 20px; padding-left: 28px"><a href="#edit" class="s15 w6" style="min-height: 32px; display: flex; align-items: center">Edit</a><a href="#cancel" class="s15 w5 t2" style="min-height: 32px; display: flex; align-items: center">Cancel</a></div>
+</div>
+<div style="border: 1px solid var(--card-line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; gap: 10px"><span style="color: var(--cl-blue); display: flex; padding-top: 2px"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></span><div style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span class="s15 w6">Sat · 9:00–10:00 AM</span><span class="s14 t2">20 places · Priya Sharma</span><span class="s13 t3">From 5 Sep 2026 · Next: Sat 3 Oct</span></div></div>
+<div style="display: flex; gap: 20px; padding-left: 28px"><a href="#edit" class="s15 w6" style="min-height: 32px; display: flex; align-items: center">Edit</a><a href="#cancel" class="s15 w5 t2" style="min-height: 32px; display: flex; align-items: center">Cancel</a></div>
+</div>
+<a href="#add-slot" class="s15 w6" style="display: flex; align-items: center; gap: 6px; min-height: 36px"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>Add time slot</a>
+</section>
+
+<section class="card" style="position: relative; overflow: hidden; padding: 20px 20px 20px 25px; display: flex; flex-direction: column; gap: 14px">
+<span aria-hidden="true" style="position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--cl-orange)"></span>
+<div style="display: flex; flex-direction: column; gap: 4px"><h2 style="margin: 0; font-size: 20px; line-height: 26px; font-weight: 700">HIIT Blast</h2><p class="s14 t2" style="margin: 0">Forty-five minutes of intervals.</p></div>
+<div style="display: flex; gap: 8px; flex-wrap: wrap"><button type="button" class="btn btn-s">Edit class</button><button type="button" class="btn btn-ghost">Archive</button></div>
+<span class="s13 w6 t3">Time slots</span>
+<div style="border: 1px solid var(--card-line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; gap: 10px"><span style="color: var(--cl-orange); display: flex; padding-top: 2px"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></span><div style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span class="s15 w6">Tue &amp; Thu · 6:00–6:45 PM</span><span class="s14 t2">12 places · Alex Morgan</span><span class="s13 t3">From 2 Sep 2026 · Next: Tue 29 Sep, Thu 1 Oct</span></div></div>
+<div style="display: flex; gap: 20px; padding-left: 28px"><a href="#edit" class="s15 w6" style="min-height: 32px; display: flex; align-items: center">Edit</a><a href="#cancel" class="s15 w5 t2" style="min-height: 32px; display: flex; align-items: center">Cancel</a></div>
+</div>
+<a href="#add-slot" class="s15 w6" style="display: flex; align-items: center; gap: 6px; min-height: 36px"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>Add time slot</a>
+</section>
+<button type="button" class="card" style="display: flex; align-items: center; gap: 12px; padding: 16px; color: var(--t1); text-align: left; width: 100%">
+<span class="s15 w6" style="flex-grow: 1">Archived classes <span class="t3 w5">· 1</span></span>
+<span class="t3" style="display: flex"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></span>
+</button>
+</main>
+<!--TABBAR:classes-->
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Leads — dark, phone</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<div data-root="1" class="t-dark" style="width: 390px; height: %H%px; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden">
+<!--TOPBAR-->
+<main style="flex-grow: 1; box-sizing: border-box; padding: 20px 16px 24px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<h1 class="h1p">Leads</h1>
+<p class="sub">People interested in joining Iron House Gym</p>
+</div>
+<button type="button" class="btn btn-p btn-lg"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" x2="19" y1="8" y2="14"></line><line x1="22" x2="16" y1="11" y2="11"></line></svg>Add lead</button>
+<label class="search"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><input class="input" type="search" placeholder="Search" aria-label="Search your leads"></label>
+<div role="group" aria-label="Status" style="display: flex; gap: 8px; flex-wrap: wrap">
+<button type="button" class="chip chip-on" aria-pressed="true">All <span class="n">42</span></button>
+<button type="button" class="chip" aria-pressed="false">New <span class="n">12</span></button>
+<button type="button" class="chip" aria-pressed="false">Contacted <span class="n">9</span></button>
+<button type="button" class="chip" aria-pressed="false">On trial <span class="n">6</span></button>
+<button type="button" class="chip" aria-pressed="false">Joined <span class="n">11</span></button>
+<button type="button" class="chip" aria-pressed="false">Lost <span class="n">4</span></button>
+</div>
+<div class="card" style="overflow: hidden">
+<a href="#lead" style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; color: var(--t1)">
+<span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1; min-width: 0"><span style="display: flex; align-items: center; justify-content: space-between; gap: 8px"><span class="s15 w6 ell">Hannah Lee</span><span class="tag tag-soft">New</span></span><span class="s13 t2 ell">hannah.lee@example.com</span><span class="s13 t3">Walked in · Added today</span></span>
+<span class="t3" style="display: flex"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span>
+</a>
+<a href="#lead" style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-top: 1px solid var(--line); color: var(--t1)">
+<span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1; min-width: 0"><span style="display: flex; align-items: center; justify-content: space-between; gap: 8px"><span class="s15 w6 ell">Carlos Diaz</span><span class="tag tag-soft">New</span></span><span class="s13 t2 ell">carlos.diaz@example.com</span><span class="s13 t3">Website · Added yesterday</span></span>
+<span class="t3" style="display: flex"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span>
+</a>
+<a href="#lead" style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-top: 1px solid var(--line); color: var(--t1)">
+<span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1; min-width: 0"><span style="display: flex; align-items: center; justify-content: space-between; gap: 8px"><span class="s15 w6 ell">Ruby Walker</span><span class="tag tag-plain">Contacted</span></span><span class="s13 t2 ell">+1 512 555 0177</span><span class="s13 t3">Social media · Added 22 Sep</span></span>
+<span class="t3" style="display: flex"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span>
+</a>
+<a href="#lead" style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-top: 1px solid var(--line); color: var(--t1)">
+<span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1; min-width: 0"><span style="display: flex; align-items: center; justify-content: space-between; gap: 8px"><span class="s15 w6 ell">Tom Nguyen</span><span class="tag tag-warn">On trial</span></span><span class="s13 t2 ell">tom.nguyen@example.com</span><span class="s13 t3">A friend · Added 20 Sep</span></span>
+<span class="t3" style="display: flex"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span>
+</a>
+<a href="#lead" style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-top: 1px solid var(--line); color: var(--t1)">
+<span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1; min-width: 0"><span style="display: flex; align-items: center; justify-content: space-between; gap: 8px"><span class="s15 w6 ell">Zoe Carter</span><span class="tag tag-good">Joined</span></span><span class="s13 t2 ell">zoe.carter@example.com</span><span class="s13 t3">Website · Added 18 Sep</span></span>
+<span class="t3" style="display: flex"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span>
+</a>
+</div>
+<button type="button" class="btn btn-s btn-lg">Load more</button>
+</main>
+<!--TABBAR:more-->
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

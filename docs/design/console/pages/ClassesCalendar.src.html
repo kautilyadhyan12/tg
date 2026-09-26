@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Classes, calendar — dark, computer</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<div data-root="1" class="t-dark" style="width: 1440px; height: %H%px; display: flex; box-sizing: border-box; overflow: hidden">
+<!--RAIL:classes-->
+<main style="flex-grow: 1; min-width: 0; box-sizing: border-box; padding: 36px 48px 48px; display: flex; flex-direction: column; gap: 24px">
+
+<header style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h1 class="h1">Classes</h1>
+<p class="sub">Iron House Gym · America/Chicago time</p>
+</div>
+<button type="button" class="btn btn-p"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>Add class</button>
+</header>
+
+<div class="utabs" role="tablist" aria-label="How to show your classes">
+<button type="button" role="tab" aria-selected="false" class="utab">Classes</button>
+<button type="button" role="tab" aria-selected="true" class="utab utab-on">Calendar</button>
+</div>
+
+<div style="display: flex; align-items: center; gap: 8px">
+<button type="button" class="icon-btn" aria-label="Week before" style="border: 1px solid var(--ctl-line); width: 44px; height: 44px"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg></button>
+<span class="s16 w6" style="min-width: 180px; text-align: center">21 – 27 Sep 2026</span>
+<button type="button" class="icon-btn" aria-label="Week after" style="border: 1px solid var(--ctl-line); width: 44px; height: 44px"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></button>
+<div style="flex-grow: 1"></div>
+<button type="button" class="sel" aria-label="Show which class" style="width: 200px"><span>All classes</span><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+<button type="button" class="sel" aria-label="Show which coach" style="width: 200px"><span>All coaches</span><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; align-items: start">
+
+<div style="display: flex; flex-direction: column; gap: 8px; min-width: 0">
+<div class="s13 w6 t3" style="padding: 0 2px 4px; border-bottom: 1px solid var(--line)">Mon 21</div>
+<button type="button" class="card" style="border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 1px; text-align: left; color: var(--t1); border-left: 3px solid var(--cl-slate)"><span class="s12 t2">5:00 AM–11:00 PM</span><span class="s14 w6 ell">Open floor</span><span class="s12 t3 ell">No limit</span></button>
+<button type="button" class="card" style="border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 1px; text-align: left; color: var(--t1); border-left: 3px solid var(--cl-blue)"><span class="s12 t2">6:30–7:15 AM</span><span class="s14 w6 ell">Sunrise Yoga</span><span class="s12 t3 ell">16 places · Priya Sharma</span></button>
+<button type="button" class="card" style="border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 1px; text-align: left; color: var(--t1); border-left: 3px solid var(--cl-green)"><span class="s12 t2">7:00–8:00 PM</span><span class="s14 w6 ell">Strength Club</span><span class="s12 t3 ell">10 places · Alex Morgan</span></button>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px; min-width: 0">
+<div class="s13 w6 t3" style="padding: 0 2px 4px; border-bottom: 1px solid var(--line)">Tue 22</div>
+<button type="button" class="card" style="border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 1px; text-align: left; color: var(--t1); border-left: 3px solid var(--cl-slate)"><span class="s12 t2">5:00 AM–11:00 PM</span><span class="s14 w6 ell">Open floor</span><span class="s12 t3 ell">No limit</span></button>
+<button type="button" class="card" style="border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 1px; text-align: left; color: var(--t1); border-left: 3px solid var(--cl-orange)"><span class="s12 t2">6:00–6:45 PM</span><span class="s14 w6 ell">HIIT Blast</span><span class="s12 t3 ell">12 places · Alex Morgan</span></button>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px; min-width: 0">
+<div class="s13 w6 t3" style="padding: 0 2px 4px; border-bottom: 1px solid var(--line)">Wed 23</div>
+<button type="button" class="card" style="border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 1px; text-align: left; color: var(--t1); border-left: 3px solid var(--cl-slate)"><span class="s12 t2">5:00 AM–11:00 PM</span><span class="s14 w6 ell">Open floor</span><span class="s12 t3 ell">No limit</span></button>
+<button type="button" class="card" style="border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 1px; text-align: left; color: var(--t1); border-left: 3px solid var(--cl-blue)"><span class="s12 t2">6:30–7:15 AM</span><span class="s14 w6 ell">Sunrise Yoga</span><span class="s12 t3 ell">16 places · Priya Sharma</span></button>
+<button type="button" class="card" style="border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 1px; text-align: left; color: var(--t1); border-left: 3px solid var(--cl-green)"><span class="s12 t2">7:00–8:00 PM</span><span class="s14 w6 ell">Strength Club</span><span class="s12 t3 ell">10 places · Jordan Hayes</span><span class="s12 w6" style="color: var(--warn)">Changed</span></button>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px; min-width: 0">
+<div class="s13 w6 t3" style="padding: 0 2px 4px; border-bottom: 1px solid var(--line)">Thu 24</div>
+<button type="button" class="card" style="border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 1px; text-align: left; color: var(--t1); border-left: 3px solid var(--cl-slate)"><span class="s12 t2">5:00 AM–11:00 PM</span><span class="s14 w6 ell">Open floor</span><span class="s12 t3 ell">No limit</span></button>
+<button type="button" class="card" style="border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 1px; text-align: left; color: var(--t1); border-left: 3px solid var(--cl-orange)"><span class="s12 t3">6:00–6:45 PM</span><span class="s14 w6 ell t2" style="text-decoration: line-through">HIIT Blast</span><span class="s12 t3 ell">12 places · Alex Morgan</span><span class="s12 w6" style="color: var(--bad)">Cancelled</span></button>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px; min-width: 0">
+<div class="s13 w6 t3" style="padding: 0 2px 4px; border-bottom: 1px solid var(--line)">Fri 25</div>
+<button type="button" class="card" style="border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 1px; text-align: left; color: var(--t1); border-left: 3px solid var(--cl-slate)"><span class="s12 t2">5:00 AM–11:00 PM</span><span class="s14 w6 ell">Open floor</span><span class="s12 t3 ell">No limit</span></button>
+<button type="button" class="card" style="border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 1px; text-align: left; color: var(--t1); border-left: 3px solid var(--cl-blue)"><span class="s12 t2">6:30–7:15 AM</span><span class="s14 w6 ell">Sunrise Yoga</span><span class="s12 t3 ell">16 places · Priya Sharma</span></button>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px; min-width: 0">
+<div class="s13 w6" style="padding: 0 2px 4px; border-bottom: 2px solid var(--accent); color: var(--link)">Sat 26 · Today</div>
+<button type="button" class="card" style="border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 1px; text-align: left; color: var(--t1); border-left: 3px solid var(--cl-slate)"><span class="s12 t2">5:00 AM–11:00 PM</span><span class="s14 w6 ell">Open floor</span><span class="s12 t3 ell">No limit</span></button>
+<button type="button" class="card" style="border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 1px; text-align: left; color: var(--t1); border-left: 3px solid var(--cl-blue)"><span class="s12 t2">9:00–10:00 AM</span><span class="s14 w6 ell">Sunrise Yoga</span><span class="s12 t3 ell">20 places · Priya Sharma</span></button>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px; min-width: 0">
+<div class="s13 w6 t3" style="padding: 0 2px 4px; border-bottom: 1px solid var(--line)">Sun 27</div>
+<button type="button" class="card" style="border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 1px; text-align: left; color: var(--t1); border-left: 3px solid var(--cl-slate)"><span class="s12 t2">5:00 AM–11:00 PM</span><span class="s14 w6 ell">Open floor</span><span class="s12 t3 ell">No limit</span></button>
+</div>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

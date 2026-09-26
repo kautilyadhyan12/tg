@@ -265,7 +265,7 @@ describe('Change size', () => {
   it('is offered to nobody who cannot pay, nor on a plan set to end', async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...TRAINER, subscription: paying }, { ...OWNER, id: '33333333-3333-3333-3333-333333333333', slug: 'other' }));
     renderOverview();
-    await screen.findByText('Iron House');
+    await screen.findByRole('heading', { name: 'Iron House' });
     expect(screen.queryByRole('button', { name: 'Change size' })).toBeNull();
     cleanup();
     resetConsoleOrgs();
@@ -482,7 +482,7 @@ describe('the last days’ question', () => {
     resetConsoleOrgs();
     orgService.getMine.mockResolvedValue(mineIs({ ...TRAINER, seatsUsed: 250, subscription: soon(FALLBACK) }));
     renderOverview();
-    await screen.findByText('Iron House');
+    await screen.findByRole('heading', { name: 'Iron House' });
     expect(screen.queryByTestId('size-decision')).toBeNull();
   });
 });

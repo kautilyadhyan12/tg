@@ -167,7 +167,7 @@ describe("the plan card's way to Paddle's page", () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...TRAINER, subscription: plan() }));
     renderOverview();
     await waitFor(() => expect(orgService.getMine).toHaveBeenCalled());
-    await screen.findByText('Iron House');
+    await screen.findByRole('heading', { name: 'Iron House' });
     expect(screen.queryByRole('button', { name: /manage payment|update payment method/i })).toBeNull();
   });
 });

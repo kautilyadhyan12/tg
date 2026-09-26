@@ -170,31 +170,32 @@ afterEach(() => {
 });
 
 describe('the console shell', () => {
-  it('names the tabs and the heading after the org type', async () => {
+  // The menu names the organisation by its own name and type ("Austin · Studio") and its
+  // people in its own word; "Gym console" is left for the pages with no organisation yet.
+  const rail = () => screen.getByTestId('console-rail');
+
+  it('names the tabs and the organisation after its type', async () => {
     settingsAs('studio');
-    // The rail and the mobile bar both carry it, hence `getAllBy`.
-    await waitFor(() => expect(screen.getAllByText('Studio console').length).toBeGreaterThan(0));
+    expect(await within(rail()).findByText('Austin · Studio')).toBeTruthy();
     expect(screen.getAllByText('Clients').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Studio').length).toBeGreaterThan(0);
-    expect(screen.queryByText('Gym console')).toBeNull();
     expect(screen.queryByText('Members')).toBeNull();
+    expect(screen.queryByText(/Gym console/)).toBeNull();
   });
 
   it('leaves a gym’s tabs exactly as they were — the control', async () => {
     settingsAs('gym');
-    await waitFor(() => expect(screen.getAllByText('Gym console').length).toBeGreaterThan(0));
+    expect(await within(rail()).findByText('Austin · Gym')).toBeTruthy();
     expect(screen.getAllByText('Members').length).toBeGreaterThan(0);
-    expect(screen.queryByText('Studio console')).toBeNull();
     expect(screen.queryByText('Clients')).toBeNull();
   });
 
-  /** **THE TWO-NOUN SPLIT, ON SCREEN.** A personal trainer runs a *business*
-   *  and their client joined a *trainer*; the console is the owner's side, so
-   *  it is the business word that belongs in the shell. */
-  it('calls a personal trainer’s console their Business, not their Trainer', async () => {
+  /** A personal trainer's console is their business: the menu says what kind of
+   *  organisation it is, never the staff role "Trainer". */
+  it('calls a personal trainer’s organisation what it is, and their people Clients', async () => {
     settingsAs('personal_trainer');
-    await waitFor(() => expect(screen.getAllByText('Business console').length).toBeGreaterThan(0));
+    expect(await within(rail()).findByText('Austin · Personal trainer')).toBeTruthy();
     expect(screen.getAllByText('Clients').length).toBeGreaterThan(0);
+    expect(within(rail()).queryByText('Trainer')).toBeNull();
   });
 });
 
