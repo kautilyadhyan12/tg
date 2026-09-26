@@ -366,9 +366,27 @@ export async function invitationViews(
       sentAgain: row.again,
       waitingSince: row.waiting_since?.toISOString() ?? null,
       notMeAt: row.not_me_at?.toISOString() ?? null,
+      removedAt: null,
     });
   }
   return views;
+}
+
+/** When the gym last removed from the app the person signed in with each address, for
+ *  those who are not members here now; keyed by the lower-cased address. */
+export async function removedAtByEmail(sql: SqlOrTx, gymId: string, emails: readonly string[]): Promise<Map<string, Date>> {
+  if (emails.length === 0) return new Map();
+  const rows = await sql<{ email: string; removed_at: Date }[]>`
+    SELECT lower(u.email::text) AS email, max(m.removed_at) AS removed_at
+    FROM gym_members m
+    JOIN users u ON u.id = m.user_id
+    WHERE m.gym_id = ${gymId}
+      AND m.removed_at IS NOT NULL
+      AND u.email = ANY(${[...emails]}::citext[])
+      AND NOT EXISTS (
+        SELECT 1 FROM gym_members l WHERE l.gym_id = m.gym_id AND l.user_id = m.user_id AND l.removed_at IS NULL)
+    GROUP BY lower(u.email::text)`;
+  return new Map(rows.map((row) => [row.email, row.removed_at]));
 }
 
 // ── The unsubscribe link (public; the token's MAC has proved the id) ─────────
@@ -967,6 +985,25 @@ export async function withdrawInvitations(
   const rows = await tx<{ id: string }[]>`
     UPDATE gym_invites SET state = 'withdrawn', answered_at = ${input.at}, waiting_since = NULL, not_me_at = NULL
     WHERE gym_id = ${input.gymId} AND email_hmac = ANY(${[...input.hmacs]}::text[]) AND state <> 'withdrawn'
+    RETURNING id`;
+  return rows.length;
+}
+
+/** Staff removed these members: each address's invitation is stopped, and an address the
+ *  gym never invited gets a stopped one, so no Invite reaches a person the gym has just
+ *  removed. Send again starts it again. Answers how many changed. */
+export async function stopInvitations(
+  tx: TransactionSql,
+  input: { gymId: string; hmacs: readonly string[]; at: Date },
+): Promise<number> {
+  if (input.hmacs.length === 0) return 0;
+  const rows = await tx<{ id: string }[]>`
+    INSERT INTO gym_invites (gym_id, email_hmac, state, answered_at, created_at)
+    SELECT ${input.gymId}, h, 'withdrawn', ${input.at}, ${input.at}
+    FROM unnest(${[...input.hmacs]}::text[]) AS h
+    ON CONFLICT (gym_id, email_hmac) DO UPDATE
+      SET state = 'withdrawn', answered_at = ${input.at}, waiting_since = NULL, not_me_at = NULL
+      WHERE gym_invites.state <> 'withdrawn'
     RETURNING id`;
   return rows.length;
 }

@@ -14,6 +14,7 @@
 // `reconcile`'s, so that the preview, the confirm, the reads and 3a-iv's removal
 // cannot answer differently.
 import { z } from "zod";
+import type { MemberForWords } from "./byWords.js";
 import type { Sql, TransactionSql } from "postgres";
 import {
   MEMBER_LIST_MAX_EDITED_FIELDS,
@@ -1574,6 +1575,8 @@ export interface EntryRow {
   formerAt: Date | null;
   source: MemberListEntrySource;
   inApp: boolean;
+  /** The gym's own columns, read only when the page asked for them (the export). */
+  extra: Record<string, string> | null;
 }
 
 export interface EntriesPageInput {
@@ -1598,6 +1601,8 @@ export interface EntriesPageInput {
   like: string | null;
   cursor: { name: string; id: string } | null;
   limit: number;
+  /** Read the gym's own columns too: the export does, a screen's page never does. */
+  withExtra?: boolean;
 }
 
 /** ONE PAGE OF THE LIST, AND HOW MANY THE FILTERS MATCH IN ALL — one statement.
@@ -1621,7 +1626,7 @@ export interface EntriesPageInput {
 export async function entriesPage(
   sql: SqlOrTx,
   input: EntriesPageInput,
-): Promise<{ total: number; entries: EntryRow[] }> {
+): Promise<{ total: number; entries: EntryRow[]; dated: { ends: number; renews: number } }> {
   const statuses = input.statuses === null ? null : [...input.statuses];
   const membershipTypes = input.membershipTypes === null ? null : [...input.membershipTypes];
   const paymentStatuses = input.paymentStatuses === null ? null : [...input.paymentStatuses];
@@ -1630,6 +1635,8 @@ export async function entriesPage(
   const rows = await sql<
     {
       total: number;
+      ends: number;
+      renews: number;
       id: string | null;
       full_name: string | null;
       email: string | null;
@@ -1645,6 +1652,7 @@ export async function entriesPage(
       former_at: Date | null;
       source: string | null;
       in_app: boolean | null;
+      extra: unknown;
     }[]
   >`
     WITH filtered AS (
@@ -1656,7 +1664,8 @@ export async function entriesPage(
              e.payment_status,
              e.date_of_birth::text AS date_of_birth,
              e.former_at, e.source,
-             (e.id = ANY(${input.inAppEntryIds}::uuid[])) AS in_app
+             (e.id = ANY(${input.inAppEntryIds}::uuid[])) AS in_app,
+             CASE WHEN ${input.withExtra === true}::boolean THEN e.extra ELSE NULL END AS extra
       FROM gym_member_list_entries e
       WHERE e.gym_id = ${input.gymId}
         -- CURRENT RECORDS UNLESS THE FORMER ONES WERE ASKED FOR BY NAME (§11.5). The
@@ -1686,10 +1695,17 @@ export async function entriesPage(
              OR (${invitedInclude}::boolean AND e.id = ANY(${invitedIds}::uuid[]))
              OR (NOT ${invitedInclude}::boolean AND e.id <> ALL(${invitedIds}::uuid[])))
     ),
-    totals AS (SELECT count(*)::int AS total FROM filtered)
-    SELECT t.total, f.id, f.full_name, f.email, f.phone_e164, f.member_number,
+    -- How many of the set carry an end date and how many a renewal date: the export
+    -- writes one date column when the set holds only one kind.
+    totals AS (
+      SELECT count(*)::int AS total,
+             (count(*) FILTER (WHERE ends_on IS NOT NULL AND ends_on_kind IS DISTINCT FROM 'renews'))::int AS ends,
+             (count(*) FILTER (WHERE ends_on IS NOT NULL AND ends_on_kind = 'renews'))::int AS renews
+      FROM filtered
+    )
+    SELECT t.total, t.ends, t.renews, f.id, f.full_name, f.email, f.phone_e164, f.member_number,
            f.status, f.membership_type, f.joined_on, f.ends_on, f.ends_on_kind,
-           f.payment_status, f.date_of_birth, f.former_at, f.source, f.in_app
+           f.payment_status, f.date_of_birth, f.former_at, f.source, f.in_app, f.extra
     FROM totals t
     LEFT JOIN LATERAL (
       SELECT *
@@ -1701,6 +1717,7 @@ export async function entriesPage(
       LIMIT ${input.limit}
     ) f ON true`;
   const total = rows[0]?.total ?? 0;
+  const dated = { ends: rows[0]?.ends ?? 0, renews: rows[0]?.renews ?? 0 };
   const entries: EntryRow[] = [];
   for (const row of rows) {
     // The LEFT JOIN gives one all-null row when the page is empty, which is how the
@@ -1724,9 +1741,10 @@ export async function entriesPage(
       formerAt: row.former_at,
       source: source.data,
       inApp: row.in_app ?? false,
+      extra: input.withExtra === true ? parseExtra(row.extra, row.id) : null,
     });
   }
-  return { total, entries };
+  return { total, entries, dated };
 }
 
 /** TELL POSTGRES WHAT IS NOW IN THE TABLE, after a confirm has filled it.
@@ -2053,6 +2071,78 @@ export async function memberContact(
   return row === undefined ? null : { displayName: row.display_name, email: row.email, phone: row.stated_phone_e164 };
 }
 
+const recordWordsSchema = z.array(z.tuple([z.string().nullable(), z.string().nullable(), z.string().nullable()]));
+
+/** Every live member of the gym with what `byWords` decides on: the record they joined
+ *  with and its words, or else the words of every current record holding their proved
+ *  email or stated phone. One statement. */
+export async function membersForWords(sql: SqlOrTx, gymId: string): Promise<MemberForWords[]> {
+  const rows = await sql<
+    {
+      user_id: string;
+      display_name: string;
+      email: string | null;
+      joined_at: Date;
+      seat_counted: boolean;
+      joined_id: string | null;
+      joined_current: boolean;
+      joined_status: string | null;
+      joined_type: string | null;
+      joined_payment: string | null;
+      reaching: unknown;
+    }[]
+  >`
+    SELECT m.user_id, m.joined_at, u.display_name,
+           (m.complimentary = false
+            AND NOT EXISTS (
+              SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)) AS seat_counted,
+           CASE WHEN v.proved THEN u.email::text ELSE NULL END AS email,
+           j.id AS joined_id,
+           (j.id IS NOT NULL AND j.former_at IS NULL) AS joined_current,
+           j.status AS joined_status, j.membership_type AS joined_type, j.payment_status AS joined_payment,
+           r.words AS reaching
+    FROM gym_members m
+    JOIN users u ON u.id = m.user_id
+    LEFT JOIN gym_member_list_entries j ON j.gym_id = m.gym_id AND j.id = m.entry_id
+    CROSS JOIN LATERAL (
+      SELECT EXISTS (
+               SELECT 1 FROM one_time_tokens t
+               WHERE t.user_id = m.user_id AND t.purpose = 'verify_email' AND t.used_at IS NOT NULL) AS proved
+    ) v
+    CROSS JOIN LATERAL (
+      SELECT coalesce(json_agg(json_build_array(x.status, x.membership_type, x.payment_status)), '[]'::json) AS words
+      FROM (
+        SELECT x.id FROM gym_member_list_entries x
+        WHERE x.gym_id = m.gym_id AND x.former_at IS NULL AND j.id IS NULL AND v.proved AND x.email = u.email
+        UNION
+        SELECT x.id FROM gym_member_list_entries x
+        WHERE x.gym_id = m.gym_id AND x.former_at IS NULL AND j.id IS NULL
+          AND m.stated_phone_e164 IS NOT NULL AND x.phone_e164 = m.stated_phone_e164
+      ) hit
+      JOIN gym_member_list_entries x ON x.gym_id = m.gym_id AND x.id = hit.id
+    ) r
+    WHERE m.gym_id = ${gymId} AND m.removed_at IS NULL`;
+  return rows.map((row) => {
+    const reaching = recordWordsSchema.safeParse(row.reaching);
+    if (!reaching.success) throw new Error(`the records reaching member ${row.user_id} did not read as words`);
+    return {
+      userId: row.user_id,
+      fullName: row.display_name,
+      email: row.email,
+      joinedAt: row.joined_at,
+      seatCounted: row.seat_counted,
+      joined:
+        row.joined_id === null
+          ? null
+          : {
+              current: row.joined_current,
+              words: { status: row.joined_status, membershipType: row.joined_type, paymentStatus: row.joined_payment },
+            },
+      reaching: reaching.data.map(([status, membershipType, paymentStatus]) => ({ status, membershipType, paymentStatus })),
+    };
+  });
+}
+
 /** "REMOVE ALL": the memberships closed, in one statement — `removeMember`'s own
  *  write for a set. The owner, staff and free places are refused here as well as by
  *  the rule that chose the set. */
@@ -2075,6 +2165,9 @@ export async function closeMemberships(
   return rows.map((row) => ({ membershipId: row.id, userId: row.user_id }));
 }
 
+/** The summary audit rows a removal of a set writes, one action for each way in. */
+export type RemovalAction = "org.member_list_unlisted_removed" | "org.member_list_words_removed";
+
 /** How many people an earlier "Remove all" of this exact set removed, since `since`, or
  *  null when there was none: the summary audit row keeps the set's digest. */
 export async function unlistedRemovalByDigest(
@@ -2083,12 +2176,13 @@ export async function unlistedRemovalByDigest(
   group: string,
   digest: string,
   since: Date,
+  action: RemovalAction = "org.member_list_unlisted_removed",
 ): Promise<number | null> {
   const rows = await tx<{ removed: string | null }[]>`
     SELECT meta->>'removed' AS removed
     FROM audit_log
     WHERE gym_id = ${gymId} AND at >= ${since}
-      AND action = 'org.member_list_unlisted_removed'
+      AND action = ${action}
       AND meta->>'group' = ${group} AND meta->>'digest' = ${digest}
     ORDER BY at DESC
     LIMIT 1`;
@@ -2100,13 +2194,19 @@ export async function unlistedRemovalByDigest(
  *  writes, in one statement. */
 export async function insertRemovalAudits(
   tx: TransactionSql,
-  input: { actorUserId: string; gymId: string; group: string; removed: readonly { membershipId: string; userId: string }[] },
+  input: {
+    actorUserId: string;
+    gymId: string;
+    group: string;
+    removed: readonly { membershipId: string; userId: string }[];
+    via?: "remove_unlisted" | "remove_by_words";
+  },
 ): Promise<void> {
   if (input.removed.length === 0) return;
   const payload = input.removed.map((r) => ({ membership_id: r.membershipId, user_id: r.userId }));
   await tx`
     INSERT INTO audit_log (actor_user_id, gym_id, action, target_type, target_id, meta)
     SELECT ${input.actorUserId}, ${input.gymId}, 'org.member_removed', 'gym_member', r.membership_id,
-           jsonb_build_object('removedUserId', r.user_id, 'via', 'remove_unlisted', 'group', ${input.group}::text)
+           jsonb_build_object('removedUserId', r.user_id, 'via', ${input.via ?? "remove_unlisted"}::text, 'group', ${input.group}::text)
     FROM jsonb_to_recordset(${tx.json(payload)}) AS r(membership_id text, user_id text)`;
 }

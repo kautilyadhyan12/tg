@@ -115,9 +115,11 @@ line, next to the model and effort. When in doubt, the bigger size.
 - Plain English a beginner can read aloud. Say what a user sees, not what the code does.
 - Lead with the answer. Short sentences. Tables over paragraphs. Numbers only when they
   change what he does next, and never a number you did not measure with a command.
-- One decision at a time, and only decisions that are genuinely his (what the user
-  sees, money, legal, order of work). Engineering choices are yours: state them in one
-  line and move on.
+- One decision at a time, and only decisions that are genuinely his (what a feature
+  does, money, legal, order of work). Engineering choices are yours: state them in one
+  line and move on. So are a screen's words and layout: judge them yourself against §4's
+  screen rule and standard gym software; never ask Kd to approve words or pictures
+  (RULINGS 2026-09-26).
 - A hazard is raised together with its solutions and a recommendation, never alone.
 - His words: "terminal", not "chat"; "job", not "card". When a step needs a word of the
   trade ("merge", "pull request", "branch"), say what it means in the same sentence.
@@ -169,6 +171,20 @@ trials use an injectable clock.
 pregnancy, or for a flagged heart, blood-pressure or diabetes answer. Safe mode hides
 workout and run plans until a professional's clearance is confirmed. Every suggestion
 that involves food shows its allergens. Disclaimer text is never softened or removed.
+
+**Screens a new gym understands (Kd, RULINGS 2026-09-26).** Write every screen for someone
+who opened a gym last week and has never seen this app.
+- Plain words that gym software and a front desk already use, never the app's inner workings
+  ("Removed from app · 26 Sep", not "Invitation stopped"; never "record", "entry", "withdrawn").
+- Nothing hidden. A button says what it does and to whom. Before anything emails, removes or
+  changes people, a box names who will change and who won't, with the reason in one line
+  each (a few names, then "and N more", See all).
+- One name for one thing, the same on every screen; the spec keeps the word list.
+- Standard patterns first: tick boxes and one action bar to act on many people, as Gmail and
+  HubSpot do; nothing happens to anyone who was not ticked.
+- The words and layout are the terminal's own judgement, never Kd's to approve (he is a
+  beginner and asked for it to be ours): check them against this rule and against what
+  standard gym software shows before building, and fix whatever his click-through finds.
 
 **The console's look (Kd, RULINGS 2026-09-26).** Every console page follows spec Part 3
 §17: colours by name from `apps/web/src/components/console/console.css`, never written

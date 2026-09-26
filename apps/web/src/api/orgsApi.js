@@ -21,6 +21,10 @@ import {
   memberInvitedResponseSchema,
   memberInviteOneResponseSchema,
   memberInvitePreviewResponseSchema,
+  memberListByWordsResponseSchema,
+  memberListRemovedByWordsResponseSchema,
+  memberListRemovedResponseSchema,
+  memberListUnlistedResponseSchema,
   memberListConfirmResponseSchema,
   memberListEntriesResponseSchema,
   memberListEntryDeletedSchema,
@@ -599,6 +603,64 @@ export const orgService = {
       'who would be invited',
       authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/invites/preview${query ? `?${query}` : ''}`),
     ),
+
+  /** GET …/member-list/remove-by-words — the app members the words ticked would remove,
+   *  a page at a time. `query` is `inviteQueryString`'s, with `cursor` for the next page. */
+  getRemoveByWords: (gymId, query) =>
+    readThrough(
+      memberListByWordsResponseSchema,
+      'who would be removed',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/remove-by-words?${query}`),
+    ),
+
+  /** POST …/member-list/remove-by-words — remove them from the app. A 409 `list_changed`
+   *  or `large_change` removed nobody. */
+  removeByWords: (gymId, body) =>
+    readThrough(
+      memberListRemovedByWordsResponseSchema,
+      'the removal',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/remove-by-words`, body),
+    ),
+
+  /** GET …/member-list/unlisted — the app members one group of §9.7's marks holds, a
+   *  page at a time. */
+  getUnlisted: (gymId, group, cursor = null) =>
+    readThrough(
+      memberListUnlistedResponseSchema,
+      'who is not on your list',
+      authApi.get(
+        `/v1/orgs/${encodeURIComponent(gymId)}/member-list/unlisted?group=${encodeURIComponent(group)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+      ),
+    ),
+
+  /** POST …/member-list/remove-unlisted — remove that whole group from the app. */
+  removeUnlisted: (gymId, body) =>
+    readThrough(
+      memberListRemovedResponseSchema,
+      'the removal',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/remove-unlisted`, body),
+    ),
+
+  /** GET …/member-list/export.csv — the list as the screen shows it, as a file. `query`
+   *  is `entriesQueryString`'s without a cursor. Answers the file and its name. */
+  downloadMemberList: async (gymId, query) => {
+    const res = await authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/export.csv${query ? `?${query}` : ''}`, {
+      responseType: 'blob',
+    });
+    // The exact name (filename*, which can hold any letter), else the plain one.
+    const header = res.headers?.['content-disposition'] ?? '';
+    const exact = /filename\*=UTF-8''([^;]+)/i.exec(header);
+    const plain = /filename="([^"]+)"/.exec(header);
+    let filename = plain?.[1] ?? 'members.csv';
+    if (exact) {
+      try {
+        filename = decodeURIComponent(exact[1]);
+      } catch {
+        // A name that does not decode keeps the plain one.
+      }
+    }
+    return { blob: res.data, filename };
+  },
 
   /** POST …/member-list/invites — press Invite. A 409 `invite_changed` carries the new
    *  preview (`inviteChangedPreview`) and nobody was invited. */

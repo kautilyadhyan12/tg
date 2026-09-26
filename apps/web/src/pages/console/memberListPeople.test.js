@@ -6,6 +6,9 @@ import {
   memberInviteRequestSchema,
   memberListEntryDetailSchema,
   memberListEntriesQuerySchema,
+  memberListByWordsQuerySchema,
+  memberListExportQuerySchema,
+  memberListRemoveByWordsRequestSchema,
   MEMBER_INVITE_EMAIL_REASON_WORDS,
 } from '@app/shared';
 import {
@@ -22,9 +25,13 @@ import {
   inviteQueryString,
   patchFrom,
   personInviteAction,
+  removeBody,
+  removeIgnores,
+  removeQueryString,
   rowWords,
   skippedLines,
   toggleWord,
+  wordsTicked,
 } from './memberListPeople';
 import { FIELD_LABELS } from './memberListView';
 
@@ -129,7 +136,9 @@ describe('what a row says about the app and the invitation', () => {
     ['joined', { invitation: inv({ state: 'accepted' }) }, 'Joined', 'green'],
     ['declined', { invitation: inv({ state: 'declined' }) }, 'Declined', 'plain'],
     ['said Not me', { invitation: inv({ state: 'declined', notMeAt: '2026-09-21T10:00:00.000Z' }) }, 'Said "Not me"', 'red'],
-    ['withdrawn', { invitation: inv({ state: 'withdrawn' }) }, 'Invitation stopped', 'plain'],
+    ['taken off the list, then put back', { invitation: inv({ state: 'withdrawn', removedAt: null }) }, 'Invitation cancelled', 'plain'],
+    ['removed from the app this year', { invitation: inv({ state: 'withdrawn', removedAt: `${String(new Date().getFullYear())}-09-26T10:00:00.000Z` }) }, 'Removed from app · 26 Sept', 'plain'],
+    ['removed from the app another year', { invitation: inv({ state: 'withdrawn', removedAt: '2020-09-26T10:00:00.000Z' }) }, 'Removed from app · 26 Sept 2020', 'plain'],
     ['waiting for a place', { invitation: inv({ waitingSince: '2026-09-21T10:00:00.000Z' }) }, 'Waiting for a place', 'orange'],
     ['email waiting', { invitation: inv({ email: { state: 'queued', reason: null, at: '2026-09-20T10:00:00.000Z', result: null } }) }, 'Invited · email waiting to go', 'plain'],
     ['delivered', { invitation: inv() }, 'Invited 20 September 2026', 'plain'],
@@ -284,7 +293,8 @@ describe("what a person's page offers about the invitation — every class", () 
     ['joined', { invitation: inv({ state: 'accepted' }) }, null],
     ['declined', { invitation: inv({ state: 'declined' }) }, 'again'],
     ['said "Not me"', { invitation: inv({ state: 'declined', notMeAt: at }) }, null],
-    ['invitation stopped', { invitation: inv({ state: 'withdrawn' }) }, 'again'],
+    ['removed from the app', { invitation: inv({ state: 'withdrawn', removedAt: '2026-09-26T10:00:00.000Z' }) }, 'invite_again'],
+    ['taken off the list, then put back', { invitation: inv({ state: 'withdrawn', removedAt: null }) }, 'invite_again'],
     ['16 by the list, never invited', { dateOfBirth: '2010-03-14' }, 'under_age'],
     ['turns 18 tomorrow', { dateOfBirth: '2008-09-26' }, 'under_age'],
     ['turned 18 today', { dateOfBirth: '2008-09-25' }, 'invite'],
@@ -353,5 +363,41 @@ describe("the gym's own day for a birthday", () => {
   });
   it('falls back to the reader\'s own day for a zone it cannot read', () => {
     expect(gymToday('Not/AZone', at)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+/** A query string as the server's querystring parser reads it: a repeated key is a list. */
+const asQuery = (qs) => {
+  const out = {};
+  for (const [k, v] of new URLSearchParams(qs)) out[k] = k in out ? [].concat(out[k], v) : v;
+  return out;
+};
+
+describe('remove by status and the download (5b-iii)', () => {
+  const ticked = { ...EMPTY_FILTERS, status: ['Cancelled', ''], paymentStatus: ['Overdue'], query: 'ann', app: 'in_app' };
+  it('needs a word ticked, on the current list', () => {
+    expect(wordsTicked(EMPTY_FILTERS)).toBe(false);
+    expect(wordsTicked({ ...EMPTY_FILTERS, app: 'in_app', query: 'x' })).toBe(false);
+    expect(wordsTicked({ ...EMPTY_FILTERS, membershipType: ['Gold'] })).toBe(true);
+    expect(wordsTicked({ ...EMPTY_FILTERS, status: ['Cancelled'], records: 'former' })).toBe(false);
+  });
+  it('the look sends the words alone, as the server reads them, and the next page', () => {
+    const qs = removeQueryString(ticked, 'cccccccc-cccc-4ccc-8ccc-cccccccccccc');
+    expect(asQuery(qs)).toEqual({ status: ['Cancelled', ''], paymentStatus: 'Overdue', cursor: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' });
+    expect(memberListByWordsQuerySchema.safeParse(asQuery(qs)).success).toBe(true);
+  });
+  it('the press carries the words and the numbers, and the tick only when asked', () => {
+    const page = { version: 3, total: 9, digest: 'd'.repeat(64) };
+    const body = removeBody(ticked, page, false);
+    expect(body).toEqual({ version: 3, expectedCount: 9, digest: 'd'.repeat(64), status: ['Cancelled', ''], paymentStatus: ['Overdue'] });
+    expect(memberListRemoveByWordsRequestSchema.safeParse(body).success).toBe(true);
+    expect(removeBody(ticked, page, true).acknowledgeLargeChange).toBe(true);
+  });
+  it('says when the search or the app filter does not choose who is removed', () => {
+    expect(removeIgnores(ticked)).toMatch(/choose who is removed/);
+    expect(removeIgnores({ ...EMPTY_FILTERS, status: ['Cancelled'] })).toBeNull();
+  });
+  it('the download asks for what the list shows, which the server accepts', () => {
+    expect(memberListExportQuerySchema.safeParse(asQuery(entriesQueryString(ticked))).success).toBe(true);
+    expect(memberListExportQuerySchema.safeParse(asQuery(entriesQueryString({ ...EMPTY_FILTERS, records: 'former' }))).success).toBe(true);
   });
 });

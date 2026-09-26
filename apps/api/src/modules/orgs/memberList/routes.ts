@@ -5,6 +5,7 @@
 //
 // Registered from `registerOrgRoutes` rather than from `app.ts`, because these
 // are the same console behind the same gates and share its deps.
+import { Readable } from "node:stream";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
@@ -21,6 +22,9 @@ import {
   memberListEntryPatchSchema,
   memberListMergeRequestSchema,
   memberListRemoveUnlistedRequestSchema,
+  memberListRemoveByWordsRequestSchema,
+  memberListByWordsQuerySchema,
+  memberListExportQuerySchema,
   memberListRowsQuerySchema,
   memberListUnlistedQuerySchema,
   memberListUploadRequestSchema,
@@ -31,6 +35,7 @@ import { memberListEntryParamsSchema, memberListParamsSchema, memberParamsSchema
 import * as invites from "../invites/service.js";
 import type { InviteSettings } from "../invites/settings.js";
 import * as byHand from "./byHandService.js";
+import * as exporter from "./exportCsv.js";
 import * as service from "./service.js";
 
 /** The body limit for an upload: the base64 ceiling plus room for the two other
@@ -523,5 +528,79 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
           requestId: req.id,
         });
     }
+  });
+
+  // ── Remove by status (5b-iii; RULINGS 2026-09-23) ──
+
+  app.get("/v1/orgs/:gymId/member-list/remove-by-words", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(memberListByWordsQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const page = await byHand.readByWords(listDeps, requireUserId(req), params.gymId, query, readGate(req, reply));
+    if (page === null) return;
+    return reply.status(200).send({ page });
+  });
+
+  // One allowance with "Remove all": both take people out of the gym in one press.
+  app.post("/v1/orgs/:gymId/member-list/remove-by-words", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(memberListRemoveByWordsRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const answer = await byHand.removeByWords(listDeps, requireUserId(req), params.gymId, body, removeGate(req, reply));
+    switch (answer.kind) {
+      case "rate_limited":
+        return;
+      case "removed":
+        return reply.status(200).send({ removed: { removed: answer.removed, alreadyRemoved: answer.alreadyRemoved } });
+      case "list_changed":
+        return reply.status(409).send({
+          error: "list_changed",
+          message: MEMBER_LIST_BY_HAND_WORDS.list_changed,
+          version: answer.version,
+          total: answer.total,
+          digest: answer.digest,
+          requestId: req.id,
+        });
+      case "large_change":
+        return reply.status(409).send({
+          error: "large_change",
+          message: MEMBER_LIST_BY_HAND_WORDS.large_change,
+          removing: answer.removing,
+          of: answer.of,
+          requestId: req.id,
+        });
+    }
+  });
+
+  // ── The CSV export (5b-iii; §9.9) ──
+
+  /** A download holds every person the filters show: 20 an hour each, 60 from one
+   *  address (the front desk). */
+  const exportGate = gate(
+    createDualRateLimit({
+      name: "memberlist_export",
+      max: 20,
+      ipMax: 60,
+      windowMs: 60 * 60 * 1000,
+      identifier: (req) => req.authUser?.id ?? null,
+      redis: deps.redis,
+    }),
+  );
+
+  app.get("/v1/orgs/:gymId/member-list/export.csv", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(memberListExportQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const file = await exporter.exportList(listDeps, requireUserId(req), params.gymId, query, exportGate(req, reply));
+    if (file === null) return;
+    return reply
+      .status(200)
+      .header("content-type", "text/csv; charset=utf-8")
+      .header("content-disposition", exporter.contentDisposition(file.filename))
+      .header("cache-control", "no-store")
+      .send(Readable.from(file.chunks));
   });
 }

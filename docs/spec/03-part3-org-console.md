@@ -1625,6 +1625,26 @@ written as they are (a blanket rule breaks `+44…`, and `-10` → `10` is a doc
 casualty elsewhere); a save-and-reopen test. Members are told when confirmed or
 removed, as a removal tells them today.
 
+**Out of 5b-iii (built 2026-09-26).** `GET /remove-by-words?status=…` (the Filter's three
+kinds of word, at least one) lists the app members the words remove, with version, count
+and digest; `POST /remove-by-words` removes them as "Remove all" does (same digest, replay,
+large-change tick, one allowance). A member's record is the one they joined with when it is
+current (a former one puts them in "no longer listed" instead); otherwise every current
+record holding their proved email or stated phone must carry the words. Paid seats only;
+records stay. `GET /export.csv` takes `GET /entries`' filters and search, streams 500
+records a read with the gym's own columns, a BOM and CRLF; one date column named by its
+kind ("End date" or "Renewal date", both only when the set holds both), so a downloaded
+list uploads back unchanged; no "in the app" column (the Filter chooses that). 20 an hour
+each, 60 an address; the audit row holds who and how many. "Using the app" shows each
+unlisted group with its Remove. Every removal (by status, Remove all, one Remove) stops the
+removed person's invitation, and gives an address never invited a stopped one, so no
+Invite emails somebody the gym has just removed. Their row reads "Removed from app · 26 Sep"
+(the invitation carries `removedAt`, worked out from the gym's closed membership at that
+address), their page says when and offers **Invite again**; one stopped by taking the record
+off reads "Invitation cancelled". The file is named for what it holds: "Cancelled members
+2026-09-26.csv", "All members …", "Past members …" (the organisation's word; RFC 6266
+`filename*` for any letter).
+
 **Out of 5a (built 2026-09-24; redesigned the same day on Kd's click-through, RULINGS
 2026-09-24).** Console → Members → an "Import members" card opens a box of two screens.
 **Upload**: a drop box (or choose a file), or Paste — pasted rows go as UTF-8 with its

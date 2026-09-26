@@ -99,6 +99,14 @@ export function whenWords(iso) {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
+/** "26 Sep", with the year when it is not this year's. */
+export function shortDay(iso, now = new Date()) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const sameYear = d.getFullYear() === now.getFullYear();
+  return d.toLocaleDateString('en-GB', sameYear ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 /** The end or renewal date in the heading's own word. */
 export function endsWords(entry) {
   if (entry.endsOn === null) return null;
@@ -137,7 +145,14 @@ export function invitationView(entry, today = null) {
       ? { tag: 'Said "Not me"', tone: 'red', detail: MEMBER_INVITE_WORDS.said_not_me }
       : { tag: 'Declined', tone: 'plain', detail: null };
   }
-  if (inv.state === 'withdrawn') return { tag: 'Invitation stopped', tone: 'plain', detail: null };
+  // A stopped invitation says what the gym did: removed the person from the app, or took
+  // them off the list. The page's line says it in full; Invite again sends a new one.
+  if (inv.state === 'withdrawn') {
+    const removedAt = inv.removedAt ?? null;
+    return removedAt !== null
+      ? { tag: `Removed from app · ${shortDay(removedAt)}`, tone: 'plain', detail: null, note: `You removed them from the app on ${whenWords(removedAt)}.` }
+      : { tag: 'Invitation cancelled', tone: 'plain', detail: null, note: 'Their invitation was cancelled when you took them off your list.' };
+  }
   if (inv.waitingSince !== null) return { tag: 'Waiting for a place', tone: 'orange', detail: null };
   const email = inv.email;
   const invited = `Invited ${whenWords(inv.invitedAt)}`;
@@ -186,6 +201,35 @@ export function inviteIgnores(filters) {
     : null;
 }
 
+// ── Remove by status (5b-iii) ────────────────────────────────────────────────
+
+/** Whether any of the gym's words is ticked: removing by status needs one. */
+export function wordsTicked(filters) {
+  return filters.records === 'current' && CHIP_KINDS.some(({ kind }) => filters[kind].length > 0);
+}
+
+/** The query for `GET …/remove-by-words`: the words, and the next page's cursor. */
+export function removeQueryString(filters, cursor = null) {
+  const params = new URLSearchParams(inviteQueryString(filters));
+  if (cursor) params.append('cursor', cursor);
+  return params.toString();
+}
+
+/** The press: the same words, the numbers the look showed, and the tick if asked for. */
+export function removeBody(filters, page, acknowledgeLargeChange) {
+  const body = { version: page.version, expectedCount: page.total, digest: page.digest };
+  for (const { kind } of CHIP_KINDS) if (filters[kind].length > 0) body[kind] = [...filters[kind]];
+  if (acknowledgeLargeChange) body.acknowledgeLargeChange = true;
+  return body;
+}
+
+/** Said when the list on screen is narrowed by something removal does not read. */
+export function removeIgnores(filters) {
+  return filters.query.trim() !== '' || filters.app !== 'all'
+    ? "Only Status, Membership and Payment choose who is removed. The search and the app filter don't."
+    : null;
+}
+
 /** Who an Invite leaves out, one line a reason, in the server's order; none for a zero. */
 export function skippedLines(skipped) {
   const lines = [
@@ -231,6 +275,8 @@ export function personInviteAction(entry, today) {
   if (underAgeOn(entry.dateOfBirth, today)) return 'under_age';
   if (inv === null) return 'invite';
   if (inv.state === 'declined' && inv.notMeAt !== null) return null;
+  // Removed from the app, or taken off the list: a new invitation, sent on purpose.
+  if (inv.state === 'withdrawn') return 'invite_again';
   const email = inv.email;
   if (inv.state === 'pending') {
     if (email === null) return 'invite';
@@ -241,9 +287,10 @@ export function personInviteAction(entry, today) {
 }
 
 /** What inviting one person did, in a line for the top of their page. */
-export function inviteOutcomeWords(outcome, again) {
+export function inviteOutcomeWords(outcome, again, back = false) {
   switch (outcome) {
     case 'queued':
+      if (back) return 'Invited again. The email goes out within a few minutes.';
       return again ? 'Invitation sent again. It goes out within a few minutes.' : 'Invited. The email goes out within a few minutes.';
     case 'already_invited':
       return 'This person was already invited.';

@@ -1229,11 +1229,42 @@ const escapeLike = (text: string): string => text.replace(/[\\%_]/g, (char) => `
  *
  *  Null is "everybody" and an empty LIST would be "nobody" — which is not a filter
  *  anybody can ask for, so a query that sends none stays null rather than becoming `[]`. */
-const foldedFilter = (asked: string | string[] | undefined): string[] | null => {
+export const foldedFilter = (asked: string | string[] | undefined): string[] | null => {
   if (asked === undefined) return null;
   const words = Array.isArray(asked) ? asked : [asked];
   return [...new Set(words.map((word) => word.trim().toLowerCase()))];
 };
+
+/** Which records the filters and the search choose, as `entriesPage` reads them: the one
+ *  reading `GET /entries` and the export share, so a download holds exactly the people
+ *  the screen shows. */
+export async function entriesFilter(
+  deps: MemberListDeps,
+  gymId: string,
+  query: Omit<MemberListEntriesQuery, "cursor">,
+): Promise<Omit<repo.EntriesPageInput, "cursor" | "limit">> {
+  const typed = (query.query ?? "").trim();
+  const members = await repo.membersAgainstList(deps.sql, gymId);
+  // A page that asked for the FORMER records has to be able to say which of them is a
+  // person who is in the app; every other reader keeps the set that leaves them out
+  // (round one, Low-2, and `inAppEntryIdsWithFormer`'s own note).
+  const records = query.records ?? "current";
+  const settings = deps.invites ?? null;
+  return {
+    gymId,
+    inAppEntryIds: records === "current" ? inAppEntryIds(members) : inAppEntryIdsWithFormer(members),
+    statuses: foldedFilter(query.status),
+    membershipTypes: foldedFilter(query.membershipType),
+    paymentStatuses: foldedFilter(query.paymentStatus),
+    // CURRENT RECORDS UNLESS THE FORMER ONES WERE ASKED FOR BY NAME (§11.5): what every
+    // screen means by "the list" is the people on it.
+    records,
+    filter: query.filter ?? "all",
+    invitation:
+      query.invitation === undefined ? null : await invites.entriesByInvitation(deps.sql, settings, gymId, query.invitation),
+    like: typed === "" ? null : `%${escapeLike(typed)}%`,
+  };
+}
 
 /** ONE PAGE OF THE LIST THE GYM KEEPS (§9.9's `GET /entries`).
  *
@@ -1262,26 +1293,9 @@ export async function readEntries(
   // "" is the people with none of that kind (§9.9, §11.5). One function for all three,
   // because a second way of folding one of them would be a filter that quietly matched
   // nobody.
-  const typed = (query.query ?? "").trim();
-  const members = await repo.membersAgainstList(deps.sql, gymId);
-  // A page that asked for the FORMER records has to be able to say which of them is a
-  // person who is in the app; every other reader keeps the set that leaves them out
-  // (round one, Low-2, and `inAppEntryIdsWithFormer`'s own note).
-  const records = query.records ?? "current";
   const settings = deps.invites ?? null;
   const page = await repo.entriesPage(deps.sql, {
-    gymId,
-    inAppEntryIds: records === "current" ? inAppEntryIds(members) : inAppEntryIdsWithFormer(members),
-    statuses: foldedFilter(query.status),
-    membershipTypes: foldedFilter(query.membershipType),
-    paymentStatuses: foldedFilter(query.paymentStatus),
-    // CURRENT RECORDS UNLESS THE FORMER ONES WERE ASKED FOR BY NAME (§11.5): what every
-    // screen means by "the list" is the people on it.
-    records,
-    filter: query.filter ?? "all",
-    invitation:
-      query.invitation === undefined ? null : await invites.entriesByInvitation(deps.sql, settings, gymId, query.invitation),
-    like: typed === "" ? null : `%${escapeLike(typed)}%`,
+    ...(await entriesFilter(deps, gymId, query)),
     cursor,
     limit: MEMBER_LIST_ENTRIES_PAGE + 1,
   });

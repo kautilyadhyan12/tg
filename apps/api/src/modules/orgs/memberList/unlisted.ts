@@ -35,7 +35,7 @@ export function unlistedDigest(gymId: string, group: MemberListUnlistedGroup, us
 }
 
 /** The page after `cursor` (the last name and id shown), in the group's own order. */
-export function unlistedPage<M extends MemberOnList>(
+export function unlistedPage<M extends { fullName: string; userId: string }>(
   people: readonly M[],
   cursor: { name: string; id: string } | null,
   size: number,
