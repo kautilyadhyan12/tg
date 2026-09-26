@@ -93,6 +93,9 @@ describe('the Leads screen', () => {
     expect(detailsRequest({ ...lead, notes: 'Mornings' }, { ...draft, source: 'walk_in' })).toEqual({});
     expect(detailsRequest(lead, { ...draft, source: 'walk_in', mayEmail: true })).toEqual({ mayEmail: true });
     expect(detailsRequest(lead, { ...draft, source: 'walk_in', status: 'lost' })).toEqual({ status: 'lost' });
+    const joined = { ...lead, status: 'joined', entryId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' };
+    expect(detailsRequest(joined, { ...draft, source: 'walk_in', status: 'joined' })).toEqual({});
+    expect(detailsRequest(joined, { ...draft, source: 'walk_in', status: 'contacted' })).toEqual({ status: 'contacted' });
     expect(detailsRequest({ ...lead, mayEmail: true }, { ...draft, source: 'walk_in', mayEmail: true })).toEqual({});
     // An emptied email takes the tick with it.
     expect(detailsRequest({ ...lead, mayEmail: true }, { ...draft, source: 'walk_in', email: '', phone: '07700 900123', mayEmail: true })).toEqual({

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Check, Loader2, UserCheck, X } from 'lucide-react';
 import { LEAD_JOIN_CHOOSE_ERROR, LEAD_JOIN_STALE_ERROR, LEAD_MAX_NOTES_CHARS } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
@@ -11,6 +11,7 @@ import {
   candidateLine,
   createLeadRequest,
   detailsRequest,
+  draftStarted,
   emptyLeadDraft,
   joinedWords,
   MAY_EMAIL_HINT,
@@ -26,6 +27,8 @@ import {
 // somebody opened earlier is never shown here. A side panel on a computer, its top and
 // bottom fixed; on a phone the whole screen, scrolled as one page (R3; spec Part 3 §17.2
 // rule 9).
+
+const UNSAVED = 'Save or cancel your changes first.';
 
 function Choice({ pressed, onClick, children, disabled = false }) {
   return (
@@ -133,7 +136,7 @@ function ChooseRecord({ name, choice, busy, onPick, onNew, onCancel, words }) {
         <button type="button" disabled={busy} onClick={onNew} className="c-btn c-btn-s">
           {`Add ${name} as someone new`}
         </button>
-        <button type="button" disabled={busy} onClick={onCancel} className="c-btn c-btn-ghost">
+        <button type="button" disabled={busy} onClick={onCancel} aria-label="Cancel choosing a record" className="c-btn c-btn-ghost">
           Cancel
         </button>
       </div>
@@ -154,6 +157,11 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
   const [deleting, setDeleting] = useState(false);
   /** The Joined status asks before it puts the person on the list. */
   const [askJoin, setAskJoin] = useState(false);
+  /** Leaving with changes not saved asks first: 'close' or 'members'. */
+  const [leaving, setLeaving] = useState(null);
+  /** What the busy request is, so only its own button spins. */
+  const [working, setWorking] = useState(null);
+  const navigate = useNavigate();
   /** The lead this panel is for; an answer about any other is dropped. */
   const shown = useRef(leadId);
 
@@ -190,8 +198,9 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
     return true;
   };
 
-  const run = async (work, fallback) => {
+  const run = async (work, fallback, what = null) => {
     setBusy(true);
+    setWorking(what);
     setError(null);
     setDone(null);
     try {
@@ -200,6 +209,7 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
       setError(errorText(err, fallback));
     } finally {
       setBusy(false);
+      setWorking(null);
     }
   };
 
@@ -223,15 +233,16 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
       if (!take(res.data.lead, saved)) return;
       onChanged();
       if (said !== null) setDone(said);
-    }, "We couldn't save that. Please try again.");
+    }, "We couldn't save that. Please try again.", saved);
 
   /** The tick is a yes to one address: a different address unticks it until staff ask
-   *  again, as the server clears it. */
+   *  again, as the server clears it, and the stored address brings its tick back. */
   const setLeadDraft = (change) =>
     setDraft((d) => {
       const next = change(d);
-      const moved = next.email !== d.email && next.email.trim().toLowerCase() !== (lead?.email ?? '').toLowerCase();
-      return moved ? { ...next, mayEmail: false } : next;
+      if (next.email === d.email || lead === null) return next;
+      const stored = next.email.trim().toLowerCase() === (lead.email ?? '').toLowerCase();
+      return { ...next, mayEmail: stored ? lead.mayEmail : false };
     });
 
   const saveDetails = () => {
@@ -244,6 +255,11 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
   };
 
   const join = (body) => {
+    // Joined puts the saved details on the list, so they must be the ones on screen.
+    if (changed) {
+      setError(UNSAVED);
+      return;
+    }
     const asked = lead.id;
     return run(async () => {
       try {
@@ -281,6 +297,16 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
   const joined = lead?.status === 'joined';
   const mayJoin = lead !== null && (!joined || !lead.onList);
   const changed = lead !== null && Object.keys(detailsRequest(lead, draft)).length > 0;
+  const unsaved = adding ? lead === null && draftStarted(draft) : changed || (lead !== null && notes.trim() !== lead.notes);
+
+  const leave = (where) => {
+    if (where === 'close') onClose();
+    else navigate(`/console/${orgSlug}/members`);
+  };
+  const tryLeave = (where) => {
+    if (unsaved) setLeaving(where);
+    else leave(where);
+  };
   const title = adding && lead === null ? 'Add lead' : (lead?.fullName ?? '');
   const off = busy || readOnly;
 
@@ -320,10 +346,21 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
                 </span>
               ) : null}
             </div>
-            <button type="button" aria-label="Close" onClick={onClose} className="c-icon-btn">
+            <button type="button" aria-label="Close" onClick={() => tryLeave('close')} className="c-icon-btn">
               <X aria-hidden="true" className="w-5 h-5" />
             </button>
           </div>
+
+          {leaving !== null ? (
+            <ConfirmInline
+              question={adding ? 'This lead is not added yet.' : `Your changes to ${lead?.fullName ?? ''} are not saved.`}
+              confirmLabel="Discard changes"
+              cancelLabel="Keep editing"
+              onConfirm={() => leave(leaving)}
+              onCancel={() => setLeaving(null)}
+              newLook
+            />
+          ) : null}
 
           {lead !== null ? (
             <div className="flex flex-wrap gap-2" role="group" aria-label="Status">
@@ -345,6 +382,7 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
                 disabled={off}
                 onClick={() => {
                   if (joined) setDraft((d) => ({ ...d, status: 'joined' }));
+                  else if (changed) setError(UNSAVED);
                   else if (choice === null) setAskJoin(true);
                 }}
               >
@@ -382,7 +420,15 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
                 : lead.entryId !== null
                   ? `Their record was taken off your list of ${words.people}. `
                   : `Their record has since been deleted from your list. `}
-              <Link to={`/console/${orgSlug}/members`} className="c-w6 c-lk">
+              <Link
+                to={`/console/${orgSlug}/members`}
+                onClick={(e) => {
+                  if (!unsaved) return;
+                  e.preventDefault();
+                  setLeaving('members');
+                }}
+                className="c-w6 c-lk"
+              >
                 Go to {words.peopleCap}
               </Link>
             </p>
@@ -421,8 +467,8 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
                 onChange={(v) => setDraft((d) => ({ ...d, mayEmail: v }))}
               />
               <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={saveDetails} disabled={off} className="c-btn c-btn-p">
-                  {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+                <button type="button" onClick={saveDetails} disabled={off || !changed} className="c-btn c-btn-p">
+                  {working === 'details' ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
                   Save
                 </button>
                 {changed ? (

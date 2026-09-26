@@ -54,6 +54,10 @@ export const STATUS_TAG = { new: 'c-tag-soft', contacted: 'c-tag-plain', on_tria
 
 export const emptyLeadDraft = () => ({ fullName: '', email: '', phone: '', source: '', notes: '', mayEmail: false });
 
+/** Whether anything has been typed or picked on Add lead. */
+export const draftStarted = (draft) =>
+  [draft.fullName, draft.email, draft.phone, draft.notes].some((v) => v.trim() !== '') || draft.source !== '' || draft.mayEmail;
+
 export const leadDraft = (lead) => ({
   status: lead.status,
   fullName: lead.fullName,

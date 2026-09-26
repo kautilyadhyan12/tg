@@ -168,6 +168,12 @@ describe('the list keeps every control', () => {
     }
     expect(within(panel()).getByLabelText('Name').disabled).toBe(true);
     expect(within(panel()).getByLabelText('Notes').disabled).toBe(true);
+    for (const name of ['Joined', 'Save', 'Walked in', 'Website', 'Social media', 'A friend', 'Other']) {
+      expect(within(panel()).getByRole('button', { name }).disabled, name).toBe(true);
+    }
+    expect(within(panel()).getByRole('checkbox', { name: 'Happy to hear from us by email' }).disabled).toBe(true);
+    expect(within(panel()).getByLabelText('Email').disabled).toBe(true);
+    expect(within(panel()).getByLabelText('Phone').disabled).toBe(true);
   });
 
   it('no leads yet says so, with no status chips', async () => {
