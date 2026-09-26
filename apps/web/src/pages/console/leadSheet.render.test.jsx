@@ -355,9 +355,15 @@ describe('round one: nothing typed is lost or sent without Save', () => {
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Thomas Reid' } });
     fireEvent.click(screen.getByRole('button', { name: 'Joined · add to your members' }));
     expect(screen.getByRole('alert').textContent).toBe('Save or cancel your changes first.');
+    // The Joined status says so under the status buttons, where a phone can see it.
     fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Joined' }));
     expect(screen.queryByTestId('ask-join')).toBeNull();
-    expect(screen.getByRole('alert').textContent).toBe('Save or cancel your changes first.');
+    const said = screen.getAllByRole('alert');
+    expect(said).toHaveLength(2);
+    expect(said[0].compareDocumentPosition(screen.getByLabelText('Name')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(said[0].textContent).toBe('Save or cancel your changes first.');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryAllByRole('alert')).toHaveLength(0);
     await new Promise((r) => setTimeout(r, 20));
     expect(orgService.joinLead).not.toHaveBeenCalled();
   });

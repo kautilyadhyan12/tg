@@ -155,7 +155,8 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
   const [done, setDone] = useState(null);
   const [choice, setChoice] = useState(null);
   const [deleting, setDeleting] = useState(false);
-  /** The Joined status asks before it puts the person on the list. */
+  /** The Joined status asks before it puts the person on the list ('ask'), or says
+   *  unsaved changes come first ('unsaved'), under the status buttons. */
   const [askJoin, setAskJoin] = useState(false);
   /** Leaving with changes not saved asks first: 'close' or 'members'. */
   const [leaving, setLeaving] = useState(null);
@@ -201,6 +202,7 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
   const run = async (work, fallback, what = null) => {
     setBusy(true);
     setWorking(what);
+    setAskJoin(false);
     setError(null);
     setDone(null);
     try {
@@ -382,8 +384,8 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
                 disabled={off}
                 onClick={() => {
                   if (joined) setDraft((d) => ({ ...d, status: 'joined' }));
-                  else if (changed) setError(UNSAVED);
-                  else if (choice === null) setAskJoin(true);
+                  else if (changed) setAskJoin('unsaved');
+                  else if (choice === null) setAskJoin('ask');
                 }}
               >
                 Joined
@@ -391,7 +393,13 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
             </div>
           ) : null}
 
-          {askJoin && lead !== null && !joined ? (
+          {askJoin === 'unsaved' && !joined ? (
+            <p className="c-s14 c-w5" role="alert" style={{ color: 'var(--bad)' }}>
+              {UNSAVED}
+            </p>
+          ) : null}
+
+          {askJoin === 'ask' && lead !== null && !joined ? (
             <div className="flex flex-col gap-3" data-testid="ask-join">
               <p className="c-s14 c-t1">{`Add ${lead.fullName} to your ${words.people}?`}</p>
               <div className="flex flex-wrap gap-2">
@@ -477,6 +485,7 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
                     onClick={() => {
                       setDraft(leadDraft(lead));
                       setError(null);
+                      setAskJoin(false);
                     }}
                     disabled={busy}
                     className="c-btn c-btn-s"
