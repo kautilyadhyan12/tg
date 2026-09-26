@@ -20,7 +20,7 @@ export function leadsQueryString({ status, query }, cursor = null) {
 
 export const SOURCE_CHOICES = LEAD_SOURCES.map((source) => ({ key: source, label: LEAD_SOURCE_WORDS[source] }));
 
-/** The statuses staff tap; Joined runs the Joined button's own step. */
+/** The statuses Save sets; Joined runs the Joined button's own step. */
 export const STATUS_CHOICES = ['new', 'contacted', 'on_trial', 'lost'].map((status) => ({
   key: status,
   label: LEAD_STATUS_WORDS[status],
@@ -55,6 +55,7 @@ export const STATUS_TAG = { new: 'c-tag-soft', contacted: 'c-tag-plain', on_tria
 export const emptyLeadDraft = () => ({ fullName: '', email: '', phone: '', source: '', notes: '', mayEmail: false });
 
 export const leadDraft = (lead) => ({
+  status: lead.status,
   fullName: lead.fullName,
   email: lead.email ?? '',
   phone: lead.phone ?? '',
@@ -95,12 +96,13 @@ export function updateLeadRequest(lead, draft) {
   return body;
 }
 
-/** A change to an open lead's details and the email tick: what moved, without the
- *  notes, which save on their own. A tick needs an address, so an emptied email
- *  sends no tick. */
+/** What Save sends for an open lead: the status, details and email tick that moved,
+ *  without the notes, which save on their own. A tick needs an address, so an emptied
+ *  email sends no tick. */
 export function detailsRequest(lead, draft) {
   const body = updateLeadRequest(lead, draft);
   delete body.notes;
+  if (draft.status !== lead.status) body.status = draft.status;
   const mayEmail = draft.mayEmail && draft.email.trim() !== '';
   if (mayEmail !== lead.mayEmail) body.mayEmail = mayEmail;
   return body;

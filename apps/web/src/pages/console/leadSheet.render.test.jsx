@@ -3,7 +3,7 @@
 // THE WORST THING THIS SCREEN COULD DO: show or change the wrong person — an answer for
 // a lead opened a moment earlier landing under another's name, or Joined putting a lead
 // on the list as a record staff did not choose. So the first tests: a late answer for
-// another lead is never shown; a status tap goes to the lead on screen; and "This is
+// another lead is never shown; a status saved goes to the lead on screen; and "This is
 // them" sends exactly the record it sits beside.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
@@ -94,12 +94,13 @@ describe('the worst thing: the wrong person', () => {
     expect(screen.queryByText('Tom Reid')).toBeNull();
   });
 
-  it('a status tap changes the lead on screen, and only that lead', async () => {
+  it('a status saved changes the lead on screen, and only that lead', async () => {
     orgService.getLead.mockResolvedValue({ data: { lead: tom } });
     orgService.updateLead.mockResolvedValue({ data: { lead: { ...tom, status: 'contacted' } } });
     render(sheet(TOM));
     await screen.findByRole('heading', { name: 'Tom Reid' });
     fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Contacted' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(orgService.updateLead).toHaveBeenCalledWith(GYM, TOM, { status: 'contacted' }));
     await waitFor(() =>
       expect(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Contacted' }).getAttribute('aria-pressed')).toBe('true'),
@@ -287,21 +288,25 @@ describe('the details open beside the status (R3)', () => {
     expect(orgService.joinLead).toHaveBeenCalledTimes(1);
   });
 
-  it('a status tap keeps what was typed in the details and the notes', async () => {
+  it('a status waits for Save, goes with the details, and Cancel puts it back', async () => {
     orgService.getLead.mockResolvedValue({ data: { lead: tom } });
-    orgService.updateLead.mockResolvedValue({ data: { lead: { ...tom, status: 'contacted' } } });
+    orgService.updateLead.mockResolvedValue({ data: { lead: { ...tom, status: 'contacted', phone: '+447700900456' } } });
     render(sheet(TOM));
     await screen.findByRole('heading', { name: 'Tom Reid' });
+    const status = (name) => within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name });
+    fireEvent.click(status('Lost'));
+    expect(status('Lost').getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(status('New').getAttribute('aria-pressed')).toBe('true');
     fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '07700 900456' } });
     fireEvent.change(screen.getByLabelText('Notes'), { target: { value: 'Call on Friday' } });
-    fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Contacted' }));
-    await waitFor(() => expect(orgService.updateLead).toHaveBeenCalledWith(GYM, TOM, { status: 'contacted' }));
-    await waitFor(() =>
-      expect(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Contacted' }).getAttribute('aria-pressed')).toBe('true'),
-    );
-    // Saved at once, and it says so beside the buttons.
-    expect(within(screen.getByRole('group', { name: 'Status' })).getByRole('status').textContent).toBe(' Saved');
-    expect(screen.getByLabelText('Phone').value).toBe('07700 900456');
+    fireEvent.click(status('Contacted'));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(orgService.updateLead).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(orgService.updateLead).toHaveBeenCalledWith(GYM, TOM, { phone: '07700 900456', status: 'contacted' }));
+    await screen.findByText('Saved.');
+    expect(status('Contacted').getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByLabelText('Notes').value).toBe('Call on Friday');
   });
 

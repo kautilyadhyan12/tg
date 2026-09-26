@@ -152,8 +152,6 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
   const [done, setDone] = useState(null);
   const [choice, setChoice] = useState(null);
   const [deleting, setDeleting] = useState(false);
-  /** "Saved" beside the status buttons, which save the moment they are tapped. */
-  const [statusSaved, setStatusSaved] = useState(false);
   /** The Joined status asks before it puts the person on the list. */
   const [askJoin, setAskJoin] = useState(false);
   /** The lead this panel is for; an answer about any other is dropped. */
@@ -181,13 +179,14 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
     };
   }, [gymId, leadId, adding]);
 
-  /** A lead from the server, shown only if it is the one on screen. The details and the
-   *  notes are open to typing beside the status, so only the part just saved is reset. */
+  /** A lead from the server, shown only if it is the one on screen. The form and the
+   *  notes save apart, so only the part just saved is reset. */
   const take = (next, saved) => {
     if (next.id !== shown.current) return false;
     setLead(next);
     if (saved === 'details') setDraft(leadDraft(next));
     if (saved === 'notes') setNotes(next.notes);
+    if (saved === 'joined') setDraft((d) => ({ ...d, status: next.status }));
     return true;
   };
 
@@ -195,7 +194,6 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
     setBusy(true);
     setError(null);
     setDone(null);
-    setStatusSaved(false);
     try {
       await work();
     } catch (err) {
@@ -224,8 +222,7 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
       const res = await orgService.updateLead(gymId, lead.id, body);
       if (!take(res.data.lead, saved)) return;
       onChanged();
-      if (saved === 'status') setStatusSaved(true);
-      else if (said !== null) setDone(said);
+      if (said !== null) setDone(said);
     }, "We couldn't save that. Please try again.");
 
   /** The tick is a yes to one address: a different address unticks it until staff ask
@@ -251,7 +248,7 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
     return run(async () => {
       try {
         const res = await orgService.joinLead(gymId, asked, body);
-        if (!take(res.data.lead, null)) return;
+        if (!take(res.data.lead, 'joined')) return;
         setChoice(null);
         onChanged();
         setDone(joinedWords(res.data.outcome, res.data.lead.fullName, words));
@@ -333,30 +330,26 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
               {STATUS_CHOICES.map((s) => (
                 <Choice
                   key={s.key}
-                  pressed={lead.status === s.key}
+                  pressed={draft.status === s.key}
                   disabled={off}
                   onClick={() => {
                     setAskJoin(false);
-                    if (lead.status !== s.key) void save({ status: s.key }, null, 'status');
+                    setDraft((d) => ({ ...d, status: s.key }));
                   }}
                 >
                   {s.label}
                 </Choice>
               ))}
               <Choice
-                pressed={joined}
+                pressed={draft.status === 'joined'}
                 disabled={off}
                 onClick={() => {
-                  if (!joined && choice === null) setAskJoin(true);
+                  if (joined) setDraft((d) => ({ ...d, status: 'joined' }));
+                  else if (choice === null) setAskJoin(true);
                 }}
               >
                 Joined
               </Choice>
-              {statusSaved ? (
-                <span className="c-s14 c-w5 self-center flex items-center gap-1" role="status" style={{ color: 'var(--good)' }}>
-                  <Check aria-hidden="true" className="w-4 h-4" /> Saved
-                </span>
-              ) : null}
             </div>
           ) : null}
 

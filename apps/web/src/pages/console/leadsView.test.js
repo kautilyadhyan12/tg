@@ -87,11 +87,12 @@ describe('the Leads screen', () => {
     expect(addedWords('2025-09-20T10:00:00.000Z', new Date('2026-10-01T10:00:00.000Z'))).toBe('Added 20 Sept 2025');
   });
 
-  it("saves an open lead's details without its notes, which save on their own", () => {
-    const draft = { fullName: 'Priya Shah', email: 'priya@example.com', phone: '', source: 'website', notes: 'stale', mayEmail: false };
+  it("saves an open lead's status and details without its notes, which save on their own", () => {
+    const draft = { status: 'new', fullName: 'Priya Shah', email: 'priya@example.com', phone: '', source: 'website', notes: 'stale', mayEmail: false };
     expect(detailsRequest({ ...lead, notes: 'Mornings' }, draft)).toEqual({ source: 'website' });
     expect(detailsRequest({ ...lead, notes: 'Mornings' }, { ...draft, source: 'walk_in' })).toEqual({});
     expect(detailsRequest(lead, { ...draft, source: 'walk_in', mayEmail: true })).toEqual({ mayEmail: true });
+    expect(detailsRequest(lead, { ...draft, source: 'walk_in', status: 'lost' })).toEqual({ status: 'lost' });
     expect(detailsRequest({ ...lead, mayEmail: true }, { ...draft, source: 'walk_in', mayEmail: true })).toEqual({});
     // An emptied email takes the tick with it.
     expect(detailsRequest({ ...lead, mayEmail: true }, { ...draft, source: 'walk_in', email: '', phone: '07700 900123', mayEmail: true })).toEqual({
