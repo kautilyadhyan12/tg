@@ -197,7 +197,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 21b. [ ] **Money, from the gym's own notebook** (after 18a): MRR, collected, overdue, lifetime value; a gym that bills elsewhere is told why it has none.
 22. **The console's new look** (Kd, RULINGS 2026-09-26; spec Part 3 §17; the drawings in `docs/design/console`). Screen jobs, Opus high, no review; a restyle keeps every button, field, message and permission its page has, and the last of R2–R8 built also turns on the Light · Dark · Auto switch (§17.7).
    - R1. [x] **The menu, the font and the colours** — merged 2026-09-26 (PR #118).
-   - R2. [ ] **Classes and the Calendar** (drawings `Classes`, `ClassesCalendar`, `ClassesPhone`). Folder B's own page.
+   - R2. [x] **Classes and the Calendar** — merged 2026-09-26 (PR #119).
    - R3. [ ] **Leads, and a lead's panel** (`LeadsList`, `LeadsPhone`, `LeadBox`). Folder B's own page; before 20c-ii, so its emails are built in the new look.
    - R4. [ ] **Overview, the banner and the plan prompts** (`Overview*`; "Your role" is in the menu since R1, Change size and the payment prompts drawn from the blocks). After 3c.
    - R5. [ ] **Attendance** (`Attendance`, `AttendancePhone`). After 16b, which rebuilds the page around the desk's live log.

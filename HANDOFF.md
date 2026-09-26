@@ -13,7 +13,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Verified:** web 2,924 of 2,924 (`poseAssets.contract` local Node 24 only); eslint 0 on every changed file; `vite build` green.
 - **Looked at in headless Edge** on the real app (throwaway gym, removed): both tabs and every form at 1440 and 390 wide, dark and `?look=light`; nothing wider than the screen, and every phone button 44 px or more. Fixed there: the date picker's days were 40 px on a phone, the Calendar's opened class stretched its form across the page, the ":" between hour and minute sat high.
 - **Click-through data:** Kd's local test gym Iron House Leeds (`kd-classes@example.com`) got HIIT Blast, Strength Club, Open floor and an archived Old Pilates, with HIIT cancelled on 29 Sep and Strength changed on 28 Sep.
-- **Next:** Kd's click-through, then merge on his word. Then R3 (Leads) in Folder B.
+- **Kd's click-through passed** (*"all pass"*). **Round one, at Kd's asking: no Critical or High; 2 Lows and 3 weak tests, all fixed.** L1 at 1024 the Calendar's filters ran off the screen: the row stacks below 1280 px. L2 a new time slot's two date pickers were squeezed side by side in a class box: they sit one above the other (320 px each, measured). Tests added: a lapsed gym gets no Un-cancel on a cancelled class, Add class on the Calendar opens the form on the Classes tab, and a role without the tick gets no Calendar at its address; each RED under its break (restored), web 2,926 of 2,926. Seen by the review, not from R2 (same on master): a role without `schedule.manage` also gets "Your role doesn't allow that." with a Try again that cannot work, because the page still reads the timetable.
+- **Merged on Kd's word, 2026-09-26 (PR #119).** Next in Folder B: R3 (Leads).
 
 ## 2026-09-26 · R1 (Folder B): the console's new menu, font and colours (branch `console-look-r1`)
 
