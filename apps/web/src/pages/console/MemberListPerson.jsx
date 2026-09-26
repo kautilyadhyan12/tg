@@ -456,7 +456,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
 
   /** Invite this person, or send their invitation again because they asked. The
    *  answer's invitation replaces the one on screen only if the box still has them open. */
-  const sendInvite = async (again) => {
+  const sendInvite = async (again, back = false) => {
     const asked = shown.entryId;
     setBusy(true);
     setNotice(null);
@@ -467,7 +467,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       const { outcome, invitation } = res.data.invite;
       setEntry((e) => (e !== null && e.entryId === asked ? { ...e, invitation } : e));
       setMode('view');
-      setNotice(inviteOutcomeWords(outcome, again));
+      setNotice(inviteOutcomeWords(outcome, again, back));
       onChanged();
     } catch (err) {
       if (wanted.current === asked) refused(err, again ? "We couldn't send the invitation again." : "We couldn't invite this person.");
@@ -736,6 +736,11 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           ) : null}
           <Tag view={inv} />
         </div>
+        {inv?.note ? (
+          <p className="text-sm" style={{ color: C.soft }} data-testid="invitation-note">
+            {inv.note}
+          </p>
+        ) : null}
         {inv?.detail ? (
           <p className="text-sm flex gap-2" style={{ color: C.orange }}>
             <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -799,6 +804,12 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
                 Invite
               </button>
             ) : null}
+            {action === 'invite_again' ? (
+              <button type="button" onClick={() => backTo('inviteAgain')} disabled={busy || readOnly} className={`${BUTTON} flex-1 sm:flex-none whitespace-nowrap`} style={{ background: C.orangeBg, color: C.orange }}>
+                <Mail className="w-4 h-4" />
+                Invite again
+              </button>
+            ) : null}
             {action === 'again' ? (
               <button type="button" onClick={() => backTo('again')} disabled={busy || readOnly} className={`${BUTTON} flex-1 sm:flex-none whitespace-nowrap`} style={{ background: C.plain, color: C.soft }}>
                 <Mail className="w-4 h-4" />
@@ -852,6 +863,27 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             <button type="button" onClick={() => void sendInvite(true)} disabled={busy || readOnly} className={BUTTON} style={{ background: C.orange, color: '#000' }}>
               {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
               Send again
+            </button>
+            <button type="button" onClick={() => backTo('view')} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
+              Back
+            </button>
+          </div>
+        </div>
+      );
+    }
+    if (mode === 'inviteAgain') {
+      return (
+        <div className="flex flex-col gap-3" data-testid="confirm-invite-again">
+          <p className="text-[15px]" style={{ color: '#fff' }}>
+            Invite {name} back to the app?
+          </p>
+          <p className="text-sm" style={{ color: C.soft }}>
+            {gym.name} sends one email to {p.email} with a link to the app. They join again when they sign in with that address.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => void sendInvite(true, true)} disabled={busy || readOnly} className={BUTTON} style={{ background: C.orange, color: '#000' }}>
+              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+              Invite again
             </button>
             <button type="button" onClick={() => backTo('view')} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
               Back
@@ -1045,7 +1077,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         <Loader2 className="w-4 h-4 animate-spin" /> Loading…
       </p>
     );
-  } else if (mode === 'takeOff' || mode === 'delete' || mode === 'again' || mode === 'share') {
+  } else if (mode === 'takeOff' || mode === 'delete' || mode === 'again' || mode === 'inviteAgain' || mode === 'share') {
     body = renderConfirm(shown);
   } else if (mode === 'join') {
     body = renderJoin(shown);

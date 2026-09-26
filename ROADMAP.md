@@ -138,6 +138,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 5b-i. [x] **See and keep your list** — merged 2026-09-25 (PR #113).
      - 5b-ii. [x] **Invite from the list** — merged 2026-09-25 (PR #115).
      - 5b-iii. [ ] **Remove by status, and the export**: "Remove 88 people marked Cancelled" (RULINGS 2026-09-23), the CSV export, members told when removed.
+     - 5b-iii-b. [ ] **Who left, one by one** (RULINGS 2026-09-26): the import's "5 members aren't in this file" asks per person (each "Left" or "Still a member", with Select all and the Filter's words), not one answer for everybody.
      - 5b-iv. [ ] **Possible duplicates** (RULINGS 2026-09-25): records alike by name, phone or member number listed as pairs ("2 people may be on your list twice · Review"), each opened side by side; Merge or "Different people" (remembered); never merged by the app.
    - 5c. [ ] **Which software are you leaving?** (spec §11.7; RULINGS 2026-09-24): each product's export steps in plain words and a preset that fills in the column matching, as data in `@app/shared`, from real exports or the vendor's own template only.
 6. [ ] Gym profile page for members; ~~gym announcements feed~~ (**item 19b since 2026-09-22**); gym greeting and branding on the member home.

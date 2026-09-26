@@ -10,7 +10,7 @@
 // Excel keeps when the file is saved again (OWASP's advice since 2026-01; an apostrophe
 // is stripped on save). The email and phone columns hold only shapes the server checked
 // and are written as they are, so "+44 …" keeps its plus.
-import type { MemberListExportQuery } from "@app/shared";
+import { orgWords, type MemberListExportQuery } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
 import { insertAudit } from "../repo.js";
 import { requirePrivilege } from "../service.js";
@@ -88,6 +88,46 @@ export function csvLine(row: Row, shape: CsvShape): string {
   return `${cells.join(",")}\r\n`;
 }
 
+const NONE_WORDS = { status: "No status", membershipType: "No membership", paymentStatus: "No payment status" } as const;
+
+/** The file's name says what it holds, in the gym's own words: "Cancelled members
+ *  2026-09-26.csv", "Past members 2026-09-26.csv". `people` is the organisation's word. */
+export function exportFileName(query: MemberListExportQuery, people: string, day: string): string {
+  const records = query.records ?? "current";
+  let name: string;
+  if (records === "former") {
+    name = `Past ${people}`;
+  } else {
+    const kinds = (["status", "membershipType", "paymentStatus"] as const).flatMap((kind) => {
+      const asked = query[kind];
+      const words = asked === undefined ? [] : Array.isArray(asked) ? asked : [asked];
+      const shown = words.map((word) => (word.trim() === "" ? NONE_WORDS[kind] : word.trim()));
+      return shown.length === 0 ? [] : [shown.join(" or ")];
+    });
+    name = kinds.length === 0 ? `All ${people}` : `${kinds.join(", ")} ${people}`;
+    if (records === "all") name += ` and past ${people}`;
+    if (query.filter === "in_app") name += " in the app";
+    if (query.filter === "not_in_app") name += " not in the app";
+  }
+  const typed = (query.query ?? "").trim();
+  if (typed !== "") name += ` matching ${typed}`;
+  // Nothing a computer refuses in a file name, and not too long to read.
+  const clean = name
+    .replace(/[\\/:*?"<>|\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 100)
+    .trim();
+  return `${clean.charAt(0).toUpperCase()}${clean.slice(1)} ${day}.csv`;
+}
+
+/** The download header: an ASCII name for old browsers, and the exact name (RFC 6266). */
+export function contentDisposition(filename: string): string {
+  const ascii = filename.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");
+  const exact = encodeURIComponent(filename).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${exact}`;
+}
+
 /** Excel reads a CSV as UTF-8 only when it starts with the byte-order mark. */
 const BOM = "\uFEFF";
 
@@ -136,5 +176,5 @@ export async function exportList(
     }
   }
 
-  return { filename: `members-${dayInTz(deps.now(), org.timezone)}.csv`, chunks: chunks() };
+  return { filename: exportFileName(query, orgWords(org.orgType).people, dayInTz(deps.now(), org.timezone)), chunks: chunks() };
 }

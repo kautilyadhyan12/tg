@@ -441,11 +441,33 @@ d("member list: remove by status, and the export (real Postgres)", () => {
       // Only Dan, who was never a member, is waiting for an invitation.
       expect(await reach()).toBe(1);
 
+      // The list says who was removed from the app, and when; Dan was never invited.
+      const invitationOf = async (fullName: string) => {
+        const res = await get(`${listUrl(gym)}/entries?query=${encodeURIComponent(fullName)}`, owner.cookies);
+        const listed = memberListEntriesPageSchema.parse((JSON.parse(res.body) as { page: unknown }).page);
+        return listed.entries.find((e) => e.fullName === fullName)?.invitation ?? null;
+      };
+      for (const name of ["Ann Again", "Bob Again", "Cat Again"]) {
+        const inv = await invitationOf(name);
+        expect(inv?.state).toBe("withdrawn");
+        expect(inv?.removedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      }
+      expect(await invitationOf("Dan Never")).toBeNull();
+
       // A gym that wants Ann back sends it on purpose, from her page (an email needs the gym's address).
       await sql`UPDATE gyms SET postal_address = '1 High Street, Leeds' WHERE id = ${gym}`;
       const again = await post(`${listUrl(gym)}/entries/${annRecord.entry.entryId}/invite/resend`, {}, owner.cookies);
       expect(again.statusCode).toBe(200);
       expect((JSON.parse(again.body) as { invite: { outcome: string } }).invite.outcome).toBe("queued");
+
+      // An invitation stopped because its person was taken off the list names no removal.
+      const eve = await typeIn(gym, owner, { fullName: "Eve Taken", email: "mrbw-t-again-eve@example.com", status: "Active" });
+      expect((await post(`${listUrl(gym)}/entries/${eve.entry.entryId}/invite`, {}, owner.cookies)).statusCode).toBe(200);
+      expect((await del(`${listUrl(gym)}/entries/${eve.entry.entryId}`, owner.cookies)).statusCode).toBe(200);
+      expect((await post(`${listUrl(gym)}/entries/${eve.entry.entryId}/restore`, {}, owner.cookies)).statusCode).toBe(200);
+      const eveInv = await invitationOf("Eve Taken");
+      expect(eveInv?.state).toBe("withdrawn");
+      expect(eveInv?.removedAt).toBeNull();
     },
     TEST_TIMEOUT_MS,
   );
@@ -506,7 +528,8 @@ d("member list: remove by status, and the export (real Postgres)", () => {
       const res = await get(`${listUrl(gym)}/export.csv`, owner.cookies);
       expect(res.statusCode).toBe(200);
       expect(res.headers["content-type"]).toBe("text/csv; charset=utf-8");
-      expect(res.headers["content-disposition"]).toMatch(/^attachment; filename="members-\d{4}-\d{2}-\d{2}\.csv"$/);
+      // The name says what the file holds, in the gym's words.
+      expect(res.headers["content-disposition"]).toMatch(/^attachment; filename="All members \d{4}-\d{2}-\d{2}\.csv"; filename\*=UTF-8''All%20members%20\d{4}-\d{2}-\d{2}\.csv$/);
       expect(res.headers["cache-control"]).toBe("no-store");
       // The web app is on another address: the browser reads the file's name only when told it may.
       const cross = await api().inject({ method: "GET", url: `${listUrl(gym)}/export.csv`, cookies: owner.cookies, remoteAddress: nextIp(), headers: { origin: "http://localhost:5173" } });
@@ -536,9 +559,11 @@ d("member list: remove by status, and the export (real Postgres)", () => {
       expect(bob?.[10]).toBe("\t=1+1");
 
       // The Filter and the search choose the same people the screen shows, and the count agrees.
-      const active = readBack((await get(`${listUrl(gym)}/export.csv?status=active`, owner.cookies)).body).slice(1);
+      const activeFile = await get(`${listUrl(gym)}/export.csv?status=Active`, owner.cookies);
+      expect(activeFile.headers["content-disposition"]).toMatch(/^attachment; filename="Active members \d{4}-\d{2}-\d{2}\.csv"/);
+      const active = readBack(activeFile.body).slice(1);
       const screen = memberListEntriesPageSchema.parse(
-        (JSON.parse((await get(`${listUrl(gym)}/entries?status=active`, owner.cookies)).body) as { page: unknown }).page,
+        (JSON.parse((await get(`${listUrl(gym)}/entries?status=Active`, owner.cookies)).body) as { page: unknown }).page,
       );
       expect(active.map((row) => row[1]).sort()).toEqual(screen.entries.map((e) => e.email).sort());
       expect(active).toHaveLength(2);

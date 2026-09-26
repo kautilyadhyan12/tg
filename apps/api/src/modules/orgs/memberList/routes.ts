@@ -599,7 +599,7 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     return reply
       .status(200)
       .header("content-type", "text/csv; charset=utf-8")
-      .header("content-disposition", `attachment; filename="${file.filename}"`)
+      .header("content-disposition", exporter.contentDisposition(file.filename))
       .header("cache-control", "no-store")
       .send(Readable.from(file.chunks));
   });

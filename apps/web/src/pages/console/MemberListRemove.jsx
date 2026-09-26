@@ -28,14 +28,14 @@ const count = (k) => k.toLocaleString('en');
 
 /** Who the box is about, in words. */
 const UNLISTED_WHO = {
-  no_longer_listed: 'Using the app, and no longer on your list',
-  never_listed: 'Using the app, and never on a list you imported',
+  no_longer_listed: 'Using the app, but no longer on your list',
+  never_listed: 'Using the app, but not on your list',
 };
 
 /** How many app members each group holds, said on one line each. */
 const UNLISTED_LINE = {
   no_longer_listed: (k) => `${count(k)} using the app ${k === 1 ? 'is' : 'are'} no longer on your list`,
-  never_listed: (k) => `${count(k)} using the app ${k === 1 ? 'was' : 'were'} never on a list you imported`,
+  never_listed: (k) => `${count(k)} using the app ${k === 1 ? "isn't" : "aren't"} on your list`,
 };
 
 /** On "Using the app": each group of app members the list does not hold, with the
@@ -271,8 +271,8 @@ export default function MemberListRemove({ gymId, gym, words, readOnly, source, 
         ) : null}
         {page.total > 0 ? (
           <p className="text-sm" style={{ color: C.muted }}>
-            They keep their own workouts and the free app, and see that they&apos;re no longer a {words.person} of {gym.name}.
-            {source.kind === 'words' ? ' Their records stay on your list.' : ''}
+            They keep their workouts and the free app. The app tells them they&apos;re no longer a {words.person} of {gym.name}.
+            {source.kind === 'words' ? ' They stay on your list.' : ''}
           </p>
         ) : null}
         {large !== null ? (

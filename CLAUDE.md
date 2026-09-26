@@ -170,6 +170,12 @@ pregnancy, or for a flagged heart, blood-pressure or diabetes answer. Safe mode 
 workout and run plans until a professional's clearance is confirmed. Every suggestion
 that involves food shows its allergens. Disclaimer text is never softened or removed.
 
+**Screen words (Kd, RULINGS 2026-09-26).** Every word on a screen says what the gym did or
+sees, in the words its front desk would say out loud to a member — never what the app did
+behind the scenes ("Removed from app · 26 Sep", not "Invitation stopped"; "They stay on your
+list", not "Their records stay"). A plan that adds words to a screen lists them, exactly as
+they will show, for Kd to read before the build.
+
 **The console's look (Kd, RULINGS 2026-09-26).** Every console page follows spec Part 3
 §17: colours by name from `apps/web/src/components/console/console.css`, never written
 into a page; its `c-` building blocks; Archivo; both looks. A new console page, or a new

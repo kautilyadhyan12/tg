@@ -1638,7 +1638,12 @@ list uploads back unchanged; no "in the app" column (the Filter chooses that). 2
 each, 60 an address; the audit row holds who and how many. "Using the app" shows each
 unlisted group with its Remove. Every removal (by status, Remove all, one Remove) stops the
 removed person's invitation, and gives an address never invited a stopped one, so no
-Invite emails somebody the gym has just removed; Send again on their page starts it again.
+Invite emails somebody the gym has just removed. Their row reads "Removed from app · 26 Sep"
+(the invitation carries `removedAt`, worked out from the gym's closed membership at that
+address), their page says when and offers **Invite again**; one stopped by taking the record
+off reads "Invitation cancelled". The file is named for what it holds: "Cancelled members
+2026-09-26.csv", "All members …", "Past members …" (the organisation's word; RFC 6266
+`filename*` for any letter).
 
 **Out of 5a (built 2026-09-24; redesigned the same day on Kd's click-through, RULINGS
 2026-09-24).** Console → Members → an "Import members" card opens a box of two screens.

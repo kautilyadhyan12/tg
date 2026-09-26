@@ -647,8 +647,19 @@ export const orgService = {
     const res = await authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/export.csv${query ? `?${query}` : ''}`, {
       responseType: 'blob',
     });
-    const named = /filename="([^"]+)"/.exec(res.headers?.['content-disposition'] ?? '');
-    return { blob: res.data, filename: named?.[1] ?? 'members.csv' };
+    // The exact name (filename*, which can hold any letter), else the plain one.
+    const header = res.headers?.['content-disposition'] ?? '';
+    const exact = /filename\*=UTF-8''([^;]+)/i.exec(header);
+    const plain = /filename="([^"]+)"/.exec(header);
+    let filename = plain?.[1] ?? 'members.csv';
+    if (exact) {
+      try {
+        filename = decodeURIComponent(exact[1]);
+      } catch {
+        // A name that does not decode keeps the plain one.
+      }
+    }
+    return { blob: res.data, filename };
   },
 
   /** POST …/member-list/invites — press Invite. A 409 `invite_changed` carries the new

@@ -7,7 +7,14 @@
 // numbers of the names on screen; a moved list shows the new names and asks again.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
-import { MEMBER_LIST_BY_HAND_WORDS, memberListByWordsPageSchema, memberListEntriesPageSchema, memberListUnlistedPageSchema, memberListViewSchema } from '@app/shared';
+import {
+  MEMBER_LIST_BY_HAND_WORDS,
+  memberListByWordsPageSchema,
+  memberListEntriesPageSchema,
+  memberListEntryDetailSchema,
+  memberListUnlistedPageSchema,
+  memberListViewSchema,
+} from '@app/shared';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -22,6 +29,8 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getUnlisted: vi.fn(),
       removeUnlisted: vi.fn(),
       downloadMemberList: vi.fn(),
+      getMemberListEntry: vi.fn(),
+      resendMemberListInvite: vi.fn(),
     },
   };
 });
@@ -31,6 +40,7 @@ const MemberListRemoveModule = await import('./MemberListRemove');
 const MemberListRemove = MemberListRemoveModule.default;
 const { NotOnListRemove } = MemberListRemoveModule;
 const MemberListPanel = (await import('./MemberListPanel')).default;
+const MemberListPerson = (await import('./MemberListPerson')).default;
 
 const GYM = '11111111-1111-4111-8111-111111111111';
 const WORDS = { people: 'members', person: 'member', peopleCap: 'Members' };
@@ -72,7 +82,7 @@ describe('the Remove box', () => {
       'Ann · ann@members.example',
       'Ben · ben@members.example',
     ]);
-    expect(screen.getByText(/Their records stay on your list\./)).toBeTruthy();
+    expect(screen.getByText(/They stay on your list\./)).toBeTruthy();
 
     fireEvent.click(removeButton());
     await screen.findByRole('status');
@@ -154,8 +164,8 @@ describe('the Remove box', () => {
     orgService.getUnlisted.mockResolvedValue({ data: { page } });
     orgService.removeUnlisted.mockResolvedValue({ data: { removed: { group: 'never_listed', removed: 1, alreadyRemoved: false } } });
     drawBox({ kind: 'unlisted', group: 'never_listed' });
-    expect((await screen.findByTestId('remove-who')).textContent).toBe('Using the app, and never on a list you imported');
-    expect(screen.queryByText(/Their records stay on your list/)).toBeNull();
+    expect((await screen.findByTestId('remove-who')).textContent).toBe('Using the app, but not on your list');
+    expect(screen.queryByText(/They stay on your list/)).toBeNull();
     fireEvent.click(removeButton());
     await screen.findByRole('status');
     expect(orgService.getUnlisted).toHaveBeenCalledWith(GYM, 'never_listed', null);
@@ -256,5 +266,55 @@ describe('on Using the app', () => {
     const { container } = render(<NotOnListRemove gymId={GYM} gym={IRON} words={WORDS} readOnly={false} refreshKey={0} onRemoved={() => undefined} />);
     await waitFor(() => expect(orgService.getUnlisted).toHaveBeenCalledTimes(2));
     expect(container.textContent).toBe('');
+  });
+});
+
+describe("a removed person's page", () => {
+  const ISLA = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  const stopped = (removedAt) => ({
+    state: 'withdrawn',
+    invitedAt: '2026-09-26T10:00:00.000Z',
+    email: null,
+    sentAgain: 0,
+    waitingSince: null,
+    notMeAt: null,
+    removedAt,
+  });
+  const isla = (invitation) =>
+    memberListEntryDetailSchema.parse({
+      entryId: ISLA, fullName: 'Isla Morgan', email: 'isla@members.example', phone: null, memberNumber: null,
+      status: 'Cancelled', membershipType: null, joinedOn: null, endsOn: null, endsOnKind: null, paymentStatus: null,
+      dateOfBirth: null, formerAt: null, source: 'upload', inApp: false, invitation, extra: [], handEdited: [], members: [],
+    });
+  const LIST = memberListViewSchema.parse({
+    hasList: true, version: 3, lastConfirmedAt: '2026-09-20T10:00:00.000Z',
+    counts: { entries: 1, inApp: 0, canBeInvited: 0, noEmail: 0, former: 0 },
+    statuses: [], membershipTypes: [], paymentStatuses: [], fields: [],
+  });
+  const draw = () =>
+    render(<MemberListPerson gymId={GYM} gym={IRON} entryId={ISLA} list={LIST} words={WORDS} readOnly={false} onClose={() => undefined} onChanged={() => undefined} />);
+
+  it('says when the gym removed them, and Invite again asks first, then sends', async () => {
+    orgService.getMemberListEntry.mockResolvedValue({ data: { entry: isla(stopped('2026-09-26T10:00:00.000Z')) } });
+    orgService.resendMemberListInvite.mockResolvedValue({
+      data: { invite: { outcome: 'queued', invitation: { ...stopped(null), state: 'pending', email: { state: 'queued', reason: null, at: '2026-09-26T11:00:00.000Z', result: null } } } },
+    });
+    draw();
+    expect((await screen.findByTestId('invitation-note')).textContent).toBe('You removed them from the app on 26 September 2026.');
+    expect(screen.queryByText('Invitation stopped')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Send again' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Invite again' }));
+    expect((await screen.findByTestId('confirm-invite-again')).textContent).toContain('Invite Isla Morgan back to the app?');
+    expect(orgService.resendMemberListInvite).not.toHaveBeenCalled();
+    fireEvent.click(within(screen.getByTestId('confirm-invite-again')).getByRole('button', { name: 'Invite again' }));
+    await screen.findByText('Invited again. The email goes out within a few minutes.');
+    expect(orgService.resendMemberListInvite).toHaveBeenCalledWith(GYM, ISLA);
+  });
+
+  it('taken off the list and put back, it says so, not removed', async () => {
+    orgService.getMemberListEntry.mockResolvedValue({ data: { entry: isla(stopped(null)) } });
+    draw();
+    expect((await screen.findByTestId('invitation-note')).textContent).toBe('Their invitation was cancelled when you took them off your list.');
+    expect(screen.getByRole('button', { name: 'Invite again' })).toBeTruthy();
   });
 });

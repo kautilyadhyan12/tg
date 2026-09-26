@@ -1,7 +1,7 @@
 // REMOVE BY STATUS AND THE CSV FILE — the pure rules, every class of case (5b-iii).
 import { describe, expect, it } from "vitest";
 import { byWordsDigest, byWordsGroup, removedByWords, type MemberForWords, type RecordWords } from "../src/modules/orgs/memberList/byWords.js";
-import { csvField, csvHeader, csvLine, type CsvShape } from "../src/modules/orgs/memberList/exportCsv.js";
+import { contentDisposition, csvField, csvHeader, csvLine, exportFileName, type CsvShape } from "../src/modules/orgs/memberList/exportCsv.js";
 import type { EntryRow } from "../src/modules/orgs/memberList/repo.js";
 import type { WordFilters } from "../src/modules/orgs/invites/repo.js";
 
@@ -160,5 +160,38 @@ describe("the file's columns", () => {
     expect(renews).toBe('"Ann","","","","","","","","2026-12-01","","","L-1","2026-09-20"\r\n');
     expect(ends).toBe('"Ann","","","","","","","2026-10-01","","","","",""\r\n');
     expect(heads(both).at(-1)).toBe('"Removed from list"');
+  });
+});
+
+describe("the file's name says what it holds", () => {
+  const day = "2026-09-26";
+  it.each([
+    { query: {}, name: "All members 2026-09-26.csv" },
+    { query: { status: "Cancelled" }, name: "Cancelled members 2026-09-26.csv" },
+    { query: { status: ["Cancelled", "Expired"], paymentStatus: "Overdue" }, name: "Cancelled or Expired, Overdue members 2026-09-26.csv" },
+    { query: { status: "" }, name: "No status members 2026-09-26.csv" },
+    { query: { membershipType: ["Gold", ""] }, name: "Gold or No membership members 2026-09-26.csv" },
+    { query: { records: "former" as const }, name: "Past members 2026-09-26.csv" },
+    { query: { status: "Active", filter: "in_app" as const }, name: "Active members in the app 2026-09-26.csv" },
+    { query: { filter: "not_in_app" as const }, name: "All members not in the app 2026-09-26.csv" },
+    { query: { query: "ann" }, name: "All members matching ann 2026-09-26.csv" },
+    { query: { status: "Paid/Unpaid: <new>" }, name: "Paid Unpaid new members 2026-09-26.csv" },
+  ])("$name", ({ query, name }) => {
+    expect(exportFileName(query, "members", day)).toBe(name);
+  });
+  it("uses the organisation's own word", () => {
+    expect(exportFileName({ records: "former" }, "clients", day)).toBe("Past clients 2026-09-26.csv");
+  });
+  it("is never too long to read", () => {
+    const name = exportFileName({ query: "x".repeat(200) }, "members", day);
+    expect(name.length).toBeLessThanOrEqual(100 + " 2026-09-26.csv".length);
+  });
+  it("sends the exact name, and a plain one for old browsers", () => {
+    expect(contentDisposition("Cancelled members 2026-09-26.csv")).toBe(
+      "attachment; filename=\"Cancelled members 2026-09-26.csv\"; filename*=UTF-8''Cancelled%20members%202026-09-26.csv",
+    );
+    expect(contentDisposition("Annulé members 2026-09-26.csv")).toBe(
+      "attachment; filename=\"Annul_ members 2026-09-26.csv\"; filename*=UTF-8''Annul%C3%A9%20members%202026-09-26.csv",
+    );
   });
 });
