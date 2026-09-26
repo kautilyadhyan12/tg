@@ -218,6 +218,28 @@ describe('the Calendar tab keeps every control', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Sunrise Yoga on Tue 22 Sep/ }));
     expect(button('Close this class')).not.toBeNull();
     for (const name of ['Edit', 'Cancel class', 'Un-cancel']) expect(button(name), name).toBeNull();
+    // Un-cancel is only ever offered on a cancelled class, so look at one.
+    fireEvent.click(screen.getByRole('button', { name: /^Sunrise Yoga on Wed 23 Sep.*cancelled$/ }));
+    expect(button('Close this class')).not.toBeNull();
+    expect(button('Un-cancel')).toBeNull();
+    expect(button('Add class')).toBeNull();
+  });
+
+  it('Add class on the Calendar opens the new class form on the Classes tab', async () => {
+    draw('?view=week');
+    await screen.findByText('Changed');
+    fireEvent.click(screen.getByRole('button', { name: 'Add class' }));
+    await screen.findByRole('heading', { name: 'New class' });
+    expect(screen.getByRole('tab', { name: 'Classes' }).getAttribute('aria-selected')).toBe('true');
+    expect(button('Week before')).toBeNull();
+  });
+
+  it('a role without the timetable tick who types the Calendar address gets no Calendar', async () => {
+    useOrg(NO_TICK);
+    draw('?view=week');
+    await screen.findByText(/role doesn't allow you to set the timetable/);
+    expect(screen.queryByRole('tab')).toBeNull();
+    for (const name of ['Week before', 'Week after', 'Today', 'Add class']) expect(button(name), name).toBeNull();
   });
 });
 

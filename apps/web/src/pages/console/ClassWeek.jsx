@@ -313,7 +313,7 @@ export default function ClassWeek({ gymId, staff, locked }) {
 
   return (
     <div className="flex flex-col gap-5 md:gap-6">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -349,7 +349,7 @@ export default function ClassWeek({ gymId, staff, locked }) {
         </div>
 
         {lists.sessions.length === 0 && filter === EMPTY_FILTER ? null : (
-          <div className="grid grid-cols-2 gap-2 lg:flex lg:ml-auto">
+          <div className="grid grid-cols-2 gap-2 xl:flex xl:ml-auto">
             <select
               aria-label="Show which class"
               value={filter.classTypeId}
@@ -357,7 +357,7 @@ export default function ClassWeek({ gymId, staff, locked }) {
                 const choice = choices.classes.find((c) => c.value === e.target.value);
                 setFilter({ ...filter, classTypeId: e.target.value, className: choice?.label ?? '' });
               }}
-              className="c-input lg:!w-[200px]"
+              className="c-input xl:!w-[200px]"
             >
               <option value="">All classes</option>
               {choices.classes.map((c) => (
@@ -373,7 +373,7 @@ export default function ClassWeek({ gymId, staff, locked }) {
                 const choice = choices.coaches.find((c) => c.value === e.target.value);
                 setFilter({ ...filter, coach: e.target.value, coachLabel: choice?.label ?? '' });
               }}
-              className="c-input lg:!w-[200px]"
+              className="c-input xl:!w-[200px]"
             >
               <option value="">All coaches</option>
               {choices.coaches.map((c) => (

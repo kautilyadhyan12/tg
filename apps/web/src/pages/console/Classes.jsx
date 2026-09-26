@@ -183,7 +183,9 @@ function RepeatForm({ draft, setDraft, staff, clockFormat, today, disabled, savi
         disabled={disabled}
       />
 
-      <div className="grid gap-5 md:grid-cols-2">
+      {/* One above the other: side by side inside a class box, each calendar would be
+          squeezed to half the box. */}
+      <div className="grid gap-5">
         <DateField
           label="Start date"
           value={draft.startsOn}
