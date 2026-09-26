@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Members, your list — dark, computer</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<div data-root="1" class="t-dark" style="width: 1440px; height: %H%px; display: flex; box-sizing: border-box; overflow: hidden">
+<!--RAIL:members-->
+<main style="flex-grow: 1; min-width: 0; box-sizing: border-box; padding: 36px 48px 48px; display: flex; flex-direction: column; gap: 24px">
+
+<header style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h1 class="h1">Members</h1>
+<p class="sub">Iron House Gym · 146 of 500 members</p>
+</div>
+<div style="display: flex; gap: 8px">
+<button type="button" class="btn btn-s"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line></svg>Import</button>
+<button type="button" class="btn btn-p"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" x2="19" y1="8" y2="14"></line><line x1="22" x2="16" y1="11" y2="11"></line></svg>Add member</button>
+</div>
+</header>
+
+<div class="utabs" role="tablist" aria-label="Members">
+<button type="button" role="tab" aria-selected="true" class="utab utab-on">Your list</button>
+<button type="button" role="tab" aria-selected="false" class="utab">Using the app</button>
+</div>
+
+<div class="callout" role="note">
+<span style="color: var(--warn); display: flex; padding-top: 1px"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg></span>
+<div style="display: flex; flex-direction: column; gap: 4px; flex-grow: 1">
+<div class="s15 w6">An invitation reached the wrong person</div>
+<div class="s14 t2">Whoever gets email at this address said they aren’t your member. Check the email address you have for them.</div>
+<div class="s14" style="padding-top: 4px"><span class="w6">Jacob Kim</span><span class="t2"> · jacob.kim@example.com</span></div>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; gap: 12px">
+<label class="search" style="flex-grow: 1; max-width: 420px"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><input class="input" type="search" placeholder="Search" aria-label="Search your members"></label>
+<button type="button" class="btn btn-s btn-lg" aria-haspopup="dialog"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><line x1="21" x2="14" y1="4" y2="4"></line><line x1="10" x2="3" y1="4" y2="4"></line><line x1="21" x2="12" y1="12" y2="12"></line><line x1="8" x2="3" y1="12" y2="12"></line><line x1="21" x2="16" y1="20" y2="20"></line><line x1="12" x2="3" y1="20" y2="20"></line><line x1="14" x2="14" y1="2" y2="6"></line><line x1="8" x2="8" y1="10" y2="14"></line><line x1="16" x2="16" y1="18" y2="22"></line></svg>Filter · 2</button>
+<div style="flex-grow: 1"></div>
+<button type="button" class="btn btn-soft btn-lg"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect width="20" height="16" x="2" y="4" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg>Invite 41 members</button>
+</div>
+<div style="display: flex; align-items: center; gap: 8px">
+<span class="s14 t3">Showing:</span>
+<button type="button" class="chip chip-on" aria-label="Stop showing only Active">Active<svg class="ic" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
+<button type="button" class="chip chip-on" aria-label="Stop showing only Gold">Gold<svg class="ic" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
+<button type="button" class="btn btn-sm" style="color: var(--link)">Clear</button>
+<div style="flex-grow: 1"></div>
+<span class="s14 t2">118 members match</span>
+</div>
+</div>
+
+<div class="card" style="overflow: hidden">
+<div class="th" style="display: grid; grid-template-columns: minmax(0, 2.6fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 0.95fr) minmax(0, 2.1fr) 20px; gap: 16px; align-items: center; padding: 12px 20px">
+<span>Name</span><span>Status</span><span>Membership</span><span>Renews or ends</span><span>Payment</span><span>App</span><span></span>
+</div>
+
+<a href="#person" style="display: grid; grid-template-columns: minmax(0, 2.6fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 0.95fr) minmax(0, 2.1fr) 20px; gap: 4px 16px; align-items: center; padding: 14px 20px; border-top: 1px solid var(--line); color: var(--t1)">
+<span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span class="s15 w6 ell">Olivia Bennett</span><span class="s13 t2 ell">olivia.bennett@example.com</span></span>
+<span class="s14">Active</span><span class="s14">Gold</span><span class="s14 t2">Renews 3 Oct</span><span class="s14">Paid</span>
+<span><span class="tag tag-good">Uses the app</span></span>
+<span class="t3" style="display: flex"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span>
+</a>
+
+<a href="#person" style="display: grid; grid-template-columns: minmax(0, 2.6fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 0.95fr) minmax(0, 2.1fr) 20px; gap: 4px 16px; align-items: center; padding: 14px 20px; border-top: 1px solid var(--line); color: var(--t1)">
+<span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span class="s15 w6 ell">Marcus Reed</span><span class="s13 t2 ell">marcus.reed@example.com</span></span>
+<span class="s14">Active</span><span class="s14">Gold</span><span class="s14 t2">Renews 12 Oct</span><span class="s14">Paid</span>
+<span><span class="tag tag-good">Uses the app</span></span>
+<span class="t3" style="display: flex"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span>
+</a>
+
+<a href="#person" style="display: grid; grid-template-columns: minmax(0, 2.6fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 0.95fr) minmax(0, 2.1fr) 20px; gap: 4px 16px; align-items: center; padding: 14px 20px; border-top: 1px solid var(--line); color: var(--t1)">
+<span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span class="s15 w6 ell">Sofia Alvarez</span><span class="s13 t2 ell">sofia.alvarez@example.com</span></span>
+<span class="s14">Active</span><span class="s14">Gold</span><span class="s14 t2">Renews 29 Sep</span><span class="s14">Overdue</span>
+<span><span class="tag tag-plain">Invited</span></span>
+<span class="t3" style="display: flex"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span>
+</a>
+
+<a href="#person" style="display: grid; grid-template-columns: minmax(0, 2.6fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 0.95fr) minmax(0, 2.1fr) 20px; gap: 4px 16px; align-items: center; padding: 14px 20px; border-top: 1px solid var(--line); color: var(--t1)">
+<span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span class="s15 w6 ell">Liam Hughes</span><span class="s13 t2 ell">+1 512 555 0148</span></span>
+<span class="s14">Active</span><span class="s14">Gold</span><span class="s14 t2">Renews 7 Oct</span><span class="s14">Paid</span>
+<span><span class="tag tag-plain">No email</span></span>
+<span class="t3" style="display: flex"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span>
+</a>
+
+<a href="#person" style="display: grid; grid-template-columns: minmax(0, 2.6fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 0.95fr) minmax(0, 2.1fr) 20px; gap: 4px 16px; align-items: center; padding: 14px 20px; border-top: 1px solid var(--line); color: var(--t1)">
+<span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span class="s15 w6 ell">Emma Clarke</span><span class="s13 t2 ell">emma.clarke@example.com</span></span>
+<span class="s14">Active</span><span class="s14">Gold</span><span class="s14 t2">Ends 30 Sep</span><span class="s14">Paid</span>
+<span><span class="tag tag-warn">Invited · email didn’t arrive</span></span>
+<span class="t3" style="display: flex"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span>
+<span class="s13" style="grid-column: 1 / -1; display: flex; gap: 6px; color: var(--warn)"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" style="margin-top: 2px"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>This email bounced: the address doesn’t take email. Check it with the person.</span>
+</a>
+
+<a href="#person" style="display: grid; grid-template-columns: minmax(0, 2.6fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 0.95fr) minmax(0, 2.1fr) 20px; gap: 4px 16px; align-items: center; padding: 14px 20px; border-top: 1px solid var(--line); color: var(--t1)">
+<span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span class="s15 w6 ell">Noah Patel</span><span class="s13 t2 ell">noah.patel@example.com</span></span>
+<span class="s14">Active</span><span class="s14">Gold</span><span class="s14 t2">Renews 15 Oct</span><span class="s14">Paid</span>
+<span><span class="tag tag-good">Joined</span></span>
+<span class="t3" style="display: flex"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span>
+</a>
+
+<a href="#person" style="display: grid; grid-template-columns: minmax(0, 2.6fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 0.95fr) minmax(0, 2.1fr) 20px; gap: 4px 16px; align-items: center; padding: 14px 20px; border-top: 1px solid var(--line); color: var(--t1)">
+<span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span class="s15 w6 ell">Ava Thompson</span><span class="s13 t2 ell">ava.thompson@example.com</span></span>
+<span class="s14">Active</span><span class="s14">Gold</span><span class="s14 t2">Renews 21 Oct</span><span class="s14">Paid</span>
+<span><span class="tag tag-plain">Not invited</span></span>
+<span class="t3" style="display: flex"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span>
+</a>
+
+<a href="#person" style="display: grid; grid-template-columns: minmax(0, 2.6fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 0.95fr) minmax(0, 2.1fr) 20px; gap: 4px 16px; align-items: center; padding: 14px 20px; border-top: 1px solid var(--line); color: var(--t1)">
+<span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span class="s15 w6 ell">Ethan Brooks</span><span class="s13 t2 ell">ethan.brooks@example.com</span></span>
+<span class="s14">Active</span><span class="s14">Gold</span><span class="s14 t2">Renews 2 Oct</span><span class="s14">Paid</span>
+<span><span class="tag tag-plain">Invited · email waiting to go</span></span>
+<span class="t3" style="display: flex"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span>
+</a>
+
+<a href="#person" style="display: grid; grid-template-columns: minmax(0, 2.6fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 0.95fr) minmax(0, 2.1fr) 20px; gap: 4px 16px; align-items: center; padding: 14px 20px; border-top: 1px solid var(--line); color: var(--t1)">
+<span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span class="s15 w6 ell">Mia Rossi</span><span class="s13 t2 ell">mia.rossi@example.com</span></span>
+<span class="s14">Active</span><span class="s14">Gold</span><span class="s14 t2">Renews 9 Oct</span><span class="s14">Paid</span>
+<span><span class="tag tag-plain">Under 18</span></span>
+<span class="t3" style="display: flex"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span>
+</a>
+
+<a href="#person" style="display: grid; grid-template-columns: minmax(0, 2.6fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 0.95fr) minmax(0, 2.1fr) 20px; gap: 4px 16px; align-items: center; padding: 14px 20px; border-top: 1px solid var(--line); color: var(--t1)">
+<span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span class="s15 w6 ell">Jacob Kim</span><span class="s13 t2 ell">jacob.kim@example.com</span></span>
+<span class="s14">Active</span><span class="s14">Gold</span><span class="s14 t2">Renews 18 Oct</span><span class="s14">Paid</span>
+<span><span class="tag tag-bad">Said “Not me”</span></span>
+<span class="t3" style="display: flex"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span>
+<span class="s13" style="grid-column: 1 / -1; display: flex; gap: 6px; color: var(--bad)"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" style="margin-top: 2px"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>Whoever gets email at this address said the invitation isn’t for them. Check the address with the person, then change it.</span>
+</a>
+</div>
+
+<div><button type="button" class="btn btn-s">Load more</button></div>
+
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

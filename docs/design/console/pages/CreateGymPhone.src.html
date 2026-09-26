@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Create your organisation — dark, phone</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<div data-root="1" class="t-dark" style="width: 390px; height: %H%px; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden">
+<header class="topbar">
+<span class="s15 w6" style="color: var(--rail-t2)">Gym console</span>
+<button type="button" class="btn" style="color: var(--rail-t2); height: 44px"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" x2="9" y1="12" y2="12"></line></svg>Sign out</button>
+</header>
+<main style="flex-grow: 1; box-sizing: border-box; padding: 20px 16px 24px; display: flex; flex-direction: column; gap: 20px">
+<h1 class="h1p">Create your organisation</h1>
+<fieldset style="border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px">
+<legend class="label" style="padding: 0; margin-bottom: 10px">What is it?</legend>
+<div role="radiogroup" aria-label="What is it?" style="display: flex; flex-direction: column; gap: 10px">
+<button type="button" role="radio" aria-checked="true" style="text-align: left; border-radius: 14px; padding: 14px 16px; border: 2px solid var(--accent); background: var(--soft); color: var(--t1); display: flex; align-items: center; gap: 14px">
+<span style="display: flex; flex-direction: column; gap: 2px"><span class="s15 w6">Gym</span><span class="s13 t2">A gym or fitness centre with members</span></span>
+</button>
+<button type="button" role="radio" aria-checked="false" style="text-align: left; border-radius: 14px; padding: 14px 16px; border: 1px solid var(--ctl-line); background: transparent; color: var(--t1); display: flex; align-items: center; gap: 14px">
+<span style="display: flex; flex-direction: column; gap: 2px"><span class="s15 w6">Studio</span><span class="s13 t2">A boutique or class-based studio with clients</span></span>
+</button>
+<button type="button" role="radio" aria-checked="false" style="text-align: left; border-radius: 14px; padding: 14px 16px; border: 1px solid var(--ctl-line); background: transparent; color: var(--t1); display: flex; align-items: center; gap: 14px">
+<span style="display: flex; flex-direction: column; gap: 2px"><span class="s15 w6">Personal trainer</span><span class="s13 t2">You train your own clients</span></span>
+</button>
+</div>
+</fieldset>
+<div class="field"><label class="label" for="nm">Gym name</label><input id="nm" class="input" placeholder="Iron House"></div>
+<div class="field"><label class="label" for="ct">City <span class="t3 w5">· Optional</span></label><input id="ct" class="input" placeholder="Austin"></div>
+<div class="field"><span class="label">Country</span><button type="button" class="sel" aria-label="Country"><span class="t3">Choose a country</span><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button><span class="hint">This decides the currency you are billed in.</span></div>
+<div class="field"><span class="label">Time zone</span><button type="button" class="sel" aria-label="Time zone"><span>America/Chicago</span><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button><span class="hint">Your daily figures use this.</span></div>
+<button type="submit" class="btn btn-p btn-lg">Create</button>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

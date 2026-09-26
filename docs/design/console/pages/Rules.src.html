@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Design rules for every gym page — dark, computer</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<div data-root="1" class="t-dark" style="width: 1440px; height: %H%px; box-sizing: border-box; overflow: hidden; padding: 64px 80px; display: flex; flex-direction: column; gap: 48px">
+
+<header style="display: flex; flex-direction: column; gap: 10px; max-width: 900px">
+<span class="eyebrow">Gym console</span>
+<h1 style="margin: 0; font-size: 48px; line-height: 54px; font-weight: 700; font-stretch: 108%; letter-spacing: -0.02em">Design rules for every page</h1>
+<p class="s16 t2" style="margin: 0">Every page drawn here follows these rules, and every new page must too. Both looks, dark and light, come from the same drawing: only the colours change.</p>
+</header>
+
+<section style="display: flex; flex-direction: column; gap: 18px">
+<h2 class="h2">The twelve rules</h2>
+<ol style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px">
+<li class="card" style="padding: 18px; display: flex; flex-direction: column; gap: 6px"><span class="s13 w7 lk">1</span><span class="s15 w6">One page, one job</span><span class="s14 t2">The title says where you are, top left. The one main button sits top right; on a phone, just under the title.</span></li>
+<li class="card" style="padding: 18px; display: flex; flex-direction: column; gap: 6px"><span class="s13 w7 lk">2</span><span class="s15 w6">The key number is the biggest thing</span><span class="s14 t2">What a gym checks most is big and bold. Its label is small and calm.</span></li>
+<li class="card" style="padding: 18px; display: flex; flex-direction: column; gap: 6px"><span class="s13 w7 lk">3</span><span class="s15 w6">Orange means “press here”</span><span class="s14 t2">One solid orange button per box at most. A second important action is pale orange; the rest are outlined. In the menu, orange shows where you are.</span></li>
+<li class="card" style="padding: 18px; display: flex; flex-direction: column; gap: 6px"><span class="s13 w7 lk">4</span><span class="s15 w6">Colour always has a meaning</span><span class="s14 t2">Green is good, amber is “look at this”, red is a problem, and each class keeps its own colour. Always with a word, never colour alone.</span></li>
+<li class="card" style="padding: 18px; display: flex; flex-direction: column; gap: 6px"><span class="s13 w7 lk">5</span><span class="s15 w6">Things that belong together share a box</span><span class="s14 t2">Each box has one clear title, and a box holds one kind of thing.</span></li>
+<li class="card" style="padding: 18px; display: flex; flex-direction: column; gap: 6px"><span class="s13 w7 lk">6</span><span class="s15 w6">One font, a fixed set of sizes</span><span class="s14 t2">Archivo everywhere. Titles and big numbers in its wider bold style. Three greys for all text.</span></li>
+<li class="card" style="padding: 18px; display: flex; flex-direction: column; gap: 6px"><span class="s13 w7 lk">7</span><span class="s15 w6">The same gaps everywhere</span><span class="s14 t2">24 pixels between boxes and inside them (20 on a phone); 48 at the sides of the page (16 on a phone).</span></li>
+<li class="card" style="padding: 18px; display: flex; flex-direction: column; gap: 6px"><span class="s13 w7 lk">8</span><span class="s15 w6">Big enough for a thumb</span><span class="s14 t2">On a phone every button and row is at least 44 pixels tall. Pick from a list or calendar instead of typing.</span></li>
+<li class="card" style="padding: 18px; display: flex; flex-direction: column; gap: 6px"><span class="s13 w7 lk">9</span><span class="s15 w6">One pattern for pop-ups</span><span class="s14 t2">One person or thing opens in a side panel on a computer and a full page on a phone. A question or a choice opens in the middle, or from the bottom on a phone.</span></li>
+<li class="card" style="padding: 18px; display: flex; flex-direction: column; gap: 6px"><span class="s13 w7 lk">10</span><span class="s15 w6">Lists look the same everywhere</span><span class="s14 t2">Search and filters on top, the count on the right, rows that open, “Load more” at the bottom.</span></li>
+<li class="card" style="padding: 18px; display: flex; flex-direction: column; gap: 6px"><span class="s13 w7 lk">11</span><span class="s15 w6">Every page in both looks</span><span class="s14 t2">Dark and light, switched from the menu, with Auto following the device. The menu stays dark in both.</span></li>
+<li class="card" style="padding: 18px; display: flex; flex-direction: column; gap: 6px"><span class="s13 w7 lk">12</span><span class="s15 w6">A gym’s words</span><span class="s14 t2">Say it the way a gym would. No sentences that explain how the app works inside.</span></li>
+</ol>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 18px">
+<h2 class="h2">Colours and what each one means</h2>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px">
+<div class="t-dark card" style="padding: 20px; display: flex; flex-direction: column; gap: 12px">
+<span class="s14 w6">Dark</span>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px">
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 48px; border-radius: 10px; background: #0C0B0A; border: 1px solid #3A3530"></span><span class="s13 w6">Page</span><span class="s12 t3 num">#0C0B0A</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 48px; border-radius: 10px; background: #151311; border: 1px solid #3A3530"></span><span class="s13 w6">Box</span><span class="s12 t3 num">#151311</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 48px; border-radius: 10px; background: #F4F1EC"></span><span class="s13 w6">Main text</span><span class="s12 t3 num">#F4F1EC</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 48px; border-radius: 10px; background: #B8B0A6"></span><span class="s13 w6">Second text</span><span class="s12 t3 num">#B8B0A6</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 48px; border-radius: 10px; background: #FF8A1F"></span><span class="s13 w6">Press here</span><span class="s12 t3 num">#FF8A1F</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 48px; border-radius: 10px; background: #46D993"></span><span class="s13 w6">Good</span><span class="s12 t3 num">#46D993</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 48px; border-radius: 10px; background: #F2C35B"></span><span class="s13 w6">Look at this</span><span class="s12 t3 num">#F2C35B</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 48px; border-radius: 10px; background: #FF7B6E"></span><span class="s13 w6">A problem</span><span class="s12 t3 num">#FF7B6E</span></div>
+</div>
+</div>
+<div class="t-light card" style="padding: 20px; display: flex; flex-direction: column; gap: 12px">
+<span class="s14 w6">Light</span>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px">
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 48px; border-radius: 10px; background: #F5F3EF; border: 1px solid #D6CFC5"></span><span class="s13 w6">Page</span><span class="s12 t3 num">#F5F3EF</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 48px; border-radius: 10px; background: #FFFFFF; border: 1px solid #D6CFC5"></span><span class="s13 w6">Box</span><span class="s12 t3 num">#FFFFFF</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 48px; border-radius: 10px; background: #1B1815"></span><span class="s13 w6">Main text</span><span class="s12 t3 num">#1B1815</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 48px; border-radius: 10px; background: #57504A"></span><span class="s13 w6">Second text</span><span class="s12 t3 num">#57504A</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 48px; border-radius: 10px; background: #FF8A1F"></span><span class="s13 w6">Press here</span><span class="s12 t3 num">#FF8A1F</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 48px; border-radius: 10px; background: #177A48"></span><span class="s13 w6">Good</span><span class="s12 t3 num">#177A48</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 48px; border-radius: 10px; background: #7A5600"></span><span class="s13 w6">Look at this</span><span class="s12 t3 num">#7A5600</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="height: 48px; border-radius: 10px; background: #C23A2E"></span><span class="s13 w6">A problem</span><span class="s12 t3 num">#C23A2E</span></div>
+</div>
+</div>
+</div>
+</section>
+
+<section style="display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 24px; align-items: start">
+<div class="card" style="padding: 24px; display: flex; flex-direction: column; gap: 16px">
+<h2 class="h2">Text sizes</h2>
+<div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding-bottom: 12px"><span style="font-size: 48px; line-height: 52px; font-weight: 700; font-stretch: 108%">58</span><span class="s13 t3">Big number · 48 (phone 44)</span></div>
+<div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding-bottom: 12px"><span class="h1">Members</span><span class="s13 t3">Page title · 34 (phone 28)</span></div>
+<div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding-bottom: 12px"><span class="h2">Who came today</span><span class="s13 t3">Box title · 18</span></div>
+<div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding-bottom: 12px"><span class="s15">Olivia Bennett came in at 6:02 AM.</span><span class="s13 t3">Words · 15</span></div>
+<div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding-bottom: 12px"><span class="s14 t2">Name, status and payment labels</span><span class="s13 t3">Labels · 14</span></div>
+<div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px"><span class="s13 t3">Hints under a box, times, small print</span><span class="s13 t3">Small · 13</span></div>
+</div>
+
+<div class="card" style="padding: 24px; display: flex; flex-direction: column; gap: 18px">
+<h2 class="h2">Buttons, labels and boxes</h2>
+<div style="display: flex; flex-wrap: wrap; gap: 8px"><span class="btn btn-p">Add member</span><span class="btn btn-s">Import</span><span class="btn btn-soft">Invite 41 members</span><span class="btn btn-danger">Delete for good</span><span class="btn btn-ghost">Archive</span></div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px"><span class="tag tag-good">Uses the app</span><span class="tag tag-warn">Invited · email didn’t arrive</span><span class="tag tag-bad">Said “Not me”</span><span class="tag tag-plain">Not invited</span><span class="tag tag-soft">New</span></div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px"><span class="chip chip-on">Active <span class="n">248</span></span><span class="chip">Expired <span class="n">88</span></span><span class="tc">6:02 AM</span><span class="tc tc-warn">5:41 AM · outside hours</span></div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+<div class="field"><span class="label">Gym name</span><span class="input" style="display: flex; align-items: center">Iron House Gym</span></div>
+<div class="field"><span class="label">Country</span><span class="sel"><span>United States</span><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></span></div>
+</div>
+<div style="display: flex; align-items: center; gap: 20px"><span style="display: flex; align-items: center; gap: 10px"><span class="check check-on"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" style="stroke-width: 3"><path d="M20 6 9 17l-5-5"></path></svg></span><span class="s14">A tick</span></span><span style="display: flex; align-items: center; gap: 10px"><span class="switch switch-on"></span><span class="s14">A switch</span></span></div>
+</div>
+</section>
+
+<section class="card" style="padding: 24px; display: flex; flex-direction: column; gap: 16px">
+<h2 class="h2">Where things go on every page</h2>
+<div style="display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 32px; align-items: start">
+<div style="display: flex; height: 300px; border: 1px solid var(--card-line); border-radius: 12px; overflow: hidden">
+<div style="width: 22%; background: var(--rail-bg); display: flex; flex-direction: column; gap: 8px; padding: 12px"><span style="height: 26px; border-radius: 6px; background: var(--rail-card); border: 1px solid var(--rail-card-line)"></span><span style="height: 12px; border-radius: 4px; background: var(--rail-on)"></span><span style="height: 12px; border-radius: 4px; background: var(--rail-card)"></span><span style="height: 12px; border-radius: 4px; background: var(--rail-card)"></span><span style="height: 12px; border-radius: 4px; background: var(--rail-card)"></span><span style="flex-grow: 1"></span><span class="s12" style="color: var(--rail-t3)">Menu · always dark</span></div>
+<div style="flex-grow: 1; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: center; justify-content: space-between"><span class="s14 w7">Page title</span><span class="btn btn-sm btn-p">Main button</span></div>
+<div style="display: flex; gap: 8px"><span style="height: 22px; flex-grow: 1; max-width: 50%; border-radius: 6px; border: 1px solid var(--input-line)"></span><span style="height: 22px; width: 60px; border-radius: 6px; border: 1px solid var(--ctl-line)"></span></div>
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px; flex-grow: 1">
+<div class="card" style="border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 6px"><span class="s12 w6">The main work</span><span style="height: 8px; border-radius: 4px; background: var(--raise)"></span><span style="height: 8px; border-radius: 4px; background: var(--raise)"></span><span style="height: 8px; border-radius: 4px; background: var(--raise)"></span></div>
+<div class="card" style="border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 6px"><span class="s12 w6">Side facts</span><span style="height: 8px; border-radius: 4px; background: var(--raise)"></span></div>
+</div>
+</div>
+</div>
+<ul style="margin: 0; padding: 0 0 0 18px; display: flex; flex-direction: column; gap: 10px" class="s15 t2">
+<li>The menu on the left, the gym’s name at its top: tap it to switch gym.</li>
+<li>Title top left; the page’s one main button top right.</li>
+<li>Search and filters under the title.</li>
+<li>The main work in the wide column; side facts in the narrow one.</li>
+<li>On a phone: the gym’s name on top, the page in one column, and four tabs plus More at the bottom.</li>
+</ul>
+</div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

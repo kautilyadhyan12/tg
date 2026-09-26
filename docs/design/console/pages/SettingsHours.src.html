@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings, opening hours — dark, computer</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<div data-root="1" class="t-dark" style="width: 1440px; height: %H%px; display: flex; box-sizing: border-box; overflow: hidden">
+<!--RAIL:settings-->
+<main style="flex-grow: 1; min-width: 0; box-sizing: border-box; padding: 36px 48px 48px; display: flex; flex-direction: column; gap: 28px">
+
+<header style="display: flex; flex-direction: column; gap: 6px">
+<h1 class="h1">Settings</h1>
+<p class="sub">Iron House Gym</p>
+</header>
+
+<div style="display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 32px; align-items: start">
+<nav aria-label="Settings" style="display: flex; flex-direction: column; gap: 4px">
+<a href="#details" style="display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 12px; border: 1px solid transparent; color: var(--t1)"><span class="s15 w5">Gym details</span></a>
+<a href="#hours" aria-current="page" style="display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 12px; background: var(--card); border: 1px solid var(--card-line); color: var(--t1)"><span class="s15 w6">When we’re open</span><span class="s13 t2">Your opening times are set for every day.</span></a>
+<a href="#marking" style="display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 12px; border: 1px solid transparent; color: var(--t1)"><span class="s15 w5">Marking attendance</span><span class="s13 t3">Members can mark themselves in</span></a>
+<a href="#staff" style="display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 12px; border: 1px solid transparent; color: var(--t1)"><span class="s15 w5">Staff</span><span class="s13 t3">Who can help you run this gym.</span></a>
+</nav>
+
+<section class="card" style="padding: 24px; display: flex; flex-direction: column; gap: 24px; max-width: 720px">
+<h2 class="h2">When we’re open</h2>
+
+<fieldset style="border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px">
+<legend class="label" style="padding: 0; margin-bottom: 8px">Which clock do you use?</legend>
+<div role="radiogroup" aria-label="Which clock do you use?" style="display: inline-grid; grid-template-columns: repeat(2, 120px); gap: 2px; padding: 3px; border-radius: 10px; border: 1px solid var(--ctl-line); width: max-content">
+<button type="button" role="radio" aria-checked="true" class="s14 w6" style="height: 36px; border: 0; border-radius: 7px; background: var(--sel); color: var(--on-sel)">12-hour</button>
+<button type="button" role="radio" aria-checked="false" class="s14 w5" style="height: 36px; border: 0; border-radius: 7px; background: transparent; color: var(--t2)">24-hour</button>
+</div>
+<span class="hint">This is how times are shown to you and to your members.</span>
+</fieldset>
+
+<fieldset style="border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px">
+<legend class="label" style="padding: 0; margin-bottom: 8px">When is your gym open?</legend>
+<div role="radiogroup" aria-label="When is your gym open?" style="display: inline-grid; grid-template-columns: repeat(2, 170px); gap: 2px; padding: 3px; border-radius: 10px; border: 1px solid var(--ctl-line); width: max-content">
+<button type="button" role="radio" aria-checked="false" class="s14 w5" style="height: 36px; border: 0; border-radius: 7px; background: transparent; color: var(--t2)">Open 24 hours</button>
+<button type="button" role="radio" aria-checked="true" class="s14 w6" style="height: 36px; border: 0; border-radius: 7px; background: var(--sel); color: var(--on-sel)">Set opening times</button>
+</div>
+</fieldset>
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span class="hint">A day with no times is a day you are closed.</span>
+<div style="border: 1px solid var(--card-line); border-radius: 12px; overflow: hidden">
+<div style="background: var(--raise)">
+<button type="button" aria-expanded="true" style="width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 0; background: transparent; color: var(--t1)"><span class="s15 w6" style="width: 120px; text-align: left">Monday</span><span class="s14 t2" style="flex-grow: 1; text-align: left">5:00 AM – 11:00 PM</span><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" style="transform: rotate(180deg)"><path d="m6 9 6 6 6-6"></path></svg></button>
+<div style="padding: 4px 16px 16px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap">
+<div style="display: flex; flex-direction: column; gap: 6px"><span class="s13 w6 t2">Opens</span><div style="display: flex; gap: 6px"><span style="display: flex; flex-direction: column; gap: 4px; align-items: center"><span class="sel" style="width: 64px; justify-content: center">5</span><span class="s12 t3">Hour</span></span><span style="display: flex; flex-direction: column; gap: 4px; align-items: center"><span class="sel" style="width: 64px; justify-content: center">00</span><span class="s12 t3">Minute</span></span><span class="sel" style="width: 64px; justify-content: center">AM</span></div></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span class="s13 w6 t2">Closes</span><div style="display: flex; gap: 6px"><span style="display: flex; flex-direction: column; gap: 4px; align-items: center"><span class="sel" style="width: 64px; justify-content: center">11</span><span class="s12 t3">Hour</span></span><span style="display: flex; flex-direction: column; gap: 4px; align-items: center"><span class="sel" style="width: 64px; justify-content: center">00</span><span class="s12 t3">Minute</span></span><span class="sel" style="width: 64px; justify-content: center">PM</span></div></div>
+<button type="button" class="icon-btn" aria-label="Remove Monday session 1" style="margin-top: 26px"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg></button>
+</div>
+<div style="display: flex; gap: 20px; flex-wrap: wrap"><a href="#add-time" class="s14 w6" style="display: flex; align-items: center; gap: 6px"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>Add a time</a><a href="#every-day" class="s14 w6" style="display: flex; align-items: center; gap: 6px"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>Use these times every day</a></div>
+</div>
+</div>
+<button type="button" style="width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 0; border-top: 1px solid var(--line); background: transparent; color: var(--t1)"><span class="s15 w6" style="width: 120px; text-align: left">Tuesday</span><span class="s14 t2" style="flex-grow: 1; text-align: left">5:00 AM – 11:00 PM</span><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+<button type="button" style="width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 0; border-top: 1px solid var(--line); background: transparent; color: var(--t1)"><span class="s15 w6" style="width: 120px; text-align: left">Wednesday</span><span class="s14 t2" style="flex-grow: 1; text-align: left">5:00 AM – 11:00 PM</span><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+<button type="button" style="width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 0; border-top: 1px solid var(--line); background: transparent; color: var(--t1)"><span class="s15 w6" style="width: 120px; text-align: left">Thursday</span><span class="s14 t2" style="flex-grow: 1; text-align: left">5:00 AM – 11:00 PM</span><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+<button type="button" style="width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 0; border-top: 1px solid var(--line); background: transparent; color: var(--t1)"><span class="s15 w6" style="width: 120px; text-align: left">Friday</span><span class="s14 t2" style="flex-grow: 1; text-align: left">5:00 AM – 10:00 PM</span><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+<button type="button" style="width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 0; border-top: 1px solid var(--line); background: transparent; color: var(--t1)"><span class="s15 w6" style="width: 120px; text-align: left">Saturday</span><span class="s14 t2" style="flex-grow: 1; text-align: left">7:00 AM – 9:00 PM</span><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+<button type="button" style="width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 0; border-top: 1px solid var(--line); background: transparent; color: var(--t1)"><span class="s15 w6" style="width: 120px; text-align: left">Sunday</span><span class="s14 t2" style="flex-grow: 1; text-align: left">8:00 AM – 12:00 PM · 4:00 PM – 8:00 PM</span><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; flex-direction: column; gap: 2px"><span class="label">Closed on a date</span><span class="hint">For a holiday or a one-off. It clears itself once the date has passed.</span></div>
+<div style="display: grid; grid-template-columns: 220px minmax(0, 1fr) auto; gap: 12px; align-items: end">
+<div class="field"><span class="s13 w6 t2">Date</span><button type="button" class="sel" aria-label="Date to close"><span>Choose a date</span><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path></svg></button></div>
+<div class="field"><label class="s13 w6 t2" for="why">Reason (optional)</label><input id="why" class="input" placeholder="Thanksgiving"></div>
+<button type="button" class="btn btn-s btn-lg">Mark closed</button>
+</div>
+<div style="border: 1px solid var(--card-line); border-radius: 12px; overflow: hidden">
+<div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px"><span class="s15 w6" style="width: 160px">Thu 26 Nov 2026</span><span class="s14 t2" style="flex-grow: 1">Thanksgiving</span><button type="button" class="btn btn-sm btn-ghost">Undo</button></div>
+<div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--line)"><span class="s15 w6" style="width: 160px">Fri 25 Dec 2026</span><span class="s14 t2" style="flex-grow: 1">Christmas Day</span><button type="button" class="btn btn-sm btn-ghost">Undo</button></div>
+</div>
+</div>
+
+<div style="padding-top: 4px"><button type="button" class="btn btn-p">Save opening times</button></div>
+</section>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

@@ -170,6 +170,12 @@ pregnancy, or for a flagged heart, blood-pressure or diabetes answer. Safe mode 
 workout and run plans until a professional's clearance is confirmed. Every suggestion
 that involves food shows its allergens. Disclaimer text is never softened or removed.
 
+**The console's look (Kd, RULINGS 2026-09-26).** Every console page follows spec Part 3
+§17: colours by name from `apps/web/src/components/console/console.css`, never written
+into a page; its `c-` building blocks; Archivo; both looks. A new console page, or a new
+box on a page already restyled, is built in the new look. A restyle (ROADMAP R2–R8) keeps
+every button, field, message and permission its page has.
+
 **Tests.** Route tests via `fastify.inject` covering the happy path, a validation failure
 and the cross-tenant denial. Database-backed tests run against the local Postgres
 (`pnpm --filter api test:local`, Docker Desktop running). A bug fix starts with a failing

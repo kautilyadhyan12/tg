@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings, gym details — dark, computer</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<div data-root="1" class="t-dark" style="width: 1440px; height: %H%px; display: flex; box-sizing: border-box; overflow: hidden">
+<!--RAIL:settings-->
+<main style="flex-grow: 1; min-width: 0; box-sizing: border-box; padding: 36px 48px 48px; display: flex; flex-direction: column; gap: 28px">
+
+<header style="display: flex; flex-direction: column; gap: 6px">
+<h1 class="h1">Settings</h1>
+<p class="sub">Iron House Gym</p>
+</header>
+
+<div style="display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 32px; align-items: start">
+<nav aria-label="Settings" style="display: flex; flex-direction: column; gap: 4px">
+<a href="#details" aria-current="page" style="display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 12px; background: var(--card); border: 1px solid var(--card-line); color: var(--t1)"><span class="s15 w6">Gym details</span></a>
+<a href="#hours" style="display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 12px; border: 1px solid transparent; color: var(--t1)"><span class="s15 w5">When we’re open</span><span class="s13 t3">Your opening times are set for every day.</span></a>
+<a href="#marking" style="display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 12px; border: 1px solid transparent; color: var(--t1)"><span class="s15 w5">Marking attendance</span><span class="s13 t3">Members can mark themselves in</span></a>
+<a href="#staff" style="display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 12px; border: 1px solid transparent; color: var(--t1)"><span class="s15 w5">Staff</span><span class="s13 t3">Who can help you run this gym.</span></a>
+</nav>
+
+<section class="card" style="padding: 24px; display: flex; flex-direction: column; gap: 22px; max-width: 720px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h2 class="h2">Gym details</h2>
+<p class="s14 t2" style="margin: 0">Your gym’s name, where it is, the time zone its day ends on, and the postal address your invitations show.</p>
+</div>
+<div class="field"><label class="label" for="gn">Gym name</label><input id="gn" class="input" value="Iron House Gym"></div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
+<div class="field"><label class="label" for="gc">City <span class="t3 w5">· Optional</span></label><input id="gc" class="input" value="Austin"></div>
+<div class="field"><span class="label">Country</span><button type="button" class="sel" aria-label="Country"><span>United States</span><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button><span class="hint">This decides the currency your gym is billed in.</span></div>
+</div>
+<div class="field"><span class="label">Time zone</span><button type="button" class="sel" aria-label="Time zone"><span>America/Chicago</span><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button><span class="hint">Your gym’s daily figures use this.</span></div>
+<div class="field"><label class="label" for="ga">Postal address</label><textarea id="ga" class="area" rows="3">1200 Congress Avenue
+Austin, TX 78701
+United States</textarea><span class="hint">Printed at the foot of every invitation email, as the law asks. You can’t invite members until it’s here.</span></div>
+<div style="display: flex; gap: 12px; align-items: center; padding-top: 4px"><button type="button" class="btn btn-p">Save changes</button></div>
+</section>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

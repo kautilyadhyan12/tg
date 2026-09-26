@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings — dark, phone</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<div data-root="1" data-fixed-h="844" class="t-dark" style="width: 390px; height: %H%px; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden">
+<!--TOPBAR-->
+<main style="flex-grow: 1; box-sizing: border-box; padding: 20px 16px 24px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<h1 class="h1p">Settings</h1>
+<p class="sub">Iron House Gym</p>
+</div>
+<nav aria-label="Settings" class="card" style="overflow: hidden; display: flex; flex-direction: column">
+<a href="#details" style="display: flex; align-items: center; gap: 12px; padding: 16px; color: var(--t1); min-height: 44px"><span style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1; min-width: 0"><span class="s15 w6">Gym details</span><span class="s13 t2">Iron House Gym · Austin · America/Chicago</span></span><span class="t3" style="display: flex"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span></a>
+<a href="#hours" style="display: flex; align-items: center; gap: 12px; padding: 16px; border-top: 1px solid var(--line); color: var(--t1)"><span style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1; min-width: 0"><span class="s15 w6">When we’re open</span><span class="s13 t2">Your opening times are set for every day.</span></span><span class="t3" style="display: flex"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span></a>
+<a href="#marking" style="display: flex; align-items: center; gap: 12px; padding: 16px; border-top: 1px solid var(--line); color: var(--t1)"><span style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1; min-width: 0"><span class="s15 w6">Marking attendance</span><span class="s13 t2">Members can mark themselves in</span></span><span class="t3" style="display: flex"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span></a>
+<a href="#staff" style="display: flex; align-items: center; gap: 12px; padding: 16px; border-top: 1px solid var(--line); color: var(--t1)"><span style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1; min-width: 0"><span class="s15 w6">Staff</span><span class="s13 t2">Who can help you run this gym.</span></span><span class="t3" style="display: flex"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span></a>
+</nav>
+</main>
+<!--TABBAR:more-->
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

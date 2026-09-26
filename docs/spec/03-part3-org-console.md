@@ -170,6 +170,8 @@ scheme `/console/:orgSlug/...` — the console is a separate route group in
 group; one deploy, shared auth, less infra — recorded as the
 implementation choice).
 
+**The menu as built, and the look of every page: §17** (2026-09-26).
+
 ### 3.2 The rollup layer (every widget reads these; nothing queries raw
 tables ad hoc)
 
@@ -2641,6 +2643,167 @@ feature each for CLAUDE.md §6 (20, 21).
 Twilio support: "A2P 10DLC Sole Proprietor Brands FAQ" (the one-person registration is
 for the US and Canada) · the churn and lifetime-value formulas are the plain ones every
 subscription business uses; each card names its source before it builds.
+
+## 17. The console's look
+
+Kd, 2026-09-26: the LOOK of every console page redesigned — layout, sizes, fonts, text
+colours — drawn first and looked at before the app changed, with the rules every later
+page follows. Approved: *"i like all of them"*; both looks, with a switch: *"both design
+will have option to switch like dark mode light mode"*; and nothing taken away: *"do not
+delete the exsiting features and buttons etc"* (RULINGS 2026-09-26). Built as ROADMAP
+R1–R8: R1 the menu, the font and the colours; then one page per job.
+
+### 17.1 Where the drawings are
+
+- `docs/design/console/pages/` — one file a screen, dark (`Name.src.html`; Overview's four
+  are finished files, `Overview*.dc.html`). `docs/design/console/shared/` — `helmet.html`
+  (every colour and building block), `rail.html`, `topbar.html`, `tabbar.html` (the menus).
+  In a page file `<!--HELMET-->` and `<!--TOPBAR-->` stand for those files,
+  `<!--RAIL:members-->` for the menu with Members lit (`none`: no gym, so "Gym console"
+  where the gym's name goes and no pages) and `<!--TABBAR:members-->` for the phone's
+  tabs; the light look of a page is the same file with `t-dark` changed to `t-light`.
+- Pictures of all 56 drawings, dark and light: `D:\Projects\ai-home-gym-design\2-all-pages\`
+  on Kd's computer. The design canvas: https://claude.ai/artifact/1Rioe5nc9f132HarZ6x69y
+  (Kd's; read it with the Artifact tool).
+- Not drawn: Settings → Staff (4a rebuilds it), the marking-attendance switch, the edit
+  forms, Merge duplicate, Bulk edit, Change size and the payment prompts. The job that
+  restyles their page draws them from the same building blocks (17.6).
+
+### 17.2 The twelve rules
+
+1. **One page, one job.** The title says where you are, top left. The one main button sits
+   top right; on a phone, just under the title.
+2. **The key number is the biggest thing.** What a gym checks most is big and bold. Its
+   label is small and calm.
+3. **Orange means "press here".** One solid orange button per box at most. A second
+   important action is pale orange; the rest are outlined. In the menu, orange shows where
+   you are.
+4. **Colour always has a meaning.** Green is good, amber is "look at this", red is a
+   problem, and each class keeps its own colour. Always with a word, never colour alone.
+5. **Things that belong together share a box.** Each box has one clear title, and a box
+   holds one kind of thing.
+6. **One font, a fixed set of sizes.** Archivo everywhere. Titles and big numbers in its
+   wider bold style. Three greys for all text.
+7. **The same gaps everywhere.** 24 pixels between boxes and inside them (20 on a phone);
+   48 at the sides of the page (16 on a phone).
+8. **Big enough for a thumb.** On a phone every button and row is at least 44 pixels tall.
+   Pick from a list or calendar instead of typing.
+9. **One pattern for pop-ups.** One person or thing opens in a side panel on a computer and
+   a full page on a phone. A question or a choice opens in the middle, or from the bottom
+   on a phone.
+10. **Lists look the same everywhere.** Search and filters on top, the count on the right,
+    rows that open, "Load more" at the bottom.
+11. **Every page in both looks.** Dark and light, switched from the menu, with Auto
+    following the device. The menu stays dark in both.
+12. **A gym's words.** Say it the way a gym would. No sentences that explain how the app
+    works inside.
+
+### 17.3 Colours
+
+A page names a colour and never writes one: `apps/web/src/components/console/console.css`
+holds both looks under `.t-dark` and `.t-light`, and the shell puts one of the two on its
+root. The menu's colours (`--rail-*`) are the same in both looks.
+
+| Name | What it is for | Dark | Light |
+|---|---|---|---|
+| `--page` | the page | #0C0B0A | #F5F3EF |
+| `--card` | a box | #151311 | #FFFFFF |
+| `--t1` · `--t2` · `--t3` | main text · second text · hints and small print | #F4F1EC · #B8B0A6 · #8B847B | #1B1815 · #57504A · #736C64 |
+| `--accent` | orange: press here | #FF8A1F | #FF8A1F |
+| `--soft-t` on `--soft` | pale orange: the second action | #FF9F45 on #2A1A0C | #9A4508 on #FFE9D2 |
+| `--good` · `--warn` · `--bad` | good · look at this · a problem (each with its `-bg`) | #46D993 · #F2C35B · #FF7B6E | #177A48 · #7A5600 · #C23A2E |
+| `--link` | a link inside text | #FF9F45 | #B45309 |
+| `--cl-*` | a class's own colour: orange, blue, green, purple, red, teal, amber, slate | see `console.css` | see `console.css` |
+
+Measured 2026-09-26 with the WCAG contrast formula: every text colour on its page, box or
+tag is 4.5 to 1 or more in both looks — the lowest are the light look's red tag (4.6),
+green tag and third text on the page (4.7).
+
+### 17.4 Text
+
+One font, Archivo, kept in the app (`apps/web/src/assets/fonts/archivo`, SIL Open Font
+License); titles and big numbers use its wider bold (`font-stretch: 108%`). The sizes, and
+nothing between them: big number 48 (phone 44), 40 inside a pop-up · page title 34 (phone
+28) · box title 18 · words 15 · labels 14 · small 13 · the phone's tab names 12. Classes:
+`c-big`, `c-big-sm`, `c-h1` (34, and 28 under 768 px), `c-h2`, `c-h3`, `c-sub`,
+`c-eyebrow`, `c-s12`–`c-s16`, `c-w5`–`c-w7`, `c-t1`–`c-t3`, `c-lk`, `c-num`, `c-ell`. The
+title classes carry their own colour, because `index.css` makes every heading white.
+
+### 17.5 The menu (R1)
+
+On a computer (768 px and wider) the menu is on the left: the gym's name at the top with
+its city and type under it — tapping it opens "Your organisations" — then the pages this
+person may open, then **Your organisations**, and at the bottom their name, their role and
+**Sign out**. On a phone the gym's name is on a bar at the top (tapping it opens "Your
+organisations"), and the bottom holds up to four tabs and **More**. More holds the pages
+that are not tabs, **Your organisations**, the person's name and role, and **Sign out**.
+Where there is no gym yet (your organisations, create) the menu says "Gym console" and
+holds the name and Sign out; on a phone the top bar holds "Gym console" and Sign out, and
+there are no tabs.
+
+| Page | Drawn for whoever holds | On a phone |
+|---|---|---|
+| Overview (was "Gym") | everyone | tab |
+| Members (Clients for a studio or trainer) | everyone | tab |
+| Leads | `members.confirm` | More |
+| Attendance | `attendance.read` | tab |
+| Classes | `schedule.manage` | tab |
+| Settings | `staff.manage` or `org.manage` | More |
+
+Every page appears for exactly the people it appeared for before R1; drawing a page is not
+the permission — every route refuses on its own. The More tab is lit on More and on a page
+reached from it. The prompts drawn from the shell (the plan prompt, the smaller-size
+question) and the banner above every page are unchanged by R1 and restyled with Overview
+(R4). `apps/web/src/pages/console/consoleMenu.js` holds the rule, and
+`consoleMenu.render.test.jsx` draws every mix of the five permissions and checks that the
+menu, and the phone's tabs with More, each hold exactly the pages above.
+
+### 17.6 A page
+
+The title top left and the page's one main button top right (on a phone, under the
+title); search and filters under the title; the main work in a wide column and side facts
+in a narrow one; one column on a phone. A page's padding is `c-page`: 48 at the sides and
+24 between boxes on a computer, 16 and 20 on a phone. The building blocks, in
+`console.css`: `c-card` (a box) and `c-row` (a row in it, 44 px or more) · `c-btn` with
+`c-btn-p` (orange, one a box), `c-btn-soft` (pale orange), `c-btn-s` (outlined),
+`c-btn-danger`, `c-btn-ghost`, `c-btn-lg`, `c-btn-sm` · `c-icon-btn` · `c-chip` and
+`c-chip-on`, with `c-n` for its count · `c-tag` with `-good`, `-warn`, `-bad`, `-plain`,
+`-soft` · `c-tc` (a time in a grey box) · `c-field`, `c-label`, `c-hint`, `c-input`,
+`c-sel`, `c-area`, `c-search` · `c-check`, `c-switch` · `c-utabs` and `c-utab` (tabs
+across a page) · `c-th` (a table heading) · `c-sheet` (a panel or pop-up) · `c-callout`
+(the amber "look at this" box) · `c-seg` and `c-seg2` (Light · Dark · Auto). Every class
+starts `c-` because the member pages already use `.card`, `.btn` and `.label` for other
+things. Icons are the line icons the app already uses (`lucide-react`), never emoji.
+
+### 17.7 Both looks, and the switch
+
+A page is drawn once; `.t-dark` or `.t-light` on the shell's root picks the colours. The
+switch — **Light · Dark · Auto**, Auto following the device — sits at the bottom of the
+menu on a computer and on More on a phone, as drawn, and is built by whichever of R2–R8
+is built LAST, once every page is in both looks, so nobody meets a half-finished page; its
+plan says where the choice is kept. Until then a development build shows a page in the
+light look when its address ends in `?look=light`, which is how each job's click-through
+shows a finished page in light.
+
+### 17.8 Restyling a page (R2–R8), and new pages
+
+- A restyle changes how a page looks, never what it does: every button, field, message,
+  count and permission it has today stays (RULINGS 2026-09-26). What the drawing lacks and
+  the page has is kept, drawn from the same building blocks; words change only where the
+  drawing changed them and RULINGS allow.
+- A page is restyled only after Folder A's last planned job on it (ROADMAP R4–R8 say
+  which), so the two folders never change one page at once.
+- From R1 on, a NEW console page, or a new box on a page already restyled, is built in the
+  new look in both folders. A new box on a page not yet restyled follows that page's
+  current look, and its page's R-job restyles it with the rest.
+
+### 17.9 Where the facts came from
+
+The drawings: 17.1. The two font files are the ones Google Fonts serves (Archivo v25,
+Inter v20, with Google's own character ranges), and their SIL Open Font License 1.1 texts
+come from github.com/google/fonts; both fetched 2026-09-26. They are kept in the app
+because a page that loads Google's fonts sends each visitor's internet address to Google,
+which Landgericht München I found a breach of the GDPR on 20 January 2022 (3 O 17493/20).
 
 
 Database DDL & Mongo→PG migration** (now carrying: §2.1 columns, Part 2B's

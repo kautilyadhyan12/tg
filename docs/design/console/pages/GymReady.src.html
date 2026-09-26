@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Your gym is ready, and the free trial — dark, computer</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<div data-root="1" data-fixed-h="860" class="t-dark" style="width: 1440px; height: %H%px; display: flex; box-sizing: border-box; overflow: hidden; position: relative">
+<!--RAIL:none-->
+<main style="flex-grow: 1; min-width: 0; box-sizing: border-box; padding: 36px 48px 56px; display: flex; flex-direction: column; align-items: center">
+<div style="width: 100%; max-width: 680px; display: flex; flex-direction: column; gap: 24px">
+<div style="display: flex; flex-direction: column; gap: 6px"><h1 class="h1">Iron House Gym is ready</h1><p class="sub">Your gym is set up in USD.</p></div>
+<section class="card" style="padding: 24px; display: flex; flex-direction: column; gap: 10px">
+<h2 class="h2">Bring your members in</h2>
+<p class="s14 t2" style="margin: 0">Import your member list, or add people one at a time, then invite them to the app.</p>
+<div style="display: flex; gap: 8px; padding-top: 6px"><span class="btn btn-s">Import members</span><span class="btn btn-s">Add member</span></div>
+</section>
+<span class="btn btn-p btn-lg">Go to your console</span>
+</div>
+</main>
+
+<div style="position: absolute; inset: 0; background: var(--scrim)"></div>
+
+<div role="dialog" aria-modal="true" aria-labelledby="trial-title" class="sheet" style="position: absolute; top: 170px; left: 50%; margin-left: -250px; width: 500px; box-sizing: border-box; border: 1px solid var(--card-line); border-radius: 20px; padding: 32px; display: flex; flex-direction: column; gap: 20px">
+<span style="width: 48px; height: 48px; border-radius: 14px; background: var(--soft); color: var(--soft-t); display: flex; align-items: center; justify-content: center"><svg class="ic" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12v10H4V12"></path><path d="M2 7h20v5H2z"></path><path d="M12 22V7"></path><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path></svg></span>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<h2 id="trial-title" style="margin: 0; font-size: 24px; line-height: 30px; font-weight: 700">Start your gym’s free trial</h2>
+<p class="s15 t2" style="margin: 0">Your members get nothing extra for being in your gym until it is on a plan.</p>
+<p class="s15 w6" style="margin: 0">Your first 10 days are free. No card needed.</p>
+</div>
+<button type="button" class="btn btn-p btn-lg" style="width: 100%">Start your 10-day free trial</button>
+<button type="button" class="btn btn-ghost" style="align-self: center">Sign out</button>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

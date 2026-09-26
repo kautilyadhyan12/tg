@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A member's page — dark, phone</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<div data-root="1" class="t-dark" style="width: 390px; height: %H%px; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden; background: var(--sheet)">
+<header style="height: 56px; flex-shrink: 0; box-sizing: border-box; padding: 0 8px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line)">
+<button type="button" class="icon-btn" aria-label="Back to your list" style="width: 44px; height: 44px"><svg class="ic" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg></button>
+<span class="s15 w6">Member</span>
+<button type="button" class="icon-btn" aria-label="More" aria-haspopup="menu" style="width: 44px; height: 44px"><svg class="ic" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></button>
+</header>
+
+<main style="flex-grow: 1; box-sizing: border-box; padding: 20px 16px 16px; display: flex; flex-direction: column">
+<div style="display: flex; flex-direction: column; gap: 8px; padding-bottom: 16px">
+<h1 style="margin: 0; font-size: 26px; line-height: 32px; font-weight: 700; font-stretch: 106%">Sofia Alvarez</h1>
+<span><span class="tag tag-plain">Invited</span></span>
+</div>
+<section style="display: flex; flex-direction: column; gap: 10px; padding: 16px 0; border-top: 1px solid var(--line)">
+<h2 class="s13 w6 t3" style="margin: 0">Contact</h2>
+<div style="display: flex; flex-direction: column; gap: 2px"><span class="s13 t2">Email</span><span class="s15 w5">sofia.alvarez@example.com</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span class="s13 t2">Phone</span><span class="s15 w5">+1 512 555 0192</span></div>
+</section>
+<section style="display: flex; flex-direction: column; gap: 10px; padding: 16px 0; border-top: 1px solid var(--line)">
+<h2 class="s13 w6 t3" style="margin: 0">Membership</h2>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px">
+<div style="display: flex; flex-direction: column; gap: 2px"><span class="s13 t2">Member number</span><span class="s15 w5">IH-2041</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span class="s13 t2">Status</span><span class="s15 w5">Active</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span class="s13 t2">Membership</span><span class="s15 w5">Gold</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span class="s13 t2">Payment status</span><span class="s15 w5">Overdue</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span class="s13 t2">Join date</span><span class="s15 w5">14 Mar 2025</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span class="s13 t2">Renews</span><span class="s15 w5">29 Sep 2026</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span class="s13 t2">Date of birth</span><span class="s15 w5">3 Jun 1994</span></div>
+</div>
+</section>
+<section style="display: flex; flex-direction: column; gap: 10px; padding: 16px 0; border-top: 1px solid var(--line)">
+<h2 class="s13 w6 t3" style="margin: 0">Custom fields <span class="w5">· extra columns from your file</span></h2>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px">
+<div style="display: flex; flex-direction: column; gap: 2px"><span class="s13 t2">Locker</span><span class="s15 w5">42</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span class="s13 t2">Referred by</span><span class="s15 w5">Marcus Reed</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span class="s13 t2">Goal</span><span class="s15 w5">Strength</span></div>
+</div>
+</section>
+<section style="display: flex; flex-direction: column; gap: 10px; padding: 16px 0; border-top: 1px solid var(--line)">
+<h2 class="s13 w6 t3" style="margin: 0">In the app</h2>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px">
+<div style="display: flex; flex-direction: column; gap: 2px"><span class="s13 t2">Uses the app</span><span class="s15 w5">No</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span class="s13 t2">Invitation</span><span class="s15 w5">Invited on 22 Sep 2026</span></div>
+</div>
+</section>
+</main>
+
+<div style="flex-shrink: 0; padding: 12px 16px 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; border-top: 1px solid var(--line)">
+<button type="button" class="btn btn-s btn-lg"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect width="20" height="16" x="2" y="4" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg>Send again</button>
+<button type="button" class="btn btn-p btn-lg"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"></path></svg>Edit</button>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

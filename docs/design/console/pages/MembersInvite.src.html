@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Invite to the app — dark, computer</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<div data-root="1" data-fixed-h="900" class="t-dark" style="width: 1440px; height: %H%px; display: flex; box-sizing: border-box; overflow: hidden; position: relative">
+<!--RAIL:members-->
+<main style="flex-grow: 1; min-width: 0; box-sizing: border-box; padding: 36px 48px 48px; display: flex; flex-direction: column; gap: 24px">
+<header style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px">
+<div style="display: flex; flex-direction: column; gap: 6px"><h1 class="h1">Members</h1><p class="sub">Iron House Gym · 146 of 500 members</p></div>
+<div style="display: flex; gap: 8px"><span class="btn btn-s">Import</span><span class="btn btn-p">Add member</span></div>
+</header>
+<div class="utabs"><span class="utab utab-on">Your list</span><span class="utab">Using the app</span></div>
+<div class="card" style="height: 560px"></div>
+</main>
+
+<div style="position: absolute; inset: 0; background: var(--scrim)"></div>
+
+<div role="dialog" aria-modal="true" aria-labelledby="invite-title" class="sheet" style="position: absolute; top: 120px; left: 50%; margin-left: -290px; width: 580px; box-sizing: border-box; border: 1px solid var(--card-line); border-radius: 20px; display: flex; flex-direction: column; overflow: hidden">
+<div style="padding: 24px 28px 8px; display: flex; align-items: center; gap: 12px">
+<h2 id="invite-title" style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 700; flex-grow: 1">Invite to the app</h2>
+<button type="button" class="icon-btn" aria-label="Close"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
+</div>
+<div style="padding: 8px 28px 24px; display: flex; flex-direction: column; gap: 20px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<span class="s14 t2">Status: Active · Membership: Gold</span>
+<div style="display: flex; align-items: baseline; gap: 10px"><span class="big">41</span><span class="s16 t2">members will get an email invitation.</span></div>
+</div>
+<div style="border: 1px solid var(--card-line); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px">
+<span class="s14 w6">Left out</span>
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: 6px; column-gap: 16px">
+<span class="s14 t2">Already use the app</span><span class="s14 w5 num">68</span>
+<span class="s14 t2">Already invited</span><span class="s14 w5 num">4</span>
+<span class="s14 t2">No email address</span><span class="s14 w5 num">3</span>
+<span class="s14 t2">Under 18</span><span class="s14 w5 num">2</span>
+</div>
+</div>
+<label style="display: flex; align-items: center; gap: 12px; cursor: pointer">
+<span class="check check-on"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" style="stroke-width: 3"><path d="M20 6 9 17l-5-5"></path></svg></span>
+<span class="s15 w5">I have permission to email these members.</span>
+</label>
+</div>
+<div style="padding: 16px 28px; display: flex; align-items: center; justify-content: flex-end; gap: 12px; border-top: 1px solid var(--line); background: var(--card)">
+<button type="button" class="btn btn-s">Close</button>
+<button type="button" class="btn btn-p"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"></path><path d="m21.854 2.147-10.94 10.939"></path></svg>Send 41 invitations</button>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

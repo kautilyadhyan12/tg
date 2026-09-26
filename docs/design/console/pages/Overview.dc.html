@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Overview — Look A, dark, computer</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A;font-family:'Archivo',system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#FF9F45;text-decoration:none}a:hover{color:#FFB46E}
+button{font-family:inherit;cursor:pointer}
+.ic{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.num{font-variant-numeric:tabular-nums}
+.grid{stroke:#23201C;stroke-width:1}
+.base{stroke:#3A3530;stroke-width:1}
+.bar{fill:#E36C0E}
+.bar-now{fill:#E36C0E;fill-opacity:0.6}
+.pline{fill:none;stroke:#3A89EC;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.pdot{fill:#3A89EC;stroke:#151311;stroke-width:2}
+.tick{fill:#8B847B;font-size:12px;text-anchor:end;font-variant-numeric:tabular-nums}
+.vlab{fill:#B8B0A6;font-size:12px;font-weight:600;text-anchor:middle}
+.xlab{fill:#8B847B;font-size:12px;text-anchor:middle}
+.xnow{fill:#F4F1EC;font-size:12px;font-weight:600;text-anchor:middle}
+</style>
+</helmet>
+<div data-root="1" style="width: 1440px; height: 1300px; display: flex; background: #0C0B0A; color: #F4F1EC; box-sizing: border-box; overflow: hidden">
+
+<aside style="width: 248px; flex-shrink: 0; box-sizing: border-box; background: #0F0E0C; border-right: 1px solid #1F1C19; display: flex; flex-direction: column; gap: 24px; padding: 20px 16px">
+<a href="#your-organisations" aria-label="Iron House Gym, Austin. Switch to another organisation" style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: #171513; border: 1px solid #26231F; color: #F4F1EC">
+<span style="width: 36px; height: 36px; border-radius: 10px; background: #2E1D0E; color: #FF9F45; display: flex; align-items: center; justify-content: center; flex-shrink: 0"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"></path><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"></path><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"></path><path d="M10 6h4"></path><path d="M10 10h4"></path><path d="M10 14h4"></path><path d="M10 18h4"></path></svg></span>
+<span style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1; min-width: 0">
+<span style="font-size: 15px; line-height: 20px; font-weight: 600">Iron House Gym</span>
+<span style="font-size: 13px; line-height: 18px; color: #8B847B">Austin · Gym</span>
+</span>
+<span style="color: #8B847B; display: flex"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 15 5 5 5-5"></path><path d="m7 9 5-5 5 5"></path></svg></span>
+</a>
+
+<nav aria-label="Console" style="display: flex; flex-direction: column; gap: 4px">
+<a href="#overview" aria-current="page" style="display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 12px; border-radius: 10px; background: #2A1A0C; color: #FF9F45; font-size: 15px; font-weight: 600"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><rect width="7" height="9" x="3" y="3" rx="1"></rect><rect width="7" height="5" x="14" y="3" rx="1"></rect><rect width="7" height="9" x="14" y="12" rx="1"></rect><rect width="7" height="5" x="3" y="16" rx="1"></rect></svg>Overview</a>
+<a href="#members" style="display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 12px; border-radius: 10px; color: #B8B0A6; font-size: 15px; font-weight: 500"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>Members</a>
+<a href="#leads" style="display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 12px; border-radius: 10px; color: #B8B0A6; font-size: 15px; font-weight: 500"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="7" r="4"></circle><path d="M10.3 15H7a4 4 0 0 0-4 4v2"></path><circle cx="17" cy="17" r="3"></circle><path d="m21 21-1.9-1.9"></path></svg>Leads</a>
+<a href="#attendance" style="display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 12px; border-radius: 10px; color: #B8B0A6; font-size: 15px; font-weight: 500"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="m9 14 2 2 4-4"></path></svg>Attendance</a>
+<a href="#classes" style="display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 12px; border-radius: 10px; color: #B8B0A6; font-size: 15px; font-weight: 500"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5"></path><path d="M16 2v4"></path><path d="M8 2v4"></path><path d="M3 10h5"></path><path d="M17.5 17.5 16 16.3V14"></path><circle cx="16" cy="16" r="6"></circle></svg>Classes</a>
+<a href="#settings" style="display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 12px; border-radius: 10px; color: #B8B0A6; font-size: 15px; font-weight: 500"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>Settings</a>
+</nav>
+
+<div style="flex-grow: 1"></div>
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 13px; line-height: 18px; font-weight: 500; color: #8B847B; padding: 0 4px">Appearance</span>
+<div role="radiogroup" aria-label="Appearance" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; padding: 3px; border-radius: 10px; background: #171513; border: 1px solid #26231F">
+<button type="button" role="radio" aria-checked="false" style="display: flex; align-items: center; justify-content: center; gap: 5px; height: 32px; border: 0; border-radius: 7px; background: transparent; color: #8B847B; font-size: 13px; font-weight: 500; padding: 0"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>Light</button>
+<button type="button" role="radio" aria-checked="true" style="display: flex; align-items: center; justify-content: center; gap: 5px; height: 32px; border: 0; border-radius: 7px; background: #2C2824; color: #F4F1EC; font-size: 13px; font-weight: 600; padding: 0"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>Dark</button>
+<button type="button" role="radio" aria-checked="false" style="display: flex; align-items: center; justify-content: center; gap: 5px; height: 32px; border: 0; border-radius: 7px; background: transparent; color: #8B847B; font-size: 13px; font-weight: 500; padding: 0"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><rect width="20" height="14" x="2" y="3" rx="2"></rect><line x1="8" x2="16" y1="21" y2="21"></line><line x1="12" x2="12" y1="17" y2="21"></line></svg>Auto</button>
+</div>
+</div>
+
+<div style="border-top: 1px solid #1F1C19; padding-top: 16px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; flex-direction: column; gap: 2px; padding: 0 12px">
+<span style="font-size: 14px; line-height: 20px; font-weight: 600">Jordan Hayes</span>
+<span style="font-size: 13px; line-height: 18px; color: #8B847B">Owner</span>
+</div>
+<button type="button" style="display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 12px; border-radius: 10px; background: transparent; border: 0; color: #B8B0A6; font-size: 15px; font-weight: 500; text-align: left"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" x2="9" y1="12" y2="12"></line></svg>Sign out</button>
+</div>
+</aside>
+
+<main style="flex-grow: 1; min-width: 0; box-sizing: border-box; padding: 36px 48px 48px; display: flex; flex-direction: column; gap: 28px">
+
+<header style="display: flex; flex-direction: column; gap: 6px">
+<div style="font-size: 14px; line-height: 20px; font-weight: 500; color: #8B847B">Saturday 26 September</div>
+<h1 style="margin: 0; font-size: 34px; line-height: 40px; font-weight: 700; font-stretch: 108%; letter-spacing: -0.01em">Overview</h1>
+</header>
+
+<div style="display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 24px; align-items: start">
+
+<div style="display: flex; flex-direction: column; gap: 24px; min-width: 0">
+
+<section style="background: #151311; border: 1px solid #25221E; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 20px">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 16px">
+<h2 style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 600">Who’s turning up</h2>
+<a href="#attendance" style="display: flex; align-items: center; gap: 4px; font-size: 14px; line-height: 20px; font-weight: 600">Attendance<svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></a>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid #25221E; border-bottom: 1px solid #25221E">
+<div style="padding: 20px 20px 20px 0; display: flex; flex-direction: column; gap: 6px">
+<div style="font-size: 14px; line-height: 20px; font-weight: 500; color: #B8B0A6">Today</div>
+<div style="display: flex; align-items: baseline; gap: 8px"><span style="font-size: 48px; line-height: 52px; font-weight: 700; font-stretch: 108%; letter-spacing: -0.02em">23</span><span style="font-size: 16px; line-height: 22px; color: #B8B0A6">people</span></div>
+</div>
+<div style="padding: 20px; border-left: 1px solid #25221E; display: flex; flex-direction: column; gap: 6px">
+<div style="font-size: 14px; line-height: 20px; font-weight: 500; color: #B8B0A6">This week</div>
+<div style="display: flex; align-items: baseline; gap: 8px"><span style="font-size: 48px; line-height: 52px; font-weight: 700; font-stretch: 108%; letter-spacing: -0.02em">58</span><span style="font-size: 16px; line-height: 22px; color: #B8B0A6">people</span></div>
+<div style="display: flex; align-items: flex-start; gap: 6px; font-size: 13px; line-height: 18px; color: #B8B0A6"><span style="color: #46D993; display: flex; padding-top: 2px"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" aria-label="Up"><path d="m5 12 7-7 7 7"></path><path d="M12 19V5"></path></svg></span><span>so far, against 131 visits in the whole of last week</span></div>
+</div>
+<div style="padding: 20px 0 20px 20px; border-left: 1px solid #25221E; display: flex; flex-direction: column; gap: 6px">
+<div style="font-size: 14px; line-height: 20px; font-weight: 500; color: #B8B0A6">Last 30 days</div>
+<div style="display: flex; align-items: baseline; gap: 8px"><span style="font-size: 48px; line-height: 52px; font-weight: 700; font-stretch: 108%; letter-spacing: -0.02em">66%</span></div>
+<div style="font-size: 13px; line-height: 18px; color: #B8B0A6">97 of 146 members came in the last 30 days</div>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap">
+<h3 style="margin: 0; font-size: 15px; line-height: 22px; font-weight: 600">The last 8 weeks</h3>
+<div style="display: flex; align-items: center; gap: 16px; font-size: 13px; line-height: 18px; color: #B8B0A6">
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 10px; border-radius: 2px; background: #E36C0E"></span>Visits</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 10px; border-radius: 2px; background: rgba(227, 108, 14, 0.6)"></span>This week so far</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 14px; height: 2px; border-radius: 1px; background: #3A89EC"></span>Different people</span>
+</div>
+</div>
+<svg viewBox="0 0 664 250" style="width: 100%; height: auto; display: block; overflow: visible" role="img" aria-label="Visits a week for the last 8 weeks, with how many different people came">
+<line class="grid" x1="36" x2="664" y1="28" y2="28"></line>
+<line class="grid" x1="36" x2="664" y1="88" y2="88"></line>
+<line class="grid" x1="36" x2="664" y1="148" y2="148"></line>
+<text class="tick" x="26" y="32">150</text>
+<text class="tick" x="26" y="92">100</text>
+<text class="tick" x="26" y="152">50</text>
+<text class="tick" x="26" y="212">0</text>
+<g><title>Week of 3 Aug: 104 visits, 52 people</title><path class="bar" d="M63.25 208V87.2a4 4 0 0 1 4-4h16a4 4 0 0 1 4 4V208Z"></path></g>
+<g><title>Week of 10 Aug: 112 visits, 55 people</title><path class="bar" d="M141.75 208V77.6a4 4 0 0 1 4-4h16a4 4 0 0 1 4 4V208Z"></path></g>
+<g><title>Week of 17 Aug: 118 visits, 57 people</title><path class="bar" d="M220.25 208V70.4a4 4 0 0 1 4-4h16a4 4 0 0 1 4 4V208Z"></path></g>
+<g><title>Week of 24 Aug: 109 visits, 54 people</title><path class="bar" d="M298.75 208V81.2a4 4 0 0 1 4-4h16a4 4 0 0 1 4 4V208Z"></path></g>
+<g><title>Week of 31 Aug: 121 visits, 58 people</title><path class="bar" d="M377.25 208V66.8a4 4 0 0 1 4-4h16a4 4 0 0 1 4 4V208Z"></path></g>
+<g><title>Week of 7 Sep: 127 visits, 60 people</title><path class="bar" d="M455.75 208V59.6a4 4 0 0 1 4-4h16a4 4 0 0 1 4 4V208Z"></path></g>
+<g><title>Week of 14 Sep: 131 visits, 61 people</title><path class="bar" d="M534.25 208V54.8a4 4 0 0 1 4-4h16a4 4 0 0 1 4 4V208Z"></path></g>
+<g><title>This week so far: 139 visits, 58 people</title><path class="bar-now" d="M612.75 208V45.2a4 4 0 0 1 4-4h16a4 4 0 0 1 4 4V208Z"></path></g>
+<line class="base" x1="36" x2="664" y1="208" y2="208"></line>
+<text class="vlab" x="75.25" y="75.2">104</text>
+<text class="vlab" x="153.75" y="65.6">112</text>
+<text class="vlab" x="232.25" y="58.4">118</text>
+<text class="vlab" x="310.75" y="69.2">109</text>
+<text class="vlab" x="389.25" y="54.8">121</text>
+<text class="vlab" x="467.75" y="47.6">127</text>
+<text class="vlab" x="546.25" y="42.8">131</text>
+<text class="vlab" x="624.75" y="33.2">139</text>
+<polyline class="pline" points="75.25,145.6 153.75,142 232.25,139.6 310.75,143.2 389.25,138.4 467.75,136 546.25,134.8 624.75,138.4"></polyline>
+<circle class="pdot" cx="75.25" cy="145.6" r="4"></circle>
+<circle class="pdot" cx="153.75" cy="142" r="4"></circle>
+<circle class="pdot" cx="232.25" cy="139.6" r="4"></circle>
+<circle class="pdot" cx="310.75" cy="143.2" r="4"></circle>
+<circle class="pdot" cx="389.25" cy="138.4" r="4"></circle>
+<circle class="pdot" cx="467.75" cy="136" r="4"></circle>
+<circle class="pdot" cx="546.25" cy="134.8" r="4"></circle>
+<circle class="pdot" cx="624.75" cy="138.4" r="4"></circle>
+<text class="xlab" x="75.25" y="234">3 Aug</text>
+<text class="xlab" x="153.75" y="234">10 Aug</text>
+<text class="xlab" x="232.25" y="234">17 Aug</text>
+<text class="xlab" x="310.75" y="234">24 Aug</text>
+<text class="xlab" x="389.25" y="234">31 Aug</text>
+<text class="xlab" x="467.75" y="234">7 Sep</text>
+<text class="xlab" x="546.25" y="234">14 Sep</text>
+<text class="xnow" x="624.75" y="234">21 Sep</text>
+</svg>
+</div>
+</section>
+
+<section style="background: #151311; border: 1px solid #25221E; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 12px">
+<h2 style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 600">On a roll</h2>
+<div style="display: flex; flex-direction: column">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-top: 1px solid #25221E">
+<div style="display: flex; flex-direction: column; gap: 3px; min-width: 0"><span style="font-size: 15px; line-height: 20px; font-weight: 600">Marcus Reed</span><span style="font-size: 13px; line-height: 18px; color: #B8B0A6">6 weeks in a row · 12 days in a row · 31 visits</span></div>
+<div role="group" aria-label="Cheer Marcus Reed" style="display: flex; gap: 6px; flex-shrink: 0">
+<button type="button" title="Great week — keep it going." aria-label="Cheer Marcus Reed: Great week — keep it going." style="width: 40px; height: 40px; border-radius: 10px; border: 1px solid #2E2A26; background: #1D1A17; font-size: 18px; line-height: 1; padding: 0">💪</button>
+<button type="button" title="You’re on a roll." aria-label="Cheer Marcus Reed: You’re on a roll." style="width: 40px; height: 40px; border-radius: 10px; border: 1px solid #2E2A26; background: #1D1A17; font-size: 18px; line-height: 1; padding: 0">🔥</button>
+<button type="button" title="Nice consistency — we see you." aria-label="Cheer Marcus Reed: Nice consistency — we see you." style="width: 40px; height: 40px; border-radius: 10px; border: 1px solid #2E2A26; background: #1D1A17; font-size: 18px; line-height: 1; padding: 0">👏</button>
+<button type="button" title="Strong streak." aria-label="Cheer Marcus Reed: Strong streak." style="width: 40px; height: 40px; border-radius: 10px; border: 1px solid #2E2A26; background: #1D1A17; font-size: 18px; line-height: 1; padding: 0">🏆</button>
+</div>
+</div>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-top: 1px solid #25221E">
+<div style="display: flex; flex-direction: column; gap: 3px; min-width: 0"><span style="font-size: 15px; line-height: 20px; font-weight: 600">Olivia Bennett</span><span style="font-size: 13px; line-height: 18px; color: #B8B0A6">5 weeks in a row · 22 visits</span></div>
+<div role="group" aria-label="Cheer Olivia Bennett" style="display: flex; gap: 6px; flex-shrink: 0">
+<button type="button" title="Great week — keep it going." aria-label="Cheer Olivia Bennett: Great week — keep it going." style="width: 40px; height: 40px; border-radius: 10px; border: 1px solid #2E2A26; background: #1D1A17; font-size: 18px; line-height: 1; padding: 0">💪</button>
+<button type="button" title="You’re on a roll." aria-label="Cheer Olivia Bennett: You’re on a roll." style="width: 40px; height: 40px; border-radius: 10px; border: 1px solid #2E2A26; background: #1D1A17; font-size: 18px; line-height: 1; padding: 0">🔥</button>
+<button type="button" title="Nice consistency — we see you." aria-label="Cheer Olivia Bennett: Nice consistency — we see you." style="width: 40px; height: 40px; border-radius: 10px; border: 1px solid #2E2A26; background: #1D1A17; font-size: 18px; line-height: 1; padding: 0">👏</button>
+<button type="button" title="Strong streak." aria-label="Cheer Olivia Bennett: Strong streak." style="width: 40px; height: 40px; border-radius: 10px; border: 1px solid #2E2A26; background: #1D1A17; font-size: 18px; line-height: 1; padding: 0">🏆</button>
+</div>
+</div>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-top: 1px solid #25221E">
+<div style="display: flex; flex-direction: column; gap: 3px; min-width: 0"><span style="font-size: 15px; line-height: 20px; font-weight: 600">Noah Patel</span><span style="font-size: 13px; line-height: 18px; color: #B8B0A6">4 weeks in a row · 5 days in a row · 17 visits</span></div>
+<div style="font-size: 13px; line-height: 18px; color: #8B847B; flex-shrink: 0; min-height: 40px; display: flex; align-items: center">Cheered today.</div>
+</div>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-top: 1px solid #25221E">
+<div style="display: flex; flex-direction: column; gap: 3px; min-width: 0"><span style="font-size: 15px; line-height: 20px; font-weight: 600">Ava Thompson</span><span style="font-size: 13px; line-height: 18px; color: #B8B0A6">4 weeks in a row · 14 visits</span></div>
+<div role="group" aria-label="Cheer Ava Thompson" style="display: flex; gap: 6px; flex-shrink: 0">
+<button type="button" title="Great week — keep it going." aria-label="Cheer Ava Thompson: Great week — keep it going." style="width: 40px; height: 40px; border-radius: 10px; border: 1px solid #2E2A26; background: #1D1A17; font-size: 18px; line-height: 1; padding: 0">💪</button>
+<button type="button" title="You’re on a roll." aria-label="Cheer Ava Thompson: You’re on a roll." style="width: 40px; height: 40px; border-radius: 10px; border: 1px solid #2E2A26; background: #1D1A17; font-size: 18px; line-height: 1; padding: 0">🔥</button>
+<button type="button" title="Nice consistency — we see you." aria-label="Cheer Ava Thompson: Nice consistency — we see you." style="width: 40px; height: 40px; border-radius: 10px; border: 1px solid #2E2A26; background: #1D1A17; font-size: 18px; line-height: 1; padding: 0">👏</button>
+<button type="button" title="Strong streak." aria-label="Cheer Ava Thompson: Strong streak." style="width: 40px; height: 40px; border-radius: 10px; border: 1px solid #2E2A26; background: #1D1A17; font-size: 18px; line-height: 1; padding: 0">🏆</button>
+</div>
+</div>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0 0; border-top: 1px solid #25221E">
+<div style="display: flex; flex-direction: column; gap: 3px; min-width: 0"><span style="font-size: 15px; line-height: 20px; font-weight: 600">Ethan Brooks</span><span style="font-size: 13px; line-height: 18px; color: #B8B0A6">3 weeks in a row · 11 visits</span></div>
+<div role="group" aria-label="Cheer Ethan Brooks" style="display: flex; gap: 6px; flex-shrink: 0">
+<button type="button" title="Great week — keep it going." aria-label="Cheer Ethan Brooks: Great week — keep it going." style="width: 40px; height: 40px; border-radius: 10px; border: 1px solid #2E2A26; background: #1D1A17; font-size: 18px; line-height: 1; padding: 0">💪</button>
+<button type="button" title="You’re on a roll." aria-label="Cheer Ethan Brooks: You’re on a roll." style="width: 40px; height: 40px; border-radius: 10px; border: 1px solid #2E2A26; background: #1D1A17; font-size: 18px; line-height: 1; padding: 0">🔥</button>
+<button type="button" title="Nice consistency — we see you." aria-label="Cheer Ethan Brooks: Nice consistency — we see you." style="width: 40px; height: 40px; border-radius: 10px; border: 1px solid #2E2A26; background: #1D1A17; font-size: 18px; line-height: 1; padding: 0">👏</button>
+<button type="button" title="Strong streak." aria-label="Cheer Ethan Brooks: Strong streak." style="width: 40px; height: 40px; border-radius: 10px; border: 1px solid #2E2A26; background: #1D1A17; font-size: 18px; line-height: 1; padding: 0">🏆</button>
+</div>
+</div>
+</div>
+</section>
+
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 24px; min-width: 0">
+
+<section style="background: #151311; border: 1px solid #25221E; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<div style="display: flex; align-items: baseline; gap: 10px"><h2 style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 600">Who came today</h2><span style="font-size: 14px; line-height: 20px; color: #B8B0A6">23 people</span></div>
+<button type="button" aria-expanded="true" aria-label="Hide who came today" style="width: 32px; height: 32px; border-radius: 8px; border: 0; background: transparent; color: #B8B0A6; display: flex; align-items: center; justify-content: center; padding: 0"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m18 15-6-6-6 6"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid #25221E"><span style="font-size: 15px; line-height: 20px; font-weight: 500">Olivia Bennett</span><span style="display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end"><span class="num" style="font-size: 13px; line-height: 18px; padding: 3px 8px; border-radius: 6px; background: #1D1A17; color: #B8B0A6">6:02 AM</span></span></div>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid #25221E"><span style="font-size: 15px; line-height: 20px; font-weight: 500">Marcus Reed</span><span style="display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end"><span class="num" style="font-size: 13px; line-height: 18px; padding: 3px 8px; border-radius: 6px; background: #1D1A17; color: #B8B0A6">6:15 AM</span><span class="num" style="font-size: 13px; line-height: 18px; padding: 3px 8px; border-radius: 6px; background: #1D1A17; color: #B8B0A6">5:40 PM</span></span></div>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid #25221E"><span style="font-size: 15px; line-height: 20px; font-weight: 500">Sofia Alvarez</span><span style="display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end"><span class="num" style="font-size: 13px; line-height: 18px; padding: 3px 8px; border-radius: 6px; background: #1D1A17; color: #B8B0A6">7:30 AM</span></span></div>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid #25221E"><span style="font-size: 15px; line-height: 20px; font-weight: 500">Liam Hughes</span><span style="display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end"><span class="num" style="font-size: 13px; line-height: 18px; padding: 3px 8px; border-radius: 6px; background: #1D1A17; color: #B8B0A6">12:10 PM</span></span></div>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid #25221E"><span style="font-size: 15px; line-height: 20px; font-weight: 500">Emma Clarke</span><span style="display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end"><span class="num" style="font-size: 13px; line-height: 18px; padding: 3px 8px; border-radius: 6px; background: #33290F; color: #F2C35B">5:41 AM · outside hours</span></span></div>
+</div>
+<a href="#attendance" style="display: flex; align-items: center; gap: 4px; font-size: 14px; line-height: 20px; font-weight: 600; padding-top: 4px">18 more — see everyone<svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></a>
+</section>
+
+<section style="background: #151311; border: 1px solid #25221E; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<h2 style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 600">Members</h2>
+<a href="#members" style="display: flex; align-items: center; gap: 4px; font-size: 14px; line-height: 20px; font-weight: 600">Open list<svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></a>
+</div>
+<div style="display: flex; align-items: baseline; gap: 8px"><span style="font-size: 40px; line-height: 44px; font-weight: 700; font-stretch: 108%; letter-spacing: -0.02em">146</span><span style="font-size: 16px; line-height: 22px; color: #B8B0A6">members</span></div>
+<div style="border-top: 1px solid #25221E; padding-top: 16px; display: flex; flex-direction: column; gap: 8px">
+<h3 style="margin: 0; font-size: 15px; line-height: 22px; font-weight: 600">Bring your members in</h3>
+<p style="margin: 0; font-size: 14px; line-height: 20px; color: #B8B0A6">Import your member list, or add people one at a time, then invite them to the app.</p>
+<div style="display: flex; gap: 8px; flex-wrap: wrap; padding-top: 6px">
+<a href="#import-members" style="display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 14px; border-radius: 10px; background: #FF8A1F; color: #140C04; font-size: 14px; font-weight: 600"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line></svg>Import members</a>
+<a href="#add-member" style="display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid #3A3530; color: #F4F1EC; font-size: 14px; font-weight: 600; box-sizing: border-box"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" x2="19" y1="8" y2="14"></line><line x1="22" x2="16" y1="11" y2="11"></line></svg>Add member</a>
+</div>
+</div>
+</section>
+
+<section style="background: #151311; border: 1px solid #25221E; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+<h2 style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 600">Plan</h2>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<div style="font-size: 16px; line-height: 22px; font-weight: 600">Up to 500 members · $129 a month</div>
+<div style="font-size: 14px; line-height: 20px; color: #B8B0A6">Next payment $129 on 3 Oct</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div aria-hidden="true" style="height: 8px; border-radius: 999px; background: #25221E; overflow: hidden"><div style="width: 29.2%; height: 8px; border-radius: 999px; background: #8B847B"></div></div>
+<div style="font-size: 14px; line-height: 20px; color: #B8B0A6">146 of 500 members.</div>
+</div>
+<div style="display: flex; gap: 8px; flex-wrap: wrap">
+<button type="button" style="height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid #3A3530; background: transparent; color: #F4F1EC; font-size: 14px; font-weight: 600">Change size</button>
+<button type="button" style="height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid #3A3530; background: transparent; color: #F4F1EC; font-size: 14px; font-weight: 600">Manage payment</button>
+</div>
+</section>
+
+<section style="background: #151311; border: 1px solid #25221E; border-radius: 16px; padding: 20px 24px; display: flex; flex-direction: column; gap: 8px">
+<h2 style="margin: 0; font-size: 15px; line-height: 22px; font-weight: 600">Details</h2>
+<dl style="margin: 0; display: flex; flex-direction: column">
+<div style="display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid #25221E"><dt style="font-size: 14px; line-height: 20px; color: #B8B0A6">Currency</dt><dd style="margin: 0; font-size: 14px; line-height: 20px; font-weight: 500">USD</dd></div>
+<div style="display: flex; justify-content: space-between; gap: 12px; padding: 10px 0 0; border-top: 1px solid #25221E"><dt style="font-size: 14px; line-height: 20px; color: #B8B0A6">Time zone</dt><dd style="margin: 0; font-size: 14px; line-height: 20px; font-weight: 500">America/Chicago</dd></div>
+</dl>
+</section>
+
+</div>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1300}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
