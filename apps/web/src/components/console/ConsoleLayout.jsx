@@ -24,19 +24,20 @@ import './console.css';
 // The role comes from the same kept list of gyms the screen inside reads
 // (`pages/console/consoleOrgs.js`), so the shell asks the server nothing of its own.
 
-/** The gym's name at the top of the menu: tapping it opens "Your organisations". */
-function GymSwitcher({ org, compact }) {
+/** The gym's name at the top of the menu: tapping it opens "Your organisations". With no
+ *  gym to name (still loading, or an address that is not one of the person's gyms) it
+ *  says whose console this is, as the menu did before R1. */
+function GymSwitcher({ org, fallback, compact }) {
   const place = org ? [org.city, orgTypeLabel(org.orgType)].filter(Boolean).join(' · ') : '';
-  const label = org
-    ? `${org.name}${org.city ? `, ${org.city}` : ''}. Switch to another organisation`
-    : 'Switch to another organisation';
+  const title = org?.name ?? fallback;
+  const label = `${title}${org?.city ? `, ${org.city}` : ''}. Switch to another organisation`;
   return (
     <Link to="/console" aria-label={label} className={compact ? 'c-topbar-gym' : 'c-switcher'}>
       <span className="c-gymicon">
         <Building2 size={compact ? 18 : 20} />
       </span>
       <span className="c-switcher-text">
-        <span className={`${compact ? 'c-s16' : 'c-s15'} c-w6 c-ell`}>{org?.name ?? ''}</span>
+        <span className={`${compact ? 'c-s16' : 'c-s15'} c-w6 c-ell`}>{title}</span>
         {!compact && place ? (
           <span className="c-s13 c-ell" style={{ color: 'var(--rail-t3)' }}>
             {place}
@@ -58,6 +59,7 @@ export default function ConsoleLayout({ children }) {
   const { signingOut, signOut } = useConsoleSignOut();
 
   const words = orgWords(org?.orgType);
+  const consoleName = `${words.itCap} console`;
   const menu = orgSlug ? consoleMenu(orgSlug, viewerPrivileges(org), org?.orgType) : null;
   const moreOn = menu ? moreIsCurrent(menu, pathname) : false;
   const name = user?.displayName || user?.email || '';
@@ -68,7 +70,7 @@ export default function ConsoleLayout({ children }) {
     <div className={`c-console t-${consoleLook(search, import.meta.env.DEV)}`}>
       {/* ── The menu, on a computer ─────────────────────────────────────────── */}
       <aside className="c-rail" data-testid="console-rail">
-        {menu ? <GymSwitcher org={org} /> : <div className="c-rail-title">{words.itCap} console</div>}
+        {menu ? <GymSwitcher org={org} fallback={consoleName} /> : <div className="c-rail-title">{consoleName}</div>}
 
         {menu ? (
           <div className="c-rail-nav">
@@ -120,11 +122,11 @@ export default function ConsoleLayout({ children }) {
                under More; without one (your organisations, create) Sign out is here. ── */}
         <header className="c-topbar" data-testid="console-topbar">
           {menu ? (
-            <GymSwitcher org={org} compact />
+            <GymSwitcher org={org} fallback={consoleName} compact />
           ) : (
             <>
               <span className="c-s15 c-w6" style={{ color: 'var(--rail-t2)' }}>
-                {words.itCap} console
+                {consoleName}
               </span>
               <button
                 type="button"

@@ -24,6 +24,7 @@ const { orgService } = await import('../../api/orgsApi');
 const { resetConsoleOrgs } = await import('./consoleOrgs');
 const ConsoleLayout = (await import('../../components/console/ConsoleLayout')).default;
 const More = (await import('./More')).default;
+const Overview = (await import('./Overview')).default;
 
 const GATES = ['members.confirm', 'attendance.read', 'schedule.manage', 'staff.manage', 'org.manage'];
 const BASE = '/console/iron-house';
@@ -117,6 +118,35 @@ describe('nobody loses a page they can open today', () => {
     await openMore('trainer', [...ROLE_PRIVILEGES.trainer]);
     const tabbar = screen.getByTestId('console-tabbar');
     expect(within(tabbar).getByRole('link', { name: 'Attendance' }).getAttribute('href')).toBe(`${BASE}/attendance`);
+  });
+});
+
+describe('the gym box at the top of the menu', () => {
+  // Another gym's address, or a made-up one: there is no gym to name, and the box still
+  // says whose console this is, as it did before R1.
+  it('says "Gym console" when the address is not one of the person’s gyms', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [gym('owner', [...ROLE_PRIVILEGES.owner])] } });
+    render(
+      <MemoryRouter initialEntries={['/console/somebody-elses-gym']}>
+        <Routes>
+          <Route path="/console/:orgSlug" element={<ConsoleLayout><Overview /></ConsoleLayout>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    // The page's own answer comes only once the person's gyms have been read.
+    expect(await screen.findByText(/couldn't find an organisation you run/i)).toBeTruthy();
+    const box = within(screen.getByTestId('console-rail')).getByRole('link', { name: /Switch to another organisation/ });
+    expect(within(box).getByText('Gym console')).toBeTruthy();
+    expect(within(screen.getByTestId('console-topbar')).getByText('Gym console')).toBeTruthy();
+    expect(screen.queryByText('Iron House')).toBeNull();
+  });
+});
+
+describe('the banner above every page', () => {
+  it('takes its colours from the look, by name', async () => {
+    // The gym is on a free trial, so the trial's "info" banner is up.
+    await openMore('owner', [...ROLE_PRIVILEGES.owner]);
+    expect(screen.getByRole('status').className).toContain('c-banner-info');
   });
 });
 

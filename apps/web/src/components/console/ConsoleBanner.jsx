@@ -23,12 +23,12 @@ import { bannerFor, bannerIsDismissed, dismissBanner } from '../../pages/console
  *  for something an owner merely wants to know. Kept here rather than in the
  *  view module because a colour is not a decision about what is true.
  *
- *  `danger` is §4.2's own word for the read-only row (*"red: Trial ended…"*) and
- *  it borrows `ConsoleFailed`'s red so the console has one red rather than two. */
+ *  Each is a class of `console.css` whose colours are the look's own names
+ *  (spec Part 3 §17.3), so the banner reads in the light look as in the dark. */
 const TONES = {
-  danger: { background: 'rgba(239,68,68,0.10)', color: '#ef4444' },
-  warn: { background: 'rgba(255,138,31,0.14)', color: '#FF8A1F' },
-  info: { background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.75)' },
+  danger: 'c-banner-danger',
+  warn: 'c-banner-warn',
+  info: 'c-banner-info',
 };
 
 export default function ConsoleBanner({ org }) {
@@ -57,8 +57,7 @@ export default function ConsoleBanner({ org }) {
     <div
       role="status"
       data-testid="console-banner"
-      className="flex items-center gap-3 px-4 md:px-8 py-2.5 text-sm"
-      style={{ background: tone.background, color: tone.color }}
+      className={`flex items-center gap-3 px-4 md:px-8 py-2.5 text-sm ${tone}`}
     >
       <span className="flex-1">{banner.text}</span>
       {banner.dismissible && gymId !== null ? (

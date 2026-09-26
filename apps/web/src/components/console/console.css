@@ -109,7 +109,9 @@
   --t1: #1B1815;
   --t2: #57504A;
   --t3: #736C64;
-  --link: #B45309;
+  /* The drawing's #B45309 measured 4.42:1 on --raise; this shade passes 4.5 on every
+     surface (spec Part 3 §17.3). */
+  --link: #A84D08;
   --accent: #FF8A1F;
   --on-accent: #140C04;
   --soft: #FFE9D2;
@@ -716,6 +718,23 @@
   border-radius: 14px;
   background: var(--warn-bg);
   color: var(--t1);
+}
+
+/* The banner above every page (Part 3 §4.2): a problem, a deadline or a wall, news. */
+.c-banner-danger { background: var(--bad-bg); color: var(--bad); }
+.c-banner-warn { background: var(--warn-bg); color: var(--warn); }
+.c-banner-info { background: var(--raise); color: var(--t2); }
+
+/* Rule 8: on a phone every button is at least 44 px, whatever size a drawing gave it. */
+@media (max-width: 767px) {
+  .c-btn,
+  .c-chip {
+    min-height: 44px;
+  }
+  .c-icon-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
 
 /* Light · Dark · Auto, in the menu (`c-seg`) and on More (`c-seg2`). */

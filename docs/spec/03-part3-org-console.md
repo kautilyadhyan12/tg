@@ -2712,12 +2712,19 @@ root. The menu's colours (`--rail-*`) are the same in both looks.
 | `--accent` | orange: press here | #FF8A1F | #FF8A1F |
 | `--soft-t` on `--soft` | pale orange: the second action | #FF9F45 on #2A1A0C | #9A4508 on #FFE9D2 |
 | `--good` · `--warn` · `--bad` | good · look at this · a problem (each with its `-bg`) | #46D993 · #F2C35B · #FF7B6E | #177A48 · #7A5600 · #C23A2E |
-| `--link` | a link inside text | #FF9F45 | #B45309 |
+| `--link` | a link inside text | #FF9F45 | #A84D08 (the drawing's #B45309, a shade darker) |
 | `--cl-*` | a class's own colour: orange, blue, green, purple, red, teal, amber, slate | see `console.css` | see `console.css` |
 
-Measured 2026-09-26 with the WCAG contrast formula: every text colour on its page, box or
-tag is 4.5 to 1 or more in both looks — the lowest are the light look's red tag (4.6),
-green tag and third text on the page (4.7).
+Every text colour (`--t1`, `--t2`, `--t3`, `--link`, `--good`, `--warn`, `--bad`) on the
+page, a box, a raised box (`--raise`) and a sheet, each tag on its own background, and the
+words on an orange, pale orange or picked button, is 4.5 to 1 or more in both looks: 34
+pairs a look, measured 2026-09-26 with the WCAG contrast formula and checked on every push
+by `apps/web/src/components/console/consoleCss.test.js`. The lowest are the light look's
+third text on a raised box and red tag (4.55 each), its third text on the page (4.67) and
+the dark look's third text on a raised box (4.69). The drawing's light link, #B45309,
+measured 4.42 on a raised box, so the app's is #A84D08 (4.95 there, 5.08 on the page).
+The banner above every page takes its colours from the same names (`c-banner-danger`,
+`c-banner-warn`, `c-banner-info`).
 
 ### 17.4 Text
 
@@ -2738,7 +2745,8 @@ person may open, then **Your organisations**, and at the bottom their name, thei
 organisations"), and the bottom holds up to four tabs and **More**. More holds the pages
 that are not tabs, **Your organisations**, the person's name and role, and **Sign out**.
 Where there is no gym yet (your organisations, create) the menu says "Gym console" and
-holds the name and Sign out; on a phone the top bar holds "Gym console" and Sign out, and
+holds the name and Sign out, and the gym box says "Gym console" too while the gym is being
+read or when the address is not one of the person's gyms; on a phone the top bar holds "Gym console" and Sign out, and
 there are no tabs.
 
 | Page | Drawn for whoever holds | On a phone |
@@ -2773,7 +2781,10 @@ in a narrow one; one column on a phone. A page's padding is `c-page`: 48 at the 
 across a page) · `c-th` (a table heading) · `c-sheet` (a panel or pop-up) · `c-callout`
 (the amber "look at this" box) · `c-seg` and `c-seg2` (Light · Dark · Auto). Every class
 starts `c-` because the member pages already use `.card`, `.btn` and `.label` for other
-things. Icons are the line icons the app already uses (`lucide-react`), never emoji.
+things. Rule 8 holds whatever a drawing shows: under 768 px every `c-btn` (`c-btn-sm`
+included), `c-chip` and `c-icon-btn` is at least 44 px tall, an icon button 44 px wide
+too, and `consoleCss.test.js` checks it with the widths each bar shows at. Icons are the
+line icons the app already uses (`lucide-react`), never emoji.
 
 ### 17.7 Both looks, and the switch
 
