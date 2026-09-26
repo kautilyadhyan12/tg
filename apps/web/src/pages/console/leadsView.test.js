@@ -91,6 +91,14 @@ describe('the Leads screen', () => {
     const draft = { fullName: 'Priya Shah', email: 'priya@example.com', phone: '', source: 'website', notes: 'stale', mayEmail: false };
     expect(detailsRequest({ ...lead, notes: 'Mornings' }, draft)).toEqual({ source: 'website' });
     expect(detailsRequest({ ...lead, notes: 'Mornings' }, { ...draft, source: 'walk_in' })).toEqual({});
+    expect(detailsRequest(lead, { ...draft, source: 'walk_in', mayEmail: true })).toEqual({ mayEmail: true });
+    expect(detailsRequest({ ...lead, mayEmail: true }, { ...draft, source: 'walk_in', mayEmail: true })).toEqual({});
+    // An emptied email takes the tick with it.
+    expect(detailsRequest({ ...lead, mayEmail: true }, { ...draft, source: 'walk_in', email: '', phone: '07700 900123', mayEmail: true })).toEqual({
+      email: null,
+      phone: '07700 900123',
+      mayEmail: false,
+    });
   });
 
   it('says what Joined did in the gym words', () => {

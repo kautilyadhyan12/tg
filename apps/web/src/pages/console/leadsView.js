@@ -95,11 +95,14 @@ export function updateLeadRequest(lead, draft) {
   return body;
 }
 
-/** A change to an open lead's details: what moved, without the notes, which save on
- *  their own. */
+/** A change to an open lead's details and the email tick: what moved, without the
+ *  notes, which save on their own. A tick needs an address, so an emptied email
+ *  sends no tick. */
 export function detailsRequest(lead, draft) {
   const body = updateLeadRequest(lead, draft);
   delete body.notes;
+  const mayEmail = draft.mayEmail && draft.email.trim() !== '';
+  if (mayEmail !== lead.mayEmail) body.mayEmail = mayEmail;
   return body;
 }
 

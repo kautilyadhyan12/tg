@@ -195,12 +195,15 @@ describe('adding and keeping a lead', () => {
     );
   });
 
-  it('on a lead, the tick is saved for that lead', async () => {
+  it('on a lead, the tick is saved with Save, for that lead', async () => {
     orgService.getLead.mockResolvedValue({ data: { lead: tom } });
     orgService.updateLead.mockResolvedValue({ data: { lead: { ...tom, mayEmail: true } } });
     render(sheet(TOM));
     await screen.findByRole('heading', { name: 'Tom Reid' });
     fireEvent.click(screen.getByRole('checkbox', { name: 'Happy to hear from us by email' }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(orgService.updateLead).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(orgService.updateLead).toHaveBeenCalledWith(GYM, TOM, { mayEmail: true }));
     await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Happy to hear from us by email' }).getAttribute('aria-checked')).toBe('true'));
   });
@@ -255,12 +258,27 @@ describe('adding and keeping a lead', () => {
 });
 
 describe('the details open beside the status (R3)', () => {
-  it('the Joined status does what "Joined · add to your members" does', async () => {
+  it('the Joined status asks first, and Keep as a lead changes nothing', async () => {
+    orgService.getLead.mockResolvedValue({ data: { lead: tom } });
+    render(sheet(TOM));
+    await screen.findByRole('heading', { name: 'Tom Reid' });
+    fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Joined' }));
+    expect(screen.getByText('Add Tom Reid to your members?')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Keep as a lead' }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByTestId('ask-join')).toBeNull();
+    expect(orgService.joinLead).not.toHaveBeenCalled();
+    expect(orgService.updateLead).not.toHaveBeenCalled();
+  });
+
+  it('the Joined status, once asked, does what "Joined · add to your members" does', async () => {
     orgService.getLead.mockResolvedValue({ data: { lead: tom } });
     orgService.joinLead.mockResolvedValue({ data: { lead: { ...tom, status: 'joined', entryId: OWN, onList: true }, outcome: 'added' } });
     render(sheet(TOM));
     await screen.findByRole('heading', { name: 'Tom Reid' });
     fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Joined' }));
+    expect(orgService.joinLead).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Add to members' }));
     await waitFor(() => expect(orgService.joinLead).toHaveBeenCalledWith(GYM, TOM, {}));
     await screen.findByText('Tom Reid is on your list of members now.');
     expect(orgService.updateLead).not.toHaveBeenCalled();
@@ -281,6 +299,8 @@ describe('the details open beside the status (R3)', () => {
     await waitFor(() =>
       expect(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Contacted' }).getAttribute('aria-pressed')).toBe('true'),
     );
+    // Saved at once, and it says so beside the buttons.
+    expect(within(screen.getByRole('group', { name: 'Status' })).getByRole('status').textContent).toBe(' Saved');
     expect(screen.getByLabelText('Phone').value).toBe('07700 900456');
     expect(screen.getByLabelText('Notes').value).toBe('Call on Friday');
   });
@@ -306,5 +326,18 @@ describe('the details open beside the status (R3)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.getByLabelText('Name').value).toBe('Tom Reid');
     expect(orgService.updateLead).toHaveBeenCalledTimes(2);
+  });
+
+  it('a new email address unticks the tick until staff ask again', async () => {
+    orgService.getLead.mockResolvedValue({ data: { lead: { ...tom, mayEmail: true } } });
+    orgService.updateLead.mockResolvedValue({ data: { lead: { ...tom, email: 'tom.reid@example.com', mayEmail: false } } });
+    render(sheet(TOM));
+    await screen.findByRole('heading', { name: 'Tom Reid' });
+    const tick = screen.getByRole('checkbox', { name: 'Happy to hear from us by email' });
+    expect(tick.getAttribute('aria-checked')).toBe('true');
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'tom.reid@example.com' } });
+    expect(tick.getAttribute('aria-checked')).toBe('false');
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(orgService.updateLead).toHaveBeenCalledWith(GYM, TOM, { email: 'tom.reid@example.com', mayEmail: false }));
   });
 });

@@ -152,6 +152,10 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
   const [done, setDone] = useState(null);
   const [choice, setChoice] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  /** "Saved" beside the status buttons, which save the moment they are tapped. */
+  const [statusSaved, setStatusSaved] = useState(false);
+  /** The Joined status asks before it puts the person on the list. */
+  const [askJoin, setAskJoin] = useState(false);
   /** The lead this panel is for; an answer about any other is dropped. */
   const shown = useRef(leadId);
 
@@ -191,6 +195,7 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
     setBusy(true);
     setError(null);
     setDone(null);
+    setStatusSaved(false);
     try {
       await work();
     } catch (err) {
@@ -219,8 +224,18 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
       const res = await orgService.updateLead(gymId, lead.id, body);
       if (!take(res.data.lead, saved)) return;
       onChanged();
-      if (said !== null) setDone(said);
+      if (saved === 'status') setStatusSaved(true);
+      else if (said !== null) setDone(said);
     }, "We couldn't save that. Please try again.");
+
+  /** The tick is a yes to one address: a different address unticks it until staff ask
+   *  again, as the server clears it. */
+  const setLeadDraft = (change) =>
+    setDraft((d) => {
+      const next = change(d);
+      const moved = next.email !== d.email && next.email.trim().toLowerCase() !== (lead?.email ?? '').toLowerCase();
+      return moved ? { ...next, mayEmail: false } : next;
+    });
 
   const saveDetails = () => {
     const problem = leadProblem(draft);
@@ -321,7 +336,8 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
                   pressed={lead.status === s.key}
                   disabled={off}
                   onClick={() => {
-                    if (lead.status !== s.key) void save({ status: s.key }, null, null);
+                    setAskJoin(false);
+                    if (lead.status !== s.key) void save({ status: s.key }, null, 'status');
                   }}
                 >
                   {s.label}
@@ -331,11 +347,38 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
                 pressed={joined}
                 disabled={off}
                 onClick={() => {
-                  if (!joined && choice === null) void join({});
+                  if (!joined && choice === null) setAskJoin(true);
                 }}
               >
                 Joined
               </Choice>
+              {statusSaved ? (
+                <span className="c-s14 c-w5 self-center flex items-center gap-1" role="status" style={{ color: 'var(--good)' }}>
+                  <Check aria-hidden="true" className="w-4 h-4" /> Saved
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+
+          {askJoin && lead !== null && !joined ? (
+            <div className="flex flex-col gap-3" data-testid="ask-join">
+              <p className="c-s14 c-t1">{`Add ${lead.fullName} to your ${words.people}?`}</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={off}
+                  onClick={() => {
+                    setAskJoin(false);
+                    void join({});
+                  }}
+                  className="c-btn c-btn-sm c-btn-p"
+                >
+                  {`Add to ${words.people}`}
+                </button>
+                <button type="button" disabled={busy} onClick={() => setAskJoin(false)} className="c-btn c-btn-sm c-btn-s">
+                  Keep as a lead
+                </button>
+              </div>
             </div>
           ) : null}
 
@@ -377,8 +420,13 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
 
           {lead !== null ? (
             <>
-              <DetailsForm draft={draft} setDraft={setDraft} disabled={off} />
-              <MayEmailTick checked={lead.mayEmail} hasEmail={lead.email !== null} disabled={off} onChange={(v) => save({ mayEmail: v }, null, null)} />
+              <DetailsForm draft={draft} setDraft={setLeadDraft} disabled={off} />
+              <MayEmailTick
+                checked={draft.mayEmail && draft.email.trim() !== ''}
+                hasEmail={draft.email.trim() !== ''}
+                disabled={off}
+                onChange={(v) => setDraft((d) => ({ ...d, mayEmail: v }))}
+              />
               <div className="flex flex-wrap gap-2">
                 <button type="button" onClick={saveDetails} disabled={off} className="c-btn c-btn-p">
                   {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
