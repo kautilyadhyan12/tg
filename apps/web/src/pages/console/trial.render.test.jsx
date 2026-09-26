@@ -193,7 +193,7 @@ describe('the plan card', () => {
     orgService.getMine.mockResolvedValue(mineIs(ORG));
     renderConsole(Overview);
 
-    await screen.findByText('Iron House');
+    await screen.findByRole('heading', { name: 'Iron House' });
     expect(screen.queryByText('Plan')).toBeNull();
     expect(screen.queryByText(/ of \d+ members/)).toBeNull();
     // THE ONLY TRIAL BUTTON ON SCREEN IS THE PROMPT'S, and asserting WHERE it
@@ -228,7 +228,7 @@ describe('the plan card', () => {
     );
     renderConsole(Overview);
 
-    await screen.findByText('Iron House');
+    await screen.findByRole('heading', { name: 'Iron House' });
     expect(screen.queryByText('Plan')).toBeNull();
     expect(screen.queryByText('Free trial')).toBeNull();
     expect(screen.queryByText(/ of \d+ members/)).toBeNull();
@@ -354,7 +354,7 @@ describe('the banner above every console screen', () => {
 
     cleanup();
     renderConsole(Overview);
-    await screen.findByText('Iron House');
+    await screen.findByRole('heading', { name: 'Iron House' });
     expect(screen.queryByTestId('console-banner')).toBeNull();
   });
 
@@ -407,7 +407,7 @@ describe('the banner above every console screen', () => {
   it('says nothing at all for a gym on no plan', async () => {
     orgService.getMine.mockResolvedValue(mineIs(ORG));
     renderConsole(Overview);
-    await screen.findByText('Iron House');
+    await screen.findByRole('heading', { name: 'Iron House' });
     expect(screen.queryByTestId('console-banner')).toBeNull();
   });
 });

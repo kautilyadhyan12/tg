@@ -45,6 +45,7 @@ import ConsoleAttendance from './pages/console/Attendance';
 import ConsoleClasses  from './pages/console/Classes';
 import ConsoleLeads    from './pages/console/Leads';
 import ConsoleSettings from './pages/console/Settings';
+import ConsoleMore     from './pages/console/More';
 
 export default function App() {
   return (
@@ -268,6 +269,13 @@ export default function App() {
             <Route path="/console/:orgSlug/settings" element={
               <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
                 <ConsoleLayout><ConsoleSettings /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
+            {/* MORE, the phone's fifth tab (spec Part 3 §17.5): the pages that are not tabs,
+                your organisations, Sign out. */}
+            <Route path="/console/:orgSlug/more" element={
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
+                <ConsoleLayout><ConsoleMore /></ConsoleLayout>
               </ProtectedRoute>
             } />
 
