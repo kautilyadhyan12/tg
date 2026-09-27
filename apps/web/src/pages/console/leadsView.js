@@ -1,6 +1,6 @@
 // The Leads screen's small rules (ROADMAP 20c-i), apart from the components so they
 // are tested on their own. Every count is the server's.
-import { LEAD_SOURCES, LEAD_SOURCE_WORDS, LEAD_STATUSES, LEAD_STATUS_WORDS } from '@app/shared';
+import { LEAD_FOLLOW_UPS, LEAD_SOURCES, LEAD_SOURCE_WORDS, LEAD_STATUSES, LEAD_STATUS_WORDS } from '@app/shared';
 
 /** The chips over the list: All, then each status, with the server's counts. */
 export function statusChips(counts) {
@@ -8,10 +8,12 @@ export function statusChips(counts) {
   return [all, ...LEAD_STATUSES.map((status) => ({ key: status, label: LEAD_STATUS_WORDS[status], count: counts?.[status] ?? 0 }))];
 }
 
-/** The page's query: a status of 'all' is no status. */
-export function leadsQueryString({ status, query }, cursor = null) {
+/** The page's query: a status of 'all' is no status; `due` keeps only leads due a
+ *  follow-up email. */
+export function leadsQueryString({ status, query, due = false }, cursor = null) {
   const params = new URLSearchParams();
   if (status !== 'all') params.set('status', status);
+  if (due) params.set('followUp', 'due');
   const q = query.trim();
   if (q !== '') params.set('q', q);
   if (cursor !== null) params.set('cursor', cursor);
@@ -114,7 +116,7 @@ export function detailsRequest(lead, draft) {
 
 /** The words beside the "Happy to hear from us" tick. */
 export const MAY_EMAIL_LABEL = 'Happy to hear from us by email';
-export const MAY_EMAIL_HINT = 'Tick only if they said yes. The follow-up emails go only to people who did.';
+export const MAY_EMAIL_HINT = "Tick only if they said yes. We'll remind you to email them 3 times over a week.";
 
 /** What Joined did, in one sentence. */
 export function joinedWords(outcome, name, words) {
@@ -128,3 +130,88 @@ export function joinedWords(outcome, name, words) {
 export function candidateLine(candidate) {
   return [candidate.email, candidate.phone].filter((part) => part !== null && part !== '').join(' · ');
 }
+
+// ── FOLLOW-UP EMAILS (20c-ii; RULINGS 2026-09-27) ─────────────────────────────
+// The gym sends each from its own mailbox: "Email Priya" opens the gym's email
+// program with the words written, and staff press Send there. Nothing goes through us.
+
+/** "Tue 30 Sept", for a YYYY-MM-DD day of the gym's. */
+export function dueDayWords(day) {
+  const at = new Date(`${day}T12:00:00Z`);
+  if (Number.isNaN(at.getTime())) return '';
+  return at.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+}
+
+const firstName = (fullName) => fullName.trim().split(/\s+/)[0] ?? '';
+
+/** Where the gym is, for the end of each email: its postal address, else its city. */
+function gymSignature(gym) {
+  const where = (gym.postalAddress ?? '').trim() || (gym.city ?? '').trim();
+  return where === '' ? gym.name : `${gym.name}\n${where}`;
+}
+
+/** Follow-up email `step` (1, 2 or 3) to this lead, from this gym. */
+export function followUpEmail(step, lead, gym) {
+  const hi = firstName(lead.fullName) === '' ? 'Hi,' : `Hi ${firstName(lead.fullName)},`;
+  const end = gymSignature(gym);
+  const letters = {
+    1: {
+      subject: `Thanks for asking about ${gym.name}`,
+      lines: [
+        `Thanks for asking about ${gym.name}. We'd love to show you around.`,
+        'Come in any time we are open, or reply to this email with any questions.',
+      ],
+    },
+    2: {
+      subject: `Come and see us at ${gym.name}`,
+      lines: [
+        'Just checking in. Would you like to come in for a look around, or try a session?',
+        "Reply with a day that suits you and we'll have it ready.",
+      ],
+    },
+    3: {
+      subject: `Still thinking about ${gym.name}?`,
+      lines: [
+        "This is our last note, so we won't fill your inbox.",
+        "If you'd like to join or have a question, just reply. We'd be glad to see you.",
+      ],
+    },
+  };
+  const letter = letters[step];
+  if (letter === undefined) return null;
+  const body = [hi, ...letter.lines, end].join('\n\n');
+  const href = `mailto:${encodeURIComponent(lead.email ?? '')}?subject=${encodeURIComponent(letter.subject)}&body=${encodeURIComponent(body)}`;
+  return { subject: letter.subject, body, href };
+}
+
+/** ", the last today", ", the last yesterday", ", the last on 3 Sept". */
+function lastSentWords(iso, now) {
+  if (iso === null) return '';
+  const day = addedDay(iso, now);
+  if (day === '') return '';
+  return `, the last ${day === 'Today' || day === 'Yesterday' ? day.toLowerCase() : `on ${day}`}`;
+}
+
+/** What the lead's follow-up box says, or null when there is nothing to say: a lead
+ *  who never said yes and has had none. `next` is the step due, or null. */
+export function followUpState(lead, now = new Date()) {
+  const f = lead.followUp;
+  if (f === undefined || f === null) return null;
+  const sentLine = f.sent === 0 ? null : `${f.sent} of ${LEAD_FOLLOW_UPS} sent${lastSentWords(f.lastSentAt, now)}.`;
+  // The server says when one is due; only a New lead with the tick is ever offered one.
+  if (f.dueOn !== null && lead.status === 'new' && lead.mayEmail) {
+    const step = f.sent + 1;
+    const of = `Email ${step} of ${LEAD_FOLLOW_UPS}`;
+    const headline = f.overdue ? `${of} was due ${dueDayWords(f.dueOn)}` : f.dueNow ? `${of} is due today` : `${of} is due ${dueDayWords(f.dueOn)}`;
+    // Before its day it is only announced: nothing to send yet.
+    return { next: f.dueNow ? step : null, headline, due: f.dueNow, sentLine };
+  }
+  if (f.sent >= LEAD_FOLLOW_UPS) return { next: null, headline: `All ${LEAD_FOLLOW_UPS} follow-up emails sent`, due: false, sentLine };
+  if (f.sent === 0 && !lead.mayEmail) return null;
+  if (f.sent === 0 && lead.status === 'new') return null;
+  const why = !lead.mayEmail ? 'the "Happy to hear from us" tick is off' : `they're marked ${statusWord(lead.status)}`;
+  return { next: null, headline: `Follow-up emails stopped: ${why}`, due: false, sentLine };
+}
+
+/** The toggle beside the status chips. */
+export const DUE_CHIP_LABEL = 'Email due';
