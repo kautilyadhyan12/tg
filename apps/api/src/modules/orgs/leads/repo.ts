@@ -20,6 +20,10 @@ export interface LeadRow {
   onList: boolean;
   createdAt: Date;
   statusChangedAt: Date;
+  followUpsSent: number;
+  followUpLastAt: Date | null;
+  /** YYYY-MM-DD, the gym's day. */
+  followUpDueOn: string | null;
 }
 
 interface DbLead {
@@ -35,6 +39,9 @@ interface DbLead {
   on_list: boolean;
   created_at: Date;
   status_changed_at: Date;
+  follow_ups_sent: number;
+  follow_up_last_at: Date | null;
+  follow_up_due_on: string | null;
 }
 
 const toRow = (row: DbLead): LeadRow => ({
@@ -50,6 +57,9 @@ const toRow = (row: DbLead): LeadRow => ({
   onList: row.on_list,
   createdAt: row.created_at,
   statusChangedAt: row.status_changed_at,
+  followUpsSent: row.follow_ups_sent,
+  followUpLastAt: row.follow_up_last_at,
+  followUpDueOn: row.follow_up_due_on,
 });
 
 export interface LeadValues {
@@ -59,6 +69,9 @@ export interface LeadValues {
   source: LeadSource;
   notes: string;
   emailOkAt: Date | null;
+  followUpsSent: number;
+  followUpLastAt: Date | null;
+  followUpDueOn: string | null;
 }
 
 /** A clash on one of the two UNIQUEs: another lead of this gym holds the email or phone. */
@@ -97,10 +110,12 @@ export async function leadHolding(
 
 export async function insertLead(tx: TransactionSql, gymId: string, values: LeadValues, addedBy: string): Promise<LeadRow> {
   const rows = await tx<DbLead[]>`
-    INSERT INTO gym_leads (gym_id, full_name, email, phone_e164, source, notes, email_ok_at, added_by)
-    VALUES (${gymId}, ${values.fullName}, ${values.email}, ${values.phone}, ${values.source}, ${values.notes}, ${values.emailOkAt}, ${addedBy})
+    INSERT INTO gym_leads (gym_id, full_name, email, phone_e164, source, notes, email_ok_at, added_by,
+                           follow_ups_sent, follow_up_last_at, follow_up_due_on)
+    VALUES (${gymId}, ${values.fullName}, ${values.email}, ${values.phone}, ${values.source}, ${values.notes}, ${values.emailOkAt}, ${addedBy},
+            ${values.followUpsSent}, ${values.followUpLastAt}, ${values.followUpDueOn}::date)
     RETURNING id, full_name, email, phone_e164, source, status, notes, email_ok_at, entry_id, false AS on_list,
-              created_at, status_changed_at`;
+              created_at, status_changed_at, follow_ups_sent, follow_up_last_at, follow_up_due_on::text AS follow_up_due_on`;
   const row = rows[0];
   if (row === undefined) throw new Error("inserting a lead returned no row");
   return toRow(row);
@@ -109,7 +124,8 @@ export async function insertLead(tx: TransactionSql, gymId: string, values: Lead
 export async function leadFor(sql: SqlOrTx, gymId: string, leadId: string): Promise<LeadRow | null> {
   const rows = await sql<DbLead[]>`
     SELECT l.id, l.full_name, l.email, l.phone_e164, l.source, l.status, l.notes, l.email_ok_at, l.entry_id,
-           (e.id IS NOT NULL AND e.former_at IS NULL) AS on_list, l.created_at, l.status_changed_at
+           (e.id IS NOT NULL AND e.former_at IS NULL) AS on_list, l.created_at, l.status_changed_at,
+           l.follow_ups_sent, l.follow_up_last_at, l.follow_up_due_on::text AS follow_up_due_on
     FROM gym_leads l
     LEFT JOIN gym_member_list_entries e ON e.gym_id = l.gym_id AND e.id = l.entry_id
     WHERE l.gym_id = ${gymId} AND l.id = ${leadId}`;
@@ -121,7 +137,8 @@ export async function leadFor(sql: SqlOrTx, gymId: string, leadId: string): Prom
 export async function lockLead(tx: TransactionSql, gymId: string, leadId: string): Promise<LeadRow | null> {
   const rows = await tx<DbLead[]>`
     SELECT l.id, l.full_name, l.email, l.phone_e164, l.source, l.status, l.notes, l.email_ok_at, l.entry_id,
-           (e.id IS NOT NULL AND e.former_at IS NULL) AS on_list, l.created_at, l.status_changed_at
+           (e.id IS NOT NULL AND e.former_at IS NULL) AS on_list, l.created_at, l.status_changed_at,
+           l.follow_ups_sent, l.follow_up_last_at, l.follow_up_due_on::text AS follow_up_due_on
     FROM gym_leads l
     LEFT JOIN gym_member_list_entries e ON e.gym_id = l.gym_id AND e.id = l.entry_id
     WHERE l.gym_id = ${gymId} AND l.id = ${leadId}
@@ -150,12 +167,16 @@ export async function writeLead(
           status_changed_at = CASE WHEN status = ${values.status} THEN status_changed_at ELSE ${at} END,
           status = ${values.status},
           entry_id = ${values.entryId},
+          follow_ups_sent = ${values.followUpsSent},
+          follow_up_last_at = ${values.followUpLastAt},
+          follow_up_due_on = ${values.followUpDueOn}::date,
           updated_at = ${at}
       WHERE gym_id = ${gymId} AND id = ${leadId}
       RETURNING *
     )
     SELECT w.id, w.full_name, w.email, w.phone_e164, w.source, w.status, w.notes, w.email_ok_at, w.entry_id,
-           (e.id IS NOT NULL AND e.former_at IS NULL) AS on_list, w.created_at, w.status_changed_at
+           (e.id IS NOT NULL AND e.former_at IS NULL) AS on_list, w.created_at, w.status_changed_at,
+           w.follow_ups_sent, w.follow_up_last_at, w.follow_up_due_on::text AS follow_up_due_on
     FROM written w
     LEFT JOIN gym_member_list_entries e ON e.gym_id = w.gym_id AND e.id = w.entry_id`;
   const row = rows[0];
@@ -185,20 +206,31 @@ export interface LeadsPageRow extends LeadRow {
 }
 
 /** Newest first. `like` is an escaped ILIKE pattern for the name and email; `digits`
- *  the digits of a phone search (at least four), or null. */
+ *  the digits of a phone search (at least four), or null; `dueBy` the gym's today when
+ *  only leads due a follow-up are wanted. */
 export async function leadsPage(
   sql: SqlOrTx,
-  input: { gymId: string; status: LeadStatus | null; like: string | null; digits: string | null; cursor: LeadCursor | null; limit: number },
+  input: {
+    gymId: string;
+    status: LeadStatus | null;
+    like: string | null;
+    digits: string | null;
+    dueBy: string | null;
+    cursor: LeadCursor | null;
+    limit: number;
+  },
 ): Promise<{ rows: LeadsPageRow[]; total: number }> {
-  const { gymId, status, like, digits, cursor } = input;
+  const { gymId, status, like, digits, dueBy, cursor } = input;
   const rows = await sql<(DbLead & { cursor_at: string })[]>`
     SELECT l.id, l.full_name, l.email, l.phone_e164, l.source, l.status, l.notes, l.email_ok_at, l.entry_id,
            (e.id IS NOT NULL AND e.former_at IS NULL) AS on_list, l.created_at, l.status_changed_at,
+           l.follow_ups_sent, l.follow_up_last_at, l.follow_up_due_on::text AS follow_up_due_on,
            to_char(l.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_at
     FROM gym_leads l
     LEFT JOIN gym_member_list_entries e ON e.gym_id = l.gym_id AND e.id = l.entry_id
     WHERE l.gym_id = ${gymId}
       AND (${status}::text IS NULL OR l.status = ${status}::text)
+      AND (${dueBy}::date IS NULL OR l.follow_up_due_on <= ${dueBy}::date)
       AND ((${like}::text IS NULL AND ${digits}::text IS NULL)
            OR l.full_name ILIKE ${like}::text
            OR l.email::text ILIKE ${like}::text
@@ -215,6 +247,7 @@ export async function leadsPage(
     FROM gym_leads l
     WHERE l.gym_id = ${gymId}
       AND (${status}::text IS NULL OR l.status = ${status}::text)
+      AND (${dueBy}::date IS NULL OR l.follow_up_due_on <= ${dueBy}::date)
       AND ((${like}::text IS NULL AND ${digits}::text IS NULL)
            OR l.full_name ILIKE ${like}::text
            OR l.email::text ILIKE ${like}::text
@@ -222,12 +255,15 @@ export async function leadsPage(
   return { rows: rows.map((row) => ({ ...toRow(row), cursorAt: row.cursor_at })), total: totals[0]?.n ?? 0 };
 }
 
-export async function leadCounts(sql: SqlOrTx, gymId: string): Promise<LeadCounts> {
-  const rows = await sql<{ status: string; n: number }[]>`
-    SELECT status, count(*)::int AS n FROM gym_leads WHERE gym_id = ${gymId} GROUP BY status`;
-  const counts: LeadCounts = { all: 0, new: 0, contacted: 0, on_trial: 0, joined: 0, lost: 0 };
+/** The gym's leads by status, and how many are due a follow-up by `today`. */
+export async function leadCounts(sql: SqlOrTx, gymId: string, today: string): Promise<LeadCounts> {
+  const rows = await sql<{ status: string; n: number; due: number }[]>`
+    SELECT status, count(*)::int AS n, (count(*) FILTER (WHERE follow_up_due_on <= ${today}::date))::int AS due
+    FROM gym_leads WHERE gym_id = ${gymId} GROUP BY status`;
+  const counts: LeadCounts = { all: 0, new: 0, contacted: 0, on_trial: 0, joined: 0, lost: 0, followUpsDue: 0 };
   for (const row of rows) {
     counts.all += row.n;
+    counts.followUpsDue += row.due;
     if (row.status === "new") counts.new = row.n;
     else if (row.status === "contacted") counts.contacted = row.n;
     else if (row.status === "on_trial") counts.on_trial = row.n;

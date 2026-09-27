@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Check, Loader2, UserCheck, X } from 'lucide-react';
+import { Check, Loader2, Mail, UserCheck, X } from 'lucide-react';
 import { LEAD_JOIN_CHOOSE_ERROR, LEAD_JOIN_STALE_ERROR, LEAD_MAX_NOTES_CHARS } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import { ConfirmInline } from '../../components/console/ConsoleStates';
@@ -13,6 +13,8 @@ import {
   detailsRequest,
   draftStarted,
   emptyLeadDraft,
+  followUpEmail,
+  followUpState,
   joinedWords,
   MAY_EMAIL_HINT,
   MAY_EMAIL_LABEL,
@@ -21,7 +23,8 @@ import {
   sourceWord,
 } from './leadsView';
 
-// One lead (ROADMAP 20c-i): add a new one, or open one to change its status in a tap,
+// One lead (ROADMAP 20c-i; its follow-up emails 20c-ii): add a new one, or open one to
+// change its status in a tap,
 // change its details, keep notes, delete, and mark them joined. `leadId` null is "Add
 // lead". Every answer is checked against the lead on screen, so a late answer for
 // somebody opened earlier is never shown here. A side panel on a computer, its top and
@@ -111,6 +114,46 @@ function NotesBox({ value, onChange, disabled }) {
   );
 }
 
+/** The follow-up emails (20c-ii): which is due and when, "Email Priya", which opens the
+ *  gym's own email program with the words written, and "Mark as sent". Nothing is sent
+ *  by the app. */
+function FollowUpBox({ lead, gym, readOnly, busy, working, onMark }) {
+  const state = followUpState(lead);
+  if (state === null) return null;
+  const email = state.next === null ? null : followUpEmail(state.next, lead, gym);
+  const first = lead.fullName.trim().split(/\s+/)[0] ?? lead.fullName;
+  return (
+    <section className={state.due ? 'c-callout flex-col' : 'c-card p-4 flex flex-col gap-3'} data-testid="follow-up">
+      <div className="flex flex-col gap-0.5">
+        <p className="c-s15 c-w6 c-t1">{state.headline}</p>
+        {state.sentLine !== null ? <p className="c-s14 c-t2">{state.sentLine}</p> : null}
+      </div>
+      {email !== null ? (
+        <>
+          <div className="flex flex-wrap gap-2">
+            {readOnly ? (
+              <button type="button" disabled className="c-btn c-btn-sm c-btn-p">
+                <Mail aria-hidden="true" className="w-4 h-4" />
+                {`Email ${first}`}
+              </button>
+            ) : (
+              <a href={email.href} className="c-btn c-btn-sm c-btn-p">
+                <Mail aria-hidden="true" className="w-4 h-4" />
+                {`Email ${first}`}
+              </a>
+            )}
+            <button type="button" onClick={() => onMark(state.next)} disabled={readOnly || busy} className="c-btn c-btn-sm c-btn-s">
+              {working === 'followUp' ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+              {`Mark email ${state.next} as sent`}
+            </button>
+          </div>
+          <p className="c-hint">Opens your own email with the message written. Send it from there, then mark it as sent.</p>
+        </>
+      ) : null}
+    </section>
+  );
+}
+
 /** The records that share the lead's email or phone, to say which is this person. */
 function ChooseRecord({ name, choice, busy, onPick, onNew, onCancel, words }) {
   return (
@@ -144,7 +187,7 @@ function ChooseRecord({ name, choice, busy, onPick, onNew, onCancel, words }) {
   );
 }
 
-export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onClose, onChanged, onAdded = () => undefined }) {
+export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly, onClose, onChanged, onAdded = () => undefined }) {
   const adding = leadId === null;
   const [lead, setLead] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -288,6 +331,14 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
       }
     }, "We couldn't mark them as joined. Please try again.");
   };
+
+  const markSent = (step) =>
+    run(async () => {
+      const res = await orgService.markFollowUpSent(gymId, lead.id, step);
+      if (!take(res.data.lead, 'followUp')) return;
+      onChanged();
+      setDone(`Email ${step} marked as sent.`);
+    }, "We couldn't mark that as sent. Please try again.", 'followUp');
 
   const remove = () =>
     run(async () => {
@@ -467,6 +518,7 @@ export default function LeadSheet({ gymId, leadId, orgSlug, words, readOnly, onC
 
           {lead !== null ? (
             <>
+              <FollowUpBox lead={lead} gym={gym} readOnly={readOnly} busy={busy} working={working} onMark={markSent} />
               <DetailsForm draft={draft} setDraft={setLeadDraft} disabled={off} />
               <MayEmailTick
                 checked={draft.mayEmail && draft.email.trim() !== ''}

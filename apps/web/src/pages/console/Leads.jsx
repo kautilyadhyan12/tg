@@ -8,13 +8,24 @@ import LeadSheet from './LeadSheet';
 import { useConsoleOrg } from './useConsoleOrg';
 import { orgWords, viewerPrivileges } from './consoleView';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
-import { STATUS_TAG, addedDay, addedWords, candidateLine, leadsQueryString, sourceWord, statusChips, statusWord } from './leadsView';
+import {
+  DUE_CHIP_LABEL,
+  STATUS_TAG,
+  addedDay,
+  addedWords,
+  candidateLine,
+  leadsQueryString,
+  sourceWord,
+  statusChips,
+  statusWord,
+} from './leadsView';
 
 // A gym's leads (ROADMAP 20c-i; spec Part 3 §16.3): people who asked about the gym and
 // have not joined. Search, the status chips with the server's counts, Add lead, and
 // one lead's panel. `members.confirm`'s, like the gym's own list; the server refuses
 // anyone else whatever this screen shows. Drawn from `console.css` (R3; spec Part 3 §17):
-// a table on a computer, a row per lead on a phone.
+// a table on a computer, a row per lead on a phone. "Email due" (20c-ii) keeps the leads
+// due a follow-up email today, whatever their status chip.
 
 const count = (n) => n.toLocaleString('en');
 
@@ -26,7 +37,7 @@ export default function Leads() {
   const readOnly = consoleIsReadOnly(org);
   const mayKeep = viewerPrivileges(org).includes('members.confirm');
 
-  const [filters, setFilters] = useState({ status: 'all', query: '' });
+  const [filters, setFilters] = useState({ status: 'all', query: '', due: false });
   const [typed, setTyped] = useState('');
   const [page, setPage] = useState({ loading: true, error: null, refused: false, leads: [], total: 0, cursor: null, counts: null });
   const [loadingMore, setLoadingMore] = useState(false);
@@ -120,7 +131,7 @@ export default function Leads() {
   }
 
   const noLeads = page.counts !== null && page.counts.all === 0;
-  const searching = filters.query.trim() !== '' || filters.status !== 'all';
+  const searching = filters.query.trim() !== '' || filters.status !== 'all' || filters.due;
   const openLead = (id) => {
     setNotice(null);
     setOpenId(id);
@@ -180,6 +191,16 @@ export default function Leads() {
                     {chip.label} <span className="c-n">{count(chip.count)}</span>
                   </button>
                 ))}
+                {page.counts.followUpsDue > 0 || filters.due ? (
+                  <button
+                    type="button"
+                    aria-pressed={filters.due}
+                    onClick={() => change({ ...filters, due: !filters.due })}
+                    className={filters.due ? 'c-chip c-chip-on' : 'c-chip'}
+                  >
+                    {DUE_CHIP_LABEL} <span className="c-n">{count(page.counts.followUpsDue)}</span>
+                  </button>
+                ) : null}
               </div>
             ) : null}
             {!page.loading && page.error === null && !noLeads && searching ? (
@@ -238,8 +259,12 @@ export default function Leads() {
                       <span className="md:hidden c-s13 c-t3 c-ell" style={{ gridArea: 'meta' }}>
                         {sourceWord(lead.source)} · {addedWords(lead.createdAt)}
                       </span>
-                      <span className="self-start md:self-center justify-self-end md:justify-self-start" style={{ gridArea: 'tag' }}>
+                      <span
+                        className="self-start md:self-center justify-self-end md:justify-self-start flex flex-wrap justify-end md:justify-start gap-1.5"
+                        style={{ gridArea: 'tag' }}
+                      >
                         <span className={`c-tag ${STATUS_TAG[lead.status] ?? 'c-tag-plain'}`}>{statusWord(lead.status)}</span>
+                        {lead.followUp?.dueNow ? <span className="c-tag c-tag-warn">{DUE_CHIP_LABEL}</span> : null}
                       </span>
                       <ChevronRight aria-hidden="true" className="w-[18px] h-[18px] c-t3" style={{ gridArea: 'go' }} />
                     </button>
@@ -264,6 +289,7 @@ export default function Leads() {
         <LeadSheet
           key={openId ?? 'new'}
           gymId={gymId}
+          gym={org}
           leadId={openId}
           orgSlug={orgSlug}
           words={words}

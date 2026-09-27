@@ -6,7 +6,13 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
-import { createLeadRequestSchema, joinLeadRequestSchema, leadsQuerySchema, updateLeadRequestSchema } from "@app/shared";
+import {
+  createLeadRequestSchema,
+  joinLeadRequestSchema,
+  leadFollowUpSentRequestSchema,
+  leadsQuerySchema,
+  updateLeadRequestSchema,
+} from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { leadParamsSchema, orgParamsSchema } from "../schemas.js";
@@ -121,6 +127,18 @@ export function registerLeadRoutes(app: FastifyInstance, deps: LeadRouteDeps): v
     const done = await service.deleteLead(leadDeps, requireUserId(req), params.gymId, params.leadId, writeGate(req, reply));
     if (done === null) return;
     return reply.status(204).send();
+  });
+
+  /** A follow-up email sent from the gym's own mailbox (20c-ii). The same request
+   *  twice answers the lead unchanged. */
+  app.post("/v1/orgs/:gymId/leads/:leadId/follow-up", signedIn, async (req, reply) => {
+    const params = parseOr400(leadParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(leadFollowUpSentRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const lead = await service.markFollowUpSent(leadDeps, requireUserId(req), params.gymId, params.leadId, body, writeGate(req, reply));
+    if (lead === null) return;
+    return reply.status(200).send({ lead });
   });
 
   /** Joined. The same request twice answers `already_joined` the second time. */

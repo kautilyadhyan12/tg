@@ -4,7 +4,9 @@
 // status, where the person heard of the gym, notes. "Joined" puts the person on the
 // member list, linked to a record already there when it is the same person
 // (`leadJoinDecision` on the server), and never makes a second copy of them.
-// The follow-up emails are 20c-ii's; leads from a file are 20c-iii's.
+// The three follow-up emails (20c-ii) are sent by the gym from its own mailbox: the
+// app says when each is due and keeps what staff marked as sent. Leads from a file are
+// 20c-iii's.
 import { z } from "zod";
 import {
   MEMBER_LIST_MAX_EMAIL_CHARS,
@@ -31,6 +33,23 @@ export const LEAD_QUERY_MAX_CHARS = 120;
 export const LEADS_PAGE = 100;
 /** The most leads one gym keeps: the member list's own ceiling (§9.4). */
 export const LEADS_MAX_PER_GYM = 10000;
+
+/** Follow-up emails a lead gets, at most: day 0, day 3 and day 7 (RULINGS 2026-09-27). */
+export const LEAD_FOLLOW_UPS = 3;
+
+export const leadFollowUpSchema = z
+  .object({
+    /** How many staff have marked as sent, 0 to 3. */
+    sent: z.number().int().min(0).max(LEAD_FOLLOW_UPS),
+    /** The gym's day the next one is due (YYYY-MM-DD), or null when none is: the lead
+     *  is not New, has not said yes to email, or has had all three. */
+    dueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+    /** Due today or earlier, by the gym's clock. */
+    dueNow: z.boolean(),
+    lastSentAt: z.string().datetime({ offset: true }).nullable(),
+  })
+  .strict();
+export type LeadFollowUp = z.infer<typeof leadFollowUpSchema>;
 
 export const LEAD_STATUS_WORDS: Record<LeadStatus, string> = {
   new: "New",
@@ -68,6 +87,7 @@ export const leadSchema = z
     onList: z.boolean(),
     createdAt: z.string().datetime({ offset: true }),
     statusChangedAt: z.string().datetime({ offset: true }),
+    followUp: leadFollowUpSchema,
   })
   .strict();
 export type Lead = z.infer<typeof leadSchema>;
@@ -76,6 +96,8 @@ export const leadsQuerySchema = z
   .object({
     status: leadStatusSchema.optional(),
     q: z.string().max(LEAD_QUERY_MAX_CHARS).optional(),
+    /** Only leads due a follow-up email today or earlier. */
+    followUp: z.literal("due").optional(),
     cursor: z.string().max(400).optional(),
   })
   .strict();
@@ -89,6 +111,8 @@ export const leadCountsSchema = z
     on_trial: z.number().int().nonnegative(),
     joined: z.number().int().nonnegative(),
     lost: z.number().int().nonnegative(),
+    /** Leads due a follow-up email today or earlier. */
+    followUpsDue: z.number().int().nonnegative(),
   })
   .strict();
 export type LeadCounts = z.infer<typeof leadCountsSchema>;
@@ -146,6 +170,13 @@ export const joinLeadRequestSchema = z
   .refine((body) => !(body.entryId !== undefined && body.asNew !== undefined), { message: "one choice at a time" });
 export type JoinLeadRequest = z.infer<typeof joinLeadRequestSchema>;
 
+/** Staff sent follow-up email `step` from the gym's mailbox. The same request twice
+ *  changes nothing the second time. */
+export const leadFollowUpSentRequestSchema = z
+  .object({ step: z.number().int().min(1).max(LEAD_FOLLOW_UPS) })
+  .strict();
+export type LeadFollowUpSentRequest = z.infer<typeof leadFollowUpSentRequestSchema>;
+
 /** A record on the list that shares the lead's email or phone. */
 export const leadJoinCandidateSchema = z
   .object({
@@ -198,6 +229,7 @@ export const LEAD_WORDS = {
   notes_card: "The notes look like they hold a payment card number. We never store card details, so nothing was saved.",
   join_choose: "Somebody on your list has the same email or phone. Choose the record that is this person, or add them as someone new.",
   join_stale: "Your list changed while you were choosing. Choose again.",
+  follow_up_not_due: "This lead isn't waiting for that follow-up email. It may have been marked already, or the lead changed.",
   join_exact:
     "Your list already has a record with exactly this name and contact. If it is this person, choose it. If not, change the lead's name, email or phone first.",
 } as const;

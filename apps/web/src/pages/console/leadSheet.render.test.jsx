@@ -20,6 +20,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       updateLead: vi.fn(),
       deleteLead: vi.fn(),
       joinLead: vi.fn(),
+      markFollowUpSent: vi.fn(),
     },
   };
 });
@@ -48,6 +49,7 @@ const lead = (id, fullName, over = {}) =>
     onList: false,
     createdAt: '2026-09-20T10:00:00.000Z',
     statusChangedAt: '2026-09-20T10:00:00.000Z',
+    followUp: { sent: 0, dueOn: null, dueNow: false, lastSentAt: null },
     ...over,
   });
 const arjun = lead(ARJUN, 'Arjun Shah', { email: 'shah.family@example.com' });
@@ -449,5 +451,76 @@ describe('round one: nothing typed is lost or sent without Save', () => {
     await new Promise((r) => setTimeout(r, 20));
     expect(screen.queryByText(/Tom Reid/)).toBeNull();
     expect(screen.getByLabelText('Name').value).toBe('Arjun Shah');
+  });
+});
+
+describe('the follow-up emails (20c-ii): the gym sends them, the app reminds', () => {
+  const GYM_INFO = { name: 'Iron House', city: 'Leeds', postalAddress: '12 Kirkgate, Leeds' };
+  const dueTom = lead(TOM, 'Tom Reid', { mayEmail: true, followUp: { sent: 0, dueOn: '2026-09-27', dueNow: true, lastSentAt: null } });
+  const open = (l, props = {}) => {
+    orgService.getLead.mockResolvedValue({ data: { lead: l } });
+    render(sheet(l.id, { gym: GYM_INFO, ...props }));
+    return screen.findByRole('heading', { name: l.fullName });
+  };
+
+  it('the worst thing: a lead who never said yes, or who is no longer New, gets nothing to send', async () => {
+    const cases = [
+      lead(TOM, 'Tom Reid'),
+      lead(TOM, 'Tom Reid', { status: 'lost', mayEmail: true }),
+      lead(TOM, 'Tom Reid', { status: 'contacted', mayEmail: true, followUp: { sent: 1, dueOn: null, dueNow: false, lastSentAt: '2026-09-20T10:00:00.000Z' } }),
+      lead(TOM, 'Tom Reid', { status: 'joined', mayEmail: true, onList: true, entryId: OWN }),
+    ];
+    for (const l of cases) {
+      await open(l);
+      expect(screen.queryByRole('link', { name: 'Email Tom' }), l.status).toBeNull();
+      expect(screen.queryByRole('button', { name: /^Mark email/ }), l.status).toBeNull();
+      cleanup();
+    }
+  });
+
+  it("a due lead's Email opens the gym's own email to the SAVED address, even while another is typed", async () => {
+    await open(dueTom);
+    expect(screen.getByText('Email 1 of 3 is due today')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'someone.else@example.com' } });
+    const link = screen.getByRole('link', { name: 'Email Tom' });
+    const url = new URL(link.getAttribute('href'));
+    expect(url.protocol).toBe('mailto:');
+    expect(decodeURIComponent(url.pathname)).toBe('tom@example.com');
+    expect(url.searchParams.get('subject')).toBe('Thanks for asking about Iron House');
+    expect(url.searchParams.get('body')).toContain('Hi Tom,');
+  });
+
+  it('Mark as sent sends that step for that lead, shows the next, and keeps what was typed', async () => {
+    orgService.markFollowUpSent.mockResolvedValue({
+      data: { lead: { ...dueTom, followUp: { sent: 1, dueOn: '2026-09-30', dueNow: false, lastSentAt: new Date().toISOString() } } },
+    });
+    await open(dueTom);
+    fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '07700 900456' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Mark email 1 as sent' }));
+    await waitFor(() => expect(orgService.markFollowUpSent).toHaveBeenCalledWith(GYM, TOM, 1));
+    await screen.findByText('Email 2 of 3 is due Wed 30 Sept');
+    expect(screen.getByText('1 of 3 sent, the last today.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Mark email 2 as sent' })).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toBe('Email 1 marked as sent.');
+    expect(screen.getByLabelText('Phone').value).toBe('07700 900456');
+    expect(orgService.updateLead).not.toHaveBeenCalled();
+  });
+
+  it("the server's refusal is shown in its words", async () => {
+    orgService.markFollowUpSent.mockRejectedValue(
+      Object.assign(new Error('409'), {
+        response: { status: 409, data: { error: 'follow_up_not_due', message: "This lead isn't waiting for that follow-up email." } },
+      }),
+    );
+    await open(dueTom);
+    fireEvent.click(screen.getByRole('button', { name: 'Mark email 1 as sent' }));
+    expect((await screen.findByRole('alert')).textContent).toContain("This lead isn't waiting for that follow-up email.");
+  });
+
+  it('a lapsed gym sees what is due and can neither open the email nor mark it', async () => {
+    await open(dueTom, { readOnly: true });
+    expect(screen.queryByRole('link', { name: 'Email Tom' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Email Tom' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Mark email 1 as sent' }).disabled).toBe(true);
   });
 });

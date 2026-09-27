@@ -2575,8 +2575,8 @@ the phone app (the member web until it exists), with a phone notification once t
 phone app has push (spec Part 6 §6) — Kd's change to the plan, RULINGS 2026-09-22.
 `gym_member_messages`: gym · person · kind · the words as sent · when · read at ·
 expires (30 days). **Email only where the person has no app**: the member's invitation
-(9.12), a staff invitation (10.3), a lead's follow-ups (16.3), the owner's weekly
-summary — and the sign-in code. **No SMS** (RULINGS 2026-09-17). The one gym message
+(9.12), a staff invitation (10.3), the owner's weekly
+summary — and the sign-in code. (A lead's follow-ups go from the gym's own email, 16.3.) **No SMS** (RULINGS 2026-09-17). The one gym message
 of RULINGS 2026-09-07 (a new one replaces the old; gone after 7 days) becomes the
 inbox's pinned note.
 
@@ -2601,9 +2601,14 @@ notice.
 
 `gym_leads`: name · email · phone · where from · `new` · `contacted` · `on_trial` ·
 `joined` · `lost` · notes. Added by hand or by the upload (a list of leads is another
-kind of upload). Three follow-up EMAILS, fixed words, at once · day 3 · day 7, stopped
-the moment the status moves; they go through 9.12's checks, suppressions and
-unsubscribe, from the invites sub-domain, under the same caps. A lead who becomes a
+kind of upload). Three follow-up emails, day 0 · day 3 · day 7, **sent by the gym from
+its own email, not by the app** (RULINGS 2026-09-27): only a New lead ticked "Happy to
+hear from us" is due one; the first on the day of the tick, the second 3 days after the
+first is sent, the third 4 days after the second (`follow_up_due_on`, the gym's day);
+**Email {first name}** opens the gym's email program with fixed words and the gym's
+address, and staff press **Mark email N as sent**; an **Email due** chip and tag on the
+list. Moving the status or taking the tick off stops them; a new address starts them
+again. Nothing goes through our email account. A lead who becomes a
 member is the same person: the record is made from the lead.
 
 ### 16.4 At risk

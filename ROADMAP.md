@@ -194,7 +194,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 20b. [ ] **The eight automatic messages and their switches** (Settings → Messages; every number the gym's; the gym's ONE own line, no links): Welcome · Trial check-in · Trial ending · We miss you · Membership ending · Payment overdue (after 18a) · Birthday · Milestone.
    - 20c. **Leads** (split 2026-09-25 in three, RULINGS that day): the small list, and three follow-up EMAILS through 3b-i's checks, caps and unsubscribe.
      - 20c-i. [x] **The Leads list** — merged 2026-09-25 (PR #116).
-     - 20c-ii. [ ] **The three follow-up emails** (at once, day 3, day 7), stopped when the status moves; only to leads ticked "Happy to hear from us" (RULINGS 2026-09-25).
+     - 20c-ii. [ ] **The three follow-up emails, sent by the gym from its own email** (day 0, 3, 7): the app reminds (Email due), opens the gym's email with the words written, and keeps what was marked sent; only New leads ticked "Happy to hear from us" (RULINGS 2026-09-25, 2026-09-27).
      - 20c-iii. [ ] **Leads from a file**: the member upload's reader, its own columns and preview.
      - 20c-iv. [ ] **Each gym's own page with its lead form** (RULINGS 2026-09-25): a page of ours the gym links to from its website, Instagram or a poster, and a box it may paste into its own site; spam protection; the full review (it takes in strangers' data).
    - 20d. [ ] **At risk, and the owner's weekly summary** — it takes the place of item 2's "slipping away"; it reads visits (after 16a).
