@@ -2,76 +2,84 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>A member's page — dark, computer</title>
+<title>A member's page — in the app, More open, dark, computer</title>
 <script src="./support.js"></script>
 </head>
 <body>
 <x-dc>
 <!--HELMET-->
+<style>
+.facts{margin:0;display:grid;grid-template-columns:170px minmax(0,1fr);row-gap:10px;column-gap:16px}
+.facts dt{font-size:14px;line-height:20px;color:var(--t2)}
+.facts dd{margin:0;font-size:14px;line-height:20px;font-weight:500}
+.menu{position:absolute;min-width:300px;background:var(--sheet);border:1px solid var(--card-line);border-radius:14px;box-shadow:var(--pop);padding:6px;display:flex;flex-direction:column}
+.mi{display:flex;align-items:flex-start;gap:12px;min-height:44px;padding:10px 12px;border-radius:10px;color:var(--t1);font-size:15px;font-weight:500;background:transparent;border:0;text-align:left}
+</style>
 <div data-root="1" data-fixed-h="1000" class="t-dark" style="width: 1440px; height: %H%px; display: flex; box-sizing: border-box; overflow: hidden; position: relative">
 <!--RAIL:members-->
 <main style="flex-grow: 1; min-width: 0; box-sizing: border-box; padding: 36px 48px 48px; display: flex; flex-direction: column; gap: 24px">
 <header style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px">
-<div style="display: flex; flex-direction: column; gap: 6px"><h1 class="h1">Members</h1><p class="sub">Iron House Gym · 146 of 500 members</p></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><h1 class="h1">Members</h1><p class="sub">Iron House Gym · 146 of 500 members in the app</p></div>
 <div style="display: flex; gap: 8px"><span class="btn btn-s">Import</span><span class="btn btn-p">Add member</span></div>
 </header>
-<div class="utabs"><span class="utab utab-on">Your list</span><span class="utab">Using the app</span></div>
 <div class="card" style="height: 760px"></div>
 </main>
-
 <div style="position: absolute; inset: 0; background: var(--scrim)"></div>
-
 <aside role="dialog" aria-modal="true" aria-labelledby="person-name" class="sheet" style="position: absolute; top: 0; right: 0; bottom: 0; width: 540px; box-sizing: border-box; border-left: 1px solid var(--card-line); display: flex; flex-direction: column">
-<div style="padding: 28px 28px 20px; display: flex; flex-direction: column; gap: 16px; border-bottom: 1px solid var(--line)">
+<div style="padding: 28px 28px 20px; display: flex; flex-direction: column; gap: 16px; border-bottom: 1px solid var(--line); position: relative">
 <div style="display: flex; align-items: flex-start; gap: 12px">
 <div style="display: flex; flex-direction: column; gap: 8px; flex-grow: 1; min-width: 0">
-<h2 id="person-name" style="margin: 0; font-size: 26px; line-height: 32px; font-weight: 700; font-stretch: 106%">Sofia Alvarez</h2>
-<span><span class="tag tag-plain">Invited</span></span>
+<h2 id="person-name" style="margin: 0; font-size: 26px; line-height: 32px; font-weight: 700; font-stretch: 106%">Olivia Bennett</h2>
+<span><span class="tag tag-good">In the app</span></span>
 </div>
 <button type="button" class="icon-btn" aria-label="Close"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
 </div>
 <div style="display: flex; gap: 8px">
-<button type="button" class="btn btn-p"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"></path></svg>Edit</button>
-<button type="button" class="btn btn-s"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect width="20" height="16" x="2" y="4" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg>Send again</button>
-<button type="button" class="btn btn-s" aria-haspopup="menu">More<svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+<button type="button" class="btn btn-p"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"></path><path d="m15 5 4 4"></path></svg>Edit</button>
+<button type="button" class="btn btn-s" aria-haspopup="menu" aria-expanded="true">More<svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+</div>
+<div class="menu" role="menu" style="top: 142px; left: 104px">
+<button type="button" role="menuitem" class="mi"><span class="t2" style="display: flex; padding-top: 2px"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="22" x2="16" y1="11" y2="11"></line></svg></span><span style="display: flex; flex-direction: column; gap: 2px"><span>Move to past members</span><span class="s13 t3" style="font-weight: 400">When they have left your gym</span></span></button>
+<button type="button" role="menuitem" class="mi"><span class="t2" style="display: flex; padding-top: 2px"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 6 4-4 4 4"></path><path d="M12 2v10.3a4 4 0 0 1-1.172 2.872L4 22"></path><path d="m20 22-5-5"></path></svg></span><span style="display: flex; flex-direction: column; gap: 2px"><span>Merge duplicate</span><span class="s13 t3" style="font-weight: 400">When this person is on your list twice</span></span></button>
+<div style="height: 1px; background: var(--line); margin: 4px 8px"></div>
+<button type="button" role="menuitem" class="mi" style="color: var(--bad)"><span style="display: flex; padding-top: 2px"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="17" x2="22" y1="8" y2="13"></line><line x1="22" x2="17" y1="8" y2="13"></line></svg></span><span style="display: flex; flex-direction: column; gap: 2px"><span>Remove from app</span><span class="s13 t3" style="font-weight: 400">They stay on your list</span></span></button>
 </div>
 </div>
-
 <div style="padding: 8px 28px 28px; display: flex; flex-direction: column">
 <section style="display: flex; flex-direction: column; padding: 16px 0; border-bottom: 1px solid var(--line)">
 <h3 class="s13 w6 t3" style="margin: 0 0 6px">Contact</h3>
-<dl style="margin: 0; display: grid; grid-template-columns: 170px minmax(0, 1fr); row-gap: 10px; column-gap: 16px">
-<dt class="s14 t2">Email</dt><dd class="s14 w5" style="margin: 0">sofia.alvarez@example.com</dd>
-<dt class="s14 t2">Phone</dt><dd class="s14 w5" style="margin: 0">+1 512 555 0192</dd>
+<dl class="facts">
+<dt>Email</dt><dd>olivia.bennett@example.com</dd>
+<dt>Phone</dt><dd><span style="display: flex; flex-direction: column; gap: 2px">+1 512 555 0107<span class="s13 t3" style="font-weight: 400">Changed by hand</span></span></dd>
 </dl>
 </section>
 <section style="display: flex; flex-direction: column; padding: 16px 0; border-bottom: 1px solid var(--line)">
 <h3 class="s13 w6 t3" style="margin: 0 0 6px">Membership</h3>
-<dl style="margin: 0; display: grid; grid-template-columns: 170px minmax(0, 1fr); row-gap: 10px; column-gap: 16px">
-<dt class="s14 t2">Member number</dt><dd class="s14 w5" style="margin: 0">IH-2041</dd>
-<dt class="s14 t2">Status</dt><dd class="s14 w5" style="margin: 0">Active</dd>
-<dt class="s14 t2">Membership</dt><dd class="s14 w5" style="margin: 0">Gold</dd>
-<dt class="s14 t2">Payment status</dt><dd class="s14 w5" style="margin: 0">Overdue</dd>
-<dt class="s14 t2">Join date</dt><dd class="s14 w5" style="margin: 0">14 Mar 2025</dd>
-<dt class="s14 t2">Renews</dt><dd class="s14 w5" style="margin: 0">29 Sep 2026</dd>
-<dt class="s14 t2">Date of birth</dt><dd class="s14 w5" style="margin: 0">3 Jun 1994</dd>
+<dl class="facts">
+<dt>Member number</dt><dd>IH-1027</dd>
+<dt>Status</dt><dd>Active</dd>
+<dt>Membership</dt><dd>Gold</dd>
+<dt>Payment status</dt><dd>Paid</dd>
+<dt>Join date</dt><dd>14 Mar 2025</dd>
+<dt>Renews</dt><dd>3 Oct 2026</dd>
+<dt>Date of birth</dt><dd>3 Jun 1994</dd>
 </dl>
 </section>
 <section style="display: flex; flex-direction: column; padding: 16px 0; border-bottom: 1px solid var(--line)">
-<h3 class="s13 w6 t3" style="margin: 0 0 6px">Custom fields <span class="w5">· extra columns from your file</span></h3>
-<dl style="margin: 0; display: grid; grid-template-columns: 170px minmax(0, 1fr); row-gap: 10px; column-gap: 16px">
-<dt class="s14 t2">Locker</dt><dd class="s14 w5" style="margin: 0">42</dd>
-<dt class="s14 t2">Referred by</dt><dd class="s14 w5" style="margin: 0">Marcus Reed</dd>
-<dt class="s14 t2">Goal</dt><dd class="s14 w5" style="margin: 0">Strength</dd>
+<h3 class="s13 w6 t3" style="margin: 0 0 6px">Custom fields</h3>
+<dl class="facts">
+<dt>Locker</dt><dd>42</dd>
+<dt>Referred by</dt><dd>Marcus Reed</dd>
 </dl>
 </section>
 <section style="display: flex; flex-direction: column; padding: 16px 0">
-<h3 class="s13 w6 t3" style="margin: 0 0 6px">In the app</h3>
-<dl style="margin: 0; display: grid; grid-template-columns: 170px minmax(0, 1fr); row-gap: 10px; column-gap: 16px">
-<dt class="s14 t2">Uses the app</dt><dd class="s14 w5" style="margin: 0">No</dd>
-<dt class="s14 t2">Invitation</dt><dd class="s14 w5" style="margin: 0">Invited on 22 Sep 2026</dd>
+<h3 class="s13 w6 t3" style="margin: 0 0 6px">App</h3>
+<dl class="facts">
+<dt>In the app since</dt><dd>12 Aug 2026</dd>
+<dt>Visits</dt><dd>14 · last 25 Sep</dd>
 </dl>
 </section>
+<p class="s13 t3" style="margin: 4px 0 0">Changed by hand: Phone. An import asks before it writes over these.</p>
 </div>
 </aside>
 </div>

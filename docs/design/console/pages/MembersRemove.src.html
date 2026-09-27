@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Remove from the app — the box that names who, dark, computer</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<style>
+.who{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:16px;row-gap:2px;padding:10px 0;border-top:1px solid var(--line)}
+</style>
+<div data-root="1" data-fixed-h="900" class="t-dark" style="width: 1440px; height: %H%px; display: flex; box-sizing: border-box; overflow: hidden; position: relative">
+<!--RAIL:members-->
+<main style="flex-grow: 1; min-width: 0; box-sizing: border-box; padding: 36px 48px 48px; display: flex; flex-direction: column; gap: 24px">
+<header style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px">
+<div style="display: flex; flex-direction: column; gap: 6px"><h1 class="h1">Members</h1><p class="sub">Iron House Gym · 146 of 500 members in the app</p></div>
+<div style="display: flex; gap: 8px"><span class="btn btn-s">Import</span><span class="btn btn-p">Add member</span></div>
+</header>
+<div class="card" style="height: 660px"></div>
+</main>
+<div style="position: absolute; inset: 0; background: var(--scrim)"></div>
+<div role="dialog" aria-modal="true" aria-labelledby="remove-title" class="sheet" style="position: absolute; top: 96px; left: 50%; margin-left: -300px; width: 600px; box-sizing: border-box; border: 1px solid var(--card-line); border-radius: 20px; display: flex; flex-direction: column; overflow: hidden">
+<div style="padding: 24px 28px 8px; display: flex; align-items: center; gap: 12px">
+<h2 id="remove-title" style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 700; flex-grow: 1">Remove from the app</h2>
+<button type="button" class="icon-btn" aria-label="Close"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
+</div>
+<div style="padding: 8px 28px 24px; display: flex; flex-direction: column; gap: 18px">
+<span class="s14 t2">You selected 4 members.</span>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="display: flex; align-items: baseline; gap: 10px"><span class="big num">2</span><span class="s16 t2">will be removed from the app</span></div>
+<div class="s14">Chloe Martin and Ben Cole</div>
+</div>
+<span class="s14 t2">They stay on your list. They keep their workouts and the free app, and the app tells them they’re no longer a member of Iron House Gym.</span>
+<div style="border: 1px solid var(--card-line); border-radius: 14px; padding: 6px 16px; display: flex; flex-direction: column">
+<div class="s14 w6" style="padding: 8px 0 4px">2 won’t</div>
+<div class="who"><span class="s14 w5">Not in the app</span><span class="s14 w5 num">1</span><span class="s13 t2" style="grid-column: 1 / -1">Ava Thompson</span></div>
+<div class="who"><span class="s14 w5">Complimentary (owner or staff)</span><span class="s14 w5 num">1</span><span class="s13 t2" style="grid-column: 1 / -1">Jordan Hayes</span></div>
+</div>
+</div>
+<div style="padding: 16px 28px; display: flex; align-items: center; justify-content: flex-end; gap: 12px; border-top: 1px solid var(--line); background: var(--card)">
+<button type="button" class="btn btn-s">Cancel</button>
+<button type="button" class="btn btn-danger"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="22" x2="16" y1="11" y2="11"></line></svg>Remove 2 from the app</button>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

@@ -2,79 +2,81 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Members, your list — dark, phone</title>
+<title>Members — the one list, dark, phone</title>
 <script src="./support.js"></script>
 </head>
 <body>
 <x-dc>
 <!--HELMET-->
+<style>
+.prow{display:grid;grid-template-columns:44px minmax(0,1fr) 18px;column-gap:8px;align-items:start;padding:12px 12px 12px 4px;border-top:1px solid var(--line);color:var(--t1)}
+.prow .tickcell{display:flex;align-items:center;justify-content:center;width:44px;height:44px}
+.prow .body{display:flex;flex-direction:column;gap:3px;min-width:0;padding-top:4px}
+</style>
 <div data-root="1" class="t-dark" style="width: 390px; height: %H%px; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden">
 <!--TOPBAR-->
-<main style="flex-grow: 1; box-sizing: border-box; padding: 20px 16px 24px; display: flex; flex-direction: column; gap: 16px">
+<main style="flex-grow: 1; box-sizing: border-box; padding: 20px 16px 24px; display: flex; flex-direction: column; gap: 20px">
 
 <div style="display: flex; flex-direction: column; gap: 4px">
 <h1 class="h1p">Members</h1>
-<p class="sub">146 of 500 members</p>
+<p class="sub">146 of 500 members in the app</p>
 </div>
-<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
 <button type="button" class="btn btn-s btn-lg"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line></svg>Import</button>
 <button type="button" class="btn btn-p btn-lg"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" x2="19" y1="8" y2="14"></line><line x1="22" x2="16" y1="11" y2="11"></line></svg>Add member</button>
 </div>
 
-<div class="utabs" role="tablist" aria-label="Members">
-<button type="button" role="tab" aria-selected="true" class="utab utab-on">Your list</button>
-<button type="button" role="tab" aria-selected="false" class="utab">Using the app</button>
-</div>
+<section class="callout" aria-labelledby="check-title-p" style="flex-direction: column; gap: 8px">
+<h2 id="check-title-p" class="s15 w6" style="margin: 0; display: flex; align-items: center; gap: 8px"><span style="color: var(--warn); display: flex"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg></span>Check these</h2>
+<a href="#filter-wrong-email" class="s14" style="display: flex; justify-content: space-between; align-items: center; min-height: 44px; color: var(--t1)"><span>1 invitation reached the wrong person</span><span class="w6 lk">See who</span></a>
+<a href="#filter-not-on-list" class="s14" style="display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 44px; color: var(--t1); border-top: 1px solid color-mix(in srgb, var(--warn) 25%, transparent)"><span>3 people use the app but aren’t on your list</span><span class="w6 lk" style="flex-shrink: 0">See who</span></a>
+</section>
 
-<div class="callout" role="note">
-<span style="color: var(--warn); display: flex; padding-top: 1px"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg></span>
-<div style="display: flex; flex-direction: column; gap: 4px; flex-grow: 1; min-width: 0">
-<div class="s15 w6">An invitation reached the wrong person</div>
-<div class="s14 t2">Whoever gets email at this address said they aren’t your member. Check the email address you have for them.</div>
-<div class="s14" style="padding-top: 4px"><span class="w6">Jacob Kim</span><span class="t2"> · jacob.kim@example.com</span></div>
-</div>
-</div>
-
-<label class="search"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><input class="input" type="search" placeholder="Search" aria-label="Search your members"></label>
-<div style="display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px">
-<button type="button" class="btn btn-s btn-lg" aria-haspopup="dialog"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><line x1="21" x2="14" y1="4" y2="4"></line><line x1="10" x2="3" y1="4" y2="4"></line><line x1="21" x2="12" y1="12" y2="12"></line><line x1="8" x2="3" y1="12" y2="12"></line><line x1="21" x2="16" y1="20" y2="20"></line><line x1="12" x2="3" y1="20" y2="20"></line><line x1="14" x2="14" y1="2" y2="6"></line><line x1="8" x2="8" y1="10" y2="14"></line><line x1="16" x2="16" y1="18" y2="22"></line></svg>Filter · 2</button>
-<button type="button" class="btn btn-soft btn-lg"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect width="20" height="16" x="2" y="4" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg>Invite 41 members</button>
-</div>
-<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
-<button type="button" class="chip chip-on" aria-label="Stop showing only Active">Active<svg class="ic" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
-<button type="button" class="chip chip-on" aria-label="Stop showing only Gold">Gold<svg class="ic" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
-<button type="button" class="btn btn-sm" style="color: var(--link)">Clear</button>
-<span class="s14 t2" style="margin-left: auto">118 match</span>
+<label class="search"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><input class="input" type="search" placeholder="Search" aria-label="Search your members by name, email, phone or member number"></label>
+<div style="display: flex; align-items: center; gap: 12px">
+<button type="button" class="btn btn-s btn-lg" aria-haspopup="dialog"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><line x1="21" x2="14" y1="4" y2="4"></line><line x1="10" x2="3" y1="4" y2="4"></line><line x1="21" x2="12" y1="12" y2="12"></line><line x1="8" x2="3" y1="12" y2="12"></line><line x1="21" x2="16" y1="20" y2="20"></line><line x1="12" x2="3" y1="20" y2="20"></line><line x1="14" x2="14" y1="2" y2="6"></line><line x1="8" x2="8" y1="10" y2="14"></line><line x1="16" x2="16" y1="18" y2="22"></line></svg>Filter</button>
+<div style="flex-grow: 1"></div>
+<span class="s14 t2 num">312 members</span>
 </div>
 
 <div class="card" style="overflow: hidden">
-<a href="#person" style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; color: var(--t1)">
-<span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1; min-width: 0"><span class="s15 w6 ell">Olivia Bennett</span><span class="s13 t2 ell">olivia.bennett@example.com</span><span class="s13 t3">Active · Gold · Renews 3 Oct · Paid</span><span style="padding-top: 5px"><span class="tag tag-good">Uses the app</span></span></span>
-<span class="t3" style="display: flex"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span>
+<label class="s14 w6 t2" style="display: flex; align-items: center; gap: 8px; padding: 4px 12px 4px 4px">
+<span style="display: flex; align-items: center; justify-content: center; width: 44px; height: 44px"><span class="check" role="checkbox" aria-checked="false"></span></span>Select everyone shown
+</label>
+
+<a href="#person" class="prow">
+<span class="tickcell"><span class="check" role="checkbox" aria-checked="false" aria-label="Select Olivia Bennett"></span></span>
+<span class="body"><span class="s15 w6 ell">Olivia Bennett</span><span class="s13 t2 ell">olivia.bennett@example.com</span><span class="s13 t2">Active · Gold · Renews 3 Oct · Paid</span><span style="padding-top: 4px"><span class="tag tag-good">In the app</span></span></span>
+<span class="t3" style="display: flex; padding-top: 16px"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span>
 </a>
-<a href="#person" style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-top: 1px solid var(--line); color: var(--t1)">
-<span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1; min-width: 0"><span class="s15 w6 ell">Sofia Alvarez</span><span class="s13 t2 ell">sofia.alvarez@example.com</span><span class="s13 t3">Active · Gold · Renews 29 Sep · Overdue</span><span style="padding-top: 5px"><span class="tag tag-plain">Invited</span></span></span>
-<span class="t3" style="display: flex"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span>
+<a href="#person" class="prow">
+<span class="tickcell"><span class="check" role="checkbox" aria-checked="false" aria-label="Select Sofia Alvarez"></span></span>
+<span class="body"><span class="s15 w6 ell">Sofia Alvarez</span><span class="s13 t2 ell">sofia.alvarez@example.com</span><span class="s13 t2">Active · Gold · Renews 29 Sep · Overdue</span><span style="padding-top: 4px; display: flex; align-items: center; gap: 8px"><span class="tag tag-plain">Invited</span><span class="s13 t3">22 Sep</span></span></span>
+<span class="t3" style="display: flex; padding-top: 16px"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span>
 </a>
-<a href="#person" style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-top: 1px solid var(--line); color: var(--t1)">
-<span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1; min-width: 0"><span class="s15 w6 ell">Emma Clarke</span><span class="s13 t2 ell">emma.clarke@example.com</span><span class="s13 t3">Active · Gold · Ends 30 Sep · Paid</span><span style="padding-top: 5px"><span class="tag tag-warn">Invited · email didn’t arrive</span></span><span class="s13" style="display: flex; gap: 6px; color: var(--warn); padding-top: 4px"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" style="margin-top: 2px"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>This email bounced: the address doesn’t take email. Check it with the person.</span></span>
-<span class="t3" style="display: flex"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span>
+<a href="#person" class="prow">
+<span class="tickcell"><span class="check" role="checkbox" aria-checked="false" aria-label="Select Liam Hughes"></span></span>
+<span class="body"><span class="s15 w6 ell">Liam Hughes</span><span class="s13 t2 ell">+1 512 555 0148</span><span class="s13 t2">Active · Gold · Renews 7 Oct · Paid</span><span style="padding-top: 4px; display: flex; align-items: center; gap: 8px"><span class="tag tag-plain">Not invited</span><span class="s13 t3">No email address</span></span></span>
+<span class="t3" style="display: flex; padding-top: 16px"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span>
 </a>
-<a href="#person" style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-top: 1px solid var(--line); color: var(--t1)">
-<span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1; min-width: 0"><span class="s15 w6 ell">Liam Hughes</span><span class="s13 t2 ell">+1 512 555 0148</span><span class="s13 t3">Active · Gold · Renews 7 Oct · Paid</span><span style="padding-top: 5px"><span class="tag tag-plain">No email</span></span></span>
-<span class="t3" style="display: flex"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span>
+<a href="#person" class="prow">
+<span class="tickcell"><span class="check" role="checkbox" aria-checked="false" aria-label="Select Emma Clarke"></span></span>
+<span class="body"><span class="s15 w6 ell">Emma Clarke</span><span class="s13 t2 ell">emma.clarke@example.com</span><span class="s13 t2">Active · Gold · Ends 30 Sep · Paid</span><span style="padding-top: 4px"><span class="tag tag-warn">Email didn’t arrive</span></span><span class="s13" style="display: flex; gap: 6px; color: var(--warn); padding-top: 2px"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" style="margin-top: 2px"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>The email bounced. Check the address with Emma.</span></span>
+<span class="t3" style="display: flex; padding-top: 16px"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span>
 </a>
-<a href="#person" style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-top: 1px solid var(--line); color: var(--t1)">
-<span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1; min-width: 0"><span class="s15 w6 ell">Noah Patel</span><span class="s13 t2 ell">noah.patel@example.com</span><span class="s13 t3">Active · Gold · Renews 15 Oct · Paid</span><span style="padding-top: 5px"><span class="tag tag-good">Joined</span></span></span>
-<span class="t3" style="display: flex"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span>
+<a href="#person" class="prow">
+<span class="tickcell"><span class="check" role="checkbox" aria-checked="false" aria-label="Select Jacob Kim"></span></span>
+<span class="body"><span class="s15 w6 ell">Jacob Kim</span><span class="s13 t2 ell">jacob.kim@example.com</span><span class="s13 t2">Active · Gold · Renews 18 Oct · Paid</span><span style="padding-top: 4px"><span class="tag tag-bad">Wrong email</span></span><span class="s13" style="display: flex; gap: 6px; color: var(--bad); padding-top: 2px"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" style="margin-top: 2px"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>Whoever gets email at this address says they aren’t Jacob. Check the address with Jacob.</span></span>
+<span class="t3" style="display: flex; padding-top: 16px"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span>
 </a>
-<a href="#person" style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-top: 1px solid var(--line); color: var(--t1)">
-<span style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1; min-width: 0"><span class="s15 w6 ell">Ava Thompson</span><span class="s13 t2 ell">ava.thompson@example.com</span><span class="s13 t3">Active · Gold · Renews 21 Oct · Paid</span><span style="padding-top: 5px"><span class="tag tag-plain">Not invited</span></span></span>
-<span class="t3" style="display: flex"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span>
+<a href="#person" class="prow">
+<span class="tickcell"><span class="check" role="checkbox" aria-checked="false" aria-label="Select Ben Cole"></span></span>
+<span class="body"><span class="s15 w6 ell">Ben Cole</span><span class="s13 t2 ell">ben.cole@example.com</span><span class="s13 t2">Cancelled · Gold · Ended 15 Sep</span><span style="padding-top: 4px"><span class="tag tag-plain">Removed from app · 26 Sep</span></span></span>
+<span class="t3" style="display: flex; padding-top: 16px"><svg class="ic" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></span>
 </a>
 </div>
-<button type="button" class="btn btn-s btn-lg">Load more</button>
 
+<button type="button" class="btn btn-s btn-lg" style="width: 100%">Load more</button>
 </main>
 <!--TABBAR:members-->
 </div>

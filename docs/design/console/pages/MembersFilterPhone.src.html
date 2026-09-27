@@ -2,68 +2,65 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Filter your list — dark, phone</title>
+<title>Members — the Filter, from the bottom, dark, phone</title>
 <script src="./support.js"></script>
 </head>
 <body>
 <x-dc>
 <!--HELMET-->
-<div data-root="1" data-fixed-h="844" class="t-dark" style="width: 390px; height: %H%px; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden; position: relative">
+<style>
+.grp{display:flex;flex-direction:column;gap:8px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips .chip{height:44px}
+</style>
+<div data-root="1" data-fixed-h="1180" class="t-dark" style="width: 390px; height: %H%px; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden; position: relative">
 <!--TOPBAR-->
-<main style="flex-grow: 1; box-sizing: border-box; padding: 20px 16px 24px; display: flex; flex-direction: column; gap: 16px">
-<div style="display: flex; flex-direction: column; gap: 4px"><h1 class="h1p">Members</h1><p class="sub">146 of 500 members</p></div>
-<div class="card" style="height: 220px"></div>
+<main style="flex-grow: 1; box-sizing: border-box; padding: 20px 16px; display: flex; flex-direction: column; gap: 4px">
+<h1 class="h1p">Members</h1>
+<p class="sub">146 of 500 members in the app</p>
 </main>
-<!--TABBAR:members-->
-
 <div style="position: absolute; inset: 0; background: var(--scrim)"></div>
-
-<div role="dialog" aria-modal="true" aria-labelledby="filter-title" class="sheet" style="position: absolute; left: 0; right: 0; bottom: 0; box-sizing: border-box; border-radius: 24px 24px 0 0; border-top: 1px solid var(--card-line); padding: 8px 16px 20px; display: flex; flex-direction: column; gap: 18px">
-<div aria-hidden="true" style="width: 40px; height: 4px; border-radius: 2px; background: var(--ctl-line); align-self: center"></div>
-<div style="display: flex; align-items: center; gap: 12px">
-<h2 id="filter-title" style="margin: 0; font-size: 20px; line-height: 26px; font-weight: 700; flex-grow: 1">Filter</h2>
-<button type="button" class="icon-btn" aria-label="Close" style="width: 44px; height: 44px"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
+<div role="dialog" aria-modal="true" aria-labelledby="fp-title" class="sheet" style="position: absolute; left: 0; right: 0; bottom: 0; top: 120px; border-radius: 20px 20px 0 0; border-top: 1px solid var(--card-line); display: flex; flex-direction: column">
+<div style="width: 40px; height: 4px; border-radius: 2px; background: var(--ctl-line); align-self: center; margin-top: 10px"></div>
+<div style="padding: 8px 8px 0 16px; display: flex; align-items: center"><h2 id="fp-title" style="margin: 0; font-size: 20px; line-height: 26px; font-weight: 700; flex-grow: 1">Filter</h2><button type="button" class="icon-btn" style="width: 44px; height: 44px" aria-label="Close"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></div>
+<div style="padding: 8px 16px 16px; display: flex; flex-direction: column; gap: 18px; flex-grow: 1">
+<div class="grp" role="radiogroup" aria-labelledby="fp-show"><span id="fp-show" class="s14 w6 t2">Show</span><div class="chips">
+<button type="button" role="radio" aria-checked="true" class="chip chip-on">Members <span class="n">312</span></button>
+<button type="button" role="radio" aria-checked="false" class="chip">Past members <span class="n">40</span></button>
+<button type="button" role="radio" aria-checked="false" class="chip">Not on your list <span class="n">3</span></button>
+</div></div>
+<div class="grp"><span class="s14 w6 t2">App</span><div class="chips">
+<button type="button" class="chip">In the app <span class="n">146</span></button>
+<button type="button" class="chip">Invited <span class="n">82</span></button>
+<button type="button" class="chip">Not invited <span class="n">58</span></button>
+<button type="button" class="chip">Email didn’t arrive <span class="n">4</span></button>
+<button type="button" class="chip">Wrong email <span class="n">1</span></button>
+<button type="button" class="chip">Waiting for a place <span class="n">1</span></button>
+<button type="button" class="chip">Declined <span class="n">6</span></button>
+<button type="button" class="chip">Unsubscribed <span class="n">3</span></button>
+<button type="button" class="chip">Removed from app <span class="n">11</span></button>
+</div></div>
+<div class="grp"><span class="s14 w6 t2">Status</span><div class="chips">
+<button type="button" class="chip chip-on">Active <span class="n">248</span></button>
+<button type="button" class="chip">Expired <span class="n">38</span></button>
+<button type="button" class="chip">Frozen <span class="n">12</span></button>
+<button type="button" class="chip">Cancelled <span class="n">10</span></button>
+<button type="button" class="chip">No status <span class="n">4</span></button>
+</div></div>
+<div class="grp"><span class="s14 w6 t2">Membership</span><div class="chips">
+<button type="button" class="chip chip-on">Gold <span class="n">160</span></button>
+<button type="button" class="chip">Silver <span class="n">110</span></button>
+<button type="button" class="chip">Student <span class="n">24</span></button>
+<button type="button" class="chip">Day pass <span class="n">18</span></button>
+</div></div>
+<div class="grp"><span class="s14 w6 t2">Payment status</span><div class="chips">
+<button type="button" class="chip">Paid <span class="n">262</span></button>
+<button type="button" class="chip">Overdue <span class="n">20</span></button>
+<button type="button" class="chip">Unpaid <span class="n">10</span></button>
+<button type="button" class="chip">No payment status <span class="n">20</span></button>
+</div></div>
 </div>
-<div style="display: flex; flex-direction: column; gap: 8px">
-<span class="s13 w6 t3">Status</span>
-<div role="group" aria-label="Status" style="display: flex; flex-wrap: wrap; gap: 8px">
-<button type="button" class="chip chip-on" aria-pressed="true">Active <span class="n">248</span></button>
-<button type="button" class="chip" aria-pressed="false">Expired <span class="n">88</span></button>
-<button type="button" class="chip" aria-pressed="false">Frozen <span class="n">12</span></button>
-<button type="button" class="chip" aria-pressed="false">No status <span class="n">4</span></button>
-</div>
-</div>
-<div style="display: flex; flex-direction: column; gap: 8px">
-<span class="s13 w6 t3">Membership</span>
-<div role="group" aria-label="Membership" style="display: flex; flex-wrap: wrap; gap: 8px">
-<button type="button" class="chip chip-on" aria-pressed="true">Gold <span class="n">160</span></button>
-<button type="button" class="chip" aria-pressed="false">Silver <span class="n">110</span></button>
-<button type="button" class="chip" aria-pressed="false">Student <span class="n">64</span></button>
-<button type="button" class="chip" aria-pressed="false">Day pass <span class="n">18</span></button>
-</div>
-</div>
-<div style="display: flex; flex-direction: column; gap: 8px">
-<span class="s13 w6 t3">Payment</span>
-<div role="group" aria-label="Payment" style="display: flex; flex-wrap: wrap; gap: 8px">
-<button type="button" class="chip" aria-pressed="false">Paid <span class="n">262</span></button>
-<button type="button" class="chip" aria-pressed="false">Overdue <span class="n">20</span></button>
-<button type="button" class="chip" aria-pressed="false">No payment status <span class="n">70</span></button>
-</div>
-</div>
-<div style="display: flex; flex-direction: column; gap: 8px">
-<span class="s13 w6 t3">App</span>
-<div role="group" aria-label="App" style="display: flex; flex-wrap: wrap; gap: 8px">
-<button type="button" class="chip" aria-pressed="false">In the app <span class="n">146</span></button>
-<button type="button" class="chip" aria-pressed="false">Not in the app <span class="n">206</span></button>
-</div>
-</div>
-<div style="display: flex; flex-direction: column; gap: 8px">
-<span class="s13 w6 t3">Show</span>
-<div role="group" aria-label="Show" style="display: flex; flex-wrap: wrap; gap: 8px">
-<button type="button" class="chip" aria-pressed="false">Past members <span class="n">40</span></button>
-</div>
-</div>
-<div style="display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding-top: 4px">
+<div style="padding: 12px 16px 20px; display: grid; grid-template-columns: 1fr auto; gap: 8px; border-top: 1px solid var(--line)">
 <button type="button" class="btn btn-p btn-lg">Show 118 members</button>
 <button type="button" class="btn btn-s btn-lg">Clear</button>
 </div>

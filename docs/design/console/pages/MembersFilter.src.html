@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Members — the Filter box, dark, computer</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<style>
+.grp{display:flex;flex-direction:column;gap:10px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+</style>
+<div data-root="1" data-fixed-h="1000" class="t-dark" style="width: 1440px; height: %H%px; display: flex; box-sizing: border-box; overflow: hidden; position: relative">
+<!--RAIL:members-->
+<main style="flex-grow: 1; min-width: 0; box-sizing: border-box; padding: 36px 48px 48px; display: flex; flex-direction: column; gap: 24px">
+<header style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px">
+<div style="display: flex; flex-direction: column; gap: 6px"><h1 class="h1">Members</h1><p class="sub">Iron House Gym · 146 of 500 members in the app</p></div>
+<div style="display: flex; gap: 8px"><span class="btn btn-s">Import</span><span class="btn btn-p">Add member</span></div>
+</header>
+<div class="card" style="height: 760px"></div>
+</main>
+<div style="position: absolute; inset: 0; background: var(--scrim)"></div>
+<div role="dialog" aria-modal="true" aria-labelledby="filter-title" class="sheet" style="position: absolute; top: 64px; left: 50%; margin-left: -330px; width: 660px; box-sizing: border-box; border: 1px solid var(--card-line); border-radius: 20px; display: flex; flex-direction: column; overflow: hidden">
+<div style="padding: 24px 28px 8px; display: flex; align-items: center; gap: 12px">
+<h2 id="filter-title" style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 700; flex-grow: 1">Filter</h2>
+<button type="button" class="icon-btn" aria-label="Close"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
+</div>
+<div style="padding: 12px 28px 24px; display: flex; flex-direction: column; gap: 22px">
+<div class="grp" role="radiogroup" aria-labelledby="g-show">
+<span id="g-show" class="s14 w6 t2">Show</span>
+<div class="chips">
+<button type="button" role="radio" aria-checked="true" class="chip chip-on">Members <span class="n">312</span></button>
+<button type="button" role="radio" aria-checked="false" class="chip">Past members <span class="n">40</span></button>
+<button type="button" role="radio" aria-checked="false" class="chip">Not on your list <span class="n">3</span></button>
+</div>
+</div>
+<div class="grp">
+<span class="s14 w6 t2">App</span>
+<div class="chips">
+<button type="button" class="chip">In the app <span class="n">146</span></button>
+<button type="button" class="chip">Invited <span class="n">82</span></button>
+<button type="button" class="chip">Not invited <span class="n">58</span></button>
+<button type="button" class="chip">Email didn’t arrive <span class="n">4</span></button>
+<button type="button" class="chip">Wrong email <span class="n">1</span></button>
+<button type="button" class="chip">Waiting for a place <span class="n">1</span></button>
+<button type="button" class="chip">Declined <span class="n">6</span></button>
+<button type="button" class="chip">Unsubscribed <span class="n">3</span></button>
+<button type="button" class="chip">Removed from app <span class="n">11</span></button>
+</div>
+</div>
+<div class="grp">
+<span class="s14 w6 t2">Status</span>
+<div class="chips">
+<button type="button" class="chip chip-on">Active <span class="n">248</span></button>
+<button type="button" class="chip">Expired <span class="n">38</span></button>
+<button type="button" class="chip">Frozen <span class="n">12</span></button>
+<button type="button" class="chip">Cancelled <span class="n">10</span></button>
+<button type="button" class="chip">No status <span class="n">4</span></button>
+</div>
+</div>
+<div class="grp">
+<span class="s14 w6 t2">Membership</span>
+<div class="chips">
+<button type="button" class="chip chip-on">Gold <span class="n">160</span></button>
+<button type="button" class="chip">Silver <span class="n">110</span></button>
+<button type="button" class="chip">Student <span class="n">24</span></button>
+<button type="button" class="chip">Day pass <span class="n">18</span></button>
+</div>
+</div>
+<div class="grp">
+<span class="s14 w6 t2">Payment status</span>
+<div class="chips">
+<button type="button" class="chip">Paid <span class="n">262</span></button>
+<button type="button" class="chip">Overdue <span class="n">20</span></button>
+<button type="button" class="chip">Unpaid <span class="n">10</span></button>
+<button type="button" class="chip">No payment status <span class="n">20</span></button>
+</div>
+</div>
+</div>
+<div style="padding: 16px 28px; display: flex; align-items: center; justify-content: flex-end; gap: 12px; border-top: 1px solid var(--line); background: var(--card)">
+<button type="button" class="btn btn-s">Clear</button>
+<button type="button" class="btn btn-p">Show 118 members</button>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

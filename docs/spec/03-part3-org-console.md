@@ -1594,6 +1594,8 @@ gym's door does is Kd's (ROADMAP), and 3b's join meets the same wall.
 
 ### 9.14 The screen (item 5) — the frame
 
+**Redrawn 2026-09-27 as §18 (5b-v):** one list, tick boxes and one action bar, ten App words. Where this frame and §18 differ, §18 wins.
+
 Members gains **Member list**. Upload — or **paste rows copied from a spreadsheet**
 into a box, for a gym that would rather not save a file (Kd, 2026-09-20; Mailchimp's
 other way in). A paste needs nothing new on the server: what a spreadsheet puts on the
@@ -2665,6 +2667,7 @@ R1–R8: R1 the menu, the font and the colours; then one page per job.
 - Pictures of all 56 drawings, dark and light: `D:\Projects\ai-home-gym-design\2-all-pages\`
   on Kd's computer. The design canvas: https://claude.ai/artifact/1Rioe5nc9f132HarZ6x69y
   (Kd's; read it with the Artifact tool).
+- Members is drawn again by 5b-v (2026-09-27): its 17 files and what each shows are in §18.1; `MembersApp` is gone.
 - Not drawn: Settings → Staff (4a rebuilds it), the marking-attendance switch, the edit
   forms, Merge duplicate, Bulk edit, Change size and the payment prompts. The job that
   restyles their page draws them from the same building blocks (17.6).
@@ -2820,6 +2823,261 @@ Inter v20, with Google's own character ranges), and their SIL Open Font License 
 come from github.com/google/fonts; both fetched 2026-09-26. They are kept in the app
 because a page that loads Google's fonts sends each visitor's internet address to Google,
 which Landgericht München I found a breach of the GDPR on 20 January 2022 (3 O 17493/20).
+
+## 18. Members, redesigned (5b-v)
+
+Planned 2026-09-27 (RULINGS 2026-09-26, "Members is redesigned before anything more is built
+on it"), after 5b-iii's click-through measured the same people in two tabs, 14 labels for
+where someone stands with the app, 79 phrases in all, and buttons acting on people the screen
+never named. The words and the layout are the planning terminal's judgement (CLAUDE.md §3,
+§4 "Screens a new gym understands"); every feature Members had is kept (18.9). It is built in
+the console's new look (§17), so it is also Members' restyle (ROADMAP R8, folded in).
+
+### 18.1 The drawings
+
+`docs/design/console/pages/`, the §17.1 format (dark; `t-light` for the light look), 17 files
+that replace Members' drawings of 2026-09-26 (`MembersApp`, the "Using the app" tab, is gone):
+
+| File | What it shows |
+|---|---|
+| `MembersList` | The one list: every App word on a row, the "Check these" box, search, Filter, the count |
+| `MembersSelected` | Everyone on the page selected: the action bar and "Select all 312 members" |
+| `MembersInvite` · `MembersRemove` | The two boxes that name who changes and who doesn't |
+| `MembersNotOnList` | People in the app who aren't on your list, and the "Owner and staff" box |
+| `MembersPast` | Past members, two selected |
+| `MembersFilter` · `MembersFilterPhone` | The Filter, in the middle on a computer, from the bottom on a phone |
+| `MemberPerson` · `MemberPersonPhone` | A member's page: in the app with More open; not invited, asking before the invitation |
+| `MemberPast` · `MemberAppOnly` | A past member still in the app; someone in the app who isn't on your list |
+| `MembersImport` | Review, with "who has left" marked person by person (5b-iii-b) |
+| `MembersPhone` · `MembersPhoneSelected` | The list on a phone; three selected with the bar at the bottom |
+| `MembersTrainer` · `MembersEmpty` | What a trainer sees; a new gym with no list yet |
+
+The drawings' words are the words to build. Where a drawing and this section differ, this
+section wins and the drawing is corrected in the same job.
+
+### 18.2 The page
+
+- **Title** "Members" ("Clients" for a studio or trainer, `orgWords`), and under it the gym's
+  name and the plan meter: "146 of 500 members in the app" (paid places, as the meter counts
+  today; amber at 90 %, and "your gym is full, so nobody else can join yet" with **Change
+  size** for `billing.manage`, as today). **Import** (outlined) and **Add member** (orange)
+  top right; on a phone under the title.
+- **Check these** (amber box, only when a line has a number): "1 invitation reached the wrong
+  person · See who" (App filter: Wrong email) and "3 people use the app but aren't on your
+  list · See who" (Show: Not on your list). 5b-iv adds its "2 people may be on your list
+  twice · Review" line here. It replaces today's "Not me" box and the group rows.
+- **Search** ("Search by name, email, phone or member number"), **Filter**, and the count on the
+  right ("312 members", "118 members match", "40 past members", "3 people").
+- **One list.** Rows are the gym's members; each person appears once. Columns: tick box ·
+  Name (email, else phone) · Status · Membership · Renews or ends ("Renews 3 Oct", "Ends 30
+  Sep", "Ended 31 Aug" once past) · Payment · App · ›. A row opens the person (18.7). On a
+  phone each row is a card with the tick box on the left and "Active · Gold · Renews 3 Oct ·
+  Paid" as one line.
+- **Show** (in the Filter, one choice): **Members** (the list, the default) · **Past members** ·
+  **Not on your list** — people in the app with no current member at their details (paid
+  places, amber, with the reason and the fix on the row: "Moved to past members on 3 Sep" +
+  **Put back on your list**, "Was on an earlier list" or "Not on any list you imported" + **Add
+  to your list**, and "Arjun Shah on your list has the same email"). Owner and staff in the app
+  who aren't on the list sit below in their own box, "Owner and staff in the app · 1", "They
+  use the app free and don't need to be on your list.", tagged **Complimentary**, and are not
+  counted as "Not on your list".
+- **The "Using the app" tab is gone.** A person in the app who is on the list is their member
+  row; one who isn't is under Not on your list. A trainer (no `members.confirm`) sees one list
+  of the people in the app (`MembersTrainer`: name, "In the app since", Complimentary), with
+  no tick boxes and no list details, as the roster shows them today.
+- **A gym with no list yet**: "Your list is empty" / "Import your members from a spreadsheet,
+  or add them one at a time." with **Import members** and **Add member**, and below it
+  "Already in the app · 3" (today's roster).
+- "Waiting to join" (join-code requests) stays above the list, restyled, until 3c switches it
+  off. Every state a read-only gym has today stays (18.9).
+
+### 18.3 One name for one thing
+
+| The thing | The word on every screen | Never |
+|---|---|---|
+| A person on the gym's list | member (client for a studio or trainer) | record, entry, person on your list |
+| Someone the gym took off its list | past member · "Past member since 3 Sep 2026" | former, removed from list, taken off |
+| Taking someone off | **Move to past members** | Remove from list, Take off the list |
+| Bringing them back | **Put back on your list** | Put back, Put back on list, restore |
+| Deleting a past member | **Delete for good** | erase |
+| One person twice | **Merge duplicate** | join records |
+| Using the member app through the gym | **In the app** · "In the app since 12 Aug 2026" | Uses the app, Joined, Using the app |
+| Emailing the link | **Invite to app**; the email is an invitation | Send invites, Invite N members |
+| Ending someone's app use | **Remove from app** · "Removed from app · 26 Sep" | Remove, Remove all, Invitation stopped |
+| In the app, no member at their details | **Not on your list** | unlisted, no longer listed, never listed |
+| Adding such a person | **Add to your list** | Put on the list, Add to list |
+| Owner or staff in the app free | **Complimentary** | free seat |
+| The gym's own extra columns | **Custom fields** | extra fields, own columns |
+| The gym's three kinds of word | **Status · Membership · Payment status** | Payment (as a heading) |
+| People ticked | "3 selected" · **Select all 312 members** · **Clear** | ticked, chosen |
+| The file | **Download CSV** | Export |
+
+"Selected", the banner and the tick box at the top left are Gmail's and HubSpot's own
+wording (18.12); "Download" is Glofox's and TeamUp's.
+
+### 18.4 The App word — ONE function, one table test
+
+Every member row, the person's page, the Filter's App chips and their counts read ONE pure
+function on the server (it decides something about a person, so CLAUDE.md §4's table test,
+with cases from real invitation histories, including states the table has never seen, which
+must come out as a word and never throw). First match wins:
+
+| # | When | Word (colour) | Second line |
+|---|---|---|---|
+| 1 | A current member row reaches someone in the app (§9.7's one-row-per-person match) | **In the app** (green) | Names differ: "Signed up in the app as Dan Wu. Check this is them." (amber) · two people in the app on one row: "Maria Park and Leo Park use the app with these details." |
+| 1b | A past member row whose person is still in the app | **In the app** (amber) | "Grace still uses the app through your gym. Remove them from the app if they've left." |
+| 2 | Invitation declined as "Not me" | **Wrong email** (red) | "Whoever gets email at {email} says they aren't {first name}. Check the address with {first name}." |
+| 3 | Invitation waiting for a place | **Waiting for a place** (amber) | "{First name} tapped Join, but all {cap} places in your plan are taken." |
+| 4 | Invitation stopped with a removed date | **Removed from app · 26 Sep** (grey) | — |
+| 5 | Invitation accepted, not in the app now, no removed date | **Left the app** (grey) | — |
+| 6 | The person unsubscribed, or marked an invitation as spam | **Unsubscribed** (grey) | spam only: "Marked your invitation as spam." |
+| 7 | Declined | **Declined** (grey) | — |
+| 8 | Email bounced, failed or refused, or not sent for an address, delivery or gym reason | **Email didn't arrive** (amber) | the reason's sentence (`MEMBER_INVITE_EMAIL_RESULT_WORDS` / `…_REASON_WORDS`), e.g. "The email bounced. Check the address with Emma." |
+| 9 | Invitation waiting (queued, sending, sent, delivered, or not known) | **Invited** (grey) | the day, "22 Sep"; not known: "We couldn't confirm this email went. Only send it again if they say they didn't get it." |
+| 10 | Never invited, or the invitation was cancelled when they were moved to past members | **Not invited** (grey) | "No email address" · "Under 18" (the list's date of birth, the gym's today) · "Invitation cancelled" |
+
+Ten words where there were fourteen tags, each with at most one second line; the "Not sent:"
+sentences stay as the second line of #8 and on the person's page. The Filter's App chips are
+these words with their counts over the current members (Show: Members) — #1 In the app · #9
+Invited · #10 Not invited · #8 · #2 · #3 · #7 · #6 · #4 (and #5 only while it holds anyone).
+
+### 18.5 Selecting, and the action bar
+
+- A tick box on every row (44 px on a phone); the heading's box selects everyone shown. Then
+  the line under the bar: "All 100 members on this page are selected. **Select all 312
+  members**" (or "… that match" with a filter or search), then "All 312 members are selected.
+  **Clear**". A search or filter change clears the selection.
+- With one or more selected, the table's heading row becomes the bar: "3 selected" ·
+  **Invite to app** (pale orange) · **Remove from app** · **Download CSV** · **Clear**. Past
+  members: Remove from app · Download CSV. Not on your list: Remove from app. A trainer has
+  no tick boxes. A read-only gym's bar holds Download CSV only. On a phone the bar sits above
+  the tabs, three buttons of icon and words.
+- **Nothing happens to anyone who was not selected.** A press sends either the selected rows'
+  ids (a page at most) or, after "Select all", the filter and search with the count and a
+  digest of who they were (as "Remove all" does today); if the set has moved, nothing happens
+  and the box shows the new names.
+- Today's "Invite 41 members", "Remove N from the app" and the group rows' "Remove N from the
+  app" become this bar: the same actions on the people selected.
+
+### 18.6 The boxes
+
+Before anything emails, removes or changes people, a box (middle on a computer, from the
+bottom on a phone) names who will change and who won't, a reason a line: a few names, "and N
+more", **See all** (the names, 100 at a time).
+
+- **Invite to the app** (`MembersInvite`): "You selected all 312 members." · the big number
+  "41 will get an email invitation" and names · "271 won't": Already in the app · Invited before
+  · No email address · Under 18 · Unsubscribed · Their address bounces (and the other skip
+  reasons the server has, each its own line) · "Each gets one email from Iron House Gym with a
+  link to the app." · the tick "I have permission to email these members." (2026-09-25) ·
+  Cancel · **Send 41 invitations**. After: today's "41 invitations are on the way.", the batches
+  line, "Share it yourself too" and Done.
+- **Remove from the app** (`MembersRemove`): "You selected 4 members." · "2 will be removed
+  from the app" and names · "They stay on your list. They keep their workouts and the free
+  app, and the app tells them they're no longer a member of Iron House Gym." · "2 won't": Not
+  in the app · Complimentary (owner or staff) · "Another member at their email is still on
+  your list" (5b-iii's rule, 18.10) · over the large-change line (more than 10, or 10 % of the
+  paid places) the tick "Yes, remove 60 of your 146 members in the app." shown up front ·
+  Cancel · **Remove 2 from the app** (red). After: "2 members removed from the app."
+- **Download CSV** has no box: it changes nobody, and the bar already says how many. The file is
+  named for what it holds, as 5b-iii built ("Cancelled members 2026-09-26.csv"; "Selected
+  members …" for rows picked by hand).
+- **One person** (their page): **Invite to app** asks "Invite Ava Thompson to the app?" / "One
+  email goes to ava.thompson@example.com with a link to the app." / **Send invitation** ·
+  Cancel (today it sent at once; Send again and Invite again already asked). **Move to past
+  members**: "Move Olivia Bennett to past members?" / "Their details are kept, and you can put
+  them back." + "Their invitation stops working." when one is waiting + "They stay in the app
+  until you remove them from the app." when in the app / **Move to past members** · Keep as a
+  member. **Remove from app**: "Remove Olivia Bennett from the app?" / "They stay on your list.
+  They keep their workouts and the free app, and the app tells them they're no longer a member
+  of Iron House Gym." / **Remove from app** (red) · Cancel. Send again, Invite again, Delete for
+  good keep today's words.
+
+### 18.7 A person's page
+
+A side panel on a computer, the whole screen on a phone (§17.2 rule 9), closed only by its X.
+Name, App word (and its line), then the buttons by state:
+
+| The person | Buttons | More |
+|---|---|---|
+| Not invited, with an email | **Invite to app** (orange) · Edit | Move to past members · Merge duplicate |
+| Invited | Edit · **Send again** | Share the invitation · Move to past members · Merge duplicate |
+| Removed from app, or invitation cancelled | Edit · **Invite again** | Move to past members · Merge duplicate |
+| In the app | **Edit** | Move to past members · Merge duplicate · Remove from app (red, `members.remove`) |
+| Past member | **Put back on your list** | Edit · Merge duplicate · Delete for good; still in the app: the amber line with **Remove from app** |
+| Not on your list | **Put back on your list** or **Add to your list** · **Remove from app** | — ("Open their details" when a member has the same email) |
+
+Sections: Contact · Membership · Custom fields · App ("In the app since", Visits "14 · last 25
+Sep", the invitation's line). "Changed by hand" under a field and the "An import asks before
+it writes over these." line stay. The Add member and Edit forms keep every field, hint, date
+picker and both buttons (Add member · Add and invite), drawn in the new look.
+
+### 18.8 Import: who has left, person by person (5b-iii-b)
+
+Upload and Review keep every step, line, warning, tick and error they have (18.9). The
+missing-people card becomes: "4 of your 340 members aren't in this file" / "Mark each one.
+Those who have left become past members." · **Select:** the Status words of the missing people
+with counts · a list with tick boxes, each row the name, their status and "in the app", and its
+mark: **Left**, **Still a member** or **Not marked yet** · with any selected, "1 selected ·
+**They've left** · **Still a member**" · the tally "2 left · 1 still a member · 1 not marked
+yet". Nothing is marked for staff. Import waits until everyone is marked ("Mark Leo Park
+first. Nobody is emailed."). Over the large-change line the number of leavers is typed, as
+today. The confirm sends who left and who stays, with the digest of the missing set; a set
+that moved is refused as `list_changed`, nothing applied.
+
+### 18.9 Every feature kept
+
+| Today | In the redesign |
+|---|---|
+| "Your list" and "Using the app" tabs | One list; Show: Members · Past members · Not on your list; a trainer's list (18.2) |
+| 14 row tags, 79 standing phrases | 10 App words, one second line each (18.4); every "Not sent:" and "didn't arrive" sentence kept as a line |
+| "Not me" box | "Check these" line → App: Wrong email |
+| Group rows "N using the app … Remove N from the app" | "Check these" line → Not on your list; select → Remove from app |
+| Roster row: Joined date, "On your list as", Check this is them, Complimentary, Remove, Put back on list, Add to list | Member row ("In the app", "Signed up in the app as …"); Not on your list rows and page; Owner and staff box; Remove from app in the bar and on the page |
+| Search, Filter (Status, Membership, Payment, App, Past members), Showing pills, Clear, counts | Kept; App gains the ten words; Show gains Not on your list |
+| Invite N members (by words) + its box, tick, sent screen, share text | The bar's Invite to app on selected people, the same box with names |
+| Remove N from the app (by words) + its box and large-change tick | The bar's Remove from app, the same box with names |
+| Download CSV on the total line | The bar's Download CSV |
+| Seat meter, Change size, read-only note, "Waiting to join" queue | Kept, restyled (the queue until 3c) |
+| Person page: Edit, Invite, Send again, Invite again, Share the invitation, Remove from list, Put back on list, Merge duplicate (find, compare, Swap, Merge), Delete for good, Go ahead anyway, Open that record, every notice and refusal | Kept (18.7), renamed per 18.3; Invite now asks first; Remove from app added to the page |
+| Add member form: every field, hints, date pickers, Ends or renews, custom fields, Add and invite | Kept, restyled |
+| Import: Upload/Paste, Review tiles and names, columns panel, dates Swap, never-kept lines, warnings, hand-edit tick, permission tick, typed number, Done, every error | Kept, restyled; the missing-people question per person (18.8) |
+| Empty list, loading and failure cards, Load more everywhere | Kept, restyled |
+
+### 18.10 The four build jobs, each Opus xhigh with its review round
+
+| Job | What a gym sees | The server | The worst thing, the first test |
+|---|---|---|---|
+| **5b-v-a · The one list** | The page in the new look: one list, the ten App words, Check these, Show (Members · Past members · Not on your list, Owner and staff), the Filter, a trainer's list, the empty list. Today's Invite N, Remove N, group Remove and Download stay as they are, restyled, until 5b-v-b | The App word function (18.4) with its table test; the App filter and its counts; the matched person's signed-up name on a member row; Not on your list and Owner and staff from the roster's own facts, paged; 5b-iii's stopped invitation with `removedAt` for every removal, taken from the paused branch | A member row showing someone else's app state — the son's row "In the app" when only his mother joined on that email — or a false word, so staff remove or chase the wrong person |
+| **5b-v-b · Select and act** | Tick boxes, Select all 312, the bar, the Invite and Remove boxes with names, Download CSV of the selected | Invite, Remove from app and the file take `{entryIds}` (a page at most) or `{filter, query, expectedCount, digest, version}`; their previews return names by reason, paged; 5b-iii's remove rule and export taken from the paused branch; the old by-words buttons go into the bar | Someone emailed or removed who was not selected — a select-all whose set moved, an Active mother removed with her Cancelled son, the owner removed |
+| **5b-v-c · A person's page** | 18.7 and 18.6's one-person boxes in the new look; Invite asks first; Remove from app on the page; the page for someone not on your list; Add member and Edit restyled | None new beyond calling existing routes (the roster's Remove, the list's writes) | An answer for one person landing on another's page, or a button acting on the person opened before — two people opened one after the other, the first answering late |
+| **5b-v-d · Import, who has left** | 18.8 in the new look | The confirm takes the marks per person with the missing set's digest | Someone never marked "Left" becoming a past member, or someone marked "Left" staying |
+
+Each merges before the next starts, then 5b-iv (possible duplicates) and 5c. PR #121 (5b-iii,
+a draft) stays open until 5b-v-b has taken its last server part, then is closed unmerged.
+
+### 18.11 Cost at full size
+
+Each job measures, with a command, how long the server answers nobody at 10,000 members and
+2,000 in the app (the cap) and at 20 gyms of 200 (§4 "Cost at full size"): 5b-v-a one page of
+names with the App word and the Filter's counts; 5b-v-b a preview and a press of "Select all"
+at the cap; 5b-v-d a confirm with 1,000 marks.
+
+### 18.12 Where the facts came from (read 2026-09-26, the vendors' own help pages)
+
+Gmail: "All 50 conversations on this page are selected. Select all 2,000 conversations in
+Inbox." (support.google.com/mail/answer/7401). HubSpot: "select the checkbox at the top left of
+the table … click the Select all [number] [records] link" and "At the top of the table, select
+from the following actions" (knowledge.hubspot.com/records/bulk-edit-records); delete asks to
+"enter the number of records". Wodify: "Click the uppermost checkbox … a clickable link to
+Select All Items will appear". Gymdesk: "Check all" and an "Actions" button (Change status,
+Delete, Compose Email, Send Text); "export it as a PDF or CSV file". Glofox: "Actions" →
+"Download" a CSV. TeamUp: an "Unclaimed" marker on each customer not yet in the app, a
+"claimed or unclaimed" filter, "Resend Invite Email". PushPress: "Ex-Member", "Blocked?" to
+end app access, "Contacts with an unsubscribe status will automatically be excluded from the
+send". Zen Planner: "Alumni". None of these confirmation boxes lists names; this app does,
+because CLAUDE.md §4 asks it to. None offers "who has left" on an import; this app does,
+because RULINGS 2026-09-17 and 2026-09-26 ask it to.
 
 
 Database DDL & Mongo→PG migration** (now carrying: §2.1 columns, Part 2B's
