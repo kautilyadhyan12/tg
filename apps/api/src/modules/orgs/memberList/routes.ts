@@ -21,6 +21,7 @@ import {
   memberListEntryInputSchema,
   memberListEntryPatchSchema,
   memberListMergeRequestSchema,
+  memberListNameCheckRequestSchema,
   memberListRemoveUnlistedRequestSchema,
   memberListRowsQuerySchema,
   memberListUnlistedQuerySchema,
@@ -374,6 +375,21 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     if (params === null) return;
     return sendWrite(req, reply, await byHand.restore(listDeps, requireUserId(req), params.gymId, params.entryId, editGate(req, reply)));
   });
+
+  // "This is them" and "Not them" (§18.4): the answer to a name that differs.
+  for (const [path, answer] of [
+    ["this-is-them", "same"],
+    ["not-them", "not_them"],
+  ] as const) {
+    app.post(`/v1/orgs/:gymId/member-list/entries/:entryId/${path}`, { preHandler: [app.authenticate] }, async (req, reply) => {
+      const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
+      if (params === null) return;
+      const body = parseOr400(memberListNameCheckRequestSchema, req.body, req, reply);
+      if (body === null) return;
+      const written = await byHand.answerNameCheck(listDeps, requireUserId(req), params.gymId, params.entryId, answer, body, editGate(req, reply));
+      return sendWrite(req, reply, written);
+    });
+  }
 
   app.post("/v1/orgs/:gymId/member-list/entries/:entryId/merge", { preHandler: [app.authenticate] }, async (req, reply) => {
     const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);

@@ -25,6 +25,8 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       restoreMemberListEntry: vi.fn(),
       mergeMemberListEntries: vi.fn(),
       deleteFormerMemberListEntry: vi.fn(),
+      confirmSamePerson: vi.fn(),
+      notThem: vi.fn(),
     },
   };
 });
@@ -421,6 +423,57 @@ describe('a person on the list', () => {
     fireEvent.click(dialog().getByRole('button', { name: 'Put back on your list' }));
     await waitFor(() => expect(orgService.restoreMemberListEntry).toHaveBeenCalledWith(GYM, ADA));
     expect(await dialog().findByText('Back on your list.')).toBeTruthy();
+  });
+
+  describe("'Signed up in the app as Dan Wu. Check this is them.' (Kd, 2026-09-27: what do I press?)", () => {
+    const DAN = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    const asked = {
+      ...person(ADA, 'Daniel Wu'),
+      inApp: true,
+      removeEndsApp: true,
+      nameCheck: { userId: DAN, appName: 'Dan Wu' },
+      app: { word: 'in_app', tone: 'green', at: null, line: 'Signed up in the app as Dan Wu. Check this is them.', lineTone: 'amber' },
+    };
+
+    it('Yes, this is them saves the answer for this record, and the question goes', async () => {
+      orgService.getMemberListEntry.mockResolvedValue(entryAnswer(asked));
+      openBox(ADA);
+      const check = within(await screen.findByTestId('name-check'));
+      const answered = { ...asked, nameCheck: null, app: { ...asked.app, line: null, lineTone: 'plain' } };
+      orgService.confirmSamePerson.mockResolvedValue(written('name_confirmed', answered));
+      fireEvent.click(check.getByRole('button', { name: 'Yes, this is them' }));
+      await waitFor(() => expect(orgService.confirmSamePerson).toHaveBeenCalledWith(GYM, ADA, DAN));
+      expect(await dialog().findByText("Saved. The names won't be asked about again.")).toBeTruthy();
+      expect(screen.queryByTestId('name-check')).toBeNull();
+      expect(orgService.notThem).not.toHaveBeenCalled();
+    });
+
+    it('Not them asks first, naming who loses the app and who stays, then takes out that one account', async () => {
+      orgService.getMemberListEntry.mockResolvedValue(entryAnswer(asked));
+      openBox(ADA);
+      fireEvent.click(within(await screen.findByTestId('name-check')).getByRole('button', { name: 'Not them' }));
+      const box = within(screen.getByTestId('confirm-not-them'));
+      expect(box.getByText("Dan Wu isn't Daniel Wu?")).toBeTruthy();
+      expect(box.getByText(/Dan Wu signed up in the app with the email address on Daniel Wu's record\. They lose the app with your gym\./)).toBeTruthy();
+      expect(box.getByText(/Daniel Wu stays on your list/)).toBeTruthy();
+      fireEvent.click(box.getByRole('button', { name: 'Cancel' }));
+      expect(orgService.notThem).not.toHaveBeenCalled();
+
+      fireEvent.click(within(screen.getByTestId('name-check')).getByRole('button', { name: 'Not them' }));
+      const out = { ...asked, inApp: false, removeEndsApp: false, nameCheck: null, app: { word: 'not_in_app', tone: 'grey', at: null, line: 'Invitation cancelled', lineTone: 'plain' } };
+      orgService.notThem.mockResolvedValue(written('not_them', out));
+      fireEvent.click(within(screen.getByTestId('confirm-not-them')).getByRole('button', { name: 'Take Dan Wu out of the app' }));
+      await waitFor(() => expect(orgService.notThem).toHaveBeenCalledWith(GYM, ADA, DAN));
+      expect(await dialog().findByText('Taken out of the app. Check the email address on this record, then invite them again.')).toBeTruthy();
+      expect(orgService.takeOffMemberListEntry).not.toHaveBeenCalled();
+    });
+
+    it('asks nothing where the names agree', async () => {
+      orgService.getMemberListEntry.mockResolvedValue(entryAnswer({ ...asked, nameCheck: null, app: { ...asked.app, line: null, lineTone: 'plain' } }));
+      openBox(ADA);
+      await dialog().findByText('In the app');
+      expect(screen.queryByTestId('name-check')).toBeNull();
+    });
   });
 
   it("a past member still in the app is removed from it here, as from 'Using the app' (Kd, 2026-09-27: one card in both places)", async () => {

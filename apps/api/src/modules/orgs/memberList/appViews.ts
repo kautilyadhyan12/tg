@@ -70,6 +70,7 @@ export async function appFactsOf(
     const person: AppPerson = {
       name: member.fullName,
       madeFromAddress: member.accountEmail === null ? null : displayNameFromEmail(member.accountEmail),
+      confirmed: member.entryId !== null && member.nameConfirmedEntryId === member.entryId,
     };
     if (member.entryId !== null) add(current, member.entryId, person);
     if (member.formerEntryId !== null) add(former, member.formerEntryId, person);

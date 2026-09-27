@@ -517,6 +517,10 @@ export function outcomeWords(outcome) {
       return "Removed. They're a past member now, and their details are kept.";
     case 'removed_from_app':
       return 'Removed from the app. Their record stays with your past members.';
+    case 'name_confirmed':
+      return "Saved. The names won't be asked about again.";
+    case 'not_them':
+      return 'Taken out of the app. Check the email address on this record, then invite them again.';
     case 'already_taken_off':
       return 'This person was already removed from your list.';
     case 'restored':

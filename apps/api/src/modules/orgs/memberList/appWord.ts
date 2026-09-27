@@ -27,6 +27,9 @@ export interface AppPerson {
   name: string;
   /** The name their account was given from its own address, if any: that is no name. */
   madeFromAddress: string | null;
+  /** Staff said this is the person on the record ("This is them"), so a different name is
+   *  not asked about again. */
+  confirmed?: boolean;
 }
 
 export interface AppWordInput {
@@ -131,7 +134,7 @@ export function appReason(input: AppWordInput): AppReason {
       return view("in_app", "green", `${names(input.inApp.map((p) => p.name))} use the app with these details.`, "amber");
     }
     const [person] = input.inApp;
-    if (person !== undefined && checkName(input.fullName, person.name, person.madeFromAddress) === "differs") {
+    if (person !== undefined && person.confirmed !== true && checkName(input.fullName, person.name, person.madeFromAddress) === "differs") {
       return view("in_app", "green", `Signed up in the app as ${person.name}. Check this is them.`, "amber");
     }
     return view("in_app", "green");

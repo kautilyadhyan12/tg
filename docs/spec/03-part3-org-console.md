@@ -2861,11 +2861,52 @@ app confusion"*. Built in 5b-v-a-i, and where this section says otherwise, this 
   from the app? They can't use the app with your gym any more, and they keep their own
   workouts." A role with the list's tick but not `members.remove` is refused on a record
   whose person is in the app, and the reverse ("…your role can't…").
-- **Invite names its people.** The box lists the first five who get the email ("Ava
-  Thompson, Sofia Alvarez and 39 more") and the first five of each group left out, on its
-  reason's line ("2 have no email address: Liam Hughes and Cy Park"); the tick reads "These
-  are Iron House Gym's members, and I have permission to email them." Selecting people by
-  hand stays 5b-v-b.
+- **Invite is a page, laid out as the list is** (Kd's second click-through: *"it should show
+  like a normal dashboard just like your list … showing every details and reason that is
+  understandable by human"*, and "Everyone on your list" over "Invite 20" read as a
+  contradiction). One line whose numbers add up: "20 of the 38 members on your list will get
+  an email invitation. 18 won't." ("…the 30 members you chose…" when words are ticked, with
+  "You chose: Status: Active" under it). Two tabs, **Will get an email 20 · Won't get one
+  18**, each a table of Name · Status · Membership · The email goes to (or Why they won't get
+  one), a hundred at a time with Load more; a row opens the person's page over Invite's.
+  Each reason in the words the person's own row uses, and what to do: "No email address ·
+  Add one on their page to invite them", "Under 18 · can be invited from 1 May 2030",
+  "Already in the app", "Maria Park uses the app with this email.", "Same email as Arjun
+  Shah, who gets this invitation", "Invitation sent · 22 Sep · To send it again, open their
+  page.", "Removed from app · 26 Sep", "Unsubscribed from your emails", "A shared address,
+  such as info@". `GET …/member-list/invites/people?group=reach|left_out&cursor=` is worked
+  out by the walk that makes the count and the press (`invites/people.ts`), so the page and
+  the Send button cannot disagree. The tick reads "These are Iron House Gym's members, and I
+  have permission to email them." Selecting people by hand stays 5b-v-b.
+- **Built at the second click-through too** (RULINGS 2026-09-27): an import's "aren't in
+  this file" people are shown at once, each with what the list says of them today —
+  "Cancelled · Gold · Ended 31 Aug · Unpaid", "Uses the app", "Added by hand · 20 Sep" — and
+  "Your file should hold everyone who is a member today, so people missing from it have
+  usually left. Anyone added by hand may simply not be in the system you exported from yet."
+  A date column's own proof (a day over 12) beats a switch remembered from an earlier file;
+  where nothing in the file settles it the line reads "We read 03/04/2024 as 3 April 2024"
+  with **Read as 4 March 2024 instead**, which also puts it back; "We understood 13 of your
+  14 columns", its examples "from the first row of your file". The Filter's App choices add
+  **Not invited yet** and **Removed from app**. An under-18's page adds "They can be invited
+  from 14 March 2028, when they turn 18. If the date of birth is wrong, press Edit to change
+  it."; a full plan's line adds "Free a place — a bigger plan, or remove someone who has left
+  — then ask Noah to tap Join again."
+- **One page for one person.** In "Using the app", somebody with a record of their own
+  opens the same page as on "Your list" (the current record §9.7 matches them to, else the
+  past record they joined with; never a past record found only by a shared email, which can
+  be a relative's); the rest keep their panel. A past member still in the app (a whole-list
+  import never ends anybody's app) has **Remove** there: "Remove Grace Hall from the app?
+  They're already a past member. This ends their app with your gym, and they keep their own
+  workouts." Remove's box says the app ends only when Remove's own rule says it will
+  (`removeEndsApp`).
+- **"Signed up in the app as Dan Wu. Check this is them."** now has two buttons. **Yes, this
+  is them** stops the question for that person and that record, on the page, the list and
+  the roster (`gym_members.name_confirmed_entry_id`, migration 0048; matched to a different
+  record later, it is asked again). **Not them** asks first ("Dan Wu isn't Daniel Wu? … They
+  lose the app with your gym. Daniel Wu stays on your list: check their email address,
+  change it with Edit, then invite them again.") and takes out that one account: the record
+  stays as it was, the invitation to the record's address stops, and it needs the
+  `members.remove` tick.
 
 ### 18.1 The drawings
 

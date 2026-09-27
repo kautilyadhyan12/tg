@@ -483,6 +483,105 @@ d("One Remove (real Postgres)", () => {
     TEST_TIMEOUT_MS,
   );
 
+  // ── "This is them" / "Not them" (§18.4; Kd, 2026-09-27) ──
+  // The worst thing this answer could do: "Not them" take out the real member, or a
+  // relative on their own record, instead of the one account staff said isn't them.
+
+  it(
+    "Not them takes out that one account and nobody else: the record stays, a relative on their own record keeps the app, and the address lets nobody back in",
+    async () => {
+      const gym = await makeGym();
+      const daniel = await add(gym, { fullName: "Daniel Wu", email: addr("nt-dwu") });
+      const dan = await signIn(addr("nt-dwu"), "Dan Wu");
+      await accept(dan);
+      const lin = await add(gym, { fullName: "Lin Wu", email: addr("nt-lwu") });
+      const linUser = await signIn(addr("nt-lwu"), "Lin Wu");
+      await accept(linUser);
+      const asked = await detailOf(gym, daniel);
+      expect(asked.nameCheck).toEqual({ userId: dan.userId, appName: "Dan Wu" });
+      expect(asked.app.line).toBe("Signed up in the app as Dan Wu. Check this is them.");
+      expect((await detailOf(gym, lin)).nameCheck).toBeNull();
+
+      // A role that keeps the list but may not remove people is refused, and nothing moves.
+      const keeper = await staffWith(gym, ["members.read", "members.confirm"]);
+      const refused = await post(`${entriesUrl(gym)}/${daniel}/not-them`, { userId: dan.userId }, keeper.cookies);
+      expect(refused.statusCode).toBe(403);
+      expect(await memberships(gym, dan)).toBe(false);
+      // Lin is not matched to Daniel's record: naming her there takes nobody out.
+      const wrongPerson = await post(`${entriesUrl(gym)}/${daniel}/not-them`, { userId: linUser.userId }, gym.owner.cookies);
+      expect(wrongPerson.statusCode).toBe(409);
+      expect(await memberships(gym, linUser)).toBe(false);
+
+      const res = await post(`${entriesUrl(gym)}/${daniel}/not-them`, { userId: dan.userId }, gym.owner.cookies);
+      expect(res.statusCode, res.body).toBe(200);
+      const written = memberListEntryWrittenSchema.parse(JSON.parse(res.body));
+      expect(written.outcome).toBe("not_them");
+      expect(written.entry.app.word).toBe("not_in_app");
+      expect(written.entry.nameCheck).toBeNull();
+      // Out of the app: Dan alone. Daniel's record stays on the list; Lin keeps her app.
+      expect(await memberships(gym, dan)).toBe(true);
+      expect(await memberships(gym, linUser)).toBe(false);
+      expect(await former(gym, daniel)).toBe(false);
+      expect(await former(gym, lin)).toBe(false);
+      // The address's invitation is stopped: signing in with it lets nobody back in.
+      const invites = myInvitationsResponseSchema.parse(JSON.parse((await get("/v1/orgs/invitations", dan.cookies)).body));
+      expect(invites.invitations).toEqual([]);
+      const audit = await sql<{ via: string }[]>`
+        SELECT meta->>'via' AS via FROM audit_log
+        WHERE gym_id = ${gym.id} AND action = 'org.member_removed' AND meta->>'removedUserId' = ${dan.userId}`;
+      expect(audit.map((row) => row.via)).toEqual(["not_them"]);
+      // Answered again, Dan is matched to nothing here any more.
+      const again = await post(`${entriesUrl(gym)}/${daniel}/not-them`, { userId: dan.userId }, gym.owner.cookies);
+      expect(again.statusCode).toBe(409);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "This is them stops the question on the page, the list and the roster, for that record only; refused for another gym, a trainer, a bad body and a person not matched",
+    async () => {
+      const gym = await makeGym();
+      const daniel = await add(gym, { fullName: "Daniel Wu", email: addr("ti-dwu") });
+      const dan = await signIn(addr("ti-dwu"), "Dan Wu");
+      await accept(dan);
+      const other = await add(gym, { fullName: "Other Person", email: addr("ti-other") });
+      const thisIsThem = (entryId: string, userId: string, who: User = gym.owner) => post(`${entriesUrl(gym)}/${entryId}/this-is-them`, { userId }, who.cookies);
+
+      expect((await page(gym, "?app=needs_check")).entries.map((entry) => entry.fullName)).toEqual(["Daniel Wu"]);
+
+      // Refused: another gym's owner, a trainer, a body that is not a person, a person not
+      // matched to that record. Nothing is written by any of them.
+      const rival = await makeGym();
+      expect((await thisIsThem(daniel, dan.userId, rival.owner)).statusCode).toBe(404);
+      const trainer = await staffWith(gym, ["members.read"]);
+      expect((await thisIsThem(daniel, dan.userId, trainer)).statusCode).toBe(403);
+      expect((await post(`${entriesUrl(gym)}/${daniel}/this-is-them`, { userId: "dan" }, gym.owner.cookies)).statusCode).toBe(400);
+      expect((await thisIsThem(other, dan.userId)).statusCode).toBe(409);
+      const none = await sql<{ confirmed: string | null }[]>`
+        SELECT name_confirmed_entry_id AS confirmed FROM gym_members WHERE gym_id = ${gym.id} AND user_id = ${dan.userId} AND removed_at IS NULL`;
+      expect(none[0]?.confirmed).toBeNull();
+
+      const res = await thisIsThem(daniel, dan.userId);
+      expect(res.statusCode, res.body).toBe(200);
+      const written = memberListEntryWrittenSchema.parse(JSON.parse(res.body));
+      expect(written.outcome).toBe("name_confirmed");
+      expect(written.entry.app).toMatchObject({ word: "in_app", line: null, lineTone: "plain" });
+      expect(written.entry.nameCheck).toBeNull();
+      expect((await page(gym, "?app=needs_check")).entries).toEqual([]);
+      const roster = await get(`/v1/orgs/${gym.id}/members`, gym.owner.cookies);
+      const item = (JSON.parse(roster.body) as { items: { userId: string; onList?: { name: string; nameCheck: string } }[] }).items.find(
+        (member) => member.userId === dan.userId,
+      );
+      expect(item?.onList).toEqual({ name: "Daniel Wu", nameCheck: "matches" });
+      const audit = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.member_name_confirmed' AND target_id = ${daniel}`;
+      expect(audit[0]?.n).toBe(1);
+      // Pressed twice, it stays answered.
+      expect((await thisIsThem(daniel, dan.userId)).statusCode).toBe(200);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   it(
     "another gym's staff get 404 from both doors and change nothing",
     async () => {

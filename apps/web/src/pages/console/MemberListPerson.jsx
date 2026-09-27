@@ -456,6 +456,18 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     return run(asked, () => orgService.takeOffMemberListEntry(gymId, asked), "We couldn't remove this person.");
   };
 
+  /** The answer to "Signed up in the app as Dan Wu. Check this is them." (§18.4). */
+  const answerName = (same) => {
+    const asked = shown.entryId;
+    const person = shown.nameCheck?.userId;
+    if (person === undefined) return undefined;
+    return run(
+      asked,
+      () => (same ? orgService.confirmSamePerson(gymId, asked, person) : orgService.notThem(gymId, asked, person)),
+      "We couldn't save that. Please try again.",
+    );
+  };
+
   /** Invite this person, or send their invitation again because they asked. The
    *  answer's invitation replaces the one on screen only if the box still has them open. */
   const sendInvite = async (again) => {
@@ -757,6 +769,23 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             {inv.detail}
           </p>
         ) : null}
+        {p.nameCheck !== null && p.formerAt === null ? (
+          <div className="flex flex-wrap gap-2" data-testid="name-check">
+            <button
+              type="button"
+              onClick={() => void answerName(true)}
+              disabled={busy || readOnly}
+              className={`${BUTTON} flex-1 sm:flex-none`}
+              style={{ background: C.orangeBg, color: C.orange }}
+            >
+              <Check className="w-4 h-4" />
+              Yes, this is them
+            </button>
+            <button type="button" onClick={() => setMode('notThem')} disabled={busy || readOnly} className={`${BUTTON} flex-1 sm:flex-none`} style={{ background: C.plain, color: C.soft }}>
+              Not them
+            </button>
+          </div>
+        ) : null}
         {action === 'under_age' ? (
           <div className="flex flex-col gap-1">
             <p className="text-sm" style={{ color: C.muted }} data-testid="under-age-note">
@@ -893,6 +922,28 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           <button type="button" onClick={() => backTo('view')} className={`${BUTTON} self-start`} style={{ background: C.plain, color: C.soft }}>
             Back
           </button>
+        </div>
+      );
+    }
+    if (mode === 'notThem' && p.nameCheck !== null) {
+      const appName = p.nameCheck.appName || 'This person';
+      return (
+        <div className="flex flex-col gap-3" data-testid="confirm-not-them">
+          <p className="text-[15px]" style={{ color: '#fff' }}>
+            {appName} isn&apos;t {name}?
+          </p>
+          <p className="text-sm" style={{ color: C.soft }}>
+            {appName} signed up in the app with the email address on {name}&apos;s record. They lose the app with your {words.it ?? 'gym'}.{' '}
+            {name} stays on your list: check their email address, change it with Edit, then invite them again.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => void answerName(false)} disabled={busy || readOnly} className={BUTTON} style={{ background: C.redBg, color: C.red }}>
+              Take {appName} out of the app
+            </button>
+            <button type="button" onClick={() => backTo('view')} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
+              Cancel
+            </button>
+          </div>
         </div>
       );
     }
@@ -1075,7 +1126,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         <Loader2 className="w-4 h-4 animate-spin" /> Loading…
       </p>
     );
-  } else if (mode === 'takeOff' || mode === 'delete' || mode === 'again' || mode === 'share') {
+  } else if (mode === 'takeOff' || mode === 'delete' || mode === 'again' || mode === 'share' || mode === 'notThem') {
     body = renderConfirm(shown);
   } else if (mode === 'join') {
     body = renderJoin(shown);

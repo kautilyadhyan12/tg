@@ -20,6 +20,7 @@ import {
   type MemberListEntryOutcome,
   type MemberListEntryPatch,
   type MemberListEntryWritten,
+  type MemberListNameCheckRequest,
   type MemberListRemoveUnlistedRequest,
   type MemberListUnlistedGroup,
   type MemberListUnlistedPage,
@@ -27,8 +28,10 @@ import {
 } from "@app/shared";
 import type { TransactionSql } from "postgres";
 import { z } from "zod";
+import { displayNameFromEmail } from "../../auth/service.js";
 import { bustEntitlements } from "../../entitlements/service.js";
 import { withdrawForAccounts, withdrawForAddress } from "../invites/join.js";
+import { checkName } from "../invites/nameCheck.js";
 import { invitationsOf, inviteEntryInTx, readyToSend } from "../invites/service.js";
 import type { InviteSettings } from "../invites/settings.js";
 import { insertAudit } from "../repo.js";
@@ -101,6 +104,7 @@ async function detailOf(
     extra: fields.map((field) => ({ key: field.key, label: field.label, value: values.extra[field.key] ?? "" })),
     handEdited: entry.handEdited,
     removeEndsApp: appPeopleIn(reached, entry).length > 0,
+    nameCheck: nameCheckOf(mine, entry),
     members: visits.map((row) => ({
       userId: row.userId,
       displayName: row.displayName,
@@ -109,6 +113,16 @@ async function detailOf(
       lastVisitOn: row.lastVisitOn,
     })),
   };
+}
+
+/** The one person in the app matched to this current record under another name, not yet
+ *  answered — the same test the App word's "Signed up in the app as …" line makes. */
+function nameCheckOf(mine: readonly repo.MemberAgainstList[], entry: repo.StoredEntry): MemberListEntryDetail["nameCheck"] {
+  const [only] = mine;
+  if (entry.formerAt !== null || mine.length !== 1 || only === undefined) return null;
+  if (only.nameConfirmedEntryId === entry.id) return null;
+  const fromAddress = only.accountEmail === null ? null : displayNameFromEmail(only.accountEmail);
+  return checkName(entry.values.fullName, only.fullName, fromAddress) === "differs" ? { userId: only.userId, appName: only.fullName } : null;
 }
 
 async function detailAfter(deps: MemberListDeps, gymId: string, entryId: string): Promise<MemberListEntryDetail> {
@@ -440,6 +454,71 @@ async function bustAfterRemoval(deps: MemberListDeps, gymId: string, userIds: re
   const results = await Promise.allSettled(userIds.map((member) => bustEntitlements(deps.redis, member)));
   const failed = results.filter((result) => result.status === "rejected").length;
   if (failed > 0) deps.log.warn({ event: "memberlist.remove_bust_failed", gymId, failed }, "entitlements could not be refreshed after a removal");
+}
+
+/** "This is them" and "Not them" (§18.4; Kd, 2026-09-27: "people may not sign in as exact
+ *  name"): the answer to "Signed up in the app as Dan Wu. Check this is them." The person
+ *  must still be matched to this current record, or nothing is written. "This is them"
+ *  stops the question for that pairing. "Not them" takes that person out of the app — the
+ *  record stays as it was, for the member it belongs to — and stops the invitation to the
+ *  record's address, so the address lets nobody back in until staff check it and invite
+ *  again. */
+export async function answerNameCheck(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  entryId: string,
+  answer: "same" | "not_them",
+  body: MemberListNameCheckRequest,
+  limit: () => Promise<boolean>,
+): Promise<WriteAnswer> {
+  const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
+  await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
+  if (answer === "not_them" && !privileges.includes("members.remove")) {
+    throw new OrgsError(403, "forbidden", MEMBER_LIST_BY_HAND_WORDS.not_them_needs_remove);
+  }
+  if (!(await limit())) return { kind: "rate_limited" };
+  const at = deps.now();
+  const closed: string[] = [];
+  const done = await deps.sql.begin(async (tx): Promise<Done> => {
+    await repo.lockGym(tx, gymId);
+    const stored = await repo.entryFor(tx, gymId, entryId);
+    if (stored === null || stored.formerAt !== null) throw notFound();
+    const reached = await repo.membersAgainstList(tx, gymId, { email: stored.values.email, phone: stored.values.phone, entryIds: [stored.id] });
+    const member = reached.find((m) => m.userId === body.userId && m.entryId === stored.id);
+    if (member === undefined) throw new OrgsError(409, "name_check_gone", MEMBER_LIST_BY_HAND_WORDS.name_check_gone);
+    const version = (await repo.listState(tx, gymId))?.version ?? 0;
+    if (answer === "same") {
+      await repo.confirmMemberName(tx, gymId, member.userId, stored.id);
+      await insertAudit(tx, {
+        actorUserId: userId,
+        gymId,
+        action: "org.member_name_confirmed",
+        targetType: "member_list_entry",
+        targetId: stored.id,
+        meta: { userId: member.userId },
+      });
+      return { outcome: "name_confirmed", entryId, version };
+    }
+    const rows = await repo.closeMemberships(tx, gymId, [member.userId], at);
+    if (rows.length === 0) throw new OrgsError(409, "not_them_staff", MEMBER_LIST_BY_HAND_WORDS.not_them_staff);
+    for (const row of rows) {
+      await insertAudit(tx, {
+        actorUserId: userId,
+        gymId,
+        action: "org.member_removed",
+        targetType: "gym_member",
+        targetId: row.membershipId,
+        meta: { removedUserId: row.userId, via: "not_them" },
+      });
+    }
+    await withdrawForAccounts(tx, deps.invites ?? null, { gymId, userIds: rows.map((row) => row.userId), at });
+    await withdrawForAddress(tx, deps.invites ?? null, { gymId, email: stored.values.email, at });
+    closed.push(...rows.map((row) => row.userId));
+    return { outcome: "not_them", entryId, version };
+  });
+  await bustAfterRemoval(deps, gymId, closed);
+  return await finish(deps, gymId, done);
 }
 
 /** Put a former record back on the list. */

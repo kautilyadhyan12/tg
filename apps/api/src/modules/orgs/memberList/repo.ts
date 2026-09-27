@@ -117,6 +117,8 @@ export interface MemberAgainstList extends ListMember {
   joinedFormer: boolean;
   /** The name on the record they are on the list through, or null. */
   entryFullName: string | null;
+  /** The record staff said this person is though the names differ ("This is them"). */
+  nameConfirmedEntryId: string | null;
   /** When this membership began, for a screen naming the person. */
   joinedAt: Date;
 }
@@ -882,10 +884,12 @@ export async function membersAgainstList(
       joined_former: boolean;
       same_contact: unknown;
       joined_at: Date;
+      name_confirmed_entry_id: string | null;
     }[]
   >`
     SELECT m.user_id,
            m.joined_at,
+           m.name_confirmed_entry_id,
            u.display_name,
            u.email::text AS account_email,
            (m.complimentary = false
@@ -1022,8 +1026,18 @@ export async function membersAgainstList(
       joinedFullName: joinedName,
       joinedFormer: row.joined_former,
       joinedAt: row.joined_at,
+      nameConfirmedEntryId: row.name_confirmed_entry_id,
     };
   });
+}
+
+/** "This is them": this member is the person on this record, whatever the two names. */
+export async function confirmMemberName(tx: TransactionSql, gymId: string, userId: string, entryId: string): Promise<boolean> {
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_members SET name_confirmed_entry_id = ${entryId}
+    WHERE gym_id = ${gymId} AND user_id = ${userId} AND removed_at IS NULL
+    RETURNING id`;
+  return rows.length > 0;
 }
 
 const sameContactSchema = z.array(
@@ -2003,12 +2017,15 @@ export async function deleteEntry(tx: TransactionSql, gymId: string, entryId: st
 }
 
 /** Two records joined: the memberships linked to the one not kept are linked to the
- *  kept one (§13.2). */
+ *  kept one (§13.2), and so is a "This is them" answered for it: it is the same person. */
 export async function moveMembershipLinks(tx: TransactionSql, gymId: string, fromEntryId: string, toEntryId: string): Promise<number> {
   const rows = await tx<{ id: string }[]>`
     UPDATE gym_members SET entry_id = ${toEntryId}
     WHERE gym_id = ${gymId} AND entry_id = ${fromEntryId}
     RETURNING id`;
+  await tx`
+    UPDATE gym_members SET name_confirmed_entry_id = ${toEntryId}
+    WHERE gym_id = ${gymId} AND name_confirmed_entry_id = ${fromEntryId}`;
   return rows.length;
 }
 

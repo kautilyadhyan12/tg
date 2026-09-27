@@ -1287,17 +1287,20 @@ async function offListOf(
   sql: Sql,
   gymId: string,
   userIds: readonly string[],
-): Promise<{ offList: Map<string, OffList>; typedInName: Map<string, string>; records: Map<string, string> }> {
+): Promise<{ offList: Map<string, OffList>; typedInName: Map<string, string>; records: Map<string, string>; confirmed: Set<string> }> {
   const out = new Map<string, OffList>();
   const typedInName = new Map<string, string>();
   const records = new Map<string, string>();
-  if (userIds.length === 0 || (await listRepo.listState(sql, gymId)) === null) return { offList: out, typedInName, records };
+  const confirmed = new Set<string>();
+  if (userIds.length === 0 || (await listRepo.listState(sql, gymId)) === null) return { offList: out, typedInName, records, confirmed };
   const members = await listRepo.membersAgainstList(sql, gymId, { email: null, phone: null, userIds });
   // Each person's own record, for their page: the current match, else the past record
   // they joined with — never a past record found only by a shared email.
   for (const m of members) {
     const own = m.onList ? m.entryId : m.joinedFormer ? m.joinedEntryId : null;
     if (own !== null) records.set(m.userId, own);
+    // "This is them" answered for the record they are on the list through.
+    if (m.onList && m.entryId !== null && m.nameConfirmedEntryId === m.entryId) confirmed.add(m.userId);
   }
   // On the list through a current record with their joined record's name, their own
   // having come off: "On your list as" names that record.
@@ -1324,7 +1327,7 @@ async function offListOf(
       sameEmailName: m.email === null ? null : (facts.nameByEmail.get(m.email.toLowerCase()) ?? null),
     });
   }
-  return { offList: out, typedInName, records };
+  return { offList: out, typedInName, records, confirmed };
 }
 
 export async function listOrgMembers(
@@ -1364,9 +1367,9 @@ export async function listOrgMembers(
     limit: query.limit,
     cursor: parseCursor(query.cursor),
   });
-  const { offList, typedInName, records } = seesList
+  const { offList, typedInName, records, confirmed } = seesList
     ? await offListOf(deps.sql, gymId, page.items.map((m) => m.userId))
-    : { offList: new Map<string, OffList>(), typedInName: new Map<string, string>(), records: new Map<string, string>() };
+    : { offList: new Map<string, OffList>(), typedInName: new Map<string, string>(), records: new Map<string, string>(), confirmed: new Set<string>() };
   // Parsed on the way out, and this one carries the most weight: the roster
   // shape IS Part 3 §2.4's visibility boundary, so a field added to the row
   // without being added to the schema is dropped here rather than served.
@@ -1384,7 +1387,9 @@ export async function listOrgMembers(
           ? {
               onList: {
                 name: listName,
-                nameCheck: checkName(listName, m.displayName, m.accountEmail === null ? null : displayNameFromEmail(m.accountEmail)),
+                nameCheck: confirmed.has(m.userId)
+                  ? "matches"
+                  : checkName(listName, m.displayName, m.accountEmail === null ? null : displayNameFromEmail(m.accountEmail)),
               },
             }
           : {}),
