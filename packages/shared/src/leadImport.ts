@@ -263,7 +263,7 @@ export const LEAD_FILE_WORDS = {
   added_title: (n: number): string => (n === 1 ? "1 person will be added to your leads" : `${n.toLocaleString("en")} people will be added to your leads`),
   none_added_title: "Nobody in this file can be added",
   not_added_title: (n: number): string => `Not added (${n.toLocaleString("en")})`,
-  more_skipped: (n: number): string => `and ${count(n, "more row", "more rows")} that couldn't be read as a person`,
+  more_skipped: (n: number): string => `and ${count(n, "more row", "more rows")} not added`,
   tick: "Nobody will be emailed. “Happy to hear from us” starts unticked on each of them, because a file can't show they agreed to emails. Tick it on a lead when they do.",
   changed: "Your leads or members changed after this file was checked, so nobody was added. Check the file again.",
   needs_name: "Choose which column has their name.",

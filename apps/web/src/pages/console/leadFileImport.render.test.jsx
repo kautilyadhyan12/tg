@@ -127,9 +127,27 @@ describe('Import leads', () => {
     fireEvent.change(screen.getByLabelText('What Lead Source holds'), { target: { value: 'notes' } });
     expect(addButton().disabled).toBe(true);
     expect(screen.getByTestId('lead-file-why').textContent).toContain('Check the file again to see who will be added.');
+    // The new check shows other people, so the tick given for the first ones is gone.
+    const REMAPPED = { ...MAPPING, source: null, notes: 2 };
+    api.checkLeadFile.mockResolvedValueOnce({ data: { preview: { ...PREVIEW, mapping: REMAPPED, expected: 'b'.repeat(64) } } });
     fireEvent.click(screen.getByRole('button', { name: 'Check the file again' }));
     await waitFor(() => expect(api.checkLeadFile).toHaveBeenCalledTimes(2));
-    expect(api.checkLeadFile.mock.calls[1][1].mapping).toEqual({ ...MAPPING, source: null, notes: 2 });
+    expect(api.checkLeadFile.mock.calls[1][1].mapping).toEqual(REMAPPED);
+    await waitFor(() => expect(tick().getAttribute('aria-checked')).toBe('false'));
+    expect(addButton().disabled).toBe(true);
+  });
+
+  it('a check that shows the same people keeps the tick', async () => {
+    open();
+    await pick();
+    fireEvent.click(tick());
+    api.addLeadFile.mockRejectedValue({ response: { status: 409, data: { error: LEAD_FILE_CHANGED_ERROR, message: LEAD_FILE_WORDS.changed } } });
+    fireEvent.click(addButton());
+    await screen.findByText(LEAD_FILE_WORDS.changed);
+    fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
+    await waitFor(() => expect(api.checkLeadFile).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(addButton().disabled).toBe(false));
+    expect(tick().getAttribute('aria-checked')).toBe('true');
   });
 
   it('a list that changed since the check adds nothing and offers Check again', async () => {

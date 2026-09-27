@@ -2608,7 +2608,7 @@ who is added, who is already a lead (left as they are), who is already on the me
 list with the same name and contact (not added), who repeats an email or phone from an
 earlier row, and each file word beside the source it was sorted into (the word kept in
 the notes). Every lead from a file is New and **never ticked "Happy to hear from us"**,
-whatever the file's opt-in column says. Add re-reads the file under the gym's lock and
+whatever the file's opt-in column says. Add re-reads the file and, under the gym's lock,
 adds exactly the list shown (its key) or nothing; staff tick that they may store the
 people's details, as for the member list. Three follow-up emails, day 0 · day 3 · day 7, **sent by the gym from
 its own email, not by the app** (RULINGS 2026-09-27): only a New lead ticked "Happy to

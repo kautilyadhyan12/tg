@@ -61,33 +61,61 @@ const SOURCE_HEADINGS = [
   "referral type",
   "referral",
   "found us",
-  "channel",
-  "contact method",
   "initial contact",
+  "marketing channel",
+  "acquisition channel",
+  "lead channel",
 ];
+/** Words that name where somebody came from only when they are the whole heading:
+ *  ABC GymSales' "Contact Method" is Referral · Walk-in · Internet, but a "Preferred
+ *  Contact Method" is how the person likes to be reached. */
+const SOURCE_ONLY_ALONE = ["channel", "contact method"];
 /** Headings that are notes about the enquiry: "Notes" (GymSales, Gymdesk, Mailchimp),
  *  "Key Note" (ClubReady). */
 const NOTES_HEADINGS = ["note", "notes", "comment", "comments", "message", "enquiry", "inquiry", "remarks", "remark"];
-/** A heading that holds one of these is a date, an id or somebody's own detail, not a
- *  source or a note: "Prospect Added Date", "External ID", "Staff Notes Email". */
-const NOT_SOURCE_OR_NOTES = ["date", "id", "email", "phone", "owner", "staff", "salesperson", "assigned"];
+/** A heading that holds one of these is a date, an id, a system's own column or
+ *  somebody's own detail, not a source or a note: "Prospect Added Date", "External ID",
+ *  HubSpot's "Record Source" (how the row got into HubSpot), "Referral Code". */
+const NOT_SOURCE_OR_NOTES = [
+  "date",
+  "id",
+  "email",
+  "phone",
+  "owner",
+  "staff",
+  "salesperson",
+  "assigned",
+  "record",
+  "data",
+  "import",
+  "system",
+  "preferred",
+  "communication",
+  "code",
+];
+/** Notes that are about somebody else — an emergency contact, a parent — whose name and
+ *  number are not the lead's to keep. */
+const NOT_NOTES = ["emergency", "contact", "guardian", "parent", "kin", "spouse", "partner", "nominee"];
 
 const holds = (header: string, word: string): boolean => ` ${header} `.includes(` ${word} `);
 
-/** How well a heading names one of `words`: its place in the list, or null. */
-function headingRank(stat: ColumnStat, words: readonly string[]): number | null {
+/** How well a heading names one of `words`: its place in the list, or null. A word of
+ *  `alone` counts only as the whole heading, after the list. */
+function headingRank(stat: ColumnStat, words: readonly string[], never: readonly string[], alone: readonly string[] = []): number | null {
   if (stat.header === null) return null;
   const header = normaliseHeader(stat.header);
-  if (header === "" || NOT_SOURCE_OR_NOTES.some((word) => holds(header, word))) return null;
+  if (header === "" || never.some((word) => holds(header, word))) return null;
   const at = words.findIndex((word) => holds(header, word));
-  return at === -1 ? null : at;
+  if (at !== -1) return at;
+  const whole = alone.indexOf(header);
+  return whole === -1 ? null : words.length + whole;
 }
 
 /** The column whose heading names one of `words` best; the leftmost of equals. */
-function bestHeaded(stats: readonly ColumnStat[], words: readonly string[]): number | null {
+function bestHeaded(stats: readonly ColumnStat[], words: readonly string[], never: readonly string[], alone: readonly string[] = []): number | null {
   let best: { index: number; rank: number } | null = null;
   for (const stat of stats) {
-    const rank = headingRank(stat, words);
+    const rank = headingRank(stat, words, never, alone);
     if (rank !== null && (best === null || rank < best.rank)) best = { index: stat.index, rank };
   }
   return best?.index ?? null;
@@ -121,10 +149,11 @@ function guessLeadMapping(stats: readonly ColumnStat[], sheet: number, headerRow
   const taken = new Set<number>([...mapping.email, ...mapping.phone]);
   for (const at of [mapping.fullName, mapping.firstName, mapping.lastName]) if (at !== null) taken.add(at);
   const free = stats.filter((stat) => stat.neverKept === null && !taken.has(stat.index));
-  const source = bestHeaded(free, SOURCE_HEADINGS);
+  const source = bestHeaded(free, SOURCE_HEADINGS, NOT_SOURCE_OR_NOTES, SOURCE_ONLY_ALONE);
   const notes = bestHeaded(
     free.filter((stat) => stat.index !== source),
     NOTES_HEADINGS,
+    [...NOT_SOURCE_OR_NOTES, ...NOT_NOTES],
   );
   return {
     sheet,

@@ -159,6 +159,64 @@ const read = (lines: string[], mapping: LeadFileUnderstanding["mapping"] | null 
   return result;
 };
 
+describe("which heading is where they heard of you, and which is notes", () => {
+  // Round one of 20c-iii, High 2 and Low 3. Source headings from the vendors' own pages
+  // (Glofox, ABC GymSales, ClubReady, Gymdesk, PushPress, HubSpot); the ones that are
+  // NOT a source are HubSpot's "Record Source" beside its "Original Traffic Source",
+  // system and import columns, and a person's preferred way to be contacted.
+  const guessOf = (header: string, field: "source" | "notes"): boolean => {
+    const file = read(["Name,Email," + header, "Ann Bell,ann@example.com,some text here"]);
+    return file.mapping[field] === 2;
+  };
+  it.each([
+    ["Lead Source"],
+    ["Marketing Source"],
+    ["Source"],
+    ["How did you hear about us?"],
+    ["Referral Type"],
+    ["Referred by"],
+    ["Original Traffic Source"],
+    ["Contact Method"],
+    ["Channel"],
+    ["Initial Contact Was"],
+    ["Marketing Channel"],
+    ["Acquisition Channel"],
+  ])("%s is where they heard of you", (header) => {
+    expect(guessOf(header, "source")).toBe(true);
+  });
+  it.each([
+    ["Data Source"],
+    ["Import Source"],
+    ["Record Source"],
+    ["Source System"],
+    ["Preferred Contact Method"],
+    ["Preferred Contact Channel"],
+    ["Communication Channel"],
+    ["Referral Code"],
+    ["Source Date"],
+    ["Lead Source ID"],
+    ["Best Contact Method"],
+    ["Contact Method Used For Reminders"],
+    ["Best Channel To Reach"],
+  ])("%s is not", (header) => {
+    expect(guessOf(header, "source")).toBe(false);
+  });
+  it("HubSpot's Record Source beside its Original Traffic Source: the traffic source wins", () => {
+    const file = read(["Name,Email,Record Source,Original Traffic Source", "Ann Bell,ann@example.com,Import,Organic social"]);
+    expect(file.mapping.source).toBe(3);
+    expect(file.rows[0]).toMatchObject({ source: "social", sourceWord: "Organic social" });
+  });
+  it.each([["Notes"], ["Key Note"], ["Comments"], ["Trainer Notes"], ["Enquiry"], ["Message"]])("%s is notes", (header) => {
+    expect(guessOf(header, "notes")).toBe(true);
+  });
+  it.each([["Emergency Contact Notes"], ["Guardian Notes"], ["Parent Comments"], ["Next of Kin Notes"], ["Contact Notes"], ["Physio Notes"], ["Staff Notes"]])(
+    "%s is not notes: somebody else's details, health, or the staff's own",
+    (header) => {
+      expect(guessOf(header, "notes")).toBe(false);
+    },
+  );
+});
+
 describe("a leads file read as leads", () => {
   it("Glofox's Lead Report: names, contact and Lead Source; its status and opt-in column are not read", () => {
     const file = read([

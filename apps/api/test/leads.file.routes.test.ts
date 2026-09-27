@@ -1,5 +1,5 @@
-// Leads from a file â€” the two routes against real Postgres and the real file worker
-// (DATABASE_URL-gated). ROADMAP 20c-iii; spec Part 3 Â§16.3.
+// Leads from a file — the two routes against real Postgres and the real file worker
+// (DATABASE_URL-gated). ROADMAP 20c-iii; spec Part 3 §16.3.
 //
 // The first test is the worst thing this job could do to a real person: somebody in a
 // gym's spreadsheet starts getting follow-up emails they never agreed to. The files are
@@ -96,6 +96,9 @@ d("leads from a file (real Postgres, real worker)", () => {
     });
   const get = (path: string, cookies: Record<string, string>) => send("GET", path, undefined, cookies);
   const post = (path: string, payload: unknown, cookies: Record<string, string>) => send("POST", path, payload, cookies);
+  /** The same, from one fixed address: a front desk with several staff signed in. */
+  const postFrom = (ip: string, path: string, payload: unknown, cookies: Record<string, string>) =>
+    api().inject({ method: "POST", url: path, remoteAddress: ip, cookies, headers: { "content-type": "application/json" }, payload: JSON.stringify(payload) });
 
   const makeUser = async (local: string) => {
     const email = `leadf-t-${local}@example.com`;
@@ -198,7 +201,7 @@ d("leads from a file (real Postgres, real worker)", () => {
     await sql.end({ timeout: 5 });
   }, TIMEOUT_MS);
 
-  // â”€â”€ THE WORST THING: EMAILS NOBODY AGREED TO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── THE WORST THING: EMAILS NOBODY AGREED TO ────────────────────────────────────
 
   it(
     "no lead from a file is ever ticked or due a follow-up email, whatever its opt-in column says",
@@ -247,7 +250,7 @@ d("leads from a file (real Postgres, real worker)", () => {
     TIMEOUT_MS,
   );
 
-  // â”€â”€ WHO MAY USE IT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── WHO MAY USE IT ──────────────────────────────────────────────────────────────
 
   it(
     "nobody outside this gym's ticked staff can check or add a file, and a refusal writes nothing",
@@ -353,7 +356,7 @@ d("leads from a file (real Postgres, real worker)", () => {
     TIMEOUT_MS,
   );
 
-  // â”€â”€ WHO IS ADDED â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── WHO IS ADDED ────────────────────────────────────────────────────────────────
 
   it(
     "leads already kept are left as they are, members on the list are not added, and everyone else is",
@@ -416,6 +419,64 @@ d("leads from a file (real Postgres, real worker)", () => {
       // One of ours is kept as it is, with no note added.
       expect(byName.get("Pat Quinn")).toMatchObject({ source: "social", notes: "" });
       expect(stored).toHaveLength(5);
+      // One audit row, a count and no person in it.
+      const audit = await sql<{ meta: Record<string, unknown> }[]>`
+        SELECT meta FROM audit_log WHERE gym_id = ${gym} AND action = 'org.leads_imported'`;
+      expect(audit.map((a) => a.meta)).toEqual([{ added: "4" }]);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "another gym's leads and members decide nothing: the same people are added here, and nothing of theirs is said",
+    async () => {
+      const owner = await makeUser("tenancy-owner");
+      const rival = await makeUser("tenancy-rival");
+      const org = await makeOrg(owner.cookies, "Tenancy Leads Gym");
+      const rivalOrg = await makeOrg(rival.cookies, "Tenancy Rival Gym");
+      // The rival holds one of the file's people as a lead and the other as a member.
+      expect(
+        (await post(`/v1/orgs/${rivalOrg.org.id}/leads`, { fullName: "Wes Young", email: "wes@example.com", source: "other" }, rival.cookies)).statusCode,
+      ).toBe(201);
+      await addEntry(rivalOrg.org.id, rival.cookies, { fullName: "Xia Zhou", email: "xia@example.com" });
+
+      const file = csv(["Name,Email", "Wes Young,wes@example.com", "Xia Zhou,xia@example.com"]);
+      const preview = await check(org.org.id, owner.cookies, file);
+      expect(preview.add.map((p) => p.fullName)).toEqual(["Wes Young", "Xia Zhou"]);
+      expect(preview.notAdded).toEqual([]);
+      expect((await add(org.org.id, owner.cookies, file, preview)).statusCode).toBe(200);
+      expect((await storedLeads(org.org.id)).map((l) => l.full_name)).toEqual(["Wes Young", "Xia Zhou"]);
+      expect((await storedLeads(rivalOrg.org.id)).map((l) => l.full_name)).toEqual(["Wes Young"]);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "checking and adding are limited per person, and staff of several gyms at one address are not stopped by each other",
+    async () => {
+      const first = await makeUser("limit-first");
+      const second = await makeUser("limit-second");
+      const org = await makeOrg(first.cookies, "Limit Leads Gym");
+      const other = await makeOrg(second.cookies, "Limit Other Gym");
+      const desk = "10.64.0.1";
+      const file = csv(["Name,Email", "Yan Abel,yan@example.com"]);
+      // The allowance is spent before the file is read, so a body refused straight after
+      // it ("!!!!" is no base64) spends it as a real file would, without a worker each.
+      const garbled = { contentBase64: "!!!!" };
+      for (let i = 1; i <= 30; i++) {
+        expect({ i, status: (await postFrom(desk, checkUrl(org.org.id), garbled, first.cookies)).statusCode }).toEqual({ i, status: 400 });
+      }
+      expect((await postFrom(desk, checkUrl(org.org.id), { contentBase64: file }, first.cookies)).statusCode).toBe(429);
+      // Another gym's owner at the same desk still has their own allowance.
+      expect((await postFrom(desk, checkUrl(other.org.id), { contentBase64: file }, second.cookies)).statusCode).toBe(200);
+
+      // Add: twenty presses answered (here, as changed), the twenty-first refused.
+      const stale = { contentBase64: file, mapping: { sheet: 0, headerRow: 0, fullName: 0, email: [1] }, expected: "0".repeat(64), permissionConfirmed: true };
+      for (let i = 1; i <= 20; i++) {
+        expect({ i, status: (await postFrom(desk, addUrl(other.org.id), stale, second.cookies)).statusCode }).toEqual({ i, status: 409 });
+      }
+      expect((await postFrom(desk, addUrl(other.org.id), stale, second.cookies)).statusCode).toBe(429);
+      expect(await storedLeads(other.org.id)).toEqual([]);
     },
     TIMEOUT_MS,
   );
@@ -500,6 +561,30 @@ d("leads from a file (real Postgres, real worker)", () => {
       ).toEqual({ status: 409, code: LEAD_FILE_CHANGED_ERROR });
       expect(await storedLeads(gym)).toEqual([]);
 
+      // Another transaction holding the gym's lock while it adds one of the file's people:
+      // Add waits for it, then sees them. Without the lock Add would read before that
+      // commit and run into the unique address instead.
+      await sql`DELETE FROM gym_member_list_entries WHERE gym_id = ${gym}`;
+      let other: Promise<unknown> = Promise.resolve();
+      expect(
+        await refusal(async () => {
+          let held: () => void = () => undefined;
+          const holding = new Promise<void>((resolve) => {
+            held = resolve;
+          });
+          other = sql.begin(async (tx) => {
+            await tx`SELECT 1 FROM gyms WHERE id = ${gym} FOR UPDATE`;
+            await tx`INSERT INTO gym_leads (gym_id, full_name, email, source) VALUES (${gym}, 'Val West', 'val@example.com', 'walk_in')`;
+            held();
+            await new Promise((resolve) => setTimeout(resolve, 500));
+          });
+          await holding;
+        }),
+      ).toEqual({ status: 409, code: LEAD_FILE_CHANGED_ERROR });
+      await other;
+      expect((await storedLeads(gym)).map((l) => l.full_name)).toEqual(["Val West"]);
+      await sql`DELETE FROM gym_leads WHERE gym_id = ${gym}`;
+
       // The positive control: nothing in between, the same call adds.
       await sql`DELETE FROM gym_member_list_entries WHERE gym_id = ${gym}`;
       expect(await refusal(() => Promise.resolve())).toBe("added");
@@ -530,7 +615,7 @@ d("leads from a file (real Postgres, real worker)", () => {
     TIMEOUT_MS,
   );
 
-  // â”€â”€ THE FILE'S COLUMNS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── THE FILE'S COLUMNS ──────────────────────────────────────────────────────────
 
   it(
     "a column never kept shows no cell and can never be chosen, whatever staff pick",

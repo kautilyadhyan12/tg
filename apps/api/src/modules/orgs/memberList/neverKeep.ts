@@ -585,6 +585,37 @@ const MEDICAL_WORDS = [
   "immunisation",
   "immunization",
   "nhs number",
+  // Round one of 20c-iii, High 1: an enquiry form's "Physio Notes" and "Pain Notes"
+  // were kept, and the PAR-Q+ questions' own words were missing.
+  "physio",
+  "physiotherapist",
+  "rehab",
+  "rehabilitation",
+  "pain",
+  "operation",
+  "epilepsy",
+  "epileptic",
+  "seizure",
+  "arthritis",
+  "hernia",
+  "concussion",
+  "dizziness",
+  "consciousness",
+  "cardiac",
+  "cholesterol",
+  "hypertension",
+  "chronic",
+  "soft tissue",
+  "ligament",
+  "tendon",
+  // A body part is a column of health notes only with a word that says so: a "Joint
+  // Membership" is a couples' plan and "Back Office Notes" are the gym's.
+  ...["knee", "back", "shoulder", "hip", "neck", "ankle", "wrist", "elbow", "spine", "spinal", "heart", "chest", "joint", "bone"].flatMap((part) => [
+    `${part} note`,
+    `${part} notes`,
+    `${part} problem`,
+    `${part} issue`,
+  ]),
 ];
 
 /** "Terms and Conditions" is not a medical condition, and a gym's waiver is a

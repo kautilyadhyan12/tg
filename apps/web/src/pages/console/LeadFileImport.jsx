@@ -119,6 +119,8 @@ export default function LeadFileImport({ gymId, gym, readOnly, onClose, onAdded 
     try {
       const res = await orgService.checkLeadFile(gymId, { contentBase64: next.base64, ...(chosen ? { mapping: chosen } : {}) });
       const p = res.data.preview;
+      // The tick was for the people staff saw: a check that shows other people clears it.
+      setTicked((was) => was && preview !== null && preview.expected === p.expected);
       setPreview(p);
       setMapping(p.mapping);
       // Nothing about the people is read until the columns say who they are.

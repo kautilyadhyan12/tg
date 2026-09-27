@@ -26,8 +26,9 @@ import type { MemberListField } from "@app/shared";
 import { tidyCell } from "./cells.js";
 
 /** Punctuation between the words of a heading. A heading is one line of a
- *  spreadsheet, so anything here is a separator, never part of a word. */
-const PUNCTUATION = /[_\-.,/\\()[\]:#*'\u2018\u2019\u00b4`"]+/g;
+ *  spreadsheet, so anything here is a separator, never part of a word. A form's
+ *  question ends in "?" ("Pregnant?"), which is no part of its last word. */
+const PUNCTUATION = /[_\-.,/\\()[\]:#*'\u2018\u2019\u00b4`"?!]+/g;
 const COMBINING_MARKS = /[\u0300-\u036f]/g;
 /** "Email 1" and "Phone — primary" are the first column of their kind, not
  *  another one; Google Contacts and Mailchimp both write them. */
