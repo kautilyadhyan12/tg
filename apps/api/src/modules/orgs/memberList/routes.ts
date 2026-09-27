@@ -13,6 +13,7 @@ import {
   MEMBER_LIST_BY_HAND_WORDS,
   MEMBER_LIST_CONFIRM_REFUSAL_WORDS,
   MEMBER_INVITE_WORDS,
+  memberInvitePeopleQuerySchema,
   memberInvitePreviewQuerySchema,
   memberInviteRequestSchema,
   memberListConfirmRequestSchema,
@@ -28,6 +29,7 @@ import {
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { memberListEntryParamsSchema, memberListParamsSchema, memberParamsSchema, orgParamsSchema } from "../schemas.js";
+import { invitePeople } from "../invites/people.js";
 import * as invites from "../invites/service.js";
 import type { InviteSettings } from "../invites/settings.js";
 import * as byHand from "./byHandService.js";
@@ -441,6 +443,17 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     const preview = await invites.previewInvite(listDeps, requireUserId(req), params.gymId, query, readGate(req, reply));
     if (preview === null) return;
     return reply.status(200).send({ preview });
+  });
+
+  /** Invite's page: who these filters would email, or leave out and why (§18.6). */
+  app.get("/v1/orgs/:gymId/member-list/invites/people", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(memberInvitePeopleQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const page = await invitePeople(listDeps, requireUserId(req), params.gymId, query, readGate(req, reply));
+    if (page === null) return;
+    return reply.status(200).send({ page });
   });
 
   app.post("/v1/orgs/:gymId/member-list/invites", { preHandler: [app.authenticate] }, async (req, reply) => {

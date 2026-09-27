@@ -25,6 +25,7 @@ import {
   MEMBER_INVITE_EMAIL_REASON_WORDS,
   MEMBER_INVITE_WORDS,
   memberInviteOneSchema,
+  memberInvitePeopleSchema,
   memberInvitePreviewSchema,
   memberInvitedSchema,
   memberListEntriesPageSchema,
@@ -389,6 +390,115 @@ d("press Invite (real Postgres)", () => {
   );
 
   it(
+    "Invite's page lists exactly the people the press emails, and everyone it leaves out with their own true reason",
+    async () => {
+      const owner = await makeUser("page-owner");
+      const org = await makeGym(owner, "Page Invite Gym");
+      const gym = org.org.id;
+      const active = { status: "Active", membershipType: "Gold" };
+      await typeIn(gym, owner, { fullName: "Ava Thompson", email: addr("page-ava"), ...active });
+      await typeIn(gym, owner, { fullName: "Arjun Shah", email: addr("page-shah"), ...active });
+      // A couple at one address: one invitation, for the first of them on the list.
+      await typeIn(gym, owner, { fullName: "Priya Shah", email: addr("page-shah"), ...active });
+      await typeIn(gym, owner, { fullName: "Liam Hughes", phone: "07400 200107", ...active });
+      await typeIn(gym, owner, { fullName: "Mia Rossi", email: addr("page-mia"), dateOfBirth: "2012-03-14", ...active });
+      await typeIn(gym, owner, { fullName: "Ravi Kumar", email: `info+page@${DOMAIN}`, ...active });
+      await typeIn(gym, owner, { fullName: "Thomas Moore", email: addr("page-thomas"), status: "Expired", membershipType: "Gold" });
+      const olivia = await makeUser("page-olivia");
+      await verify(olivia.email);
+      await typeIn(gym, owner, { fullName: "Olivia Bennett", email: olivia.email, ...active });
+      await join(olivia, org, owner);
+      // Her husband, on his own record at her address.
+      await typeIn(gym, owner, { fullName: "Mark Bennett", email: olivia.email, ...active });
+
+      const people = async (query: string, who: User = owner) => {
+        const res = await get(`${listUrl(gym)}/invites/people${query}`, who.cookies);
+        expect(res.statusCode, res.body).toBe(200);
+        return memberInvitePeopleSchema.parse((JSON.parse(res.body) as { page: unknown }).page);
+      };
+      const preview = await previewOf(gym, owner, "?status=Active");
+      const reach = await people("?status=Active&group=reach");
+      const leftOut = await people("?status=Active&group=left_out");
+
+      expect(reach.people.map((p) => [p.fullName, p.email, p.status, p.membershipType])).toEqual([
+        ["Ava Thompson", addr("page-ava"), "Active", "Gold"],
+        ["Arjun Shah", addr("page-shah"), "Active", "Gold"],
+      ]);
+      expect([reach.total, reach.cursor]).toEqual([preview.reach, null]);
+      expect(leftOut.people.map((p) => [p.fullName, p.reason, p.sameAddressAs, p.turns18On])).toEqual([
+        ["Priya Shah", "alreadyInvited", "Arjun Shah", null],
+        ["Liam Hughes", "noEmail", null, null],
+        ["Mia Rossi", "underAge", null, "2030-03-14"],
+        ["Ravi Kumar", "sharedAddress", null, null],
+        ["Olivia Bennett", "inApp", null, null],
+        ["Mark Bennett", "inApp", null, null],
+      ]);
+      // The page's reasons are the count's, one for one.
+      const tally = new Map<string, number>();
+      for (const p of leftOut.people) tally.set(p.reason, (tally.get(p.reason) ?? 0) + 1);
+      expect(Object.fromEntries(tally)).toEqual(Object.fromEntries(Object.entries(preview.skipped).filter(([, n]) => n > 0)));
+      // Each reads as their own row does: Olivia is in the app, Mark is not — she uses it with his email.
+      const app = new Map(leftOut.people.map((p) => [p.fullName, p.app]));
+      expect(app.get("Olivia Bennett")?.word).toBe("in_app");
+      expect([app.get("Mark Bennett")?.word, app.get("Mark Bennett")?.line]).toEqual(["not_in_app", "Olivia Bennett uses the app with this email."]);
+
+      // The press emails the page's people and nobody else.
+      const pressed = await press(gym, owner, preview, { status: ["Active"] });
+      expect(pressed.statusCode, pressed.body).toBe(200);
+      await runSender();
+      const typed = new Set([addr("page-ava"), addr("page-shah"), addr("page-mia"), `info+page@${DOMAIN}`, addr("page-thomas"), olivia.email]);
+      const sentTo = outbox.filter((message) => typed.has(message.to)).map((message) => message.to);
+      expect(sentTo.sort()).toEqual(reach.people.map((p) => p.email).sort());
+      // Afterwards the two who were emailed have been invited, and nobody is left to reach.
+      expect((await people("?status=Active&group=reach")).total).toBe(0);
+      const after = await people("?status=Active&group=left_out");
+      expect(after.people.filter((p) => p.fullName === "Ava Thompson").map((p) => [p.reason, p.app.word])).toEqual([["alreadyInvited", "invited"]]);
+
+      // A bad group or cursor is refused; a trainer and another gym's owner see nobody.
+      expect((await get(`${listUrl(gym)}/invites/people?group=everyone`, owner.cookies)).statusCode).toBe(400);
+      expect((await get(`${listUrl(gym)}/invites/people?group=reach&cursor=-1`, owner.cookies)).statusCode).toBe(400);
+      expect((await get(`${listUrl(gym)}/invites/people`, owner.cookies)).statusCode).toBe(400);
+      const trainer = await makeUser("page-trainer");
+      await verify(trainer.email);
+      await appoint(trainer, org, owner, "trainer");
+      expect((await get(`${listUrl(gym)}/invites/people?group=reach`, trainer.cookies)).statusCode).toBe(403);
+      const stranger = await makeUser("page-stranger");
+      await makeGym(stranger, "Page Stranger Gym");
+      const theirs = await get(`${listUrl(gym)}/invites/people?group=left_out`, stranger.cookies);
+      expect(theirs.statusCode).toBe(404);
+      expect(theirs.body).not.toContain("Priya");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "Invite's page comes a hundred at a time, in the list's order, and the pages together are the whole group",
+    async () => {
+      const owner = await makeUser("pages-owner");
+      const org = await makeGym(owner, "Pages Invite Gym");
+      const gym = org.org.id;
+      const names: string[] = [];
+      for (let i = 1; i <= 103; i++) {
+        const name = `Paged Person ${String(i).padStart(3, "0")}`;
+        names.push(name);
+        await typeIn(gym, owner, { fullName: name, email: addr(`pages-${String(i)}`) });
+      }
+      const pageOf = async (query: string) => {
+        const res = await get(`${listUrl(gym)}/invites/people${query}`, owner.cookies);
+        expect(res.statusCode, res.body).toBe(200);
+        return memberInvitePeopleSchema.parse((JSON.parse(res.body) as { page: unknown }).page);
+      };
+      const first = await pageOf("?group=reach");
+      expect([first.total, first.people.length, first.cursor]).toEqual([103, 100, 100]);
+      const second = await pageOf(`?group=reach&cursor=${String(first.cursor)}`);
+      expect([second.total, second.people.length, second.cursor]).toEqual([103, 3, null]);
+      expect([...first.people, ...second.people].map((p) => p.fullName)).toEqual(names);
+      expect((await pageOf("?group=left_out")).total).toBe(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "an unsubscribe is for that gym alone, and a hard bounce is for every gym",
     async () => {
       const ownerA = await makeUser("scope-a");
@@ -617,8 +727,7 @@ d("press Invite (real Postgres)", () => {
         staff.push(manager);
       }
       const none = { noEmail: 0, underAge: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, refused: 0, sharedAddress: 0 };
-      const noNames = { reach: [], noEmail: [], underAge: [], inApp: [], alreadyInvited: [], unsubscribed: [], bounced: [], refused: [], sharedAddress: [] };
-      const stale = { version: 999, reach: 0, skipped: none, names: noNames, blocked: null };
+      const stale = { version: 999, reach: 0, skipped: none, blocked: null };
       const desk = "10.64.0.1";
       // Five people, 24 presses each, at one address: all answered (the list moved).
       for (const who of staff) {

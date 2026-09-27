@@ -16,6 +16,7 @@ import { emailHmac } from "../src/modules/orgs/invites/address.js";
 import { inviteSettings } from "../src/modules/orgs/invites/settings.js";
 import {
   MEMBER_LIST_BY_HAND_WORDS,
+  memberInvitePeopleResponseSchema,
   memberListEntriesPageSchema,
   memberListEntryDetailSchema,
   memberListEntryWrittenSchema,
@@ -145,7 +146,7 @@ d("One Remove (real Postgres)", () => {
 
   /** Staff type a person in; the gym's invitation to their address is written here, as
    *  the join suite does, so no other suite's sender emails it. */
-  const add = async (gym: Gym, body: { fullName: string; email?: string; phone?: string; dateOfBirth?: string }, invited = true): Promise<string> => {
+  const add = async (gym: Gym, body: { fullName: string; email?: string; phone?: string; dateOfBirth?: string; memberNumber?: string }, invited = true): Promise<string> => {
     const res = await post(entriesUrl(gym), body, gym.owner.cookies);
     expect([200, 201], res.body).toContain(res.statusCode);
     const { entry } = memberListEntryWrittenSchema.parse(JSON.parse(res.body));
@@ -304,6 +305,9 @@ d("One Remove (real Postgres)", () => {
       expect(await former(gym, olivia)).toBe(false);
       expect(await memberships(gym, oliviaUser)).toBe(true);
       expect((await rowOf(gym, "Olivia Bennett")).app).toMatchObject({ word: "not_in_app", line: "Removed from app" });
+      // The Filter finds her under "Removed from app", and not under "Not invited yet".
+      expect((await page(gym, "?app=removed")).entries.map((entry) => entry.fullName)).toEqual(["Olivia Bennett"]);
+      expect((await page(gym, "?app=not_invited")).entries.map((entry) => entry.fullName)).not.toContain("Olivia Bennett");
     },
     TEST_TIMEOUT_MS,
   );
@@ -379,7 +383,7 @@ d("One Remove (real Postgres)", () => {
   );
 
   it(
-    "Invite's box names who gets the email and who doesn't, by reason, the first five of each in the list's order",
+    "Invite's page names who gets the email and who doesn't, with each one's reason, in the list's order",
     async () => {
       const gym = await makeGym();
       await add(gym, { fullName: "Olivia Bennett", email: addr("inv-olivia") });
@@ -387,18 +391,94 @@ d("One Remove (real Postgres)", () => {
       for (let i = 1; i <= 7; i++) await add(gym, { fullName: `Reach ${String(i)}`, email: addr(`inv-${String(i)}`) }, false);
       await add(gym, { fullName: "Liam Hughes", phone: "+447911123457" }, false);
       await add(gym, { fullName: "Mia Rossi", email: addr("inv-mia"), dateOfBirth: "2012-03-14" }, false);
-      const res = await get(`/v1/orgs/${gym.id}/member-list/invites/preview`, gym.owner.cookies);
-      expect(res.statusCode, res.body).toBe(200);
-      const preview = (JSON.parse(res.body) as { preview: { reach: number; skipped: Record<string, number>; names: Record<string, string[]> } }).preview;
-      expect(preview.reach).toBe(7);
-      expect(preview.names.reach).toEqual(["Reach 1", "Reach 2", "Reach 3", "Reach 4", "Reach 5"]);
-      expect(preview.names.noEmail).toEqual(["Liam Hughes"]);
-      expect(preview.names.underAge).toEqual(["Mia Rossi"]);
-      expect(preview.names.inApp).toEqual(["Olivia Bennett"]);
-      expect(preview.skipped).toMatchObject({ noEmail: 1, underAge: 1, inApp: 1 });
-      // Another gym's staff see no names.
+      const peopleOf = async (group: string, who: User = gym.owner) => {
+        const res = await get(`/v1/orgs/${gym.id}/member-list/invites/people?group=${group}`, who.cookies);
+        expect(res.statusCode, res.body).toBe(200);
+        return memberInvitePeopleResponseSchema.parse(JSON.parse(res.body)).page;
+      };
+      const reach = await peopleOf("reach");
+      expect(reach.people.map((p) => p.fullName)).toEqual(["Reach 1", "Reach 2", "Reach 3", "Reach 4", "Reach 5", "Reach 6", "Reach 7"]);
+      const left = await peopleOf("left_out");
+      expect(left.people.map((p) => [p.fullName, p.reason, p.turns18On])).toEqual([
+        ["Olivia Bennett", "inApp", null],
+        ["Liam Hughes", "noEmail", null],
+        ["Mia Rossi", "underAge", "2030-03-14"],
+      ]);
+      // Another gym's staff see nobody.
       const other = await makeGym();
-      expect((await get(`/v1/orgs/${gym.id}/member-list/invites/preview`, other.owner.cookies)).statusCode).toBe(404);
+      const theirs = await get(`/v1/orgs/${gym.id}/member-list/invites/people?group=reach`, other.owner.cookies);
+      expect(theirs.statusCode).toBe(404);
+      expect(theirs.body).not.toContain("Reach 1");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a past member still in the app is removed from their own page, and 'Using the app' opens that page; a relative's past record on the same email never does",
+    async () => {
+      const gym = await makeGym();
+      // Grace joined with her record; a whole-list import then moved it to past members,
+      // which never ends anybody's app.
+      const grace = await add(gym, { fullName: "Grace Hall", email: addr("ghall") });
+      const graceUser = await signIn(addr("ghall"), "Grace Hall");
+      await accept(graceUser);
+      await sql`UPDATE gym_member_list_entries SET former_at = now() WHERE gym_id = ${gym.id} AND id = ${grace}`;
+      // Maria is on the list with her own record; her son's past record holds her email.
+      const son = await add(gym, { fullName: "Sam Park", email: addr("mpark"), memberNumber: "S-1" }, false);
+      await sql`UPDATE gym_member_list_entries SET former_at = now() WHERE gym_id = ${gym.id} AND id = ${son}`;
+      const maria = await add(gym, { fullName: "Maria Park", email: addr("mpark") });
+      const mariaUser = await signIn(addr("mpark"), "Maria Park");
+      await accept(mariaUser);
+      // Leo joined without a record of his own (a join code); the only record at his
+      // address is a past one — which may be a relative's, so it is never taken as his.
+      const dad = await add(gym, { fullName: "Leo Ford", email: addr("lford") });
+      const leoUser = await signIn(addr("lford"), "Leo Ford");
+      await accept(leoUser);
+      await sql`UPDATE gym_members SET entry_id = NULL WHERE gym_id = ${gym.id} AND user_id = ${leoUser.userId}`;
+      await sql`UPDATE gym_member_list_entries SET former_at = now() WHERE gym_id = ${gym.id} AND id = ${dad}`;
+
+      // "Using the app" names each person's own record, and no other.
+      const roster = await get(`/v1/orgs/${gym.id}/members`, gym.owner.cookies);
+      expect(roster.statusCode, roster.body).toBe(200);
+      const records = new Map(
+        (JSON.parse(roster.body) as { items: { userId: string; recordId?: string }[] }).items.map((item) => [item.userId, item.recordId ?? null]),
+      );
+      expect(records.get(graceUser.userId)).toBe(grace);
+      expect(records.get(mariaUser.userId)).toBe(maria);
+      expect(records.get(leoUser.userId)).toBeNull();
+      // Staff who don't see the list get no record at all.
+      const trainer = await staffWith(gym, ["members.read"]);
+      const theirs = await get(`/v1/orgs/${gym.id}/members`, trainer.cookies);
+      expect(theirs.body).not.toContain("recordId");
+
+      // The pages say whether Remove would end somebody's app, by Remove's own rule.
+      expect((await detailOf(gym, grace)).removeEndsApp).toBe(true);
+      expect((await detailOf(gym, son)).removeEndsApp).toBe(false);
+      expect((await detailOf(gym, dad)).removeEndsApp).toBe(false);
+      expect((await detailOf(gym, maria)).removeEndsApp).toBe(true);
+
+      // A relative's past record: Remove changes nobody's app.
+      const sonOff = await removeRecord(gym, son);
+      expect(memberListEntryWrittenSchema.parse(JSON.parse(sonOff.body)).outcome).toBe("already_taken_off");
+      expect(await memberships(gym, mariaUser)).toBe(false);
+      expect(memberListEntryWrittenSchema.parse(JSON.parse((await removeRecord(gym, dad)).body)).outcome).toBe("already_taken_off");
+      expect(await memberships(gym, leoUser)).toBe(false);
+
+      // Grace's own past record: Remove ends her app; the record stays a past member.
+      const off = await removeRecord(gym, grace);
+      expect(off.statusCode, off.body).toBe(200);
+      const written = memberListEntryWrittenSchema.parse(JSON.parse(off.body));
+      expect(written.outcome).toBe("removed_from_app");
+      expect(written.entry.app.word).toBe("not_in_app");
+      expect(written.entry.removeEndsApp).toBe(false);
+      expect(await memberships(gym, graceUser)).toBe(true);
+      expect(await former(gym, grace)).toBe(true);
+      const audit = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM audit_log
+        WHERE gym_id = ${gym.id} AND action = 'org.member_removed' AND meta->>'removedUserId' = ${graceUser.userId}`;
+      expect(audit[0]?.n).toBe(1);
+      // Pressed again, nothing more happens.
+      expect(memberListEntryWrittenSchema.parse(JSON.parse((await removeRecord(gym, grace)).body)).outcome).toBe("already_taken_off");
     },
     TEST_TIMEOUT_MS,
   );

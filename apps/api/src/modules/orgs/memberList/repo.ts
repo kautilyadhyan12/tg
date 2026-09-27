@@ -35,6 +35,8 @@ import {
   type MemberListMapping,
   type MemberListMode,
   type MemberListRecords,
+  memberListOnListSchema,
+  type MemberListOnList,
   type MemberListStoredPerson,
   type MemberListRowGroup,
   type MemberListStagedFile,
@@ -640,6 +642,39 @@ export async function stagedShell(sql: SqlOrTx, gymId: string, uploadId: string)
  *  Both bounds are whole numbers worked out HERE and cast in the statement: Postgres
  *  cannot add two parameters it has no type for (`operator is not unique: unknown +
  *  unknown`), and arithmetic on a page's edge belongs where the numbers already are. */
+/** What the list holds today about these records, for the people an import leaves out:
+ *  their membership, end or renewal, payment, and how and when they came onto the list. */
+export async function onListOf(sql: SqlOrTx, gymId: string, entryIds: readonly string[]): Promise<Map<string, MemberListOnList>> {
+  if (entryIds.length === 0) return new Map();
+  const rows = await sql<
+    {
+      id: string;
+      membership_type: string | null;
+      ends_on: string | null;
+      ends_on_kind: string | null;
+      payment_status: string | null;
+      source: string;
+      created_at: Date;
+    }[]
+  >`
+    SELECT id, membership_type, ends_on::text AS ends_on, ends_on_kind, payment_status, source, created_at
+    FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND id = ANY(${[...entryIds]}::uuid[])`;
+  return new Map(
+    rows.map((row) => [
+      row.id,
+      memberListOnListSchema.parse({
+        membershipType: row.membership_type,
+        endsOn: row.ends_on,
+        endsOnKind: row.ends_on_kind,
+        paymentStatus: row.payment_status,
+        source: row.source,
+        addedAt: row.created_at.toISOString(),
+      }),
+    ]),
+  );
+}
+
 export async function stagedPage(
   sql: SqlOrTx,
   gymId: string,

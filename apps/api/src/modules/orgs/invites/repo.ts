@@ -29,6 +29,8 @@ export interface WordFilters {
 export interface Candidate {
   entryId: string;
   fullName: string;
+  status: string | null;
+  membershipType: string | null;
   email: string | null;
   /** 'YYYY-MM-DD', or null. */
   dateOfBirth: string | null;
@@ -40,8 +42,10 @@ export async function inviteCandidates(sql: SqlOrTx, gymId: string, filters: Wor
   const statuses = filters.statuses === null ? null : [...filters.statuses];
   const membershipTypes = filters.membershipTypes === null ? null : [...filters.membershipTypes];
   const paymentStatuses = filters.paymentStatuses === null ? null : [...filters.paymentStatuses];
-  const rows = await sql<{ id: string; full_name: string; email: string | null; date_of_birth: string | null }[]>`
-    SELECT e.id, e.full_name, e.email::text AS email, e.date_of_birth::text AS date_of_birth
+  const rows = await sql<
+    { id: string; full_name: string; status: string | null; membership_type: string | null; email: string | null; date_of_birth: string | null }[]
+  >`
+    SELECT e.id, e.full_name, e.status, e.membership_type, e.email::text AS email, e.date_of_birth::text AS date_of_birth
     FROM gym_member_list_entries e
     WHERE e.gym_id = ${gymId}
       AND e.former_at IS NULL
@@ -51,7 +55,14 @@ export async function inviteCandidates(sql: SqlOrTx, gymId: string, filters: Wor
       AND (${paymentStatuses}::text[] IS NULL
            OR lower(coalesce(e.payment_status, '')) = ANY(${paymentStatuses}::text[]))
     ORDER BY e.listed_seq`;
-  return rows.map((row) => ({ entryId: row.id, fullName: row.full_name, email: row.email, dateOfBirth: row.date_of_birth }));
+  return rows.map((row) => ({
+    entryId: row.id,
+    fullName: row.full_name,
+    status: row.status,
+    membershipType: row.membership_type,
+    email: row.email,
+    dateOfBirth: row.date_of_birth,
+  }));
 }
 
 /** Every entry of the gym that has an address, current or former, for the list's

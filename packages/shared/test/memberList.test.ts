@@ -740,14 +740,14 @@ describe("the wider record, kept (3a-v-b's own shapes)", () => {
     expect(memberListEntriesQuerySchema.safeParse({ record: "former" }).success).toBe(false);
   });
 
-  it("the App word is one of three, and a page asks for them, or Needs checking, by name and no other (5b-v-a-i, §18.4)", () => {
+  it("the App word is one of three, and a page asks for them, Not invited yet, Removed from app or Needs checking, by name and no other (5b-v-a-i, §18.4)", () => {
     expect(memberListEntriesQuerySchema.parse({ app: "in_app" }).app).toBe("in_app");
     expect(memberListEntriesQuerySchema.parse({ app: ["invited", "needs_check"] }).app).toEqual(["invited", "needs_check"]);
     expect(memberListEntriesQuerySchema.safeParse({ app: "uses_the_app" }).success).toBe(false);
     expect(memberListEntriesQuerySchema.safeParse({ app: "wrong_email" }).success).toBe(false);
-    expect(memberListEntriesQuerySchema.safeParse({ app: Array.from({ length: 5 }, () => "invited") }).success).toBe(false);
+    expect(memberListEntriesQuerySchema.safeParse({ app: Array.from({ length: MEMBER_APP_FILTER_ORDER.length + 1 }, () => "invited") }).success).toBe(false);
     expect(memberAppWordSchema.options).toEqual(["in_app", "invited", "not_in_app"]);
-    expect(MEMBER_APP_FILTER_ORDER).toEqual(["in_app", "invited", "not_in_app", "needs_check"]);
+    expect(MEMBER_APP_FILTER_ORDER).toEqual(["in_app", "invited", "not_in_app", "not_invited", "removed", "needs_check"]);
     for (const word of MEMBER_APP_FILTER_ORDER) expect(MEMBER_APP_FILTER_WORDS[word].length).toBeGreaterThan(0);
     expect(memberAppViewSchema.safeParse({ word: "removed", tone: "grey", at: null, line: null, lineTone: "plain" }).success).toBe(false);
     const view = { word: "not_in_app", tone: "grey", at: "2026-09-26T09:30:00.000Z", line: "Removed from app", lineTone: "plain" };

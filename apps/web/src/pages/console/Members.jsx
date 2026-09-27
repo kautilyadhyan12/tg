@@ -6,6 +6,7 @@ import { orgService, errorText, errorCode } from '../../api/orgsApi';
 import { useConsoleOrg } from './useConsoleOrg';
 import ApplicationsQueue from './ApplicationsQueue';
 import MemberListPanel from './MemberListPanel';
+import MemberListPerson from './MemberListPerson';
 import { orgWords } from '@app/shared';
 import {
   canRemoveMembers,
@@ -221,6 +222,9 @@ export default function Members() {
   const [choosing, setChoosing] = useState(false);
   /** Import or Add member, pressed in the header, for the list to open. */
   const [action, setAction] = useState(null);
+  /** The record of a person in the app whose page is open, and the list view it reads. */
+  const [openRecord, setOpenRecord] = useState(null);
+  const [recordList, setRecordList] = useState(null);
   const clearAction = useCallback(() => setAction(null), []);
   const gymId = org?.id ?? null;
   // §4.3's "Remove hidden" for a trainer, off the org row the screen already has.
@@ -235,6 +239,24 @@ export default function Members() {
   const readOnly = consoleIsReadOnly(org);
   // A gym has members, a studio and a trainer have clients.
   const words = orgWords(org?.orgType);
+
+  // A person's page reads the list's own columns and words: read once, when the first
+  // page is opened from "Using the app". Without it the page still shows everything else.
+  useEffect(() => {
+    if (openRecord === null || recordList !== null || gymId === null) return undefined;
+    let live = true;
+    Promise.resolve()
+      .then(() => orgService.getMemberList(gymId))
+      .then(
+        (res) => {
+          if (live) setRecordList(res.data.list);
+        },
+        () => undefined,
+      );
+    return () => {
+      live = false;
+    };
+  }, [openRecord, recordList, gymId]);
 
   useEffect(() => {
     const timer = setTimeout(() => setRosterQuery(rosterTyped.trim()), 300);
@@ -369,6 +391,9 @@ export default function Members() {
   }
 
   const openMember = openUserId === null ? null : (state.items.find((m) => m.userId === openUserId) ?? null);
+  // Somebody with a record of their own opens the same page as on "Your list" (Kd,
+  // 2026-09-27: "those personal card should be same in both"); the rest open their panel.
+  const openFromRoster = (m) => (canSeeList && m.recordId ? setOpenRecord(m.recordId) : setOpenUserId(m.userId));
   const countLabel = memberCountLabel({ items: state.items, nextCursor: state.nextCursor }, org?.orgType);
   // §4.3's header meter, off the org row: null for a gym on no plan and a capless band.
   const meter = seatMeter(org);
@@ -498,7 +523,7 @@ export default function Members() {
         <section className="c-card overflow-hidden">
           <ul>
             {state.items.map((m) => (
-              <RosterRow key={m.userId} member={m} onOpen={() => setOpenUserId(m.userId)} />
+              <RosterRow key={m.userId} member={m} onOpen={() => openFromRoster(m)} />
             ))}
           </ul>
         </section>
@@ -516,6 +541,23 @@ export default function Members() {
           onClose={() => setOpenUserId(null)}
           onRemove={() => removeMember(openMember)}
           onPutOnList={() => putOnList(openMember)}
+        />
+      ) : null}
+
+      {tab === 'app' && openRecord !== null ? (
+        <MemberListPerson
+          key={openRecord}
+          gymId={gymId}
+          gym={org}
+          entryId={openRecord}
+          list={recordList}
+          words={words}
+          readOnly={readOnly}
+          onClose={() => setOpenRecord(null)}
+          onChanged={() => {
+            reloadRoster();
+            setListKey((k) => k + 1);
+          }}
         />
       ) : null}
 

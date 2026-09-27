@@ -1611,6 +1611,11 @@ export const orgMemberSchema = z.object({
     })
     .strict()
     .optional(),
+  /** THEIR OWN RECORD ON THE GYM'S LIST, so "Using the app" opens the same person's page
+   *  as "Your list" (Kd, 2026-09-27): the current record §9.7 matches them to, else the
+   *  past record they joined with. Never a past record found only by a shared email,
+   *  which can be a relative's. Only for staff who see the list; absent otherwise. */
+  recordId: z.string().uuid().optional(),
 });
 export type OrgMember = z.infer<typeof orgMemberSchema>;
 

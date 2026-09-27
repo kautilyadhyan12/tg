@@ -102,15 +102,34 @@ export function dayWords(day) {
   return `${String(d)} ${MONTHS[m - 1]} ${String(y)}`;
 }
 
+/** The same written date read the other way round: '2024-04-03' → '2024-03-04'; null
+ *  where the day is over 12, so that reading is no date. */
+export function swappedDay(day) {
+  const [y, m, d] = day.split('-');
+  return Number(d) > 12 ? null : `${y}-${d}-${m}`;
+}
+
+/** "We read 03/04/2024 as 3 April 2024", and the other reading as the switch's own words,
+ *  "Read as 4 March 2024 instead", so pressing it says what it does and pressing it again
+ *  puts it back (Kd, 2026-09-27: "what exactly is the functionality of swap … there is no
+ *  undo"). */
+export function dateReading(example) {
+  const other = swappedDay(example.read);
+  return {
+    read: `We read ${example.raw} as ${dayWords(example.read)}`,
+    other: other === null ? 'Swap day and month' : `Read as ${dayWords(other)} instead`,
+  };
+}
+
 /** Date columns whose day-or-month order nothing in the file settled (the gym's
- *  country decided, or staff swapped it), so the review shows one example to check. */
+ *  country decided, or staff switched it), so the review shows one example to check. */
 export function datesToCheck(preview) {
   return preview.dateColumns
     .filter((d) => d.example !== null && (d.from === 'country' || d.from === 'chosen'))
     .map((d) => ({
       column: d.column,
       order: d.order,
-      example: `${d.example.raw} = ${dayWords(d.example.read)}`,
+      ...dateReading(d.example),
       columnName: columnName(preview.columns.find((c) => c.index === d.column) ?? { header: null, index: d.column }),
     }));
 }

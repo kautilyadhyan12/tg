@@ -1,81 +1,91 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, Check, Copy, Loader2, Mail, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronRight, Loader2, Mail, X } from 'lucide-react';
 import { MEMBER_INVITE_PERMISSION_WORDS } from '@app/shared';
 import { orgService, errorText, inviteChangedPreview } from '../../api/orgsApi';
-import { Tick } from './MemberListUpload';
+import MemberListPerson from './MemberListPerson';
+import { ShareInvite } from './ShareInvite';
 import {
+  gymToday,
   inviteBlockedWords,
   inviteBody,
   inviteIgnores,
+  invitePeopleQuery,
   inviteQueryString,
-  inviteShareText,
+  inviteSummary,
+  inviteWhyNot,
   inviteWho,
-  joinLink,
-  namesWords,
   skippedLines,
 } from './memberListPeople';
 
-// Invite from the list (ROADMAP 5b-ii; spec Part 3 §9.12, §9.14): the box the list's
-// Invite button opens. It says who the press is for, how many get an email and who is
-// left out and why, then sends. A list that changed meanwhile invites nobody and the
-// box shows the new count. Afterwards it offers the invitation's words and link to send
-// another way. Every number is the server's.
-
-const C = {
-  panel: '#0f0e0d',
-  card: '#141210',
-  line: 'rgba(255,255,255,0.07)',
-  muted: 'rgba(255,255,255,0.5)',
-  soft: 'rgba(255,255,255,0.8)',
-  orange: '#FF8A1F',
-  orangeBg: 'rgba(255,138,31,0.12)',
-  green: '#34d399',
-  plain: 'rgba(255,255,255,0.06)',
-};
-const BUTTON = 'rounded-xl min-h-[48px] px-5 text-[15px] font-bold flex items-center justify-center gap-2 disabled:opacity-40';
+// Invite from the list (spec Part 3 §18.6; ROADMAP 5b-ii, 5b-v-a-i), the page the list's
+// "Invite to app" opens. Kd, 2026-09-27: it "should show like a normal dashboard just like
+// your list … showing every details and reason that is understandable by human". So it
+// is laid out as the list is: one line saying how many of the people it looked at get an
+// email and how many don't, then two tabs — Will get an email · Won't get one — each a
+// table of those people with their status and membership, where the email goes, or why
+// it won't, in the words their own row uses. A row opens the person's page, where the
+// reason can be fixed. Every number and every person is the server's, worked out by the
+// same rule as the Send button. A list that changed meanwhile invites nobody and shows
+// the new people. Afterwards it offers the invitation's words and link to send another way.
 
 const count = (k) => k.toLocaleString('en');
 
-/** The invitation's words and link, with a Copy button. */
-export function ShareInvite({ gymName, slug, email = null }) {
-  const text = inviteShareText({ gymName, link: joinLink(window.location.origin, slug), email });
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-    } catch {
-      setCopied(false);
-    }
-  };
+const GROUPS = [
+  { key: 'reach', title: 'Will get an email' },
+  { key: 'left_out', title: "Won't get one" },
+];
+const LOADING = { loading: true, error: null, people: [], total: 0, cursor: null };
+
+/** The permission tick (§9.12), drawn as the Leads page draws its own. */
+function PermissionTick({ checked, onChange, children }) {
   return (
-    <div className="flex flex-col gap-2" data-testid="share-invite">
-      <textarea
-        readOnly
-        aria-label="The invitation's words"
-        value={text}
-        rows={8}
-        onFocus={(e) => e.target.select()}
-        className="w-full rounded-xl px-3 py-2.5 text-sm resize-none"
-        style={{ background: '#0A0908', border: '1px solid rgba(255,255,255,0.10)', color: C.soft }}
-      />
-      <button type="button" onClick={() => void copy()} className="self-start rounded-xl min-h-[44px] px-4 text-sm font-semibold flex items-center gap-2" style={{ background: C.plain, color: C.soft }}>
-        {copied ? <Check className="w-4 h-4" style={{ color: C.green }} /> : <Copy className="w-4 h-4" />}
-        {copied ? 'Copied' : 'Copy'}
-      </button>
-    </div>
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className="self-start flex items-start gap-3 min-h-11 text-left"
+    >
+      <span className={checked ? 'c-check c-check-on mt-px' : 'c-check mt-px'}>
+        {checked ? <Check aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={3} /> : null}
+      </span>
+      <span className="c-s15 c-w5 c-t1">{children}</span>
+    </button>
   );
 }
 
-export default function MemberListInvite({ gymId, gym, filters, words, readOnly, preview: first, onSent, onClose }) {
+export default function MemberListInvite({
+  gymId,
+  gym,
+  list = null,
+  filters,
+  words,
+  readOnly,
+  preview: first,
+  onSent,
+  onListChanged = () => undefined,
+  onClose,
+}) {
   const [preview, setPreview] = useState(first);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
   const [sent, setSent] = useState(null);
   const [permission, setPermission] = useState(false);
+  const [tab, setTab] = useState('reach');
+  const [groups, setGroups] = useState({ reach: LOADING, left_out: LOADING });
+  const [loadingMore, setLoadingMore] = useState(false);
+  /** undefined: no person open · an id: that person's page, over this one. */
+  const [openId, setOpenId] = useState(undefined);
+  /** Bumped when the count must be read again (a change on a person's page). */
+  const [countTick, setCountTick] = useState(0);
+  /** Bumped when the lists must be read again (that, or a list that moved under a press). */
+  const [peopleTick, setPeopleTick] = useState(0);
+  /** The `peopleTick` each list was last read for, so a tab is read once per change. */
+  const readFor = useRef({ reach: -1, left_out: -1 });
+  const today = gymToday(gym?.timezone);
 
-  // Counted again as the box opens: the button's number may be minutes old.
+  // Counted again as the page opens: the button's number may be minutes old.
   useEffect(() => {
     let live = true;
     Promise.resolve()
@@ -92,7 +102,54 @@ export default function MemberListInvite({ gymId, gym, filters, words, readOnly,
     return () => {
       live = false;
     };
-  }, [gymId, filters]);
+  }, [gymId, filters, countTick]);
+
+  // A tab's first page, read when the tab is first shown and again after a change.
+  useEffect(() => {
+    if (sent !== null) return undefined;
+    const group = tab;
+    const reads = readFor.current;
+    if (reads[group] === peopleTick) return undefined;
+    reads[group] = peopleTick;
+    let live = true;
+    let done = false;
+    setGroups((g) => ({ ...g, [group]: LOADING }));
+    Promise.resolve()
+      .then(() => orgService.getInvitePeople(gymId, invitePeopleQuery(filters, group)))
+      .then(
+        (res) => {
+          done = true;
+          if (live) setGroups((g) => ({ ...g, [group]: { loading: false, error: null, ...res.data.page } }));
+        },
+        (err) => {
+          done = true;
+          if (live) setGroups((g) => ({ ...g, [group]: { ...LOADING, loading: false, error: errorText(err, "We couldn't load who would be invited.") } }));
+        },
+      );
+    return () => {
+      live = false;
+      // Left before it answered: read it again when the tab comes back.
+      if (!done) reads[group] = -1;
+    };
+  }, [gymId, filters, tab, peopleTick, sent]);
+
+  const loadMore = async () => {
+    const group = tab;
+    const shown = groups[group];
+    if (shown.cursor === null || loadingMore) return;
+    const at = readFor.current[group];
+    setLoadingMore(true);
+    try {
+      const res = await orgService.getInvitePeople(gymId, invitePeopleQuery(filters, group, shown.cursor));
+      if (readFor.current[group] !== at) return;
+      const p = res.data.page;
+      setGroups((g) => ({ ...g, [group]: { ...g[group], people: [...g[group].people, ...p.people], total: p.total, cursor: p.cursor } }));
+    } catch (err) {
+      if (readFor.current[group] === at) setGroups((g) => ({ ...g, [group]: { ...g[group], error: errorText(err, "We couldn't load any more.") } }));
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const send = async () => {
     if (preview === null || sending || !permission) return;
@@ -106,8 +163,9 @@ export default function MemberListInvite({ gymId, gym, filters, words, readOnly,
       const fresh = inviteChangedPreview(err);
       if (fresh !== null) {
         setPreview(fresh);
-        // The tick was for the group staff saw; a new group is ticked again.
+        // The tick was for the people staff saw; new people are ticked again.
         setPermission(false);
+        setPeopleTick((t) => t + 1);
       }
       setError(errorText(err, "We couldn't send the invitations. Please try again."));
     } finally {
@@ -115,183 +173,280 @@ export default function MemberListInvite({ gymId, gym, filters, words, readOnly,
     }
   };
 
+  // Something changed on a person's page: count and list again, and ask for the tick again.
+  const personChanged = () => {
+    setPermission(false);
+    setCountTick((t) => t + 1);
+    setPeopleTick((t) => t + 1);
+    onListChanged();
+  };
+
   const blocked = preview === null ? null : inviteBlockedWords(preview.blocked, words);
   const reach = preview?.reach ?? 0;
   const ignores = inviteIgnores(filters);
-  const people = (k) => (k === 1 ? words.person : words.people);
+  const chosen = inviteWho(filters);
+  const summary = preview === null ? null : inviteSummary(preview, filters, words);
 
   let body;
+  let footer;
   if (sent !== null) {
     const left = skippedLines(sent.skipped);
     body = (
       <>
-        <p className="text-[15px] flex gap-2" style={{ color: '#fff' }} role="status">
-          <Check className="w-5 h-5 flex-shrink-0" style={{ color: C.green }} />
+        <p className="c-s16 c-w6 c-t1 flex items-center gap-2" role="status">
+          <Check aria-hidden="true" className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--good)' }} />
           {sent.queued === 0
             ? 'Nobody new was invited.'
             : `${count(sent.queued)} ${sent.queued === 1 ? 'invitation is' : 'invitations are'} on the way.`}
         </p>
         {sent.queued > 0 ? (
-          <p className="text-sm" style={{ color: C.muted }}>
-            Emails go out in small batches, so a long list can take a day or more. Each person&apos;s page shows how theirs went.
-          </p>
+          <p className="c-s14 c-t2">Emails go out in small batches, so a long list can take a day or more. Each person&apos;s page shows how theirs went.</p>
         ) : null}
-        {left.length > 0 ? <LeftOut lines={left} /> : null}
+        {left.length > 0 ? (
+          <div data-testid="invite-left-out" className="flex flex-col gap-1">
+            <span className="c-s14 c-w6 c-t2">Not sent</span>
+            <ul className="flex flex-col gap-1">
+              {left.map((line) => (
+                <li key={line.key} className="c-s14 c-t1">
+                  {line.text}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         {sent.queued > 0 ? (
           <section className="flex flex-col gap-2">
-            <h3 className="text-sm font-semibold" style={{ color: '#fff' }}>
-              Share it yourself too
-            </h3>
-            <p className="text-sm" style={{ color: C.muted }}>
-              Send these words by WhatsApp, text or your own email. The link only lets in someone who signs in with the address you
-              invited.
+            <h3 className="c-h3">Share it yourself too</h3>
+            <p className="c-s14 c-t2">
+              Send these words by WhatsApp, text or your own email. The link only lets in someone who signs in with the address you invited.
             </p>
-            <ShareInvite gymName={gym.name} slug={gym.slug} />
+            <ShareInvite gymName={gym.name} slug={gym.slug} newLook />
           </section>
         ) : null}
-        <button type="button" onClick={onClose} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
-          Done
-        </button>
       </>
+    );
+    footer = (
+      <button type="button" onClick={onClose} className="c-btn c-btn-p c-btn-lg">
+        Done
+      </button>
     );
   } else if (preview === null) {
     body =
       error !== null ? (
-        <p className="text-sm" style={{ color: C.soft }} role="alert">
+        <p className="c-s14 c-t1" role="alert">
           {error}
         </p>
       ) : (
-        <p className="text-sm flex items-center gap-2" style={{ color: C.muted }}>
-          <Loader2 className="w-4 h-4 animate-spin" /> Counting…
+        <p className="c-s14 c-t2 flex items-center gap-2">
+          <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> Counting…
         </p>
       );
+    footer = (
+      <button type="button" onClick={onClose} className="c-btn c-btn-s c-btn-lg">
+        Cancel
+      </button>
+    );
   } else {
-    // Who is left out, a reason a line, each with its first names (§18.6).
-    const left = skippedLines(preview.skipped).map((line) => {
-      const who = namesWords(preview.names?.[line.key], preview.skipped[line.key]);
-      return who === '' ? line : { ...line, text: `${line.text}: ${who}` };
-    });
-    const reachNames = namesWords(preview.names?.reach, reach);
+    const shown = groups[tab];
+    const leftOut = summary.leftOut;
     body = (
       <>
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: C.muted }}>
-            Who
+        <div className="flex flex-col gap-1">
+          <p className="c-s16 c-w6 c-t1" data-testid="invite-summary">
+            {summary.gets}
+            {summary.wont !== null ? (
+              <>
+                {' '}
+                <button type="button" onClick={() => setTab('left_out')} className="c-btn-link c-w6" style={{ color: 'var(--t1)' }}>
+                  {summary.wont}
+                </button>
+              </>
+            ) : null}
           </p>
-          <p className="text-sm mt-1" style={{ color: C.soft }} data-testid="invite-who">
-            {inviteWho(filters)}
-          </p>
-          {ignores !== null ? (
-            <p className="text-xs mt-1" style={{ color: C.muted }}>
-              {ignores}
+          {chosen !== 'Everyone on your list' ? (
+            <p className="c-s14 c-t2" data-testid="invite-who">
+              You chose: {chosen}
             </p>
           ) : null}
+          {ignores !== null ? <p className="c-hint">{ignores}</p> : null}
         </div>
+
         {blocked !== null ? (
-          <div className="rounded-xl p-3 flex flex-col gap-2" style={{ background: C.orangeBg }} role="alert">
-            <p className="text-sm flex gap-2" style={{ color: '#fff' }}>
-              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: C.orange }} />
+          <div className="c-callout flex-col" role="alert">
+            <p className="c-s14 flex gap-2">
+              <AlertTriangle aria-hidden="true" className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--warn)' }} />
               {blocked}
             </p>
             {preview.blocked === 'no_postal_address' ? (
-              <Link to={`/console/${gym.slug}/settings`} className="text-sm font-semibold self-start" style={{ color: C.orange }}>
+              <Link to={`/console/${gym.slug}/settings`} className="c-btn c-btn-s self-start">
                 Open Settings
               </Link>
             ) : null}
           </div>
         ) : null}
-        <div className="rounded-2xl p-4" style={{ background: C.card, border: `1px solid ${C.line}` }}>
-          <p className="text-3xl font-bold" style={{ color: '#fff' }} data-testid="invite-reach">
-            {count(reach)}
-          </p>
-          <p className="text-sm mt-1" style={{ color: C.soft }}>
-            {reach === 0 ? `Nobody here is waiting for an invitation.` : `${people(reach)} will get an email invitation.`}
-          </p>
-          {reachNames !== '' ? (
-            <p className="text-sm mt-1" style={{ color: '#fff' }} data-testid="invite-reach-names">
-              {reachNames}
-            </p>
-          ) : null}
+
+        <div className="c-utabs" role="tablist" aria-label="Who gets an email">
+          {GROUPS.map(({ key, title }) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
+              data-testid={`invite-tab-${key}`}
+              onClick={() => setTab(key)}
+              className={tab === key ? 'c-utab c-utab-on gap-1.5' : 'c-utab gap-1.5'}
+            >
+              {title} <span className="c-n">{count(key === 'reach' ? reach : leftOut)}</span>
+            </button>
+          ))}
         </div>
-        {left.length > 0 ? <LeftOut lines={left} /> : null}
-        <p className="text-sm" style={{ color: C.muted }}>
-          They get one email from {gym.name} via AI Home Gym with a link to the app. Only someone who signs in with that email address can
-          join.
+
+        {shown.loading ? (
+          <p className="c-s14 c-t2 flex items-center gap-2">
+            <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> Loading…
+          </p>
+        ) : null}
+        {shown.error !== null ? (
+          <p className="c-s14 c-t1" role="alert">
+            {shown.error}
+          </p>
+        ) : null}
+
+        {!shown.loading && shown.people.length > 0 ? (
+          <section className="c-card overflow-hidden" data-testid={`invite-list-${tab}`}>
+            <div className="c-invite-grid c-th hidden md:grid px-5 py-2.5">
+              <span style={{ gridArea: 'who' }}>Name</span>
+              <span style={{ gridArea: 'status' }}>Status</span>
+              <span style={{ gridArea: 'type' }}>Membership</span>
+              <span style={{ gridArea: 'why' }}>{tab === 'reach' ? 'The email goes to' : "Why they won't get one"}</span>
+            </div>
+            <ul>
+              {shown.people.map((p, i) => {
+                const why = tab === 'reach' ? null : inviteWhyNot(p, today);
+                const gymWords = [p.status, p.membershipType].filter((w) => w !== null && w !== '').join(' · ');
+                return (
+                  <li key={p.entryId} className={i > 0 ? 'border-t' : 'md:border-t'} style={{ borderColor: 'var(--line)' }}>
+                    <button
+                      type="button"
+                      data-testid="invite-row"
+                      onClick={() => setOpenId(p.entryId)}
+                      className="c-invite-grid grid w-full text-left min-h-11 px-4 py-3 md:px-5 md:py-3"
+                    >
+                      <span className="flex flex-col gap-0.5 min-w-0" style={{ gridArea: 'who' }}>
+                        <span className="c-s15 c-w6 c-t1 c-ell">{p.fullName || 'No name'}</span>
+                        {why !== null && p.email !== null ? <span className="c-s13 c-t2 c-ell">{p.email}</span> : null}
+                      </span>
+                      {gymWords !== '' ? (
+                        <span className="md:hidden c-s13 c-t2" style={{ gridArea: 'words' }}>
+                          {gymWords}
+                        </span>
+                      ) : null}
+                      <span className="hidden md:block c-s14 c-t1 c-ell" style={{ gridArea: 'status' }}>
+                        {p.status || <span className="c-t3">—</span>}
+                      </span>
+                      <span className="hidden md:block c-s14 c-t1 c-ell" style={{ gridArea: 'type' }}>
+                        {p.membershipType || <span className="c-t3">—</span>}
+                      </span>
+                      <span className="flex flex-col gap-0.5 min-w-0" style={{ gridArea: 'why' }} data-testid="invite-why">
+                        {why === null ? (
+                          <span className="c-s14 c-t1 c-ell">{p.email}</span>
+                        ) : (
+                          <>
+                            <span className="c-s14 c-t1">{why.text}</span>
+                            {why.hint !== null ? <span className="c-hint">{why.hint}</span> : null}
+                          </>
+                        )}
+                      </span>
+                      <ChevronRight aria-hidden="true" className="w-[18px] h-[18px] c-t3 self-center" style={{ gridArea: 'go' }} />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ) : null}
+
+        {!shown.loading && shown.error === null && shown.people.length === 0 ? (
+          <p className="c-s14 c-t2">{tab === 'reach' ? 'Nobody here will get an email.' : 'Everyone here will get an email.'}</p>
+        ) : null}
+
+        {!shown.loading && shown.cursor !== null ? (
+          <button type="button" onClick={loadMore} disabled={loadingMore} className="c-btn c-btn-s c-btn-lg w-full md:w-auto md:self-start">
+            {loadingMore ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+            {loadingMore ? 'Loading…' : 'Load more'}
+          </button>
+        ) : null}
+      </>
+    );
+    footer = (
+      <div className="flex flex-col gap-3 w-full">
+        <p className="c-s13 c-t2">
+          Each gets one email from {gym.name} via AI Home Gym with a link to the app. Only someone who signs in with that email address can join.
         </p>
         {reach > 0 && blocked === null ? (
-          <Tick checked={permission} onChange={setPermission}>
+          <PermissionTick checked={permission} onChange={setPermission}>
             {MEMBER_INVITE_PERMISSION_WORDS.replace('{gym}', gym.name).replace('{people}', words.people)}
-          </Tick>
+          </PermissionTick>
         ) : null}
         {error !== null ? (
-          <p className="text-sm" style={{ color: '#fff' }} role="alert">
+          <p className="c-s14 c-t1" role="alert">
             {error}
           </p>
         ) : null}
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-[1fr_auto] md:flex md:justify-end gap-2 md:gap-3">
           <button
             type="button"
             onClick={() => void send()}
             disabled={reach === 0 || blocked !== null || !permission || readOnly || sending}
-            className={`${BUTTON} flex-1 sm:flex-none`}
-            style={{ background: C.orange, color: '#000' }}
+            className="c-btn c-btn-p c-btn-lg md:order-2"
           >
-            {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+            {sending ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Mail aria-hidden="true" className="w-4 h-4" />}
             {reach === 1 ? 'Send 1 invitation' : `Send ${count(reach)} invitations`}
           </button>
-          <button type="button" onClick={onClose} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
-            Close
+          <button type="button" onClick={onClose} className="c-btn c-btn-s c-btn-lg md:order-1">
+            Cancel
           </button>
         </div>
-      </>
+      </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto" style={{ background: 'rgba(10,9,8,0.88)' }}>
-      <div className="min-h-full flex items-end sm:items-center justify-center sm:p-6">
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Invite to the app"
-          data-testid="invite-box"
-          className="w-full sm:max-w-[560px] rounded-t-[28px] sm:rounded-[28px] p-5 sm:p-6 flex flex-col gap-4"
-          style={{ background: C.panel, border: `1px solid ${C.line}` }}
-        >
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold" style={{ color: '#fff' }}>
-              Invite to the app
-            </h2>
-            <button
-              type="button"
-              aria-label="Close"
-              onClick={onClose}
-              className="w-10 h-10 rounded-full flex items-center justify-center"
-              style={{ background: C.plain, color: C.soft }}
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-          {body}
+    <div className="fixed inset-0 z-50" style={{ background: 'var(--scrim)' }}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Invite to the app"
+        data-testid="invite-box"
+        className="c-sheet absolute inset-x-0 bottom-0 top-8 md:top-10 md:bottom-10 md:left-1/2 md:right-auto md:-translate-x-1/2 md:w-[960px] md:max-w-[calc(100%-48px)] flex flex-col rounded-t-[20px] md:rounded-[20px] border"
+        style={{ borderColor: 'var(--card-line)' }}
+      >
+        <div className="flex items-center gap-3 pl-4 pr-2 pt-3 md:px-7 md:pt-6 md:pb-2">
+          <h2 className="c-h2 flex-grow" style={{ fontSize: 22, lineHeight: '28px', fontWeight: 700 }}>
+            Invite to the app
+          </h2>
+          <button type="button" aria-label="Close" onClick={onClose} className="c-icon-btn">
+            <X aria-hidden="true" className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="flex flex-col gap-4 px-4 pt-2 pb-4 md:px-7 md:pt-3 md:pb-6 overflow-y-auto flex-grow">{body}</div>
+        <div className="flex px-4 pt-3 pb-5 md:px-7 md:py-4 border-t md:justify-end" style={{ borderColor: 'var(--line)', background: 'var(--card)' }}>
+          {footer}
         </div>
       </div>
-    </div>
-  );
-}
-
-function LeftOut({ lines }) {
-  return (
-    <div data-testid="invite-left-out">
-      <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: C.muted }}>
-        Left out
-      </p>
-      <ul className="mt-1 flex flex-col gap-1">
-        {lines.map((line) => (
-          <li key={line.key} className="text-sm" style={{ color: C.soft }}>
-            {line.text}
-          </li>
-        ))}
-      </ul>
+      {openId !== undefined ? (
+        <MemberListPerson
+          key={openId}
+          gymId={gymId}
+          gym={gym}
+          entryId={openId}
+          list={list}
+          words={words}
+          readOnly={readOnly}
+          onClose={() => setOpenId(undefined)}
+          onChanged={personChanged}
+        />
+      ) : null}
     </div>
   );
 }

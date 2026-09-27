@@ -13,6 +13,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { memberListEntryDetailSchema } from '@app/shared';
 import { WEEK_STARTS, attendanceDay, attendee, overview } from './__fixtures__/overview';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
@@ -38,6 +39,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       putMemberOnList: vi.fn(),
       getMemberList: vi.fn(),
       getMemberListEntries: vi.fn(),
+      getMemberListEntry: vi.fn(),
     },
   };
 });
@@ -1577,6 +1579,52 @@ describe('Removing a member', () => {
     fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
     expect(panel.getByText(/Remove Nia Cole from the app\? They can't use the app with your gym any more/)).toBeTruthy();
     expect(panel.queryByText(/past members/)).toBeNull();
+  });
+
+  it("someone with a record of their own opens the same page as on 'Your list' (Kd, 2026-09-27: one card in both places)", async () => {
+    const RECORD = '99999999-9999-4999-8999-999999999999';
+    const grace = {
+      ...joinedMemberWithForbiddenExtras,
+      userId: 'u9',
+      displayName: 'Grace Hall',
+      recordId: RECORD,
+      offList: { reason: 'taken_off', at: '2026-09-25T09:00:00.000Z', sameEmailName: null },
+    };
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, grace]));
+    orgService.getMemberListEntry.mockResolvedValue({
+      data: {
+        entry: memberListEntryDetailSchema.parse({
+          entryId: RECORD,
+          fullName: 'Grace Hall',
+          email: 'grace@members.example',
+          phone: null,
+          memberNumber: null,
+          status: 'Active',
+          membershipType: null,
+          joinedOn: null,
+          endsOn: null,
+          endsOnKind: null,
+          paymentStatus: null,
+          dateOfBirth: null,
+          formerAt: '2026-09-25T09:00:00.000Z',
+          source: 'upload',
+          inApp: true,
+          invitation: null,
+          app: { word: 'in_app', tone: 'amber', at: null, line: "Grace still uses the app through your gym. Remove them from the app if they've left.", lineTone: 'amber' },
+          extra: [],
+          handEdited: [],
+          members: [],
+          removeEndsApp: true,
+        }),
+      },
+    });
+    drawMembers();
+    fireEvent.click(await screen.findByText('Grace Hall'));
+    await waitFor(() => expect(orgService.getMemberListEntry).toHaveBeenCalledWith(ORG.id, RECORD));
+    expect(await screen.findByText(/Grace still uses the app through your gym/)).toBeTruthy();
+    expect(screen.getByText(/Past member since/)).toBeTruthy();
+    // Not the panel of somebody with no record.
+    expect(screen.queryByText('Add to your list')).toBeNull();
   });
 
   it('searches the people in the app by name once typing pauses, and says when nobody matches', async () => {

@@ -15,13 +15,20 @@ import { ADULT_AGE } from "./plan.js";
  *  date of birth: invited as before. */
 export function underAgeOn(dateOfBirth: string | null, today: string): boolean {
   if (dateOfBirth === null) return false;
+  const birthday = turns18On(dateOfBirth);
   // A date in any other shape cannot be judged, and is never taken as an adult.
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) return true;
+  return birthday === null || today < birthday;
+}
+
+/** The day someone born on `dateOfBirth` ('YYYY-MM-DD') turns 18, the first day Invite
+ *  reaches them; 29 February's birthday falls on 1 March in a year without one. Null for
+ *  a date in any other shape. */
+export function turns18On(dateOfBirth: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) return null;
   const year = Number(dateOfBirth.slice(0, 4)) + ADULT_AGE;
   const monthDay = dateOfBirth.slice(5);
   const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
-  const birthday = monthDay === "02-29" && !leap ? `${String(year)}-03-01` : `${String(year)}-${monthDay}`;
-  return today < birthday;
+  return monthDay === "02-29" && !leap ? `${String(year)}-03-01` : `${String(year)}-${monthDay}`;
 }
 
 /** The longest postal address a gym may keep for its invitations' footer. */

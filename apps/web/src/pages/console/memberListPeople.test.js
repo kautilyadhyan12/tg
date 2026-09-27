@@ -342,7 +342,7 @@ describe('who an Invite leaves out, in words', () => {
     expect(lines.map((line) => line.text)).toEqual([
       '1 has no email address',
       '3 are under 18 by the date of birth on your list',
-      '2 were invited before',
+      '2 were invited before, or share an email with someone who was',
       '1 has an address that bounces',
       '1 has a shared address such as info@',
     ]);

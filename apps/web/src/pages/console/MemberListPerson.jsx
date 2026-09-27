@@ -17,7 +17,7 @@ import {
 import { MEMBER_INVITE_AGAIN_PER_PERSON, MEMBER_INVITE_AGAIN_PERSON_DAYS, MEMBER_INVITE_WORDS, MEMBER_LIST_QUERY_MAX_CHARS } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import DatePick from '../../components/console/DatePick';
-import { ShareInvite } from './MemberListInvite';
+import { ShareInvite } from './ShareInvite';
 import { FIELD_LABELS, dayWords } from './memberListView';
 import {
   DAY_FIELDS,
@@ -38,6 +38,7 @@ import {
   pastWords,
   patchFrom,
   compareRecords,
+  underAgeWhen,
   whenWords,
 } from './memberListPeople';
 
@@ -452,7 +453,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
 
   const takeOff = () => {
     const asked = shown.entryId;
-    return run(asked, () => orgService.takeOffMemberListEntry(gymId, asked), "We couldn't take this person off.");
+    return run(asked, () => orgService.takeOffMemberListEntry(gymId, asked), "We couldn't remove this person.");
   };
 
   /** Invite this person, or send their invitation again because they asked. The
@@ -757,9 +758,14 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           </p>
         ) : null}
         {action === 'under_age' ? (
-          <p className="text-sm" style={{ color: C.muted }} data-testid="under-age-note">
-            {MEMBER_INVITE_WORDS.under_age}
-          </p>
+          <div className="flex flex-col gap-1">
+            <p className="text-sm" style={{ color: C.muted }} data-testid="under-age-note">
+              {MEMBER_INVITE_WORDS.under_age}
+            </p>
+            <p className="text-sm" style={{ color: C.soft }} data-testid="under-age-when">
+              {underAgeWhen(p.dateOfBirth)}
+            </p>
+          </div>
         ) : null}
         <Section title="Contact">
           {contact.length === 0 ? <Fact label="Email or phone" value="None" /> : null}
@@ -840,6 +846,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
               disabled={busy || readOnly}
               items={[
                 { label: 'Edit', onPick: startEdit },
+                // A past member still in the app is removed from it here, as from "Using the app".
+                ...(p.removeEndsApp ? [{ label: 'Remove', icon: UserMinus, onPick: () => setMode('takeOff') }] : []),
                 { label: 'Merge duplicate', hint: 'When this person is on your list twice', icon: ArrowLeftRight, onPick: startJoin },
                 { label: 'Delete for good', icon: Trash2, danger: true, onPick: () => setMode('delete') },
               ]}
@@ -890,17 +898,24 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     }
     if (mode === 'takeOff') {
       const pending = p.invitation?.state === 'pending';
+      const past = p.formerAt !== null;
       return (
         <div className="flex flex-col gap-3" data-testid="confirm-take-off">
           <p className="text-[15px]" style={{ color: '#fff' }}>
-            Remove {name}?
+            {past ? `Remove ${name} from the app?` : `Remove ${name}?`}
           </p>
-          <p className="text-sm" style={{ color: C.soft }}>
-            {p.inApp
-              ? `They move to past members and can't use the app with your ${words.it ?? 'gym'} any more.`
-              : 'They move to past members.'}
-            {pending ? ' Their invitation stops working.' : ''} Their details are kept, and Put back brings them back.
-          </p>
+          {past ? (
+            <p className="text-sm" style={{ color: C.soft }}>
+              They&apos;re already a past {words.person}. This ends their app with your {words.it ?? 'gym'}, and they keep their own workouts.
+            </p>
+          ) : (
+            <p className="text-sm" style={{ color: C.soft }}>
+              {p.removeEndsApp
+                ? `They move to past ${words.people} and can't use the app with your ${words.it ?? 'gym'} any more.`
+                : `They move to past ${words.people}.`}
+              {pending ? ' Their invitation stops working.' : ''} Their details are kept, and Put back brings them back.
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => void takeOff()} disabled={busy || readOnly} className={BUTTON} style={{ background: C.redBg, color: C.red }}>
               Remove

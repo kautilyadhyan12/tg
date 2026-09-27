@@ -105,10 +105,16 @@ const SHOWN: Readonly<Record<AppReasonKind, { word: MemberAppView["word"]; line:
 
 /** The word, its colour and the one line a screen shows for a person (§18.4). */
 export function appWord(input: AppWordInput): MemberAppView {
+  return appFact(input).view;
+}
+
+/** What a screen shows, and the reason behind it, which the Filter's "Not invited yet" and
+ *  "Removed from app" choices read. */
+export function appFact(input: AppWordInput): { view: MemberAppView; reason: AppReasonKind } {
   const found = appReason(input);
   const shown = SHOWN[found.reason];
   const tone = shown.word === "in_app" ? found.tone : "grey";
-  return { word: shown.word, tone, at: found.at, line: found.line ?? shown.line, lineTone: found.lineTone };
+  return { view: { word: shown.word, tone, at: found.at, line: found.line ?? shown.line, lineTone: found.lineTone }, reason: found.reason };
 }
 
 /** WHY a person is where they are with the app: first match wins. */
@@ -151,7 +157,12 @@ export function appReason(input: AppWordInput): AppReason {
     // 3
     if (inv.state === "pending" && inv.waitingSince !== null) {
       const full = input.cap === null ? "your plan has no free places" : `all ${String(input.cap)} places in your plan are taken`;
-      return view("waiting", "amber", `${first} tapped Join, but ${full}.`, "amber");
+      return view(
+        "waiting",
+        "amber",
+        `${first} tapped Join, but ${full}. Free a place — a bigger plan, or remove someone who has left — then ask ${first} to tap Join again.`,
+        "amber",
+      );
     }
     // 4
     if (inv.state === "withdrawn" && inv.removedAt !== null) return view("removed", "grey", null, "plain", inv.removedAt);

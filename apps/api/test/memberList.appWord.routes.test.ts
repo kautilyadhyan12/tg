@@ -241,9 +241,11 @@ d("the App word on the Members list (real Postgres)", () => {
       const inApp = await page(gym, "?app=in_app");
       expect(inApp.entries.map((entry) => entry.fullName)).toEqual(["Maria Park"]);
       expect(inApp.total).toBe(1);
+      // Leo has never had an invitation of his own: Not invited yet.
       expect((await viewOf(gym)).appWords).toEqual([
         { word: "in_app", count: 1 },
         { word: "not_in_app", count: 1 },
+        { word: "not_invited", count: 1 },
       ]);
     },
     TEST_TIMEOUT_MS,
@@ -387,15 +389,19 @@ d("the App word on the Members list (real Postgres)", () => {
       expect(words["Mia Stone"]?.line).toBe("No email address");
 
       const counts = (await viewOf(gym)).appWords;
-      expect(counts.map(({ word }) => word)).toEqual(["invited", "not_in_app", "needs_check"]);
+      expect(counts.map(({ word }) => word)).toEqual(["invited", "not_in_app", "not_invited", "needs_check"]);
+      const threeWords = new Set(["in_app", "invited", "not_in_app"]);
       for (const { word, count } of counts) {
         const filtered = await page(gym, `?app=${word}`);
         expect(filtered.total, word).toBe(count);
-        const holds = (entry: MemberListEntry) => (word === "needs_check" ? entry.app.lineTone !== "plain" : entry.app.word === word);
+        const holds = (entry: MemberListEntry) =>
+          word === "needs_check" ? entry.app.lineTone !== "plain" : threeWords.has(word) ? entry.app.word === word : entry.app.word === "not_in_app";
         expect(filtered.entries.every(holds), word).toBe(true);
       }
       // The three words hold everybody once; Needs checking is Priya and Emma.
-      expect(counts.filter(({ word }) => word !== "needs_check").reduce((sum, { count }) => sum + count, 0)).toBe(8);
+      expect(counts.filter(({ word }) => threeWords.has(word)).reduce((sum, { count }) => sum + count, 0)).toBe(8);
+      // Not invited yet: never sent an invitation, with or without an email to send it to.
+      expect((await page(gym, "?app=not_invited")).entries.map((entry) => entry.fullName).sort()).toEqual(["Mia Stone", "Noah Fox"]);
       expect((await page(gym, "?app=needs_check")).entries.map((entry) => entry.fullName).sort()).toEqual(["Emma Hart", "Priya Shah"]);
       // Two choices at once are both.
       expect((await page(gym, "?app=invited&app=needs_check")).entries.map((entry) => entry.fullName).sort()).toEqual([

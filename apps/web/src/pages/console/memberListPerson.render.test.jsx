@@ -311,11 +311,11 @@ describe('round one: a confirm only ever sends what was refused', () => {
     openBox(ADA);
     await pickMore('Remove');
     fireEvent.click(within(screen.getByTestId('confirm-take-off')).getByRole('button', { name: 'Remove' }));
-    expect(await dialog().findByText(/kept as a past member/)).toBeTruthy();
+    expect(await dialog().findByText(/their details are kept/)).toBeTruthy();
     await pickMore('Delete for good');
     fireEvent.click(within(screen.getByTestId('confirm-delete')).getByRole('button', { name: 'Delete for good' }));
     await screen.findByTestId('deleted-note');
-    expect(dialog().queryByText(/kept as a past member/)).toBeNull();
+    expect(dialog().queryByText(/their details are kept/)).toBeNull();
   });
 
   it('L1: the Merge search takes no more than the server reads', async () => {
@@ -379,7 +379,9 @@ describe('a person on the list', () => {
   });
 
   it("Remove says in its box that someone in the app loses it too, and says less for someone who isn't (One Remove)", async () => {
-    orgService.getMemberListEntry.mockResolvedValue(entryAnswer({ ...ada, inApp: true, app: { word: 'in_app', tone: 'green', at: null, line: null, lineTone: 'plain' } }));
+    orgService.getMemberListEntry.mockResolvedValue(
+      entryAnswer({ ...ada, inApp: true, removeEndsApp: true, app: { word: 'in_app', tone: 'green', at: null, line: null, lineTone: 'plain' } }),
+    );
     openBox(ADA);
     await pickMore('Remove');
     const box = within(screen.getByTestId('confirm-take-off'));
@@ -419,6 +421,35 @@ describe('a person on the list', () => {
     fireEvent.click(dialog().getByRole('button', { name: 'Put back on your list' }));
     await waitFor(() => expect(orgService.restoreMemberListEntry).toHaveBeenCalledWith(GYM, ADA));
     expect(await dialog().findByText('Back on your list.')).toBeTruthy();
+  });
+
+  it("a past member still in the app is removed from it here, as from 'Using the app' (Kd, 2026-09-27: one card in both places)", async () => {
+    const grace = {
+      ...person(ADA, 'Grace Hall'),
+      formerAt: '2026-09-25T10:00:00.000Z',
+      inApp: true,
+      removeEndsApp: true,
+      app: { word: 'in_app', tone: 'amber', at: null, line: "Grace still uses the app through your gym. Remove them from the app if they've left.", lineTone: 'amber' },
+    };
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer(grace));
+    openBox(ADA);
+    await pickMore('Remove');
+    const box = within(screen.getByTestId('confirm-take-off'));
+    expect(box.getByText('Remove Grace Hall from the app?')).toBeTruthy();
+    expect(box.getByText(/already a past member\. This ends their app with your gym, and they keep their own workouts\./)).toBeTruthy();
+    const done = { ...grace, inApp: false, removeEndsApp: false, app: { word: 'not_in_app', tone: 'grey', at: '2026-09-27T10:00:00.000Z', line: 'Removed from app', lineTone: 'plain' } };
+    orgService.takeOffMemberListEntry.mockResolvedValue(written('removed_from_app', done));
+    fireEvent.click(box.getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(orgService.takeOffMemberListEntry).toHaveBeenCalledWith(GYM, ADA));
+    expect(await dialog().findByText('Removed from the app. Their record stays with your past members.')).toBeTruthy();
+  });
+
+  it('offers no Remove on a past member whose Remove would change nothing', async () => {
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer({ ...person(ADA, 'Sam Park'), formerAt: '2026-09-25T10:00:00.000Z', removeEndsApp: false }));
+    openBox(ADA);
+    fireEvent.click(await dialog().findByRole('button', { name: /^More/ }));
+    expect(dialog().getByRole('menuitem', { name: /^Delete for good/ })).toBeTruthy();
+    expect(dialog().queryByRole('menuitem', { name: /^Remove$/ })).toBeNull();
   });
 
   it('says an invitation stops working when somebody invited is removed from the list', async () => {

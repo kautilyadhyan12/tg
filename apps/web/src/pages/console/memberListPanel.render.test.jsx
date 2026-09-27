@@ -388,8 +388,7 @@ describe('round one: after a change', () => {
   });
 });
 describe('the Invite button', () => {
-  const noNames = { reach: [], noEmail: [], underAge: [], inApp: [], alreadyInvited: [], unsubscribed: [], bounced: [], refused: [], sharedAddress: [] };
-  const preview = (reach) => ({ data: { preview: { version: 3, reach, skipped: { noEmail: 0, underAge: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, refused: 0, sharedAddress: 0 }, names: noNames, blocked: null } } });
+  const preview = (reach) => ({ data: { preview: { version: 3, reach, skipped: { noEmail: 0, underAge: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, refused: 0, sharedAddress: 0 }, blocked: null } } });
 
   it("reads Invite to app, and asks the box's number again for the gym's own words but not for a search", async () => {
     orgService.getInvitePreview.mockResolvedValue(preview(214));

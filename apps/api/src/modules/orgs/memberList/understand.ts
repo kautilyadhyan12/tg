@@ -577,9 +577,10 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
     // Over EVERY row of the column, not the value sample: one cell on row 207
     // whose day is over 12 is the whole proof of which way round a file writes
     // its dates (review of PR #90, High 5). At most three columns, one cheap
-    // reading each, and it stops the moment the column contradicts itself.
+    // reading each, and it stops the moment the column contradicts itself. Read even
+    // where staff flipped it: a flip never beats the column's own proof (`settleOrder`).
     const chosenOrder = flipped.get(column) ?? null;
-    const evidence = chosenOrder !== null ? { dayFirst: false, monthFirst: false, anyEither: false } : evidenceInColumn(cellsDown(rows, firstDataRow, column));
+    const evidence = evidenceInColumn(cellsDown(rows, firstDataRow, column));
     const settled = settleOrder(evidence, options.country, chosenOrder);
     datePlans.push({ field, column, order: settled.order, from: settled.from, notRead: 0, example: null });
   }

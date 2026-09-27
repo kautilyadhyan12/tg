@@ -11,7 +11,6 @@ import {
   MEMBER_INVITE_AGAIN_PER_GYM_DAY,
   MEMBER_INVITE_AGAIN_PER_PERSON,
   MEMBER_INVITE_AGAIN_PERSON_DAYS,
-  MEMBER_INVITE_NAMES_SHOWN,
   MEMBER_INVITE_WORDS,
   MEMBER_LIST_BY_HAND_WORDS,
   type MemberInviteBlocked,
@@ -20,7 +19,7 @@ import {
   type MemberInvitePreviewQuery,
   type MemberInviteRefusal,
   type MemberInviteRequest,
-  type MemberInviteNames,
+  type MemberInviteReason,
   type MemberInviteSkipped,
   type MemberInvited,
   type MemberListInvitation,
@@ -56,7 +55,7 @@ const folded = (asked: string | string[] | undefined): string[] | null => {
   return [...new Set(words.map((word) => word.trim().toLowerCase()))];
 };
 
-const filtersOf = (query: MemberInvitePreviewQuery): repo.WordFilters => ({
+export const filtersOf = (query: MemberInvitePreviewQuery): repo.WordFilters => ({
   statuses: folded(query.status),
   membershipTypes: folded(query.membershipType),
   paymentStatuses: folded(query.paymentStatus),
@@ -65,8 +64,11 @@ const filtersOf = (query: MemberInvitePreviewQuery): repo.WordFilters => ({
 interface Group {
   reach: { hmac: string; email: string }[];
   skipped: MemberInviteSkipped;
-  /** The first names of each, for the box (§18.6). */
-  names: MemberInviteNames;
+  /** Every candidate with its reason, in the list's order, for Invite's page (§18.6);
+   *  `sameAddressAs` names who an address shared within this group goes to. */
+  people: { candidate: repo.Candidate; why: MemberInviteReason; sameAddressAs: string | null }[];
+  /** The gym's live members by §9.7's match, as the walk read them. */
+  members: listRepo.MemberAgainstList[];
 }
 
 /** Who of the filtered group an Invite would queue, and why each of the rest is left
@@ -74,7 +76,7 @@ interface Group {
  *  listed. Two people sharing one address are one invitation: the first in the list's
  *  order is reached and the others count as already invited. `today` is the gym's own
  *  calendar day, for the list's dates of birth. */
-async function workOutGroup(
+export async function workOutGroup(
   sql: SqlOrTx,
   settings: InviteSettings,
   gymId: string,
@@ -97,17 +99,15 @@ async function workOutGroup(
     repo.suppressionsFor(sql, gymId, hmacs),
   ]);
   const skipped = noneSkipped();
-  const names = noNames();
-  const name = (group: keyof MemberInviteNames, candidate: repo.Candidate) => {
-    if (names[group].length < MEMBER_INVITE_NAMES_SHOWN) names[group].push(candidate.fullName || "No name");
-  };
+  const people: Group["people"] = [];
   const reach: Group["reach"] = [];
-  const taken = new Set<string>();
+  /** Each address reached so far, and the name it is reached for. */
+  const taken = new Map<string, string>();
   let next = 0;
   for (const candidate of candidates) {
     if (candidate.email === null) {
       skipped.noEmail += 1;
-      name("noEmail", candidate);
+      people.push({ candidate, why: "noEmail", sameAddressAs: null });
       continue;
     }
     const person = withEmail[next++];
@@ -115,7 +115,7 @@ async function workOutGroup(
     const invite = invites.get(person.hmac);
     // Before the address is taken: a parent later in the list who shares it is still
     // reached, and a child alone at it is not.
-    const why: keyof MemberInviteNames = underAgeOn(candidate.dateOfBirth, today)
+    const why: MemberInviteReason = underAgeOn(candidate.dateOfBirth, today)
       ? "underAge"
       : inAppAddresses.has(person.email.toLowerCase())
         ? "inApp"
@@ -130,28 +130,17 @@ async function workOutGroup(
                 : isSharedAddress(person.email)
                   ? "sharedAddress"
                   : "reach";
-    name(why, candidate);
+    const sameAddressAs = why === "alreadyInvited" && (invite === undefined || !repo.alreadyInvited(invite)) ? (taken.get(person.hmac) ?? null) : null;
+    people.push({ candidate, why, sameAddressAs });
     if (why === "reach") {
       reach.push(person);
-      taken.add(person.hmac);
+      taken.set(person.hmac, candidate.fullName);
     } else {
       skipped[why] += 1;
     }
   }
-  return { reach, skipped, names };
+  return { reach, skipped, people, members };
 }
-
-const noNames = (): MemberInviteNames => ({
-  reach: [],
-  noEmail: [],
-  underAge: [],
-  inApp: [],
-  alreadyInvited: [],
-  unsubscribed: [],
-  bounced: [],
-  refused: [],
-  sharedAddress: [],
-});
 
 const noneSkipped = (): MemberInviteSkipped => ({
   noEmail: 0,
@@ -196,10 +185,11 @@ export async function previewInvite(
   const settings = deps.invites ?? null;
   const state = await listRepo.listState(deps.sql, gymId);
   const blocked = await blockedFor(deps.sql, settings, gymId, org.status);
-  if (settings === null) return { version: state?.version ?? 0, reach: 0, skipped: noneSkipped(), names: noNames(), blocked };
+  if (settings === null) return { version: state?.version ?? 0, reach: 0, skipped: noneSkipped(), blocked };
   const group = await workOutGroup(deps.sql, settings, gymId, filtersOf(query), dayInTz(deps.now(), org.timezone));
-  return { version: state?.version ?? 0, reach: group.reach.length, skipped: group.skipped, names: group.names, blocked };
+  return { version: state?.version ?? 0, reach: group.reach.length, skipped: group.skipped, blocked };
 }
+
 
 /** How many people one press writes in one transaction. The api has one database
  *  connection, so a press of ten thousand in one transaction would hold every other
@@ -233,13 +223,13 @@ export async function pressInvite(
   const changed = async (): Promise<InviteChanged> => {
     const version = (await listRepo.listState(deps.sql, gymId))?.version ?? 0;
     const group = await workOutGroup(deps.sql, settings, gymId, filters, today);
-    return new InviteChanged({ version, reach: group.reach.length, skipped: group.skipped, names: group.names, blocked: null });
+    return new InviteChanged({ version, reach: group.reach.length, skipped: group.skipped, blocked: null });
   };
 
   const version = (await listRepo.listState(deps.sql, gymId))?.version ?? 0;
   const group = await workOutGroup(deps.sql, settings, gymId, filters, today);
   if (version !== request.version || group.reach.length !== request.expectedCount) {
-    throw new InviteChanged({ version, reach: group.reach.length, skipped: group.skipped, names: group.names, blocked: null });
+    throw new InviteChanged({ version, reach: group.reach.length, skipped: group.skipped, blocked: null });
   }
   await deps.afterInviteGroupRead?.();
   const batches: (typeof group.reach)[] = [];

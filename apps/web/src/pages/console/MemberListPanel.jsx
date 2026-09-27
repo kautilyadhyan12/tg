@@ -29,7 +29,7 @@ import {
 // drawn from `console.css` as `MembersList`, `MembersPhone` and `MembersFilter` show it:
 // "Check these", Search, Filter and the count over one list, a table on a computer and a
 // card per person on a phone. Each row carries the server's App word. Every number is
-// the server's. Invite stays as it was until the action bar (5b-v-b).
+// the server's. Invite opens its own page of who gets an email and who doesn't (§18.6).
 
 const count = (n) => n.toLocaleString('en');
 
@@ -471,6 +471,7 @@ export default function MemberListPanel({
         <MemberListInvite
           gymId={gymId}
           gym={gym}
+          list={list}
           filters={filters}
           words={words}
           readOnly={readOnly}
@@ -478,6 +479,11 @@ export default function MemberListPanel({
           onSent={() => {
             keepLoaded.current = page.entries.length;
             setTick((n) => n + 1);
+          }}
+          onListChanged={() => {
+            keepLoaded.current = page.entries.length;
+            setTick((n) => n + 1);
+            onRosterChanged();
           }}
           onClose={() => setInviting(false)}
         />

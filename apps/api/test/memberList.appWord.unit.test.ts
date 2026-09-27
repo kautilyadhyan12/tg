@@ -73,7 +73,7 @@ describe("the spec's table, one case a row (§18.4)", () => {
     [
       "3 waiting for a place",
       { invitation: invitation({ waitingSince: AT }) },
-      { reason: "waiting", tone: "amber", at: null, line: "Emma tapped Join, but all 500 places in your plan are taken.", lineTone: "amber" },
+      { reason: "waiting", tone: "amber", at: null, line: "Emma tapped Join, but all 500 places in your plan are taken. Free a place — a bigger plan, or remove someone who has left — then ask Emma to tap Join again.", lineTone: "amber" },
     ],
     ["4 removed from app", { invitation: invitation({ state: "withdrawn", removedAt: REMOVED }) }, { reason: "removed", tone: "grey", at: REMOVED, line: null, lineTone: "plain" }],
     ["5 left the app", { invitation: invitation({ state: "accepted" }) }, { reason: "left", tone: "grey", at: null, line: null, lineTone: "plain" }],
@@ -251,7 +251,7 @@ describe("the three words a screen shows (Kd, 2026-09-27: the list showed too mu
     [
       "invited, waiting for a place: a line to check",
       { invitation: invitation({ waitingSince: AT }) },
-      { word: "invited", tone: "grey", at: null, line: "Emma tapped Join, but all 500 places in your plan are taken.", lineTone: "amber" },
+      { word: "invited", tone: "grey", at: null, line: "Emma tapped Join, but all 500 places in your plan are taken. Free a place — a bigger plan, or remove someone who has left — then ask Emma to tap Join again.", lineTone: "amber" },
     ],
     [
       "wrong email: not in the app, a red line to check",

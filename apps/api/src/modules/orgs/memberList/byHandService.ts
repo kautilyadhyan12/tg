@@ -34,7 +34,7 @@ import type { InviteSettings } from "../invites/settings.js";
 import { insertAudit } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { appViewsOf } from "./appViews.js";
-import { removeRecordIn } from "./oneRemove.js";
+import { appPeopleIn, removeRecordIn } from "./oneRemove.js";
 import { applyTyped, EMPTY_VALUES, mergeValues, type EntryValues, type TypedContext } from "./byHand.js";
 import { tidyCell } from "./cells.js";
 import { cut, identityKey } from "./fields.js";
@@ -100,6 +100,7 @@ async function detailOf(
     app: appOrThrow(app[0]),
     extra: fields.map((field) => ({ key: field.key, label: field.label, value: values.extra[field.key] ?? "" })),
     handEdited: entry.handEdited,
+    removeEndsApp: appPeopleIn(reached, entry).length > 0,
     members: visits.map((row) => ({
       userId: row.userId,
       displayName: row.displayName,
@@ -423,6 +424,9 @@ export async function takeOff(
       case "removed":
         closed.push(...removed.closed);
         return { outcome: "taken_off", entryId, version: removed.version };
+      case "removed_from_app":
+        closed.push(...removed.closed);
+        return { outcome: "removed_from_app", entryId, version: removed.version };
     }
   });
   await bustAfterRemoval(deps, gymId, closed);

@@ -55,6 +55,7 @@ import {
   type MemberListSeat,
   type MemberListStagedFile,
   type MemberListStagedShell,
+  type MemberListOnList,
   type MemberListStoredPerson,
   type MemberListUnderstanding,
   type MemberListUploadSummary,
@@ -402,6 +403,7 @@ async function freshMemberSide(
       status: person.status,
       wasStatus: person.wasStatus,
       inApp: true,
+      onList: null,
     })),
     inApp,
   };
@@ -743,7 +745,20 @@ export async function readPreviewRows(
   // number, whichever group they came from, so one answer serves all four groups and
   // nothing has to be looked up by place.
   // The record's id decides the tick and stays here: a page shows the file's people.
-  const people = picked.people.map(({ entryId, ...person }) => ({ ...person, inApp: read.inApp({ ...person, entryId: entryId ?? null }) }));
+  // Somebody the file leaves out carries what the list says of them today.
+  const onList =
+    group === "gone"
+      ? await repo.onListOf(
+          deps.sql,
+          gymId,
+          picked.people.flatMap(({ entryId }) => (entryId === null || entryId === undefined ? [] : [entryId])),
+        )
+      : new Map<string, MemberListOnList>();
+  const people = picked.people.map(({ entryId, ...person }) => ({
+    ...person,
+    inApp: read.inApp({ ...person, entryId: entryId ?? null }),
+    onList: entryId === null || entryId === undefined ? null : (onList.get(entryId) ?? null),
+  }));
   return {
     group,
     total: picked.total,

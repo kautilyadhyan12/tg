@@ -1,15 +1,22 @@
-// Invite from the list (ROADMAP 5b-ii): the Invite box, and Invite, Send again, Share
-// and Add and invite on a person's page.
+// Invite from the list (ROADMAP 5b-ii, 5b-v-a-i): Invite's page, and Invite, Send again,
+// Share and Add and invite on a person's page.
 //
 // THE WORST THING THIS SCREEN COULD DO: email people the gym did not choose — a press
-// that sends other words than the box showed, or a number the box never showed, or a
-// box that says "on the way" when the server invited nobody. So the first tests: the
-// press carries exactly the words and count on screen; a list that changed meanwhile
-// invites nobody and shows the new count; and under-18s are said as left out.
+// that sends other words than the page showed, or a number the page never showed, or
+// people listed as getting an email who are not the ones the press reaches, or a page
+// that says "on the way" when the server invited nobody. So the first tests: the press
+// and both lists carry exactly the words on screen; a list that changed meanwhile invites
+// nobody and shows the new people; and everyone left out is shown with their reason.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { MEMBER_INVITE_WORDS, memberInvitePreviewSchema, memberListEntryDetailSchema, memberListViewSchema } from '@app/shared';
+import {
+  MEMBER_INVITE_WORDS,
+  memberInvitePeopleSchema,
+  memberInvitePreviewSchema,
+  memberListEntryDetailSchema,
+  memberListViewSchema,
+} from '@app/shared';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -17,6 +24,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
     ...actual,
     orgService: {
       getInvitePreview: vi.fn(),
+      getInvitePeople: vi.fn(),
       pressInvite: vi.fn(),
       inviteMemberListEntry: vi.fn(),
       resendMemberListInvite: vi.fn(),
@@ -37,8 +45,7 @@ const IRON = { name: 'Iron House', slug: 'iron-house' };
 const NONE = { noEmail: 0, underAge: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, refused: 0, sharedAddress: 0 };
 const FILTERS = { records: 'current', app: 'all', status: ['Active'], membershipType: [], paymentStatus: [], query: '' };
 
-const NO_NAMES = { reach: [], noEmail: [], underAge: [], inApp: [], alreadyInvited: [], unsubscribed: [], bounced: [], refused: [], sharedAddress: [] };
-const preview = (over = {}) => memberInvitePreviewSchema.parse({ version: 7, reach: 2, skipped: NONE, names: NO_NAMES, blocked: null, ...over });
+const preview = (over = {}) => memberInvitePreviewSchema.parse({ version: 7, reach: 2, skipped: NONE, blocked: null, ...over });
 const previewAnswer = (p) => ({ data: { preview: p } });
 const refusal = (status, data) => Object.assign(new Error('refused'), { response: { status, data } });
 
@@ -102,27 +109,65 @@ beforeEach(() => {
 });
 afterEach(() => cleanup());
 
-function openInvite(p, filters = FILTERS) {
+let ids = 0;
+/** One person on Invite's lists, as the server gives them. */
+const invitee = (fullName, over = {}) => ({
+  entryId: `bbbbbbbb-bbbb-4bbb-8bbb-${String(++ids).padStart(12, '0')}`,
+  fullName,
+  email: `${fullName.split(' ')[0].toLowerCase()}@members.example`,
+  status: 'Active',
+  membershipType: 'Gold',
+  reason: 'reach',
+  turns18On: null,
+  sameAddressAs: null,
+  app: { word: 'not_in_app', tone: 'grey', at: null, line: 'Not invited yet', lineTone: 'plain' },
+  ...over,
+});
+const peopleAnswer = (people, over = {}) => ({
+  data: { page: memberInvitePeopleSchema.parse({ total: people.length, people, cursor: null, ...over }) },
+});
+const ARJUN = invitee('Arjun Shah');
+const AVA = invitee('Ava Thompson');
+
+/** Invite's page over these words; each list answers with its own people. */
+function openInvite(p, filters = FILTERS, { reach = [AVA, ARJUN], leftOut = [] } = {}) {
   orgService.getInvitePreview.mockResolvedValue(previewAnswer(p));
+  orgService.getInvitePeople.mockImplementation((_gym, query) =>
+    Promise.resolve(new URLSearchParams(query).get('group') === 'left_out' ? peopleAnswer(leftOut) : peopleAnswer(reach)),
+  );
   return render(
     <MemoryRouter>
-      <MemberListInvite gymId={GYM} gym={IRON} filters={filters} words={WORDS} readOnly={false} preview={null} onSent={onSent} onClose={onClose} />
+      <MemberListInvite gymId={GYM} gym={IRON} list={LIST} filters={filters} words={WORDS} readOnly={false} preview={null} onSent={onSent} onClose={onClose} />
     </MemoryRouter>,
   );
 }
 const box = () => within(screen.getByTestId('invite-box'));
-const tick = () => fireEvent.click(box().getByLabelText("These are Iron House's members, and I have permission to email them."));
+const tick = () => fireEvent.click(box().getByRole('checkbox', { name: "These are Iron House's members, and I have permission to email them." }));
+const rows = () => box().queryAllByTestId('invite-row');
+const whyOf = (name) => {
+  const row = rows().find((r) => r.textContent.includes(name));
+  if (row === undefined) throw new Error(`${name} is not on the page`);
+  return within(row).getByTestId('invite-why').textContent;
+};
 
 describe('the worst thing: nobody the gym did not choose is emailed', () => {
-  it('the press carries exactly the words on screen and the number shown', async () => {
+  it('the press and both lists carry exactly the words on screen, and the number shown', async () => {
     openInvite(preview());
     orgService.pressInvite.mockResolvedValue({ data: { invited: { queued: 2, skipped: NONE, version: 7 } } });
     const send = await box().findByRole('button', { name: 'Send 2 invitations' });
     expect(send.disabled).toBe(true);
     tick();
     expect(send.disabled).toBe(false);
-    expect(box().getByTestId('invite-who').textContent).toBe('Status: Active');
+    expect(box().getByTestId('invite-who').textContent).toBe('You chose: Status: Active');
     expect(orgService.getInvitePreview).toHaveBeenCalledWith(GYM, 'status=Active');
+    // The people shown are the ones these same words reach, with where each email goes.
+    await waitFor(() => expect(rows()).toHaveLength(2));
+    expect(rows()[0].textContent).toContain('Ava Thompson');
+    expect(rows()[1].textContent).toContain('Arjun Shah');
+    expect(orgService.getInvitePeople).toHaveBeenCalledWith(GYM, 'status=Active&group=reach');
+    expect(whyOf('Ava Thompson')).toBe('ava@members.example');
+    fireEvent.click(box().getByRole('tab', { name: "Won't get one 0" }));
+    await waitFor(() => expect(orgService.getInvitePeople).toHaveBeenCalledWith(GYM, 'status=Active&group=left_out'));
     fireEvent.click(send);
     await waitFor(() => expect(orgService.pressInvite).toHaveBeenCalledTimes(1));
     expect(orgService.pressInvite).toHaveBeenCalledWith(GYM, { status: ['Active'], version: 7, expectedCount: 2, permissionConfirmed: true });
@@ -134,15 +179,19 @@ describe('the worst thing: nobody the gym did not choose is emailed', () => {
       refusal(409, { error: 'invite_changed', message: MEMBER_INVITE_WORDS.invite_changed, preview: preview({ version: 8, reach: 1 }) }),
     );
     const button = await box().findByRole('button', { name: 'Send 2 invitations' });
+    await waitFor(() => expect(rows()).toHaveLength(2));
+    orgService.getInvitePeople.mockResolvedValue(peopleAnswer([AVA]));
     tick();
     fireEvent.click(button);
     expect(await box().findByText(MEMBER_INVITE_WORDS.invite_changed)).toBeTruthy();
-    expect(box().getByTestId('invite-reach').textContent).toBe('1');
+    expect(box().getByTestId('invite-summary').textContent).toBe('The 1 member you chose will get an email invitation.');
     expect(box().queryByText(/on the way/)).toBeNull();
     expect(onSent).not.toHaveBeenCalled();
+    // The people are read again for the new group.
+    await waitFor(() => expect(rows()).toHaveLength(1));
 
     // The tick was for the old group: it is asked again for the new one.
-    expect(box().getByLabelText("These are Iron House's members, and I have permission to email them.").checked).toBe(false);
+    expect(box().getByRole('checkbox', { name: "These are Iron House's members, and I have permission to email them." }).getAttribute('aria-checked')).toBe('false');
     expect(box().getByRole('button', { name: 'Send 1 invitation' }).disabled).toBe(true);
     tick();
     orgService.pressInvite.mockResolvedValue({ data: { invited: { queued: 1, skipped: NONE, version: 8 } } });
@@ -150,36 +199,57 @@ describe('the worst thing: nobody the gym did not choose is emailed', () => {
     await waitFor(() => expect(orgService.pressInvite).toHaveBeenLastCalledWith(GYM, { status: ['Active'], version: 8, expectedCount: 1, permissionConfirmed: true }));
   });
 
-  it('says how many are left out for being under 18, and why each of the rest is', async () => {
-    openInvite(preview({ skipped: { ...NONE, noEmail: 12, underAge: 3, alreadyInvited: 1 } }));
-    const left = within(await box().findByTestId('invite-left-out'));
-    expect(left.getByText('3 are under 18 by the date of birth on your list')).toBeTruthy();
-    expect(left.getByText('12 have no email address')).toBeTruthy();
-    expect(left.getByText('1 was invited before')).toBeTruthy();
+  it("the numbers add up: how many of the people it looked at get an email, and how many don't (Kd, 2026-09-27)", async () => {
+    openInvite(preview({ reach: 20, skipped: { ...NONE, noEmail: 12, underAge: 3, alreadyInvited: 2 } }), { ...FILTERS, status: [] });
+    expect((await box().findByTestId('invite-summary')).textContent).toBe("20 of the 37 members on your list will get an email invitation. 17 won't.");
+    // Never "Everyone on your list" over a smaller number.
+    expect(box().queryByText(/Everyone on your list/)).toBeNull();
+    expect(box().queryByTestId('invite-who')).toBeNull();
+    expect(box().getByRole('tab', { name: 'Will get an email 20' }).getAttribute('aria-selected')).toBe('true');
+    expect(box().getByRole('tab', { name: "Won't get one 17" })).toBeTruthy();
   });
 
-  it("names who gets the email and who is left out, a few names then 'and N more' (Kd, 2026-09-27: Invite was vague)", async () => {
-    openInvite(
-      preview({
-        reach: 41,
-        skipped: { ...NONE, noEmail: 2, underAge: 1 },
-        names: { ...NO_NAMES, reach: ['Ava Thompson', 'Sofia Alvarez'], noEmail: ['Liam Hughes', 'Cy Park'], underAge: ['Mia Rossi'] },
+  it('shows everyone left out with their own reason, in the words their own row uses, and what to do', async () => {
+    const leftOut = [
+      invitee('Priya Shah', { email: 'arjun@members.example', reason: 'alreadyInvited', sameAddressAs: 'Arjun Shah' }),
+      invitee('Liam Hughes', { email: null, reason: 'noEmail', app: { word: 'not_in_app', tone: 'grey', at: null, line: 'No email address', lineTone: 'plain' } }),
+      invitee('Mia Rossi', { reason: 'underAge', turns18On: '2030-03-14', app: { word: 'not_in_app', tone: 'grey', at: null, line: 'Under 18', lineTone: 'plain' } }),
+      invitee('Olivia Bennett', { reason: 'inApp', app: { word: 'in_app', tone: 'green', at: null, line: null, lineTone: 'plain' } }),
+      invitee('Mark Bennett', {
+        email: 'olivia@members.example',
+        reason: 'inApp',
+        app: { word: 'not_in_app', tone: 'grey', at: null, line: 'Olivia Bennett uses the app with this email.', lineTone: 'plain' },
       }),
-    );
-    expect((await box().findByTestId('invite-reach-names')).textContent).toBe('Ava Thompson, Sofia Alvarez and 39 more');
-    const left = within(box().getByTestId('invite-left-out'));
-    expect(left.getByText('2 have no email address: Liam Hughes and Cy Park')).toBeTruthy();
-    expect(left.getByText('1 is under 18 by the date of birth on your list: Mia Rossi')).toBeTruthy();
+      invitee('Sofia Alvarez', { reason: 'alreadyInvited', app: { word: 'invited', tone: 'grey', at: '2026-09-24T10:01:00.000Z', line: 'Invitation sent', lineTone: 'plain' } }),
+      invitee('Ben Cole', { reason: 'alreadyInvited', app: { word: 'not_in_app', tone: 'grey', at: '2026-09-26T10:00:00.000Z', line: 'Removed from app', lineTone: 'plain' } }),
+      invitee('Ravi Kumar', { email: 'info@kumar.example', reason: 'sharedAddress' }),
+      invitee('Zara Ahmed', { reason: 'unsubscribed' }),
+    ];
+    openInvite(preview({ reach: 2, skipped: { ...NONE, alreadyInvited: 3, noEmail: 1, underAge: 1, inApp: 2, sharedAddress: 1, unsubscribed: 1 } }), FILTERS, { leftOut });
+    fireEvent.click(await box().findByRole('tab', { name: "Won't get one 9" }));
+    await waitFor(() => expect(rows()).toHaveLength(9));
+    expect(whyOf('Priya Shah')).toBe('Same email as Arjun Shah, who gets this invitationGive them their own email address to invite them too.');
+    expect(whyOf('Liam Hughes')).toBe('No email addressAdd one on their page to invite them.');
+    expect(whyOf('Mia Rossi')).toBe('Under 18 · can be invited from 14 Mar 2030If the date of birth is wrong, change it on their page.');
+    expect(whyOf('Olivia Bennett')).toBe('Already in the app');
+    expect(whyOf('Mark Bennett')).toBe('Olivia Bennett uses the app with this email.Give them their own email address to invite them.');
+    expect(whyOf('Sofia Alvarez')).toMatch(/^Invitation sent · 24 Sep( 2026)?To send it again, open their page\.$/);
+    expect(whyOf('Ben Cole')).toMatch(/^Removed from app · 26 Sep( 2026)?$/);
+    expect(whyOf('Ravi Kumar')).toBe('A shared address, such as info@Add their own email to invite them.');
+    expect(whyOf('Zara Ahmed')).toBe('Unsubscribed from your emails');
+    // Each row still says who it is: the name, and the email it has.
+    expect(rows()[0].textContent).toContain('arjun@members.example');
   });
 
   it('with nobody to reach, nothing can be sent', async () => {
-    openInvite(preview({ reach: 0, skipped: { ...NONE, underAge: 1 } }));
-    expect(await box().findByText('Nobody here is waiting for an invitation.')).toBeTruthy();
+    openInvite(preview({ reach: 0, skipped: { ...NONE, underAge: 1 } }), FILTERS, { reach: [] });
+    expect((await box().findByTestId('invite-summary')).textContent).toBe("The 1 member you chose won't get an email invitation.");
+    expect(await box().findByText('Nobody here will get an email.')).toBeTruthy();
     expect(box().getByRole('button', { name: 'Send 0 invitations' }).disabled).toBe(true);
   });
 });
 
-describe('the Invite box', () => {
+describe("Invite's page", () => {
   it('a gym with no postal address is sent to Settings and cannot send', async () => {
     openInvite(preview({ blocked: 'no_postal_address' }));
     expect(await box().findByText(/Add your gym's postal address in Settings first/)).toBeTruthy();
@@ -189,8 +259,31 @@ describe('the Invite box', () => {
 
   it('says when the search or the app filter does not choose who is invited', async () => {
     openInvite(preview(), { ...FILTERS, status: [], query: 'ada' });
-    expect(await box().findByText('Everyone on your list')).toBeTruthy();
+    expect((await box().findByTestId('invite-summary')).textContent).toBe('All 2 members on your list will get an email invitation.');
     expect(box().getByText(/The search and the app filter don't/)).toBeTruthy();
+    await waitFor(() => expect(orgService.getInvitePeople).toHaveBeenCalledWith(GYM, 'group=reach'));
+  });
+
+  it('brings the next hundred with Load more, after the ones already shown', async () => {
+    openInvite(preview({ reach: 3 }));
+    orgService.getInvitePeople.mockResolvedValueOnce(peopleAnswer([AVA, ARJUN], { total: 3, cursor: 100 }));
+    await waitFor(() => expect(rows()).toHaveLength(2));
+    const rest = invitee('Zoe Park');
+    orgService.getInvitePeople.mockResolvedValueOnce(peopleAnswer([rest], { total: 3, cursor: null }));
+    fireEvent.click(box().getByRole('button', { name: 'Load more' }));
+    await waitFor(() => expect(rows()).toHaveLength(3));
+    expect(orgService.getInvitePeople).toHaveBeenLastCalledWith(GYM, 'status=Active&group=reach&cursor=100');
+    expect(rows()[2].textContent).toContain('Zoe Park');
+    expect(box().queryByRole('button', { name: 'Load more' })).toBeNull();
+  });
+
+  it("a row opens that person's page over Invite's", async () => {
+    openInvite(preview());
+    orgService.getMemberListEntry.mockResolvedValue({ data: { entry: person({ entryId: AVA.entryId, fullName: 'Ava Thompson', email: AVA.email }) } });
+    await waitFor(() => expect(rows()).toHaveLength(2));
+    fireEvent.click(rows()[0]);
+    await waitFor(() => expect(orgService.getMemberListEntry).toHaveBeenCalledWith(GYM, AVA.entryId));
+    expect(screen.getAllByRole('dialog')).toHaveLength(2);
   });
 
   it('afterwards: how many are on the way, and the words and link to share', async () => {
@@ -239,6 +332,10 @@ describe("a person's page", () => {
   it('says why somebody the list says is under 18 cannot be invited, with nothing to press', async () => {
     openPerson(person({ dateOfBirth: '2010-03-14', app: { word: 'not_in_app', tone: 'grey', at: null, line: 'Under 18', lineTone: 'plain' } }));
     expect((await page().findByTestId('under-age-note')).textContent).toBe(MEMBER_INVITE_WORDS.under_age);
+    // When they can be, and what to do if the date is wrong (Kd, 2026-09-27).
+    expect(page().getByTestId('under-age-when').textContent).toBe(
+      'They can be invited from 14 March 2028, when they turn 18. If the date of birth is wrong, press Edit to change it.',
+    );
     expect(page().getByText('Under 18')).toBeTruthy();
     expect(page().queryByRole('button', { name: 'Invite' })).toBeNull();
     expect(page().queryByRole('button', { name: 'Send again' })).toBeNull();

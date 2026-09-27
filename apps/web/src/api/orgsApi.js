@@ -20,6 +20,7 @@ import {
   memberInviteChangedSchema,
   memberInvitedResponseSchema,
   memberInviteOneResponseSchema,
+  memberInvitePeopleResponseSchema,
   memberInvitePreviewResponseSchema,
   memberListConfirmResponseSchema,
   memberListEntriesResponseSchema,
@@ -598,6 +599,15 @@ export const orgService = {
       memberInvitePreviewResponseSchema,
       'who would be invited',
       authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/invites/preview${query ? `?${query}` : ''}`),
+    ),
+
+  /** Invite's page: who these filters would email (`group=reach`), or leave out and why
+   *  (`group=left_out`), a hundred at a time. */
+  getInvitePeople: (gymId, query) =>
+    readThrough(
+      memberInvitePeopleResponseSchema,
+      'who would be invited',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/invites/people?${query}`),
     ),
 
   /** POST …/member-list/invites — press Invite. A 409 `invite_changed` carries the new

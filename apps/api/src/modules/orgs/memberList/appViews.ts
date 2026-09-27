@@ -11,7 +11,7 @@ import * as invitesRepo from "../invites/repo.js";
 import { invitationsOf } from "../invites/service.js";
 import type { InviteSettings } from "../invites/settings.js";
 import { gymSeatCap } from "../repo.js";
-import { appWord, type AppPerson } from "./appWord.js";
+import { appFact, type AppPerson, type AppReasonKind } from "./appWord.js";
 import type { MemberAgainstList, SqlOrTx } from "./repo.js";
 import * as repo from "./repo.js";
 
@@ -24,6 +24,12 @@ export interface AppRow {
   former: boolean;
 }
 
+/** A record's App word, and the reason behind it. */
+export interface AppFact {
+  view: MemberAppView;
+  reason: AppReasonKind;
+}
+
 /** The App word of each record, in the order given. `members` is the gym's live members
  *  by §9.7's match: all of them, or at least every one this set's contacts reach. */
 export async function appViewsOf(
@@ -34,6 +40,18 @@ export async function appViewsOf(
   members: readonly MemberAgainstList[],
   now: Date,
 ): Promise<MemberAppView[]> {
+  return (await appFactsOf(sql, settings, gymId, rows, members, now)).map((fact) => fact.view);
+}
+
+/** `appViewsOf`, with each record's reason. */
+export async function appFactsOf(
+  sql: SqlOrTx,
+  settings: InviteSettings | null,
+  gymId: string,
+  rows: readonly AppRow[],
+  members: readonly MemberAgainstList[],
+  now: Date,
+): Promise<AppFact[]> {
   if (rows.length === 0) return [];
   const [invitations, optedOut, timeZone, cap] = await Promise.all([
     // The word never reads how many times an invitation was sent again.
@@ -63,7 +81,7 @@ export async function appViewsOf(
   return rows.map((row, at) => {
     const email = row.email?.toLowerCase() ?? null;
     const other = email === null ? undefined : heldBy.get(email)?.find((held) => held.entryId !== row.id);
-    return appWord({
+    return appFact({
       fullName: row.fullName,
       email: row.email,
       dateOfBirth: row.dateOfBirth,
@@ -78,10 +96,13 @@ export async function appViewsOf(
   });
 }
 
-/** The App choices a person answers to: their word, and "needs_check" when their line
- *  asks staff to check something. */
-export function appChoices(view: MemberAppView): MemberAppFilter[] {
-  return view.lineTone === "plain" ? [view.word] : [view.word, "needs_check"];
+/** The App choices a person answers to: their word; "not_invited" or "removed" for those
+ *  two reasons; and "needs_check" when their line asks staff to check something. */
+export function appChoices({ view, reason }: AppFact): MemberAppFilter[] {
+  const choices: MemberAppFilter[] = [view.word];
+  if (reason === "not_invited" || reason === "removed") choices.push(reason);
+  if (view.lineTone !== "plain") choices.push("needs_check");
+  return choices;
 }
 
 /** How many of the gym's current members each App choice holds, in the Filter's order,
@@ -94,13 +115,13 @@ export async function currentAppWords(
   now: Date,
 ): Promise<{ counts: MemberAppWordCount[]; choices: Map<string, MemberAppFilter[]> }> {
   const rows = await repo.appRows(sql, gymId);
-  const views = await appViewsOf(sql, settings, gymId, rows, members, now);
+  const facts = await appFactsOf(sql, settings, gymId, rows, members, now);
   const choices = new Map<string, MemberAppFilter[]>();
   const tally = new Map<MemberAppFilter, number>();
-  views.forEach((view, at) => {
+  facts.forEach((fact, at) => {
     const row = rows[at];
     if (row === undefined) return;
-    const mine = appChoices(view);
+    const mine = appChoices(fact);
     choices.set(row.id, mine);
     for (const choice of mine) tally.set(choice, (tally.get(choice) ?? 0) + 1);
   });
