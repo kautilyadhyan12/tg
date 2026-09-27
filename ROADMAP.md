@@ -195,7 +195,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 20c. **Leads** (split 2026-09-25 in three, RULINGS that day): the small list, and three follow-up EMAILS through 3b-i's checks, caps and unsubscribe.
      - 20c-i. [x] **The Leads list** — merged 2026-09-25 (PR #116).
      - 20c-ii. [x] **The three follow-up emails, sent by the gym from its own email** — merged 2026-09-27 (PR #124).
-     - 20c-iii. [ ] **Leads from a file**: the member upload's reader, its own columns and preview.
+     - 20c-iii. [x] **Leads from a file** — merged 2026-09-28 (PR #125).
      - 20c-iv. [ ] **Each gym's own page with its lead form** (RULINGS 2026-09-25): a page of ours the gym links to from its website, Instagram or a poster, and a box it may paste into its own site; spam protection; the full review (it takes in strangers' data).
      - 20c-v. [ ] **"Send them for me"** (RULINGS 2026-09-27): a Settings switch; the app sends the three follow-ups itself through the invitations' checks, caps and unsubscribe, for at most 100 leads a gym a month on every plan, then the reminders again. After 20c-ii.
    - 20d. [ ] **At risk, and the owner's weekly summary** — it takes the place of item 2's "slipping away"; it reads visits (after 16a).
