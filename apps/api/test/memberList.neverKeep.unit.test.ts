@@ -216,7 +216,18 @@ describe("health notes, by headings from outside this code", () => {
     expect(neverKeptByHeader(header, NO_HINTS)).toBe("medical");
   });
 
-  it.each([["Joint Membership"], ["Back Office Notes"], ["Call Back Date"], ["Feedback"], ["Operator"], ["Notes"], ["Trainer Notes"], ["Terms and Conditions"]])(
+  it.each([
+    ["Joint Membership"],
+    ["Back Office Notes"],
+    ["Call Back Date"],
+    ["Call back notes"],
+    ["Hours of operation"],
+    ["Feedback"],
+    ["Operator"],
+    ["Notes"],
+    ["Trainer Notes"],
+    ["Terms and Conditions"],
+  ])(
     "%s is kept",
     (header) => {
       expect(neverKeptByHeader(header, NO_HINTS)).toBe(null);

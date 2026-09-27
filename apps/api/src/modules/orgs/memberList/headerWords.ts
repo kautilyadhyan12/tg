@@ -98,6 +98,10 @@ const NOT_THE_MAIN_ONE = 10;
  *  qualifier is, the plain column wins. */
 const SAYS_MORE_THAN_THE_WORD = 5;
 
+/** Words that name a field only as the WHOLE heading: "Last" is a surname column, but
+ *  "Last Contacted", "Last Visit" and "Last Contact Notes" are not (20c-iii's re-check). */
+const ONLY_ALONE = new Set(["first", "last"]);
+
 const WORDS: readonly HeaderWord[] = [
   ...["first name", "firstname", "member firstname", "given name", "fname", "first", "forename"].map((word) => ({ word, field: "firstName" as const, rank: 0 })),
   ...["last name", "lastname", "family name", "lname", "surname", "last"].map((word) => ({ word, field: "lastName" as const, rank: 0 })),
@@ -398,7 +402,7 @@ export function readHeader(raw: string): HeaderReading {
   let best: HeaderWord | null = null;
   let tied = false;
   for (const entry of WORDS) {
-    if (!holds(header, entry.word)) continue;
+    if (ONLY_ALONE.has(entry.word) ? header !== entry.word : !holds(header, entry.word)) continue;
     if (best === null || entry.word.length > best.word.length) {
       best = entry;
       tied = false;

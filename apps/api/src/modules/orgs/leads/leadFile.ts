@@ -94,8 +94,8 @@ const NOT_SOURCE_OR_NOTES = [
   "code",
 ];
 /** Notes that are about somebody else — an emergency contact, a parent — whose name and
- *  number are not the lead's to keep. */
-const NOT_NOTES = ["emergency", "contact", "guardian", "parent", "kin", "spouse", "partner", "nominee"];
+ *  number are not the lead's to keep. "Contact Notes" alone are notes about the lead. */
+const NOT_NOTES = ["emergency", "guardian", "parent", "kin", "spouse", "partner", "nominee"];
 
 const holds = (header: string, word: string): boolean => ` ${header} `.includes(` ${word} `);
 

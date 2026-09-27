@@ -636,6 +636,10 @@ const NOT_MEDICAL_WORDS = [
   "accepted",
   "signed",
   "branch",
+  // Re-check of 20c-iii: "back notes" and "operation" are health words, but a desk's
+  // "Call back notes" and a gym's "Hours of operation" are not.
+  "call back",
+  "hours of operation",
 ];
 
 /** What the SHEET as a whole says, worked out once and handed to every column:

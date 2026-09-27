@@ -107,11 +107,18 @@ describe("what a heading names", () => {
     expect(readHeader(`Member${ch(0x2019)}s name`).field).toBe("fullName");
   });
 
-  it("a heading naming two fields with words of the same length names neither", () => {
-    // "first" and "email" are both five letters, and nothing says which it is.
-    // Its cells can still make it an email column, which the grid tests cover.
-    expect(readHeader("First Email").field).toBe(null);
-    expect(readHeader("First Email").isHeaderWord).toBe(true);
+  it("a bare First or Last is a name only as the whole heading", () => {
+    // Round one of 20c-iii: "Last Contact Notes" was read as the surname, and a
+    // leads file with "First Name" and no "Last Name" column glued the note onto the
+    // person's name. Glofox's Lead Report has "Last Contacted"; gym exports carry
+    // "Last Visit" and "First Visit Date". Wodify-style "First" and "Last" still are names.
+    expect(readHeader("First").field).toBe("firstName");
+    expect(readHeader("Last").field).toBe("lastName");
+    for (const header of ["Last Contact Notes", "Last Contacted", "Last Visit", "Last Login", "First Visit Date", "Last Payment"]) {
+      expect({ header, field: readHeader(header).field === "lastName" || readHeader(header).field === "firstName" }).toEqual({ header, field: false });
+    }
+    // "First Email" is the first email column, not a first name.
+    expect(readHeader("First Email").field).toBe("email");
   });
 
   it("the longer word wins where one holds the other", () => {

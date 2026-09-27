@@ -206,10 +206,10 @@ describe("which heading is where they heard of you, and which is notes", () => {
     expect(file.mapping.source).toBe(3);
     expect(file.rows[0]).toMatchObject({ source: "social", sourceWord: "Organic social" });
   });
-  it.each([["Notes"], ["Key Note"], ["Comments"], ["Trainer Notes"], ["Enquiry"], ["Message"]])("%s is notes", (header) => {
+  it.each([["Notes"], ["Key Note"], ["Comments"], ["Trainer Notes"], ["Enquiry"], ["Message"], ["Contact Notes"], ["Last Contact Notes"]])("%s is notes", (header) => {
     expect(guessOf(header, "notes")).toBe(true);
   });
-  it.each([["Emergency Contact Notes"], ["Guardian Notes"], ["Parent Comments"], ["Next of Kin Notes"], ["Contact Notes"], ["Physio Notes"], ["Staff Notes"]])(
+  it.each([["Emergency Contact Notes"], ["Guardian Notes"], ["Parent Comments"], ["Next of Kin Notes"], ["Physio Notes"], ["Staff Notes"]])(
     "%s is not notes: somebody else's details, health, or the staff's own",
     (header) => {
       expect(guessOf(header, "notes")).toBe(false);
@@ -294,6 +294,12 @@ describe("a leads file read as leads", () => {
       { row: 4, fullName: "", reason: "no_name" },
       { row: 5, fullName: "Cy Dent", reason: "no_contact" },
     ]);
+  });
+
+  it("a note beside a first name is never glued onto the name", () => {
+    const file = read(["First Name,Email,Last Contact Notes", "Asha,asha@example.com,Called Tuesday"]);
+    expect(file.mapping).toMatchObject({ firstName: 0, lastName: null, notes: 2 });
+    expect(file.rows[0]).toMatchObject({ fullName: "Asha", notes: "Called Tuesday" });
   });
 
   it("a file with no email or phone column asks staff to choose, and reads nothing until they do", () => {
