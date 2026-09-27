@@ -437,9 +437,7 @@ export default function MemberListPanel({
             {current ? (
               <button type="button" onClick={() => setInviting(true)} disabled={readOnly} data-testid="invite-button" className="c-btn c-btn-soft c-btn-lg">
                 <Mail aria-hidden="true" className="w-4 h-4" />
-                {invitePreview === null
-                  ? 'Invite'
-                  : `Invite ${count(invitePreview.reach)} ${invitePreview.reach === 1 ? words.person : words.people}`}
+                Invite to app
               </button>
             ) : null}
             <span className="flex-grow" />

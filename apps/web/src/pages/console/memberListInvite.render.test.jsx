@@ -238,7 +238,7 @@ describe("a person's page", () => {
     expect(page().queryByRole('button', { name: 'Send again' })).toBeNull();
     fireEvent.click(page().getByRole('button', { name: /^More/ }));
     expect(page().queryByRole('menuitem', { name: /^Share the invitation/ })).toBeNull();
-    expect(page().getByRole('menuitem', { name: /^Remove from list/ })).toBeTruthy();
+    expect(page().getByRole('menuitem', { name: /^Move to past members/ })).toBeTruthy();
   });
 
   it("shows the server's refusal when the gym's own day says under 18", async () => {

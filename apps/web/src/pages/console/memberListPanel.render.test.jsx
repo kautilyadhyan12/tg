@@ -384,17 +384,17 @@ describe('round one: after a change', () => {
 describe('the Invite button', () => {
   const preview = (reach) => ({ data: { preview: { version: 3, reach, skipped: { noEmail: 0, underAge: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, refused: 0, sharedAddress: 0 }, blocked: null } } });
 
-  it("says the server's number, and asks again for the gym's own words but not for a search", async () => {
+  it("reads Invite to app, and asks the box's number again for the gym's own words but not for a search", async () => {
     orgService.getInvitePreview.mockResolvedValue(preview(214));
     draw();
-    expect((await screen.findByTestId('invite-button')).textContent).toBe('Invite 214 members');
-    expect(orgService.getInvitePreview).toHaveBeenLastCalledWith(GYM, '');
+    expect((await screen.findByTestId('invite-button')).textContent).toBe('Invite to app');
+    await waitFor(() => expect(orgService.getInvitePreview).toHaveBeenLastCalledWith(GYM, ''));
 
     orgService.getInvitePreview.mockResolvedValue(preview(1));
     await openFilter();
     fireEvent.click(filterBox().getByRole('button', { name: 'Active 300' }));
-    await waitFor(() => expect(screen.getByTestId('invite-button').textContent).toBe('Invite 1 member'));
-    expect(orgService.getInvitePreview).toHaveBeenLastCalledWith(GYM, 'status=Active');
+    await waitFor(() => expect(orgService.getInvitePreview).toHaveBeenLastCalledWith(GYM, 'status=Active'));
+    expect(screen.getByTestId('invite-button').textContent).toBe('Invite to app');
     const asked = orgService.getInvitePreview.mock.calls.length;
 
     fireEvent.click(filterBox().getByRole('button', { name: 'Close' }));

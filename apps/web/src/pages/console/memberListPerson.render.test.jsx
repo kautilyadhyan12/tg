@@ -309,8 +309,8 @@ describe('round one: a confirm only ever sends what was refused', () => {
     orgService.takeOffMemberListEntry.mockResolvedValue(written('taken_off', { ...ada, formerAt: '2026-09-25T10:00:00.000Z' }));
     orgService.deleteFormerMemberListEntry.mockResolvedValue({ data: { deleted: true, version: 6 } });
     openBox(ADA);
-    await pickMore('Remove from list');
-    fireEvent.click(within(screen.getByTestId('confirm-take-off')).getByRole('button', { name: 'Remove from list' }));
+    await pickMore('Move to past members');
+    fireEvent.click(within(screen.getByTestId('confirm-take-off')).getByRole('button', { name: 'Move to past members' }));
     expect(await dialog().findByText(/kept as a past member/)).toBeTruthy();
     await pickMore('Delete for good');
     fireEvent.click(within(screen.getByTestId('confirm-delete')).getByRole('button', { name: 'Delete for good' }));
@@ -382,20 +382,20 @@ describe('a person on the list', () => {
     const off = { ...ada, formerAt: '2026-09-25T10:00:00.000Z' };
     orgService.takeOffMemberListEntry.mockResolvedValue(written('taken_off', off));
     openBox(ADA);
-    await pickMore('Remove from list');
+    await pickMore('Move to past members');
     expect(screen.getByTestId('confirm-take-off')).toBeTruthy();
     expect(orgService.takeOffMemberListEntry).not.toHaveBeenCalled();
-    fireEvent.click(dialog().getByRole('button', { name: 'Keep on list' }));
+    fireEvent.click(dialog().getByRole('button', { name: 'Keep as a member' }));
     expect(orgService.takeOffMemberListEntry).not.toHaveBeenCalled();
 
-    await pickMore('Remove from list');
-    fireEvent.click(within(screen.getByTestId('confirm-take-off')).getByRole('button', { name: 'Remove from list' }));
+    await pickMore('Move to past members');
+    fireEvent.click(within(screen.getByTestId('confirm-take-off')).getByRole('button', { name: 'Move to past members' }));
     await waitFor(() => expect(orgService.takeOffMemberListEntry).toHaveBeenCalledWith(GYM, ADA));
     expect(await dialog().findByText(/Past member since 25 Sep 2026/)).toBeTruthy();
     expect(dialog().getByRole('button', { name: 'Put back on your list' })).toBeTruthy();
     fireEvent.click(dialog().getByRole('button', { name: /^More/ }));
     expect(dialog().getByRole('menuitem', { name: /^Delete for good/ })).toBeTruthy();
-    expect(dialog().queryByRole('menuitem', { name: /^Remove from list/ })).toBeNull();
+    expect(dialog().queryByRole('menuitem', { name: /^Move to past members/ })).toBeNull();
 
     orgService.restoreMemberListEntry.mockResolvedValue(written('restored', ada));
     fireEvent.click(dialog().getByRole('button', { name: 'Put back on your list' }));
@@ -408,7 +408,7 @@ describe('a person on the list', () => {
       entryAnswer(person(ADA, 'Ada Lovelace', { invitation: { state: 'pending', invitedAt: '2026-09-20T10:00:00.000Z', email: null, sentAgain: 0, waitingSince: null, notMeAt: null } })),
     );
     openBox(ADA);
-    await pickMore('Remove from list');
+    await pickMore('Move to past members');
     expect(within(screen.getByTestId('confirm-take-off')).getByText(/invitation stops working/)).toBeTruthy();
   });
 
