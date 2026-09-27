@@ -2969,7 +2969,7 @@ more", **See all** (the names, 100 at a time).
   "41 will get an email invitation" and names · "271 won't": Already in the app · Invited before
   · No email address · Under 18 · Unsubscribed · Their address bounces (and the other skip
   reasons the server has, each its own line) · "Each gets one email from Iron House Gym with a
-  link to the app." · the tick "I have permission to email these members." (2026-09-25) ·
+  link to the app." · the tick "These are Iron House Gym's members, and I have permission to email them." (RULINGS 2026-09-27; `MEMBER_INVITE_PERMISSION_WORDS` changes with it) ·
   Cancel · **Send 41 invitations**. After: today's "41 invitations are on the way.", the batches
   line, "Share it yourself too" and Done.
 - **Remove from the app** (`MembersRemove`): "You selected 4 members." · "2 will be removed
@@ -3020,7 +3020,7 @@ Those who have left become past members." · **Select:** the Status words of the
 with counts · a list with tick boxes, each row the name, their status and "in the app", and its
 mark: **Left**, **Still a member** or **Not marked yet** · with any selected, "1 selected ·
 **They've left** · **Still a member**" · the tally "2 left · 1 still a member · 1 not marked
-yet". Nothing is marked for staff. Import waits until everyone is marked ("Mark Leo Park
+yet". The permission tick reads "These are Iron House Gym's members, and I have permission to store their details." (RULINGS 2026-09-27). Nothing is marked for staff. Import waits until everyone is marked ("Mark Leo Park
 first. Nobody is emailed."). Over the large-change line the number of leavers is typed, as
 today. The confirm sends who left and who stays, with the digest of the missing set; a set
 that moved is refused as `list_changed`, nothing applied.
