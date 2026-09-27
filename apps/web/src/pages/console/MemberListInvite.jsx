@@ -12,6 +12,7 @@ import {
   inviteShareText,
   inviteWho,
   joinLink,
+  namesWords,
   skippedLines,
 } from './memberListPeople';
 
@@ -165,7 +166,12 @@ export default function MemberListInvite({ gymId, gym, filters, words, readOnly,
         </p>
       );
   } else {
-    const left = skippedLines(preview.skipped);
+    // Who is left out, a reason a line, each with its first names (§18.6).
+    const left = skippedLines(preview.skipped).map((line) => {
+      const who = namesWords(preview.names?.[line.key], preview.skipped[line.key]);
+      return who === '' ? line : { ...line, text: `${line.text}: ${who}` };
+    });
+    const reachNames = namesWords(preview.names?.reach, reach);
     body = (
       <>
         <div>
@@ -201,6 +207,11 @@ export default function MemberListInvite({ gymId, gym, filters, words, readOnly,
           <p className="text-sm mt-1" style={{ color: C.soft }}>
             {reach === 0 ? `Nobody here is waiting for an invitation.` : `${people(reach)} will get an email invitation.`}
           </p>
+          {reachNames !== '' ? (
+            <p className="text-sm mt-1" style={{ color: '#fff' }} data-testid="invite-reach-names">
+              {reachNames}
+            </p>
+          ) : null}
         </div>
         {left.length > 0 ? <LeftOut lines={left} /> : null}
         <p className="text-sm" style={{ color: C.muted }}>
@@ -209,7 +220,7 @@ export default function MemberListInvite({ gymId, gym, filters, words, readOnly,
         </p>
         {reach > 0 && blocked === null ? (
           <Tick checked={permission} onChange={setPermission}>
-            {MEMBER_INVITE_PERMISSION_WORDS.replace('{people}', words.people)}
+            {MEMBER_INVITE_PERMISSION_WORDS.replace('{gym}', gym.name).replace('{people}', words.people)}
           </Tick>
         ) : null}
         {error !== null ? (

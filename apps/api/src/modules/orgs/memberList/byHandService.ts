@@ -34,6 +34,7 @@ import type { InviteSettings } from "../invites/settings.js";
 import { insertAudit } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { appViewsOf } from "./appViews.js";
+import { removeRecordIn } from "./oneRemove.js";
 import { applyTyped, EMPTY_VALUES, mergeValues, type EntryValues, type TypedContext } from "./byHand.js";
 import { tidyCell } from "./cells.js";
 import { cut, identityKey } from "./fields.js";
@@ -399,7 +400,42 @@ export async function takeOff(
   entryId: string,
   limit: () => Promise<boolean>,
 ): Promise<WriteAnswer> {
-  return await setOnList(deps, userId, gymId, entryId, false, limit);
+  const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
+  await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return { kind: "rate_limited" };
+  const at = deps.now();
+  // ONE REMOVE (RULINGS 2026-09-27): the record becomes a past member and the app ends
+  // for the people it reaches, in this one transaction (`oneRemove.ts`).
+  const closed: string[] = [];
+  const done = await deps.sql.begin(async (tx): Promise<Done> => {
+    await repo.lockGym(tx, gymId);
+    const stored = await repo.entryFor(tx, gymId, entryId);
+    if (stored === null) throw notFound();
+    const removed = await removeRecordIn(tx, { gymId, actorUserId: userId, at, settings: deps.invites ?? null }, stored, {
+      endApp: true,
+      mayEndApp: privileges.includes("members.remove"),
+    });
+    switch (removed.kind) {
+      case "needs_app_privilege":
+        throw new OrgsError(403, "forbidden", MEMBER_LIST_BY_HAND_WORDS.remove_needs_app);
+      case "already_removed":
+        return { outcome: "already_taken_off", entryId, version: removed.version };
+      case "removed":
+        closed.push(...removed.closed);
+        return { outcome: "taken_off", entryId, version: removed.version };
+    }
+  });
+  await bustAfterRemoval(deps, gymId, closed);
+  return await finish(deps, gymId, done);
+}
+
+/** After the commit, as a single removal does: their gym perks end at once. A failed bust
+ *  leaves the cached answer to expire on its own (60 s), so it is warned about. */
+async function bustAfterRemoval(deps: MemberListDeps, gymId: string, userIds: readonly string[]): Promise<void> {
+  if (userIds.length === 0) return;
+  const results = await Promise.allSettled(userIds.map((member) => bustEntitlements(deps.redis, member)));
+  const failed = results.filter((result) => result.status === "rejected").length;
+  if (failed > 0) deps.log.warn({ event: "memberlist.remove_bust_failed", gymId, failed }, "entitlements could not be refreshed after a removal");
 }
 
 /** Put a former record back on the list. */

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, Loader2, Upload, UserPlus } from 'lucide-react';
-import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
+import { AlertTriangle, ChevronRight, Loader2, Search, Upload, UserPlus, X } from 'lucide-react';
+import { ConfirmInline, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { orgService, errorText, errorCode } from '../../api/orgsApi';
 import { useConsoleOrg } from './useConsoleOrg';
 import ApplicationsQueue from './ApplicationsQueue';
@@ -10,13 +10,13 @@ import { orgWords } from '@app/shared';
 import {
   canRemoveMembers,
   viewerPrivileges,
-  formatJoinedAt,
   groupLabelText,
   memberCountLabel,
   offListView,
   seatIsFree,
 } from './consoleView';
 import { canMakeRoomNow, consoleIsReadOnly, memberMeterText, readOnlyNote, seatMeter } from './billingView';
+import { shortWhen } from './memberListPeople';
 import PlanChoiceDialog from '../../components/console/PlanChoiceDialog';
 
 // The Members screen (spec Part 3 §4.3, §18.2), drawn from `console.css` (spec §17):
@@ -31,105 +31,146 @@ import PlanChoiceDialog from '../../components/console/PlanChoiceDialog';
 // address, no body weight, no meals, no workouts. The meter's numbers are the server's
 // exact count off the org row, never the length of a page of the roster.
 
-/** REMOVING SOMEONE FROM THE APP (§4.3), behind a question: the button sits where the
- *  question appears, so a mis-tap lands on the question. The person keeps every workout
- *  and loses the gym's features at once. */
-function RemoveControl({ member, busy, readOnly, words, onRemove }) {
-  const [asking, setAsking] = useState(false);
-
-  if (!asking) {
-    return (
-      <button type="button" onClick={() => setAsking(true)} disabled={busy || readOnly} className="c-btn c-btn-s c-btn-sm flex-shrink-0">
-        Remove from app
-      </button>
-    );
-  }
-
+/** One person in the app, as Leads shows a lead: their name, since when, and one tag.
+ *  Everything to do with them is on their panel (`RosterSheet`). */
+function RosterRow({ member, onOpen }) {
+  // An app member the gym's list does not hold (3a-vi-b). Only staff who may see the
+  // list are sent it.
+  const off = offListView(member.offList);
+  const differs = member.onList?.nameCheck === 'differs';
   return (
-    <div className="flex flex-col items-stretch md:items-end gap-2 w-full md:w-auto md:max-w-[320px]">
-      <span className="c-s13 c-t2 md:text-right">
-        Remove {member.displayName} from the app? They keep their own workouts and lose your {words.it}&apos;s features.
-      </span>
-      <div className="flex items-center gap-2 md:justify-end">
-        <button
-          type="button"
-          onClick={() => {
-            setAsking(false);
-            onRemove();
-          }}
-          disabled={busy || readOnly}
-          className="c-btn c-btn-danger c-btn-sm"
-        >
-          Remove from app
-        </button>
-        <button type="button" onClick={() => setAsking(false)} className="c-btn c-btn-s c-btn-sm">
-          Keep
-        </button>
-      </div>
-    </div>
+    <li className="border-t first:border-t-0" style={{ borderColor: 'var(--line)' }} data-testid={off ? 'member-off-list' : undefined}>
+      <button
+        type="button"
+        onClick={onOpen}
+        data-testid="roster-row"
+        className="grid w-full text-left min-h-11 px-4 py-3.5 md:px-5 gap-x-3 items-center"
+        style={{ gridTemplateColumns: 'minmax(0, 1fr) auto 18px' }}
+      >
+        <span className="flex flex-col gap-0.5 min-w-0">
+          <span className="c-s15 c-w6 c-t1 c-ell">{member.displayName}</span>
+          <span className="c-s13 c-t2 c-ell">In the app since {shortWhen(member.joinedAt)}</span>
+        </span>
+        <span>
+          {seatIsFree(member) ? (
+            <span className="c-tag c-tag-soft">Complimentary</span>
+          ) : off ? (
+            <span className="c-tag c-tag-warn">
+              <AlertTriangle aria-hidden="true" className="w-3.5 h-3.5" />
+              Not on your list
+            </span>
+          ) : differs ? (
+            <span data-testid="check-this-is-them" className="c-tag c-tag-warn">
+              <AlertTriangle aria-hidden="true" className="w-3.5 h-3.5" />
+              Check this is them
+            </span>
+          ) : null}
+        </span>
+        <ChevronRight aria-hidden="true" className="w-[18px] h-[18px] c-t3" />
+      </button>
+    </li>
   );
 }
 
-function MemberRow({ member, busy, canRemove, readOnly, words, onRemove, onPutOnList }) {
-  // An app member the gym's list does not hold (3a-vi-b): the reason, and the button
-  // that puts it right. Only staff who may see the list are sent it.
+/** One person in the app, opened: who they are to the gym, and what staff can do — put
+ *  them on the list, or Remove (One Remove, RULINGS 2026-09-27: someone on the list moves
+ *  to past members AND leaves the app in the same step). A side panel on a computer, the
+ *  whole screen on a phone, as a lead's panel is. */
+function RosterSheet({ member, words, seesList, canRemove, readOnly, busy, onClose, onRemove, onPutOnList }) {
+  const [asking, setAsking] = useState(false);
   const off = offListView(member.offList);
+  const free = seatIsFree(member);
+  // The server marks a paying member who is NOT on the list (`offList`), so any other one
+  // is on it, whatever record they are matched to — and Remove moves that record too.
+  const onList = seesList && !free && off === null;
+  const question = onList
+    ? `Remove ${member.displayName}? They move to past members and can't use the app with your ${words.it} any more. They keep their own workouts, and Put back brings them back.`
+    : `Remove ${member.displayName} from the app? They can't use the app with your ${words.it} any more, and they keep their own workouts.`;
   return (
-    <li
-      data-testid={off ? 'member-off-list' : undefined}
-      className="flex flex-col md:flex-row md:items-center gap-3 px-4 py-3.5 md:px-5 border-t first:border-t-0"
-      style={{ borderColor: 'var(--line)' }}
-    >
-      <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-        <span className="c-s15 c-w6 c-t1 c-ell">{member.displayName}</span>
-        <span className="c-s13 c-t2">
-          In the app since {formatJoinedAt(member.joinedAt)} · {groupLabelText(member)}
-        </span>
-        {/* The name on the gym's own list at the address they joined with, beside the
-            name they signed up with: a gym that mistyped an address invited a
-            stranger, and a different name is the clue (RULINGS 2026-09-23, gap A). */}
-        {member.onList ? (
-          <span className="c-s13 c-t2 flex flex-wrap items-center gap-2">
-            <span className="c-ell">On your list as {member.onList.name}</span>
-            {member.onList.nameCheck === 'differs' ? (
-              <span data-testid="check-this-is-them" className="c-tag c-tag-warn">
-                <AlertTriangle aria-hidden="true" className="w-3 h-3" />
-                Check this is them
-              </span>
-            ) : null}
-          </span>
-        ) : null}
-        {off ? (
-          <span className="c-s13 flex flex-col gap-0.5 pt-0.5">
-            <span className="flex items-center gap-1.5 c-w6" style={{ color: 'var(--warn)' }}>
-              <AlertTriangle aria-hidden="true" className="w-3.5 h-3.5 flex-shrink-0" />
-              {off.line}
+    <div className="fixed inset-0 z-50" style={{ background: 'var(--scrim)' }}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={member.displayName}
+        className="c-sheet absolute inset-0 md:left-auto md:w-[480px] md:border-l flex flex-col overflow-y-auto"
+        style={{ borderColor: 'var(--card-line)' }}
+      >
+        <div className="flex items-start gap-3 px-4 pt-5 pb-4 md:px-7 md:pt-7 md:pb-5 border-b" style={{ borderColor: 'var(--line)' }}>
+          <div className="flex flex-col gap-1 flex-grow min-w-0">
+            <h2 className="c-h1 c-ell" style={{ fontSize: 28, lineHeight: '34px' }}>
+              {member.displayName}
+            </h2>
+            <span className="c-s14 c-t2">
+              In the app since {shortWhen(member.joinedAt)}
+              {groupLabelText(member) === '—' ? '' : ` · ${groupLabelText(member)}`}
             </span>
-            {off.sameEmail ? <span className="c-t2">{off.sameEmail}</span> : null}
-          </span>
-        ) : null}
+          </div>
+          <button type="button" aria-label="Close" onClick={onClose} className="c-icon-btn">
+            <X aria-hidden="true" className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="flex flex-col gap-4 px-4 py-5 md:px-7">
+          {free ? (
+            <p className="c-s14 c-t2">
+              <span className="c-tag c-tag-soft mr-2">Complimentary</span>
+              The owner and staff use the app free. Staff are changed in Settings.
+            </p>
+          ) : null}
+          {/* The name on the gym's own list at the address they joined with, beside the
+              name they signed up with: a gym that mistyped an address invited a stranger,
+              and a different name is the clue (RULINGS 2026-09-23, gap A). */}
+          {member.onList ? (
+            <div className="flex flex-col gap-1">
+              <span className="c-s14 c-t2">On your list as {member.onList.name}</span>
+              {member.onList.nameCheck === 'differs' ? (
+                <span className="c-s14 flex items-center gap-1.5" style={{ color: 'var(--warn)' }}>
+                  <AlertTriangle aria-hidden="true" className="w-4 h-4 flex-shrink-0" />
+                  They signed up as {member.displayName}. Check this is them.
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+          {off ? (
+            <div className="flex flex-col gap-1">
+              <span className="c-s14 c-w6 flex items-center gap-1.5" style={{ color: 'var(--warn)' }}>
+                <AlertTriangle aria-hidden="true" className="w-4 h-4 flex-shrink-0" />
+                {off.line}
+              </span>
+              {off.sameEmail ? <span className="c-s14 c-t2">{off.sameEmail}</span> : null}
+            </div>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            {off ? (
+              <button type="button" onClick={onPutOnList} disabled={busy || readOnly} className="c-btn c-btn-soft">
+                {off.button}
+              </button>
+            ) : null}
+            {/* A trainer is refused the removal, so it is not drawn for them; a lapsed gym
+                greys it rather than hiding it (the server's 403 enforces both). The owner
+                and staff are removed with staff. */}
+            {!free && canRemove && !asking ? (
+              <button type="button" onClick={() => setAsking(true)} disabled={busy || readOnly} className="c-btn c-btn-s">
+                Remove
+              </button>
+            ) : null}
+          </div>
+          {asking ? (
+            <ConfirmInline
+              newLook
+              question={question}
+              confirmLabel="Remove"
+              cancelLabel="Cancel"
+              busy={busy || readOnly}
+              onConfirm={() => {
+                setAsking(false);
+                onRemove();
+              }}
+              onCancel={() => setAsking(false)}
+            />
+          ) : null}
+        </div>
       </div>
-      {off ? (
-        <button
-          type="button"
-          onClick={onPutOnList}
-          disabled={busy || readOnly}
-          className="c-btn c-btn-soft c-btn-sm flex-shrink-0 self-start md:self-center"
-        >
-          {off.button}
-        </button>
-      ) : null}
-      {seatIsFree(member) ? (
-        /* A place the gym is not charged for: the owner's own seat and anybody holding
-           the keys. No Remove control beside it: `removeMember` refuses anybody who is
-           still staff, and an owner is member one of their own gym. */
-        <span className="c-tag c-tag-soft self-start md:self-center">Complimentary</span>
-      ) : canRemove ? (
-        /* §4.3: a trainer is refused the removal, so the control is not drawn for them;
-           a lapsed gym greys it rather than hiding it (the server's 403 enforces both). */
-        <RemoveControl member={member} busy={busy} readOnly={readOnly} words={words} onRemove={onRemove} />
-      ) : null}
-    </li>
+    </div>
   );
 }
 
@@ -149,7 +190,7 @@ function AlreadyInApp({ items }) {
             style={{ borderColor: 'var(--line)' }}
           >
             <span className="c-s15 c-w6 c-t1 c-ell">{m.displayName}</span>
-            <span className="c-s14 c-t2">In the app since {formatJoinedAt(m.joinedAt)}</span>
+            <span className="c-s14 c-t2">In the app since {shortWhen(m.joinedAt)}</span>
             <span>{seatIsFree(m) ? <span className="c-tag c-tag-soft">Complimentary</span> : null}</span>
           </li>
         ))}
@@ -169,6 +210,13 @@ export default function Members() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [removingId, setRemovingId] = useState(null);
   const [removeError, setRemoveError] = useState(null);
+  /** The person in the app whose panel is open, by id. */
+  const [openUserId, setOpenUserId] = useState(null);
+  /** The search over the people in the app, as typed and as asked (after a pause). */
+  const [rosterTyped, setRosterTyped] = useState('');
+  const [rosterQuery, setRosterQuery] = useState('');
+  /** Bumped when a change here moves the list (One Remove, Put back), so it reads again. */
+  const [listKey, setListKey] = useState(0);
   /** The bigger size opened from the "nearly full" line. */
   const [choosing, setChoosing] = useState(false);
   /** Import or Add member, pressed in the header, for the list to open. */
@@ -189,10 +237,15 @@ export default function Members() {
   const words = orgWords(org?.orgType);
 
   useEffect(() => {
+    const timer = setTimeout(() => setRosterQuery(rosterTyped.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [rosterTyped]);
+
+  useEffect(() => {
     if (gymId === null) return undefined;
     let cancelled = false;
     orgService
-      .getMembers(gymId, { limit: 50 })
+      .getMembers(gymId, rosterQuery === '' ? { limit: 50 } : { limit: 50, query: rosterQuery })
       .then((res) => {
         if (cancelled) return;
         setState({
@@ -216,7 +269,7 @@ export default function Members() {
     return () => {
       cancelled = true;
     };
-  }, [gymId, attempt, words]);
+  }, [gymId, attempt, words, rosterQuery]);
 
   const retry = () => {
     setState({ loading: true, error: null, items: [], nextCursor: null });
@@ -236,6 +289,8 @@ export default function Members() {
     setRemoveError(null);
     try {
       await orgService.putMemberOnList(gymId, member.userId);
+      setOpenUserId(null);
+      setListKey((n) => n + 1);
       reloadRoster();
     } catch (err) {
       setRemoveError(errorText(err, "We couldn't put them on your list. Please try again."));
@@ -250,9 +305,12 @@ export default function Members() {
     setRemoveError(null);
     try {
       await orgService.removeMember(gymId, member.userId);
+      setOpenUserId(null);
+      setListKey((n) => n + 1);
       reloadRoster();
     } catch (err) {
       // The server's own sentence; the list is left as it was, because nothing changed.
+      setOpenUserId(null);
       setRemoveError(errorText(err, "We couldn't remove them. Please try again."));
     } finally {
       setRemovingId(null);
@@ -263,7 +321,10 @@ export default function Members() {
     if (gymId === null || state.nextCursor === null || loadingMore) return;
     setLoadingMore(true);
     try {
-      const res = await orgService.getMembers(gymId, { limit: 50, cursor: state.nextCursor });
+      const res = await orgService.getMembers(
+        gymId,
+        rosterQuery === '' ? { limit: 50, cursor: state.nextCursor } : { limit: 50, cursor: state.nextCursor, query: rosterQuery },
+      );
       setState((prev) => ({
         ...prev,
         // Appended, never replaced: the cursor walk is keyset-ordered.
@@ -307,6 +368,7 @@ export default function Members() {
     );
   }
 
+  const openMember = openUserId === null ? null : (state.items.find((m) => m.userId === openUserId) ?? null);
   const countLabel = memberCountLabel({ items: state.items, nextCursor: state.nextCursor }, org?.orgType);
   // §4.3's header meter, off the org row: null for a gym on no plan and a capless band.
   const meter = seatMeter(org);
@@ -332,7 +394,6 @@ export default function Members() {
               </>
             ) : null}
           </p>
-          {tab === 'app' && !state.loading && state.error === null ? <p className="c-s14 c-t3">{countLabel}</p> : null}
           {/* Nearly full: billing staff on a paying plan can make room from here. */}
           {meter?.pressure === true && canMakeRoomNow(org) ? (
             <button type="button" onClick={() => setChoosing(true)} className="c-btn c-btn-soft self-start mt-1">
@@ -387,11 +448,31 @@ export default function Members() {
           gym={org}
           words={words}
           readOnly={readOnly}
+          refreshKey={listKey}
           action={action}
           onActionTaken={clearAction}
           emptyExtra={<AlreadyInApp items={state.items} />}
           onRosterChanged={reloadRoster}
         />
+      ) : null}
+
+      {tab === 'app' ? (
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <label className="c-search w-full md:max-w-[460px] md:flex-grow">
+            <Search aria-hidden="true" className="w-[18px] h-[18px]" />
+            <input
+              type="search"
+              aria-label={`Search the ${words.people} in the app by name`}
+              maxLength={120}
+              placeholder="Search by name"
+              value={rosterTyped}
+              onChange={(e) => setRosterTyped(e.target.value)}
+              className="c-input"
+            />
+          </label>
+          <span className="flex-grow" />
+          {!state.loading && state.error === null ? <span className="c-s14 c-t2 c-num whitespace-nowrap">{countLabel}</span> : null}
+        </div>
       ) : null}
 
       {tab === 'app' && state.loading ? <ConsoleLoading label={`Loading ${words.people}…`} newLook /> : null}
@@ -402,7 +483,11 @@ export default function Members() {
 
       {tab === 'app' && !state.loading && state.error !== null ? <ConsoleFailed message={state.error} onRetry={retry} newLook /> : null}
 
-      {tab === 'app' && !state.loading && state.error === null && state.items.length === 0 ? (
+      {tab === 'app' && !state.loading && state.error === null && state.items.length === 0 && rosterQuery !== '' ? (
+        <p className="c-s14 c-t2">Nobody in the app matches.</p>
+      ) : null}
+
+      {tab === 'app' && !state.loading && state.error === null && state.items.length === 0 && rosterQuery === '' ? (
         <section className="c-card p-5 md:p-6 flex flex-col gap-1">
           <p className="c-s15 c-w6 c-t1">Nobody has joined yet.</p>
           <p className="c-s14 c-t2">Share your join code and {words.people} will appear here.</p>
@@ -413,19 +498,25 @@ export default function Members() {
         <section className="c-card overflow-hidden">
           <ul>
             {state.items.map((m) => (
-              <MemberRow
-                key={m.userId}
-                member={m}
-                words={words}
-                busy={removingId === m.userId}
-                canRemove={canRemove}
-                readOnly={readOnly}
-                onRemove={() => removeMember(m)}
-                onPutOnList={() => putOnList(m)}
-              />
+              <RosterRow key={m.userId} member={m} onOpen={() => setOpenUserId(m.userId)} />
             ))}
           </ul>
         </section>
+      ) : null}
+
+      {tab === 'app' && openMember !== null ? (
+        <RosterSheet
+          key={openMember.userId}
+          member={openMember}
+          words={words}
+          seesList={canSeeList}
+          canRemove={canRemove}
+          readOnly={readOnly}
+          busy={removingId === openMember.userId}
+          onClose={() => setOpenUserId(null)}
+          onRemove={() => removeMember(openMember)}
+          onPutOnList={() => putOnList(openMember)}
+        />
       ) : null}
 
       {tab === 'app' && state.nextCursor !== null ? (

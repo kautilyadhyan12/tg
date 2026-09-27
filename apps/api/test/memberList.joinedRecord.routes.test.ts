@@ -322,9 +322,12 @@ d("member list: an app member follows their record (real Postgres)", () => {
       expect(changed.statusCode, changed.body).toBe(200);
       expect(await unlisted(gymId, cookies)).toEqual([]);
 
-      // Staff take Priya's record off, then put Priya back from her membership.
-      const off = await api().inject({ method: "DELETE", url: `/v1/orgs/${gymId}/member-list/entries/${priyaRecord.id}`, remoteAddress: nextIp(), cookies });
-      expect(off.statusCode, off.body).toBe(200);
+      // Next month's file leaves Priya out: her record comes off and she stays in the app
+      // (removing her by hand would end her app too — One Remove, RULINGS 2026-09-27).
+      // Then staff put Priya back from her membership.
+      // The file carries the address staff typed for Emma, so it does not overwrite it.
+      await confirm(gymId, cookies, (await stage(gymId, cookies, csv([{ ...emma, email: addr("b-emma.typed") }, ...others]))).uploadId);
+      expect(await recordOf(gymId, priya.name)).toEqual({ id: priyaRecord.id, former: true });
       expect(await unlisted(gymId, cookies)).toEqual([priyaUser.userId]);
       const back = await post(`/v1/orgs/${gymId}/member-list/entries/from-member/${priyaUser.userId}`, {}, cookies);
       expect(back.statusCode, back.body).toBeLessThan(300);
@@ -362,8 +365,9 @@ d("member list: an app member follows their record (real Postgres)", () => {
       await confirm(gymId, cookies, (await stage(gymId, cookies, csv([emma, ...others]))).uploadId);
       const emmaUser = await joinByInvitation(gymId, emma.email);
       const emmaRecord = await recordOf(gymId, emma.name);
-      const off = await api().inject({ method: "DELETE", url: `/v1/orgs/${gymId}/member-list/entries/${emmaRecord.id}`, remoteAddress: nextIp(), cookies });
-      expect(off.statusCode, off.body).toBe(200);
+      // Next month's file leaves Emma out: her record comes off and she stays in the app.
+      await confirm(gymId, cookies, (await stage(gymId, cookies, csv(others))).uploadId);
+      expect(await recordOf(gymId, emma.name)).toEqual({ id: emmaRecord.id, former: true });
       const typed = await post(`/v1/orgs/${gymId}/member-list/entries`, { fullName: emma.name, email: emma.email, phone: "07700 900999" }, cookies);
       expect(typed.statusCode, typed.body).toBe(201);
       const typedId = memberListEntryWrittenSchema.parse(JSON.parse(typed.body)).entry.entryId;

@@ -37,7 +37,8 @@ const IRON = { name: 'Iron House', slug: 'iron-house' };
 const NONE = { noEmail: 0, underAge: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, refused: 0, sharedAddress: 0 };
 const FILTERS = { records: 'current', app: 'all', status: ['Active'], membershipType: [], paymentStatus: [], query: '' };
 
-const preview = (over = {}) => memberInvitePreviewSchema.parse({ version: 7, reach: 2, skipped: NONE, blocked: null, ...over });
+const NO_NAMES = { reach: [], noEmail: [], underAge: [], inApp: [], alreadyInvited: [], unsubscribed: [], bounced: [], refused: [], sharedAddress: [] };
+const preview = (over = {}) => memberInvitePreviewSchema.parse({ version: 7, reach: 2, skipped: NONE, names: NO_NAMES, blocked: null, ...over });
 const previewAnswer = (p) => ({ data: { preview: p } });
 const refusal = (status, data) => Object.assign(new Error('refused'), { response: { status, data } });
 
@@ -110,7 +111,7 @@ function openInvite(p, filters = FILTERS) {
   );
 }
 const box = () => within(screen.getByTestId('invite-box'));
-const tick = () => fireEvent.click(box().getByLabelText('I have permission to email these members.'));
+const tick = () => fireEvent.click(box().getByLabelText("These are Iron House's members, and I have permission to email them."));
 
 describe('the worst thing: nobody the gym did not choose is emailed', () => {
   it('the press carries exactly the words on screen and the number shown', async () => {
@@ -141,7 +142,7 @@ describe('the worst thing: nobody the gym did not choose is emailed', () => {
     expect(onSent).not.toHaveBeenCalled();
 
     // The tick was for the old group: it is asked again for the new one.
-    expect(box().getByLabelText('I have permission to email these members.').checked).toBe(false);
+    expect(box().getByLabelText("These are Iron House's members, and I have permission to email them.").checked).toBe(false);
     expect(box().getByRole('button', { name: 'Send 1 invitation' }).disabled).toBe(true);
     tick();
     orgService.pressInvite.mockResolvedValue({ data: { invited: { queued: 1, skipped: NONE, version: 8 } } });
@@ -155,6 +156,20 @@ describe('the worst thing: nobody the gym did not choose is emailed', () => {
     expect(left.getByText('3 are under 18 by the date of birth on your list')).toBeTruthy();
     expect(left.getByText('12 have no email address')).toBeTruthy();
     expect(left.getByText('1 was invited before')).toBeTruthy();
+  });
+
+  it("names who gets the email and who is left out, a few names then 'and N more' (Kd, 2026-09-27: Invite was vague)", async () => {
+    openInvite(
+      preview({
+        reach: 41,
+        skipped: { ...NONE, noEmail: 2, underAge: 1 },
+        names: { ...NO_NAMES, reach: ['Ava Thompson', 'Sofia Alvarez'], noEmail: ['Liam Hughes', 'Cy Park'], underAge: ['Mia Rossi'] },
+      }),
+    );
+    expect((await box().findByTestId('invite-reach-names')).textContent).toBe('Ava Thompson, Sofia Alvarez and 39 more');
+    const left = within(box().getByTestId('invite-left-out'));
+    expect(left.getByText('2 have no email address: Liam Hughes and Cy Park')).toBeTruthy();
+    expect(left.getByText('1 is under 18 by the date of birth on your list: Mia Rossi')).toBeTruthy();
   });
 
   it('with nobody to reach, nothing can be sent', async () => {
@@ -238,7 +253,7 @@ describe("a person's page", () => {
     expect(page().queryByRole('button', { name: 'Send again' })).toBeNull();
     fireEvent.click(page().getByRole('button', { name: /^More/ }));
     expect(page().queryByRole('menuitem', { name: /^Share the invitation/ })).toBeNull();
-    expect(page().getByRole('menuitem', { name: /^Move to past members/ })).toBeTruthy();
+    expect(page().getByRole('menuitem', { name: /^Remove$/ })).toBeTruthy();
   });
 
   it("shows the server's refusal when the gym's own day says under 18", async () => {

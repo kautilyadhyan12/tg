@@ -309,8 +309,8 @@ describe('round one: a confirm only ever sends what was refused', () => {
     orgService.takeOffMemberListEntry.mockResolvedValue(written('taken_off', { ...ada, formerAt: '2026-09-25T10:00:00.000Z' }));
     orgService.deleteFormerMemberListEntry.mockResolvedValue({ data: { deleted: true, version: 6 } });
     openBox(ADA);
-    await pickMore('Move to past members');
-    fireEvent.click(within(screen.getByTestId('confirm-take-off')).getByRole('button', { name: 'Move to past members' }));
+    await pickMore('Remove');
+    fireEvent.click(within(screen.getByTestId('confirm-take-off')).getByRole('button', { name: 'Remove' }));
     expect(await dialog().findByText(/kept as a past member/)).toBeTruthy();
     await pickMore('Delete for good');
     fireEvent.click(within(screen.getByTestId('confirm-delete')).getByRole('button', { name: 'Delete for good' }));
@@ -378,24 +378,42 @@ describe('a person on the list', () => {
     expect(dialog().getByText(/Changed by hand: Phone/)).toBeTruthy();
   });
 
+  it("Remove says in its box that someone in the app loses it too, and says less for someone who isn't (One Remove)", async () => {
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer({ ...ada, inApp: true, app: { word: 'in_app', tone: 'green', at: null, line: null, lineTone: 'plain' } }));
+    openBox(ADA);
+    await pickMore('Remove');
+    const box = within(screen.getByTestId('confirm-take-off'));
+    expect(box.getByText('Remove Ada Lovelace?')).toBeTruthy();
+    expect(box.getByText(/They move to past members and can't use the app with your gym any more\./)).toBeTruthy();
+    expect(box.getByText(/Put back brings them back/)).toBeTruthy();
+    cleanup();
+
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer(ada));
+    openBox(ADA);
+    await pickMore('Remove');
+    const plain = within(screen.getByTestId('confirm-take-off'));
+    expect(plain.getByText(/They move to past members\./)).toBeTruthy();
+    expect(plain.queryByText(/use the app/)).toBeNull();
+  });
+
   it('asks before removing somebody from the list, then shows them as a past member with Put back, and Delete for good under More', async () => {
     const off = { ...ada, formerAt: '2026-09-25T10:00:00.000Z' };
     orgService.takeOffMemberListEntry.mockResolvedValue(written('taken_off', off));
     openBox(ADA);
-    await pickMore('Move to past members');
+    await pickMore('Remove');
     expect(screen.getByTestId('confirm-take-off')).toBeTruthy();
     expect(orgService.takeOffMemberListEntry).not.toHaveBeenCalled();
-    fireEvent.click(dialog().getByRole('button', { name: 'Keep as a member' }));
+    fireEvent.click(dialog().getByRole('button', { name: 'Cancel' }));
     expect(orgService.takeOffMemberListEntry).not.toHaveBeenCalled();
 
-    await pickMore('Move to past members');
-    fireEvent.click(within(screen.getByTestId('confirm-take-off')).getByRole('button', { name: 'Move to past members' }));
+    await pickMore('Remove');
+    fireEvent.click(within(screen.getByTestId('confirm-take-off')).getByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(orgService.takeOffMemberListEntry).toHaveBeenCalledWith(GYM, ADA));
     expect(await dialog().findByText(/Past member since 25 Sep 2026/)).toBeTruthy();
     expect(dialog().getByRole('button', { name: 'Put back on your list' })).toBeTruthy();
     fireEvent.click(dialog().getByRole('button', { name: /^More/ }));
     expect(dialog().getByRole('menuitem', { name: /^Delete for good/ })).toBeTruthy();
-    expect(dialog().queryByRole('menuitem', { name: /^Move to past members/ })).toBeNull();
+    expect(dialog().queryByRole('menuitem', { name: /^Remove$/ })).toBeNull();
 
     orgService.restoreMemberListEntry.mockResolvedValue(written('restored', ada));
     fireEvent.click(dialog().getByRole('button', { name: 'Put back on your list' }));
@@ -408,7 +426,7 @@ describe('a person on the list', () => {
       entryAnswer(person(ADA, 'Ada Lovelace', { invitation: { state: 'pending', invitedAt: '2026-09-20T10:00:00.000Z', email: null, sentAgain: 0, waitingSince: null, notMeAt: null } })),
     );
     openBox(ADA);
-    await pickMore('Move to past members');
+    await pickMore('Remove');
     expect(within(screen.getByTestId('confirm-take-off')).getByText(/invitation stops working/)).toBeTruthy();
   });
 

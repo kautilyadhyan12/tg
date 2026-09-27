@@ -191,9 +191,10 @@ export const MEMBER_INVITE_AGAIN_PER_PERSON = 3;
 export const MEMBER_INVITE_AGAIN_PERSON_DAYS = 30;
 export const MEMBER_INVITE_AGAIN_PER_GYM_DAY = 20;
 
-/** The tick staff make before pressing Invite (Kd, 5b-ii's click-through, 2026-09-25),
- *  recorded with who pressed. `{people}` is the organisation's word for its people. */
-export const MEMBER_INVITE_PERMISSION_WORDS = "I have permission to email these {people}.";
+/** The tick staff make before pressing Invite (Kd, 5b-ii's click-through, 2026-09-25;
+ *  who the people are added, RULINGS 2026-09-27), recorded with who pressed. `{gym}` is
+ *  the gym's name and `{people}` the organisation's word for its people. */
+export const MEMBER_INVITE_PERMISSION_WORDS = "These are {gym}'s {people}, and I have permission to email them.";
 
 /** The server's sentences for invitations, printed as sent. */
 export const MEMBER_INVITE_WORDS = {

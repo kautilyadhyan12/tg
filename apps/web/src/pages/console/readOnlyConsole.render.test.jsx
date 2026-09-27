@@ -607,8 +607,9 @@ describe('the roster', () => {
     orgService.getMine.mockResolvedValue(mineIs(LAPSED));
     renderConsole(Members, '/console/iron-house/members?view=app');
 
-    expect(await screen.findByText('Rahul Das')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^remove from app$/i }).disabled).toBe(true);
+    // Remove is on the person's panel (One Remove), greyed there.
+    fireEvent.click(await screen.findByText('Rahul Das'));
+    expect((await screen.findByRole('button', { name: /^remove$/i })).disabled).toBe(true);
     expect(screen.getAllByText(READ_ONLY_NOTE).length).toBeGreaterThan(0);
   });
 
@@ -616,8 +617,8 @@ describe('the roster', () => {
     orgService.getMine.mockResolvedValue(mineIs(PAYING));
     renderConsole(Members, '/console/iron-house/members?view=app');
 
-    await screen.findByText('Rahul Das');
-    expect(screen.getByRole('button', { name: /^remove from app$/i }).disabled).toBe(false);
+    fireEvent.click(await screen.findByText('Rahul Das'));
+    expect((await screen.findByRole('button', { name: /^remove$/i })).disabled).toBe(false);
     expect(screen.queryByText(READ_ONLY_NOTE)).toBeNull();
   });
 

@@ -42,7 +42,7 @@ import {
 } from './memberListPeople';
 
 // One person on the gym's own list (ROADMAP 5b-i; spec Part 3 §11.6): everything kept
-// about them, and Edit; under More, Move to past members, Merge duplicate and (for a past member)
+// about them, and Edit; under More, Remove (One Remove, RULINGS 2026-09-27), Merge duplicate and (for a past member)
 // Delete for good, as gym software keeps its rarer actions. "Add member" is
 // the same box with an empty form. It closes only by its X, as the import box does.
 //
@@ -825,7 +825,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
                 ...(p.invitation?.state === 'pending' && action !== 'under_age'
                   ? [{ label: 'Share the invitation', hint: 'Its words and link, to send yourself', icon: Copy, onPick: () => backTo('share') }]
                   : []),
-                { label: 'Move to past members', icon: UserMinus, onPick: () => setMode('takeOff') },
+                { label: 'Remove', icon: UserMinus, onPick: () => setMode('takeOff') },
                 { label: 'Merge duplicate', hint: 'When this person is on your list twice', icon: ArrowLeftRight, onPick: startJoin },
               ]}
             />
@@ -893,19 +893,20 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       return (
         <div className="flex flex-col gap-3" data-testid="confirm-take-off">
           <p className="text-[15px]" style={{ color: '#fff' }}>
-            Move {name} to past members?
+            Remove {name}?
           </p>
           <p className="text-sm" style={{ color: C.soft }}>
-            Their details are kept, and you can put them back.
-            {pending ? ' Their invitation stops working.' : ''}
-            {p.inApp ? ' They stay in the app until you remove them from the app.' : ''}
+            {p.inApp
+              ? `They move to past members and can't use the app with your ${words.it ?? 'gym'} any more.`
+              : 'They move to past members.'}
+            {pending ? ' Their invitation stops working.' : ''} Their details are kept, and Put back brings them back.
           </p>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => void takeOff()} disabled={busy || readOnly} className={BUTTON} style={{ background: C.orange, color: '#000' }}>
-              Move to past members
+            <button type="button" onClick={() => void takeOff()} disabled={busy || readOnly} className={BUTTON} style={{ background: C.redBg, color: C.red }}>
+              Remove
             </button>
             <button type="button" onClick={() => backTo('view')} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
-              Keep as a member
+              Cancel
             </button>
           </div>
         </div>

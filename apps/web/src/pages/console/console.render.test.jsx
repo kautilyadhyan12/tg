@@ -194,6 +194,12 @@ const chooseCountry = async (name) => {
 
 const drawOverview = () => drawAt('/console/iron-house', <Overview />, '/console/:orgSlug');
 const drawMembers = () => drawAt('/console/iron-house/members?view=app', <Members />, '/console/:orgSlug/members');
+/** Open one person in the app: their row opens their panel, as a lead's does (One Remove). */
+const openInApp = async (name) => {
+  fireEvent.click(await screen.findByText(name));
+  return within(await screen.findByRole('dialog', { name }));
+};
+const removeButton = () => screen.queryByRole('button', { name: 'Remove' });
 /** The Members screen's first tab, the gym's own list (5b-i). */
 const drawListTab = () => drawAt('/console/iron-house/members', <Members />, '/console/:orgSlug/members');
 
@@ -1061,10 +1067,12 @@ describe('Members', () => {
     drawMembers();
 
     expect(await screen.findByText('Rita Sen')).toBeTruthy();
-    expect(screen.getByText(/Morning Batch/)).toBeTruthy();
     expect(screen.getByText('Complimentary')).toBeTruthy(); // the owner's seat
+    // Opened, her panel says how she came in, and nothing more about her.
+    const panel = await openInApp('Rita Sen');
+    expect(panel.getByText(/Morning Batch/)).toBeTruthy();
 
-    // The boundary itself. The fixture carries an email address, a body weight,
+    // The boundary itself, with the row AND the panel on screen. The fixture carries an email address, a body weight,
     // a workout count and a form score — none of which the endpoint returns and
     // none of which a gym may ever see. If a later edit renders the member
     // object rather than its four allowed fields, these appear.
@@ -1166,14 +1174,19 @@ describe('Members', () => {
     drawMembers();
 
     expect(await screen.findByText('Priya Sharma')).toBeTruthy();
-    expect(screen.getByText('On your list as Priya Shah')).toBeTruthy();
-    expect(screen.getByText('On your list as José Álvarez')).toBeTruthy();
     const checks = screen.getAllByTestId('check-this-is-them');
     expect(checks).toHaveLength(1);
-    // The mark sits on the stranger's row, next to its Remove.
-    const row = checks[0].closest('li');
-    expect(within(row).getByText('Priya Sharma')).toBeTruthy();
-    expect(within(row).getByRole('button', { name: 'Remove from app' })).toBeTruthy();
+    // The mark sits on the stranger's row.
+    expect(within(checks[0].closest('li')).getByText('Priya Sharma')).toBeTruthy();
+    // Opened, each panel names the list's person beside the name they signed up with.
+    let panel = await openInApp('Priya Sharma');
+    expect(panel.getByText('On your list as Priya Shah')).toBeTruthy();
+    expect(panel.getByText(/They signed up as Priya Sharma\. Check this is them\./)).toBeTruthy();
+    expect(panel.getByRole('button', { name: 'Remove' })).toBeTruthy();
+    fireEvent.click(panel.getByRole('button', { name: 'Close' }));
+    panel = await openInApp('Jose Alvarez');
+    expect(panel.getByText('On your list as José Álvarez')).toBeTruthy();
+    expect(panel.queryByText(/Check this is them/)).toBeNull();
   });
 
   // ROADMAP 3a-vi-b: an app member the gym's list does not hold looks different, says
@@ -1194,17 +1207,20 @@ describe('Members', () => {
     expect(await screen.findByText('Priya Shah')).toBeTruthy();
     const marked = screen.getAllByTestId('member-off-list');
     expect(marked).toHaveLength(2);
-    const priyaRow = marked.find((row) => within(row).queryByText('Priya Shah') !== null);
-    expect(within(priyaRow).getByText(/^Not on your list · taken off /)).toBeTruthy();
-    expect(within(priyaRow).getByText('Arjun Shah on your list has the same email')).toBeTruthy();
-    const nia = marked.find((row) => within(row).queryByText('Nia Cole') !== null);
-    expect(within(nia).getByText('Not on your list · not on any list you have imported')).toBeTruthy();
-    expect(within(nia).queryByText(/taken off/)).toBeNull();
-    expect(within(nia).getByRole('button', { name: 'Add to your list' })).toBeTruthy();
-    // Emma is on the list: no mark, no button.
-    expect(screen.getByText('On your list as Emma Clarke').closest('[data-testid=member-off-list]')).toBeNull();
+    // Emma is on the list: no mark on her row.
+    expect(marked.some((row) => within(row).queryByText('Emma Clarke') !== null)).toBe(false);
+    // Nia's panel: why, and Add to your list.
+    let panel = await openInApp('Nia Cole');
+    expect(panel.getByText('Not on your list · not on any list you have imported')).toBeTruthy();
+    expect(panel.queryByText(/taken off/)).toBeNull();
+    expect(panel.getByRole('button', { name: 'Add to your list' })).toBeTruthy();
+    fireEvent.click(panel.getByRole('button', { name: 'Close' }));
+    // Priya's panel: why, who else holds the address, and Put back on your list.
+    panel = await openInApp('Priya Shah');
+    expect(panel.getByText(/^Not on your list · taken off /)).toBeTruthy();
+    expect(panel.getByText('Arjun Shah on your list has the same email')).toBeTruthy();
 
-    fireEvent.click(within(priyaRow).getByRole('button', { name: 'Put back on your list' }));
+    fireEvent.click(panel.getByRole('button', { name: 'Put back on your list' }));
     await waitFor(() => expect(orgService.putMemberOnList).toHaveBeenCalledWith(ORG.id, 'u7'));
     await waitFor(() => expect(orgService.getMembers.mock.calls.length).toBeGreaterThan(1));
   });
@@ -1230,7 +1246,7 @@ describe('Members', () => {
     });
     drawListTab();
     const box = await screen.findByTestId('check-these');
-    expect(within(box).getByText('1 member needs checking')).toBeTruthy();
+    expect(box.textContent).toBe('1 needs checking');
     // The old box read its own endpoint; the list's counts say it now.
     expect(orgService.getNotMe).not.toHaveBeenCalled();
   });
@@ -1547,17 +1563,47 @@ describe('Waiting to join', () => {
 // ── Removing a member ───────────────────────────────────────────────────────
 
 describe('Removing a member', () => {
-  it('asks before it removes, and Keep really keeps', async () => {
-    // Part 3 §4.3 specifies a confirm sheet, and the button sits where a thumb
-    // reaches for it on a phone.
+  it("Remove on someone on your list says they move to past members too (One Remove); on someone who isn't, only that they leave the app", async () => {
+    const listed = { ...joinedMemberWithForbiddenExtras, onList: { name: 'Rita Sen', nameCheck: 'matches' } };
+    const nia = { ...joinedMemberWithForbiddenExtras, userId: 'u8', displayName: 'Nia Cole', offList: { reason: 'never_listed', at: null, sameEmailName: null } };
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, listed, nia]));
+    drawMembers();
+    let panel = await openInApp('Rita Sen');
+    fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
+    expect(panel.getByText(/Remove Rita Sen\? They move to past members and can't use the app with your gym any more\./)).toBeTruthy();
+    fireEvent.click(panel.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(panel.getByRole('button', { name: 'Close' }));
+    panel = await openInApp('Nia Cole');
+    fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
+    expect(panel.getByText(/Remove Nia Cole from the app\? They can't use the app with your gym any more/)).toBeTruthy();
+    expect(panel.queryByText(/past members/)).toBeNull();
+  });
+
+  it('searches the people in the app by name once typing pauses, and says when nobody matches', async () => {
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
+    drawMembers();
+    expect(await screen.findByText('Rita Sen')).toBeTruthy();
+    orgService.getMembers.mockResolvedValue(page([]));
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search the members in the app by name' }), { target: { value: '  zed ' } });
+    await waitFor(() => expect(orgService.getMembers).toHaveBeenLastCalledWith(ORG.id, { limit: 50, query: 'zed' }));
+    expect(await screen.findByText('Nobody in the app matches.')).toBeTruthy();
+    expect(screen.queryByText(/Nobody has joined yet/)).toBeNull();
+  });
+
+  it('asks before it removes, and Cancel really keeps', async () => {
+    // Part 3 §4.3 specifies a confirm sheet; it is on the person's own panel now, as a
+    // lead's actions are.
     orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
     drawMembers();
 
-    fireEvent.click(await screen.findByText('Remove from app'));
-    expect(screen.getByText(/Remove Rita Sen from the app\?/i)).toBeTruthy();
-    fireEvent.click(screen.getByText('Keep'));
+    const panel = await openInApp('Rita Sen');
+    fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
+    // Rita pays and the server does not mark her off the list, so she is on it: Remove
+    // moves her to past members too, and the box says so.
+    expect(panel.getByText(/Remove Rita Sen\? They move to past members/i)).toBeTruthy();
+    fireEvent.click(panel.getByRole('button', { name: 'Cancel' }));
     expect(orgService.removeMember).not.toHaveBeenCalled();
-    expect(screen.getByText('Rita Sen')).toBeTruthy();
+    expect(screen.getAllByText('Rita Sen').length).toBeGreaterThan(0);
   });
 
   it('removes on the second tap and re-reads the roster', async () => {
@@ -1567,9 +1613,10 @@ describe('Removing a member', () => {
     orgService.removeMember.mockResolvedValue({ data: { status: 'removed' } });
     drawMembers();
 
-    fireEvent.click(await screen.findByText('Remove from app'));
-    // The second "Remove from app" is the one inside the question.
-    fireEvent.click(screen.getAllByText('Remove from app')[0]);
+    const panel = await openInApp('Rita Sen');
+    fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
+    // Asked, the only Remove left is the one inside the question.
+    fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
     await waitFor(() =>
       expect(orgService.removeMember).toHaveBeenCalledWith('11111111-1111-1111-1111-111111111111', 'u2'),
     );
@@ -1585,8 +1632,8 @@ describe('Removing a member', () => {
     // clothes.
     orgService.getMembers.mockResolvedValue(page([ownerSeat]));
     drawMembers();
-    expect(await screen.findByText('Kd Owner')).toBeTruthy();
-    expect(screen.queryByText('Remove from app')).toBeNull();
+    await openInApp('Kd Owner');
+    expect(removeButton()).toBeNull();
   });
 
   /** KD'S FINDING AT THE STAFF RE-SMOKE (:14953): *"when a member is added as a
@@ -1606,9 +1653,9 @@ describe('Removing a member', () => {
     expect(await screen.findByText('Bhaskar Das')).toBeTruthy();
     // Two free places — the owner's and the trainer's — and NOT the third row.
     expect(screen.getAllByText('Complimentary')).toHaveLength(2);
-    // The control: Rita pays, so she keeps her Remove button and no badge.
-    expect(screen.getByText('Rita Sen')).toBeTruthy();
-    expect(screen.getAllByText('Remove from app')).toHaveLength(1);
+    // The control: Rita pays, so her panel offers Remove and her row no badge.
+    await openInApp('Rita Sen');
+    expect(removeButton()).toBeTruthy();
   });
 
   it('offers NO Remove beside a staff member, because the server refuses it', async () => {
@@ -1617,8 +1664,8 @@ describe('Removing a member', () => {
     // own flow — keys first, then the membership.
     orgService.getMembers.mockResolvedValue(page([staffMemberSeat]));
     drawMembers();
-    expect(await screen.findByText('Bhaskar Das')).toBeTruthy();
-    expect(screen.queryByText('Remove from app')).toBeNull();
+    await openInApp('Bhaskar Das');
+    expect(removeButton()).toBeNull();
   });
 
   /** THE EXPAND-THEN-CONTRACT WINDOW, and it is why the field is optional
@@ -1637,7 +1684,8 @@ describe('Removing a member', () => {
 
     expect(await screen.findByText('Kd Owner')).toBeTruthy();
     expect(screen.getAllByText('Complimentary')).toHaveLength(1);
-    expect(screen.getAllByText('Remove from app')).toHaveLength(1);
+    await openInApp('Rita Sen');
+    expect(removeButton()).toBeTruthy();
   });
 
   it('hides Remove from a TRAINER, who may read the roster and may not remove (T3 r1 C/H-2)', async () => {
@@ -1654,9 +1702,9 @@ describe('Removing a member', () => {
     orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
     drawMembers();
 
-    expect(await screen.findByText('Rita Sen')).toBeTruthy();
-    expect(screen.getByText(/Morning Batch/)).toBeTruthy();
-    expect(screen.queryByText('Remove from app')).toBeNull();
+    const panel = await openInApp('Rita Sen');
+    expect(panel.getByText(/Morning Batch/)).toBeTruthy();
+    expect(removeButton()).toBeNull();
   });
 
   /** T3 ROUND 1 C/H-1, the roster half. `removeOrgMember` gates on
@@ -1677,15 +1725,16 @@ describe('Removing a member', () => {
     orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
     drawMembers();
 
-    expect(await screen.findByText('Rita Sen')).toBeTruthy();
-    expect(screen.getByText('Remove from app')).toBeTruthy();
+    await openInApp('Rita Sen');
+    expect(removeButton()).toBeTruthy();
   });
 
   it('still offers Remove to a MANAGER (the gate must not shut on the people §2.2 allows)', async () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'manager' }] } });
     orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
     drawMembers();
-    expect(await screen.findByText('Remove from app')).toBeTruthy();
+    await openInApp('Rita Sen');
+    expect(removeButton()).toBeTruthy();
   });
 
   it('keeps the person on screen when the server refuses, and says why', async () => {
@@ -1699,8 +1748,9 @@ describe('Removing a member', () => {
     );
     drawMembers();
 
-    fireEvent.click(await screen.findByText('Remove from app'));
-    fireEvent.click(screen.getAllByText('Remove from app')[0]);
+    const panel = await openInApp('Rita Sen');
+    fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
+    fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
     expect(await screen.findByText(/A staff member can't be removed/i)).toBeTruthy();
     // Nothing changed, so nothing on the list may look as though it did.
     expect(screen.getByText('Rita Sen')).toBeTruthy();
@@ -1760,7 +1810,8 @@ describe('what may I do here', () => {
   it('NARROWING: a power taken away reaches a screen that is already open', async () => {
     orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
     drawMembers();
-    expect(await screen.findByText('Remove from app')).toBeTruthy();
+    await openInApp('Rita Sen');
+    expect(removeButton()).toBeTruthy();
 
     // Somebody at the next desk moves this person off manager. Before this card
     // the button stayed until they pressed F5 — the server refused the click,
@@ -1769,10 +1820,10 @@ describe('what may I do here', () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'trainer' }] } });
     clickBackIn();
 
-    await waitFor(() => expect(screen.queryByText('Remove from app')).toBeNull());
+    await waitFor(() => expect(removeButton()).toBeNull());
     // The roster itself is NOT dragged through a reload: only the answer about
     // what this person may do was re-read.
-    expect(screen.getByText('Rita Sen')).toBeTruthy();
+    expect(screen.getAllByText('Rita Sen').length).toBeGreaterThan(0);
     expect(orgService.getMembers).toHaveBeenCalledTimes(1);
   });
 
@@ -1780,8 +1831,8 @@ describe('what may I do here', () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'trainer' }] } });
     orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
     drawMembers();
-    expect(await screen.findByText('Rita Sen')).toBeTruthy();
-    expect(screen.queryByText('Remove from app')).toBeNull();
+    await openInApp('Rita Sen');
+    expect(removeButton()).toBeNull();
 
     orgService.getMine.mockResolvedValue({
       data: {
@@ -1792,24 +1843,26 @@ describe('what may I do here', () => {
     });
     clickBackIn();
 
-    expect(await screen.findByText('Remove from app')).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Remove' })).toBeTruthy();
   });
 
   it('counts the TAB coming back to the front, which is a different event', async () => {
     orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
     drawMembers();
-    expect(await screen.findByText('Remove from app')).toBeTruthy();
+    await openInApp('Rita Sen');
+    expect(removeButton()).toBeTruthy();
 
     orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'trainer' }] } });
     fireEvent(document, new Event('visibilitychange'));
 
-    await waitFor(() => expect(screen.queryByText('Remove from app')).toBeNull());
+    await waitFor(() => expect(removeButton()).toBeNull());
   });
 
   it('leaves a working screen ALONE when the re-check fails', async () => {
     orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
     drawMembers();
-    expect(await screen.findByText('Remove from app')).toBeTruthy();
+    await openInApp('Rita Sen');
+    expect(removeButton()).toBeTruthy();
 
     orgService.getMine.mockRejectedValue(offline());
     clickBackIn();
@@ -1818,8 +1871,8 @@ describe('what may I do here', () => {
     // A check WE started, dropping ITS connection, must not take away what the
     // person is looking at — that would be this project's empty-vs-failed
     // defect, self-inflicted.
-    expect(screen.getByText('Rita Sen')).toBeTruthy();
-    expect(screen.getByText('Remove from app')).toBeTruthy();
+    expect(screen.getAllByText('Rita Sen').length).toBeGreaterThan(0);
+    expect(removeButton()).toBeTruthy();
     expect(screen.queryByText(/Couldn't reach the server/i)).toBeNull();
   });
 

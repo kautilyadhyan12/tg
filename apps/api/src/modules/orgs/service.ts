@@ -4,6 +4,7 @@
 import type { Sql } from "postgres";
 import {
   GYM_POSTAL_ADDRESS_MAX_CHARS,
+  MEMBER_LIST_BY_HAND_WORDS,
   JOIN_CODE_LENGTH,
   ORG_TYPES_PHRASE,
   SMALLER_SIZE_DECIDE_HOURS,
@@ -21,6 +22,7 @@ import { codeFromBytes, slugCandidate, slugifyName } from "./codes.js";
 import { cleanGymText } from "./invites/gymText.js";
 import { withdrawForAccounts } from "./invites/join.js";
 import { checkName } from "./invites/nameCheck.js";
+import { recordOfMember, removeRecordIn } from "./memberList/oneRemove.js";
 import { displayNameFromEmail } from "../auth/service.js";
 import type { InviteSettings } from "./invites/settings.js";
 import * as listRepo from "./memberList/repo.js";
@@ -1346,8 +1348,12 @@ export async function listOrgMembers(
     );
   }
 
+  const typed = (query.query ?? "").trim();
   const page = await repo.listMembers(deps.sql, {
     gymId,
+    // LIKE's own characters escaped, so "10%" finds that name and not everybody.
+    like: typed === "" ? null : `%${typed.replace(/[\\%_]/g, (char) => `\\${char}`)}%`,
+    likeListName: seesList,
     limit: query.limit,
     cursor: parseCursor(query.cursor),
   });
@@ -1823,12 +1829,24 @@ export async function removeOrgMember(
   targetUserId: string,
 ): Promise<RemoveMemberResponse> {
   const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.remove");
+  const { privileges } = await requirePrivilege(deps, gymId, userId, "members.remove");
+  const at = new Date();
 
   const outcome = await repo.removeMember(deps.sql, {
     gymId,
     userId: targetUserId,
     actorUserId: userId,
-    afterClose: (tx) => withdrawForAccounts(tx, deps.invites, { gymId, userIds: [targetUserId], at: new Date() }),
+    // ONE REMOVE (RULINGS 2026-09-27): the record §9.7 matches them to becomes a past
+    // member in the same step — that record only, never another at their address.
+    beforeClose: async (tx) => {
+      const entryId = await recordOfMember(tx, gymId, targetUserId);
+      if (entryId === null) return;
+      if (!privileges.includes("members.confirm")) throw new OrgsError(403, "forbidden", MEMBER_LIST_BY_HAND_WORDS.remove_needs_list);
+      const entry = await listRepo.entryFor(tx, gymId, entryId);
+      if (entry === null) return;
+      await removeRecordIn(tx, { gymId, actorUserId: userId, at, settings: deps.invites }, entry, { endApp: false, mayEndApp: true });
+    },
+    afterClose: (tx) => withdrawForAccounts(tx, deps.invites, { gymId, userIds: [targetUserId], at }),
   });
 
   switch (outcome.kind) {

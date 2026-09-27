@@ -235,6 +235,15 @@ export function skippedLines(skipped) {
   return lines.filter(([, count]) => count > 0).map(([key, count, words]) => ({ key, text: words(count) }));
 }
 
+/** A few names, then "and N more": "Ava Thompson, Sofia Alvarez and 39 more" (§18.6). */
+export function namesWords(names, total) {
+  if (!Array.isArray(names) || names.length === 0) return '';
+  const more = total - names.length;
+  if (more > 0) return `${names.join(', ')} and ${n(more)} more`;
+  if (names.length === 1) return names[0];
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
 /** Why the gym cannot send at all yet, in words. */
 export function inviteBlockedWords(blocked, words) {
   switch (blocked) {

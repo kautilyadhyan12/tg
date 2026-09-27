@@ -264,7 +264,11 @@ d("member list: keeping it by hand (real Postgres)", () => {
       await typeIn(gym, owner, { fullName: "By Phone", phone: "07911 000101" });
       await typeIn(gym, owner, { fullName: "Both Gyms", email: both.email });
       const droppedEntry = await typeIn(gym, owner, { fullName: "Dropped", email: dropped.email });
-      expect((await del(entryUrl(gym, droppedEntry.entry.entryId), owner.cookies)).statusCode).toBe(200);
+      // Dropped off the list the way a whole-list upload that leaves them out does it: the
+      // record becomes former and the member stays in the app, "no longer on your list".
+      // (Removing them by hand ends their app too — One Remove, RULINGS 2026-09-27.)
+      await sql`UPDATE gym_member_list_entries SET former_at = now() WHERE gym_id = ${gym} AND id = ${droppedEntry.entry.entryId}`;
+      await sql`UPDATE gym_members SET last_listed_at = now() WHERE gym_id = ${gym} AND user_id = ${dropped.userId}`;
       // Gym B keeps a list too, so its members are marked there.
       await typeIn(rival.org.id, rivalOwner, { fullName: "Somebody Else", email: "mhand-t-elsewhere@example.com" });
 
@@ -860,7 +864,7 @@ d("member list: keeping it by hand (real Postgres)", () => {
   );
 
   it(
-    "taking a record off makes the member it reached 'no longer on your list', putting it back makes them listed again, and doing either twice changes nothing",
+    "removing a record ends the app of the member it reached (One Remove), putting it back lists the record again without the app, and doing either twice changes nothing",
     async () => {
       const owner = await makeUser("off-owner");
       const org = await makeOrg(owner, "Off Gym");
@@ -870,16 +874,19 @@ d("member list: keeping it by hand (real Postgres)", () => {
       const who = await member("off-member", org, owner);
 
       const off = await del(entryUrl(gym, one.entry.entryId), owner.cookies);
-      expect(written(off)).toMatchObject({ outcome: "taken_off" });
+      expect(written(off)).toMatchObject({ outcome: "taken_off", entry: { inApp: false } });
       const version = written(off).version;
-      expect((await unlisted(gym, owner, "no_longer_listed")).people.map((p) => p.userId)).toEqual([who.userId]);
+      // Out of the app, so in neither group of people in the app who aren't on the list.
+      expect(await liveMembers(gym)).not.toContain(who.userId);
+      expect((await unlisted(gym, owner, "no_longer_listed")).total).toBe(0);
       expect((await unlisted(gym, owner, "never_listed")).total).toBe(0);
 
       const twice = await del(entryUrl(gym, one.entry.entryId), owner.cookies);
       expect(written(twice)).toMatchObject({ outcome: "already_taken_off", version });
 
       const back = await post(`${entryUrl(gym, one.entry.entryId)}/restore`, {}, owner.cookies);
-      expect(written(back)).toMatchObject({ outcome: "restored", entry: { inApp: true, formerAt: null } });
+      expect(written(back)).toMatchObject({ outcome: "restored", entry: { inApp: false, formerAt: null } });
+      expect(await liveMembers(gym)).not.toContain(who.userId);
       expect((await unlisted(gym, owner, "no_longer_listed")).total).toBe(0);
       const backTwice = await post(`${entryUrl(gym, one.entry.entryId)}/restore`, {}, owner.cookies);
       expect(written(backTwice)).toMatchObject({ outcome: "already_on_list", version: written(back).version });

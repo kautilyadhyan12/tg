@@ -1493,11 +1493,34 @@ export type MemberInvitePreviewQuery = z.infer<typeof memberInvitePreviewQuerySc
 /** What an Invite would do now: how many it would reach, who it leaves out and why,
  *  and the list's version. The press sends `version` and `reach` back. `blocked` says
  *  why the gym cannot send at all yet, or null. */
+/** How many names Invite's box shows for each group before "and N more" (spec §18.6;
+ *  Kd, 2026-09-27: Invite was vague about who it emails). */
+export const MEMBER_INVITE_NAMES_SHOWN = 5;
+const inviteNames = z.array(z.string()).max(MEMBER_INVITE_NAMES_SHOWN);
+
+/** The first names of the people an Invite reaches, and of each group it leaves out,
+ *  in the list's order. */
+export const memberInviteNamesSchema = z
+  .object({
+    reach: inviteNames,
+    noEmail: inviteNames,
+    underAge: inviteNames,
+    inApp: inviteNames,
+    alreadyInvited: inviteNames,
+    unsubscribed: inviteNames,
+    bounced: inviteNames,
+    refused: inviteNames,
+    sharedAddress: inviteNames,
+  })
+  .strict();
+export type MemberInviteNames = z.infer<typeof memberInviteNamesSchema>;
+
 export const memberInvitePreviewSchema = z
   .object({
     version: z.number().int().min(0),
     reach: z.number().int().min(0),
     skipped: memberInviteSkippedSchema,
+    names: memberInviteNamesSchema,
     blocked: memberInviteBlockedSchema.nullable(),
   })
   .strict();
@@ -1792,6 +1815,8 @@ export const MEMBER_LIST_BY_HAND_WORDS = {
   list_changed: "Your list or your members changed while you were looking, so nobody was removed. Look at the names again.",
   large_change:
     "This would remove more of your members than we do without asking. Check the number, then confirm again to go ahead.",
+  remove_needs_app: "This person uses the app, and your role can't remove people from it. Ask the owner.",
+  remove_needs_list: "Removing someone also moves them to past members, which your role can't do. Ask the owner.",
 } as const;
 
 /** The sentence for a card number typed into a field, naming the field. */

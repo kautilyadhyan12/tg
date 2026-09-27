@@ -821,7 +821,10 @@ d("join by invitation (real Postgres)", () => {
       expect(merged.statusCode, merged.body).toBe(200);
       expect((await membershipsOf(gym, xena))[0]?.entry_id).toBe(keptId);
 
-      expect((await send("DELETE", entryUrl(gym, keptId), gym.owner.cookies)).statusCode).toBe(200);
+      // Off the list the way a whole-list upload that leaves her out does it, so she is still
+      // in the app (removing her by hand would end her app too — One Remove, RULINGS
+      // 2026-09-27); then the record is deleted for good.
+      await sql`UPDATE gym_member_list_entries SET former_at = now() WHERE gym_id = ${gym.id} AND id = ${keptId}`;
       expect((await send("DELETE", `/v1/orgs/${gym.id}/member-list/former/${keptId}`, gym.owner.cookies)).statusCode).toBe(200);
       const rows = await membershipsOf(gym, xena);
       expect(rows).toHaveLength(1);

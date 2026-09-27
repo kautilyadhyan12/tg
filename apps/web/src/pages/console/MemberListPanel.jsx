@@ -160,9 +160,22 @@ function usePhone() {
   return phone;
 }
 
-/** One person's App word. What only explains it is on their own page. */
+/** One person's App word, one tag per row as Leads shows its status. When something
+ *  needs checking the tag itself turns amber (red for a wrong email) with a ⚠, and says
+ *  why to a screen reader and on hover; the sentence is on the person's own page. */
 function AppWord({ view }) {
-  return <span className={`c-tag ${view.tag}`}>{view.text}</span>;
+  if (view.note === null) return <span className={`c-tag ${view.tag}`}>{view.text}</span>;
+  return (
+    <span
+      className={`c-tag ${view.noteTone === 'red' ? 'c-tag-bad' : 'c-tag-warn'}`}
+      title={view.note}
+      aria-label={`${view.text}. Needs checking: ${view.note}`}
+      data-testid="needs-check"
+    >
+      <AlertTriangle aria-hidden="true" className="w-3.5 h-3.5" />
+      {view.text}
+    </span>
+  );
 }
 
 // `onRosterChanged` tells the Members screen that the list moved, so "Using the app",
@@ -386,28 +399,6 @@ export default function MemberListPanel({
 
   return (
     <div className="flex flex-col gap-5 md:gap-6" data-testid="member-list-panel">
-      {/* Check these (§18.2): only a line with a number, each opening the people it names. */}
-      {needsCheck > 0 ? (
-        <section className="c-callout flex-col gap-2" aria-labelledby="check-these" data-testid="check-these">
-          <h2 id="check-these" className="c-s15 c-w6 c-t1 flex items-center gap-2">
-            <AlertTriangle aria-hidden="true" className="w-[18px] h-[18px]" style={{ color: 'var(--warn)' }} />
-            Check these
-          </h2>
-          <div className="flex flex-col md:pl-[26px]">
-            <button
-              type="button"
-              onClick={() => seeWho('needs_check')}
-              className="flex items-center justify-between md:justify-start gap-3 min-h-11 md:min-h-0 text-left c-s14"
-            >
-              <span className="c-t1">
-                {needsCheck === 1 ? `1 ${words.person} needs checking` : `${count(needsCheck)} ${words.people} need checking`}
-              </span>
-              <span className="c-w6 c-lk flex-shrink-0">See who</span>
-            </button>
-          </div>
-        </section>
-      ) : null}
-
       <div className="flex flex-col gap-3">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-3">
           <label className="c-search w-full md:max-w-[460px] md:flex-grow">
@@ -436,6 +427,20 @@ export default function MemberListPanel({
               </button>
             ) : null}
             <span className="flex-grow" />
+            {/* Check these (§18.2), as one quiet link beside the count, as Leads keeps its
+                own line: it shows the people whose tag carries a ⚠. */}
+            {needsCheck > 0 && current ? (
+              <button
+                type="button"
+                onClick={() => seeWho('needs_check')}
+                data-testid="check-these"
+                className="c-btn-link c-s14 c-w6 flex items-center gap-1.5 whitespace-nowrap"
+                style={{ color: 'var(--warn)' }}
+              >
+                <AlertTriangle aria-hidden="true" className="w-4 h-4" />
+                {`${count(needsCheck)} need${needsCheck === 1 ? 's' : ''} checking`}
+              </button>
+            ) : null}
             {!page.loading && page.error === null ? (
               <span className="c-s14 c-t2 c-num text-right whitespace-nowrap" data-testid="list-total">
                 {totalWords}
@@ -560,16 +565,6 @@ export default function MemberListPanel({
                       <AppWord view={app} />
                     </span>
                     <ChevronRight aria-hidden="true" className="w-[18px] h-[18px] c-t3 self-center" style={{ gridArea: 'go' }} />
-                    {app.note !== null ? (
-                      <span
-                        className="c-s13 flex gap-1.5"
-                        style={{ gridArea: 'note', color: app.noteTone === 'red' ? 'var(--bad)' : 'var(--warn)' }}
-                        data-testid="row-note"
-                      >
-                        <AlertTriangle aria-hidden="true" className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                        <span>{app.note}</span>
-                      </span>
-                    ) : null}
                   </button>
                 </li>
               );

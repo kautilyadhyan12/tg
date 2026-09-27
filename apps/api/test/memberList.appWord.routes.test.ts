@@ -313,8 +313,10 @@ d("the App word on the Members list (real Postgres)", () => {
         const removed = await send("DELETE", `/v1/orgs/${gym.id}/members/${who.userId}`, gym.owner.cookies);
         expect(removed.statusCode, removed.body).toBe(200);
       }
+      // One Remove (RULINGS 2026-09-27): removing them from the app moved their records to
+      // past members in the same step.
       for (const name of ["Olivia Bennett", "Tom Reed"]) {
-        const row = await rowOf(gym, name);
+        const row = await rowOf(gym, name, "?records=former");
         expect(row.app.word, name).toBe("not_in_app");
         expect(row.app.line, name).toBe("Removed from app");
         expect(row.app.at, name).not.toBeNull();
@@ -412,10 +414,11 @@ d("the App word on the Members list (real Postgres)", () => {
       const grace = await add(gym, { fullName: "Grace Hall", email: addr("grace") });
       await accept(await signIn(addr("grace"), "Grace Hall"));
       const leo = await add(gym, { fullName: "Leo Ford", email: addr("leoford") });
-      for (const id of [grace, leo]) {
-        const off = await send("DELETE", `${entriesUrl(gym)}/${id}`, gym.owner.cookies);
-        expect(off.statusCode, off.body).toBe(200);
-      }
+      // Grace comes off the way a whole-list upload that leaves her out does it, so she is
+      // still in the app (removing her by hand ends her app too — One Remove).
+      await sql`UPDATE gym_member_list_entries SET former_at = now() WHERE gym_id = ${gym.id} AND id = ${grace}`;
+      const off = await send("DELETE", `${entriesUrl(gym)}/${leo}`, gym.owner.cookies);
+      expect(off.statusCode, off.body).toBe(200);
       const past = await page(gym, "?records=former");
       const byName = Object.fromEntries(past.entries.map((entry) => [entry.fullName, entry.app]));
       expect(byName["Grace Hall"]).toEqual({

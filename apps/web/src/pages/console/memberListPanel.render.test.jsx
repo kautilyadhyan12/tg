@@ -221,15 +221,21 @@ describe("the gym's own list", () => {
     draw();
     const rows = await screen.findAllByTestId('list-row');
     expect(rows[0].textContent).toContain('In the app');
-    expect(within(rows[0]).queryByTestId('row-note')).toBeNull();
+    // One tag per row, as Leads: a ⚠ on the tag itself when something needs checking,
+    // the sentence on hover and to a screen reader (and on the person's page).
+    expect(within(rows[0]).queryByTestId('needs-check')).toBeNull();
     expect(rows[1].textContent).toContain('Invited');
-    expect(within(rows[1]).getByTestId('row-note').textContent).toBe(MEMBER_INVITE_EMAIL_REASON_WORDS.shared_address);
+    expect(within(rows[1]).getByTestId('needs-check').getAttribute('title')).toBe(MEMBER_INVITE_EMAIL_REASON_WORDS.shared_address);
+    expect(within(rows[1]).getByTestId('needs-check').className).toContain('c-tag-warn');
+    expect(rows[1].textContent).not.toContain(MEMBER_INVITE_EMAIL_REASON_WORDS.shared_address);
     expect(rows[2].textContent).toContain('+447700900123');
     expect(rows[2].textContent).toContain('Not in the app');
     // A line that only explains is on the person's own page, not on the list.
     expect(rows[2].textContent).not.toContain('No email address');
-    expect(within(rows[2]).queryByTestId('row-note')).toBeNull();
-    expect(within(rows[3]).getByTestId('row-note').textContent).toBe('Signed up in the app as Dan. Check this is them.');
+    expect(within(rows[2]).queryByTestId('needs-check')).toBeNull();
+    expect(within(rows[3]).getByTestId('needs-check').getAttribute('aria-label')).toBe(
+      'In the app. Needs checking: Signed up in the app as Dan. Check this is them.',
+    );
   });
 
   // THE WORST THING (5b-v-a-i): a row saying something false about a person with the app.
@@ -263,8 +269,8 @@ describe("the gym's own list", () => {
     orgService.getMemberList.mockResolvedValue({ data: { list: view({ appWords: [{ word: 'in_app', count: 40 }, { word: 'needs_check', count: 2 }] }) } });
     draw();
     const box = await screen.findByTestId('check-these');
-    expect(box.textContent).toContain('2 members need checking');
-    fireEvent.click(within(box).getByRole('button', { name: /See who/ }));
+    expect(box.textContent).toBe('2 need checking');
+    fireEvent.click(box);
     await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'app=needs_check'));
     expect(within(screen.getByTestId('showing')).getByRole('button', { name: 'Stop showing only Needs checking' })).toBeTruthy();
   });
@@ -382,7 +388,8 @@ describe('round one: after a change', () => {
   });
 });
 describe('the Invite button', () => {
-  const preview = (reach) => ({ data: { preview: { version: 3, reach, skipped: { noEmail: 0, underAge: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, refused: 0, sharedAddress: 0 }, blocked: null } } });
+  const noNames = { reach: [], noEmail: [], underAge: [], inApp: [], alreadyInvited: [], unsubscribed: [], bounced: [], refused: [], sharedAddress: [] };
+  const preview = (reach) => ({ data: { preview: { version: 3, reach, skipped: { noEmail: 0, underAge: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, refused: 0, sharedAddress: 0 }, names: noNames, blocked: null } } });
 
   it("reads Invite to app, and asks the box's number again for the gym's own words but not for a search", async () => {
     orgService.getInvitePreview.mockResolvedValue(preview(214));

@@ -2654,6 +2654,9 @@ export async function removeMember(
     gymId: string;
     userId: string;
     actorUserId: string;
+    /** Run in the same transaction just before a live membership is closed, while the
+     *  person still counts as a member: moving their list record to past members. */
+    beforeClose?: (tx: TransactionSql) => Promise<unknown>;
     /** Run in the same transaction once the membership is closed (or was already):
      *  withdrawing the person's invitation, so signing in again lets nobody back in. */
     afterClose?: (tx: TransactionSql) => Promise<unknown>;
@@ -2672,6 +2675,7 @@ export async function removeMember(
     const staff = staffRows[0];
     if (staff !== undefined) return { kind: "is_staff", role: toOrgRole(staff.role) };
 
+    await input.beforeClose?.(tx);
     const closed = await tx<{ id: string }[]>`
       UPDATE gym_members SET removed_at = now()
       WHERE gym_id = ${input.gymId} AND user_id = ${input.userId} AND removed_at IS NULL
@@ -2737,8 +2741,18 @@ export async function removeMember(
  *  refusal — per :14013's six-site precedent. Change one, change the other. */
 export async function listMembers(
   sql: Sql,
-  input: { gymId: string; limit: number; cursor: { joinedAt: string; id: string } | null },
+  input: {
+    gymId: string;
+    limit: number;
+    cursor: { joinedAt: string; id: string } | null;
+    /** A name search, already escaped for LIKE, or null. `likeListName` also matches the
+     *  name on the gym's list (staff who may see it). */
+    like?: string | null;
+    likeListName?: boolean;
+  },
 ): Promise<{ items: MemberRow[]; nextCursor: { joinedAt: Date; id: string } | null }> {
+  const like = input.like ?? null;
+  const likeListName = input.likeListName ?? false;
   const cursorJoinedAt = input.cursor?.joinedAt ?? null;
   const cursorId = input.cursor?.id ?? null;
   const rows = await sql<
@@ -2768,6 +2782,9 @@ export async function listMembers(
     LEFT JOIN gym_member_list_entries e ON e.gym_id = m.gym_id AND e.id = m.entry_id AND e.former_at IS NULL
     WHERE m.gym_id = ${input.gymId}
       AND m.removed_at IS NULL
+      AND (${like}::text IS NULL
+           OR u.display_name ILIKE ${like}::text
+           OR (${likeListName}::boolean AND e.full_name ILIKE ${like}::text))
       AND (
         ${cursorJoinedAt}::timestamptz IS NULL
         OR (m.joined_at, m.id) < (${cursorJoinedAt}::timestamptz, ${cursorId}::uuid)

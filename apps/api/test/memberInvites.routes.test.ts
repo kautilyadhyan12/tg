@@ -616,7 +616,9 @@ d("press Invite (real Postgres)", () => {
         await appoint(manager, org, owner, "manager");
         staff.push(manager);
       }
-      const stale = { version: 999, reach: 0, skipped: { noEmail: 0, underAge: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, refused: 0, sharedAddress: 0 }, blocked: null };
+      const none = { noEmail: 0, underAge: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, refused: 0, sharedAddress: 0 };
+      const noNames = { reach: [], noEmail: [], underAge: [], inApp: [], alreadyInvited: [], unsubscribed: [], bounced: [], refused: [], sharedAddress: [] };
+      const stale = { version: 999, reach: 0, skipped: none, names: noNames, blocked: null };
       const desk = "10.64.0.1";
       // Five people, 24 presses each, at one address: all answered (the list moved).
       for (const who of staff) {

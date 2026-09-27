@@ -2833,6 +2833,33 @@ never named. The words and the layout are the planning terminal's judgement (CLA
 §4 "Screens a new gym understands"); every feature Members had is kept (18.9). It is built in
 the console's new look (§17), so it is also Members' restyle (ROADMAP R8, folded in).
 
+**AMENDED 2026-09-27, at 5b-v-a-i's click-through (RULINGS 2026-09-27).** Kd: *"clean like the
+leads … i dont want thing to be deleted … just fix the vague invite and delete list delete
+app confusion"*. Built in 5b-v-a-i, and where this section says otherwise, this wins:
+- **Laid out as Leads is.** One tag per row: the App word (18.4), amber or red with a ⚠ when
+  something needs checking, the sentence on the person's page (and on hover). Check these is
+  one quiet "⚠ 4 need checking" link beside the count, not a box. No button inside a row:
+  "Using the app" rows are a name, "In the app since 7 Sep 2026" and one tag (Complimentary ·
+  Not on your list · Check this is them); the row opens the person's panel (as a lead's),
+  which holds Add to your list / Put back on your list and Remove. "Using the app" has
+  "Search by name" (the name they signed up with, and the list's name for staff who see the
+  list; never by email) with the count beside it.
+- **One Remove** (both doors: a member's page, and a person in the app). Removing someone on
+  the list moves their record to past members AND ends their app in one transaction
+  (`memberList/oneRemove.ts`), their place freed; only the people §9.7 matches to that record,
+  never a household member on their own record, never staff or a complimentary place. Put
+  back returns the record without the app (Invite again). The box: "Remove Olivia Bennett?" /
+  "They move to past members and can't use the app with your gym any more. Their details are
+  kept, and Put back brings them back." Someone in the app not on the list: "Remove Nia Cole
+  from the app? They can't use the app with your gym any more, and they keep their own
+  workouts." A role with the list's tick but not `members.remove` is refused on a record
+  whose person is in the app, and the reverse ("…your role can't…").
+- **Invite names its people.** The box lists the first five who get the email ("Ava
+  Thompson, Sofia Alvarez and 39 more") and the first five of each group left out, on its
+  reason's line ("2 have no email address: Liam Hughes and Cy Park"); the tick reads "These
+  are Iron House Gym's members, and I have permission to email them." Selecting people by
+  hand stays 5b-v-b.
+
 ### 18.1 The drawings
 
 `docs/design/console/pages/`, the §17.1 format (dark; `t-light` for the light look), 17 files
