@@ -5,83 +5,70 @@ import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import { bytesToBase64 } from './memberListView';
 import {
   COLUMN_ROLES,
-  NEVER_KEPT_WORDS,
   addButton,
+  addedTitle,
+  columnLines,
   columnName,
   contactLine,
-  groupsOf,
+  heardLine,
   mappingProblem,
+  notAddedRow,
   roleOf,
   roleWord,
   sameMapping,
-  skippedLines,
-  someNames,
-  sortedWordLine,
+  unlistedNotAdded,
   warningLines,
   withRole,
 } from './leadFileView';
-import { sourceWord } from './leadsView';
 
 // Import leads (ROADMAP 20c-iii; spec Part 3 §16.3): a CSV or Excel file of people who
 // asked about joining, read by the server and shown back before anything is saved —
-// who will be added, who will not and why, how their "heard of you from" words were
-// sorted, and which column is which. Add adds exactly what was shown, or nothing.
-// Nobody is emailed and nobody arrives ticked "Happy to hear from us".
+// who will be added, and everybody who won't with the reason beside their name. Add
+// adds exactly what was shown, or nothing. Nobody is emailed and nobody arrives ticked
+// "Happy to hear from us".
 
 const count = (n) => n.toLocaleString('en');
-/** Names a group opens to, a page at a time. */
+/** Names shown before See all, and a page of them after. */
+const FIRST = 5;
 const PAGE = 100;
 
-function Group({ group, open, onToggle }) {
-  const [shown, setShown] = useState(PAGE);
+/** A list that shows its first few rows, then all of them a page at a time. */
+function ShortList({ items, render, testId }) {
+  const [shown, setShown] = useState(FIRST);
+  const more = items.length - shown;
   return (
-    <div className="flex flex-col gap-1 px-4 py-3.5 md:px-5" data-testid={`group-${group.key}`}>
-      <div className="flex items-center justify-between gap-3">
-        <p className="c-s15 c-w6 c-t1">
-          {group.title} <span className="c-n">{count(group.people.length)}</span>
-        </p>
-        <button type="button" onClick={onToggle} aria-expanded={open} className="c-btn c-btn-link c-s14">
-          {open ? 'Hide' : 'See all'}
-        </button>
-      </div>
-      <p className="c-s14 c-t2">{group.reason}</p>
-      {!open ? <p className="c-s14 c-t1">{someNames(group.people)}</p> : null}
-      {open ? (
-        <ul className="flex flex-col mt-1">
-          {group.people.slice(0, shown).map((person) => (
-            <li key={person.row} className="flex items-baseline justify-between gap-3 py-1.5 border-t" style={{ borderColor: 'var(--line)' }}>
-              <span className="flex flex-col min-w-0">
-                <span className="c-s14 c-w6 c-t1 c-ell">{person.fullName}</span>
-                <span className="c-s13 c-t2 c-ell">{contactLine(person)}</span>
-              </span>
-              <span className="c-s13 c-t3 whitespace-nowrap">
-                {sourceWord(person.source)} · row {count(person.row)}
-              </span>
-            </li>
-          ))}
-          {group.people.length > shown ? (
-            <li className="pt-2">
-              <button type="button" onClick={() => setShown((n) => n + PAGE)} className="c-btn c-btn-link c-s14">
-                Show {count(Math.min(PAGE, group.people.length - shown))} more
-              </button>
-            </li>
-          ) : null}
-        </ul>
+    <ul className="flex flex-col" data-testid={testId}>
+      {items.slice(0, shown).map((item, i) => (
+        <li key={item.row} className={`flex items-start justify-between gap-3 py-2.5 ${i > 0 ? 'border-t' : ''}`} style={{ borderColor: 'var(--line)' }}>
+          {render(item)}
+        </li>
+      ))}
+      {more > 0 ? (
+        <li className="pt-2">
+          <button type="button" onClick={() => setShown((n) => (n === FIRST ? PAGE : n + PAGE))} className="c-btn c-btn-link c-s14">
+            {shown === FIRST ? `See all ${count(items.length)}` : `Show ${count(Math.min(PAGE, more))} more`}
+          </button>
+        </li>
       ) : null}
-    </div>
+    </ul>
   );
 }
 
 function Columns({ preview, mapping, onChange, disabled }) {
   return (
     <ul className="c-card overflow-hidden" data-testid="lead-file-columns">
-      {preview.columns.map((column, i) => (
-        <li key={column.index} className={`flex flex-col gap-2 px-4 py-3 md:flex-row md:items-center md:px-5 ${i > 0 ? 'border-t' : ''}`} style={{ borderColor: 'var(--line)' }}>
-          <span className="flex flex-col min-w-0 md:flex-1">
-            <span className="c-s14 c-w6 c-t1 c-ell">{columnName(column)}</span>
-            <span className="c-s13 c-t2 c-ell">{column.neverKept !== null ? NEVER_KEPT_WORDS[column.neverKept] : column.samples.join(' · ') || 'Empty'}</span>
-          </span>
-          {column.neverKept === null ? (
+      {preview.columns
+        .filter((column) => column.neverKept === null)
+        .map((column, i) => (
+          <li
+            key={column.index}
+            className={`flex flex-col gap-2 px-4 py-3 md:flex-row md:items-center md:px-5 ${i > 0 ? 'border-t' : ''}`}
+            style={{ borderColor: 'var(--line)' }}
+          >
+            <span className="flex flex-col min-w-0 md:flex-1">
+              <span className="c-s14 c-w6 c-t1 c-ell">{columnName(column)}</span>
+              <span className="c-s13 c-t2 c-ell">{column.samples.join(' · ') || 'Empty'}</span>
+            </span>
             <select
               aria-label={`What ${columnName(column)} holds`}
               value={roleOf(mapping, column.index)}
@@ -96,9 +83,8 @@ function Columns({ preview, mapping, onChange, disabled }) {
                 </option>
               ))}
             </select>
-          ) : null}
-        </li>
-      ))}
+          </li>
+        ))}
     </ul>
   );
 }
@@ -115,7 +101,6 @@ export default function LeadFileImport({ gymId, gym, readOnly, onClose, onAdded 
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState(null);
   const [changed, setChanged] = useState(false);
-  const [openGroup, setOpenGroup] = useState(null);
   const [showColumns, setShowColumns] = useState(false);
 
   const check = async (chosen, next = file) => {
@@ -127,7 +112,6 @@ export default function LeadFileImport({ gymId, gym, readOnly, onClose, onAdded 
       const p = res.data.preview;
       setPreview(p);
       setMapping(p.mapping);
-      setOpenGroup(null);
       // Nothing about the people is read until the columns say who they are.
       if (p.needsMapping || mappingProblem(p.mapping) !== null) setShowColumns(true);
     } catch (err) {
@@ -183,10 +167,7 @@ export default function LeadFileImport({ gymId, gym, readOnly, onClose, onAdded 
 
   const columnsChanged = preview !== null && mapping !== null && !sameMapping(mapping, preview.mapping);
   const button = preview !== null ? addButton({ preview, mapping, ticked, readOnly }) : null;
-  const groups = preview !== null ? groupsOf(preview) : [];
-  const skipped = preview !== null ? skippedLines(preview) : [];
-  const matched = preview !== null ? preview.columns.filter((c) => roleOf(preview.mapping, c.index) !== '').length : 0;
-  const notKept = preview !== null ? preview.columns.filter((c) => c.neverKept !== null) : [];
+  const unlisted = preview !== null ? unlistedNotAdded(preview) : 0;
   const off = busy !== null;
 
   return (
@@ -205,7 +186,7 @@ export default function LeadFileImport({ gymId, gym, readOnly, onClose, onAdded 
             </h2>
             {file !== null && preview !== null ? (
               <span className="c-s14 c-t2 c-ell" data-testid="lead-file-name">
-                {file.label} · {count(preview.counts.dataRows)} {preview.counts.dataRows === 1 ? 'row' : 'rows'}
+                {file.label}
               </span>
             ) : null}
           </div>
@@ -222,8 +203,8 @@ export default function LeadFileImport({ gymId, gym, readOnly, onClose, onAdded 
               <FileSpreadsheet aria-hidden="true" className="w-6 h-6 c-t2" />
               <p className="c-s15 c-w6 c-t1">A CSV or Excel (.xlsx) file of people who asked about joining</p>
               <p className="c-s14 c-t2">
-                For example the leads or prospects export from your old software, or your own spreadsheet. It needs a name and an email or phone for
-                each person. You&apos;ll see who will be added before anything is saved.
+                For example the leads export from your old software, or your own spreadsheet. Each person needs a name and an email or phone number.
+                You&apos;ll see who will be added before anything is saved.
               </p>
               <button type="button" onClick={() => input.current?.click()} disabled={readOnly || off} className="c-btn c-btn-p">
                 {busy === 'check' ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
@@ -247,17 +228,48 @@ export default function LeadFileImport({ gymId, gym, readOnly, onClose, onAdded 
 
           {preview !== null ? (
             <>
-              {groups.length > 0 ? (
-                <section className="c-card overflow-hidden divide-y" style={{ borderColor: 'var(--line)' }}>
-                  {groups.map((group) => (
-                    <Group key={group.key} group={group} open={openGroup === group.key} onToggle={() => setOpenGroup((k) => (k === group.key ? null : group.key))} />
-                  ))}
+              <section className="c-card px-4 py-4 md:px-5 flex flex-col gap-1" data-testid="lead-file-added">
+                <h3 className="c-s16 c-w7 c-t1">{addedTitle(preview)}</h3>
+                {preview.add.length > 0 ? (
+                  <ShortList
+                    items={preview.add}
+                    testId="lead-file-added-list"
+                    render={(person) => (
+                      <>
+                        <span className="flex flex-col min-w-0">
+                          <span className="c-s15 c-w6 c-t1 c-ell">{person.fullName}</span>
+                          <span className="c-s13 c-t2 c-ell">{contactLine(person)}</span>
+                        </span>
+                        <span className="c-s13 c-t2 text-right">{heardLine(person)}</span>
+                      </>
+                    )}
+                  />
+                ) : null}
+              </section>
+
+              {preview.counts.notAdded > 0 ? (
+                <section className="c-card px-4 py-4 md:px-5 flex flex-col gap-1" data-testid="lead-file-not-added">
+                  <h3 className="c-s16 c-w7 c-t1">{LEAD_FILE_WORDS.not_added_title(preview.counts.notAdded)}</h3>
+                  <ShortList
+                    items={preview.notAdded}
+                    testId="lead-file-not-added-list"
+                    render={(entry) => {
+                      const shown = notAddedRow(entry);
+                      return (
+                        <span className="flex flex-col min-w-0">
+                          <span className="c-s15 c-w6 c-t1 c-ell">{shown.name}</span>
+                          <span className="c-s13 c-t2">{shown.why}</span>
+                        </span>
+                      );
+                    }}
+                  />
+                  {unlisted > 0 ? <p className="c-s13 c-t2 pt-1">{LEAD_FILE_WORDS.more_skipped(unlisted)}</p> : null}
                 </section>
               ) : null}
 
-              {skipped.length > 0 || preview.warnings.length > 0 ? (
+              {preview.warnings.length > 0 ? (
                 <ul className="flex flex-col gap-1.5" data-testid="lead-file-notes">
-                  {[...skipped, ...warningLines(preview)].map((line) => (
+                  {warningLines(preview).map((line) => (
                     <li key={line} className="c-s14 c-t2">
                       {line}
                     </li>
@@ -265,30 +277,18 @@ export default function LeadFileImport({ gymId, gym, readOnly, onClose, onAdded 
                 </ul>
               ) : null}
 
-              {preview.sources.length > 0 ? (
-                <section className="flex flex-col gap-2">
-                  <h3 className="c-s15 c-w6 c-t1">Heard of you from</h3>
-                  <p className="c-s14 c-t2">Each word in the file is sorted into one of yours. The file&apos;s own word is kept in the lead&apos;s notes.</p>
-                  <ul className="flex flex-wrap gap-2" data-testid="lead-file-sources">
-                    {preview.sources.map((entry) => (
-                      <li key={entry.word} className="c-tag c-tag-plain">
-                        {sortedWordLine(entry)} <span className="c-n">{count(entry.count)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              ) : null}
-
-              <section className="flex flex-col gap-2">
+              <section className="flex flex-col gap-2" data-testid="lead-file-column-lines">
                 <div className="flex items-center justify-between gap-3">
-                  <h3 className="c-s15 c-w6 c-t1">
-                    {matched === 1 ? '1 column used' : `${count(matched)} columns used`}
-                    {notKept.length > 0 ? ` · ${count(notKept.length)} not kept` : ''}
-                  </h3>
+                  <h3 className="c-s15 c-w6 c-t1">Your columns</h3>
                   <button type="button" onClick={() => setShowColumns((v) => !v)} aria-expanded={showColumns} className="c-btn c-btn-link c-s14">
-                    {showColumns ? 'Hide' : 'Check columns'}
+                    {showColumns ? 'Done' : 'Change'}
                   </button>
                 </div>
+                {columnLines(preview).map((line) => (
+                  <p key={line.key} className="c-s14 c-t2">
+                    <span className="c-w6 c-t1">{line.label}:</span> {line.text}
+                  </p>
+                ))}
                 {showColumns ? (
                   <>
                     <Columns preview={preview} mapping={mapping} disabled={off || readOnly} onChange={(index, role) => setMapping((m) => withRole(m, index, role))} />
@@ -306,19 +306,21 @@ export default function LeadFileImport({ gymId, gym, readOnly, onClose, onAdded 
                 {LEAD_FILE_WORDS.tick}
               </p>
 
-              <button
-                type="button"
-                role="checkbox"
-                aria-checked={ticked}
-                onClick={() => setTicked((v) => !v)}
-                disabled={readOnly || off}
-                className="self-start flex items-start gap-3 min-h-11 text-left disabled:opacity-50"
-              >
-                <span className={ticked ? 'c-check c-check-on mt-px' : 'c-check mt-px'}>
-                  {ticked ? <Check aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={3} /> : null}
-                </span>
-                <span className="c-s15 c-w5 c-t1">{LEAD_FILE_PERMISSION_WORDS.replace('{gym}', gym?.name ?? 'your gym')}</span>
-              </button>
+              {preview.counts.add > 0 ? (
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={ticked}
+                  onClick={() => setTicked((v) => !v)}
+                  disabled={readOnly || off}
+                  className="self-start flex items-start gap-3 min-h-11 text-left disabled:opacity-50"
+                >
+                  <span className={ticked ? 'c-check c-check-on mt-px' : 'c-check mt-px'}>
+                    {ticked ? <Check aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={3} /> : null}
+                  </span>
+                  <span className="c-s15 c-w5 c-t1">{LEAD_FILE_PERMISSION_WORDS.replace('{gym}', gym?.name ?? 'your gym')}</span>
+                </button>
+              ) : null}
             </>
           ) : null}
         </div>
@@ -330,15 +332,16 @@ export default function LeadFileImport({ gymId, gym, readOnly, onClose, onAdded 
                 {button.why}
               </p>
             ) : null}
-            <p className="c-s13 c-t2">Nobody is emailed.</p>
             <div className="flex gap-2 md:justify-end">
               <button type="button" onClick={startAgain} disabled={off} className="c-btn c-btn-s flex-1 md:flex-none">
                 Choose another file
               </button>
-              <button type="button" onClick={add} disabled={!button.enabled || off} className="c-btn c-btn-p flex-1 md:flex-none">
-                {busy === 'add' ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-                {button.label}
-              </button>
+              {preview.counts.add > 0 ? (
+                <button type="button" onClick={add} disabled={!button.enabled || off} className="c-btn c-btn-p flex-1 md:flex-none">
+                  {busy === 'add' ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+                  {button.label}
+                </button>
+              ) : null}
             </div>
           </div>
         ) : null}

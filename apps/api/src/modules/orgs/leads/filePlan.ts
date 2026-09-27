@@ -30,7 +30,8 @@ export interface LeadFilePlan {
   add: LeadFileRow[];
   alreadyLead: LeadFileRow[];
   alreadyMember: LeadFileRow[];
-  twiceInFile: LeadFileRow[];
+  /** Each with the name of the added person whose email or phone it repeats. */
+  twiceInFile: { row: LeadFileRow; sameAs: string }[];
 }
 
 const lower = (email: string | null): string | null => (email === null ? null : email.toLowerCase());
@@ -60,8 +61,8 @@ export function leadFilePlan(rows: readonly LeadFileRow[], leads: readonly Known
   }
 
   const plan: LeadFilePlan = { add: [], alreadyLead: [], alreadyMember: [], twiceInFile: [] };
-  const addedEmails = new Set<string>();
-  const addedPhones = new Set<string>();
+  const addedEmails = new Map<string, string>();
+  const addedPhones = new Map<string, string>();
   for (const row of rows) {
     const email = lower(row.email);
     if ((email !== null && leadEmails.has(email)) || (row.phone !== null && leadPhones.has(row.phone))) {
@@ -74,12 +75,13 @@ export function leadFilePlan(rows: readonly LeadFileRow[], leads: readonly Known
       plan.alreadyMember.push(row);
       continue;
     }
-    if ((email !== null && addedEmails.has(email)) || (row.phone !== null && addedPhones.has(row.phone))) {
-      plan.twiceInFile.push(row);
+    const sameAs = (email === null ? undefined : addedEmails.get(email)) ?? (row.phone === null ? undefined : addedPhones.get(row.phone));
+    if (sameAs !== undefined) {
+      plan.twiceInFile.push({ row, sameAs });
       continue;
     }
-    if (email !== null) addedEmails.add(email);
-    if (row.phone !== null) addedPhones.add(row.phone);
+    if (email !== null) addedEmails.set(email, row.fullName);
+    if (row.phone !== null) addedPhones.set(row.phone, row.fullName);
     plan.add.push(row);
   }
   return plan;

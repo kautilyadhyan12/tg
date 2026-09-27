@@ -118,7 +118,10 @@ describe("who in a file is added", () => {
     const samePhone = row({ row: 4, fullName: "Other Ann", phone: "+447700900010" });
     const plan = leadFilePlan([a, sameEmail, samePhone], [], []);
     expect(plan.add).toEqual([a]);
-    expect(plan.twiceInFile).toEqual([sameEmail, samePhone]);
+    expect(plan.twiceInFile).toEqual([
+      { row: sameEmail, sameAs: "Ann Bell" },
+      { row: samePhone, sameAs: "Ann Bell" },
+    ]);
   });
 
   it("a row not added does not claim its address: the son after his member mother is added", () => {
@@ -224,10 +227,15 @@ describe("a leads file read as leads", () => {
     expect(fits.warnings).toEqual([]);
   });
 
-  it("no name, no contact and the same person twice are counted, not added", () => {
+  it("no name, no contact and the same person twice are not added, and each is named with its row", () => {
     const file = read(["Name,Email", "Ann Bell,ann@example.com", "Ann Bell,ann@example.com", ",nobody@example.com", "Cy Dent,"]);
     expect(file.rows.map((r) => r.fullName)).toEqual(["Ann Bell"]);
     expect(file.counts).toEqual({ dataRows: 4, noContact: 1, noName: 1, twiceInFile: 1 });
+    expect(file.skipped).toEqual([
+      { row: 3, fullName: "Ann Bell", reason: "same_person" },
+      { row: 4, fullName: "", reason: "no_name" },
+      { row: 5, fullName: "Cy Dent", reason: "no_contact" },
+    ]);
   });
 
   it("a file with no email or phone column asks staff to choose, and reads nothing until they do", () => {

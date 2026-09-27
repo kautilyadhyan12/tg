@@ -19,6 +19,7 @@ import {
   type LeadFileAddRequest,
   type LeadFileCheckRequest,
   type LeadFileMapping,
+  type LeadFileNotAdded,
   type LeadFilePerson,
   type LeadFilePreview,
   type LeadFileResult,
@@ -91,7 +92,24 @@ const personOf = (row: LeadFileRow): LeadFilePerson => ({
   email: row.email,
   phone: row.phone,
   source: row.source,
+  sourceWord: row.sourceWord,
 });
+
+/** Everybody the file names who is not added, in the file's order. */
+function notAddedOf(file: LeadFileUnderstanding, plan: LeadFilePlan): LeadFileNotAdded[] {
+  const named = (row: LeadFileRow, reason: LeadFileNotAdded["reason"], sameAs: string | null = null): LeadFileNotAdded => ({
+    row: row.row,
+    fullName: row.fullName,
+    reason,
+    sameAs,
+  });
+  return [
+    ...plan.alreadyLead.map((row) => named(row, "already_lead")),
+    ...plan.alreadyMember.map((row) => named(row, "already_member")),
+    ...plan.twiceInFile.map((entry) => named(entry.row, "repeated", entry.sameAs)),
+    ...file.skipped.map((entry) => ({ row: entry.row, fullName: entry.fullName, reason: entry.reason, sameAs: null })),
+  ].sort((a, b) => a.row - b.row);
+}
 
 function previewOf(file: LeadFileUnderstanding, plan: LeadFilePlan, leadsNow: number): LeadFilePreview {
   return {
@@ -106,12 +124,16 @@ function previewOf(file: LeadFileUnderstanding, plan: LeadFilePlan, leadsNow: nu
       add: plan.add.length,
       alreadyLead: plan.alreadyLead.length,
       alreadyMember: plan.alreadyMember.length,
+      notAdded:
+        plan.alreadyLead.length +
+        plan.alreadyMember.length +
+        plan.twiceInFile.length +
+        file.counts.noContact +
+        file.counts.noName +
+        file.counts.twiceInFile,
     },
     add: plan.add.map(personOf),
-    alreadyLead: plan.alreadyLead.map(personOf),
-    alreadyMember: plan.alreadyMember.map(personOf),
-    twiceInFile: plan.twiceInFile.map(personOf),
-    sources: file.sources,
+    notAdded: notAddedOf(file, plan),
     warnings: file.warnings,
     leadsNow,
     room: Math.max(0, LEADS_MAX_PER_GYM - leadsNow),

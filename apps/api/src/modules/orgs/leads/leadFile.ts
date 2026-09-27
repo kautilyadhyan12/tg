@@ -13,7 +13,7 @@
 // "Happy to hear from us": there is no field for it below, and the service never sets
 // it on an insert from a file.
 import {
-  LEAD_FILE_MAX_SOURCE_WORDS,
+  LEAD_FILE_SKIPPED_SHOWN,
   LEAD_FILE_MAX_SOURCE_WORD_CHARS,
   LEAD_MAX_NOTES_CHARS,
   LEAD_SOURCE_WORDS,
@@ -23,7 +23,7 @@ import {
   type LeadFileMapping,
   type LeadFileResult,
   type LeadFileRow,
-  type LeadFileSourceWord,
+  type LeadFileSkipped,
   type LeadFileUnderstanding,
   type LeadFileWarning,
   type LeadSource,
@@ -33,7 +33,7 @@ import {
 } from "@app/shared";
 import { tidyCell } from "../memberList/cells.js";
 import { type ColumnStat, columnStats, findHeaderRow, guessMapping } from "../memberList/columns.js";
-import { cut, fold } from "../memberList/fields.js";
+import { cleanName, cut, fold } from "../memberList/fields.js";
 import { normaliseHeader } from "../memberList/headerWords.js";
 import { cardShapedCell, withoutCardNumbers } from "../memberList/neverKeep.js";
 import { readCountry } from "../memberList/phone.js";
@@ -266,7 +266,7 @@ export function understandLeadGrid(grid: MemberFileGrid, job: LeadFileJob): Lead
       needsMapping: true,
       rows: [],
       counts: { dataRows: understood.counts.dataRows, noContact: 0, noName: 0, twiceInFile: 0 },
-      sources: [],
+      skipped: [],
       warnings,
     };
   }
@@ -274,12 +274,19 @@ export function understandLeadGrid(grid: MemberFileGrid, job: LeadFileJob): Lead
   const cards = { n: 0 };
   let noName = 0;
   let notesCut = 0;
-  const words = new Map<string, LeadFileSourceWord>();
   const leads: LeadFileRow[] = [];
   const cell = (row: number, column: number | null): string => (column === null ? "" : (rows[row - 1]?.[column] ?? ""));
+  // Every row not read as a lead is named on the check screen, with its reason: the
+  // reader's own (no email or phone, the same person twice) and a row with no name.
+  const skipped: LeadFileSkipped[] = understood.skipped.map((entry) => ({
+    row: entry.row,
+    fullName: cleanName({ full: cell(entry.row, mapping.fullName), first: cell(entry.row, mapping.firstName), last: cell(entry.row, mapping.lastName) }),
+    reason: entry.reason === "no_contact" ? "no_contact" : "same_person",
+  }));
   for (const person of understood.rows) {
     if (person.fullName === "") {
       noName++;
+      skipped.push({ row: person.row, fullName: "", reason: "no_name" });
       continue;
     }
     const word = cut(keptText(cell(person.row, mapping.source), cards), LEAD_FILE_MAX_SOURCE_WORD_CHARS);
@@ -288,12 +295,6 @@ export function understandLeadGrid(grid: MemberFileGrid, job: LeadFileJob): Lead
     // the file said is lost when "Instagram" becomes Social media.
     const ours = word !== "" && fold(word) === fold(LEAD_SOURCE_WORDS[source]);
     const sourceWord = word === "" || ours ? null : word;
-    if (word !== "") {
-      const key = fold(word);
-      const seen = words.get(key);
-      if (seen === undefined) words.set(key, { word, source, count: 1 });
-      else seen.count++;
-    }
     const raw = cell(person.row, mapping.notes);
     const written = keptText(raw, cards);
     const joined = [written, sourceWord === null ? "" : `Heard of you from: ${sourceWord}`].filter((part) => part !== "").join("\n");
@@ -323,9 +324,7 @@ export function understandLeadGrid(grid: MemberFileGrid, job: LeadFileJob): Lead
     // The same person twice is counted here; two people on one email or phone are the
     // plan's to settle (`filePlan.ts`), after it knows who is already a member.
     counts: { dataRows: understood.counts.dataRows, noContact: understood.counts.noContact, noName, twiceInFile: understood.counts.duplicates },
-    sources: [...words.values()]
-      .sort((a, b) => b.count - a.count || (a.word < b.word ? -1 : a.word > b.word ? 1 : 0))
-      .slice(0, LEAD_FILE_MAX_SOURCE_WORDS),
+    skipped: skipped.sort((a, b) => a.row - b.row).slice(0, LEAD_FILE_SKIPPED_SHOWN),
     warnings,
   };
 }

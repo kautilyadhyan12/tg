@@ -10,7 +10,7 @@
 // file says. A file cannot show that the person agreed to be emailed; staff tick each
 // lead who did, as they do for a lead added by hand.
 import { z } from "zod";
-import { LEAD_MAX_NOTES_CHARS, LEADS_MAX_PER_GYM, LEAD_SOURCE_WORDS, leadSourceSchema } from "./leads.js";
+import { LEAD_MAX_NOTES_CHARS, LEADS_MAX_PER_GYM, leadSourceSchema } from "./leads.js";
 import {
   MEMBER_FILE_MAX_ARCHIVE_ENTRIES,
   MEMBER_FILE_MAX_BASE64_CHARS,
@@ -44,8 +44,6 @@ export const LEAD_FILE_FIELD_WORDS: Readonly<Record<LeadFileField, string>> = {
 
 /** The most characters of a "heard of you from" cell kept in the notes. */
 export const LEAD_FILE_MAX_SOURCE_WORD_CHARS = 60;
-/** The most different "heard of you from" words the preview lists. */
-export const LEAD_FILE_MAX_SOURCE_WORDS = 50;
 
 const columnIndexSchema = z.number().int().min(0).max(MEMBER_FILE_MAX_COLUMNS - 1);
 
@@ -96,15 +94,23 @@ export const leadFileRowSchema = z
   .strict();
 export type LeadFileRow = z.infer<typeof leadFileRowSchema>;
 
-/** How the file's "heard of you from" words were sorted, with how many carry each. */
-export const leadFileSourceWordSchema = z
+/** Why somebody in a file is not added, each said beside their name. */
+export const LEAD_FILE_NOT_ADDED_REASONS = ["already_lead", "already_member", "repeated", "same_person", "no_contact", "no_name"] as const;
+export const leadFileNotAddedReasonSchema = z.enum(LEAD_FILE_NOT_ADDED_REASONS);
+export type LeadFileNotAddedReason = z.infer<typeof leadFileNotAddedReasonSchema>;
+
+/** Rows the reader skipped that are listed by name; past this many they are counted. */
+export const LEAD_FILE_SKIPPED_SHOWN = 200;
+
+/** A row the reader could not read as a lead, with the name it had (may be empty). */
+export const leadFileSkippedSchema = z
   .object({
-    word: z.string().max(LEAD_FILE_MAX_SOURCE_WORD_CHARS),
-    source: leadSourceSchema,
-    count: z.number().int().positive(),
+    row: z.number().int().positive(),
+    fullName: z.string().max(MEMBER_LIST_MAX_NAME_CHARS),
+    reason: z.enum(["same_person", "no_contact", "no_name"]),
   })
   .strict();
-export type LeadFileSourceWord = z.infer<typeof leadFileSourceWordSchema>;
+export type LeadFileSkipped = z.infer<typeof leadFileSkippedSchema>;
 
 const LEAD_FILE_PLAIN_WARNINGS = ["hidden_rows_or_columns", "encoding_guessed", "no_header_row"] as const;
 const LEAD_FILE_COUNTED_WARNINGS = [
@@ -151,7 +157,8 @@ export const leadFileUnderstandingSchema = z
     needsMapping: z.boolean(),
     rows: z.array(leadFileRowSchema).max(MEMBER_LIST_MAX_DATA_ROWS),
     counts: fileCountsSchema,
-    sources: z.array(leadFileSourceWordSchema).max(LEAD_FILE_MAX_SOURCE_WORDS),
+    /** The rows skipped, by name, up to `LEAD_FILE_SKIPPED_SHOWN`; the counts hold them all. */
+    skipped: z.array(leadFileSkippedSchema).max(LEAD_FILE_SKIPPED_SHOWN),
     warnings: z.array(leadFileWarningSchema),
   })
   .strict();
@@ -171,9 +178,23 @@ export const leadFilePersonSchema = z
     email: z.string().nullable(),
     phone: z.string().nullable(),
     source: leadSourceSchema,
+    /** The file's own word, where it is not already one of ours. */
+    sourceWord: z.string().nullable(),
   })
   .strict();
 export type LeadFilePerson = z.infer<typeof leadFilePersonSchema>;
+
+/** Somebody in the file who is not added, and why. `sameAs` names the person above
+ *  whose email or phone they repeat. */
+export const leadFileNotAddedSchema = z
+  .object({
+    row: z.number().int().positive(),
+    fullName: z.string(),
+    reason: leadFileNotAddedReasonSchema,
+    sameAs: z.string().nullable(),
+  })
+  .strict();
+export type LeadFileNotAdded = z.infer<typeof leadFileNotAddedSchema>;
 
 /** The check screen: who will be added, who will not and why, before anything is saved.
  *  `expected` names exactly the leads `add` holds; Add sends it back, and the server
@@ -189,14 +210,12 @@ export const leadFilePreviewSchema = z
       add: z.number().int().min(0),
       alreadyLead: z.number().int().min(0),
       alreadyMember: z.number().int().min(0),
+      /** Everybody not added, the rows only counted included. */
+      notAdded: z.number().int().min(0),
     }),
     add: z.array(leadFilePersonSchema),
-    alreadyLead: z.array(leadFilePersonSchema),
-    alreadyMember: z.array(leadFilePersonSchema),
-    /** A later row with an email or phone an earlier added row has. The very same
-     *  person twice is only counted. */
-    twiceInFile: z.array(leadFilePersonSchema),
-    sources: z.array(leadFileSourceWordSchema).max(LEAD_FILE_MAX_SOURCE_WORDS),
+    /** Everybody not added whom the file names, in the file's order. */
+    notAdded: z.array(leadFileNotAddedSchema),
     warnings: z.array(leadFileWarningSchema),
     /** The gym's leads now, and how many more it may keep. */
     leadsNow: z.number().int().min(0),
@@ -241,28 +260,36 @@ const count = (n: number, one: string, many: string): string => (n === 1 ? `1 ${
 export const LEAD_FILE_PERMISSION_WORDS = "These people asked {gym} about joining, and I have permission to store their details.";
 
 export const LEAD_FILE_WORDS = {
-  tick: "Everyone added starts as New, with “Happy to hear from us” unticked. A file can't show that someone agreed to emails, so tick it yourself on each lead who did.",
-  add_reason: "Not in your leads or on your member list yet.",
-  already_lead_reason: "Already in your leads with the same email or phone. Left as they are: their status and notes don't change.",
-  already_member_reason: "On your member list with the same name and the same email or phone, so they aren't added as leads.",
-  changed: "Your leads or member list changed since you checked this file, so nothing was added. Check the file again.",
-  nothing_to_add: "Nobody in this file can be added. Everyone is below, with the reason.",
-  needs_mapping: "We couldn't find an email or phone column. Choose which column is which below, then check again.",
-  needs_name: "Choose the column with the person's name, or the first and last name columns.",
-  needs_contact: "Choose the column with the email address or the phone number.",
+  added_title: (n: number): string => (n === 1 ? "1 person will be added to your leads" : `${n.toLocaleString("en")} people will be added to your leads`),
+  none_added_title: "Nobody in this file can be added",
+  not_added_title: (n: number): string => `Not added (${n.toLocaleString("en")})`,
+  more_skipped: (n: number): string => `and ${count(n, "more row", "more rows")} that couldn't be read as a person`,
+  tick: "Nobody will be emailed. “Happy to hear from us” starts unticked on each of them, because a file can't show they agreed to emails. Tick it on a lead when they do.",
+  changed: "Your leads or members changed after this file was checked, so nobody was added. Check the file again.",
+  needs_name: "Choose which column has their name.",
+  needs_contact: "Choose which column has their email or phone number.",
   full: (room: number, adding: number): string =>
-    `A gym can keep ${LEADS_MAX_PER_GYM.toLocaleString("en")} leads and you have room for ${count(room, "more", "more")}, so these ${adding.toLocaleString("en")} can't all be added. Delete leads you no longer need, or split the file, then check it again.`,
+    `You can keep ${LEADS_MAX_PER_GYM.toLocaleString("en")} leads and have room for ${count(room, "more", "more")}, so these ${adding.toLocaleString("en")} won't fit. Delete old leads or split the file, then check it again.`,
   added: (n: number): string => `${count(n, "lead", "leads")} added.`,
-  no_contact: (n: number): string => `${count(n, "row has", "rows have")} no email and no phone, so ${n === 1 ? "it was" : "they were"} skipped. A lead needs one, so you can reach them.`,
-  no_name: (n: number): string => `${count(n, "row has", "rows have")} no name, so ${n === 1 ? "it was" : "they were"} skipped.`,
-  twice_in_file_reason: "The same email or phone as someone above, and a lead has its own. Add them by hand with their own details.",
-  twice_in_file: (n: number): string =>
-    `${count(n, "row repeats", "rows repeat")} an email or phone from an earlier row, so only the first is added.`,
 } as const;
 
-/** "Instagram → Social media". */
-export const leadFileSourceWordLine = (entry: LeadFileSourceWord): string =>
-  `${entry.word} → ${LEAD_SOURCE_WORDS[entry.source]} (${entry.count.toLocaleString("en")})`;
+/** Why somebody is not added, said beside their name. */
+export function leadFileNotAddedWords(entry: { reason: LeadFileNotAddedReason; sameAs: string | null }): string {
+  switch (entry.reason) {
+    case "already_lead":
+      return "Already one of your leads — left as they are";
+    case "already_member":
+      return "Already a member";
+    case "repeated":
+      return entry.sameAs === null ? "Same email or phone as someone above" : `Same email or phone as ${entry.sameAs}`;
+    case "same_person":
+      return "In the file twice";
+    case "no_contact":
+      return "No email or phone number";
+    case "no_name":
+      return "No name";
+  }
+}
 
 const WHAT_TO_UPLOAD = "Upload your leads as a CSV or Excel (.xlsx) file";
 
@@ -333,7 +360,7 @@ export function leadFileWarningWords(warning: LeadFileWarning): string {
     case "phones_need_country":
       return `${count(warning.rows, "phone number was", "phone numbers were")} left out because this gym has no country set. Set the gym's country in Settings, or write the numbers with their country code, and check again.`;
     case "phones_unusual":
-      return `${count(warning.rows, "phone number doesn't", "phone numbers don't")} look like a normal number for their country. They have been kept — check them before you call.`;
+      return `${count(warning.rows, "phone number looks", "phone numbers look")} mistyped. ${warning.rows === 1 ? "It was" : "They were"} kept as written.`;
     case "card_cells_dropped":
       return `${count(warning.rows, "cell was dropped because it is shaped like a payment card number", "cells were dropped because they are shaped like payment card numbers")}. We never store card details, wherever they sit in a file.`;
     case "notes_cut":

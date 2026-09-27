@@ -17,7 +17,7 @@ const LeadFileImport = (await import('./LeadFileImport')).default;
 
 const KEY = 'a'.repeat(64);
 const MAPPING = { sheet: 0, headerRow: 0, fullName: 0, firstName: null, lastName: null, email: [1], phone: [], source: 2, notes: null };
-const person = (row, fullName, email) => ({ row, fullName, email, phone: null, source: 'social' });
+const person = (row, fullName, email, sourceWord = null) => ({ row, fullName, email, phone: null, source: 'social', sourceWord });
 const PREVIEW = leadFilePreviewSchema.parse({
   sheet: { index: 0, name: null },
   headerRow: 0,
@@ -26,15 +26,16 @@ const PREVIEW = leadFilePreviewSchema.parse({
     { index: 1, header: 'Email', samples: ['ann@example.com'], guess: 'email', neverKept: null },
     { index: 2, header: 'Lead Source', samples: ['Instagram'], guess: 'source', neverKept: null },
     { index: 3, header: 'Card Number', samples: [], guess: null, neverKept: 'payment_card' },
+    { index: 4, header: 'Opted to Receive Marketing', samples: ['Yes'], guess: null, neverKept: null },
   ],
   mapping: MAPPING,
   needsMapping: false,
-  counts: { dataRows: 4, noContact: 1, noName: 0, twiceInFile: 0, add: 2, alreadyLead: 1, alreadyMember: 0 },
-  add: [person(2, 'Ann Bell', 'ann@example.com'), person(3, 'Bo Cox', 'bo@example.com')],
-  alreadyLead: [person(4, 'Jo Lane', 'jo@example.com')],
-  alreadyMember: [],
-  twiceInFile: [],
-  sources: [{ word: 'Instagram', source: 'social', count: 3 }],
+  counts: { dataRows: 4, noContact: 1, noName: 0, twiceInFile: 0, add: 2, alreadyLead: 1, alreadyMember: 0, notAdded: 2 },
+  add: [person(2, 'Ann Bell', 'ann@example.com', 'Instagram'), person(3, 'Bo Cox', 'bo@example.com')],
+  notAdded: [
+    { row: 4, fullName: 'Jo Lane', reason: 'already_lead', sameAs: null },
+    { row: 5, fullName: 'Ella Fox', reason: 'no_contact', sameAs: null },
+  ],
   warnings: [],
   leadsNow: 1,
   room: 9999,
@@ -52,7 +53,7 @@ function open(readOnly = false) {
 async function pick() {
   const file = new File(['Name,Email,Lead Source\nAnn Bell,ann@example.com,Instagram\n'], 'leads.csv', { type: 'text/csv' });
   fireEvent.change(screen.getByTestId('lead-file-input'), { target: { files: [file] } });
-  await screen.findByTestId('group-add');
+  await screen.findByTestId('lead-file-added');
   return file;
 }
 
@@ -74,9 +75,8 @@ describe('Import leads', () => {
     await pick();
     // Nobody arrives ticked "Happy to hear from us", said before Add.
     expect(screen.getByTestId('lead-file-tick-note').textContent).toContain(LEAD_FILE_WORDS.tick);
-    expect(screen.getByText('Nobody is emailed.', { exact: false })).toBeTruthy();
     expect(addButton().disabled).toBe(true);
-    expect(screen.getByTestId('lead-file-why').textContent).toContain('Tick the box above first.');
+    expect(screen.getByTestId('lead-file-why').textContent).toContain('Tick the box above to add them.');
     fireEvent.click(tick());
     expect(tick().getAttribute("aria-checked")).toBe("true");
     api.addLeadFile.mockResolvedValue({ data: { added: 2 } });
@@ -91,34 +91,38 @@ describe('Import leads', () => {
     expect(Object.keys(body).sort()).toEqual(['contentBase64', 'expected', 'mapping', 'permissionConfirmed']);
   });
 
-  it('names who will be added and who will not, with the reason, and every name on See all', async () => {
+  it('names who will be added and everyone who will not, each with the reason beside the name', async () => {
     open();
     await pick();
-    const add = screen.getByTestId('group-add');
-    expect(add.textContent).toContain('New leads');
-    expect(add.textContent).toContain('Ann Bell and Bo Cox');
-    const kept = screen.getByTestId('group-alreadyLead');
-    expect(kept.textContent).toContain(LEAD_FILE_WORDS.already_lead_reason);
-    expect(kept.textContent).toContain('Jo Lane');
-    expect(screen.getByTestId('lead-file-notes').textContent).toContain(LEAD_FILE_WORDS.no_contact(1));
-    expect(screen.getByTestId('lead-file-sources').textContent).toContain('Instagram → Social media');
-    fireEvent.click(within(add).getByRole('button', { name: 'See all' }));
-    expect(within(add).getByText('ann@example.com')).toBeTruthy();
-    expect(within(add).getByText('bo@example.com')).toBeTruthy();
+    const added = screen.getByTestId('lead-file-added');
+    expect(added.textContent).toContain('2 people will be added to your leads');
+    expect(added.textContent).toContain('Ann Bell');
+    expect(added.textContent).toContain('ann@example.com');
+    expect(added.textContent).toContain('Social media · Instagram');
+    expect(added.textContent).toContain('Bo Cox');
+    const notAdded = screen.getByTestId('lead-file-not-added');
+    expect(notAdded.textContent).toContain('Not added (2)');
+    expect(notAdded.textContent).toContain('Jo Lane');
+    expect(notAdded.textContent).toContain('Already one of your leads — left as they are');
+    expect(notAdded.textContent).toContain('Ella Fox');
+    expect(notAdded.textContent).toContain('No email or phone number');
+    const columns = screen.getByTestId('lead-file-column-lines').textContent;
+    expect(columns).toContain('Read: Name, Email, Lead Source');
+    expect(columns).toContain('Not used: Opted to Receive Marketing');
+    expect(columns).toContain('Left out: Card Number (we never keep card numbers)');
   });
 
   it('a column changed must be checked again before Add, and the new check sends that mapping', async () => {
     open();
     await pick();
     fireEvent.click(tick());
-    fireEvent.click(screen.getByRole('button', { name: 'Check columns' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Change' }));
     // A column never kept has no picker.
     const columns = screen.getByTestId('lead-file-columns');
-    expect(within(columns).getByText('Not kept: card numbers')).toBeTruthy();
     expect(within(columns).queryByLabelText('What Card Number holds')).toBeNull();
     fireEvent.change(screen.getByLabelText('What Lead Source holds'), { target: { value: 'notes' } });
     expect(addButton().disabled).toBe(true);
-    expect(screen.getByTestId('lead-file-why').textContent).toContain('Check the file again first.');
+    expect(screen.getByTestId('lead-file-why').textContent).toContain('Check the file again to see who will be added.');
     fireEvent.click(screen.getByRole('button', { name: 'Check the file again' }));
     await waitFor(() => expect(api.checkLeadFile).toHaveBeenCalledTimes(2));
     expect(api.checkLeadFile.mock.calls[1][1].mapping).toEqual({ ...MAPPING, source: null, notes: 2 });

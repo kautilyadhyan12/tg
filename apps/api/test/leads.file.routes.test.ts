@@ -383,18 +383,24 @@ d("leads from a file (real Postgres, real worker)", () => {
       ]);
       const preview = await check(gym, owner.cookies, file);
       const names = (people: { fullName: string }[]) => people.map((p) => p.fullName);
-      expect(names(preview.alreadyLead)).toEqual(["Jo Lane"]);
-      expect(names(preview.alreadyMember)).toEqual(["Kate Moss"]);
       expect(names(preview.add)).toEqual(["Max Moss", "Lee Nash", "Nia Obi", "Pat Quinn"]);
-      expect(names(preview.twiceInFile)).toEqual(["Nia O."]);
-      expect(preview.counts).toMatchObject({ add: 4, alreadyLead: 1, alreadyMember: 1, twiceInFile: 1, noContact: 1, noName: 1 });
-      expect(preview.sources).toEqual(
-        expect.arrayContaining([
-          { word: "Instagram", source: "social", count: 3 },
-          { word: "Google Ads", source: "website", count: 1 },
-          { word: "Social media", source: "social", count: 1 },
-        ]),
-      );
+      // Everybody not added is named, in the file's order, with the reason and whom
+      // they repeat.
+      expect(preview.notAdded).toEqual([
+        { row: 2, fullName: "Jo Lane", reason: "already_lead", sameAs: null },
+        { row: 3, fullName: "Kate Moss", reason: "already_member", sameAs: null },
+        { row: 7, fullName: "Nia O.", reason: "repeated", sameAs: "Nia Obi" },
+        { row: 8, fullName: "Omar Pike", reason: "no_contact", sameAs: null },
+        { row: 9, fullName: "", reason: "no_name", sameAs: null },
+      ]);
+      expect(preview.counts).toMatchObject({ add: 4, alreadyLead: 1, alreadyMember: 1, twiceInFile: 1, noContact: 1, noName: 1, notAdded: 5 });
+      // Each person carries the file's own word beside the source it becomes.
+      expect(preview.add.map((p) => [p.fullName, p.source, p.sourceWord])).toEqual([
+        ["Max Moss", "friend", null],
+        ["Lee Nash", "website", "Google Ads"],
+        ["Nia Obi", "social", "Instagram"],
+        ["Pat Quinn", "social", null],
+      ]);
 
       const res = await add(gym, owner.cookies, file, preview);
       expect(res.statusCode).toBe(200);
