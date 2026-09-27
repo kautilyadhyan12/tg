@@ -296,3 +296,58 @@ export async function recordsSharingContact(
     former: row.former,
   }));
 }
+
+/** The gym's leads and current member records that share any of these emails or
+ *  phones (a leads file, 20c-iii), and how many leads the gym has. Emails compare as
+ *  citext does: case does not tell two apart. */
+export async function contactsKnown(
+  sql: SqlOrTx,
+  gymId: string,
+  contacts: { emails: readonly string[]; phones: readonly string[] },
+): Promise<{
+  leads: { email: string | null; phone: string | null }[];
+  members: { fullName: string; email: string | null; phone: string | null }[];
+  leadsNow: number;
+}> {
+  const emails = [...contacts.emails];
+  const phones = [...contacts.phones];
+  const leads = await sql<{ email: string | null; phone_e164: string | null }[]>`
+    SELECT email::text AS email, phone_e164 FROM gym_leads
+    WHERE gym_id = ${gymId}
+      AND (email = ANY(${emails}::citext[]) OR phone_e164 = ANY(${phones}::text[]))`;
+  const members = await sql<{ full_name: string; email: string | null; phone_e164: string | null }[]>`
+    SELECT full_name, email::text AS email, phone_e164 FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND former_at IS NULL
+      AND (email = ANY(${emails}::citext[]) OR phone_e164 = ANY(${phones}::text[]))`;
+  const counted = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_leads WHERE gym_id = ${gymId}`;
+  return {
+    leads: leads.map((row) => ({ email: row.email, phone: row.phone_e164 })),
+    members: members.map((row) => ({ fullName: row.full_name, email: row.email, phone: row.phone_e164 })),
+    leadsNow: counted[0]?.n ?? 0,
+  };
+}
+
+/** Leads from a file, New and unticked, in one statement per thousand. */
+export async function insertLeadsFromFile(
+  tx: TransactionSql,
+  gymId: string,
+  leads: readonly { fullName: string; email: string | null; phone: string | null; source: LeadSource; notes: string }[],
+  addedBy: string,
+): Promise<number> {
+  let added = 0;
+  for (let at = 0; at < leads.length; at += 1000) {
+    const batch = leads.slice(at, at + 1000).map((lead) => ({
+      gym_id: gymId,
+      full_name: lead.fullName,
+      email: lead.email,
+      phone_e164: lead.phone,
+      source: lead.source,
+      notes: lead.notes,
+      added_by: addedBy,
+    }));
+    // One statement: every row is written or none is.
+    await tx`INSERT INTO gym_leads ${tx(batch, "gym_id", "full_name", "email", "phone_e164", "source", "notes", "added_by")}`;
+    added += batch.length;
+  }
+  return added;
+}

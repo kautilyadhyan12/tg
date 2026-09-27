@@ -26,8 +26,9 @@ import type { MemberListField } from "@app/shared";
 import { tidyCell } from "./cells.js";
 
 /** Punctuation between the words of a heading. A heading is one line of a
- *  spreadsheet, so anything here is a separator, never part of a word. */
-const PUNCTUATION = /[_\-.,/\\()[\]:#*'\u2018\u2019\u00b4`"]+/g;
+ *  spreadsheet, so anything here is a separator, never part of a word. A form's
+ *  question ends in "?" ("Pregnant?"), which is no part of its last word. */
+const PUNCTUATION = /[_\-.,/\\()[\]:#*'\u2018\u2019\u00b4`"?!]+/g;
 const COMBINING_MARKS = /[\u0300-\u036f]/g;
 /** "Email 1" and "Phone — primary" are the first column of their kind, not
  *  another one; Google Contacts and Mailchimp both write them. */
@@ -96,6 +97,10 @@ const NOT_THE_MAIN_ONE = 10;
  *  holds where the never-list below has not heard of the word: whatever the
  *  qualifier is, the plain column wins. */
 const SAYS_MORE_THAN_THE_WORD = 5;
+
+/** Words that name a field only as the WHOLE heading: "Last" is a surname column, but
+ *  "Last Contacted", "Last Visit" and "Last Contact Notes" are not (20c-iii's re-check). */
+const ONLY_ALONE = new Set(["first", "last"]);
 
 const WORDS: readonly HeaderWord[] = [
   ...["first name", "firstname", "member firstname", "given name", "fname", "first", "forename"].map((word) => ({ word, field: "firstName" as const, rank: 0 })),
@@ -397,7 +402,7 @@ export function readHeader(raw: string): HeaderReading {
   let best: HeaderWord | null = null;
   let tied = false;
   for (const entry of WORDS) {
-    if (!holds(header, entry.word)) continue;
+    if (ONLY_ALONE.has(entry.word) ? header !== entry.word : !holds(header, entry.word)) continue;
     if (best === null || entry.word.length > best.word.length) {
       best = entry;
       tied = false;

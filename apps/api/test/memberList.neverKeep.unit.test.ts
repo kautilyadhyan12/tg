@@ -179,6 +179,62 @@ describe("a heading, the backstop", () => {
   });
 });
 
+describe("health notes, by headings from outside this code", () => {
+  // Round one of 20c-iii, High 1: a leads file's "Physio Notes" was guessed as the
+  // lead's notes and kept. The headings below are the PAR-Q+ questions (the 2023 form)
+  // as a gym's form export writes them, and the health headings of enquiry and joining
+  // forms; the kept ones are real gym columns the words must not catch.
+  it.each([
+    ["Physio Notes"],
+    ["Physiotherapist"],
+    ["Back pain notes"],
+    ["Pain Notes"],
+    ["Knee Notes"],
+    ["Knee Problems"],
+    ["Back Problems"],
+    ["Hip issues"],
+    ["Neck Pain"],
+    ["Shoulder Injury"],
+    ["Operation Notes"],
+    ["Rehab Notes"],
+    ["Rehabilitation"],
+    ["Pregnant?"],
+    ["Are you pregnant?"],
+    ["Epilepsy"],
+    ["Seizures"],
+    ["Arthritis"],
+    ["Heart Problems"],
+    ["Concussion"],
+    ["Any injuries?"],
+    ["Health Issues"],
+    ["Mental Health"],
+    ["Has your doctor ever said that you have a heart condition OR high blood pressure?"],
+    ["Do you feel pain in your chest at rest, during your daily activities of living, OR when you do physical activity?"],
+    ["Do you lose balance because of dizziness OR have you lost consciousness in the last 12 months?"],
+    ["Do you currently have (or have had within the past 12 months) a bone, joint, or soft tissue (muscle, ligament, or tendon) problem that could be made worse by becoming more physically active?"],
+  ])("%s is never kept", (header) => {
+    expect(neverKeptByHeader(header, NO_HINTS)).toBe("medical");
+  });
+
+  it.each([
+    ["Joint Membership"],
+    ["Back Office Notes"],
+    ["Call Back Date"],
+    ["Call back notes"],
+    ["Hours of operation"],
+    ["Feedback"],
+    ["Operator"],
+    ["Notes"],
+    ["Trainer Notes"],
+    ["Terms and Conditions"],
+  ])(
+    "%s is kept",
+    (header) => {
+      expect(neverKeptByHeader(header, NO_HINTS)).toBe(null);
+    },
+  );
+});
+
 describe("a postcode is an address, in every word the English-speaking world writes it with", () => {
   // Kd, 2026-09-22. The words are Wikipedia's ("Postal code", read that day)
   // and Gymdesk's own import field, which it writes "Zip/Postal Code".

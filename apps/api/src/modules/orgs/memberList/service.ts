@@ -126,7 +126,11 @@ function refuse(refusal: MemberFileRefusal): OrgsError {
  *  **REDIS DOWN FAILS OPEN, LOUDLY**, exactly as the rate limiters do: the
  *  per-process ceiling of two still stands, and refusing every gym's upload
  *  because a cache blinked would be a worse answer than reading two files. */
-async function withOneReaderPerGym<T>(deps: MemberListDeps, gymId: string, work: () => Promise<T>): Promise<T> {
+export async function withOneReaderPerGym<T>(
+  deps: Pick<MemberListDeps, "redis" | "log">,
+  gymId: string,
+  work: () => Promise<T>,
+): Promise<T> {
   const key = `mlist:reading:${gymId}`;
   const seconds = Math.ceil(MEMBER_FILE_PARSE_TIMEOUT_MS / 1000) + 1;
   const count = await deps.redis.incrWithTtl(key, seconds);

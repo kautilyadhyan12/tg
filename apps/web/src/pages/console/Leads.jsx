@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ChevronRight, Loader2, Search, UserPlus } from 'lucide-react';
-import { LEAD_QUERY_MAX_CHARS } from '@app/shared';
+import { ChevronRight, FileUp, Loader2, Search, UserPlus } from 'lucide-react';
+import { LEAD_FILE_WORDS, LEAD_QUERY_MAX_CHARS } from '@app/shared';
 import { orgService, errorStatus, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
+import LeadFileImport from './LeadFileImport';
 import LeadSheet from './LeadSheet';
 import { useConsoleOrg } from './useConsoleOrg';
 import { orgWords, viewerPrivileges } from './consoleView';
@@ -26,6 +27,7 @@ import {
 // anyone else whatever this screen shows. Drawn from `console.css` (R3; spec Part 3 §17):
 // a table on a computer, a row per lead on a phone. "Email due" (20c-ii) keeps the leads
 // due a follow-up email today: a chip of its own, so it and a status chip are never on together.
+// Import leads (20c-iii) reads a file and adds its people after staff have seen who.
 
 const count = (n) => n.toLocaleString('en');
 
@@ -44,6 +46,7 @@ export default function Leads() {
   const [tick, setTick] = useState(0);
   /** undefined: no panel · null: adding · an id: that lead. */
   const [openId, setOpenId] = useState(undefined);
+  const [importing, setImporting] = useState(false);
   /** "Tom Reid is on your leads.", after Add lead closes. */
   const [notice, setNotice] = useState(null);
   /** The newest request for a page: an answer to an older one is dropped. */
@@ -145,10 +148,24 @@ export default function Leads() {
           <p className="c-sub">People interested in joining {org.name}</p>
         </div>
         {!page.refused ? (
-          <button type="button" onClick={() => openLead(null)} disabled={readOnly} className="c-btn c-btn-p w-full md:w-auto">
-            <UserPlus aria-hidden="true" className="w-4 h-4" />
-            Add lead
-          </button>
+          <div className="flex gap-2 w-full md:w-auto">
+            <button
+              type="button"
+              onClick={() => {
+                setNotice(null);
+                setImporting(true);
+              }}
+              disabled={readOnly}
+              className="c-btn c-btn-s flex-1 md:flex-none"
+            >
+              <FileUp aria-hidden="true" className="w-4 h-4" />
+              Import leads
+            </button>
+            <button type="button" onClick={() => openLead(null)} disabled={readOnly} className="c-btn c-btn-p flex-1 md:flex-none">
+              <UserPlus aria-hidden="true" className="w-4 h-4" />
+              Add lead
+            </button>
+          </div>
         ) : null}
       </header>
 
@@ -224,7 +241,8 @@ export default function Leads() {
             <section className="c-card p-5 md:p-6 flex flex-col gap-1">
               <p className="c-s15 c-w6 c-t1">No leads yet.</p>
               <p className="c-s14 c-t2">
-                When somebody asks about joining, add them here with how to reach them, and keep track of them until they join.
+                When somebody asks about joining, add them here with how to reach them, and keep track of them until they join. Leads kept in
+                other software or a spreadsheet can be brought in with Import leads.
               </p>
             </section>
           ) : null}
@@ -284,6 +302,20 @@ export default function Leads() {
           ) : null}
         </>
       )}
+
+      {importing ? (
+        <LeadFileImport
+          gymId={gymId}
+          gym={org}
+          readOnly={readOnly}
+          onClose={() => setImporting(false)}
+          onAdded={(added) => {
+            setImporting(false);
+            setNotice(LEAD_FILE_WORDS.added(added));
+            setTick((n) => n + 1);
+          }}
+        />
+      ) : null}
 
       {openId !== undefined ? (
         <LeadSheet
