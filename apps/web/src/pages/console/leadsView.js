@@ -116,7 +116,7 @@ export function detailsRequest(lead, draft) {
 
 /** The words beside the "Happy to hear from us" tick. */
 export const MAY_EMAIL_LABEL = 'Happy to hear from us by email';
-export const MAY_EMAIL_HINT = "Tick only if they said yes. We'll remind you to email them today, in 3 days and in 7.";
+export const MAY_EMAIL_HINT = "Tick only if they said yes. We'll remind you to email them 3 times over a week.";
 
 /** What Joined did, in one sentence. */
 export function joinedWords(outcome, name, words) {
