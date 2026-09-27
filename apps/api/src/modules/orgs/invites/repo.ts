@@ -496,6 +496,8 @@ export interface ClaimLimits {
   /** The most one gym sends in any 24 hours, on a paid plan and on a trial. */
   gymPerDay: number;
   trialGymPerDay: number;
+  /** Only these gyms' emails (a test's own); null for every gym. */
+  gymIds: readonly string[] | null;
 }
 
 /** For each gym with an email due: whether it is stopped, and how far its first batch
@@ -550,6 +552,8 @@ export async function gateFacts(sql: SqlOrTx, now: Date): Promise<{ gymId: strin
 export async function claimNextSend(sql: Sql, limits: ClaimLimits): Promise<ClaimedSend | "capped" | null> {
   const dayAgo = new Date(limits.now.getTime() - 24 * 60 * 60 * 1000);
   const leaseUntil = new Date(limits.now.getTime() + limits.leaseMs);
+  const everyGym = limits.gymIds === null;
+  const onlyGyms = [...(limits.gymIds ?? [])];
   return await sql.begin(async (tx) => {
     await tx`SELECT pg_advisory_xact_lock(hashtext('gym_invite_sends.claim'))`;
     const again = await tx<ClaimedRow[]>`
@@ -558,6 +562,7 @@ export async function claimNextSend(sql: Sql, limits: ClaimLimits): Promise<Clai
         WHERE s.maybe_sent_at IS NOT NULL
           AND ((s.state = 'queued' AND s.not_before <= ${limits.now})
                OR (s.state = 'sending' AND s.lease_until < ${limits.now}))
+          AND (${everyGym}::boolean OR s.gym_id = ANY(${onlyGyms}::uuid[]))
         ORDER BY s.not_before, s.id
         LIMIT 1
         FOR UPDATE OF s SKIP LOCKED
@@ -599,6 +604,7 @@ export async function claimNextSend(sql: Sql, limits: ClaimLimits): Promise<Clai
                OR (s.state = 'sending' AND s.lease_until < ${limits.now}))
           AND s.gym_id NOT IN (SELECT capped.gym_id FROM capped)
           AND s.gym_id <> ALL(${waiting}::uuid[])
+          AND (${everyGym}::boolean OR s.gym_id = ANY(${onlyGyms}::uuid[]))
         ORDER BY s.not_before, s.created_at, s.id
         LIMIT 1
         FOR UPDATE OF s SKIP LOCKED

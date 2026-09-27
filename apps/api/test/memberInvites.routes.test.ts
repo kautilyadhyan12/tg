@@ -223,8 +223,15 @@ d("press Invite (real Postgres)", () => {
   };
   const sender = settings.sender;
   if (sender === null) throw new Error("sending is off in the test config");
+  // This suite's own gyms only: the local database also holds a developer's gyms, whose
+  // waiting invitations are theirs to send, under their own server's key.
+  const ourGyms = async () =>
+    (await sql<{ id: string }[]>`SELECT id FROM gyms WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE ${`minv-t-%@${DOMAIN}`})`).map(
+      (row) => row.id,
+    );
   const runSender = async (over: Partial<SenderDeps> = {}): Promise<SendRun> =>
     await sendDueInvites({
+      gymIds: await ourGyms(),
       sql,
       log,
       settings,
@@ -332,6 +339,7 @@ d("press Invite (real Postgres)", () => {
       preview = await previewOf(gym, owner);
       expect((await press(gym, owner, preview)).statusCode).toBe(200);
       const claimed = await claimNextSend(sql, {
+        gymIds: await ourGyms(),
         now: new Date(Date.now() + 1),
         leaseMs: 60_000,
         platformPerDay: 2000,
@@ -494,6 +502,27 @@ d("press Invite (real Postgres)", () => {
       expect([second.total, second.people.length, second.cursor]).toEqual([103, 3, null]);
       expect([...first.people, ...second.people].map((p) => p.fullName)).toEqual(names);
       expect((await pageOf("?group=left_out")).total).toBe(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a sender limited to some gyms leaves every other gym's waiting email alone: a developer's own gyms share this database",
+    async () => {
+      const owner = await makeUser("only-owner");
+      const org = await makeGym(owner, "Only Gyms Gym");
+      const gym = org.org.id;
+      await typeIn(gym, owner, { fullName: "Ola", email: addr("only-ola") });
+      expect((await press(gym, owner, await previewOf(gym, owner))).statusCode).toBe(200);
+      const states = async () => (await sql<{ state: string }[]>`SELECT state FROM gym_invite_sends WHERE gym_id = ${gym}`).map((row) => row.state);
+      // Another gym's sender: this gym's email is not claimed, skipped or sent.
+      const elsewhere = await runSender({ gymIds: ["00000000-0000-4000-8000-000000000000"] });
+      expect([elsewhere.sent, elsewhere.skipped, elsewhere.failed]).toEqual([0, 0, 0]);
+      expect(await states()).toEqual(["queued"]);
+      // Its own sender sends it.
+      const here = await runSender({ gymIds: [gym] });
+      expect(here.sent).toBe(1);
+      expect(emailsTo(addr("only-ola"))).toHaveLength(1);
     },
     TEST_TIMEOUT_MS,
   );

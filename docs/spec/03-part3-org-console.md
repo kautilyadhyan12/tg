@@ -2907,6 +2907,20 @@ app confusion"*. Built in 5b-v-a-i, and where this section says otherwise, this 
   change it with Edit, then invite them again.") and takes out that one account: the record
   stays as it was, the invitation to the record's address stops, and it needs the
   `members.remove` tick.
+- **Asked again at the next look** (Kd: *"i want to know why this warning is showing"*; *"Not
+  sent: this address was no longer on your list … what is trying to say?"*). The page says
+  why it asks, under the warning: "The email matches your list, but the name they gave the
+  app is different. It may be a short name, or someone else using this email address." The
+  name rule itself is unchanged: a short form (Dan for Daniel) is still asked about, since
+  the same rule would take Priya for Priyanka or Chris for Christine, often relatives on one
+  family address, the case it exists for; one tap answers it for good. **An invitation
+  whose email never went is not "Invited":** it reads **Not in the app**, amber, with why
+  and what to press ("Not sent: when the email was due to go, this person wasn't on your
+  list. Press Invite to send it now."), and counts under Not invited yet; an email that went
+  and bounced stays **Invited** · "This email bounced…". (The line Kd saw was false: a test
+  run's sender, sharing the local database, had skipped his local gym's waiting invitations
+  under its own address key. A test's sender now touches only its own gyms, `gymIds`, as
+  the sweeps already do.)
 
 ### 18.1 The drawings
 

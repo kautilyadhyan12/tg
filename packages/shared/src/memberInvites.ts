@@ -70,7 +70,7 @@ export type MemberInviteEmailReason = z.infer<typeof memberInviteEmailReasonSche
 
 /** The sentence staff read beside an email that did not go. */
 export const MEMBER_INVITE_EMAIL_REASON_WORDS: Readonly<Record<MemberInviteEmailReason, string>> = {
-  not_on_list: "Not sent: this address was no longer on your list when it was due to go.",
+  not_on_list: "Not sent: when the email was due to go, this person wasn't on your list. Press Invite to send it now.",
   under_age: "Not sent: your list says this person is under 18, and the app is for 18 and over.",
   in_app: "Not sent: this person is already a member in the app.",
   unsubscribed: "Not sent: this person unsubscribed from your emails.",

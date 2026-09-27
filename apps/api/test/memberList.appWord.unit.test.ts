@@ -90,9 +90,20 @@ describe("the spec's table, one case a row (§18.4)", () => {
       { reason: "not_arrived", tone: "amber", at: null, line: "This email bounced: the address doesn't take email. Check it with the person.", lineTone: "amber" },
     ],
     [
+      // Never emailed, so not "Invited" (Kd, 2026-09-27: "Invited · Not sent" said two things).
       "8 not sent: bad address",
       { invitation: invitation({ email: email({ state: "skipped", reason: "bad_address" }) }) },
-      { reason: "not_arrived", tone: "amber", at: null, line: MEMBER_INVITE_EMAIL_REASON_WORDS.bad_address, lineTone: "amber" },
+      { reason: "not_sent", tone: "grey", at: null, line: MEMBER_INVITE_EMAIL_REASON_WORDS.bad_address, lineTone: "amber" },
+    ],
+    [
+      "8 not sent: not on the list when it was due",
+      { invitation: invitation({ email: email({ state: "skipped", reason: "not_on_list" }) }) },
+      { reason: "not_sent", tone: "grey", at: null, line: MEMBER_INVITE_EMAIL_REASON_WORDS.not_on_list, lineTone: "amber" },
+    ],
+    [
+      "8 not sent: the email service refused it for a week",
+      { invitation: invitation({ email: email({ state: "failed", reason: "provider_refused" }) }) },
+      { reason: "not_sent", tone: "grey", at: null, line: MEMBER_INVITE_EMAIL_REASON_WORDS.provider_refused, lineTone: "amber" },
     ],
     ["9 invited, the email went", { invitation: invitation({ email: email({ result: "delivered" }) }) }, { reason: "invited", tone: "grey", at: AT, line: null, lineTone: "plain" }],
     ["9 invited, still queued", { invitation: invitation({ email: email({ state: "queued" }) }) }, { reason: "invited", tone: "grey", at: AT, line: null, lineTone: "plain" }],
@@ -176,7 +187,7 @@ describe("the invitation histories found in the local databases, 2026-09-27", ()
     ["accepted", null, null, null, "left"],
     ["accepted", "skipped", "invitation_closed", null, "left"],
     ["declined", null, null, null, "declined"],
-    ["pending", "skipped", "gym_not_active", null, "not_arrived"],
+    ["pending", "skipped", "gym_not_active", null, "not_sent"],
     ["declined", "skipped", "invitation_closed", null, "declined"],
     ["declined", "skipped", "gym_not_active", null, "declined"],
     ["accepted", "skipped", "not_on_list", null, "left"],
@@ -222,7 +233,9 @@ describe("every combination of invitation facts the types allow: a word, and nev
           if (out.reason === "wrong_email") expect(inv?.state === "declined" && inv.notMeAt !== null, where).toBe(true);
           if (out.reason === "waiting") expect(inv?.state === "pending" && inv.waitingSince !== null, where).toBe(true);
           if (out.reason === "declined") expect(inv?.state, where).toBe("declined");
-          if (out.reason === "invited" || out.reason === "not_arrived") expect(inv?.state, where).toBe("pending");
+          if (out.reason === "invited" || out.reason === "not_arrived" || out.reason === "not_sent") expect(inv?.state, where).toBe("pending");
+          // "Invited" only once an email went, may have gone, or is on its way.
+          if (out.reason === "not_sent") expect(inv?.email?.state === "skipped" || inv?.email?.state === "failed", where).toBe(true);
           if (inv === null) expect(["not_invited", "unsubscribed"], where).toContain(out.reason);
           checked += 1;
           // Someone in the app on the record is always "In the app", whatever the invitation says.
@@ -279,6 +292,7 @@ describe("the three words a screen shows (Kd, 2026-09-27: the list showed too mu
       in_app: "in_app",
       waiting: "invited",
       not_arrived: "invited",
+      not_sent: "not_in_app",
       invited: "invited",
       wrong_email: "not_in_app",
       removed: "not_in_app",

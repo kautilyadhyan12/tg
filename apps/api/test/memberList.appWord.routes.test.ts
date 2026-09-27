@@ -381,7 +381,8 @@ d("the App word on the Members list (real Postgres)", () => {
       expect(words["Kim Lee"]?.line).toBe("Left the app");
       expect(words["Uma Rao"]?.word).toBe("not_in_app");
       expect(words["Uma Rao"]?.line).toBe("Unsubscribed from your emails");
-      expect(words["Emma Hart"]).toEqual({ word: "invited", tone: "grey", at: null, line: "Not sent: emails to this address bounce.", lineTone: "amber" });
+      // Her email never went, so she is not "Invited".
+      expect(words["Emma Hart"]).toEqual({ word: "not_in_app", tone: "grey", at: null, line: "Not sent: emails to this address bounce.", lineTone: "amber" });
       expect(words["Ava Thompson"]?.word).toBe("invited");
       expect(words["Ava Thompson"]?.line).toBe("Invitation sent");
       expect(words["Ava Thompson"]?.at).not.toBeNull();
@@ -400,8 +401,8 @@ d("the App word on the Members list (real Postgres)", () => {
       }
       // The three words hold everybody once; Needs checking is Priya and Emma.
       expect(counts.filter(({ word }) => threeWords.has(word)).reduce((sum, { count }) => sum + count, 0)).toBe(8);
-      // Not invited yet: never sent an invitation, with or without an email to send it to.
-      expect((await page(gym, "?app=not_invited")).entries.map((entry) => entry.fullName).sort()).toEqual(["Mia Stone", "Noah Fox"]);
+      // Not invited yet: no invitation email has reached them, with or without an address.
+      expect((await page(gym, "?app=not_invited")).entries.map((entry) => entry.fullName).sort()).toEqual(["Emma Hart", "Mia Stone", "Noah Fox"]);
       expect((await page(gym, "?app=needs_check")).entries.map((entry) => entry.fullName).sort()).toEqual(["Emma Hart", "Priya Shah"]);
       // Two choices at once are both.
       expect((await page(gym, "?app=invited&app=needs_check")).entries.map((entry) => entry.fullName).sort()).toEqual([

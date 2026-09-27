@@ -73,6 +73,11 @@ export interface SenderDeps {
   sleep: (ms: number) => Promise<void>;
   /** Smaller caps for a test; production passes nothing. */
   limits?: Partial<Record<"gymPerDay" | "trialGymPerDay" | "perRun", number>>;
+  /** Only these gyms' emails, for a test that shares its database with a developer's own
+   *  gyms, as the sweeps take `gymIds`; production passes nothing and sends for every gym.
+   *  Without it a test run once skipped a local gym's 21 waiting invitations as "no longer
+   *  on your list": its key for addresses is not the local server's. */
+  gymIds?: readonly string[];
 }
 
 export interface SendRun {
@@ -115,6 +120,7 @@ export async function sendDueInvites(deps: SenderDeps): Promise<SendRun> {
       platformPerDay: deps.settings.perDay,
       gymPerDay: limits.gymPerDay,
       trialGymPerDay: limits.trialGymPerDay,
+      gymIds: deps.gymIds ?? null,
     });
     if (claim === null) break;
     if (claim === "capped") {

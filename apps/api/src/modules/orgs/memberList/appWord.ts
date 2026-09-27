@@ -68,6 +68,7 @@ export type AppReasonKind =
   | "unsubscribed"
   | "declined"
   | "not_arrived"
+  | "not_sent"
   | "invited"
   | "not_invited";
 
@@ -97,6 +98,9 @@ const SHOWN: Readonly<Record<AppReasonKind, { word: MemberAppView["word"]; line:
   in_app: { word: "in_app", line: null },
   waiting: { word: "invited", line: null },
   not_arrived: { word: "invited", line: null },
+  // Never emailed at all, so not "Invited" (Kd, 2026-09-27: "Invited · Not sent" read as
+  // two opposite things); their page offers Invite.
+  not_sent: { word: "not_in_app", line: null },
   invited: { word: "invited", line: "Invitation sent" },
   wrong_email: { word: "not_in_app", line: null },
   removed: { word: "not_in_app", line: "Removed from app" },
@@ -193,7 +197,7 @@ export function appReason(input: AppWordInput): AppReason {
         const reason = email.reason;
         if ((email.state === "skipped" || email.state === "failed") && reason !== "send_unknown") {
           const said = reason !== null && !OPT_OUT_REASONS.has(reason) ? MEMBER_INVITE_EMAIL_REASON_WORDS[reason] : null;
-          return view("not_arrived", "amber", said ?? "This email didn't arrive. Check the address with the person.", "amber");
+          return view("not_sent", "grey", said ?? "The invitation email wasn't sent. Press Invite to send it.", "amber");
         }
         // 9, not known
         if (reason === "send_unknown") return view("invited", "grey", MEMBER_INVITE_EMAIL_REASON_WORDS.send_unknown, "plain", email.at);

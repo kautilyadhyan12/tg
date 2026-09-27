@@ -770,6 +770,12 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           </p>
         ) : null}
         {p.nameCheck !== null && p.formerAt === null ? (
+          <p className="text-sm" style={{ color: C.soft }} data-testid="name-check-why">
+            The email matches your list, but the name they gave the app is different. It may be a short name, or someone else using
+            this email address.
+          </p>
+        ) : null}
+        {p.nameCheck !== null && p.formerAt === null ? (
           <div className="flex flex-wrap gap-2" data-testid="name-check">
             <button
               type="button"

@@ -97,11 +97,13 @@ export async function appFactsOf(
   });
 }
 
-/** The App choices a person answers to: their word; "not_invited" or "removed" for those
- *  two reasons; and "needs_check" when their line asks staff to check something. */
+/** The App choices a person answers to: their word; "not_invited" for somebody no
+ *  invitation email has reached, "removed" for those the gym took out; and "needs_check"
+ *  when their line asks staff to check something. */
 export function appChoices({ view, reason }: AppFact): MemberAppFilter[] {
   const choices: MemberAppFilter[] = [view.word];
-  if (reason === "not_invited" || reason === "removed") choices.push(reason);
+  if (reason === "not_invited" || reason === "not_sent") choices.push("not_invited");
+  if (reason === "removed") choices.push("removed");
   if (view.lineTone !== "plain") choices.push("needs_check");
   return choices;
 }

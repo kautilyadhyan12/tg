@@ -439,6 +439,10 @@ describe('a person on the list', () => {
       orgService.getMemberListEntry.mockResolvedValue(entryAnswer(asked));
       openBox(ADA);
       const check = within(await screen.findByTestId('name-check'));
+      // Why it asks, in one line (Kd, 2026-09-27: "i want to know why this warning is showing").
+      expect(screen.getByTestId('name-check-why').textContent).toBe(
+        'The email matches your list, but the name they gave the app is different. It may be a short name, or someone else using this email address.',
+      );
       const answered = { ...asked, nameCheck: null, app: { ...asked.app, line: null, lineTone: 'plain' } };
       orgService.confirmSamePerson.mockResolvedValue(written('name_confirmed', answered));
       fireEvent.click(check.getByRole('button', { name: 'Yes, this is them' }));
@@ -473,6 +477,7 @@ describe('a person on the list', () => {
       openBox(ADA);
       await dialog().findByText('In the app');
       expect(screen.queryByTestId('name-check')).toBeNull();
+      expect(screen.queryByTestId('name-check-why')).toBeNull();
     });
   });
 
