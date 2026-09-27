@@ -15,6 +15,8 @@ import {
   createOrgResponseSchema,
   declineInvitationResponseSchema,
   joinLeadResponseSchema,
+  leadFileAddResponseSchema,
+  leadFileCheckResponseSchema,
   leadResponseSchema,
   leadsResponseSchema,
   memberInviteChangedSchema,
@@ -707,6 +709,19 @@ export const orgService = {
     ),
 
   deleteLead: (gymId, leadId) => authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/leads/${encodeURIComponent(leadId)}`),
+
+  /** POST …/leads/from-file/check — who in a file would be added; nothing is saved (20c-iii). */
+  checkLeadFile: (gymId, body) =>
+    readThrough(
+      leadFileCheckResponseSchema,
+      'your file',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/leads/from-file/check`, body),
+    ),
+
+  /** POST …/leads/from-file — add exactly the leads the check showed, or nothing (409
+   *  `lead_file_changed`). */
+  addLeadFile: (gymId, body) =>
+    readThrough(leadFileAddResponseSchema, 'your leads', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/leads/from-file`, body)),
 
   /** POST …/leads/:leadId/join — Joined. `choice` is {}, { entryId } or { asNew: true };
    *  a 409 `lead_join_choose` or `lead_join_stale` carries the records to choose from. */

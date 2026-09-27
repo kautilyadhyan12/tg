@@ -21,15 +21,17 @@ import {
   MEMBER_FILE_PARSES_AT_ONCE,
   MEMBER_FILE_PARSE_TIMEOUT_MS,
   MEMBER_FILE_WORKER_HEAP_MB,
+  leadFileResultSchema,
   memberFileResultSchema,
   memberListUnderstandResultSchema,
+  type LeadFileResult,
   type MemberFileRefusal,
   type MemberFileResult,
   type MemberListUnderstandResult,
 } from "@app/shared";
 import type { OpenableKind } from "./openFile.js";
 import { sniffMemberFile } from "./sniff.js";
-import { CRASH_NAME, type UnderstandJob } from "./workerAnswer.js";
+import { CRASH_NAME, type LeadJob, type UnderstandJob } from "./workerAnswer.js";
 
 const WORKER_FILE = new URL("./parseWorker.boot.mjs", import.meta.url);
 
@@ -37,6 +39,7 @@ const WORKER_FILE = new URL("./parseWorker.boot.mjs", import.meta.url);
 const crashedSchema = z.object({ crashed: z.string().regex(CRASH_NAME) });
 const gridReplySchema = z.union([z.object({ done: memberFileResultSchema }), crashedSchema]);
 const understoodReplySchema = z.union([z.object({ done: memberListUnderstandResultSchema }), crashedSchema]);
+const leadsReplySchema = z.union([z.object({ done: leadFileResultSchema }), crashedSchema]);
 
 /** A crash is reported by its error's class NAME only: a message could quote a
  *  cell, and a cell never reaches a log (§9.9). */
@@ -58,6 +61,13 @@ export function readWorkerReply(message: unknown): MemberFileResult {
 /** The same, for a worker that was asked to understand the file as well. */
 export function readUnderstoodReply(message: unknown): MemberListUnderstandResult {
   const reply = understoodReplySchema.safeParse(message);
+  if (!reply.success) throw new Error(UNKNOWN_SHAPE);
+  return answerOf(reply.data);
+}
+
+/** The same, for a worker that was asked to read the file as leads (20c-iii). */
+export function readLeadsReply(message: unknown): LeadFileResult {
+  const reply = leadsReplySchema.safeParse(message);
   if (!reply.success) throw new Error(UNKNOWN_SHAPE);
   return answerOf(reply.data);
 }
@@ -85,10 +95,17 @@ const refused = (refusal: MemberFileRefusal): MemberFileResult => ({ ok: false, 
 const codeOf = (error: unknown): string =>
   error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "no code";
 
+/** What the worker does after opening the file: nothing more, understand it as a
+ *  member list, or read it as leads. */
+interface Job {
+  understand: UnderstandJob | null;
+  leads: LeadJob | null;
+}
+
 function readInWorker<T>(
   kind: OpenableKind,
   bytes: Uint8Array,
-  understand: UnderstandJob | null,
+  job: Job,
   readAnswer: (message: unknown) => T,
   onRefusal: (refusal: MemberFileRefusal) => T,
   seams: ParseMemberFileSeams,
@@ -101,7 +118,7 @@ function readInWorker<T>(
     const worker = new Worker(WORKER_FILE, {
       // Nothing inherited from the parent's command line: the entry loads tsx itself.
       execArgv: [],
-      workerData: { kind, bytes: own, understand },
+      workerData: { kind, bytes: own, understand: job.understand, leads: job.leads },
       transferList: [own.buffer],
       resourceLimits: { maxOldGenerationSizeMb: seams.heapMb ?? MEMBER_FILE_WORKER_HEAP_MB },
     });
@@ -147,7 +164,7 @@ function readInWorker<T>(
 
 async function inAWorkerOfItsOwn<T>(
   bytes: Uint8Array,
-  understand: UnderstandJob | null,
+  job: Job,
   readAnswer: (message: unknown) => T,
   onRefusal: (refusal: MemberFileRefusal) => T,
   seams: ParseMemberFileSeams,
@@ -157,7 +174,7 @@ async function inAWorkerOfItsOwn<T>(
   if (open >= MEMBER_FILE_PARSES_AT_ONCE) return onRefusal({ code: "busy" });
   open++;
   try {
-    return await readInWorker(sniffed.kind, bytes, understand, readAnswer, onRefusal, seams);
+    return await readInWorker(sniffed.kind, bytes, job, readAnswer, onRefusal, seams);
   } finally {
     open--;
   }
@@ -167,10 +184,16 @@ async function inAWorkerOfItsOwn<T>(
  *  do instead. Throws only for a fault of the server's own (the worker could not
  *  start, or crashed in our code) — never with a cell in the message. */
 export const parseMemberFile = (bytes: Uint8Array, seams: ParseMemberFileSeams = {}): Promise<MemberFileResult> =>
-  inAWorkerOfItsOwn(bytes, null, readWorkerReply, refused, seams);
+  inAWorkerOfItsOwn(bytes, { understand: null, leads: null }, readWorkerReply, refused, seams);
 
 /** An uploaded file as the people it holds (§9.5), read and understood in the
  *  worker: the request's own thread is handed the rows a list keeps, never the
  *  file's cells, and waits for neither. This is what the route (3a-iii) calls. */
 export const understandMemberFile = (bytes: Uint8Array, understand: UnderstandJob, seams: ParseMemberFileSeams = {}): Promise<MemberListUnderstandResult> =>
-  inAWorkerOfItsOwn(bytes, understand, readUnderstoodReply, (refusal): MemberListUnderstandResult => ({ ok: false, refusal }), seams);
+  inAWorkerOfItsOwn(bytes, { understand, leads: null }, readUnderstoodReply, (refusal): MemberListUnderstandResult => ({ ok: false, refusal }), seams);
+
+/** A leads file (ROADMAP 20c-iii), read and understood in the worker: the request's
+ *  thread is handed the leads, never the file's cells. Same budget of workers and the
+ *  same timeout as a member file. */
+export const readLeadFile = (bytes: Uint8Array, leads: LeadJob, seams: ParseMemberFileSeams = {}): Promise<LeadFileResult> =>
+  inAWorkerOfItsOwn(bytes, { understand: null, leads }, readLeadsReply, (refusal): LeadFileResult => ({ ok: false, refusal }), seams);

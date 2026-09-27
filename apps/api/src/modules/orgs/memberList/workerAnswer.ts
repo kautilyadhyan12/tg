@@ -7,7 +7,8 @@
 // a cell, and a cell never reaches a log or Sentry (§9.9). The package's own
 // errors never get this far — the adapter turns them into `unreadable_excel`.
 import { z } from "zod";
-import { type MemberFileResult, type MemberListUnderstandResult, memberListMappingSchema } from "@app/shared";
+import { type LeadFileResult, type MemberFileResult, type MemberListUnderstandResult, leadFileMappingSchema, memberListMappingSchema } from "@app/shared";
+import { understandLeadGrid } from "../leads/leadFile.js";
 import { openMemberFileContents, type OpenableKind } from "./openFile.js";
 import { understandMemberGrid } from "./understand.js";
 
@@ -23,26 +24,36 @@ const understandJobSchema = z.object({
 });
 export type UnderstandJob = z.infer<typeof understandJobSchema>;
 
+/** A leads file (ROADMAP 20c-iii): read by the same reader, then as leads. */
+const leadJobSchema = z.object({
+  country: z.string().nullable(),
+  mapping: leadFileMappingSchema.nullable(),
+});
+export type LeadJob = z.infer<typeof leadJobSchema>;
+
 const jobSchema = z.object({
   kind: z.enum(["zip", "text"]),
   bytes: z.instanceof(Uint8Array),
   understand: understandJobSchema.nullable().default(null),
+  leads: leadJobSchema.nullable().default(null),
 });
 
 /** An error's class name as the worker may report it: letters and digits, never
  *  anything a file could have written. */
 export const CRASH_NAME = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 
-export type WorkerAnswer = { done: MemberFileResult | MemberListUnderstandResult } | { crashed: string };
+export type WorkerAnswer = { done: MemberFileResult | MemberListUnderstandResult | LeadFileResult } | { crashed: string };
 
 export async function workerAnswer(
   job: unknown,
   open: (kind: OpenableKind, bytes: Uint8Array) => Promise<MemberFileResult> = openMemberFileContents,
 ): Promise<WorkerAnswer> {
   try {
-    const { kind, bytes, understand } = jobSchema.parse(job);
+    const { kind, bytes, understand, leads } = jobSchema.parse(job);
     const opened = await open(kind, bytes);
-    if (understand === null || !opened.ok) return { done: opened };
+    if (!opened.ok) return { done: opened };
+    if (leads !== null) return { done: understandLeadGrid(opened, leads) };
+    if (understand === null) return { done: opened };
     return { done: understandMemberGrid(opened, understand) };
   } catch (error) {
     const name = error instanceof Error ? error.name : "";

@@ -7,8 +7,11 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
 import {
+  MEMBER_FILE_MAX_BASE64_CHARS,
   createLeadRequestSchema,
   joinLeadRequestSchema,
+  leadFileAddRequestSchema,
+  leadFileCheckRequestSchema,
   leadFollowUpSentRequestSchema,
   leadsQuerySchema,
   updateLeadRequestSchema,
@@ -16,7 +19,12 @@ import {
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { leadParamsSchema, orgParamsSchema } from "../schemas.js";
+import * as fileService from "./fileService.js";
 import * as service from "./service.js";
+
+/** A file of leads arrives as base64, as a member list does, with room for the rest of
+ *  the body (the mapping, the key). */
+const FILE_BODY_LIMIT = MEMBER_FILE_MAX_BASE64_CHARS + 16 * 1024;
 
 function parseOr400<S extends z.ZodTypeAny>(
   schema: S,
@@ -78,8 +86,29 @@ export function registerLeadRoutes(app: FastifyInstance, deps: LeadRouteDeps): v
       await limit(req, reply);
       return !reply.sent;
     };
+  /** A file is read in a worker thread each time staff check it (a column changed is
+   *  another check): 30 an hour each, 100 from one address — `ipMax` explicit, for the
+   *  front desk that is one address with several staff signed in on it. */
+  const fileCheckLimit = createDualRateLimit({
+    name: "leads_file_check",
+    max: 30,
+    ipMax: 100,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+  /** Add reads the file once more and writes; fewer than checks. */
+  const fileAddLimit = createDualRateLimit({
+    name: "leads_file_add",
+    max: 20,
+    ipMax: 60,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
   const readGate = gate(readLimit);
   const writeGate = gate(writeLimit);
+  const fileDeps: fileService.LeadFileDeps = { sql: deps.sql, redis: deps.redis, log: app.log };
   const signedIn = { preHandler: [app.authenticate] };
 
   app.get("/v1/orgs/:gymId/leads", signedIn, async (req, reply) => {
@@ -91,6 +120,36 @@ export function registerLeadRoutes(app: FastifyInstance, deps: LeadRouteDeps): v
     if (page === null) return;
     return reply.status(200).send(page);
   });
+
+  /** Leads from a file (20c-iii): who would be added, and nothing written. */
+  app.post(
+    "/v1/orgs/:gymId/leads/from-file/check",
+    { bodyLimit: FILE_BODY_LIMIT, preHandler: [app.authenticate] },
+    async (req, reply) => {
+      const params = parseOr400(orgParamsSchema, req.params, req, reply);
+      if (params === null) return;
+      const body = parseOr400(leadFileCheckRequestSchema, req.body, req, reply);
+      if (body === null) return;
+      const preview = await fileService.checkLeadFile(fileDeps, requireUserId(req), params.gymId, body, gate(fileCheckLimit)(req, reply));
+      if (preview === null) return;
+      return reply.status(200).send({ preview });
+    },
+  );
+
+  /** Add exactly the leads the check showed, or nothing (409 `lead_file_changed`). */
+  app.post(
+    "/v1/orgs/:gymId/leads/from-file",
+    { bodyLimit: FILE_BODY_LIMIT, preHandler: [app.authenticate] },
+    async (req, reply) => {
+      const params = parseOr400(orgParamsSchema, req.params, req, reply);
+      if (params === null) return;
+      const body = parseOr400(leadFileAddRequestSchema, req.body, req, reply);
+      if (body === null) return;
+      const done = await fileService.addLeadFile(fileDeps, requireUserId(req), params.gymId, body, gate(fileAddLimit)(req, reply));
+      if (done === null) return;
+      return reply.status(200).send(done);
+    },
+  );
 
   app.get("/v1/orgs/:gymId/leads/:leadId", signedIn, async (req, reply) => {
     const params = parseOr400(leadParamsSchema, req.params, req, reply);
