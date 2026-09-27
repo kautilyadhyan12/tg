@@ -1,12 +1,12 @@
 // A GYM'S LEADS (spec Part 3 §16.3; ROADMAP Stage 2 item 20c-i). Mirrors
-// `0046_gym_leads.sql`, which is the record.
+// `0046_gym_leads.sql` and `0047_lead_follow_ups.sql`, which are the record.
 //
 // People who asked about the gym and have not joined. Held for the gym, like the
 // member list: the only user link is which member of staff added the lead, so the
 // table is on `USER_LINKED_NOT_PURGED_TABLES`, and a closed gym's leads are deleted
 // with its list (`archiveSweep.ts`).
 import { sql } from "drizzle-orm";
-import { check, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { check, date, index, pgTable, smallint, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { citext, createdAt } from "./common.js";
 import { users } from "./identity.js";
 import { gyms } from "./tenancy.js";
@@ -36,6 +36,12 @@ export const gymLeads = pgTable(
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     statusChangedAt: timestamp("status_changed_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Follow-up emails staff have marked as sent from the gym's own mailbox (20c-ii,
+     *  `0047_lead_follow_ups.sql`), and when the last one was. */
+    followUpsSent: smallint("follow_ups_sent").notNull().default(0),
+    followUpLastAt: timestamp("follow_up_last_at", { withTimezone: true }),
+    /** The gym's day the next one is due (`followUpDueOn`); null when none is. */
+    followUpDueOn: date("follow_up_due_on", { mode: "string" }),
   },
   (t) => [
     check("gym_leads_name_len_check", sql`char_length(${t.fullName}) BETWEEN 1 AND 120`),
@@ -50,5 +56,12 @@ export const gymLeads = pgTable(
     index("gym_leads_gym_created_idx").on(t.gymId, t.createdAt, t.id),
     index("gym_leads_gym_status_created_idx").on(t.gymId, t.status, t.createdAt, t.id),
     index("gym_leads_entry_idx").on(t.entryId).where(sql`${t.entryId} IS NOT NULL`),
+    check("gym_leads_follow_ups_sent_check", sql`${t.followUpsSent} BETWEEN 0 AND 3`),
+    check("gym_leads_follow_up_last_check", sql`(${t.followUpsSent} = 0) = (${t.followUpLastAt} IS NULL)`),
+    check(
+      "gym_leads_follow_up_due_check",
+      sql`${t.followUpDueOn} IS NULL OR (${t.status} = 'new' AND ${t.emailOkAt} IS NOT NULL AND ${t.followUpsSent} < 3)`,
+    ),
+    index("gym_leads_follow_up_due_idx").on(t.gymId, t.followUpDueOn).where(sql`${t.followUpDueOn} IS NOT NULL`),
   ],
 );

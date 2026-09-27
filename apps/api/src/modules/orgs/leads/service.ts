@@ -9,6 +9,7 @@ import {
   LEAD_JOIN_CHOOSE_ERROR,
   LEAD_JOIN_MAX_CANDIDATES,
   LEAD_JOIN_STALE_ERROR,
+  LEAD_FOLLOW_UPS,
   LEAD_WORDS,
   LEADS_MAX_PER_GYM,
   LEADS_PAGE,
@@ -18,19 +19,23 @@ import {
   type JoinLeadRequest,
   type JoinLeadResponse,
   type Lead,
+  type LeadFollowUpSentRequest,
   type LeadJoinCandidate,
+  type LeadStatus,
   type LeadsQuery,
   type LeadsResponse,
   type UpdateLeadRequest,
 } from "@app/shared";
 import type { Sql } from "postgres";
 import { z } from "zod";
+import { dayInTz } from "../../gamification/streak.js";
 import { insertAudit } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { applyTyped, EMPTY_VALUES, holdsCard } from "../memberList/byHand.js";
 import { placeLeadInTx } from "../memberList/byHandService.js";
 import { entryFor, lockGym } from "../memberList/repo.js";
 import { readCountry } from "../memberList/phone.js";
+import { followUpDueOn } from "./followUp.js";
 import { leadJoinDecision, sharesContact, type ListRecord } from "./joinRule.js";
 import * as repo from "./repo.js";
 
@@ -43,7 +48,8 @@ type Limit = () => Promise<boolean>;
 
 const notFound = (): OrgsError => new OrgsError(404, "lead_not_found", LEAD_WORDS.lead_not_found);
 
-function toLead(row: repo.LeadRow): Lead {
+/** `today` is the gym's day, which says whether a follow-up is due now. */
+function toLead(row: repo.LeadRow, today: string): Lead {
   return {
     id: row.id,
     fullName: row.fullName,
@@ -58,8 +64,36 @@ function toLead(row: repo.LeadRow): Lead {
     onList: row.onList,
     createdAt: row.createdAt.toISOString(),
     statusChangedAt: row.statusChangedAt.toISOString(),
+    followUp: {
+      sent: row.followUpsSent,
+      dueOn: row.followUpDueOn,
+      dueNow: row.followUpDueOn !== null && row.followUpDueOn <= today,
+      overdue: row.followUpDueOn !== null && row.followUpDueOn < today,
+      lastSentAt: row.followUpLastAt === null ? null : row.followUpLastAt.toISOString(),
+    },
   };
 }
+
+/** A lead's follow-up columns after a write: the count and the last one as given,
+ *  and the next due day worked out again from the status and the tick. */
+function followUpValues(
+  input: { status: LeadStatus; emailOkAt: Date | null; sent: number; lastAt: Date | null },
+  timeZone: string,
+): { followUpsSent: number; followUpLastAt: Date | null; followUpDueOn: string | null } {
+  return {
+    followUpsSent: input.sent,
+    followUpLastAt: input.lastAt,
+    followUpDueOn: followUpDueOn({
+      status: input.status,
+      ticked: input.emailOkAt !== null,
+      sent: input.sent,
+      tickDay: input.emailOkAt === null ? null : dayInTz(input.emailOkAt, timeZone),
+      lastSentDay: input.lastAt === null ? null : dayInTz(input.lastAt, timeZone),
+    }),
+  };
+}
+
+const sameAddress = (a: string | null, b: string | null): boolean => a !== null && b !== null && a.toLowerCase() === b.toLowerCase();
 
 /** A lead's name, email and phone, cleaned by the member list's own rules, so a
  *  lead and the record made from it hold the same address and the same number. */
@@ -139,8 +173,9 @@ export async function listLeads(
   query: LeadsQuery,
   limit: Limit,
 ): Promise<LeadsResponse | null> {
-  await requirePrivilege(deps, gymId, userId, "members.confirm");
+  const { org } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
+  const today = dayInTz(deps.now(), org.timezone);
   let cursor: repo.LeadCursor | null = null;
   if (query.cursor !== undefined) {
     cursor = decodeCursor(query.cursor);
@@ -153,15 +188,16 @@ export async function listLeads(
       status: query.status ?? null,
       like: typed === "" ? null : `%${escapeLike(typed)}%`,
       digits: phoneDigits(typed),
+      dueBy: query.followUp === "due" ? today : null,
       cursor,
       limit: LEADS_PAGE + 1,
     }),
-    repo.leadCounts(deps.sql, gymId),
+    repo.leadCounts(deps.sql, gymId, today),
   ]);
   const shown = page.rows.slice(0, LEADS_PAGE);
   const last = page.rows.length > LEADS_PAGE ? shown[shown.length - 1] : undefined;
   return {
-    leads: shown.map(toLead),
+    leads: shown.map((row) => toLead(row, today)),
     total: page.total,
     cursor: last === undefined ? null : encodeCursor({ at: last.cursorAt, id: last.id }),
     counts,
@@ -169,11 +205,11 @@ export async function listLeads(
 }
 
 export async function getLead(deps: LeadsDeps, userId: string, gymId: string, leadId: string, limit: Limit): Promise<Lead | null> {
-  await requirePrivilege(deps, gymId, userId, "members.confirm");
+  const { org } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
   const row = await repo.leadFor(deps.sql, gymId, leadId);
   if (row === null) throw notFound();
-  return toLead(row);
+  return toLead(row, dayInTz(deps.now(), org.timezone));
 }
 
 /** Two requests past the check at once (two servers): the database's UNIQUE answers,
@@ -209,14 +245,26 @@ export async function createLead(
   if (!(await limit())) return null;
   const contact = cleanContact({ fullName: body.fullName, email: body.email ?? null, phone: body.phone ?? null }, org.country);
   const notes = cleanNotes(body.notes ?? "");
-  const okAt = emailOkAt(body.mayEmail, contact.email, null, deps.now());
+  const at = deps.now();
+  const okAt = emailOkAt(body.mayEmail, contact.email, null, at);
   const row = await clashIsExists(deps.sql.begin(async (tx) => {
     await lockGym(tx, gymId);
     if ((await repo.countLeads(tx, gymId)) >= LEADS_MAX_PER_GYM) {
       throw new OrgsError(409, "leads_full", LEAD_WORDS.leads_full);
     }
     await refuseHeld(tx, gymId, contact, null);
-    const inserted = await repo.insertLead(tx, gymId, { ...contact, source: body.source, notes, emailOkAt: okAt }, userId);
+    const inserted = await repo.insertLead(
+      tx,
+      gymId,
+      {
+        ...contact,
+        source: body.source,
+        notes,
+        emailOkAt: okAt,
+        ...followUpValues({ status: "new", emailOkAt: okAt, sent: 0, lastAt: null }, org.timezone),
+      },
+      userId,
+    );
     await insertAudit(tx, {
       actorUserId: userId,
       gymId,
@@ -227,7 +275,7 @@ export async function createLead(
     });
     return inserted;
   }));
-  return toLead(row);
+  return toLead(row, dayInTz(at, org.timezone));
 }
 
 export async function updateLead(
@@ -255,6 +303,9 @@ export async function updateLead(
     );
     if (contact.email !== stored.email || contact.phone !== stored.phone) await refuseHeld(tx, gymId, contact, leadId);
     const status = body.status ?? leadStatusSchema.parse(stored.status);
+    const okAt = emailOkAt(body.mayEmail, contact.email, stored, at);
+    // The follow-ups are to one address: a new one starts them again from the first.
+    const kept = sameAddress(contact.email, stored.email);
     const written = await repo.writeLead(
       tx,
       gymId,
@@ -263,10 +314,14 @@ export async function updateLead(
         ...contact,
         source: body.source ?? leadSourceSchema.parse(stored.source),
         notes: body.notes === undefined ? stored.notes : cleanNotes(body.notes),
-        emailOkAt: emailOkAt(body.mayEmail, contact.email, stored, at),
+        emailOkAt: okAt,
         status,
         // A lead moved off "joined" is no longer anybody on the list.
         entryId: status === "joined" ? stored.entryId : null,
+        ...followUpValues(
+          { status, emailOkAt: okAt, sent: kept ? stored.followUpsSent : 0, lastAt: kept ? stored.followUpLastAt : null },
+          org.timezone,
+        ),
       },
       at,
     );
@@ -280,7 +335,72 @@ export async function updateLead(
     });
     return written;
   }));
-  return toLead(row);
+  return toLead(row, dayInTz(at, org.timezone));
+}
+
+/** Staff sent follow-up `step` from the gym's own mailbox to `email`. Counted only as
+ *  the next one, on or after its day, to the lead's current address; the same request
+ *  again answers the lead unchanged. */
+export async function markFollowUpSent(
+  deps: LeadsDeps,
+  userId: string,
+  gymId: string,
+  leadId: string,
+  body: LeadFollowUpSentRequest,
+  limit: Limit,
+): Promise<Lead | null> {
+  const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return null;
+  const at = deps.now();
+  const today = dayInTz(at, org.timezone);
+  const row = await deps.sql.begin(async (tx) => {
+    const stored = await repo.lockLead(tx, gymId, leadId);
+    if (stored === null) throw notFound();
+    if (stored.followUpsSent >= body.step) return stored;
+    const status = leadStatusSchema.parse(stored.status);
+    const due = followUpValues(
+      { status, emailOkAt: stored.emailOkAt, sent: stored.followUpsSent, lastAt: stored.followUpLastAt },
+      org.timezone,
+    ).followUpDueOn;
+    // Only the next one, on or after its day, and to the address the lead has now: a
+    // panel opened before the address changed emailed somebody else.
+    if (
+      due === null ||
+      due > today ||
+      !sameAddress(body.email, stored.email) ||
+      body.step !== stored.followUpsSent + 1 ||
+      body.step > LEAD_FOLLOW_UPS
+    ) {
+      throw new OrgsError(409, "follow_up_not_due", LEAD_WORDS.follow_up_not_due);
+    }
+    const written = await repo.writeLead(
+      tx,
+      gymId,
+      leadId,
+      {
+        fullName: stored.fullName,
+        email: stored.email,
+        phone: stored.phone,
+        source: leadSourceSchema.parse(stored.source),
+        notes: stored.notes,
+        emailOkAt: stored.emailOkAt,
+        status,
+        entryId: stored.entryId,
+        ...followUpValues({ status, emailOkAt: stored.emailOkAt, sent: body.step, lastAt: at }, org.timezone),
+      },
+      at,
+    );
+    await insertAudit(tx, {
+      actorUserId: userId,
+      gymId,
+      action: "org.lead_follow_up_sent",
+      targetType: "lead",
+      targetId: leadId,
+      meta: { step: String(body.step) },
+    });
+    return written;
+  });
+  return toLead(row, today);
 }
 
 export async function deleteLead(deps: LeadsDeps, userId: string, gymId: string, leadId: string, limit: Limit): Promise<boolean | null> {
@@ -350,7 +470,7 @@ export async function joinLead(
     const stored = await repo.lockLead(tx, gymId, leadId);
     if (stored === null) throw notFound();
     if (stored.status === "joined" && stored.entryId !== null && stored.onList) {
-      return { kind: "joined", body: { lead: toLead(stored), outcome: "already_joined" } };
+      return { kind: "joined", body: { lead: toLead(stored, dayInTz(at, org.timezone)), outcome: "already_joined" } };
     }
     const lead = { fullName: stored.fullName, email: stored.email, phone: stored.phone };
     const records = await repo.recordsSharingContact(tx, gymId, lead, RECORDS_READ);
@@ -395,6 +515,10 @@ export async function joinLead(
         emailOkAt: stored.emailOkAt,
         status: "joined",
         entryId: placed.entryId,
+        ...followUpValues(
+          { status: "joined", emailOkAt: stored.emailOkAt, sent: stored.followUpsSent, lastAt: stored.followUpLastAt },
+          org.timezone,
+        ),
       },
       at,
     );
@@ -406,6 +530,6 @@ export async function joinLead(
       targetId: leadId,
       meta: { outcome: placed.outcome, entryId: placed.entryId },
     });
-    return { kind: "joined", body: { lead: toLead(written), outcome: placed.outcome } };
+    return { kind: "joined", body: { lead: toLead(written, dayInTz(at, org.timezone)), outcome: placed.outcome } };
   });
 }
