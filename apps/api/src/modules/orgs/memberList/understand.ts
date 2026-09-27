@@ -141,7 +141,7 @@ const droppedColumns = (stats: readonly ColumnStat[]): Set<number> =>
  *  (which makes a bare "PIN" a postcode and not a door code) and whether it
  *  carries bank columns (which makes a bare "Account Number" a bank account
  *  and not the gym's own number for a member). */
-function hintsOf(rows: Rows, headerRow: number | null): SheetHints {
+export function hintsOf(rows: Rows, headerRow: number | null): SheetHints {
   if (headerRow === null) return { hasAddress: false, hasPostcode: false, hasBank: false };
   return sheetHints((rows[headerRow] ?? []).map((cell) => tidyCell(cell)));
 }
@@ -196,7 +196,7 @@ const widthOf = (rows: Rows): number => rows.reduce((widest, row) => Math.max(wi
  *  column. The others are named in a warning, never read. Every sheet is looked
  *  at with the cheap rules only — no phone number is parsed until the sheet is
  *  chosen — so a workbook of many sheets costs no more than one. */
-function chooseSheet(sheets: readonly MemberFileSheet[], country: CountryCode | null, remembered: RememberedMapping | null): number {
+export function chooseSheet(sheets: readonly MemberFileSheet[], country: CountryCode | null, remembered: RememberedMapping | null): number {
   if (sheets.length <= 1) return 0;
   // The sheet whose headings this gym's last upload was mapped on, first.
   const last = remembered === null ? null : remembered.mapping.sheet;

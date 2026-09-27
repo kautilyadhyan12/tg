@@ -4,6 +4,16 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-27 · 20c-iii (Folder B): leads from a file (branch `leads-from-a-file`)
+
+- **Why this job:** next on Folder B's list after 20c-ii (1d waits on Razorpay). **Risky (an upload of strangers' details), Opus xhigh; Kd said *"go"*.** No new package, no migration.
+- **Built:** `POST …/leads/from-file/check` (who would be added; nothing written) and `POST …/leads/from-file` (Add). The member file worker gained a leads job (`leadFile.ts`): the member reader reads name, email and phone, then "heard of you from" and notes by heading; `sourceWords.ts` sorts the file's word into our five and keeps it in the notes; `filePlan.ts` decides new · already a lead (left alone) · already a member (same name and contact, on the list now) · repeated in the file. Add re-reads the file under the gym's lock and adds exactly Check's list (its key) or answers 409 `lead_file_changed`; staff's permission tick is required. Web: **Import leads** on Leads, a panel with the groups by name, the sorted words, the columns to change, the unticked note.
+- **Worst thing, first test:** Glofox's Lead Report ("Opted to Receive Marketing" = Yes) and ABC GymSales' uploader ("Email Opted Out" = false), headings from their own pages: every lead New, unticked, none due. **Three breaks, each RED, restored sha256-identical:** every lead with an email ticked; ticked and due today; only the first lead ticked.
+- **Found by the tests, fixed:** a son sharing his member mother's email was dropped as "twice in the file" before the member check ran; the repeat check now runs after it. "Nobody is emailed." showed only once Add was ready.
+- **Verified:** api tsc 0 · api eslint 0 · shared tsc 0 · shared lint 0 · lead file unit 71/71 · lead file routes 9/9 · **whole api suite on `aihg_b`: 3,911 of 3,912**, the GBP clash passes alone · web 2,982 of 2,982 (`poseAssets.contract` local Node 24) · web eslint 0 on changed files. Root `pnpm lint` fails locally on pnpm 11's version pin only.
+- **Cost at the ceiling** (10,000 rows, 2.0 MB, mains 2,592 MHz, three runs, event-loop monitor): Check 2.2–3.5 s with the server answering nobody at most 46–59 ms; Add 3.0–6.2 s, at most 46–96 ms; Check of the same 10,000 again 2.3–3.7 s, at most 52–121 ms; the leads page after 35–46 ms. The check's reply is 1,348 KB (every name, for See all).
+- **Open:** round-one review (`reviews/20c-iii-1-review.md`); Kd's click-through. The two extra passes run once over 20c (i–v) before a real gym uses Leads.
+
 ## 2026-09-27 · 5b-v (Folder A): Members redesigned, planned and drawn (branch `members-redesign-plan`)
 
 - **Why this job:** next on Folder A's list after 5b-iii paused. A planning job, no code; the rulebook named Fable max, Kd kept Opus 5.5 max and said *"go"*.
