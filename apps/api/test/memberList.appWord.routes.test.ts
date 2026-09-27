@@ -252,7 +252,7 @@ d("the App word on the Members list (real Postgres)", () => {
   );
 
   it(
-    "a mother who signed up under a name on neither record: the first record reads 'In the app' and asks staff to check, the other says who uses the email",
+    "a mother who signed up under a name on neither record: the first record reads 'In the app' and names her on its page (names are never compared), the other says who uses the email",
     async () => {
       const gym = await makeGym();
       const email = addr("ng-family");
@@ -261,9 +261,9 @@ d("the App word on the Members list (real Postgres)", () => {
       await accept(await signIn(email, "Mum"));
 
       const sam = await rowOf(gym, "Sam Ng");
-      expect(sam.app.word).toBe("in_app");
-      expect(sam.app.line).toBe("Signed up in the app as Mum. Check this is them.");
-      expect(sam.app.lineTone).toBe("amber");
+      expect(sam.app).toMatchObject({ word: "in_app", line: null, lineTone: "plain" });
+      // The page names who uses the app with the record, for staff to see (and Not this person).
+      expect((await detailOf(gym, sam.entryId)).members.map((member) => member.displayName)).toEqual(["Mum"]);
       const ivy = await rowOf(gym, "Ivy Ng");
       expect(ivy.app.word).toBe("not_in_app");
       expect(ivy.app.line).toBe("Sam Ng uses the app with this email.");
@@ -272,18 +272,17 @@ d("the App word on the Members list (real Postgres)", () => {
   );
 
   it(
-    "one person on one record under another name reads 'In the app' with 'Signed up in the app as …'; the same name reads plainly",
+    "one person on one record reads 'In the app' plainly whatever name they gave the app: the email is the link (RULINGS 2026-09-28)",
     async () => {
       const gym = await makeGym();
       await add(gym, { fullName: "Daniel Wu", email: addr("dwu") });
       await add(gym, { fullName: "Grace Hill", email: addr("ghill") });
-      await accept(await signIn(addr("dwu"), "Dan Wu"));
+      await accept(await signIn(addr("dwu"), "du"));
       await accept(await signIn(addr("ghill"), "Hill Grace"));
 
-      const daniel = await rowOf(gym, "Daniel Wu");
-      expect(daniel.app.word).toBe("in_app");
-      expect(daniel.app.line).toBe("Signed up in the app as Dan Wu. Check this is them.");
+      expect((await rowOf(gym, "Daniel Wu")).app).toMatchObject({ word: "in_app", line: null, lineTone: "plain" });
       expect((await rowOf(gym, "Grace Hill")).app.line).toBeNull();
+      expect((await page(gym, "?app=needs_check")).entries).toEqual([]);
     },
     TEST_TIMEOUT_MS,
   );
@@ -382,7 +381,7 @@ d("the App word on the Members list (real Postgres)", () => {
       expect(words["Uma Rao"]?.word).toBe("not_in_app");
       expect(words["Uma Rao"]?.line).toBe("Unsubscribed from your emails");
       // Her email never went, so she is not "Invited".
-      expect(words["Emma Hart"]).toEqual({ word: "not_in_app", tone: "grey", at: null, line: "Not sent: emails to this address bounce.", lineTone: "amber" });
+      expect(words["Emma Hart"]).toEqual({ word: "not_in_app", tone: "grey", at: null, line: "The invitation email wasn't sent: emails to this address bounce.", lineTone: "amber" });
       expect(words["Ava Thompson"]?.word).toBe("invited");
       expect(words["Ava Thompson"]?.line).toBe("Invitation sent");
       expect(words["Ava Thompson"]?.at).not.toBeNull();

@@ -661,15 +661,7 @@ export const orgService = {
       authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/restore`, {}),
     ),
 
-  /** "This is them" (§18.4): the person in the app under another name is this record's. */
-  confirmSamePerson: (gymId, entryId, userId) =>
-    readThrough(
-      memberListEntryWrittenSchema,
-      'this person',
-      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/this-is-them`, { userId }),
-    ),
-
-  /** "Not them" (§18.4): that person is taken out of the app; the record stays. */
+  /** "Not this person" (§18.4): that account is taken out of the app; the record stays. */
   notThem: (gymId, entryId, userId) =>
     readThrough(
       memberListEntryWrittenSchema,

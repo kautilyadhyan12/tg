@@ -1730,9 +1730,6 @@ export const memberListEntryDetailSchema = memberListEntrySchema.extend({
   /** Whether Remove would end somebody's app (One Remove, RULINGS 2026-09-27), worked out
    *  by the rule Remove itself uses, so the box says only what will happen. */
   removeEndsApp: z.boolean().default(false),
-  /** The one person in the app matched to this record who signed up under another name,
-   *  not yet answered: the page asks "This is them" or "Not them" (Kd, 2026-09-27). */
-  nameCheck: z.object({ userId: z.string().uuid(), appName: z.string() }).strict().nullable().default(null),
 });
 export type MemberListEntryDetail = z.infer<typeof memberListEntryDetailSchema>;
 
@@ -1751,9 +1748,7 @@ export const memberListEntryOutcomeSchema = z.enum([
   "already_taken_off",
   /** A past member removed from the app; their record was already off the list. */
   "removed_from_app",
-  /** "This is them": the person in the app under another name is this record's. */
-  "name_confirmed",
-  /** "Not them": that person is out of the app; the record stays as it was. */
+  /** "Not this person": that account is out of the app; the record stays as it was. */
   "not_them",
   "restored",
   "merged",
@@ -1898,14 +1893,14 @@ export const MEMBER_LIST_BY_HAND_WORDS = {
     "This would remove more of your members than we do without asking. Check the number, then confirm again to go ahead.",
   remove_needs_app: "This person uses the app, and your role can't remove people from it. Ask the owner.",
   remove_needs_list: "Removing someone also moves them to past members, which your role can't do. Ask the owner.",
-  name_check_gone: "This person isn't matched to this record any more. Close it and open it again.",
+  not_them_gone: "This person isn't using the app with this record any more. Close it and open it again.",
   not_them_needs_remove: "Taking somebody out of the app needs a role that can remove members. Ask the owner.",
   not_them_staff: "This person is staff or has a free place, so they stay in the app. Change that under Staff.",
 } as const;
 
-/** "This is them" and "Not them": who in the app the answer is about (§18.4). */
-export const memberListNameCheckRequestSchema = z.object({ userId: z.string().uuid() }).strict();
-export type MemberListNameCheckRequest = z.infer<typeof memberListNameCheckRequestSchema>;
+/** "Not this person": which account in the app it is about (§18.4). */
+export const memberListNotThemRequestSchema = z.object({ userId: z.string().uuid() }).strict();
+export type MemberListNotThemRequest = z.infer<typeof memberListNotThemRequestSchema>;
 
 /** The sentence for a card number typed into a field, naming the field. */
 export const memberListCardTypedWords = (field: string): string =>

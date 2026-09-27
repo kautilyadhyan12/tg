@@ -539,12 +539,6 @@ export const gymMembers = pgTable(
      *  NULL (entry_id) — written in `0040_join_by_invitation.sql`, which Drizzle's
      *  builder cannot express. */
     entryId: uuid("entry_id"),
-    /** "This is them" (§18.4): the record staff said this person is, though they signed up
-     *  under another name, so the list stops asking while they stay matched to it. The
-     *  foreign key is `(gym_id, name_confirmed_entry_id)` → the record's `(gym_id, id)`,
-     *  ON DELETE SET NULL (name_confirmed_entry_id) — written in
-     *  `0048_member_name_confirmed.sql`, which Drizzle's builder cannot express. */
-    nameConfirmedEntryId: uuid("name_confirmed_entry_id"),
     createdAt: createdAt(),
   },
   (t) => [

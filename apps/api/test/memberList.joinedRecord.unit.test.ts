@@ -154,8 +154,9 @@ describe("an app member follows the record they joined with", () => {
       rows: [row(2, { ...emmaNewEmail, phone: "+447700900999" }), row(3, { fullName: "Someone Else", email: emma.email ?? null })],
       entries: [entry("r1", emma)],
       member: { email: emma.email ?? null, joinedEntryId: "r1" },
-      // The roster then shows "On your list as Someone Else" with "Check this is them"
-      // (3b-ii-b's name check): the same answer she had by address before this job.
+      // The roster then shows "On your list as Someone Else" beside the name she gave the
+      // app (names are never compared, RULINGS 2026-09-28): the same answer she had by
+      // address before this job.
       expect: { mark: "on_list", leaving: false },
     },
     {

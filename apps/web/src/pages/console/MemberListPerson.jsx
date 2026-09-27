@@ -277,6 +277,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const [loadError, setLoadError] = useState(null);
   const [attempt, setAttempt] = useState(0);
   const [mode, setMode] = useState(entryId === null ? 'edit' : 'view');
+  /** The person in the app a "Not this person" box is about. */
+  const [notThem, setNotThem] = useState(null);
   const [form, setForm] = useState(() => formFrom(null, fields));
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
@@ -456,16 +458,12 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     return run(asked, () => orgService.takeOffMemberListEntry(gymId, asked), "We couldn't remove this person.");
   };
 
-  /** The answer to "Signed up in the app as Dan Wu. Check this is them." (§18.4). */
-  const answerName = (same) => {
+  /** "Not this person" (§18.4): somebody uses the app with this record's email who is not
+   *  the person on it. Staff know it; the app never guesses it from names (RULINGS
+   *  2026-09-28). That account comes out of the app, and the record stays. */
+  const notThisPerson = (member) => {
     const asked = shown.entryId;
-    const person = shown.nameCheck?.userId;
-    if (person === undefined) return undefined;
-    return run(
-      asked,
-      () => (same ? orgService.confirmSamePerson(gymId, asked, person) : orgService.notThem(gymId, asked, person)),
-      "We couldn't save that. Please try again.",
-    );
+    return run(asked, () => orgService.notThem(gymId, asked, member.userId), "We couldn't take them out of the app. Please try again.");
   };
 
   /** Invite this person, or send their invitation again because they asked. The
@@ -769,29 +767,6 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             {inv.detail}
           </p>
         ) : null}
-        {p.nameCheck !== null && p.formerAt === null ? (
-          <p className="text-sm" style={{ color: C.soft }} data-testid="name-check-why">
-            The email matches your list, but the name they gave the app is different. It may be a short name, or someone else using
-            this email address.
-          </p>
-        ) : null}
-        {p.nameCheck !== null && p.formerAt === null ? (
-          <div className="flex flex-wrap gap-2" data-testid="name-check">
-            <button
-              type="button"
-              onClick={() => void answerName(true)}
-              disabled={busy || readOnly}
-              className={`${BUTTON} flex-1 sm:flex-none`}
-              style={{ background: C.orangeBg, color: C.orange }}
-            >
-              <Check className="w-4 h-4" />
-              Yes, this is them
-            </button>
-            <button type="button" onClick={() => setMode('notThem')} disabled={busy || readOnly} className={`${BUTTON} flex-1 sm:flex-none`} style={{ background: C.plain, color: C.soft }}>
-              Not them
-            </button>
-          </div>
-        ) : null}
         {action === 'under_age' ? (
           <div className="flex flex-col gap-1">
             <p className="text-sm" style={{ color: C.muted }} data-testid="under-age-note">
@@ -824,16 +799,32 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         ) : null}
         {p.members.length > 0 ? (
           <Section title="In the app">
+            {/* Who uses the app with this record's email, under the name they gave the app.
+                The email is the link; names are never compared (RULINGS 2026-09-28). */}
             {p.members.map((m) => (
-              <div key={m.userId} className="py-2 flex gap-3 items-start" style={{ borderTop: `1px solid ${C.line}` }}>
+              <div key={m.userId} className="py-2 flex gap-3 items-start" style={{ borderTop: `1px solid ${C.line}` }} data-testid="in-app-person">
                 <Smartphone className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: C.green }} />
-                <div className="text-sm" style={{ color: C.soft }}>
+                <div className="text-sm flex-1 min-w-0" style={{ color: C.soft }}>
                   <span style={{ color: '#fff' }}>{m.displayName}</span> joined {whenWords(m.joinedAt)}
                   <span className="block text-xs" style={{ color: C.muted }}>
                     {m.visits === 1 ? '1 visit' : `${String(m.visits)} visits`}
                     {m.lastVisitOn !== null ? ` · last ${dayWords(m.lastVisitOn)}` : ''}
                   </span>
                 </div>
+                {p.formerAt === null ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNotThem(m);
+                      setMode('notThem');
+                    }}
+                    disabled={busy || readOnly}
+                    className="text-xs font-semibold whitespace-nowrap self-center"
+                    style={{ color: C.orange }}
+                  >
+                    Not {p.fullName || 'this person'}?
+                  </button>
+                ) : null}
               </div>
             ))}
           </Section>
@@ -931,8 +922,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         </div>
       );
     }
-    if (mode === 'notThem' && p.nameCheck !== null) {
-      const appName = p.nameCheck.appName || 'This person';
+    if (mode === 'notThem' && notThem !== null) {
+      const appName = notThem.displayName || 'This person';
       return (
         <div className="flex flex-col gap-3" data-testid="confirm-not-them">
           <p className="text-[15px]" style={{ color: '#fff' }}>
@@ -943,7 +934,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             {name} stays on your list: check their email address, change it with Edit, then invite them again.
           </p>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => void answerName(false)} disabled={busy || readOnly} className={BUTTON} style={{ background: C.redBg, color: C.red }}>
+            <button type="button" onClick={() => void notThisPerson(notThem)} disabled={busy || readOnly} className={BUTTON} style={{ background: C.redBg, color: C.red }}>
               Take {appName} out of the app
             </button>
             <button type="button" onClick={() => backTo('view')} className={BUTTON} style={{ background: C.plain, color: C.soft }}>

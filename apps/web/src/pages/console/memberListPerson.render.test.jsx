@@ -25,7 +25,6 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       restoreMemberListEntry: vi.fn(),
       mergeMemberListEntries: vi.fn(),
       deleteFormerMemberListEntry: vi.fn(),
-      confirmSamePerson: vi.fn(),
       notThem: vi.fn(),
     },
   };
@@ -425,59 +424,50 @@ describe('a person on the list', () => {
     expect(await dialog().findByText('Back on your list.')).toBeTruthy();
   });
 
-  describe("'Signed up in the app as Dan Wu. Check this is them.' (Kd, 2026-09-27: what do I press?)", () => {
+  describe("who uses the app with a record, and Not this person (RULINGS 2026-09-28: the email is the link)", () => {
     const DAN = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
-    const asked = {
+    const daniel = {
       ...person(ADA, 'Daniel Wu'),
       inApp: true,
       removeEndsApp: true,
-      nameCheck: { userId: DAN, appName: 'Dan Wu' },
-      app: { word: 'in_app', tone: 'green', at: null, line: 'Signed up in the app as Dan Wu. Check this is them.', lineTone: 'amber' },
+      app: { word: 'in_app', tone: 'green', at: null, line: null, lineTone: 'plain' },
+      members: [{ userId: DAN, displayName: 'du', joinedAt: '2026-09-07T10:00:00.000Z', visits: 0, lastVisitOn: null }],
     };
 
-    it('Yes, this is them saves the answer for this record, and the question goes', async () => {
-      orgService.getMemberListEntry.mockResolvedValue(entryAnswer(asked));
+    it('names who uses the app under the name they gave it, and asks nothing about the name', async () => {
+      orgService.getMemberListEntry.mockResolvedValue(entryAnswer(daniel));
       openBox(ADA);
-      const check = within(await screen.findByTestId('name-check'));
-      // Why it asks, in one line (Kd, 2026-09-27: "i want to know why this warning is showing").
-      expect(screen.getByTestId('name-check-why').textContent).toBe(
-        'The email matches your list, but the name they gave the app is different. It may be a short name, or someone else using this email address.',
-      );
-      const answered = { ...asked, nameCheck: null, app: { ...asked.app, line: null, lineTone: 'plain' } };
-      orgService.confirmSamePerson.mockResolvedValue(written('name_confirmed', answered));
-      fireEvent.click(check.getByRole('button', { name: 'Yes, this is them' }));
-      await waitFor(() => expect(orgService.confirmSamePerson).toHaveBeenCalledWith(GYM, ADA, DAN));
-      expect(await dialog().findByText("Saved. The names won't be asked about again.")).toBeTruthy();
-      expect(screen.queryByTestId('name-check')).toBeNull();
-      expect(orgService.notThem).not.toHaveBeenCalled();
+      const who = within(await screen.findByTestId('in-app-person'));
+      expect(who.getByText('du')).toBeTruthy();
+      expect(dialog().queryByText(/Check this is them/)).toBeNull();
+      expect(who.getByRole('button', { name: 'Not Daniel Wu?' })).toBeTruthy();
     });
 
-    it('Not them asks first, naming who loses the app and who stays, then takes out that one account', async () => {
-      orgService.getMemberListEntry.mockResolvedValue(entryAnswer(asked));
+    it('Not this person asks first, naming who loses the app and who stays, then takes out that one account', async () => {
+      orgService.getMemberListEntry.mockResolvedValue(entryAnswer(daniel));
       openBox(ADA);
-      fireEvent.click(within(await screen.findByTestId('name-check')).getByRole('button', { name: 'Not them' }));
+      fireEvent.click(within(await screen.findByTestId('in-app-person')).getByRole('button', { name: 'Not Daniel Wu?' }));
       const box = within(screen.getByTestId('confirm-not-them'));
-      expect(box.getByText("Dan Wu isn't Daniel Wu?")).toBeTruthy();
-      expect(box.getByText(/Dan Wu signed up in the app with the email address on Daniel Wu's record\. They lose the app with your gym\./)).toBeTruthy();
+      expect(box.getByText("du isn't Daniel Wu?")).toBeTruthy();
+      expect(box.getByText(/du signed up in the app with the email address on Daniel Wu's record\. They lose the app with your gym\./)).toBeTruthy();
       expect(box.getByText(/Daniel Wu stays on your list/)).toBeTruthy();
       fireEvent.click(box.getByRole('button', { name: 'Cancel' }));
       expect(orgService.notThem).not.toHaveBeenCalled();
 
-      fireEvent.click(within(screen.getByTestId('name-check')).getByRole('button', { name: 'Not them' }));
-      const out = { ...asked, inApp: false, removeEndsApp: false, nameCheck: null, app: { word: 'not_in_app', tone: 'grey', at: null, line: 'Invitation cancelled', lineTone: 'plain' } };
+      fireEvent.click(within(screen.getByTestId('in-app-person')).getByRole('button', { name: 'Not Daniel Wu?' }));
+      const out = { ...daniel, inApp: false, removeEndsApp: false, members: [], app: { word: 'not_in_app', tone: 'grey', at: null, line: 'Invitation cancelled', lineTone: 'plain' } };
       orgService.notThem.mockResolvedValue(written('not_them', out));
-      fireEvent.click(within(screen.getByTestId('confirm-not-them')).getByRole('button', { name: 'Take Dan Wu out of the app' }));
+      fireEvent.click(within(screen.getByTestId('confirm-not-them')).getByRole('button', { name: 'Take du out of the app' }));
       await waitFor(() => expect(orgService.notThem).toHaveBeenCalledWith(GYM, ADA, DAN));
       expect(await dialog().findByText('Taken out of the app. Check the email address on this record, then invite them again.')).toBeTruthy();
       expect(orgService.takeOffMemberListEntry).not.toHaveBeenCalled();
     });
 
-    it('asks nothing where the names agree', async () => {
-      orgService.getMemberListEntry.mockResolvedValue(entryAnswer({ ...asked, nameCheck: null, app: { ...asked.app, line: null, lineTone: 'plain' } }));
+    it("offers no Not this person on a past member's page: Remove is there for them", async () => {
+      orgService.getMemberListEntry.mockResolvedValue(entryAnswer({ ...daniel, formerAt: '2026-09-25T10:00:00.000Z' }));
       openBox(ADA);
-      await dialog().findByText('In the app');
-      expect(screen.queryByTestId('name-check')).toBeNull();
-      expect(screen.queryByTestId('name-check-why')).toBeNull();
+      const who = within(await screen.findByTestId('in-app-person'));
+      expect(who.queryByRole('button', { name: /^Not / })).toBeNull();
     });
   });
 

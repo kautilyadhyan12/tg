@@ -1982,7 +1982,7 @@ wrong-file guard does; after the tick the file wins. "Gone" marks the record for
 - **The four identity fields are hand-edit marks too** (§11.6), so a phone staff corrected is asked about before a file writes over it.
 - **Not changed here:** app members are still matched to the list by their proved email or stated phone (ROADMAP 3a-vi-b, below).
 
-**Out of 3a-vi-b (built 2026-09-25; RULINGS 2026-09-25).** A member who joined by invitation is matched to the record that invitation was for (`gym_members.entry_id`), before their email or phone, everywhere "on your list" is decided: the upload's preview and confirm (`reconcile`'s `onListOf`), the one read behind the list, Remove all, the person's page and Invite (`membersAgainstList`, the joined record first and the contact channels only for a member with none), the roster's "On your list as …" (a current record only), and the staff stamp. So the gym's software changing their email keeps them on the list, and their row reads "in the app" so Invite does not email the new address; and when their own record comes off they are off the list, even while a relative's record on the same address stays. A member with no joined record (a code, a family address at the time, a deleted record) is matched by email, then phone, as before. "Put on the list" for a member whose joined record is former brings that record back rather than making a second. A staged upload's groups remember each row's record id (`entryId`), so a second look at a preview gives the same answer. Known edge, by 3a-vi's rule (3): another name on the member's lone old address is read as their record renamed, and the member follows it; the roster's name check then says "Check this is them". **On Members (RULINGS 2026-09-25)**, a paid-place member the list does not hold, once the gym has a list, has an amber edge, "Not on your list" with why (their record taken off on a day · was on an earlier list · never on a list the gym imported), the name on a current record holding their address, and "Put back on list" / "Add to list" (5b's "Put on the list", brought forward); only for staff with `members.confirm` (`orgMember.offList`). No migration, no new package.
+**Out of 3a-vi-b (built 2026-09-25; RULINGS 2026-09-25).** A member who joined by invitation is matched to the record that invitation was for (`gym_members.entry_id`), before their email or phone, everywhere "on your list" is decided: the upload's preview and confirm (`reconcile`'s `onListOf`), the one read behind the list, Remove all, the person's page and Invite (`membersAgainstList`, the joined record first and the contact channels only for a member with none), the roster's "On your list as …" (a current record only), and the staff stamp. So the gym's software changing their email keeps them on the list, and their row reads "in the app" so Invite does not email the new address; and when their own record comes off they are off the list, even while a relative's record on the same address stays. A member with no joined record (a code, a family address at the time, a deleted record) is matched by email, then phone, as before. "Put on the list" for a member whose joined record is former brings that record back rather than making a second. A staged upload's groups remember each row's record id (`entryId`), so a second look at a preview gives the same answer. Known edge, by 3a-vi's rule (3): another name on the member's lone old address is read as their record renamed, and the member follows it; the roster's name check then said "Check this is them" (until 2026-09-28: names are no longer compared). **On Members (RULINGS 2026-09-25)**, a paid-place member the list does not hold, once the gym has a list, has an amber edge, "Not on your list" with why (their record taken off on a day · was on an earlier list · never on a list the gym imported), the name on a current record holding their address, and "Put back on list" / "Add to list" (5b's "Put on the list", brought forward); only for staff with `members.confirm` (`orgMember.offList`). No migration, no new package.
 - **Measured** (2026-09-25, mains, 2,592 MHz): 5a's second month on the real server reads 3 new · 2 missing · phone 2, email 1, name 1, status 4 (was 7 new, 6 missing); the same 20 people as "Surname, First" read 20 updated (was 20 new, 20 missing). At 10,000 people and 2,000 members, a month where every phone changed: confirm's bystander worst 2,909 ms, preview's 641 ms; the same status-only month on master 2,841 ms and 439 ms, on this job 2,920 ms and 559 ms (run-to-run noise is larger). At 200 people, every phone changed: confirm 134 ms, preview 57 ms.
 
 ### 11.5 Filters and Invite
@@ -2847,7 +2847,7 @@ app confusion"*. Built in 5b-v-a-i, and where this section says otherwise, this 
   something needs checking, the sentence on the person's page (and on hover). Check these is
   one quiet "⚠ 4 need checking" link beside the count, not a box. No button inside a row:
   "Using the app" rows are a name, "In the app since 7 Sep 2026" and one tag (Complimentary ·
-  Not on your list · Check this is them); the row opens the person's panel (as a lead's),
+  Not on your list); the row opens the person's panel (as a lead's),
   which holds Add to your list / Put back on your list and Remove. "Using the app" has
   "Search by name" (the name they signed up with, and the list's name for staff who see the
   list; never by email) with the count beside it.
@@ -2899,28 +2899,33 @@ app confusion"*. Built in 5b-v-a-i, and where this section says otherwise, this 
   They're already a past member. This ends their app with your gym, and they keep their own
   workouts." Remove's box says the app ends only when Remove's own rule says it will
   (`removeEndsApp`).
-- **"Signed up in the app as Dan Wu. Check this is them."** now has two buttons. **Yes, this
-  is them** stops the question for that person and that record, on the page, the list and
-  the roster (`gym_members.name_confirmed_entry_id`, migration 0048; matched to a different
-  record later, it is asked again). **Not them** asks first ("Dan Wu isn't Daniel Wu? … They
-  lose the app with your gym. Daniel Wu stays on your list: check their email address,
-  change it with Edit, then invite them again.") and takes out that one account: the record
-  stays as it was, the invitation to the record's address stops, and it needs the
-  `members.remove` tick.
-- **Asked again at the next look** (Kd: *"i want to know why this warning is showing"*; *"Not
-  sent: this address was no longer on your list … what is trying to say?"*). The page says
-  why it asks, under the warning: "The email matches your list, but the name they gave the
-  app is different. It may be a short name, or someone else using this email address." The
-  name rule itself is unchanged: a short form (Dan for Daniel) is still asked about, since
-  the same rule would take Priya for Priyanka or Chris for Christine, often relatives on one
-  family address, the case it exists for; one tap answers it for good. **An invitation
-  whose email never went is not "Invited":** it reads **Not in the app**, amber, with why
-  and what to press ("Not sent: when the email was due to go, this person wasn't on your
-  list. Press Invite to send it now."), and counts under Not invited yet; an email that went
-  and bounced stays **Invited** · "This email bounced…". (The line Kd saw was false: a test
-  run's sender, sharing the local database, had skipped his local gym's waiting invitations
-  under its own address key. A test's sender now touches only its own gyms, `gymIds`, as
-  the sweeps already do.)
+- **The email on the list is the link; names are never compared (RULINGS 2026-09-28).** Kd:
+  *"daniel wu enter the name as du , but the email is correct , now how on earth gym staff
+  will know du is daniel wu"*. As GymMaster, Gym Insight and Gymdesk do (their help pages,
+  read that day: the app finds the member's account by the email on file; GymMaster's "member
+  must have correct email to login; this is their username"), the person who proves the
+  email on a record is that record's person, whatever name they give the app. So there is no
+  "Signed up in the app as … Check this is them" any more, on a row, a page or the roster
+  (it amends 2026-09-23 (A)). A person's page lists who uses the app with it under the name
+  they gave the app ("du joined 7 September 2026"), with **Not Daniel Wu?** beside each for
+  staff who know it is somebody else — a relative on a family address, a stranger at a
+  mistyped one. It asks first ("du isn't Daniel Wu? du signed up in the app with the email
+  address on Daniel Wu's record. They lose the app with your gym. Daniel Wu stays on your
+  list: check their email address, change it with Edit, then invite them again.") and takes
+  out that one account: the record stays, the invitation to the record's address stops, and
+  it needs the `members.remove` tick. "Using the app" shows "On your list as Daniel Wu" beside
+  the name they gave the app, and marks nothing. A stranger at a mistyped address is stopped
+  where they can be — the invitation's own "It's not me" — which reaches the list as "Whoever
+  gets email at … says they aren't Daniel". No join codes: a code tells nobody who someone is
+  (staff would see "du" waiting all the same), where a proved email ties them to a record.
+- **An invitation whose email never went is not "Invited"** (Kd: *"Not sent: this address
+  was no longer on your list … what is trying to say?"*): it reads **Not in the app**, amber,
+  with the reason in words that say the email was not sent, and what to press ("The
+  invitation email wasn't sent: this person wasn't on your list when it was due to go. Press
+  Invite to send it now."), and counts under Not invited yet; an email that went and bounced
+  stays **Invited** · "This email bounced…". (The line Kd saw was false: a test run's sender,
+  sharing the local database, had skipped his local gym's waiting invitations under its own
+  address key. A test's sender now touches only its own gyms, `gymIds`, as the sweeps do.)
 
 ### 18.1 The drawings
 
@@ -3010,7 +3015,7 @@ wording (18.12); "Download" is Glofox's and TeamUp's.
 information"*; RULINGS 2026-09-27). The ten rows below are now the REASONS `appReason` finds,
 first match wins, exactly as the table says. A screen shows **three words**: **In the app**
 (rows 1, 1b) · **Invited** (3 waiting, 8 didn't arrive, 9) · **Not in the app** (1c, 1d, 2, 4,
-5, 6, 7, 10), and the reason as the one line under it: a red or amber line (1 names differ or
+5, 6, 7, 10), and the reason as the one line under it: a red or amber line (1 two people on one row,
 two people, 1b, 2, 3, 8) asks staff to check something and is shown on the list under the
 row; every other line only explains ("Invitation sent · 22 Sep", "Removed from app · 26 Sep",
 "Left the app", "Declined the invitation", "Unsubscribed from your emails", "Not invited yet",
@@ -3027,7 +3032,7 @@ must come out as a word and never throw). First match wins:
 
 | # | When | Word (colour) | Second line |
 |---|---|---|---|
-| 1 | A current member row reaches someone in the app (§9.7's one-row-per-person match) | **In the app** (green) | Names differ: "Signed up in the app as Dan Wu. Check this is them." (amber) · two people in the app on one row: "Maria Park and Leo Park use the app with these details." |
+| 1 | A current member row reaches someone in the app (§9.7's one-row-per-person match) | **In the app** (green) | Two people in the app on one row: "Maria Park and Leo Park use the app with these details." (amber). Names are never compared (AMENDED 2026-09-28). |
 | 1b | A past member row whose person is still in the app | **In the app** (amber) | "Grace still uses the app through your gym. Remove them from the app if they've left." |
 | 1c | Nobody in the app on this row, but someone in the app with this row's email is matched to another row (a household) | **Not invited** (grey) | "Maria Park uses the app with this email." (the other row's name) |
 | 1d | A current row with an email whose date of birth makes them under 18 by the gym's day | **Not invited** (grey) | "Under 18" — whatever the address's invitation says: Invite never reaches them, so it was a parent's or came before the date was corrected |
@@ -3152,7 +3157,7 @@ that moved is refused as `list_changed`, nothing applied.
 | 14 row tags, 79 standing phrases | 10 App words, one second line each (18.4); every "Not sent:" and "didn't arrive" sentence kept as a line |
 | "Not me" box | "Check these" line → App: Wrong email |
 | Group rows "N using the app … Remove N from the app" | "Check these" line → Not on your list; select → Remove from app |
-| Roster row: Joined date, "On your list as", Check this is them, Complimentary, Remove, Put back on list, Add to list | Member row ("In the app", "Signed up in the app as …"); Not on your list rows and page; Owner and staff box; Remove from app in the bar and on the page |
+| Roster row: Joined date, "On your list as", Complimentary, Remove, Put back on list, Add to list (Check this is them: gone 2026-09-28, names are never compared) | Member row ("In the app"); a person's page names who uses the app with it, with Not {name}?; Not on your list rows and page; Owner and staff box; Remove from app in the bar and on the page |
 | Search, Filter (Status, Membership, Payment, App, Past members), Showing pills, Clear, counts | Kept; App gains the ten words; Show gains Not on your list |
 | Invite N members (by words) + its box, tick, sent screen, share text | The bar's Invite to app on selected people, the same box with names |
 | Remove N from the app (by words) + its box and large-change tick | The bar's Remove from app, the same box with names |

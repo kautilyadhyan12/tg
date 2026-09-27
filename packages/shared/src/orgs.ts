@@ -1593,10 +1593,7 @@ export const orgMemberSchema = z.object({
    *  address invited a stranger, and a different name is the clue). The gym's own data
    *  about the person, so only for staff who may see the list (`members.confirm`);
    *  absent otherwise and when the membership names no list record. */
-  onList: z
-    .object({ name: z.string(), nameCheck: z.enum(["matches", "differs"]) })
-    .strict()
-    .optional(),
+  onList: z.object({ name: z.string() }).strict().optional(),
   /** WHY THIS MEMBER IS NOT ON THE GYM'S LIST (ROADMAP 3a-vi-b), so staff can put it
    *  right: the record they joined with was taken off (`at`), they dropped off without
    *  that, or they were never on a list the gym imported. `sameEmailName`

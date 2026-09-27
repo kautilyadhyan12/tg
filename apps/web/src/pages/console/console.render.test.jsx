@@ -1167,28 +1167,23 @@ describe('Members', () => {
     expect(screen.queryByTitle(/keep it going/i)).toBeNull();
   });
 
-  // ROADMAP 3b-ii-b: a gym that mistyped an address invited a stranger, and the
-  // stranger's own name is the clue (RULINGS 2026-09-23, gap A).
-  it("shows the name on the gym's list beside the one somebody signed up with, and 'Check this is them' where they differ", async () => {
-    const stranger = { ...joinedMemberWithForbiddenExtras, userId: 'u5', displayName: 'Priya Sharma', onList: { name: 'Priya Shah', nameCheck: 'differs' } };
-    const member = { ...joinedMemberWithForbiddenExtras, userId: 'u6', displayName: 'Jose Alvarez', onList: { name: 'José Álvarez', nameCheck: 'matches' } };
-    orgService.getMembers.mockResolvedValue(page([ownerSeat, stranger, member]));
+  // The name on the gym's list sits beside the name somebody gave the app; the email is the
+  // link, and names are never compared (RULINGS 2026-09-28; before, 3b-ii-b asked "Check
+  // this is them" where they differed).
+  it("shows the name on the gym's list beside the one somebody gave the app, and marks nothing for a different name", async () => {
+    const daniel = { ...joinedMemberWithForbiddenExtras, userId: 'u5', displayName: 'du', onList: { name: 'Daniel Wu' } };
+    const jose = { ...joinedMemberWithForbiddenExtras, userId: 'u6', displayName: 'Jose Alvarez', onList: { name: 'José Álvarez' } };
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, daniel, jose]));
     drawMembers();
 
-    expect(await screen.findByText('Priya Sharma')).toBeTruthy();
-    const checks = screen.getAllByTestId('check-this-is-them');
-    expect(checks).toHaveLength(1);
-    // The mark sits on the stranger's row.
-    expect(within(checks[0].closest('li')).getByText('Priya Sharma')).toBeTruthy();
-    // Opened, each panel names the list's person beside the name they signed up with.
-    let panel = await openInApp('Priya Sharma');
-    expect(panel.getByText('On your list as Priya Shah')).toBeTruthy();
-    expect(panel.getByText(/They signed up as Priya Sharma\. Check this is them\./)).toBeTruthy();
-    expect(panel.getByRole('button', { name: 'Remove' })).toBeTruthy();
+    expect(await screen.findByText('du')).toBeTruthy();
+    expect(screen.queryByText(/Check this is them/)).toBeNull();
+    let panel = await openInApp('du');
+    expect(panel.getByText('On your list as Daniel Wu')).toBeTruthy();
+    expect(panel.queryByText(/Check this is them/)).toBeNull();
     fireEvent.click(panel.getByRole('button', { name: 'Close' }));
     panel = await openInApp('Jose Alvarez');
     expect(panel.getByText('On your list as José Álvarez')).toBeTruthy();
-    expect(panel.queryByText(/Check this is them/)).toBeNull();
   });
 
   // ROADMAP 3a-vi-b: an app member the gym's list does not hold looks different, says
@@ -1201,7 +1196,7 @@ describe('Members', () => {
       offList: { reason: 'taken_off', at: '2026-09-25T09:00:00.000Z', sameEmailName: 'Arjun Shah' },
     };
     const newcomer = { ...joinedMemberWithForbiddenExtras, userId: 'u8', displayName: 'Nia Cole', offList: { reason: 'never_listed', at: null, sameEmailName: null } };
-    const emma = { ...joinedMemberWithForbiddenExtras, userId: 'u9', displayName: 'Emma Clarke', onList: { name: 'Emma Clarke', nameCheck: 'matches' } };
+    const emma = { ...joinedMemberWithForbiddenExtras, userId: 'u9', displayName: 'Emma Clarke', onList: { name: 'Emma Clarke' } };
     orgService.getMembers.mockResolvedValue(page([ownerSeat, priya, newcomer, emma]));
     orgService.putMemberOnList.mockResolvedValue({ data: {} });
     drawMembers();
@@ -1566,7 +1561,7 @@ describe('Waiting to join', () => {
 
 describe('Removing a member', () => {
   it("Remove on someone on your list says they move to past members too (One Remove); on someone who isn't, only that they leave the app", async () => {
-    const listed = { ...joinedMemberWithForbiddenExtras, onList: { name: 'Rita Sen', nameCheck: 'matches' } };
+    const listed = { ...joinedMemberWithForbiddenExtras, onList: { name: 'Rita Sen' } };
     const nia = { ...joinedMemberWithForbiddenExtras, userId: 'u8', displayName: 'Nia Cole', offList: { reason: 'never_listed', at: null, sameEmailName: null } };
     orgService.getMembers.mockResolvedValue(page([ownerSeat, listed, nia]));
     drawMembers();

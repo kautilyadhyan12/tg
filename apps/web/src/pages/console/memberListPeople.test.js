@@ -149,8 +149,8 @@ describe("how a row shows the server's App word (spec Part 3 §18.4)", () => {
     ],
     [
       'an invitation email that never went: not in the app, with an amber line to check',
-      app({ word: 'not_in_app', tone: 'grey', line: 'Not sent: emails to this address bounce.', lineTone: 'amber' }),
-      { text: 'Not in the app', tag: 'c-tag-plain', plain: null, note: 'Not sent: emails to this address bounce.' },
+      app({ word: 'not_in_app', tone: 'grey', line: "The invitation email wasn't sent: emails to this address bounce.", lineTone: 'amber' }),
+      { text: 'Not in the app', tag: 'c-tag-plain', plain: null, note: "The invitation email wasn't sent: emails to this address bounce." },
     ],
     [
       'a removal last year keeps its year',

@@ -8,6 +8,9 @@
 // answers every combination of facts and never throws: a state it has not seen falls
 // through to the plainest true reason, never to a confident false one.
 //
+// It never compares the name somebody gave the app with the list's (RULINGS 2026-09-28):
+// the email on the list is the link, and a name proves nothing.
+//
 // An invitation belongs to an ADDRESS, not a person. Where two people on the list share
 // one email and the person in the app is matched to the other record, this record's
 // invitation facts are that person's, not this one's: it says who uses the app with its
@@ -19,17 +22,11 @@ import {
   type MemberAppView,
   type MemberListInvitation,
 } from "@app/shared";
-import { checkName } from "../invites/nameCheck.js";
 
 /** Someone in the app whom this record reaches. */
 export interface AppPerson {
-  /** The name they signed up with. */
+  /** The name they gave the app, only ever shown beside the list's. */
   name: string;
-  /** The name their account was given from its own address, if any: that is no name. */
-  madeFromAddress: string | null;
-  /** Staff said this is the person on the record ("This is them"), so a different name is
-   *  not asked about again. */
-  confirmed?: boolean;
 }
 
 export interface AppWordInput {
@@ -136,10 +133,6 @@ export function appReason(input: AppWordInput): AppReason {
     }
     if (input.inApp.length > 1) {
       return view("in_app", "green", `${names(input.inApp.map((p) => p.name))} use the app with these details.`, "amber");
-    }
-    const [person] = input.inApp;
-    if (person !== undefined && person.confirmed !== true && checkName(input.fullName, person.name, person.madeFromAddress) === "differs") {
-      return view("in_app", "green", `Signed up in the app as ${person.name}. Check this is them.`, "amber");
     }
     return view("in_app", "green");
   }

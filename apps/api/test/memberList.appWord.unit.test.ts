@@ -49,20 +49,21 @@ const word = (over: Partial<AppWordInput>) => appWord({ ...base, ...over });
 
 describe("the spec's table, one case a row (§18.4)", () => {
   const cases: [string, Partial<AppWordInput>, ReturnType<typeof appReason>][] = [
-    ["1 in the app, same name", { inApp: [{ name: "Emma Hart", madeFromAddress: null }] }, { reason: "in_app", tone: "green", at: null, line: null, lineTone: "plain" }],
+    ["1 in the app, same name", { inApp: [{ name: "Emma Hart" }] }, { reason: "in_app", tone: "green", at: null, line: null, lineTone: "plain" }],
     [
-      "1 in the app, another name",
-      { fullName: "Daniel Wu", inApp: [{ name: "Dan Wu", madeFromAddress: null }] },
-      { reason: "in_app", tone: "green", at: null, line: "Signed up in the app as Dan Wu. Check this is them.", lineTone: "amber" },
+      // The email on the list is the link; a name proves nothing (RULINGS 2026-09-28).
+      "1 in the app under another name, read plainly",
+      { fullName: "Daniel Wu", inApp: [{ name: "du" }] },
+      { reason: "in_app", tone: "green", at: null, line: null, lineTone: "plain" },
     ],
     [
       "1 two people in the app on one record",
-      { fullName: "Maria Park", inApp: [{ name: "Maria Park", madeFromAddress: null }, { name: "Leo Park", madeFromAddress: null }] },
+      { fullName: "Maria Park", inApp: [{ name: "Maria Park" }, { name: "Leo Park" }] },
       { reason: "in_app", tone: "green", at: null, line: "Maria Park and Leo Park use the app with these details.", lineTone: "amber" },
     ],
     [
       "1b a past member still in the app",
-      { fullName: "Grace Hall", former: true, inApp: [{ name: "Grace Hall", madeFromAddress: null }] },
+      { fullName: "Grace Hall", former: true, inApp: [{ name: "Grace Hall" }] },
       { reason: "in_app", tone: "amber", at: null, line: "Grace still uses the app through your gym. Remove them from the app if they've left.", lineTone: "amber" },
     ],
     [
@@ -135,7 +136,7 @@ describe("a household: two records on one email, the person in the app matched t
     }
   });
   it("a record that reaches someone itself still reads 'In the app'", () => {
-    expect(reason({ sharedWith: "Maria Park", inApp: [{ name: "Emma Hart", madeFromAddress: null }] }).reason).toBe("in_app");
+    expect(reason({ sharedWith: "Maria Park", inApp: [{ name: "Emma Hart" }] }).reason).toBe("in_app");
   });
 });
 
@@ -155,28 +156,29 @@ describe("someone the list says is under 18", () => {
     }
   });
   it("still reads 'In the app' when they are, and a past member's day of birth is not judged", () => {
-    expect(reason({ ...child, inApp: [{ name: "Leo Park", madeFromAddress: null }] }).reason).toBe("in_app");
+    expect(reason({ ...child, inApp: [{ name: "Leo Park" }] }).reason).toBe("in_app");
     expect(reason({ ...child, former: true, invitation: invitation({ state: "accepted" }) }).reason).toBe("left");
   });
 });
 
-describe("names the way people really sign up (the rule is nameCheck's, 3b-ii-b)", () => {
-  const cases: [string, string, string | null, boolean][] = [
-    // list name, signed-up name, the address it was made from, asks staff to check
-    ["Priya Shah", "Shah, Priya", null, false],
-    ["Seán O'Neill", "Sean ONeill", null, false],
-    ["Daniel Wu", "Dan Wu", null, true],
-    ["Robert Reedman", "Rob Reed", null, true],
-    ["Mary Smith", "mary.smith", "mary.smith", true],
-    ["Anil Kumar Velikkakathu", "Anil V.", null, true],
-    ["Jo Jimenez", "Jo J.", null, true],
-    ["Zhang Wei", "张伟", null, true],
-    ["Leo Park", "Mum", null, true],
+describe("the names people really give the app never make a line (RULINGS 2026-09-28: the email is the link)", () => {
+  // list name, the name given to the app: the ways people write their own name (W3C's
+  // "Personal names around the world"), a short form, an initial, a name made from the
+  // address, another script, a word that is no name at all (Kd's "du").
+  const cases: [string, string][] = [
+    ["Priya Shah", "Shah, Priya"],
+    ["Seán O'Neill", "Sean ONeill"],
+    ["Daniel Wu", "Dan Wu"],
+    ["Daniel Wu", "du"],
+    ["Robert Reedman", "Rob Reed"],
+    ["Mary Smith", "mary.smith"],
+    ["Anil Kumar Velikkakathu", "Anil V."],
+    ["Jo Jimenez", "Jo J."],
+    ["Zhang Wei", "张伟"],
+    ["Leo Park", "Mum"],
   ];
-  it.each(cases)("%s signed up as %s", (list, signed, made, asks) => {
-    const out = reason({ fullName: list, inApp: [{ name: signed, madeFromAddress: made }] });
-    expect(out.reason).toBe("in_app");
-    expect(out.line === null ? false : out.line.startsWith("Signed up in the app as")).toBe(asks);
+  it.each(cases)("%s in the app as %s", (list, given) => {
+    expect(reason({ fullName: list, inApp: [{ name: given }] })).toEqual({ reason: "in_app", tone: "green", at: null, line: null, lineTone: "plain" });
   });
 });
 
@@ -239,7 +241,7 @@ describe("every combination of invitation facts the types allow: a word, and nev
           if (inv === null) expect(["not_invited", "unsubscribed"], where).toContain(out.reason);
           checked += 1;
           // Someone in the app on the record is always "In the app", whatever the invitation says.
-          expect(reason({ invitation: inv, optedOut, former, inApp: [{ name: "Emma Hart", madeFromAddress: null }] }).reason, where).toBe("in_app");
+          expect(reason({ invitation: inv, optedOut, former, inApp: [{ name: "Emma Hart" }] }).reason, where).toBe("in_app");
         }
       }
     }
@@ -249,11 +251,11 @@ describe("every combination of invitation facts the types allow: a word, and nev
 
 describe("the three words a screen shows (Kd, 2026-09-27: the list showed too much)", () => {
   const shown: [string, Partial<AppWordInput>, ReturnType<typeof appWord>][] = [
-    ["in the app", { inApp: [{ name: "Emma Hart", madeFromAddress: null }] }, { word: "in_app", tone: "green", at: null, line: null, lineTone: "plain" }],
+    ["in the app", { inApp: [{ name: "Emma Hart" }] }, { word: "in_app", tone: "green", at: null, line: null, lineTone: "plain" }],
     [
-      "in the app under another name, a line to check",
-      { fullName: "Daniel Wu", inApp: [{ name: "Dan Wu", madeFromAddress: null }] },
-      { word: "in_app", tone: "green", at: null, line: "Signed up in the app as Dan Wu. Check this is them.", lineTone: "amber" },
+      "in the app under another name, plainly",
+      { fullName: "Daniel Wu", inApp: [{ name: "Dan Wu" }] },
+      { word: "in_app", tone: "green", at: null, line: null, lineTone: "plain" },
     ],
     ["invited, the day on their page", { invitation: invitation({ email: email({ result: "delivered" }) }) }, { word: "invited", tone: "grey", at: AT, line: "Invitation sent", lineTone: "plain" }],
     [
@@ -304,7 +306,7 @@ describe("the three words a screen shows (Kd, 2026-09-27: the list showed too mu
     const states = [null, ...memberInviteStateSchema.options];
     for (const state of states) {
       for (const over of [{}, { notMeAt: AT }, { waitingSince: AT }, { removedAt: REMOVED }, { email: email({ result: "bounced" }) }]) {
-        for (const inApp of [[], [{ name: "Emma Hart", madeFromAddress: null }]]) {
+        for (const inApp of [[], [{ name: "Emma Hart" }]]) {
           const input = { invitation: state === null ? null : invitation({ state, ...over }), inApp };
           const found = reason(input);
           const out = word(input);

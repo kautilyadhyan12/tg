@@ -38,7 +38,6 @@ function RosterRow({ member, onOpen }) {
   // An app member the gym's list does not hold (3a-vi-b). Only staff who may see the
   // list are sent it.
   const off = offListView(member.offList);
-  const differs = member.onList?.nameCheck === 'differs';
   return (
     <li className="border-t first:border-t-0" style={{ borderColor: 'var(--line)' }} data-testid={off ? 'member-off-list' : undefined}>
       <button
@@ -59,11 +58,6 @@ function RosterRow({ member, onOpen }) {
             <span className="c-tag c-tag-warn">
               <AlertTriangle aria-hidden="true" className="w-3.5 h-3.5" />
               Not on your list
-            </span>
-          ) : differs ? (
-            <span data-testid="check-this-is-them" className="c-tag c-tag-warn">
-              <AlertTriangle aria-hidden="true" className="w-3.5 h-3.5" />
-              Check this is them
             </span>
           ) : null}
         </span>
@@ -117,20 +111,9 @@ function RosterSheet({ member, words, seesList, canRemove, readOnly, busy, onClo
               The owner and staff use the app free. Staff are changed in Settings.
             </p>
           ) : null}
-          {/* The name on the gym's own list at the address they joined with, beside the
-              name they signed up with: a gym that mistyped an address invited a stranger,
-              and a different name is the clue (RULINGS 2026-09-23, gap A). */}
-          {member.onList ? (
-            <div className="flex flex-col gap-1">
-              <span className="c-s14 c-t2">On your list as {member.onList.name}</span>
-              {member.onList.nameCheck === 'differs' ? (
-                <span className="c-s14 flex items-center gap-1.5" style={{ color: 'var(--warn)' }}>
-                  <AlertTriangle aria-hidden="true" className="w-4 h-4 flex-shrink-0" />
-                  They signed up as {member.displayName}. Check this is them.
-                </span>
-              ) : null}
-            </div>
-          ) : null}
+          {/* The name on the gym's own list, beside the name they gave the app. The email on
+              the list is the link; names are never compared (RULINGS 2026-09-28). */}
+          {member.onList ? <span className="c-s14 c-t2">On your list as {member.onList.name}</span> : null}
           {off ? (
             <div className="flex flex-col gap-1">
               <span className="c-s14 c-w6 flex items-center gap-1.5" style={{ color: 'var(--warn)' }}>

@@ -82,8 +82,6 @@ export interface ListState {
 
 /** One of the gym's own app members, and what its list says about them today. */
 export interface MemberAgainstList extends ListMember {
-  /** The account's address, proved or not: only to tell a name made from it (§18.4). */
-  accountEmail: string | null;
   /** The record they joined with is current; with no such record, a current entry of
    *  this gym matches their verified email, else their stated phone. */
   onList: boolean;
@@ -117,8 +115,6 @@ export interface MemberAgainstList extends ListMember {
   joinedFormer: boolean;
   /** The name on the record they are on the list through, or null. */
   entryFullName: string | null;
-  /** The record staff said this person is though the names differ ("This is them"). */
-  nameConfirmedEntryId: string | null;
   /** When this membership began, for a screen naming the person. */
   joinedAt: Date;
 }
@@ -868,7 +864,6 @@ export async function membersAgainstList(
     {
       user_id: string;
       display_name: string;
-      account_email: string | null;
       email: string | null;
       stated_phone_e164: string | null;
       ever_listed: boolean;
@@ -884,14 +879,11 @@ export async function membersAgainstList(
       joined_former: boolean;
       same_contact: unknown;
       joined_at: Date;
-      name_confirmed_entry_id: string | null;
     }[]
   >`
     SELECT m.user_id,
            m.joined_at,
-           m.name_confirmed_entry_id,
            u.display_name,
-           u.email::text AS account_email,
            (m.complimentary = false
             AND NOT EXISTS (
               SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)) AS seat_counted,
@@ -1011,7 +1003,6 @@ export async function membersAgainstList(
     return {
       userId: row.user_id,
       fullName: row.display_name,
-      accountEmail: row.account_email,
       email: row.email,
       statedPhone: row.stated_phone_e164,
       everListed: row.ever_listed,
@@ -1026,18 +1017,8 @@ export async function membersAgainstList(
       joinedFullName: joinedName,
       joinedFormer: row.joined_former,
       joinedAt: row.joined_at,
-      nameConfirmedEntryId: row.name_confirmed_entry_id,
     };
   });
-}
-
-/** "This is them": this member is the person on this record, whatever the two names. */
-export async function confirmMemberName(tx: TransactionSql, gymId: string, userId: string, entryId: string): Promise<boolean> {
-  const rows = await tx<{ id: string }[]>`
-    UPDATE gym_members SET name_confirmed_entry_id = ${entryId}
-    WHERE gym_id = ${gymId} AND user_id = ${userId} AND removed_at IS NULL
-    RETURNING id`;
-  return rows.length > 0;
 }
 
 const sameContactSchema = z.array(
@@ -2017,15 +1998,12 @@ export async function deleteEntry(tx: TransactionSql, gymId: string, entryId: st
 }
 
 /** Two records joined: the memberships linked to the one not kept are linked to the
- *  kept one (§13.2), and so is a "This is them" answered for it: it is the same person. */
+ *  kept one (§13.2). */
 export async function moveMembershipLinks(tx: TransactionSql, gymId: string, fromEntryId: string, toEntryId: string): Promise<number> {
   const rows = await tx<{ id: string }[]>`
     UPDATE gym_members SET entry_id = ${toEntryId}
     WHERE gym_id = ${gymId} AND entry_id = ${fromEntryId}
     RETURNING id`;
-  await tx`
-    UPDATE gym_members SET name_confirmed_entry_id = ${toEntryId}
-    WHERE gym_id = ${gymId} AND name_confirmed_entry_id = ${fromEntryId}`;
   return rows.length;
 }
 

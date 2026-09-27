@@ -279,8 +279,8 @@ d("not me, and the edges (real Postgres)", () => {
       const strangerRow = roster.items.find((m) => m.userId === stranger.userId);
       const joseRow = roster.items.find((m) => m.userId === jose.userId);
       expect(strangerRow?.displayName).toBe("Priya Sharma");
-      expect(strangerRow?.onList).toEqual({ name: "Priya Shah", nameCheck: "differs" });
-      expect(joseRow?.onList).toEqual({ name: "José Álvarez", nameCheck: "matches" });
+      expect(strangerRow?.onList).toEqual({ name: "Priya Shah" });
+      expect(joseRow?.onList).toEqual({ name: "José Álvarez" });
 
       // And the one tap that ends it: Remove, which the Members screen already has.
       const removed = await send("DELETE", `/v1/orgs/${iron.id}/members/${stranger.userId}`, iron.owner.cookies);
@@ -303,12 +303,12 @@ d("not me, and the edges (real Postgres)", () => {
       expect(named[0]?.display_name).toBe("tom.reed");
       expect((await accept(stranger, await inviteIdOf(gym, typo))).statusCode).toBe(200);
       const row = (await rosterOf(gym, gym.owner)).items.find((m) => m.userId === stranger.userId);
-      expect(row?.onList).toEqual({ name: "Tom Reed", nameCheck: "differs" });
+      expect(row?.onList).toEqual({ name: "Tom Reed" });
 
       // The real Tom, once he types his name, matches.
       await sql`UPDATE users SET display_name = 'Tom Reed' WHERE id = ${stranger.userId}`;
       const renamed = (await rosterOf(gym, gym.owner)).items.find((m) => m.userId === stranger.userId);
-      expect(renamed?.onList).toEqual({ name: "Tom Reed", nameCheck: "matches" });
+      expect(renamed?.onList).toEqual({ name: "Tom Reed" });
     },
     TEST_TIMEOUT_MS,
   );

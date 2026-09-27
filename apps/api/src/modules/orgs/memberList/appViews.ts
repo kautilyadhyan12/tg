@@ -4,7 +4,6 @@
 // all come through here, so they cannot disagree.
 import type { MemberAppFilter, MemberAppView, MemberAppWordCount } from "@app/shared";
 import { MEMBER_APP_FILTER_ORDER } from "@app/shared";
-import { displayNameFromEmail } from "../../auth/service.js";
 import { dayInTz } from "../../gamification/streak.js";
 import { emailHmac } from "../invites/address.js";
 import * as invitesRepo from "../invites/repo.js";
@@ -67,11 +66,7 @@ export async function appFactsOf(
   // Each address someone in the app has proved, with the records they are matched to.
   const heldBy = new Map<string, { entryId: string; name: string }[]>();
   for (const member of members) {
-    const person: AppPerson = {
-      name: member.fullName,
-      madeFromAddress: member.accountEmail === null ? null : displayNameFromEmail(member.accountEmail),
-      confirmed: member.entryId !== null && member.nameConfirmedEntryId === member.entryId,
-    };
+    const person: AppPerson = { name: member.fullName };
     if (member.entryId !== null) add(current, member.entryId, person);
     if (member.formerEntryId !== null) add(former, member.formerEntryId, person);
     if (member.email !== null && member.entryId !== null) {

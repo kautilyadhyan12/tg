@@ -212,10 +212,10 @@ describe("the gym's own list", () => {
       pageOf([
         entry('Ada Lovelace', { inApp: true, app: app({ word: 'in_app', tone: 'green' }) }),
         entry('Bea Hart', {
-          app: app({ word: 'invited', tone: 'grey', line: MEMBER_INVITE_EMAIL_REASON_WORDS.shared_address, lineTone: 'amber' }),
+          app: app({ word: 'not_in_app', tone: 'grey', line: MEMBER_INVITE_EMAIL_REASON_WORDS.shared_address, lineTone: 'amber' }),
         }),
         entry('Cy No Email', { email: null, phone: '+447700900123', app: app({ word: 'not_in_app', tone: 'grey', line: 'No email address' }) }),
-        entry('Dan Wu', { app: app({ word: 'in_app', tone: 'green', line: 'Signed up in the app as Dan. Check this is them.', lineTone: 'amber' }) }),
+        entry('Maria Park', { app: app({ word: 'in_app', tone: 'green', line: 'Maria Park and Leo Park use the app with these details.', lineTone: 'amber' }) }),
       ]),
     );
     draw();
@@ -224,7 +224,7 @@ describe("the gym's own list", () => {
     // One tag per row, as Leads: a ⚠ on the tag itself when something needs checking,
     // the sentence on hover and to a screen reader (and on the person's page).
     expect(within(rows[0]).queryByTestId('needs-check')).toBeNull();
-    expect(rows[1].textContent).toContain('Invited');
+    expect(rows[1].textContent).toContain('Not in the app');
     expect(within(rows[1]).getByTestId('needs-check').getAttribute('title')).toBe(MEMBER_INVITE_EMAIL_REASON_WORDS.shared_address);
     expect(within(rows[1]).getByTestId('needs-check').className).toContain('c-tag-warn');
     expect(rows[1].textContent).not.toContain(MEMBER_INVITE_EMAIL_REASON_WORDS.shared_address);
@@ -234,7 +234,7 @@ describe("the gym's own list", () => {
     expect(rows[2].textContent).not.toContain('No email address');
     expect(within(rows[2]).queryByTestId('needs-check')).toBeNull();
     expect(within(rows[3]).getByTestId('needs-check').getAttribute('aria-label')).toBe(
-      'In the app. Needs checking: Signed up in the app as Dan. Check this is them.',
+      'In the app. Needs checking: Maria Park and Leo Park use the app with these details.',
     );
   });
 

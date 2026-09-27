@@ -1023,7 +1023,7 @@ d("member list: keeping it by hand (real Postgres)", () => {
   // and deleting clears both. The day another table points at a record (visits,
   // bookings), this fails: that job must make the join move its rows too, decide what
   // deleting does to them, and drive both.
-  it("the tables that point at a list record are the membership (its record and its 'This is them') and the joined lead, each with its gym", async () => {
+  it("the tables that point at a list record are the membership and the joined lead, each with its gym", async () => {
     const refs = await sql<{ ref: string }[]>`
       SELECT DISTINCT tc.table_name || '.' || kcu.column_name AS ref
       FROM information_schema.table_constraints tc
@@ -1038,7 +1038,6 @@ d("member list: keeping it by hand (real Postgres)", () => {
       "gym_leads.gym_id",
       "gym_members.entry_id",
       "gym_members.gym_id",
-      "gym_members.name_confirmed_entry_id",
     ]);
   });
 });
