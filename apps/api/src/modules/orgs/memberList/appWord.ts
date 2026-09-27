@@ -1,10 +1,12 @@
-// WHERE A PERSON ON THE LIST STANDS WITH THE APP, IN ONE WORD (spec Part 3 §18.4). Pure.
+// WHERE A PERSON ON THE LIST STANDS WITH THE APP (spec Part 3 §18.4). Pure.
 //
 // Every member row, a person's page, the Filter's App choices and their counts read
-// this function, so no two screens can say different things about one person. First
-// match wins. It decides something about a person, so it answers every combination of
-// facts with a word and never throws: a state it has not seen falls through to the
-// plainest true word, never to a confident false one.
+// this, so no two screens can say different things about one person. `appReason` finds
+// WHY — first match wins, one of eleven reasons — and `appWord` shows it as one of three
+// words (In the app · Invited · Not in the app) with the reason as the line under it
+// (Kd, 2026-09-27: the list showed too much). It decides something about a person, so it
+// answers every combination of facts and never throws: a state it has not seen falls
+// through to the plainest true reason, never to a confident false one.
 //
 // An invitation belongs to an ADDRESS, not a person. Where two people on the list share
 // one email and the person in the app is matched to the other record, this record's
@@ -53,18 +55,64 @@ const firstName = (fullName: string): string => fullName.trim().split(/\s+/)[0] 
 const names = (list: readonly string[]): string =>
   list.length <= 1 ? (list[0] ?? "") : `${list.slice(0, -1).join(", ")} and ${list[list.length - 1] ?? ""}`;
 
+/** Why a person is where they are with the app. */
+export type AppReasonKind =
+  | "in_app"
+  | "wrong_email"
+  | "waiting"
+  | "removed"
+  | "left"
+  | "unsubscribed"
+  | "declined"
+  | "not_arrived"
+  | "invited"
+  | "not_invited";
+
+export interface AppReason {
+  reason: AppReasonKind;
+  /** Amber when a past member is still in the app. */
+  tone: MemberAppView["tone"];
+  line: string | null;
+  lineTone: MemberAppView["lineTone"];
+  at: string | null;
+}
+
 const view = (
-  word: MemberAppView["word"],
+  reason: AppReasonKind,
   tone: MemberAppView["tone"],
   line: string | null = null,
   lineTone: MemberAppView["lineTone"] = "plain",
   at: string | null = null,
-): MemberAppView => ({ word, tone, at, line, lineTone });
+): AppReason => ({ reason, tone, line, lineTone, at });
 
 /** Reasons an email was not sent that are the person's own choice. */
 const OPT_OUT_REASONS = new Set(["unsubscribed", "complained"]);
 
+/** Where each reason puts a person, and the line a reason with no sentence of its own
+ *  shows on their page. */
+const SHOWN: Readonly<Record<AppReasonKind, { word: MemberAppView["word"]; line: string | null }>> = {
+  in_app: { word: "in_app", line: null },
+  waiting: { word: "invited", line: null },
+  not_arrived: { word: "invited", line: null },
+  invited: { word: "invited", line: "Invitation sent" },
+  wrong_email: { word: "not_in_app", line: null },
+  removed: { word: "not_in_app", line: "Removed from app" },
+  left: { word: "not_in_app", line: "Left the app" },
+  unsubscribed: { word: "not_in_app", line: "Unsubscribed from your emails" },
+  declined: { word: "not_in_app", line: "Declined the invitation" },
+  not_invited: { word: "not_in_app", line: "Not invited yet" },
+};
+
+/** The word, its colour and the one line a screen shows for a person (§18.4). */
 export function appWord(input: AppWordInput): MemberAppView {
+  const found = appReason(input);
+  const shown = SHOWN[found.reason];
+  const tone = shown.word === "in_app" ? found.tone : "grey";
+  return { word: shown.word, tone, at: found.at, line: found.line ?? shown.line, lineTone: found.lineTone };
+}
+
+/** WHY a person is where they are with the app: first match wins. */
+export function appReason(input: AppWordInput): AppReason {
   const first = firstName(input.fullName);
   const inv = input.invitation;
 

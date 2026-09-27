@@ -71,7 +71,7 @@ function person(over = {}) {
     source: 'upload',
     inApp: false,
     invitation: null,
-    app: { word: 'not_invited', tone: 'grey', at: null, line: null, lineTone: 'plain' },
+    app: { word: 'not_in_app', tone: 'grey', at: null, line: 'Not invited yet', lineTone: 'plain' },
     extra: [],
     handEdited: [],
     members: [],
@@ -217,12 +217,12 @@ describe("a person's page", () => {
     expect(await page().findByText('Invited. The email goes out within a few minutes.')).toBeTruthy();
     expect(orgService.inviteMemberListEntry).toHaveBeenCalledWith(GYM, ADA);
     expect(await page().findByText('Invited')).toBeTruthy();
-    expect(page().queryByText('Not invited')).toBeNull();
+    expect(page().queryByText('Not in the app')).toBeNull();
     expect(onChanged).toHaveBeenCalled();
   });
 
   it('says why somebody the list says is under 18 cannot be invited, with nothing to press', async () => {
-    openPerson(person({ dateOfBirth: '2010-03-14', app: { word: 'not_invited', tone: 'grey', at: null, line: 'Under 18', lineTone: 'plain' } }));
+    openPerson(person({ dateOfBirth: '2010-03-14', app: { word: 'not_in_app', tone: 'grey', at: null, line: 'Under 18', lineTone: 'plain' } }));
     expect((await page().findByTestId('under-age-note')).textContent).toBe(MEMBER_INVITE_WORDS.under_age);
     expect(page().getByText('Under 18')).toBeTruthy();
     expect(page().queryByRole('button', { name: 'Invite' })).toBeNull();
@@ -231,7 +231,7 @@ describe("a person's page", () => {
 
   it('a child at a parent\'s invited address, or one corrected after inviting, is offered nothing to send or share', async () => {
     // The invitation hangs on the address, so the child's page carries the parent's.
-    openPerson(person({ dateOfBirth: '2010-03-14', invitation: invitation(wentEmail), app: { word: 'not_invited', tone: 'grey', at: null, line: 'Under 18', lineTone: 'plain' } }));
+    openPerson(person({ dateOfBirth: '2010-03-14', invitation: invitation(wentEmail), app: { word: 'not_in_app', tone: 'grey', at: null, line: 'Under 18', lineTone: 'plain' } }));
     expect((await page().findByTestId('under-age-note')).textContent).toBe(MEMBER_INVITE_WORDS.under_age);
     expect(page().getByText('Under 18')).toBeTruthy();
     expect(page().queryByText(/^Invited/)).toBeNull();

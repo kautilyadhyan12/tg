@@ -1271,14 +1271,14 @@ export async function readEntries(
   // (round one, Low-2, and `inAppEntryIdsWithFormer`'s own note).
   const records = query.records ?? "current";
   const settings = deps.invites ?? null;
-  // THE APP WORDS ASKED FOR (§18.4) are worked out for every current member by the one
-  // rule, and the page is cut from the records that hold them. They are current
-  // members' words, so a page of past members is not narrowed by them.
-  const askedWords = query.app === undefined ? null : new Set(Array.isArray(query.app) ? query.app : [query.app]);
+  // THE APP CHOICES ASKED FOR (§18.4) are worked out for every current member by the one
+  // rule, and the page is cut from the records that answer to any of them. They are
+  // current members' words, so a page of past members is not narrowed by them.
+  const asked = query.app === undefined ? null : new Set(Array.isArray(query.app) ? query.app : [query.app]);
   let appIds: string[] | null = null;
-  if (askedWords !== null && records === "current") {
-    const { words } = await currentAppWords(deps.sql, settings, gymId, members, deps.now());
-    appIds = [...words].flatMap(([id, word]) => (askedWords.has(word) ? [id] : []));
+  if (asked !== null && records === "current") {
+    const { choices } = await currentAppWords(deps.sql, settings, gymId, members, deps.now());
+    appIds = [...choices].flatMap(([id, mine]) => (mine.some((choice) => asked.has(choice)) ? [id] : []));
   }
   const page = await repo.entriesPage(deps.sql, {
     gymId,

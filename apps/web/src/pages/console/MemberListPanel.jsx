@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ChevronRight, Loader2, Mail, Search, SlidersHorizontal, Upload, UserPlus, X } from 'lucide-react';
-import { MEMBER_APP_WORDS, MEMBER_LIST_QUERY_MAX_CHARS } from '@app/shared';
+import { MEMBER_APP_FILTER_WORDS, MEMBER_LIST_QUERY_MAX_CHARS } from '@app/shared';
 import { orgService, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import MemberListInvite from './MemberListInvite';
@@ -103,7 +103,7 @@ function FilterBox({ list, filters, words, total, onChange, onClear, onClose }) 
                 'App',
                 list.appWords.map((w) => (
                   <Chip key={w.word} pressed={filters.app.includes(w.word)} onClick={() => onChange(toggleApp(filters, w.word))}>
-                    {MEMBER_APP_WORDS[w.word]} <span className="c-n">{count(w.count)}</span>
+                    {MEMBER_APP_FILTER_WORDS[w.word]} <span className="c-n">{count(w.count)}</span>
                   </Chip>
                 )),
               )
@@ -160,14 +160,9 @@ function usePhone() {
   return phone;
 }
 
-/** One person's App word: the tag, and the plain line under it. */
+/** One person's App word. What only explains it is on their own page. */
 function AppWord({ view }) {
-  return (
-    <span className="flex flex-wrap items-center gap-x-2 gap-y-1 md:flex-col md:items-start">
-      <span className={`c-tag ${view.tag}`}>{view.text}</span>
-      {view.plain !== null ? <span className="c-s13 c-t3">{view.plain}</span> : null}
-    </span>
-  );
+  return <span className={`c-tag ${view.tag}`}>{view.text}</span>;
 }
 
 // `onRosterChanged` tells the Members screen that the list moved, so "Using the app",
@@ -328,7 +323,7 @@ export default function MemberListPanel({
   };
   const noList = list !== null && !list.hasList && list.counts.entries === 0 && former === 0;
   const today = gymToday(gym?.timezone);
-  const wrongEmail = list?.appWords.find((w) => w.word === 'wrong_email')?.count ?? 0;
+  const needsCheck = list?.appWords.find((w) => w.word === 'needs_check')?.count ?? 0;
   const seeWho = (word) => {
     setTyped('');
     change({ ...EMPTY_FILTERS, app: [word] });
@@ -392,7 +387,7 @@ export default function MemberListPanel({
   return (
     <div className="flex flex-col gap-5 md:gap-6" data-testid="member-list-panel">
       {/* Check these (§18.2): only a line with a number, each opening the people it names. */}
-      {wrongEmail > 0 ? (
+      {needsCheck > 0 ? (
         <section className="c-callout flex-col gap-2" aria-labelledby="check-these" data-testid="check-these">
           <h2 id="check-these" className="c-s15 c-w6 c-t1 flex items-center gap-2">
             <AlertTriangle aria-hidden="true" className="w-[18px] h-[18px]" style={{ color: 'var(--warn)' }} />
@@ -401,11 +396,11 @@ export default function MemberListPanel({
           <div className="flex flex-col md:pl-[26px]">
             <button
               type="button"
-              onClick={() => seeWho('wrong_email')}
+              onClick={() => seeWho('needs_check')}
               className="flex items-center justify-between md:justify-start gap-3 min-h-11 md:min-h-0 text-left c-s14"
             >
               <span className="c-t1">
-                {wrongEmail === 1 ? '1 invitation reached the wrong person' : `${count(wrongEmail)} invitations reached the wrong person`}
+                {needsCheck === 1 ? `1 ${words.person} needs checking` : `${count(needsCheck)} ${words.people} need checking`}
               </span>
               <span className="c-w6 c-lk flex-shrink-0">See who</span>
             </button>

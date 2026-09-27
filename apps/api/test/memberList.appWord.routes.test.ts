@@ -226,7 +226,7 @@ d("the App word on the Members list (real Postgres)", () => {
       await accept(await signIn(email, "Maria Park"));
 
       const leoRow = await rowOf(gym, "Leo Park");
-      expect(leoRow.app.word).toBe("not_invited");
+      expect(leoRow.app.word).toBe("not_in_app");
       expect(leoRow.app.line).toBe("Maria Park uses the app with this email.");
       expect(leoRow.inApp).toBe(false);
       const mariaRow = await rowOf(gym, "Maria Park");
@@ -243,7 +243,7 @@ d("the App word on the Members list (real Postgres)", () => {
       expect(inApp.total).toBe(1);
       expect((await viewOf(gym)).appWords).toEqual([
         { word: "in_app", count: 1 },
-        { word: "not_invited", count: 1 },
+        { word: "not_in_app", count: 1 },
       ]);
     },
     TEST_TIMEOUT_MS,
@@ -263,7 +263,7 @@ d("the App word on the Members list (real Postgres)", () => {
       expect(sam.app.line).toBe("Signed up in the app as Mum. Check this is them.");
       expect(sam.app.lineTone).toBe("amber");
       const ivy = await rowOf(gym, "Ivy Ng");
-      expect(ivy.app.word).toBe("not_invited");
+      expect(ivy.app.word).toBe("not_in_app");
       expect(ivy.app.line).toBe("Sam Ng uses the app with this email.");
     },
     TEST_TIMEOUT_MS,
@@ -315,7 +315,8 @@ d("the App word on the Members list (real Postgres)", () => {
       }
       for (const name of ["Olivia Bennett", "Tom Reed"]) {
         const row = await rowOf(gym, name);
-        expect(row.app.word, name).toBe("removed");
+        expect(row.app.word, name).toBe("not_in_app");
+        expect(row.app.line, name).toBe("Removed from app");
         expect(row.app.at, name).not.toBeNull();
         expect(row.invitation?.removedAt, name).toBe(row.app.at);
       }
@@ -324,7 +325,7 @@ d("the App word on the Members list (real Postgres)", () => {
   );
 
   it(
-    "Wrong email, Declined, Left the app, Unsubscribed, Email didn't arrive, Invited and Not invited, each through the real routes, and the Filter holds each",
+    "wrong email, declined, left the app, unsubscribed, an email that didn't arrive, invited and never invited, each through the real routes, and the Filter holds each",
     async () => {
       const gym = await makeGym();
       await add(gym, { fullName: "Priya Shah", email: addr("priya") });
@@ -363,27 +364,43 @@ d("the App word on the Members list (real Postgres)", () => {
       }
 
       const words = Object.fromEntries((await page(gym)).entries.map((entry) => [entry.fullName, entry.app]));
-      expect(words["Priya Shah"]?.word).toBe("wrong_email");
-      expect(words["Priya Shah"]?.line).toBe(`Whoever gets email at ${addr("priya")} says they aren't Priya. Check the address with Priya.`);
-      expect(words["Ben Cole"]?.word).toBe("declined");
-      expect(words["Kim Lee"]?.word).toBe("left");
-      expect(words["Uma Rao"]?.word).toBe("unsubscribed");
-      expect(words["Emma Hart"]?.word).toBe("not_arrived");
-      expect(words["Emma Hart"]?.line).toBe("Not sent: emails to this address bounce.");
+      expect(words["Priya Shah"]).toEqual({
+        word: "not_in_app",
+        tone: "grey",
+        at: null,
+        line: `Whoever gets email at ${addr("priya")} says they aren't Priya. Check the address with Priya.`,
+        lineTone: "red",
+      });
+      expect(words["Ben Cole"]?.word).toBe("not_in_app");
+      expect(words["Ben Cole"]?.line).toBe("Declined the invitation");
+      expect(words["Kim Lee"]?.word).toBe("not_in_app");
+      expect(words["Kim Lee"]?.line).toBe("Left the app");
+      expect(words["Uma Rao"]?.word).toBe("not_in_app");
+      expect(words["Uma Rao"]?.line).toBe("Unsubscribed from your emails");
+      expect(words["Emma Hart"]).toEqual({ word: "invited", tone: "grey", at: null, line: "Not sent: emails to this address bounce.", lineTone: "amber" });
       expect(words["Ava Thompson"]?.word).toBe("invited");
+      expect(words["Ava Thompson"]?.line).toBe("Invitation sent");
       expect(words["Ava Thompson"]?.at).not.toBeNull();
-      expect(words["Noah Fox"]).toEqual({ word: "not_invited", tone: "grey", at: null, line: null, lineTone: "plain" });
+      expect(words["Noah Fox"]).toEqual({ word: "not_in_app", tone: "grey", at: null, line: "Not invited yet", lineTone: "plain" });
       expect(words["Mia Stone"]?.line).toBe("No email address");
 
       const counts = (await viewOf(gym)).appWords;
+      expect(counts.map(({ word }) => word)).toEqual(["invited", "not_in_app", "needs_check"]);
       for (const { word, count } of counts) {
         const filtered = await page(gym, `?app=${word}`);
         expect(filtered.total, word).toBe(count);
-        expect(filtered.entries.every((entry) => entry.app.word === word), word).toBe(true);
+        const holds = (entry: MemberListEntry) => (word === "needs_check" ? entry.app.lineTone !== "plain" : entry.app.word === word);
+        expect(filtered.entries.every(holds), word).toBe(true);
       }
-      expect(counts.reduce((sum, { count }) => sum + count, 0)).toBe(8);
-      // Two words at once are both.
-      expect((await page(gym, "?app=declined&app=left")).entries.map((entry) => entry.fullName).sort()).toEqual(["Ben Cole", "Kim Lee"]);
+      // The three words hold everybody once; Needs checking is Priya and Emma.
+      expect(counts.filter(({ word }) => word !== "needs_check").reduce((sum, { count }) => sum + count, 0)).toBe(8);
+      expect((await page(gym, "?app=needs_check")).entries.map((entry) => entry.fullName).sort()).toEqual(["Emma Hart", "Priya Shah"]);
+      // Two choices at once are both.
+      expect((await page(gym, "?app=invited&app=needs_check")).entries.map((entry) => entry.fullName).sort()).toEqual([
+        "Ava Thompson",
+        "Emma Hart",
+        "Priya Shah",
+      ]);
     },
     TEST_TIMEOUT_MS,
   );
@@ -408,7 +425,7 @@ d("the App word on the Members list (real Postgres)", () => {
         line: "Grace still uses the app through your gym. Remove them from the app if they've left.",
         lineTone: "amber",
       });
-      expect(byName["Leo Ford"]?.word).toBe("not_invited");
+      expect(byName["Leo Ford"]?.word).toBe("not_in_app");
       expect(byName["Leo Ford"]?.line).toBe("Invitation cancelled");
       // Past members hold no App word in the Filter's counts.
       expect((await viewOf(gym)).appWords).toEqual([]);

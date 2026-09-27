@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  MEMBER_APP_WORDS,
-  MEMBER_APP_WORD_ORDER,
+  MEMBER_APP_FILTER_ORDER,
+  MEMBER_APP_FILTER_WORDS,
   memberAppViewSchema,
   memberAppWordSchema,
   isLargeMemberListChange,
@@ -486,7 +486,7 @@ describe("pressing confirm, and the list you keep (3a-iii-b's own shapes)", () =
       membershipTypes: [],
       paymentStatuses: [],
       fields: [],
-      appWords: [{ word: "in_app" as const, count: 3 }],
+      appWords: [{ word: "in_app" as const, count: 3 }, { word: "needs_check" as const, count: 1 }],
     };
     expect(memberListViewSchema.parse(view)).toEqual(view);
     // A GYM WITH NO LIST IS A SCREEN, NOT A MISSING ONE: every field still has to
@@ -554,7 +554,7 @@ describe("pressing confirm, and the list you keep (3a-iii-b's own shapes)", () =
       formerAt: null,
       source: "upload" as const,
       inApp: false,
-      app: { word: "not_invited" as const, tone: "grey" as const, at: null, line: null, lineTone: "plain" as const },
+      app: { word: "not_in_app" as const, tone: "grey" as const, at: null, line: "Not invited yet", lineTone: "plain" as const },
     };
     expect(memberListEntriesPageSchema.parse({ total: 1, entries: [entry], cursor: null }).cursor).toBeNull();
     expect(
@@ -740,15 +740,17 @@ describe("the wider record, kept (3a-v-b's own shapes)", () => {
     expect(memberListEntriesQuerySchema.safeParse({ record: "former" }).success).toBe(false);
   });
 
-  it("the App word is one of ten, and a page asks for them by name and no other (5b-v-a-i, §18.4)", () => {
+  it("the App word is one of three, and a page asks for them, or Needs checking, by name and no other (5b-v-a-i, §18.4)", () => {
     expect(memberListEntriesQuerySchema.parse({ app: "in_app" }).app).toBe("in_app");
-    expect(memberListEntriesQuerySchema.parse({ app: ["invited", "not_arrived"] }).app).toEqual(["invited", "not_arrived"]);
+    expect(memberListEntriesQuerySchema.parse({ app: ["invited", "needs_check"] }).app).toEqual(["invited", "needs_check"]);
     expect(memberListEntriesQuerySchema.safeParse({ app: "uses_the_app" }).success).toBe(false);
-    expect(memberListEntriesQuerySchema.safeParse({ app: Array.from({ length: 11 }, () => "invited") }).success).toBe(false);
-    expect(MEMBER_APP_WORD_ORDER).toHaveLength(10);
-    expect(new Set(MEMBER_APP_WORD_ORDER)).toEqual(new Set(memberAppWordSchema.options));
-    for (const word of memberAppWordSchema.options) expect(MEMBER_APP_WORDS[word].length).toBeGreaterThan(0);
-    const view = { word: "removed", tone: "grey", at: "2026-09-26T09:30:00.000Z", line: null, lineTone: "plain" };
+    expect(memberListEntriesQuerySchema.safeParse({ app: "wrong_email" }).success).toBe(false);
+    expect(memberListEntriesQuerySchema.safeParse({ app: Array.from({ length: 5 }, () => "invited") }).success).toBe(false);
+    expect(memberAppWordSchema.options).toEqual(["in_app", "invited", "not_in_app"]);
+    expect(MEMBER_APP_FILTER_ORDER).toEqual(["in_app", "invited", "not_in_app", "needs_check"]);
+    for (const word of MEMBER_APP_FILTER_ORDER) expect(MEMBER_APP_FILTER_WORDS[word].length).toBeGreaterThan(0);
+    expect(memberAppViewSchema.safeParse({ word: "removed", tone: "grey", at: null, line: null, lineTone: "plain" }).success).toBe(false);
+    const view = { word: "not_in_app", tone: "grey", at: "2026-09-26T09:30:00.000Z", line: "Removed from app", lineTone: "plain" };
     expect(memberAppViewSchema.parse(view)).toEqual(view);
     expect(memberAppViewSchema.safeParse({ ...view, extra: 1 }).success).toBe(false);
     expect(memberAppViewSchema.safeParse({ ...view, tone: "orange" }).success).toBe(false);
@@ -771,7 +773,7 @@ describe("the wider record, kept (3a-v-b's own shapes)", () => {
       formerAt: null,
       source: "upload" as const,
       inApp: false,
-      app: { word: "not_invited" as const, tone: "grey" as const, at: null, line: null, lineTone: "plain" as const },
+      app: { word: "not_in_app" as const, tone: "grey" as const, at: null, line: "Not invited yet", lineTone: "plain" as const },
     };
     // The invitation (3b-i-a) is null for a person never invited, and for a row from a
     // server too old to send it.
@@ -829,7 +831,7 @@ describe("keeping the list by hand (3a-iv's own shapes)", () => {
     formerAt: null,
     source: "typed",
     inApp: false,
-    app: { word: "not_invited" as const, tone: "grey" as const, at: null, line: null, lineTone: "plain" as const },
+    app: { word: "not_in_app" as const, tone: "grey" as const, at: null, line: "Not invited yet", lineTone: "plain" as const },
     extra: [{ key: "locker_no", label: "Locker No", value: "L-1" }],
     handEdited: ["status", "extra:locker_no"],
     members: [],

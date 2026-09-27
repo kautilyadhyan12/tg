@@ -142,7 +142,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 5b-v. **Members, redesigned** (RULINGS 2026-09-26): planned 2026-09-27 (spec §18, 17 drawings in `docs/design/console/pages`): one list, ten App words, tick boxes and one action bar, boxes that name who changes. Four jobs, each Opus xhigh with its review round, in this order:
        - 5b-v-a. **The one list** (§18.2–18.4), split 2026-09-27 in two (spec §18.10); today's buttons kept until 5b-v-b.
          - 5b-v-a-i. [ ] **The list and its App words**: the page in the new look, the App word function and its table test, Check these, the Filter (Show: Members · Past members), the empty list; the "Using the app" tab kept, restyled.
-         - 5b-v-a-ii. [ ] **Not on your list, and a trainer's list**: Show: Not on your list with Owner and staff, Check these' second line, a trainer's list; the "Using the app" tab folded into the one list.
+         - 5b-v-a-ii. [ ] **One list, one Remove** (RULINGS 2026-09-27): Remove makes a member a past member AND ends their app, Put back undoes both; tabs Members · Past members; Not on your list with Owner and staff; a trainer's list; "Using the app" folded in.
        - 5b-v-b. [ ] **Select and act** (§18.5–18.6): tick boxes, Select all, the bar; Invite, Remove from app and Download CSV on the selected people, the boxes with names; 5b-iii's server parts.
        - 5b-v-c. [ ] **A person's page** (§18.6–18.7): every button kept, Invite asks first, Remove from app on the page, the page for someone not on your list, Add member and Edit restyled.
        - 5b-v-d. [ ] **Import, who has left** (§18.8, was 5b-iii-b): each missing person marked Left or Still a member; Upload and Review restyled.

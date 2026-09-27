@@ -1,4 +1,4 @@
-import { MEMBER_APP_WORDS, MEMBER_APP_WORD_ORDER, MEMBER_INVITE_WORDS, underAgeOn } from '@app/shared';
+import { MEMBER_APP_FILTER_ORDER, MEMBER_APP_FILTER_WORDS, MEMBER_APP_WORDS, MEMBER_INVITE_WORDS, underAgeOn } from '@app/shared';
 import { dayWords } from './memberListView';
 
 // The gym's own list on the Members screen (ROADMAP 5b-i; spec Part 3 §9.14, §11.5,
@@ -68,9 +68,9 @@ export function activeFilters(filters, words) {
       out.push({ key: `${kind}:${label}`, text: chipText(label, none), without: toggleWord(filters, kind, label) });
     }
   }
-  for (const word of MEMBER_APP_WORD_ORDER) {
+  for (const word of MEMBER_APP_FILTER_ORDER) {
     if (filters.app.includes(word)) {
-      out.push({ key: `app:${word}`, text: MEMBER_APP_WORDS[word], without: toggleApp(filters, word) });
+      out.push({ key: `app:${word}`, text: MEMBER_APP_FILTER_WORDS[word], without: toggleApp(filters, word) });
     }
   }
   return out;
@@ -162,15 +162,20 @@ export function toggleApp(filters, word) {
 
 const APP_TAGS = { green: 'c-tag-good', amber: 'c-tag-warn', red: 'c-tag-bad', grey: 'c-tag-plain' };
 
-/** The server's App word as a screen shows it (§18.4): the tag's words and colour, the
- *  plain line under the word (the day for "Invited"), and a red or amber line under the
- *  whole row. */
+/** The server's App word as a screen shows it (§18.4): the word and its colour; `note`,
+ *  a red or amber line that asks staff to check something, shown on the list under the
+ *  whole row; and `plain`, the line that only explains ("Invitation sent · 22 Sep"),
+ *  shown on the person's own page and never on the list (Kd, 2026-09-27: the list
+ *  showed too much). */
 export function appView(app, today = null) {
-  const word = MEMBER_APP_WORDS[app.word];
-  const text = app.word === 'removed' && app.at !== null ? `${word} · ${shortWhen(app.at, today)}` : word;
-  const plain = app.lineTone === 'plain' ? (app.line ?? (app.word === 'invited' && app.at !== null ? shortWhen(app.at, today) : null)) : null;
-  const note = app.lineTone === 'plain' ? null : app.line;
-  return { text, tag: APP_TAGS[app.tone], plain, note, noteTone: app.lineTone };
+  const line = app.line === null ? null : app.at === null ? app.line : `${app.line} · ${shortWhen(app.at, today)}`;
+  return {
+    text: MEMBER_APP_WORDS[app.word],
+    tag: APP_TAGS[app.tone],
+    plain: app.lineTone === 'plain' ? line : null,
+    note: app.lineTone === 'plain' ? null : line,
+    noteTone: app.lineTone,
+  };
 }
 
 /** The same word for a person's page, in the shape its tag reads. */

@@ -3,7 +3,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   MEMBER_APP_WORDS,
-  MEMBER_APP_WORD_ORDER,
   memberInvitePreviewQuerySchema,
   memberInviteRequestSchema,
   memberListEntryDetailSchema,
@@ -54,7 +53,7 @@ const entry = (over = {}) =>
     source: 'upload',
     inApp: false,
     invitation: null,
-    app: { word: 'not_invited', tone: 'grey', at: null, line: null, lineTone: 'plain' },
+    app: { word: 'not_in_app', tone: 'grey', at: null, line: 'Not invited yet', lineTone: 'plain' },
     extra: [{ key: 'locker', label: 'Locker', value: '12' }],
     handEdited: [],
     members: [],
@@ -96,14 +95,14 @@ describe('the query a filter sends', () => {
   it('keeps the three kinds apart and sends the App words and the search', () => {
     let f = toggleWord(EMPTY_FILTERS, 'membershipType', 'Gold');
     f = toggleWord(f, 'paymentStatus', 'Overdue');
-    f = { ...toggleApp(toggleApp(f, 'invited'), 'not_arrived'), query: '  ada ' };
+    f = { ...toggleApp(toggleApp(f, 'invited'), 'needs_check'), query: '  ada ' };
     expect(serverReads(entriesQueryString(f))).toEqual({
-      app: ['invited', 'not_arrived'],
+      app: ['invited', 'needs_check'],
       membershipType: 'Gold',
       paymentStatus: 'Overdue',
       query: 'ada',
     });
-    expect(toggleApp(f, 'invited').app).toEqual(['not_arrived']);
+    expect(toggleApp(f, 'invited').app).toEqual(['needs_check']);
   });
 
   it('asks for past members only, and never mixes in chips that count the current list', () => {
@@ -123,47 +122,54 @@ describe("how a row shows the server's App word (spec Part 3 §18.4)", () => {
   it.each([
     ['in the app', app({ word: 'in_app', tone: 'green' }), { text: 'In the app', tag: 'c-tag-good', plain: null, note: null }],
     [
-      'in the app under another name',
+      'in the app under another name: a line to check, under the row',
       app({ word: 'in_app', tone: 'green', line: 'Signed up in the app as Dan Wu. Check this is them.', lineTone: 'amber' }),
       { text: 'In the app', tag: 'c-tag-good', plain: null, note: 'Signed up in the app as Dan Wu. Check this is them.' },
     ],
     [
-      'wrong email, its line under the whole row in red',
-      app({ word: 'wrong_email', tone: 'red', line: 'Whoever gets email at x says they are not Jacob.', lineTone: 'red' }),
-      { text: 'Wrong email', tag: 'c-tag-bad', plain: null, note: 'Whoever gets email at x says they are not Jacob.' },
+      'wrong email: a red line to check',
+      app({ word: 'not_in_app', tone: 'grey', line: 'Whoever gets email at x says they are not Jacob.', lineTone: 'red' }),
+      { text: 'Not in the app', tag: 'c-tag-plain', plain: null, note: 'Whoever gets email at x says they are not Jacob.' },
     ],
-    ['removed, with its day', app({ word: 'removed', tone: 'grey', at: '2026-09-26T09:30:00.000Z' }), { text: 'Removed from app · 26 Sep', tag: 'c-tag-plain', plain: null, note: null }],
-    ['invited, the day under the word', app({ word: 'invited', tone: 'grey', at: '2026-09-22T10:00:00.000Z' }), { text: 'Invited', tag: 'c-tag-plain', plain: '22 Sep', note: null }],
     [
-      'invited, not known whether it went',
-      app({ word: 'invited', tone: 'grey', at: '2026-09-22T10:00:00.000Z', line: 'We could not confirm this email went.' }),
-      { text: 'Invited', tag: 'c-tag-plain', plain: 'We could not confirm this email went.', note: null },
+      'removed, the day on their page',
+      app({ word: 'not_in_app', tone: 'grey', line: 'Removed from app', at: '2026-09-26T09:30:00.000Z' }),
+      { text: 'Not in the app', tag: 'c-tag-plain', plain: 'Removed from app · 26 Sep', note: null },
     ],
-    ['not invited, no email', app({ word: 'not_invited', tone: 'grey', line: 'No email address' }), { text: 'Not invited', tag: 'c-tag-plain', plain: 'No email address', note: null }],
     [
-      'email did not arrive, its line in amber',
-      app({ word: 'not_arrived', tone: 'amber', line: 'Not sent: emails to this address bounce.', lineTone: 'amber' }),
-      { text: "Email didn't arrive", tag: 'c-tag-warn', plain: null, note: 'Not sent: emails to this address bounce.' },
+      'invited, the day on their page',
+      app({ word: 'invited', tone: 'grey', line: 'Invitation sent', at: '2026-09-22T10:00:00.000Z' }),
+      { text: 'Invited', tag: 'c-tag-plain', plain: 'Invitation sent · 22 Sep', note: null },
     ],
-    ['a removal last year keeps its year', app({ word: 'removed', tone: 'grey', at: '2025-03-02T12:00:00.000Z' }), { text: 'Removed from app · 2 Mar 2025', tag: 'c-tag-plain', plain: null, note: null }],
+    ['no email, on their page', app({ word: 'not_in_app', tone: 'grey', line: 'No email address' }), { text: 'Not in the app', tag: 'c-tag-plain', plain: 'No email address', note: null }],
+    [
+      'an email that did not arrive: an amber line to check',
+      app({ word: 'invited', tone: 'grey', line: 'Not sent: emails to this address bounce.', lineTone: 'amber' }),
+      { text: 'Invited', tag: 'c-tag-plain', plain: null, note: 'Not sent: emails to this address bounce.' },
+    ],
+    [
+      'a removal last year keeps its year',
+      app({ word: 'not_in_app', tone: 'grey', line: 'Removed from app', at: '2025-03-02T12:00:00.000Z' }),
+      { text: 'Not in the app', tag: 'c-tag-plain', plain: 'Removed from app · 2 Mar 2025', note: null },
+    ],
   ])('%s', (_name, given, expected) => {
     const view = appView(given, TODAY);
     expect({ text: view.text, tag: view.tag, plain: view.plain, note: view.note }).toEqual(expected);
   });
 
-  it('every one of the ten words has its own text and a tag colour', () => {
-    for (const word of MEMBER_APP_WORD_ORDER) {
+  it('each of the three words has its own text and a tag colour', () => {
+    for (const word of ['in_app', 'invited', 'not_in_app']) {
       for (const tone of ['green', 'amber', 'red', 'grey']) {
         const view = appView(app({ word, tone }), TODAY);
-        expect(view.text.startsWith(MEMBER_APP_WORDS[word]), word).toBe(true);
+        expect(view.text, word).toBe(MEMBER_APP_WORDS[word]);
         expect(view.tag, `${word} ${tone}`).toMatch(/^c-tag-(good|warn|bad|plain)$/);
       }
     }
   });
 
   it("a person's page reads the same word", () => {
-    const view = invitationView(entry({ app: app({ word: 'wrong_email', tone: 'red', line: 'Check the address.', lineTone: 'red' }) }), TODAY);
-    expect(view).toEqual({ tag: 'Wrong email', tone: 'red', detail: 'Check the address.', line: null });
+    const view = invitationView(entry({ app: app({ word: 'not_in_app', tone: 'grey', line: 'Check the address.', lineTone: 'red' }) }), TODAY);
+    expect(view).toEqual({ tag: 'Not in the app', tone: 'plain', detail: 'Check the address.', line: null });
   });
 
   it("names the gym's own words on the row, and since when a past member is one", () => {
@@ -229,9 +235,9 @@ describe('the "Showing:" line', () => {
   it('names each ticked word, "no status" in words, and the App words; each pill takes off only itself', () => {
     let f = toggleWord(EMPTY_FILTERS, 'status', 'Frozen');
     f = toggleWord(f, 'status', '');
-    f = { ...toggleWord(f, 'membershipType', 'Gold'), app: ['wrong_email', 'in_app'], query: 'ada' };
+    f = { ...toggleWord(f, 'membershipType', 'Gold'), app: ['needs_check', 'in_app'], query: 'ada' };
     const pills = activeFilters(f, WORDS);
-    expect(pills.map((p) => p.text)).toEqual(['Frozen', 'No status', 'Gold', 'In the app', 'Wrong email']);
+    expect(pills.map((p) => p.text)).toEqual(['Frozen', 'No status', 'Gold', 'In the app', 'Needs checking']);
     expect(pills[0].without.status).toEqual(['']);
     expect(pills[0].without.membershipType).toEqual(['Gold']);
     expect(pills[4].without.app).toEqual(['in_app']);

@@ -1209,7 +1209,7 @@ describe('Members', () => {
     await waitFor(() => expect(orgService.getMembers.mock.calls.length).toBeGreaterThan(1));
   });
 
-  it("says 'Check these' when an invitation reached the wrong person, from the list's own App counts", async () => {
+  it("says 'Check these' when somebody needs checking, from the list's own App counts", async () => {
     orgService.getMemberList.mockResolvedValue({
       data: {
         list: {
@@ -1223,14 +1223,14 @@ describe('Members', () => {
           fields: [],
           appWords: [
             { word: 'invited', count: 2 },
-            { word: 'wrong_email', count: 1 },
+            { word: 'needs_check', count: 1 },
           ],
         },
       },
     });
     drawListTab();
     const box = await screen.findByTestId('check-these');
-    expect(within(box).getByText('1 invitation reached the wrong person')).toBeTruthy();
+    expect(within(box).getByText('1 member needs checking')).toBeTruthy();
     // The old box read its own endpoint; the list's counts say it now.
     expect(orgService.getNotMe).not.toHaveBeenCalled();
   });
@@ -1257,7 +1257,7 @@ describe('Members', () => {
 // ── Waiting to join ─────────────────────────────────────────────────────────
 
 describe('Members: the two tabs (5b-i)', () => {
-  const listPage = { data: { page: { total: 1, entries: [{ entryId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', fullName: 'Lena List', email: 'lena@members.example', phone: null, memberNumber: null, status: 'Active', membershipType: null, joinedOn: null, endsOn: null, endsOnKind: null, paymentStatus: null, dateOfBirth: null, formerAt: null, source: 'upload', inApp: false, invitation: null, app: { word: 'not_invited', tone: 'grey', at: null, line: null, lineTone: 'plain' } }], cursor: null } } };
+  const listPage = { data: { page: { total: 1, entries: [{ entryId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', fullName: 'Lena List', email: 'lena@members.example', phone: null, memberNumber: null, status: 'Active', membershipType: null, joinedOn: null, endsOn: null, endsOnKind: null, paymentStatus: null, dateOfBirth: null, formerAt: null, source: 'upload', inApp: false, invitation: null, app: { word: 'not_in_app', tone: 'grey', at: null, line: 'Not invited yet', lineTone: 'plain' } }], cursor: null } } };
   const listView = { data: { list: { hasList: true, version: 1, lastConfirmedAt: null, counts: { entries: 1, inApp: 0, canBeInvited: 1, noEmail: 0, former: 0 }, statuses: [], membershipTypes: [], paymentStatuses: [], fields: [], appWords: [] } } };
 
   it("opens on the gym's own list for staff who may see it, and the roster is one tap away", async () => {

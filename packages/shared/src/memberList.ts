@@ -1282,69 +1282,49 @@ export type MemberListStatusCount = z.infer<typeof memberListStatusCountSchema>;
  *  header and the chips, which is the whole reason it is one query. */
 export const MEMBER_LIST_STATUS_CHIPS_MAX = 200;
 
-/** Where a person on the list stands with the app, in one word (spec Part 3 §18.4).
- *  The server decides it (`appWord`); every screen prints it. */
-export const memberAppWordSchema = z.enum([
-  "in_app",
-  "wrong_email",
-  "waiting",
-  "removed",
-  "left",
-  "unsubscribed",
-  "declined",
-  "not_arrived",
-  "invited",
-  "not_invited",
-]);
+/** Where a person on the list stands with the app, in one of three words (spec Part 3
+ *  §18.4; Kd, 2026-09-27: the list showed too much). The server decides it (`appWord`);
+ *  every screen prints it. Why a person is where they are is the line under the word. */
+export const memberAppWordSchema = z.enum(["in_app", "invited", "not_in_app"]);
 export type MemberAppWord = z.infer<typeof memberAppWordSchema>;
 
-/** The words, as every screen shows them (§18.3). "Removed from app" is followed by its
- *  day ("Removed from app · 26 Sep"). */
+/** The words, as every screen shows them (§18.3). */
 export const MEMBER_APP_WORDS: Readonly<Record<MemberAppWord, string>> = {
   in_app: "In the app",
-  wrong_email: "Wrong email",
-  waiting: "Waiting for a place",
-  removed: "Removed from app",
-  left: "Left the app",
-  unsubscribed: "Unsubscribed",
-  declined: "Declined",
-  not_arrived: "Email didn't arrive",
   invited: "Invited",
-  not_invited: "Not invited",
+  not_in_app: "Not in the app",
 };
 
-/** The Filter's order for the App words (§18.4). */
-export const MEMBER_APP_WORD_ORDER: readonly MemberAppWord[] = [
-  "in_app",
-  "invited",
-  "not_invited",
-  "not_arrived",
-  "wrong_email",
-  "waiting",
-  "declined",
-  "unsubscribed",
-  "removed",
-  "left",
-];
+/** What the Filter's App choices ask for: the three words, and everyone whose line asks
+ *  staff to check something. */
+export const memberAppFilterSchema = z.enum(["in_app", "invited", "not_in_app", "needs_check"]);
+export type MemberAppFilter = z.infer<typeof memberAppFilterSchema>;
 
-/** A person's App word with its colour, its day and at most one line under it. `at` is
- *  the day that goes with the word: the removal for "Removed from app", the email for
- *  "Invited" (shown as the line when there is no other). */
+export const MEMBER_APP_FILTER_WORDS: Readonly<Record<MemberAppFilter, string>> = {
+  ...MEMBER_APP_WORDS,
+  needs_check: "Needs checking",
+};
+
+/** The Filter's order for the App choices (§18.4). */
+export const MEMBER_APP_FILTER_ORDER: readonly MemberAppFilter[] = ["in_app", "invited", "not_in_app", "needs_check"];
+
+/** A person's App word with its colour and at most one line: why they are where they are.
+ *  `at` is the day the line is about (the invitation sent, the removal), shown after it.
+ *  A red or amber line asks staff to check something and is shown on the list, under the
+ *  whole row; a plain one only explains, and is shown on the person's own page. */
 export const memberAppViewSchema = z
   .object({
     word: memberAppWordSchema,
     tone: z.enum(["green", "amber", "red", "grey"]),
     at: z.string().nullable(),
     line: z.string().nullable(),
-    /** A red or amber line asks staff to check something, under the whole row; a plain
-     *  one only explains, under the word. */
     lineTone: z.enum(["red", "amber", "plain"]),
   })
   .strict();
 export type MemberAppView = z.infer<typeof memberAppViewSchema>;
 
-/** One App word and how many current members it holds, for the Filter. */
-export const memberAppWordCountSchema = z.object({ word: memberAppWordSchema, count: z.number().int().min(0) }).strict();
+/** One App choice and how many current members it holds, for the Filter. */
+export const memberAppWordCountSchema = z.object({ word: memberAppFilterSchema, count: z.number().int().min(0) }).strict();
 export type MemberAppWordCount = z.infer<typeof memberAppWordCountSchema>;
 
 /** THE LIST AS IT STANDS. A gym that has never confirmed one answers `hasList:
@@ -1375,9 +1355,9 @@ export const memberListViewSchema = z.object({
     .array(z.object({ key: z.string(), label: z.string() }).strict())
     .max(MEMBER_LIST_MAX_EXTRA_FIELDS)
     .default([]),
-  /** Each App word with how many current members it holds (§18.4), in the Filter's
-   *  order, words holding nobody left out. */
-  appWords: z.array(memberAppWordCountSchema).max(MEMBER_APP_WORD_ORDER.length).default([]),
+  /** Each App choice with how many current members it holds (§18.4), in the Filter's
+   *  order, choices holding nobody left out. */
+  appWords: z.array(memberAppWordCountSchema).max(MEMBER_APP_FILTER_ORDER.length).default([]),
 });
 export type MemberListView = z.infer<typeof memberListViewSchema>;
 
@@ -1476,7 +1456,7 @@ export const memberListEntriesQuerySchema = z
     /** Who has been invited, and how it stands (§11.5). */
     invitation: memberListInvitationFilterSchema.optional(),
     /** The App words to show (§18.4), given once each; current members only. */
-    app: z.union([memberAppWordSchema, z.array(memberAppWordSchema).max(MEMBER_APP_WORD_ORDER.length)]).optional(),
+    app: z.union([memberAppFilterSchema, z.array(memberAppFilterSchema).max(MEMBER_APP_FILTER_ORDER.length)]).optional(),
     query: z.string().max(MEMBER_LIST_QUERY_MAX_CHARS).optional(),
     cursor: z.string().max(512).optional(),
   })

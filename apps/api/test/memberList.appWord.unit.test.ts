@@ -1,4 +1,5 @@
-// THE APP WORD, as a table (spec Part 3 §18.4; ROADMAP 5b-v-a-i). `appWord` decides what
+// THE APP WORD, as a table (spec Part 3 §18.4; ROADMAP 5b-v-a-i). `appReason` decides WHY a
+// person is where they are and `appWord` shows it as one of three words; they decide what
 // a gym's staff read about a person, so every row of the spec's table is a case, the
 // invitation histories found in the local databases on 2026-09-27 are cases, and every
 // combination of invitation facts the types allow is swept for a word that is never
@@ -12,7 +13,7 @@ import {
   memberInviteStateSchema,
   type MemberListInvitation,
 } from "@app/shared";
-import { appWord, type AppWordInput } from "../src/modules/orgs/memberList/appWord.js";
+import { appReason, appWord, type AppReasonKind, type AppWordInput } from "../src/modules/orgs/memberList/appWord.js";
 
 const AT = "2026-09-22T10:00:00.000Z";
 const REMOVED = "2026-09-26T09:30:00.000Z";
@@ -43,86 +44,87 @@ const invitation = (over: Partial<MemberListInvitation> = {}): MemberListInvitat
 type Email = NonNullable<MemberListInvitation["email"]>;
 const email = (over: Partial<Email> = {}): Email => ({ state: "sent", reason: null, at: AT, result: null, ...over });
 
+const reason = (over: Partial<AppWordInput>) => appReason({ ...base, ...over });
 const word = (over: Partial<AppWordInput>) => appWord({ ...base, ...over });
 
 describe("the spec's table, one case a row (§18.4)", () => {
-  const cases: [string, Partial<AppWordInput>, ReturnType<typeof appWord>][] = [
-    ["1 in the app, same name", { inApp: [{ name: "Emma Hart", madeFromAddress: null }] }, { word: "in_app", tone: "green", at: null, line: null, lineTone: "plain" }],
+  const cases: [string, Partial<AppWordInput>, ReturnType<typeof appReason>][] = [
+    ["1 in the app, same name", { inApp: [{ name: "Emma Hart", madeFromAddress: null }] }, { reason: "in_app", tone: "green", at: null, line: null, lineTone: "plain" }],
     [
       "1 in the app, another name",
       { fullName: "Daniel Wu", inApp: [{ name: "Dan Wu", madeFromAddress: null }] },
-      { word: "in_app", tone: "green", at: null, line: "Signed up in the app as Dan Wu. Check this is them.", lineTone: "amber" },
+      { reason: "in_app", tone: "green", at: null, line: "Signed up in the app as Dan Wu. Check this is them.", lineTone: "amber" },
     ],
     [
       "1 two people in the app on one record",
       { fullName: "Maria Park", inApp: [{ name: "Maria Park", madeFromAddress: null }, { name: "Leo Park", madeFromAddress: null }] },
-      { word: "in_app", tone: "green", at: null, line: "Maria Park and Leo Park use the app with these details.", lineTone: "amber" },
+      { reason: "in_app", tone: "green", at: null, line: "Maria Park and Leo Park use the app with these details.", lineTone: "amber" },
     ],
     [
       "1b a past member still in the app",
       { fullName: "Grace Hall", former: true, inApp: [{ name: "Grace Hall", madeFromAddress: null }] },
-      { word: "in_app", tone: "amber", at: null, line: "Grace still uses the app through your gym. Remove them from the app if they've left.", lineTone: "amber" },
+      { reason: "in_app", tone: "amber", at: null, line: "Grace still uses the app through your gym. Remove them from the app if they've left.", lineTone: "amber" },
     ],
     [
       "2 wrong email",
       { invitation: invitation({ state: "declined", notMeAt: AT }) },
-      { word: "wrong_email", tone: "red", at: null, line: "Whoever gets email at emma@example.com says they aren't Emma. Check the address with Emma.", lineTone: "red" },
+      { reason: "wrong_email", tone: "red", at: null, line: "Whoever gets email at emma@example.com says they aren't Emma. Check the address with Emma.", lineTone: "red" },
     ],
     [
       "3 waiting for a place",
       { invitation: invitation({ waitingSince: AT }) },
-      { word: "waiting", tone: "amber", at: null, line: "Emma tapped Join, but all 500 places in your plan are taken.", lineTone: "amber" },
+      { reason: "waiting", tone: "amber", at: null, line: "Emma tapped Join, but all 500 places in your plan are taken.", lineTone: "amber" },
     ],
-    ["4 removed from app", { invitation: invitation({ state: "withdrawn", removedAt: REMOVED }) }, { word: "removed", tone: "grey", at: REMOVED, line: null, lineTone: "plain" }],
-    ["5 left the app", { invitation: invitation({ state: "accepted" }) }, { word: "left", tone: "grey", at: null, line: null, lineTone: "plain" }],
-    ["6 unsubscribed", { invitation: invitation({ email: email() }), optedOut: "unsubscribed" }, { word: "unsubscribed", tone: "grey", at: null, line: null, lineTone: "plain" }],
+    ["4 removed from app", { invitation: invitation({ state: "withdrawn", removedAt: REMOVED }) }, { reason: "removed", tone: "grey", at: REMOVED, line: null, lineTone: "plain" }],
+    ["5 left the app", { invitation: invitation({ state: "accepted" }) }, { reason: "left", tone: "grey", at: null, line: null, lineTone: "plain" }],
+    ["6 unsubscribed", { invitation: invitation({ email: email() }), optedOut: "unsubscribed" }, { reason: "unsubscribed", tone: "grey", at: null, line: null, lineTone: "plain" }],
     [
       "6 marked as spam",
       { invitation: invitation({ email: email({ result: "complained" }) }) },
-      { word: "unsubscribed", tone: "grey", at: null, line: "Marked your invitation as spam.", lineTone: "plain" },
+      { reason: "unsubscribed", tone: "grey", at: null, line: "Marked your invitation as spam.", lineTone: "plain" },
     ],
-    ["7 declined", { invitation: invitation({ state: "declined" }) }, { word: "declined", tone: "grey", at: null, line: null, lineTone: "plain" }],
+    ["7 declined", { invitation: invitation({ state: "declined" }) }, { reason: "declined", tone: "grey", at: null, line: null, lineTone: "plain" }],
     [
       "8 bounced after it went",
       { invitation: invitation({ email: email({ result: "bounced" }) }) },
-      { word: "not_arrived", tone: "amber", at: null, line: "This email bounced: the address doesn't take email. Check it with the person.", lineTone: "amber" },
+      { reason: "not_arrived", tone: "amber", at: null, line: "This email bounced: the address doesn't take email. Check it with the person.", lineTone: "amber" },
     ],
     [
       "8 not sent: bad address",
       { invitation: invitation({ email: email({ state: "skipped", reason: "bad_address" }) }) },
-      { word: "not_arrived", tone: "amber", at: null, line: MEMBER_INVITE_EMAIL_REASON_WORDS.bad_address, lineTone: "amber" },
+      { reason: "not_arrived", tone: "amber", at: null, line: MEMBER_INVITE_EMAIL_REASON_WORDS.bad_address, lineTone: "amber" },
     ],
-    ["9 invited, the email went", { invitation: invitation({ email: email({ result: "delivered" }) }) }, { word: "invited", tone: "grey", at: AT, line: null, lineTone: "plain" }],
-    ["9 invited, still queued", { invitation: invitation({ email: email({ state: "queued" }) }) }, { word: "invited", tone: "grey", at: AT, line: null, lineTone: "plain" }],
+    ["9 invited, the email went", { invitation: invitation({ email: email({ result: "delivered" }) }) }, { reason: "invited", tone: "grey", at: AT, line: null, lineTone: "plain" }],
+    ["9 invited, still queued", { invitation: invitation({ email: email({ state: "queued" }) }) }, { reason: "invited", tone: "grey", at: AT, line: null, lineTone: "plain" }],
     [
       "9 not known whether it went",
       { invitation: invitation({ email: email({ state: "skipped", reason: "send_unknown" }) }) },
-      { word: "invited", tone: "grey", at: AT, line: MEMBER_INVITE_EMAIL_REASON_WORDS.send_unknown, lineTone: "plain" },
+      { reason: "invited", tone: "grey", at: AT, line: MEMBER_INVITE_EMAIL_REASON_WORDS.send_unknown, lineTone: "plain" },
     ],
-    ["10 never invited", {}, { word: "not_invited", tone: "grey", at: null, line: null, lineTone: "plain" }],
-    ["10 no email address", { email: null }, { word: "not_invited", tone: "grey", at: null, line: "No email address", lineTone: "plain" }],
-    ["10 under 18 by the gym's day", { dateOfBirth: "2008-09-28" }, { word: "not_invited", tone: "grey", at: null, line: "Under 18", lineTone: "plain" }],
-    ["10 eighteen today", { dateOfBirth: "2008-09-27" }, { word: "not_invited", tone: "grey", at: null, line: null, lineTone: "plain" }],
+    ["10 never invited", {}, { reason: "not_invited", tone: "grey", at: null, line: null, lineTone: "plain" }],
+    ["10 no email address", { email: null }, { reason: "not_invited", tone: "grey", at: null, line: "No email address", lineTone: "plain" }],
+    ["10 under 18 by the gym's day", { dateOfBirth: "2008-09-28" }, { reason: "not_invited", tone: "grey", at: null, line: "Under 18", lineTone: "plain" }],
+    ["10 eighteen today", { dateOfBirth: "2008-09-27" }, { reason: "not_invited", tone: "grey", at: null, line: null, lineTone: "plain" }],
     [
       "10 invitation cancelled when moved to past members",
       { former: true, invitation: invitation({ state: "withdrawn" }) },
-      { word: "not_invited", tone: "grey", at: null, line: "Invitation cancelled", lineTone: "plain" },
+      { reason: "not_invited", tone: "grey", at: null, line: "Invitation cancelled", lineTone: "plain" },
     ],
   ];
   it.each(cases)("%s", (_name, over, expected) => {
-    expect(word(over)).toEqual(expected);
+    expect(reason(over)).toEqual(expected);
   });
 });
 
 describe("a household: two records on one email, the person in the app matched to the other", () => {
   it("the other record says who uses the email, never their 'Left the app' or 'Invited'", () => {
     for (const state of memberInviteStateSchema.options) {
-      const out = word({ fullName: "Leo Park", sharedWith: "Maria Park", invitation: invitation({ state }) });
-      expect(out, state).toEqual({ word: "not_invited", tone: "grey", at: null, line: "Maria Park uses the app with this email.", lineTone: "plain" });
+      const out = reason({ fullName: "Leo Park", sharedWith: "Maria Park", invitation: invitation({ state }) });
+      expect(out, state).toEqual({ reason: "not_invited", tone: "grey", at: null, line: "Maria Park uses the app with this email.", lineTone: "plain" });
     }
   });
   it("a record that reaches someone itself still reads 'In the app'", () => {
-    expect(word({ sharedWith: "Maria Park", inApp: [{ name: "Emma Hart", madeFromAddress: null }] }).word).toBe("in_app");
+    expect(reason({ sharedWith: "Maria Park", inApp: [{ name: "Emma Hart", madeFromAddress: null }] }).reason).toBe("in_app");
   });
 });
 
@@ -131,8 +133,8 @@ describe("someone the list says is under 18", () => {
   it("reads 'Not invited · Under 18' whatever their address's invitation says: it was a parent's, or came before the date was corrected", () => {
     for (const state of memberInviteStateSchema.options) {
       for (const over of [{}, { notMeAt: AT }, { waitingSince: AT }, { removedAt: REMOVED }, { email: email() }]) {
-        expect(word({ ...child, invitation: invitation({ state, ...over }) }), `${state} ${JSON.stringify(over)}`).toEqual({
-          word: "not_invited",
+        expect(reason({ ...child, invitation: invitation({ state, ...over }) }), `${state} ${JSON.stringify(over)}`).toEqual({
+          reason: "not_invited",
           tone: "grey",
           at: null,
           line: "Under 18",
@@ -142,8 +144,8 @@ describe("someone the list says is under 18", () => {
     }
   });
   it("still reads 'In the app' when they are, and a past member's day of birth is not judged", () => {
-    expect(word({ ...child, inApp: [{ name: "Leo Park", madeFromAddress: null }] }).word).toBe("in_app");
-    expect(word({ ...child, former: true, invitation: invitation({ state: "accepted" }) }).word).toBe("left");
+    expect(reason({ ...child, inApp: [{ name: "Leo Park", madeFromAddress: null }] }).reason).toBe("in_app");
+    expect(reason({ ...child, former: true, invitation: invitation({ state: "accepted" }) }).reason).toBe("left");
   });
 });
 
@@ -161,8 +163,8 @@ describe("names the way people really sign up (the rule is nameCheck's, 3b-ii-b)
     ["Leo Park", "Mum", null, true],
   ];
   it.each(cases)("%s signed up as %s", (list, signed, made, asks) => {
-    const out = word({ fullName: list, inApp: [{ name: signed, madeFromAddress: made }] });
-    expect(out.word).toBe("in_app");
+    const out = reason({ fullName: list, inApp: [{ name: signed, madeFromAddress: made }] });
+    expect(out.reason).toBe("in_app");
     expect(out.line === null ? false : out.line.startsWith("Signed up in the app as")).toBe(asks);
   });
 });
@@ -179,13 +181,13 @@ describe("the invitation histories found in the local databases, 2026-09-27", ()
     ["declined", "skipped", "gym_not_active", null, "declined"],
     ["accepted", "skipped", "not_on_list", null, "left"],
   ];
-  it.each(found)("%s, newest email %s %s %s → %s", (state, emailState, reason, result, expected) => {
-    const inv = invitation({ state, email: emailState === null ? null : email({ state: emailState, reason, result }) });
-    expect(word({ invitation: inv }).word).toBe(expected);
+  it.each(found)("%s, newest email %s %s %s → %s", (state, emailState, why, result, expected) => {
+    const inv = invitation({ state, email: emailState === null ? null : email({ state: emailState, reason: why, result }) });
+    expect(reason({ invitation: inv }).reason).toBe(expected);
   });
   it("the gym-reason email says why in the gym's words", () => {
     const inv = invitation({ email: email({ state: "skipped", reason: "gym_not_active" }) });
-    expect(word({ invitation: inv }).line).toBe(MEMBER_INVITE_EMAIL_REASON_WORDS.gym_not_active);
+    expect(reason({ invitation: inv }).line).toBe(MEMBER_INVITE_EMAIL_REASON_WORDS.gym_not_active);
   });
 });
 
@@ -212,22 +214,92 @@ describe("every combination of invitation facts the types allow: a word, and nev
     for (const inv of invitations) {
       for (const optedOut of [null, "unsubscribed", "complained"] as const) {
         for (const former of [false, true]) {
-          const out = word({ invitation: inv, optedOut, former });
+          const out = reason({ invitation: inv, optedOut, former });
           const where = JSON.stringify({ inv, optedOut, former });
-          expect(out.word, where).not.toBe("in_app");
-          if (out.word === "removed") expect(inv?.state === "withdrawn" && inv.removedAt !== null, where).toBe(true);
-          if (out.word === "left") expect(inv?.state, where).toBe("accepted");
-          if (out.word === "wrong_email") expect(inv?.state === "declined" && inv.notMeAt !== null, where).toBe(true);
-          if (out.word === "waiting") expect(inv?.state === "pending" && inv.waitingSince !== null, where).toBe(true);
-          if (out.word === "declined") expect(inv?.state, where).toBe("declined");
-          if (out.word === "invited" || out.word === "not_arrived") expect(inv?.state, where).toBe("pending");
-          if (inv === null) expect(["not_invited", "unsubscribed"], where).toContain(out.word);
+          expect(out.reason, where).not.toBe("in_app");
+          if (out.reason === "removed") expect(inv?.state === "withdrawn" && inv.removedAt !== null, where).toBe(true);
+          if (out.reason === "left") expect(inv?.state, where).toBe("accepted");
+          if (out.reason === "wrong_email") expect(inv?.state === "declined" && inv.notMeAt !== null, where).toBe(true);
+          if (out.reason === "waiting") expect(inv?.state === "pending" && inv.waitingSince !== null, where).toBe(true);
+          if (out.reason === "declined") expect(inv?.state, where).toBe("declined");
+          if (out.reason === "invited" || out.reason === "not_arrived") expect(inv?.state, where).toBe("pending");
+          if (inv === null) expect(["not_invited", "unsubscribed"], where).toContain(out.reason);
           checked += 1;
           // Someone in the app on the record is always "In the app", whatever the invitation says.
-          expect(word({ invitation: inv, optedOut, former, inApp: [{ name: "Emma Hart", madeFromAddress: null }] }).word, where).toBe("in_app");
+          expect(reason({ invitation: inv, optedOut, former, inApp: [{ name: "Emma Hart", madeFromAddress: null }] }).reason, where).toBe("in_app");
         }
       }
     }
     expect(checked).toBe(invitations.length * 6);
+  });
+});
+
+describe("the three words a screen shows (Kd, 2026-09-27: the list showed too much)", () => {
+  const shown: [string, Partial<AppWordInput>, ReturnType<typeof appWord>][] = [
+    ["in the app", { inApp: [{ name: "Emma Hart", madeFromAddress: null }] }, { word: "in_app", tone: "green", at: null, line: null, lineTone: "plain" }],
+    [
+      "in the app under another name, a line to check",
+      { fullName: "Daniel Wu", inApp: [{ name: "Dan Wu", madeFromAddress: null }] },
+      { word: "in_app", tone: "green", at: null, line: "Signed up in the app as Dan Wu. Check this is them.", lineTone: "amber" },
+    ],
+    ["invited, the day on their page", { invitation: invitation({ email: email({ result: "delivered" }) }) }, { word: "invited", tone: "grey", at: AT, line: "Invitation sent", lineTone: "plain" }],
+    [
+      "invited, the email bounced: a line to check",
+      { invitation: invitation({ email: email({ result: "bounced" }) }) },
+      { word: "invited", tone: "grey", at: null, line: "This email bounced: the address doesn't take email. Check it with the person.", lineTone: "amber" },
+    ],
+    [
+      "invited, waiting for a place: a line to check",
+      { invitation: invitation({ waitingSince: AT }) },
+      { word: "invited", tone: "grey", at: null, line: "Emma tapped Join, but all 500 places in your plan are taken.", lineTone: "amber" },
+    ],
+    [
+      "wrong email: not in the app, a red line to check",
+      { invitation: invitation({ state: "declined", notMeAt: AT }) },
+      { word: "not_in_app", tone: "grey", at: null, line: "Whoever gets email at emma@example.com says they aren't Emma. Check the address with Emma.", lineTone: "red" },
+    ],
+    ["removed from the app, with its day", { invitation: invitation({ state: "withdrawn", removedAt: REMOVED }) }, { word: "not_in_app", tone: "grey", at: REMOVED, line: "Removed from app", lineTone: "plain" }],
+    ["left the app", { invitation: invitation({ state: "accepted" }) }, { word: "not_in_app", tone: "grey", at: null, line: "Left the app", lineTone: "plain" }],
+    ["declined", { invitation: invitation({ state: "declined" }) }, { word: "not_in_app", tone: "grey", at: null, line: "Declined the invitation", lineTone: "plain" }],
+    ["unsubscribed", { optedOut: "unsubscribed" }, { word: "not_in_app", tone: "grey", at: null, line: "Unsubscribed from your emails", lineTone: "plain" }],
+    ["never invited", {}, { word: "not_in_app", tone: "grey", at: null, line: "Not invited yet", lineTone: "plain" }],
+    ["no email address", { email: null }, { word: "not_in_app", tone: "grey", at: null, line: "No email address", lineTone: "plain" }],
+    [
+      "the son on his mother's email",
+      { fullName: "Leo Park", sharedWith: "Maria Park", invitation: invitation({ state: "accepted" }) },
+      { word: "not_in_app", tone: "grey", at: null, line: "Maria Park uses the app with this email.", lineTone: "plain" },
+    ],
+  ];
+  it.each(shown)("%s", (_name, over, expected) => {
+    expect(word(over)).toEqual(expected);
+  });
+
+  it("every reason lands on exactly one of the three words, and only someone in the app reads In the app", () => {
+    const where: Record<AppReasonKind, string> = {
+      in_app: "in_app",
+      waiting: "invited",
+      not_arrived: "invited",
+      invited: "invited",
+      wrong_email: "not_in_app",
+      removed: "not_in_app",
+      left: "not_in_app",
+      unsubscribed: "not_in_app",
+      declined: "not_in_app",
+      not_invited: "not_in_app",
+    };
+    const states = [null, ...memberInviteStateSchema.options];
+    for (const state of states) {
+      for (const over of [{}, { notMeAt: AT }, { waitingSince: AT }, { removedAt: REMOVED }, { email: email({ result: "bounced" }) }]) {
+        for (const inApp of [[], [{ name: "Emma Hart", madeFromAddress: null }]]) {
+          const input = { invitation: state === null ? null : invitation({ state, ...over }), inApp };
+          const found = reason(input);
+          const out = word(input);
+          expect(out.word, JSON.stringify(input)).toBe(where[found.reason]);
+          expect(out.word === "in_app", JSON.stringify(input)).toBe(inApp.length > 0);
+          // Never a word with nothing to say why, except In the app.
+          if (out.word !== "in_app") expect(out.line, JSON.stringify(input)).not.toBeNull();
+        }
+      }
+    }
   });
 });

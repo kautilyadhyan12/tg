@@ -2,8 +2,8 @@
 // §18.4): who in the app each record reaches, its address's invitation and opt-out, the
 // plan's places and the gym's own day. A page, a person's page and the Filter's counts
 // all come through here, so they cannot disagree.
-import type { MemberAppView, MemberAppWord, MemberAppWordCount } from "@app/shared";
-import { MEMBER_APP_WORD_ORDER } from "@app/shared";
+import type { MemberAppFilter, MemberAppView, MemberAppWordCount } from "@app/shared";
+import { MEMBER_APP_FILTER_ORDER } from "@app/shared";
 import { displayNameFromEmail } from "../../auth/service.js";
 import { dayInTz } from "../../gamification/streak.js";
 import { emailHmac } from "../invites/address.js";
@@ -78,30 +78,37 @@ export async function appViewsOf(
   });
 }
 
-/** How many of the gym's current members hold each App word, in the Filter's order,
- *  and the word of each (for the Filter's own page). */
+/** The App choices a person answers to: their word, and "needs_check" when their line
+ *  asks staff to check something. */
+export function appChoices(view: MemberAppView): MemberAppFilter[] {
+  return view.lineTone === "plain" ? [view.word] : [view.word, "needs_check"];
+}
+
+/** How many of the gym's current members each App choice holds, in the Filter's order,
+ *  and the choices of each (for the Filter's own page). */
 export async function currentAppWords(
   sql: SqlOrTx,
   settings: InviteSettings | null,
   gymId: string,
   members: readonly MemberAgainstList[],
   now: Date,
-): Promise<{ counts: MemberAppWordCount[]; words: Map<string, MemberAppWord> }> {
+): Promise<{ counts: MemberAppWordCount[]; choices: Map<string, MemberAppFilter[]> }> {
   const rows = await repo.appRows(sql, gymId);
   const views = await appViewsOf(sql, settings, gymId, rows, members, now);
-  const words = new Map<string, MemberAppWord>();
-  const tally = new Map<MemberAppWord, number>();
+  const choices = new Map<string, MemberAppFilter[]>();
+  const tally = new Map<MemberAppFilter, number>();
   views.forEach((view, at) => {
     const row = rows[at];
     if (row === undefined) return;
-    words.set(row.id, view.word);
-    tally.set(view.word, (tally.get(view.word) ?? 0) + 1);
+    const mine = appChoices(view);
+    choices.set(row.id, mine);
+    for (const choice of mine) tally.set(choice, (tally.get(choice) ?? 0) + 1);
   });
-  const counts = MEMBER_APP_WORD_ORDER.flatMap((word) => {
+  const counts = MEMBER_APP_FILTER_ORDER.flatMap((word) => {
     const count = tally.get(word) ?? 0;
     return count === 0 ? [] : [{ word, count }];
   });
-  return { counts, words };
+  return { counts, choices };
 }
 
 function add<K, V>(map: Map<K, V[]>, key: K, value: V): void {

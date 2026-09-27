@@ -69,7 +69,7 @@ function person(entryId, fullName, over = {}) {
     source: 'upload',
     inApp: false,
     invitation: null,
-    app: { word: 'not_invited', tone: 'grey', at: null, line: null, lineTone: 'plain' },
+    app: { word: 'not_in_app', tone: 'grey', at: null, line: 'Not invited yet', lineTone: 'plain' },
     extra: [{ key: 'locker', label: 'Locker', value: '' }],
     handEdited: [],
     members: [],

@@ -2917,6 +2917,20 @@ wording (18.12); "Download" is Glofox's and TeamUp's.
 
 ### 18.4 The App word — ONE function, one table test
 
+**AMENDED 2026-09-27, at 5b-v-a-i's click-through** (Kd: *"confusing list with too many
+information"*; RULINGS 2026-09-27). The ten rows below are now the REASONS `appReason` finds,
+first match wins, exactly as the table says. A screen shows **three words**: **In the app**
+(rows 1, 1b) · **Invited** (3 waiting, 8 didn't arrive, 9) · **Not in the app** (1c, 1d, 2, 4,
+5, 6, 7, 10), and the reason as the one line under it: a red or amber line (1 names differ or
+two people, 1b, 2, 3, 8) asks staff to check something and is shown on the list under the
+row; every other line only explains ("Invitation sent · 22 Sep", "Removed from app · 26 Sep",
+"Left the app", "Declined the invitation", "Unsubscribed from your emails", "Not invited yet",
+"No email address", "Under 18", "Maria Park uses the app with this email.") and is shown on
+the person's own page only. The Filter's App choices are **In the app · Invited · Not in the
+app · Needs checking** (everyone with a red or amber line), and Check these reads "3 members
+need checking · See who" (Needs checking). Every product read that day shows about this
+much: TeamUp one "Unclaimed" pill, Trainerize a "Pending" folder.
+
 Every member row, the person's page, the Filter's App chips and their counts read ONE pure
 function on the server (it decides something about a person, so CLAUDE.md §4's table test,
 with cases from real invitation histories, including states the table has never seen, which
@@ -3072,7 +3086,9 @@ that moved is refused as `list_changed`, nothing applied.
 **5b-v-a is two pull requests** (split 2026-09-27: the first half alone adds 2,165 lines):
 **5b-v-a-i** the page in the new look, the App word, Check these ("reached the wrong person"),
 the Filter with Show (Members · Past members) and the App words, the empty list — the "Using
-the app" tab kept, restyled; **5b-v-a-ii** Show: Not on your list with Owner and staff, Check
+the app" tab kept, restyled; **5b-v-a-ii** the ONE Remove (RULINGS 2026-09-27: removing a
+member makes them a past member and ends their app, one step; Put back undoes both; the tabs
+become **Members · Past members**), Show: Not on your list with Owner and staff, Check
 these' second line, a trainer's list, and the "Using the app" tab folded in. The worst thing
 is the same for both.
 
