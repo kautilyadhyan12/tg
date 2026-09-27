@@ -10,6 +10,7 @@ import {
   columnLines,
   columnName,
   contactLine,
+  exampleLine,
   heardLine,
   mappingProblem,
   notAddedRow,
@@ -54,27 +55,34 @@ function ShortList({ items, render, testId }) {
   );
 }
 
+/** The columns as import tools lay them out: the file's column, an example of what it
+ *  holds, and what it is saved as. */
 function Columns({ preview, mapping, onChange, disabled }) {
   return (
-    <ul className="c-card overflow-hidden" data-testid="lead-file-columns">
+    <div className="c-card overflow-hidden" data-testid="lead-file-columns">
+      <p className="c-s14 c-t2 px-4 pt-3 md:px-5">Choose what each column in your file is. Nothing is saved until you add the leads.</p>
+      <div className="c-th hidden md:grid grid-cols-[1fr_1fr_200px] gap-4 px-5 pt-3 pb-2">
+        <span>Column in your file</span>
+        <span>Example</span>
+        <span>Save as</span>
+      </div>
+      <ul>
       {preview.columns
         .filter((column) => column.neverKept === null)
-        .map((column, i) => (
+        .map((column) => (
           <li
             key={column.index}
-            className={`flex flex-col gap-2 px-4 py-3 md:flex-row md:items-center md:px-5 ${i > 0 ? 'border-t' : ''}`}
+            className="flex flex-col gap-2 px-4 py-3 md:grid md:grid-cols-[1fr_1fr_200px] md:gap-4 md:items-center md:px-5 border-t"
             style={{ borderColor: 'var(--line)' }}
           >
-            <span className="flex flex-col min-w-0 md:flex-1">
-              <span className="c-s14 c-w6 c-t1 c-ell">{columnName(column)}</span>
-              <span className="c-s13 c-t2 c-ell">{column.samples.join(' · ') || 'Empty'}</span>
-            </span>
+            <span className="c-s14 c-w6 c-t1 c-ell">{columnName(column)}</span>
+            <span className="c-s13 c-t2 c-ell">{exampleLine(column)}</span>
             <select
               aria-label={`What ${columnName(column)} holds`}
               value={roleOf(mapping, column.index)}
               onChange={(e) => onChange(column.index, e.target.value)}
               disabled={disabled}
-              className="c-input md:!w-[200px]"
+              className="c-input"
             >
               <option value="">{roleWord('')}</option>
               {COLUMN_ROLES.map((role) => (
@@ -85,7 +93,8 @@ function Columns({ preview, mapping, onChange, disabled }) {
             </select>
           </li>
         ))}
-    </ul>
+      </ul>
+    </div>
   );
 }
 

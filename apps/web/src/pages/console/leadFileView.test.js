@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LEAD_FILE_WORDS } from '@app/shared';
-import { addButton, addedTitle, columnLines, heardLine, mappingProblem, notAddedRow, roleOf, unlistedNotAdded, withRole } from './leadFileView';
+import { addButton, addedTitle, columnLines, exampleLine, heardLine, mappingProblem, notAddedRow, roleOf, unlistedNotAdded, withRole } from './leadFileView';
 
 const MAPPING = { sheet: 0, headerRow: 0, fullName: 0, firstName: null, lastName: null, email: [1], phone: [2], source: 3, notes: null };
 const person = (row, fullName) => ({ row, fullName, email: `${row}@example.com`, phone: null, source: 'other', sourceWord: null });
@@ -66,6 +66,11 @@ describe('the words staff read', () => {
   it('rows past the ones listed are counted', () => {
     expect(unlistedNotAdded(preview({ counts: { ...preview().counts, notAdded: 205 }, notAdded: new Array(200).fill(null) }))).toBe(5);
     expect(unlistedNotAdded(preview())).toBe(0);
+  });
+
+  it("a column's cells are said as examples, never as the people it applies to", () => {
+    expect(exampleLine({ samples: ['Asha', 'Ben', 'Cara'] })).toBe('e.g. Asha, Ben, Cara');
+    expect(exampleLine({ samples: [] })).toBe('Empty');
   });
 
   it('the columns in three lines: read, not used, left out with the reason', () => {

@@ -120,6 +120,10 @@ describe('Import leads', () => {
     // A column never kept has no picker.
     const columns = screen.getByTestId('lead-file-columns');
     expect(within(columns).queryByLabelText('What Card Number holds')).toBeNull();
+    // Headed as import tools head it, and the cells said as examples.
+    expect(columns.textContent).toContain('Column in your file');
+    expect(columns.textContent).toContain('Save as');
+    expect(columns.textContent).toContain('e.g. Ann Bell');
     fireEvent.change(screen.getByLabelText('What Lead Source holds'), { target: { value: 'notes' } });
     expect(addButton().disabled).toBe(true);
     expect(screen.getByTestId('lead-file-why').textContent).toContain('Check the file again to see who will be added.');

@@ -11,6 +11,10 @@ export const roleWord = (role) => (role === '' ? 'Not used' : LEAD_FILE_FIELD_WO
 /** A column as staff know it: its own heading, or its place. */
 export const columnName = (column) => (column.header && column.header.trim() !== '' ? column.header : `Column ${column.index + 1}`);
 
+/** A few of a column's own cells, said as examples so nobody reads them as the
+ *  people the choice applies to: "e.g. Asha, Ben, Cara". */
+export const exampleLine = (column) => (column.samples.length === 0 ? 'Empty' : `e.g. ${column.samples.join(', ')}`);
+
 /** Which role a column has in a mapping, or ''. */
 export function roleOf(mapping, index) {
   if (mapping.email.includes(index)) return 'email';
