@@ -1,4 +1,4 @@
-import { MEMBER_INVITE_EMAIL_REASON_WORDS, MEMBER_INVITE_EMAIL_RESULT_WORDS, MEMBER_INVITE_WORDS, underAgeOn } from '@app/shared';
+import { MEMBER_APP_WORDS, MEMBER_APP_WORD_ORDER, MEMBER_INVITE_WORDS, underAgeOn } from '@app/shared';
 import { dayWords } from './memberListView';
 
 // The gym's own list on the Members screen (ROADMAP 5b-i; spec Part 3 §9.14, §11.5,
@@ -10,12 +10,13 @@ import { dayWords } from './memberListView';
 export const CHIP_KINDS = [
   { kind: 'status', from: 'statuses', title: 'Status', none: 'No status' },
   { kind: 'membershipType', from: 'membershipTypes', title: 'Membership', none: 'No membership' },
-  { kind: 'paymentStatus', from: 'paymentStatuses', title: 'Payment', none: 'No payment status' },
+  { kind: 'paymentStatus', from: 'paymentStatuses', title: 'Payment status', none: 'No payment status' },
 ];
 
 export const EMPTY_FILTERS = {
   records: 'current',
-  app: 'all',
+  /** App words ticked (spec Part 3 §18.4); none is everybody. */
+  app: [],
   status: [],
   membershipType: [],
   paymentStatus: [],
@@ -46,7 +47,7 @@ export function entriesQueryString(filters, cursor) {
   const params = new URLSearchParams();
   if (filters.records !== 'current') params.append('records', filters.records);
   if (filters.records === 'current') {
-    if (filters.app !== 'all') params.append('filter', filters.app);
+    for (const word of filters.app) params.append('app', word);
     for (const { kind } of CHIP_KINDS) for (const word of filters[kind]) params.append(kind, word);
   }
   const query = filters.query.trim();
@@ -67,15 +68,17 @@ export function activeFilters(filters, words) {
       out.push({ key: `${kind}:${label}`, text: chipText(label, none), without: toggleWord(filters, kind, label) });
     }
   }
-  if (filters.app !== 'all') {
-    out.push({ key: 'app', text: filters.app === 'in_app' ? 'In the app' : 'Not in the app', without: { ...filters, app: 'all' } });
+  for (const word of MEMBER_APP_WORD_ORDER) {
+    if (filters.app.includes(word)) {
+      out.push({ key: `app:${word}`, text: MEMBER_APP_WORDS[word], without: toggleApp(filters, word) });
+    }
   }
   return out;
 }
 
 export function filtersAreEmpty(filters) {
   return (
-    filters.app === 'all' &&
+    filters.app.length === 0 &&
     filters.query.trim() === '' &&
     CHIP_KINDS.every(({ kind }) => filters[kind].length === 0)
   );
@@ -99,56 +102,82 @@ export function whenWords(iso) {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-/** The end or renewal date in the heading's own word. */
-export function endsWords(entry) {
-  if (entry.endsOn === null) return null;
-  return `${entry.endsOnKind === 'renews' ? 'Renews' : 'Ends'} ${dayWords(entry.endsOn)}`;
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "2026-10-03" → "3 Oct", with the year when it is not `today`'s ("3 Oct 2027"). */
+export function shortDay(day, today = null) {
+  const [y, m, d] = day.split('-').map(Number);
+  const year = today !== null && today.slice(0, 4) === String(y) ? '' : ` ${String(y)}`;
+  return `${String(d)} ${SHORT_MONTHS[m - 1]}${year}`;
 }
 
-/** The row's second line: the gym's own words about the person. */
-export function rowWords(entry) {
-  if (entry.formerAt !== null) return [`Removed from list ${whenWords(entry.formerAt)}`];
-  return [entry.status, entry.membershipType, endsWords(entry)].filter((w) => w !== null && w !== '');
+/** A timestamp's day in the reader's own calendar, 'YYYY-MM-DD'. */
+function localDay(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const pad = (x) => String(x).padStart(2, '0');
+  return `${String(d.getFullYear())}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** "26 Sep" from a timestamp, with the year when it is not `today`'s. */
+export function shortWhen(iso, today = null) {
+  const day = localDay(iso);
+  return day === null ? '' : shortDay(day, today);
+}
+
+/** The end or renewal date in the heading's own word: "Renews 3 Oct", "Ends 30 Sep",
+ *  and "Ended 31 Aug" once the gym's day is past it. */
+export function endsWords(entry, today = null) {
+  if (entry.endsOn === null) return null;
+  if (today !== null && entry.endsOn < today) return `Ended ${shortDay(entry.endsOn, today)}`;
+  return `${entry.endsOnKind === 'renews' ? 'Renews' : 'Ends'} ${shortDay(entry.endsOn, today)}`;
+}
+
+/** The day someone became a past member, "3 Sep 2026", or null. */
+export function pastSince(entry) {
+  const day = entry.formerAt === null ? null : localDay(entry.formerAt);
+  return day === null ? null : shortDay(day);
+}
+
+/** "Past member since 3 Sep 2026" (spec Part 3 §18.3). */
+export function pastWords(entry) {
+  const since = pastSince(entry);
+  return since === null ? null : `Past member since ${since}`;
+}
+
+/** The gym's own words about the person in one line, as a phone's row shows them. */
+export function rowWords(entry, today = null) {
+  if (entry.formerAt !== null) return [pastWords(entry)].filter((w) => w !== null);
+  return [entry.status, entry.membershipType, endsWords(entry, today), entry.paymentStatus].filter((w) => w !== null && w !== '');
 }
 
 export function contactWords(entry) {
   return entry.email ?? entry.phone ?? 'No email or phone';
 }
 
-/** Where the person stands with the app, as a short tag and, when something went
- *  wrong with an email, the server's own sentence about it. With `today`, somebody
- *  never invited whom the list says is under 18 reads "Under 18". */
+/** Tick or untick one App word. */
+export function toggleApp(filters, word) {
+  return { ...filters, app: filters.app.includes(word) ? filters.app.filter((w) => w !== word) : [...filters.app, word] };
+}
+
+const APP_TAGS = { green: 'c-tag-good', amber: 'c-tag-warn', red: 'c-tag-bad', grey: 'c-tag-plain' };
+
+/** The server's App word as a screen shows it (§18.4): the tag's words and colour, the
+ *  plain line under the word (the day for "Invited"), and a red or amber line under the
+ *  whole row. */
+export function appView(app, today = null) {
+  const word = MEMBER_APP_WORDS[app.word];
+  const text = app.word === 'removed' && app.at !== null ? `${word} · ${shortWhen(app.at, today)}` : word;
+  const plain = app.lineTone === 'plain' ? (app.line ?? (app.word === 'invited' && app.at !== null ? shortWhen(app.at, today) : null)) : null;
+  const note = app.lineTone === 'plain' ? null : app.line;
+  return { text, tag: APP_TAGS[app.tone], plain, note, noteTone: app.lineTone };
+}
+
+/** The same word for a person's page, in the shape its tag reads. */
 export function invitationView(entry, today = null) {
-  const inv = entry.invitation;
-  if (entry.inApp) return { tag: 'Uses the app', tone: 'green', detail: null };
-  // An invitation hangs on the ADDRESS, so a child at a parent's invited address, or one
-  // whose date of birth was corrected after inviting, carries one: the row still says
-  // what the list says about them.
-  const under = today !== null && entry.formerAt === null && entry.email !== null && underAgeOn(entry.dateOfBirth, today);
-  if (under && (inv === null || inv.state !== 'accepted')) return { tag: 'Under 18', tone: 'plain', detail: null };
-  if (inv === null) {
-    if (entry.formerAt !== null) return null;
-    if (entry.email === null) return { tag: 'No email', tone: 'plain', detail: null };
-    return { tag: 'Not invited', tone: 'plain', detail: null };
-  }
-  if (inv.state === 'accepted') return { tag: 'Joined', tone: 'green', detail: null };
-  if (inv.state === 'declined') {
-    return inv.notMeAt !== null
-      ? { tag: 'Said "Not me"', tone: 'red', detail: MEMBER_INVITE_WORDS.said_not_me }
-      : { tag: 'Declined', tone: 'plain', detail: null };
-  }
-  if (inv.state === 'withdrawn') return { tag: 'Invitation stopped', tone: 'plain', detail: null };
-  if (inv.waitingSince !== null) return { tag: 'Waiting for a place', tone: 'orange', detail: null };
-  const email = inv.email;
-  const invited = `Invited ${whenWords(inv.invitedAt)}`;
-  if (email === null) return { tag: invited, tone: 'plain', detail: null };
-  if (email.state === 'queued' || email.state === 'sending') return { tag: 'Invited · email waiting to go', tone: 'plain', detail: null };
-  if (email.state === 'sent') {
-    if (email.result === null || email.result === 'delivered') return { tag: invited, tone: 'plain', detail: null };
-    return { tag: "Invited · email didn't arrive", tone: 'orange', detail: MEMBER_INVITE_EMAIL_RESULT_WORDS[email.result] };
-  }
-  const detail = email.reason === null ? null : MEMBER_INVITE_EMAIL_REASON_WORDS[email.reason];
-  return { tag: 'Invited · email not sent', tone: 'orange', detail };
+  const view = appView(entry.app, today);
+  const tone = { green: 'green', amber: 'orange', red: 'red', grey: 'plain' }[entry.app.tone];
+  return { tag: view.text, tone, detail: view.note, line: view.plain };
 }
 
 // ── Invite (5b-ii; §9.12, §11.5) ─────────────────────────────────────────────
@@ -181,7 +210,7 @@ export function inviteWho(filters) {
 
 /** Said when the list on screen is narrowed by something Invite does not read. */
 export function inviteIgnores(filters) {
-  return filters.query.trim() !== '' || filters.app !== 'all'
+  return filters.query.trim() !== '' || filters.app.length > 0
     ? "Only Status, Membership and Payment choose who is invited. The search and the app filter don't."
     : null;
 }

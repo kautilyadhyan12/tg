@@ -33,13 +33,14 @@ import { invitationsOf, inviteEntryInTx, readyToSend } from "../invites/service.
 import type { InviteSettings } from "../invites/settings.js";
 import { insertAudit } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
+import { appViewsOf } from "./appViews.js";
 import { applyTyped, EMPTY_VALUES, mergeValues, type EntryValues, type TypedContext } from "./byHand.js";
 import { tidyCell } from "./cells.js";
 import { cut, identityKey } from "./fields.js";
 import { withoutCardNumbers } from "./neverKeep.js";
 import { readCountry } from "./phone.js";
 import * as repo from "./repo.js";
-import type { MemberListDeps } from "./service.js";
+import { appOrThrow, type MemberListDeps } from "./service.js";
 import { unlistedDigest, unlistedGroup, unlistedPage } from "./unlisted.js";
 
 type Sql = MemberListDeps["sql"];
@@ -52,6 +53,7 @@ async function detailOf(
   gymId: string,
   entry: repo.StoredEntry,
   settings: InviteSettings | null,
+  now: Date,
 ): Promise<MemberListEntryDetail> {
   const [fields, reached, invitation] = await Promise.all([
     repo.listFields(sql, gymId),
@@ -61,12 +63,22 @@ async function detailOf(
   // A member belongs to this record when §9.7's match takes them to it: the current
   // record for a current one, the former match for a former one.
   const mine = reached.filter((member) => (entry.formerAt === null ? member.entryId : member.formerEntryId) === entry.id);
-  const visits = await repo.memberVisits(
-    sql,
-    gymId,
-    mine.map((member) => member.userId),
-  );
   const { values } = entry;
+  const [visits, app] = await Promise.all([
+    repo.memberVisits(
+      sql,
+      gymId,
+      mine.map((member) => member.userId),
+    ),
+    appViewsOf(
+      sql,
+      settings,
+      gymId,
+      [{ id: entry.id, fullName: values.fullName, email: values.email, dateOfBirth: values.dateOfBirth, former: entry.formerAt !== null }],
+      reached,
+      now,
+    ),
+  ]);
   return {
     entryId: entry.id,
     fullName: values.fullName,
@@ -84,6 +96,7 @@ async function detailOf(
     source: entry.source,
     inApp: mine.length > 0,
     invitation: invitation[0] ?? null,
+    app: appOrThrow(app[0]),
     extra: fields.map((field) => ({ key: field.key, label: field.label, value: values.extra[field.key] ?? "" })),
     handEdited: entry.handEdited,
     members: visits.map((row) => ({
@@ -99,7 +112,7 @@ async function detailOf(
 async function detailAfter(deps: MemberListDeps, gymId: string, entryId: string): Promise<MemberListEntryDetail> {
   const entry = await repo.entryFor(deps.sql, gymId, entryId);
   if (entry === null) throw notFound();
-  return await detailOf(deps.sql, gymId, entry, deps.invites ?? null);
+  return await detailOf(deps.sql, gymId, entry, deps.invites ?? null, deps.now());
 }
 
 async function typedContext(tx: TransactionSql, gymId: string, country: string | null): Promise<TypedContext> {

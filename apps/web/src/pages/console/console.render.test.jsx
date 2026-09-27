@@ -210,7 +210,7 @@ beforeEach(() => {
   orgService.getNotMe.mockResolvedValue({ data: { items: [] } });
   // The gym's own list is empty, by default (5b-i's tab).
   orgService.getMemberList.mockResolvedValue({
-    data: { list: { hasList: false, version: 0, lastConfirmedAt: null, counts: { entries: 0, inApp: 0, canBeInvited: 0, noEmail: 0, former: 0 }, statuses: [], membershipTypes: [], paymentStatuses: [], fields: [] } },
+    data: { list: { hasList: false, version: 0, lastConfirmedAt: null, counts: { entries: 0, inApp: 0, canBeInvited: 0, noEmail: 0, former: 0 }, statuses: [], membershipTypes: [], paymentStatuses: [], fields: [], appWords: [] } },
   });
   orgService.getMemberListEntries.mockResolvedValue({ data: { page: { total: 0, entries: [], cursor: null } } });
   // THE NUMBERS ARE QUIET BY DEFAULT, AND THAT IS THE TRUTHFUL DEFAULT FOR
@@ -1171,9 +1171,9 @@ describe('Members', () => {
     const checks = screen.getAllByTestId('check-this-is-them');
     expect(checks).toHaveLength(1);
     // The mark sits on the stranger's row, next to its Remove.
-    const row = checks[0].closest('.rounded-2xl');
+    const row = checks[0].closest('li');
     expect(within(row).getByText('Priya Sharma')).toBeTruthy();
-    expect(within(row).getByRole('button', { name: 'Remove' })).toBeTruthy();
+    expect(within(row).getByRole('button', { name: 'Remove from app' })).toBeTruthy();
   });
 
   // ROADMAP 3a-vi-b: an app member the gym's list does not hold looks different, says
@@ -1200,32 +1200,46 @@ describe('Members', () => {
     const nia = marked.find((row) => within(row).queryByText('Nia Cole') !== null);
     expect(within(nia).getByText('Not on your list · not on any list you have imported')).toBeTruthy();
     expect(within(nia).queryByText(/taken off/)).toBeNull();
-    expect(within(nia).getByRole('button', { name: 'Add to list' })).toBeTruthy();
+    expect(within(nia).getByRole('button', { name: 'Add to your list' })).toBeTruthy();
     // Emma is on the list: no mark, no button.
     expect(screen.getByText('On your list as Emma Clarke').closest('[data-testid=member-off-list]')).toBeNull();
 
-    fireEvent.click(within(priyaRow).getByRole('button', { name: 'Put back on list' }));
+    fireEvent.click(within(priyaRow).getByRole('button', { name: 'Put back on your list' }));
     await waitFor(() => expect(orgService.putMemberOnList).toHaveBeenCalledWith(ORG.id, 'u7'));
     await waitFor(() => expect(orgService.getMembers.mock.calls.length).toBeGreaterThan(1));
   });
 
-  it("lists the invitations that came back 'Not me', with the address to check", async () => {
-    orgService.getNotMe.mockResolvedValue({
-      data: { items: [{ entryId: 'e1', fullName: 'Hana Kim', email: 'hana-typo@example.com', notMeAt: '2026-09-24T09:00:00.000Z' }] },
+  it("says 'Check these' when an invitation reached the wrong person, from the list's own App counts", async () => {
+    orgService.getMemberList.mockResolvedValue({
+      data: {
+        list: {
+          hasList: true,
+          version: 1,
+          lastConfirmedAt: null,
+          counts: { entries: 3, inApp: 0, canBeInvited: 3, noEmail: 0, former: 0 },
+          statuses: [],
+          membershipTypes: [],
+          paymentStatuses: [],
+          fields: [],
+          appWords: [
+            { word: 'invited', count: 2 },
+            { word: 'wrong_email', count: 1 },
+          ],
+        },
+      },
     });
     drawListTab();
-    const box = await screen.findByTestId('not-me-box');
-    expect(within(box).getByText('An invitation reached the wrong person')).toBeTruthy();
-    expect(within(box).getByText('Hana Kim')).toBeTruthy();
-    expect(within(box).getByText('hana-typo@example.com')).toBeTruthy();
-    expect(orgService.getNotMe).toHaveBeenCalledWith(ORG.id);
+    const box = await screen.findByTestId('check-these');
+    expect(within(box).getByText('1 invitation reached the wrong person')).toBeTruthy();
+    // The old box read its own endpoint; the list's counts say it now.
+    expect(orgService.getNotMe).not.toHaveBeenCalled();
   });
 
-  it("draws no 'Not me' box when nothing came back, and a trainer, who may not see the list, never asks", async () => {
+  it("draws no 'Check these' when nothing needs checking, and a trainer, who may not see the list, never asks for it", async () => {
     drawListTab();
-    await waitFor(() => expect(orgService.getNotMe).toHaveBeenCalled());
     expect(await screen.findByTestId('member-list-panel')).toBeTruthy();
-    expect(screen.queryByTestId('not-me-box')).toBeNull();
+    await waitFor(() => expect(orgService.getMemberList).toHaveBeenCalled());
+    expect(screen.queryByTestId('check-these')).toBeNull();
 
     cleanup();
     resetConsoleOrgs();
@@ -1235,15 +1249,16 @@ describe('Members', () => {
     orgService.getApplications.mockResolvedValue(queue([]));
     drawMembers();
     expect(await screen.findByText('Kd Owner')).toBeTruthy();
-    expect(orgService.getNotMe).not.toHaveBeenCalled();
+    expect(orgService.getMemberList).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('check-these')).toBeNull();
   });
 });
 
 // ── Waiting to join ─────────────────────────────────────────────────────────
 
 describe('Members: the two tabs (5b-i)', () => {
-  const listPage = { data: { page: { total: 1, entries: [{ entryId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', fullName: 'Lena List', email: 'lena@members.example', phone: null, memberNumber: null, status: 'Active', membershipType: null, joinedOn: null, endsOn: null, endsOnKind: null, paymentStatus: null, dateOfBirth: null, formerAt: null, source: 'upload', inApp: false, invitation: null }], cursor: null } } };
-  const listView = { data: { list: { hasList: true, version: 1, lastConfirmedAt: null, counts: { entries: 1, inApp: 0, canBeInvited: 1, noEmail: 0, former: 0 }, statuses: [], membershipTypes: [], paymentStatuses: [], fields: [] } } };
+  const listPage = { data: { page: { total: 1, entries: [{ entryId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', fullName: 'Lena List', email: 'lena@members.example', phone: null, memberNumber: null, status: 'Active', membershipType: null, joinedOn: null, endsOn: null, endsOnKind: null, paymentStatus: null, dateOfBirth: null, formerAt: null, source: 'upload', inApp: false, invitation: null, app: { word: 'not_invited', tone: 'grey', at: null, line: null, lineTone: 'plain' } }], cursor: null } } };
+  const listView = { data: { list: { hasList: true, version: 1, lastConfirmedAt: null, counts: { entries: 1, inApp: 0, canBeInvited: 1, noEmail: 0, former: 0 }, statuses: [], membershipTypes: [], paymentStatuses: [], fields: [], appWords: [] } } };
 
   it("opens on the gym's own list for staff who may see it, and the roster is one tap away", async () => {
     orgService.getMemberList.mockResolvedValue(listView);
@@ -1259,6 +1274,37 @@ describe('Members: the two tabs (5b-i)', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Using the app' }));
     expect(await screen.findByText('Rita Sen')).toBeTruthy();
     expect(screen.queryByText('Lena List')).toBeNull();
+  });
+
+  it("puts Import and Add member in the page's header, and from the roster tab each opens its box on the list", async () => {
+    orgService.getMemberList.mockResolvedValue(listView);
+    orgService.getMemberListEntries.mockResolvedValue(listPage);
+    drawAt('/console/iron-house/members?view=app', <Members />, '/console/:orgSlug/members');
+    expect(await screen.findByText('Kd Owner')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+    expect(await screen.findByTestId('member-import')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Your list' }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
+    expect(await screen.findByRole('dialog', { name: 'Add member' })).toBeTruthy();
+  });
+
+  it("greys the header's Import and Add member on a gym whose plan has lapsed, and a trainer gets neither", async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, consoleReadOnly: true }] } });
+    drawAt('/console/iron-house/members', <Members />, '/console/:orgSlug/members');
+    expect((await screen.findByRole('button', { name: 'Import' })).disabled).toBe(true);
+    // The header's, and the empty list's own.
+    const adds = await screen.findAllByRole('button', { name: 'Add member' });
+    expect(adds).toHaveLength(2);
+    for (const add of adds) expect(add.disabled).toBe(true);
+
+    cleanup();
+    resetConsoleOrgs();
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'trainer', privileges: ['members.read'] }] } });
+    drawAt('/console/iron-house/members', <Members />, '/console/:orgSlug/members');
+    expect(await screen.findByText('Kd Owner')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Import' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add member' })).toBeNull();
   });
 
   it('L2: shows the people waiting to join above both tabs, so the list tab opening first never hides them', async () => {
@@ -1507,8 +1553,8 @@ describe('Removing a member', () => {
     orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
     drawMembers();
 
-    fireEvent.click(await screen.findByText('Remove'));
-    expect(screen.getByText(/Remove Rita Sen\?/i)).toBeTruthy();
+    fireEvent.click(await screen.findByText('Remove from app'));
+    expect(screen.getByText(/Remove Rita Sen from the app\?/i)).toBeTruthy();
     fireEvent.click(screen.getByText('Keep'));
     expect(orgService.removeMember).not.toHaveBeenCalled();
     expect(screen.getByText('Rita Sen')).toBeTruthy();
@@ -1521,9 +1567,9 @@ describe('Removing a member', () => {
     orgService.removeMember.mockResolvedValue({ data: { status: 'removed' } });
     drawMembers();
 
-    fireEvent.click(await screen.findByText('Remove'));
-    // The second "Remove" is the one inside the question.
-    fireEvent.click(screen.getAllByText('Remove')[0]);
+    fireEvent.click(await screen.findByText('Remove from app'));
+    // The second "Remove from app" is the one inside the question.
+    fireEvent.click(screen.getAllByText('Remove from app')[0]);
     await waitFor(() =>
       expect(orgService.removeMember).toHaveBeenCalledWith('11111111-1111-1111-1111-111111111111', 'u2'),
     );
@@ -1540,7 +1586,7 @@ describe('Removing a member', () => {
     orgService.getMembers.mockResolvedValue(page([ownerSeat]));
     drawMembers();
     expect(await screen.findByText('Kd Owner')).toBeTruthy();
-    expect(screen.queryByText('Remove')).toBeNull();
+    expect(screen.queryByText('Remove from app')).toBeNull();
   });
 
   /** KD'S FINDING AT THE STAFF RE-SMOKE (:14953): *"when a member is added as a
@@ -1562,7 +1608,7 @@ describe('Removing a member', () => {
     expect(screen.getAllByText('Complimentary')).toHaveLength(2);
     // The control: Rita pays, so she keeps her Remove button and no badge.
     expect(screen.getByText('Rita Sen')).toBeTruthy();
-    expect(screen.getAllByText('Remove')).toHaveLength(1);
+    expect(screen.getAllByText('Remove from app')).toHaveLength(1);
   });
 
   it('offers NO Remove beside a staff member, because the server refuses it', async () => {
@@ -1572,7 +1618,7 @@ describe('Removing a member', () => {
     orgService.getMembers.mockResolvedValue(page([staffMemberSeat]));
     drawMembers();
     expect(await screen.findByText('Bhaskar Das')).toBeTruthy();
-    expect(screen.queryByText('Remove')).toBeNull();
+    expect(screen.queryByText('Remove from app')).toBeNull();
   });
 
   /** THE EXPAND-THEN-CONTRACT WINDOW, and it is why the field is optional
@@ -1591,7 +1637,7 @@ describe('Removing a member', () => {
 
     expect(await screen.findByText('Kd Owner')).toBeTruthy();
     expect(screen.getAllByText('Complimentary')).toHaveLength(1);
-    expect(screen.getAllByText('Remove')).toHaveLength(1);
+    expect(screen.getAllByText('Remove from app')).toHaveLength(1);
   });
 
   it('hides Remove from a TRAINER, who may read the roster and may not remove (T3 r1 C/H-2)', async () => {
@@ -1610,7 +1656,7 @@ describe('Removing a member', () => {
 
     expect(await screen.findByText('Rita Sen')).toBeTruthy();
     expect(screen.getByText(/Morning Batch/)).toBeTruthy();
-    expect(screen.queryByText('Remove')).toBeNull();
+    expect(screen.queryByText('Remove from app')).toBeNull();
   });
 
   /** T3 ROUND 1 C/H-1, the roster half. `removeOrgMember` gates on
@@ -1632,14 +1678,14 @@ describe('Removing a member', () => {
     drawMembers();
 
     expect(await screen.findByText('Rita Sen')).toBeTruthy();
-    expect(screen.getByText('Remove')).toBeTruthy();
+    expect(screen.getByText('Remove from app')).toBeTruthy();
   });
 
   it('still offers Remove to a MANAGER (the gate must not shut on the people §2.2 allows)', async () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'manager' }] } });
     orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
     drawMembers();
-    expect(await screen.findByText('Remove')).toBeTruthy();
+    expect(await screen.findByText('Remove from app')).toBeTruthy();
   });
 
   it('keeps the person on screen when the server refuses, and says why', async () => {
@@ -1653,8 +1699,8 @@ describe('Removing a member', () => {
     );
     drawMembers();
 
-    fireEvent.click(await screen.findByText('Remove'));
-    fireEvent.click(screen.getAllByText('Remove')[0]);
+    fireEvent.click(await screen.findByText('Remove from app'));
+    fireEvent.click(screen.getAllByText('Remove from app')[0]);
     expect(await screen.findByText(/A staff member can't be removed/i)).toBeTruthy();
     // Nothing changed, so nothing on the list may look as though it did.
     expect(screen.getByText('Rita Sen')).toBeTruthy();
@@ -1714,7 +1760,7 @@ describe('what may I do here', () => {
   it('NARROWING: a power taken away reaches a screen that is already open', async () => {
     orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
     drawMembers();
-    expect(await screen.findByText('Remove')).toBeTruthy();
+    expect(await screen.findByText('Remove from app')).toBeTruthy();
 
     // Somebody at the next desk moves this person off manager. Before this card
     // the button stayed until they pressed F5 — the server refused the click,
@@ -1723,7 +1769,7 @@ describe('what may I do here', () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'trainer' }] } });
     clickBackIn();
 
-    await waitFor(() => expect(screen.queryByText('Remove')).toBeNull());
+    await waitFor(() => expect(screen.queryByText('Remove from app')).toBeNull());
     // The roster itself is NOT dragged through a reload: only the answer about
     // what this person may do was re-read.
     expect(screen.getByText('Rita Sen')).toBeTruthy();
@@ -1735,7 +1781,7 @@ describe('what may I do here', () => {
     orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
     drawMembers();
     expect(await screen.findByText('Rita Sen')).toBeTruthy();
-    expect(screen.queryByText('Remove')).toBeNull();
+    expect(screen.queryByText('Remove from app')).toBeNull();
 
     orgService.getMine.mockResolvedValue({
       data: {
@@ -1746,24 +1792,24 @@ describe('what may I do here', () => {
     });
     clickBackIn();
 
-    expect(await screen.findByText('Remove')).toBeTruthy();
+    expect(await screen.findByText('Remove from app')).toBeTruthy();
   });
 
   it('counts the TAB coming back to the front, which is a different event', async () => {
     orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
     drawMembers();
-    expect(await screen.findByText('Remove')).toBeTruthy();
+    expect(await screen.findByText('Remove from app')).toBeTruthy();
 
     orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'trainer' }] } });
     fireEvent(document, new Event('visibilitychange'));
 
-    await waitFor(() => expect(screen.queryByText('Remove')).toBeNull());
+    await waitFor(() => expect(screen.queryByText('Remove from app')).toBeNull());
   });
 
   it('leaves a working screen ALONE when the re-check fails', async () => {
     orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
     drawMembers();
-    expect(await screen.findByText('Remove')).toBeTruthy();
+    expect(await screen.findByText('Remove from app')).toBeTruthy();
 
     orgService.getMine.mockRejectedValue(offline());
     clickBackIn();
@@ -1773,7 +1819,7 @@ describe('what may I do here', () => {
     // person is looking at — that would be this project's empty-vs-failed
     // defect, self-inflicted.
     expect(screen.getByText('Rita Sen')).toBeTruthy();
-    expect(screen.getByText('Remove')).toBeTruthy();
+    expect(screen.getByText('Remove from app')).toBeTruthy();
     expect(screen.queryByText(/Couldn't reach the server/i)).toBeNull();
   });
 

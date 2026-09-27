@@ -266,8 +266,9 @@ async function recordNotMe(
   });
 }
 
-/** Withdraw the invitations of these accounts' addresses at this gym, inside the
- *  caller's transaction: staff removed them, so signing in again lets nobody back in. */
+/** Stop the invitations of these accounts' addresses at this gym, inside the caller's
+ *  transaction: staff removed them, so signing in again lets nobody back in, and no
+ *  Invite emails them again (an address never invited gets a stopped invitation). */
 export async function withdrawForAccounts(
   tx: TransactionSql,
   settings: InviteSettings | null,
@@ -275,7 +276,7 @@ export async function withdrawForAccounts(
 ): Promise<number> {
   if (settings === null || input.userIds.length === 0) return 0;
   const emails = await repo.accountAddresses(tx, input.userIds);
-  return await repo.withdrawInvitations(tx, {
+  return await repo.stopInvitations(tx, {
     gymId: input.gymId,
     hmacs: emails.map((email) => emailHmac(settings.hmacKey, email)),
     at: input.at,

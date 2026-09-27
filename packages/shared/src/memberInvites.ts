@@ -149,6 +149,9 @@ export const memberListInvitationSchema = z
     /** When the person the invitation reached said it is not theirs ("Not me"): the gym
      *  has the wrong address for somebody. Only on a declined invitation. */
     notMeAt: z.string().nullable().default(null),
+    /** On a stopped invitation: when the gym removed this address's person from the app,
+     *  or null when it was stopped because the person was taken off the list. */
+    removedAt: z.string().nullable().default(null),
   })
   .strict();
 export type MemberListInvitation = z.infer<typeof memberListInvitationSchema>;

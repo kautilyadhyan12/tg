@@ -608,7 +608,7 @@ describe('the roster', () => {
     renderConsole(Members, '/console/iron-house/members?view=app');
 
     expect(await screen.findByText('Rahul Das')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^remove$/i }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: /^remove from app$/i }).disabled).toBe(true);
     expect(screen.getAllByText(READ_ONLY_NOTE).length).toBeGreaterThan(0);
   });
 
@@ -617,7 +617,7 @@ describe('the roster', () => {
     renderConsole(Members, '/console/iron-house/members?view=app');
 
     await screen.findByText('Rahul Das');
-    expect(screen.getByRole('button', { name: /^remove$/i }).disabled).toBe(false);
+    expect(screen.getByRole('button', { name: /^remove from app$/i }).disabled).toBe(false);
     expect(screen.queryByText(READ_ONLY_NOTE)).toBeNull();
   });
 

@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, Loader2 } from 'lucide-react';
-import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
+import { AlertTriangle, Loader2, Upload, UserPlus } from 'lucide-react';
+import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { orgService, errorText, errorCode } from '../../api/orgsApi';
 import { useConsoleOrg } from './useConsoleOrg';
 import ApplicationsQueue from './ApplicationsQueue';
@@ -16,91 +16,41 @@ import {
   offListView,
   seatIsFree,
 } from './consoleView';
-import {
-  canMakeRoomNow,
-  consoleIsReadOnly,
-  readOnlyNote,
-  seatLineText,
-  seatMeter,
-} from './billingView';
+import { canMakeRoomNow, consoleIsReadOnly, memberMeterText, readOnlyNote, seatMeter } from './billingView';
 import PlanChoiceDialog from '../../components/console/PlanChoiceDialog';
 
-// The roster — Part 3 §4.3's Members screen, holding EXACTLY to §2.4's
-// visibility boundary.
+// The Members screen (spec Part 3 §4.3, §18.2), drawn from `console.css` (spec §17):
+// the title with the plan meter, Import and Add member, Waiting to join, and two tabs —
+// "Your list" (the gym's own list, `MemberListPanel`) and "Using the app" (the roster)
+// until 5b-v-a-ii folds the roster into the one list.
 //
-// FIVE FACTS PER PERSON, and no sixth: display name, the day they joined, the
-// label of the code that brought them in, whether their seat is complimentary,
-// and whether they occupy one of the gym's paid places at all. That is the
-// whole of what the endpoint returns, and it is the whole of what §2.4 lets a
-// gym see about somebody. Staff who may see the gym's own list also get the name
-// that list holds for the person (3b-ii-b): the gym's data, not the member's.
-//
-// **The fifth was added 2026-08-22 (:14953), and T3 L-1 corrected the argument
-// for it — see `orgMemberSchema`, which carries the corrected version.** In
-// short: it does NOT merely say "this place is free". Read beside the
-// complimentary flag it is served with, it tells any trainer or manager exactly
-// which colleagues hold the keys — a list the server otherwise refuses them
-// with a 403. That disclosure is ACCEPTED rather than unnoticed: §2.4's
-// never-see list is member health and personal data, none of which moves, and
-// withholding it would hand a trainer back the defect this card removed.
-// No email address, no body
-// weight, no meals, no coach conversations, no run routes — and no workout
-// figures either, since the columns §4.3 lists (last active, workouts 30d,
-// average form 30d, streak) come from `org_member_stats`, a view that does not
-// exist.
-//
-// **§4.3's SEAT METER IS HERE NOW, and this comment used to explain why it was
-// not.** It said the meter "needs a plan's seat cap, and no gym has a
-// subscription, so a meter here would be drawn over a null" — true until
-// 2026-08-27, when a gym gained the ability to start its own trial. A gym on no
-// plan is still uncapped and still gets no meter, which is the same null handled
-// the same way; what changed is that a gym CAN now be on a plan. The numerator
-// is the server's exact count, never the length of the page below it: this list
-// is fifty rows at a time, so `items.length` would read "50 of 300" at a gym of
-// six hundred.
-//
-// Staff who may see the gym's own list get two tabs: "Your list" (the list the gym
-// keeps, ROADMAP 5b-i) and "Using the app" (this roster). Everyone else sees the roster.
+// The roster holds EXACTLY to §2.4's visibility boundary: display name, the day they
+// joined, the label of the code that brought them in, whether their seat is
+// complimentary, and whether they take one of the gym's paid places — plus, for staff
+// who may see the gym's own list, the name that list holds for them (3b-ii-b). No email
+// address, no body weight, no meals, no workouts. The meter's numbers are the server's
+// exact count off the org row, never the length of a page of the roster.
 
-/** REMOVING A MEMBER — Part 3 §4.3, and it exists because Kd asked what happens
- *  when a gym confirms the wrong person. Until this shipped, nothing in the
- *  product could end a membership except the member deleting their account, so
- *  Confirm was a one-way door.
- *
- *  §4.3 specifies a CONFIRM SHEET before it, and that is the two-step below: the
- *  buttons sit where "Remove" was, so a mis-tap lands on a question rather than
- *  on the removal. Confirm and "Not this person" in the queue above have no such
- *  step, deliberately — both of those are reversible now (remove undoes one, a
- *  fresh application undoes the other), and a question in front of every tap on
- *  a walk-in queue is the friction the 30-second join is supposed not to have.
- *
- *  The consequence is stated where the gym reads it, because it is Kd's own
- *  rule: the person loses the gym's features immediately and keeps every
- *  workout they ever did. */
+/** REMOVING SOMEONE FROM THE APP (§4.3), behind a question: the button sits where the
+ *  question appears, so a mis-tap lands on the question. The person keeps every workout
+ *  and loses the gym's features at once. */
 function RemoveControl({ member, busy, readOnly, words, onRemove }) {
   const [asking, setAsking] = useState(false);
 
   if (!asking) {
     return (
-      <button
-        type="button"
-        onClick={() => setAsking(true)}
-        disabled={busy || readOnly}
-        className="text-xs rounded-lg px-3 py-1.5 flex-shrink-0 disabled:opacity-40"
-        style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
-      >
-        Remove
+      <button type="button" onClick={() => setAsking(true)} disabled={busy || readOnly} className="c-btn c-btn-s c-btn-sm flex-shrink-0">
+        Remove from app
       </button>
     );
   }
 
   return (
-    <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-      <span className="text-xs text-right" style={{ color: 'rgba(255,255,255,0.6)' }}>
-        Remove {member.displayName}? They keep their own workouts and lose your {words.it}&apos;s
-        features.
+    <div className="flex flex-col items-stretch md:items-end gap-2 w-full md:w-auto md:max-w-[320px]">
+      <span className="c-s13 c-t2 md:text-right">
+        Remove {member.displayName} from the app? They keep their own workouts and lose your {words.it}&apos;s features.
       </span>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 md:justify-end">
         <button
           type="button"
           onClick={() => {
@@ -108,17 +58,11 @@ function RemoveControl({ member, busy, readOnly, words, onRemove }) {
             onRemove();
           }}
           disabled={busy || readOnly}
-          className="text-xs rounded-lg px-3 py-1.5 font-semibold disabled:opacity-40"
-          style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}
+          className="c-btn c-btn-danger c-btn-sm"
         >
-          Remove
+          Remove from app
         </button>
-        <button
-          type="button"
-          onClick={() => setAsking(false)}
-          className="text-xs rounded-lg px-3 py-1.5"
-          style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
-        >
+        <button type="button" onClick={() => setAsking(false)} className="c-btn c-btn-s c-btn-sm">
           Keep
         </button>
       </div>
@@ -127,48 +71,42 @@ function RemoveControl({ member, busy, readOnly, words, onRemove }) {
 }
 
 function MemberRow({ member, busy, canRemove, readOnly, words, onRemove, onPutOnList }) {
-  // An app member the gym's list does not hold (3a-vi-b): an amber edge, the reason,
-  // and the button that puts it right. Only staff who may see the list are sent it.
+  // An app member the gym's list does not hold (3a-vi-b): the reason, and the button
+  // that puts it right. Only staff who may see the list are sent it.
   const off = offListView(member.offList);
   return (
-    <div
+    <li
       data-testid={off ? 'member-off-list' : undefined}
-      className="rounded-2xl p-4 flex items-center gap-4"
-      style={{ background: '#121110', border: off ? '1px solid rgba(255,138,31,0.45)' : '1px solid rgba(255,255,255,0.06)' }}
+      className="flex flex-col md:flex-row md:items-center gap-3 px-4 py-3.5 md:px-5 border-t first:border-t-0"
+      style={{ borderColor: 'var(--line)' }}
     >
-      <div className="flex-1 min-w-0">
-        <div className="font-semibold truncate" style={{ color: '#fff' }}>
-          {member.displayName}
-        </div>
-        <div className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          Joined {formatJoinedAt(member.joinedAt)} · {groupLabelText(member)}
-        </div>
+      <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+        <span className="c-s15 c-w6 c-t1 c-ell">{member.displayName}</span>
+        <span className="c-s13 c-t2">
+          In the app since {formatJoinedAt(member.joinedAt)} · {groupLabelText(member)}
+        </span>
         {/* The name on the gym's own list at the address they joined with, beside the
             name they signed up with: a gym that mistyped an address invited a
             stranger, and a different name is the clue (RULINGS 2026-09-23, gap A). */}
         {member.onList ? (
-          <div className="text-xs mt-1 flex flex-wrap items-center gap-2" style={{ color: 'rgba(255,255,255,0.6)' }}>
-            <span className="truncate">On your list as {member.onList.name}</span>
+          <span className="c-s13 c-t2 flex flex-wrap items-center gap-2">
+            <span className="c-ell">On your list as {member.onList.name}</span>
             {member.onList.nameCheck === 'differs' ? (
-              <span
-                data-testid="check-this-is-them"
-                className="rounded-md px-1.5 py-0.5 font-medium flex items-center gap-1"
-                style={{ background: 'rgba(255,138,31,0.12)', color: '#FF8A1F' }}
-              >
-                <AlertTriangle className="w-3 h-3" />
+              <span data-testid="check-this-is-them" className="c-tag c-tag-warn">
+                <AlertTriangle aria-hidden="true" className="w-3 h-3" />
                 Check this is them
               </span>
             ) : null}
-          </div>
+          </span>
         ) : null}
         {off ? (
-          <div className="text-xs mt-1.5 flex flex-col gap-0.5">
-            <span className="flex items-center gap-1 font-medium" style={{ color: '#FF8A1F' }}>
-              <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+          <span className="c-s13 flex flex-col gap-0.5 pt-0.5">
+            <span className="flex items-center gap-1.5 c-w6" style={{ color: 'var(--warn)' }}>
+              <AlertTriangle aria-hidden="true" className="w-3.5 h-3.5 flex-shrink-0" />
               {off.line}
             </span>
-            {off.sameEmail ? <span style={{ color: 'rgba(255,255,255,0.6)' }}>{off.sameEmail}</span> : null}
-          </div>
+            {off.sameEmail ? <span className="c-t2">{off.sameEmail}</span> : null}
+          </span>
         ) : null}
       </div>
       {off ? (
@@ -176,113 +114,43 @@ function MemberRow({ member, busy, canRemove, readOnly, words, onRemove, onPutOn
           type="button"
           onClick={onPutOnList}
           disabled={busy || readOnly}
-          className="text-xs rounded-lg px-3 py-1.5 font-semibold flex-shrink-0 disabled:opacity-40"
-          style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
+          className="c-btn c-btn-soft c-btn-sm flex-shrink-0 self-start md:self-center"
         >
           {off.button}
         </button>
       ) : null}
       {seatIsFree(member) ? (
-        /* A place the gym is not charged for: the owner's own §4.0-step-6 seat,
-           and — since Kd's finding at the staff re-smoke (:14953) — anybody
-           holding the keys, who has cost the gym nothing since :14401 while
-           still looking on this screen exactly like somebody who does.
-
-           No Remove control is drawn beside it, and that is the same rule as
-           before rather than a new one: `removeMember` refuses anybody who is
-           still staff, and an owner is member #1 of their own gym. A greyed
-           control over a live refusal is the defect §2.2's own rules warn
-           about; an absent one states nothing. Ending a staff member's
-           membership is the Staff screen's two-stage flow. */
-        <span
-          className="text-xs rounded-lg px-2 py-1 flex-shrink-0"
-          style={{ background: 'rgba(255,138,31,0.12)', color: '#FF8A1F' }}
-        >
-          Complimentary
-        </span>
+        /* A place the gym is not charged for: the owner's own seat and anybody holding
+           the keys. No Remove control beside it: `removeMember` refuses anybody who is
+           still staff, and an owner is member one of their own gym. */
+        <span className="c-tag c-tag-soft self-start md:self-center">Complimentary</span>
       ) : canRemove ? (
-        /* §4.3: "Trainer role: … Remove hidden." A trainer reads this roster in
-           full and is refused the removal itself, so the control is not drawn
-           for them — same reasoning as the free place above, and the server's
-           403 remains the enforcement (`canRemoveMembers`).
-           **A LAPSED GYM IS THE OTHER CASE AND IT GREYS RATHER THAN HIDES.**
-           The two look alike and are not: a trainer never has this power, so
-           drawing nothing tells them nothing false; read-only is a temporary
-           fact about the GYM, and a manager whose Remove button vanished would
-           be left guessing whether their permissions had changed. */
-        <RemoveControl
-          member={member}
-          busy={busy}
-          readOnly={readOnly}
-          words={words}
-          onRemove={onRemove}
-        />
+        /* §4.3: a trainer is refused the removal, so the control is not drawn for them;
+           a lapsed gym greys it rather than hiding it (the server's 403 enforces both). */
+        <RemoveControl member={member} busy={busy} readOnly={readOnly} words={words} onRemove={onRemove} />
       ) : null}
-    </div>
+    </li>
   );
 }
 
-/** Invitations whose person said "Not me" (RULINGS 2026-09-23, gap A): the gym has the
- *  wrong address for somebody on its list. Reads its own endpoint and owns its own
- *  failure, like the queue above; with nothing to check it draws nothing. */
-function NotMeBox({ gymId, words }) {
-  const [items, setItems] = useState(null);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    if (gymId === null) return undefined;
-    let live = true;
-    // Inside a promise, so even a call that throws at once is a failed read.
-    Promise.resolve()
-      .then(() => orgService.getNotMe(gymId))
-      .then(
-      (res) => {
-        if (live) setItems(res.data?.items ?? []);
-      },
-      (err) => {
-        if (live) setError(errorText(err, "We couldn't check your invitations."));
-      },
-    );
-    return () => {
-      live = false;
-    };
-  }, [gymId]);
-
-  if (error !== null) {
-    return (
-      <p className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
-        {error}
-      </p>
-    );
-  }
-  if (items === null || items.length === 0) return null;
+/** "Already in the app · 3" under an empty list (`MembersEmpty`). */
+function AlreadyInApp({ items }) {
+  if (items.length === 0) return null;
   return (
-    <section
-      data-testid="not-me-box"
-      className="rounded-2xl p-4 flex flex-col gap-3"
-      style={{ background: 'rgba(255,138,31,0.06)', border: '1px solid rgba(255,138,31,0.25)' }}
-    >
-      <div className="flex items-start gap-3">
-        <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: '#FF8A1F' }} />
-        <div>
-          <h2 className="text-sm font-semibold" style={{ color: '#fff' }}>
-            {items.length === 1 ? 'An invitation reached the wrong person' : `${String(items.length)} invitations reached the wrong person`}
-          </h2>
-          <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.65)' }}>
-            Whoever gets email at these addresses said they aren&apos;t your {words.person}. Check the email address you have
-            for them.
-          </p>
-        </div>
-      </div>
-      <ul className="flex flex-col gap-2">
-        {items.map((item) => (
-          <li key={item.entryId} className="rounded-xl px-3 py-2 text-sm" style={{ background: '#121110' }}>
-            <span className="font-medium" style={{ color: '#fff' }}>
-              {item.fullName || 'No name'}
-            </span>
-            <span className="block truncate" style={{ color: 'rgba(255,255,255,0.55)' }}>
-              {item.email}
-            </span>
+    <section className="c-card overflow-hidden" aria-labelledby="already-title">
+      <h2 id="already-title" className="c-h3 px-5 pt-4 pb-3">
+        Already in the app · {items.length.toLocaleString('en')}
+      </h2>
+      <ul>
+        {items.map((m) => (
+          <li
+            key={m.userId}
+            className="flex flex-col md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_minmax(0,1fr)] gap-1 md:gap-4 md:items-center px-5 py-3.5 border-t"
+            style={{ borderColor: 'var(--line)' }}
+          >
+            <span className="c-s15 c-w6 c-t1 c-ell">{m.displayName}</span>
+            <span className="c-s14 c-t2">In the app since {formatJoinedAt(m.joinedAt)}</span>
+            <span>{seatIsFree(m) ? <span className="c-tag c-tag-soft">Complimentary</span> : null}</span>
           </li>
         ))}
       </ul>
@@ -303,26 +171,21 @@ export default function Members() {
   const [removeError, setRemoveError] = useState(null);
   /** The bigger size opened from the "nearly full" line. */
   const [choosing, setChoosing] = useState(false);
+  /** Import or Add member, pressed in the header, for the list to open. */
+  const [action, setAction] = useState(null);
+  const clearAction = useCallback(() => setAction(null), []);
   const gymId = org?.id ?? null;
-  // §4.3's "Remove hidden" for a trainer. Read off the SAME org row the screen
-  // already has, so there is no second read to disagree with the first, and it
-  // is false while the org is still loading — the roster cannot be on screen
-  // before then anyway.
+  // §4.3's "Remove hidden" for a trainer, off the org row the screen already has.
   const canRemove = canRemoveMembers(viewerPrivileges(org));
-  // The gym's own list (and so what came back "Not me") is `members.confirm`'s.
+  // The gym's own list is `members.confirm`'s.
   const canSeeList = viewerPrivileges(org).includes('members.confirm');
   // Which tab, kept in the address so a reload stays on it.
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = canSeeList && searchParams.get('view') !== 'app' ? 'list' : 'app';
   const showTab = (next) => setSearchParams(next === 'app' ? { view: 'app' } : {}, { replace: true });
-  // Part 3 §4.2's read-only console, off the org row this screen already holds
-  // — no read of its own, and false while the org is still loading, which is
-  // the safe direction: a screen with no roster on it yet has no control to
-  // grey out.
+  // Part 3 §4.2's read-only console, off the org row this screen already holds.
   const readOnly = consoleIsReadOnly(org);
-  // THE WORDS THIS SCREEN SPEAKS (roadmap 2b) — a gym has members, a studio
-  // and a trainer have clients. Off the org row already in hand; the gym's
-  // words while it loads, which is what every sentence here said before.
+  // A gym has members, a studio and a trainer have clients.
   const words = orgWords(org?.orgType);
 
   useEffect(() => {
@@ -341,10 +204,9 @@ export default function Members() {
       })
       .catch((err) => {
         if (cancelled) return;
-        // §2.2 gives a trainer the member list for their own group only, and
-        // nothing assigns groups yet, so a studio trainer is held out with a
-        // 403 carrying its own sentence. Printing the empty state at them would
-        // say the gym has no members, which is a different and false thing.
+        // §2.2 gives a trainer the member list for their own group only, and nothing
+        // assigns groups yet, so a studio trainer is held out with a 403 carrying its own
+        // sentence. Printing the empty state would say the gym has no members.
         const message =
           errorCode(err) === 'trainer_scope_unavailable'
             ? errorText(err, "Your role doesn't allow that.")
@@ -361,11 +223,8 @@ export default function Members() {
     setAttempt((n) => n + 1);
   };
 
-  /** A confirm from the queue above puts somebody INTO this list, so the list
-   *  is re-read from page one rather than having a row assembled here out of
-   *  two responses. The person is on screen the moment they are a member,
-   *  which is what makes the tap feel like it did something — and every field
-   *  shown is one the server just stated. */
+  /** A confirm from the queue above puts somebody INTO this list, so the list is re-read
+   *  from page one; every field shown is one the server just stated. */
   const reloadRoster = () => {
     setRemoveError(null);
     retry();
@@ -393,9 +252,7 @@ export default function Members() {
       await orgService.removeMember(gymId, member.userId);
       reloadRoster();
     } catch (err) {
-      // The server's own sentence — a staff member cannot be removed here, and
-      // that refusal explains itself better than anything this screen could
-      // invent. The list is left exactly as it was, because nothing changed.
+      // The server's own sentence; the list is left as it was, because nothing changed.
       setRemoveError(errorText(err, "We couldn't remove them. Please try again."));
     } finally {
       setRemovingId(null);
@@ -409,14 +266,12 @@ export default function Members() {
       const res = await orgService.getMembers(gymId, { limit: 50, cursor: state.nextCursor });
       setState((prev) => ({
         ...prev,
-        // Appended, never replaced: the cursor walk is keyset-ordered on the
-        // same pair the server sorts by, so pages tile rather than overlap.
+        // Appended, never replaced: the cursor walk is keyset-ordered.
         items: [...prev.items, ...(res.data?.items ?? [])],
         nextCursor: res.data?.nextCursor ?? null,
       }));
     } catch (err) {
-      // The rows already on screen are real and stay. A failure to fetch the
-      // NEXT page must not wipe the page a person is reading.
+      // The rows already on screen are real and stay.
       setState((prev) => ({ ...prev, error: errorText(err, "We couldn't load any more.") }));
     } finally {
       setLoadingMore(false);
@@ -425,111 +280,89 @@ export default function Members() {
 
   if (orgLoading) {
     return (
-      <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
-        <ConsoleLoading label="Loading your organisation…" />
+      <div className="c-page">
+        <ConsoleLoading label="Loading your organisation…" newLook />
       </div>
     );
   }
 
   if (orgError !== null) {
     return (
-      <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
-        <ConsoleFailed message={orgError} onRetry={reload} />
+      <div className="c-page">
+        <ConsoleFailed message={orgError} onRetry={reload} newLook />
       </div>
     );
   }
 
   if (notFound) {
     return (
-      <div className="max-w-3xl mx-auto px-4 md:px-8 py-8">
-        <ConsoleCard>
-          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-            We couldn&apos;t find an organisation you run at this address.
-          </p>
-          <Link to="/console" className="text-sm inline-block mt-3" style={{ color: '#FF8A1F' }}>
+      <div className="c-page">
+        <section className="c-card p-5 md:p-6 flex flex-col gap-3">
+          <p className="c-s15 c-t2">We couldn&apos;t find an organisation you run at this address.</p>
+          <Link to="/console" className="c-s15 c-w6 c-lk self-start">
             Your organisations
           </Link>
-        </ConsoleCard>
+        </section>
       </div>
     );
   }
 
-  const countLabel = memberCountLabel(
-    { items: state.items, nextCursor: state.nextCursor },
-    org?.orgType,
-  );
-  // §4.3's header meter. Null for a gym on no plan and for a capless band — both
-  // are real states, and neither may be drawn as "0 of 0" (:5807). It does NOT
-  // wait on the roster read: the numbers come off the org row, so a gym whose
-  // member list failed to load still shows how full it is.
+  const countLabel = memberCountLabel({ items: state.items, nextCursor: state.nextCursor }, org?.orgType);
+  // §4.3's header meter, off the org row: null for a gym on no plan and a capless band.
   const meter = seatMeter(org);
+  const meterText = memberMeterText(meter, org?.orgType);
+  const press = (what) => {
+    showTab('list');
+    setAction(what);
+  };
 
   return (
-    <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 flex flex-col gap-4">
-      <div>
-        <h1 className="text-2xl font-bold" style={{ color: '#fff' }}>
-          {words.peopleCap}
-        </h1>
-        {!state.loading && state.error === null ? (
-          <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
-            {tab === 'app' ? `${org.name} · ${countLabel}` : org.name}
+    <div className="c-page">
+      <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between md:gap-6">
+        <div className="flex flex-col gap-1.5 min-w-0">
+          <h1 className="c-h1">{words.peopleCap}</h1>
+          <p className="c-sub">
+            <span className={meterText === null ? '' : 'hidden md:inline'}>{org.name}</span>
+            {meterText !== null ? (
+              <>
+                <span className="hidden md:inline"> · </span>
+                <span data-testid="seat-meter" style={meter.pressure ? { color: 'var(--warn)' } : undefined}>
+                  {meterText}
+                </span>
+              </>
+            ) : null}
           </p>
+          {tab === 'app' && !state.loading && state.error === null ? <p className="c-s14 c-t3">{countLabel}</p> : null}
+          {/* Nearly full: billing staff on a paying plan can make room from here. */}
+          {meter?.pressure === true && canMakeRoomNow(org) ? (
+            <button type="button" onClick={() => setChoosing(true)} className="c-btn c-btn-soft self-start mt-1">
+              Change size
+            </button>
+          ) : null}
+          {/* The note explains greyed controls, so only to somebody who has them. */}
+          {readOnly && canRemove ? <p className="c-s14 c-t2">{readOnlyNote(org?.orgType)}</p> : null}
+        </div>
+        {canSeeList ? (
+          <div className="grid grid-cols-2 gap-2 md:flex">
+            <button type="button" onClick={() => press('import')} disabled={readOnly} className="c-btn c-btn-s c-btn-lg md:h-10 md:text-sm">
+              <Upload aria-hidden="true" className="w-4 h-4" />
+              Import
+            </button>
+            <button type="button" onClick={() => press('add')} disabled={readOnly} className="c-btn c-btn-p c-btn-lg md:h-10 md:text-sm">
+              <UserPlus aria-hidden="true" className="w-4 h-4" />
+              Add {words.person}
+            </button>
+          </div>
         ) : null}
-        {meter !== null ? (
-          <p
-            data-testid="seat-meter"
-            className="text-sm mt-1 font-medium"
-            /* §4.2's own threshold: amber at 90 % of cap. Below it the meter is
-               a fact, not a warning, and colouring it would cry wolf for the
-               290 days a gym is nowhere near its limit. */
-            style={{ color: meter.pressure ? '#FF8A1F' : 'rgba(255,255,255,0.45)' }}
-          >
-            {/* The words are `seatLineText`'s. This header used to spell the
-                full-gym clause out itself, which meant the banner overhead and
-                the line under it were two copies of one sentence with nothing
-                keeping them equal. */}
-            {seatLineText(meter, org?.orgType)}
-          </p>
-        ) : null}
-        {/* Nearly full: billing staff on a paying plan can make room from here. A trial's
-            limit stays the trial's until the first payment, so it gets no button. */}
-        {meter?.pressure === true && canMakeRoomNow(org) ? (
-          <button
-            type="button"
-            onClick={() => setChoosing(true)}
-            className="mt-2 rounded-xl px-4 py-2.5 text-sm font-semibold"
-            style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F', minHeight: 44 }}
-          >
-            Change size
-          </button>
-        ) : null}
-        {choosing ? <PlanChoiceDialog org={org} mode="size" onClose={() => setChoosing(false)} /> : null}
-        {/* THE NOTE IS DRAWN WHERE THERE IS A GREYED CONTROL TO EXPLAIN, and on
-            this screen that means somebody who may remove people. A trainer has
-            no Remove button at all (§4.3), so for them this sentence would
-            explain nothing that is on their screen — true, and noise, with
-            §4.2's strip overhead already saying the gym has no plan. The
-            waiting queue below carries its own sentence for its own reason. */}
-        {readOnly && canRemove ? (
-          <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
-            {readOnlyNote(org?.orgType)}
-          </p>
-        ) : null}
-      </div>
+      </header>
+      {choosing ? <PlanChoiceDialog org={org} mode="size" onClose={() => setChoosing(false)} /> : null}
 
-      {/* WAITING TO JOIN, above both tabs, where it sat before the tabs: the list tab opens
-          first, and people at the door must not be hidden behind the other one. It reads its
-          own endpoint and owns its own failure, and a trainer, who may read the roster and
-          may not confirm, sees no section rather than a refusal. */}
-      <ApplicationsQueue
-        gymId={gymId}
-        orgType={org?.orgType}
-        readOnly={readOnly}
-        onRosterChanged={reloadRoster}
-      />
+      {/* WAITING TO JOIN, above the tabs: people at the door must not be hidden behind the
+          other tab. It reads its own endpoint and owns its own failure. */}
+      <ApplicationsQueue gymId={gymId} orgType={org?.orgType} readOnly={readOnly} onRosterChanged={reloadRoster} />
 
       {canSeeList ? (
-        <div className="grid grid-cols-2 gap-1 rounded-2xl p-1" role="tablist" style={{ background: 'rgba(255,255,255,0.06)' }}>
+        <div className="c-utabs" role="tablist">
           {[
             ['list', 'Your list'],
             ['app', 'Using the app'],
@@ -540,8 +373,7 @@ export default function Members() {
               role="tab"
               aria-selected={tab === key}
               onClick={() => showTab(key)}
-              className="rounded-xl min-h-[44px] text-sm font-semibold"
-              style={tab === key ? { background: '#FF8A1F', color: '#000' } : { color: 'rgba(255,255,255,0.7)' }}
+              className={tab === key ? 'c-utab c-utab-on' : 'c-utab'}
             >
               {label}
             </button>
@@ -550,65 +382,55 @@ export default function Members() {
       ) : null}
 
       {tab === 'list' ? (
-        <>
-          {/* Invitations that came back "Not me". */}
-          <NotMeBox gymId={gymId} words={words} />
-          <MemberListPanel gymId={gymId} gym={org} words={words} readOnly={readOnly} onRosterChanged={reloadRoster} />
-        </>
+        <MemberListPanel
+          gymId={gymId}
+          gym={org}
+          words={words}
+          readOnly={readOnly}
+          action={action}
+          onActionTaken={clearAction}
+          emptyExtra={<AlreadyInApp items={state.items} />}
+          onRosterChanged={reloadRoster}
+        />
       ) : null}
 
-      {tab === 'app' && state.loading ? <ConsoleLoading label={`Loading ${words.people}…`} /> : null}
+      {tab === 'app' && state.loading ? <ConsoleLoading label={`Loading ${words.people}…`} newLook /> : null}
 
-      {/* T3 r1 L-3: `ConsoleFailed`'s own contract is "a failure ALWAYS offers a
-          way out", and this one dead-ended. The way out of a failed removal is
-          to re-read the roster — the person is still on it, their own Remove
-          control is still there, and the fresh read settles whether the removal
+      {/* A failure always offers a way out: the fresh read settles whether a removal
           landed before the error did. */}
-      {tab === 'app' && removeError !== null ? (
-        <ConsoleFailed message={removeError} onRetry={reloadRoster} />
-      ) : null}
+      {tab === 'app' && removeError !== null ? <ConsoleFailed message={removeError} onRetry={reloadRoster} newLook /> : null}
 
-      {tab === 'app' && !state.loading && state.error !== null ? (
-        <ConsoleFailed message={state.error} onRetry={retry} />
-      ) : null}
+      {tab === 'app' && !state.loading && state.error !== null ? <ConsoleFailed message={state.error} onRetry={retry} newLook /> : null}
 
       {tab === 'app' && !state.loading && state.error === null && state.items.length === 0 ? (
-        <ConsoleCard>
-          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-            Nobody has joined yet.
-          </p>
-          <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.45)' }}>
-            Share your join code and {words.people} will appear here.
-          </p>
-        </ConsoleCard>
+        <section className="c-card p-5 md:p-6 flex flex-col gap-1">
+          <p className="c-s15 c-w6 c-t1">Nobody has joined yet.</p>
+          <p className="c-s14 c-t2">Share your join code and {words.people} will appear here.</p>
+        </section>
       ) : null}
 
       {tab === 'app' && state.items.length > 0 ? (
-        <div className="flex flex-col gap-3">
-          {state.items.map((m) => (
-            <MemberRow
-              key={m.userId}
-              member={m}
-              words={words}
-              busy={removingId === m.userId}
-              canRemove={canRemove}
-              readOnly={readOnly}
-              onRemove={() => removeMember(m)}
-              onPutOnList={() => putOnList(m)}
-            />
-          ))}
-        </div>
+        <section className="c-card overflow-hidden">
+          <ul>
+            {state.items.map((m) => (
+              <MemberRow
+                key={m.userId}
+                member={m}
+                words={words}
+                busy={removingId === m.userId}
+                canRemove={canRemove}
+                readOnly={readOnly}
+                onRemove={() => removeMember(m)}
+                onPutOnList={() => putOnList(m)}
+              />
+            ))}
+          </ul>
+        </section>
       ) : null}
 
       {tab === 'app' && state.nextCursor !== null ? (
-        <button
-          type="button"
-          onClick={loadMore}
-          disabled={loadingMore}
-          className="self-start rounded-xl px-4 py-2.5 text-sm font-medium flex items-center gap-2"
-          style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
-        >
-          {loadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+        <button type="button" onClick={loadMore} disabled={loadingMore} className="c-btn c-btn-s c-btn-lg w-full md:w-auto md:self-start">
+          {loadingMore ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
           {loadingMore ? 'Loading…' : 'Load more'}
         </button>
       ) : null}

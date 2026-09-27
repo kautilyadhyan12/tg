@@ -35,6 +35,7 @@ import {
   inviteOutcomeWords,
   outcomeWords,
   personInviteAction,
+  pastWords,
   patchFrom,
   compareRecords,
   whenWords,
@@ -469,6 +470,14 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       setMode('view');
       setNotice(inviteOutcomeWords(outcome, again));
       onChanged();
+      // The App word is the server's (§18.4), so the person is read again for it; if
+      // that read fails the invitation above still shows.
+      try {
+        const fresh = (await orgService.getMemberListEntry(gymId, asked)).data.entry;
+        if (wanted.current === asked && fresh.entryId === asked) setEntry(fresh);
+      } catch {
+        // Kept as it is: the notice says what was done.
+      }
     } catch (err) {
       if (wanted.current === asked) refused(err, again ? "We couldn't send the invitation again." : "We couldn't invite this person.");
     } finally {
@@ -731,10 +740,15 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         <div className="flex flex-wrap items-center gap-2">
           {p.formerAt !== null ? (
             <span className="rounded-md px-2 py-0.5 text-xs font-medium" style={{ background: C.plain, color: C.soft }}>
-              Past member · removed {whenWords(p.formerAt)}
+              {pastWords(p)}
             </span>
           ) : null}
           <Tag view={inv} />
+          {inv.line !== null ? (
+            <span className="text-xs" style={{ color: C.muted }}>
+              {inv.line}
+            </span>
+          ) : null}
         </div>
         {inv?.detail ? (
           <p className="text-sm flex gap-2" style={{ color: C.orange }}>
@@ -820,7 +834,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           <div className="flex gap-2">
             <button type="button" onClick={() => void putBack()} disabled={busy || readOnly} className={`${BUTTON} flex-1 sm:flex-none`} style={{ background: C.orange, color: '#000' }}>
               <UserPlus className="w-4 h-4" />
-              Put back on list
+              Put back on your list
             </button>
             <MoreMenu
               disabled={busy || readOnly}

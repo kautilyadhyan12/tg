@@ -735,6 +735,31 @@
   }
 }
 
+/* A member's row (5b-v; `MembersList`, `MembersPhone`): on a phone the name and contact,
+   the gym's words on one line, the App word, and a line to check under it all; from
+   768 px one row of the table under `c-th`. `c-member-grid-past` is the past members'
+   table (no Payment; "Past member since" in its place). Sets no `display`. */
+.c-member-grid {
+  grid-template-columns: minmax(0, 1fr) 18px;
+  grid-template-areas: "who go" "words go" "app go" "note note";
+  column-gap: 12px;
+  row-gap: 3px;
+  align-items: start;
+}
+@media (min-width: 768px) {
+  .c-member-grid {
+    grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 0.9fr) minmax(0, 2.1fr) 20px;
+    grid-template-areas: "who status type ends pay app go" "note note note note note note note";
+    column-gap: 16px;
+    row-gap: 4px;
+    align-items: center;
+  }
+  .c-member-grid-past {
+    grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 2.1fr) 20px;
+    grid-template-areas: "who status type ends app go" "note note note note note note";
+  }
+}
+
 /* A panel or pop-up, and the "look at this" box. */
 .c-sheet {
   background: var(--sheet);

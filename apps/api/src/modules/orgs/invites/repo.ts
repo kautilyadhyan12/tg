@@ -304,11 +304,17 @@ export async function againUsage(
 }
 
 /** The gym's invitations to these addresses as a person's page and the list show
- *  them, by HMAC: the state, when, the newest email and how many were sent again. */
+ *  them, by HMAC: the state, when, the newest email and how many were sent again.
+ *
+ *  `countSentAgain: false` leaves the count out and reads it as 0: the App word over a
+ *  whole list needs no count, and on a sends table whose statistics are not yet fresh
+ *  (a gym that has just invited thousands) the count's subquery was planned over every
+ *  sent email, once per invitation — 5.4 s for 8,000 invitations, measured 2026-09-27. */
 export async function invitationViews(
   sql: SqlOrTx,
   gymId: string,
   hmacs: readonly string[],
+  { countSentAgain = true }: { countSentAgain?: boolean } = {},
 ): Promise<Map<string, MemberListInvitation>> {
   if (hmacs.length === 0) return new Map();
   const rows = await sql<
@@ -331,8 +337,10 @@ export async function invitationViews(
            l.reason AS email_reason,
            coalesce(l.finished_at, l.created_at) AS email_at,
            l.result AS email_result,
-           (SELECT count(*)::int FROM gym_invite_sends a
-             WHERE a.gym_id = i.gym_id AND a.invite_id = i.id AND a.kind = 'again' AND a.state = 'sent') AS again
+           CASE WHEN ${countSentAgain}::boolean
+                THEN (SELECT count(*)::int FROM gym_invite_sends a
+                       WHERE a.gym_id = i.gym_id AND a.invite_id = i.id AND a.kind = 'again' AND a.state = 'sent')
+                ELSE 0 END AS again
     FROM gym_invites i
     LEFT JOIN LATERAL (
       SELECT s.state, s.reason, s.finished_at, s.created_at, s.result
@@ -366,9 +374,27 @@ export async function invitationViews(
       sentAgain: row.again,
       waitingSince: row.waiting_since?.toISOString() ?? null,
       notMeAt: row.not_me_at?.toISOString() ?? null,
+      removedAt: null,
     });
   }
   return views;
+}
+
+/** When the gym last removed from the app the person signed in with each address, for
+ *  those who are not members here now; keyed by the lower-cased address. */
+export async function removedAtByEmail(sql: SqlOrTx, gymId: string, emails: readonly string[]): Promise<Map<string, Date>> {
+  if (emails.length === 0) return new Map();
+  const rows = await sql<{ email: string; removed_at: Date }[]>`
+    SELECT lower(u.email::text) AS email, max(m.removed_at) AS removed_at
+    FROM gym_members m
+    JOIN users u ON u.id = m.user_id
+    WHERE m.gym_id = ${gymId}
+      AND m.removed_at IS NOT NULL
+      AND u.email = ANY(${[...emails]}::citext[])
+      AND NOT EXISTS (
+        SELECT 1 FROM gym_members l WHERE l.gym_id = m.gym_id AND l.user_id = m.user_id AND l.removed_at IS NULL)
+    GROUP BY lower(u.email::text)`;
+  return new Map(rows.map((row) => [row.email, row.removed_at]));
 }
 
 // ── The unsubscribe link (public; the token's MAC has proved the id) ─────────
@@ -967,6 +993,25 @@ export async function withdrawInvitations(
   const rows = await tx<{ id: string }[]>`
     UPDATE gym_invites SET state = 'withdrawn', answered_at = ${input.at}, waiting_since = NULL, not_me_at = NULL
     WHERE gym_id = ${input.gymId} AND email_hmac = ANY(${[...input.hmacs]}::text[]) AND state <> 'withdrawn'
+    RETURNING id`;
+  return rows.length;
+}
+
+/** Staff removed these members: each address's invitation is stopped, and an address the
+ *  gym never invited gets a stopped one, so no Invite reaches a person the gym has just
+ *  removed. Send again starts it again. Answers how many changed. */
+export async function stopInvitations(
+  tx: TransactionSql,
+  input: { gymId: string; hmacs: readonly string[]; at: Date },
+): Promise<number> {
+  if (input.hmacs.length === 0) return 0;
+  const rows = await tx<{ id: string }[]>`
+    INSERT INTO gym_invites (gym_id, email_hmac, state, answered_at, created_at)
+    SELECT ${input.gymId}, h, 'withdrawn', ${input.at}, ${input.at}
+    FROM unnest(${[...input.hmacs]}::text[]) AS h
+    ON CONFLICT (gym_id, email_hmac) DO UPDATE
+      SET state = 'withdrawn', answered_at = ${input.at}, waiting_since = NULL, not_me_at = NULL
+      WHERE gym_invites.state <> 'withdrawn'
     RETURNING id`;
   return rows.length;
 }

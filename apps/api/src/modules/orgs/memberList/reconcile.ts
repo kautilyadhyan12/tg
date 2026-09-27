@@ -866,7 +866,13 @@ export function reconcile(input: ReconcileInput): Reconciled {
       // `onListOf` over today's list, keeping the record it lands on.
       const contact = { email: member.email, phone: member.statedPhone };
       const joined = joinedOf(member);
-      const entry = joined === null ? entryFor(contact, null) : !joined.former ? joined : entryFor(contact, joined.fullName);
+      // No joined record: the record with their own name, else the first (a household).
+      const entry =
+        joined === null
+          ? (entryFor(contact, member.fullName) ?? entryFor(contact, null))
+          : !joined.former
+            ? joined
+            : entryFor(contact, joined.fullName);
       return {
         ...member,
         onList: entry !== null,

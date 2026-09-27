@@ -46,7 +46,7 @@ import type { EntryValues } from "./byHand.js";
 import type { CarriedFields, ListEntry, ListMember } from "./reconcile.js";
 import { sameName } from "./samePerson.js";
 
-type SqlOrTx = Sql | TransactionSql;
+export type SqlOrTx = Sql | TransactionSql;
 
 /** An upload row's stored values as this module is willing to read them back.
  *  Every one of the six has a CHECK or a schema behind it in the table, and every
@@ -80,6 +80,8 @@ export interface ListState {
 
 /** One of the gym's own app members, and what its list says about them today. */
 export interface MemberAgainstList extends ListMember {
+  /** The account's address, proved or not: only to tell a name made from it (§18.4). */
+  accountEmail: string | null;
   /** The record they joined with is current; with no such record, a current entry of
    *  this gym matches their verified email, else their stated phone. */
   onList: boolean;
@@ -115,6 +117,26 @@ export interface MemberAgainstList extends ListMember {
   entryFullName: string | null;
   /** When this membership began, for a screen naming the person. */
   joinedAt: Date;
+}
+
+/** The gym's time zone, for its own calendar day. */
+export async function gymTimeZone(sql: SqlOrTx, gymId: string): Promise<string> {
+  const rows = await sql<{ timezone: string }[]>`SELECT timezone FROM gyms WHERE id = ${gymId}`;
+  const zone = rows[0]?.timezone;
+  if (zone === undefined) throw new Error(`gym ${gymId} has no row`);
+  return zone;
+}
+
+/** Every current record, as much as its App word needs (§18.4). */
+export async function appRows(
+  sql: SqlOrTx,
+  gymId: string,
+): Promise<{ id: string; fullName: string; email: string | null; dateOfBirth: string | null; former: boolean }[]> {
+  const rows = await sql<{ id: string; full_name: string; email: string | null; date_of_birth: string | null }[]>`
+    SELECT id, full_name, email::text AS email, date_of_birth::text AS date_of_birth
+    FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND former_at IS NULL`;
+  return rows.map((row) => ({ id: row.id, fullName: row.full_name, email: row.email, dateOfBirth: row.date_of_birth, former: false }));
 }
 
 export async function listState(sql: SqlOrTx, gymId: string): Promise<ListState | null> {
@@ -809,6 +831,7 @@ export async function membersAgainstList(
     {
       user_id: string;
       display_name: string;
+      account_email: string | null;
       email: string | null;
       stated_phone_e164: string | null;
       ever_listed: boolean;
@@ -829,6 +852,7 @@ export async function membersAgainstList(
     SELECT m.user_id,
            m.joined_at,
            u.display_name,
+           u.email::text AS account_email,
            (m.complimentary = false
             AND NOT EXISTS (
               SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)) AS seat_counted,
@@ -902,21 +926,22 @@ export async function membersAgainstList(
       ORDER BY c.channel, c.listed_seq
       LIMIT 1
     ) f ON true
-    -- A JOINED RECORD THAT HAS COME OFF: the current records on the member's proved
-    -- email or stated phone, email first, for the same-name test below (onListOf).
+    -- A JOINED RECORD THAT HAS COME OFF, OR NO JOINED RECORD: the current records on the
+    -- member's proved email or stated phone, email first, for the same-name test below
+    -- (onListOf; and a household, where the record with the member's own name is theirs).
     LEFT JOIN LATERAL (
       SELECT jsonb_agg(jsonb_build_object('id', c.id, 'status', c.status, 'memberNumber', c.member_number, 'fullName', c.full_name)
                        ORDER BY c.channel, c.listed_seq) AS list
       FROM (
         (SELECT x.id, x.status, x.member_number, x.full_name, x.listed_seq, 1 AS channel
          FROM gym_member_list_entries x
-         WHERE x.gym_id = m.gym_id AND x.former_at IS NULL AND j.former_at IS NOT NULL AND v.proved AND x.email = u.email
+         WHERE x.gym_id = m.gym_id AND x.former_at IS NULL AND (j.id IS NULL OR j.former_at IS NOT NULL) AND v.proved AND x.email = u.email
          ORDER BY x.listed_seq
          LIMIT 20)
         UNION ALL
         (SELECT x.id, x.status, x.member_number, x.full_name, x.listed_seq, 2 AS channel
          FROM gym_member_list_entries x
-         WHERE x.gym_id = m.gym_id AND x.former_at IS NULL AND j.former_at IS NOT NULL
+         WHERE x.gym_id = m.gym_id AND x.former_at IS NULL AND (j.id IS NULL OR j.former_at IS NOT NULL)
            AND m.stated_phone_e164 IS NOT NULL AND x.phone_e164 = m.stated_phone_e164
          ORDER BY x.listed_seq
          LIMIT 20)
@@ -934,14 +959,20 @@ export async function membersAgainstList(
     ORDER BY m.joined_at, m.user_id`;
   return rows.map((row) => {
     // Joined record off the list: a current record on their contact with its name is them.
+    // No joined record: of the records on their contact (a household on one address),
+    // the one with the name they signed up with is theirs, else §9.7's first.
     const joinedName = row.joined_full_name;
+    const sameContact = sameContactSchema.parse(row.same_contact ?? []);
     const alt =
       row.joined_former && joinedName !== null
-        ? sameContactSchema.parse(row.same_contact ?? []).find((entry) => sameName(entry.fullName, joinedName))
-        : undefined;
+        ? sameContact.find((entry) => sameName(entry.fullName, joinedName))
+        : row.joined_entry_id === null
+          ? sameContact.find((entry) => sameName(entry.fullName, row.display_name))
+          : undefined;
     return {
       userId: row.user_id,
       fullName: row.display_name,
+      accountEmail: row.account_email,
       email: row.email,
       statedPhone: row.stated_phone_e164,
       everListed: row.ever_listed,
@@ -1594,6 +1625,8 @@ export interface EntriesPageInput {
   /** The invitation filter (§11.5): only these entries, or all but these; null for
    *  no filter. The ids are worked out by the caller from the address HMACs. */
   invitation: { ids: readonly string[]; include: boolean } | null;
+  /** Only these records (the App words asked for, §18.4), or null for no filter. */
+  appIds: readonly string[] | null;
   /** Already escaped for LIKE by the caller, or null. */
   like: string | null;
   cursor: { name: string; id: string } | null;
@@ -1627,6 +1660,7 @@ export async function entriesPage(
   const paymentStatuses = input.paymentStatuses === null ? null : [...input.paymentStatuses];
   const invitedIds = input.invitation === null ? null : [...input.invitation.ids];
   const invitedInclude = input.invitation?.include ?? true;
+  const appIds = input.appIds === null ? null : [...input.appIds];
   const rows = await sql<
     {
       total: number;
@@ -1685,6 +1719,7 @@ export async function entriesPage(
         AND (${invitedIds}::uuid[] IS NULL
              OR (${invitedInclude}::boolean AND e.id = ANY(${invitedIds}::uuid[]))
              OR (NOT ${invitedInclude}::boolean AND e.id <> ALL(${invitedIds}::uuid[])))
+        AND (${appIds}::uuid[] IS NULL OR e.id = ANY(${appIds}::uuid[]))
     ),
     totals AS (SELECT count(*)::int AS total FROM filtered)
     SELECT t.total, f.id, f.full_name, f.email, f.phone_e164, f.member_number,

@@ -373,12 +373,13 @@ export async function inviteAgain(
 }
 
 /** The invitation of each of these entries' addresses, for a page of the list or one
- *  person's page. */
+ *  person's page. `countSentAgain: false` is the App word's (its `sentAgain` reads 0). */
 export async function invitationsOf(
   sql: SqlOrTx,
   settings: InviteSettings | null,
   gymId: string,
   entries: readonly { email: string | null }[],
+  options: { countSentAgain?: boolean } = {},
 ): Promise<(MemberListInvitation | null)[]> {
   if (settings === null) return entries.map(() => null);
   const hmacs = entries.map((entry) => (entry.email === null ? null : emailHmac(settings.hmacKey, entry.email)));
@@ -386,8 +387,18 @@ export async function invitationsOf(
     sql,
     gymId,
     hmacs.flatMap((hmac) => (hmac === null ? [] : [hmac])),
+    options,
   );
-  return hmacs.map((hmac) => (hmac === null ? null : (views.get(hmac) ?? null)));
+  const found = hmacs.map((hmac) => (hmac === null ? null : (views.get(hmac) ?? null)));
+  // A stopped invitation says whether the gym removed its person from the app, and when.
+  const stopped = entries.flatMap((entry, at) => (found[at]?.state === "withdrawn" && entry.email !== null ? [entry.email] : []));
+  if (stopped.length === 0) return found;
+  const removed = await repo.removedAtByEmail(sql, gymId, stopped);
+  return found.map((view, at) => {
+    const email = entries[at]?.email ?? null;
+    const when = view?.state === "withdrawn" && email !== null ? removed.get(email.toLowerCase()) : undefined;
+    return view === null || when === undefined ? view : { ...view, removedAt: when.toISOString() };
+  });
 }
 
 /** The invitations that came back "Not me", each with the list's current people at

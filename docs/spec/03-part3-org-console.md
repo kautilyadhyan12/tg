@@ -2926,6 +2926,8 @@ must come out as a word and never throw). First match wins:
 |---|---|---|---|
 | 1 | A current member row reaches someone in the app (§9.7's one-row-per-person match) | **In the app** (green) | Names differ: "Signed up in the app as Dan Wu. Check this is them." (amber) · two people in the app on one row: "Maria Park and Leo Park use the app with these details." |
 | 1b | A past member row whose person is still in the app | **In the app** (amber) | "Grace still uses the app through your gym. Remove them from the app if they've left." |
+| 1c | Nobody in the app on this row, but someone in the app with this row's email is matched to another row (a household) | **Not invited** (grey) | "Maria Park uses the app with this email." (the other row's name) |
+| 1d | A current row with an email whose date of birth makes them under 18 by the gym's day | **Not invited** (grey) | "Under 18" — whatever the address's invitation says: Invite never reaches them, so it was a parent's or came before the date was corrected |
 | 2 | Invitation declined as "Not me" | **Wrong email** (red) | "Whoever gets email at {email} says they aren't {first name}. Check the address with {first name}." |
 | 3 | Invitation waiting for a place | **Waiting for a place** (amber) | "{First name} tapped Join, but all {cap} places in your plan are taken." |
 | 4 | Invitation stopped with a removed date | **Removed from app · 26 Sep** (grey) | — |
@@ -2935,6 +2937,20 @@ must come out as a word and never throw). First match wins:
 | 8 | Email bounced, failed or refused, or not sent for an address, delivery or gym reason | **Email didn't arrive** (amber) | the reason's sentence (`MEMBER_INVITE_EMAIL_RESULT_WORDS` / `…_REASON_WORDS`), e.g. "The email bounced. Check the address with Emma." |
 | 9 | Invitation waiting (queued, sending, sent, delivered, or not known) | **Invited** (grey) | the day, "22 Sep"; not known: "We couldn't confirm this email went. Only send it again if they say they didn't get it." |
 | 10 | Never invited, or the invitation was cancelled when they were moved to past members | **Not invited** (grey) | "No email address" · "Under 18" (the list's date of birth, the gym's today) · "Invitation cancelled" |
+
+**Built in 5b-v-a-i (2026-09-27):** `appWord` in `apps/api/src/modules/orgs/memberList/appWord.ts`,
+its facts gathered in `appViews.ts`, its table in `memberList.appWord.unit.test.ts` (the
+spec's rows, the local databases' real invitation histories, and every combination of
+invitation facts the types allow). Two things building it settled. **A household's person is
+the row with their own name** (§9.7's match, both `membersAgainstList` and `reconcile`): of
+the current rows on a member's proved email or stated phone, the one whose name is the name
+they signed up with (the same words in any order), else §9.7's first — so when Maria joins
+on the email she shares with her son Leo, typed in first, her row reads "In the app" and his
+reads 1c; under a name on neither row the first row reads "In the app" with "Signed up in
+the app as …". **An invitation belongs to an address, not a person**, so 1c and 1d come
+before every invitation row: without them the son read "Left the app" or "Invited" from his
+mother's invitation. The line's colour is its own (`lineTone`): red for Wrong email, amber
+for 1, 1b, 3 and 8's lines (under the whole row), plain for the rest (under the word).
 
 Ten words where there were fourteen tags, each with at most one second line; the "Not sent:"
 sentences stay as the second line of #8 and on the person's page. The Filter's App chips are
@@ -3052,6 +3068,13 @@ that moved is refused as `list_changed`, nothing applied.
 | **5b-v-b · Select and act** | Tick boxes, Select all 312, the bar, the Invite and Remove boxes with names, Download CSV of the selected | Invite, Remove from app and the file take `{entryIds}` (a page at most) or `{filter, query, expectedCount, digest, version}`; their previews return names by reason, paged; 5b-iii's remove rule and export taken from the paused branch; the old by-words buttons go into the bar | Someone emailed or removed who was not selected — a select-all whose set moved, an Active mother removed with her Cancelled son, the owner removed |
 | **5b-v-c · A person's page** | 18.7 and 18.6's one-person boxes in the new look; Invite asks first; Remove from app on the page; the page for someone not on your list; Add member and Edit restyled | None new beyond calling existing routes (the roster's Remove, the list's writes) | An answer for one person landing on another's page, or a button acting on the person opened before — two people opened one after the other, the first answering late |
 | **5b-v-d · Import, who has left** | 18.8 in the new look | The confirm takes the marks per person with the missing set's digest | Someone never marked "Left" becoming a past member, or someone marked "Left" staying |
+
+**5b-v-a is two pull requests** (split 2026-09-27: the first half alone adds 2,165 lines):
+**5b-v-a-i** the page in the new look, the App word, Check these ("reached the wrong person"),
+the Filter with Show (Members · Past members) and the App words, the empty list — the "Using
+the app" tab kept, restyled; **5b-v-a-ii** Show: Not on your list with Owner and staff, Check
+these' second line, a trainer's list, and the "Using the app" tab folded in. The worst thing
+is the same for both.
 
 Each merges before the next starts, then 5b-iv (possible duplicates) and 5c. PR #121 (5b-iii,
 a draft) stays open until 5b-v-b has taken its last server part, then is closed unmerged.

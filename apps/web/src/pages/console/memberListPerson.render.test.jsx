@@ -48,6 +48,7 @@ const LIST = memberListViewSchema.parse({
   membershipTypes: [],
   paymentStatuses: [],
   fields: [{ key: 'locker', label: 'Locker' }],
+  appWords: [],
 });
 
 function person(entryId, fullName, over = {}) {
@@ -68,6 +69,7 @@ function person(entryId, fullName, over = {}) {
     source: 'upload',
     inApp: false,
     invitation: null,
+    app: { word: 'not_invited', tone: 'grey', at: null, line: null, lineTone: 'plain' },
     extra: [{ key: 'locker', label: 'Locker', value: '' }],
     handEdited: [],
     members: [],
@@ -357,6 +359,7 @@ describe('a person on the list', () => {
           endsOn: '2026-10-03',
           endsOnKind: 'renews',
           inApp: true,
+          app: { word: 'in_app', tone: 'green', at: null, line: null, lineTone: 'plain' },
           handEdited: ['phone'],
           extra: [{ key: 'locker', label: 'Locker', value: '12' }],
           members: [{ userId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', displayName: 'Ada L', joinedAt: '2026-09-02T10:00:00.000Z', visits: 4, lastVisitOn: '2026-09-20' }],
@@ -366,10 +369,11 @@ describe('a person on the list', () => {
     openBox(ADA);
     expect(await dialog().findByText('+447700900123')).toBeTruthy();
     expect(dialog().getByText('Gold')).toBeTruthy();
-    expect(dialog().getByText('Renews 3 October 2026')).toBeTruthy();
+    expect(dialog().getByText('Renews 3 Oct 2026')).toBeTruthy();
     expect(dialog().getByText('Locker')).toBeTruthy();
     expect(dialog().getByText('12')).toBeTruthy();
-    expect(dialog().getByText('Uses the app')).toBeTruthy();
+    // The App word, and the section of who uses the app under it.
+    expect(dialog().getAllByText('In the app')).toHaveLength(2);
     expect(dialog().getByText(/4 visits · last 20 September 2026/)).toBeTruthy();
     expect(dialog().getByText(/Changed by hand: Phone/)).toBeTruthy();
   });
@@ -387,14 +391,14 @@ describe('a person on the list', () => {
     await pickMore('Remove from list');
     fireEvent.click(within(screen.getByTestId('confirm-take-off')).getByRole('button', { name: 'Remove from list' }));
     await waitFor(() => expect(orgService.takeOffMemberListEntry).toHaveBeenCalledWith(GYM, ADA));
-    expect(await dialog().findByText(/Past member · removed 25 September 2026/)).toBeTruthy();
-    expect(dialog().getByRole('button', { name: 'Put back on list' })).toBeTruthy();
+    expect(await dialog().findByText(/Past member since 25 Sep 2026/)).toBeTruthy();
+    expect(dialog().getByRole('button', { name: 'Put back on your list' })).toBeTruthy();
     fireEvent.click(dialog().getByRole('button', { name: /^More/ }));
     expect(dialog().getByRole('menuitem', { name: /^Delete for good/ })).toBeTruthy();
     expect(dialog().queryByRole('menuitem', { name: /^Remove from list/ })).toBeNull();
 
     orgService.restoreMemberListEntry.mockResolvedValue(written('restored', ada));
-    fireEvent.click(dialog().getByRole('button', { name: 'Put back on list' }));
+    fireEvent.click(dialog().getByRole('button', { name: 'Put back on your list' }));
     await waitFor(() => expect(orgService.restoreMemberListEntry).toHaveBeenCalledWith(GYM, ADA));
     expect(await dialog().findByText('Back on your list.')).toBeTruthy();
   });

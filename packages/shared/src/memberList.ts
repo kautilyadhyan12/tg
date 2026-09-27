@@ -1282,6 +1282,71 @@ export type MemberListStatusCount = z.infer<typeof memberListStatusCountSchema>;
  *  header and the chips, which is the whole reason it is one query. */
 export const MEMBER_LIST_STATUS_CHIPS_MAX = 200;
 
+/** Where a person on the list stands with the app, in one word (spec Part 3 §18.4).
+ *  The server decides it (`appWord`); every screen prints it. */
+export const memberAppWordSchema = z.enum([
+  "in_app",
+  "wrong_email",
+  "waiting",
+  "removed",
+  "left",
+  "unsubscribed",
+  "declined",
+  "not_arrived",
+  "invited",
+  "not_invited",
+]);
+export type MemberAppWord = z.infer<typeof memberAppWordSchema>;
+
+/** The words, as every screen shows them (§18.3). "Removed from app" is followed by its
+ *  day ("Removed from app · 26 Sep"). */
+export const MEMBER_APP_WORDS: Readonly<Record<MemberAppWord, string>> = {
+  in_app: "In the app",
+  wrong_email: "Wrong email",
+  waiting: "Waiting for a place",
+  removed: "Removed from app",
+  left: "Left the app",
+  unsubscribed: "Unsubscribed",
+  declined: "Declined",
+  not_arrived: "Email didn't arrive",
+  invited: "Invited",
+  not_invited: "Not invited",
+};
+
+/** The Filter's order for the App words (§18.4). */
+export const MEMBER_APP_WORD_ORDER: readonly MemberAppWord[] = [
+  "in_app",
+  "invited",
+  "not_invited",
+  "not_arrived",
+  "wrong_email",
+  "waiting",
+  "declined",
+  "unsubscribed",
+  "removed",
+  "left",
+];
+
+/** A person's App word with its colour, its day and at most one line under it. `at` is
+ *  the day that goes with the word: the removal for "Removed from app", the email for
+ *  "Invited" (shown as the line when there is no other). */
+export const memberAppViewSchema = z
+  .object({
+    word: memberAppWordSchema,
+    tone: z.enum(["green", "amber", "red", "grey"]),
+    at: z.string().nullable(),
+    line: z.string().nullable(),
+    /** A red or amber line asks staff to check something, under the whole row; a plain
+     *  one only explains, under the word. */
+    lineTone: z.enum(["red", "amber", "plain"]),
+  })
+  .strict();
+export type MemberAppView = z.infer<typeof memberAppViewSchema>;
+
+/** One App word and how many current members it holds, for the Filter. */
+export const memberAppWordCountSchema = z.object({ word: memberAppWordSchema, count: z.number().int().min(0) }).strict();
+export type MemberAppWordCount = z.infer<typeof memberAppWordCountSchema>;
+
 /** THE LIST AS IT STANDS. A gym that has never confirmed one answers `hasList:
  *  false` with everything at zero rather than a 404: "you have no list yet" is a
  *  screen, and a missing route is not. */
@@ -1310,6 +1375,9 @@ export const memberListViewSchema = z.object({
     .array(z.object({ key: z.string(), label: z.string() }).strict())
     .max(MEMBER_LIST_MAX_EXTRA_FIELDS)
     .default([]),
+  /** Each App word with how many current members it holds (§18.4), in the Filter's
+   *  order, words holding nobody left out. */
+  appWords: z.array(memberAppWordCountSchema).max(MEMBER_APP_WORD_ORDER.length).default([]),
 });
 export type MemberListView = z.infer<typeof memberListViewSchema>;
 
@@ -1344,6 +1412,8 @@ export const memberListEntrySchema = z.object({
   /** The gym's invitation to this record's address, or null if it was never invited
    *  (§9.12). */
   invitation: memberListInvitationSchema.nullable().default(null),
+  /** Where they stand with the app, in one word (§18.4). */
+  app: memberAppViewSchema,
   /** **THE GYM'S OWN COLUMNS ARE NOT HERE, AND THAT IS DELIBERATE.** A page holds a
    *  hundred people and a gym may keep forty of its own columns of up to five hundred
    *  characters each, so carrying them would be two megabytes of a screen that shows
@@ -1405,6 +1475,8 @@ export const memberListEntriesQuerySchema = z
     records: memberListRecordsSchema.optional(),
     /** Who has been invited, and how it stands (§11.5). */
     invitation: memberListInvitationFilterSchema.optional(),
+    /** The App words to show (§18.4), given once each; current members only. */
+    app: z.union([memberAppWordSchema, z.array(memberAppWordSchema).max(MEMBER_APP_WORD_ORDER.length)]).optional(),
     query: z.string().max(MEMBER_LIST_QUERY_MAX_CHARS).optional(),
     cursor: z.string().max(512).optional(),
   })
