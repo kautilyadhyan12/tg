@@ -21,7 +21,8 @@ import type { RedisLike } from "../../redis.js";
 import { codeFromBytes, slugCandidate, slugifyName } from "./codes.js";
 import { cleanGymText } from "./invites/gymText.js";
 import { withdrawForAccounts } from "./invites/join.js";
-import { recordOfMember, removeRecordIn } from "./memberList/oneRemove.js";
+import { recordsOfMember, removeRecordIn } from "./memberList/oneRemove.js";
+import { currentRecordOf, pastRecordOf } from "./memberList/whose.js";
 import type { InviteSettings } from "./invites/settings.js";
 import * as listRepo from "./memberList/repo.js";
 import * as repo from "./repo.js";
@@ -1278,6 +1279,10 @@ export async function listOrgPlans(
 
 type OffList = NonNullable<OrgMember["offList"]>;
 
+/** "Leo Park or Maria Park", "A, B or C". */
+const eitherOf = (names: readonly string[]): string =>
+  names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} or ${names[names.length - 1] ?? ""}`;
+
 /** WHY THE PAGE'S PAID-PLACE MEMBERS ARE NOT ON THE GYM'S LIST (3a-vi-b), by the one
  *  rule every screen uses (`membersAgainstList`). Nothing for a gym with no list: nobody
  *  is missing from a list that does not exist. */
@@ -1291,15 +1296,20 @@ async function offListOf(
   const records = new Map<string, string>();
   if (userIds.length === 0 || (await listRepo.listState(sql, gymId)) === null) return { offList: out, typedInName, records };
   const members = await listRepo.membersAgainstList(sql, gymId, { email: null, phone: null, userIds });
-  // Each person's own record, for their page: the current match, else the past record
-  // they joined with — never a past record found only by a shared email.
+  // Each person's own record, for their page (`whose.ts`): the current one that is
+  // certainly theirs, else the past one they joined with — never a record a shared
+  // email only might make theirs.
   for (const m of members) {
-    const own = m.onList ? m.entryId : m.joinedFormer ? m.joinedEntryId : null;
+    const own = m.onList ? currentRecordOf(m) : pastRecordOf(m);
     if (own !== null) records.set(m.userId, own);
   }
-  // On the list through a current record with their joined record's name, their own
-  // having come off: "On your list as" names that record.
-  for (const m of members) if (m.joinedFormer && m.onList && m.entryFullName !== null) typedInName.set(m.userId, m.entryFullName);
+  // "On your list as": the record they are on the list through, however it was matched;
+  // on an email several records share, every one of them.
+  for (const m of members) {
+    if (!m.onList) continue;
+    const name = m.unsure === null ? m.entryFullName : eitherOf(m.unsure.records.map((record) => record.fullName));
+    if (name !== null) typedInName.set(m.userId, name);
+  }
   const off = members.filter((m) => m.seatCounted && !m.onList);
   // "Taken off" is only ever about the record they joined with: a former record found
   // by their email or phone can be a relative's on a shared family address.
@@ -1837,15 +1847,19 @@ export async function removeOrgMember(
     gymId,
     userId: targetUserId,
     actorUserId: userId,
-    // ONE REMOVE (RULINGS 2026-09-27): the record §9.7 matches them to becomes a past
-    // member in the same step — that record only, never another at their address.
+    // ONE REMOVE (RULINGS 2026-09-27): the current record that is certainly theirs becomes
+    // a past member in the same step — that record only, never another at their address,
+    // and none when a family's shared email leaves the list unable to say. The membership
+    // keeps the record it was removed with (their past one if that is all they have), for
+    // Put back.
     beforeClose: async (tx) => {
-      const entryId = await recordOfMember(tx, gymId, targetUserId);
-      if (entryId === null) return;
+      const records = await recordsOfMember(tx, gymId, targetUserId);
+      if (records.current === null) return records.past;
       if (!privileges.includes("members.confirm")) throw new OrgsError(403, "forbidden", MEMBER_LIST_BY_HAND_WORDS.remove_needs_list);
-      const entry = await listRepo.entryFor(tx, gymId, entryId);
-      if (entry === null) return;
+      const entry = await listRepo.entryFor(tx, gymId, records.current);
+      if (entry === null) return null;
       await removeRecordIn(tx, { gymId, actorUserId: userId, at, settings: deps.invites }, entry, { endApp: false, mayEndApp: true });
+      return records.current;
     },
     afterClose: (tx) => withdrawForAccounts(tx, deps.invites, { gymId, userIds: [targetUserId], at }),
   });

@@ -1576,12 +1576,10 @@ export const memberInvitePeopleQuerySchema = z
   .object({
     ...inviteFilterShape,
     group: z.enum(["reach", "left_out"]),
-    /** Where the last page ended: an offset into the group, as the server gave it. */
-    cursor: z
-      .string()
-      .regex(/^(?:0|[1-9][0-9]{0,4})$/)
-      .transform(Number)
-      .optional(),
+    /** The last person the page showed, as the server gave it: the next page starts
+     *  after them in the list's order, so people the group gains or loses in between
+     *  are never skipped or shown twice. */
+    cursor: z.string().uuid().optional(),
   })
   .strict();
 export type MemberInvitePeopleQuery = z.infer<typeof memberInvitePeopleQuerySchema>;
@@ -1590,7 +1588,7 @@ export const memberInvitePeopleSchema = z
   .object({
     total: z.number().int().min(0),
     people: z.array(memberInvitePersonSchema).max(MEMBER_INVITE_PEOPLE_PAGE),
-    cursor: z.number().int().min(0).nullable(),
+    cursor: z.string().uuid().nullable(),
   })
   .strict();
 export type MemberInvitePeople = z.infer<typeof memberInvitePeopleSchema>;
@@ -1716,6 +1714,10 @@ export const memberListEntryMemberSchema = z
     joinedAt: z.string(),
     visits: z.number().int().min(0),
     lastVisitOn: memberListDaySchema.nullable(),
+    /** They use an email (or phone) this record shares with other records, and the list
+     *  can't say which record is theirs: no "Not {name}?", and removing this record
+     *  leaves their app as it is. */
+    sharedEmail: z.boolean().default(false),
   })
   .strict();
 export type MemberListEntryMember = z.infer<typeof memberListEntryMemberSchema>;
@@ -1730,6 +1732,8 @@ export const memberListEntryDetailSchema = memberListEntrySchema.extend({
   /** Whether Remove would end somebody's app (One Remove, RULINGS 2026-09-27), worked out
    *  by the rule Remove itself uses, so the box says only what will happen. */
   removeEndsApp: z.boolean().default(false),
+  /** Whose app it would end, of `members`, so the box can name them. */
+  removeEndsAppFor: z.array(z.string().uuid()).max(MEMBER_LIST_MAX_ENTRY_MEMBERS).default([]),
 });
 export type MemberListEntryDetail = z.infer<typeof memberListEntryDetailSchema>;
 
@@ -1763,6 +1767,9 @@ export const memberListEntryWrittenSchema = z
     version: z.number().int().min(0),
     /** What "Add and invite" did about the invitation; absent for any other write. */
     invite: memberInviteOneSchema.optional(),
+    /** Put back, when staff had removed someone in the app with this record: their app
+     *  access given back, or no free place on the plan for it. Absent otherwise. */
+    app: z.enum(["back", "no_place"]).optional(),
   })
   .strict();
 export type MemberListEntryWritten = z.infer<typeof memberListEntryWrittenSchema>;
@@ -1891,9 +1898,9 @@ export const MEMBER_LIST_BY_HAND_WORDS = {
   list_changed: "Your list or your members changed while you were looking, so nobody was removed. Look at the names again.",
   large_change:
     "This would remove more of your members than we do without asking. Check the number, then confirm again to go ahead.",
-  remove_needs_app: "This member uses the app, and your role can't remove app access. Ask the owner.",
-  remove_needs_list: "Removing this member also moves them to past members, which your role can't do. Ask the owner.",
-  not_them_gone: "This person no longer uses the app with this member's details. Close and reopen the page.",
+  remove_needs_app: "This person uses the app, and your role can't remove app access. Ask the owner.",
+  remove_needs_list: "Removing this person also takes them off your list, which your role can't do. Ask the owner.",
+  not_them_gone: "This person no longer uses the app with these details. Close and reopen the page.",
   not_them_needs_remove: "Your role can't remove app access. Ask the owner.",
   not_them_staff: "This person is staff or has a complimentary place, so their access is managed under Staff.",
 } as const;

@@ -41,8 +41,9 @@ type App = Awaited<ReturnType<typeof buildApp>>;
 const TEST_TIMEOUT_MS = 120_000;
 const HOOK_TIMEOUT_MS = 60_000;
 
-/** This suite's own plan: the suites share one database. */
+/** This suite's own plans: the suites share one database. */
 const LIVE_PLAN = "zz_member_one_remove";
+const TWO_PLACES = "zz_member_one_remove_two";
 const DOMAIN = "onerm-t.example.com";
 const addr = (local: string) => `onerm-t-${local}@${DOMAIN}`;
 
@@ -92,7 +93,7 @@ d("One Remove (real Postgres)", () => {
     await sql`DELETE FROM gym_members WHERE user_id IN (SELECT id FROM users WHERE email LIKE ${`onerm-t-%@${DOMAIN}`})`;
     await sql`DELETE FROM users WHERE email LIKE ${`onerm-t-%@${DOMAIN}`}`;
     await sql`DELETE FROM sign_in_codes WHERE email LIKE ${`onerm-t-%@${DOMAIN}`}`;
-    await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
+    await sql`DELETE FROM plans WHERE code IN (${LIVE_PLAN}, ${TWO_PLACES})`;
   };
 
   const send = (method: "GET" | "POST" | "PATCH" | "DELETE", path: string, cookies: Record<string, string>, payload?: unknown) =>
@@ -191,6 +192,11 @@ d("One Remove (real Postgres)", () => {
                          seat_cap, trial_days, rank, entitlements, member_entitlements)
       VALUES (${LIVE_PLAN}, 'org', ${"plan." + LIVE_PLAN}, 0, 'INR', 'month', 100000, 0, 10, '{}'::jsonb, '{}'::jsonb)
       ON CONFLICT (code) DO UPDATE SET active = true, seat_cap = 100000`;
+    await sql`
+      INSERT INTO plans (code, audience, name_key, price_minor, currency, interval,
+                         seat_cap, trial_days, rank, entitlements, member_entitlements)
+      VALUES (${TWO_PLACES}, 'org', ${"plan." + TWO_PLACES}, 0, 'INR', 'month', 2, 0, 10, '{}'::jsonb, '{}'::jsonb)
+      ON CONFLICT (code) DO UPDATE SET active = true, seat_cap = 2`;
     app = await buildApp(loadConfig(baseEnv), {
       emailSender: {
         sendVerificationEmail: () => Promise.resolve(),
@@ -219,6 +225,26 @@ d("One Remove (real Postgres)", () => {
       SELECT (former_at IS NOT NULL) AS former FROM gym_member_list_entries WHERE gym_id = ${gym.id} AND id = ${entryId}`)[0]?.former ?? null;
   const removeRecord = (gym: Gym, entryId: string, who: User = gym.owner) => send("DELETE", `${entriesUrl(gym)}/${entryId}`, who.cookies);
   const removeFromApp = (gym: Gym, member: User, who: User = gym.owner) => send("DELETE", `/v1/orgs/${gym.id}/members/${member.userId}`, who.cookies);
+
+  /** One person as "Using the app" shows them to the owner. */
+  const rosterItem = async (gym: Gym, who: User) => {
+    const res = await get(`/v1/orgs/${gym.id}/members`, gym.owner.cookies);
+    expect(res.statusCode, res.body).toBe(200);
+    const item = (JSON.parse(res.body) as { items: { userId: string; displayName: string; recordId?: string; onList?: unknown }[] }).items.find(
+      (member) => member.userId === who.userId,
+    );
+    if (item === undefined) throw new Error(`${who.email} is not in the app`);
+    return item;
+  };
+  const invitationOf = async (gym: Gym, email: string) =>
+    (await sql<{ state: string; wrong: boolean }[]>`
+      SELECT state, wrong_person_at IS NOT NULL AS wrong FROM gym_invites
+      WHERE gym_id = ${gym.id} AND email_hmac = ${emailHmac(settings.hmacKey, email)}`)[0] ?? null;
+  const putBack = async (gym: Gym, entryId: string) => {
+    const res = await send("POST", `${entriesUrl(gym)}/${entryId}/restore`, gym.owner.cookies, {});
+    expect(res.statusCode, res.body).toBe(200);
+    return memberListEntryWrittenSchema.parse(JSON.parse(res.body));
+  };
 
   /** A member of staff with exactly these ticks. */
   let staffCount = 0;
@@ -271,7 +297,7 @@ d("One Remove (real Postgres)", () => {
   );
 
   it(
-    "removing a member from their page ends their app in the same step: their place is freed, their invitation stops, and Put back brings the record back without the app",
+    "removing a member from their page ends their app in the same step: their place is freed, their invitation stops, and Put back undoes both",
     async () => {
       const gym = await makeGym();
       const olivia = await add(gym, { fullName: "Olivia Bennett", email: addr("olivia") });
@@ -299,15 +325,23 @@ d("One Remove (real Postgres)", () => {
       expect(again.statusCode).toBe(200);
       expect(memberListEntryWrittenSchema.parse(JSON.parse(again.body)).outcome).toBe("already_taken_off");
 
-      // Put back: on the list again, not in the app until invited again.
-      const back = await send("POST", `${entriesUrl(gym)}/${olivia}/restore`, gym.owner.cookies, {});
-      expect(back.statusCode, back.body).toBe(200);
+      // Put back undoes both (RULINGS 2026-09-27): on the list again AND in the app again,
+      // her place taken again and her invitation reading accepted.
+      const back = await putBack(gym, olivia);
+      expect([back.outcome, back.app]).toEqual(["restored", "back"]);
       expect(await former(gym, olivia)).toBe(false);
-      expect(await memberships(gym, oliviaUser)).toBe(true);
-      expect((await rowOf(gym, "Olivia Bennett")).app).toMatchObject({ word: "not_in_app", line: "Removed from app" });
-      // The Filter finds her under "Removed from app", and not under "Not invited yet".
-      expect((await page(gym, "?app=removed")).entries.map((entry) => entry.fullName)).toEqual(["Olivia Bennett"]);
-      expect((await page(gym, "?app=not_invited")).entries.map((entry) => entry.fullName)).not.toContain("Olivia Bennett");
+      expect(await memberships(gym, oliviaUser)).toBe(false);
+      expect(await seats()).toBe(before);
+      expect((await invitationOf(gym, addr("olivia")))?.state).toBe("accepted");
+      expect((await rowOf(gym, "Olivia Bennett")).app).toEqual({ word: "in_app", tone: "green", at: null, line: null, lineTone: "plain" });
+      expect((await page(gym, "?app=removed")).entries).toEqual([]);
+      const restored = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM audit_log
+        WHERE gym_id = ${gym.id} AND action = 'org.member_restored' AND meta->>'restoredUserId' = ${oliviaUser.userId}`;
+      expect(restored[0]?.n).toBe(1);
+      // Pressed again, nothing more happens.
+      const twice = await putBack(gym, olivia);
+      expect([twice.outcome, twice.app]).toEqual(["already_on_list", undefined]);
     },
     TEST_TIMEOUT_MS,
   );
@@ -372,6 +406,10 @@ d("One Remove (real Postgres)", () => {
         return (JSON.parse(res.body) as { items: { displayName: string }[] }).items.map((item) => item.displayName);
       };
       expect(await names(gym.owner, "dan")).toEqual(["Dan Wu"]);
+      expect(await names(gym.owner, "Daniel")).toEqual(["Dan Wu"]);
+      // Matched by their email rather than the record they joined with, still found by the
+      // list's name, and still shown with it (round one, Low-7).
+      await sql`UPDATE gym_members SET entry_id = NULL WHERE gym_id = ${gym.id} AND user_id IN (SELECT id FROM users WHERE email = ${addr("dwu")})`;
       expect(await names(gym.owner, "Daniel")).toEqual(["Dan Wu"]);
       expect(await names(trainer, "dan")).toEqual(["Dan Wu"]);
       expect(await names(trainer, "Daniel")).toEqual([]);
@@ -451,11 +489,28 @@ d("One Remove (real Postgres)", () => {
       const theirs = await get(`/v1/orgs/${gym.id}/members`, trainer.cookies);
       expect(theirs.body).not.toContain("recordId");
 
-      // The pages say whether Remove would end somebody's app, by Remove's own rule.
+      // The pages say whether Remove would end somebody's app, by Remove's own rule, and the
+      // words say the same: a past record reads "In the app" only when it is certainly the
+      // person's own (High-2), and otherwise says who uses its email.
       expect((await detailOf(gym, grace)).removeEndsApp).toBe(true);
+      expect((await detailOf(gym, grace)).removeEndsAppFor).toEqual([graceUser.userId]);
       expect((await detailOf(gym, son)).removeEndsApp).toBe(false);
       expect((await detailOf(gym, dad)).removeEndsApp).toBe(false);
       expect((await detailOf(gym, maria)).removeEndsApp).toBe(true);
+      const past = Object.fromEntries((await page(gym, "?records=former")).entries.map((entry) => [entry.fullName, entry.app]));
+      expect(past["Grace Hall"]).toEqual({
+        word: "in_app",
+        tone: "amber",
+        at: null,
+        line: "Grace is a past member but still uses the app. Remove them if they've left.",
+        lineTone: "amber",
+      });
+      expect(past["Sam Park"]).toEqual({ word: "not_in_app", tone: "grey", at: null, line: "Maria Park uses the app with this email address.", lineTone: "plain" });
+      expect(past["Leo Ford"]).toEqual({ word: "not_in_app", tone: "grey", at: null, line: "Leo Ford uses the app with this email address.", lineTone: "plain" });
+      for (const id of [son, dad]) {
+        const detail = await detailOf(gym, id);
+        expect([detail.inApp, detail.members]).toEqual([false, []]);
+      }
 
       // A relative's past record: Remove changes nobody's app.
       const sonOff = await removeRecord(gym, son);
@@ -526,6 +581,33 @@ d("One Remove (real Postgres)", () => {
       // The address's invitation is stopped: signing in with it lets nobody back in.
       const invites = myInvitationsResponseSchema.parse(JSON.parse((await get("/v1/orgs/invitations", dan.cookies)).body));
       expect(invites.invitations).toEqual([]);
+      // Daniel's row says the address is somebody else's, in red, under Needs attention —
+      // never "Removed from app" (round one, High-3) — and nothing is sent to it again.
+      const after = await rowOf(gym, "Daniel Wu");
+      expect(after.app).toEqual({
+        word: "not_in_app",
+        tone: "grey",
+        at: null,
+        line: `Someone else uses ${addr("nt-dwu")}. Confirm Daniel's email address.`,
+        lineTone: "red",
+      });
+      expect((await page(gym, "?app=needs_check")).entries.map((entry) => entry.fullName)).toEqual(["Daniel Wu"]);
+      expect((await page(gym, "?app=removed")).entries).toEqual([]);
+      expect(await invitationOf(gym, addr("nt-dwu"))).toEqual({ state: "withdrawn", wrong: true });
+      const sends = async () =>
+        (await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_invite_sends WHERE gym_id = ${gym.id}`)[0]?.n ?? 0;
+      const sent = await sends();
+      const resend = await post(`${entriesUrl(gym)}/${daniel}/invite/resend`, {}, gym.owner.cookies);
+      expect(resend.statusCode, resend.body).toBe(409);
+      expect((JSON.parse(resend.body) as { error: string }).error).toBe("wrong_person");
+      const invite = await post(`${entriesUrl(gym)}/${daniel}/invite`, {}, gym.owner.cookies);
+      expect(invite.statusCode, invite.body).toBe(200);
+      expect((JSON.parse(invite.body) as { invite: { outcome: string } }).invite.outcome).toBe("already_invited");
+      expect(await sends()).toBe(sent);
+      // Invite's page leaves him out, saying why in the row's own words.
+      const left = await get(`/v1/orgs/${gym.id}/member-list/invites/people?group=left_out`, gym.owner.cookies);
+      const leftOut = memberInvitePeopleResponseSchema.parse(JSON.parse(left.body)).page.people;
+      expect(leftOut.find((person) => person.fullName === "Daniel Wu")?.app.line).toBe(after.app.line);
       const audit = await sql<{ via: string }[]>`
         SELECT meta->>'via' AS via FROM audit_log
         WHERE gym_id = ${gym.id} AND action = 'org.member_removed' AND meta->>'removedUserId' = ${dan.userId}`;
@@ -558,6 +640,155 @@ d("One Remove (real Postgres)", () => {
         (member) => member.userId === dan.userId,
       );
       expect([item?.displayName, item?.onList]).toEqual(["du", { name: "Daniel Wu" }]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // ── A family on one email the list can't place (round one, High-1) ──
+  // The mother signs up as "Mum" — or "Maria", which the app's own "What should we call
+  // you?" invites. Nothing may treat her as either record's person.
+
+  it(
+    "a family whose mother signed up as 'Mum': both rows say so in amber, removing the son's record leaves her app, Not them is refused, and removing her from the app moves neither record",
+    async () => {
+      for (const given of ["Mum", "Maria"]) {
+        const gym = await makeGym();
+        const email = addr(`mum-${given.toLowerCase()}`);
+        const leo = await add(gym, { fullName: "Leo Park", email });
+        const maria = await add(gym, { fullName: "Maria Park", email });
+        const mum = await signIn(email, given);
+        await accept(mum);
+
+        const line = `${given} uses the app with the email address Leo Park and Maria Park share, so we can't tell which of them it is. Give each of them their own email address.`;
+        for (const name of ["Leo Park", "Maria Park"]) {
+          expect((await rowOf(gym, name)).app, `${given}: ${name}`).toEqual({ word: "in_app", tone: "amber", at: null, line, lineTone: "amber" });
+        }
+        // "Using the app" opens no one record for her, and names both.
+        const item = await rosterItem(gym, mum);
+        expect([item.recordId, item.onList]).toEqual([undefined, { name: "Leo Park or Maria Park" }]);
+        // Not them is refused on either page: a family's address is right.
+        for (const id of [leo, maria]) {
+          const res = await post(`${entriesUrl(gym)}/${id}/not-them`, { userId: mum.userId }, gym.owner.cookies);
+          expect(res.statusCode, given).toBe(409);
+        }
+        expect(await memberships(gym, mum)).toBe(false);
+        // The son's page: Remove moves him and nobody's app.
+        expect((await detailOf(gym, leo)).removeEndsAppFor).toEqual([]);
+        const off = await removeRecord(gym, leo);
+        expect(memberListEntryWrittenSchema.parse(JSON.parse(off.body)).outcome).toBe("taken_off");
+        expect(await memberships(gym, mum)).toBe(false);
+        expect(await former(gym, maria)).toBe(false);
+        // The email is now Maria's alone, so her row is the one in the app.
+        expect((await rowOf(gym, "Maria Park")).app).toEqual({ word: "in_app", tone: "green", at: null, line: null, lineTone: "plain" });
+      }
+
+      // Another family: removing Mum from "Using the app" ends her app and moves no record.
+      const gym = await makeGym();
+      const email = addr("mum-ng");
+      const sam = await add(gym, { fullName: "Sam Ng", email });
+      const ivy = await add(gym, { fullName: "Ivy Ng", email });
+      const mum = await signIn(email, "Mum");
+      await accept(mum);
+      const gone = await removeFromApp(gym, mum);
+      expect(gone.statusCode, gone.body).toBe(200);
+      expect(await memberships(gym, mum)).toBe(true);
+      expect(await former(gym, sam)).toBe(false);
+      expect(await former(gym, ivy)).toBe(false);
+      // Both rows say it of the address, not of the person: neither was removed.
+      for (const name of ["Sam Ng", "Ivy Ng"]) {
+        const row = await rowOf(gym, name);
+        expect([row.app.word, row.app.line], name).toEqual(["not_in_app", "Someone using this email address was removed from the app"]);
+        expect(row.app.at, name).not.toBeNull();
+      }
+      expect((await page(gym, "?app=removed")).entries).toEqual([]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "two adults on one email: removing the one in the app never reads as the other's removal, and Put back gives her app back (round one, High-4)",
+    async () => {
+      const gym = await makeGym();
+      const email = addr("tom-maria");
+      await add(gym, { fullName: "Tom Park", email });
+      const maria = await add(gym, { fullName: "Maria Park", email });
+      const mariaUser = await signIn(email, "Maria Park");
+      await accept(mariaUser);
+      expect((await rowOf(gym, "Tom Park")).app.line).toBe("Maria Park uses the app with this email address.");
+
+      expect((await removeRecord(gym, maria)).statusCode).toBe(200);
+      expect(await memberships(gym, mariaUser)).toBe(true);
+      const tom = await rowOf(gym, "Tom Park");
+      expect([tom.app.word, tom.app.line]).toEqual(["not_in_app", "Someone using this email address was removed from the app"]);
+      expect((await page(gym, "?app=removed")).entries).toEqual([]);
+      // Her own row, among past members, is the one that reads "Removed from app".
+      const hers = await rowOf(gym, "Maria Park", "?records=former");
+      expect([hers.app.line, hers.app.at === null]).toEqual(["Removed from app", false]);
+
+      const back = await putBack(gym, maria);
+      expect(back.app).toBe("back");
+      expect(await memberships(gym, mariaUser)).toBe(false);
+      expect((await rowOf(gym, "Maria Park")).app.word).toBe("in_app");
+      expect((await rowOf(gym, "Tom Park")).app.line).toBe("Maria Park uses the app with this email address.");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "Put back gives the app back only to whoever was removed with that record, and only when the plan has a place: never to an account taken out as somebody else",
+    async () => {
+      const gym = await makeGym();
+      await sql`UPDATE subscriptions SET plan_id = (SELECT id FROM plans WHERE code = ${TWO_PLACES}) WHERE owner_type = 'gym' AND owner_id = ${gym.id}`;
+      const olivia = await add(gym, { fullName: "Olivia Bennett", email: addr("pb-olivia") });
+      const oliviaUser = await signIn(addr("pb-olivia"), "Olivia Bennett");
+      await accept(oliviaUser);
+      // Removed from "Using the app": the other door, the same One Remove.
+      expect((await removeFromApp(gym, oliviaUser)).statusCode).toBe(200);
+      expect(await former(gym, olivia)).toBe(true);
+      // Two others take both places while she is out.
+      for (const who of ["pb-ben", "pb-ava"]) {
+        await add(gym, { fullName: who, email: addr(who) });
+        await accept(await signIn(addr(who), who));
+      }
+      const full = await putBack(gym, olivia);
+      expect([full.outcome, full.app]).toEqual(["restored", "no_place"]);
+      expect(await memberships(gym, oliviaUser)).toBe(true);
+      expect((await rowOf(gym, "Olivia Bennett")).app).toMatchObject({ word: "not_in_app", line: "Removed from app" });
+
+      // Staff said Dan isn't Daniel: taking Daniel off and putting him back never lets Dan in.
+      const daniel = await add(gym, { fullName: "Daniel Wu", email: addr("pb-dwu") });
+      await sql`UPDATE subscriptions SET plan_id = (SELECT id FROM plans WHERE code = ${LIVE_PLAN}) WHERE owner_type = 'gym' AND owner_id = ${gym.id}`;
+      const dan = await signIn(addr("pb-dwu"), "du");
+      await accept(dan);
+      expect((await post(`${entriesUrl(gym)}/${daniel}/not-them`, { userId: dan.userId }, gym.owner.cookies)).statusCode).toBe(200);
+      expect((await removeRecord(gym, daniel)).statusCode).toBe(200);
+      const back = await putBack(gym, daniel);
+      expect([back.outcome, back.app]).toEqual(["restored", undefined]);
+      expect(await memberships(gym, dan)).toBe(true);
+      expect(await invitationOf(gym, addr("pb-dwu"))).toEqual({ state: "withdrawn", wrong: true });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "merging the record someone was removed with into another carries the removal to the kept one, so Put back on it still gives their app back",
+    async () => {
+      const gym = await makeGym();
+      const first = await add(gym, { fullName: "Olivia Bennett", email: addr("mg-olivia") });
+      const oliviaUser = await signIn(addr("mg-olivia"), "Olivia Bennett");
+      await accept(oliviaUser);
+      expect((await removeRecord(gym, first)).statusCode).toBe(200);
+      // The same person typed in again under another address, and taken off too.
+      const second = await add(gym, { fullName: "Olivia Bennett", email: addr("mg-olivia2") }, false);
+      expect((await removeRecord(gym, second)).statusCode).toBe(200);
+      const merged = await post(`${entriesUrl(gym)}/${first}/merge`, { keepEntryId: second }, gym.owner.cookies);
+      expect(merged.statusCode, merged.body).toBe(200);
+      const link = await sql<{ removed_entry_id: string | null }[]>`
+        SELECT removed_entry_id FROM gym_members WHERE gym_id = ${gym.id} AND user_id = ${oliviaUser.userId}`;
+      expect(link.map((row) => row.removed_entry_id)).toEqual([second]);
+      const back = await putBack(gym, second);
+      expect(back.app).toBe("back");
+      expect(await memberships(gym, oliviaUser)).toBe(false);
     },
     TEST_TIMEOUT_MS,
   );

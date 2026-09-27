@@ -1560,20 +1560,27 @@ describe('Waiting to join', () => {
 // ── Removing a member ───────────────────────────────────────────────────────
 
 describe('Removing a member', () => {
-  it("Remove on someone on your list says they move to past members too (One Remove); on someone who isn't, only that they leave the app", async () => {
-    const listed = { ...joinedMemberWithForbiddenExtras, onList: { name: 'Rita Sen' } };
+  it("Remove here ends the app and moves nobody to past members: someone on the list the server names no record for (a family's shared email), someone on no list, and a gym with no list (round one of 5b-v-a-i, High-6)", async () => {
+    // A mother on the email she shares with her son: on the list, whose record is not known.
+    const listed = { ...joinedMemberWithForbiddenExtras, onList: { name: 'Rita Sen or Ravi Sen' } };
     const nia = { ...joinedMemberWithForbiddenExtras, userId: 'u8', displayName: 'Nia Cole', offList: { reason: 'never_listed', at: null, sameEmailName: null } };
-    orgService.getMembers.mockResolvedValue(page([ownerSeat, listed, nia]));
+    // A gym that never imported a list: the server sends neither `offList` nor `recordId`.
+    const tom = { ...joinedMemberWithForbiddenExtras, userId: 'u9', displayName: 'Tom Reed' };
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, listed, nia, tom]));
     drawMembers();
-    let panel = await openInApp('Rita Sen');
-    fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
-    expect(panel.getByText(/Remove Rita Sen\? They'll be moved to past members and lose access to your gym in the app\./)).toBeTruthy();
-    fireEvent.click(panel.getByRole('button', { name: 'Cancel' }));
-    fireEvent.click(panel.getByRole('button', { name: 'Close' }));
-    panel = await openInApp('Nia Cole');
-    fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
-    expect(panel.getByText(/Remove Nia Cole's app access\? They'll lose access to your gym in the app\./)).toBeTruthy();
-    expect(panel.queryByText(/past members/)).toBeNull();
+    for (const [name, asked] of [
+      ['Rita Sen', /Remove Rita Sen's app access\? They'll lose access to your gym in the app\./],
+      ['Nia Cole', /Remove Nia Cole's app access\? They'll lose access to your gym in the app\./],
+      ['Tom Reed', /Remove Tom Reed's app access\? They'll lose access to your gym in the app\./],
+    ]) {
+      const panel = await openInApp(name);
+      fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
+      expect(panel.getByText(asked)).toBeTruthy();
+      expect(panel.queryByText(/past members/)).toBeNull();
+      expect(panel.queryByText(/put them back/)).toBeNull();
+      fireEvent.click(panel.getByRole('button', { name: 'Cancel' }));
+      fireEvent.click(panel.getByRole('button', { name: 'Close' }));
+    }
   });
 
   it("someone with a record of their own opens the same page as on 'Your list' (Kd, 2026-09-27: one card in both places)", async () => {
@@ -1641,9 +1648,8 @@ describe('Removing a member', () => {
 
     const panel = await openInApp('Rita Sen');
     fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
-    // Rita pays and the server does not mark her off the list, so she is on it: Remove
-    // moves her to past members too, and the box says so.
-    expect(panel.getByText(/Remove Rita Sen\? They'll be moved to past members/i)).toBeTruthy();
+    // The server names no record of hers, so Remove here ends her app and nothing else.
+    expect(panel.getByText(/Remove Rita Sen's app access\?/i)).toBeTruthy();
     fireEvent.click(panel.getByRole('button', { name: 'Cancel' }));
     expect(orgService.removeMember).not.toHaveBeenCalled();
     expect(screen.getAllByText('Rita Sen').length).toBeGreaterThan(0);

@@ -84,6 +84,7 @@ import {
   type ReconciledPerson,
 } from "./reconcile.js";
 import * as repo from "./repo.js";
+import { inAppRecordIds, pastRecordOf } from "./whose.js";
 
 export interface MemberListDeps {
   sql: Sql;
@@ -1147,16 +1148,15 @@ export function expectApplied(did: number, said: number, what: string, uploadId:
   );
 }
 
-/** WHICH OF THE GYM'S OWN ENTRIES ARE ALREADY MEMBERS HERE — the entry ids, deduped.
+/** WHICH OF THE GYM'S OWN ENTRIES ARE ALREADY MEMBERS HERE — the entry ids, deduped,
+ *  as the App word reads them (`whose.ts`): each record certainly somebody's, and every
+ *  record of an email a family shares when the list can't say whose it is.
  *
- *  One member matches at most one entry (§9.7's order, `membersAgainstList`), and two
- *  members can land on the same entry — a household on one address — so the ids are
- *  put through a Set before anything counts them. Counting `members.length` instead
- *  would say a gym of two has two people on a list that holds one. */
+ *  Two members can land on the same entry, so the ids are put through a Set before
+ *  anything counts them. Counting `members.length` instead would say a gym of two has
+ *  two people on a list that holds one. */
 function inAppEntryIds(members: readonly repo.MemberAgainstList[]): string[] {
-  const ids = new Set<string>();
-  for (const member of members) if (member.entryId !== null) ids.add(member.entryId);
-  return [...ids];
+  return inAppRecordIds(members);
 }
 
 /** THE SAME ANSWER FOR A PAGE THAT WAS ASKED FOR THE FORMER RECORDS (round one, Low-2).
@@ -1170,10 +1170,10 @@ function inAppEntryIds(members: readonly repo.MemberAgainstList[]): string[] {
  *  So a page that asked for them reads the union, and every OTHER reader — the counts,
  *  the chips, `canBeInvited` — keeps the set that excludes them. */
 function inAppEntryIdsWithFormer(members: readonly repo.MemberAgainstList[]): string[] {
-  const ids = new Set<string>();
+  const ids = new Set(inAppRecordIds(members));
   for (const member of members) {
-    if (member.entryId !== null) ids.add(member.entryId);
-    if (member.formerEntryId !== null) ids.add(member.formerEntryId);
+    const past = pastRecordOf(member);
+    if (past !== null) ids.add(past);
   }
   return [...ids];
 }
@@ -1319,7 +1319,12 @@ export async function readEntries(
   const shown = page.entries.slice(0, MEMBER_LIST_ENTRIES_PAGE);
   const last = page.entries.length > MEMBER_LIST_ENTRIES_PAGE ? shown[shown.length - 1] : undefined;
   const [invitations, app] = await Promise.all([
-    invites.invitationsOf(deps.sql, settings, gymId, shown),
+    invites.invitationsOf(
+      deps.sql,
+      settings,
+      gymId,
+      shown.map((entry) => ({ id: entry.entryId, email: entry.email })),
+    ),
     appViewsOf(
       deps.sql,
       settings,

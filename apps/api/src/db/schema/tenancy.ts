@@ -539,10 +539,18 @@ export const gymMembers = pgTable(
      *  NULL (entry_id) — written in `0040_join_by_invitation.sql`, which Drizzle's
      *  builder cannot express. */
     entryId: uuid("entry_id"),
+    /** The list record staff removed this member WITH, when the list said for certain it
+     *  was theirs (One Remove, Remove all): Put back on it gives their app back, and only
+     *  such a removal reads "Removed from app" on a record (Part 3 §18). Null otherwise.
+     *  Foreign key `(gym_id, removed_entry_id)` → the record, ON DELETE SET NULL
+     *  (removed_entry_id), and a CHECK that only a closed membership has one — both in
+     *  `0048_removed_with_record.sql`. */
+    removedEntryId: uuid("removed_entry_id"),
     createdAt: createdAt(),
   },
   (t) => [
     index("gym_members_entry_idx").on(t.entryId).where(sql`${t.entryId} IS NOT NULL`),
+    index("gym_members_removed_entry_idx").on(t.removedEntryId).where(sql`${t.removedEntryId} IS NOT NULL`),
     // The leave/rejoin design: one LIVE membership per (gym,user); history rows stack.
     uniqueIndex("gym_members_live_uq")
       .on(t.gymId, t.userId)
@@ -566,6 +574,7 @@ export const gymMembers = pgTable(
     // columns directly, so a number stored one way here and another way there
     // would match nobody and nothing would say why.
     check("gym_members_stated_phone_check", sql`${t.statedPhoneE164} IS NULL OR ${t.statedPhoneE164} ~ '^\\+[1-9][0-9]{6,14}$'`),
+    check("gym_members_removed_entry_check", sql`${t.removedEntryId} IS NULL OR ${t.removedAt} IS NOT NULL`),
   ],
 );
 

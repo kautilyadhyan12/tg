@@ -10,9 +10,10 @@ import * as invitesRepo from "../invites/repo.js";
 import { invitationsOf } from "../invites/service.js";
 import type { InviteSettings } from "../invites/settings.js";
 import { gymSeatCap } from "../repo.js";
-import { appFact, type AppPerson, type AppReasonKind } from "./appWord.js";
+import { appFact, type AppPerson, type AppReasonKind, type AppUnsure } from "./appWord.js";
 import type { MemberAgainstList, SqlOrTx } from "./repo.js";
 import * as repo from "./repo.js";
+import { currentRecordOf, pastRecordOf } from "./whose.js";
 
 /** One record, as much of it as the word needs. */
 export interface AppRow {
@@ -61,16 +62,26 @@ export async function appFactsOf(
   ]);
   const today = dayInTz(now, timeZone);
 
+  // Each record's own people in the app (`whose.ts`), the people a shared email leaves
+  // unplaced, and each address someone in the app has proved with the record that is
+  // theirs (null for none): their name, as the list has it when it has them.
   const current = new Map<string, AppPerson[]>();
   const former = new Map<string, AppPerson[]>();
-  // Each address someone in the app has proved, with the records they are matched to.
-  const heldBy = new Map<string, { entryId: string; name: string }[]>();
+  const unsure = new Map<string, AppUnsure[]>();
+  const heldBy = new Map<string, { entryId: string | null; name: string }[]>();
   for (const member of members) {
     const person: AppPerson = { name: member.fullName };
-    if (member.entryId !== null) add(current, member.entryId, person);
-    if (member.formerEntryId !== null) add(former, member.formerEntryId, person);
-    if (member.email !== null && member.entryId !== null) {
-      add(heldBy, member.email.toLowerCase(), { entryId: member.entryId, name: member.entryFullName ?? member.fullName });
+    const own = currentRecordOf(member);
+    const past = pastRecordOf(member);
+    if (own !== null) add(current, own, person);
+    if (past !== null) add(former, past, person);
+    if (member.unsure !== null) {
+      const shared: AppUnsure = { name: member.fullName, by: member.unsure.by, records: member.unsure.records.map((record) => record.fullName) };
+      for (const record of member.unsure.records) add(unsure, record.id, shared);
+    }
+    if (member.email !== null) {
+      const name = own !== null ? (member.entryFullName ?? member.fullName) : member.fullName;
+      add(heldBy, member.email.toLowerCase(), { entryId: own ?? past, name });
     }
   }
 
@@ -83,6 +94,7 @@ export async function appFactsOf(
       dateOfBirth: row.dateOfBirth,
       former: row.former,
       inApp: (row.former ? former : current).get(row.id) ?? [],
+      unsure: row.former ? [] : (unsure.get(row.id) ?? []),
       sharedWith: other?.name ?? null,
       invitation: invitations[at] ?? null,
       optedOut: optedOut[at] ?? null,
@@ -92,8 +104,9 @@ export async function appFactsOf(
   });
 }
 
-/** The App choices a person answers to: their word; "not_invited" for somebody no
- *  invitation email has reached, "removed" for those the gym took out; and "needs_check"
+/** The App choices a person answers to: their word; "not_invited" for somebody Invite
+ *  would email and no invitation email has reached (never a relative's address in the
+ *  app, nor someone under 18), "removed" for those the gym took out; and "needs_check"
  *  when their line asks staff to check something. */
 export function appChoices({ view, reason }: AppFact): MemberAppFilter[] {
   const choices: MemberAppFilter[] = [view.word];

@@ -25,6 +25,9 @@ export const gymInvites = pgTable(
     waitingSince: timestamp("waiting_since", { withTimezone: true }),
     /** The person it reached said it is not theirs ("Not me"): only on a declined one. */
     notMeAt: timestamp("not_me_at", { withTimezone: true }),
+    /** Staff said the person using this address is not the person on the list ("Not
+     *  {name}?"): only on a withdrawn one, which nothing sends again (Part 3 §18.4). */
+    wrongPersonAt: timestamp("wrong_person_at", { withTimezone: true }),
   },
   (t) => [
     unique("gym_invites_address_uq").on(t.gymId, t.emailHmac),
@@ -34,6 +37,7 @@ export const gymInvites = pgTable(
     check("gym_invites_answered_check", sql`(${t.state} = 'pending') = (${t.answeredAt} IS NULL)`),
     check("gym_invites_waiting_check", sql`${t.waitingSince} IS NULL OR ${t.state} = 'pending'`),
     check("gym_invites_not_me_check", sql`${t.notMeAt} IS NULL OR ${t.state} = 'declined'`),
+    check("gym_invites_wrong_person_check", sql`${t.wrongPersonAt} IS NULL OR ${t.state} = 'withdrawn'`),
     index("gym_invites_not_me_idx").on(t.gymId).where(sql`${t.notMeAt} IS NOT NULL`),
   ],
 );

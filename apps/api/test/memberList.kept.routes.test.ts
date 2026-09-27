@@ -523,12 +523,14 @@ d("member list: the wider record, kept (real Postgres)", () => {
       expect(formerPage.total).toBe(1);
       expect(formerPage.entries[0]?.memberNumber).toBe("K-1");
       expect(formerPage.entries[0]?.formerAt).not.toBeNull();
-      // THEY REALLY ARE IN THE APP, and the page that shows them says so (round one,
-      // Low-2). This line asserted `false` until the reviewer found it: the match that
-      // every count and chip reads excludes former records on purpose, so the page
-      // inherited that and said something FALSE about a named person on the one page
-      // whose job is to show them. The counts below are the ones that must stay 0.
-      expect(formerPage.entries[0]?.inApp).toBe(true);
+      // SOMEBODY IS IN THE APP WITH THIS RECORD'S EMAIL, and the page says who. They joined
+      // by the gym's code, with no record of their own, so the list can't say the past
+      // record is theirs — a past record found only by an email can be a relative's
+      // (5b-v-a-i round one, High-2) — and it never claims them: nothing is removed with
+      // it, and its row names the account instead of saying "In the app" about the
+      // record's person. The counts below are the ones that must stay 0.
+      expect(formerPage.entries[0]?.inApp).toBe(false);
+      expect(formerPage.entries[0]?.app.line).toMatch(/ uses the app with this email address\.$/);
 
       const both = pageOf(await get(`${listUrl(org.org.id)}/entries?records=all`, owner.cookies));
       expect(both.total).toBe(2);
@@ -702,10 +704,15 @@ d("member list: the wider record, kept (real Postgres)", () => {
       await apply(org.org.id, owner.cookies, file([person(2)]));
       const formerPage = pageOf(await get(`${listUrl(org.org.id)}/entries?records=former`, owner.cookies));
       expect(formerPage.entries.map((e) => e.memberNumber)).toEqual(["K-1"]);
-      expect(formerPage.entries[0]?.inApp).toBe(true);
+      // Who uses the app with the record's email is said, by name; that it is the
+      // record's own person is not (5b-v-a-i round one, High-2: they joined with no
+      // record, and a past record found only by an email can be a relative's).
+      const shown = formerPage.entries[0];
+      expect([shown?.inApp, shown?.app.word]).toEqual([false, "not_in_app"]);
+      expect(shown?.app.line).toMatch(/ uses the app with this email address\.$/);
       // …and on an `all` page too.
       const all = pageOf(await get(`${listUrl(org.org.id)}/entries?records=all`, owner.cookies));
-      expect(all.entries.find((e) => e.memberNumber === "K-1")?.inApp).toBe(true);
+      expect(all.entries.find((e) => e.memberNumber === "K-1")?.app).toEqual(shown?.app);
 
       // BUT NOTHING ABOUT THE LIST COUNTS THEM. `inApp` here is the list as it stands,
       // and `canBeInvited` is the number 3b's Invite button acts on.

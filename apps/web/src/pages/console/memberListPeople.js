@@ -160,15 +160,20 @@ export function pastSince(entry) {
   return day === null ? null : shortDay(day);
 }
 
-/** "Past member since 3 Sep 2026" (spec Part 3 §18.3). */
-export function pastWords(entry) {
+/** "Mum", "Mum and Dan", "A, B and C". */
+export function listNames(names) {
+  return names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+/** "Past member since 3 Sep 2026" — "Past client since" for a studio (spec Part 3 §18.3). */
+export function pastWords(entry, person = 'member') {
   const since = pastSince(entry);
-  return since === null ? null : `Past member since ${since}`;
+  return since === null ? null : `Past ${person} since ${since}`;
 }
 
 /** The gym's own words about the person in one line, as a phone's row shows them. */
-export function rowWords(entry, today = null) {
-  if (entry.formerAt !== null) return [pastWords(entry)].filter((w) => w !== null);
+export function rowWords(entry, today = null, person = 'member') {
+  if (entry.formerAt !== null) return [pastWords(entry, person)].filter((w) => w !== null);
   return [entry.status, entry.membershipType, endsWords(entry, today), entry.paymentStatus].filter((w) => w !== null && w !== '');
 }
 
@@ -284,9 +289,13 @@ export function inviteWhyNot(person, today = null) {
         hint: 'If the date of birth is incorrect, update it on their page.',
       };
     case 'inApp':
-      return person.app.word === 'in_app'
-        ? { text: 'Already in the app', hint: null }
-        : { text: person.app.line ?? 'Another member uses the app with this email address.', hint: 'Add a separate email address to invite them.' };
+      // In the app with nothing to add, or the row's own line: a family's shared email
+      // carries its own advice; a relative in the app with this email needs another address.
+      if (person.app.word === 'in_app' && person.app.line === null) return { text: 'Already in the app', hint: null };
+      return {
+        text: person.app.line ?? 'Someone else uses the app with this email address.',
+        hint: person.app.word === 'in_app' ? null : 'Add a separate email address to invite them.',
+      };
     case 'alreadyInvited': {
       if (person.sameAddressAs !== null) {
         return { text: `Shares an email address with ${person.sameAddressAs}, who is being invited`, hint: 'Add a separate email address to invite them.' };
@@ -297,11 +306,11 @@ export function inviteWhyNot(person, today = null) {
     case 'unsubscribed':
       return { text: 'Unsubscribed from your emails', hint: null };
     case 'bounced':
-      return { text: 'Email address bounces', hint: 'Confirm the address with the member.' };
+      return { text: 'Email address bounces', hint: 'Confirm the address with them.' };
     case 'refused':
-      return { text: "Our email provider won't deliver to this address", hint: 'Ask the member for another email address.' };
+      return { text: "Our email provider won't deliver to this address", hint: 'Ask them for another email address.' };
     case 'sharedAddress':
-      return { text: 'Shared email address (such as info@)', hint: "Add the member's own email address to invite them." };
+      return { text: 'Shared email address (such as info@)', hint: 'Add their own email address to invite them.' };
     default:
       return { text: 'Not included', hint: null };
   }
@@ -345,6 +354,9 @@ export function personInviteAction(entry, today) {
   if (underAgeOn(entry.dateOfBirth, today)) return 'under_age';
   if (inv === null) return 'invite';
   if (inv.state === 'declined' && inv.notMeAt !== null) return null;
+  // A stopped invitation: nothing goes to an address staff said is somebody else's; any
+  // other is invited again, asked first (RULINGS 2026-09-26: "Invite again").
+  if (inv.state === 'withdrawn') return inv.wrongPersonAt ? null : 'invite_again';
   const email = inv.email;
   if (inv.state === 'pending') {
     if (email === null) return 'invite';
@@ -360,9 +372,9 @@ export function inviteOutcomeWords(outcome, again) {
     case 'queued':
       return again ? 'Invitation resent. It will arrive within a few minutes.' : 'Invitation sent. It will arrive within a few minutes.';
     case 'already_invited':
-      return 'This member has already been invited.';
+      return 'They have already been invited.';
     case 'already_queued':
-      return 'An invitation to this member is already being sent.';
+      return 'An invitation to them is already being sent.';
     default:
       return null;
   }
@@ -470,9 +482,9 @@ export function handEditedWords(entry, fields, labels) {
  *  order, "—" where a record has none, and whether the two differ, so staff can tell
  *  one person on the list twice from two different people. The gym's custom fields
  *  follow, under their own headings; a detail neither record holds is left out. */
-export function compareRecords(keep, remove, fields) {
+export function compareRecords(keep, remove, fields, person = 'member') {
   const day = (d) => (d === null ? null : dayWords(d));
-  const onList = (r) => (r.formerAt === null ? 'On the list' : 'Past member');
+  const onList = (r) => (r.formerAt === null ? 'On the list' : `Past ${person}`);
   const extra = (r, key) => r.extra?.find((x) => x.key === key)?.value || null;
   const rows = [
     ['fullName', 'Name', (r) => r.fullName || null],
@@ -499,28 +511,31 @@ export function compareRecords(keep, remove, fields) {
 }
 
 /** What a write did, in a line for the top of the person's page. */
-export function outcomeWords(outcome) {
+export function outcomeWords(outcome, words = { person: 'member', personCap: 'Member', people: 'members' }, app = undefined) {
   switch (outcome) {
     case 'added':
-      return 'Member added.';
+      return `${words.personCap} added.`;
     case 'revived':
-      return 'This member was a past member and is back on your list.';
+      return `They were a past ${words.person} and are back on your list.`;
     case 'already_on_list':
-      return 'This member is already on your list.';
+      return 'They are already on your list.';
     case 'changed':
       return 'Changes saved.';
     case 'unchanged':
       return 'No changes to save.';
     case 'taken_off':
-      return 'Moved to past members. Their details are kept.';
+      return `Moved to past ${words.people}. Their details are kept.`;
     case 'removed_from_app':
-      return 'App access removed. They remain a past member.';
+      return `App access removed. They remain a past ${words.person}.`;
     case 'not_them':
-      return 'App access removed. Update the email address, then invite the member again.';
+      return 'App access removed. Nothing more is sent to that email address: update it with Edit before inviting again.';
     case 'already_taken_off':
-      return 'This member is already a past member.';
+      return `They are already a past ${words.person}.`;
     case 'restored':
-      return 'Restored to your member list.';
+      // Put back undoes both (RULINGS 2026-09-27), when the plan has a place for it.
+      if (app === 'back') return 'Put back on your list, with their app access.';
+      if (app === 'no_place') return "Put back on your list. Their app access wasn't given back because your plan has no free place: invite them again when one is free.";
+      return 'Put back on your list.';
     case 'merged':
       return 'Records merged. This is the record you kept.';
     default:

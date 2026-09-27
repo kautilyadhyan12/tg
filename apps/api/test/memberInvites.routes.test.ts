@@ -445,10 +445,15 @@ d("press Invite (real Postgres)", () => {
       const tally = new Map<string, number>();
       for (const p of leftOut.people) tally.set(p.reason, (tally.get(p.reason) ?? 0) + 1);
       expect(Object.fromEntries(tally)).toEqual(Object.fromEntries(Object.entries(preview.skipped).filter(([, n]) => n > 0)));
-      // Each reads as their own row does: Olivia is in the app, Mark is not — she uses it with his email.
+      // Each reads as their own row does. She joined by the gym's code under a name on
+      // neither record, so the list can't say which of the two she is, and both say so
+      // (round one of 5b-v-a-i, High-1).
       const app = new Map(leftOut.people.map((p) => [p.fullName, p.app]));
-      expect(app.get("Olivia Bennett")?.word).toBe("in_app");
-      expect([app.get("Mark Bennett")?.word, app.get("Mark Bennett")?.line]).toEqual(["not_in_app", "Olivia Bennett uses the app with this email address."]);
+      const shared =
+        "Inv page-olivia uses the app with the email address Olivia Bennett and Mark Bennett share, so we can't tell which of them it is. Give each of them their own email address.";
+      for (const name of ["Olivia Bennett", "Mark Bennett"]) {
+        expect([app.get(name)?.word, app.get(name)?.line], name).toEqual(["in_app", shared]);
+      }
 
       // The press emails the page's people and nobody else.
       const pressed = await press(gym, owner, preview, { status: ["Active"] });
@@ -497,11 +502,22 @@ d("press Invite (real Postgres)", () => {
         return memberInvitePeopleSchema.parse((JSON.parse(res.body) as { page: unknown }).page);
       };
       const first = await pageOf("?group=reach");
-      expect([first.total, first.people.length, first.cursor]).toEqual([103, 100, 100]);
+      expect([first.total, first.people.length, first.cursor]).toEqual([103, 100, first.people[99]?.entryId]);
+      // Ten people the first page showed leave the group before the next page is read
+      // (another member of staff's press, the sender): the next page still starts after
+      // the last person shown, skipping nobody and showing nobody twice (round one, Low-4).
+      for (const person of first.people.slice(0, 10)) {
+        await sql`
+          INSERT INTO gym_invites (gym_id, email_hmac, state, answered_at)
+          VALUES (${gym}, ${emailHmac(settings.hmacKey, person.email ?? "")}, 'declined', now())`;
+      }
       const second = await pageOf(`?group=reach&cursor=${String(first.cursor)}`);
-      expect([second.total, second.people.length, second.cursor]).toEqual([103, 3, null]);
+      expect([second.total, second.people.length, second.cursor]).toEqual([93, 3, null]);
       expect([...first.people, ...second.people].map((p) => p.fullName)).toEqual(names);
-      expect((await pageOf("?group=left_out")).total).toBe(0);
+      expect((await pageOf("?group=left_out")).total).toBe(10);
+      // A cursor naming nobody of this gym's is refused rather than read as the start.
+      const lost = await get(`${listUrl(gym)}/invites/people?group=reach&cursor=00000000-0000-4000-8000-000000000000`, owner.cookies);
+      expect(lost.statusCode).toBe(400);
     },
     TEST_TIMEOUT_MS,
   );
@@ -598,7 +614,7 @@ d("press Invite (real Postgres)", () => {
       expect(callsTo(addr("unc4"))).toHaveLength(1);
       expect(await sendRow(gym, addr("unc4"))).toEqual({ state: "failed", reason: "send_unknown", email: null });
       expect(MEMBER_INVITE_EMAIL_REASON_WORDS.send_unknown).toBe(
-        "We couldn't confirm this invitation was delivered. Resend it only if the member didn't receive it.",
+        "We couldn't confirm this invitation was delivered. Resend it only if they didn't receive it.",
       );
     },
     TEST_TIMEOUT_MS,
@@ -710,7 +726,7 @@ d("press Invite (real Postgres)", () => {
 
       const off = { sql, redis: createMemoryRedis(), log: { warn: () => undefined }, now: () => new Date(), invites: sendingOff };
       expect((await previewInvite(off, owner.userId, gym, {}, () => Promise.resolve(true)))?.blocked).toBe("invites_off");
-      const views = await invitationsOf(sql, sendingOff, gym, [{ email: addr("off-ida") }]);
+      const views = await invitationsOf(sql, sendingOff, gym, [{ id: "00000000-0000-4000-8000-000000000000", email: addr("off-ida") }]);
       expect(views[0]?.state).toBe("pending");
     },
     TEST_TIMEOUT_MS,

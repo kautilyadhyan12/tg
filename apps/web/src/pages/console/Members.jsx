@@ -75,10 +75,12 @@ function RosterSheet({ member, words, seesList, canRemove, readOnly, busy, onClo
   const [asking, setAsking] = useState(false);
   const off = offListView(member.offList);
   const free = seatIsFree(member);
-  // The server marks a paying member who is NOT on the list (`offList`), so any other one
-  // is on it, whatever record they are matched to — and Remove moves that record too.
-  const onList = seesList && !free && off === null;
-  const question = onList
+  // Remove moves a record to past members only when the server named the record that is
+  // certainly theirs (`recordId`); a gym with no list, someone on no list, and a family's
+  // shared email the list can't place lose their app access and nothing else (round one
+  // of 5b-v-a-i, High-6).
+  const movesRecord = seesList && !free && member.recordId !== undefined;
+  const question = movesRecord
     ? `Remove ${member.displayName}? They'll be moved to past ${words.people} and lose access to your ${words.it} in the app. Their own workout history isn't affected, and you can put them back at any time.`
     : `Remove ${member.displayName}'s app access? They'll lose access to your ${words.it} in the app. Their own workout history isn't affected.`;
   return (

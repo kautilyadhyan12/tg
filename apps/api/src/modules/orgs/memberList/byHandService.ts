@@ -29,13 +29,14 @@ import {
 import type { TransactionSql } from "postgres";
 import { z } from "zod";
 import { bustEntitlements } from "../../entitlements/service.js";
-import { withdrawForAccounts, withdrawForAddress } from "../invites/join.js";
+import { acceptAgainForAccounts, markWrongPersonFor, withdrawForAccounts, withdrawForAddress } from "../invites/join.js";
 import { invitationsOf, inviteEntryInTx, readyToSend } from "../invites/service.js";
 import type { InviteSettings } from "../invites/settings.js";
-import { insertAudit } from "../repo.js";
+import { insertAudit, placesFree } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { appViewsOf } from "./appViews.js";
 import { appPeopleIn, removeRecordIn } from "./oneRemove.js";
+import { currentRecordOf, pastRecordOf } from "./whose.js";
 import { applyTyped, EMPTY_VALUES, mergeValues, type EntryValues, type TypedContext } from "./byHand.js";
 import { tidyCell } from "./cells.js";
 import { cut, identityKey } from "./fields.js";
@@ -60,18 +61,22 @@ async function detailOf(
   const [fields, reached, invitation] = await Promise.all([
     repo.listFields(sql, gymId),
     repo.membersAgainstList(sql, gymId, { email: entry.values.email, phone: entry.values.phone, entryIds: [entry.id] }),
-    invitationsOf(sql, settings, gymId, [{ email: entry.values.email }]),
+    invitationsOf(sql, settings, gymId, [{ id: entry.id, email: entry.values.email }]),
   ]);
-  // A member belongs to this record when §9.7's match takes them to it: the current
-  // record for a current one, the former match for a former one.
-  const mine = reached.filter((member) => (entry.formerAt === null ? member.entryId : member.formerEntryId) === entry.id);
+  // The people whose record this certainly is (`whose.ts`), and on a current record the
+  // people on an email it shares with other records whom the list can't place: shown,
+  // with no "Not {name}?", and never removed with it.
+  const recordOf = entry.formerAt === null ? currentRecordOf : pastRecordOf;
+  const mine = reached.filter((member) => recordOf(member) === entry.id);
+  const shared = new Set(
+    entry.formerAt === null
+      ? reached.filter((member) => member.unsure?.records.some((record) => record.id === entry.id) === true).map((member) => member.userId)
+      : [],
+  );
+  const ends = appPeopleIn(reached, entry).map((member) => member.userId);
   const { values } = entry;
   const [visits, app] = await Promise.all([
-    repo.memberVisits(
-      sql,
-      gymId,
-      mine.map((member) => member.userId),
-    ),
+    repo.memberVisits(sql, gymId, [...mine.map((member) => member.userId), ...shared]),
     appViewsOf(
       sql,
       settings,
@@ -96,18 +101,20 @@ async function detailOf(
     dateOfBirth: values.dateOfBirth,
     formerAt: entry.formerAt?.toISOString() ?? null,
     source: entry.source,
-    inApp: mine.length > 0,
+    inApp: mine.length > 0 || shared.size > 0,
     invitation: invitation[0] ?? null,
     app: appOrThrow(app[0]),
     extra: fields.map((field) => ({ key: field.key, label: field.label, value: values.extra[field.key] ?? "" })),
     handEdited: entry.handEdited,
-    removeEndsApp: appPeopleIn(reached, entry).length > 0,
+    removeEndsApp: ends.length > 0,
+    removeEndsAppFor: ends,
     members: visits.map((row) => ({
       userId: row.userId,
       displayName: row.displayName,
       joinedAt: row.joinedAt.toISOString(),
       visits: row.visits,
       lastVisitOn: row.lastVisitOn,
+      sharedEmail: shared.has(row.userId),
     })),
   };
 }
@@ -200,11 +207,14 @@ interface Done {
   version: number;
   /** "Add and invite": what happened to the invitation. */
   invited?: "queued" | "already_invited";
+  /** Put back: the app given back to the people removed with the record, or no place. */
+  app?: "back" | "no_place";
 }
 
 async function finish(deps: MemberListDeps, gymId: string, done: Done): Promise<WriteAnswer> {
   const entry = await detailAfter(deps, gymId, done.entryId);
   const written: MemberListEntryWritten = { outcome: done.outcome, entry, version: done.version };
+  if (done.app !== undefined) written.app = done.app;
   if (done.invited !== undefined) {
     if (entry.invitation === null) throw new Error("an invited entry has no invitation");
     written.invite = { outcome: done.invited, invitation: entry.invitation };
@@ -443,13 +453,14 @@ async function bustAfterRemoval(deps: MemberListDeps, gymId: string, userIds: re
   if (failed > 0) deps.log.warn({ event: "memberlist.remove_bust_failed", gymId, failed }, "entitlements could not be refreshed after a removal");
 }
 
-/** "Not this person" (§18.4): somebody uses the app with this record's email who is not
- *  the person on it — a relative on a family address, or a stranger at a mistyped one.
- *  Staff know it; the app never guesses it from names (RULINGS 2026-09-28). That one
- *  account is taken out of the app; the record stays as it was, for the member it belongs
- *  to; and the invitation to the record's address stops, so the address lets nobody back in
- *  until staff check it and invite again. The person must still be matched to this current
- *  record, or nothing is written. */
+/** "Not this person" (§18.4): somebody uses the app as the person on this record who is not
+ *  them — a stranger at a mistyped address. Staff know it; the app never guesses it from
+ *  names (RULINGS 2026-09-28). That one account is taken out of the app; the record stays as
+ *  it was, for the person it belongs to; and the address that account uses is marked as
+ *  somebody else's: its invitation stays stopped, nothing is sent to it again, and the
+ *  record reads "Someone else uses …" until its email is changed. The person must still be
+ *  certainly this current record's (never a family's shared email the list can't place),
+ *  or nothing is written. */
 export async function notThisPerson(
   deps: MemberListDeps,
   userId: string,
@@ -471,10 +482,11 @@ export async function notThisPerson(
     const stored = await repo.entryFor(tx, gymId, entryId);
     if (stored === null || stored.formerAt !== null) throw notFound();
     const reached = await repo.membersAgainstList(tx, gymId, { email: stored.values.email, phone: stored.values.phone, entryIds: [stored.id] });
-    const member = reached.find((m) => m.userId === body.userId && m.entryId === stored.id);
+    const member = reached.find((m) => m.userId === body.userId && currentRecordOf(m) === stored.id);
     if (member === undefined) throw new OrgsError(409, "not_them_gone", MEMBER_LIST_BY_HAND_WORDS.not_them_gone);
     const version = (await repo.listState(tx, gymId))?.version ?? 0;
-    const rows = await repo.closeMemberships(tx, gymId, [member.userId], at);
+    // Not removed WITH the record: it was never theirs, so Put back never gives it back.
+    const rows = await repo.closeMemberships(tx, gymId, [{ userId: member.userId, removedWith: null }], at);
     if (rows.length === 0) throw new OrgsError(409, "not_them_staff", MEMBER_LIST_BY_HAND_WORDS.not_them_staff);
     for (const row of rows) {
       await insertAudit(tx, {
@@ -486,8 +498,7 @@ export async function notThisPerson(
         meta: { removedUserId: row.userId, via: "not_them" },
       });
     }
-    await withdrawForAccounts(tx, deps.invites ?? null, { gymId, userIds: rows.map((row) => row.userId), at });
-    await withdrawForAddress(tx, deps.invites ?? null, { gymId, email: stored.values.email, at });
+    await markWrongPersonFor(tx, deps.invites ?? null, { gymId, userIds: rows.map((row) => row.userId), at });
     closed.push(...rows.map((row) => row.userId));
     return { outcome: "not_them", entryId, version };
   });
@@ -517,18 +528,24 @@ async function setOnList(
   await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return { kind: "rate_limited" };
   const at = deps.now();
+  const reopened: string[] = [];
   const done = await deps.sql.begin(async (tx): Promise<Done> => {
     await repo.lockGym(tx, gymId);
-    return await setOnListIn(tx, deps, { userId, gymId, entryId, on, at });
+    return await setOnListIn(tx, deps, { userId, gymId, entryId, on, at, reopened });
   });
+  // After the commit, as a join does: their gym perks start at once.
+  await Promise.allSettled(reopened.map((member) => bustEntitlements(deps.redis, member)));
   return await finish(deps, gymId, done);
 }
 
-/** `setOnList`'s work, inside the caller's transaction and under its lock. */
+/** `setOnList`'s work, inside the caller's transaction and under its lock. Putting a
+ *  record back gives the app back to the people staff removed with it (RULINGS
+ *  2026-09-27: "Put back undoes both"), when the plan has a place for every one of them;
+ *  their ids go into `reopened`. */
 async function setOnListIn(
   tx: TransactionSql,
   deps: Pick<MemberListDeps, "invites">,
-  input: { userId: string; gymId: string; entryId: string; on: boolean; at: Date },
+  input: { userId: string; gymId: string; entryId: string; on: boolean; at: Date; reopened?: string[] },
 ): Promise<Done> {
   const { userId, gymId, entryId, on, at } = input;
   const stored = await repo.entryFor(tx, gymId, entryId);
@@ -540,8 +557,9 @@ async function setOnListIn(
   await repo.stampListedByContact(tx, gymId, currentContacts({ values: stored.values, current: true }), [entryId], at);
   // Taken off by staff: signing in with the address must not let them in, even if a
   // later upload holds them again, until staff send the invitation again (§10.2).
-  // Putting back re-opens nothing.
   if (!on) await withdrawForAddress(tx, deps.invites ?? null, { gymId, email: stored.values.email, at });
+  const app = on ? await giveAppBack(tx, deps, { userId, gymId, entryId, at }) : null;
+  input.reopened?.push(...(app?.reopened ?? []));
   const version = await repo.bumpListVersion(tx, gymId);
   await insertAudit(tx, {
     actorUserId: userId,
@@ -549,9 +567,40 @@ async function setOnListIn(
     action: on ? "org.member_list_entry_restored" : "org.member_list_entry_taken_off",
     targetType: "member_list_entry",
     targetId: entryId,
-    meta: {},
+    meta: app === null || app.kind === "none" ? {} : { app: app.kind, reopened: String(app.reopened.length) },
   });
-  return { outcome: on ? "restored" : "taken_off", entryId, version };
+  return { outcome: on ? "restored" : "taken_off", entryId, version, ...(app === null || app.kind === "none" ? {} : { app: app.kind }) };
+}
+
+/** Put back's other half: the memberships staff removed WITH this record open again,
+ *  all of them or — with no place for every one — none, each audited, and their
+ *  addresses' invitations read accepted again. */
+async function giveAppBack(
+  tx: TransactionSql,
+  deps: Pick<MemberListDeps, "invites">,
+  input: { userId: string; gymId: string; entryId: string; at: Date },
+): Promise<{ kind: "none" | "back" | "no_place"; reopened: string[] }> {
+  const { gymId, at } = input;
+  const due = await repo.removedWithRecord(tx, gymId, input.entryId);
+  if (due.length === 0) return { kind: "none", reopened: [] };
+  if (!(await placesFree(tx, gymId, due.length))) return { kind: "no_place", reopened: [] };
+  const back = await repo.reopenMemberships(
+    tx,
+    gymId,
+    due.map((row) => row.membershipId),
+  );
+  for (const row of back) {
+    await insertAudit(tx, {
+      actorUserId: input.userId,
+      gymId,
+      action: "org.member_restored",
+      targetType: "gym_member",
+      targetId: row.membershipId,
+      meta: { restoredUserId: row.userId, via: "put_back" },
+    });
+  }
+  await acceptAgainForAccounts(tx, deps.invites ?? null, { gymId, userIds: back.map((row) => row.userId), at });
+  return { kind: "back", reopened: back.map((row) => row.userId) };
 }
 
 /** Delete a FORMER record for good (§11.1). A current one has to be taken off first. */
@@ -775,7 +824,12 @@ export async function removeUnlisted(
     if (isLargeMemberListChange(ids.length, seats) && input.acknowledgeLargeChange !== true) {
       return { kind: "large_change", removing: ids.length, of: seats };
     }
-    const closed = await repo.closeMemberships(tx, gymId, ids, at);
+    const closed = await repo.closeMemberships(
+      tx,
+      gymId,
+      people.map((person) => ({ userId: person.userId, removedWith: pastRecordOf(person) })),
+      at,
+    );
     // Under the gym's lock the set cannot move between the rule and the write, so a
     // difference is a fault of ours and nothing is committed.
     if (closed.length !== ids.length) {

@@ -530,7 +530,7 @@ export default function MemberListPanel({
                 <span style={{ gridArea: 'pay' }}>Payment</span>
               </>
             ) : (
-              <span style={{ gridArea: 'ends' }}>Past member since</span>
+              <span style={{ gridArea: 'ends' }}>Past {words.person} since</span>
             )}
             <span style={{ gridArea: 'app' }}>App</span>
           </div>
@@ -551,7 +551,7 @@ export default function MemberListPanel({
                       <span className="c-s13 c-t2 c-ell">{contactWords(e)}</span>
                     </span>
                     <span className="md:hidden c-s13 c-t2" style={{ gridArea: 'words' }}>
-                      {rowWords(e, today).join(' · ')}
+                      {rowWords(e, today, words.person).join(' · ')}
                     </span>
                     <span className="hidden md:block c-s14 c-t1 c-ell" style={{ gridArea: 'status' }}>
                       {e.status || <span className="c-t3">—</span>}

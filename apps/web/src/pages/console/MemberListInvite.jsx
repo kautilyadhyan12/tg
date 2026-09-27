@@ -145,7 +145,12 @@ export default function MemberListInvite({
       const res = await orgService.getInvitePeople(gymId, invitePeopleQuery(filters, group, shown.cursor));
       if (readFor.current[group] !== at) return;
       const p = res.data.page;
-      setGroups((g) => ({ ...g, [group]: { ...g[group], people: [...g[group].people, ...p.people], total: p.total, cursor: p.cursor } }));
+      // Each person once, whatever the list did between the pages.
+      setGroups((g) => {
+        const seen = new Set(g[group].people.map((person) => person.entryId));
+        const people = [...g[group].people, ...p.people.filter((person) => !seen.has(person.entryId))];
+        return { ...g, [group]: { ...g[group], people, total: p.total, cursor: p.cursor } };
+      });
     } catch (err) {
       if (readFor.current[group] === at) setGroups((g) => ({ ...g, [group]: { ...g[group], error: errorText(err, "We couldn't load any more.") } }));
     } finally {
@@ -202,7 +207,7 @@ export default function MemberListInvite({
             : `${count(sent.queued)} ${sent.queued === 1 ? 'invitation is' : 'invitations are'} being sent.`}
         </p>
         {sent.queued > 0 ? (
-          <p className="c-s14 c-t2">Invitations are sent in batches, so large lists can take up to a day. Each member&apos;s page shows the delivery status.</p>
+          <p className="c-s14 c-t2">Invitations are sent in batches, so large lists can take up to a day. Each {words.person}&apos;s page shows the delivery status.</p>
         ) : null}
         {left.length > 0 ? (
           <div data-testid="invite-left-out" className="flex flex-col gap-1">
@@ -383,7 +388,7 @@ export default function MemberListInvite({
     footer = (
       <div className="flex flex-col gap-3 w-full">
         <p className="c-s13 c-t2">
-          Each member receives one invitation email from {gym.name}, sent by AI Home Gym, with a link to join. Only someone who signs in with that email address can join.
+          Each {words.person} receives one invitation email from {gym.name}, sent by AI Home Gym, with a link to join. Only someone who signs in with that email address can join.
         </p>
         {reach > 0 && blocked === null ? (
           <PermissionTick checked={permission} onChange={setPermission}>

@@ -495,7 +495,12 @@ d("member list: keeping it by hand (real Postgres)", () => {
       const free = await member("guard-free", org, owner);
       await sql`UPDATE gym_members SET complimentary = true WHERE gym_id = ${gym} AND user_id = ${free.userId}`;
       const plain = await member("guard-plain", org, owner);
-      const closed = await sql.begin((tx) => closeMemberships(tx, gym, [owner.userId, trainer.userId, free.userId, plain.userId], new Date()));
+      const closed = await sql.begin((tx) => closeMemberships(
+          tx,
+          gym,
+          [owner.userId, trainer.userId, free.userId, plain.userId].map((userId) => ({ userId, removedWith: null })),
+          new Date(),
+        ));
       expect(closed.map((c) => c.userId)).toEqual([plain.userId]);
       expect((await liveMembers(gym)).sort()).toEqual([owner.userId, trainer.userId, free.userId].sort());
     },
@@ -725,18 +730,23 @@ d("member list: keeping it by hand (real Postgres)", () => {
         { key: "locker_no", label: "Locker No", value: "L-7" },
         { key: "emergency_contact_name", label: "Emergency Contact Name", value: "Sam Khan" },
       ]);
-      expect(entry.members).toEqual([
-        { userId: mo.userId, displayName: "Hand page-mo", joinedAt: row.joined_at.toISOString(), visits: 2, lastVisitOn: "2099-01-03" },
-      ]);
+      const moSeen = { userId: mo.userId, displayName: "Hand page-mo", joinedAt: row.joined_at.toISOString(), visits: 2, lastVisitOn: "2099-01-03" };
+      expect(entry.members).toEqual([{ ...moSeen, sharedEmail: false }]);
+      expect(entry.removeEndsAppFor).toEqual([mo.userId]);
 
-      // A household: a second record on Mo's address. §9.7 matches Mo to the FIRST, so
-      // the second record's page shows nobody in the app and none of Mo's visits.
+      // A household: a second record on Mo's address, and the name Mo gave the app is on
+      // neither, so the list can't say which is Mo's (round one, High-1). Both pages name
+      // Mo as sharing the email; neither claims Mo, and removing either ends nobody's app.
       const second = await typeIn(gym, owner, { fullName: "Sam Khan", email: mo.email });
-      const secondPage = await get(entryUrl(gym, second.entry.entryId), owner.cookies);
-      expect(memberListEntryDetailSchema.parse((JSON.parse(secondPage.body) as { entry: unknown }).entry)).toMatchObject({
-        inApp: false,
-        members: [],
-      });
+      for (const id of [second.entry.entryId, row.id]) {
+        const shown = await get(entryUrl(gym, id), owner.cookies);
+        expect(memberListEntryDetailSchema.parse((JSON.parse(shown.body) as { entry: unknown }).entry)).toMatchObject({
+          inApp: true,
+          members: [{ ...moSeen, sharedEmail: true }],
+          removeEndsApp: false,
+          removeEndsAppFor: [],
+        });
+      }
     },
     TEST_TIMEOUT_MS,
   );
@@ -864,7 +874,7 @@ d("member list: keeping it by hand (real Postgres)", () => {
   );
 
   it(
-    "removing a record ends the app of the member it reached (One Remove), putting it back lists the record again without the app, and doing either twice changes nothing",
+    "removing a record ends the app of the member it reached (One Remove), putting it back undoes both, and doing either twice changes nothing",
     async () => {
       const owner = await makeUser("off-owner");
       const org = await makeOrg(owner, "Off Gym");
@@ -884,9 +894,10 @@ d("member list: keeping it by hand (real Postgres)", () => {
       const twice = await del(entryUrl(gym, one.entry.entryId), owner.cookies);
       expect(written(twice)).toMatchObject({ outcome: "already_taken_off", version });
 
+      // Put back undoes both (RULINGS 2026-09-27): on the list, and in the app again.
       const back = await post(`${entryUrl(gym, one.entry.entryId)}/restore`, {}, owner.cookies);
-      expect(written(back)).toMatchObject({ outcome: "restored", entry: { inApp: false, formerAt: null } });
-      expect(await liveMembers(gym)).not.toContain(who.userId);
+      expect(written(back)).toMatchObject({ outcome: "restored", app: "back", entry: { inApp: true, formerAt: null } });
+      expect(await liveMembers(gym)).toContain(who.userId);
       expect((await unlisted(gym, owner, "no_longer_listed")).total).toBe(0);
       const backTwice = await post(`${entryUrl(gym, one.entry.entryId)}/restore`, {}, owner.cookies);
       expect(written(backTwice)).toMatchObject({ outcome: "already_on_list", version: written(back).version });
@@ -1038,6 +1049,8 @@ d("member list: keeping it by hand (real Postgres)", () => {
       "gym_leads.gym_id",
       "gym_members.entry_id",
       "gym_members.gym_id",
+      // The record a membership was removed with (0048): moved by a merge with the rest.
+      "gym_members.removed_entry_id",
     ]);
   });
 });

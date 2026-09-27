@@ -311,7 +311,12 @@ describe("what a person's page offers about the invitation — every class", () 
     ['joined', { invitation: inv({ state: 'accepted' }) }, null],
     ['declined', { invitation: inv({ state: 'declined' }) }, 'again'],
     ['said "Not me"', { invitation: inv({ state: 'declined', notMeAt: at }) }, null],
-    ['invitation stopped', { invitation: inv({ state: 'withdrawn' }) }, 'again'],
+    // Stopped: invited again, asked first (RULINGS 2026-09-26), never "Send again … only
+    // when they ask"; never at all to an address staff said is somebody else's.
+    ['invitation stopped', { invitation: inv({ state: 'withdrawn' }) }, 'invite_again'],
+    ['removed from the app', { invitation: inv({ state: 'withdrawn', removedAt: at }) }, 'invite_again'],
+    ['someone else at the address removed', { invitation: inv({ state: 'withdrawn', addressRemovedAt: at }) }, 'invite_again'],
+    ['staff said someone else uses the address', { invitation: inv({ state: 'withdrawn', wrongPersonAt: at }) }, null],
     ['16 by the list, never invited', { dateOfBirth: '2010-03-14' }, 'under_age'],
     ['turns 18 tomorrow', { dateOfBirth: '2008-09-26' }, 'under_age'],
     ['turned 18 today', { dateOfBirth: '2008-09-25' }, 'invite'],

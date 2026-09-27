@@ -40,7 +40,7 @@ const MemberListPerson = (await import('./MemberListPerson')).default;
 
 const GYM = '11111111-1111-4111-8111-111111111111';
 const ADA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-const WORDS = { people: 'members', person: 'member', peopleCap: 'Members', it: 'gym' };
+const WORDS = { people: 'members', person: 'member', peopleCap: 'Members', personCap: 'Member', it: 'gym' };
 const IRON = { name: 'Iron House', slug: 'iron-house' };
 const NONE = { noEmail: 0, underAge: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, refused: 0, sharedAddress: 0 };
 const FILTERS = { records: 'current', app: 'all', status: ['Active'], membershipType: [], paymentStatus: [], query: '' };
@@ -235,7 +235,7 @@ describe('the worst thing: nobody the gym did not choose is emailed', () => {
     expect(whyOf('Mark Bennett')).toBe('Olivia Bennett uses the app with this email address.Add a separate email address to invite them.');
     expect(whyOf('Sofia Alvarez')).toMatch(/^Invitation sent · 24 Sep( 2026)?To resend, open their page\.$/);
     expect(whyOf('Ben Cole')).toMatch(/^Removed from app · 26 Sep( 2026)?$/);
-    expect(whyOf('Ravi Kumar')).toBe("Shared email address (such as info@)Add the member's own email address to invite them.");
+    expect(whyOf('Ravi Kumar')).toBe('Shared email address (such as info@)Add their own email address to invite them.');
     expect(whyOf('Zara Ahmed')).toBe('Unsubscribed from your emails');
     // Each row still says who it is: the name, and the email it has.
     expect(rows()[0].textContent).toContain('arjun@members.example');
@@ -267,13 +267,15 @@ describe("Invite's page", () => {
 
   it('brings the next hundred with Load more, after the ones already shown', async () => {
     openInvite(preview({ reach: 3 }));
-    orgService.getInvitePeople.mockResolvedValueOnce(peopleAnswer([AVA, ARJUN], { total: 3, cursor: 100 }));
+    orgService.getInvitePeople.mockResolvedValueOnce(peopleAnswer([AVA, ARJUN], { total: 3, cursor: ARJUN.entryId }));
     await waitFor(() => expect(rows()).toHaveLength(2));
     const rest = invitee('Zoe Park');
-    orgService.getInvitePeople.mockResolvedValueOnce(peopleAnswer([rest], { total: 3, cursor: null }));
+    // A person already shown, sent again because the list moved between the pages, is
+    // shown once.
+    orgService.getInvitePeople.mockResolvedValueOnce(peopleAnswer([ARJUN, rest], { total: 3, cursor: null }));
     fireEvent.click(box().getByRole('button', { name: 'Load more' }));
     await waitFor(() => expect(rows()).toHaveLength(3));
-    expect(orgService.getInvitePeople).toHaveBeenLastCalledWith(GYM, 'status=Active&group=reach&cursor=100');
+    expect(orgService.getInvitePeople).toHaveBeenLastCalledWith(GYM, `status=Active&group=reach&cursor=${ARJUN.entryId}`);
     expect(rows()[2].textContent).toContain('Zoe Park');
     expect(box().queryByRole('button', { name: 'Load more' })).toBeNull();
   });

@@ -24,6 +24,7 @@ const base: AppWordInput = {
   dateOfBirth: null,
   former: false,
   inApp: [],
+  unsure: [],
   sharedWith: null,
   invitation: null,
   optedOut: null,
@@ -39,6 +40,8 @@ const invitation = (over: Partial<MemberListInvitation> = {}): MemberListInvitat
   waitingSince: null,
   notMeAt: null,
   removedAt: null,
+  addressRemovedAt: null,
+  wrongPersonAt: null,
   ...over,
 });
 type Email = NonNullable<MemberListInvitation["email"]>;
@@ -72,11 +75,23 @@ describe("the spec's table, one case a row (§18.4)", () => {
       { reason: "wrong_email", tone: "red", at: null, line: "The recipient at emma@example.com says they aren't Emma. Confirm Emma's email address.", lineTone: "red" },
     ],
     [
+      // Staff said the person using it is somebody else ("Not Emma?"): stopped, never sent again.
+      "2 wrong email, said by staff",
+      { invitation: invitation({ state: "withdrawn", wrongPersonAt: AT }) },
+      { reason: "wrong_email", tone: "red", at: null, line: "Someone else uses emma@example.com. Confirm Emma's email address.", lineTone: "red" },
+    ],
+    [
       "3 waiting for a place",
       { invitation: invitation({ waitingSince: AT }) },
       { reason: "waiting", tone: "amber", at: null, line: "Emma tried to join, but all 500 places on your plan are in use. Upgrade your plan or remove a member who has left, then ask Emma to try again.", lineTone: "amber" },
     ],
     ["4 removed from app", { invitation: invitation({ state: "withdrawn", removedAt: REMOVED }) }, { reason: "removed", tone: "grey", at: REMOVED, line: null, lineTone: "plain" }],
+    [
+      // Somebody else who used the address was removed: said of the address, never of this person.
+      "4b someone else at the address removed",
+      { invitation: invitation({ state: "withdrawn", addressRemovedAt: REMOVED }) },
+      { reason: "address_removed", tone: "grey", at: REMOVED, line: null, lineTone: "plain" },
+    ],
     ["5 left the app", { invitation: invitation({ state: "accepted" }) }, { reason: "left", tone: "grey", at: null, line: null, lineTone: "plain" }],
     ["6 unsubscribed", { invitation: invitation({ email: email() }), optedOut: "unsubscribed" }, { reason: "unsubscribed", tone: "grey", at: null, line: null, lineTone: "plain" }],
     [
@@ -88,7 +103,7 @@ describe("the spec's table, one case a row (§18.4)", () => {
     [
       "8 bounced after it went",
       { invitation: invitation({ email: email({ result: "bounced" }) }) },
-      { reason: "not_arrived", tone: "amber", at: null, line: "Invitation bounced: this address doesn't accept email. Confirm it with the member.", lineTone: "amber" },
+      { reason: "not_arrived", tone: "amber", at: null, line: "Invitation bounced: this address doesn't accept email. Confirm it with them.", lineTone: "amber" },
     ],
     [
       // Never emailed, so not "Invited" (Kd, 2026-09-27: "Invited · Not sent" said two things).
@@ -115,7 +130,7 @@ describe("the spec's table, one case a row (§18.4)", () => {
     ],
     ["10 never invited", {}, { reason: "not_invited", tone: "grey", at: null, line: null, lineTone: "plain" }],
     ["10 no email address", { email: null }, { reason: "not_invited", tone: "grey", at: null, line: "No email address", lineTone: "plain" }],
-    ["10 under 18 by the gym's day", { dateOfBirth: "2008-09-28" }, { reason: "not_invited", tone: "grey", at: null, line: "Under 18", lineTone: "plain" }],
+    ["1d under 18 by the gym's day", { dateOfBirth: "2008-09-28" }, { reason: "under_age", tone: "grey", at: null, line: null, lineTone: "plain" }],
     ["10 eighteen today", { dateOfBirth: "2008-09-27" }, { reason: "not_invited", tone: "grey", at: null, line: null, lineTone: "plain" }],
     [
       "10 invitation cancelled when moved to past members",
@@ -132,7 +147,7 @@ describe("a household: two records on one email, the person in the app matched t
   it("the other record says who uses the email, never their 'Left the app' or 'Invited'", () => {
     for (const state of memberInviteStateSchema.options) {
       const out = reason({ fullName: "Leo Park", sharedWith: "Maria Park", invitation: invitation({ state }) });
-      expect(out, state).toEqual({ reason: "not_invited", tone: "grey", at: null, line: "Maria Park uses the app with this email address.", lineTone: "plain" });
+      expect(out, state).toEqual({ reason: "shares_email", tone: "grey", at: null, line: "Maria Park uses the app with this email address.", lineTone: "plain" });
     }
   });
   it("a record that reaches someone itself still reads 'In the app'", () => {
@@ -140,18 +155,53 @@ describe("a household: two records on one email, the person in the app matched t
   });
 });
 
+describe("a household the list can't place: the person in the app gave a name on none of the records (round one, High-1)", () => {
+  // The names families really sign up with, and the ones this rule has never heard of.
+  const given = ["Mum", "Maria", "M Park", "du", "The Parks", "张伟"];
+  it.each(given)("signed up as %s: every record on the email says so, in amber, and none claims them", (name) => {
+    const unsure = [{ name, by: "email" as const, records: ["Leo Park", "Maria Park"] }];
+    for (const fullName of ["Leo Park", "Maria Park"]) {
+      for (const state of [null, ...memberInviteStateSchema.options]) {
+        const out = appWord({ ...base, fullName, unsure, invitation: state === null ? null : invitation({ state }) });
+        expect(out, `${fullName} ${String(state)}`).toEqual({
+          word: "in_app",
+          tone: "amber",
+          at: null,
+          line: `${name} uses the app with the email address Leo Park and Maria Park share, so we can't tell which of them it is. Give each of them their own email address.`,
+          lineTone: "amber",
+        });
+      }
+    }
+  });
+  it("three records, and a phone number", () => {
+    expect(reason({ unsure: [{ name: "Ivy", by: "phone", records: ["Leo Park", "Maria Park", "Ivy Park"] }] }).line).toBe(
+      "Ivy uses the app with the phone number Leo Park, Maria Park and Ivy Park share, so we can't tell which of them it is. Give each of them their own email address.",
+    );
+  });
+  it("someone certainly on the record comes first", () => {
+    expect(reason({ inApp: [{ name: "Emma Hart" }], unsure: [{ name: "Mum", by: "email", records: ["Emma Hart", "Leo Hart"] }] })).toEqual({
+      reason: "in_app",
+      tone: "green",
+      at: null,
+      line: null,
+      lineTone: "plain",
+    });
+  });
+});
+
 describe("someone the list says is under 18", () => {
   const child = { fullName: "Leo Park", dateOfBirth: "2012-05-01" };
-  it("reads 'Not invited · Under 18' whatever their address's invitation says: it was a parent's, or came before the date was corrected", () => {
+  it("reads 'Not in the app · Under 18' whatever their address's invitation says: it was a parent's, or came before the date was corrected", () => {
     for (const state of memberInviteStateSchema.options) {
-      for (const over of [{}, { notMeAt: AT }, { waitingSince: AT }, { removedAt: REMOVED }, { email: email() }]) {
-        expect(reason({ ...child, invitation: invitation({ state, ...over }) }), `${state} ${JSON.stringify(over)}`).toEqual({
-          reason: "not_invited",
+      for (const over of [{}, { notMeAt: AT }, { waitingSince: AT }, { removedAt: REMOVED }, { wrongPersonAt: AT }, { email: email() }]) {
+        expect(word({ ...child, invitation: invitation({ state, ...over }) }), `${state} ${JSON.stringify(over)}`).toEqual({
+          word: "not_in_app",
           tone: "grey",
           at: null,
           line: "Under 18",
           lineTone: "plain",
         });
+        expect(reason({ ...child, invitation: invitation({ state, ...over }) }).reason).toBe("under_age");
       }
     }
   });
@@ -217,6 +267,16 @@ describe("every combination of invitation facts the types allow: a word, and nev
       for (const notMeAt of [null, AT]) {
         for (const removedAt of [null, REMOVED]) {
           for (const mail of emails) invitations.push(invitation({ state, waitingSince, notMeAt, removedAt, email: mail }));
+          // Whose removal, and staff's "someone else", against every other fact, with an
+          // email of each kind (the full email sweep above has them unset).
+          for (const addressRemovedAt of [null, REMOVED]) {
+            for (const wrongPersonAt of [null, AT]) {
+              if (addressRemovedAt === null && wrongPersonAt === null) continue;
+              for (const mail of [null, email(), email({ state: "skipped", reason: "not_on_list" }), email({ result: "bounced" })]) {
+                invitations.push(invitation({ state, waitingSince, notMeAt, removedAt, addressRemovedAt, wrongPersonAt, email: mail }));
+              }
+            }
+          }
         }
       }
     }
@@ -231,8 +291,14 @@ describe("every combination of invitation facts the types allow: a word, and nev
           const where = JSON.stringify({ inv, optedOut, former });
           expect(out.reason, where).not.toBe("in_app");
           if (out.reason === "removed") expect(inv?.state === "withdrawn" && inv.removedAt !== null, where).toBe(true);
+          // Somebody else's removal is never read as this person's, nor theirs as somebody else's.
+          if (out.reason === "address_removed") expect(inv?.state === "withdrawn" && inv.removedAt === null && inv.addressRemovedAt !== null, where).toBe(true);
           if (out.reason === "left") expect(inv?.state, where).toBe("accepted");
-          if (out.reason === "wrong_email") expect(inv?.state === "declined" && inv.notMeAt !== null, where).toBe(true);
+          if (out.reason === "wrong_email") {
+            expect((inv?.state === "declined" && inv.notMeAt !== null) || (inv?.state === "withdrawn" && inv.wrongPersonAt !== null), where).toBe(true);
+          }
+          // An address staff said is somebody else's is never offered as "Removed from app".
+          if (inv?.state === "withdrawn" && inv.wrongPersonAt !== null) expect(out.reason, where).toBe("wrong_email");
           if (out.reason === "waiting") expect(inv?.state === "pending" && inv.waitingSince !== null, where).toBe(true);
           if (out.reason === "declined") expect(inv?.state, where).toBe("declined");
           if (out.reason === "invited" || out.reason === "not_arrived" || out.reason === "not_sent") expect(inv?.state, where).toBe("pending");
@@ -261,7 +327,7 @@ describe("the three words a screen shows (Kd, 2026-09-27: the list showed too mu
     [
       "invited, the email bounced: a line to check",
       { invitation: invitation({ email: email({ result: "bounced" }) }) },
-      { word: "invited", tone: "grey", at: null, line: "Invitation bounced: this address doesn't accept email. Confirm it with the member.", lineTone: "amber" },
+      { word: "invited", tone: "grey", at: null, line: "Invitation bounced: this address doesn't accept email. Confirm it with them.", lineTone: "amber" },
     ],
     [
       "invited, waiting for a place: a line to check",
@@ -274,6 +340,11 @@ describe("the three words a screen shows (Kd, 2026-09-27: the list showed too mu
       { word: "not_in_app", tone: "grey", at: null, line: "The recipient at emma@example.com says they aren't Emma. Confirm Emma's email address.", lineTone: "red" },
     ],
     ["removed from the app, with its day", { invitation: invitation({ state: "withdrawn", removedAt: REMOVED }) }, { word: "not_in_app", tone: "grey", at: REMOVED, line: "Removed from app", lineTone: "plain" }],
+    [
+      "someone else at the address removed, with its day",
+      { invitation: invitation({ state: "withdrawn", addressRemovedAt: REMOVED }) },
+      { word: "not_in_app", tone: "grey", at: REMOVED, line: "Someone using this email address was removed from the app", lineTone: "plain" },
+    ],
     ["left the app", { invitation: invitation({ state: "accepted" }) }, { word: "not_in_app", tone: "grey", at: null, line: "Left the app", lineTone: "plain" }],
     ["declined", { invitation: invitation({ state: "declined" }) }, { word: "not_in_app", tone: "grey", at: null, line: "Declined the invitation", lineTone: "plain" }],
     ["unsubscribed", { optedOut: "unsubscribed" }, { word: "not_in_app", tone: "grey", at: null, line: "Unsubscribed from your emails", lineTone: "plain" }],
@@ -292,6 +363,10 @@ describe("the three words a screen shows (Kd, 2026-09-27: the list showed too mu
   it("every reason lands on exactly one of the three words, and only someone in the app reads In the app", () => {
     const where: Record<AppReasonKind, string> = {
       in_app: "in_app",
+      in_app_unsure: "in_app",
+      shares_email: "not_in_app",
+      under_age: "not_in_app",
+      address_removed: "not_in_app",
       waiting: "invited",
       not_arrived: "invited",
       not_sent: "not_in_app",
@@ -305,7 +380,15 @@ describe("the three words a screen shows (Kd, 2026-09-27: the list showed too mu
     };
     const states = [null, ...memberInviteStateSchema.options];
     for (const state of states) {
-      for (const over of [{}, { notMeAt: AT }, { waitingSince: AT }, { removedAt: REMOVED }, { email: email({ result: "bounced" }) }]) {
+      for (const over of [
+        {},
+        { notMeAt: AT },
+        { waitingSince: AT },
+        { removedAt: REMOVED },
+        { addressRemovedAt: REMOVED },
+        { wrongPersonAt: AT },
+        { email: email({ result: "bounced" }) },
+      ]) {
         for (const inApp of [[], [{ name: "Emma Hart" }]]) {
           const input = { invitation: state === null ? null : invitation({ state, ...over }), inApp };
           const found = reason(input);

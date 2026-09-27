@@ -8,7 +8,8 @@ import { MEMBER_INVITE_PEOPLE_PAGE, turns18On, type MemberInvitePeople, type Mem
 import { dayInTz } from "../../gamification/streak.js";
 import { appViewsOf } from "../memberList/appViews.js";
 import type { MemberListDeps } from "../memberList/service.js";
-import { requirePrivilege } from "../service.js";
+import { OrgsError, requirePrivilege } from "../service.js";
+import { entrySeq } from "./repo.js";
 import { filtersOf, workOutGroup } from "./service.js";
 
 export async function invitePeople(
@@ -25,8 +26,15 @@ export async function invitePeople(
   const now = deps.now();
   const group = await workOutGroup(deps.sql, settings, gymId, filtersOf(query), dayInTz(now, org.timezone));
   const chosen = group.people.filter(({ why }) => (query.group === "reach") === (why === "reach"));
-  const from = query.cursor ?? 0;
-  const shown = chosen.slice(from, from + MEMBER_INVITE_PEOPLE_PAGE);
+  // A page continues after the last person the one before showed, in the list's order
+  // (a keyset): the group can gain or lose people in between — another press, the
+  // sender — and an offset would then skip some or show them twice.
+  const after = query.cursor === undefined ? null : await entrySeq(deps.sql, gymId, query.cursor);
+  if (query.cursor !== undefined && after === null) {
+    throw new OrgsError(400, "bad_cursor", "That page of names could not be read. Open Invite again.");
+  }
+  const rest = after === null ? chosen : chosen.filter(({ candidate }) => candidate.listedSeq > after);
+  const shown = rest.slice(0, MEMBER_INVITE_PEOPLE_PAGE);
   const apps = await appViewsOf(
     deps.sql,
     settings,
@@ -58,6 +66,6 @@ export async function invitePeople(
       },
     ];
   });
-  const next = from + MEMBER_INVITE_PEOPLE_PAGE;
-  return { total: chosen.length, people, cursor: next < chosen.length ? next : null };
+  const last = shown[shown.length - 1];
+  return { total: chosen.length, people, cursor: rest.length > shown.length && last !== undefined ? last.candidate.entryId : null };
 }

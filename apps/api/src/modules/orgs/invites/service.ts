@@ -367,9 +367,11 @@ export async function inviteAgain(
     const { email, hmac, invite } = await inviteable(tx, settings, gymId, entryId, at);
     if (invite === null) throw refuse(409, "not_invited");
     if (invite.state === "accepted") throw refuse(409, "already_joined");
-    // Whoever reads this address said it is not theirs: sending it again would email the
-    // same stranger. A corrected address is a different invitation.
+    // Whoever reads this address said it is not theirs, or staff said the person using it
+    // is somebody else: sending it again would email the same stranger. A corrected
+    // address is a different invitation.
     if (invite.state === "declined" && (await repo.saidNotMe(tx, gymId, invite.id))) throw refuse(409, "said_not_me");
+    if (invite.state === "withdrawn" && (await repo.markedWrongPerson(tx, gymId, invite.id))) throw refuse(409, "wrong_person");
     await mayEmail(tx, gymId, email, hmac);
     // Sending again re-opens a declined or withdrawn invitation (§10.2), before the check
     // below: an email still waiting to go would otherwise be skipped by the worker as an
@@ -394,13 +396,13 @@ export async function inviteAgain(
   return { outcome: done.outcome, invitation: await view(deps.sql, gymId, done.hmac) };
 }
 
-/** The invitation of each of these entries' addresses, for a page of the list or one
+/** The invitation of each of these records' addresses, for a page of the list or one
  *  person's page. `countSentAgain: false` is the App word's (its `sentAgain` reads 0). */
 export async function invitationsOf(
   sql: SqlOrTx,
   settings: InviteSettings | null,
   gymId: string,
-  entries: readonly { email: string | null }[],
+  entries: readonly { id: string; email: string | null }[],
   options: { countSentAgain?: boolean } = {},
 ): Promise<(MemberListInvitation | null)[]> {
   if (settings === null) return entries.map(() => null);
@@ -412,14 +414,30 @@ export async function invitationsOf(
     options,
   );
   const found = hmacs.map((hmac) => (hmac === null ? null : (views.get(hmac) ?? null)));
-  // A stopped invitation says whether the gym removed its person from the app, and when.
-  const stopped = entries.flatMap((entry, at) => (found[at]?.state === "withdrawn" && entry.email !== null ? [entry.email] : []));
+  // A stopped invitation says whether the gym removed this record's own person from the
+  // app, and when; failing that, whether it removed somebody else who used the address —
+  // an invitation belongs to an address, and two records can share one.
+  const stopped = entries.filter((entry, at) => found[at]?.state === "withdrawn" && entry.email !== null);
   if (stopped.length === 0) return found;
-  const removed = await repo.removedAtByEmail(sql, gymId, stopped);
+  const [byRecord, byAddress] = await Promise.all([
+    repo.removedAtByRecord(
+      sql,
+      gymId,
+      stopped.map((entry) => entry.id),
+    ),
+    repo.removedAtByEmail(
+      sql,
+      gymId,
+      stopped.flatMap((entry) => (entry.email === null ? [] : [entry.email])),
+    ),
+  ]);
   return found.map((view, at) => {
-    const email = entries[at]?.email ?? null;
-    const when = view?.state === "withdrawn" && email !== null ? removed.get(email.toLowerCase()) : undefined;
-    return view === null || when === undefined ? view : { ...view, removedAt: when.toISOString() };
+    const entry = entries[at];
+    if (view === null || view.state !== "withdrawn" || entry === undefined || entry.email === null) return view;
+    const theirs = byRecord.get(entry.id);
+    if (theirs !== undefined) return { ...view, removedAt: theirs.toISOString() };
+    const someone = byAddress.get(entry.email.toLowerCase());
+    return someone === undefined ? view : { ...view, addressRemovedAt: someone.toISOString() };
   });
 }
 

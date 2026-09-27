@@ -241,18 +241,19 @@ d("the App word on the Members list (real Postgres)", () => {
       const inApp = await page(gym, "?app=in_app");
       expect(inApp.entries.map((entry) => entry.fullName)).toEqual(["Maria Park"]);
       expect(inApp.total).toBe(1);
-      // Leo has never had an invitation of his own: Not invited yet.
+      // His email is in the app, so Invite can't reach him: not "Not invited yet" (round
+      // one of 5b-v-a-i, Low-6).
       expect((await viewOf(gym)).appWords).toEqual([
         { word: "in_app", count: 1 },
         { word: "not_in_app", count: 1 },
-        { word: "not_invited", count: 1 },
       ]);
+      expect((await page(gym, "?app=not_invited")).entries).toEqual([]);
     },
     TEST_TIMEOUT_MS,
   );
 
   it(
-    "a mother who signed up under a name on neither record: the first record reads 'In the app' and names her on its page (names are never compared), the other says who uses the email",
+    "a mother who signed up under a name on neither record: neither record claims her — both say, in amber, that the list can't tell which of them she is (round one, High-1)",
     async () => {
       const gym = await makeGym();
       const email = addr("ng-family");
@@ -260,13 +261,18 @@ d("the App word on the Members list (real Postgres)", () => {
       await add(gym, { fullName: "Ivy Ng", email });
       await accept(await signIn(email, "Mum"));
 
-      const sam = await rowOf(gym, "Sam Ng");
-      expect(sam.app).toMatchObject({ word: "in_app", line: null, lineTone: "plain" });
-      // The page names who uses the app with the record, for staff to see (and Not this person).
-      expect((await detailOf(gym, sam.entryId)).members.map((member) => member.displayName)).toEqual(["Mum"]);
-      const ivy = await rowOf(gym, "Ivy Ng");
-      expect(ivy.app.word).toBe("not_in_app");
-      expect(ivy.app.line).toBe("Sam Ng uses the app with this email address.");
+      const line = "Mum uses the app with the email address Sam Ng and Ivy Ng share, so we can't tell which of them it is. Give each of them their own email address.";
+      for (const name of ["Sam Ng", "Ivy Ng"]) {
+        const row = await rowOf(gym, name);
+        expect(row.app, name).toEqual({ word: "in_app", tone: "amber", at: null, line, lineTone: "amber" });
+        // Each page names her, as somebody the list can't place: no Not {name}? and no removal.
+        const detail = await detailOf(gym, row.entryId);
+        expect(detail.app, name).toEqual(row.app);
+        expect(detail.members.map((member) => [member.displayName, member.sharedEmail]), name).toEqual([["Mum", true]]);
+        expect(detail.removeEndsApp, name).toBe(false);
+        expect(detail.removeEndsAppFor, name).toEqual([]);
+      }
+      expect((await page(gym, "?app=needs_check")).entries.map((entry) => entry.fullName).sort()).toEqual(["Ivy Ng", "Sam Ng"]);
     },
     TEST_TIMEOUT_MS,
   );

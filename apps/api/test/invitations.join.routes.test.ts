@@ -798,9 +798,16 @@ d("join by invitation (real Postgres)", () => {
       );
       expect(removed.statusCode, removed.body).toBe(200);
       expect((await inviteStateOf(gym, wes.email))?.state).toBe("withdrawn");
-      // The list holds him again; he is still not let back in on his own.
-      expect((await post(`${entryUrl(gym, wesEntry.id)}/restore`, {}, gym.owner.cookies)).statusCode).toBe(200);
+      // On his own, signing in again does not walk him back in.
       expect((await accept(wes, await inviteIdOf(gym, wes.email))).statusCode).toBe(404);
+      expect((await membershipsOf(gym, wes)).filter((row) => row.removed_at === null)).toHaveLength(0);
+      // Staff putting his record back does, as it undoes the removal (RULINGS 2026-09-27:
+      // "Put back undoes both"): the membership removed with that record opens again.
+      const back = await post(`${entryUrl(gym, wesEntry.id)}/restore`, {}, gym.owner.cookies);
+      expect(back.statusCode, back.body).toBe(200);
+      expect(memberListEntryWrittenSchema.parse(JSON.parse(back.body)).app).toBe("back");
+      expect((await membershipsOf(gym, wes)).filter((row) => row.removed_at === null)).toHaveLength(1);
+      expect((await inviteStateOf(gym, wes.email))?.state).toBe("accepted");
     },
     TEST_TIMEOUT_MS,
   );

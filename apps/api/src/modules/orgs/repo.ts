@@ -1428,14 +1428,7 @@ async function claimSeat(
       // the roster's answer — on one fixture. Editing either without the other
       // puts the screen and the door back into disagreement about who costs
       // money, which is the defect Kd found.
-      const countRows = await tx<{ n: number }[]>`
-        SELECT count(*)::int AS n FROM gym_members m
-        WHERE m.gym_id = ${input.org.id} AND m.removed_at IS NULL
-          AND m.complimentary = false
-          AND NOT EXISTS (
-            SELECT 1 FROM gym_staff s
-            WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)`;
-      const used = countRows[0]?.n ?? 0;
+      const used = await paidPlacesUsed(tx, input.org.id);
       if (used >= cap) return { kind: "seat_cap", cap };
     }
   }
@@ -1499,6 +1492,28 @@ export async function claimSeatByInvitation(
       WHERE gym_id = ${input.org.id} AND user_id = ${input.userId} AND removed_at IS NULL`;
   }
   return claim;
+}
+
+/** How many paid places the gym's live members hold: `claimSeat`'s count, which Put back
+ *  asks too (`placesFree`). */
+async function paidPlacesUsed(tx: SqlOrTx, gymId: string): Promise<number> {
+  const rows = await tx<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM gym_members m
+    WHERE m.gym_id = ${gymId} AND m.removed_at IS NULL
+      AND m.complimentary = false
+      AND NOT EXISTS (
+        SELECT 1 FROM gym_staff s
+        WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)`;
+  return rows[0]?.n ?? 0;
+}
+
+/** CAN `wanted` MORE PEOPLE TAKE A PAID PLACE NOW — Put back giving people their app back
+ *  (RULINGS 2026-09-27), asked under the caller's lock on the gym with the door's own cap
+ *  and count. A gym with no live plan takes nobody, as the door refuses a join. */
+export async function placesFree(tx: TransactionSql, gymId: string, wanted: number): Promise<boolean> {
+  if (!(await gymHasLivePlan(tx, gymId))) return false;
+  const cap = await seatCapFor(tx, gymId);
+  return cap === null || (await paidPlacesUsed(tx, gymId)) + wanted <= cap;
 }
 
 /** The org's seat cap, or null when nothing caps it.
@@ -2653,8 +2668,9 @@ export async function removeMember(
     userId: string;
     actorUserId: string;
     /** Run in the same transaction just before a live membership is closed, while the
-     *  person still counts as a member: moving their list record to past members. */
-    beforeClose?: (tx: TransactionSql) => Promise<unknown>;
+     *  person still counts as a member: moving their list record to past members. It
+     *  answers the record the membership is removed with, which Put back gives back. */
+    beforeClose?: (tx: TransactionSql) => Promise<string | null>;
     /** Run in the same transaction once the membership is closed (or was already):
      *  withdrawing the person's invitation, so signing in again lets nobody back in. */
     afterClose?: (tx: TransactionSql) => Promise<unknown>;
@@ -2673,9 +2689,9 @@ export async function removeMember(
     const staff = staffRows[0];
     if (staff !== undefined) return { kind: "is_staff", role: toOrgRole(staff.role) };
 
-    await input.beforeClose?.(tx);
+    const removedWith = (await input.beforeClose?.(tx)) ?? null;
     const closed = await tx<{ id: string }[]>`
-      UPDATE gym_members SET removed_at = now()
+      UPDATE gym_members SET removed_at = now(), removed_entry_id = ${removedWith}
       WHERE gym_id = ${input.gymId} AND user_id = ${input.userId} AND removed_at IS NULL
       RETURNING id`;
     const row = closed[0];
@@ -2781,7 +2797,19 @@ export async function listMembers(
       AND m.removed_at IS NULL
       AND (${like}::text IS NULL
            OR u.display_name ILIKE ${like}::text
-           OR (${likeListName}::boolean AND e.full_name ILIKE ${like}::text))
+           -- The list's name, for staff who see the list: of the record they joined with,
+           -- or of a current record on their proved email or stated phone — a family's
+           -- shared email finds both names, as a search should (round one, Low-7).
+           OR (${likeListName}::boolean
+               AND (e.full_name ILIKE ${like}::text
+                    OR EXISTS (
+                      SELECT 1 FROM gym_member_list_entries x
+                      WHERE x.gym_id = m.gym_id AND x.former_at IS NULL AND x.full_name ILIKE ${like}::text
+                        AND ((x.email = u.email
+                              AND EXISTS (
+                                SELECT 1 FROM one_time_tokens t
+                                WHERE t.user_id = m.user_id AND t.purpose = 'verify_email' AND t.used_at IS NOT NULL))
+                             OR (m.stated_phone_e164 IS NOT NULL AND x.phone_e164 = m.stated_phone_e164))))))
       AND (
         ${cursorJoinedAt}::timestamptz IS NULL
         OR (m.joined_at, m.id) < (${cursorJoinedAt}::timestamptz, ${cursorId}::uuid)

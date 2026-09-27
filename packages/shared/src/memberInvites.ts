@@ -70,26 +70,26 @@ export type MemberInviteEmailReason = z.infer<typeof memberInviteEmailReasonSche
 
 /** The sentence staff read beside an email that did not go. */
 export const MEMBER_INVITE_EMAIL_REASON_WORDS: Readonly<Record<MemberInviteEmailReason, string>> = {
-  not_on_list: "Invitation not sent: this member wasn't on your list when it was due. Invite them again.",
-  under_age: "Invitation not sent: this member is under 18. The app is for ages 18 and over.",
-  in_app: "Invitation not sent: this member already uses the app.",
-  unsubscribed: "Invitation not sent: this member unsubscribed from your emails.",
-  complained: "Invitation not sent: this member marked a previous email from you as spam.",
+  not_on_list: "Invitation not sent: this person wasn't on your list when it was due. Invite them again.",
+  under_age: "Invitation not sent: this person is under 18. The app is for ages 18 and over.",
+  in_app: "Invitation not sent: this person already uses the app.",
+  unsubscribed: "Invitation not sent: this person unsubscribed from your emails.",
+  complained: "Invitation not sent: this person marked a previous email from you as spam.",
   bounced: "Invitation not sent: emails to this address bounce.",
-  refused: "Invitation not sent: our email provider won't deliver to this address. Ask the member for another one.",
-  shared_address: "Invitation not sent: shared addresses such as info@ or support@ can't receive invitations. Ask the member for their own.",
+  refused: "Invitation not sent: our email provider won't deliver to this address. Ask them for another one.",
+  shared_address: "Invitation not sent: shared addresses such as info@ or support@ can't receive invitations. Ask them for their own.",
   bad_address: "Invitation not sent: this email address isn't valid.",
-  no_mail_domain: "Invitation not sent: this email address can't receive email. Confirm it with the member.",
-  invitation_closed: "Invitation not sent: this member has already responded.",
-  invitation_withdrawn: "Invitation not sent: this member was removed from your list or from the app.",
-  gym_not_active: "Invitation not sent: your gym didn't have an active plan.",
-  no_postal_address: "Invitation not sent: your gym didn't have a postal address.",
-  gym_name: "Invitation not sent: your gym's name can't be used in an email. Update it in Settings.",
-  send_unknown: "We couldn't confirm this invitation was delivered. Resend it only if the member didn't receive it.",
+  no_mail_domain: "Invitation not sent: this email address can't receive email. Confirm it with them.",
+  invitation_closed: "Invitation not sent: this person has already responded.",
+  invitation_withdrawn: "Invitation not sent: this person was removed from your list or from the app.",
+  gym_not_active: "Invitation not sent: you didn't have an active plan.",
+  no_postal_address: "Invitation not sent: you hadn't added a postal address.",
+  gym_name: "Invitation not sent: your business name can't be used in an email. Update it in Settings.",
+  send_unknown: "We couldn't confirm this invitation was delivered. Resend it only if they didn't receive it.",
   provider_refused: "Invitation not sent: our email provider declined it for a week. Invite them again.",
   provider_unavailable: "Invitation not sent: our email provider was unavailable for a week. Invite them again.",
   dns_unavailable: "Invitation not sent: we couldn't check this address's email service for a week. Invite them again.",
-  sending_stopped: "Invitation not sent: your gym's invitations are paused because too many emails bounced or were marked as spam.",
+  sending_stopped: "Invitation not sent: your invitations are paused because too many emails bounced or were marked as spam.",
 };
 
 /** What the email service reported about an email that went (§9.12), once its own
@@ -100,10 +100,10 @@ export type MemberInviteEmailResult = z.infer<typeof memberInviteEmailResultSche
 /** The sentence staff read beside an email that went but did not arrive, or was marked
  *  as spam. A delivered email needs none. */
 export const MEMBER_INVITE_EMAIL_RESULT_WORDS: Readonly<Record<Exclude<MemberInviteEmailResult, "delivered">, string>> = {
-  bounced: "Invitation bounced: this address doesn't accept email. Confirm it with the member.",
-  complained: "This member marked the invitation as spam. Your gym won't email them again.",
-  failed: "Invitation not delivered. Confirm the email address with the member.",
-  refused: "Invitation not delivered: our email provider won't deliver to this address. Ask the member for another one.",
+  bounced: "Invitation bounced: this address doesn't accept email. Confirm it with them.",
+  complained: "This person marked the invitation as spam. You won't email them again.",
+  failed: "Invitation not delivered. Confirm the email address with them.",
+  refused: "Invitation not delivered: our email provider won't deliver to this address. Ask them for another one.",
 };
 
 /** Why somebody in the chosen group is not invited by a press. */
@@ -156,9 +156,15 @@ export const memberListInvitationSchema = z
     /** When the person the invitation reached said it is not theirs ("Not me"): the gym
      *  has the wrong address for somebody. Only on a declined invitation. */
     notMeAt: z.string().nullable().default(null),
-    /** On a stopped invitation: when the gym removed this address's person from the app,
-     *  or null when it was stopped because the person was taken off the list. */
+    /** On a stopped invitation: when the gym removed THIS record's person from the app
+     *  (removed with the record), or null. */
     removedAt: z.string().nullable().default(null),
+    /** On a stopped invitation not pinned to this record's person: when the gym last
+     *  removed from the app somebody who used this address, or null. */
+    addressRemovedAt: z.string().nullable().default(null),
+    /** On a stopped invitation: when staff said the person using this address is not the
+     *  person on the list ("Not {name}?"). Nothing is sent to the address again. */
+    wrongPersonAt: z.string().nullable().default(null),
   })
   .strict();
 export type MemberListInvitation = z.infer<typeof memberListInvitationSchema>;
@@ -205,25 +211,25 @@ export const MEMBER_INVITE_PERMISSION_WORDS = "These are {gym}'s {people}, and I
 
 /** The server's sentences for invitations, printed as sent. */
 export const MEMBER_INVITE_WORDS = {
-  invite_changed: "Your member list changed, so no invitations were sent. Review the updated numbers and try again.",
-  permission_needed: "Confirm that you have permission to email these members. No invitations were sent.",
-  no_postal_address: "Add your gym's postal address in Settings. The law requires it in every invitation email.",
+  invite_changed: "Your list changed, so no invitations were sent. Review the updated numbers and try again.",
+  permission_needed: "Confirm that you have permission to email these people. No invitations were sent.",
+  no_postal_address: "Add your postal address in Settings. The law requires it in every invitation email.",
   invites_off: "Invitations can't be sent yet.",
-  sending_stopped:
-    "Your gym's invitations are paused because too many emails bounced or were marked as spam. Contact us to resume them.",
-  no_email: "This member has no email address. Add one to invite them.",
-  under_age: "According to your list, this member is under 18. The app is for ages 18 and over, so they can't be invited.",
-  not_on_list: "This member is no longer on your list.",
-  in_app: "This member already uses the app.",
-  unsubscribed: "This member unsubscribed from your emails, so they can't be invited.",
-  bounced: "Emails to this address bounce. Confirm it with the member.",
-  refused: "Our email provider won't deliver to this address. Ask the member for another one.",
-  shared_address: "This is a shared address such as info@ or support@. Ask the member for their own.",
-  not_invited: "This member hasn't been invited yet.",
-  already_joined: "This member has already joined.",
-  said_not_me: "The recipient at this address said the invitation isn't for them. Confirm the address with the member and update it.",
+  sending_stopped: "Your invitations are paused because too many emails bounced or were marked as spam. Contact us to resume them.",
+  no_email: "This person has no email address. Add one to invite them.",
+  under_age: "According to your list, this person is under 18. The app is for ages 18 and over, so they can't be invited.",
+  not_on_list: "This person is no longer on your list.",
+  in_app: "This person already uses the app.",
+  unsubscribed: "This person unsubscribed from your emails, so they can't be invited.",
+  bounced: "Emails to this address bounce. Confirm it with them.",
+  refused: "Our email provider won't deliver to this address. Ask them for another one.",
+  shared_address: "This is a shared address such as info@ or support@. Ask them for their own.",
+  not_invited: "This person hasn't been invited yet.",
+  already_joined: "This person has already joined.",
+  said_not_me: "The recipient at this address said the invitation isn't for them. Confirm the address and update it.",
+  wrong_person: "You said someone else uses this address, so nothing more is sent to it. Confirm the email address and update it.",
   again_person_limit: `An invitation can be sent again ${String(MEMBER_INVITE_AGAIN_PER_PERSON)} times in ${String(MEMBER_INVITE_AGAIN_PERSON_DAYS)} days. Try again later.`,
-  again_gym_limit: `Your gym can send ${String(MEMBER_INVITE_AGAIN_PER_GYM_DAY)} invitations again a day. Try again tomorrow.`,
+  again_gym_limit: `You can send ${String(MEMBER_INVITE_AGAIN_PER_GYM_DAY)} invitations again a day. Try again tomorrow.`,
 } as const;
 export type MemberInviteRefusal = keyof typeof MEMBER_INVITE_WORDS;
 

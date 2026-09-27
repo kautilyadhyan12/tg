@@ -2881,6 +2881,44 @@ email and gym software write it; where a quote below differs, these words win:
   Sep"; "Your file should include all current members, so members missing from it have
   usually left. Members added manually may not be in your export yet."
 
+**AMENDED 2026-09-28, round one of 5b-v-a-i** (the review's six Highs; built in the same job,
+and where anything below says otherwise, this wins):
+- **A family's shared email the list can't place (row 1e).** Someone in the app who joined
+  with no record, on an email (or phone) that several current records hold, under a name on
+  none of them: every one of those rows reads **In the app** in amber with "Mum uses the app
+  with the email address Leo Park and Maria Park share, so we can't tell which of them it is.
+  Give each of them their own email address." (Needs attention). No record is theirs for
+  certain (`membersAgainstList`'s `unsure`, `whose.ts`): Remove on either record leaves their
+  app, Not {name}? is not offered and is refused, "Using the app" opens no record for them
+  ("On your list as Leo Park or Maria Park") and its Remove ends their app only. Once one
+  record holds the email, it is theirs.
+- **A past record reads In the app only when it is certainly the person's** — the one they
+  joined with, when no current record keeps them on the list (Remove's own rule). A past
+  record whose email someone else in the app uses reads 1c ("Maria Park uses the app with
+  this email address.") and nobody's app ends with it.
+- **A removal is read only onto its own record.** Removing someone with a record keeps that
+  record on the closed membership (`gym_members.removed_entry_id`, migration 0048); only that
+  record reads "Removed from app · 28 Sep" (row 4) and counts under the Filter's Removed from
+  app. Another record at the address reads "Someone using this email address was removed
+  from the app · 28 Sep" (row 4b).
+- **Not {name}? marks the address the account used as somebody else's**
+  (`gym_invites.wrong_person_at`): its invitation stays stopped, nothing is sent to it again
+  (Send again refused, `wrong_person`; Invite answers "already invited"), and the record reads
+  **Not in the app** with "Someone else uses daniel@… Confirm Daniel's email address." in red
+  (row 2) until its email is changed. The box: "du uses the app as Daniel Wu. If du isn't
+  Daniel Wu, remove their access…".
+- **Boxes name people:** Remove says whose app access ends ("…Ada L will lose access to your
+  gym in the app.") and who keeps it ("Mum keeps app access: we can't tell whether they are Ada
+  Lovelace."); "Using the app"'s Remove says "moved to past members" only when the server named
+  the record it moves, else "Remove Tom Reed's app access?".
+- **A stopped invitation offers Invite again, asked first** (RULINGS 2026-09-26), never Send
+  again: "You removed Olivia Bennett from the app on 26 September 2026. They'll get one
+  invitation email at …". 1c and 1d leave the Filter's Not invited yet (Invite can't reach
+  them). Invite's page continues after the last person shown (a keyset on the list's order),
+  and each person shows once. "Using the app"'s search finds the list's name of any current
+  record on a person's proved email or stated phone. Studio and trainer words: the new
+  sentences say "this person" or the organisation's own word ("Past client since").
+
 **AMENDED 2026-09-27, at 5b-v-a-i's click-through (RULINGS 2026-09-27).** Kd: *"clean like the
 leads … i dont want thing to be deleted … just fix the vague invite and delete list delete
 app confusion"*. Built in 5b-v-a-i, and where this section says otherwise, this wins:
@@ -2894,9 +2932,14 @@ app confusion"*. Built in 5b-v-a-i, and where this section says otherwise, this 
   list; never by email) with the count beside it.
 - **One Remove** (both doors: a member's page, and a person in the app). Removing someone on
   the list moves their record to past members AND ends their app in one transaction
-  (`memberList/oneRemove.ts`), their place freed; only the people §9.7 matches to that record,
-  never a household member on their own record, never staff or a complimentary place. Put
-  back returns the record without the app (Invite again). The box: "Remove Olivia Bennett?" /
+  (`memberList/oneRemove.ts`), their place freed; only the people whose record it certainly
+  is (`memberList/whose.ts`), never a household member on their own record, never someone on
+  a family's shared email the list can't place, never staff or a complimentary place. **Put
+  back undoes both** (RULINGS 2026-09-27; this line said the opposite until round one): the
+  record comes back, and so does the app of whoever staff removed WITH it
+  (`gym_members.removed_entry_id`), when the plan has a place for every one of them —
+  otherwise the notice says there was no free place, and the page offers Invite again. The
+  box: "Remove Olivia Bennett?" /
   "They move to past members and can't use the app with your gym any more. Their details are
   kept, and Put back brings them back." Someone in the app not on the list: "Remove Nia Cole
   from the app? They can't use the app with your gym any more, and they keep their own
@@ -2953,8 +2996,9 @@ app confusion"*. Built in 5b-v-a-i, and where this section says otherwise, this 
   mistyped one. It asks first ("du isn't Daniel Wu? du signed up in the app with the email
   address on Daniel Wu's record. They lose the app with your gym. Daniel Wu stays on your
   list: check their email address, change it with Edit, then invite them again.") and takes
-  out that one account: the record stays, the invitation to the record's address stops, and
-  it needs the `members.remove` tick. "Using the app" shows "On your list as Daniel Wu" beside
+  out that one account: the record stays, the address that account signed in with is marked
+  as somebody else's (its invitation stopped for good; round one, AMENDED above), and it needs
+  the `members.remove` tick. Never offered for a family's shared email the list can't place. "Using the app" shows "On your list as Daniel Wu" beside
   the name they gave the app, and marks nothing. A stranger at a mistyped address is stopped
   where they can be — the invitation's own "It's not me" — which reaches the list as "Whoever
   gets email at … says they aren't Daniel". No join codes: a code tells nobody who someone is
@@ -3093,10 +3137,10 @@ spec's rows, the local databases' real invitation histories, and every combinati
 invitation facts the types allow). Two things building it settled. **A household's person is
 the row with their own name** (§9.7's match, both `membersAgainstList` and `reconcile`): of
 the current rows on a member's proved email or stated phone, the one whose name is the name
-they signed up with (the same words in any order), else §9.7's first — so when Maria joins
-on the email she shares with her son Leo, typed in first, her row reads "In the app" and his
-reads 1c; under a name on neither row the first row reads "In the app" with "Signed up in
-the app as …". **An invitation belongs to an address, not a person**, so 1c and 1d come
+they signed up with (the same words in any order) — so when Maria joins on the email she
+shares with her son Leo, typed in first, her row reads "In the app" and his reads 1c. Under a
+name on neither row (AMENDED 2026-09-28, round one: "Mum", or "Maria") the list can't say
+whose she is, and both rows read 1e. **An invitation belongs to an address, not a person**, so 1c and 1d come
 before every invitation row: without them the son read "Left the app" or "Invited" from his
 mother's invitation. The line's colour is its own (`lineTone`): red for Wrong email, amber
 for 1, 1b, 3 and 8's lines (under the whole row), plain for the rest (under the word).

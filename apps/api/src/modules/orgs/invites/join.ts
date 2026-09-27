@@ -283,6 +283,39 @@ export async function withdrawForAccounts(
   });
 }
 
+/** Staff said each of these accounts is not the person on the list it was matched to
+ *  ("Not {name}?"): the address each signed in with is marked as somebody else's, its
+ *  invitation stopped, inside the caller's transaction. */
+export async function markWrongPersonFor(
+  tx: TransactionSql,
+  settings: InviteSettings | null,
+  input: { gymId: string; userIds: readonly string[]; at: Date },
+): Promise<number> {
+  if (settings === null || input.userIds.length === 0) return 0;
+  const emails = await repo.accountAddresses(tx, input.userIds);
+  return await repo.markWrongPerson(tx, {
+    gymId: input.gymId,
+    hmacs: emails.map((email) => emailHmac(settings.hmacKey, email)),
+    at: input.at,
+  });
+}
+
+/** Put back gave these accounts their membership again: the invitations their removal
+ *  stopped read accepted again, as they did while they were in. */
+export async function acceptAgainForAccounts(
+  tx: TransactionSql,
+  settings: InviteSettings | null,
+  input: { gymId: string; userIds: readonly string[]; at: Date },
+): Promise<number> {
+  if (settings === null || input.userIds.length === 0) return 0;
+  const emails = await repo.accountAddresses(tx, input.userIds);
+  return await repo.acceptAgain(tx, {
+    gymId: input.gymId,
+    hmacs: emails.map((email) => emailHmac(settings.hmacKey, email)),
+    at: input.at,
+  });
+}
+
 /** Withdraw the invitation of an address staff took off the list, inside the caller's
  *  transaction — unless another current record still holds it (a family sharing one
  *  address), whose person is still invited. */
