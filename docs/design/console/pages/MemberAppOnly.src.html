@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Someone in the app who isn't on your list — their page, dark, computer</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--HELMET-->
+<style>
+.facts{margin:0;display:grid;grid-template-columns:170px minmax(0,1fr);row-gap:10px;column-gap:16px}
+.facts dt{font-size:14px;line-height:20px;color:var(--t2)}
+.facts dd{margin:0;font-size:14px;line-height:20px;font-weight:500}
+</style>
+<div data-root="1" data-fixed-h="760" class="t-dark" style="width: 1440px; height: %H%px; display: flex; box-sizing: border-box; overflow: hidden; position: relative">
+<!--RAIL:members-->
+<main style="flex-grow: 1; min-width: 0; box-sizing: border-box; padding: 36px 48px 48px; display: flex; flex-direction: column; gap: 24px">
+<header style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px">
+<div style="display: flex; flex-direction: column; gap: 6px"><h1 class="h1">Members</h1><p class="sub">Iron House Gym · 146 of 500 members in the app</p></div>
+<div style="display: flex; gap: 8px"><span class="btn btn-s">Import</span><span class="btn btn-p">Add member</span></div>
+</header>
+<div class="card" style="height: 520px"></div>
+</main>
+<div style="position: absolute; inset: 0; background: var(--scrim)"></div>
+<aside role="dialog" aria-modal="true" aria-labelledby="app-name" class="sheet" style="position: absolute; top: 0; right: 0; bottom: 0; width: 540px; box-sizing: border-box; border-left: 1px solid var(--card-line); display: flex; flex-direction: column">
+<div style="padding: 28px 28px 20px; display: flex; flex-direction: column; gap: 16px; border-bottom: 1px solid var(--line)">
+<div style="display: flex; align-items: flex-start; gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 8px; flex-grow: 1; min-width: 0">
+<h2 id="app-name" style="margin: 0; font-size: 26px; line-height: 32px; font-weight: 700; font-stretch: 106%">Arjun Shah</h2>
+<span><span class="tag tag-warn"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>Not on your list</span></span>
+</div>
+<button type="button" class="icon-btn" aria-label="Close"><svg class="ic" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<span class="s15">Moved to past members on 3 Sep 2026.</span>
+<span class="s14 t2">Arjun Shah on your list has the same email. <a href="#person" class="w6">Open their details</a></span>
+</div>
+<div style="display: flex; gap: 8px">
+<button type="button" class="btn btn-p"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" x2="19" y1="8" y2="14"></line><line x1="22" x2="16" y1="11" y2="11"></line></svg>Put back on your list</button>
+<button type="button" class="btn btn-s"><svg class="ic" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="22" x2="16" y1="11" y2="11"></line></svg>Remove from app</button>
+</div>
+</div>
+<div style="padding: 8px 28px 28px; display: flex; flex-direction: column">
+<section style="display: flex; flex-direction: column; padding: 16px 0">
+<h3 class="s13 w6 t3" style="margin: 0 0 6px">App</h3>
+<dl class="facts">
+<dt>Email</dt><dd>arjun.shah@example.com</dd>
+<dt>In the app since</dt><dd>20 Jul 2026</dd>
+<dt>Visits</dt><dd>31 · last 24 Sep</dd>
+</dl>
+</section>
+</div>
+</aside>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":%H%}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
