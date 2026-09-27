@@ -68,6 +68,7 @@ function toLead(row: repo.LeadRow, today: string): Lead {
       sent: row.followUpsSent,
       dueOn: row.followUpDueOn,
       dueNow: row.followUpDueOn !== null && row.followUpDueOn <= today,
+      overdue: row.followUpDueOn !== null && row.followUpDueOn < today,
       lastSentAt: row.followUpLastAt === null ? null : row.followUpLastAt.toISOString(),
     },
   };
@@ -337,8 +338,9 @@ export async function updateLead(
   return toLead(row, dayInTz(at, org.timezone));
 }
 
-/** Staff sent follow-up `step` from the gym's own mailbox. Counted only as the next
- *  one of a lead that is due one; the same request again answers the lead unchanged. */
+/** Staff sent follow-up `step` from the gym's own mailbox to `email`. Counted only as
+ *  the next one, on or after its day, to the lead's current address; the same request
+ *  again answers the lead unchanged. */
 export async function markFollowUpSent(
   deps: LeadsDeps,
   userId: string,
@@ -350,6 +352,7 @@ export async function markFollowUpSent(
   const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
   const at = deps.now();
+  const today = dayInTz(at, org.timezone);
   const row = await deps.sql.begin(async (tx) => {
     const stored = await repo.lockLead(tx, gymId, leadId);
     if (stored === null) throw notFound();
@@ -359,7 +362,15 @@ export async function markFollowUpSent(
       { status, emailOkAt: stored.emailOkAt, sent: stored.followUpsSent, lastAt: stored.followUpLastAt },
       org.timezone,
     ).followUpDueOn;
-    if (due === null || body.step !== stored.followUpsSent + 1 || body.step > LEAD_FOLLOW_UPS) {
+    // Only the next one, on or after its day, and to the address the lead has now: a
+    // panel opened before the address changed emailed somebody else.
+    if (
+      due === null ||
+      due > today ||
+      !sameAddress(body.email, stored.email) ||
+      body.step !== stored.followUpsSent + 1 ||
+      body.step > LEAD_FOLLOW_UPS
+    ) {
       throw new OrgsError(409, "follow_up_not_due", LEAD_WORDS.follow_up_not_due);
     }
     const written = await repo.writeLead(
@@ -389,7 +400,7 @@ export async function markFollowUpSent(
     });
     return written;
   });
-  return toLead(row, dayInTz(at, org.timezone));
+  return toLead(row, today);
 }
 
 export async function deleteLead(deps: LeadsDeps, userId: string, gymId: string, leadId: string, limit: Limit): Promise<boolean | null> {

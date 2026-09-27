@@ -198,23 +198,18 @@ export function followUpState(lead, now = new Date()) {
   const f = lead.followUp;
   if (f === undefined || f === null) return null;
   const sentLine = f.sent === 0 ? null : `${f.sent} of ${LEAD_FOLLOW_UPS} sent${lastSentWords(f.lastSentAt, now)}.`;
-  if (f.dueOn !== null) {
+  // The server says when one is due; only a New lead with the tick is ever offered one.
+  if (f.dueOn !== null && lead.status === 'new' && lead.mayEmail) {
     const step = f.sent + 1;
-    return {
-      next: step,
-      headline: f.dueNow ? `Email ${step} of ${LEAD_FOLLOW_UPS} is due today` : `Email ${step} of ${LEAD_FOLLOW_UPS} is due ${dueDayWords(f.dueOn)}`,
-      due: f.dueNow,
-      sentLine,
-    };
+    const of = `Email ${step} of ${LEAD_FOLLOW_UPS}`;
+    const headline = f.overdue ? `${of} was due ${dueDayWords(f.dueOn)}` : f.dueNow ? `${of} is due today` : `${of} is due ${dueDayWords(f.dueOn)}`;
+    // Before its day it is only announced: nothing to send yet.
+    return { next: f.dueNow ? step : null, headline, due: f.dueNow, sentLine };
   }
   if (f.sent >= LEAD_FOLLOW_UPS) return { next: null, headline: `All ${LEAD_FOLLOW_UPS} follow-up emails sent`, due: false, sentLine };
   if (f.sent === 0 && !lead.mayEmail) return null;
   if (f.sent === 0 && lead.status === 'new') return null;
-  const why = !lead.mayEmail
-    ? lead.email === null
-      ? 'they have no email address'
-      : "they haven't said yes to email at this address"
-    : `they're marked ${statusWord(lead.status)}`;
+  const why = !lead.mayEmail ? 'the "Happy to hear from us" tick is off' : `they're marked ${statusWord(lead.status)}`;
   return { next: null, headline: `Follow-up emails stopped: ${why}`, due: false, sentLine };
 }
 

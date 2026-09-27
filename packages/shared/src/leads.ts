@@ -44,8 +44,10 @@ export const leadFollowUpSchema = z
     /** The gym's day the next one is due (YYYY-MM-DD), or null when none is: the lead
      *  is not New, has not said yes to email, or has had all three. */
     dueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
-    /** Due today or earlier, by the gym's clock. */
+    /** Due today or earlier, by the gym's clock: only then may it be sent. */
     dueNow: z.boolean(),
+    /** Its day has passed without it being marked sent. */
+    overdue: z.boolean(),
     lastSentAt: z.string().datetime({ offset: true }).nullable(),
   })
   .strict();
@@ -170,10 +172,14 @@ export const joinLeadRequestSchema = z
   .refine((body) => !(body.entryId !== undefined && body.asNew !== undefined), { message: "one choice at a time" });
 export type JoinLeadRequest = z.infer<typeof joinLeadRequestSchema>;
 
-/** Staff sent follow-up email `step` from the gym's mailbox. The same request twice
- *  changes nothing the second time. */
+/** Staff sent follow-up email `step` from the gym's mailbox, to `email`: the address
+ *  their panel showed, which must still be the lead's. The same request twice changes
+ *  nothing the second time. */
 export const leadFollowUpSentRequestSchema = z
-  .object({ step: z.number().int().min(1).max(LEAD_FOLLOW_UPS) })
+  .object({
+    step: z.number().int().min(1).max(LEAD_FOLLOW_UPS),
+    email: z.string().min(1).max(MEMBER_LIST_MAX_EMAIL_CHARS),
+  })
   .strict();
 export type LeadFollowUpSentRequest = z.infer<typeof leadFollowUpSentRequestSchema>;
 

@@ -2608,7 +2608,9 @@ first is sent, the third 4 days after the second (`follow_up_due_on`, the gym's 
 **Email {first name}** opens the gym's email program with fixed words and the gym's
 address, and staff press **Mark email N as sent**; an **Email due** chip and tag on the
 list. Moving the status or taking the tick off stops them; a new address starts them
-again. Nothing goes through our email account. A lead who becomes a
+again. Nothing goes through our email account. Staff mark only the next one, on or
+after its day, to the address the lead has now. A due day is the gym's day when it was
+worked out; a gym that later changes its time zone may see one a day early or late. A lead who becomes a
 member is the same person: the record is made from the lead.
 
 ### 16.4 At risk

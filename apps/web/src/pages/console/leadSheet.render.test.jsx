@@ -49,7 +49,7 @@ const lead = (id, fullName, over = {}) =>
     onList: false,
     createdAt: '2026-09-20T10:00:00.000Z',
     statusChangedAt: '2026-09-20T10:00:00.000Z',
-    followUp: { sent: 0, dueOn: null, dueNow: false, lastSentAt: null },
+    followUp: { sent: 0, dueOn: null, dueNow: false, overdue: false, lastSentAt: null },
     ...over,
   });
 const arjun = lead(ARJUN, 'Arjun Shah', { email: 'shah.family@example.com' });
@@ -456,7 +456,7 @@ describe('round one: nothing typed is lost or sent without Save', () => {
 
 describe('the follow-up emails (20c-ii): the gym sends them, the app reminds', () => {
   const GYM_INFO = { name: 'Iron House', city: 'Leeds', postalAddress: '12 Kirkgate, Leeds' };
-  const dueTom = lead(TOM, 'Tom Reid', { mayEmail: true, followUp: { sent: 0, dueOn: '2026-09-27', dueNow: true, lastSentAt: null } });
+  const dueTom = lead(TOM, 'Tom Reid', { mayEmail: true, followUp: { sent: 0, dueOn: '2026-09-27', dueNow: true, overdue: false, lastSentAt: null } });
   const open = (l, props = {}) => {
     orgService.getLead.mockResolvedValue({ data: { lead: l } });
     render(sheet(l.id, { gym: GYM_INFO, ...props }));
@@ -467,8 +467,10 @@ describe('the follow-up emails (20c-ii): the gym sends them, the app reminds', (
     const cases = [
       lead(TOM, 'Tom Reid'),
       lead(TOM, 'Tom Reid', { status: 'lost', mayEmail: true }),
-      lead(TOM, 'Tom Reid', { status: 'contacted', mayEmail: true, followUp: { sent: 1, dueOn: null, dueNow: false, lastSentAt: '2026-09-20T10:00:00.000Z' } }),
+      lead(TOM, 'Tom Reid', { status: 'contacted', mayEmail: true, followUp: { sent: 1, dueOn: null, dueNow: false, overdue: false, lastSentAt: '2026-09-20T10:00:00.000Z' } }),
       lead(TOM, 'Tom Reid', { status: 'joined', mayEmail: true, onList: true, entryId: OWN }),
+      // Even when an answer says one is due, a lead who is not New is offered nothing.
+      lead(TOM, 'Tom Reid', { status: 'lost', mayEmail: true, followUp: { sent: 0, dueOn: '2026-09-27', dueNow: true, overdue: false, lastSentAt: null } }),
     ];
     for (const l of cases) {
       await open(l);
@@ -492,15 +494,17 @@ describe('the follow-up emails (20c-ii): the gym sends them, the app reminds', (
 
   it('Mark as sent sends that step for that lead, shows the next, and keeps what was typed', async () => {
     orgService.markFollowUpSent.mockResolvedValue({
-      data: { lead: { ...dueTom, followUp: { sent: 1, dueOn: '2026-09-30', dueNow: false, lastSentAt: new Date().toISOString() } } },
+      data: { lead: { ...dueTom, followUp: { sent: 1, dueOn: '2026-09-30', dueNow: false, overdue: false, lastSentAt: new Date().toISOString() } } },
     });
     await open(dueTom);
     fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '07700 900456' } });
     fireEvent.click(screen.getByRole('button', { name: 'Mark email 1 as sent' }));
-    await waitFor(() => expect(orgService.markFollowUpSent).toHaveBeenCalledWith(GYM, TOM, 1));
+    await waitFor(() => expect(orgService.markFollowUpSent).toHaveBeenCalledWith(GYM, TOM, 1, 'tom@example.com'));
     await screen.findByText('Email 2 of 3 is due Wed 30 Sept');
     expect(screen.getByText('1 of 3 sent, the last today.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Mark email 2 as sent' })).toBeTruthy();
+    // Before its day the second is only announced: nothing to email or mark yet.
+    expect(screen.queryByRole('button', { name: 'Mark email 2 as sent' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Email Tom' })).toBeNull();
     expect(screen.getByRole('status').textContent).toBe('Email 1 marked as sent.');
     expect(screen.getByLabelText('Phone').value).toBe('07700 900456');
     expect(orgService.updateLead).not.toHaveBeenCalled();

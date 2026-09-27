@@ -142,7 +142,7 @@ function FollowUpBox({ lead, gym, readOnly, busy, working, onMark }) {
                 {`Email ${first}`}
               </a>
             )}
-            <button type="button" onClick={() => onMark(state.next)} disabled={readOnly || busy} className="c-btn c-btn-sm c-btn-s">
+            <button type="button" onClick={() => onMark(state.next, lead.email)} disabled={readOnly || busy} className="c-btn c-btn-sm c-btn-s">
               {working === 'followUp' ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
               {`Mark email ${state.next} as sent`}
             </button>
@@ -332,9 +332,9 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
     }, "We couldn't mark them as joined. Please try again.");
   };
 
-  const markSent = (step) =>
+  const markSent = (step, email) =>
     run(async () => {
-      const res = await orgService.markFollowUpSent(gymId, lead.id, step);
+      const res = await orgService.markFollowUpSent(gymId, lead.id, step, email);
       if (!take(res.data.lead, 'followUp')) return;
       onChanged();
       setDone(`Email ${step} marked as sent.`);

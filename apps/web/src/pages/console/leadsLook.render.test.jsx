@@ -56,7 +56,7 @@ const lead = (id, fullName, over = {}) =>
     onList: false,
     createdAt: '2026-09-20T10:00:00.000Z',
     statusChangedAt: '2026-09-20T10:00:00.000Z',
-    followUp: { sent: 0, dueOn: null, dueNow: false, lastSentAt: null },
+    followUp: { sent: 0, dueOn: null, dueNow: false, overdue: false, lastSentAt: null },
     ...over,
   });
 const arjun = lead(ARJUN, 'Arjun Shah', { phone: '+447700900004', source: 'friend', status: 'on_trial' });
@@ -246,7 +246,7 @@ describe('the new look (spec Part 3 §17)', () => {
 
 describe('"Email due" (20c-ii)', () => {
   it('with leads due, the list offers Email due with its count, tags the due row, and asks the server for them alone', async () => {
-    const dueTom = { ...tom, mayEmail: true, followUp: { sent: 0, dueOn: '2026-09-27', dueNow: true, lastSentAt: null } };
+    const dueTom = { ...tom, mayEmail: true, followUp: { sent: 0, dueOn: '2026-09-27', dueNow: true, overdue: false, lastSentAt: null } };
     api.getLeads.mockResolvedValue({ data: { leads: [arjun, dueTom], total: 2, cursor: null, counts: { ...COUNTS, followUpsDue: 1 } } });
     draw();
     await screen.findAllByTestId('lead-row');
@@ -255,6 +255,22 @@ describe('"Email due" (20c-ii)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Email due 1' }));
     await waitFor(() => expect(api.getLeads).toHaveBeenLastCalledWith('g1', 'followUp=due'));
     expect(screen.getByRole('button', { name: 'Email due 1' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('Email due and a status chip are never on together', async () => {
+    const dueTom = { ...tom, mayEmail: true, followUp: { sent: 0, dueOn: '2026-09-27', dueNow: true, overdue: false, lastSentAt: null } };
+    api.getLeads.mockResolvedValue({ data: { leads: [arjun, dueTom], total: 2, cursor: null, counts: { ...COUNTS, followUpsDue: 1 } } });
+    draw();
+    await screen.findAllByTestId('lead-row');
+    fireEvent.click(screen.getByRole('button', { name: 'On trial 1' }));
+    await waitFor(() => expect(api.getLeads).toHaveBeenLastCalledWith('g1', 'status=on_trial'));
+    fireEvent.click(screen.getByRole('button', { name: 'Email due 1' }));
+    await waitFor(() => expect(api.getLeads).toHaveBeenLastCalledWith('g1', 'followUp=due'));
+    expect(screen.getByRole('button', { name: 'On trial 1' }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByRole('button', { name: 'All 2' }).getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(screen.getByRole('button', { name: 'New 1' }));
+    await waitFor(() => expect(api.getLeads).toHaveBeenLastCalledWith('g1', 'status=new'));
+    expect(screen.getByRole('button', { name: 'Email due 1' }).getAttribute('aria-pressed')).toBe('false');
   });
 
   it('with none due, there is no Email due chip and no tag', async () => {

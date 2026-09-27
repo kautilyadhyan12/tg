@@ -25,7 +25,7 @@ import {
 // one lead's panel. `members.confirm`'s, like the gym's own list; the server refuses
 // anyone else whatever this screen shows. Drawn from `console.css` (R3; spec Part 3 §17):
 // a table on a computer, a row per lead on a phone. "Email due" (20c-ii) keeps the leads
-// due a follow-up email today, whatever their status chip.
+// due a follow-up email today: a chip of its own, so it and a status chip are never on together.
 
 const count = (n) => n.toLocaleString('en');
 
@@ -184,9 +184,9 @@ export default function Leads() {
                   <button
                     key={chip.key}
                     type="button"
-                    aria-pressed={filters.status === chip.key}
-                    onClick={() => change({ ...filters, status: chip.key })}
-                    className={filters.status === chip.key ? 'c-chip c-chip-on' : 'c-chip'}
+                    aria-pressed={!filters.due && filters.status === chip.key}
+                    onClick={() => change({ ...filters, status: chip.key, due: false })}
+                    className={!filters.due && filters.status === chip.key ? 'c-chip c-chip-on' : 'c-chip'}
                   >
                     {chip.label} <span className="c-n">{count(chip.count)}</span>
                   </button>
@@ -195,7 +195,7 @@ export default function Leads() {
                   <button
                     type="button"
                     aria-pressed={filters.due}
-                    onClick={() => change({ ...filters, due: !filters.due })}
+                    onClick={() => change({ ...filters, status: 'all', due: !filters.due })}
                     className={filters.due ? 'c-chip c-chip-on' : 'c-chip'}
                   >
                     {DUE_CHIP_LABEL} <span className="c-n">{count(page.counts.followUpsDue)}</span>

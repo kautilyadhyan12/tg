@@ -697,12 +697,13 @@ export const orgService = {
     ),
 
   /** POST …/leads/:id/follow-up — staff sent follow-up email `step` from the gym's own
-   *  mailbox (20c-ii). The same press twice counts once. */
-  markFollowUpSent: (gymId, leadId, step) =>
+   *  mailbox to `email`, the address the panel showed (20c-ii). The same press twice
+   *  counts once. */
+  markFollowUpSent: (gymId, leadId, step, email) =>
     readThrough(
       leadResponseSchema,
       'this lead',
-      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/leads/${encodeURIComponent(leadId)}/follow-up`, { step }),
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/leads/${encodeURIComponent(leadId)}/follow-up`, { step, email }),
     ),
 
   deleteLead: (gymId, leadId) => authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/leads/${encodeURIComponent(leadId)}`),
