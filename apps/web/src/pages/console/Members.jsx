@@ -79,8 +79,8 @@ function RosterSheet({ member, words, seesList, canRemove, readOnly, busy, onClo
   // is on it, whatever record they are matched to — and Remove moves that record too.
   const onList = seesList && !free && off === null;
   const question = onList
-    ? `Remove ${member.displayName}? They move to past members and can't use the app with your ${words.it} any more. They keep their own workouts, and Put back brings them back.`
-    : `Remove ${member.displayName} from the app? They can't use the app with your ${words.it} any more, and they keep their own workouts.`;
+    ? `Remove ${member.displayName}? They'll be moved to past ${words.people} and lose access to your ${words.it} in the app. Their own workout history isn't affected, and you can put them back at any time.`
+    : `Remove ${member.displayName}'s app access? They'll lose access to your ${words.it} in the app. Their own workout history isn't affected.`;
   return (
     <div className="fixed inset-0 z-50" style={{ background: 'var(--scrim)' }}>
       <div
@@ -108,7 +108,7 @@ function RosterSheet({ member, words, seesList, canRemove, readOnly, busy, onClo
           {free ? (
             <p className="c-s14 c-t2">
               <span className="c-tag c-tag-soft mr-2">Complimentary</span>
-              The owner and staff use the app free. Staff are changed in Settings.
+              The owner and staff use the app for free. Manage staff in Settings.
             </p>
           ) : null}
           {/* The name on the gym's own list, beside the name they gave the app. The email on
@@ -492,7 +492,7 @@ export default function Members() {
       {tab === 'app' && !state.loading && state.error !== null ? <ConsoleFailed message={state.error} onRetry={retry} newLook /> : null}
 
       {tab === 'app' && !state.loading && state.error === null && state.items.length === 0 && rosterQuery !== '' ? (
-        <p className="c-s14 c-t2">Nobody in the app matches.</p>
+        <p className="c-s14 c-t2">No {words.people} in the app match your search.</p>
       ) : null}
 
       {tab === 'app' && !state.loading && state.error === null && state.items.length === 0 && rosterQuery === '' ? (

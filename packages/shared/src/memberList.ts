@@ -1325,7 +1325,7 @@ export const MEMBER_APP_FILTER_WORDS: Readonly<Record<MemberAppFilter, string>> 
   ...MEMBER_APP_WORDS,
   not_invited: "Not invited yet",
   removed: "Removed from app",
-  needs_check: "Needs checking",
+  needs_check: "Needs attention",
 };
 
 /** The Filter's order for the App choices (§18.4). */
@@ -1891,11 +1891,11 @@ export const MEMBER_LIST_BY_HAND_WORDS = {
   list_changed: "Your list or your members changed while you were looking, so nobody was removed. Look at the names again.",
   large_change:
     "This would remove more of your members than we do without asking. Check the number, then confirm again to go ahead.",
-  remove_needs_app: "This person uses the app, and your role can't remove people from it. Ask the owner.",
-  remove_needs_list: "Removing someone also moves them to past members, which your role can't do. Ask the owner.",
-  not_them_gone: "This person isn't using the app with this record any more. Close it and open it again.",
-  not_them_needs_remove: "Taking somebody out of the app needs a role that can remove members. Ask the owner.",
-  not_them_staff: "This person is staff or has a free place, so they stay in the app. Change that under Staff.",
+  remove_needs_app: "This member uses the app, and your role can't remove app access. Ask the owner.",
+  remove_needs_list: "Removing this member also moves them to past members, which your role can't do. Ask the owner.",
+  not_them_gone: "This person no longer uses the app with this member's details. Close and reopen the page.",
+  not_them_needs_remove: "Your role can't remove app access. Ask the owner.",
+  not_them_staff: "This person is staff or has a complimentary place, so their access is managed under Staff.",
 } as const;
 
 /** "Not this person": which account in the app it is about (§18.4). */

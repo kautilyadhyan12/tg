@@ -169,7 +169,7 @@ function AppWord({ view }) {
     <span
       className={`c-tag ${view.noteTone === 'red' ? 'c-tag-bad' : 'c-tag-warn'}`}
       title={view.note}
-      aria-label={`${view.text}. Needs checking: ${view.note}`}
+      aria-label={`${view.text}. Needs attention: ${view.note}`}
       data-testid="needs-check"
     >
       <AlertTriangle aria-hidden="true" className="w-3.5 h-3.5" />
@@ -438,7 +438,7 @@ export default function MemberListPanel({
                 style={{ color: 'var(--warn)' }}
               >
                 <AlertTriangle aria-hidden="true" className="w-4 h-4" />
-                {`${count(needsCheck)} need${needsCheck === 1 ? 's' : ''} checking`}
+                {`${count(needsCheck)} need${needsCheck === 1 ? 's' : ''} attention`}
               </button>
             ) : null}
             {!page.loading && page.error === null ? (
@@ -580,7 +580,7 @@ export default function MemberListPanel({
       ) : null}
 
       {!page.loading && page.error === null && page.entries.length === 0 ? (
-        <p className="c-s14 c-t2">{current ? `Nobody on your list matches.` : `No past ${words.people} match.`}</p>
+        <p className="c-s14 c-t2">{current ? `No ${words.people} match.` : `No past ${words.people} match.`}</p>
       ) : null}
 
       {!page.loading && page.cursor !== null ? (

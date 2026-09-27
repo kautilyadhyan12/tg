@@ -927,15 +927,15 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       return (
         <div className="flex flex-col gap-3" data-testid="confirm-not-them">
           <p className="text-[15px]" style={{ color: '#fff' }}>
-            {appName} isn&apos;t {name}?
+            Remove {appName}&apos;s app access?
           </p>
           <p className="text-sm" style={{ color: C.soft }}>
-            {appName} signed up in the app with the email address on {name}&apos;s record. They lose the app with your {words.it ?? 'gym'}.{' '}
-            {name} stays on your list: check their email address, change it with Edit, then invite them again.
+            {appName} signed up with the email address on {name}&apos;s record. If this isn&apos;t {name}, remove their access to your{' '}
+            {words.it ?? 'gym'} in the app. {name} stays on your list: update the email address with Edit, then invite them again.
           </p>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => void notThisPerson(notThem)} disabled={busy || readOnly} className={BUTTON} style={{ background: C.redBg, color: C.red }}>
-              Take {appName} out of the app
+              Remove access
             </button>
             <button type="button" onClick={() => backTo('view')} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
               Cancel
@@ -950,18 +950,18 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       return (
         <div className="flex flex-col gap-3" data-testid="confirm-take-off">
           <p className="text-[15px]" style={{ color: '#fff' }}>
-            {past ? `Remove ${name} from the app?` : `Remove ${name}?`}
+            {past ? `Remove ${name}'s app access?` : `Remove ${name}?`}
           </p>
           {past ? (
             <p className="text-sm" style={{ color: C.soft }}>
-              They&apos;re already a past {words.person}. This ends their app with your {words.it ?? 'gym'}, and they keep their own workouts.
+              {name} is already a past {words.person}. This removes their access to your {words.it ?? 'gym'} in the app. Their own workout history isn&apos;t affected.
             </p>
           ) : (
             <p className="text-sm" style={{ color: C.soft }}>
               {p.removeEndsApp
-                ? `They move to past ${words.people} and can't use the app with your ${words.it ?? 'gym'} any more.`
-                : `They move to past ${words.people}.`}
-              {pending ? ' Their invitation stops working.' : ''} Their details are kept, and Put back brings them back.
+                ? `They'll be moved to past ${words.people} and lose access to your ${words.it ?? 'gym'} in the app.`
+                : `They'll be moved to past ${words.people}.`}
+              {pending ? ' Their pending invitation will be cancelled.' : ''} Their details are kept, and you can put them back at any time.
             </p>
           )}
           <div className="flex flex-wrap gap-2">

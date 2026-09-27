@@ -1243,7 +1243,7 @@ describe('Members', () => {
     });
     drawListTab();
     const box = await screen.findByTestId('check-these');
-    expect(box.textContent).toBe('1 needs checking');
+    expect(box.textContent).toBe('1 needs attention');
     // The old box read its own endpoint; the list's counts say it now.
     expect(orgService.getNotMe).not.toHaveBeenCalled();
   });
@@ -1567,12 +1567,12 @@ describe('Removing a member', () => {
     drawMembers();
     let panel = await openInApp('Rita Sen');
     fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
-    expect(panel.getByText(/Remove Rita Sen\? They move to past members and can't use the app with your gym any more\./)).toBeTruthy();
+    expect(panel.getByText(/Remove Rita Sen\? They'll be moved to past members and lose access to your gym in the app\./)).toBeTruthy();
     fireEvent.click(panel.getByRole('button', { name: 'Cancel' }));
     fireEvent.click(panel.getByRole('button', { name: 'Close' }));
     panel = await openInApp('Nia Cole');
     fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
-    expect(panel.getByText(/Remove Nia Cole from the app\? They can't use the app with your gym any more/)).toBeTruthy();
+    expect(panel.getByText(/Remove Nia Cole's app access\? They'll lose access to your gym in the app\./)).toBeTruthy();
     expect(panel.queryByText(/past members/)).toBeNull();
   });
 
@@ -1629,7 +1629,7 @@ describe('Removing a member', () => {
     orgService.getMembers.mockResolvedValue(page([]));
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search the members in the app by name' }), { target: { value: '  zed ' } });
     await waitFor(() => expect(orgService.getMembers).toHaveBeenLastCalledWith(ORG.id, { limit: 50, query: 'zed' }));
-    expect(await screen.findByText('Nobody in the app matches.')).toBeTruthy();
+    expect(await screen.findByText('No members in the app match your search.')).toBeTruthy();
     expect(screen.queryByText(/Nobody has joined yet/)).toBeNull();
   });
 
@@ -1643,7 +1643,7 @@ describe('Removing a member', () => {
     fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
     // Rita pays and the server does not mark her off the list, so she is on it: Remove
     // moves her to past members too, and the box says so.
-    expect(panel.getByText(/Remove Rita Sen\? They move to past members/i)).toBeTruthy();
+    expect(panel.getByText(/Remove Rita Sen\? They'll be moved to past members/i)).toBeTruthy();
     fireEvent.click(panel.getByRole('button', { name: 'Cancel' }));
     expect(orgService.removeMember).not.toHaveBeenCalled();
     expect(screen.getAllByText('Rita Sen').length).toBeGreaterThan(0);

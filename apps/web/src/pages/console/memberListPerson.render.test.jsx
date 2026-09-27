@@ -219,7 +219,7 @@ describe('the worst thing: one person tapped, another shown or changed', () => {
     fireEvent.click(dialog().getByRole('button', { name: 'Merge' }));
     await waitFor(() => expect(orgService.mergeMemberListEntries).toHaveBeenCalledTimes(1));
     expect(orgService.mergeMemberListEntries).toHaveBeenCalledWith(GYM, ADA_OLD, ADA, false);
-    expect(await dialog().findByText(/Merged\. This is the record you kept/)).toBeTruthy();
+    expect(await dialog().findByText(/Records merged\. This is the record you kept/)).toBeTruthy();
     expect(onChanged).toHaveBeenCalled();
   });
 
@@ -237,7 +237,7 @@ describe('the worst thing: one person tapped, another shown or changed', () => {
     fireEvent.click(await dialog().findByRole('button', { name: /ada\.old@members\.example/ }));
     fireEvent.click(await dialog().findByRole('button', { name: 'Merge' }));
     await waitFor(() => expect(orgService.mergeMemberListEntries).toHaveBeenCalledWith(GYM, ADA, ADA_OLD, false));
-    expect(await dialog().findByText(/Merged\. This is the record you kept/)).toBeTruthy();
+    expect(await dialog().findByText(/Records merged\. This is the record you kept/)).toBeTruthy();
     expect(dialog().getByText('ada.old@members.example')).toBeTruthy();
     // A later change goes to the kept record, never to the one removed.
     orgService.changeMemberListEntry.mockResolvedValue(written('changed', adaOld));
@@ -312,11 +312,11 @@ describe('round one: a confirm only ever sends what was refused', () => {
     openBox(ADA);
     await pickMore('Remove');
     fireEvent.click(within(screen.getByTestId('confirm-take-off')).getByRole('button', { name: 'Remove' }));
-    expect(await dialog().findByText(/their details are kept/)).toBeTruthy();
+    expect(await dialog().findByText(/Their details are kept/)).toBeTruthy();
     await pickMore('Delete for good');
     fireEvent.click(within(screen.getByTestId('confirm-delete')).getByRole('button', { name: 'Delete for good' }));
     await screen.findByTestId('deleted-note');
-    expect(dialog().queryByText(/their details are kept/)).toBeNull();
+    expect(dialog().queryByText(/Their details are kept/)).toBeNull();
   });
 
   it('L1: the Merge search takes no more than the server reads', async () => {
@@ -387,15 +387,15 @@ describe('a person on the list', () => {
     await pickMore('Remove');
     const box = within(screen.getByTestId('confirm-take-off'));
     expect(box.getByText('Remove Ada Lovelace?')).toBeTruthy();
-    expect(box.getByText(/They move to past members and can't use the app with your gym any more\./)).toBeTruthy();
-    expect(box.getByText(/Put back brings them back/)).toBeTruthy();
+    expect(box.getByText(/They'll be moved to past members and lose access to your gym in the app\./)).toBeTruthy();
+    expect(box.getByText(/you can put them back at any time/)).toBeTruthy();
     cleanup();
 
     orgService.getMemberListEntry.mockResolvedValue(entryAnswer(ada));
     openBox(ADA);
     await pickMore('Remove');
     const plain = within(screen.getByTestId('confirm-take-off'));
-    expect(plain.getByText(/They move to past members\./)).toBeTruthy();
+    expect(plain.getByText(/They'll be moved to past members\./)).toBeTruthy();
     expect(plain.queryByText(/use the app/)).toBeNull();
   });
 
@@ -421,7 +421,7 @@ describe('a person on the list', () => {
     orgService.restoreMemberListEntry.mockResolvedValue(written('restored', ada));
     fireEvent.click(dialog().getByRole('button', { name: 'Put back on your list' }));
     await waitFor(() => expect(orgService.restoreMemberListEntry).toHaveBeenCalledWith(GYM, ADA));
-    expect(await dialog().findByText('Back on your list.')).toBeTruthy();
+    expect(await dialog().findByText('Restored to your member list.')).toBeTruthy();
   });
 
   describe("who uses the app with a record, and Not this person (RULINGS 2026-09-28: the email is the link)", () => {
@@ -448,8 +448,8 @@ describe('a person on the list', () => {
       openBox(ADA);
       fireEvent.click(within(await screen.findByTestId('in-app-person')).getByRole('button', { name: 'Not Daniel Wu?' }));
       const box = within(screen.getByTestId('confirm-not-them'));
-      expect(box.getByText("du isn't Daniel Wu?")).toBeTruthy();
-      expect(box.getByText(/du signed up in the app with the email address on Daniel Wu's record\. They lose the app with your gym\./)).toBeTruthy();
+      expect(box.getByText("Remove du's app access?")).toBeTruthy();
+      expect(box.getByText(/du signed up with the email address on Daniel Wu's record\. If this isn't Daniel Wu, remove their access to your gym in the app\./)).toBeTruthy();
       expect(box.getByText(/Daniel Wu stays on your list/)).toBeTruthy();
       fireEvent.click(box.getByRole('button', { name: 'Cancel' }));
       expect(orgService.notThem).not.toHaveBeenCalled();
@@ -457,9 +457,9 @@ describe('a person on the list', () => {
       fireEvent.click(within(screen.getByTestId('in-app-person')).getByRole('button', { name: 'Not Daniel Wu?' }));
       const out = { ...daniel, inApp: false, removeEndsApp: false, members: [], app: { word: 'not_in_app', tone: 'grey', at: null, line: 'Invitation cancelled', lineTone: 'plain' } };
       orgService.notThem.mockResolvedValue(written('not_them', out));
-      fireEvent.click(within(screen.getByTestId('confirm-not-them')).getByRole('button', { name: 'Take du out of the app' }));
+      fireEvent.click(within(screen.getByTestId('confirm-not-them')).getByRole('button', { name: 'Remove access' }));
       await waitFor(() => expect(orgService.notThem).toHaveBeenCalledWith(GYM, ADA, DAN));
-      expect(await dialog().findByText('Taken out of the app. Check the email address on this record, then invite them again.')).toBeTruthy();
+      expect(await dialog().findByText('App access removed. Update the email address, then invite the member again.')).toBeTruthy();
       expect(orgService.takeOffMemberListEntry).not.toHaveBeenCalled();
     });
 
@@ -483,13 +483,13 @@ describe('a person on the list', () => {
     openBox(ADA);
     await pickMore('Remove');
     const box = within(screen.getByTestId('confirm-take-off'));
-    expect(box.getByText('Remove Grace Hall from the app?')).toBeTruthy();
-    expect(box.getByText(/already a past member\. This ends their app with your gym, and they keep their own workouts\./)).toBeTruthy();
+    expect(box.getByText("Remove Grace Hall's app access?")).toBeTruthy();
+    expect(box.getByText(/already a past member\. This removes their access to your gym in the app\./)).toBeTruthy();
     const done = { ...grace, inApp: false, removeEndsApp: false, app: { word: 'not_in_app', tone: 'grey', at: '2026-09-27T10:00:00.000Z', line: 'Removed from app', lineTone: 'plain' } };
     orgService.takeOffMemberListEntry.mockResolvedValue(written('removed_from_app', done));
     fireEvent.click(box.getByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(orgService.takeOffMemberListEntry).toHaveBeenCalledWith(GYM, ADA));
-    expect(await dialog().findByText('Removed from the app. Their record stays with your past members.')).toBeTruthy();
+    expect(await dialog().findByText('App access removed. They remain a past member.')).toBeTruthy();
   });
 
   it('offers no Remove on a past member whose Remove would change nothing', async () => {
@@ -506,7 +506,7 @@ describe('a person on the list', () => {
     );
     openBox(ADA);
     await pickMore('Remove');
-    expect(within(screen.getByTestId('confirm-take-off')).getByText(/invitation stops working/)).toBeTruthy();
+    expect(within(screen.getByTestId('confirm-take-off')).getByText(/pending invitation will be cancelled/)).toBeTruthy();
   });
 
   it('offers no Delete for good on somebody still on the list', async () => {
@@ -550,7 +550,7 @@ describe('a person on the list', () => {
     await waitFor(() =>
       expect(orgService.changeMemberListEntry).toHaveBeenLastCalledWith(GYM, ADA, { email: 'new@members.example', acknowledgeLeavesList: true }),
     );
-    expect(await dialog().findByText('Saved.')).toBeTruthy();
+    expect(await dialog().findByText('Changes saved.')).toBeTruthy();
   });
 
   it("prints the server's own sentence when a change is refused", async () => {
@@ -592,7 +592,7 @@ describe('Add member', () => {
     await waitFor(() =>
       expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Bea Hart', email: 'bea@members.example', extra: { locker: '7' } }),
     );
-    expect(await dialog().findByText('Added to your list.')).toBeTruthy();
+    expect(await dialog().findByText('Member added.')).toBeTruthy();
     expect(dialog().getByText('bea@members.example')).toBeTruthy();
     expect(onChanged).toHaveBeenCalled();
   });
@@ -602,7 +602,7 @@ describe('Add member', () => {
     openBox(null);
     fireEvent.change(dialog().getByLabelText('Email'), { target: { value: 'bea@members.example' } });
     fireEvent.click(dialog().getByRole('button', { name: 'Add member' }));
-    expect(await dialog().findByText('This person is already on your list.')).toBeTruthy();
+    expect(await dialog().findByText('This member is already on your list.')).toBeTruthy();
     expect(dialog().getByText('Bea Hart')).toBeTruthy();
   });
 });

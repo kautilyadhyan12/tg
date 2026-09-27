@@ -234,7 +234,7 @@ describe("the gym's own list", () => {
     expect(rows[2].textContent).not.toContain('No email address');
     expect(within(rows[2]).queryByTestId('needs-check')).toBeNull();
     expect(within(rows[3]).getByTestId('needs-check').getAttribute('aria-label')).toBe(
-      'In the app. Needs checking: Maria Park and Leo Park use the app with these details.',
+      'In the app. Needs attention: Maria Park and Leo Park use the app with these details.',
     );
   });
 
@@ -269,10 +269,10 @@ describe("the gym's own list", () => {
     orgService.getMemberList.mockResolvedValue({ data: { list: view({ appWords: [{ word: 'in_app', count: 40 }, { word: 'needs_check', count: 2 }] }) } });
     draw();
     const box = await screen.findByTestId('check-these');
-    expect(box.textContent).toBe('2 need checking');
+    expect(box.textContent).toBe('2 need attention');
     fireEvent.click(box);
     await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'app=needs_check'));
-    expect(within(screen.getByTestId('showing')).getByRole('button', { name: 'Stop showing only Needs checking' })).toBeTruthy();
+    expect(within(screen.getByTestId('showing')).getByRole('button', { name: 'Stop showing only Needs attention' })).toBeTruthy();
   });
 
   it('loads the next hundred with the cursor and adds them below', async () => {

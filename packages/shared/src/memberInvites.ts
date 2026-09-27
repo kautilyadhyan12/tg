@@ -70,26 +70,26 @@ export type MemberInviteEmailReason = z.infer<typeof memberInviteEmailReasonSche
 
 /** The sentence staff read beside an email that did not go. */
 export const MEMBER_INVITE_EMAIL_REASON_WORDS: Readonly<Record<MemberInviteEmailReason, string>> = {
-  not_on_list: "The invitation email wasn't sent: this person wasn't on your list when it was due to go. Press Invite to send it now.",
-  under_age: "The invitation email wasn't sent: your list says this person is under 18, and the app is for 18 and over.",
-  in_app: "The invitation email wasn't sent: this person is already a member in the app.",
-  unsubscribed: "The invitation email wasn't sent: this person unsubscribed from your emails.",
-  complained: "The invitation email wasn't sent: this person marked an earlier email from you as spam.",
-  bounced: "The invitation email wasn't sent: emails to this address bounce.",
-  refused: "The invitation email wasn't sent: our email service won't deliver to this address. Ask the person for another one.",
-  shared_address: "The invitation email wasn't sent: this is a shared address such as info@ or support@. Ask the person for their own.",
-  bad_address: "The invitation email wasn't sent: this email address isn't valid.",
-  no_mail_domain: "The invitation email wasn't sent: this email address can't receive email. Check it with the person.",
-  invitation_closed: "The invitation email wasn't sent: this person has already answered the invitation.",
-  invitation_withdrawn: "The invitation email wasn't sent: you took this person off your list or removed them from the app.",
-  gym_not_active: "The invitation email wasn't sent: your gym had no active plan when it was due to go.",
-  no_postal_address: "The invitation email wasn't sent: your gym had no postal address when it was due to go.",
-  gym_name: "The invitation email wasn't sent: your gym's name can't be shown in an email. Change it in Settings.",
-  send_unknown: "We couldn't confirm this email went. Only send it again if the person says they didn't get it.",
-  provider_refused: "The invitation email wasn't sent: the email service would not take it for a week. Invite them again.",
-  provider_unavailable: "The invitation email wasn't sent: the email service could not be reached for a week. Invite them again.",
-  dns_unavailable: "The invitation email wasn't sent: we could not check this address's email service for a week. Invite them again.",
-  sending_stopped: "The invitation email wasn't sent: your gym's invitations were stopped because too many bounced or one was marked as spam.",
+  not_on_list: "Invitation not sent: this member wasn't on your list when it was due. Invite them again.",
+  under_age: "Invitation not sent: this member is under 18. The app is for ages 18 and over.",
+  in_app: "Invitation not sent: this member already uses the app.",
+  unsubscribed: "Invitation not sent: this member unsubscribed from your emails.",
+  complained: "Invitation not sent: this member marked a previous email from you as spam.",
+  bounced: "Invitation not sent: emails to this address bounce.",
+  refused: "Invitation not sent: our email provider won't deliver to this address. Ask the member for another one.",
+  shared_address: "Invitation not sent: shared addresses such as info@ or support@ can't receive invitations. Ask the member for their own.",
+  bad_address: "Invitation not sent: this email address isn't valid.",
+  no_mail_domain: "Invitation not sent: this email address can't receive email. Confirm it with the member.",
+  invitation_closed: "Invitation not sent: this member has already responded.",
+  invitation_withdrawn: "Invitation not sent: this member was removed from your list or from the app.",
+  gym_not_active: "Invitation not sent: your gym didn't have an active plan.",
+  no_postal_address: "Invitation not sent: your gym didn't have a postal address.",
+  gym_name: "Invitation not sent: your gym's name can't be used in an email. Update it in Settings.",
+  send_unknown: "We couldn't confirm this invitation was delivered. Resend it only if the member didn't receive it.",
+  provider_refused: "Invitation not sent: our email provider declined it for a week. Invite them again.",
+  provider_unavailable: "Invitation not sent: our email provider was unavailable for a week. Invite them again.",
+  dns_unavailable: "Invitation not sent: we couldn't check this address's email service for a week. Invite them again.",
+  sending_stopped: "Invitation not sent: your gym's invitations are paused because too many emails bounced or were marked as spam.",
 };
 
 /** What the email service reported about an email that went (§9.12), once its own
@@ -100,10 +100,10 @@ export type MemberInviteEmailResult = z.infer<typeof memberInviteEmailResultSche
 /** The sentence staff read beside an email that went but did not arrive, or was marked
  *  as spam. A delivered email needs none. */
 export const MEMBER_INVITE_EMAIL_RESULT_WORDS: Readonly<Record<Exclude<MemberInviteEmailResult, "delivered">, string>> = {
-  bounced: "This email bounced: the address doesn't take email. Check it with the person.",
-  complained: "This person marked the invitation as spam. Your gym won't email them again.",
-  failed: "This email didn't arrive. Check the address with the person.",
-  refused: "Not delivered: our email service won't deliver to this address. Ask the person for another one.",
+  bounced: "Invitation bounced: this address doesn't accept email. Confirm it with the member.",
+  complained: "This member marked the invitation as spam. Your gym won't email them again.",
+  failed: "Invitation not delivered. Confirm the email address with the member.",
+  refused: "Invitation not delivered: our email provider won't deliver to this address. Ask the member for another one.",
 };
 
 /** Why somebody in the chosen group is not invited by a press. */
@@ -205,23 +205,23 @@ export const MEMBER_INVITE_PERMISSION_WORDS = "These are {gym}'s {people}, and I
 
 /** The server's sentences for invitations, printed as sent. */
 export const MEMBER_INVITE_WORDS = {
-  invite_changed: "Your list changed while you were looking, so nobody was invited. Check the number again.",
-  permission_needed: "Tick the permission box first. Nobody was invited.",
-  no_postal_address: "Add your gym's postal address in Settings first. Every invitation shows it, as the law requires.",
+  invite_changed: "Your member list changed, so no invitations were sent. Review the updated numbers and try again.",
+  permission_needed: "Confirm that you have permission to email these members. No invitations were sent.",
+  no_postal_address: "Add your gym's postal address in Settings. The law requires it in every invitation email.",
   invites_off: "Invitations can't be sent yet.",
   sending_stopped:
-    "Your gym's invitations are stopped because too many bounced or one was marked as spam. Contact us to start them again.",
-  no_email: "This person has no email address. Add one to invite them.",
-  under_age: "Your list says this person is under 18. The app is for 18 and over, so they can't be invited.",
-  not_on_list: "This person has been taken off your list.",
-  in_app: "This person is already a member in the app.",
-  unsubscribed: "This person asked not to get your emails, so they can't be invited again.",
-  bounced: "Emails to this address bounce. Check it with the person.",
-  refused: "Our email service won't deliver to this address. Ask the person for another one.",
-  shared_address: "This is a shared address such as info@ or support@. Ask the person for their own.",
-  not_invited: "This person hasn't been invited yet. Invite them first.",
-  already_joined: "This person has already joined.",
-  said_not_me: "Whoever gets email at this address said the invitation isn't for them. Check the address with the person, then change it.",
+    "Your gym's invitations are paused because too many emails bounced or were marked as spam. Contact us to resume them.",
+  no_email: "This member has no email address. Add one to invite them.",
+  under_age: "According to your list, this member is under 18. The app is for ages 18 and over, so they can't be invited.",
+  not_on_list: "This member is no longer on your list.",
+  in_app: "This member already uses the app.",
+  unsubscribed: "This member unsubscribed from your emails, so they can't be invited.",
+  bounced: "Emails to this address bounce. Confirm it with the member.",
+  refused: "Our email provider won't deliver to this address. Ask the member for another one.",
+  shared_address: "This is a shared address such as info@ or support@. Ask the member for their own.",
+  not_invited: "This member hasn't been invited yet.",
+  already_joined: "This member has already joined.",
+  said_not_me: "The recipient at this address said the invitation isn't for them. Confirm the address with the member and update it.",
   again_person_limit: `An invitation can be sent again ${String(MEMBER_INVITE_AGAIN_PER_PERSON)} times in ${String(MEMBER_INVITE_AGAIN_PERSON_DAYS)} days. Try again later.`,
   again_gym_limit: `Your gym can send ${String(MEMBER_INVITE_AGAIN_PER_GYM_DAY)} invitations again a day. Try again tomorrow.`,
 } as const;

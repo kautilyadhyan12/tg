@@ -157,9 +157,9 @@ describe('the worst thing: a wrong file cannot take people off unseen', () => {
     expect(within(olivia).getByTestId('gone-facts').textContent).toBe('Active · Gold · Paid');
     expect(within(liam).getByTestId('gone-facts').textContent).toMatch(/^Cancelled · Gold · Ended 31 Aug( 2026)? · Unpaid$/);
     expect(within(emma).getByTestId('gone-facts').textContent).toBe('Active');
-    expect(within(emma).getByTestId('gone-added').textContent).toMatch(/^Added by hand · 20 Sep( 2026)?$/);
+    expect(within(emma).getByTestId('gone-added').textContent).toMatch(/^Added manually · 20 Sep( 2026)?$/);
     expect(within(olivia).queryByTestId('gone-added')).toBeNull();
-    expect(card.getByTestId('missing-help').textContent).toContain('people missing from it have usually left');
+    expect(card.getByTestId('missing-help').textContent).toContain('members missing from it have usually left');
     expect(card.getByRole('button', { name: 'Show more (22)' })).toBeTruthy();
     expect(card.getByTestId('missing-statuses').textContent).toBe('Active 20 · Frozen 5');
     expect(orgService.getMemberListRows).toHaveBeenCalledWith(GYM, UPLOAD, 'gone', 0);
@@ -349,7 +349,7 @@ describe('an answer is only ever about the people staff were shown (review of PR
       preview({ dateColumns: [{ column: 3, field: 'joinedOn', order: 'dayFirst', from: 'country', example: { raw: '03/04/2026', read: '2026-04-03' }, notRead: 0 }] }),
     );
     orgService.uploadMemberList.mockReturnValueOnce(new Promise(() => {}));
-    const swap = screen.getByRole('button', { name: 'Read as 4 March 2026 instead' });
+    const swap = screen.getByRole('button', { name: 'Change to 4 March 2026' });
     fireEvent.click(swap);
     await waitFor(() => expect(swap.disabled).toBe(true));
     fireEvent.click(swap);
@@ -472,24 +472,24 @@ describe('the checks', () => {
   it('a date nothing in the file settled says how it was read, and the other reading is one press away, and back', async () => {
     const joined = (order, read) => [{ column: 3, field: 'joinedOn', order, from: order === 'dayFirst' ? 'country' : 'chosen', example: { raw: '03/04/2026', read }, notRead: 0 }];
     await reviewWith(preview({ dateColumns: joined('dayFirst', '2026-04-03') }));
-    expect(screen.getByText('We read 03/04/2026 as 3 April 2026')).toBeTruthy();
+    expect(screen.getByText('03/04/2026 is read as 3 April 2026')).toBeTruthy();
     orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: preview({ dateColumns: joined('monthFirst', '2026-03-04') }) } });
-    fireEvent.click(screen.getByRole('button', { name: 'Read as 4 March 2026 instead' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Change to 4 March 2026' }));
     await waitFor(() => expect(orgService.uploadMemberList).toHaveBeenCalledTimes(2));
     expect(orgService.uploadMemberList.mock.calls[1][1].mapping.dateOrder).toEqual([{ column: 3, order: 'monthFirst' }]);
     // Read the other way, the line says so, and the same place puts it back.
-    expect(await screen.findByText('We read 03/04/2026 as 4 March 2026')).toBeTruthy();
+    expect(await screen.findByText('03/04/2026 is read as 4 March 2026')).toBeTruthy();
     orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: preview({ dateColumns: joined('dayFirst', '2026-04-03') }) } });
-    fireEvent.click(screen.getByRole('button', { name: 'Read as 3 April 2026 instead' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Change to 3 April 2026' }));
     await waitFor(() => expect(orgService.uploadMemberList).toHaveBeenCalledTimes(3));
     expect(orgService.uploadMemberList.mock.calls[2][1].mapping.dateOrder).toEqual([{ column: 3, order: 'dayFirst' }]);
   });
 
   it('says how many of the columns it understood, and where the examples come from', async () => {
     await reviewWith(preview());
-    expect(screen.getByTestId('columns-line').textContent).toContain('We understood 4 of your 5 columns');
+    expect(screen.getByTestId('columns-line').textContent).toContain('4 of 5 columns matched');
     fireEvent.click(within(screen.getByTestId('columns-line')).getByRole('button', { name: 'Check' }));
-    expect(screen.getByTestId('columns-note').textContent).toBe('Each of your columns, and what it goes in as. The examples come from the first row of your file.');
+    expect(screen.getByTestId('columns-note').textContent).toBe('Examples are from the first row of your file.');
   });
 
   it('a date the file itself settled is not asked about', async () => {
@@ -498,8 +498,8 @@ describe('the checks', () => {
         dateColumns: [{ column: 3, field: 'joinedOn', order: 'dayFirst', from: 'file', example: { raw: '25/12/2025', read: '2025-12-25' }, notRead: 0 }],
       }),
     );
-    expect(screen.queryByText('We read 25/12/2025 as 25 December 2025')).toBeNull();
-    expect(screen.queryByRole('button', { name: /^Read as/ })).toBeNull();
+    expect(screen.queryByText('25/12/2025 is read as 25 December 2025')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Change to/ })).toBeNull();
   });
 
   it('a warning is one short line, with the whole sentence behind "Why?"', async () => {

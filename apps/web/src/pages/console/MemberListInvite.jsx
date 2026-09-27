@@ -32,8 +32,8 @@ import {
 const count = (k) => k.toLocaleString('en');
 
 const GROUPS = [
-  { key: 'reach', title: 'Will get an email' },
-  { key: 'left_out', title: "Won't get one" },
+  { key: 'reach', title: 'Recipients' },
+  { key: 'left_out', title: 'Not included' },
 ];
 const LOADING = { loading: true, error: null, people: [], total: 0, cursor: null };
 
@@ -72,7 +72,8 @@ export default function MemberListInvite({
   const [error, setError] = useState(null);
   const [sent, setSent] = useState(null);
   const [permission, setPermission] = useState(false);
-  const [tab, setTab] = useState('reach');
+  /** The tab staff picked; until then Recipients, or Not included when nobody is reached. */
+  const [picked, setTab] = useState(null);
   const [groups, setGroups] = useState({ reach: LOADING, left_out: LOADING });
   const [loadingMore, setLoadingMore] = useState(false);
   /** undefined: no person open · an id: that person's page, over this one. */
@@ -83,6 +84,7 @@ export default function MemberListInvite({
   const [peopleTick, setPeopleTick] = useState(0);
   /** The `peopleTick` each list was last read for, so a tab is read once per change. */
   const readFor = useRef({ reach: -1, left_out: -1 });
+  const tab = picked ?? (preview !== null && preview.reach === 0 ? 'left_out' : 'reach');
   const today = gymToday(gym?.timezone);
 
   // Counted again as the page opens: the button's number may be minutes old.
@@ -196,15 +198,15 @@ export default function MemberListInvite({
         <p className="c-s16 c-w6 c-t1 flex items-center gap-2" role="status">
           <Check aria-hidden="true" className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--good)' }} />
           {sent.queued === 0
-            ? 'Nobody new was invited.'
-            : `${count(sent.queued)} ${sent.queued === 1 ? 'invitation is' : 'invitations are'} on the way.`}
+            ? 'No new invitations were sent.'
+            : `${count(sent.queued)} ${sent.queued === 1 ? 'invitation is' : 'invitations are'} being sent.`}
         </p>
         {sent.queued > 0 ? (
-          <p className="c-s14 c-t2">Emails go out in small batches, so a long list can take a day or more. Each person&apos;s page shows how theirs went.</p>
+          <p className="c-s14 c-t2">Invitations are sent in batches, so large lists can take up to a day. Each member&apos;s page shows the delivery status.</p>
         ) : null}
         {left.length > 0 ? (
           <div data-testid="invite-left-out" className="flex flex-col gap-1">
-            <span className="c-s14 c-w6 c-t2">Not sent</span>
+            <span className="c-s14 c-w6 c-t2">Not included</span>
             <ul className="flex flex-col gap-1">
               {left.map((line) => (
                 <li key={line.key} className="c-s14 c-t1">
@@ -216,9 +218,9 @@ export default function MemberListInvite({
         ) : null}
         {sent.queued > 0 ? (
           <section className="flex flex-col gap-2">
-            <h3 className="c-h3">Share it yourself too</h3>
+            <h3 className="c-h3">Share the invitation</h3>
             <p className="c-s14 c-t2">
-              Send these words by WhatsApp, text or your own email. The link only lets in someone who signs in with the address you invited.
+              You can also send this invitation by WhatsApp, text message or email. Only someone who signs in with the invited email address can join.
             </p>
             <ShareInvite gymName={gym.name} slug={gym.slug} newLook />
           </section>
@@ -238,7 +240,7 @@ export default function MemberListInvite({
         </p>
       ) : (
         <p className="c-s14 c-t2 flex items-center gap-2">
-          <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> Counting…
+          <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> Loading…
         </p>
       );
     footer = (
@@ -256,7 +258,7 @@ export default function MemberListInvite({
             {summary.gets}
             {summary.wont !== null ? (
               <>
-                {' '}
+                {' · '}
                 <button type="button" onClick={() => setTab('left_out')} className="c-btn-link c-w6" style={{ color: 'var(--t1)' }}>
                   {summary.wont}
                 </button>
@@ -265,7 +267,7 @@ export default function MemberListInvite({
           </p>
           {chosen !== 'Everyone on your list' ? (
             <p className="c-s14 c-t2" data-testid="invite-who">
-              You chose: {chosen}
+              Filtered by {chosen}
             </p>
           ) : null}
           {ignores !== null ? <p className="c-hint">{ignores}</p> : null}
@@ -285,7 +287,7 @@ export default function MemberListInvite({
           </div>
         ) : null}
 
-        <div className="c-utabs" role="tablist" aria-label="Who gets an email">
+        <div className="c-utabs" role="tablist" aria-label="Recipients">
           {GROUPS.map(({ key, title }) => (
             <button
               key={key}
@@ -318,7 +320,7 @@ export default function MemberListInvite({
               <span style={{ gridArea: 'who' }}>Name</span>
               <span style={{ gridArea: 'status' }}>Status</span>
               <span style={{ gridArea: 'type' }}>Membership</span>
-              <span style={{ gridArea: 'why' }}>{tab === 'reach' ? 'The email goes to' : "Why they won't get one"}</span>
+              <span style={{ gridArea: 'why' }}>{tab === 'reach' ? 'Email' : 'Reason'}</span>
             </div>
             <ul>
               {shown.people.map((p, i) => {
@@ -367,7 +369,7 @@ export default function MemberListInvite({
         ) : null}
 
         {!shown.loading && shown.error === null && shown.people.length === 0 ? (
-          <p className="c-s14 c-t2">{tab === 'reach' ? 'Nobody here will get an email.' : 'Everyone here will get an email.'}</p>
+          <p className="c-s14 c-t2">{tab === 'reach' ? `No ${words.people} to invite.` : `All ${words.people} are included.`}</p>
         ) : null}
 
         {!shown.loading && shown.cursor !== null ? (
@@ -381,7 +383,7 @@ export default function MemberListInvite({
     footer = (
       <div className="flex flex-col gap-3 w-full">
         <p className="c-s13 c-t2">
-          Each gets one email from {gym.name} via AI Home Gym with a link to the app. Only someone who signs in with that email address can join.
+          Each member receives one invitation email from {gym.name}, sent by AI Home Gym, with a link to join. Only someone who signs in with that email address can join.
         </p>
         {reach > 0 && blocked === null ? (
           <PermissionTick checked={permission} onChange={setPermission}>
@@ -416,14 +418,14 @@ export default function MemberListInvite({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Invite to the app"
+        aria-label={`Invite ${words.people} to the app`}
         data-testid="invite-box"
         className="c-sheet absolute inset-x-0 bottom-0 top-8 md:top-10 md:bottom-10 md:left-1/2 md:right-auto md:-translate-x-1/2 md:w-[960px] md:max-w-[calc(100%-48px)] flex flex-col rounded-t-[20px] md:rounded-[20px] border"
         style={{ borderColor: 'var(--card-line)' }}
       >
         <div className="flex items-center gap-3 pl-4 pr-2 pt-3 md:px-7 md:pt-6 md:pb-2">
           <h2 className="c-h2 flex-grow" style={{ fontSize: 22, lineHeight: '28px', fontWeight: 700 }}>
-            Invite to the app
+            Invite {words.people} to the app
           </h2>
           <button type="button" aria-label="Close" onClick={onClose} className="c-icon-btn">
             <X aria-hidden="true" className="w-5 h-5" />

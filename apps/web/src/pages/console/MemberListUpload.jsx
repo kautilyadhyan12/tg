@@ -718,8 +718,8 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
               </div>
               {missing.group === 'gone' ? (
                 <div className="text-sm mt-1" style={{ color: C.soft }} data-testid="missing-help">
-                  Your file should hold everyone who is a {words.person} today, so people missing from it have usually left. Anyone added by
-                  hand may simply not be in the system you exported from yet.
+                  Your file should include all current {words.people}, so {words.people} missing from it have usually left. {words.peopleCap ?? 'Members'} added
+                  manually may not be in your export yet.
                 </div>
               ) : null}
               {/* Read again as people to add, the file no longer says who was missing, so
@@ -770,7 +770,7 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
                   ? 'No email or phone column found'
                   : toCheck > 0
                     ? `${count(toCheck)} ${toCheck === 1 ? 'column needs' : 'columns need'} a look`
-                    : `We understood ${count(importedColumnCount(preview.columns, mapping))} of your ${count(preview.columns.length)} columns`
+                    : `${count(importedColumnCount(preview.columns, mapping))} of ${count(preview.columns.length)} columns matched`
               }
               sub={preview.needsMapping ? 'Pick which column is which' : null}
               action={columnsOpen ? 'Hide' : 'Check'}
@@ -830,7 +830,7 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
           <div className="rounded-[18px] overflow-hidden" style={{ background: C.card, border: `1px solid ${C.line}` }} data-testid="columns">
             {/* Kd, 2026-09-27: the examples read as if the columns matched for one person. */}
             <div className="px-4 pt-3 pb-1 text-[13px]" style={{ color: C.muted }} data-testid="columns-note">
-              Each of your columns, and what it goes in as. The examples come from the first row of your file.
+              Examples are from the first row of your file.
             </div>
             {preview.columns.map((c) => {
               const date = preview.dateColumns.find((d) => d.column === c.index && d.example !== null);

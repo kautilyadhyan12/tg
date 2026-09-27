@@ -64,17 +64,17 @@ describe("the spec's table, one case a row (§18.4)", () => {
     [
       "1b a past member still in the app",
       { fullName: "Grace Hall", former: true, inApp: [{ name: "Grace Hall" }] },
-      { reason: "in_app", tone: "amber", at: null, line: "Grace still uses the app through your gym. Remove them from the app if they've left.", lineTone: "amber" },
+      { reason: "in_app", tone: "amber", at: null, line: "Grace is a past member but still uses the app. Remove them if they've left.", lineTone: "amber" },
     ],
     [
       "2 wrong email",
       { invitation: invitation({ state: "declined", notMeAt: AT }) },
-      { reason: "wrong_email", tone: "red", at: null, line: "Whoever gets email at emma@example.com says they aren't Emma. Check the address with Emma.", lineTone: "red" },
+      { reason: "wrong_email", tone: "red", at: null, line: "The recipient at emma@example.com says they aren't Emma. Confirm Emma's email address.", lineTone: "red" },
     ],
     [
       "3 waiting for a place",
       { invitation: invitation({ waitingSince: AT }) },
-      { reason: "waiting", tone: "amber", at: null, line: "Emma tapped Join, but all 500 places in your plan are taken. Free a place — a bigger plan, or remove someone who has left — then ask Emma to tap Join again.", lineTone: "amber" },
+      { reason: "waiting", tone: "amber", at: null, line: "Emma tried to join, but all 500 places on your plan are in use. Upgrade your plan or remove a member who has left, then ask Emma to try again.", lineTone: "amber" },
     ],
     ["4 removed from app", { invitation: invitation({ state: "withdrawn", removedAt: REMOVED }) }, { reason: "removed", tone: "grey", at: REMOVED, line: null, lineTone: "plain" }],
     ["5 left the app", { invitation: invitation({ state: "accepted" }) }, { reason: "left", tone: "grey", at: null, line: null, lineTone: "plain" }],
@@ -88,7 +88,7 @@ describe("the spec's table, one case a row (§18.4)", () => {
     [
       "8 bounced after it went",
       { invitation: invitation({ email: email({ result: "bounced" }) }) },
-      { reason: "not_arrived", tone: "amber", at: null, line: "This email bounced: the address doesn't take email. Check it with the person.", lineTone: "amber" },
+      { reason: "not_arrived", tone: "amber", at: null, line: "Invitation bounced: this address doesn't accept email. Confirm it with the member.", lineTone: "amber" },
     ],
     [
       // Never emailed, so not "Invited" (Kd, 2026-09-27: "Invited · Not sent" said two things).
@@ -132,7 +132,7 @@ describe("a household: two records on one email, the person in the app matched t
   it("the other record says who uses the email, never their 'Left the app' or 'Invited'", () => {
     for (const state of memberInviteStateSchema.options) {
       const out = reason({ fullName: "Leo Park", sharedWith: "Maria Park", invitation: invitation({ state }) });
-      expect(out, state).toEqual({ reason: "not_invited", tone: "grey", at: null, line: "Maria Park uses the app with this email.", lineTone: "plain" });
+      expect(out, state).toEqual({ reason: "not_invited", tone: "grey", at: null, line: "Maria Park uses the app with this email address.", lineTone: "plain" });
     }
   });
   it("a record that reaches someone itself still reads 'In the app'", () => {
@@ -261,17 +261,17 @@ describe("the three words a screen shows (Kd, 2026-09-27: the list showed too mu
     [
       "invited, the email bounced: a line to check",
       { invitation: invitation({ email: email({ result: "bounced" }) }) },
-      { word: "invited", tone: "grey", at: null, line: "This email bounced: the address doesn't take email. Check it with the person.", lineTone: "amber" },
+      { word: "invited", tone: "grey", at: null, line: "Invitation bounced: this address doesn't accept email. Confirm it with the member.", lineTone: "amber" },
     ],
     [
       "invited, waiting for a place: a line to check",
       { invitation: invitation({ waitingSince: AT }) },
-      { word: "invited", tone: "grey", at: null, line: "Emma tapped Join, but all 500 places in your plan are taken. Free a place — a bigger plan, or remove someone who has left — then ask Emma to tap Join again.", lineTone: "amber" },
+      { word: "invited", tone: "grey", at: null, line: "Emma tried to join, but all 500 places on your plan are in use. Upgrade your plan or remove a member who has left, then ask Emma to try again.", lineTone: "amber" },
     ],
     [
       "wrong email: not in the app, a red line to check",
       { invitation: invitation({ state: "declined", notMeAt: AT }) },
-      { word: "not_in_app", tone: "grey", at: null, line: "Whoever gets email at emma@example.com says they aren't Emma. Check the address with Emma.", lineTone: "red" },
+      { word: "not_in_app", tone: "grey", at: null, line: "The recipient at emma@example.com says they aren't Emma. Confirm Emma's email address.", lineTone: "red" },
     ],
     ["removed from the app, with its day", { invitation: invitation({ state: "withdrawn", removedAt: REMOVED }) }, { word: "not_in_app", tone: "grey", at: REMOVED, line: "Removed from app", lineTone: "plain" }],
     ["left the app", { invitation: invitation({ state: "accepted" }) }, { word: "not_in_app", tone: "grey", at: null, line: "Left the app", lineTone: "plain" }],
@@ -282,7 +282,7 @@ describe("the three words a screen shows (Kd, 2026-09-27: the list showed too mu
     [
       "the son on his mother's email",
       { fullName: "Leo Park", sharedWith: "Maria Park", invitation: invitation({ state: "accepted" }) },
-      { word: "not_in_app", tone: "grey", at: null, line: "Maria Park uses the app with this email.", lineTone: "plain" },
+      { word: "not_in_app", tone: "grey", at: null, line: "Maria Park uses the app with this email address.", lineTone: "plain" },
     ],
   ];
   it.each(shown)("%s", (_name, over, expected) => {

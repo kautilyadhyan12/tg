@@ -129,7 +129,7 @@ export function appReason(input: AppWordInput): AppReason {
   // 1 and 1b: this record reaches someone in the app.
   if (input.inApp.length > 0) {
     if (input.former) {
-      return view("in_app", "amber", `${first} still uses the app through your gym. Remove them from the app if they've left.`, "amber");
+      return view("in_app", "amber", `${first} is a past member but still uses the app. Remove them if they've left.`, "amber");
     }
     if (input.inApp.length > 1) {
       return view("in_app", "green", `${names(input.inApp.map((p) => p.name))} use the app with these details.`, "amber");
@@ -139,7 +139,7 @@ export function appReason(input: AppWordInput): AppReason {
 
   // The address's invitation was used by the person on another record.
   if (input.sharedWith !== null) {
-    return view("not_invited", "grey", `${input.sharedWith} uses the app with this email.`);
+    return view("not_invited", "grey", `${input.sharedWith} uses the app with this email address.`);
   }
 
   // Invite never reaches someone the list says is under 18 (RULINGS 2026-09-24), so an
@@ -152,15 +152,15 @@ export function appReason(input: AppWordInput): AppReason {
     // 2
     if (inv.state === "declined" && inv.notMeAt !== null) {
       const email = input.email ?? "this address";
-      return view("wrong_email", "red", `Whoever gets email at ${email} says they aren't ${first}. Check the address with ${first}.`, "red");
+      return view("wrong_email", "red", `The recipient at ${email} says they aren't ${first}. Confirm ${first}'s email address.`, "red");
     }
     // 3
     if (inv.state === "pending" && inv.waitingSince !== null) {
-      const full = input.cap === null ? "your plan has no free places" : `all ${String(input.cap)} places in your plan are taken`;
+      const full = input.cap === null ? "your plan has no free places" : `all ${String(input.cap)} places on your plan are in use`;
       return view(
         "waiting",
         "amber",
-        `${first} tapped Join, but ${full}. Free a place — a bigger plan, or remove someone who has left — then ask ${first} to tap Join again.`,
+        `${first} tried to join, but ${full}. Upgrade your plan or remove a member who has left, then ask ${first} to try again.`,
         "amber",
       );
     }
@@ -190,7 +190,7 @@ export function appReason(input: AppWordInput): AppReason {
         const reason = email.reason;
         if ((email.state === "skipped" || email.state === "failed") && reason !== "send_unknown") {
           const said = reason !== null && !OPT_OUT_REASONS.has(reason) ? MEMBER_INVITE_EMAIL_REASON_WORDS[reason] : null;
-          return view("not_sent", "grey", said ?? "The invitation email wasn't sent. Press Invite to send it.", "amber");
+          return view("not_sent", "grey", said ?? "Invitation not sent. Invite them again.", "amber");
         }
         // 9, not known
         if (reason === "send_unknown") return view("invited", "grey", MEMBER_INVITE_EMAIL_REASON_WORDS.send_unknown, "plain", email.at);

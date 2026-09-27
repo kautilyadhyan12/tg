@@ -142,7 +142,7 @@ export function goneWords(person, today = null) {
   const on = person.onList;
   const facts = [person.wasStatus, on.membershipType, endsWords(on, today), on.paymentStatus].filter((w) => w !== null && w !== '');
   const when = shortWhen(on.addedAt, today);
-  const added = on.source === 'typed' ? `Added by hand · ${when}` : on.source === 'member' ? `Added when they joined the app · ${when}` : null;
+  const added = on.source === 'typed' ? `Added manually · ${when}` : on.source === 'member' ? `Added from the app · ${when}` : null;
   return { facts: facts.join(' · '), added };
 }
 
@@ -150,7 +150,7 @@ export function goneWords(person, today = null) {
  *  is wrong (Kd, 2026-09-27: "now if gyms update can they join?"). */
 export function underAgeWhen(dateOfBirth) {
   const from = dateOfBirth === null ? null : turns18On(dateOfBirth);
-  const fix = 'If the date of birth is wrong, press Edit to change it.';
+  const fix = 'If the date of birth is incorrect, select Edit to update it.';
   return from === null ? fix : `They can be invited from ${dayWords(from)}, when they turn 18. ${fix}`;
 }
 
@@ -237,21 +237,21 @@ export function inviteWho(filters) {
 /** Said when the list on screen is narrowed by something Invite does not read. */
 export function inviteIgnores(filters) {
   return filters.query.trim() !== '' || filters.app.length > 0
-    ? "Only Status, Membership and Payment choose who is invited. The search and the app filter don't."
+    ? 'Recipients are chosen by your Status, Membership and Payment filters. Search and App filters don\'t apply.'
     : null;
 }
 
 /** Who an Invite leaves out, one line a reason, in the server's order; none for a zero. */
 export function skippedLines(skipped) {
   const lines = [
-    ['noEmail', skipped.noEmail, (k) => `${n(k)} ${k === 1 ? 'has' : 'have'} no email address`],
-    ['underAge', skipped.underAge, (k) => `${n(k)} ${k === 1 ? 'is' : 'are'} under 18 by the date of birth on your list`],
-    ['inApp', skipped.inApp, (k) => `${n(k)} already ${k === 1 ? 'uses' : 'use'} the app`],
-    ['alreadyInvited', skipped.alreadyInvited, (k) => `${n(k)} ${k === 1 ? 'was' : 'were'} invited before, or ${k === 1 ? 'shares' : 'share'} an email with someone who was`],
-    ['unsubscribed', skipped.unsubscribed, (k) => `${n(k)} asked not to get your emails`],
-    ['bounced', skipped.bounced, (k) => (k === 1 ? '1 has an address that bounces' : `${n(k)} have addresses that bounce`)],
-    ['refused', skipped.refused, (k) => `${n(k)} ${k === 1 ? 'has an address' : 'have addresses'} our email service won't deliver to`],
-    ['sharedAddress', skipped.sharedAddress, (k) => `${n(k)} ${k === 1 ? 'has a shared address' : 'have shared addresses'} such as info@`],
+    ['noEmail', skipped.noEmail, (k) => `${n(k)} without an email address`],
+    ['underAge', skipped.underAge, (k) => `${n(k)} under 18`],
+    ['inApp', skipped.inApp, (k) => `${n(k)} already in the app`],
+    ['alreadyInvited', skipped.alreadyInvited, (k) => `${n(k)} already invited, or sharing an invited email address`],
+    ['unsubscribed', skipped.unsubscribed, (k) => `${n(k)} unsubscribed from your emails`],
+    ['bounced', skipped.bounced, (k) => `${n(k)} with an email address that bounces`],
+    ['refused', skipped.refused, (k) => `${n(k)} with an email address our provider won't deliver to`],
+    ['sharedAddress', skipped.sharedAddress, (k) => `${n(k)} with a shared email address such as info@`],
   ];
   return lines.filter(([, count]) => count > 0).map(([key, count, words]) => ({ key, text: words(count) }));
 }
@@ -263,14 +263,12 @@ export function inviteSummary(preview, filters, words) {
   const leftOut = Object.values(preview.skipped).reduce((sum, k) => sum + k, 0);
   const total = preview.reach + leftOut;
   const chosen = CHIP_KINDS.some(({ kind }) => filters[kind].length > 0);
-  const group = chosen ? 'you chose' : 'on your list';
   let gets;
-  if (total === 0) gets = chosen ? 'Nobody on your list matches what you chose.' : 'Nobody is on your list yet.';
-  else if (total === 1) gets = `The 1 ${words.person} ${group} ${preview.reach === 1 ? 'will' : "won't"} get an email invitation.`;
-  else if (preview.reach === total) gets = `All ${n(total)} ${words.people} ${group} will get an email invitation.`;
-  else if (preview.reach === 0) gets = `None of the ${n(total)} ${words.people} ${group} will get an email invitation.`;
-  else gets = `${n(preview.reach)} of the ${n(total)} ${words.people} ${group} will get an email invitation.`;
-  const wont = leftOut === 0 || preview.reach === 0 ? null : `${n(leftOut)} won't.`;
+  if (total === 0) gets = chosen ? `No ${words.people} match your filters` : `There are no ${words.people} on your list yet`;
+  else if (preview.reach === 0) gets = `No ${words.people} to invite`;
+  else if (preview.reach === total) gets = total === 1 ? `1 ${words.person} will receive an invitation email` : `All ${n(total)} ${words.people} will receive an invitation email`;
+  else gets = `${n(preview.reach)} of ${n(total)} ${words.people} will receive an invitation email`;
+  const wont = leftOut === 0 ? null : `${n(leftOut)} not included`;
   return { gets, wont, leftOut };
 }
 
@@ -279,33 +277,33 @@ export function inviteSummary(preview, filters, words) {
 export function inviteWhyNot(person, today = null) {
   switch (person.reason) {
     case 'noEmail':
-      return { text: 'No email address', hint: 'Add one on their page to invite them.' };
+      return { text: 'No email address', hint: 'Add an email address to invite them.' };
     case 'underAge':
       return {
-        text: person.turns18On === null ? 'Under 18' : `Under 18 · can be invited from ${shortDay(person.turns18On, today)}`,
-        hint: 'If the date of birth is wrong, change it on their page.',
+        text: person.turns18On === null ? 'Under 18' : `Under 18 (can be invited from ${shortDay(person.turns18On, today)})`,
+        hint: 'If the date of birth is incorrect, update it on their page.',
       };
     case 'inApp':
       return person.app.word === 'in_app'
         ? { text: 'Already in the app', hint: null }
-        : { text: person.app.line ?? 'Someone else uses the app with this email.', hint: 'Give them their own email address to invite them.' };
+        : { text: person.app.line ?? 'Another member uses the app with this email address.', hint: 'Add a separate email address to invite them.' };
     case 'alreadyInvited': {
       if (person.sameAddressAs !== null) {
-        return { text: `Same email as ${person.sameAddressAs}, who gets this invitation`, hint: 'Give them their own email address to invite them too.' };
+        return { text: `Shares an email address with ${person.sameAddressAs}, who is being invited`, hint: 'Add a separate email address to invite them.' };
       }
       const view = appView(person.app, today);
-      return { text: view.note ?? view.plain ?? 'Invited before', hint: person.app.word === 'invited' ? 'To send it again, open their page.' : null };
+      return { text: view.note ?? view.plain ?? 'Already invited', hint: person.app.word === 'invited' ? 'To resend, open their page.' : null };
     }
     case 'unsubscribed':
       return { text: 'Unsubscribed from your emails', hint: null };
     case 'bounced':
-      return { text: 'Emails to this address bounce', hint: 'Check the address with them.' };
+      return { text: 'Email address bounces', hint: 'Confirm the address with the member.' };
     case 'refused':
-      return { text: "Our email service won't deliver to this address", hint: 'Check the address with them.' };
+      return { text: "Our email provider won't deliver to this address", hint: 'Ask the member for another email address.' };
     case 'sharedAddress':
-      return { text: 'A shared address, such as info@', hint: 'Add their own email to invite them.' };
+      return { text: 'Shared email address (such as info@)', hint: "Add the member's own email address to invite them." };
     default:
-      return { text: 'Not sent', hint: null };
+      return { text: 'Not included', hint: null };
   }
 }
 
@@ -321,7 +319,7 @@ export function invitePeopleQuery(filters, group, cursor = null) {
 export function inviteBlockedWords(blocked, words) {
   switch (blocked) {
     case 'no_postal_address':
-      return `Add your ${words.it}'s postal address in Settings first. Every invitation shows it, as the law requires.`;
+      return `Add your ${words.it}'s postal address in Settings. The law requires it in every invitation email.`;
     case 'gym_not_on_plan':
       return `Your ${words.it} needs an active plan to send invitations.`;
     case 'gym_archived':
@@ -360,11 +358,11 @@ export function personInviteAction(entry, today) {
 export function inviteOutcomeWords(outcome, again) {
   switch (outcome) {
     case 'queued':
-      return again ? 'Invitation sent again. It goes out within a few minutes.' : 'Invited. The email goes out within a few minutes.';
+      return again ? 'Invitation resent. It will arrive within a few minutes.' : 'Invitation sent. It will arrive within a few minutes.';
     case 'already_invited':
-      return 'This person was already invited.';
+      return 'This member has already been invited.';
     case 'already_queued':
-      return 'An email to them is already waiting to go.';
+      return 'An invitation to this member is already being sent.';
     default:
       return null;
   }
@@ -504,27 +502,27 @@ export function compareRecords(keep, remove, fields) {
 export function outcomeWords(outcome) {
   switch (outcome) {
     case 'added':
-      return 'Added to your list.';
+      return 'Member added.';
     case 'revived':
-      return 'This person was a past member, and is back on your list.';
+      return 'This member was a past member and is back on your list.';
     case 'already_on_list':
-      return 'This person is already on your list.';
+      return 'This member is already on your list.';
     case 'changed':
-      return 'Saved.';
+      return 'Changes saved.';
     case 'unchanged':
-      return 'Nothing changed.';
+      return 'No changes to save.';
     case 'taken_off':
-      return "Removed. They're a past member now, and their details are kept.";
+      return 'Moved to past members. Their details are kept.';
     case 'removed_from_app':
-      return 'Removed from the app. Their record stays with your past members.';
+      return 'App access removed. They remain a past member.';
     case 'not_them':
-      return 'Taken out of the app. Check the email address on this record, then invite them again.';
+      return 'App access removed. Update the email address, then invite the member again.';
     case 'already_taken_off':
-      return 'This person was already removed from your list.';
+      return 'This member is already a past member.';
     case 'restored':
-      return 'Back on your list.';
+      return 'Restored to your member list.';
     case 'merged':
-      return 'Merged. This is the record you kept.';
+      return 'Records merged. This is the record you kept.';
     default:
       return null;
   }

@@ -448,7 +448,7 @@ d("press Invite (real Postgres)", () => {
       // Each reads as their own row does: Olivia is in the app, Mark is not — she uses it with his email.
       const app = new Map(leftOut.people.map((p) => [p.fullName, p.app]));
       expect(app.get("Olivia Bennett")?.word).toBe("in_app");
-      expect([app.get("Mark Bennett")?.word, app.get("Mark Bennett")?.line]).toEqual(["not_in_app", "Olivia Bennett uses the app with this email."]);
+      expect([app.get("Mark Bennett")?.word, app.get("Mark Bennett")?.line]).toEqual(["not_in_app", "Olivia Bennett uses the app with this email address."]);
 
       // The press emails the page's people and nobody else.
       const pressed = await press(gym, owner, preview, { status: ["Active"] });
@@ -598,7 +598,7 @@ d("press Invite (real Postgres)", () => {
       expect(callsTo(addr("unc4"))).toHaveLength(1);
       expect(await sendRow(gym, addr("unc4"))).toEqual({ state: "failed", reason: "send_unknown", email: null });
       expect(MEMBER_INVITE_EMAIL_REASON_WORDS.send_unknown).toBe(
-        "We couldn't confirm this email went. Only send it again if the person says they didn't get it.",
+        "We couldn't confirm this invitation was delivered. Resend it only if the member didn't receive it.",
       );
     },
     TEST_TIMEOUT_MS,

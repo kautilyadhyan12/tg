@@ -116,8 +116,8 @@ export function swappedDay(day) {
 export function dateReading(example) {
   const other = swappedDay(example.read);
   return {
-    read: `We read ${example.raw} as ${dayWords(example.read)}`,
-    other: other === null ? 'Swap day and month' : `Read as ${dayWords(other)} instead`,
+    read: `${example.raw} is read as ${dayWords(example.read)}`,
+    other: other === null ? 'Switch day and month' : `Change to ${dayWords(other)}`,
   };
 }
 

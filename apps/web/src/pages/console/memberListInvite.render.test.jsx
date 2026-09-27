@@ -158,7 +158,7 @@ describe('the worst thing: nobody the gym did not choose is emailed', () => {
     expect(send.disabled).toBe(true);
     tick();
     expect(send.disabled).toBe(false);
-    expect(box().getByTestId('invite-who').textContent).toBe('You chose: Status: Active');
+    expect(box().getByTestId('invite-who').textContent).toBe('Filtered by Status: Active');
     expect(orgService.getInvitePreview).toHaveBeenCalledWith(GYM, 'status=Active');
     // The people shown are the ones these same words reach, with where each email goes.
     await waitFor(() => expect(rows()).toHaveLength(2));
@@ -166,7 +166,7 @@ describe('the worst thing: nobody the gym did not choose is emailed', () => {
     expect(rows()[1].textContent).toContain('Arjun Shah');
     expect(orgService.getInvitePeople).toHaveBeenCalledWith(GYM, 'status=Active&group=reach');
     expect(whyOf('Ava Thompson')).toBe('ava@members.example');
-    fireEvent.click(box().getByRole('tab', { name: "Won't get one 0" }));
+    fireEvent.click(box().getByRole('tab', { name: 'Not included 0' }));
     await waitFor(() => expect(orgService.getInvitePeople).toHaveBeenCalledWith(GYM, 'status=Active&group=left_out'));
     fireEvent.click(send);
     await waitFor(() => expect(orgService.pressInvite).toHaveBeenCalledTimes(1));
@@ -184,8 +184,8 @@ describe('the worst thing: nobody the gym did not choose is emailed', () => {
     tick();
     fireEvent.click(button);
     expect(await box().findByText(MEMBER_INVITE_WORDS.invite_changed)).toBeTruthy();
-    expect(box().getByTestId('invite-summary').textContent).toBe('The 1 member you chose will get an email invitation.');
-    expect(box().queryByText(/on the way/)).toBeNull();
+    expect(box().getByTestId('invite-summary').textContent).toBe('1 member will receive an invitation email');
+    expect(box().queryByText(/being sent/)).toBeNull();
     expect(onSent).not.toHaveBeenCalled();
     // The people are read again for the new group.
     await waitFor(() => expect(rows()).toHaveLength(1));
@@ -201,12 +201,12 @@ describe('the worst thing: nobody the gym did not choose is emailed', () => {
 
   it("the numbers add up: how many of the people it looked at get an email, and how many don't (Kd, 2026-09-27)", async () => {
     openInvite(preview({ reach: 20, skipped: { ...NONE, noEmail: 12, underAge: 3, alreadyInvited: 2 } }), { ...FILTERS, status: [] });
-    expect((await box().findByTestId('invite-summary')).textContent).toBe("20 of the 37 members on your list will get an email invitation. 17 won't.");
-    // Never "Everyone on your list" over a smaller number.
+    expect((await box().findByTestId('invite-summary')).textContent).toBe('20 of 37 members will receive an invitation email · 17 not included');
+    // Never "Everyone on your list" over a smaller number, and no "Filtered by" without a filter.
     expect(box().queryByText(/Everyone on your list/)).toBeNull();
     expect(box().queryByTestId('invite-who')).toBeNull();
-    expect(box().getByRole('tab', { name: 'Will get an email 20' }).getAttribute('aria-selected')).toBe('true');
-    expect(box().getByRole('tab', { name: "Won't get one 17" })).toBeTruthy();
+    expect(box().getByRole('tab', { name: 'Recipients 20' }).getAttribute('aria-selected')).toBe('true');
+    expect(box().getByRole('tab', { name: 'Not included 17' })).toBeTruthy();
   });
 
   it('shows everyone left out with their own reason, in the words their own row uses, and what to do', async () => {
@@ -218,7 +218,7 @@ describe('the worst thing: nobody the gym did not choose is emailed', () => {
       invitee('Mark Bennett', {
         email: 'olivia@members.example',
         reason: 'inApp',
-        app: { word: 'not_in_app', tone: 'grey', at: null, line: 'Olivia Bennett uses the app with this email.', lineTone: 'plain' },
+        app: { word: 'not_in_app', tone: 'grey', at: null, line: 'Olivia Bennett uses the app with this email address.', lineTone: 'plain' },
       }),
       invitee('Sofia Alvarez', { reason: 'alreadyInvited', app: { word: 'invited', tone: 'grey', at: '2026-09-24T10:01:00.000Z', line: 'Invitation sent', lineTone: 'plain' } }),
       invitee('Ben Cole', { reason: 'alreadyInvited', app: { word: 'not_in_app', tone: 'grey', at: '2026-09-26T10:00:00.000Z', line: 'Removed from app', lineTone: 'plain' } }),
@@ -226,16 +226,16 @@ describe('the worst thing: nobody the gym did not choose is emailed', () => {
       invitee('Zara Ahmed', { reason: 'unsubscribed' }),
     ];
     openInvite(preview({ reach: 2, skipped: { ...NONE, alreadyInvited: 3, noEmail: 1, underAge: 1, inApp: 2, sharedAddress: 1, unsubscribed: 1 } }), FILTERS, { leftOut });
-    fireEvent.click(await box().findByRole('tab', { name: "Won't get one 9" }));
+    fireEvent.click(await box().findByRole('tab', { name: 'Not included 9' }));
     await waitFor(() => expect(rows()).toHaveLength(9));
-    expect(whyOf('Priya Shah')).toBe('Same email as Arjun Shah, who gets this invitationGive them their own email address to invite them too.');
-    expect(whyOf('Liam Hughes')).toBe('No email addressAdd one on their page to invite them.');
-    expect(whyOf('Mia Rossi')).toBe('Under 18 · can be invited from 14 Mar 2030If the date of birth is wrong, change it on their page.');
+    expect(whyOf('Priya Shah')).toBe('Shares an email address with Arjun Shah, who is being invitedAdd a separate email address to invite them.');
+    expect(whyOf('Liam Hughes')).toBe('No email addressAdd an email address to invite them.');
+    expect(whyOf('Mia Rossi')).toBe('Under 18 (can be invited from 14 Mar 2030)If the date of birth is incorrect, update it on their page.');
     expect(whyOf('Olivia Bennett')).toBe('Already in the app');
-    expect(whyOf('Mark Bennett')).toBe('Olivia Bennett uses the app with this email.Give them their own email address to invite them.');
-    expect(whyOf('Sofia Alvarez')).toMatch(/^Invitation sent · 24 Sep( 2026)?To send it again, open their page\.$/);
+    expect(whyOf('Mark Bennett')).toBe('Olivia Bennett uses the app with this email address.Add a separate email address to invite them.');
+    expect(whyOf('Sofia Alvarez')).toMatch(/^Invitation sent · 24 Sep( 2026)?To resend, open their page\.$/);
     expect(whyOf('Ben Cole')).toMatch(/^Removed from app · 26 Sep( 2026)?$/);
-    expect(whyOf('Ravi Kumar')).toBe('A shared address, such as info@Add their own email to invite them.');
+    expect(whyOf('Ravi Kumar')).toBe("Shared email address (such as info@)Add the member's own email address to invite them.");
     expect(whyOf('Zara Ahmed')).toBe('Unsubscribed from your emails');
     // Each row still says who it is: the name, and the email it has.
     expect(rows()[0].textContent).toContain('arjun@members.example');
@@ -243,8 +243,9 @@ describe('the worst thing: nobody the gym did not choose is emailed', () => {
 
   it('with nobody to reach, nothing can be sent', async () => {
     openInvite(preview({ reach: 0, skipped: { ...NONE, underAge: 1 } }), FILTERS, { reach: [] });
-    expect((await box().findByTestId('invite-summary')).textContent).toBe("The 1 member you chose won't get an email invitation.");
-    expect(await box().findByText('Nobody here will get an email.')).toBeTruthy();
+    expect((await box().findByTestId('invite-summary')).textContent).toBe('No members to invite · 1 not included');
+    // With nobody to invite, the page opens on the people not included, with their reasons.
+    expect(box().getByRole('tab', { name: 'Not included 1' }).getAttribute('aria-selected')).toBe('true');
     expect(box().getByRole('button', { name: 'Send 0 invitations' }).disabled).toBe(true);
   });
 });
@@ -252,15 +253,15 @@ describe('the worst thing: nobody the gym did not choose is emailed', () => {
 describe("Invite's page", () => {
   it('a gym with no postal address is sent to Settings and cannot send', async () => {
     openInvite(preview({ blocked: 'no_postal_address' }));
-    expect(await box().findByText(/Add your gym's postal address in Settings first/)).toBeTruthy();
+    expect(await box().findByText(/Add your gym's postal address in Settings/)).toBeTruthy();
     expect(box().getByRole('link', { name: 'Open Settings' }).getAttribute('href')).toBe('/console/iron-house/settings');
     expect(box().getByRole('button', { name: 'Send 2 invitations' }).disabled).toBe(true);
   });
 
   it('says when the search or the app filter does not choose who is invited', async () => {
     openInvite(preview(), { ...FILTERS, status: [], query: 'ada' });
-    expect((await box().findByTestId('invite-summary')).textContent).toBe('All 2 members on your list will get an email invitation.');
-    expect(box().getByText(/The search and the app filter don't/)).toBeTruthy();
+    expect((await box().findByTestId('invite-summary')).textContent).toBe('All 2 members will receive an invitation email');
+    expect(box().getByText(/Search and App filters don't apply/)).toBeTruthy();
     await waitFor(() => expect(orgService.getInvitePeople).toHaveBeenCalledWith(GYM, 'group=reach'));
   });
 
@@ -292,7 +293,7 @@ describe("Invite's page", () => {
     const button = await box().findByRole('button', { name: 'Send 2 invitations' });
     tick();
     fireEvent.click(button);
-    expect(await box().findByText('2 invitations are on the way.')).toBeTruthy();
+    expect(await box().findByText('2 invitations are being sent.')).toBeTruthy();
     expect(onSent).toHaveBeenCalledTimes(1);
     const words = box().getByLabelText("The invitation's words").value;
     expect(words).toContain('Iron House has invited you to AI Home Gym');
@@ -322,7 +323,7 @@ describe("a person's page", () => {
       data: { entry: person({ invitation: queued, app: { word: 'invited', tone: 'grey', at: '2026-09-25T10:00:00.000Z', line: null, lineTone: 'plain' } }) },
     });
     fireEvent.click(button);
-    expect(await page().findByText('Invited. The email goes out within a few minutes.')).toBeTruthy();
+    expect(await page().findByText('Invitation sent. It will arrive within a few minutes.')).toBeTruthy();
     expect(orgService.inviteMemberListEntry).toHaveBeenCalledWith(GYM, ADA);
     expect(await page().findByText('Invited')).toBeTruthy();
     expect(page().queryByText('Not in the app')).toBeNull();
@@ -334,7 +335,7 @@ describe("a person's page", () => {
     expect((await page().findByTestId('under-age-note')).textContent).toBe(MEMBER_INVITE_WORDS.under_age);
     // When they can be, and what to do if the date is wrong (Kd, 2026-09-27).
     expect(page().getByTestId('under-age-when').textContent).toBe(
-      'They can be invited from 14 March 2028, when they turn 18. If the date of birth is wrong, press Edit to change it.',
+      'They can be invited from 14 March 2028, when they turn 18. If the date of birth is incorrect, select Edit to update it.',
     );
     expect(page().getByText('Under 18')).toBeTruthy();
     expect(page().queryByRole('button', { name: 'Invite' })).toBeNull();
@@ -369,7 +370,7 @@ describe("a person's page", () => {
     expect(confirm.getByText(/3 times in 30 days/)).toBeTruthy();
     orgService.resendMemberListInvite.mockResolvedValue({ data: { invite: { outcome: 'queued', invitation: invitation(wentEmail, { sentAgain: 1 }) } } });
     fireEvent.click(confirm.getByRole('button', { name: 'Send again' }));
-    expect(await page().findByText('Invitation sent again. It goes out within a few minutes.')).toBeTruthy();
+    expect(await page().findByText('Invitation resent. It will arrive within a few minutes.')).toBeTruthy();
     expect(orgService.resendMemberListInvite).toHaveBeenCalledWith(GYM, ADA);
     expect(orgService.inviteMemberListEntry).not.toHaveBeenCalled();
   });
@@ -412,7 +413,7 @@ describe('Add and invite', () => {
       added({ outcome: 'queued', invitation: invitation({ state: 'queued', reason: null, at: '2026-09-25T10:00:00.000Z', result: null }) }),
     );
     fireEvent.click(page().getByRole('button', { name: 'Add and invite' }));
-    expect(await page().findByText('Added to your list. Invited. The email goes out within a few minutes.')).toBeTruthy();
+    expect(await page().findByText('Member added. Invitation sent. It will arrive within a few minutes.')).toBeTruthy();
     expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Cy Walker', email: 'cy@members.example', invite: true });
   });
 
@@ -435,7 +436,7 @@ describe('Add and invite', () => {
     fill();
     orgService.addMemberListEntry.mockResolvedValue(added(null));
     fireEvent.click(page().getByRole('button', { name: 'Add member' }));
-    expect(await page().findByText('Added to your list.')).toBeTruthy();
+    expect(await page().findByText('Member added.')).toBeTruthy();
     expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Cy Walker', email: 'cy@members.example' });
   });
 });

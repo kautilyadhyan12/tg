@@ -227,7 +227,7 @@ d("the App word on the Members list (real Postgres)", () => {
 
       const leoRow = await rowOf(gym, "Leo Park");
       expect(leoRow.app.word).toBe("not_in_app");
-      expect(leoRow.app.line).toBe("Maria Park uses the app with this email.");
+      expect(leoRow.app.line).toBe("Maria Park uses the app with this email address.");
       expect(leoRow.inApp).toBe(false);
       const mariaRow = await rowOf(gym, "Maria Park");
       expect(mariaRow.app).toEqual({ word: "in_app", tone: "green", at: null, line: null, lineTone: "plain" });
@@ -266,7 +266,7 @@ d("the App word on the Members list (real Postgres)", () => {
       expect((await detailOf(gym, sam.entryId)).members.map((member) => member.displayName)).toEqual(["Mum"]);
       const ivy = await rowOf(gym, "Ivy Ng");
       expect(ivy.app.word).toBe("not_in_app");
-      expect(ivy.app.line).toBe("Sam Ng uses the app with this email.");
+      expect(ivy.app.line).toBe("Sam Ng uses the app with this email address.");
     },
     TEST_TIMEOUT_MS,
   );
@@ -371,7 +371,7 @@ d("the App word on the Members list (real Postgres)", () => {
         word: "not_in_app",
         tone: "grey",
         at: null,
-        line: `Whoever gets email at ${addr("priya")} says they aren't Priya. Check the address with Priya.`,
+        line: `The recipient at ${addr("priya")} says they aren't Priya. Confirm Priya's email address.`,
         lineTone: "red",
       });
       expect(words["Ben Cole"]?.word).toBe("not_in_app");
@@ -381,7 +381,7 @@ d("the App word on the Members list (real Postgres)", () => {
       expect(words["Uma Rao"]?.word).toBe("not_in_app");
       expect(words["Uma Rao"]?.line).toBe("Unsubscribed from your emails");
       // Her email never went, so she is not "Invited".
-      expect(words["Emma Hart"]).toEqual({ word: "not_in_app", tone: "grey", at: null, line: "The invitation email wasn't sent: emails to this address bounce.", lineTone: "amber" });
+      expect(words["Emma Hart"]).toEqual({ word: "not_in_app", tone: "grey", at: null, line: "Invitation not sent: emails to this address bounce.", lineTone: "amber" });
       expect(words["Ava Thompson"]?.word).toBe("invited");
       expect(words["Ava Thompson"]?.line).toBe("Invitation sent");
       expect(words["Ava Thompson"]?.at).not.toBeNull();
@@ -431,7 +431,7 @@ d("the App word on the Members list (real Postgres)", () => {
         word: "in_app",
         tone: "amber",
         at: null,
-        line: "Grace still uses the app through your gym. Remove them from the app if they've left.",
+        line: "Grace is a past member but still uses the app. Remove them if they've left.",
         lineTone: "amber",
       });
       expect(byName["Leo Ford"]?.word).toBe("not_in_app");

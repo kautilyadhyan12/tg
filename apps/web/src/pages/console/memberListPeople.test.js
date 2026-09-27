@@ -242,7 +242,7 @@ describe('the "Showing:" line', () => {
     f = toggleWord(f, 'status', '');
     f = { ...toggleWord(f, 'membershipType', 'Gold'), app: ['needs_check', 'in_app'], query: 'ada' };
     const pills = activeFilters(f, WORDS);
-    expect(pills.map((p) => p.text)).toEqual(['Frozen', 'No status', 'Gold', 'In the app', 'Needs checking']);
+    expect(pills.map((p) => p.text)).toEqual(['Frozen', 'No status', 'Gold', 'In the app', 'Needs attention']);
     expect(pills[0].without.status).toEqual(['']);
     expect(pills[0].without.membershipType).toEqual(['Gold']);
     expect(pills[4].without.app).toEqual(['in_app']);
@@ -345,11 +345,11 @@ describe('who an Invite leaves out, in words', () => {
   it('one line a reason, zeros left out, one person said as one', () => {
     const lines = skippedLines({ noEmail: 1, underAge: 3, inApp: 0, alreadyInvited: 2, unsubscribed: 0, bounced: 1, refused: 0, sharedAddress: 1 });
     expect(lines.map((line) => line.text)).toEqual([
-      '1 has no email address',
-      '3 are under 18 by the date of birth on your list',
-      '2 were invited before, or share an email with someone who was',
-      '1 has an address that bounces',
-      '1 has a shared address such as info@',
+      '1 without an email address',
+      '3 under 18',
+      '2 already invited, or sharing an invited email address',
+      '1 with an email address that bounces',
+      '1 with a shared email address such as info@',
     ]);
   });
 });

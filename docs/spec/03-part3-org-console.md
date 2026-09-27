@@ -2849,6 +2849,38 @@ never named. The words and the layout are the planning terminal's judgement (CLA
 §4 "Screens a new gym understands"); every feature Members had is kept (18.9). It is built in
 the console's new look (§17), so it is also Members' restyle (ROADMAP R8, folded in).
 
+**AMENDED 2026-09-28, the words** (Kd: *"use standard words this is not a school project … a
+professional software will not have this kind thing"*). Plain, neutral product wording, as
+email and gym software write it; where a quote below differs, these words win:
+- **Invite:** "Invite members to the app"; "20 of 38 members will receive an invitation email ·
+  18 not included" ("All 38 members will receive an invitation email"; "No members to invite ·
+  38 not included", and then the Not included tab opens first); tabs **Recipients** · **Not
+  included**; columns Name · Status · Membership · Email (or Reason); "Filtered by Status:
+  Active"; reasons "No email address" (Add an email address to invite them.), "Under 18 (can
+  be invited from 1 May 2030)", "Already in the app", "Shares an email address with Arjun
+  Shah, who is being invited", "Invitation sent · 22 Sep" (To resend, open their page.),
+  "Email address bounces", "Shared email address (such as info@)", "Unsubscribed from your
+  emails"; after Send, "20 invitations are being sent." and "Share the invitation".
+- **A person's page:** "Remove Olivia Bennett?" / "They'll be moved to past members and lose
+  access to your gym in the app. Their details are kept, and you can put them back at any
+  time."; a past member, "Remove Grace Hall's app access?"; Not this person, "Remove du's app
+  access?" with **Remove access**; notices "Member added.", "Changes saved.", "Moved to past
+  members. Their details are kept.", "App access removed. …", "Restored to your member list.",
+  "Invitation sent. It will arrive within a few minutes."; under 18, "They can be invited from
+  14 March 2028, when they turn 18. If the date of birth is incorrect, select Edit to update
+  it."
+- **Lines:** an invitation email that did not go, "Invitation not sent: …" (for example "…this
+  member wasn't on your list when it was due. Invite them again."); a full plan, "Noah tried
+  to join, but all 500 places on your plan are in use. Upgrade your plan or remove a member
+  who has left, then ask Noah to try again."; a wrong address, "The recipient at … says they
+  aren't Jacob. Confirm Jacob's email address."; a past member in the app, "Grace is a past
+  member but still uses the app. Remove them if they've left."
+- **The list and Import:** "3 need attention" and the Filter's **Needs attention**; "No members
+  match."; "13 of 14 columns matched" and "Examples are from the first row of your file.";
+  "03/04/2024 is read as 3 April 2024" with **Change to 4 March 2024**; "Added manually · 20
+  Sep"; "Your file should include all current members, so members missing from it have
+  usually left. Members added manually may not be in your export yet."
+
 **AMENDED 2026-09-27, at 5b-v-a-i's click-through (RULINGS 2026-09-27).** Kd: *"clean like the
 leads … i dont want thing to be deleted … just fix the vague invite and delete list delete
 app confusion"*. Built in 5b-v-a-i, and where this section says otherwise, this wins:
