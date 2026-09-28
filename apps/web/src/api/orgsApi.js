@@ -10,6 +10,10 @@
 // the owner to press the button again — a visible duplicate beats a silent one.
 import {
   acceptInvitationResponseSchema,
+  gymEnquiryResponseSchema,
+  gymPageResponseSchema,
+  leadEnquiriesResponseSchema,
+  publicGymPageResponseSchema,
   closeGymDayResponseSchema,
   confirmApplicationResponseSchema,
   createOrgResponseSchema,
@@ -788,6 +792,34 @@ export const orgService = {
       leadResponseSchema,
       'this lead',
       authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/leads/${encodeURIComponent(leadId)}`),
+    ),
+
+  /** GET …/leads/:id/enquiries — the messages a lead sent through the gym page's form. */
+  getLeadEnquiries: (gymId, leadId) =>
+    readThrough(
+      leadEnquiriesResponseSchema,
+      'their messages',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/leads/${encodeURIComponent(leadId)}/enquiries`),
+    ),
+
+  /** GET …/page — the gym's own page as its staff see it (20c-iv-a). */
+  getGymPage: (gymId) =>
+    readThrough(gymPageResponseSchema, 'your page', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/page`)),
+
+  /** PUT …/page — the owner saves the whole page. */
+  setGymPage: (gymId, body) =>
+    readThrough(gymPageResponseSchema, 'your page', authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/page`, body)),
+
+  /** GET /v1/public/gyms/:slug — a gym's page as anybody with the link sees it. */
+  getPublicGymPage: (slug) =>
+    readThrough(publicGymPageResponseSchema, 'this page', authApi.get(`/v1/public/gyms/${encodeURIComponent(slug)}`)),
+
+  /** POST /v1/public/gyms/:slug/enquiries — the page's form. */
+  sendGymEnquiry: (slug, body) =>
+    readThrough(
+      gymEnquiryResponseSchema,
+      'your message',
+      authApi.post(`/v1/public/gyms/${encodeURIComponent(slug)}/enquiries`, body),
     ),
 
   createLead: (gymId, body) =>

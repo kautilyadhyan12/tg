@@ -13,6 +13,7 @@ import {
   detailsRequest,
   draftStarted,
   emptyLeadDraft,
+  enquiryLines,
   followUpEmail,
   followUpState,
   joinedWords,
@@ -93,6 +94,55 @@ function MayEmailTick({ checked, hasEmail, disabled, onChange }) {
         <span className="c-hint">{hasEmail ? MAY_EMAIL_HINT : 'Add their email address to ask.'}</span>
       </span>
     </button>
+  );
+}
+
+/** What the person sent through the gym's own page (20c-iv-a), newest first. Read when
+ *  the panel opens a lead who has sent one. */
+function PageMessages({ gymId, lead }) {
+  const [state, setState] = useState({ loading: true, enquiries: [], error: null });
+  const leadId = lead.id;
+  const sentAt = lead.enquiredAt;
+  useEffect(() => {
+    let gone = false;
+    orgService.getLeadEnquiries(gymId, leadId).then(
+      (res) => {
+        if (!gone) setState({ loading: false, enquiries: res.data.enquiries, error: null });
+      },
+      (err) => {
+        if (!gone) setState({ loading: false, enquiries: [], error: errorText(err, "We couldn't load their messages.") });
+      },
+    );
+    return () => {
+      gone = true;
+    };
+  }, [gymId, leadId, sentAt]);
+
+  return (
+    <section className="flex flex-col gap-3" aria-label="Messages from your page" data-testid="page-messages">
+      <span className="c-label">Messages from your page</span>
+      {state.loading ? (
+        <p className="c-s14 c-t3 flex items-center gap-2">
+          <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> Loading…
+        </p>
+      ) : null}
+      {state.error !== null ? <p className="c-s14 c-t2">{state.error}</p> : null}
+      {state.enquiries.map((enquiry) => {
+        const lines = enquiryLines(enquiry);
+        return (
+          <div key={enquiry.id} className="c-card p-4 flex flex-col gap-1.5">
+            <span className="c-s13 c-t3">{lines.when}</span>
+            <span className="c-s14 c-w6 c-t1">{lines.who}</span>
+            {lines.message !== '' ? <p className="c-s15 c-t1 whitespace-pre-line">{lines.message}</p> : null}
+            {lines.said.map((line) => (
+              <span key={line} className="c-s13 c-t2">
+                {line}
+              </span>
+            ))}
+          </div>
+        );
+      })}
+    </section>
   );
 }
 
@@ -518,6 +568,7 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
 
           {lead !== null ? (
             <>
+              {lead.enquiredAt ? <PageMessages gymId={gymId} lead={lead} /> : null}
               <FollowUpBox lead={lead} gym={gym} readOnly={readOnly} busy={busy} working={working} onMark={markSent} />
               <DetailsForm draft={draft} setDraft={setLeadDraft} disabled={off} />
               <MayEmailTick

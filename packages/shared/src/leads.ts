@@ -90,6 +90,9 @@ export const leadSchema = z
     createdAt: z.string().datetime({ offset: true }),
     statusChangedAt: z.string().datetime({ offset: true }),
     followUp: leadFollowUpSchema,
+    /** When the person last sent the gym page's form (20c-iv-a), or null. Absent from
+     *  an answer written before the form existed, so it defaults to null. */
+    enquiredAt: z.string().datetime({ offset: true }).nullable().default(null),
   })
   .strict();
 export type Lead = z.infer<typeof leadSchema>;

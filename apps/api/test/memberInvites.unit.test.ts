@@ -467,7 +467,14 @@ describe("invitation settings", () => {
     JWT_SECRET: "config-test-secret-0123456789abcdef-32", // gitleaks:allow
     REDIS_URL: "redis://localhost:6379",
   };
-  const prod = { ...good, NODE_ENV: "production", RESEND_API_KEY: "re_x", EMAIL_FROM: "AI Home Gym <hi@example.com>" };
+  const prod = {
+    ...good,
+    NODE_ENV: "production",
+    RESEND_API_KEY: "re_x",
+    EMAIL_FROM: "AI Home Gym <hi@example.com>",
+    TURNSTILE_SITE_KEY: "site",
+    TURNSTILE_SECRET_KEY: "secret",
+  };
 
   it("production: the key alone keeps invitations readable; sending needs the sender and the api's address too", () => {
     expect(inviteSettings(loadConfig(prod))).toBeNull();
