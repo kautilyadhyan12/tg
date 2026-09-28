@@ -43,42 +43,31 @@ import {
   whenWords,
 } from './memberListPeople';
 
-// One person on the gym's own list (ROADMAP 5b-i; spec Part 3 §11.6): everything kept
-// about them, and Edit; under More, Remove (One Remove, RULINGS 2026-09-27), Merge duplicate and (for a past member)
-// Delete for good, as gym software keeps its rarer actions. "Add member" is
-// the same box with an empty form. It closes only by its X, as the import box does.
+// One person on the gym's own list (ROADMAP 5b-i, 5b-v-c; spec Part 3 §18.7): everything
+// kept about them, the one button their state calls for, and under More, Remove (One
+// Remove, RULINGS 2026-09-27), Merge duplicate and (for a past member) Delete for good, as
+// gym software keeps its rarer actions. "Add member" is the same panel with an empty form.
+// A side panel on a computer, the whole screen on a phone (§17.2 rule 9), in the console's
+// look; it closes only by its X.
 //
-// Every answer is shown only for the record it was asked about: the box draws a
+// Every answer is shown only for the record it was asked about: the panel draws a
 // person's details only when they belong to the record it has open, so a slow answer
 // for somebody opened earlier can never stand under somebody else's name.
 
-const C = {
-  panel: '#0f0e0d',
-  card: '#141210',
-  line: 'rgba(255,255,255,0.07)',
-  muted: 'rgba(255,255,255,0.5)',
-  soft: 'rgba(255,255,255,0.8)',
-  orange: '#FF8A1F',
-  orangeBg: 'rgba(255,138,31,0.12)',
-  green: '#34d399',
-  greenBg: 'rgba(52,211,153,0.12)',
-  red: '#f87171',
-  redBg: 'rgba(248,113,113,0.1)',
-  plain: 'rgba(255,255,255,0.06)',
-};
-const TAG_TONES = {
-  green: [C.greenBg, C.green],
-  orange: [C.orangeBg, C.orange],
-  red: [C.redBg, C.red],
-  plain: [C.plain, C.soft],
-};
+const TAG_TONES = { green: 'c-tag-good', orange: 'c-tag-warn', red: 'c-tag-bad', plain: 'c-tag-plain' };
 
-const BUTTON = 'rounded-xl min-h-[44px] px-4 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-40';
-const INPUT = 'w-full rounded-lg px-3 min-h-[44px] text-base';
-const inputStyle = { background: '#0A0908', border: '1px solid rgba(255,255,255,0.10)', color: '#fff' };
+/** The buttons, by what they are for (§17.2 rule 3): one orange a panel, pale orange for
+ *  a second action, outlined for the rest, red for a step that takes something away. */
+const MAIN = 'c-btn c-btn-p';
+const SECOND = 'c-btn c-btn-soft';
+const PLAIN = 'c-btn c-btn-s';
+const DANGER = 'c-btn c-btn-danger';
 
 const pad = (n) => String(n).padStart(2, '0');
 const localDay = (d) => `${String(d.getFullYear())}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+/** A past member whose Remove would end somebody's app: they still use it. */
+const pastInApp = (p) => p.formerAt !== null && p.removeEndsApp === true;
+
 function dayRanges() {
   const now = new Date();
   const today = localDay(now);
@@ -93,27 +82,16 @@ function dayRanges() {
 
 export function Tag({ view }) {
   if (view === null) return null;
-  const [bg, fg] = TAG_TONES[view.tone];
-  return (
-    <span className="rounded-md px-2 py-0.5 text-xs font-medium whitespace-nowrap" style={{ background: bg, color: fg }}>
-      {view.tag}
-    </span>
-  );
+  return <span className={`c-tag ${TAG_TONES[view.tone]} whitespace-nowrap`}>{view.tag}</span>;
 }
 
 function Fact({ label, value, edited }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 py-2" style={{ borderTop: `1px solid ${C.line}` }}>
-      <dt className="text-sm flex-shrink-0" style={{ color: C.muted }}>
-        {label}
-      </dt>
-      <dd className="text-sm text-right break-words min-w-0" style={{ color: '#fff' }}>
+    <div className="grid gap-x-4 gap-y-0.5 py-2 grid-cols-1 sm:grid-cols-[150px_minmax(0,1fr)]">
+      <dt className="c-s14 c-t2">{label}</dt>
+      <dd className="c-s14 c-w5 c-t1 m-0 break-words min-w-0">
         {value}
-        {edited ? (
-          <span className="block text-xs" style={{ color: C.muted }}>
-            changed by hand
-          </span>
-        ) : null}
+        {edited ? <span className="block c-s13 c-t3 font-normal">Changed by hand</span> : null}
       </dd>
     </div>
   );
@@ -121,13 +99,23 @@ function Fact({ label, value, edited }) {
 
 function Section({ title, note, children }) {
   return (
-    <section>
-      <h3 className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>
+    <section className="c-card px-4 py-3 md:px-5 md:py-4">
+      <h3 className="c-h2 mb-1">
         {title}
-        {note ? <span className="normal-case font-normal tracking-normal"> ({note})</span> : null}
+        {note ? <span className="c-s13 c-t3 font-normal"> ({note})</span> : null}
       </h3>
-      <dl>{children}</dl>
+      <dl className="m-0">{children}</dl>
     </section>
+  );
+}
+
+/** The question a step asks before it acts: what happens, to whom, then its buttons. */
+function Ask({ testId, question, children }) {
+  return (
+    <div className="c-card p-4 md:p-5 flex flex-col gap-3" data-testid={testId}>
+      <p className="c-s16 c-w6 c-t1 m-0">{question}</p>
+      {children}
+    </div>
   );
 }
 
@@ -146,23 +134,15 @@ function MoreMenu({ items, disabled }) {
   }, [open]);
   return (
     <div ref={wrap} className="relative">
-      <button
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-        disabled={disabled}
-        className={BUTTON}
-        style={{ background: C.plain, color: C.soft }}
-      >
+      <button type="button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)} disabled={disabled} className={PLAIN}>
         More
-        <MoreHorizontal className="w-4 h-4" />
+        <MoreHorizontal aria-hidden="true" className="w-4 h-4" />
       </button>
       {open ? (
         <div
           role="menu"
-          className="absolute right-0 sm:right-auto sm:left-0 bottom-full sm:bottom-auto sm:top-full mb-2 sm:mb-0 sm:mt-2 w-64 rounded-2xl p-1.5 z-10"
-          style={{ background: '#1a1816', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 12px 40px rgba(0,0,0,0.6)' }}
+          className="absolute right-0 sm:right-auto sm:left-0 top-full mt-2 w-72 max-w-[calc(100vw-32px)] rounded-[14px] p-1.5 z-10 flex flex-col"
+          style={{ background: 'var(--sheet)', border: '1px solid var(--card-line)', boxShadow: 'var(--pop)' }}
         >
           {items.map((item) => (
             <button
@@ -173,17 +153,13 @@ function MoreMenu({ items, disabled }) {
                 setOpen(false);
                 item.onPick();
               }}
-              className="w-full text-left rounded-xl px-3 py-2.5 flex items-start gap-2.5"
-              style={{ color: item.danger ? C.red : '#fff' }}
+              className="w-full text-left rounded-[10px] px-3 py-2.5 min-h-[44px] flex items-start gap-3"
+              style={{ color: item.danger ? 'var(--bad)' : 'var(--t1)' }}
             >
-              {item.icon ? <item.icon className="w-4 h-4 mt-0.5 flex-shrink-0" /> : <span className="w-4 flex-shrink-0" />}
+              {item.icon ? <item.icon aria-hidden="true" className="w-4 h-4 mt-0.5 flex-shrink-0" /> : <span className="w-4 flex-shrink-0" />}
               <span>
-                <span className="block text-sm font-medium">{item.label}</span>
-                {item.hint ? (
-                  <span className="block text-xs" style={{ color: C.muted }}>
-                    {item.hint}
-                  </span>
-                ) : null}
+                <span className="block c-s15 c-w5">{item.label}</span>
+                {item.hint ? <span className="block c-s13 c-t3">{item.hint}</span> : null}
               </span>
             </button>
           ))}
@@ -203,23 +179,21 @@ function CompareRecords({ keep, remove, fields, person }) {
   const differ = rows.filter((row) => row.differs).length;
   return (
     <div data-testid="merge-compare" className="flex flex-col gap-2">
-      <p className="text-sm" style={{ color: C.soft }}>
-        {differ === 0 ? 'Every detail is the same.' : `${String(differ)} of ${String(rows.length)} details differ.`}
-      </p>
-      <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${C.line}` }}>
-        <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
+      <p className="c-s14 c-t2 m-0">{differ === 0 ? 'Every detail is the same.' : `${String(differ)} of ${String(rows.length)} details differ.`}</p>
+      <div className="rounded-[14px] overflow-hidden" style={{ border: '1px solid var(--card-line)' }}>
+        <table className="w-full" style={{ tableLayout: 'fixed' }}>
           <colgroup>
             <col style={{ width: '28%' }} />
             <col style={{ width: '36%' }} />
             <col style={{ width: '36%' }} />
           </colgroup>
           <thead>
-            <tr style={{ background: C.card }}>
+            <tr style={{ background: 'var(--raise)' }}>
               <th />
-              <th className="text-left px-2 py-2 text-xs font-bold uppercase tracking-wide" style={{ color: C.green }}>
+              <th className="text-left px-2 py-2 c-s13 c-w7" style={{ color: 'var(--good)' }}>
                 Keep
               </th>
-              <th className="text-left px-2 py-2 text-xs font-bold uppercase tracking-wide" style={{ color: C.red }}>
+              <th className="text-left px-2 py-2 c-s13 c-w7" style={{ color: 'var(--bad)' }}>
                 Remove
               </th>
             </tr>
@@ -229,9 +203,9 @@ function CompareRecords({ keep, remove, fields, person }) {
               <tr
                 key={row.key}
                 data-differs={row.differs ? 'true' : 'false'}
-                style={{ borderTop: `1px solid ${C.line}`, background: row.differs ? 'rgba(255,138,31,0.07)' : 'transparent' }}
+                style={{ borderTop: '1px solid var(--line)', background: row.differs ? 'var(--warn-bg)' : 'transparent' }}
               >
-                <th scope="row" className="text-left font-normal px-1.5 sm:px-2 py-2 align-top text-xs sm:text-sm" style={{ color: C.muted }}>
+                <th scope="row" className="text-left font-normal px-1.5 sm:px-2 py-2 align-top c-s13 c-t2">
                   {row.label}
                 </th>
                 {[
@@ -241,8 +215,8 @@ function CompareRecords({ keep, remove, fields, person }) {
                   <td
                     key={side}
                     data-testid={`join-${side}-${row.key}`}
-                    className="px-1.5 sm:px-2 py-2 align-top text-[13px] sm:text-sm"
-                    style={{ color: value === '—' ? C.muted : '#fff', overflowWrap: 'break-word' }}
+                    className="px-1.5 sm:px-2 py-2 align-top c-s13"
+                    style={{ color: value === '—' ? 'var(--t3)' : 'var(--t1)', overflowWrap: 'break-word' }}
                   >
                     {/* An address may wrap at its @, never in the middle of a word. */}
                     {value.includes('@') ? (
@@ -265,14 +239,16 @@ function CompareRecords({ keep, remove, fields, person }) {
   );
 }
 
-export default function MemberListPerson({ gymId, gym, entryId, list, words, readOnly, onClose, onChanged }) {
+// `canRemove` is the viewer's `members.remove`: without it nothing that ends somebody's app is
+// offered (the server refuses it too), as the In the app sheet hides its Remove.
+export default function MemberListPerson({ gymId, gym, entryId, list, words, readOnly, canRemove = false, onClose, onChanged }) {
   const titleId = useId();
   const dialogRef = useRef(null);
   const fields = list?.fields ?? [];
 
-  /** The record the box has open; null while adding somebody new. */
+  /** The record the panel has open; null while adding somebody new. */
   const [id, setId] = useState(entryId);
-  /** Which record the box has open at this moment, for answers that arrive late. */
+  /** Which record the panel has open at this moment, for answers that arrive late. */
   const wanted = useRef(entryId);
   const [entry, setEntry] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -322,13 +298,14 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     }
   };
 
-  /** Open another record in this box: nothing of the one before stays on screen. */
+  /** Open another record in this panel: nothing of the one before stays on screen. */
   const openRecord = (next) => {
     wanted.current = next;
     setId(next);
     setEntry(null);
     setLoadError(null);
     setMode('view');
+    setNotice(null);
     setRefusal(null);
     setJoinPick(null);
     setJoinResults(null);
@@ -386,10 +363,10 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     };
   }, [gymId, id, mode, joinQuery, joinPick]);
 
-  /** The record on screen, only if it is the one the box has open. */
+  /** The record on screen, only if it is the one the panel has open. */
   const shown = entry !== null && entry.entryId === id ? entry : null;
 
-  /** A write's answer, applied only if the box still has that record open. */
+  /** A write's answer, applied only if the panel still has that record open. */
   const written = (asked, res) => {
     if (wanted.current !== asked) return;
     const next = res.data.entry;
@@ -467,8 +444,9 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     return run(asked, () => orgService.notThem(gymId, asked, member.userId), "We couldn't take them out of the app. Please try again.");
   };
 
-  /** Invite this person, or send their invitation again because they asked. The
-   *  answer's invitation replaces the one on screen only if the box still has them open. */
+  /** Invite this person, or send their invitation again because they asked, each only
+   *  from the question naming them (§18.6). The answer's invitation replaces the one on
+   *  screen only if the panel still has them open. */
   const sendInvite = async (again) => {
     const asked = shown.entryId;
     setBusy(true);
@@ -523,7 +501,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
 
   /** The other record's whole page is read before the two are compared, so the
    *  comparison has every field, custom fields included. The answer is used only if the
-   *  box still has the same record open and it is the record picked. */
+   *  panel still has the same record open and it is the record picked. */
   const pickRecord = async (otherId) => {
     const asked = shown.entryId;
     setPicking(otherId);
@@ -589,15 +567,20 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     setRefusal(null);
     setForm((f) => ({ ...f, extra: { ...f.extra, [key]: value } }));
   };
-  /** Leave a step (Back, Swap): a refusal about what was on screen goes with it. */
+  /** Leave a step (Back, Swap, Cancel): a refusal about what was on screen goes with it. */
   const backTo = (next) => {
     setRefusal(null);
     setMode(next);
   };
+  /** Open a question: a notice about an earlier step goes, so only the question shows. */
+  const ask = (next) => {
+    setNotice(null);
+    backTo(next);
+  };
 
   const title = deleted !== null ? 'Record deleted' : id === null ? `Add ${words.person}` : shown?.fullName || (shown ? 'No name' : '');
 
-  // ── What the box draws ──
+  // ── What the panel draws ──
 
   const renderForm = () => (
     <form
@@ -609,47 +592,33 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       }}
     >
       {TEXT_FIELDS.map((f) => (
-        <label key={f.key} className="flex flex-col gap-1">
-          <span className="text-sm" style={{ color: C.soft }}>
-            {f.label}
-          </span>
-          <input
-            type={f.type}
-            autoComplete={f.autoComplete}
-            value={form[f.key]}
-            onChange={(e) => setField(f.key, e.target.value)}
-            className={INPUT}
-            style={inputStyle}
-          />
+        <label key={f.key} className="c-field">
+          <span className="c-label">{f.label}</span>
+          <input type={f.type} autoComplete={f.autoComplete} value={form[f.key]} onChange={(e) => setField(f.key, e.target.value)} className="c-input" />
         </label>
       ))}
-      <p className="text-xs -mt-2" style={{ color: C.muted }}>
-        An email address or a phone number is needed to tell people apart.
-      </p>
+      <p className="c-hint -mt-2 m-0">An email address or a phone number is needed to tell people apart.</p>
       {WORD_FIELDS.map((f) => {
         const listId = `${titleId}-${f.key}`;
         const known = (list?.[f.from] ?? []).map((w) => w.label).filter((w) => w !== '');
         // The box takes any word; the suggestions are the gym's own, so a word is not
         // spelled two ways. The hint says so, since a browser draws it like a dropdown.
         return (
-          <div key={f.key} className="flex flex-col gap-1">
-            <label className="flex flex-col gap-1">
-              <span className="text-sm" style={{ color: C.soft }}>
-                {f.label}
-              </span>
+          <div key={f.key} className="c-field">
+            <label className="c-field">
+              <span className="c-label">{f.label}</span>
               <input
                 type="text"
                 list={known.length > 0 ? listId : undefined}
                 aria-describedby={known.length > 0 ? `${listId}-hint` : undefined}
                 value={form[f.key]}
                 onChange={(e) => setField(f.key, e.target.value)}
-                className={INPUT}
-                style={inputStyle}
+                className="c-input"
               />
             </label>
             {known.length > 0 ? (
               <>
-                <span id={`${listId}-hint`} className="text-xs" style={{ color: C.muted }}>
+                <span id={`${listId}-hint`} className="c-hint">
                   Pick one of your words, or type a new one.
                 </span>
                 <datalist id={listId}>
@@ -663,11 +632,10 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         );
       })}
       {DAY_FIELDS.map((f) => (
-        <div key={f.key} className="flex flex-col gap-1">
-          <span className="text-sm" style={{ color: C.soft }}>
-            {f.label}
-          </span>
+        <div key={f.key} className="c-field">
+          <span className="c-label">{f.label}</span>
           <DatePick
+            newLook
             label={f.label}
             value={form[f.key]}
             min={ranges[f.key].min}
@@ -679,13 +647,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             emptyText="Not set"
           />
           {f.key === 'endsOn' && form.endsOn !== '' ? (
-            <select
-              aria-label="Ends or renews"
-              value={form.endsOnKind}
-              onChange={(e) => setField('endsOnKind', e.target.value)}
-              className={INPUT}
-              style={inputStyle}
-            >
+            <select aria-label="Ends or renews" value={form.endsOnKind} onChange={(e) => setField('endsOnKind', e.target.value)} className="c-sel">
               <option value="ends">Membership ends on this date</option>
               <option value="renews">Membership renews on this date</option>
             </select>
@@ -693,32 +655,24 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         </div>
       ))}
       {fields.map((f) => (
-        <label key={f.key} className="flex flex-col gap-1">
-          <span className="text-sm" style={{ color: C.soft }}>
-            {f.label}
-          </span>
-          <input
-            type="text"
-            value={form.extra[f.key] ?? ''}
-            onChange={(e) => setExtra(f.key, e.target.value)}
-            className={INPUT}
-            style={inputStyle}
-          />
+        <label key={f.key} className="c-field">
+          <span className="c-label">{f.label}</span>
+          <input type="text" value={form.extra[f.key] ?? ''} onChange={(e) => setExtra(f.key, e.target.value)} className="c-input" />
         </label>
       ))}
       <div className="flex flex-wrap gap-2">
-        <button type="submit" disabled={busy || readOnly} className={BUTTON} style={{ background: C.orange, color: '#000' }}>
-          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+        <button type="submit" disabled={busy || readOnly} className={MAIN}>
+          {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Check aria-hidden="true" className="w-4 h-4" />}
           {id === null ? `Add ${words.person}` : 'Save'}
         </button>
         {id === null ? (
-          <button type="button" onClick={() => void save(true)} disabled={busy || readOnly} className={BUTTON} style={{ background: C.orangeBg, color: C.orange }}>
-            <Mail className="w-4 h-4" />
+          <button type="button" onClick={() => void save(true)} disabled={busy || readOnly} className={SECOND}>
+            <Mail aria-hidden="true" className="w-4 h-4" />
             Add and invite
           </button>
         ) : null}
         {id !== null ? (
-          <button type="button" onClick={() => backTo('view')} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
+          <button type="button" onClick={() => backTo('view')} className={PLAIN}>
             Back
           </button>
         ) : null}
@@ -726,10 +680,65 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     </form>
   );
 
+  /** The buttons a person's state calls for (§18.7): its one main button first, orange,
+   *  then Edit when that is not the main one, then More. */
+  const renderButtons = (p, action) => {
+    if (p.formerAt !== null) {
+      return (
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => void putBack()} disabled={busy || readOnly} className={MAIN}>
+            <UserPlus aria-hidden="true" className="w-4 h-4" />
+            Put back on your list
+          </button>
+          <MoreMenu
+            disabled={busy || readOnly}
+            items={[
+              { label: 'Edit', onPick: startEdit },
+              { label: 'Merge duplicate', hint: 'When this person is on your list twice', icon: ArrowLeftRight, onPick: startJoin },
+              { label: 'Delete for good', icon: Trash2, danger: true, onPick: () => ask('delete') },
+            ]}
+          />
+        </div>
+      );
+    }
+    const main =
+      action === 'invite'
+        ? { label: 'Invite to app', onPick: () => ask('invite') }
+        : action === 'again'
+          ? { label: 'Send again', onPick: () => ask('again') }
+          : action === 'invite_again'
+            ? { label: 'Invite again', onPick: () => ask('inviteAgain') }
+            : null;
+    return (
+      <div className="flex flex-wrap gap-2">
+        {main !== null ? (
+          <button type="button" onClick={main.onPick} disabled={busy || readOnly} className={`${MAIN} whitespace-nowrap`}>
+            <Mail aria-hidden="true" className="w-4 h-4" />
+            {main.label}
+          </button>
+        ) : null}
+        <button type="button" onClick={startEdit} disabled={busy || readOnly} className={main === null ? MAIN : PLAIN}>
+          Edit
+        </button>
+        <MoreMenu
+          disabled={busy || readOnly}
+          items={[
+            ...(p.invitation?.state === 'pending' && action !== 'under_age'
+              ? [{ label: 'Share the invitation', hint: 'Its words and link, to send yourself', icon: Copy, onPick: () => ask('share') }]
+              : []),
+            ...(canRemove || !p.removeEndsApp
+              ? [{ label: 'Remove', hint: `When they have left your ${words.it ?? 'gym'}`, icon: UserMinus, danger: true, onPick: () => ask('takeOff') }]
+              : []),
+            { label: 'Merge duplicate', hint: 'When this person is on your list twice', icon: ArrowLeftRight, onPick: startJoin },
+          ]}
+        />
+      </div>
+    );
+  };
+
   const renderDetails = (p) => {
     // A birthday is the gym's day, as the server decides it.
     const today = gymToday(gym?.timezone);
-    const inv = invitationView(p, today);
     const action = personInviteAction(p, today);
     const edited = new Set(p.handEdited);
     const contact = [
@@ -749,35 +758,30 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     const byHand = handEditedWords(p, fields, FIELD_LABELS);
     return (
       <div className="flex flex-col gap-5">
-        <div className="flex flex-wrap items-center gap-2">
-          {p.formerAt !== null ? (
-            <span className="rounded-md px-2 py-0.5 text-xs font-medium" style={{ background: C.plain, color: C.soft }}>
-              {pastWords(p, words.person)}
-            </span>
-          ) : null}
-          <Tag view={inv} />
-          {inv.line !== null ? (
-            <span className="text-xs" style={{ color: C.muted }}>
-              {inv.line}
-            </span>
-          ) : null}
-        </div>
-        {inv?.detail ? (
-          <p className="text-sm flex gap-2" style={{ color: C.orange }}>
-            <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-            {inv.detail}
-          </p>
-        ) : null}
         {action === 'under_age' ? (
           <div className="flex flex-col gap-1">
-            <p className="text-sm" style={{ color: C.muted }} data-testid="under-age-note">
+            <p className="c-s14 c-t2 m-0" data-testid="under-age-note">
               {MEMBER_INVITE_WORDS.under_age}
             </p>
-            <p className="text-sm" style={{ color: C.soft }} data-testid="under-age-when">
+            <p className="c-s14 c-t1 m-0" data-testid="under-age-when">
               {underAgeWhen(p.dateOfBirth)}
             </p>
           </div>
         ) : null}
+        {pastInApp(p) ? (
+          // A past member still in the app (§18.7, `MemberPast`): the amber line and its
+          // Remove from app, as from "In the app" (Kd, 2026-09-27: one card in both places).
+          <div className="c-callout items-center flex-wrap" data-testid="past-in-app">
+            <AlertTriangle aria-hidden="true" className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--warn)' }} />
+            <span className="c-s14 flex-1 min-w-[180px]">{invitationView(p, gymToday(gym?.timezone)).detail ?? `${p.fullName || 'They'} is still in the app through your ${words.it ?? 'gym'}.`}</span>
+            {canRemove ? (
+              <button type="button" onClick={() => ask('takeOff')} disabled={busy || readOnly} className="c-btn c-btn-s c-btn-sm">
+                Remove from app
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {renderButtons(p, action)}
         <Section title="Contact">
           {contact.length === 0 ? <Fact label="Email or phone" value="None" /> : null}
           {contact.map(([k, v]) => (
@@ -799,189 +803,138 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           </Section>
         ) : null}
         {p.members.length > 0 ? (
-          <Section title="In the app">
+          <section className="c-card px-4 py-3 md:px-5 md:py-4">
+            <h3 className="c-h2 mb-1">App</h3>
             {/* Who uses the app with this record's email, under the name they gave the app.
                 The email is the link; names are never compared (RULINGS 2026-09-28). Someone
                 on an email a family shares, whom the list can't place, gets no "Not …?": the
                 address is right, and the line above says what to do. */}
             {p.members.map((m) => (
-              <div key={m.userId} className="py-2 flex gap-3 items-start" style={{ borderTop: `1px solid ${C.line}` }} data-testid="in-app-person">
-                <Smartphone className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: C.green }} />
-                <div className="text-sm flex-1 min-w-0" style={{ color: C.soft }}>
-                  <span style={{ color: '#fff' }}>{m.displayName}</span> joined {whenWords(m.joinedAt)}
-                  <span className="block text-xs" style={{ color: C.muted }}>
+              <div key={m.userId} className="py-2 flex gap-3 items-start" data-testid="in-app-person">
+                <Smartphone aria-hidden="true" className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: 'var(--good)' }} />
+                <div className="c-s14 c-t2 flex-1 min-w-0">
+                  <span className="c-t1 c-w5">{m.displayName}</span> · In the app since {whenWords(m.joinedAt)}
+                  <span className="block c-s13 c-t3">
                     {m.visits === 1 ? '1 visit' : `${String(m.visits)} visits`}
                     {m.lastVisitOn !== null ? ` · last ${dayWords(m.lastVisitOn)}` : ''}
                   </span>
                 </div>
-                {p.formerAt === null && !m.sharedEmail ? (
+                {canRemove && p.formerAt === null && !m.sharedEmail ? (
                   <button
                     type="button"
                     onClick={() => {
                       setNotThem(m);
-                      setMode('notThem');
+                      ask('notThem');
                     }}
                     disabled={busy || readOnly}
-                    className="text-xs font-semibold whitespace-nowrap self-center"
-                    style={{ color: C.orange }}
+                    className="c-btn c-btn-link c-btn-sm whitespace-nowrap self-center"
                   >
                     Not {p.fullName || 'this person'}?
                   </button>
                 ) : null}
               </div>
             ))}
-          </Section>
+          </section>
         ) : null}
         {byHand.length > 0 ? (
-          <p className="text-xs" style={{ color: C.muted }}>
+          <p className="c-s13 c-t3 m-0">
             Changed by hand: {byHand.join(', ')}. An import asks before it writes over these.
           </p>
         ) : null}
-        {p.formerAt === null ? (
-          <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={startEdit} disabled={busy || readOnly} className={`${BUTTON} flex-1 sm:flex-none`} style={{ background: C.orange, color: '#000' }}>
-              Edit
-            </button>
-            {action === 'invite' ? (
-              <button type="button" onClick={() => void sendInvite(false)} disabled={busy || readOnly} className={`${BUTTON} flex-1 sm:flex-none whitespace-nowrap`} style={{ background: C.orangeBg, color: C.orange }}>
-                <Mail className="w-4 h-4" />
-                Invite
-              </button>
-            ) : null}
-            {action === 'again' ? (
-              <button type="button" onClick={() => backTo('again')} disabled={busy || readOnly} className={`${BUTTON} flex-1 sm:flex-none whitespace-nowrap`} style={{ background: C.plain, color: C.soft }}>
-                <Mail className="w-4 h-4" />
-                Send again
-              </button>
-            ) : null}
-            {action === 'invite_again' ? (
-              <button type="button" onClick={() => backTo('inviteAgain')} disabled={busy || readOnly} className={`${BUTTON} flex-1 sm:flex-none whitespace-nowrap`} style={{ background: C.orangeBg, color: C.orange }}>
-                <Mail className="w-4 h-4" />
-                Invite again
-              </button>
-            ) : null}
-            <MoreMenu
-              disabled={busy || readOnly}
-              items={[
-                ...(p.invitation?.state === 'pending' && action !== 'under_age'
-                  ? [{ label: 'Share the invitation', hint: 'Its words and link, to send yourself', icon: Copy, onPick: () => backTo('share') }]
-                  : []),
-                { label: 'Remove', icon: UserMinus, onPick: () => setMode('takeOff') },
-                { label: 'Merge duplicate', hint: 'When this person is on your list twice', icon: ArrowLeftRight, onPick: startJoin },
-              ]}
-            />
-          </div>
-        ) : (
-          <div className="flex gap-2">
-            <button type="button" onClick={() => void putBack()} disabled={busy || readOnly} className={`${BUTTON} flex-1 sm:flex-none`} style={{ background: C.orange, color: '#000' }}>
-              <UserPlus className="w-4 h-4" />
-              Put back on your list
-            </button>
-            <MoreMenu
-              disabled={busy || readOnly}
-              items={[
-                { label: 'Edit', onPick: startEdit },
-                // A past member still in the app is removed from it here, as from "Using the app".
-                ...(p.removeEndsApp ? [{ label: 'Remove', icon: UserMinus, onPick: () => setMode('takeOff') }] : []),
-                { label: 'Merge duplicate', hint: 'When this person is on your list twice', icon: ArrowLeftRight, onPick: startJoin },
-                { label: 'Delete for good', icon: Trash2, danger: true, onPick: () => setMode('delete') },
-              ]}
-            />
-          </div>
-        )}
       </div>
     );
   };
 
+  const cancel = (label = 'Cancel') => (
+    <button type="button" onClick={() => backTo('view')} className={PLAIN}>
+      {label}
+    </button>
+  );
+
   const renderConfirm = (p) => {
     const name = p.fullName || 'this person';
+    if (mode === 'invite') {
+      // §18.6: one person's invitation is asked first, naming where it goes.
+      return (
+        <Ask testId="confirm-invite" question={`Invite ${name} to the app?`}>
+          <p className="c-s14 c-t2 m-0">One email goes to {p.email} with a link to the app.</p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => void sendInvite(false)} disabled={busy || readOnly} className={MAIN}>
+              {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Mail aria-hidden="true" className="w-4 h-4" />}
+              Send invitation
+            </button>
+            {cancel()}
+          </div>
+        </Ask>
+      );
+    }
     if (mode === 'again') {
       return (
-        <div className="flex flex-col gap-3" data-testid="confirm-again">
-          <p className="text-[15px]" style={{ color: '#fff' }}>
-            Send {name}&apos;s invitation again?
-          </p>
-          <p className="text-sm" style={{ color: C.soft }}>
-            Only when they ask for it, for example when they can&apos;t find the email. It goes to {p.email}. An invitation can be
-            sent again {String(MEMBER_INVITE_AGAIN_PER_PERSON)} times in {String(MEMBER_INVITE_AGAIN_PERSON_DAYS)} days.
+        <Ask testId="confirm-again" question={`Send ${name}'s invitation again?`}>
+          <p className="c-s14 c-t2 m-0">
+            Only when they ask for it, for example when they can&apos;t find the email. It goes to {p.email}. An invitation can be sent again{' '}
+            {String(MEMBER_INVITE_AGAIN_PER_PERSON)} times in {String(MEMBER_INVITE_AGAIN_PERSON_DAYS)} days.
           </p>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => void sendInvite(true)} disabled={busy || readOnly} className={BUTTON} style={{ background: C.orange, color: '#000' }}>
-              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+            <button type="button" onClick={() => void sendInvite(true)} disabled={busy || readOnly} className={MAIN}>
+              {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Mail aria-hidden="true" className="w-4 h-4" />}
               Send again
             </button>
-            <button type="button" onClick={() => backTo('view')} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
-              Back
-            </button>
+            {cancel('Back')}
           </div>
-        </div>
+        </Ask>
       );
     }
     if (mode === 'inviteAgain') {
       // RULINGS 2026-09-26: a person whose invitation was stopped is invited again, asked
       // first, with one email; the box says why it had stopped.
       const inv = p.invitation;
-      const why =
-        inv?.removedAt
-          ? `You removed ${name} from the app on ${whenWords(inv.removedAt)}.`
-          : inv?.addressRemovedAt
-            ? `Someone using ${p.email} was removed from the app on ${whenWords(inv.addressRemovedAt)}, and this email goes to that address.`
-            : `${name}'s earlier invitation was cancelled.`;
+      const why = inv?.removedAt
+        ? `You removed ${name} from the app on ${whenWords(inv.removedAt)}.`
+        : inv?.addressRemovedAt
+          ? `Someone using ${p.email} was removed from the app on ${whenWords(inv.addressRemovedAt)}, and this email goes to that address.`
+          : `${name}'s earlier invitation was cancelled.`;
       return (
-        <div className="flex flex-col gap-3" data-testid="confirm-invite-again">
-          <p className="text-[15px]" style={{ color: '#fff' }}>
-            Invite {name} again?
-          </p>
-          <p className="text-sm" style={{ color: C.soft }}>
+        <Ask testId="confirm-invite-again" question={`Invite ${name} again?`}>
+          <p className="c-s14 c-t2 m-0">
             {why} They&apos;ll get one invitation email at {p.email}.
           </p>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => void sendInvite(true)} disabled={busy || readOnly} className={BUTTON} style={{ background: C.orange, color: '#000' }}>
-              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+            <button type="button" onClick={() => void sendInvite(true)} disabled={busy || readOnly} className={MAIN}>
+              {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Mail aria-hidden="true" className="w-4 h-4" />}
               Invite again
             </button>
-            <button type="button" onClick={() => backTo('view')} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
-              Back
-            </button>
+            {cancel('Back')}
           </div>
-        </div>
+        </Ask>
       );
     }
     if (mode === 'share') {
       return (
         <div className="flex flex-col gap-3">
-          <p className="text-sm" style={{ color: C.soft }}>
-            Send these words to {name} by WhatsApp, text or your own email. The link only lets them in when they sign in with{' '}
-            {p.email}.
+          <p className="c-s14 c-t2 m-0">
+            Send these words to {name} by WhatsApp, text or your own email. The link only lets them in when they sign in with {p.email}.
           </p>
           <ShareInvite gymName={gym.name} slug={gym.slug} email={p.email} />
-          <button type="button" onClick={() => backTo('view')} className={`${BUTTON} self-start`} style={{ background: C.plain, color: C.soft }}>
-            Back
-          </button>
+          <div>{cancel('Back')}</div>
         </div>
       );
     }
     if (mode === 'notThem' && notThem !== null) {
       const appName = notThem.displayName || 'This person';
       return (
-        <div className="flex flex-col gap-3" data-testid="confirm-not-them">
-          <p className="text-[15px]" style={{ color: '#fff' }}>
-            Remove {appName}&apos;s app access?
-          </p>
-          <p className="text-sm" style={{ color: C.soft }}>
-            {appName} uses the app as {name}. If {appName} isn&apos;t {name}, remove their access to your {words.it ?? 'gym'} in the app.{' '}
-            {name} stays on your list, and nothing more is sent to the email address {appName} uses: update {name}&apos;s email address with
-            Edit before inviting them again.
+        <Ask testId="confirm-not-them" question={`Remove ${appName}'s app access?`}>
+          <p className="c-s14 c-t2 m-0">
+            {appName} uses the app as {name}. If {appName} isn&apos;t {name}, remove their access to your {words.it ?? 'gym'} in the app. {name} stays on your
+            list, and nothing more is sent to the email address {appName} uses: update {name}&apos;s email address with Edit before inviting them again.
           </p>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => void notThisPerson(notThem)} disabled={busy || readOnly} className={BUTTON} style={{ background: C.redBg, color: C.red }}>
+            <button type="button" onClick={() => void notThisPerson(notThem)} disabled={busy || readOnly} className={DANGER}>
               Remove access
             </button>
-            <button type="button" onClick={() => backTo('view')} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
-              Cancel
-            </button>
+            {cancel()}
           </div>
-        </div>
+        </Ask>
       );
     }
     if (mode === 'takeOff') {
@@ -998,17 +951,14 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           ? null
           : `${listNames(keeping)} ${keeping.length === 1 ? 'keeps' : 'keep'} app access: we can't tell whether ${keeping.length === 1 ? 'they are' : 'any of them is'} ${name}.`;
       return (
-        <div className="flex flex-col gap-3" data-testid="confirm-take-off">
-          <p className="text-[15px]" style={{ color: '#fff' }}>
-            {past ? `Remove ${name}'s app access?` : `Remove ${name}?`}
-          </p>
+        <Ask testId="confirm-take-off" question={past ? `Remove ${name}'s app access?` : `Remove ${name}?`}>
           {past ? (
-            <p className="text-sm" style={{ color: C.soft }}>
-              {name} is already a past {words.person}. {ends ?? `This removes their access to your ${words.it ?? 'gym'} in the app.`} Their own workout
-              history isn&apos;t affected, and Put back gives their access back.
+            <p className="c-s14 c-t2 m-0">
+              {name} is already a past {words.person}. {ends ?? `This removes their access to your ${words.it ?? 'gym'} in the app.`} Their own workout history
+              isn&apos;t affected, and Put back gives their access back.
             </p>
           ) : (
-            <p className="text-sm" style={{ color: C.soft }}>
+            <p className="c-s14 c-t2 m-0">
               {[
                 `They'll be moved to past ${words.people}.`,
                 ends,
@@ -1021,33 +971,24 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             </p>
           )}
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => void takeOff()} disabled={busy || readOnly} className={BUTTON} style={{ background: C.redBg, color: C.red }}>
-              Remove
+            <button type="button" onClick={() => void takeOff()} disabled={busy || readOnly} className={DANGER}>
+              {past ? 'Remove access' : 'Remove'}
             </button>
-            <button type="button" onClick={() => backTo('view')} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
-              Cancel
-            </button>
+            {cancel()}
           </div>
-        </div>
+        </Ask>
       );
     }
     return (
-      <div className="flex flex-col gap-3" data-testid="confirm-delete">
-        <p className="text-[15px]" style={{ color: '#fff' }}>
-          Delete {name}&apos;s record for good?
-        </p>
-        <p className="text-sm" style={{ color: C.soft }}>
-          Everything on it is gone and can&apos;t be brought back.
-        </p>
+      <Ask testId="confirm-delete" question={`Delete ${name}'s record for good?`}>
+        <p className="c-s14 c-t2 m-0">Everything on it is gone and can&apos;t be brought back.</p>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => void deleteForGood()} disabled={busy || readOnly} className={BUTTON} style={{ background: C.redBg, color: C.red }}>
+          <button type="button" onClick={() => void deleteForGood()} disabled={busy || readOnly} className={DANGER}>
             Delete for good
           </button>
-          <button type="button" onClick={() => backTo('view')} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
-            Keep the record
-          </button>
+          {cancel('Keep the record')}
         </div>
-      </div>
+      </Ask>
     );
   };
 
@@ -1056,27 +997,37 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       const { keep, remove } = joinRoles();
       return (
         <div className="flex flex-col gap-3">
-          <p className="text-sm" style={{ color: C.soft }}>
-            Merge duplicate: the two records become one. The one you <b>keep</b> keeps everything it has, and takes the other&apos;s
-            details only where its own are empty. The other is removed.
+          <p className="c-s14 c-t2 m-0">
+            Merge duplicate: the two records become one. The one you <b>keep</b> keeps everything it has, and takes the other&apos;s details only where its own
+            are empty. The other is removed.
           </p>
           <CompareRecords keep={keep} remove={remove} fields={fields} person={words.person} />
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => void join()} disabled={busy || readOnly} className={BUTTON} style={{ background: C.orange, color: '#000' }}>
-              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            <button type="button" onClick={() => void join()} disabled={busy || readOnly} className={MAIN}>
+              {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
               Merge
             </button>
-            <button type="button" onClick={() => {
+            <button
+              type="button"
+              onClick={() => {
                 setRefusal(null);
                 setKeepThis((k) => !k);
-              }} disabled={busy} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
-              <ArrowLeftRight className="w-4 h-4" />
+              }}
+              disabled={busy}
+              className={PLAIN}
+            >
+              <ArrowLeftRight aria-hidden="true" className="w-4 h-4" />
               Swap
             </button>
-            <button type="button" onClick={() => {
+            <button
+              type="button"
+              onClick={() => {
                 setRefusal(null);
                 setJoinPick(null);
-              }} disabled={busy} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
+              }}
+              disabled={busy}
+              className={PLAIN}
+            >
               Back
             </button>
           </div>
@@ -1087,11 +1038,9 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     const found = joinResults !== null && joinResults.q === joinQuery.trim() ? joinResults : null;
     return (
       <div className="flex flex-col gap-3">
-        <p className="text-sm" style={{ color: C.soft }}>
-          Merge duplicate: find the other record of {p.fullName || 'this person'}. You choose which one to keep next.
-        </p>
+        <p className="c-s14 c-t2 m-0">Merge duplicate: find the other record of {p.fullName || 'this person'}. You choose which one to keep next.</p>
         <label className="relative block">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: C.muted }} />
+          <Search aria-hidden="true" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 c-t3" />
           <input
             type="search"
             aria-label="Find the other record"
@@ -1099,22 +1048,17 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             placeholder="Name, email or phone"
             value={joinQuery}
             onChange={(e) => setJoinQuery(e.target.value)}
-            className={`${INPUT} pl-9`}
-            style={inputStyle}
+            className="c-input pl-9"
           />
         </label>
         {found?.error ? (
-          <p className="text-sm" style={{ color: C.red }}>
+          <p className="c-s14 m-0" style={{ color: 'var(--bad)' }}>
             {found.error}
           </p>
         ) : null}
-        {found?.items && found.items.length === 0 ? (
-          <p className="text-sm" style={{ color: C.muted }}>
-            No other record matches.
-          </p>
-        ) : null}
+        {found?.items && found.items.length === 0 ? <p className="c-s14 c-t3 m-0">No other record matches.</p> : null}
         {found?.items ? (
-          <ul className="flex flex-col gap-2">
+          <ul className="flex flex-col gap-2 m-0 p-0 list-none">
             {found.items.map((r) => (
               <li key={r.entryId}>
                 <button
@@ -1122,13 +1066,10 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
                   data-entry-id={r.entryId}
                   onClick={onPick}
                   disabled={picking !== null}
-                  className="w-full text-left rounded-xl px-3 py-2.5"
-                  style={{ background: C.card, border: `1px solid ${C.line}` }}
+                  className="c-card w-full text-left px-3 py-2.5 min-h-[44px]"
                 >
-                  <span className="block font-medium" style={{ color: '#fff' }}>
-                    {r.fullName || 'No name'}
-                  </span>
-                  <span className="block text-sm truncate" style={{ color: C.muted }}>
+                  <span className="block c-s15 c-w5 c-t1">{r.fullName || 'No name'}</span>
+                  <span className="block c-s14 c-t3 truncate">
                     {contactWords(r)}
                     {r.formerAt !== null ? ' · past member' : ''}
                     {picking === r.entryId ? ' · opening…' : ''}
@@ -1138,9 +1079,11 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             ))}
           </ul>
         ) : null}
-        <button type="button" onClick={() => setMode('view')} className={`${BUTTON} self-start`} style={{ background: C.plain, color: C.soft }}>
-          Back
-        </button>
+        <div>
+          <button type="button" onClick={() => setMode('view')} className={PLAIN}>
+            Back
+          </button>
+        </div>
       </div>
     );
   };
@@ -1148,7 +1091,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   let body;
   if (deleted !== null) {
     body = (
-      <p className="text-sm" style={{ color: C.soft }} data-testid="deleted-note">
+      <p className="c-s14 c-t2 m-0" data-testid="deleted-note">
         {deleted}&apos;s record was deleted.
       </p>
     );
@@ -1157,29 +1100,28 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   } else if (loadError !== null) {
     body = (
       <div className="flex flex-col gap-3">
-        <p className="text-sm" style={{ color: C.soft }}>
-          {loadError}
-        </p>
-        <button
-          type="button"
-          onClick={() => {
-            setLoadError(null);
-            setAttempt((n) => n + 1);
-          }}
-          className={`${BUTTON} self-start`}
-          style={{ background: C.plain, color: C.soft }}
-        >
-          Try again
-        </button>
+        <p className="c-s14 c-t2 m-0">{loadError}</p>
+        <div>
+          <button
+            type="button"
+            onClick={() => {
+              setLoadError(null);
+              setAttempt((n) => n + 1);
+            }}
+            className={PLAIN}
+          >
+            Try again
+          </button>
+        </div>
       </div>
     );
   } else if (shown === null) {
     body = (
-      <p className="text-sm flex items-center gap-2" style={{ color: C.muted }}>
-        <Loader2 className="w-4 h-4 animate-spin" /> Loading…
+      <p className="c-s14 c-t3 m-0 flex items-center gap-2">
+        <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> Loading…
       </p>
     );
-  } else if (mode === 'takeOff' || mode === 'delete' || mode === 'again' || mode === 'inviteAgain' || mode === 'share' || mode === 'notThem') {
+  } else if (mode === 'invite' || mode === 'takeOff' || mode === 'delete' || mode === 'again' || mode === 'inviteAgain' || mode === 'share' || mode === 'notThem') {
     body = renderConfirm(shown);
   } else if (mode === 'join') {
     body = renderJoin(shown);
@@ -1187,52 +1129,62 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     body = renderDetails(shown);
   }
 
+  // Under the name: past member, the App word and its line (§18.4), whatever step is open.
+  const inv = shown !== null && deleted === null ? invitationView(shown, gymToday(gym?.timezone)) : null;
+
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto" style={{ background: 'rgba(10,9,8,0.88)' }} data-testid="member-person">
-      <div className="min-h-full flex items-start sm:items-center justify-center sm:p-6">
-        <div
-          ref={dialogRef}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby={titleId}
-          tabIndex={-1}
-          onKeyDown={keepFocusInside}
-          className="w-full sm:max-w-[560px] min-h-[100dvh] sm:min-h-0 sm:rounded-[28px] p-5 sm:p-6 flex flex-col gap-4 outline-none"
-          style={{ background: C.panel, border: `1px solid ${C.line}` }}
-        >
-          <div className="flex items-center gap-3">
-            <h2 id={titleId} className="text-xl font-bold flex-1 min-w-0 break-words" style={{ color: '#fff' }}>
+    <div className="fixed inset-0 z-50" style={{ background: 'var(--scrim)' }} data-testid="member-person">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        onKeyDown={keepFocusInside}
+        className="c-sheet absolute inset-0 md:left-auto md:w-[560px] md:border-l flex flex-col overflow-y-auto outline-none"
+        style={{ borderColor: 'var(--card-line)' }}
+      >
+        <div className="flex items-start gap-3 px-4 pt-5 pb-4 md:px-7 md:pt-7 md:pb-5 border-b" style={{ borderColor: 'var(--line)' }}>
+          <div className="flex flex-col gap-2 flex-grow min-w-0">
+            <h2 id={titleId} className="c-h1 break-words" style={{ fontSize: 28, lineHeight: '34px' }}>
               {title}
             </h2>
-            <button
-              type="button"
-              aria-label="Close"
-              onClick={onClose}
-              className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-              style={{ background: C.plain, color: C.soft }}
-            >
-              <X className="w-5 h-5" />
-            </button>
+            {inv !== null ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {shown.formerAt !== null ? <span className="c-tag c-tag-plain">{pastWords(shown, words.person)}</span> : null}
+                <Tag view={inv} />
+                {inv.line !== null ? <span className="c-s13 c-t2">{inv.line}</span> : null}
+              </div>
+            ) : null}
+            {inv?.detail && !(mode === 'view' && pastInApp(shown)) ? (
+              <p className="c-s14 m-0 flex gap-2" style={{ color: 'var(--warn)' }}>
+                <AlertTriangle aria-hidden="true" className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                {inv.detail}
+              </p>
+            ) : null}
           </div>
+          <button type="button" aria-label="Close" onClick={onClose} className="c-icon-btn flex-shrink-0">
+            <X aria-hidden="true" className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="flex flex-col gap-4 px-4 py-5 md:px-7">
           {notice !== null ? (
-            <p className="text-sm flex items-center gap-2" style={{ color: C.green }} role="status">
-              <Check className="w-4 h-4" />
+            <p className="c-s14 c-w5 m-0 flex items-center gap-2" style={{ color: 'var(--good)' }} role="status">
+              <Check aria-hidden="true" className="w-4 h-4" />
               {notice}
             </p>
           ) : null}
           {refusal !== null ? (
-            <div className="rounded-xl p-3 flex flex-col gap-2" style={{ background: C.redBg }} role="alert">
-              <p className="text-sm" style={{ color: '#fff' }}>
-                {refusal.message}
-              </p>
+            <div className="rounded-[14px] p-3 flex flex-col gap-2" style={{ background: 'var(--bad-bg)' }} role="alert">
+              <p className="c-s14 c-t1 m-0">{refusal.message}</p>
               <div className="flex flex-wrap gap-2">
                 {refusal.openId !== null ? (
-                  <button type="button" onClick={() => openRecord(refusal.openId)} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
+                  <button type="button" onClick={() => openRecord(refusal.openId)} className={PLAIN}>
                     Open that record
                   </button>
                 ) : null}
                 {refusal.ack !== null ? (
-                  <button type="button" onClick={() => void refusal.ack()} disabled={busy} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
+                  <button type="button" onClick={() => void refusal.ack()} disabled={busy} className={PLAIN}>
                     Go ahead anyway
                   </button>
                 ) : null}
