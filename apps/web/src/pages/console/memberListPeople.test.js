@@ -7,6 +7,7 @@ import {
   memberInviteRequestSchema,
   memberListEntryDetailSchema,
   memberListEntriesQuerySchema,
+  memberListFilterSchema,
 } from '@app/shared';
 import {
   EMPTY_FILTERS,
@@ -24,6 +25,8 @@ import {
   patchFrom,
   personInviteAction,
   rowWords,
+  selectedInviteSummary,
+  selectionFilter,
   skippedLines,
   toggleApp,
   toggleWord,
@@ -367,5 +370,53 @@ describe("the gym's own day for a birthday", () => {
   });
   it('falls back to the reader\'s own day for a zone it cannot read', () => {
     expect(gymToday('Not/AZone', at)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+// "Select all" sends the filter the list shows; a key lost on the way would select people
+// the list did not show (round one of 5b-v-b-i, test gap 2).
+describe('Select all sends exactly the filter the list is read with', () => {
+  const read = (qs) => {
+    const out = {};
+    for (const [k, v] of new URLSearchParams(qs)) out[k] = k in out ? [].concat(out[k], v) : v;
+    return out;
+  };
+  const cases = [
+    ['nothing', EMPTY_FILTERS],
+    ['one status', { ...EMPTY_FILTERS, status: ['Active'] }],
+    ['two statuses and no status', { ...EMPTY_FILTERS, status: ['Active', ''] }],
+    ['membership and payment', { ...EMPTY_FILTERS, membershipType: ['Gold'], paymentStatus: ['Overdue'] }],
+    ['an App word', { ...EMPTY_FILTERS, app: ['invited'] }],
+    ['two App words and a status', { ...EMPTY_FILTERS, app: ['in_app', 'needs_check'], status: ['Frozen'] }],
+    ['a search', { ...EMPTY_FILTERS, query: ' park ' }],
+    ['past members', { ...EMPTY_FILTERS, records: 'former' }],
+    ['past members and a search', { ...EMPTY_FILTERS, records: 'former', query: 'hall' }],
+  ];
+  for (const [name, filters] of cases) {
+    it(name, () => {
+      const sent = selectionFilter(filters);
+      expect(memberListFilterSchema.safeParse(sent).success).toBe(true);
+      const asList = (v) => (v === undefined ? [] : [].concat(v));
+      const listed = read(entriesQueryString(filters));
+      for (const key of ['records', 'query', 'app', 'status', 'membershipType', 'paymentStatus']) {
+        expect(asList(sent[key]), key).toEqual(asList(listed[key]));
+      }
+    });
+  }
+});
+
+// Invite's headline for the people selected agrees with the bar behind it (round one, L2).
+describe('Invite for the people selected counts everyone selected', () => {
+  const skipped = { noEmail: 0, underAge: 0, inApp: 1, alreadyInvited: 0, unsubscribed: 0, bounced: 0, refused: 0, sharedAddress: 0 };
+  const words = { people: 'members', person: 'member' };
+  it('three selected, one invited, one in the app, one gone from the list', () => {
+    const s = selectedInviteSummary({ version: 1, reach: 1, skipped, blocked: null }, words, 3);
+    expect(s.gets).toBe('1 of 3 selected members will receive an invitation email');
+    expect(s.wont).toBe('2 not included');
+    expect(s.goneLine).toBe('1 is no longer on your list');
+  });
+  it('nobody gone: no such line', () => {
+    const s = selectedInviteSummary({ version: 1, reach: 1, skipped, blocked: null }, words, 2);
+    expect(s.gets).toBe('1 of 2 selected members will receive an invitation email');
+    expect(s.goneLine).toBeNull();
   });
 });

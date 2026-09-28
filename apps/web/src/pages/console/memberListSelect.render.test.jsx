@@ -260,4 +260,71 @@ describe('selecting people', () => {
     fireEvent.click(within(screen.getByTestId('invite-box')).getByRole('button', { name: 'Close' }));
     expect(document.body.style.overflow).toBe('');
   });
+
+  // ── Round one of the review ──
+
+  it("with people ticked, the Invite above the list gives way to the bar: nothing may go to the Filter's whole group from there", async () => {
+    draw();
+    await screen.findByText('Ben Carter');
+    expect(screen.getByTestId('invite-button')).toBeTruthy();
+    fireEvent.click(tickOf('Ben Carter'));
+    expect(screen.queryByTestId('invite-button')).toBeNull();
+    expect(screen.queryAllByRole('button', { name: /Invite to app/ })).toHaveLength(2); // the bar, computer and phone
+    for (const b of screen.getAllByRole('button', { name: /Invite to app/ })) expect(b.getAttribute('data-testid')).toBe('bar-invite');
+    fireEvent.click(bar().getByRole('button', { name: 'Clear' }));
+    expect(screen.getByTestId('invite-button')).toBeTruthy();
+  });
+
+  it('a Select all that moved clears the old numbers, so Send waits for the new count', async () => {
+    draw();
+    await screen.findByText('Ada Lovelace');
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select every member on this page' }));
+    orgService.selectAllMembers.mockResolvedValue({ data: { selection: { count: 312, digest: DIGEST } } });
+    fireEvent.click(within(screen.getByTestId('select-line')).getByRole('button', { name: 'Select all 312 members' }));
+    await waitFor(() => expect(bar().getByTestId('sel-count').textContent).toBe('312 selected'));
+    orgService.getSelectedInvitePreview.mockResolvedValueOnce(preview(300));
+    let answer;
+    orgService.getSelectedInvitePreview.mockImplementationOnce(() => new Promise((r) => { answer = r; }));
+    fireEvent.click(bar().getByTestId('bar-invite'));
+    const box = within(await screen.findByTestId('invite-box'));
+    await box.findByRole('button', { name: 'Send 300 invitations' });
+    orgService.pressInvite.mockRejectedValue({
+      response: { status: 409, data: { error: 'selection_changed', message: 'The members you selected have changed, so nothing was done. Check who is selected now and try again.', count: 314, digest: 'b'.repeat(64) } },
+    });
+    fireEvent.click(box.getByRole('checkbox', { name: /I have permission to email them/ }));
+    fireEvent.click(box.getByRole('button', { name: 'Send 300 invitations' }));
+    // The old count is gone at once: no Send button to press with it.
+    await waitFor(() => expect(box.queryByRole('button', { name: /^Send \d/ })).toBeNull());
+    expect(bar().getByTestId('sel-count').textContent).toBe('314 selected');
+    answer(preview(302));
+    expect(await box.findByRole('button', { name: 'Send 302 invitations' })).toBeTruthy();
+    expect(orgService.getSelectedInvitePreview).toHaveBeenLastCalledWith(GYM, { kind: 'all', filter: {}, count: 314, digest: 'b'.repeat(64) });
+    expect(orgService.pressInvite).toHaveBeenCalledTimes(1);
+  });
+
+  it('past 500 rows loaded, the heading ticks the first 500 and still offers Select all; unticking after Select all keeps 499', async () => {
+    const many = Array.from({ length: 600 }, (_, k) => entry(`Person ${String(k).padStart(3, '0')}`));
+    orgService.getMemberListEntries.mockReset();
+    for (let k = 0; k < 6; k += 1) {
+      orgService.getMemberListEntries.mockResolvedValueOnce({
+        data: { page: memberListEntriesPageSchema.parse({ total: 612, entries: many.slice(k * 100, k * 100 + 100), cursor: k < 5 ? `c${String(k)}` : null }) },
+      });
+    }
+    draw();
+    await screen.findByText('Person 000');
+    for (let k = 1; k < 6; k += 1) {
+      fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
+      await screen.findByText(`Person ${String(k * 100).padStart(3, '0')}`);
+    }
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select every member on this page' }));
+    expect(bar().getByTestId('sel-count').textContent).toBe('500 selected');
+    const line = screen.getByTestId('select-line');
+    expect(line.textContent).toContain('The first 500 members shown are selected.');
+    orgService.selectAllMembers.mockResolvedValue({ data: { selection: { count: 612, digest: DIGEST } } });
+    fireEvent.click(within(line).getByRole('button', { name: 'Select all 612 members' }));
+    await waitFor(() => expect(bar().getByTestId('sel-count').textContent).toBe('612 selected'));
+    fireEvent.click(tickOf('Person 007'));
+    expect(bar().getByTestId('sel-count').textContent).toBe('499 selected');
+    expect(screen.getByTestId('selection-note').textContent).toContain('You can select up to 500 members one at a time.');
+  }, 30_000);
 });

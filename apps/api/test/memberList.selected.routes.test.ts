@@ -487,4 +487,102 @@ d("the people selected (real Postgres)", () => {
     },
     TEST_TIMEOUT_MS,
   );
+
+  // =========================================================================
+  // ROUND ONE OF THE REVIEW
+  // =========================================================================
+
+  it(
+    "the same number of people, but different ones, is still a changed Select all: nobody emailed, no file",
+    async () => {
+      const owner = await makeUser("swap-owner");
+      const gym = (await makeGym(owner, "Swap Gym")).org.id;
+      await typeIn(gym, owner, { fullName: "Uma Swap", email: addr("uma"), status: "Active" });
+      await typeIn(gym, owner, { fullName: "Vic Swap", email: addr("vic"), status: "Cancelled" });
+      const filter: MemberListFilter = { status: "Active" };
+      const selection = await selectAll(gym, owner, filter);
+      const seen = await previewOf(gym, owner, selection);
+      expect(seen.reach).toBe(1);
+      // One leaves the filter and one joins it before Send: still one Active member.
+      await sql`UPDATE gym_member_list_entries SET status = CASE full_name WHEN 'Uma Swap' THEN 'Cancelled' ELSE 'Active' END
+                WHERE gym_id = ${gym} AND full_name IN ('Uma Swap', 'Vic Swap')`;
+      outbox.length = 0;
+      const pressed = await press(gym, owner, selection, seen);
+      expect(pressed.statusCode, pressed.body).toBe(409);
+      expect(memberListSelectionChangedSchema.parse(JSON.parse(pressed.body)).count).toBe(1);
+      const file = await exportOf(gym, owner, selection);
+      expect(file.statusCode).toBe(409);
+      expect(file.body).not.toContain("Vic Swap");
+      await runSender();
+      expect(emailedTo()).toEqual([]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "the file's note counts the people in it, not the ids sent; an email that starts like a formula is guarded",
+    async () => {
+      const owner = await makeUser("count-owner");
+      const gym = (await makeGym(owner, "Count Gym")).org.id;
+      const stranger = await makeUser("count-stranger");
+      const theirs = (await makeGym(stranger, "Count Stranger Gym")).org.id;
+      const wes = await typeIn(gym, owner, { fullName: "Wes Count", email: `+sum${addr("wes")}`, status: "Active" });
+      const xia = await typeIn(gym, owner, { fullName: "Xia Count", email: `-2+3${addr("xia")}`, status: "Cancelled" });
+      expect((await del(`${listUrl(gym)}/entries/${xia}`, owner.cookies)).statusCode).toBe(200);
+      const foreign = await typeIn(theirs, stranger, { fullName: "Yan Elsewhere", email: addr("yan"), status: "Active" });
+      const nobody = "00000000-0000-4000-8000-000000000001";
+
+      const file = await exportOf(gym, owner, ticked(wes, xia, foreign, wes, nobody));
+      expect(file.statusCode, file.body).toBe(200);
+      const rows = csvRows(file.body);
+      expect(rows.slice(1).map((row) => row[0])).toEqual(["Wes Count", "Xia Count"]);
+      expect(rows[1]?.[1]).toBe(`\t+sum${addr("wes")}`);
+      expect(rows[2]?.[1]).toBe(`\t-2+3${addr("xia")}`);
+      const audit = await sql<{ meta: Record<string, string> }[]>`
+        SELECT meta FROM audit_log WHERE gym_id = ${gym} AND action = 'org.member_list_exported'`;
+      expect(audit.map((row) => row.meta["rows"])).toEqual(["2"]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "downloads: 20 an hour a person and 60 at one address, and presses refused to one person use up nobody else's",
+    async () => {
+      const desk = "10.65.0.1";
+      const owners: User[] = [];
+      const selections: MemberListSelection[] = [];
+      for (const n of [0, 1, 2, 3]) {
+        const who = await makeUser(`desk-${String(n)}`);
+        const gym = (await makeGym(who, `Desk Gym ${String(n)}`)).org.id;
+        const one = await typeIn(gym, who, { fullName: `Zed Desk ${String(n)}`, email: addr(`zed${String(n)}`), status: "Active" });
+        owners.push(who);
+        selections.push(ticked(one));
+      }
+      const pressAt = async (n: number, ip: string) => {
+        const who = owners[n];
+        const selection = selections[n];
+        if (who === undefined || selection === undefined) throw new Error("no such owner");
+        const gymId = (await sql<{ id: string }[]>`SELECT id FROM gyms WHERE owner_user_id = ${who.userId}`)[0]?.id ?? "";
+        return (await post(`${listUrl(gymId)}/export.csv`, { selection }, who.cookies, ip)).statusCode;
+      };
+      // One person: twenty, then refused — and their five refused presses cost the desk nothing.
+      const first: number[] = [];
+      for (let i = 0; i < 25; i += 1) first.push(await pressAt(0, desk));
+      expect(first.filter((code) => code === 200)).toHaveLength(20);
+      expect(first.slice(20)).toEqual([429, 429, 429, 429, 429]);
+      // Two colleagues at the same desk still get their twenty each: sixty at the address.
+      for (const n of [1, 2]) {
+        const codes: number[] = [];
+        for (let i = 0; i < 20; i += 1) codes.push(await pressAt(n, desk));
+        expect(codes.every((code) => code === 200), `owner ${String(n)}: ${codes.join(",")}`).toBe(true);
+      }
+      // The desk is full: a fourth is refused there, and those refusals are given back to
+      // them, so from another address they still have their own twenty.
+      for (let i = 0; i < 5; i += 1) expect(await pressAt(3, desk)).toBe(429);
+      const elsewhere: number[] = [];
+      for (let i = 0; i < 20; i += 1) elsewhere.push(await pressAt(3, "10.65.0.2"));
+      expect(elsewhere.every((code) => code === 200)).toBe(true);
+    },
+    TEST_TIMEOUT_MS,
+  );
 });

@@ -393,7 +393,10 @@ export default function MemberListPanel({
   const picked = selectedCount(ticked, all);
   const selection = useMemo(() => selectionOf(ticked, all), [ticked, all]);
   const loadedIds = page.entries.map((e) => e.entryId);
-  const pageTicked = all !== null || (loadedIds.length > 0 && loadedIds.every((id) => ticked.has(id)));
+  // The rows the heading's box ticks: every row loaded, up to the most that can be ticked
+  // one by one. Past that, "Select all" is the way (round one, L4).
+  const pageIds = loadedIds.slice(0, MEMBER_LIST_TICKED_MAX);
+  const pageTicked = all !== null || (pageIds.length > 0 && pageIds.every((id) => ticked.has(id)));
   const headState = pageTicked ? 'on' : picked > 0 ? 'some' : 'off';
   const rowPicked = (id) => all !== null || ticked.has(id);
   const clearSelection = () => {
@@ -405,16 +408,24 @@ export default function MemberListPanel({
       clearSelection();
       return;
     }
-    setSel({ for: filters, ticked: new Set(loadedIds.slice(0, MEMBER_LIST_TICKED_MAX)), all: null });
+    setSel({ for: filters, ticked: new Set(pageIds), all: null });
     setSelNote(null);
   };
+  const tooMany = `You can select up to ${count(MEMBER_LIST_TICKED_MAX)} ${words.people} one at a time. To select more, tick the box at the top, then Select all.`;
   const tickRow = (id) => {
-    // From "Select all", unticking one leaves the rest of the rows shown ticked.
-    const from = all !== null ? new Set(loadedIds) : ticked;
-    const next = new Set(from);
+    // From "Select all", unticking one leaves the rest of the rows shown ticked, as many
+    // as can be ticked one by one.
+    if (all !== null) {
+      const next = new Set(pageIds);
+      next.delete(id);
+      setSel({ for: filters, ticked: next, all: null });
+      setSelNote(loadedIds.length > MEMBER_LIST_TICKED_MAX ? tooMany : null);
+      return;
+    }
+    const next = new Set(ticked);
     if (next.has(id)) next.delete(id);
     else if (next.size >= MEMBER_LIST_TICKED_MAX) {
-      setSelNote(`You can select up to ${count(MEMBER_LIST_TICKED_MAX)} ${words.people} one at a time. To select more, tick the box at the top, then Select all.`);
+      setSelNote(tooMany);
       return;
     } else next.add(id);
     setSel({ for: filters, ticked: next, all: null });
@@ -563,10 +574,14 @@ export default function MemberListPanel({
         </button>
       </>
     );
-  } else if (pageTicked && page.total > loadedIds.length) {
+  } else if (pageTicked && page.total > ticked.size) {
     selectLine = (
       <>
-        <span>{`All ${peopleWords(ticked.size)} on this page ${ticked.size === 1 ? 'is' : 'are'} selected.`}</span>
+        <span>
+          {ticked.size < loadedIds.length
+            ? `The first ${peopleWords(ticked.size)} shown are selected.`
+            : `All ${peopleWords(ticked.size)} on this page ${ticked.size === 1 ? 'is' : 'are'} selected.`}
+        </span>
         <button type="button" onClick={() => void selectEveryone()} disabled={selecting} data-testid="select-everyone" className="c-btn-link c-w6">
           {`Select all ${peopleWords(page.total)}${matchWord}`}
         </button>
@@ -597,14 +612,15 @@ export default function MemberListPanel({
               <SlidersHorizontal aria-hidden="true" className="w-4 h-4" />
               {shown.length > 0 ? `Filter · ${String(shown.length)}` : 'Filter'}
             </button>
-            {current ? (
+            {/* With people selected, the bar's Invite and Download are the ones: two buttons
+                with one name acting on two different sets would be a guess for staff, and
+                nothing may happen to anyone who was not ticked (CLAUDE.md §4). */}
+            {current && picked === 0 ? (
               <button type="button" onClick={() => setInviting(true)} disabled={readOnly} data-testid="invite-button" className="c-btn c-btn-soft c-btn-lg">
                 <Mail aria-hidden="true" className="w-4 h-4" />
                 Invite to app
               </button>
             ) : null}
-            {/* With people selected, the bar's Download is the one: two buttons with one name
-                acting on two different sets would be a guess for staff. */}
             {page.total > 0 && picked === 0 ? (
               <button type="button" onClick={() => void download(null)} disabled={downloading} data-testid="download-shown" className="c-btn c-btn-s c-btn-lg">
                 {downloading ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Download aria-hidden="true" className="w-4 h-4" />}

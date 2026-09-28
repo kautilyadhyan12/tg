@@ -1818,21 +1818,23 @@ export interface ExportRow {
   extra: Record<string, string>;
 }
 
-/** Of these records, how many carry an end date, a renewal date, and how many are past
- *  members: the file's columns are chosen from them before its first line is written. */
+/** Of these records, how many are this gym's (the people the file will hold), how many
+ *  carry an end date, a renewal date, and how many are past members: the file's columns
+ *  are chosen from them before its first line is written. */
 export async function exportShapeOf(
   sql: SqlOrTx,
   gymId: string,
   ids: readonly string[],
-): Promise<{ ends: number; renews: number; former: number }> {
-  const rows = await sql<{ ends: number; renews: number; former: number }[]>`
-    SELECT (count(*) FILTER (WHERE ends_on IS NOT NULL AND ends_on_kind IS DISTINCT FROM 'renews'))::int AS ends,
+): Promise<{ people: number; ends: number; renews: number; former: number }> {
+  const rows = await sql<{ people: number; ends: number; renews: number; former: number }[]>`
+    SELECT count(*)::int AS people,
+           (count(*) FILTER (WHERE ends_on IS NOT NULL AND ends_on_kind IS DISTINCT FROM 'renews'))::int AS ends,
            (count(*) FILTER (WHERE ends_on IS NOT NULL AND ends_on_kind = 'renews'))::int AS renews,
            (count(*) FILTER (WHERE former_at IS NOT NULL))::int AS former
     FROM gym_member_list_entries
     WHERE gym_id = ${gymId} AND id = ANY(${[...ids]}::uuid[])`;
   const row = rows[0];
-  return { ends: row?.ends ?? 0, renews: row?.renews ?? 0, former: row?.former ?? 0 };
+  return { people: row?.people ?? 0, ends: row?.ends ?? 0, renews: row?.renews ?? 0, former: row?.former ?? 0 };
 }
 
 /** These records of this gym, with the gym's own columns, in the list's order. A record

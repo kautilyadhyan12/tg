@@ -17,6 +17,7 @@ import {
   inviteWho,
   selectedInviteBody,
   selectedInviteSummary,
+  selectionSize,
   skippedLines,
 } from './memberListPeople';
 
@@ -116,6 +117,8 @@ export default function MemberListInvite({
     (err) => {
       const fresh = selectionChanged(err);
       if (fresh === null) return;
+      // The old numbers go with the old people: Send waits for the new count (round one, L3).
+      setPreview(null);
       setPermission(false);
       setPeopleTick((t) => t + 1);
       onSelectionChanged(fresh);
@@ -243,7 +246,7 @@ export default function MemberListInvite({
   const reach = preview?.reach ?? 0;
   const ignores = selection === null ? inviteIgnores(filters) : null;
   const chosen = selection === null ? inviteWho(filters) : null;
-  const summary = preview === null ? null : selection === null ? inviteSummary(preview, filters, words) : selectedInviteSummary(preview, words);
+  const summary = preview === null ? null : selection === null ? inviteSummary(preview, filters, words) : selectedInviteSummary(preview, words, selectionSize(selection));
 
   let body;
   let footer;
@@ -359,6 +362,12 @@ export default function MemberListInvite({
           ))}
         </div>
 
+        {tab === 'left_out' && summary.goneLine ? (
+          <p className="c-s14 c-t1" data-testid="invite-gone">
+            {summary.goneLine}
+          </p>
+        ) : null}
+
         {shown.loading ? (
           <p className="c-s14 c-t2 flex items-center gap-2">
             <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> Loading…
@@ -424,7 +433,7 @@ export default function MemberListInvite({
           </section>
         ) : null}
 
-        {!shown.loading && shown.error === null && shown.people.length === 0 ? (
+        {!shown.loading && shown.error === null && shown.people.length === 0 && !(tab === 'left_out' && summary.goneLine) ? (
           <p className="c-s14 c-t2">{tab === 'reach' ? `No ${words.people} to invite.` : `All ${words.people} are included.`}</p>
         ) : null}
 

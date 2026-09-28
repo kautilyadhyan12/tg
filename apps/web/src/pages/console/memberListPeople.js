@@ -270,10 +270,15 @@ export function selectedInviteBody(selection, preview, permissionConfirmed) {
   return { selection, version: preview.version, expectedCount: preview.reach, permissionConfirmed };
 }
 
-/** Invite's top line for the people selected, as `inviteSummary` says it for the list. */
-export function selectedInviteSummary(preview, words) {
-  const leftOut = Object.values(preview.skipped).reduce((sum, k) => sum + k, 0);
-  const total = preview.reach + leftOut;
+/** Invite's top line for the people selected, as `inviteSummary` says it for the list.
+ *  Counted from how many were selected (`selected`), so it agrees with the bar behind it:
+ *  anyone selected who has since left the list, or was never this gym's, is `gone` and
+ *  counted among those not included (round one, L2). */
+export function selectedInviteSummary(preview, words, selected) {
+  const skipped = Object.values(preview.skipped).reduce((sum, k) => sum + k, 0);
+  const total = Math.max(selected, preview.reach + skipped);
+  const gone = total - preview.reach - skipped;
+  const leftOut = skipped + gone;
   let gets;
   if (total === 0) gets = `None of the selected ${words.people} are on your list now`;
   else if (preview.reach === 0) gets = `No ${words.people} to invite`;
@@ -281,7 +286,13 @@ export function selectedInviteSummary(preview, words) {
     gets = total === 1 ? `1 selected ${words.person} will receive an invitation email` : `All ${n(total)} selected ${words.people} will receive an invitation email`;
   else gets = `${n(preview.reach)} of ${n(total)} selected ${words.people} will receive an invitation email`;
   const wont = leftOut === 0 ? null : `${n(leftOut)} not included`;
-  return { gets, wont, leftOut };
+  const goneLine = gone === 0 ? null : `${n(gone)} ${gone === 1 ? 'is' : 'are'} no longer on your list`;
+  return { gets, wont, leftOut, goneLine };
+}
+
+/** How many people a selection holds. */
+export function selectionSize(selection) {
+  return selection === null ? 0 : selection.kind === 'all' ? selection.count : selection.entryIds.length;
 }
 
 /** Who an Invite is for, in the gym's own words. */

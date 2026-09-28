@@ -9,8 +9,9 @@
 // Excel runs a cell that starts with = + - @ (or a TAB, CR, LF, or their full-width
 // forms) as a formula. Such a cell gets a TAB at the front of its quoted field, which
 // Excel keeps when the file is saved again (OWASP's advice; an apostrophe is stripped on
-// save). The email and phone columns hold only shapes the server checked and are written
-// as they are, so "+44 …" keeps its plus.
+// save). The phone column holds only E.164 numbers the server made and is written as it
+// is, so "+44 …" keeps its plus; an email address may start with + or - (round one, L5),
+// so it is guarded like free text.
 import { MEMBER_APP_FILTER_WORDS, orgWords, type MemberListExportRequest, type MemberListFilter } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
 import { insertAudit } from "../repo.js";
@@ -25,7 +26,7 @@ export const EXPORT_PAGE = 500;
 /** A cell Excel would run as a formula. */
 const FORMULA_START = /^[=+\-@\t\r\n＝＋－＠]/u;
 
-/** One quoted field. `checked` is a shape the server made (an email, an E.164 phone),
+/** One quoted field. `checked` is a shape the server made (an E.164 phone),
  *  written as it is; everything else is free text and guarded. */
 export function csvField(value: string, checked = false): string {
   const guarded = !checked && FORMULA_START.test(value) ? `\t${value}` : value;
@@ -60,7 +61,7 @@ function columns(shape: CsvShape): Column[] {
   const dates = ends > 0 && renews > 0 ? [endDate, renewalDate] : renews > 0 ? [renewalDate] : [endDate];
   return [
     { heading: "Name", value: (row) => row.fullName },
-    { heading: "Email", value: (row) => row.email, checked: true },
+    { heading: "Email", value: (row) => row.email },
     { heading: "Phone", value: (row) => row.phone, checked: true },
     { heading: "Member number", value: (row) => row.memberNumber },
     { heading: "Status", value: (row) => row.status },
@@ -167,7 +168,8 @@ export async function exportSelected(
       action: "org.member_list_exported",
       targetType: "member_list",
       targetId: gymId,
-      meta: { chosenBy: selection.kind, rows: String(ids.length) },
+      // The people the file holds: ids of another gym, or deleted since, are nobody.
+      meta: { chosenBy: selection.kind, rows: String(counts.people) },
     });
   });
 
