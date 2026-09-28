@@ -620,7 +620,10 @@ export default function MemberListPanel({
 
   return (
     <div className={`flex flex-col gap-5 md:gap-6 ${picked > 0 ? 'pb-20 md:pb-0' : ''}`} data-testid="member-list-panel">
-      <div className="flex flex-col gap-3">
+      {/* The toolbar stays at the top of the screen on a computer while the list scrolls, and
+          with people selected the bar over them sits in it (Kd, 2026-09-28: at the bottom of
+          the list he had to scroll back up to act), as Gmail and HubSpot keep theirs. */}
+      <div className="flex flex-col gap-3 c-sticky-tools">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-3">
           <label className="c-search w-full md:max-w-[460px] md:flex-grow">
             <Search aria-hidden="true" className="w-[18px] h-[18px]" />
@@ -691,6 +694,17 @@ export default function MemberListPanel({
             <button type="button" onClick={clearAll} className="c-btn c-btn-sm c-btn-link">
               Clear
             </button>
+          </div>
+        ) : null}
+
+        {picked > 0 && !page.loading && page.entries.length > 0 ? (
+          <div className="hidden md:block c-card overflow-hidden">
+            <div className="c-selbar c-selbar-top" data-testid="sel-bar">
+              <span className="c-s14 c-w6 c-t1 flex-grow" data-testid="sel-count">
+                {selectedWords(picked)}
+              </span>
+              {barButtons}
+            </div>
           </div>
         ) : null}
       </div>
@@ -793,35 +807,23 @@ export default function MemberListPanel({
 
       {!page.loading && page.entries.length > 0 ? (
         <section className="c-card overflow-hidden">
-          {picked > 0 ? (
-            <div className="hidden md:block">
-              <div className="c-selbar" data-testid="sel-bar">
-                <Tick state={headState} label={pageTicked ? 'Clear the selection' : `Select every ${words.person} on this page`} onClick={tickPage} />
-                <span className="c-s14 c-w6 c-t1 flex-grow" data-testid="sel-count">
-                  {selectedWords(picked)}
-                </span>
-                {barButtons}
-              </div>
+          <div className="hidden md:flex items-center pl-1" data-testid="list-head">
+            <Tick state={headState} label={pageTicked ? 'Clear the selection' : `Select every ${words.person} on this page`} onClick={tickPage} />
+            <div className={`c-member-grid ${current ? '' : 'c-member-grid-past'} c-th grid flex-grow pr-5 py-2.5`}>
+              <span style={{ gridArea: 'who' }}>Name</span>
+              <span style={{ gridArea: 'status' }}>Status</span>
+              <span style={{ gridArea: 'type' }}>Membership</span>
+              {current ? (
+                <>
+                  <span style={{ gridArea: 'ends' }}>Renews or ends</span>
+                  <span style={{ gridArea: 'pay' }}>Payment</span>
+                </>
+              ) : (
+                <span style={{ gridArea: 'ends' }}>Past {words.person} since</span>
+              )}
+              <span style={{ gridArea: 'app' }}>App</span>
             </div>
-          ) : (
-            <div className="hidden md:flex items-center pl-1" data-testid="list-head">
-              <Tick state={headState} label={`Select every ${words.person} on this page`} onClick={tickPage} />
-              <div className={`c-member-grid ${current ? '' : 'c-member-grid-past'} c-th grid flex-grow pr-5 py-2.5`}>
-                <span style={{ gridArea: 'who' }}>Name</span>
-                <span style={{ gridArea: 'status' }}>Status</span>
-                <span style={{ gridArea: 'type' }}>Membership</span>
-                {current ? (
-                  <>
-                    <span style={{ gridArea: 'ends' }}>Renews or ends</span>
-                    <span style={{ gridArea: 'pay' }}>Payment</span>
-                  </>
-                ) : (
-                  <span style={{ gridArea: 'ends' }}>Past {words.person} since</span>
-                )}
-                <span style={{ gridArea: 'app' }}>App</span>
-              </div>
-            </div>
-          )}
+          </div>
           {selectLine !== null ? (
             <div className="c-s14 c-t2 flex flex-wrap justify-center gap-x-2 gap-y-1 px-4 py-2.5 border-b text-center" style={{ borderColor: 'var(--line)' }} data-testid="select-line">
               {selectLine}

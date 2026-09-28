@@ -541,22 +541,33 @@ export default function Members() {
         />
       ) : null}
 
+      {/* Search and, with people ticked, the bar stay at the top on a computer (as on the list). */}
       {tab === 'app' ? (
-        <div className="flex flex-col gap-3 md:flex-row md:items-center">
-          <label className="c-search w-full md:max-w-[460px] md:flex-grow">
-            <Search aria-hidden="true" className="w-[18px] h-[18px]" />
-            <input
-              type="search"
-              aria-label={`Search the ${words.people} in the app by name`}
-              maxLength={120}
-              placeholder="Search by name"
-              value={rosterTyped}
-              onChange={(e) => setRosterTyped(e.target.value)}
-              className="c-input"
-            />
-          </label>
-          <span className="flex-grow" />
-          {!state.loading && state.error === null ? <span className="c-s14 c-t2 c-num whitespace-nowrap">{countLabel}</span> : null}
+        <div className="flex flex-col gap-3 c-sticky-tools">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center">
+            <label className="c-search w-full md:max-w-[460px] md:flex-grow">
+              <Search aria-hidden="true" className="w-[18px] h-[18px]" />
+              <input
+                type="search"
+                aria-label={`Search the ${words.people} in the app by name`}
+                maxLength={120}
+                placeholder="Search by name"
+                value={rosterTyped}
+                onChange={(e) => setRosterTyped(e.target.value)}
+                className="c-input"
+              />
+            </label>
+            <span className="flex-grow" />
+            {!state.loading && state.error === null ? <span className="c-s14 c-t2 c-num whitespace-nowrap">{countLabel}</span> : null}
+          </div>
+          {canTick && rosterTicked.size > 0 && state.items.length > 0 ? (
+            <div className="hidden md:block c-card overflow-hidden">
+              <div className="c-selbar c-selbar-top" data-testid="roster-sel-bar">
+                <span className="c-s14 c-w6 c-t1 flex-grow">{rosterSelected}</span>
+                {rosterBar}
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -587,18 +598,9 @@ export default function Members() {
 
       {tab === 'app' && state.items.length > 0 ? (
         <section className="c-card overflow-hidden">
-          {canTick && rosterTicked.size > 0 ? (
-            <div className="hidden md:block">
-              <div className="c-selbar" data-testid="roster-sel-bar">
-                <Tick state={rosterHead} label={rosterAllTicked ? 'Clear the selection' : 'Select everyone shown'} onClick={tickRosterPage} />
-                <span className="c-s14 c-w6 c-t1 flex-grow">{rosterSelected}</span>
-                {rosterBar}
-              </div>
-            </div>
-          ) : null}
-          {canTick && rosterTicked.size === 0 ? (
+          {canTick ? (
             <div className="hidden md:flex items-center pl-1 border-b" style={{ borderColor: 'var(--line)' }}>
-              <Tick state="off" label="Select everyone shown" onClick={tickRosterPage} />
+              <Tick state={rosterHead} label={rosterAllTicked ? 'Clear the selection' : 'Select everyone shown'} onClick={tickRosterPage} />
               <span className="c-th py-2.5">Name</span>
             </div>
           ) : null}

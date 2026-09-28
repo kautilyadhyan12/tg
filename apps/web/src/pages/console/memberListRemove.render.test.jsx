@@ -124,7 +124,9 @@ describe('Remove from the bar', () => {
     expect(dialog.getByTestId('remove-move').textContent).toContain('2 will move to past members');
     expect(within(dialog.getByTestId('remove-names-move')).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Ben Carter', 'Cara Diaz']);
     expect(within(dialog.getByTestId('remove-names-endApp')).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Ben Carter']);
-    expect(dialog.getByTestId('remove-endApp').textContent).toContain("They keep their own workouts and the free app. The app tells them they're no longer a member of Iron House Gym.");
+    expect(dialog.getByTestId('remove-endApp').textContent).toContain(
+      "Only people who use the app lose access. The other 1 doesn't use the app, so only their details move. They keep their own workouts and the free app, and the app tells them they're no longer a member of Iron House Gym.",
+    );
 
     fireEvent.click(dialog.getByRole('button', { name: 'Remove 2 members' }));
     await waitFor(() => expect(orgService.removeSelected).toHaveBeenCalledTimes(1));

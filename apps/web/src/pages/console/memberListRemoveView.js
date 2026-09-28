@@ -40,13 +40,27 @@ export function removeChangeGroups(preview, words, gymName) {
       people: preview.move,
     });
   }
+  // Why some lose the app and others don't (Kd, 2026-09-28: "the reason why one is removed
+  // from app another is not"): only people who use the app have access to lose.
+  // A record's person in the app is named with that record, losing the app or kept as staff.
+  const staff = preview.kept.find((group) => group.reason === 'staff')?.people ?? [];
+  const usesApp = new Set([...preview.endApp, ...staff].map((p) => p.entryId).filter((id) => id !== null));
+  const others = preview.move.filter((p) => !usesApp.has(p.entryId)).length;
+  const why =
+    others <= 0
+      ? ''
+      : others === 1
+        ? " The other 1 doesn't use the app, so only their details move."
+        : ` The other ${count(others)} don't use the app, so only their details move.`;
   if (preview.endApp.length > 0) {
     groups.push({
       key: 'endApp',
       heading: `${count(preview.endApp.length)} will lose access to the app`,
-      line: `They keep their own workouts and the free app. The app tells them they're no longer a ${words.person} of ${gymName}.`,
+      line: `Only people who use the app lose access.${why} They keep their own workouts and the free app, and the app tells them they're no longer a ${words.person} of ${gymName}.`,
       people: preview.endApp,
     });
+  } else if (preview.move.length > 0 && others === preview.move.length) {
+    groups[0] = { ...groups[0], line: `${groups[0].line} None of them use the app, so nobody loses access to it.` };
   }
   return groups;
 }

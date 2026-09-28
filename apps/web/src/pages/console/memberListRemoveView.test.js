@@ -35,12 +35,45 @@ describe('the box for each door', () => {
 });
 
 describe('who changes, and the button', () => {
-  it('moves and app endings each get a heading and a line naming the gym', () => {
-    const groups = removeChangeGroups(preview({ move: [p('A', 1), p('B', 2)], endApp: [p('A', 1)] }), GYM, 'Iron House Gym');
-    expect(groups.map((g) => [g.key, g.heading, g.line])).toEqual([
-      ['move', '2 will move to past members', 'Their details are kept, and you can put them back at any time.'],
-      ['endApp', '1 will lose access to the app', "They keep their own workouts and the free app. The app tells them they're no longer a member of Iron House Gym."],
+  // Kd, 2026-09-28, of Olivia (in the app) and Ava (not): "the reason why one is removed
+  // from app another is not". The box says it.
+  const olivia = p('Olivia Bennett', 1);
+  const ava = p('Ava Thompson', 2);
+  const oliviaApp = { ...olivia, userId: 'bbbbbbbb-bbbb-4bbb-8bbb-000000000001' };
+  const lines = (over) => removeChangeGroups(preview(over), GYM, 'Iron House Gym').map((g) => [g.key, g.heading, g.line]);
+  const MOVE = 'Their details are kept, and you can put them back at any time.';
+  const ENDS = "They keep their own workouts and the free app, and the app tells them they're no longer a member of Iron House Gym.";
+
+  it('one in the app and one not: says why only one loses access', () => {
+    expect(lines({ move: [olivia, ava], endApp: [oliviaApp] })).toEqual([
+      ['move', '2 will move to past members', MOVE],
+      ['endApp', '1 will lose access to the app', `Only people who use the app lose access. The other 1 doesn't use the app, so only their details move. ${ENDS}`],
     ]);
+  });
+
+  it('several who do not use the app are counted in the plural', () => {
+    expect(lines({ move: [olivia, ava, p('Tom Reed', 3), p('Zoe Adams', 4)], endApp: [oliviaApp] })[1][2]).toBe(
+      `Only people who use the app lose access. The other 3 don't use the app, so only their details move. ${ENDS}`,
+    );
+  });
+
+  it('everyone in the app: no "others" line', () => {
+    expect(lines({ move: [olivia], endApp: [oliviaApp] })[1][2]).toBe(`Only people who use the app lose access. ${ENDS}`);
+  });
+
+  it('nobody in the app: the move says nobody loses access', () => {
+    expect(lines({ move: [ava] })).toEqual([['move', '1 will move to past members', `${MOVE} None of them use the app, so nobody loses access to it.`]]);
+  });
+
+  it('staff use the app and keep it: never counted among those who do not use it', () => {
+    const coach = p('Coach Dee', 5);
+    const coachKept = { reason: 'staff', people: [{ ...coach, userId: 'bbbbbbbb-bbbb-4bbb-8bbb-000000000005' }] };
+    expect(lines({ move: [coach, olivia], endApp: [oliviaApp], kept: [coachKept] })[1][2]).toBe(`Only people who use the app lose access. ${ENDS}`);
+    expect(lines({ move: [coach], kept: [coachKept] })).toEqual([['move', '1 will move to past members', MOVE]]);
+  });
+
+  it('In the app: each record moving belongs to a person losing the app', () => {
+    expect(lines({ move: [olivia], endApp: [oliviaApp] })[1][2]).toBe(`Only people who use the app lose access. ${ENDS}`);
   });
 
   const buttons = [
