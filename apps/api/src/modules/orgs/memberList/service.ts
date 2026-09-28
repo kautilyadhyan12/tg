@@ -1126,7 +1126,8 @@ export async function confirmUpload(
     if (leavers !== null && leavers.moveIds.length !== reconciled.gone.length) {
       raise(`an import's leavers box moves ${String(leavers.moveIds.length)} records where ${String(reconciled.gone.length)} are marked Left`);
     }
-    if (leavers !== null) {
+    // Nobody ticked as having left: no box was shown, and the plan moves and ends nothing.
+    if (leavers !== null && (input.marks?.left.length ?? 0) > 0) {
       if (leavers.preview.digest !== input.leaversDigest) {
         return { kind: "leavers_changed", leavers: leaversOf(leavers, reconciled) };
       }

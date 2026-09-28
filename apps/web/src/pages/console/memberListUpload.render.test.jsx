@@ -145,7 +145,7 @@ const tickPermission = () => fireEvent.click(screen.getByLabelText("These are Ir
 beforeEach(() => vi.resetAllMocks());
 afterEach(cleanup);
 
-describe('the worst thing: nobody goes who was not marked Left', () => {
+describe('the worst thing: nobody leaves who was not ticked', () => {
   const wrongFile = () =>
     preview({
       list: list({ unchanged: 5, gone: 25 }),
@@ -161,12 +161,12 @@ describe('the worst thing: nobody goes who was not marked Left', () => {
   const emma = missingOne(3, 'Emma Price', { wasStatus: 'Frozen' }, { membershipType: null, paymentStatus: null, source: 'typed', addedAt: '2026-09-20T09:30:00.000Z' });
   const oneMissing = () => preview({ list: list({ unchanged: 4, gone: 1 }), guard: { ...calm, entriesGoing: 1, listSize: 5 } });
 
-  it('names each one with what the list says, marks nobody, and Import waits until each is marked', async () => {
+  it('names each one with what the list says, ticks nobody, and sends exactly the ticked as leaving', async () => {
     orgService.getMemberListMissing.mockResolvedValueOnce(missingRead([olivia, liam, emma]));
     await reviewWith(wrongFile());
     const card = within(await screen.findByTestId('missing'));
     expect(card.getByText("3 of your 30 members aren't in this file")).toBeTruthy();
-    expect(card.getByTestId('missing-mark-help').textContent).toBe('Mark each one. Those who have left become past members.');
+    expect(card.getByTestId('missing-mark-help').textContent).toBe('Tick the ones who have left. The rest stay on your list.');
     expect(card.getByTestId('missing-help').textContent).toContain('members missing from it have usually left');
     expect(screen.queryByText('No changes')).toBeNull();
     expect(orgService.getMemberListMissing).toHaveBeenCalledWith(GYM, UPLOAD);
@@ -182,25 +182,14 @@ describe('the worst thing: nobody goes who was not marked Left', () => {
     expect(rows[2].textContent).toMatch(/Added manually · 20 Sep( 2026)?/);
     expect(within(rows[0]).getByText('In the app')).toBeTruthy();
     expect(within(rows[1]).queryByText('In the app')).toBeNull();
-    // Nothing is marked for staff.
-    expect(card.getAllByTestId('mark').map((m) => m.textContent)).toEqual(['Not marked yet', 'Not marked yet', 'Not marked yet']);
-    expect(card.getByTestId('missing-tally').textContent).toBe('0 left · 0 still members · 3 not marked yet');
-    tickPermission();
-    expect(importButton().disabled).toBe(true);
-    expect(screen.getByText('Mark Olivia Walker and 2 more first. Nobody is emailed.')).toBeTruthy();
+    // Nobody is ticked for staff.
+    expect(card.getAllByRole('checkbox').map((b) => b.checked)).toEqual([false, false, false, false]);
+    expect(screen.getByText('Nobody is emailed.')).toBeTruthy();
 
-    // A status word selects its people; one row more; They've left marks exactly those.
-    fireEvent.click(card.getByRole('button', { name: 'Cancelled 1' }));
-    fireEvent.click(card.getByLabelText('Select Emma Price'));
-    expect(within(card.getByTestId('missing-bar')).getByText('2 selected')).toBeTruthy();
-    fireEvent.click(card.getByRole('button', { name: "They've left" }));
-    expect(card.queryByTestId('missing-bar')).toBeNull();
-    expect(card.getAllByTestId('mark').map((m) => m.textContent)).toEqual(['Not marked yet', 'Left', 'Left']);
-    expect(importButton().disabled).toBe(true);
-    expect(screen.getByText('Mark Olivia Walker first. Nobody is emailed.')).toBeTruthy();
-    fireEvent.click(card.getByLabelText('Select Olivia Walker'));
-    fireEvent.click(card.getByRole('button', { name: 'Still a member' }));
-    expect(card.getByTestId('missing-tally').textContent).toBe('2 left · 1 still a member · 0 not marked yet');
+    fireEvent.click(card.getByLabelText('Liam Hughes has left'));
+    fireEvent.click(card.getByLabelText('Emma Price has left'));
+    expect(screen.getByText('2 members will leave. Nobody is emailed.')).toBeTruthy();
+    tickPermission();
     expect(importButton().disabled).toBe(false);
 
     // Import opens the box naming who moves and who loses the app; a big change is typed there.
@@ -212,7 +201,7 @@ describe('the worst thing: nobody goes who was not marked Left', () => {
     const sentMarks = { missingDigest: DIGEST, left: [liam.entryId, emma.entryId], stay: [olivia.entryId] };
     expect(orgService.getMemberListLeavers).toHaveBeenCalledWith(GYM, UPLOAD, sentMarks);
     expect(box.getByText('2 will move to past members')).toBeTruthy();
-    expect(box.getByTestId('leavers-stay').textContent).toBe('1 marked still a member stays on your list.');
+    expect(box.getByTestId('leavers-stay').textContent).toBe('1 not ticked stays on your list.');
     const go = box.getByRole('button', { name: 'Import and move 2 to past members' });
     expect(go.disabled).toBe(true);
     fireEvent.change(box.getByLabelText('Type the number to confirm'), { target: { value: '25' } });
@@ -232,12 +221,42 @@ describe('the worst thing: nobody goes who was not marked Left', () => {
     });
   });
 
+  it('with nobody ticked, Import sends everyone as staying and opens no box', async () => {
+    orgService.getMemberListMissing.mockResolvedValueOnce(missingRead([olivia, liam]));
+    await reviewWith(preview({ list: list({ new: 3, unchanged: 5, gone: 2 }), guard: { ...calm, entriesGoing: 2, listSize: 40 } }));
+    await screen.findByTestId('missing');
+    tickPermission();
+    expect(importButton().textContent).toBe('Import 3 members');
+    orgService.confirmMemberList.mockResolvedValueOnce({ data: { confirmed: confirmedAnswer() } });
+    fireEvent.click(importButton());
+    await screen.findByTestId('member-import-done');
+    expect(orgService.getMemberListLeavers).not.toHaveBeenCalled();
+    expect(orgService.confirmMemberList).toHaveBeenCalledWith(GYM, UPLOAD, {
+      permissionConfirmed: true,
+      acknowledgeLargeChange: false,
+      acknowledgeHandEdits: false,
+      marks: { missingDigest: DIGEST, left: [], stay: [olivia.entryId, liam.entryId] },
+    });
+  });
+
+  it('Select all ticks everyone, and again unticks them; the button names the new people only when nobody leaves', async () => {
+    orgService.getMemberListMissing.mockResolvedValueOnce(missingRead([olivia, liam]));
+    await reviewWith(preview({ list: list({ new: 3, unchanged: 5, gone: 2 }), guard: { ...calm, entriesGoing: 2, listSize: 40 } }));
+    const card = within(await screen.findByTestId('missing'));
+    fireEvent.click(card.getByLabelText('Select all'));
+    expect(card.getAllByRole('checkbox').map((b) => b.checked)).toEqual([true, true, true]);
+    expect(screen.getByText('2 members will leave. Nobody is emailed.')).toBeTruthy();
+    expect(importButton().textContent).toBe('Import');
+    fireEvent.click(card.getByLabelText('Select all'));
+    expect(card.getAllByRole('checkbox').map((b) => b.checked)).toEqual([false, false, false]);
+    expect(importButton().textContent).toBe('Import 3 members');
+  });
+
   it('who loses the app is named in the box, and a box that moved is shown again before anything is imported', async () => {
     orgService.getMemberListMissing.mockResolvedValueOnce(missingRead([olivia]));
     await reviewWith(oneMissing());
     const card = within(await screen.findByTestId('missing'));
-    fireEvent.click(card.getByRole('button', { name: 'All 1' }));
-    fireEvent.click(card.getByRole('button', { name: "They've left" }));
+    fireEvent.click(card.getByLabelText('Olivia Walker has left'));
     tickPermission();
     orgService.getMemberListLeavers.mockResolvedValueOnce(leaversRead({ move: [who('Olivia Walker', 1)], movingNotInApp: 1 }));
     fireEvent.click(importButton());
@@ -264,12 +283,11 @@ describe('the worst thing: nobody goes who was not marked Left', () => {
     expect(orgService.confirmMemberList.mock.calls[1][2].leaversDigest).toBe('b'.repeat(64));
   });
 
-  it('a refusal in the box closes it and offers to read the file again, which asks about everyone afresh', async () => {
+  it('a refusal in the box closes it and offers to read the file again, which ticks nobody', async () => {
     orgService.getMemberListMissing.mockResolvedValueOnce(missingRead([olivia]));
     await reviewWith(oneMissing());
     const card = within(await screen.findByTestId('missing'));
-    fireEvent.click(card.getByRole('button', { name: 'All 1' }));
-    fireEvent.click(card.getByRole('button', { name: "They've left" }));
+    fireEvent.click(card.getByLabelText('Olivia Walker has left'));
     tickPermission();
     orgService.getMemberListLeavers.mockResolvedValueOnce(leaversRead({ move: [who('Olivia Walker', 1)] }));
     fireEvent.click(importButton());
@@ -288,23 +306,21 @@ describe('the worst thing: nobody goes who was not marked Left', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Read the file again' }));
     await waitFor(() => expect(screen.getAllByTestId('missing-row')).toHaveLength(2));
     expect(orgService.uploadMemberList.mock.calls[1][1].mode).toBe('whole_list');
-    expect(screen.getAllByTestId('mark').map((m) => m.textContent)).toEqual(['Not marked yet', 'Not marked yet']);
-    expect(importButton().disabled).toBe(true);
+    expect(within(screen.getByTestId('missing')).getAllByRole('checkbox').map((b) => b.checked)).toEqual([false, false, false]);
   });
 
-  it('other columns read the file again and ask about everyone afresh', async () => {
+  it('other columns read the file again and tick nobody', async () => {
     orgService.getMemberListMissing.mockResolvedValueOnce(missingRead([olivia]));
     await reviewWith(oneMissing());
     const card = within(await screen.findByTestId('missing'));
-    fireEvent.click(card.getByRole('button', { name: 'All 1' }));
-    fireEvent.click(card.getByRole('button', { name: "They've left" }));
+    fireEvent.click(card.getByLabelText('Olivia Walker has left'));
     fireEvent.click(screen.getByRole('button', { name: 'Check' }));
     fireEvent.change(screen.getByLabelText('Status imports as'), { target: { value: 'membershipType' } });
     orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: oneMissing() } });
     orgService.getMemberListMissing.mockResolvedValueOnce(missingRead([olivia]));
     fireEvent.click(screen.getByRole('button', { name: 'Apply changes' }));
     await waitFor(() => expect(orgService.getMemberListMissing).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(screen.getAllByTestId('mark').map((m) => m.textContent)).toEqual(['Not marked yet']));
+    await waitFor(() => expect(screen.getByLabelText('Olivia Walker has left').checked).toBe(false));
   });
 
   it('when the names cannot be read, Import waits and Try again reads them', async () => {
@@ -316,13 +332,7 @@ describe('the worst thing: nobody goes who was not marked Left', () => {
     orgService.getMemberListMissing.mockResolvedValueOnce(missingRead([olivia]));
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByTestId('missing')).toBeTruthy();
-  });
-
-  it('the button names the new people only when nobody is missing', async () => {
-    orgService.getMemberListMissing.mockResolvedValueOnce(missingRead([missingOne(1, 'Ben Cole')]));
-    await reviewWith(preview({ list: list({ new: 3, unchanged: 5, gone: 1 }), guard: { ...calm, entriesGoing: 1, listSize: 40 } }));
-    await screen.findByTestId('missing');
-    expect(importButton().textContent).toBe('Import');
+    expect(importButton().disabled).toBe(false);
   });
 });
 

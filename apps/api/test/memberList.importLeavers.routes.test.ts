@@ -280,6 +280,13 @@ d("Import: who has left, person by person (real Postgres)", () => {
       expect(box.preview.kept).toEqual([{ reason: "own_record", people: [{ name: "Maria Park", entryId: f.maria, userId: f.mariaUser.userId }] }]);
       expect(box.stay).toBe(2);
 
+      // People ticked as having left and no box read: nothing is imported.
+      const before = await snapshot(f.gym);
+      const unseen = await confirm(f.gym, uploadId, { marks });
+      expect(unseen.statusCode, unseen.body).toBe(409);
+      expect(errorOf(unseen).error).toBe("leavers_changed");
+      expect(await snapshot(f.gym)).toEqual(before);
+
       const res = await confirm(f.gym, uploadId, { marks, leaversDigest: box.preview.digest });
       expect(res.statusCode, res.body).toBe(200);
       const done = memberListConfirmResponseSchema.parse(JSON.parse(res.body)).confirmed;
@@ -418,7 +425,7 @@ d("Import: who has left, person by person (real Postgres)", () => {
   );
 
   it(
-    "everyone marked Still a member: nobody moves, nobody loses the app, and the file's changes still apply",
+    "nobody ticked as having left: Import needs no box, nobody moves, nobody loses the app, and the file's changes still apply",
     async () => {
       const f = await family();
       const uploadId = await upload(f.gym, [
@@ -432,7 +439,7 @@ d("Import: who has left, person by person (real Postgres)", () => {
       expect(box.preview.endApp).toEqual([]);
       expect(box.stay).toBe(4);
       expect(box.guard.entriesGoing).toBe(0);
-      const res = await confirm(f.gym, uploadId, { marks, leaversDigest: box.preview.digest });
+      const res = await confirm(f.gym, uploadId, { marks });
       expect(res.statusCode, res.body).toBe(200);
       const done = memberListConfirmResponseSchema.parse(JSON.parse(res.body)).confirmed;
       expect([done.applied.new, done.applied.changed, done.applied.gone]).toEqual([1, 1, 0]);

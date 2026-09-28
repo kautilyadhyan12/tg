@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import { Check } from 'lucide-react';
 import { goneWords, gymToday } from './memberListPeople';
-import { hasStatusChip, markTally, missingMarkTitle, missingStatusChips, withMarks } from './memberListView';
+import { missingMarkTitle } from './memberListView';
 
-// The import's question about the people a whole-list file leaves out, one person at a time
-// (spec Part 3 §18.8; ROADMAP 5b-v-d; RULINGS 2026-09-26). Each is marked Left or Still a
-// member; nothing is marked for staff. Tick people (or a status word, or everyone) and press
-// They've left or Still a member, as Gmail and HubSpot act on the rows ticked. Drawn in the
-// import box's own colours until 5b-v-d-ii restyles Upload and Review.
+// The people a whole-list file leaves out (spec Part 3 §18.8; ROADMAP 5b-v-d-i). Staff tick
+// the ones who have left; everyone not ticked stays on the list (Kd, RULINGS 2026-09-28:
+// "keep the selecting thing and seeing not present people"). Nobody leaves unless ticked.
+// Drawn as the import's card always was, until 5b-v-d-ii restyles Upload and Review.
 
 const C = {
   card: '#141210',
@@ -17,11 +16,6 @@ const C = {
   soft: 'rgba(255,255,255,0.8)',
   orange: '#FF8A1F',
   orangeBg: 'rgba(255,138,31,0.12)',
-  green: '#34d399',
-  greenBg: 'rgba(52,211,153,0.12)',
-  red: '#f87171',
-  redBg: 'rgba(248,113,113,0.1)',
-  plain: 'rgba(255,255,255,0.06)',
 };
 
 /** How many rows show before "Show more". */
@@ -44,47 +38,18 @@ function Box({ checked, label, onChange, disabled }) {
   );
 }
 
-function Mark({ mark, words }) {
-  const [bg, fg, text] =
-    mark === 'left' ? [C.redBg, C.red, 'Left'] : mark === 'stay' ? [C.greenBg, C.green, `Still a ${words.person}`] : [C.plain, C.muted, 'Not marked yet'];
-  return (
-    <span className="text-[12px] font-semibold rounded-full px-2.5 py-1 flex-shrink-0 whitespace-nowrap" style={{ background: bg, color: fg }} data-testid="mark">
-      {text}
-    </span>
-  );
-}
-
-function InApp() {
-  return (
-    <span className="text-[11px] font-semibold rounded-full px-2 py-0.5 flex-shrink-0" style={{ background: C.orangeBg, color: C.orange }}>
-      In the app
-    </span>
-  );
-}
-
-export default function MemberListMissing({ missing, marks, onMarks, listSize, words, disabled }) {
-  const [picked, setPicked] = useState(() => new Set());
+export default function MemberListMissing({ missing, left, onLeft, listSize, words, disabled }) {
   const [shown, setShown] = useState(ROWS);
   const today = gymToday();
   const people = missing.people;
-  const chips = missingStatusChips(people);
+  const all = people.length > 0 && people.every((p) => left.has(p.entryId));
 
-  const pick = (ids, on) =>
-    setPicked((before) => {
-      const next = new Set(before);
-      for (const id of ids) {
-        if (on) next.add(id);
-        else next.delete(id);
-      }
-      return next;
-    });
-  /** A status word (or everyone) ticks all of them; pressed again, unticks them. */
-  const pickGroup = (ids) => pick(ids, !ids.every((id) => picked.has(id)));
-  const markPicked = (mark) => {
-    onMarks(withMarks(marks, [...picked], mark));
-    setPicked(new Set());
+  const tick = (entryId, on) => {
+    const next = new Set(left);
+    if (on) next.add(entryId);
+    else next.delete(entryId);
+    onLeft(next);
   };
-  const allIds = people.map((p) => p.entryId);
 
   return (
     <div className="rounded-[18px] p-4 flex flex-col gap-3.5" style={{ background: C.card, border: '1px solid rgba(255,138,31,0.45)' }} data-testid="missing">
@@ -93,56 +58,27 @@ export default function MemberListMissing({ missing, marks, onMarks, listSize, w
           {missingMarkTitle(people.length, listSize, words)}
         </div>
         <div className="text-sm mt-1" style={{ color: C.soft }} data-testid="missing-mark-help">
-          Mark each one. Those who have left become past {words.people}.
+          Tick the ones who have left. The rest stay on your list.
         </div>
-        <div className="text-sm mt-1" style={{ color: C.muted }} data-testid="missing-help">
+        <div className="text-[13px] mt-1" style={{ color: C.muted }} data-testid="missing-help">
           Your file should include all current {words.people}, so {words.people} missing from it have usually left. {words.peopleCap ?? 'Members'} added
           manually may not be in your export yet.
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2" data-testid="missing-chips">
-        <span className="text-[13px] font-semibold" style={{ color: C.muted }}>
-          Select:
-        </span>
-        <button
-          type="button"
-          aria-pressed={allIds.length > 0 && allIds.every((id) => picked.has(id))}
-          onClick={() => pickGroup(allIds)}
-          disabled={disabled}
-          className="rounded-full px-3 min-h-[36px] text-[13px] font-semibold"
-          style={{ background: C.plain, color: C.soft }}
-        >
-          All {count(people.length)}
-        </button>
-        {chips.map((chip) => {
-          const ids = people.filter((p) => hasStatusChip(p, chip.label)).map((p) => p.entryId);
-          const on = ids.every((id) => picked.has(id));
-          return (
-            <button
-              key={chip.label}
-              type="button"
-              aria-pressed={on}
-              onClick={() => pickGroup(ids)}
-              disabled={disabled}
-              className="rounded-full px-3 min-h-[36px] text-[13px] font-semibold"
-              style={{ background: on ? C.orangeBg : C.plain, color: on ? C.orange : C.soft }}
-            >
-              {chip.label} {count(chip.n)}
-            </button>
-          );
-        })}
-      </div>
-
       <ul className="rounded-2xl overflow-hidden max-h-[420px] overflow-y-auto" style={{ background: C.card2, border: `1px solid ${C.line}` }} data-testid="missing-rows">
+        <li className="flex items-center gap-1 pr-3 py-0.5">
+          <Box checked={all} label="Select all" onChange={(on) => onLeft(on ? new Set(people.map((p) => p.entryId)) : new Set())} disabled={disabled} />
+          <span className="text-sm font-semibold" style={{ color: C.soft }}>
+            Select all
+          </span>
+        </li>
         {people.slice(0, shown).map((p) => {
           const gone = p.onList === null ? null : goneWords(p, today);
           const facts = gone === null ? (p.wasStatus ?? '') : gone.facts;
           return (
             <li key={p.entryId} className="flex items-center gap-1 pr-3 py-1.5" style={{ borderTop: `1px solid ${C.line}` }} data-testid="missing-row">
-              <Box checked={picked.has(p.entryId)} label={`Select ${p.fullName || 'No name'}`} onChange={(on) => pick([p.entryId], on)} disabled={disabled} />
-              {/* On a phone the tags wrap under the name, so the name is not cut short. */}
-              <div className="min-w-0 flex-1 sm:flex sm:items-center sm:gap-2">
+              <Box checked={left.has(p.entryId)} label={`${p.fullName || 'No name'} has left`} onChange={(on) => tick(p.entryId, on)} disabled={disabled} />
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium truncate" style={{ color: '#fff' }}>
                   {p.fullName || 'No name'}
@@ -156,11 +92,11 @@ export default function MemberListMissing({ missing, marks, onMarks, listSize, w
                   </div>
                 ) : null}
               </div>
-              <div className="flex items-center gap-2 mt-1.5 sm:mt-0 flex-shrink-0">
-                {p.inApp ? <InApp /> : null}
-                <Mark mark={marks.get(p.entryId)} words={words} />
-              </div>
-              </div>
+              {p.inApp ? (
+                <span className="text-[11px] font-semibold rounded-full px-2 py-0.5 flex-shrink-0" style={{ background: C.orangeBg, color: C.orange }}>
+                  In the app
+                </span>
+              ) : null}
             </li>
           );
         })}
@@ -172,27 +108,6 @@ export default function MemberListMissing({ missing, marks, onMarks, listSize, w
           </li>
         ) : null}
       </ul>
-
-      {picked.size > 0 ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl px-3 py-2" style={{ background: C.card2, border: `1px solid ${C.line}` }} data-testid="missing-bar">
-          <span className="text-sm font-semibold mr-auto" style={{ color: '#fff' }}>
-            {count(picked.size)} selected
-          </span>
-          <button type="button" onClick={() => markPicked('left')} disabled={disabled} className="rounded-xl px-3 min-h-[40px] text-sm font-bold" style={{ background: C.redBg, color: C.red }}>
-            They&apos;ve left
-          </button>
-          <button type="button" onClick={() => markPicked('stay')} disabled={disabled} className="rounded-xl px-3 min-h-[40px] text-sm font-bold" style={{ background: C.greenBg, color: C.green }}>
-            Still a {words.person}
-          </button>
-          <button type="button" onClick={() => setPicked(new Set())} className="rounded-xl px-3 min-h-[40px] text-sm" style={{ color: C.soft }}>
-            Clear
-          </button>
-        </div>
-      ) : null}
-
-      <p className="text-[13px]" style={{ color: C.soft }} data-testid="missing-tally">
-        {markTally(people, marks, words)}
-      </p>
     </div>
   );
 }
