@@ -251,8 +251,12 @@ describe('selecting people', () => {
     fireEvent.click(bar().getByTestId('bar-invite'));
     await screen.findByTestId('invite-box');
     expect(document.body.style.overflow).toBe('hidden');
-    // Its own middle scrolls: a flex child allowed to shrink below its content.
-    expect(screen.getByTestId('invite-scroll').className).toContain('min-h-0');
+    // Its own middle scrolls: allowed to shrink below its content, and not itself a column,
+    // which would shrink the table to fit and cut its last rows off instead (jsdom has no
+    // layout; this was seen in Edge with 35 people).
+    const scroller = screen.getByTestId('invite-scroll');
+    expect(scroller.className).toContain('min-h-0');
+    expect(scroller.className.split(' ')).not.toContain('flex-col');
     fireEvent.click(within(screen.getByTestId('invite-box')).getByRole('button', { name: 'Close' }));
     expect(document.body.style.overflow).toBe('');
   });

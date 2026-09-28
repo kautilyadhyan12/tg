@@ -476,7 +476,7 @@ export default function MemberListInvite({
         aria-modal="true"
         aria-label={`Invite ${words.people} to the app`}
         data-testid="invite-box"
-        className="c-sheet absolute inset-x-0 bottom-0 top-8 md:top-10 md:bottom-10 md:left-1/2 md:right-auto md:-translate-x-1/2 md:w-[960px] md:max-w-[calc(100%-48px)] flex flex-col rounded-t-[20px] md:rounded-[20px] border"
+        className="c-sheet absolute inset-x-0 bottom-0 top-6 md:top-6 md:bottom-6 md:left-1/2 md:right-auto md:-translate-x-1/2 md:w-[1120px] md:max-w-[calc(100%-48px)] flex flex-col rounded-t-[20px] md:rounded-[20px] border"
         style={{ borderColor: 'var(--card-line)' }}
       >
         <div className="flex items-center gap-3 pl-4 pr-2 pt-3 md:px-7 md:pt-6 md:pb-2">
@@ -487,8 +487,11 @@ export default function MemberListInvite({
             <X aria-hidden="true" className="w-5 h-5" />
           </button>
         </div>
-        <div className="flex flex-col gap-4 px-4 pt-2 pb-4 md:px-7 md:pt-3 md:pb-6 overflow-y-auto overscroll-contain flex-grow min-h-0" data-testid="invite-scroll">
-          {body}
+        {/* The scroller is a plain box and its content a column inside it: were the scroller
+            itself a flex column, the table would shrink to fit and cut its last rows off
+            instead of scrolling (Kd's click-through, 2026-09-28). */}
+        <div className="px-4 pt-2 pb-4 md:px-7 md:pt-3 md:pb-6 overflow-y-auto overscroll-contain flex-grow min-h-0" data-testid="invite-scroll">
+          <div className="flex flex-col gap-4">{body}</div>
         </div>
         <div className="flex px-4 pt-3 pb-5 md:px-7 md:py-4 border-t md:justify-end" style={{ borderColor: 'var(--line)', background: 'var(--card)' }}>
           {footer}
