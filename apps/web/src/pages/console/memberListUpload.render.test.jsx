@@ -145,7 +145,7 @@ const tickPermission = () => fireEvent.click(screen.getByLabelText("These are Ir
 beforeEach(() => vi.resetAllMocks());
 afterEach(cleanup);
 
-describe('the worst thing: nobody leaves who was not ticked', () => {
+describe('the worst thing: nobody leaves who was not answered for', () => {
   const wrongFile = () =>
     preview({
       list: list({ unchanged: 5, gone: 25 }),
@@ -160,39 +160,45 @@ describe('the worst thing: nobody leaves who was not ticked', () => {
   const liam = missingOne(2, 'Liam Hughes', { wasStatus: 'Cancelled' }, { endsOn: '2026-08-31', endsOnKind: 'ends', paymentStatus: 'Unpaid' });
   const emma = missingOne(3, 'Emma Price', { wasStatus: 'Frozen' }, { membershipType: null, paymentStatus: null, source: 'typed', addedAt: '2026-09-20T09:30:00.000Z' });
   const oneMissing = () => preview({ list: list({ unchanged: 4, gone: 1 }), guard: { ...calm, entriesGoing: 1, listSize: 5 } });
+  const choice = (name) => screen.getByRole('radio', { name });
 
-  it('names each one with what the list says, ticks nobody, and sends exactly the ticked as leaving', async () => {
+  it('the card as it was: names with details, nothing chosen, and They\'ve left moves only the people ticked', async () => {
     orgService.getMemberListMissing.mockResolvedValueOnce(missingRead([olivia, liam, emma]));
     await reviewWith(wrongFile());
     const card = within(await screen.findByTestId('missing'));
-    expect(card.getByText("3 of your 30 members aren't in this file")).toBeTruthy();
-    expect(card.getByTestId('missing-mark-help').textContent).toBe('Tick the ones who have left. The rest stay on your list.');
+    expect(card.getByText("25 of your 30 members aren't in this file")).toBeTruthy();
     expect(card.getByTestId('missing-help').textContent).toContain('members missing from it have usually left');
+    expect(card.getByTestId('missing-statuses').textContent).toBe('Active 20 · Frozen 5');
     expect(screen.queryByText('No changes')).toBeNull();
     expect(orgService.getMemberListMissing).toHaveBeenCalledWith(GYM, UPLOAD);
     expect(orgService.getMemberListRows).not.toHaveBeenCalled();
 
-    const rows = card.getAllByTestId('missing-row');
+    const rows = await card.findAllByTestId('missing-row');
     expect(rows.map((r) => r.textContent)).toEqual([
       expect.stringContaining('Olivia Walker'),
       expect.stringContaining('Liam Hughes'),
       expect.stringContaining('Emma Price'),
     ]);
-    expect(rows[1].textContent).toMatch(/Cancelled · Gold · Ended 31 Aug( 2026)? · Unpaid/);
-    expect(rows[2].textContent).toMatch(/Added manually · 20 Sep( 2026)?/);
+    expect(within(rows[0]).getByTestId('gone-facts').textContent).toBe('Active · Gold · Paid');
+    expect(within(rows[1]).getByTestId('gone-facts').textContent).toMatch(/^Cancelled · Gold · Ended 31 Aug( 2026)? · Unpaid$/);
+    expect(within(rows[2]).getByTestId('gone-added').textContent).toMatch(/^Added manually · 20 Sep( 2026)?$/);
     expect(within(rows[0]).getByText('In the app')).toBeTruthy();
     expect(within(rows[1]).queryByText('In the app')).toBeNull();
-    // Nobody is ticked for staff.
-    expect(card.getAllByRole('checkbox').map((b) => b.checked)).toEqual([false, false, false, false]);
-    expect(screen.getByText('Nobody is emailed.')).toBeTruthy();
+
+    // Nothing is chosen or ticked for staff, and Import waits for an answer.
+    expect([choice(/They've left/), choice(/They're still members/)].map((r) => r.getAttribute('aria-checked'))).toEqual(['false', 'false']);
+    expect(card.getAllByRole('checkbox').map((b) => b.checked)).toEqual([false, false, false]);
+    tickPermission();
+    expect(importButton().disabled).toBe(true);
 
     fireEvent.click(card.getByLabelText('Liam Hughes has left'));
     fireEvent.click(card.getByLabelText('Emma Price has left'));
-    expect(screen.getByText('2 members will leave. Nobody is emailed.')).toBeTruthy();
-    tickPermission();
+    expect(choice(/They've left/).textContent).toContain('Move the 2 ticked to past members');
+    fireEvent.click(choice(/They've left/));
+    // The big-change number is typed in the box, not on the card.
+    expect(screen.queryByLabelText('Type the number to confirm')).toBeNull();
     expect(importButton().disabled).toBe(false);
 
-    // Import opens the box naming who moves and who loses the app; a big change is typed there.
     orgService.getMemberListLeavers.mockResolvedValueOnce(
       leaversRead({ move: [who('Emma Price', 3), who('Liam Hughes', 2)], stay: 1, guard: { ...wrongFile().guard, entriesGoing: 2 } }),
     );
@@ -221,12 +227,31 @@ describe('the worst thing: nobody leaves who was not ticked', () => {
     });
   });
 
-  it('with nobody ticked, Import sends everyone as staying and opens no box', async () => {
+  it("They've left with nobody ticked moves everyone, as before", async () => {
+    orgService.getMemberListMissing.mockResolvedValueOnce(missingRead([olivia, liam]));
+    await reviewWith(preview({ list: list({ unchanged: 4, gone: 2 }), guard: { ...calm, entriesGoing: 2, listSize: 6 } }));
+    await screen.findAllByTestId('missing-row');
+    expect(choice(/They've left/).textContent).toContain('Move to past members');
+    fireEvent.click(choice(/They've left/));
+    tickPermission();
+    orgService.getMemberListLeavers.mockResolvedValueOnce(leaversRead({ move: [who('Liam Hughes', 2), who('Olivia Walker', 1)] }));
+    fireEvent.click(importButton());
+    await screen.findByTestId('leavers-box');
+    expect(orgService.getMemberListLeavers).toHaveBeenCalledWith(GYM, UPLOAD, { missingDigest: DIGEST, left: [olivia.entryId, liam.entryId], stay: [] });
+  });
+
+  it("They're still members keeps everyone, whoever is ticked, and imports with no box", async () => {
     orgService.getMemberListMissing.mockResolvedValueOnce(missingRead([olivia, liam]));
     await reviewWith(preview({ list: list({ new: 3, unchanged: 5, gone: 2 }), guard: { ...calm, entriesGoing: 2, listSize: 40 } }));
-    await screen.findByTestId('missing');
-    tickPermission();
+    const card = within(await screen.findByTestId('missing'));
+    fireEvent.click(await card.findByLabelText('Liam Hughes has left'));
+    fireEvent.click(choice(/They've left/));
+    expect(importButton().textContent).toBe('Import');
+    fireEvent.click(choice(/They're still members/));
     expect(importButton().textContent).toBe('Import 3 members');
+    // No second read of the file: the answer goes with the press.
+    expect(orgService.uploadMemberList).toHaveBeenCalledTimes(1);
+    tickPermission();
     orgService.confirmMemberList.mockResolvedValueOnce({ data: { confirmed: confirmedAnswer() } });
     fireEvent.click(importButton());
     await screen.findByTestId('member-import-done');
@@ -239,24 +264,11 @@ describe('the worst thing: nobody leaves who was not ticked', () => {
     });
   });
 
-  it('Select all ticks everyone, and again unticks them; the button names the new people only when nobody leaves', async () => {
-    orgService.getMemberListMissing.mockResolvedValueOnce(missingRead([olivia, liam]));
-    await reviewWith(preview({ list: list({ new: 3, unchanged: 5, gone: 2 }), guard: { ...calm, entriesGoing: 2, listSize: 40 } }));
-    const card = within(await screen.findByTestId('missing'));
-    fireEvent.click(card.getByLabelText('Select all'));
-    expect(card.getAllByRole('checkbox').map((b) => b.checked)).toEqual([true, true, true]);
-    expect(screen.getByText('2 members will leave. Nobody is emailed.')).toBeTruthy();
-    expect(importButton().textContent).toBe('Import');
-    fireEvent.click(card.getByLabelText('Select all'));
-    expect(card.getAllByRole('checkbox').map((b) => b.checked)).toEqual([false, false, false]);
-    expect(importButton().textContent).toBe('Import 3 members');
-  });
-
   it('who loses the app is named in the box, and a box that moved is shown again before anything is imported', async () => {
     orgService.getMemberListMissing.mockResolvedValueOnce(missingRead([olivia]));
     await reviewWith(oneMissing());
-    const card = within(await screen.findByTestId('missing'));
-    fireEvent.click(card.getByLabelText('Olivia Walker has left'));
+    await screen.findAllByTestId('missing-row');
+    fireEvent.click(choice(/They've left/));
     tickPermission();
     orgService.getMemberListLeavers.mockResolvedValueOnce(leaversRead({ move: [who('Olivia Walker', 1)], movingNotInApp: 1 }));
     fireEvent.click(importButton());
@@ -283,11 +295,12 @@ describe('the worst thing: nobody leaves who was not ticked', () => {
     expect(orgService.confirmMemberList.mock.calls[1][2].leaversDigest).toBe('b'.repeat(64));
   });
 
-  it('a refusal in the box closes it and offers to read the file again, which ticks nobody', async () => {
+  it('a refusal in the box closes it and offers to read the file again, which asks afresh', async () => {
     orgService.getMemberListMissing.mockResolvedValueOnce(missingRead([olivia]));
     await reviewWith(oneMissing());
     const card = within(await screen.findByTestId('missing'));
-    fireEvent.click(card.getByLabelText('Olivia Walker has left'));
+    fireEvent.click(await card.findByLabelText('Olivia Walker has left'));
+    fireEvent.click(choice(/They've left/));
     tickPermission();
     orgService.getMemberListLeavers.mockResolvedValueOnce(leaversRead({ move: [who('Olivia Walker', 1)] }));
     fireEvent.click(importButton());
@@ -306,14 +319,17 @@ describe('the worst thing: nobody leaves who was not ticked', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Read the file again' }));
     await waitFor(() => expect(screen.getAllByTestId('missing-row')).toHaveLength(2));
     expect(orgService.uploadMemberList.mock.calls[1][1].mode).toBe('whole_list');
-    expect(within(screen.getByTestId('missing')).getAllByRole('checkbox').map((b) => b.checked)).toEqual([false, false, false]);
+    expect(within(screen.getByTestId('missing')).getAllByRole('checkbox').map((b) => b.checked)).toEqual([false, false]);
+    expect(choice(/They've left/).getAttribute('aria-checked')).toBe('false');
+    expect(importButton().disabled).toBe(true);
   });
 
-  it('other columns read the file again and tick nobody', async () => {
+  it('other columns read the file again and ask afresh', async () => {
     orgService.getMemberListMissing.mockResolvedValueOnce(missingRead([olivia]));
     await reviewWith(oneMissing());
     const card = within(await screen.findByTestId('missing'));
-    fireEvent.click(card.getByLabelText('Olivia Walker has left'));
+    fireEvent.click(await card.findByLabelText('Olivia Walker has left'));
+    fireEvent.click(choice(/They've left/));
     fireEvent.click(screen.getByRole('button', { name: 'Check' }));
     fireEvent.change(screen.getByLabelText('Status imports as'), { target: { value: 'membershipType' } });
     orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: oneMissing() } });
@@ -321,17 +337,19 @@ describe('the worst thing: nobody leaves who was not ticked', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Apply changes' }));
     await waitFor(() => expect(orgService.getMemberListMissing).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.getByLabelText('Olivia Walker has left').checked).toBe(false));
+    expect(choice(/They've left/).getAttribute('aria-checked')).toBe('false');
   });
 
   it('when the names cannot be read, Import waits and Try again reads them', async () => {
     orgService.getMemberListMissing.mockRejectedValueOnce(new Error('offline'));
     await reviewWith(oneMissing());
-    expect(await screen.findByText("We couldn't load who isn't in this file.")).toBeTruthy();
+    expect(await screen.findByText("We couldn't load the names.")).toBeTruthy();
+    fireEvent.click(choice(/They've left/));
     tickPermission();
     expect(importButton().disabled).toBe(true);
     orgService.getMemberListMissing.mockResolvedValueOnce(missingRead([olivia]));
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
-    expect(await screen.findByTestId('missing')).toBeTruthy();
+    expect(await screen.findByTestId('missing-row')).toBeTruthy();
     expect(importButton().disabled).toBe(false);
   });
 });

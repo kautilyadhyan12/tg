@@ -192,27 +192,19 @@ export function missingTitle(missing, needsTick, words) {
   return `${of(missing.n, words.person, words.people)} ${verb} in this file`;
 }
 
-// ── Who has left, person by person (5b-v-d; spec Part 3 §18.8) ─────────────
+// ── Who has left (5b-v-d-i; spec Part 3 §18.8; RULINGS 2026-09-28) ─────────
 
-/** "4 of your 340 members aren't in this file". */
-export function missingMarkTitle(n, listSize, words) {
-  const verb = n === 1 ? "isn't" : "aren't";
-  if (listSize > n) return `${count(n)} of your ${count(listSize)} ${words.people} ${verb} in this file`;
-  return `${of(n, words.person, words.people)} ${verb} in this file`;
-}
-
-/** What the server is sent: the people ticked have left, everyone else the file leaves out
- *  stays on the list (RULINGS 2026-09-28). */
-export function marksBody(missing, left) {
-  const leftIds = [];
-  const stay = [];
-  for (const p of missing.people) (left.has(p.entryId) ? leftIds : stay).push(p.entryId);
-  return { missingDigest: missing.digest, left: leftIds, stay };
-}
-
-/** The line under Import: "3 will leave. Nobody is emailed." */
-export function leavingLine(n, words) {
-  return n === 0 ? 'Nobody is emailed.' : `${of(n, words.person, words.people)} will leave. Nobody is emailed.`;
+/** What the server is sent for the card's answer. They've left: the people ticked, or
+ *  everyone when nobody is ticked, as the card always meant; the rest stay. They're still
+ *  members: everyone stays. */
+export function marksBody(missing, left, answer) {
+  const anyTicked = answer === 'left' && missing.people.some((p) => left.has(p.entryId));
+  const leaves = (p) => answer === 'left' && (!anyTicked || left.has(p.entryId));
+  return {
+    missingDigest: missing.digest,
+    left: missing.people.filter(leaves).map((p) => p.entryId),
+    stay: missing.people.filter((p) => !leaves(p)).map((p) => p.entryId),
+  };
 }
 
 /** "Ben Cole, Amy Shaw, Raj Patel and 2 more". */

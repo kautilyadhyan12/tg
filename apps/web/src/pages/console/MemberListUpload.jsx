@@ -28,7 +28,6 @@ import {
   groupNote,
   guardNumber,
   importedColumnCount,
-  leavingLine,
   marksBody,
   missingOf,
   missingStatusLine,
@@ -467,7 +466,10 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
     else setAnswer('left');
   };
   const chooseKeep = () => {
-    if (preview.mode === 'whole_list') void read(source, 'add', mapping);
+    // The list's own people who are missing are answered with the marks; only app members
+    // leaving with no record missing are read again as people to add, as before.
+    if (missingGroup.current === 'gone') setAnswer('keep');
+    else if (preview.mode === 'whole_list') void read(source, 'add', mapping);
   };
   /** Any other read of the same file — again after a refusal, with other columns, a date
    *  swapped — is the whole list, and asks about the missing people afresh. */
@@ -501,7 +503,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
       permissionConfirmed: permission,
       acknowledgeLargeChange,
       acknowledgeHandEdits: handEdits.entries > 0 && handTick,
-      marks: marksBody(missingSet, left),
+      marks: marksBody(missingSet, left, 'left'),
       leaversDigest,
     });
     return res.data.confirmed;
@@ -509,7 +511,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
 
   const uploadId = preview?.uploadId ?? null;
   const loadLeavers = useCallback(
-    () => orgService.getMemberListLeavers(gymId, uploadId, marksBody(missingSet, left)).then((res) => res.data.leavers),
+    () => orgService.getMemberListLeavers(gymId, uploadId, marksBody(missingSet, left, 'left')).then((res) => res.data.leavers),
     [gymId, uploadId, missingSet, left],
   );
   const leaversFailed = useCallback((err) => {
@@ -672,24 +674,24 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
     const skipped = preview.file.noContact + preview.file.duplicates;
     const wholeList = preview.mode === 'whole_list';
     const needsTyping = wholeList && guard.needsTick;
-    // The people the file leaves out are marked one by one (§18.8); the big-change number
-    // is then typed in the box Import opens, which names who moves and who loses the app.
+    // The list's own people missing from the file (§18.8): a tick beside each name, and the
+    // card's two answers. The big-change number is typed in the box Import opens, which
+    // names who moves and who loses the app.
     const marking = missing?.group === 'gone';
     const markSet = marking && missingSet !== null && typeof missingSet === 'object' ? missingSet : null;
-    const leaving = markSet === null ? 0 : markSet.people.filter((p) => left.has(p.entryId)).length;
+    const ticked = markSet === null ? 0 : markSet.people.filter((p) => left.has(p.entryId)).length;
     const canImport =
       busy === null &&
       !readOnly &&
       !preview.needsMapping &&
       !dirty &&
       permission &&
-      (marking
-        ? markSet !== null
-        : (missing === null || answer !== null) && (!needsTyping || (answer === 'left' && typedMatches(typed, guard)))) &&
+      (missing === null || answer !== null) &&
+      (marking ? markSet !== null : !needsTyping || (answer === 'left' && typedMatches(typed, guard))) &&
       (handEdits.entries === 0 || handTick);
     // "Import 3 members" only when nobody is moved to past members by the same press.
     const importLabel =
-      summary.hero !== null && (missing === null || (marking ? leaving === 0 : answer === 'keep')) ? `Import ${count(summary.hero)} ${peopleWord(summary.hero, words)}` : 'Import';
+      summary.hero !== null && (missing === null || answer === 'keep') ? `Import ${count(summary.hero)} ${peopleWord(summary.hero, words)}` : 'Import';
     const namesFor = (group) => (
       <Names
         page={pages[group]}
@@ -783,24 +785,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
 
         {openGroup !== null && openGroup !== missing?.group ? namesFor(openGroup) : null}
 
-        {marking && !preview.needsMapping ? (
-          markSet !== null ? (
-            <MemberListMissing missing={markSet} left={left} onLeft={setLeft} listSize={guard.listSize} words={words} disabled={busy !== null || readOnly} />
-          ) : missingSet === 'error' ? (
-            <div role="alert" className="rounded-2xl px-4 py-3 text-sm flex items-center justify-between gap-3" style={{ background: C.redBg, color: '#fca5a5' }}>
-              We couldn&apos;t load who isn&apos;t in this file.
-              <button type="button" onClick={() => void loadMissing(preview.uploadId)} className={LINK} style={{ color: C.orange }}>
-                Try again
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 text-sm" style={{ color: C.muted }}>
-              <Loader2 className="w-4 h-4 animate-spin" /> Loading who isn&apos;t in this file…
-            </div>
-          )
-        ) : null}
-
-        {missing !== null && !marking && !preview.needsMapping ? (
+        {missing !== null && !preview.needsMapping ? (
           <div className="rounded-[18px] p-4 flex flex-col gap-3.5" style={{ background: C.card, border: '1px solid rgba(255,138,31,0.45)' }} data-testid="missing">
             <div>
               <div className="text-[17px] font-bold" style={{ color: '#fff' }}>
@@ -826,12 +811,39 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
               ) : null}
             </div>
             {/* Every one of them, with what the list says of them, before the question. */}
-            {wholeList ? namesFor(missing.group) : null}
+            {!marking ? (
+              wholeList ? namesFor(missing.group) : null
+            ) : markSet !== null ? (
+              <MemberListMissing missing={markSet} left={left} onLeft={setLeft} disabled={busy !== null || readOnly} />
+            ) : missingSet === 'error' ? (
+              <div role="alert" className="rounded-2xl px-4 py-3 text-sm flex items-center justify-between gap-3" style={{ background: C.redBg, color: '#fca5a5' }}>
+                We couldn&apos;t load the names.
+                <button type="button" onClick={() => void loadMissing(preview.uploadId)} className={LINK} style={{ color: C.orange }}>
+                  Try again
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-sm" style={{ color: C.muted }}>
+                <Loader2 className="w-4 h-4 animate-spin" /> Loading names…
+              </div>
+            )}
             <div role="radiogroup" aria-label="What happened to them?" className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <Choice on={answer === 'left'} title="They've left" sub={missing.group === 'gone' ? `Move to past ${words.people}` : 'Mark them as not on your list'} onClick={chooseLeft} disabled={busy !== null} />
+              <Choice
+                on={answer === 'left'}
+                title="They've left"
+                sub={
+                  missing.group !== 'gone'
+                    ? 'Mark them as not on your list'
+                    : ticked > 0
+                      ? `Move the ${count(ticked)} ticked to past ${words.people}`
+                      : `Move to past ${words.people}`
+                }
+                onClick={chooseLeft}
+                disabled={busy !== null}
+              />
               <Choice on={answer === 'keep'} title={`They're still ${words.people}`} sub="Leave them on the list" onClick={chooseKeep} disabled={busy !== null} />
             </div>
-            {answer === 'left' && needsTyping ? (
+            {answer === 'left' && needsTyping && !marking ? (
               <label className="flex items-center gap-3 text-[15px]" style={{ color: C.soft }}>
                 <span>
                   Type <b style={{ color: '#fff' }}>{count(guardNumber(guard))}</b> to confirm
@@ -1019,7 +1031,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
             <button
               type="button"
               onClick={
-                !marking ? () => void confirm() : leaving > 0 ? () => setLeaversOpen(true) : () => void confirm({ marks: marksBody(markSet, left) })
+                !marking ? () => void confirm() : answer === 'left' ? () => setLeaversOpen(true) : () => void confirm({ marks: marksBody(markSet, left, 'keep') })
               }
               disabled={!canImport}
               className={`${PRIMARY} mt-2`}
@@ -1029,7 +1041,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
               {importLabel}
             </button>
             <p className="text-[13px] text-center mt-1.5" style={{ color: C.muted }}>
-              {dirty ? 'Apply your column changes first.' : leavingLine(leaving, words)}
+              {dirty ? 'Apply your column changes first.' : 'Nobody is emailed.'}
             </p>
           </div>
         ) : null}

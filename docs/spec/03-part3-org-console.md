@@ -3332,12 +3332,13 @@ first. Nobody is emailed."). Over the large-change line the number of leavers is
 today. The confirm sends who left and who stays, with the digest of the missing set; a set
 that moved is refused as `list_changed`, nothing applied.
 
-**Built in 5b-v-d-i (2026-09-28), amended at Kd's click-through (RULINGS 2026-09-28):** the
-card is the one the import always had, with a tick box on each missing person and Select all:
-"Tick the ones who have left. The rest stay on your list." No status chips, no per-person mark,
-no tally; nobody leaves unless ticked, so Import does not wait; the line under it reads "2
-members will leave. Nobody is emailed." With nobody ticked, Import sends everyone as staying
-and opens no box. Import with anyone ticked opens a box first, as
+**Built in 5b-v-d-i (2026-09-28), as Kd ruled at its click-through (RULINGS 2026-09-28, amended 2026-09-29):**
+Review keeps the look it had: the number of new members above, then this card with the
+names of the people the file leaves out and their details, and its two answers, **They've
+left** and **They're still members**. The one addition is a tick beside each name: They've
+left moves the people ticked ("Move the 2 ticked to past members"), or everyone when nobody
+is ticked, as before; They're still members keeps everyone and opens no box. Import waits for
+one of the two answers. Import with anyone leaving opens a box first, as
 Remove does (18.6): who moves to past members, who loses the app with them, who keeps it and
 why, how many stay; the large-change number is typed there. It is Remove's own rule on the
 records marked Left, worked out before the file is applied, with one exception that ends
