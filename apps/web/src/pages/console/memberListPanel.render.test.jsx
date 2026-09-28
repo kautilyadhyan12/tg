@@ -18,6 +18,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       uploadMemberList: vi.fn(),
       changeMemberListEntry: vi.fn(),
       getInvitePreview: vi.fn(),
+      inviteMemberListEntry: vi.fn(),
     },
   };
 });
@@ -100,6 +101,65 @@ beforeEach(() => {
 });
 
 afterEach(() => cleanup());
+
+// 5b-v-c's worst thing (spec Part 3 §18.10): staff open one person, then another, and the
+// first one's late answer lands on the second one's page, or a button acts on the first.
+describe("the worst thing on a person's page: two people opened one after the other", () => {
+  const detail = (e) => ({ ...e, extra: [], handEdited: [], members: [] });
+  const person = () => within(screen.getByTestId('member-person'));
+  const rowOf = async (name) => (await screen.findAllByTestId('list-row')).find((r) => r.textContent.includes(name));
+
+  it("Ada's page answering late never shows under Bea's name, and Bea's Invite asks for Bea and invites Bea", async () => {
+    const ada = entry('Ada Lovelace');
+    const bea = entry('Bea Hart');
+    orgService.getMemberListEntries.mockResolvedValue(pageOf([ada, bea]));
+    const adaLate = later();
+    orgService.getMemberListEntry.mockImplementation((_gym, id) => (id === ada.entryId ? adaLate.promise : Promise.resolve({ data: { entry: detail(bea) } })));
+    orgService.inviteMemberListEntry.mockResolvedValue({ data: { invite: { outcome: 'queued', invitation: null } } });
+    draw();
+    fireEvent.click(await rowOf('Ada Lovelace'));
+    fireEvent.click(person().getByRole('button', { name: 'Close' }));
+    fireEvent.click(await rowOf('Bea Hart'));
+    expect(await person().findByRole('heading', { name: 'Bea Hart' })).toBeTruthy();
+    adaLate.resolve({ data: { entry: detail(ada) } });
+    await adaLate.promise;
+    await waitFor(() => expect(person().queryByText(/ada@members\.example/)).toBeNull());
+    expect(person().getByRole('heading', { name: 'Bea Hart' })).toBeTruthy();
+
+    fireEvent.click(person().getByRole('button', { name: 'Invite to app' }));
+    const ask = within(person().getByTestId('confirm-invite'));
+    expect(ask.getByText('Invite Bea Hart to the app?')).toBeTruthy();
+    expect(ask.getByText('One email goes to bea@members.example with a link to the app.')).toBeTruthy();
+    fireEvent.click(ask.getByRole('button', { name: 'Send invitation' }));
+    await waitFor(() => expect(orgService.inviteMemberListEntry).toHaveBeenCalledTimes(1));
+    expect(orgService.inviteMemberListEntry).toHaveBeenCalledWith(GYM, bea.entryId);
+  });
+
+  it("Ada's invitation answering after staff moved on to Bea says nothing on Bea's page", async () => {
+    const ada = entry('Ada Lovelace');
+    const bea = entry('Bea Hart');
+    orgService.getMemberListEntries.mockResolvedValue(pageOf([ada, bea]));
+    orgService.getMemberListEntry.mockImplementation((_gym, id) => Promise.resolve({ data: { entry: detail(id === ada.entryId ? ada : bea) } }));
+    const invited = later();
+    orgService.inviteMemberListEntry.mockReturnValue(invited.promise);
+    draw();
+    fireEvent.click(await rowOf('Ada Lovelace'));
+    fireEvent.click(await person().findByRole('button', { name: 'Invite to app' }));
+    fireEvent.click(person().getByRole('button', { name: 'Send invitation' }));
+    fireEvent.click(person().getByRole('button', { name: 'Close' }));
+    fireEvent.click(await rowOf('Bea Hart'));
+    expect(await person().findByRole('heading', { name: 'Bea Hart' })).toBeTruthy();
+    const queued = { state: 'queued', invitedAt: '2026-09-28T10:00:00.000Z', email: null, sentAgain: 0, waitingSince: null, notMeAt: null };
+    invited.resolve({ data: { invite: { outcome: 'queued', invitation: queued } } });
+    await invited.promise;
+    // Ada's invitation was sent for Ada, and Bea's page is untouched by it.
+    expect(orgService.inviteMemberListEntry).toHaveBeenCalledWith(GYM, ada.entryId);
+    await waitFor(() => expect(person().queryByRole('status')).toBeNull());
+    expect(person().queryByText(/Invitation sent/)).toBeNull();
+    expect(person().getByText('Not in the app')).toBeTruthy();
+    expect(person().getByRole('button', { name: 'Invite to app' })).toBeTruthy();
+  });
+});
 
 describe("the gym's own list", () => {
   it('shows Search, Filter and the count over the list, and no chips until Filter is pressed', async () => {

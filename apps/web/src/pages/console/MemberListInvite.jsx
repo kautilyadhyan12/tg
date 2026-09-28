@@ -74,6 +74,7 @@ export default function MemberListInvite({
   filters,
   words,
   readOnly,
+  canRemove = false,
   preview: first,
   selection = null,
   onSelectionChanged = NOTHING,
@@ -515,6 +516,7 @@ export default function MemberListInvite({
           list={list}
           words={words}
           readOnly={readOnly}
+          canRemove={canRemove}
           onClose={() => setOpenId(undefined)}
           onChanged={personChanged}
         />

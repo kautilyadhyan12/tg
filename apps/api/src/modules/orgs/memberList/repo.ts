@@ -1024,17 +1024,17 @@ const sameContactSchema = z.array(
 );
 
 /** WHY SOME OF THE GYM'S MEMBERS ARE NOT ON ITS LIST, for the roster (3a-vi-b): when
- *  each FORMER record came off, and the name on the first current record holding each
- *  address. Both are the gym's own data about its list, asked by id and address in
- *  this gym only. */
+ *  each FORMER record came off, and the first current record holding each address (its
+ *  id and name, so the roster can open it). Both are the gym's own data about its list,
+ *  asked by id and address in this gym only. */
 export async function offListFacts(
   sql: SqlOrTx,
   gymId: string,
   formerEntryIds: readonly string[],
   emails: readonly string[],
-): Promise<{ takenOffAt: Map<string, Date>; nameByEmail: Map<string, string> }> {
+): Promise<{ takenOffAt: Map<string, Date>; recordByEmail: Map<string, { id: string; fullName: string }> }> {
   const takenOffAt = new Map<string, Date>();
-  const nameByEmail = new Map<string, string>();
+  const recordByEmail = new Map<string, { id: string; fullName: string }>();
   if (formerEntryIds.length > 0) {
     const rows = await sql<{ id: string; former_at: Date }[]>`
       SELECT id, former_at FROM gym_member_list_entries
@@ -1042,14 +1042,14 @@ export async function offListFacts(
     for (const row of rows) takenOffAt.set(row.id, row.former_at);
   }
   if (emails.length > 0) {
-    const rows = await sql<{ email: string; full_name: string }[]>`
-      SELECT DISTINCT ON (lower(email::text)) lower(email::text) AS email, full_name
+    const rows = await sql<{ email: string; id: string; full_name: string }[]>`
+      SELECT DISTINCT ON (lower(email::text)) lower(email::text) AS email, id, full_name
       FROM gym_member_list_entries
       WHERE gym_id = ${gymId} AND former_at IS NULL AND email = ANY(${[...emails]}::citext[])
       ORDER BY lower(email::text), listed_seq`;
-    for (const row of rows) nameByEmail.set(row.email, row.full_name);
+    for (const row of rows) recordByEmail.set(row.email, { id: row.id, fullName: row.full_name });
   }
-  return { takenOffAt, nameByEmail };
+  return { takenOffAt, recordByEmail };
 }
 
 /** THE WHOLE DOCUMENT, rows and all — the expensive read, and the only caller is a

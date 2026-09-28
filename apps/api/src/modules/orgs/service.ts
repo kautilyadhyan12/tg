@@ -1326,10 +1326,12 @@ async function offListOf(
   for (const m of off) {
     const own = ownRecord(m);
     const at = own === null ? undefined : facts.takenOffAt.get(own);
+    const same = m.email === null ? undefined : facts.recordByEmail.get(m.email.toLowerCase());
     out.set(m.userId, {
       reason: at !== undefined ? "taken_off" : m.everListed ? "no_longer_listed" : "never_listed",
       at: at?.toISOString() ?? null,
-      sameEmailName: m.email === null ? null : (facts.nameByEmail.get(m.email.toLowerCase()) ?? null),
+      sameEmailName: same?.fullName ?? null,
+      sameEmailEntryId: same?.id ?? null,
     });
   }
   return { offList: out, typedInName, records };

@@ -109,6 +109,7 @@ function openBox(entryId, extra = {}) {
       list={LIST}
       words={WORDS}
       readOnly={false}
+      canRemove
       onClose={onClose}
       onChanged={onChanged}
       {...extra}
@@ -195,6 +196,36 @@ describe('the worst thing: one person tapped, another shown or changed', () => {
     beaRead.resolve(entryAnswer(bea));
     expect(await dialog().findByText('Bea Hart')).toBeTruthy();
     expect(orgService.getMemberListEntry).toHaveBeenLastCalledWith(GYM, BEA);
+  });
+
+  it("5b-v-c: after Open that record, the App word, the Invite question and its press are all the second person's", async () => {
+    const adaInApp = { ...ada, inApp: true, app: { word: 'in_app', tone: 'green', at: null, line: null, lineTone: 'plain' } };
+    const beaRead = later();
+    orgService.getMemberListEntry.mockImplementation((_gym, id) => (id === ADA ? Promise.resolve(entryAnswer(adaInApp)) : beaRead.promise));
+    orgService.changeMemberListEntry.mockRejectedValue(
+      refusal(409, { error: 'already_on_list', message: 'This person is already on your list.', entryId: BEA }),
+    );
+    orgService.inviteMemberListEntry.mockResolvedValue({ data: { invite: { outcome: 'queued', invitation: null } } });
+    openBox(ADA);
+    expect(await dialog().findByText('In the app')).toBeTruthy();
+    fireEvent.click(dialog().getByRole('button', { name: 'Edit' }));
+    fireEvent.change(dialog().getByLabelText('Email'), { target: { value: 'bea@members.example' } });
+    fireEvent.click(dialog().getByRole('button', { name: 'Save' }));
+    fireEvent.click(await dialog().findByRole('button', { name: 'Open that record' }));
+    // While Bea is read, nothing of Ada's stays: not her name, not her App word.
+    expect(dialog().queryByText('In the app')).toBeNull();
+    expect(dialog().queryByRole('heading', { name: 'Ada Lovelace' })).toBeNull();
+    beaRead.resolve(entryAnswer(bea));
+    expect(await dialog().findByRole('heading', { name: 'Bea Hart' })).toBeTruthy();
+    expect(dialog().getByText('Not in the app')).toBeTruthy();
+
+    fireEvent.click(dialog().getByRole('button', { name: 'Invite to app' }));
+    const ask = within(dialog().getByTestId('confirm-invite'));
+    expect(ask.getByText('Invite Bea Hart to the app?')).toBeTruthy();
+    expect(ask.getByText('One email goes to bea@members.example with a link to the app.')).toBeTruthy();
+    fireEvent.click(ask.getByRole('button', { name: 'Send invitation' }));
+    await waitFor(() => expect(orgService.inviteMemberListEntry).toHaveBeenCalledTimes(1));
+    expect(orgService.inviteMemberListEntry).toHaveBeenCalledWith(GYM, BEA);
   });
 
   it('Join removes the record shown under Remove and keeps the one under Keep, both ways round', async () => {
@@ -327,6 +358,56 @@ describe('round one: a confirm only ever sends what was refused', () => {
     expect(dialog().getByLabelText('Find the other record').getAttribute('maxLength')).toBe(String(MEMBER_LIST_QUERY_MAX_CHARS));
   });
 });
+describe("5b-v-c: the one main button, and Invite asks first (spec Part 3 §18.6, §18.7)", () => {
+  const went = { state: 'sent', reason: null, at: '2026-09-20T10:01:00.000Z', result: 'delivered' };
+  const pending = { state: 'pending', invitedAt: '2026-09-20T10:00:00.000Z', email: went, sentAgain: 0, waitingSince: null, notMeAt: null };
+  const cases = [
+    ['not invited, with an email', {}, 'Invite to app'],
+    ['invited', { invitation: pending, app: { word: 'invited', tone: 'grey', at: '2026-09-20T10:00:00.000Z', line: null, lineTone: 'plain' } }, 'Send again'],
+    [
+      'removed from the app',
+      {
+        invitation: { ...pending, state: 'withdrawn', removedAt: '2026-09-26T09:30:00.000Z', addressRemovedAt: null, wrongPersonAt: null },
+        app: { word: 'not_in_app', tone: 'grey', at: '2026-09-26T09:30:00.000Z', line: 'Removed from app · 26 Sep', lineTone: 'plain' },
+      },
+      'Invite again',
+    ],
+    ['in the app', { inApp: true, app: { word: 'in_app', tone: 'green', at: null, line: null, lineTone: 'plain' } }, 'Edit'],
+    ['with no email', { email: null, phone: '+447700900123' }, 'Edit'],
+    ['under 18', { dateOfBirth: '2015-03-14', app: { word: 'not_in_app', tone: 'grey', at: null, line: 'Under 18', lineTone: 'plain' } }, 'Edit'],
+    ['a past member', { formerAt: '2026-08-01T10:00:00.000Z' }, 'Put back on your list'],
+  ];
+  it.each(cases)('%s: one orange button, and it is the right one', async (_label, over, main) => {
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer(person(ADA, 'Ada Lovelace', over)));
+    openBox(ADA);
+    await dialog().findByRole('heading', { name: 'Ada Lovelace' });
+    const orange = dialog()
+      .getAllByRole('button')
+      .filter((b) => b.classList.contains('c-btn-p'));
+    expect(orange.map((b) => b.textContent)).toEqual([main]);
+  });
+
+  it('Invite to app names the person and the address first; Cancel sends nothing', async () => {
+    openBox(ADA);
+    fireEvent.click(await dialog().findByRole('button', { name: 'Invite to app' }));
+    const ask = within(dialog().getByTestId('confirm-invite'));
+    expect(ask.getByText('Invite Ada Lovelace to the app?')).toBeTruthy();
+    expect(ask.getByText('One email goes to ada@members.example with a link to the app.')).toBeTruthy();
+    expect(orgService.inviteMemberListEntry).not.toHaveBeenCalled();
+    fireEvent.click(ask.getByRole('button', { name: 'Cancel' }));
+    expect(dialog().queryByTestId('confirm-invite')).toBeNull();
+    expect(dialog().getByRole('button', { name: 'Invite to app' })).toBeTruthy();
+    expect(orgService.inviteMemberListEntry).not.toHaveBeenCalled();
+  });
+
+  it('opens as a side panel with the App word under the name, in the console look', async () => {
+    openBox(ADA);
+    await dialog().findByRole('heading', { name: 'Ada Lovelace' });
+    expect(screen.getByRole('dialog').classList.contains('c-sheet')).toBe(true);
+    expect(dialog().getByText('Not in the app').classList.contains('c-tag')).toBe(true);
+  });
+});
+
 describe('a person on the list', () => {
   it('shows both records side by side, every field, the ones that differ marked, so two different people can be told apart', async () => {
     const liam = person(ADA, 'Liam Hughes', { email: 'liam.hughes@members.example', phone: '+447700900302', memberNumber: 'M-103', dateOfBirth: '1990-03-12', joinedOn: '2025-03-03', status: 'Frozen', inApp: true, extra: [{ key: 'locker', label: 'Locker', value: '4' }] });
@@ -375,8 +456,9 @@ describe('a person on the list', () => {
     expect(dialog().getByText('Renews 3 Oct 2026')).toBeTruthy();
     expect(dialog().getByText('Locker')).toBeTruthy();
     expect(dialog().getByText('12')).toBeTruthy();
-    // The App word, and the section of who uses the app under it.
-    expect(dialog().getAllByText('In the app')).toHaveLength(2);
+    // The App word, and the App section of who uses the app.
+    expect(dialog().getByText('In the app')).toBeTruthy();
+    expect(dialog().getByRole('heading', { name: 'App' })).toBeTruthy();
     expect(dialog().getByText(/4 visits · last 20 September 2026/)).toBeTruthy();
     expect(dialog().getByText(/Changed by hand: Phone/)).toBeTruthy();
   });
@@ -451,7 +533,7 @@ describe('a person on the list', () => {
     expect(dialog().getByRole('button', { name: 'Put back on your list' })).toBeTruthy();
     fireEvent.click(dialog().getByRole('button', { name: /^More/ }));
     expect(dialog().getByRole('menuitem', { name: /^Delete for good/ })).toBeTruthy();
-    expect(dialog().queryByRole('menuitem', { name: /^Remove$/ })).toBeNull();
+    expect(dialog().queryByRole('menuitem', { name: /^Remove/ })).toBeNull();
 
     // Put back undoes both (RULINGS 2026-09-27): the answer says whether their app came back.
     orgService.restoreMemberListEntry.mockResolvedValue({ data: { ...written('restored', ada).data, app: 'back' } });
@@ -512,7 +594,7 @@ describe('a person on the list', () => {
     await dialog().findByRole('button', { name: 'Edit' });
     expect(dialog().queryByRole('button', { name: 'Invite again' })).toBeNull();
     expect(dialog().queryByRole('button', { name: 'Send again' })).toBeNull();
-    expect(dialog().queryByRole('button', { name: 'Invite' })).toBeNull();
+    expect(dialog().queryByRole('button', { name: 'Invite to app' })).toBeNull();
   });
 
   describe("who uses the app with a record, and Not this person (RULINGS 2026-09-28: the email is the link)", () => {
@@ -530,6 +612,9 @@ describe('a person on the list', () => {
       openBox(ADA);
       const who = within(await screen.findByTestId('in-app-person'));
       expect(who.getByText('du')).toBeTruthy();
+      // Round one of 5b-v-c, L3: §18.3's words, never "joined".
+      expect(who.getByText(/· In the app since 7 September 2026/)).toBeTruthy();
+      expect(who.queryByText(/joined/)).toBeNull();
       expect(dialog().queryByText(/Check this is them/)).toBeNull();
       expect(who.getByRole('button', { name: 'Not Daniel Wu?' })).toBeTruthy();
     });
@@ -574,13 +659,20 @@ describe('a person on the list', () => {
     };
     orgService.getMemberListEntry.mockResolvedValue(entryAnswer(grace));
     openBox(ADA);
-    await pickMore('Remove');
+    // §18.7: the amber line and its Remove from app on the page, not under More.
+    const line = within(await dialog().findByTestId('past-in-app'));
+    expect(line.getByText("Grace still uses the app through your gym. Remove them from the app if they've left.")).toBeTruthy();
+    fireEvent.click(dialog().getByRole('button', { name: /^More/ }));
+    expect(dialog().queryByRole('menuitem', { name: /^Remove/ })).toBeNull();
+    fireEvent.click(line.getByRole('button', { name: 'Remove from app' }));
     const box = within(screen.getByTestId('confirm-take-off'));
     expect(box.getByText("Remove Grace Hall's app access?")).toBeTruthy();
     expect(box.getByText(/already a past member\. This removes their access to your gym in the app\./)).toBeTruthy();
     const done = { ...grace, inApp: false, removeEndsApp: false, app: { word: 'not_in_app', tone: 'grey', at: '2026-09-27T10:00:00.000Z', line: 'Removed from app', lineTone: 'plain' } };
     orgService.takeOffMemberListEntry.mockResolvedValue(written('removed_from_app', done));
-    fireEvent.click(box.getByRole('button', { name: 'Remove' }));
+    // Round one of 5b-v-c, L2: the button says what it takes away.
+    expect(box.queryByRole('button', { name: 'Remove' })).toBeNull();
+    fireEvent.click(box.getByRole('button', { name: 'Remove access' }));
     await waitFor(() => expect(orgService.takeOffMemberListEntry).toHaveBeenCalledWith(GYM, ADA));
     expect(await dialog().findByText('App access removed. They remain a past member.')).toBeTruthy();
   });
@@ -590,7 +682,8 @@ describe('a person on the list', () => {
     openBox(ADA);
     fireEvent.click(await dialog().findByRole('button', { name: /^More/ }));
     expect(dialog().getByRole('menuitem', { name: /^Delete for good/ })).toBeTruthy();
-    expect(dialog().queryByRole('menuitem', { name: /^Remove$/ })).toBeNull();
+    expect(dialog().queryByRole('menuitem', { name: /^Remove/ })).toBeNull();
+    expect(dialog().queryByRole('button', { name: 'Remove from app' })).toBeNull();
   });
 
   it('says an invitation stops working when somebody invited is removed from the list', async () => {
@@ -653,6 +746,40 @@ describe('a person on the list', () => {
     fireEvent.change(dialog().getByLabelText('Email'), { target: { value: 'nope' } });
     fireEvent.click(dialog().getByRole('button', { name: 'Save' }));
     expect(await dialog().findByText(/doesn't look right/)).toBeTruthy();
+  });
+
+  it("round one of 5b-v-c, L1: without members.remove, nothing that ends somebody's app is offered", async () => {
+    const DAN = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    const inApp = {
+      ...person(ADA, 'Daniel Wu'),
+      inApp: true,
+      removeEndsApp: true,
+      app: { word: 'in_app', tone: 'green', at: null, line: null, lineTone: 'plain' },
+      members: [{ userId: DAN, displayName: 'du', joinedAt: '2026-09-07T10:00:00.000Z', visits: 0, lastVisitOn: null }],
+    };
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer(inApp));
+    openBox(ADA, { canRemove: false });
+    const who = within(await screen.findByTestId('in-app-person'));
+    expect(who.queryByRole('button', { name: /^Not / })).toBeNull();
+    fireEvent.click(dialog().getByRole('button', { name: /^More/ }));
+    expect(dialog().queryByRole('menuitem', { name: /^Remove/ })).toBeNull();
+    expect(dialog().getByRole('menuitem', { name: /^Merge duplicate/ })).toBeTruthy();
+    cleanup();
+
+    // A past member still in the app: the amber line stays, its button goes.
+    const grace = { ...person(ADA, 'Grace Hall'), formerAt: '2026-09-25T10:00:00.000Z', inApp: true, removeEndsApp: true };
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer(grace));
+    openBox(ADA, { canRemove: false });
+    const line = within(await dialog().findByTestId('past-in-app'));
+    expect(line.getByText(/Grace Hall is still in the app through your gym\./)).toBeTruthy();
+    expect(line.queryByRole('button', { name: 'Remove from app' })).toBeNull();
+    cleanup();
+
+    // Nobody uses the app with this record: Remove only moves it, which the list's tick allows.
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer(ada));
+    openBox(ADA, { canRemove: false });
+    fireEvent.click(await dialog().findByRole('button', { name: /^More/ }));
+    expect(dialog().getByRole('menuitem', { name: /^Remove/ })).toBeTruthy();
   });
 
   it('greys every change on a gym whose plan has lapsed', async () => {

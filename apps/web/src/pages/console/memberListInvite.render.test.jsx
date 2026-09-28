@@ -318,7 +318,8 @@ describe("a person's page", () => {
     orgService.inviteMemberListEntry.mockResolvedValue({
       data: { invite: { outcome: 'queued', invitation: invitation({ state: 'queued', reason: null, at: '2026-09-25T10:00:00.000Z', result: null }) } },
     });
-    const button = await page().findByRole('button', { name: 'Invite' });
+    fireEvent.click(await page().findByRole('button', { name: 'Invite to app' }));
+    const button = within(page().getByTestId('confirm-invite')).getByRole('button', { name: 'Send invitation' });
     // Read again after the press, the person carries the server's App word for it.
     const queued = invitation({ state: 'queued', reason: null, at: '2026-09-25T10:00:00.000Z', result: null });
     orgService.getMemberListEntry.mockResolvedValue({
@@ -340,7 +341,7 @@ describe("a person's page", () => {
       'They can be invited from 14 March 2028, when they turn 18. If the date of birth is incorrect, select Edit to update it.',
     );
     expect(page().getByText('Under 18')).toBeTruthy();
-    expect(page().queryByRole('button', { name: 'Invite' })).toBeNull();
+    expect(page().queryByRole('button', { name: 'Invite to app' })).toBeNull();
     expect(page().queryByRole('button', { name: 'Send again' })).toBeNull();
   });
 
@@ -353,13 +354,14 @@ describe("a person's page", () => {
     expect(page().queryByRole('button', { name: 'Send again' })).toBeNull();
     fireEvent.click(page().getByRole('button', { name: /^More/ }));
     expect(page().queryByRole('menuitem', { name: /^Share the invitation/ })).toBeNull();
-    expect(page().getByRole('menuitem', { name: /^Remove$/ })).toBeTruthy();
+    expect(page().getByRole('menuitem', { name: /^Remove/ })).toBeTruthy();
   });
 
   it("shows the server's refusal when the gym's own day says under 18", async () => {
     openPerson(person());
     orgService.inviteMemberListEntry.mockRejectedValue(refusal(409, { error: 'under_age', message: MEMBER_INVITE_WORDS.under_age }));
-    fireEvent.click(await page().findByRole('button', { name: 'Invite' }));
+    fireEvent.click(await page().findByRole('button', { name: 'Invite to app' }));
+    fireEvent.click(page().getByRole('button', { name: 'Send invitation' }));
     expect(await page().findByText(MEMBER_INVITE_WORDS.under_age)).toBeTruthy();
     expect(page().queryByText(/Invited\./)).toBeNull();
   });
@@ -380,7 +382,7 @@ describe("a person's page", () => {
   it('offers nothing to send for somebody already in the app', async () => {
     openPerson(person({ inApp: true, app: { word: 'in_app', tone: 'green', at: null, line: null, lineTone: 'plain' } }));
     await page().findByText('In the app');
-    expect(page().queryByRole('button', { name: 'Invite' })).toBeNull();
+    expect(page().queryByRole('button', { name: 'Invite to app' })).toBeNull();
     expect(page().queryByRole('button', { name: 'Send again' })).toBeNull();
   });
 

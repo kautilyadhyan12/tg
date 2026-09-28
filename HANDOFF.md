@@ -4,6 +4,19 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-28 · 5b-v-c (Folder A): a person's page (branch `members-person-page`)
+
+- **Why this job:** next in Folder A's list. **Risky** (a person's details, a button that emails or removes them), Opus xhigh recommended; the plan was rewritten in simpler words at Kd's ask (*"as a beginner finding too to complex … english is not my fiorst languge"*), then Kd: *"go"*. No migration, no new package.
+- **Screen:** `MemberListPerson` in the console's look (§17), a side panel on a computer, the whole screen on a phone; the App word under the name; one orange button by state; Invite to app asks first (name and address); Remove ("When they have left your gym") and Merge duplicate under More; a past member still in the app has the amber line with Remove from app; sections Contact · Membership · Custom fields · App; Add member and Edit in the new look. `MemberPerson` drawing corrected to One Remove.
+- **Server:** the roster's `offList` gains `sameEmailEntryId` (this gym's first current record at that email), so "someone not on your list" has **Open their details**.
+- **Worst thing, first test:** Ada opened, closed, Bea opened — Ada's late page or late invitation never shows under Bea, and Bea's Invite asks for and sends Bea; the same after "Open that record" inside one panel. **Breaks, each RED, restored sha256-identical:** Invite sending the panel's first person; opening another record keeping the first on screen. A third (the list reusing one panel for everyone) stayed green: Close throws the panel away, so the guard there is the unmount, not the key.
+- **Tests:** api **4,104 of 4,104** (the new roster test: another gym's older record at the same email is never offered); web **3,083 of 3,083** (`poseAssets.contract` local Node 24); shared 233/233; tsc and eslint 0 on every changed file; `vite build` green. Seen in headless Edge at 1440 and 390, dark and light: nothing wider than the screen.
+- **Cost at full size:** no new read of people; the roster's existing same-email query returns one more column (not re-measured).
+- **Kd's click-through:** *"all passed"*. Kd also said yes to member photos on Members (5b-vi, after photo storage; RULINGS 2026-09-28).
+- **Round one: no Critical or High, 4 Low, all fixed (79f2bc2):** nothing that ends somebody's app without `members.remove` (the test RED with the permission not passed); a past member's box button **Remove access**; "In the app since", never "joined"; an unnamed member at the address still opens. Web 3,086 of 3,086.
+- **Re-check closed the round** (*"Nothing Critical or High is open"*); its one Low (the unnamed line said "member" to a studio) fixed: "Someone on your list has the same email".
+- **Next:** merge on Kd's word (ROADMAP tick with it), then 5b-v-d.
+
 ## 2026-09-28 · 20c-iv-a (Folder B): the gym's page, its facilities and the enquiry form (branch `gym-page-and-form`)
 
 - **Why this job:** next on Folder B's list; 1d (Razorpay) still waits — its test account now answers reads (two list calls, 200), and Razorpay told Kd it will reply within 48 hours. Kd split 20c-iv (no QR code; facilities and photos on the page; photos are 20c-iv-b, at most 10 a gym, 2 MB each), took Cloudflare Turnstile, and said *"go"*. **Risky (strangers' details from the internet), Opus xhigh.** Migration `0049_gym_pages` (`gym_pages`, `gym_lead_enquiries`, `gym_leads.enquired_at`); no new package.

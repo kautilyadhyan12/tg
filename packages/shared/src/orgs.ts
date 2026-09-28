@@ -1598,13 +1598,15 @@ export const orgMemberSchema = z.object({
    *  right: the record they joined with was taken off (`at`), they dropped off without
    *  that, or they were never on a list the gym imported. `sameEmailName`
    *  is the name on a current record holding their address — a relative who stayed on
-   *  it, the usual reason a gym is puzzled. Only for staff who may see the list, only
-   *  for paid places, only once the gym has a list; absent otherwise. */
+   *  it, the usual reason a gym is puzzled — and `sameEmailEntryId` that record, so the
+   *  panel can open it ("Open their details", 5b-v-c). Only for staff who may see the
+   *  list, only for paid places, only once the gym has a list; absent otherwise. */
   offList: z
     .object({
       reason: z.enum(["taken_off", "no_longer_listed", "never_listed"]),
       at: z.string().nullable(),
       sameEmailName: z.string().nullable(),
+      sameEmailEntryId: z.string().uuid().nullable(),
     })
     .strict()
     .optional(),

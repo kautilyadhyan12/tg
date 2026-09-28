@@ -81,7 +81,7 @@ function RosterRow({ member, onOpen, picked = null, onTick }) {
  *  them on the list, or Remove (One Remove, RULINGS 2026-09-27: someone on the list moves
  *  to past members AND leaves the app in the same step). A side panel on a computer, the
  *  whole screen on a phone, as a lead's panel is. */
-function RosterSheet({ member, words, seesList, canRemove, readOnly, busy, onClose, onRemove, onPutOnList }) {
+function RosterSheet({ member, words, seesList, canRemove, readOnly, busy, onClose, onRemove, onPutOnList, onOpenRecord }) {
   const [asking, setAsking] = useState(false);
   const off = offListView(member.offList);
   const free = seatIsFree(member);
@@ -133,6 +133,13 @@ function RosterSheet({ member, words, seesList, canRemove, readOnly, busy, onClo
                 {off.line}
               </span>
               {off.sameEmail ? <span className="c-s14 c-t2">{off.sameEmail}</span> : null}
+              {/* That member's own page (spec Part 3 §18.7): a relative who stayed on the
+                  address is the usual reason, and their page says who they are. */}
+              {off.sameEmailEntryId !== null ? (
+                <button type="button" onClick={() => onOpenRecord(off.sameEmailEntryId)} className="c-btn c-btn-link c-btn-sm self-start">
+                  Open their details
+                </button>
+              ) : null}
             </div>
           ) : null}
           <div className="flex flex-wrap gap-2">
@@ -539,6 +546,7 @@ export default function Members() {
           onActionTaken={clearAction}
           emptyExtra={<AlreadyInApp items={state.items} />}
           onRosterChanged={reloadRoster}
+          canRemove={canRemove}
         />
       ) : null}
 
@@ -655,6 +663,10 @@ export default function Members() {
           onClose={() => setOpenUserId(null)}
           onRemove={() => removeMember(openMember)}
           onPutOnList={() => putOnList(openMember)}
+          onOpenRecord={(recordId) => {
+            setOpenUserId(null);
+            setOpenRecord(recordId);
+          }}
         />
       ) : null}
 
@@ -667,6 +679,7 @@ export default function Members() {
           list={recordList}
           words={words}
           readOnly={readOnly}
+          canRemove={canRemove}
           onClose={() => setOpenRecord(null)}
           onChanged={() => {
             reloadRoster();
