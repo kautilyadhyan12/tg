@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ChevronRight, FileUp, Loader2, Search, UserPlus } from 'lucide-react';
+import { ChevronRight, FileUp, Globe, Loader2, Search, UserPlus } from 'lucide-react';
 import { LEAD_FILE_WORDS, LEAD_QUERY_MAX_CHARS } from '@app/shared';
 import { orgService, errorStatus, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
+import GymPageSheet from './GymPageSheet';
 import LeadFileImport from './LeadFileImport';
 import LeadSheet from './LeadSheet';
 import { useConsoleOrg } from './useConsoleOrg';
@@ -11,6 +12,7 @@ import { orgWords, viewerPrivileges } from './consoleView';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
 import {
   DUE_CHIP_LABEL,
+  FROM_PAGE_TAG,
   STATUS_TAG,
   addedDay,
   addedWords,
@@ -28,6 +30,7 @@ import {
 // a table on a computer, a row per lead on a phone. "Email due" (20c-ii) keeps the leads
 // due a follow-up email today: a chip of its own, so it and a status chip are never on together.
 // Import leads (20c-iii) reads a file and adds its people after staff have seen who.
+// "Your gym page" (20c-iv-a) opens the gym's own page, whose form adds people here.
 
 const count = (n) => n.toLocaleString('en');
 
@@ -47,6 +50,7 @@ export default function Leads() {
   /** undefined: no panel · null: adding · an id: that lead. */
   const [openId, setOpenId] = useState(undefined);
   const [importing, setImporting] = useState(false);
+  const [pageOpen, setPageOpen] = useState(false);
   /** "Tom Reid is on your leads.", after Add lead closes. */
   const [notice, setNotice] = useState(null);
   /** The newest request for a page: an answer to an older one is dropped. */
@@ -148,7 +152,18 @@ export default function Leads() {
           <p className="c-sub">People interested in joining {org.name}</p>
         </div>
         {!page.refused ? (
-          <div className="flex gap-2 w-full md:w-auto">
+          <div className="flex flex-wrap gap-2 w-full md:w-auto">
+            <button
+              type="button"
+              onClick={() => {
+                setNotice(null);
+                setPageOpen(true);
+              }}
+              className="c-btn c-btn-s flex-1 md:flex-none"
+            >
+              <Globe aria-hidden="true" className="w-4 h-4" />
+              {`Your ${words.it} page`}
+            </button>
             <button
               type="button"
               onClick={() => {
@@ -283,6 +298,7 @@ export default function Leads() {
                       >
                         <span className={`c-tag ${STATUS_TAG[lead.status] ?? 'c-tag-plain'}`}>{statusWord(lead.status)}</span>
                         {lead.followUp?.dueNow ? <span className="c-tag c-tag-warn">{DUE_CHIP_LABEL}</span> : null}
+                        {lead.enquiredAt ? <span className="c-tag c-tag-soft">{FROM_PAGE_TAG}</span> : null}
                       </span>
                       <ChevronRight aria-hidden="true" className="w-[18px] h-[18px] c-t3" style={{ gridArea: 'go' }} />
                     </button>
@@ -302,6 +318,8 @@ export default function Leads() {
           ) : null}
         </>
       )}
+
+      {pageOpen ? <GymPageSheet gymId={gymId} gym={org} words={words} readOnly={readOnly} onClose={() => setPageOpen(false)} /> : null}
 
       {importing ? (
         <LeadFileImport

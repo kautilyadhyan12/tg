@@ -74,7 +74,14 @@ describe("config: email service", () => {
   });
   it("dev boots with neither; production boots with both", () => {
     expect(loadConfig({ ...good, NODE_ENV: "development" }).RESEND_API_KEY).toBeUndefined();
-    const prod = loadConfig({ ...good, NODE_ENV: "production", RESEND_API_KEY: "re_x", EMAIL_FROM: "AI Home Gym <hi@example.com>" });
+    const prod = loadConfig({
+      ...good,
+      NODE_ENV: "production",
+      RESEND_API_KEY: "re_x",
+      EMAIL_FROM: "AI Home Gym <hi@example.com>",
+      TURNSTILE_SITE_KEY: "site",
+      TURNSTILE_SECRET_KEY: "secret",
+    });
     expect(prod.EMAIL_FROM).toBe("AI Home Gym <hi@example.com>");
   });
 });

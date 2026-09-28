@@ -2622,6 +2622,31 @@ after its day, to the address the lead has now. A due day is the gym's day when 
 worked out; a gym that later changes its time zone may see one a day early or late. A lead who becomes a
 member is the same person: the record is made from the lead.
 
+**The gym's own page and its form (20c-iv-a; RULINGS 2026-09-28).** `/gyms/{slug}`, a
+page of ours anyone with the link opens without signing in: the gym's name, town, today's
+opening hours and the week (from Settings), its **About us** (1,000 characters) and the
+**Facilities** it ticked from a fixed list of 21 (`GYM_FACILITIES`) plus one line of its
+own, then **Get in touch**: name, email or phone, "How did you hear about us?" (the five
+sources in a visitor's words), a message (1,000), an unticked **Happy to hear from {gym}
+by email**, Cloudflare Turnstile's robot check, a hidden field only robots fill, and
+"Your details go only to {gym}, so they can reply." `?embed=1` is the form alone, and
+**Leads → Your gym page** gives the code (an iframe) that shows it inside the gym's own
+website, beside the link. The page is **off until the owner switches it on** (`gym_pages`;
+`org.manage` changes it; staff with `members.confirm` see it and copy the link); off, of a
+gym with no live plan, closed, or no such gym, both routes answer the same 404. A sent
+form always answers the same `received` — for a new person, a known lead or a robot — so
+the form never says who a gym has. A person no lead has by email or phone becomes a New
+lead of THAT gym (`added_by` null, their source or Other, ticked only by their own tick);
+one a lead already has by email (else phone) is kept as a message on that lead, which
+the form never renames, re-contacts or moves — a stranger can type anybody's email — and
+the tick is taken only for the email the lead already has. Every message is kept on its
+lead (`gym_lead_enquiries`, the newest 20, deleted with the lead; the foreign key is
+`(gym_id, lead_id)`, so a message cannot sit on another gym's lead) and shown in the
+lead's panel as typed; the list tags the lead **From your page**. Limits: 60 messages an
+hour from one address, 120 an hour to one page; the robot check is asked after the limit,
+and only our secret and the token are sent to Cloudflare. Photos of the facilities are
+20c-iv-b (at most 10 a gym, 2 MB each).
+
 ### 16.4 At risk
 
 The console lists members whose visits have dropped — came in at least 2 of the last

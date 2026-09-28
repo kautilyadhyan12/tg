@@ -215,3 +215,21 @@ export function followUpState(lead, now = new Date()) {
 
 /** The toggle beside the status chips. */
 export const DUE_CHIP_LABEL = 'Email due';
+
+/** The tag on a lead who sent the form on the gym's own page (20c-iv-a). */
+export const FROM_PAGE_TAG = 'From your page';
+
+/** One message from the gym page's form, as the lead's panel lists it: when, then what
+ *  the person typed that time, which may differ from the lead's own details. */
+export function enquiryLines(enquiry) {
+  const contact = [enquiry.email, enquiry.phone].filter(Boolean).join(' · ');
+  const said = [];
+  if (enquiry.source) said.push(`Heard of you from: ${sourceWord(enquiry.source)}`);
+  if (enquiry.mayEmail) said.push('Happy to hear from you by email');
+  return {
+    when: addedDay(enquiry.createdAt),
+    who: contact === '' ? enquiry.fullName : `${enquiry.fullName} · ${contact}`,
+    said,
+    message: enquiry.message,
+  };
+}

@@ -6,6 +6,7 @@
 // the same gate as the member list (`members.confirm`); a write also needs a live plan.
 // Gates in CLAUDE.md §4's order: privilege, then the rate limit, then the handler.
 import {
+  GYM_ENQUIRIES_KEPT_PER_LEAD,
   LEAD_JOIN_CHOOSE_ERROR,
   LEAD_JOIN_MAX_CANDIDATES,
   LEAD_JOIN_STALE_ERROR,
@@ -20,6 +21,7 @@ import {
   type JoinLeadResponse,
   type Lead,
   type LeadFollowUpSentRequest,
+  type LeadEnquiry,
   type LeadJoinCandidate,
   type LeadStatus,
   type LeadsQuery,
@@ -49,7 +51,7 @@ type Limit = () => Promise<boolean>;
 const notFound = (): OrgsError => new OrgsError(404, "lead_not_found", LEAD_WORDS.lead_not_found);
 
 /** `today` is the gym's day, which says whether a follow-up is due now. */
-function toLead(row: repo.LeadRow, today: string): Lead {
+export function toLead(row: repo.LeadRow, today: string): Lead {
   return {
     id: row.id,
     fullName: row.fullName,
@@ -71,12 +73,13 @@ function toLead(row: repo.LeadRow, today: string): Lead {
       overdue: row.followUpDueOn !== null && row.followUpDueOn < today,
       lastSentAt: row.followUpLastAt === null ? null : row.followUpLastAt.toISOString(),
     },
+    enquiredAt: row.enquiredAt === null ? null : row.enquiredAt.toISOString(),
   };
 }
 
 /** A lead's follow-up columns after a write: the count and the last one as given,
  *  and the next due day worked out again from the status and the tick. */
-function followUpValues(
+export function followUpValues(
   input: { status: LeadStatus; emailOkAt: Date | null; sent: number; lastAt: Date | null },
   timeZone: string,
 ): { followUpsSent: number; followUpLastAt: Date | null; followUpDueOn: string | null } {
@@ -97,7 +100,7 @@ const sameAddress = (a: string | null, b: string | null): boolean => a !== null 
 
 /** A lead's name, email and phone, cleaned by the member list's own rules, so a
  *  lead and the record made from it hold the same address and the same number. */
-function cleanContact(
+export function cleanContact(
   typed: { fullName: string; email: string | null; phone: string | null },
   country: string | null,
 ): { fullName: string; email: string | null; phone: string | null } {
@@ -210,6 +213,30 @@ export async function getLead(deps: LeadsDeps, userId: string, gymId: string, le
   const row = await repo.leadFor(deps.sql, gymId, leadId);
   if (row === null) throw notFound();
   return toLead(row, dayInTz(deps.now(), org.timezone));
+}
+
+/** The messages a lead sent through the gym page's form, newest first (20c-iv-a). */
+export async function listEnquiries(
+  deps: LeadsDeps,
+  userId: string,
+  gymId: string,
+  leadId: string,
+  limit: Limit,
+): Promise<LeadEnquiry[] | null> {
+  await requirePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return null;
+  if ((await repo.leadFor(deps.sql, gymId, leadId)) === null) throw notFound();
+  const rows = await repo.enquiriesFor(deps.sql, gymId, leadId, GYM_ENQUIRIES_KEPT_PER_LEAD);
+  return rows.map((row) => ({
+    id: row.id,
+    fullName: row.fullName,
+    email: row.email,
+    phone: row.phone,
+    source: row.source === null ? null : leadSourceSchema.parse(row.source),
+    message: row.message,
+    mayEmail: row.mayEmail,
+    createdAt: row.createdAt.toISOString(),
+  }));
 }
 
 /** Two requests past the check at once (two servers): the database's UNIQUE answers,

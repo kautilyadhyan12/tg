@@ -73,6 +73,16 @@ describe('authApi refresh-retry interceptor (v1 §6.1)', () => {
     expect(window.location.href).toBe('');
   });
 
+  it("does NOT send a signed-out visitor away from a gym's own page, where they send the gym a message", async () => {
+    vi.stubGlobal('window', { location: { pathname: '/gyms/iron-house', href: '' } });
+    installAdapter({
+      '/v1/auth/me': () => ({ status: 401 }),
+      '/v1/auth/refresh': () => ({ status: 401 }),
+    });
+    await expect(authService.getMe()).rejects.toMatchObject({ response: { status: 401 } });
+    expect(window.location.href).toBe('');
+  });
+
   it('concurrent 401s trigger a SINGLE refresh, then both retry', async () => {
     const calls = installAdapter({
       '/v1/auth/me': (_c, n) => (n <= 2 ? { status: 401 } : { status: 200, data: { ok: true } }),
