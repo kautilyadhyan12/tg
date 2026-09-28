@@ -19,6 +19,7 @@ import {
   type MemberInvitePreviewQuery,
   type MemberInviteRefusal,
   type MemberInviteRequest,
+  type MemberInviteReason,
   type MemberInviteSkipped,
   type MemberInvited,
   type MemberListInvitation,
@@ -54,7 +55,7 @@ const folded = (asked: string | string[] | undefined): string[] | null => {
   return [...new Set(words.map((word) => word.trim().toLowerCase()))];
 };
 
-const filtersOf = (query: MemberInvitePreviewQuery): repo.WordFilters => ({
+export const filtersOf = (query: MemberInvitePreviewQuery): repo.WordFilters => ({
   statuses: folded(query.status),
   membershipTypes: folded(query.membershipType),
   paymentStatuses: folded(query.paymentStatus),
@@ -63,6 +64,11 @@ const filtersOf = (query: MemberInvitePreviewQuery): repo.WordFilters => ({
 interface Group {
   reach: { hmac: string; email: string }[];
   skipped: MemberInviteSkipped;
+  /** Every candidate with its reason, in the list's order, for Invite's page (§18.6);
+   *  `sameAddressAs` names who an address shared within this group goes to. */
+  people: { candidate: repo.Candidate; why: MemberInviteReason; sameAddressAs: string | null }[];
+  /** The gym's live members by §9.7's match, as the walk read them. */
+  members: listRepo.MemberAgainstList[];
 }
 
 /** Who of the filtered group an Invite would queue, and why each of the rest is left
@@ -70,7 +76,7 @@ interface Group {
  *  listed. Two people sharing one address are one invitation: the first in the list's
  *  order is reached and the others count as already invited. `today` is the gym's own
  *  calendar day, for the list's dates of birth. */
-async function workOutGroup(
+export async function workOutGroup(
   sql: SqlOrTx,
   settings: InviteSettings,
   gymId: string,
@@ -93,12 +99,15 @@ async function workOutGroup(
     repo.suppressionsFor(sql, gymId, hmacs),
   ]);
   const skipped = noneSkipped();
+  const people: Group["people"] = [];
   const reach: Group["reach"] = [];
-  const taken = new Set<string>();
+  /** Each address reached so far, and the name it is reached for. */
+  const taken = new Map<string, string>();
   let next = 0;
   for (const candidate of candidates) {
     if (candidate.email === null) {
       skipped.noEmail += 1;
+      people.push({ candidate, why: "noEmail", sameAddressAs: null });
       continue;
     }
     const person = withEmail[next++];
@@ -106,19 +115,31 @@ async function workOutGroup(
     const invite = invites.get(person.hmac);
     // Before the address is taken: a parent later in the list who shares it is still
     // reached, and a child alone at it is not.
-    if (underAgeOn(candidate.dateOfBirth, today)) skipped.underAge += 1;
-    else if (inAppAddresses.has(person.email.toLowerCase())) skipped.inApp += 1;
-    else if ((invite !== undefined && repo.alreadyInvited(invite)) || taken.has(person.hmac)) skipped.alreadyInvited += 1;
-    else if (suppressions.get(person.hmac) === "bounced") skipped.bounced += 1;
-    else if (suppressions.get(person.hmac) === "refused") skipped.refused += 1;
-    else if (suppressions.has(person.hmac)) skipped.unsubscribed += 1;
-    else if (isSharedAddress(person.email)) skipped.sharedAddress += 1;
-    else {
+    const why: MemberInviteReason = underAgeOn(candidate.dateOfBirth, today)
+      ? "underAge"
+      : inAppAddresses.has(person.email.toLowerCase())
+        ? "inApp"
+        : (invite !== undefined && repo.alreadyInvited(invite)) || taken.has(person.hmac)
+          ? "alreadyInvited"
+          : suppressions.get(person.hmac) === "bounced"
+            ? "bounced"
+            : suppressions.get(person.hmac) === "refused"
+              ? "refused"
+              : suppressions.has(person.hmac)
+                ? "unsubscribed"
+                : isSharedAddress(person.email)
+                  ? "sharedAddress"
+                  : "reach";
+    const sameAddressAs = why === "alreadyInvited" && (invite === undefined || !repo.alreadyInvited(invite)) ? (taken.get(person.hmac) ?? null) : null;
+    people.push({ candidate, why, sameAddressAs });
+    if (why === "reach") {
       reach.push(person);
-      taken.add(person.hmac);
+      taken.set(person.hmac, candidate.fullName);
+    } else {
+      skipped[why] += 1;
     }
   }
-  return { reach, skipped };
+  return { reach, skipped, people, members };
 }
 
 const noneSkipped = (): MemberInviteSkipped => ({
@@ -168,6 +189,7 @@ export async function previewInvite(
   const group = await workOutGroup(deps.sql, settings, gymId, filtersOf(query), dayInTz(deps.now(), org.timezone));
   return { version: state?.version ?? 0, reach: group.reach.length, skipped: group.skipped, blocked };
 }
+
 
 /** How many people one press writes in one transaction. The api has one database
  *  connection, so a press of ten thousand in one transaction would hold every other
@@ -345,9 +367,11 @@ export async function inviteAgain(
     const { email, hmac, invite } = await inviteable(tx, settings, gymId, entryId, at);
     if (invite === null) throw refuse(409, "not_invited");
     if (invite.state === "accepted") throw refuse(409, "already_joined");
-    // Whoever reads this address said it is not theirs: sending it again would email the
-    // same stranger. A corrected address is a different invitation.
+    // Whoever reads this address said it is not theirs, or staff said the person using it
+    // is somebody else: sending it again would email the same stranger. A corrected
+    // address is a different invitation.
     if (invite.state === "declined" && (await repo.saidNotMe(tx, gymId, invite.id))) throw refuse(409, "said_not_me");
+    if (invite.state === "withdrawn" && (await repo.markedWrongPerson(tx, gymId, invite.id))) throw refuse(409, "wrong_person");
     await mayEmail(tx, gymId, email, hmac);
     // Sending again re-opens a declined or withdrawn invitation (§10.2), before the check
     // below: an email still waiting to go would otherwise be skipped by the worker as an
@@ -372,13 +396,14 @@ export async function inviteAgain(
   return { outcome: done.outcome, invitation: await view(deps.sql, gymId, done.hmac) };
 }
 
-/** The invitation of each of these entries' addresses, for a page of the list or one
- *  person's page. */
+/** The invitation of each of these records' addresses, for a page of the list or one
+ *  person's page. `countSentAgain: false` is the App word's (its `sentAgain` reads 0). */
 export async function invitationsOf(
   sql: SqlOrTx,
   settings: InviteSettings | null,
   gymId: string,
-  entries: readonly { email: string | null }[],
+  entries: readonly { id: string; email: string | null }[],
+  options: { countSentAgain?: boolean } = {},
 ): Promise<(MemberListInvitation | null)[]> {
   if (settings === null) return entries.map(() => null);
   const hmacs = entries.map((entry) => (entry.email === null ? null : emailHmac(settings.hmacKey, entry.email)));
@@ -386,8 +411,34 @@ export async function invitationsOf(
     sql,
     gymId,
     hmacs.flatMap((hmac) => (hmac === null ? [] : [hmac])),
+    options,
   );
-  return hmacs.map((hmac) => (hmac === null ? null : (views.get(hmac) ?? null)));
+  const found = hmacs.map((hmac) => (hmac === null ? null : (views.get(hmac) ?? null)));
+  // A stopped invitation says whether the gym removed this record's own person from the
+  // app, and when; failing that, whether it removed somebody else who used the address —
+  // an invitation belongs to an address, and two records can share one.
+  const stopped = entries.filter((entry, at) => found[at]?.state === "withdrawn" && entry.email !== null);
+  if (stopped.length === 0) return found;
+  const [byRecord, byAddress] = await Promise.all([
+    repo.removedAtByRecord(
+      sql,
+      gymId,
+      stopped.map((entry) => entry.id),
+    ),
+    repo.removedAtByEmail(
+      sql,
+      gymId,
+      stopped.flatMap((entry) => (entry.email === null ? [] : [entry.email])),
+    ),
+  ]);
+  return found.map((view, at) => {
+    const entry = entries[at];
+    if (view === null || view.state !== "withdrawn" || entry === undefined || entry.email === null) return view;
+    const theirs = byRecord.get(entry.id);
+    if (theirs !== undefined) return { ...view, removedAt: theirs.toISOString() };
+    const someone = byAddress.get(entry.email.toLowerCase());
+    return someone === undefined ? view : { ...view, addressRemovedAt: someone.toISOString() };
+  });
 }
 
 /** The invitations that came back "Not me", each with the list's current people at

@@ -25,6 +25,7 @@
 // as in front of the work.
 import { createHash } from "node:crypto";
 import type { Sql, TransactionSql } from "postgres";
+import type { MemberAppView } from "@app/shared";
 import {
   isLargeMemberListChange,
   MEMBER_FILE_MAX_BYTES,
@@ -54,6 +55,7 @@ import {
   type MemberListSeat,
   type MemberListStagedFile,
   type MemberListStagedShell,
+  type MemberListOnList,
   type MemberListStoredPerson,
   type MemberListUnderstanding,
   type MemberListUploadSummary,
@@ -65,6 +67,7 @@ import type { InviteSettings } from "../invites/settings.js";
 import { insertAudit } from "../repo.js";
 import * as orgRepo from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
+import { appViewsOf, currentAppWords } from "./appViews.js";
 import { decodeEntryCursor, encodeEntryCursor } from "./cursor.js";
 import { extraForWriting, growFields, keptFields, wordForWriting, type FieldSlot } from "./extraFields.js";
 import { understandMemberFile } from "./parseMemberFile.js";
@@ -81,6 +84,7 @@ import {
   type ReconciledPerson,
 } from "./reconcile.js";
 import * as repo from "./repo.js";
+import { inAppRecordIds, pastRecordOf } from "./whose.js";
 
 export interface MemberListDeps {
   sql: Sql;
@@ -404,6 +408,7 @@ async function freshMemberSide(
       status: person.status,
       wasStatus: person.wasStatus,
       inApp: true,
+      onList: null,
     })),
     inApp,
   };
@@ -745,7 +750,20 @@ export async function readPreviewRows(
   // number, whichever group they came from, so one answer serves all four groups and
   // nothing has to be looked up by place.
   // The record's id decides the tick and stays here: a page shows the file's people.
-  const people = picked.people.map(({ entryId, ...person }) => ({ ...person, inApp: read.inApp({ ...person, entryId: entryId ?? null }) }));
+  // Somebody the file leaves out carries what the list says of them today.
+  const onList =
+    group === "gone"
+      ? await repo.onListOf(
+          deps.sql,
+          gymId,
+          picked.people.flatMap(({ entryId }) => (entryId === null || entryId === undefined ? [] : [entryId])),
+        )
+      : new Map<string, MemberListOnList>();
+  const people = picked.people.map(({ entryId, ...person }) => ({
+    ...person,
+    inApp: read.inApp({ ...person, entryId: entryId ?? null }),
+    onList: entryId === null || entryId === undefined ? null : (onList.get(entryId) ?? null),
+  }));
   return {
     group,
     total: picked.total,
@@ -1130,16 +1148,15 @@ export function expectApplied(did: number, said: number, what: string, uploadId:
   );
 }
 
-/** WHICH OF THE GYM'S OWN ENTRIES ARE ALREADY MEMBERS HERE — the entry ids, deduped.
+/** WHICH OF THE GYM'S OWN ENTRIES ARE ALREADY MEMBERS HERE — the entry ids, deduped,
+ *  as the App word reads them (`whose.ts`): each record certainly somebody's, and every
+ *  record of an email a family shares when the list can't say whose it is.
  *
- *  One member matches at most one entry (§9.7's order, `membersAgainstList`), and two
- *  members can land on the same entry — a household on one address — so the ids are
- *  put through a Set before anything counts them. Counting `members.length` instead
- *  would say a gym of two has two people on a list that holds one. */
+ *  Two members can land on the same entry, so the ids are put through a Set before
+ *  anything counts them. Counting `members.length` instead would say a gym of two has
+ *  two people on a list that holds one. */
 function inAppEntryIds(members: readonly repo.MemberAgainstList[]): string[] {
-  const ids = new Set<string>();
-  for (const member of members) if (member.entryId !== null) ids.add(member.entryId);
-  return [...ids];
+  return inAppRecordIds(members);
 }
 
 /** THE SAME ANSWER FOR A PAGE THAT WAS ASKED FOR THE FORMER RECORDS (round one, Low-2).
@@ -1153,10 +1170,10 @@ function inAppEntryIds(members: readonly repo.MemberAgainstList[]): string[] {
  *  So a page that asked for them reads the union, and every OTHER reader — the counts,
  *  the chips, `canBeInvited` — keeps the set that excludes them. */
 function inAppEntryIdsWithFormer(members: readonly repo.MemberAgainstList[]): string[] {
-  const ids = new Set<string>();
+  const ids = new Set(inAppRecordIds(members));
   for (const member of members) {
-    if (member.entryId !== null) ids.add(member.entryId);
-    if (member.formerEntryId !== null) ids.add(member.formerEntryId);
+    const past = pastRecordOf(member);
+    if (past !== null) ids.add(past);
   }
   return [...ids];
 }
@@ -1180,11 +1197,10 @@ export async function readList(
     repo.membersAgainstList(deps.sql, gymId),
     repo.listFields(deps.sql, gymId),
   ]);
-  const { totals, statuses, membershipTypes, paymentStatuses } = await repo.listStatusCounts(
-    deps.sql,
-    gymId,
-    inAppEntryIds(members),
-  );
+  const [{ totals, statuses, membershipTypes, paymentStatuses }, app] = await Promise.all([
+    repo.listStatusCounts(deps.sql, gymId, inAppEntryIds(members)),
+    currentAppWords(deps.sql, deps.invites ?? null, gymId, members, deps.now()),
+  ]);
   // THE WHOLE-LIST NUMBERS AND THE CHIPS COME FROM ONE STATEMENT, never two: two
   // statements counting one gym's people two ways is two answers to one question, and
   // the screen would show both at once.
@@ -1206,6 +1222,7 @@ export async function readList(
     membershipTypes: chipsOf(membershipTypes),
     paymentStatuses: chipsOf(paymentStatuses),
     fields: fields.map((field) => ({ key: field.key, label: field.label })),
+    appWords: app.counts,
   };
 }
 
@@ -1273,6 +1290,15 @@ export async function readEntries(
   // (round one, Low-2, and `inAppEntryIdsWithFormer`'s own note).
   const records = query.records ?? "current";
   const settings = deps.invites ?? null;
+  // THE APP CHOICES ASKED FOR (§18.4) are worked out for every current member by the one
+  // rule, and the page is cut from the records that answer to any of them. They are
+  // current members' words, so a page of past members is not narrowed by them.
+  const asked = query.app === undefined ? null : new Set(Array.isArray(query.app) ? query.app : [query.app]);
+  let appIds: string[] | null = null;
+  if (asked !== null && records === "current") {
+    const { choices } = await currentAppWords(deps.sql, settings, gymId, members, deps.now());
+    appIds = [...choices].flatMap(([id, mine]) => (mine.some((choice) => asked.has(choice)) ? [id] : []));
+  }
   const page = await repo.entriesPage(deps.sql, {
     gymId,
     inAppEntryIds: records === "current" ? inAppEntryIds(members) : inAppEntryIdsWithFormer(members),
@@ -1285,13 +1311,35 @@ export async function readEntries(
     filter: query.filter ?? "all",
     invitation:
       query.invitation === undefined ? null : await invites.entriesByInvitation(deps.sql, settings, gymId, query.invitation),
+    appIds,
     like: typed === "" ? null : `%${escapeLike(typed)}%`,
     cursor,
     limit: MEMBER_LIST_ENTRIES_PAGE + 1,
   });
   const shown = page.entries.slice(0, MEMBER_LIST_ENTRIES_PAGE);
   const last = page.entries.length > MEMBER_LIST_ENTRIES_PAGE ? shown[shown.length - 1] : undefined;
-  const invitations = await invites.invitationsOf(deps.sql, settings, gymId, shown);
+  const [invitations, app] = await Promise.all([
+    invites.invitationsOf(
+      deps.sql,
+      settings,
+      gymId,
+      shown.map((entry) => ({ id: entry.entryId, email: entry.email })),
+    ),
+    appViewsOf(
+      deps.sql,
+      settings,
+      gymId,
+      shown.map((entry) => ({
+        id: entry.entryId,
+        fullName: entry.fullName,
+        email: entry.email,
+        dateOfBirth: entry.dateOfBirth,
+        former: entry.formerAt !== null,
+      })),
+      members,
+      deps.now(),
+    ),
+  ]);
   return {
     total: page.total,
     entries: shown.map((entry, at) => ({
@@ -1311,7 +1359,14 @@ export async function readEntries(
       source: entry.source,
       inApp: entry.inApp,
       invitation: invitations[at] ?? null,
+      app: appOrThrow(app[at]),
     })),
     cursor: last === undefined ? null : encodeEntryCursor({ name: last.fullName, id: last.entryId }),
   };
+}
+
+/** Every record given to `appViewsOf` comes back with its word. */
+export function appOrThrow(view: MemberAppView | undefined): MemberAppView {
+  if (view === undefined) throw new Error("a record came back from the App word without one");
+  return view;
 }

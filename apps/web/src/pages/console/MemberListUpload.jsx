@@ -21,8 +21,8 @@ import {
   FIELD_LABELS,
   bytesToBase64,
   columnName,
+  dateReading,
   datesToCheck,
-  dayWords,
   disbelieved,
   doneWords,
   groupNote,
@@ -44,6 +44,7 @@ import {
   withColumnRole,
   withDateOrder,
 } from './memberListView';
+import { goneWords, gymToday } from './memberListPeople';
 
 // Importing a member list (ROADMAP 5a; spec Part 3 §9.14): Upload, then Review. The
 // server reads, counts and applies; this box shows what matters and sends staff's
@@ -143,6 +144,7 @@ function Line({ icon, tone, title, sub, action, onAction, actionDisabled = false
 
 function Names({ page, note, onMore, onRetry }) {
   if (page === undefined) return null;
+  const today = gymToday();
   return (
     <div className="rounded-2xl overflow-hidden" style={{ background: C.card2, border: `1px solid ${C.line}` }}>
       {note ? (
@@ -152,9 +154,12 @@ function Names({ page, note, onMore, onRetry }) {
       ) : null}
       <ul className="py-1 max-h-[360px] overflow-y-auto">
         {page.people.map((p, i) => {
-          const status = p.wasStatus !== null && p.status !== null && p.wasStatus !== p.status ? `${p.wasStatus} → ${p.status}` : p.status;
+          // Somebody the file leaves out is shown as the list knows them today.
+          const gone = p.onList === null ? null : goneWords(p, today);
+          const status =
+            gone !== null ? null : p.wasStatus !== null && p.status !== null && p.wasStatus !== p.status ? `${p.wasStatus} → ${p.status}` : p.status;
           return (
-            <li key={`${String(p.row)}-${String(i)}`} className="flex items-center gap-3 px-4 py-2.5">
+            <li key={`${String(p.row)}-${String(i)}`} className="flex items-center gap-3 px-4 py-2.5" data-testid="names-row">
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium truncate" style={{ color: '#fff' }}>
                   {p.fullName || 'No name'}
@@ -162,6 +167,16 @@ function Names({ page, note, onMore, onRetry }) {
                 <div className="text-xs truncate" style={{ color: C.muted }}>
                   {[p.email ?? p.phone, status].filter((v) => v !== null && v !== '').join(' · ')}
                 </div>
+                {gone !== null && gone.facts !== '' ? (
+                  <div className="text-xs mt-0.5" style={{ color: C.soft }} data-testid="gone-facts">
+                    {gone.facts}
+                  </div>
+                ) : null}
+                {gone !== null && gone.added !== null ? (
+                  <div className="text-xs font-semibold mt-0.5" style={{ color: C.orange }} data-testid="gone-added">
+                    {gone.added}
+                  </div>
+                ) : null}
               </div>
               {p.inApp ? (
                 <span className="text-[11px] font-semibold rounded-full px-2 py-0.5 flex-shrink-0" style={{ background: C.orangeBg, color: C.orange }}>
@@ -701,28 +716,31 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
               <div className="text-[17px] font-bold" style={{ color: '#fff' }}>
                 {missingTitle(missing, missing.needsTick, words)}
               </div>
-              <div className="text-sm mt-0.5" style={{ color: C.muted }}>
-                {someNames(missingNames, missing.n)}
-                {wholeList ? (
-                  <>
-                    {missingNames.length > 0 ? ' · ' : ''}
-                    <button type="button" onClick={() => toggleGroup(missing.group)} className={LINK} style={{ color: C.orange }}>
-                      {openGroup === missing.group ? 'Hide' : 'See all'}
-                    </button>
-                  </>
-                ) : null}
-              </div>
+              {missing.group === 'gone' ? (
+                <div className="text-sm mt-1" style={{ color: C.soft }} data-testid="missing-help">
+                  Your file should include all current {words.people}, so {words.people} missing from it have usually left. {words.peopleCap ?? 'Members'} added
+                  manually may not be in your export yet.
+                </div>
+              ) : null}
+              {/* Read again as people to add, the file no longer says who was missing, so
+                  the names kept from before stand in for the list. */}
+              {!wholeList && missingNames.length > 0 ? (
+                <div className="text-sm mt-0.5" style={{ color: C.muted }}>
+                  {someNames(missingNames, missing.n)}
+                </div>
+              ) : null}
               {missingStatusLine(missing) !== '' ? (
                 <div className="text-[13px] mt-1" style={{ color: C.soft }} data-testid="missing-statuses">
                   {missingStatusLine(missing)}
                 </div>
               ) : null}
             </div>
+            {/* Every one of them, with what the list says of them, before the question. */}
+            {wholeList ? namesFor(missing.group) : null}
             <div role="radiogroup" aria-label="What happened to them?" className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <Choice on={answer === 'left'} title="They've left" sub={missing.group === 'gone' ? `Move to past ${words.people}` : 'Mark them as not on your list'} onClick={chooseLeft} disabled={busy !== null} />
               <Choice on={answer === 'keep'} title={`They're still ${words.people}`} sub="Leave them on the list" onClick={chooseKeep} disabled={busy !== null} />
             </div>
-            {openGroup === missing.group && wholeList ? namesFor(missing.group) : null}
             {answer === 'left' && needsTyping ? (
               <label className="flex items-center gap-3 text-[15px]" style={{ color: C.soft }}>
                 <span>
@@ -752,14 +770,23 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
                   ? 'No email or phone column found'
                   : toCheck > 0
                     ? `${count(toCheck)} ${toCheck === 1 ? 'column needs' : 'columns need'} a look`
-                    : `${count(importedColumnCount(preview.columns, mapping))} columns matched`
+                    : `${count(importedColumnCount(preview.columns, mapping))} of ${count(preview.columns.length)} columns matched`
               }
               sub={preview.needsMapping ? 'Pick which column is which' : null}
               action={columnsOpen ? 'Hide' : 'Check'}
               onAction={() => setColumnsOpen((o) => !o)}
             />
             {dates.map((d) => (
-              <Line key={`date-${String(d.column)}`} icon={CalendarDays} tone="plain" title={d.example} sub={d.columnName} action="Swap" onAction={() => swap(d.column, d.order)} actionDisabled={busy !== null} />
+              <Line
+                key={`date-${String(d.column)}`}
+                icon={CalendarDays}
+                tone="plain"
+                title={d.read}
+                sub={d.columnName}
+                action={d.other}
+                onAction={() => swap(d.column, d.order)}
+                actionDisabled={busy !== null}
+              />
             ))}
             {never.map((n) => (
               <Line key={n.reason} icon={Lock} tone="red" title={n.title} sub={n.columns} />
@@ -801,14 +828,22 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
 
         {columnsOpen ? (
           <div className="rounded-[18px] overflow-hidden" style={{ background: C.card, border: `1px solid ${C.line}` }} data-testid="columns">
-            {preview.columns.map((c, i) => {
+            {/* Kd, 2026-09-27: the examples read as if the columns matched for one person. */}
+            <div className="px-4 pt-3 pb-1 text-[13px]" style={{ color: C.muted }} data-testid="columns-note">
+              Examples are from the first row of your file.
+            </div>
+            {preview.columns.map((c) => {
               const date = preview.dateColumns.find((d) => d.column === c.index && d.example !== null);
+              // A switch only where nothing in the file settled the order: where the file
+              // proves it, the file decides and there is nothing to switch.
+              const switchable = date !== undefined && (date.from === 'country' || date.from === 'chosen');
+              const reading = date === undefined ? null : dateReading(date.example);
               return (
                 <div
                   key={c.index}
                   data-testid={`column-${String(c.index)}`}
                   className="flex items-center gap-3 px-4 py-3"
-                  style={i === 0 ? undefined : { borderTop: `1px solid ${C.line}` }}
+                  style={{ borderTop: `1px solid ${C.line}` }}
                 >
                   <div className="min-w-0 flex-1">
                     <div className="text-[15px] font-semibold truncate" style={{ color: '#fff' }}>
@@ -818,13 +853,18 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
                       <div className="text-[13px]" style={{ color: C.orange }}>
                         Doesn&apos;t look like {FIELD_LABELS[c.headerSays].toLowerCase()}
                       </div>
-                    ) : date ? (
+                    ) : reading !== null ? (
                       <div className="text-[13px] flex items-center gap-1.5 flex-wrap" style={{ color: C.muted }}>
                         <CalendarDays className="w-3.5 h-3.5" />
-                        {date.example.raw} = {dayWords(date.example.read)} ·
-                        <button type="button" onClick={() => swap(date.column, date.order)} disabled={busy !== null} className={LINK} style={{ color: C.orange }}>
-                          Swap
-                        </button>
+                        {reading.read}
+                        {switchable ? (
+                          <>
+                            {' · '}
+                            <button type="button" onClick={() => swap(date.column, date.order)} disabled={busy !== null} className={LINK} style={{ color: C.orange }}>
+                              {reading.other}
+                            </button>
+                          </>
+                        ) : null}
                       </div>
                     ) : c.samples.length > 0 ? (
                       <div className="text-[13px] truncate" style={{ color: C.muted }}>

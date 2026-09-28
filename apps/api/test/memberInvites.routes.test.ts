@@ -25,6 +25,7 @@ import {
   MEMBER_INVITE_EMAIL_REASON_WORDS,
   MEMBER_INVITE_WORDS,
   memberInviteOneSchema,
+  memberInvitePeopleSchema,
   memberInvitePreviewSchema,
   memberInvitedSchema,
   memberListEntriesPageSchema,
@@ -222,8 +223,15 @@ d("press Invite (real Postgres)", () => {
   };
   const sender = settings.sender;
   if (sender === null) throw new Error("sending is off in the test config");
+  // This suite's own gyms only: the local database also holds a developer's gyms, whose
+  // waiting invitations are theirs to send, under their own server's key.
+  const ourGyms = async () =>
+    (await sql<{ id: string }[]>`SELECT id FROM gyms WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE ${`minv-t-%@${DOMAIN}`})`).map(
+      (row) => row.id,
+    );
   const runSender = async (over: Partial<SenderDeps> = {}): Promise<SendRun> =>
     await sendDueInvites({
+      gymIds: await ourGyms(),
       sql,
       log,
       settings,
@@ -331,6 +339,7 @@ d("press Invite (real Postgres)", () => {
       preview = await previewOf(gym, owner);
       expect((await press(gym, owner, preview)).statusCode).toBe(200);
       const claimed = await claimNextSend(sql, {
+        gymIds: await ourGyms(),
         now: new Date(Date.now() + 1),
         leaseMs: 60_000,
         platformPerDay: 2000,
@@ -384,6 +393,152 @@ d("press Invite (real Postgres)", () => {
       expect(run.skipped).toBe(1);
 
       for (const who of ["ann", "bob", "cat", "dan", "eve"]) expect(emailsTo(addr(who)), who).toHaveLength(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "Invite's page lists exactly the people the press emails, and everyone it leaves out with their own true reason",
+    async () => {
+      const owner = await makeUser("page-owner");
+      const org = await makeGym(owner, "Page Invite Gym");
+      const gym = org.org.id;
+      const active = { status: "Active", membershipType: "Gold" };
+      await typeIn(gym, owner, { fullName: "Ava Thompson", email: addr("page-ava"), ...active });
+      await typeIn(gym, owner, { fullName: "Arjun Shah", email: addr("page-shah"), ...active });
+      // A couple at one address: one invitation, for the first of them on the list.
+      await typeIn(gym, owner, { fullName: "Priya Shah", email: addr("page-shah"), ...active });
+      await typeIn(gym, owner, { fullName: "Liam Hughes", phone: "07400 200107", ...active });
+      await typeIn(gym, owner, { fullName: "Mia Rossi", email: addr("page-mia"), dateOfBirth: "2012-03-14", ...active });
+      await typeIn(gym, owner, { fullName: "Ravi Kumar", email: `info+page@${DOMAIN}`, ...active });
+      await typeIn(gym, owner, { fullName: "Thomas Moore", email: addr("page-thomas"), status: "Expired", membershipType: "Gold" });
+      const olivia = await makeUser("page-olivia");
+      await verify(olivia.email);
+      await typeIn(gym, owner, { fullName: "Olivia Bennett", email: olivia.email, ...active });
+      await join(olivia, org, owner);
+      // Her husband, on his own record at her address.
+      await typeIn(gym, owner, { fullName: "Mark Bennett", email: olivia.email, ...active });
+
+      const people = async (query: string, who: User = owner) => {
+        const res = await get(`${listUrl(gym)}/invites/people${query}`, who.cookies);
+        expect(res.statusCode, res.body).toBe(200);
+        return memberInvitePeopleSchema.parse((JSON.parse(res.body) as { page: unknown }).page);
+      };
+      const preview = await previewOf(gym, owner, "?status=Active");
+      const reach = await people("?status=Active&group=reach");
+      const leftOut = await people("?status=Active&group=left_out");
+
+      expect(reach.people.map((p) => [p.fullName, p.email, p.status, p.membershipType])).toEqual([
+        ["Ava Thompson", addr("page-ava"), "Active", "Gold"],
+        ["Arjun Shah", addr("page-shah"), "Active", "Gold"],
+      ]);
+      expect([reach.total, reach.cursor]).toEqual([preview.reach, null]);
+      expect(leftOut.people.map((p) => [p.fullName, p.reason, p.sameAddressAs, p.turns18On])).toEqual([
+        ["Priya Shah", "alreadyInvited", "Arjun Shah", null],
+        ["Liam Hughes", "noEmail", null, null],
+        ["Mia Rossi", "underAge", null, "2030-03-14"],
+        ["Ravi Kumar", "sharedAddress", null, null],
+        ["Olivia Bennett", "inApp", null, null],
+        ["Mark Bennett", "inApp", null, null],
+      ]);
+      // The page's reasons are the count's, one for one.
+      const tally = new Map<string, number>();
+      for (const p of leftOut.people) tally.set(p.reason, (tally.get(p.reason) ?? 0) + 1);
+      expect(Object.fromEntries(tally)).toEqual(Object.fromEntries(Object.entries(preview.skipped).filter(([, n]) => n > 0)));
+      // Each reads as their own row does. She joined by the gym's code under a name on
+      // neither record, so the list can't say which of the two she is, and both say so
+      // (round one of 5b-v-a-i, High-1).
+      const app = new Map(leftOut.people.map((p) => [p.fullName, p.app]));
+      const shared =
+        "Inv page-olivia uses the app with the email address Olivia Bennett and Mark Bennett share, so we can't tell which of them it is. Give each of them their own email address.";
+      for (const name of ["Olivia Bennett", "Mark Bennett"]) {
+        expect([app.get(name)?.word, app.get(name)?.line], name).toEqual(["in_app", shared]);
+      }
+
+      // The press emails the page's people and nobody else.
+      const pressed = await press(gym, owner, preview, { status: ["Active"] });
+      expect(pressed.statusCode, pressed.body).toBe(200);
+      await runSender();
+      const typed = new Set([addr("page-ava"), addr("page-shah"), addr("page-mia"), `info+page@${DOMAIN}`, addr("page-thomas"), olivia.email]);
+      const sentTo = outbox.filter((message) => typed.has(message.to)).map((message) => message.to);
+      expect(sentTo.sort()).toEqual(reach.people.map((p) => p.email).sort());
+      // Afterwards the two who were emailed have been invited, and nobody is left to reach.
+      expect((await people("?status=Active&group=reach")).total).toBe(0);
+      const after = await people("?status=Active&group=left_out");
+      expect(after.people.filter((p) => p.fullName === "Ava Thompson").map((p) => [p.reason, p.app.word])).toEqual([["alreadyInvited", "invited"]]);
+
+      // A bad group or cursor is refused; a trainer and another gym's owner see nobody.
+      expect((await get(`${listUrl(gym)}/invites/people?group=everyone`, owner.cookies)).statusCode).toBe(400);
+      expect((await get(`${listUrl(gym)}/invites/people?group=reach&cursor=-1`, owner.cookies)).statusCode).toBe(400);
+      expect((await get(`${listUrl(gym)}/invites/people`, owner.cookies)).statusCode).toBe(400);
+      const trainer = await makeUser("page-trainer");
+      await verify(trainer.email);
+      await appoint(trainer, org, owner, "trainer");
+      expect((await get(`${listUrl(gym)}/invites/people?group=reach`, trainer.cookies)).statusCode).toBe(403);
+      const stranger = await makeUser("page-stranger");
+      await makeGym(stranger, "Page Stranger Gym");
+      const theirs = await get(`${listUrl(gym)}/invites/people?group=left_out`, stranger.cookies);
+      expect(theirs.statusCode).toBe(404);
+      expect(theirs.body).not.toContain("Priya");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "Invite's page comes a hundred at a time, in the list's order, and the pages together are the whole group",
+    async () => {
+      const owner = await makeUser("pages-owner");
+      const org = await makeGym(owner, "Pages Invite Gym");
+      const gym = org.org.id;
+      const names: string[] = [];
+      for (let i = 1; i <= 103; i++) {
+        const name = `Paged Person ${String(i).padStart(3, "0")}`;
+        names.push(name);
+        await typeIn(gym, owner, { fullName: name, email: addr(`pages-${String(i)}`) });
+      }
+      const pageOf = async (query: string) => {
+        const res = await get(`${listUrl(gym)}/invites/people${query}`, owner.cookies);
+        expect(res.statusCode, res.body).toBe(200);
+        return memberInvitePeopleSchema.parse((JSON.parse(res.body) as { page: unknown }).page);
+      };
+      const first = await pageOf("?group=reach");
+      expect([first.total, first.people.length, first.cursor]).toEqual([103, 100, first.people[99]?.entryId]);
+      // Ten people the first page showed leave the group before the next page is read
+      // (another member of staff's press, the sender): the next page still starts after
+      // the last person shown, skipping nobody and showing nobody twice (round one, Low-4).
+      for (const person of first.people.slice(0, 10)) {
+        await sql`
+          INSERT INTO gym_invites (gym_id, email_hmac, state, answered_at)
+          VALUES (${gym}, ${emailHmac(settings.hmacKey, person.email ?? "")}, 'declined', now())`;
+      }
+      const second = await pageOf(`?group=reach&cursor=${String(first.cursor)}`);
+      expect([second.total, second.people.length, second.cursor]).toEqual([93, 3, null]);
+      expect([...first.people, ...second.people].map((p) => p.fullName)).toEqual(names);
+      expect((await pageOf("?group=left_out")).total).toBe(10);
+      // A cursor naming nobody of this gym's is refused rather than read as the start.
+      const lost = await get(`${listUrl(gym)}/invites/people?group=reach&cursor=00000000-0000-4000-8000-000000000000`, owner.cookies);
+      expect(lost.statusCode).toBe(400);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a sender limited to some gyms leaves every other gym's waiting email alone: a developer's own gyms share this database",
+    async () => {
+      const owner = await makeUser("only-owner");
+      const org = await makeGym(owner, "Only Gyms Gym");
+      const gym = org.org.id;
+      await typeIn(gym, owner, { fullName: "Ola", email: addr("only-ola") });
+      expect((await press(gym, owner, await previewOf(gym, owner))).statusCode).toBe(200);
+      const states = async () => (await sql<{ state: string }[]>`SELECT state FROM gym_invite_sends WHERE gym_id = ${gym}`).map((row) => row.state);
+      // Another gym's sender: this gym's email is not claimed, skipped or sent.
+      const elsewhere = await runSender({ gymIds: ["00000000-0000-4000-8000-000000000000"] });
+      expect([elsewhere.sent, elsewhere.skipped, elsewhere.failed]).toEqual([0, 0, 0]);
+      expect(await states()).toEqual(["queued"]);
+      // Its own sender sends it.
+      const here = await runSender({ gymIds: [gym] });
+      expect(here.sent).toBe(1);
+      expect(emailsTo(addr("only-ola"))).toHaveLength(1);
     },
     TEST_TIMEOUT_MS,
   );
@@ -459,7 +614,7 @@ d("press Invite (real Postgres)", () => {
       expect(callsTo(addr("unc4"))).toHaveLength(1);
       expect(await sendRow(gym, addr("unc4"))).toEqual({ state: "failed", reason: "send_unknown", email: null });
       expect(MEMBER_INVITE_EMAIL_REASON_WORDS.send_unknown).toBe(
-        "We couldn't confirm this email went. Only send it again if the person says they didn't get it.",
+        "We couldn't confirm this invitation was delivered. Resend it only if they didn't receive it.",
       );
     },
     TEST_TIMEOUT_MS,
@@ -571,7 +726,7 @@ d("press Invite (real Postgres)", () => {
 
       const off = { sql, redis: createMemoryRedis(), log: { warn: () => undefined }, now: () => new Date(), invites: sendingOff };
       expect((await previewInvite(off, owner.userId, gym, {}, () => Promise.resolve(true)))?.blocked).toBe("invites_off");
-      const views = await invitationsOf(sql, sendingOff, gym, [{ email: addr("off-ida") }]);
+      const views = await invitationsOf(sql, sendingOff, gym, [{ id: "00000000-0000-4000-8000-000000000000", email: addr("off-ida") }]);
       expect(views[0]?.state).toBe("pending");
     },
     TEST_TIMEOUT_MS,
@@ -616,7 +771,8 @@ d("press Invite (real Postgres)", () => {
         await appoint(manager, org, owner, "manager");
         staff.push(manager);
       }
-      const stale = { version: 999, reach: 0, skipped: { noEmail: 0, underAge: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, refused: 0, sharedAddress: 0 }, blocked: null };
+      const none = { noEmail: 0, underAge: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, refused: 0, sharedAddress: 0 };
+      const stale = { version: 999, reach: 0, skipped: none, blocked: null };
       const desk = "10.64.0.1";
       // Five people, 24 presses each, at one address: all answered (the list moved).
       for (const who of staff) {

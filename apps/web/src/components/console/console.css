@@ -735,6 +735,50 @@
   }
 }
 
+/* A member's row (5b-v; `MembersList`, `MembersPhone`): on a phone the name and contact,
+   the gym's words on one line and the App word; from 768 px one row of the table under
+   `c-th`, one tag per row as Leads shows it. `c-member-grid-past` is the past members'
+   table (no Payment; "Past member since" in its place). Sets no `display`. */
+.c-member-grid {
+  grid-template-columns: minmax(0, 1fr) 18px;
+  grid-template-areas: "who go" "words go" "app go";
+  column-gap: 12px;
+  row-gap: 3px;
+  align-items: start;
+}
+@media (min-width: 768px) {
+  .c-member-grid {
+    grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 0.9fr) minmax(0, 2.1fr) 20px;
+    grid-template-areas: "who status type ends pay app go";
+    column-gap: 16px;
+    row-gap: 4px;
+    align-items: center;
+  }
+  .c-member-grid-past {
+    grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 2.1fr) 20px;
+    grid-template-areas: "who status type ends app go";
+  }
+}
+
+/* Invite's two lists (§18.6): on a phone the name, the gym's words on one line, and where
+   the email goes or why it won't; from 768 px one row of the table under `c-th`. Sets no
+   `display`. */
+.c-invite-grid {
+  grid-template-columns: minmax(0, 1fr) 18px;
+  grid-template-areas: "who go" "words go" "why go";
+  column-gap: 12px;
+  row-gap: 3px;
+  align-items: start;
+}
+@media (min-width: 768px) {
+  .c-invite-grid {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2.6fr) 20px;
+    grid-template-areas: "who status type why go";
+    column-gap: 16px;
+    align-items: center;
+  }
+}
+
 /* A panel or pop-up, and the "look at this" box. */
 .c-sheet {
   background: var(--sheet);

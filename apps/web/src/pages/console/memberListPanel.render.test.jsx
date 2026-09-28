@@ -42,6 +42,11 @@ const view = (over = {}) =>
     membershipTypes: [{ label: 'Gold', count: 12, inApp: 3, canBeInvited: 9 }],
     paymentStatuses: [],
     fields: [],
+    appWords: [
+      { word: 'in_app', count: 40 },
+      { word: 'invited', count: 200 },
+      { word: 'not_in_app', count: 72 },
+    ],
     ...over,
   });
 
@@ -65,6 +70,7 @@ const entry = (fullName, over = {}) => {
     source: 'upload',
     inApp: false,
     invitation: null,
+    app: { word: 'not_in_app', tone: 'grey', at: null, line: 'Not invited yet', lineTone: 'plain' },
     ...over,
   };
 };
@@ -96,14 +102,25 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("the gym's own list", () => {
-  it('shows Search, Filter, Import and Add over the list, and no chips until Filter is pressed', async () => {
+  it('shows Search, Filter and the count over the list, and no chips until Filter is pressed', async () => {
     draw();
     expect((await screen.findByTestId('list-total')).textContent).toBe('312 members');
     expect(screen.getByRole('button', { name: 'Filter' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Import' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Add member' })).toBeTruthy();
+    expect(screen.getByRole('searchbox', { name: 'Search your members by name, email, phone or member number' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Active 300' })).toBeNull();
     expect(screen.queryByTestId('showing')).toBeNull();
+    // Import and Add member sit in the page's header, not over the list.
+    expect(screen.queryByRole('button', { name: 'Import' })).toBeNull();
+  });
+
+  it("opens Import or Add member when the page's header asks, and says it was taken", async () => {
+    const taken = vi.fn();
+    const { rerender } = draw({ action: 'import', onActionTaken: taken });
+    expect(await screen.findByTestId('member-import')).toBeTruthy();
+    expect(taken).toHaveBeenCalledTimes(1);
+    rerender(<MemberListPanel gymId={GYM} words={WORDS} readOnly={false} refreshKey={0} action="add" onActionTaken={taken} />);
+    expect(await screen.findByRole('dialog', { name: 'Add member' })).toBeTruthy();
+    expect(taken).toHaveBeenCalledTimes(2);
   });
 
   it("holds the gym's own words in the Filter box, with the server's counts", async () => {
@@ -114,9 +131,11 @@ describe("the gym's own list", () => {
     expect(within(status).getByRole('button', { name: 'Expired 7' })).toBeTruthy();
     expect(within(status).getByRole('button', { name: 'No status 5' })).toBeTruthy();
     expect(within(filterBox().getByRole('group', { name: 'Membership' })).getByRole('button', { name: 'Gold 12' })).toBeTruthy();
-    expect(filterBox().queryByRole('group', { name: 'Payment' })).toBeNull();
-    expect(filterBox().getByRole('button', { name: 'In the app 40' })).toBeTruthy();
-    expect(filterBox().getByRole('button', { name: 'Not in the app 272' })).toBeTruthy();
+    expect(filterBox().queryByRole('group', { name: 'Payment status' })).toBeNull();
+    const app = within(filterBox().getByRole('group', { name: 'App' }));
+    expect(app.getAllByRole('button').map((b) => b.textContent)).toEqual(['In the app 40', 'Invited 200', 'Not in the app 72']);
+    // Show holds no Past members for a gym that has none, so the box starts at App.
+    expect(filterBox().queryByRole('radiogroup', { name: 'Show' })).toBeNull();
   });
 
   it('asks for the ticked words, and "no status" as the people with none, then shows them on one line', async () => {
@@ -126,8 +145,8 @@ describe("the gym's own list", () => {
     await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'status=Active'));
     fireEvent.click(filterBox().getByRole('button', { name: 'No status 5' }));
     await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'status=Active&status='));
-    fireEvent.click(filterBox().getByRole('button', { name: 'Not in the app 272' }));
-    await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'filter=not_in_app&status=Active&status='));
+    fireEvent.click(filterBox().getByRole('button', { name: 'Not in the app 72' }));
+    await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'app=not_in_app&status=Active&status='));
     expect(filterBox().getByRole('button', { name: 'Active 300' }).getAttribute('aria-pressed')).toBe('true');
 
     fireEvent.click(await filterBox().findByRole('button', { name: /^Show \d+ members?$/ }));
@@ -138,7 +157,7 @@ describe("the gym's own list", () => {
 
     // A pill takes off only itself.
     fireEvent.click(within(showing).getByRole('button', { name: 'Stop showing only No status' }));
-    await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'filter=not_in_app&status=Active'));
+    await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'app=not_in_app&status=Active'));
     fireEvent.click(within(screen.getByTestId('showing')).getByRole('button', { name: 'Clear' }));
     await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, ''));
     expect(screen.queryByTestId('showing')).toBeNull();
@@ -162,7 +181,7 @@ describe("the gym's own list", () => {
   it('searches once typing pauses', async () => {
     draw();
     await screen.findAllByTestId('list-row');
-    fireEvent.change(screen.getByLabelText('Search your members'), { target: { value: 'ada' } });
+    fireEvent.change(screen.getByLabelText('Search your members by name, email, phone or member number'), { target: { value: 'ada' } });
     await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'query=ada'));
   });
 
@@ -170,10 +189,13 @@ describe("the gym's own list", () => {
     orgService.getMemberList.mockResolvedValue({ data: { list: view({ counts: { entries: 312, inApp: 40, canBeInvited: 250, noEmail: 22, former: 4 } }) } });
     draw();
     await openFilter();
-    fireEvent.click(filterBox().getByRole('button', { name: 'Past members 4' }));
+    const show = within(filterBox().getByRole('radiogroup', { name: 'Show' }));
+    expect(show.getByRole('radio', { name: 'Members 312' }).getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(show.getByRole('radio', { name: 'Past members 4' }));
     await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'records=former'));
+    expect(show.getByRole('radio', { name: 'Past members 4' }).getAttribute('aria-checked')).toBe('true');
     expect(filterBox().queryByRole('group', { name: 'Status' })).toBeNull();
-    expect(filterBox().queryByRole('button', { name: 'In the app 40' })).toBeNull();
+    expect(filterBox().queryByRole('group', { name: 'App' })).toBeNull();
     fireEvent.click(filterBox().getByRole('button', { name: 'Close' }));
     expect(within(screen.getByTestId('showing')).getByRole('button', { name: 'Stop showing only Past members' })).toBeTruthy();
   });
@@ -184,30 +206,73 @@ describe("the gym's own list", () => {
     expect(filterBox().queryByRole('button', { name: /Past members/ })).toBeNull();
   });
 
-  it("says where each person stands, with the server's reason for an email that did not go", async () => {
+  it("prints each row's App word as the server sent it, a line to check under the whole row", async () => {
+    const app = (over) => ({ at: null, line: null, lineTone: 'plain', ...over });
     orgService.getMemberListEntries.mockResolvedValue(
       pageOf([
-        entry('Ada Lovelace', { inApp: true }),
+        entry('Ada Lovelace', { inApp: true, app: app({ word: 'in_app', tone: 'green' }) }),
         entry('Bea Hart', {
-          invitation: {
-            state: 'pending',
-            invitedAt: '2026-09-20T10:00:00.000Z',
-            email: { state: 'skipped', reason: 'shared_address', at: '2026-09-20T10:01:00.000Z', result: null },
-            sentAgain: 0,
-            waitingSince: null,
-            notMeAt: null,
-          },
+          app: app({ word: 'not_in_app', tone: 'grey', line: MEMBER_INVITE_EMAIL_REASON_WORDS.shared_address, lineTone: 'amber' }),
         }),
-        entry('Cy No Email', { email: null, phone: '+447700900123' }),
+        entry('Cy No Email', { email: null, phone: '+447700900123', app: app({ word: 'not_in_app', tone: 'grey', line: 'No email address' }) }),
+        entry('Maria Park', { app: app({ word: 'in_app', tone: 'green', line: 'Maria Park and Leo Park use the app with these details.', lineTone: 'amber' }) }),
       ]),
     );
     draw();
     const rows = await screen.findAllByTestId('list-row');
-    expect(rows[0].textContent).toContain('Uses the app');
-    expect(rows[1].textContent).toContain('Invited · email not sent');
-    expect(rows[1].textContent).toContain(MEMBER_INVITE_EMAIL_REASON_WORDS.shared_address);
+    expect(rows[0].textContent).toContain('In the app');
+    // One tag per row, as Leads: a ⚠ on the tag itself when something needs checking,
+    // the sentence on hover and to a screen reader (and on the person's page).
+    expect(within(rows[0]).queryByTestId('needs-check')).toBeNull();
+    expect(rows[1].textContent).toContain('Not in the app');
+    expect(within(rows[1]).getByTestId('needs-check').getAttribute('title')).toBe(MEMBER_INVITE_EMAIL_REASON_WORDS.shared_address);
+    expect(within(rows[1]).getByTestId('needs-check').className).toContain('c-tag-warn');
+    expect(rows[1].textContent).not.toContain(MEMBER_INVITE_EMAIL_REASON_WORDS.shared_address);
     expect(rows[2].textContent).toContain('+447700900123');
-    expect(rows[2].textContent).toContain('No email');
+    expect(rows[2].textContent).toContain('Not in the app');
+    // A line that only explains is on the person's own page, not on the list.
+    expect(rows[2].textContent).not.toContain('No email address');
+    expect(within(rows[2]).queryByTestId('needs-check')).toBeNull();
+    expect(within(rows[3]).getByTestId('needs-check').getAttribute('aria-label')).toBe(
+      'In the app. Needs attention: Maria Park and Leo Park use the app with these details.',
+    );
+  });
+
+  // THE WORST THING (5b-v-a-i): a row saying something false about a person with the app.
+  // The server decides the word once for everybody (§18.4); a screen that worked out its
+  // own from `inApp` or the address's invitation would put the mother's "In the app" or
+  // "Invited" on her son's row.
+  it("prints the server's App word on every row and never one of its own, whatever else the row carries", async () => {
+    const app = (over) => ({ at: null, line: null, lineTone: 'plain', ...over });
+    const accepted = { state: 'accepted', invitedAt: '2026-09-20T10:00:00.000Z', email: null, sentAgain: 0, waitingSince: null, notMeAt: null };
+    orgService.getMemberListEntries.mockResolvedValue(
+      pageOf([
+        // The son: the address's invitation is his mother's, and the server says so.
+        entry('Leo Park', { invitation: accepted, app: app({ word: 'not_in_app', tone: 'grey', line: 'Maria Park uses the app with this email.' }) }),
+        // A row the old tick called "in the app" that the server does not.
+        entry('Olu Ade', { inApp: true, app: app({ word: 'not_in_app', tone: 'grey', line: 'Removed from app', at: '2026-09-26T09:30:00.000Z' }) }),
+      ]),
+    );
+    draw();
+    const rows = await screen.findAllByTestId('list-row');
+    expect(rows[0].textContent).toContain('Not in the app');
+    expect(rows[0].textContent).not.toMatch(/In the app|Left the app|Invited/);
+    expect(rows[1].textContent).toContain('Not in the app');
+    expect(rows[1].textContent).not.toContain('In the app');
+  });
+
+  it("offers 'Check these' only when somebody needs checking, and See who shows them", async () => {
+    draw();
+    await screen.findAllByTestId('list-row');
+    expect(screen.queryByTestId('check-these')).toBeNull();
+    cleanup();
+    orgService.getMemberList.mockResolvedValue({ data: { list: view({ appWords: [{ word: 'in_app', count: 40 }, { word: 'needs_check', count: 2 }] }) } });
+    draw();
+    const box = await screen.findByTestId('check-these');
+    expect(box.textContent).toBe('2 need attention');
+    fireEvent.click(box);
+    await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'app=needs_check'));
+    expect(within(screen.getByTestId('showing')).getByRole('button', { name: 'Stop showing only Needs attention' })).toBeTruthy();
   });
 
   it('loads the next hundred with the cursor and adds them below', async () => {
@@ -221,35 +286,36 @@ describe("the gym's own list", () => {
     expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull();
   });
 
-  it('opens the import box from the Import button', async () => {
-    draw();
-    fireEvent.click(await screen.findByRole('button', { name: 'Import' }));
-    expect(await screen.findByTestId('member-import')).toBeTruthy();
-  });
-
   it('says the list is empty, and how to fill it, for a gym with no list', async () => {
     orgService.getMemberList.mockResolvedValue({
       data: { list: view({ hasList: false, counts: { entries: 0, inApp: 0, canBeInvited: 0, noEmail: 0, former: 0 }, statuses: [], membershipTypes: [] }) },
     });
     orgService.getMemberListEntries.mockResolvedValue(pageOf([]));
-    draw();
-    expect(await screen.findByText('Your list is empty.')).toBeTruthy();
+    draw({ emptyExtra: <p>Already in the app · 3</p> });
+    expect(await screen.findByRole('heading', { name: 'Your list is empty' })).toBeTruthy();
+    expect(screen.getByText('Already in the app · 3')).toBeTruthy();
     expect(screen.queryByTestId('list-total')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Import members' }));
+    expect(await screen.findByTestId('member-import')).toBeTruthy();
   });
 
   it('says a failed read failed, never that the list is empty, and reads again', async () => {
     orgService.getMemberListEntries.mockRejectedValueOnce(Object.assign(new Error('x'), { response: { status: 500, data: {} } }));
     draw();
     expect(await screen.findByText("We couldn't load your list.")).toBeTruthy();
-    expect(screen.queryByText('Your list is empty.')).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Your list is empty' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByText(/Ada Lovelace/)).toBeTruthy();
   });
 
-  it('greys Import and Add on a gym whose plan has lapsed', async () => {
+  it("greys an empty list's Import and Add on a gym whose plan has lapsed", async () => {
+    orgService.getMemberList.mockResolvedValue({
+      data: { list: view({ hasList: false, counts: { entries: 0, inApp: 0, canBeInvited: 0, noEmail: 0, former: 0 }, statuses: [], membershipTypes: [] }) },
+    });
+    orgService.getMemberListEntries.mockResolvedValue(pageOf([]));
     draw({ readOnly: true });
     expect((await screen.findByRole('button', { name: 'Add member' })).disabled).toBe(true);
-    expect(screen.getByRole('button', { name: 'Import' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Import members' }).disabled).toBe(true);
   });
 });
 
@@ -294,7 +360,7 @@ describe('round one: after a change', () => {
 
   it('L1: the search takes no more than the server reads', async () => {
     draw();
-    expect((await screen.findByLabelText('Search your members')).getAttribute('maxLength')).toBe(String(MEMBER_LIST_QUERY_MAX_CHARS));
+    expect((await screen.findByLabelText('Search your members by name, email, phone or member number')).getAttribute('maxLength')).toBe(String(MEMBER_LIST_QUERY_MAX_CHARS));
   });
 
   it('L4: the re-read after a change walks at most five pages, and leaves Load more for the rest', async () => {
@@ -324,21 +390,21 @@ describe('round one: after a change', () => {
 describe('the Invite button', () => {
   const preview = (reach) => ({ data: { preview: { version: 3, reach, skipped: { noEmail: 0, underAge: 0, inApp: 0, alreadyInvited: 0, unsubscribed: 0, bounced: 0, refused: 0, sharedAddress: 0 }, blocked: null } } });
 
-  it("says the server's number, and asks again for the gym's own words but not for a search", async () => {
+  it("reads Invite to app, and asks the box's number again for the gym's own words but not for a search", async () => {
     orgService.getInvitePreview.mockResolvedValue(preview(214));
     draw();
-    expect((await screen.findByTestId('invite-button')).textContent).toBe('Invite 214 members');
-    expect(orgService.getInvitePreview).toHaveBeenLastCalledWith(GYM, '');
+    expect((await screen.findByTestId('invite-button')).textContent).toBe('Invite to app');
+    await waitFor(() => expect(orgService.getInvitePreview).toHaveBeenLastCalledWith(GYM, ''));
 
     orgService.getInvitePreview.mockResolvedValue(preview(1));
     await openFilter();
     fireEvent.click(filterBox().getByRole('button', { name: 'Active 300' }));
-    await waitFor(() => expect(screen.getByTestId('invite-button').textContent).toBe('Invite 1 member'));
-    expect(orgService.getInvitePreview).toHaveBeenLastCalledWith(GYM, 'status=Active');
+    await waitFor(() => expect(orgService.getInvitePreview).toHaveBeenLastCalledWith(GYM, 'status=Active'));
+    expect(screen.getByTestId('invite-button').textContent).toBe('Invite to app');
     const asked = orgService.getInvitePreview.mock.calls.length;
 
     fireEvent.click(filterBox().getByRole('button', { name: 'Close' }));
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Search your members' }), { target: { value: 'ada' } });
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search your members by name, email, phone or member number' }), { target: { value: 'ada' } });
     await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'status=Active&query=ada'));
     expect(orgService.getInvitePreview.mock.calls.length).toBe(asked);
   });
@@ -349,7 +415,7 @@ describe('the Invite button', () => {
     draw();
     await screen.findByTestId('invite-button');
     await openFilter();
-    fireEvent.click(filterBox().getByRole('button', { name: 'Past members 4' }));
+    fireEvent.click(filterBox().getByRole('radio', { name: 'Past members 4' }));
     await waitFor(() => expect(screen.queryByTestId('invite-button')).toBeNull());
   });
 });

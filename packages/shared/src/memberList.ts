@@ -914,6 +914,24 @@ export type MemberListPreview = z.infer<typeof memberListPreviewSchema>;
 /** One person on a preview's page of names, and where they came from. A row of
  *  the FILE carries its own row number; a member who would be marked "no longer
  *  listed" is not in the file at all, so `row` is null for them. */
+/** What the gym's list holds TODAY about somebody an import leaves out (`gone`), so staff
+ *  can tell who has left from who is only missing from the export (Kd, 2026-09-27: "how
+ *  can a gym simply decide they are member or have left just by looking at names"). Read
+ *  from the record as it is now, never stored with the upload. */
+export const memberListOnListSchema = z
+  .object({
+    membershipType: z.string().nullable(),
+    endsOn: memberListDaySchema.nullable(),
+    endsOnKind: z.enum(["ends", "renews"]).nullable(),
+    paymentStatus: z.string().nullable(),
+    /** How the record came onto the list: an import, typed in by staff, or made when the
+     *  person joined the app. */
+    source: memberListEntrySourceSchema,
+    addedAt: z.string().datetime({ offset: true }),
+  })
+  .strict();
+export type MemberListOnList = z.infer<typeof memberListOnListSchema>;
+
 export const memberListPreviewPersonSchema = z.object({
   row: z.number().int().positive().nullable(),
   fullName: z.string(),
@@ -926,6 +944,8 @@ export const memberListPreviewPersonSchema = z.object({
    *  twice. */
   wasStatus: z.string().nullable(),
   inApp: z.boolean(),
+  /** For somebody the file leaves out: the list's own details of them; else null. */
+  onList: memberListOnListSchema.nullable(),
 });
 export type MemberListPreviewPerson = z.infer<typeof memberListPreviewPersonSchema>;
 
@@ -1007,7 +1027,7 @@ const memberListGroupedRowSchema = z
  *  record of them, which is what the list is. `inApp` is filled in on every read, for
  *  the reason above. `entryId` never reaches a screen. */
 export const memberListStoredPersonSchema = memberListPreviewPersonSchema
-  .omit({ inApp: true })
+  .omit({ inApp: true, onList: true })
   .extend({ entryId: memberListStagedEntryIdSchema });
 export type MemberListStoredPerson = z.infer<typeof memberListStoredPersonSchema>;
 
@@ -1282,6 +1302,54 @@ export type MemberListStatusCount = z.infer<typeof memberListStatusCountSchema>;
  *  header and the chips, which is the whole reason it is one query. */
 export const MEMBER_LIST_STATUS_CHIPS_MAX = 200;
 
+/** Where a person on the list stands with the app, in one of three words (spec Part 3
+ *  §18.4; Kd, 2026-09-27: the list showed too much). The server decides it (`appWord`);
+ *  every screen prints it. Why a person is where they are is the line under the word. */
+export const memberAppWordSchema = z.enum(["in_app", "invited", "not_in_app"]);
+export type MemberAppWord = z.infer<typeof memberAppWordSchema>;
+
+/** The words, as every screen shows them (§18.3). */
+export const MEMBER_APP_WORDS: Readonly<Record<MemberAppWord, string>> = {
+  in_app: "In the app",
+  invited: "Invited",
+  not_in_app: "Not in the app",
+};
+
+/** What the Filter's App choices ask for: the three words; two kinds of "Not in the app"
+ *  staff look for by name (Kd, 2026-09-27) — never invited, and taken out of the app by
+ *  the gym; and everyone whose line asks staff to check something. */
+export const memberAppFilterSchema = z.enum(["in_app", "invited", "not_in_app", "not_invited", "removed", "needs_check"]);
+export type MemberAppFilter = z.infer<typeof memberAppFilterSchema>;
+
+export const MEMBER_APP_FILTER_WORDS: Readonly<Record<MemberAppFilter, string>> = {
+  ...MEMBER_APP_WORDS,
+  not_invited: "Not invited yet",
+  removed: "Removed from app",
+  needs_check: "Needs attention",
+};
+
+/** The Filter's order for the App choices (§18.4). */
+export const MEMBER_APP_FILTER_ORDER: readonly MemberAppFilter[] = ["in_app", "invited", "not_in_app", "not_invited", "removed", "needs_check"];
+
+/** A person's App word with its colour and at most one line: why they are where they are.
+ *  `at` is the day the line is about (the invitation sent, the removal), shown after it.
+ *  A red or amber line asks staff to check something and is shown on the list, under the
+ *  whole row; a plain one only explains, and is shown on the person's own page. */
+export const memberAppViewSchema = z
+  .object({
+    word: memberAppWordSchema,
+    tone: z.enum(["green", "amber", "red", "grey"]),
+    at: z.string().nullable(),
+    line: z.string().nullable(),
+    lineTone: z.enum(["red", "amber", "plain"]),
+  })
+  .strict();
+export type MemberAppView = z.infer<typeof memberAppViewSchema>;
+
+/** One App choice and how many current members it holds, for the Filter. */
+export const memberAppWordCountSchema = z.object({ word: memberAppFilterSchema, count: z.number().int().min(0) }).strict();
+export type MemberAppWordCount = z.infer<typeof memberAppWordCountSchema>;
+
 /** THE LIST AS IT STANDS. A gym that has never confirmed one answers `hasList:
  *  false` with everything at zero rather than a 404: "you have no list yet" is a
  *  screen, and a missing route is not. */
@@ -1310,6 +1378,9 @@ export const memberListViewSchema = z.object({
     .array(z.object({ key: z.string(), label: z.string() }).strict())
     .max(MEMBER_LIST_MAX_EXTRA_FIELDS)
     .default([]),
+  /** Each App choice with how many current members it holds (§18.4), in the Filter's
+   *  order, choices holding nobody left out. */
+  appWords: z.array(memberAppWordCountSchema).max(MEMBER_APP_FILTER_ORDER.length).default([]),
 });
 export type MemberListView = z.infer<typeof memberListViewSchema>;
 
@@ -1344,6 +1415,8 @@ export const memberListEntrySchema = z.object({
   /** The gym's invitation to this record's address, or null if it was never invited
    *  (§9.12). */
   invitation: memberListInvitationSchema.nullable().default(null),
+  /** Where they stand with the app, in one word (§18.4). */
+  app: memberAppViewSchema,
   /** **THE GYM'S OWN COLUMNS ARE NOT HERE, AND THAT IS DELIBERATE.** A page holds a
    *  hundred people and a gym may keep forty of its own columns of up to five hundred
    *  characters each, so carrying them would be two megabytes of a screen that shows
@@ -1405,6 +1478,8 @@ export const memberListEntriesQuerySchema = z
     records: memberListRecordsSchema.optional(),
     /** Who has been invited, and how it stands (§11.5). */
     invitation: memberListInvitationFilterSchema.optional(),
+    /** The App words to show (§18.4), given once each; current members only. */
+    app: z.union([memberAppFilterSchema, z.array(memberAppFilterSchema).max(MEMBER_APP_FILTER_ORDER.length)]).optional(),
     query: z.string().max(MEMBER_LIST_QUERY_MAX_CHARS).optional(),
     cursor: z.string().max(512).optional(),
   })
@@ -1452,6 +1527,73 @@ export const memberInvitePreviewSchema = z
 export type MemberInvitePreview = z.infer<typeof memberInvitePreviewSchema>;
 
 export const memberInvitePreviewResponseSchema = z.object({ preview: memberInvitePreviewSchema });
+
+// ── Who an Invite reaches, person by person (spec §18.6; Kd, 2026-09-27) ────
+//
+// Kd: Invite "should show like a normal dashboard … showing every details and reason that
+// is understandable by human". The same rule that decides who is emailed (the preview's
+// count and the press) lists the people, a page at a time: those it reaches, and those it
+// leaves out, each with their reason.
+
+/** How many people one page of Invite's lists holds. */
+export const MEMBER_INVITE_PEOPLE_PAGE = 100;
+
+/** Why a person is where they are in an Invite: reached, or the first reason that leaves
+ *  them out (the skipped counts' own keys). */
+export const memberInviteReasonSchema = z.enum([
+  "reach",
+  "noEmail",
+  "underAge",
+  "inApp",
+  "alreadyInvited",
+  "unsubscribed",
+  "bounced",
+  "refused",
+  "sharedAddress",
+]);
+export type MemberInviteReason = z.infer<typeof memberInviteReasonSchema>;
+
+export const memberInvitePersonSchema = z
+  .object({
+    entryId: z.string().uuid(),
+    fullName: z.string(),
+    email: z.string().nullable(),
+    status: z.string().nullable(),
+    membershipType: z.string().nullable(),
+    reason: memberInviteReasonSchema,
+    /** Someone under 18: the day they turn 18, 'YYYY-MM-DD'; else null. */
+    turns18On: memberListDaySchema.nullable(),
+    /** Left out because the same address is emailed for someone earlier in this Invite:
+     *  that person's name on the list; else null. */
+    sameAddressAs: z.string().nullable(),
+    /** Where they stand with the app, in the list's own words (§18.4). */
+    app: memberAppViewSchema,
+  })
+  .strict();
+export type MemberInvitePerson = z.infer<typeof memberInvitePersonSchema>;
+
+export const memberInvitePeopleQuerySchema = z
+  .object({
+    ...inviteFilterShape,
+    group: z.enum(["reach", "left_out"]),
+    /** The last person the page showed, as the server gave it: the next page starts
+     *  after them in the list's order, so people the group gains or loses in between
+     *  are never skipped or shown twice. */
+    cursor: z.string().uuid().optional(),
+  })
+  .strict();
+export type MemberInvitePeopleQuery = z.infer<typeof memberInvitePeopleQuerySchema>;
+
+export const memberInvitePeopleSchema = z
+  .object({
+    total: z.number().int().min(0),
+    people: z.array(memberInvitePersonSchema).max(MEMBER_INVITE_PEOPLE_PAGE),
+    cursor: z.string().uuid().nullable(),
+  })
+  .strict();
+export type MemberInvitePeople = z.infer<typeof memberInvitePeopleSchema>;
+
+export const memberInvitePeopleResponseSchema = z.object({ page: memberInvitePeopleSchema });
 export type MemberInvitePreviewResponse = z.infer<typeof memberInvitePreviewResponseSchema>;
 
 /** Press Invite. If the list's version or the number the preview showed has moved,
@@ -1572,6 +1714,10 @@ export const memberListEntryMemberSchema = z
     joinedAt: z.string(),
     visits: z.number().int().min(0),
     lastVisitOn: memberListDaySchema.nullable(),
+    /** They use an email (or phone) this record shares with other records, and the list
+     *  can't say which record is theirs: no "Not {name}?", and removing this record
+     *  leaves their app as it is. */
+    sharedEmail: z.boolean().default(false),
   })
   .strict();
 export type MemberListEntryMember = z.infer<typeof memberListEntryMemberSchema>;
@@ -1583,6 +1729,11 @@ export const memberListEntryDetailSchema = memberListEntrySchema.extend({
   extra: z.array(memberListEntryFieldValueSchema).max(MEMBER_LIST_MAX_EXTRA_FIELDS),
   handEdited: z.array(memberListEditedFieldSchema).max(MEMBER_LIST_MAX_EDITED_FIELDS),
   members: z.array(memberListEntryMemberSchema).max(MEMBER_LIST_MAX_ENTRY_MEMBERS),
+  /** Whether Remove would end somebody's app (One Remove, RULINGS 2026-09-27), worked out
+   *  by the rule Remove itself uses, so the box says only what will happen. */
+  removeEndsApp: z.boolean().default(false),
+  /** Whose app it would end, of `members`, so the box can name them. */
+  removeEndsAppFor: z.array(z.string().uuid()).max(MEMBER_LIST_MAX_ENTRY_MEMBERS).default([]),
 });
 export type MemberListEntryDetail = z.infer<typeof memberListEntryDetailSchema>;
 
@@ -1599,6 +1750,10 @@ export const memberListEntryOutcomeSchema = z.enum([
   "unchanged",
   "taken_off",
   "already_taken_off",
+  /** A past member removed from the app; their record was already off the list. */
+  "removed_from_app",
+  /** "Not this person": that account is out of the app; the record stays as it was. */
+  "not_them",
   "restored",
   "merged",
 ]);
@@ -1612,6 +1767,9 @@ export const memberListEntryWrittenSchema = z
     version: z.number().int().min(0),
     /** What "Add and invite" did about the invitation; absent for any other write. */
     invite: memberInviteOneSchema.optional(),
+    /** Put back, when staff had removed someone in the app with this record: their app
+     *  access given back, or no free place on the plan for it. Absent otherwise. */
+    app: z.enum(["back", "no_place"]).optional(),
   })
   .strict();
 export type MemberListEntryWritten = z.infer<typeof memberListEntryWrittenSchema>;
@@ -1740,7 +1898,16 @@ export const MEMBER_LIST_BY_HAND_WORDS = {
   list_changed: "Your list or your members changed while you were looking, so nobody was removed. Look at the names again.",
   large_change:
     "This would remove more of your members than we do without asking. Check the number, then confirm again to go ahead.",
+  remove_needs_app: "This person uses the app, and your role can't remove app access. Ask the owner.",
+  remove_needs_list: "Removing this person also takes them off your list, which your role can't do. Ask the owner.",
+  not_them_gone: "This person no longer uses the app with these details. Close and reopen the page.",
+  not_them_needs_remove: "Your role can't remove app access. Ask the owner.",
+  not_them_staff: "This person is staff or has a complimentary place, so their access is managed under Staff.",
 } as const;
+
+/** "Not this person": which account in the app it is about (§18.4). */
+export const memberListNotThemRequestSchema = z.object({ userId: z.string().uuid() }).strict();
+export type MemberListNotThemRequest = z.infer<typeof memberListNotThemRequestSchema>;
 
 /** The sentence for a card number typed into a field, naming the field. */
 export const memberListCardTypedWords = (field: string): string =>

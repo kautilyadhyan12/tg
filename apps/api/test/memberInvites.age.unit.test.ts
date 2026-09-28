@@ -5,6 +5,7 @@
 // ones a gym's export holds — a junior on a family plan, somebody turning 18 today or
 // tomorrow, a leap-day birthday — read on the GYM's own calendar day, not the server's.
 import { describe, expect, it } from "vitest";
+import { turns18On } from "@app/shared";
 import { underAgeAt, underAgeOn } from "../src/modules/orgs/invites/age.js";
 
 describe("underAgeOn — the list's date of birth against the gym's today", () => {
@@ -44,5 +45,32 @@ describe("underAgeAt — the day is the GYM's, not the server's", () => {
   });
   it("a gym in Los Angeles: it is still the day before", () => {
     expect(underAgeAt("2008-09-25", instant, "America/Los_Angeles")).toBe(true);
+  });
+});
+
+describe("turns18On — the day Invite's page says someone can be invited from", () => {
+  const cases: [string, string, string | null][] = [
+    ["a junior on a family plan", "2010-03-14", "2028-03-14"],
+    ["born 29 February: 1 March, 18 years on", "2008-02-29", "2026-03-01"],
+    ["born 28 February", "2008-02-28", "2026-02-28"],
+    ["born 31 December", "2008-12-31", "2026-12-31"],
+    ["born 1 January", "2008-01-01", "2026-01-01"],
+    ["a date in another shape has no day", "14/03/1990", null],
+  ];
+  for (const [name, dateOfBirth, day] of cases) {
+    it(name, () => {
+      expect(turns18On(dateOfBirth)).toBe(day);
+    });
+  }
+
+  it("is the first day underAgeOn says 18, for every birthday of a leap year", () => {
+    const dayOf = (at: Date) => at.toISOString().slice(0, 10);
+    for (let at = new Date("2008-01-01T00:00:00Z"); at.getUTCFullYear() === 2008; at = new Date(at.getTime() + 86_400_000)) {
+      const born = dayOf(at);
+      const from = turns18On(born);
+      if (from === null) throw new Error(`no day for ${born}`);
+      const before = dayOf(new Date(new Date(`${from}T00:00:00Z`).getTime() - 86_400_000));
+      expect([born, underAgeOn(born, before), underAgeOn(born, from)]).toEqual([born, true, false]);
+    }
   });
 });

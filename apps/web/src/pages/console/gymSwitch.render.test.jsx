@@ -571,11 +571,11 @@ describe('walking from one gym to another', () => {
     );
 
     expect(screen.queryByText('Alice Anderson')).toBeNull();
-    expect(screen.queryByRole('button', { name: /^remove$/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^remove from app$/i })).toBeNull();
 
     // THE CONTROL: gym B's roster lands and the screen is gym B's.
     releaseBMembers(B_ROSTER);
-    await waitFor(() => expect(screen.getByText(/^Gym B ·/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Nobody has joined yet.')).toBeTruthy());
     expect(screen.queryByText('Alice Anderson')).toBeNull();
   });
 });

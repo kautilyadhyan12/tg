@@ -1530,6 +1530,9 @@ export const orgMemberListQuerySchema = z
   .object({
     limit: z.coerce.number().int().min(1).max(100).default(50),
     cursor: z.string().max(120).optional(),
+    /** Search by name: the name they signed up with, and — for staff who may see the
+     *  gym's list — the name the list holds for them. Never by email (§2.4). */
+    query: z.string().max(120).optional(),
   })
   .strict();
 export type OrgMemberListQuery = z.infer<typeof orgMemberListQuerySchema>;
@@ -1590,10 +1593,7 @@ export const orgMemberSchema = z.object({
    *  address invited a stranger, and a different name is the clue). The gym's own data
    *  about the person, so only for staff who may see the list (`members.confirm`);
    *  absent otherwise and when the membership names no list record. */
-  onList: z
-    .object({ name: z.string(), nameCheck: z.enum(["matches", "differs"]) })
-    .strict()
-    .optional(),
+  onList: z.object({ name: z.string() }).strict().optional(),
   /** WHY THIS MEMBER IS NOT ON THE GYM'S LIST (ROADMAP 3a-vi-b), so staff can put it
    *  right: the record they joined with was taken off (`at`), they dropped off without
    *  that, or they were never on a list the gym imported. `sameEmailName`
@@ -1608,6 +1608,11 @@ export const orgMemberSchema = z.object({
     })
     .strict()
     .optional(),
+  /** THEIR OWN RECORD ON THE GYM'S LIST, so "Using the app" opens the same person's page
+   *  as "Your list" (Kd, 2026-09-27): the current record §9.7 matches them to, else the
+   *  past record they joined with. Never a past record found only by a shared email,
+   *  which can be a relative's. Only for staff who see the list; absent otherwise. */
+  recordId: z.string().uuid().optional(),
 });
 export type OrgMember = z.infer<typeof orgMemberSchema>;
 

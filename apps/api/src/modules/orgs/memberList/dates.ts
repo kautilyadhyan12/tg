@@ -196,16 +196,20 @@ export function evidenceInColumn(cells: Iterable<string>): ColumnEvidence {
 }
 
 /** A column's order, settled once for the whole column (§11.3). The file's own
- *  evidence beats the country; staff's switch beats both. Where the file says
- *  one thing on one row and the other on another, the file is not trusted at
- *  all and the country decides — two rows cannot both be right. */
+ *  evidence decides. Where it proves nothing, or says one thing on one row and the
+ *  other on another (two rows cannot both be right), staff's switch decides, and
+ *  without one the gym's country. A switch never beats the file's proof: remembered
+ *  from an earlier file whose dates were all 12 or under, it read this file's
+ *  "20/02/2023" as a twentieth month and dropped it, and staff saw "03/04/2024 = 4
+ *  March 2024" on a column that could only be day first (Kd's click-through,
+ *  2026-09-27). */
 export function settleOrder(evidence: ColumnEvidence, country: string | null, chosen: MemberListDateOrder | null): SettledOrder {
-  if (chosen !== null) return { order: chosen, from: "chosen" };
   const { dayFirst, monthFirst, anyEither } = evidence;
   if (dayFirst !== monthFirst) return { order: dayFirst ? "dayFirst" : "monthFirst", from: "file" };
   // Nothing in the column could be read either way, so nothing was decided:
   // every cell said its own order (ISO, or a written-out month).
   if (!dayFirst && !monthFirst && !anyEither) return { order: countryOrder(country), from: "none" };
+  if (chosen !== null) return { order: chosen, from: "chosen" };
   return { order: countryOrder(country), from: "country" };
 }
 

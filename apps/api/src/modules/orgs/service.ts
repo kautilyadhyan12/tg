@@ -4,6 +4,7 @@
 import type { Sql } from "postgres";
 import {
   GYM_POSTAL_ADDRESS_MAX_CHARS,
+  MEMBER_LIST_BY_HAND_WORDS,
   JOIN_CODE_LENGTH,
   ORG_TYPES_PHRASE,
   SMALLER_SIZE_DECIDE_HOURS,
@@ -20,8 +21,8 @@ import type { RedisLike } from "../../redis.js";
 import { codeFromBytes, slugCandidate, slugifyName } from "./codes.js";
 import { cleanGymText } from "./invites/gymText.js";
 import { withdrawForAccounts } from "./invites/join.js";
-import { checkName } from "./invites/nameCheck.js";
-import { displayNameFromEmail } from "../auth/service.js";
+import { recordsOfMember, removeRecordIn } from "./memberList/oneRemove.js";
+import { currentRecordOf, pastRecordOf } from "./memberList/whose.js";
 import type { InviteSettings } from "./invites/settings.js";
 import * as listRepo from "./memberList/repo.js";
 import * as repo from "./repo.js";
@@ -1278,6 +1279,10 @@ export async function listOrgPlans(
 
 type OffList = NonNullable<OrgMember["offList"]>;
 
+/** "Leo Park or Maria Park", "A, B or C". */
+const eitherOf = (names: readonly string[]): string =>
+  names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} or ${names[names.length - 1] ?? ""}`;
+
 /** WHY THE PAGE'S PAID-PLACE MEMBERS ARE NOT ON THE GYM'S LIST (3a-vi-b), by the one
  *  rule every screen uses (`membersAgainstList`). Nothing for a gym with no list: nobody
  *  is missing from a list that does not exist. */
@@ -1285,14 +1290,26 @@ async function offListOf(
   sql: Sql,
   gymId: string,
   userIds: readonly string[],
-): Promise<{ offList: Map<string, OffList>; typedInName: Map<string, string> }> {
+): Promise<{ offList: Map<string, OffList>; typedInName: Map<string, string>; records: Map<string, string> }> {
   const out = new Map<string, OffList>();
   const typedInName = new Map<string, string>();
-  if (userIds.length === 0 || (await listRepo.listState(sql, gymId)) === null) return { offList: out, typedInName };
+  const records = new Map<string, string>();
+  if (userIds.length === 0 || (await listRepo.listState(sql, gymId)) === null) return { offList: out, typedInName, records };
   const members = await listRepo.membersAgainstList(sql, gymId, { email: null, phone: null, userIds });
-  // On the list through a current record with their joined record's name, their own
-  // having come off: "On your list as" names that record.
-  for (const m of members) if (m.joinedFormer && m.onList && m.entryFullName !== null) typedInName.set(m.userId, m.entryFullName);
+  // Each person's own record, for their page (`whose.ts`): the current one that is
+  // certainly theirs, else the past one they joined with — never a record a shared
+  // email only might make theirs.
+  for (const m of members) {
+    const own = m.onList ? currentRecordOf(m) : pastRecordOf(m);
+    if (own !== null) records.set(m.userId, own);
+  }
+  // "On your list as": the record they are on the list through, however it was matched;
+  // on an email several records share, every one of them.
+  for (const m of members) {
+    if (!m.onList) continue;
+    const name = m.unsure === null ? m.entryFullName : eitherOf(m.unsure.records.map((record) => record.fullName));
+    if (name !== null) typedInName.set(m.userId, name);
+  }
   const off = members.filter((m) => m.seatCounted && !m.onList);
   // "Taken off" is only ever about the record they joined with: a former record found
   // by their email or phone can be a relative's on a shared family address.
@@ -1315,7 +1332,7 @@ async function offListOf(
       sameEmailName: m.email === null ? null : (facts.nameByEmail.get(m.email.toLowerCase()) ?? null),
     });
   }
-  return { offList: out, typedInName };
+  return { offList: out, typedInName, records };
 }
 
 export async function listOrgMembers(
@@ -1346,14 +1363,18 @@ export async function listOrgMembers(
     );
   }
 
+  const typed = (query.query ?? "").trim();
   const page = await repo.listMembers(deps.sql, {
     gymId,
+    // LIKE's own characters escaped, so "10%" finds that name and not everybody.
+    like: typed === "" ? null : `%${typed.replace(/[\\%_]/g, (char) => `\\${char}`)}%`,
+    likeListName: seesList,
     limit: query.limit,
     cursor: parseCursor(query.cursor),
   });
-  const { offList, typedInName } = seesList
+  const { offList, typedInName, records } = seesList
     ? await offListOf(deps.sql, gymId, page.items.map((m) => m.userId))
-    : { offList: new Map<string, OffList>(), typedInName: new Map<string, string>() };
+    : { offList: new Map<string, OffList>(), typedInName: new Map<string, string>(), records: new Map<string, string>() };
   // Parsed on the way out, and this one carries the most weight: the roster
   // shape IS Part 3 §2.4's visibility boundary, so a field added to the row
   // without being added to the schema is dropped here rather than served.
@@ -1368,14 +1389,10 @@ export async function listOrgMembers(
         complimentary: m.complimentary,
         takesSeat: m.takesSeat,
         ...(seesList && listName !== null
-          ? {
-              onList: {
-                name: listName,
-                nameCheck: checkName(listName, m.displayName, m.accountEmail === null ? null : displayNameFromEmail(m.accountEmail)),
-              },
-            }
+          ? { onList: { name: listName } }
           : {}),
         ...(offList.has(m.userId) ? { offList: offList.get(m.userId) } : {}),
+        ...(records.has(m.userId) ? { recordId: records.get(m.userId) } : {}),
       };
     }),
     nextCursor:
@@ -1823,12 +1840,28 @@ export async function removeOrgMember(
   targetUserId: string,
 ): Promise<RemoveMemberResponse> {
   const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.remove");
+  const { privileges } = await requirePrivilege(deps, gymId, userId, "members.remove");
+  const at = new Date();
 
   const outcome = await repo.removeMember(deps.sql, {
     gymId,
     userId: targetUserId,
     actorUserId: userId,
-    afterClose: (tx) => withdrawForAccounts(tx, deps.invites, { gymId, userIds: [targetUserId], at: new Date() }),
+    // ONE REMOVE (RULINGS 2026-09-27): the current record that is certainly theirs becomes
+    // a past member in the same step — that record only, never another at their address,
+    // and none when a family's shared email leaves the list unable to say. The membership
+    // keeps the record it was removed with (their past one if that is all they have), for
+    // Put back.
+    beforeClose: async (tx) => {
+      const records = await recordsOfMember(tx, gymId, targetUserId);
+      if (records.current === null) return records.past;
+      if (!privileges.includes("members.confirm")) throw new OrgsError(403, "forbidden", MEMBER_LIST_BY_HAND_WORDS.remove_needs_list);
+      const entry = await listRepo.entryFor(tx, gymId, records.current);
+      if (entry === null) return null;
+      await removeRecordIn(tx, { gymId, actorUserId: userId, at, settings: deps.invites }, entry, { endApp: false, mayEndApp: true });
+      return records.current;
+    },
+    afterClose: (tx) => withdrawForAccounts(tx, deps.invites, { gymId, userIds: [targetUserId], at }),
   });
 
   switch (outcome.kind) {

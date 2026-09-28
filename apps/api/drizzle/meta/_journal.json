@@ -330,6 +330,13 @@
       "when": 1788220800030,
       "tag": "0047_lead_follow_ups",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1788220800031,
+      "tag": "0048_removed_with_record",
+      "breakpoints": true
     }
   ]
 }

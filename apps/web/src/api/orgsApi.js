@@ -22,6 +22,7 @@ import {
   memberInviteChangedSchema,
   memberInvitedResponseSchema,
   memberInviteOneResponseSchema,
+  memberInvitePeopleResponseSchema,
   memberInvitePreviewResponseSchema,
   memberListConfirmResponseSchema,
   memberListEntriesResponseSchema,
@@ -602,6 +603,15 @@ export const orgService = {
       authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/invites/preview${query ? `?${query}` : ''}`),
     ),
 
+  /** Invite's page: who these filters would email (`group=reach`), or leave out and why
+   *  (`group=left_out`), a hundred at a time. */
+  getInvitePeople: (gymId, query) =>
+    readThrough(
+      memberInvitePeopleResponseSchema,
+      'who would be invited',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/invites/people?${query}`),
+    ),
+
   /** POST …/member-list/invites — press Invite. A 409 `invite_changed` carries the new
    *  preview (`inviteChangedPreview`) and nobody was invited. */
   pressInvite: (gymId, body) =>
@@ -651,6 +661,14 @@ export const orgService = {
       memberListEntryWrittenSchema,
       'this person',
       authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/restore`, {}),
+    ),
+
+  /** "Not this person" (§18.4): that account is taken out of the app; the record stays. */
+  notThem: (gymId, entryId, userId) =>
+    readThrough(
+      memberListEntryWrittenSchema,
+      'this person',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/not-them`, { userId }),
     ),
 
   /** POST …/entries/:removeEntryId/merge — join two records: the one in the path is

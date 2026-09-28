@@ -71,8 +71,17 @@ function preview(over = {}) {
 
 const person = (fullName, over = {}) => ({
   row: null, fullName, email: `${fullName.split(' ')[0].toLowerCase()}@members.example`, phone: null, memberNumber: null,
-  status: 'Active', wasStatus: null, inApp: false, ...over,
+  status: 'Active', wasStatus: null, inApp: false, onList: null, ...over,
 });
+/** Somebody the file leaves out, as the list knows them today (Kd, 2026-09-27). */
+const goneOne = (fullName, onList = {}, over = {}) =>
+  person(fullName, {
+    status: null,
+    wasStatus: 'Active',
+    onList: { membershipType: 'Gold', endsOn: null, endsOnKind: null, paymentStatus: 'Paid', source: 'upload', addedAt: '2026-01-05T10:00:00.000Z', ...onList },
+    ...over,
+  });
+const namesRows = (root) => root.getAllByTestId('names-row');
 const page = (group, people, total, cursor = null) => ({ data: { page: memberListRowsPageSchema.parse({ group, total, people, cursor }) } });
 
 const confirmedAnswer = (over = {}) =>
@@ -123,7 +132,16 @@ describe('the worst thing: a wrong file cannot take people off unseen', () => {
 
   it('names who is missing, picks nothing, and waits for the typed number', async () => {
     orgService.getMemberListRows.mockResolvedValueOnce(
-      page('gone', [person('Olivia Walker', { inApp: true }), person('Liam Hughes'), person('Emma Price')], 25),
+      page(
+        'gone',
+        [
+          goneOne('Olivia Walker', {}, { inApp: true }),
+          goneOne('Liam Hughes', { endsOn: '2026-08-31', endsOnKind: 'ends', paymentStatus: 'Unpaid' }, { wasStatus: 'Cancelled' }),
+          goneOne('Emma Price', { membershipType: null, paymentStatus: null, source: 'typed', addedAt: '2026-09-20T09:30:00.000Z' }),
+        ],
+        25,
+        3,
+      ),
     );
     await reviewWith(wrongFile());
 
@@ -133,7 +151,16 @@ describe('the worst thing: a wrong file cannot take people off unseen', () => {
     expect(screen.queryByText('Missing')).toBeNull();
     expect(screen.queryByText('No changes')).toBeNull();
     expect(screen.getByText('5 already up to date')).toBeTruthy();
-    expect(await card.findByText(/Olivia Walker, Liam Hughes, Emma Price and 22 more/)).toBeTruthy();
+    // Each one is shown at once with what the list says of them, not only a name.
+    await waitFor(() => expect(namesRows(card)).toHaveLength(3));
+    const [olivia, liam, emma] = namesRows(card);
+    expect(within(olivia).getByTestId('gone-facts').textContent).toBe('Active · Gold · Paid');
+    expect(within(liam).getByTestId('gone-facts').textContent).toMatch(/^Cancelled · Gold · Ended 31 Aug( 2026)? · Unpaid$/);
+    expect(within(emma).getByTestId('gone-facts').textContent).toBe('Active');
+    expect(within(emma).getByTestId('gone-added').textContent).toMatch(/^Added manually · 20 Sep( 2026)?$/);
+    expect(within(olivia).queryByTestId('gone-added')).toBeNull();
+    expect(card.getByTestId('missing-help').textContent).toContain('members missing from it have usually left');
+    expect(card.getByRole('button', { name: 'Show more (22)' })).toBeTruthy();
     expect(card.getByTestId('missing-statuses').textContent).toBe('Active 20 · Frozen 5');
     expect(orgService.getMemberListRows).toHaveBeenCalledWith(GYM, UPLOAD, 'gone', 0);
 
@@ -143,9 +170,8 @@ describe('the worst thing: a wrong file cannot take people off unseen', () => {
     tickPermission();
     expect(importButton().disabled).toBe(true);
 
-    // Every name can be read before answering, and who uses the app is marked.
-    fireEvent.click(card.getByRole('button', { name: 'See all' }));
-    expect(card.getByText('Uses the app')).toBeTruthy();
+    // Who uses the app is marked.
+    expect(within(olivia).getByText('Uses the app')).toBeTruthy();
 
     fireEvent.click(card.getByRole('radio', { name: /They've left/ }));
     expect(importButton().disabled).toBe(true);
@@ -215,10 +241,11 @@ describe('the worst thing: a wrong file cannot take people off unseen', () => {
   });
 
   it('a few missing still need an answer, but no typed number', async () => {
-    orgService.getMemberListRows.mockResolvedValueOnce(page('gone', [person('Ben Cole'), person('Amy Shaw')], 2));
+    orgService.getMemberListRows.mockResolvedValueOnce(page('gone', [goneOne('Ben Cole'), goneOne('Amy Shaw')], 2));
     await reviewWith(preview({ list: list({ new: 3, changed: 6, unchanged: 30, gone: 2 }), guard: { ...calm, entriesGoing: 2, listSize: 38 } }));
     expect(screen.getByText("2 members aren't in this file")).toBeTruthy();
-    expect(await screen.findByText(/Ben Cole, Amy Shaw/)).toBeTruthy();
+    const card = within(screen.getByTestId('missing'));
+    await waitFor(() => expect(namesRows(card).map((row) => row.textContent)).toEqual([expect.stringContaining('Ben Cole'), expect.stringContaining('Amy Shaw')]));
     tickPermission();
     expect(importButton().disabled).toBe(true);
     fireEvent.click(screen.getByRole('radio', { name: /They've left/ }));
@@ -294,10 +321,15 @@ describe('an answer is only ever about the people staff were shown (review of PR
   });
 
   it('app members leaving with nobody else missing: their names, in words true for them', async () => {
-    orgService.getMemberListRows.mockResolvedValueOnce(page('members_leaving', [person('Amy Shaw', { inApp: true })], 2));
+    orgService.getMemberListRows.mockResolvedValueOnce(page('members_leaving', [person('Amy Shaw', { inApp: true })], 2, 1));
     await reviewWith(preview({ list: list({ unchanged: 5 }), members: { leaving: 2, listedNow: 4 } }));
     expect(screen.getByText("2 members who use the app aren't in this file")).toBeTruthy();
-    expect(await screen.findByText(/Amy Shaw and 1 more/)).toBeTruthy();
+    const card = within(screen.getByTestId('missing'));
+    await waitFor(() => expect(namesRows(card)).toHaveLength(1));
+    expect(namesRows(card)[0].textContent).toContain('Amy Shaw');
+    expect(card.getByRole('button', { name: 'Show more (1)' })).toBeTruthy();
+    // The hint about leavers is about the list's own people, not about app members.
+    expect(card.queryByTestId('missing-help')).toBeNull();
     expect(orgService.getMemberListRows).toHaveBeenCalledWith(GYM, UPLOAD, 'members_leaving', 0);
     expect(screen.getByRole('radio', { name: /They've left/ }).textContent).toContain('Mark them as not on your list');
   });
@@ -317,7 +349,7 @@ describe('an answer is only ever about the people staff were shown (review of PR
       preview({ dateColumns: [{ column: 3, field: 'joinedOn', order: 'dayFirst', from: 'country', example: { raw: '03/04/2026', read: '2026-04-03' }, notRead: 0 }] }),
     );
     orgService.uploadMemberList.mockReturnValueOnce(new Promise(() => {}));
-    const swap = screen.getByRole('button', { name: 'Swap' });
+    const swap = screen.getByRole('button', { name: 'Change to 4 March 2026' });
     fireEvent.click(swap);
     await waitFor(() => expect(swap.disabled).toBe(true));
     fireEvent.click(swap);
@@ -437,17 +469,27 @@ describe('the checks', () => {
     expect(orgService.uploadMemberList.mock.calls[1][1].mapping).toMatchObject({ status: null, membershipType: 2 });
   });
 
-  it('a date nothing in the file settled is shown once, and Swap reads it the other way', async () => {
-    await reviewWith(
-      preview({
-        dateColumns: [{ column: 3, field: 'joinedOn', order: 'dayFirst', from: 'country', example: { raw: '03/04/2026', read: '2026-04-03' }, notRead: 0 }],
-      }),
-    );
-    expect(screen.getByText('03/04/2026 = 3 April 2026')).toBeTruthy();
-    orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: preview() } });
-    fireEvent.click(screen.getByRole('button', { name: 'Swap' }));
+  it('a date nothing in the file settled says how it was read, and the other reading is one press away, and back', async () => {
+    const joined = (order, read) => [{ column: 3, field: 'joinedOn', order, from: order === 'dayFirst' ? 'country' : 'chosen', example: { raw: '03/04/2026', read }, notRead: 0 }];
+    await reviewWith(preview({ dateColumns: joined('dayFirst', '2026-04-03') }));
+    expect(screen.getByText('03/04/2026 is read as 3 April 2026')).toBeTruthy();
+    orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: preview({ dateColumns: joined('monthFirst', '2026-03-04') }) } });
+    fireEvent.click(screen.getByRole('button', { name: 'Change to 4 March 2026' }));
     await waitFor(() => expect(orgService.uploadMemberList).toHaveBeenCalledTimes(2));
     expect(orgService.uploadMemberList.mock.calls[1][1].mapping.dateOrder).toEqual([{ column: 3, order: 'monthFirst' }]);
+    // Read the other way, the line says so, and the same place puts it back.
+    expect(await screen.findByText('03/04/2026 is read as 4 March 2026')).toBeTruthy();
+    orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: preview({ dateColumns: joined('dayFirst', '2026-04-03') }) } });
+    fireEvent.click(screen.getByRole('button', { name: 'Change to 3 April 2026' }));
+    await waitFor(() => expect(orgService.uploadMemberList).toHaveBeenCalledTimes(3));
+    expect(orgService.uploadMemberList.mock.calls[2][1].mapping.dateOrder).toEqual([{ column: 3, order: 'dayFirst' }]);
+  });
+
+  it('says how many of the columns it understood, and where the examples come from', async () => {
+    await reviewWith(preview());
+    expect(screen.getByTestId('columns-line').textContent).toContain('4 of 5 columns matched');
+    fireEvent.click(within(screen.getByTestId('columns-line')).getByRole('button', { name: 'Check' }));
+    expect(screen.getByTestId('columns-note').textContent).toBe('Examples are from the first row of your file.');
   });
 
   it('a date the file itself settled is not asked about', async () => {
@@ -456,7 +498,8 @@ describe('the checks', () => {
         dateColumns: [{ column: 3, field: 'joinedOn', order: 'dayFirst', from: 'file', example: { raw: '25/12/2025', read: '2025-12-25' }, notRead: 0 }],
       }),
     );
-    expect(screen.queryByText('25/12/2025 = 25 December 2025')).toBeNull();
+    expect(screen.queryByText('25/12/2025 is read as 25 December 2025')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Change to/ })).toBeNull();
   });
 
   it('a warning is one short line, with the whole sentence behind "Why?"', async () => {

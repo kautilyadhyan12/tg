@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  dateReading,
   datesToCheck,
   dayWords,
   doneWords,
@@ -106,8 +107,19 @@ describe('dates', () => {
       dateColumns: [{ column: 3, field: 'joinedOn', order: 'dayFirst', from, example: { raw: '03/04/2026', read: '2026-04-03' }, notRead: 0 }],
     };
     expect(datesToCheck(preview)).toEqual(
-      shown ? [{ column: 3, order: 'dayFirst', example: '03/04/2026 = 3 April 2026', columnName: 'Joined' }] : [],
+      shown
+        ? [{ column: 3, order: 'dayFirst', read: '03/04/2026 is read as 3 April 2026', other: 'Change to 4 March 2026', columnName: 'Joined' }]
+        : [],
     );
+  });
+
+  it.each([
+    ['day first', { raw: '03/04/2024', read: '2024-04-03' }, '03/04/2024 is read as 3 April 2024', 'Change to 4 March 2024'],
+    ['month first', { raw: '03/04/2024', read: '2024-03-04' }, '03/04/2024 is read as 4 March 2024', 'Change to 3 April 2024'],
+    ['the same day both ways', { raw: '05/05/2024', read: '2024-05-05' }, '05/05/2024 is read as 5 May 2024', 'Change to 5 May 2024'],
+    ['no other reading', { raw: '04/13/2024', read: '2024-04-13' }, '04/13/2024 is read as 13 April 2024', 'Switch day and month'],
+  ])('says what a date was read as, and names the other reading (%s)', (_what, example, read, other) => {
+    expect(dateReading(example)).toEqual({ read, other });
   });
 });
 

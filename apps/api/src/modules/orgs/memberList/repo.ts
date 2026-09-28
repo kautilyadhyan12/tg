@@ -35,6 +35,8 @@ import {
   type MemberListMapping,
   type MemberListMode,
   type MemberListRecords,
+  memberListOnListSchema,
+  type MemberListOnList,
   type MemberListStoredPerson,
   type MemberListRowGroup,
   type MemberListStagedFile,
@@ -46,7 +48,7 @@ import type { EntryValues } from "./byHand.js";
 import type { CarriedFields, ListEntry, ListMember } from "./reconcile.js";
 import { sameName } from "./samePerson.js";
 
-type SqlOrTx = Sql | TransactionSql;
+export type SqlOrTx = Sql | TransactionSql;
 
 /** An upload row's stored values as this module is willing to read them back.
  *  Every one of the six has a CHECK or a schema behind it in the table, and every
@@ -96,17 +98,14 @@ export interface MemberAgainstList extends ListMember {
    *  what the list still says about them. Null where no entry matches. */
   entryStatus: string | null;
   entryMemberNumber: string | null;
-  /** WHICH FORMER RECORD THIS MEMBER MATCHES, AND NOTHING ELSE (round one, Low-2).
-   *
-   *  It answers one question only: a page asked for the gym's FORMER records has to be
-   *  able to say "this one is somebody who is in the app", and the match above
-   *  deliberately cannot, because it excludes former records so that one can never
-   *  admit anybody or be counted where an invite is decided (§11.1).
-   *
-   *  So it is read by a page's `inApp` tick when the page was asked for the former
-   *  records, and by NOTHING else: not the marks, not `leaving`, not the guard, not a
-   *  chip, not `canBeInvited`. */
-  formerEntryId: string | null;
+  /** WHEN THE LIST CANNOT SAY WHICH RECORD IS THIS PERSON'S: they joined with none,
+   *  several current records hold the email (or, with no email match, the phone) they
+   *  are matched by — a family sharing one address — and none carries the name they
+   *  gave the app. `entryId` is still §9.7's first of them, because the address is on
+   *  the list and in the app either way (admission, places, Invite); but no screen shows
+   *  them as that record's person and no removal of a record ends their app (round one
+   *  of 5b-v-a-i, High-1). Null when the match is certain or there is none. */
+  unsure: { by: "email" | "phone"; records: { id: string; fullName: string }[] } | null;
   /** The name on the record they joined with, and whether it has come off — what a
    *  read needs to ask `onListOf` about a list after an upload. */
   joinedFullName: string | null;
@@ -115,6 +114,26 @@ export interface MemberAgainstList extends ListMember {
   entryFullName: string | null;
   /** When this membership began, for a screen naming the person. */
   joinedAt: Date;
+}
+
+/** The gym's time zone, for its own calendar day. */
+export async function gymTimeZone(sql: SqlOrTx, gymId: string): Promise<string> {
+  const rows = await sql<{ timezone: string }[]>`SELECT timezone FROM gyms WHERE id = ${gymId}`;
+  const zone = rows[0]?.timezone;
+  if (zone === undefined) throw new Error(`gym ${gymId} has no row`);
+  return zone;
+}
+
+/** Every current record, as much as its App word needs (§18.4). */
+export async function appRows(
+  sql: SqlOrTx,
+  gymId: string,
+): Promise<{ id: string; fullName: string; email: string | null; dateOfBirth: string | null; former: boolean }[]> {
+  const rows = await sql<{ id: string; full_name: string; email: string | null; date_of_birth: string | null }[]>`
+    SELECT id, full_name, email::text AS email, date_of_birth::text AS date_of_birth
+    FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND former_at IS NULL`;
+  return rows.map((row) => ({ id: row.id, fullName: row.full_name, email: row.email, dateOfBirth: row.date_of_birth, former: false }));
 }
 
 export async function listState(sql: SqlOrTx, gymId: string): Promise<ListState | null> {
@@ -618,6 +637,39 @@ export async function stagedShell(sql: SqlOrTx, gymId: string, uploadId: string)
  *  Both bounds are whole numbers worked out HERE and cast in the statement: Postgres
  *  cannot add two parameters it has no type for (`operator is not unique: unknown +
  *  unknown`), and arithmetic on a page's edge belongs where the numbers already are. */
+/** What the list holds today about these records, for the people an import leaves out:
+ *  their membership, end or renewal, payment, and how and when they came onto the list. */
+export async function onListOf(sql: SqlOrTx, gymId: string, entryIds: readonly string[]): Promise<Map<string, MemberListOnList>> {
+  if (entryIds.length === 0) return new Map();
+  const rows = await sql<
+    {
+      id: string;
+      membership_type: string | null;
+      ends_on: string | null;
+      ends_on_kind: string | null;
+      payment_status: string | null;
+      source: string;
+      created_at: Date;
+    }[]
+  >`
+    SELECT id, membership_type, ends_on::text AS ends_on, ends_on_kind, payment_status, source, created_at
+    FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND id = ANY(${[...entryIds]}::uuid[])`;
+  return new Map(
+    rows.map((row) => [
+      row.id,
+      memberListOnListSchema.parse({
+        membershipType: row.membership_type,
+        endsOn: row.ends_on,
+        endsOnKind: row.ends_on_kind,
+        paymentStatus: row.payment_status,
+        source: row.source,
+        addedAt: row.created_at.toISOString(),
+      }),
+    ]),
+  );
+}
+
 export async function stagedPage(
   sql: SqlOrTx,
   gymId: string,
@@ -818,7 +870,6 @@ export async function membersAgainstList(
       entry_member_number: string | null;
       entry_full_name: string | null;
       on_list: boolean;
-      former_entry_id: string | null;
       joined_entry_id: string | null;
       joined_full_name: string | null;
       joined_former: boolean;
@@ -840,7 +891,6 @@ export async function membersAgainstList(
            e.member_number AS entry_member_number,
            e.full_name     AS entry_full_name,
            (e.id IS NOT NULL) AS on_list,
-           f.id            AS former_entry_id,
            j.id            AS joined_entry_id,
            j.full_name     AS joined_full_name,
            (j.former_at IS NOT NULL) AS joined_former,
@@ -875,48 +925,24 @@ export async function membersAgainstList(
       ORDER BY c.channel, c.listed_seq
       LIMIT 1
     ) e ON true
-    -- THE SAME MATCH OVER THE FORMER RECORDS, ANSWERING ONE QUESTION ONLY: which former
-    -- record belongs to somebody who IS in the app, so the page that shows them can say
-    -- so (round one, Low-2). It is deliberately no part of on_list, entry_status or
-    -- anything the marks, the counts and the chips read -- a former record admits nobody
-    -- and is invited by nothing, which is what the lateral above is for.
+    -- A JOINED RECORD THAT HAS COME OFF, OR NO JOINED RECORD: the current records on the
+    -- member's proved email or stated phone, email first, for the same-name test below
+    -- (onListOf; and a household, where the record with the member's own name is theirs,
+    -- and several with no such name leave the list unable to say).
     LEFT JOIN LATERAL (
-      SELECT c.id
-      FROM (
-        (SELECT j.id, j.listed_seq, 0 AS channel
-         WHERE j.id IS NOT NULL AND j.former_at IS NOT NULL)
-        UNION ALL
-        (SELECT x.id, x.listed_seq, 1 AS channel
-         FROM gym_member_list_entries x
-         WHERE x.gym_id = m.gym_id AND x.former_at IS NOT NULL AND j.id IS NULL AND v.proved AND x.email = u.email
-         ORDER BY x.listed_seq
-         LIMIT 1)
-        UNION ALL
-        (SELECT x.id, x.listed_seq, 2 AS channel
-         FROM gym_member_list_entries x
-         WHERE x.gym_id = m.gym_id AND x.former_at IS NOT NULL AND j.id IS NULL
-           AND m.stated_phone_e164 IS NOT NULL AND x.phone_e164 = m.stated_phone_e164
-         ORDER BY x.listed_seq
-         LIMIT 1)
-      ) c
-      ORDER BY c.channel, c.listed_seq
-      LIMIT 1
-    ) f ON true
-    -- A JOINED RECORD THAT HAS COME OFF: the current records on the member's proved
-    -- email or stated phone, email first, for the same-name test below (onListOf).
-    LEFT JOIN LATERAL (
-      SELECT jsonb_agg(jsonb_build_object('id', c.id, 'status', c.status, 'memberNumber', c.member_number, 'fullName', c.full_name)
+      SELECT jsonb_agg(jsonb_build_object('id', c.id, 'status', c.status, 'memberNumber', c.member_number, 'fullName', c.full_name,
+                                          'channel', c.channel)
                        ORDER BY c.channel, c.listed_seq) AS list
       FROM (
         (SELECT x.id, x.status, x.member_number, x.full_name, x.listed_seq, 1 AS channel
          FROM gym_member_list_entries x
-         WHERE x.gym_id = m.gym_id AND x.former_at IS NULL AND j.former_at IS NOT NULL AND v.proved AND x.email = u.email
+         WHERE x.gym_id = m.gym_id AND x.former_at IS NULL AND (j.id IS NULL OR j.former_at IS NOT NULL) AND v.proved AND x.email = u.email
          ORDER BY x.listed_seq
          LIMIT 20)
         UNION ALL
         (SELECT x.id, x.status, x.member_number, x.full_name, x.listed_seq, 2 AS channel
          FROM gym_member_list_entries x
-         WHERE x.gym_id = m.gym_id AND x.former_at IS NULL AND j.former_at IS NOT NULL
+         WHERE x.gym_id = m.gym_id AND x.former_at IS NULL AND (j.id IS NULL OR j.former_at IS NOT NULL)
            AND m.stated_phone_e164 IS NOT NULL AND x.phone_e164 = m.stated_phone_e164
          ORDER BY x.listed_seq
          LIMIT 20)
@@ -934,11 +960,24 @@ export async function membersAgainstList(
     ORDER BY m.joined_at, m.user_id`;
   return rows.map((row) => {
     // Joined record off the list: a current record on their contact with its name is them.
+    // No joined record: of the records on their contact (a household on one address),
+    // the one with the name they gave the app is theirs (`reconcile`'s `entryFor`); with
+    // no such record, one record on the first channel that matched is theirs, and
+    // several leave the list unable to say which (`unsure`).
     const joinedName = row.joined_full_name;
-    const alt =
-      row.joined_former && joinedName !== null
-        ? sameContactSchema.parse(row.same_contact ?? []).find((entry) => sameName(entry.fullName, joinedName))
-        : undefined;
+    const sameContact = sameContactSchema.parse(row.same_contact ?? []);
+    let alt: (typeof sameContact)[number] | undefined;
+    let unsure: MemberAgainstList["unsure"] = null;
+    if (row.joined_former && joinedName !== null) {
+      alt = sameContact.find((entry) => sameName(entry.fullName, joinedName));
+    } else if (row.joined_entry_id === null) {
+      alt = sameContact.find((entry) => sameName(entry.fullName, row.display_name));
+      const channel = sameContact[0]?.channel;
+      const first = sameContact.filter((entry) => entry.channel === channel);
+      if (alt === undefined && first.length > 1) {
+        unsure = { by: channel === 1 ? "email" : "phone", records: first.map((entry) => ({ id: entry.id, fullName: entry.fullName })) };
+      }
+    }
     return {
       userId: row.user_id,
       fullName: row.display_name,
@@ -951,7 +990,7 @@ export async function membersAgainstList(
       entryStatus: alt === undefined ? row.entry_status : alt.status,
       entryMemberNumber: alt === undefined ? row.entry_member_number : alt.memberNumber,
       entryFullName: alt === undefined ? row.entry_full_name : alt.fullName,
-      formerEntryId: row.former_entry_id ?? null,
+      unsure,
       joinedEntryId: row.joined_entry_id,
       joinedFullName: joinedName,
       joinedFormer: row.joined_former,
@@ -961,7 +1000,15 @@ export async function membersAgainstList(
 }
 
 const sameContactSchema = z.array(
-  z.object({ id: z.string().uuid(), status: z.string().nullable(), memberNumber: z.string().nullable(), fullName: z.string() }).strict(),
+  z
+    .object({
+      id: z.string().uuid(),
+      status: z.string().nullable(),
+      memberNumber: z.string().nullable(),
+      fullName: z.string(),
+      channel: z.union([z.literal(1), z.literal(2)]),
+    })
+    .strict(),
 );
 
 /** WHY SOME OF THE GYM'S MEMBERS ARE NOT ON ITS LIST, for the roster (3a-vi-b): when
@@ -1594,6 +1641,8 @@ export interface EntriesPageInput {
   /** The invitation filter (§11.5): only these entries, or all but these; null for
    *  no filter. The ids are worked out by the caller from the address HMACs. */
   invitation: { ids: readonly string[]; include: boolean } | null;
+  /** Only these records (the App words asked for, §18.4), or null for no filter. */
+  appIds: readonly string[] | null;
   /** Already escaped for LIKE by the caller, or null. */
   like: string | null;
   cursor: { name: string; id: string } | null;
@@ -1627,6 +1676,7 @@ export async function entriesPage(
   const paymentStatuses = input.paymentStatuses === null ? null : [...input.paymentStatuses];
   const invitedIds = input.invitation === null ? null : [...input.invitation.ids];
   const invitedInclude = input.invitation?.include ?? true;
+  const appIds = input.appIds === null ? null : [...input.appIds];
   const rows = await sql<
     {
       total: number;
@@ -1685,6 +1735,7 @@ export async function entriesPage(
         AND (${invitedIds}::uuid[] IS NULL
              OR (${invitedInclude}::boolean AND e.id = ANY(${invitedIds}::uuid[]))
              OR (NOT ${invitedInclude}::boolean AND e.id <> ALL(${invitedIds}::uuid[])))
+        AND (${appIds}::uuid[] IS NULL OR e.id = ANY(${appIds}::uuid[]))
     ),
     totals AS (SELECT count(*)::int AS total FROM filtered)
     SELECT t.total, f.id, f.full_name, f.email, f.phone_e164, f.member_number,
@@ -1932,14 +1983,19 @@ export async function deleteEntry(tx: TransactionSql, gymId: string, entryId: st
   return rows.length === 1;
 }
 
-/** Two records joined: the memberships linked to the one not kept are linked to the
- *  kept one (§13.2). */
+/** Two records joined: the memberships linked to the one not kept — joined with it, or
+ *  removed with it — are linked to the kept one (§13.2), so its row still says who was
+ *  removed and Put back on it still gives their app back. */
 export async function moveMembershipLinks(tx: TransactionSql, gymId: string, fromEntryId: string, toEntryId: string): Promise<number> {
-  const rows = await tx<{ id: string }[]>`
+  const joined = await tx<{ id: string }[]>`
     UPDATE gym_members SET entry_id = ${toEntryId}
     WHERE gym_id = ${gymId} AND entry_id = ${fromEntryId}
     RETURNING id`;
-  return rows.length;
+  const removed = await tx<{ id: string }[]>`
+    UPDATE gym_members SET removed_entry_id = ${toEntryId}
+    WHERE gym_id = ${gymId} AND removed_entry_id = ${fromEntryId}
+    RETURNING id`;
+  return joined.length + removed.length;
 }
 
 /** Two records joined: a joined lead linked to the one not kept is linked to the kept
@@ -2053,25 +2109,66 @@ export async function memberContact(
   return row === undefined ? null : { displayName: row.display_name, email: row.email, phone: row.stated_phone_e164 };
 }
 
-/** "REMOVE ALL": the memberships closed, in one statement — `removeMember`'s own
- *  write for a set. The owner, staff and free places are refused here as well as by
- *  the rule that chose the set. */
+/** THE MEMBERSHIPS CLOSED, in one statement — `removeMember`'s own write for a set. The
+ *  owner, staff and free places are refused here as well as by the rule that chose the
+ *  set. Each keeps the record it was removed with, if the list said for certain which
+ *  was theirs: Put back on that record gives their app back (`removedWithRecord`). */
 export async function closeMemberships(
   tx: TransactionSql,
   gymId: string,
-  userIds: readonly string[],
+  people: readonly { userId: string; removedWith: string | null }[],
   at: Date,
 ): Promise<{ membershipId: string; userId: string }[]> {
-  if (userIds.length === 0) return [];
+  if (people.length === 0) return [];
+  const payload = people.map((person) => ({ user_id: person.userId, entry_id: person.removedWith }));
   const rows = await tx<{ id: string; user_id: string }[]>`
     UPDATE gym_members m
-    SET removed_at = ${at}
+    SET removed_at = ${at}, removed_entry_id = p.entry_id
+    FROM jsonb_to_recordset(${tx.json(payload)}) AS p(user_id uuid, entry_id uuid)
     WHERE m.gym_id = ${gymId}
-      AND m.user_id = ANY(${[...userIds]}::uuid[])
+      AND m.user_id = p.user_id
       AND m.removed_at IS NULL
       AND m.complimentary = false
       AND NOT EXISTS (SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)
     RETURNING m.id, m.user_id`;
+  return rows.map((row) => ({ membershipId: row.id, userId: row.user_id }));
+}
+
+/** PUT BACK UNDOES ONE REMOVE (RULINGS 2026-09-27): the memberships staff removed WITH
+ *  this record that Put back would open again — the newest of each person's, when they
+ *  have not rejoined or been removed some other way since, and never an account that has
+ *  been deleted. */
+export async function removedWithRecord(
+  tx: TransactionSql,
+  gymId: string,
+  entryId: string,
+): Promise<{ membershipId: string; userId: string; email: string | null }[]> {
+  const rows = await tx<{ id: string; user_id: string; email: string | null }[]>`
+    SELECT m.id, m.user_id, u.email::text AS email
+    FROM gym_members m
+    JOIN users u ON u.id = m.user_id
+    WHERE m.gym_id = ${gymId}
+      AND m.removed_entry_id = ${entryId}
+      AND u.deleted_at IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM gym_members l
+        WHERE l.gym_id = m.gym_id AND l.user_id = m.user_id AND l.id <> m.id
+          AND (l.removed_at IS NULL OR l.joined_at > m.joined_at))
+    ORDER BY m.joined_at, m.id`;
+  return rows.map((row) => ({ membershipId: row.id, userId: row.user_id, email: row.email }));
+}
+
+/** Open these closed memberships again, as they were (Put back). Answers who came back. */
+export async function reopenMemberships(
+  tx: TransactionSql,
+  gymId: string,
+  membershipIds: readonly string[],
+): Promise<{ membershipId: string; userId: string }[]> {
+  if (membershipIds.length === 0) return [];
+  const rows = await tx<{ id: string; user_id: string }[]>`
+    UPDATE gym_members SET removed_at = NULL, removed_entry_id = NULL
+    WHERE gym_id = ${gymId} AND id = ANY(${[...membershipIds]}::uuid[]) AND removed_at IS NOT NULL
+    RETURNING id, user_id`;
   return rows.map((row) => ({ membershipId: row.id, userId: row.user_id }));
 }
 

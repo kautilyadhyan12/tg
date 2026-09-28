@@ -569,6 +569,15 @@ export function seatLineText(meter, orgType) {
     : `${meter.used.toLocaleString()} of ${meter.cap.toLocaleString()} ${orgWords(orgType).people}.`;
 }
 
+/** Members' own meter line (spec Part 3 §18.2): "146 of 500 members in the app", and
+ *  the full gym's clause from `seatLineText`. */
+export function memberMeterText(meter, orgType) {
+  if (meter === null || meter === undefined) return null;
+  const w = orgWords(orgType);
+  const line = `${meter.used.toLocaleString()} of ${meter.cap.toLocaleString()} ${w.people} in the app`;
+  return meter.full ? `${line} — your ${w.it} is full, so nobody else can join yet.` : line;
+}
+
 /** Part 3 §4.2, the persistent slot above every console screen. One banner or
  *  none.
  *

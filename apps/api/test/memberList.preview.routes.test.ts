@@ -29,7 +29,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { archiveLapsedGyms } from "../src/modules/orgs/archiveSweep.js";
 import { expireStagedMemberListUploads } from "../src/modules/orgs/memberList/expiry.js";
-import type { MemberListPreview } from "@app/shared";
+import { memberListRowsPageSchema, type MemberListPreview } from "@app/shared";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -1354,6 +1354,62 @@ d("member list: upload and preview (real Postgres)", () => {
       // use for it, and it is the one field that would let two gyms' pages be compared.
       const raw = await get(`${uploadsUrl(org.org.id)}/${preview.uploadId}/rows?group=new`, owner.cookies);
       expect(raw.body).not.toContain("identityKey");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "the people an import leaves out carry what the list says of them today, so staff can tell who has left (Kd, 2026-09-27)",
+    async () => {
+      const owner = await makeUser("gone-owner");
+      const org = await makeOrg(owner.cookies, "Gone Details Gym");
+      const other = await makeOrg((await makeUser("gone-rival")).cookies, "Gone Rival Gym");
+      await sql`INSERT INTO gym_member_lists (gym_id, version) VALUES (${org.org.id}, 1)`;
+      const key = (n: number) => String(n).repeat(64).slice(0, 64);
+      // From last month's export: cancelled, ended, unpaid.
+      await sql`
+        INSERT INTO gym_member_list_entries (gym_id, full_name, email, status, membership_type, ends_on, ends_on_kind, payment_status, identity_key, source)
+        VALUES (${org.org.id}, 'Chloe Martin', 'gone-chloe@example.com', 'Cancelled', 'Gold', '2026-08-31', 'ends', 'Unpaid', ${key(1)}, 'upload')`;
+      // A walk-in the front desk typed in last week, not in the gym software yet.
+      await sql`
+        INSERT INTO gym_member_list_entries (gym_id, full_name, email, status, identity_key, source, created_at)
+        VALUES (${org.org.id}, 'Nia Cole', 'gone-nia@example.com', 'Active', ${key(2)}, 'typed', '2026-09-20T09:30:00Z')`;
+      // Another gym's record with the same details is never read for this one.
+      await sql`
+        INSERT INTO gym_member_list_entries (gym_id, full_name, email, status, membership_type, identity_key, source)
+        VALUES (${other.org.id}, 'Chloe Martin', 'gone-chloe@example.com', 'Active', 'Platinum', ${key(1)}, 'upload')`;
+
+      const file = csv([
+        ["Full Name", "Email", "Status"],
+        ["Stays Here", "gone-stays@example.com", "Active"],
+      ]);
+      const preview = body(await upload(org.org.id, owner.cookies, { bytes: file })).preview;
+      expect(preview.list.gone).toBe(2);
+      const res = await get(`${uploadsUrl(org.org.id)}/${preview.uploadId}/rows?group=gone`, owner.cookies);
+      expect(res.statusCode, res.body).toBe(200);
+      const page = memberListRowsPageSchema.parse((JSON.parse(res.body) as { page: unknown }).page);
+      const byName = new Map(page.people.map((person) => [person.fullName, person]));
+      expect(byName.get("Chloe Martin")?.onList).toMatchObject({
+        membershipType: "Gold",
+        endsOn: "2026-08-31",
+        endsOnKind: "ends",
+        paymentStatus: "Unpaid",
+        source: "upload",
+      });
+      expect(Number.isNaN(Date.parse(byName.get("Chloe Martin")?.onList?.addedAt ?? ""))).toBe(false);
+      expect([byName.get("Chloe Martin")?.status, byName.get("Chloe Martin")?.wasStatus]).toEqual([null, "Cancelled"]);
+      expect(byName.get("Nia Cole")?.onList).toEqual({
+        membershipType: null,
+        endsOn: null,
+        endsOnKind: null,
+        paymentStatus: null,
+        source: "typed",
+        addedAt: "2026-09-20T09:30:00.000Z",
+      });
+      // The file's own people carry none of it: their details are the file's.
+      const added = await get(`${uploadsUrl(org.org.id)}/${preview.uploadId}/rows?group=new`, owner.cookies);
+      const fresh = memberListRowsPageSchema.parse((JSON.parse(added.body) as { page: unknown }).page);
+      expect(fresh.people.map((person) => [person.fullName, person.onList])).toEqual([["Stays Here", null]]);
     },
     TEST_TIMEOUT_MS,
   );

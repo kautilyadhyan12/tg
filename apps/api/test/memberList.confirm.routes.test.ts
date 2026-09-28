@@ -1136,7 +1136,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
   );
 
   it(
-    "a family sharing ONE address is answered by the FIRST of them, and the chips come in the list's own order",
+    "a family sharing ONE address that the list can't tell apart is in the app on both records, neither can be invited, and the chips come in the list's own order",
     async () => {
       const owner = await makeUser("order-owner");
       const inApp = await makeUser("order-inapp");
@@ -1157,20 +1157,22 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       const preview = await stage(org.org.id, owner.cookies, file(people));
       expect((await post(confirmUrl(org.org.id, preview.uploadId), { permissionConfirmed: true }, owner.cookies)).statusCode).toBe(200);
 
-      // THE FIRST OF THE TWO IS THE ONE SHOWN AS BEING IN THE APP. Marking the
-      // second says the wrong person of a household has the app, on the screen
-      // staff invite from.
+      // NEITHER RECORD IS THEIRS FOR CERTAIN (round one of 5b-v-a-i, High-1): the name
+      // they gave the app is on neither, so the list can't say which of the two they are.
+      // Picking the first said the wrong person of a household had the app. Both read
+      // "In the app" and say why (the App word); neither can be invited, as Invite, which
+      // skips an address that is in the app, already said.
       const page = pageOf(await get(`${listUrl(org.org.id)}/entries`, owner.cookies));
       const numbered = (number: string) => page.entries.find((entry) => entry.memberNumber === number);
-      expect(numbered("M-FIRST")?.inApp).toBe(true);
-      expect(numbered("M-SECOND")?.inApp).toBe(false);
+      for (const number of ["M-FIRST", "M-SECOND"]) {
+        expect(numbered(number)?.inApp, number).toBe(true);
+        expect(numbered(number)?.app.tone, number).toBe("amber");
+      }
 
       const list = listOf(await get(listUrl(org.org.id), owner.cookies));
       expect(list.statuses.map((status) => status.label)).toEqual(["Active", "Frozen", "Pending"]);
-      // And the member is counted against the FIRST entry's word: "Active" holds the
-      // one in the app, "Frozen" holds somebody who can still be invited.
       expect(list.statuses[0]).toMatchObject({ label: "Active", count: 1, inApp: 1, canBeInvited: 0 });
-      expect(list.statuses[1]).toMatchObject({ label: "Frozen", count: 1, inApp: 0, canBeInvited: 1 });
+      expect(list.statuses[1]).toMatchObject({ label: "Frozen", count: 1, inApp: 1, canBeInvited: 0 });
     },
     TEST_TIMEOUT_MS,
   );

@@ -454,6 +454,29 @@ describe("reconcile: what an upload would do to the list", () => {
     expect(out.members.leaving).toBe(0);
   });
 
+  it("a family on ONE address: the member is the record with their own name, even when a child's is first (§18.4)", () => {
+    const kid = person({ fullName: "Kid Fox", email: "fox@gym.com", memberNumber: "K-1" });
+    const mum = person({ fullName: "Mum Fox", email: "fox@gym.com", memberNumber: "M-1" });
+    const out = run({
+      rows: [row(2, ann, "Active")],
+      entries: [entry(kid, "Cancelled"), entry(mum, "Active")],
+      members: [member({ userId: "u1", fullName: "Mum Fox", email: "fox@gym.com", everListed: true })],
+      mode: "whole_list",
+      hasList: true,
+    });
+    // She is leaving with what the list says about HER, not about her son.
+    expect(out.membersLeaving.map((p) => [p.wasStatus, p.memberNumber])).toEqual([["Active", "M-1"]]);
+    // Under a name on neither record, the first record on the address is still theirs.
+    const unnamed = run({
+      rows: [row(2, ann, "Active")],
+      entries: [entry(kid, "Cancelled"), entry(mum, "Active")],
+      members: [member({ userId: "u1", fullName: "Mum", email: "fox@gym.com", everListed: true })],
+      mode: "whole_list",
+      hasList: true,
+    });
+    expect(unnamed.membersLeaving.map((p) => [p.wasStatus, p.memberNumber])).toEqual([["Cancelled", "K-1"]]);
+  });
+
   // -------------------------------------------------------------------------
   // THE GYM'S OWN WORDS
   // -------------------------------------------------------------------------

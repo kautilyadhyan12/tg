@@ -17,7 +17,7 @@ import {
 import { MEMBER_INVITE_AGAIN_PER_PERSON, MEMBER_INVITE_AGAIN_PERSON_DAYS, MEMBER_INVITE_WORDS, MEMBER_LIST_QUERY_MAX_CHARS } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import DatePick from '../../components/console/DatePick';
-import { ShareInvite } from './MemberListInvite';
+import { ShareInvite } from './ShareInvite';
 import { FIELD_LABELS, dayWords } from './memberListView';
 import {
   DAY_FIELDS,
@@ -33,15 +33,18 @@ import {
   gymToday,
   invitationView,
   inviteOutcomeWords,
+  listNames,
   outcomeWords,
   personInviteAction,
+  pastWords,
   patchFrom,
   compareRecords,
+  underAgeWhen,
   whenWords,
 } from './memberListPeople';
 
 // One person on the gym's own list (ROADMAP 5b-i; spec Part 3 §11.6): everything kept
-// about them, and Edit; under More, Remove from list, Merge duplicate and (for a past member)
+// about them, and Edit; under More, Remove (One Remove, RULINGS 2026-09-27), Merge duplicate and (for a past member)
 // Delete for good, as gym software keeps its rarer actions. "Add member" is
 // the same box with an empty form. It closes only by its X, as the import box does.
 //
@@ -195,8 +198,8 @@ function MoreMenu({ items, disabled }) {
  *  the line above says how many differ, so staff can see at a glance whether this is
  *  one person twice or two different people. Each value cell names its side and field
  *  for the tests. */
-function CompareRecords({ keep, remove, fields }) {
-  const rows = compareRecords(keep, remove, fields);
+function CompareRecords({ keep, remove, fields, person }) {
+  const rows = compareRecords(keep, remove, fields, person);
   const differ = rows.filter((row) => row.differs).length;
   return (
     <div data-testid="merge-compare" className="flex flex-col gap-2">
@@ -275,6 +278,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const [loadError, setLoadError] = useState(null);
   const [attempt, setAttempt] = useState(0);
   const [mode, setMode] = useState(entryId === null ? 'edit' : 'view');
+  /** The person in the app a "Not this person" box is about. */
+  const [notThem, setNotThem] = useState(null);
   const [form, setForm] = useState(() => formFrom(null, fields));
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
@@ -393,7 +398,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     setEntry(next);
     setMode('view');
     const invited = res.data.invite === undefined ? null : inviteOutcomeWords(res.data.invite.outcome, false);
-    setNotice([outcomeWords(res.data.outcome), invited].filter((line) => line !== null).join(' '));
+    setNotice([outcomeWords(res.data.outcome, words, res.data.app), invited].filter((line) => line !== null).join(' '));
     setRefusal(null);
     onChanged();
   };
@@ -433,7 +438,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     const patch = patchFrom(form, shown, fields);
     if (Object.keys(patch).length === 0) {
       setMode('view');
-      setNotice(outcomeWords('unchanged'));
+      setNotice(outcomeWords('unchanged', words));
       return;
     }
     await sendChange(asked, patch, false);
@@ -451,7 +456,15 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
 
   const takeOff = () => {
     const asked = shown.entryId;
-    return run(asked, () => orgService.takeOffMemberListEntry(gymId, asked), "We couldn't take this person off.");
+    return run(asked, () => orgService.takeOffMemberListEntry(gymId, asked), "We couldn't remove this person.");
+  };
+
+  /** "Not this person" (§18.4): somebody uses the app with this record's email who is not
+   *  the person on it. Staff know it; the app never guesses it from names (RULINGS
+   *  2026-09-28). That account comes out of the app, and the record stays. */
+  const notThisPerson = (member) => {
+    const asked = shown.entryId;
+    return run(asked, () => orgService.notThem(gymId, asked, member.userId), "We couldn't take them out of the app. Please try again.");
   };
 
   /** Invite this person, or send their invitation again because they asked. The
@@ -469,6 +482,14 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       setMode('view');
       setNotice(inviteOutcomeWords(outcome, again));
       onChanged();
+      // The App word is the server's (§18.4), so the person is read again for it; if
+      // that read fails the invitation above still shows.
+      try {
+        const fresh = (await orgService.getMemberListEntry(gymId, asked)).data.entry;
+        if (wanted.current === asked && fresh.entryId === asked) setEntry(fresh);
+      } catch {
+        // Kept as it is: the notice says what was done.
+      }
     } catch (err) {
       if (wanted.current === asked) refused(err, again ? "We couldn't send the invitation again." : "We couldn't invite this person.");
     } finally {
@@ -731,10 +752,15 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         <div className="flex flex-wrap items-center gap-2">
           {p.formerAt !== null ? (
             <span className="rounded-md px-2 py-0.5 text-xs font-medium" style={{ background: C.plain, color: C.soft }}>
-              Past member · removed {whenWords(p.formerAt)}
+              {pastWords(p, words.person)}
             </span>
           ) : null}
           <Tag view={inv} />
+          {inv.line !== null ? (
+            <span className="text-xs" style={{ color: C.muted }}>
+              {inv.line}
+            </span>
+          ) : null}
         </div>
         {inv?.detail ? (
           <p className="text-sm flex gap-2" style={{ color: C.orange }}>
@@ -743,9 +769,14 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           </p>
         ) : null}
         {action === 'under_age' ? (
-          <p className="text-sm" style={{ color: C.muted }} data-testid="under-age-note">
-            {MEMBER_INVITE_WORDS.under_age}
-          </p>
+          <div className="flex flex-col gap-1">
+            <p className="text-sm" style={{ color: C.muted }} data-testid="under-age-note">
+              {MEMBER_INVITE_WORDS.under_age}
+            </p>
+            <p className="text-sm" style={{ color: C.soft }} data-testid="under-age-when">
+              {underAgeWhen(p.dateOfBirth)}
+            </p>
+          </div>
         ) : null}
         <Section title="Contact">
           {contact.length === 0 ? <Fact label="Email or phone" value="None" /> : null}
@@ -769,16 +800,34 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         ) : null}
         {p.members.length > 0 ? (
           <Section title="In the app">
+            {/* Who uses the app with this record's email, under the name they gave the app.
+                The email is the link; names are never compared (RULINGS 2026-09-28). Someone
+                on an email a family shares, whom the list can't place, gets no "Not …?": the
+                address is right, and the line above says what to do. */}
             {p.members.map((m) => (
-              <div key={m.userId} className="py-2 flex gap-3 items-start" style={{ borderTop: `1px solid ${C.line}` }}>
+              <div key={m.userId} className="py-2 flex gap-3 items-start" style={{ borderTop: `1px solid ${C.line}` }} data-testid="in-app-person">
                 <Smartphone className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: C.green }} />
-                <div className="text-sm" style={{ color: C.soft }}>
+                <div className="text-sm flex-1 min-w-0" style={{ color: C.soft }}>
                   <span style={{ color: '#fff' }}>{m.displayName}</span> joined {whenWords(m.joinedAt)}
                   <span className="block text-xs" style={{ color: C.muted }}>
                     {m.visits === 1 ? '1 visit' : `${String(m.visits)} visits`}
                     {m.lastVisitOn !== null ? ` · last ${dayWords(m.lastVisitOn)}` : ''}
                   </span>
                 </div>
+                {p.formerAt === null && !m.sharedEmail ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNotThem(m);
+                      setMode('notThem');
+                    }}
+                    disabled={busy || readOnly}
+                    className="text-xs font-semibold whitespace-nowrap self-center"
+                    style={{ color: C.orange }}
+                  >
+                    Not {p.fullName || 'this person'}?
+                  </button>
+                ) : null}
               </div>
             ))}
           </Section>
@@ -805,13 +854,19 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
                 Send again
               </button>
             ) : null}
+            {action === 'invite_again' ? (
+              <button type="button" onClick={() => backTo('inviteAgain')} disabled={busy || readOnly} className={`${BUTTON} flex-1 sm:flex-none whitespace-nowrap`} style={{ background: C.orangeBg, color: C.orange }}>
+                <Mail className="w-4 h-4" />
+                Invite again
+              </button>
+            ) : null}
             <MoreMenu
               disabled={busy || readOnly}
               items={[
                 ...(p.invitation?.state === 'pending' && action !== 'under_age'
                   ? [{ label: 'Share the invitation', hint: 'Its words and link, to send yourself', icon: Copy, onPick: () => backTo('share') }]
                   : []),
-                { label: 'Remove from list', icon: UserMinus, onPick: () => setMode('takeOff') },
+                { label: 'Remove', icon: UserMinus, onPick: () => setMode('takeOff') },
                 { label: 'Merge duplicate', hint: 'When this person is on your list twice', icon: ArrowLeftRight, onPick: startJoin },
               ]}
             />
@@ -820,12 +875,14 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           <div className="flex gap-2">
             <button type="button" onClick={() => void putBack()} disabled={busy || readOnly} className={`${BUTTON} flex-1 sm:flex-none`} style={{ background: C.orange, color: '#000' }}>
               <UserPlus className="w-4 h-4" />
-              Put back on list
+              Put back on your list
             </button>
             <MoreMenu
               disabled={busy || readOnly}
               items={[
                 { label: 'Edit', onPick: startEdit },
+                // A past member still in the app is removed from it here, as from "Using the app".
+                ...(p.removeEndsApp ? [{ label: 'Remove', icon: UserMinus, onPick: () => setMode('takeOff') }] : []),
                 { label: 'Merge duplicate', hint: 'When this person is on your list twice', icon: ArrowLeftRight, onPick: startJoin },
                 { label: 'Delete for good', icon: Trash2, danger: true, onPick: () => setMode('delete') },
               ]}
@@ -860,6 +917,36 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         </div>
       );
     }
+    if (mode === 'inviteAgain') {
+      // RULINGS 2026-09-26: a person whose invitation was stopped is invited again, asked
+      // first, with one email; the box says why it had stopped.
+      const inv = p.invitation;
+      const why =
+        inv?.removedAt
+          ? `You removed ${name} from the app on ${whenWords(inv.removedAt)}.`
+          : inv?.addressRemovedAt
+            ? `Someone using ${p.email} was removed from the app on ${whenWords(inv.addressRemovedAt)}, and this email goes to that address.`
+            : `${name}'s earlier invitation was cancelled.`;
+      return (
+        <div className="flex flex-col gap-3" data-testid="confirm-invite-again">
+          <p className="text-[15px]" style={{ color: '#fff' }}>
+            Invite {name} again?
+          </p>
+          <p className="text-sm" style={{ color: C.soft }}>
+            {why} They&apos;ll get one invitation email at {p.email}.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => void sendInvite(true)} disabled={busy || readOnly} className={BUTTON} style={{ background: C.orange, color: '#000' }}>
+              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+              Invite again
+            </button>
+            <button type="button" onClick={() => backTo('view')} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
+              Back
+            </button>
+          </div>
+        </div>
+      );
+    }
     if (mode === 'share') {
       return (
         <div className="flex flex-col gap-3">
@@ -874,24 +961,71 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         </div>
       );
     }
+    if (mode === 'notThem' && notThem !== null) {
+      const appName = notThem.displayName || 'This person';
+      return (
+        <div className="flex flex-col gap-3" data-testid="confirm-not-them">
+          <p className="text-[15px]" style={{ color: '#fff' }}>
+            Remove {appName}&apos;s app access?
+          </p>
+          <p className="text-sm" style={{ color: C.soft }}>
+            {appName} uses the app as {name}. If {appName} isn&apos;t {name}, remove their access to your {words.it ?? 'gym'} in the app.{' '}
+            {name} stays on your list, and nothing more is sent to the email address {appName} uses: update {name}&apos;s email address with
+            Edit before inviting them again.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => void notThisPerson(notThem)} disabled={busy || readOnly} className={BUTTON} style={{ background: C.redBg, color: C.red }}>
+              Remove access
+            </button>
+            <button type="button" onClick={() => backTo('view')} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      );
+    }
     if (mode === 'takeOff') {
       const pending = p.invitation?.state === 'pending';
+      const past = p.formerAt !== null;
+      // Named, before anything happens (CLAUDE.md §4): whose app access ends, and who on
+      // an email a family shares keeps theirs, and why.
+      const endsFor = p.removeEndsAppFor ?? [];
+      const ending = p.members.filter((m) => endsFor.includes(m.userId)).map((m) => m.displayName);
+      const keeping = p.members.filter((m) => m.sharedEmail).map((m) => m.displayName);
+      const ends = ending.length === 0 ? null : `${listNames(ending)} will lose access to your ${words.it ?? 'gym'} in the app.`;
+      const keeps =
+        keeping.length === 0
+          ? null
+          : `${listNames(keeping)} ${keeping.length === 1 ? 'keeps' : 'keep'} app access: we can't tell whether ${keeping.length === 1 ? 'they are' : 'any of them is'} ${name}.`;
       return (
         <div className="flex flex-col gap-3" data-testid="confirm-take-off">
           <p className="text-[15px]" style={{ color: '#fff' }}>
-            Remove {name} from your list?
+            {past ? `Remove ${name}'s app access?` : `Remove ${name}?`}
           </p>
-          <p className="text-sm" style={{ color: C.soft }}>
-            Their record is kept as a past member, and you can put it back.
-            {pending ? ' Their invitation stops working.' : ''}
-            {p.inApp ? ` They keep the app until you remove them under Using the app.` : ''}
-          </p>
+          {past ? (
+            <p className="text-sm" style={{ color: C.soft }}>
+              {name} is already a past {words.person}. {ends ?? `This removes their access to your ${words.it ?? 'gym'} in the app.`} Their own workout
+              history isn&apos;t affected, and Put back gives their access back.
+            </p>
+          ) : (
+            <p className="text-sm" style={{ color: C.soft }}>
+              {[
+                `They'll be moved to past ${words.people}.`,
+                ends,
+                keeps,
+                pending ? 'Their pending invitation will be cancelled.' : null,
+                'Their details are kept, and you can put them back at any time.',
+              ]
+                .filter((line) => line !== null)
+                .join(' ')}
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => void takeOff()} disabled={busy || readOnly} className={BUTTON} style={{ background: C.orange, color: '#000' }}>
-              Remove from list
+            <button type="button" onClick={() => void takeOff()} disabled={busy || readOnly} className={BUTTON} style={{ background: C.redBg, color: C.red }}>
+              Remove
             </button>
             <button type="button" onClick={() => backTo('view')} className={BUTTON} style={{ background: C.plain, color: C.soft }}>
-              Keep on list
+              Cancel
             </button>
           </div>
         </div>
@@ -926,7 +1060,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             Merge duplicate: the two records become one. The one you <b>keep</b> keeps everything it has, and takes the other&apos;s
             details only where its own are empty. The other is removed.
           </p>
-          <CompareRecords keep={keep} remove={remove} fields={fields} />
+          <CompareRecords keep={keep} remove={remove} fields={fields} person={words.person} />
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => void join()} disabled={busy || readOnly} className={BUTTON} style={{ background: C.orange, color: '#000' }}>
               {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
@@ -1045,7 +1179,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         <Loader2 className="w-4 h-4 animate-spin" /> Loading…
       </p>
     );
-  } else if (mode === 'takeOff' || mode === 'delete' || mode === 'again' || mode === 'share') {
+  } else if (mode === 'takeOff' || mode === 'delete' || mode === 'again' || mode === 'inviteAgain' || mode === 'share' || mode === 'notThem') {
     body = renderConfirm(shown);
   } else if (mode === 'join') {
     body = renderJoin(shown);

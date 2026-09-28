@@ -2,15 +2,16 @@
 // row says about an invitation, and what a form sends back.
 import { describe, expect, it } from 'vitest';
 import {
+  MEMBER_APP_WORDS,
   memberInvitePreviewQuerySchema,
   memberInviteRequestSchema,
   memberListEntryDetailSchema,
   memberListEntriesQuerySchema,
-  MEMBER_INVITE_EMAIL_REASON_WORDS,
 } from '@app/shared';
 import {
   EMPTY_FILTERS,
   activeFilters,
+  appView,
   compareRecords,
   entriesQueryString,
   formFrom,
@@ -24,6 +25,7 @@ import {
   personInviteAction,
   rowWords,
   skippedLines,
+  toggleApp,
   toggleWord,
 } from './memberListPeople';
 import { FIELD_LABELS } from './memberListView';
@@ -51,6 +53,7 @@ const entry = (over = {}) =>
     source: 'upload',
     inApp: false,
     invitation: null,
+    app: { word: 'not_in_app', tone: 'grey', at: null, line: 'Not invited yet', lineTone: 'plain' },
     extra: [{ key: 'locker', label: 'Locker', value: '12' }],
     handEdited: [],
     members: [],
@@ -89,20 +92,21 @@ describe('the query a filter sends', () => {
     expect(f.status).toEqual([]);
   });
 
-  it('keeps the three kinds apart and sends the in-app choice and the search', () => {
+  it('keeps the three kinds apart and sends the App words and the search', () => {
     let f = toggleWord(EMPTY_FILTERS, 'membershipType', 'Gold');
     f = toggleWord(f, 'paymentStatus', 'Overdue');
-    f = { ...f, app: 'not_in_app', query: '  ada ' };
+    f = { ...toggleApp(toggleApp(f, 'invited'), 'needs_check'), query: '  ada ' };
     expect(serverReads(entriesQueryString(f))).toEqual({
-      filter: 'not_in_app',
+      app: ['invited', 'needs_check'],
       membershipType: 'Gold',
       paymentStatus: 'Overdue',
       query: 'ada',
     });
+    expect(toggleApp(f, 'invited').app).toEqual(['needs_check']);
   });
 
   it('asks for past members only, and never mixes in chips that count the current list', () => {
-    const f = { ...toggleWord(EMPTY_FILTERS, 'status', 'Active'), app: 'in_app', records: 'former' };
+    const f = { ...toggleWord(EMPTY_FILTERS, 'status', 'Active'), app: ['in_app'], records: 'former' };
     expect(serverReads(entriesQueryString(f))).toEqual({ records: 'former' });
   });
 
@@ -111,50 +115,73 @@ describe('the query a filter sends', () => {
   });
 });
 
-describe('what a row says about the app and the invitation', () => {
-  const inv = (over = {}) => ({
-    state: 'pending',
-    invitedAt: '2026-09-20T10:00:00.000Z',
-    email: { state: 'sent', reason: null, at: '2026-09-20T10:01:00.000Z', result: 'delivered' },
-    sentAgain: 0,
-    waitingSince: null,
-    notMeAt: null,
-    ...over,
-  });
+describe("how a row shows the server's App word (spec Part 3 §18.4)", () => {
+  const app = (over) => ({ at: null, line: null, lineTone: 'plain', ...over });
+  const TODAY = '2026-09-27';
 
   it.each([
-    ['in the app', { inApp: true, invitation: inv({ state: 'accepted' }) }, 'Uses the app', 'green'],
-    ['never invited', {}, 'Not invited', 'plain'],
-    ['no email, never invited', { email: null }, 'No email', 'plain'],
-    ['joined', { invitation: inv({ state: 'accepted' }) }, 'Joined', 'green'],
-    ['declined', { invitation: inv({ state: 'declined' }) }, 'Declined', 'plain'],
-    ['said Not me', { invitation: inv({ state: 'declined', notMeAt: '2026-09-21T10:00:00.000Z' }) }, 'Said "Not me"', 'red'],
-    ['withdrawn', { invitation: inv({ state: 'withdrawn' }) }, 'Invitation stopped', 'plain'],
-    ['waiting for a place', { invitation: inv({ waitingSince: '2026-09-21T10:00:00.000Z' }) }, 'Waiting for a place', 'orange'],
-    ['email waiting', { invitation: inv({ email: { state: 'queued', reason: null, at: '2026-09-20T10:00:00.000Z', result: null } }) }, 'Invited · email waiting to go', 'plain'],
-    ['delivered', { invitation: inv() }, 'Invited 20 September 2026', 'plain'],
-    ['bounced', { invitation: inv({ email: { state: 'sent', reason: null, at: '2026-09-20T10:01:00.000Z', result: 'bounced' } }) }, "Invited · email didn't arrive", 'orange'],
-    ['not sent', { invitation: inv({ email: { state: 'skipped', reason: 'shared_address', at: '2026-09-20T10:01:00.000Z', result: null } }) }, 'Invited · email not sent', 'orange'],
-  ])('%s', (_name, over, tag, tone) => {
-    const view = invitationView(entry(over));
-    expect(view.tag).toBe(tag);
-    expect(view.tone).toBe(tone);
+    ['in the app', app({ word: 'in_app', tone: 'green' }), { text: 'In the app', tag: 'c-tag-good', plain: null, note: null }],
+    [
+      'in the app under another name: a line to check, under the row',
+      app({ word: 'in_app', tone: 'green', line: 'Signed up in the app as Dan Wu. Check this is them.', lineTone: 'amber' }),
+      { text: 'In the app', tag: 'c-tag-good', plain: null, note: 'Signed up in the app as Dan Wu. Check this is them.' },
+    ],
+    [
+      'wrong email: a red line to check',
+      app({ word: 'not_in_app', tone: 'grey', line: 'Whoever gets email at x says they are not Jacob.', lineTone: 'red' }),
+      { text: 'Not in the app', tag: 'c-tag-plain', plain: null, note: 'Whoever gets email at x says they are not Jacob.' },
+    ],
+    [
+      'removed, the day on their page',
+      app({ word: 'not_in_app', tone: 'grey', line: 'Removed from app', at: '2026-09-26T09:30:00.000Z' }),
+      { text: 'Not in the app', tag: 'c-tag-plain', plain: 'Removed from app · 26 Sep', note: null },
+    ],
+    [
+      'invited, the day on their page',
+      app({ word: 'invited', tone: 'grey', line: 'Invitation sent', at: '2026-09-22T10:00:00.000Z' }),
+      { text: 'Invited', tag: 'c-tag-plain', plain: 'Invitation sent · 22 Sep', note: null },
+    ],
+    ['no email, on their page', app({ word: 'not_in_app', tone: 'grey', line: 'No email address' }), { text: 'Not in the app', tag: 'c-tag-plain', plain: 'No email address', note: null }],
+    [
+      'an email that went and did not arrive: an amber line to check',
+      app({ word: 'invited', tone: 'grey', line: "This email bounced: the address doesn't take email. Check it with the person.", lineTone: 'amber' }),
+      { text: 'Invited', tag: 'c-tag-plain', plain: null, note: "This email bounced: the address doesn't take email. Check it with the person." },
+    ],
+    [
+      'an invitation email that never went: not in the app, with an amber line to check',
+      app({ word: 'not_in_app', tone: 'grey', line: "The invitation email wasn't sent: emails to this address bounce.", lineTone: 'amber' }),
+      { text: 'Not in the app', tag: 'c-tag-plain', plain: null, note: "The invitation email wasn't sent: emails to this address bounce." },
+    ],
+    [
+      'a removal last year keeps its year',
+      app({ word: 'not_in_app', tone: 'grey', line: 'Removed from app', at: '2025-03-02T12:00:00.000Z' }),
+      { text: 'Not in the app', tag: 'c-tag-plain', plain: 'Removed from app · 2 Mar 2025', note: null },
+    ],
+  ])('%s', (_name, given, expected) => {
+    const view = appView(given, TODAY);
+    expect({ text: view.text, tag: view.tag, plain: view.plain, note: view.note }).toEqual(expected);
   });
 
-  it("gives the server's own reason for an email that did not go", () => {
-    const view = invitationView(
-      entry({ invitation: inv({ email: { state: 'skipped', reason: 'shared_address', at: '2026-09-20T10:01:00.000Z', result: null } }) }),
-    );
-    expect(view.detail).toBe(MEMBER_INVITE_EMAIL_REASON_WORDS.shared_address);
+  it('each of the three words has its own text and a tag colour', () => {
+    for (const word of ['in_app', 'invited', 'not_in_app']) {
+      for (const tone of ['green', 'amber', 'red', 'grey']) {
+        const view = appView(app({ word, tone }), TODAY);
+        expect(view.text, word).toBe(MEMBER_APP_WORDS[word]);
+        expect(view.tag, `${word} ${tone}`).toMatch(/^c-tag-(good|warn|bad|plain)$/);
+      }
+    }
   });
 
-  it('says nothing about an invitation on a past member who never had one', () => {
-    expect(invitationView(entry({ formerAt: '2026-09-01T10:00:00.000Z' }))).toBeNull();
+  it("a person's page reads the same word", () => {
+    const view = invitationView(entry({ app: app({ word: 'not_in_app', tone: 'grey', line: 'Check the address.', lineTone: 'red' }) }), TODAY);
+    expect(view).toEqual({ tag: 'Not in the app', tone: 'plain', detail: 'Check the address.', line: null });
   });
 
-  it("names the gym's own words on the row, and when a past member was taken off", () => {
-    expect(rowWords(entry())).toEqual(['Active', 'Gold', 'Renews 3 October 2026']);
-    expect(rowWords(entry({ formerAt: '2026-09-01T10:00:00.000Z' }))).toEqual(['Removed from list 1 September 2026']);
+  it("names the gym's own words on the row, and since when a past member is one", () => {
+    expect(rowWords(entry({ paymentStatus: 'Paid' }), TODAY)).toEqual(['Active', 'Gold', 'Renews 3 Oct', 'Paid']);
+    expect(rowWords(entry({ endsOn: '2026-08-31', endsOnKind: 'ends' }), TODAY)).toEqual(['Active', 'Gold', 'Ended 31 Aug']);
+    expect(rowWords(entry({ endsOn: '2027-01-31', endsOnKind: 'ends' }), TODAY)).toEqual(['Active', 'Gold', 'Ends 31 Jan 2027']);
+    expect(rowWords(entry({ formerAt: '2026-09-03T10:00:00.000Z' }), TODAY)).toEqual(['Past member since 3 Sep 2026']);
   });
 });
 
@@ -210,16 +237,16 @@ describe('what the form sends', () => {
 describe('the "Showing:" line', () => {
   const WORDS = { people: 'members', person: 'member' };
 
-  it('names each ticked word, "no status" in words, and the app choice; each pill takes off only itself', () => {
+  it('names each ticked word, "no status" in words, and the App words; each pill takes off only itself', () => {
     let f = toggleWord(EMPTY_FILTERS, 'status', 'Frozen');
     f = toggleWord(f, 'status', '');
-    f = { ...toggleWord(f, 'membershipType', 'Gold'), app: 'not_in_app', query: 'ada' };
+    f = { ...toggleWord(f, 'membershipType', 'Gold'), app: ['needs_check', 'in_app'], query: 'ada' };
     const pills = activeFilters(f, WORDS);
-    expect(pills.map((p) => p.text)).toEqual(['Frozen', 'No status', 'Gold', 'Not in the app']);
+    expect(pills.map((p) => p.text)).toEqual(['Frozen', 'No status', 'Gold', 'In the app', 'Needs attention']);
     expect(pills[0].without.status).toEqual(['']);
     expect(pills[0].without.membershipType).toEqual(['Gold']);
-    expect(pills[3].without.app).toBe('all');
-    expect(pills[3].without.query).toBe('ada');
+    expect(pills[4].without.app).toEqual(['in_app']);
+    expect(pills[4].without.query).toBe('ada');
   });
 
   it('shows past members as the one pill, since the other filters do not apply to them', () => {
@@ -284,7 +311,12 @@ describe("what a person's page offers about the invitation — every class", () 
     ['joined', { invitation: inv({ state: 'accepted' }) }, null],
     ['declined', { invitation: inv({ state: 'declined' }) }, 'again'],
     ['said "Not me"', { invitation: inv({ state: 'declined', notMeAt: at }) }, null],
-    ['invitation stopped', { invitation: inv({ state: 'withdrawn' }) }, 'again'],
+    // Stopped: invited again, asked first (RULINGS 2026-09-26), never "Send again … only
+    // when they ask"; never at all to an address staff said is somebody else's.
+    ['invitation stopped', { invitation: inv({ state: 'withdrawn' }) }, 'invite_again'],
+    ['removed from the app', { invitation: inv({ state: 'withdrawn', removedAt: at }) }, 'invite_again'],
+    ['someone else at the address removed', { invitation: inv({ state: 'withdrawn', addressRemovedAt: at }) }, 'invite_again'],
+    ['staff said someone else uses the address', { invitation: inv({ state: 'withdrawn', wrongPersonAt: at }) }, null],
     ['16 by the list, never invited', { dateOfBirth: '2010-03-14' }, 'under_age'],
     ['turns 18 tomorrow', { dateOfBirth: '2008-09-26' }, 'under_age'],
     ['turned 18 today', { dateOfBirth: '2008-09-25' }, 'invite'],
@@ -318,32 +350,14 @@ describe('who an Invite leaves out, in words', () => {
   it('one line a reason, zeros left out, one person said as one', () => {
     const lines = skippedLines({ noEmail: 1, underAge: 3, inApp: 0, alreadyInvited: 2, unsubscribed: 0, bounced: 1, refused: 0, sharedAddress: 1 });
     expect(lines.map((line) => line.text)).toEqual([
-      '1 has no email address',
-      '3 are under 18 by the date of birth on your list',
-      '2 were invited before',
-      '1 has an address that bounces',
-      '1 has a shared address such as info@',
+      '1 without an email address',
+      '3 under 18',
+      '2 already invited, or sharing an invited email address',
+      '1 with an email address that bounces',
+      '1 with a shared email address such as info@',
     ]);
   });
 });
-describe('a row for somebody the list says is under 18', () => {
-  it('reads "Under 18" when never invited, and as before without a date to judge by', () => {
-    expect(invitationView(entry({ dateOfBirth: '2010-03-14' }), '2026-09-25')?.tag).toBe('Under 18');
-    expect(invitationView(entry({ dateOfBirth: '2008-09-25' }), '2026-09-25')?.tag).toBe('Not invited');
-    expect(invitationView(entry({ dateOfBirth: '2010-03-14' }))?.tag).toBe('Not invited');
-  });
-
-  const pending = { state: 'pending', invitedAt: '2026-09-20T10:00:00.000Z', email: { state: 'sent', reason: null, at: '2026-09-20T10:01:00.000Z', result: 'delivered' }, sentAgain: 0, waitingSince: null, notMeAt: null };
-  it("reads \"Under 18\" even when the address's invitation is a parent's, or came before the date was corrected", () => {
-    expect(invitationView(entry({ dateOfBirth: '2010-03-14', invitation: pending }), '2026-09-25')?.tag).toBe('Under 18');
-    expect(invitationView(entry({ dateOfBirth: '2010-03-14', invitation: { ...pending, state: 'withdrawn' } }), '2026-09-25')?.tag).toBe('Under 18');
-  });
-  it('still says Joined, or Uses the app, for somebody already in', () => {
-    expect(invitationView(entry({ dateOfBirth: '2010-03-14', invitation: { ...pending, state: 'accepted' } }), '2026-09-25')?.tag).toBe('Joined');
-    expect(invitationView(entry({ dateOfBirth: '2010-03-14', inApp: true }), '2026-09-25')?.tag).toBe('Uses the app');
-  });
-});
-
 describe("the gym's own day for a birthday", () => {
   // 20:00 on 24 September in London is already 25 September in Auckland.
   const at = new Date('2026-09-24T20:00:00Z');

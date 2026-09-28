@@ -115,9 +115,20 @@ describe("a whole column's order", () => {
     expect(order([], "IN")).toEqual({ order: "dayFirst", from: "none" });
   });
 
-  it("lets staff's own switch beat both", () => {
-    expect(order(["25/12/2025"], "IN", "monthFirst")).toEqual({ order: "monthFirst", from: "chosen" });
-    expect(order(["12/25/2025"], "US", "dayFirst")).toEqual({ order: "dayFirst", from: "chosen" });
+  it("lets staff's own switch beat the country where the file proves nothing", () => {
+    expect(order(["03/04/2026", "05/06/2026"], "IN", "monthFirst")).toEqual({ order: "monthFirst", from: "chosen" });
+    expect(order(["03/04/2026"], "US", "dayFirst")).toEqual({ order: "dayFirst", from: "chosen" });
+    // A column that contradicts itself is not the file's to decide, so the switch does.
+    expect(order(["25/12/2025", "12/25/2025"], "IN", "monthFirst")).toEqual({ order: "monthFirst", from: "chosen" });
+  });
+
+  it("never lets a switch beat the file's own proof (Kd's click-through, 2026-09-27)", () => {
+    // Remembered from an earlier file, a month-first switch read "20/02/2023" as the
+    // twentieth month: the file's own cells say day first, and they decide.
+    expect(order(["03/04/2024", "12/01/2025", "20/02/2023"], "GB", "monthFirst")).toEqual({ order: "dayFirst", from: "file" });
+    expect(order(["03/04/2026", "12/25/2025"], "IN", "dayFirst")).toEqual({ order: "monthFirst", from: "file" });
+    // And nothing to switch where every cell said its own order.
+    expect(order(["2026-04-03", "3 Apr 2026"], "IN", "monthFirst")).toEqual({ order: "dayFirst", from: "none" });
   });
 
   it("READS EVERY ROW OF THE COLUMN, not its first two hundred cells", () => {
