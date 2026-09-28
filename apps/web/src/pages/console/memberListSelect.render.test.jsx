@@ -225,4 +225,35 @@ describe('selecting people', () => {
     expect(bar().queryByTestId('bar-invite')).toBeNull();
     expect(bar().getByTestId('bar-download')).toBeTruthy();
   });
+
+  it('with nobody ticked, Download CSV above the list downloads everyone the list shows; with people ticked it gives way to the bar', async () => {
+    draw();
+    await screen.findByText('Ada Lovelace');
+    orgService.selectAllMembers.mockResolvedValue({ data: { selection: { count: 312, digest: DIGEST } } });
+    orgService.downloadMembersCsv.mockResolvedValue({ blob: new Blob(['x']), filename: 'All members 2026-09-28.csv' });
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: () => 'blob:x', revokeObjectURL: () => undefined }));
+    fireEvent.click(screen.getByTestId('download-shown'));
+    await waitFor(() => expect(orgService.downloadMembersCsv).toHaveBeenCalledTimes(1));
+    expect(orgService.selectAllMembers).toHaveBeenCalledWith(GYM, {});
+    expect(orgService.downloadMembersCsv).toHaveBeenCalledWith(GYM, { kind: 'all', filter: {}, count: 312, digest: DIGEST });
+    vi.unstubAllGlobals();
+
+    fireEvent.click(tickOf('Ada Lovelace'));
+    expect(screen.queryByTestId('download-shown')).toBeNull();
+    expect(bar().getByTestId('bar-download')).toBeTruthy();
+  });
+
+  it('the Invite page holds the list behind it still while it is open, and lets it scroll again after', async () => {
+    draw();
+    await screen.findByText('Ben Carter');
+    fireEvent.click(tickOf('Ben Carter'));
+    orgService.getSelectedInvitePreview.mockResolvedValue(preview(1));
+    fireEvent.click(bar().getByTestId('bar-invite'));
+    await screen.findByTestId('invite-box');
+    expect(document.body.style.overflow).toBe('hidden');
+    // Its own middle scrolls: a flex child allowed to shrink below its content.
+    expect(screen.getByTestId('invite-scroll').className).toContain('min-h-0');
+    fireEvent.click(within(screen.getByTestId('invite-box')).getByRole('button', { name: 'Close' }));
+    expect(document.body.style.overflow).toBe('');
+  });
 });

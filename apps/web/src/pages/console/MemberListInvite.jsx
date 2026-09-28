@@ -98,6 +98,16 @@ export default function MemberListInvite({
   /** The `peopleTick` each list was last read for, so a tab is read once per change. */
   const readFor = useRef({ reach: -1, left_out: -1 });
   const tab = picked ?? (preview !== null && preview.reach === 0 ? 'left_out' : 'reach');
+
+  // The page behind holds still while this one is open; this one scrolls (Kd's
+  // click-through, 2026-09-28: the list behind scrolled and this page did not).
+  useEffect(() => {
+    const before = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = before;
+    };
+  }, []);
   const today = gymToday(gym?.timezone);
 
   // A "Select all" that now holds other people: nothing was done. Its new count goes back
@@ -477,7 +487,9 @@ export default function MemberListInvite({
             <X aria-hidden="true" className="w-5 h-5" />
           </button>
         </div>
-        <div className="flex flex-col gap-4 px-4 pt-2 pb-4 md:px-7 md:pt-3 md:pb-6 overflow-y-auto flex-grow">{body}</div>
+        <div className="flex flex-col gap-4 px-4 pt-2 pb-4 md:px-7 md:pt-3 md:pb-6 overflow-y-auto overscroll-contain flex-grow min-h-0" data-testid="invite-scroll">
+          {body}
+        </div>
         <div className="flex px-4 pt-3 pb-5 md:px-7 md:py-4 border-t md:justify-end" style={{ borderColor: 'var(--line)', background: 'var(--card)' }}>
           {footer}
         </div>

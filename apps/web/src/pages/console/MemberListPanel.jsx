@@ -93,7 +93,7 @@ function FilterBox({ list, filters, words, total, onChange, onClear, onClose }) 
             <X aria-hidden="true" className="w-5 h-5" />
           </button>
         </div>
-        <div className="flex flex-col gap-5 px-4 pt-2 pb-4 md:px-7 md:pt-3 md:pb-6 overflow-y-auto flex-grow">
+        <div className="flex flex-col gap-5 px-4 pt-2 pb-4 md:px-7 md:pt-3 md:pb-6 overflow-y-auto overscroll-contain flex-grow min-h-0">
           {list !== null && (former > 0 || past)
             ? group(
                 'Show',
@@ -438,12 +438,20 @@ export default function MemberListPanel({
   const selectionMoved = useCallback((fresh) => {
     setSel((s) => (s.all === null ? s : { ...s, all: { ...s.all, count: fresh.count, digest: fresh.digest } }));
   }, []);
-  const download = async () => {
-    if (selection === null || downloading) return;
+  /** Download CSV of `chosen`: the people selected, or, from the toolbar with nobody
+   *  selected, everyone the list shows now (Kd, 2026-09-28: there by default). */
+  const download = async (chosen = selection) => {
+    if (downloading) return;
     setDownloading(true);
     setSelNote(null);
     try {
-      const file = await orgService.downloadMembersCsv(gymId, selection);
+      let asked = chosen;
+      if (asked === null) {
+        const filter = selectionFilter(filters);
+        const res = await orgService.selectAllMembers(gymId, filter);
+        asked = { kind: 'all', filter, ...res.data.selection };
+      }
+      const file = await orgService.downloadMembersCsv(gymId, asked);
       saveFile(file.blob, file.filename);
     } catch (raw) {
       const err = await blobError(raw);
@@ -535,7 +543,7 @@ export default function MemberListPanel({
           Invite to app
         </button>
       ) : null}
-      <button type="button" onClick={() => void download()} disabled={downloading} data-testid="bar-download" className="c-btn c-btn-s c-btn-sm">
+      <button type="button" onClick={() => void download(selection)} disabled={downloading} data-testid="bar-download" className="c-btn c-btn-s c-btn-sm">
         {downloading ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Download aria-hidden="true" className="w-4 h-4" />}
         Download CSV
       </button>
@@ -593,6 +601,14 @@ export default function MemberListPanel({
               <button type="button" onClick={() => setInviting(true)} disabled={readOnly} data-testid="invite-button" className="c-btn c-btn-soft c-btn-lg">
                 <Mail aria-hidden="true" className="w-4 h-4" />
                 Invite to app
+              </button>
+            ) : null}
+            {/* With people selected, the bar's Download is the one: two buttons with one name
+                acting on two different sets would be a guess for staff. */}
+            {page.total > 0 && picked === 0 ? (
+              <button type="button" onClick={() => void download(null)} disabled={downloading} data-testid="download-shown" className="c-btn c-btn-s c-btn-lg">
+                {downloading ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Download aria-hidden="true" className="w-4 h-4" />}
+                Download CSV
               </button>
             ) : null}
             <span className="flex-grow" />
