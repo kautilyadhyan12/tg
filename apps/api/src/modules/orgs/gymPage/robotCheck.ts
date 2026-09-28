@@ -4,9 +4,10 @@
 // sent — never the person's details or address.
 //
 // Outside production, with no keys set, Cloudflare's own test pair stands in: its site
-// key draws a widget that always passes, and its secret accepts only that widget's
-// dummy token (developers.cloudflare.com/turnstile/troubleshooting/testing, read
-// 2026-09-28).
+// key draws a widget that always passes, and its secret PASSES EVERY TOKEN — measured
+// 2026-09-28 against the real Siteverify, though Cloudflare's testing page says it takes
+// only the dummy one. It checks nothing: never point a shared server at it; production
+// refuses to start without real keys (`config.ts`).
 import { robotCheckReplySchema } from "@app/shared";
 import type { AppConfig } from "../../../config.js";
 

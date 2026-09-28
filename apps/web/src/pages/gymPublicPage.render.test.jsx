@@ -149,11 +149,54 @@ describe('the form', () => {
     expect(api.sendGymEnquiry).toHaveBeenCalledTimes(1);
   });
 
-  it('the hidden field is out of sight and out of the tab order', async () => {
+  it('the hidden field is out of sight, out of the tab order, and named nothing autofill knows', async () => {
     const { container } = draw();
     await screen.findByRole('heading', { name: 'Canal Street Gym' });
-    const fax = container.querySelector('input[name="fax"]');
-    expect(fax.tabIndex).toBe(-1);
-    expect(fax.closest('[aria-hidden="true"]')).not.toBeNull();
+    const trap = container.querySelector('input[name="enq_hp"]');
+    expect(trap.tabIndex).toBe(-1);
+    expect(trap.closest('[aria-hidden="true"]')).not.toBeNull();
+    expect(container.querySelector('label[for="enq-hp"]').textContent).toBe('Leave this field empty');
+    expect(container.querySelector('input[name="fax"]')).toBeNull();
+  });
+
+  it('when the robot check cannot load, says what to do instead of "try again"', async () => {
+    delete window.turnstile;
+    const append = vi.spyOn(document.head, 'appendChild').mockImplementation((el) => {
+      // A blocker stops Cloudflare's script: it never loads.
+      setTimeout(() => el.onerror?.(), 0);
+      return el;
+    });
+    draw();
+    await screen.findByRole('heading', { name: 'Canal Street Gym' });
+    type('Name', 'Asha Rao');
+    type('Email', 'asha@example.com');
+    await waitFor(() => expect(append).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 10));
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      "The robot check didn't load. Turn off any ad blocker for this page and reload it, or contact Canal Street Gym directly.",
+    );
+    expect(api.sendGymEnquiry).not.toHaveBeenCalled();
+    append.mockRestore();
+  });
+
+  it('a busy page says so in its own words; a busy address says "from here"', async () => {
+    const refused = (error, message) => Object.assign(new Error('429'), { response: { status: 429, data: { error, message } } });
+    api.sendGymEnquiry
+      .mockRejectedValueOnce(refused('page_busy', 'This page is getting a lot of messages. Please try again in an hour, or contact them directly.'))
+      .mockRejectedValueOnce(refused('rate_limited', 'Too many requests'));
+    draw();
+    await screen.findByRole('heading', { name: 'Canal Street Gym' });
+    await waitFor(() => expect(rendered).not.toBeNull());
+    type('Name', 'Asha Rao');
+    type('Email', 'asha@example.com');
+    pass('tok-1');
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toBe('This page is getting a lot of messages. Please try again in an hour, or contact them directly.'),
+    );
+    pass('tok-2');
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('Too many messages have been sent from here. Please try again later.'));
   });
 });

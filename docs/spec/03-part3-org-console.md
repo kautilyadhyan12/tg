@@ -2630,7 +2630,8 @@ itself (**Add a facility**: up to 10, 40 characters each, shown ticked in the sa
 taken off by unticking; words that are the list's own tick the list's facility, and one
 typed twice is kept once — `typedFacility`), as one list, then **Get in touch**: name, email or phone, "How did you hear about us?" (the five
 sources in a visitor's words), a message (1,000), an unticked **Happy to hear from {gym}
-by email**, Cloudflare Turnstile's robot check, a hidden field only robots fill, and
+by email**, Cloudflare Turnstile's robot check, a hidden field only robots fill (labelled
+"Leave this field empty", a name no autofill knows), and
 "Your details go only to {gym}, so they can reply." `?embed=1` is the form alone, and
 **Leads → Your gym page** gives the code (an iframe) that shows it inside the gym's own
 website, beside the link. The page is **off until the owner switches it on** (`gym_pages`;
@@ -2640,13 +2641,20 @@ form always answers the same `received` — for a new person, a known lead or a 
 the form never says who a gym has. A person no lead has by email or phone becomes a New
 lead of THAT gym (`added_by` null, their source or Other, ticked only by their own tick);
 one a lead already has by email (else phone) is kept as a message on that lead, which
-the form never renames, re-contacts or moves — a stranger can type anybody's email — and
-the tick is taken only for the email the lead already has. Every message is kept on its
+the form never renames, re-contacts, moves or re-ticks — a stranger can type anybody's
+email, and staff may have taken a tick off when the person asked for no more emails; the
+person's tick is kept on the message for staff to act on. A gym at its 10,000 leads
+refuses everybody alike, before anybody is looked up. Every message is kept on its
 lead (`gym_lead_enquiries`, the newest 20, deleted with the lead; the foreign key is
 `(gym_id, lead_id)`, so a message cannot sit on another gym's lead) and shown in the
-lead's panel as typed; the list tags the lead **From your page**. Limits: 60 messages an
-hour from one address, 120 an hour to one page; the robot check is asked after the limit,
-and only our secret and the token are sent to Cloudflare. Photos of the facilities are
+lead's panel as typed; the list tags the lead **From your page**. Limits, in this order:
+60 sends an hour from one address (any send), then the hidden field, then the robot
+check, then 120 messages an hour to one page — counted only for sends that passed the
+robot check, so robots cannot use a page up; a page over it says "This page is getting a
+lot of messages…", not "from here". Only our secret and the token are sent to Cloudflare.
+The public page carries only TODAY's closure: notes further ahead were written for
+members. A robot check that never loaded (a blocker) says to turn the blocker off or
+contact the gym, not to try again. Photos of the facilities are
 20c-iv-b (at most 10 a gym, 2 MB each).
 
 ### 16.4 At risk

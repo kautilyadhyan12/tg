@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { Check, Clock, Loader2, MapPin } from 'lucide-react';
 import { ENQUIRY_SOURCE_WORDS, ENQUIRY_WORDS, GYM_ENQUIRY_MAX_MESSAGE_CHARS, LEAD_SOURCES } from '@app/shared';
-import { orgService, errorStatus, errorText } from '../api/orgsApi';
+import { orgService, errorCode, errorStatus, errorText } from '../api/orgsApi';
 import { EMPTY_ENQUIRY, enquiryBody, enquiryProblem, facilityLines, hoursView } from './gymPublicView';
 import { useRobotCheck } from './useRobotCheck';
 
@@ -41,7 +41,7 @@ function EnquiryForm({ slug, page }) {
   const [problem, setProblem] = useState(null);
   const [sending, setSending] = useState(false);
   const [sentTo, setSentTo] = useState(null);
-  const { boxRef, token: robotToken, failed: robotFailed, reset: resetRobot } = useRobotCheck(page.robotCheckKey);
+  const { boxRef, token: robotToken, failed: robotFailed, blocked: robotBlocked, reset: resetRobot } = useRobotCheck(page.robotCheckKey);
   const set = (key) => (e) => {
     const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
     setForm((f) => ({ ...f, [key]: value }));
@@ -57,7 +57,8 @@ function EnquiryForm({ slug, page }) {
       return;
     }
     if (robotToken === null) {
-      setProblem(robotFailed ? ENQUIRY_WORDS.robot : 'Tick the box to show you’re not a robot.');
+      if (robotBlocked) setProblem(ENQUIRY_WORDS.robot_blocked(page.name));
+      else setProblem(robotFailed ? ENQUIRY_WORDS.robot : 'Tick the box to show you’re not a robot.');
       return;
     }
     setSending(true);
@@ -66,7 +67,9 @@ function EnquiryForm({ slug, page }) {
       setSentTo(form.fullName.trim().split(/\s+/)[0] ?? '');
     } catch (err) {
       resetRobot();
-      setProblem(errorStatus(err) === 429 ? ENQUIRY_WORDS.too_many : errorText(err, 'We couldn’t send your message. Please try again.'));
+      // The page's own allowance says so in its own words; the address's is "from here".
+      const busy = errorStatus(err) === 429 && errorCode(err) !== 'page_busy';
+      setProblem(busy ? ENQUIRY_WORDS.too_many : errorText(err, 'We couldn’t send your message. Please try again.'));
     } finally {
       setSending(false);
     }
@@ -146,8 +149,9 @@ function EnquiryForm({ slug, page }) {
       </label>
       {/* A field no person sees or fills; a robot filling every field fills it. */}
       <div aria-hidden="true" style={{ position: 'absolute', left: '-10000px', width: 1, height: 1, overflow: 'hidden' }}>
-        <label htmlFor="enq-fax">Fax</label>
-        <input id="enq-fax" name="fax" tabIndex={-1} autoComplete="off" value={form.fax} onChange={set('fax')} />
+        {/* A name and label no autofill knows, so a browser never fills it for a person. */}
+        <label htmlFor="enq-hp">Leave this field empty</label>
+        <input id="enq-hp" name="enq_hp" tabIndex={-1} autoComplete="off" value={form.trap} onChange={set('trap')} />
       </div>
       <div ref={boxRef} data-testid="robot-check" />
       {problem !== null ? (

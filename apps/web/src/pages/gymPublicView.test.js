@@ -83,7 +83,7 @@ describe('the form', () => {
   });
 
   it('passes on the hidden field when a robot filled it, so the server can drop it', () => {
-    expect(enquiryBody(form({ fax: '555' }), 'tok').fax).toBe('555');
+    expect(enquiryBody(form({ trap: '555' }), 'tok').trap).toBe('555');
   });
 });
 

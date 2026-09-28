@@ -9,6 +9,7 @@ import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { RobotCheck, RobotCheckAnswer } from "../src/modules/orgs/gymPage/robotCheck.js";
+import { enquiriesFor } from "../src/modules/orgs/leads/repo.js";
 import { GYM_ENQUIRIES_KEPT_PER_LEAD, ROLE_PRIVILEGES, type GymPage, type Lead, type LeadEnquiry, type PublicGymPage } from "@app/shared";
 
 const url = process.env["DATABASE_URL"];
@@ -56,6 +57,9 @@ const fakeRobotCheck: RobotCheck = {
 d("a gym's own page and its enquiry form (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
   let app: App | undefined;
+  /** A second api on the same database: one api holds one connection, so two requests
+   *  race only across two of them. */
+  let second: App | undefined;
   const api = (): App => {
     if (app === undefined) throw new Error("beforeAll did not build the app");
     return app;
@@ -67,6 +71,7 @@ d("a gym's own page and its enquiry form (real Postgres)", () => {
       WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE 'gpage-t-%@example.com')`;
     await sql`DELETE FROM gym_leads WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_pages WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_closures WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine})`;
     await sql`DELETE FROM gym_join_applications WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_members WHERE gym_id IN (${mine})`;
@@ -176,11 +181,14 @@ d("a gym's own page and its enquiry form (real Postgres)", () => {
       robotCheck: fakeRobotCheck,
     });
     await api().ready();
+    second = await buildApp(loadConfig(baseEnv), { robotCheck: fakeRobotCheck });
+    await second.ready();
   }, TIMEOUT_MS);
 
   afterAll(async () => {
     await cleanup();
     await app?.close();
+    await second?.close();
     await sql.end({ timeout: 5 });
   }, TIMEOUT_MS);
 
@@ -232,7 +240,7 @@ d("a gym's own page and its enquiry form (real Postgres)", () => {
 
       // The same answer, byte for byte, for someone already a lead and for a robot.
       const again = await post(formUrl(gymB.org.slug), enquiry());
-      const robot = await post(formUrl(gymB.org.slug), enquiry({ fullName: "Someone New", email: "new.person@example.com", fax: "555-0101" }));
+      const robot = await post(formUrl(gymB.org.slug), enquiry({ fullName: "Someone New", email: "new.person@example.com", trap: "555-0101" }));
       const fresh = await post(formUrl(gymB.org.slug), enquiry({ fullName: "Ben Cole", email: "ben.cole@example.com" }));
       for (const res of [again, robot, fresh]) {
         expect(res.statusCode).toBe(202);
@@ -308,7 +316,7 @@ d("a gym's own page and its enquiry form (real Postgres)", () => {
   // ── A PERSON ALREADY A LEAD ────────────────────────────────────────────────
 
   it(
-    "a message from someone already a lead is kept on that lead, and changes nothing staff keep but the tick for the lead's own email",
+    "a message from someone already a lead is kept on that lead, and changes nothing staff keep, not even the tick",
     async () => {
       const owner = await makeUser("known-owner");
       const gym = await makeOrg(owner.cookies, "Known Lead Gym");
@@ -333,10 +341,12 @@ d("a gym's own page and its enquiry form (real Postgres)", () => {
       expect(stored).toHaveLength(1);
       expect(stored[0]).toMatchObject({ id: lead.id, full_name: "Maria Park", email: "maria.park@example.com", status: "contacted", source: "friend", email_ok: false });
 
-      // Her own email, ticked: the tick is taken; she is Contacted, so nothing is due.
+      // Her own email, ticked: still not ticked on the lead (staff may have taken it off
+      // when she asked for no more emails, and a stranger can type her address); the
+      // message keeps her tick for staff to act on.
       expect((await post(formUrl(gym.org.slug), enquiry({ fullName: "Maria Park", email: "MARIA.PARK@example.com", mayEmail: true }))).statusCode).toBe(202);
       stored = await storedLeads(gym.org.id);
-      expect(stored[0]).toMatchObject({ email_ok: true, status: "contacted", due: null });
+      expect(stored[0]).toMatchObject({ email_ok: false, status: "contacted", due: null });
 
       const messages = await storedEnquiries(gym.org.id);
       expect(messages.map((m) => [m.lead_id, m.full_name, m.email, m.may_email])).toEqual([
@@ -408,7 +418,7 @@ d("a gym's own page and its enquiry form (real Postgres)", () => {
 
       // The hidden field: answered as received, and the robot check is not even asked.
       const callsBefore = robotCalls.length;
-      expect((await post(formUrl(gym.org.slug), enquiry({ fax: "x" }))).statusCode).toBe(202);
+      expect((await post(formUrl(gym.org.slug), enquiry({ trap: "x" }))).statusCode).toBe(202);
       expect(robotCalls.length).toBe(callsBefore);
 
       const refused = [
@@ -450,6 +460,119 @@ d("a gym's own page and its enquiry form (real Postgres)", () => {
       // Another address still gets through.
       expect((await post(formUrl(gym.org.slug), enquiry({ email: "elsewhere@example.com" }))).statusCode).toBe(202);
       expect(await storedLeads(gym.org.id)).toHaveLength(61);
+      // The refused 61st never reached the robot check.
+      const calls = robotCalls.length;
+      robotAnswers.set("after-limit-token", "passed");
+      expect((await send("POST", formUrl(gym.org.slug), enquiry({ email: "later@example.com", robotToken: "after-limit-token" }), {}, address)).statusCode).toBe(429);
+      expect(robotCalls.slice(calls)).not.toContain("after-limit-token");
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "robots cannot use up a page: only sends that pass the robot check count, and the 121st real one hears the page is busy",
+    async () => {
+      const owner = await makeUser("page-owner");
+      const gym = await makeOrg(owner.cookies, "Popular Gym");
+      await switchOn(gym, owner.cookies);
+      robotAnswers.set("robot-token", "failed");
+      // 130 robot sends from many addresses: the hidden field filled, or a failed check.
+      for (let i = 0; i < 65; i += 1) {
+        expect((await post(formUrl(gym.org.slug), enquiry({ email: `bot${String(i)}@example.com`, trap: "x" }))).statusCode).toBe(202);
+        expect((await post(formUrl(gym.org.slug), enquiry({ email: `bot${String(i)}@example.com`, robotToken: "robot-token" }))).statusCode).toBe(400);
+      }
+      expect(await storedLeads(gym.org.id)).toEqual([]);
+      // 120 real people, each from their own address, all kept.
+      for (let i = 0; i < 120; i += 1) {
+        const res = await post(formUrl(gym.org.slug), enquiry({ fullName: `Real ${String(i)}`, email: `real${String(i)}@example.com` }));
+        expect(res.statusCode, `person ${String(i + 1)}`).toBe(202);
+      }
+      const busy = await post(formUrl(gym.org.slug), enquiry({ fullName: "One Too Many", email: "late.real@example.com" }));
+      expect(busy.statusCode).toBe(429);
+      expect(JSON.parse(busy.body)).toMatchObject({
+        error: "page_busy",
+        message: "This page is getting a lot of messages. Please try again in an hour, or contact them directly.",
+      });
+      expect(await storedLeads(gym.org.id)).toHaveLength(120);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "a full gym answers a known lead and a new person alike, so the form never says who it has",
+    async () => {
+      const owner = await makeUser("full-owner");
+      const gym = await makeOrg(owner.cookies, "Full Gym");
+      await switchOn(gym, owner.cookies);
+      await sql`INSERT INTO gym_leads (gym_id, full_name, email, source)
+        SELECT ${gym.org.id}, 'Lead ' || n, 'full.lead' || n || '@example.com', 'website' FROM generate_series(1, 10000) n`;
+      const known = await post(formUrl(gym.org.slug), enquiry({ fullName: "Lead 7", email: "full.lead7@example.com" }));
+      const stranger = await post(formUrl(gym.org.slug), enquiry({ fullName: "Not Yet", email: "not.yet@example.com" }));
+      const answer = (res: { statusCode: number; body: string }) => {
+        const body = JSON.parse(res.body) as { error: string; message: string };
+        return [res.statusCode, body.error, body.message];
+      };
+      expect(known.statusCode).toBe(409);
+      expect(answer(stranger)).toEqual(answer(known));
+      expect(await storedEnquiries(gym.org.id)).toEqual([]);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "the same new person sent twice at the same instant, through two apis, is one lead with two messages, never an error",
+    async () => {
+      const owner = await makeUser("race-owner");
+      const gym = await makeOrg(owner.cookies, "Race Gym");
+      await switchOn(gym, owner.cookies);
+      const other = second;
+      if (other === undefined) throw new Error("beforeAll did not build the second api");
+      const via = (target: App, body: unknown) =>
+        target.inject({
+          method: "POST",
+          url: formUrl(gym.org.slug),
+          remoteAddress: nextIp(),
+          headers: { "content-type": "application/json" },
+          payload: JSON.stringify(body),
+        });
+      for (let round = 0; round < 10; round += 1) {
+        const body = enquiry({ fullName: `Twin ${String(round)}`, email: `twice${String(round)}@example.com` });
+        const [a, b] = await Promise.all([via(api(), body), via(other, body)]);
+        expect([a.statusCode, b.statusCode], `round ${String(round + 1)}`).toEqual([202, 202]);
+      }
+      expect(await storedLeads(gym.org.id)).toHaveLength(10);
+      expect(await storedEnquiries(gym.org.id)).toHaveLength(20);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "a lead's messages are read with its gym: another gym's id finds none",
+    async () => {
+      const owner = await makeUser("read-owner");
+      const gym = await makeOrg(owner.cookies, "Read Gym");
+      const other = await makeOrg(owner.cookies, "Read Other Gym");
+      await switchOn(gym, owner.cookies);
+      expect((await post(formUrl(gym.org.slug), enquiry())).statusCode).toBe(202);
+      const leadId = (await storedLeads(gym.org.id))[0]?.id ?? "";
+      expect(await enquiriesFor(sql, gym.org.id, leadId, 20)).toHaveLength(1);
+      expect(await enquiriesFor(sql, other.org.id, leadId, 20)).toEqual([]);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "the public page shows only today's closure; notes further ahead were written for members",
+    async () => {
+      const owner = await makeUser("closed-owner");
+      const gym = await makeOrg(owner.cookies, "Closed Gym");
+      await switchOn(gym, owner.cookies);
+      await sql`INSERT INTO gym_closures (gym_id, day, note) VALUES
+        (${gym.org.id}, (now() AT TIME ZONE 'Europe/London')::date, 'Deep clean'),
+        (${gym.org.id}, (now() AT TIME ZONE 'Europe/London')::date + 3, 'Staff training, members only')`;
+      const page = (JSON.parse((await get(publicUrl(gym.org.slug))).body) as { page: PublicGymPage }).page;
+      expect(page.hours.closures.map((c) => c.note)).toEqual(["Deep clean"]);
+      await sql`DELETE FROM gym_closures WHERE gym_id = ${gym.org.id}`;
     },
     TIMEOUT_MS,
   );

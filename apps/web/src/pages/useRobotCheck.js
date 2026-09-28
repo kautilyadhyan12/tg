@@ -27,12 +27,14 @@ function loadTurnstile() {
   return loading;
 }
 
-/** `{ boxRef, token, failed, reset }`: put `boxRef` on an empty div. */
+/** `{ boxRef, token, failed, blocked, reset }`: put `boxRef` on an empty div. `blocked`:
+ *  Cloudflare's script never loaded (a blocker), so trying again cannot help. */
 export function useRobotCheck(siteKey) {
   const boxRef = useRef(null);
   const widgetId = useRef(null);
   const [token, setToken] = useState(null);
   const [failed, setFailed] = useState(false);
+  const [blocked, setBlocked] = useState(false);
 
   useEffect(() => {
     if (!siteKey || boxRef.current === null) return undefined;
@@ -55,7 +57,7 @@ export function useRobotCheck(siteKey) {
         });
       },
       () => {
-        if (!gone) setFailed(true);
+        if (!gone) setBlocked(true);
       },
     );
     return () => {
@@ -70,5 +72,5 @@ export function useRobotCheck(siteKey) {
     if (widgetId.current !== null && window.turnstile) window.turnstile.reset(widgetId.current);
   }, []);
 
-  return { boxRef, token, failed, reset };
+  return { boxRef, token, failed, blocked, reset };
 }

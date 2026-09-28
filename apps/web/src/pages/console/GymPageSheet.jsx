@@ -256,7 +256,7 @@ export default function GymPageSheet({ gymId, gym, words, readOnly, onClose }) {
                 ) : null}
               </div>
 
-              <p className="c-s14 c-t2">Your page also shows your opening hours from Settings.</p>
+              <p className="c-s14 c-t2">Your page also shows your opening hours from Settings, and on a day you close, that day's closure note.</p>
 
               <div className="c-field pt-4 border-t" style={{ borderColor: 'var(--line)' }}>
                 <span className="c-label">Show the form on your own website</span>

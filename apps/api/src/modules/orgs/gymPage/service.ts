@@ -14,8 +14,6 @@ import {
   GYM_ENQUIRIES_KEPT_PER_LEAD,
   GYM_FACILITIES,
   LEADS_MAX_PER_GYM,
-  leadSourceSchema,
-  leadStatusSchema,
   orgTypeSchema,
   typedFacility,
   type GymEnquiryRequest,
@@ -25,6 +23,7 @@ import {
   type SetGymPageRequest,
 } from "@app/shared";
 import type { Sql } from "postgres";
+import { dayInTz } from "../../gamification/streak.js";
 import { getGymHours, gymHasLivePlan, insertAudit } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege, toGymHours } from "../service.js";
 import { holdsCard } from "../memberList/byHand.js";
@@ -107,11 +106,13 @@ async function livePage(sql: Sql, slug: string): Promise<repo.ShownPageRow | nul
   return page;
 }
 
-export async function publicPage(deps: Pick<GymPageDeps, "sql" | "robotCheck">, slug: string): Promise<PublicGymPage> {
+export async function publicPage(deps: Pick<GymPageDeps, "sql" | "robotCheck" | "now">, slug: string): Promise<PublicGymPage> {
   const page = await livePage(deps.sql, slug);
   if (page === null) throw notFound();
   const hours = await getGymHours(deps.sql, page.gymId);
   if (hours === null) throw notFound();
+  const gymHours = toGymHours(hours);
+  const today = dayInTz(deps.now(), page.timezone);
   return {
     name: page.name,
     city: page.city,
@@ -121,7 +122,8 @@ export async function publicPage(deps: Pick<GymPageDeps, "sql" | "robotCheck">, 
     ownFacilities: page.ownFacilities,
     // The week as the gym's members see it; the week a gym open all day keeps
     // aside for later is the console's alone.
-    hours: { ...toGymHours(hours), savedWeek: [] },
+    // Only today's closure: the notes further ahead were written for members.
+    hours: { ...gymHours, savedWeek: [], closures: gymHours.closures.filter((closure) => closure.day === today) },
     robotCheckKey: deps.robotCheck.siteKey,
   };
 }
@@ -147,17 +149,25 @@ function visitorContact(
   }
 }
 
-const sameAddress = (a: string | null, b: string | null): boolean => a !== null && b !== null && a.toLowerCase() === b.toLowerCase();
-
 /** A message from the form. A lead with its email (else its phone) keeps it, and is
- *  otherwise left as staff keep it: a stranger can type anybody's email, so the form
- *  never changes a lead's name, contact or status. Its "Happy to hear from us" is taken
- *  only for the email that lead already has. Nobody else is a lead yet: they become
- *  one, New, as the form's own. Answered `received` in every case. */
-export async function sendEnquiry(deps: GymPageDeps, slug: string, body: GymEnquiryRequest, limit: Limit): Promise<"received" | null> {
-  if (!(await limit())) return null;
+ *  left exactly as staff keep it: a stranger can type anybody's email, so the form never
+ *  changes a lead's name, contact, status or "Happy to hear from us" — the person's tick
+ *  is kept on the message, for staff to act on. Nobody else is a lead yet: they become
+ *  one, New, as the form's own, ticked by their own tick. Answered `received` in every
+ *  case, and a full gym refuses everybody alike, so the reply never says who a gym has.
+ *
+ *  Order: the address's allowance, the hidden field, the robot check, the page's own
+ *  allowance, the write. Only a send that passed the robot check spends the page's, so
+ *  robots cannot use it up for the people who come after them. */
+export async function sendEnquiry(
+  deps: GymPageDeps,
+  slug: string,
+  body: GymEnquiryRequest,
+  limits: { address: Limit; page: () => Promise<boolean> },
+): Promise<"received" | null> {
+  if (!(await limits.address())) return null;
   // The field no person sees: filled, it was a robot, and nothing is kept.
-  if ((body.fax ?? "").trim() !== "") return "received";
+  if ((body.trap ?? "").trim() !== "") return "received";
   const checked = await deps.robotCheck.verify(body.robotToken);
   if (checked === "unavailable") throw new OrgsError(503, "robot_check_unavailable", ENQUIRY_WORDS.robot_unavailable);
   if (checked === "failed") throw new OrgsError(400, "robot_check_failed", ENQUIRY_WORDS.robot);
@@ -169,39 +179,21 @@ export async function sendEnquiry(deps: GymPageDeps, slug: string, body: GymEnqu
   if (holdsCard(message)) throw new OrgsError(400, "card_number", ENQUIRY_WORDS.card_number);
   const mayEmail = body.mayEmail === true;
   if (mayEmail && contact.email === null) throw new OrgsError(400, "needs_email", ENQUIRY_WORDS.needs_email);
+  if (!(await limits.page())) throw new OrgsError(429, "page_busy", ENQUIRY_WORDS.page_busy);
   const source = body.source ?? null;
   const at = deps.now();
 
   await deps.sql.begin(async (tx) => {
     await lockGym(tx, page.gymId);
+    // Before anybody is looked up: a full gym answers everybody the same.
+    if ((await leadsRepo.countLeads(tx, page.gymId)) >= LEADS_MAX_PER_GYM) {
+      throw new OrgsError(409, "enquiries_full", ENQUIRY_WORDS.full);
+    }
     const lead = await leadsRepo.lockLeadForContact(tx, page.gymId, contact);
     let leadId: string;
     if (lead !== null) {
       leadId = lead.id;
-      if (mayEmail && lead.emailOkAt === null && sameAddress(contact.email, lead.email)) {
-        const status = leadStatusSchema.parse(lead.status);
-        await leadsRepo.writeLead(
-          tx,
-          page.gymId,
-          lead.id,
-          {
-            fullName: lead.fullName,
-            email: lead.email,
-            phone: lead.phone,
-            source: leadSourceSchema.parse(lead.source),
-            notes: lead.notes,
-            emailOkAt: at,
-            status,
-            entryId: lead.entryId,
-            ...followUpValues({ status, emailOkAt: at, sent: lead.followUpsSent, lastAt: lead.followUpLastAt }, page.timezone),
-          },
-          at,
-        );
-      }
     } else {
-      if ((await leadsRepo.countLeads(tx, page.gymId)) >= LEADS_MAX_PER_GYM) {
-        throw new OrgsError(409, "enquiries_full", ENQUIRY_WORDS.full);
-      }
       const okAt = mayEmail ? at : null;
       const inserted = await leadsRepo.insertLead(
         tx,

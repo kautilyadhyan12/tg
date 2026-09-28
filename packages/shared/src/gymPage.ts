@@ -140,7 +140,7 @@ export type PublicGymPage = z.infer<typeof publicGymPageSchema>;
 export const publicGymPageResponseSchema = z.object({ page: publicGymPageSchema }).strict();
 export type PublicGymPageResponse = z.infer<typeof publicGymPageResponseSchema>;
 
-/** The form. `fax` is a field no person sees or fills: a robot that fills every
+/** The form. `trap` is a field no person sees or fills: a robot that fills every
  *  field fills it, and its enquiry is dropped without a word. */
 export const gymEnquiryRequestSchema = z
   .object({
@@ -150,7 +150,7 @@ export const gymEnquiryRequestSchema = z
     source: leadSourceSchema.optional(),
     message: z.string().max(GYM_ENQUIRY_MAX_MESSAGE_CHARS).optional(),
     mayEmail: z.boolean().optional(),
-    fax: z.string().max(200).optional(),
+    trap: z.string().max(200).optional(),
     robotToken: z.string().min(1).max(ROBOT_CHECK_TOKEN_MAX_CHARS),
   })
   .strict();
@@ -205,7 +205,12 @@ export const ENQUIRY_WORDS = {
   bad_phone: "Check your phone number.",
   card_number: "That looks like a payment card number. Please take it out and send again.",
   robot: "We couldn't check that you're not a robot. Please try again.",
+  /** The robot check's script did not load (a blocker, or a network that stops it). */
+  robot_blocked: (gym: string): string =>
+    `The robot check didn't load. Turn off any ad blocker for this page and reload it, or contact ${gym} directly.`,
   robot_unavailable: "We couldn't send your message just now. Please try again in a minute.",
   full: "This page can't take messages right now. Please contact them directly.",
   too_many: "Too many messages have been sent from here. Please try again later.",
+  /** The page's own hourly allowance, spent only by sends that passed the robot check. */
+  page_busy: "This page is getting a lot of messages. Please try again in an hour, or contact them directly.",
 } as const;

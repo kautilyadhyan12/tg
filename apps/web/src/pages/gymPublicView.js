@@ -39,7 +39,7 @@ export function hoursView(hours, now = new Date()) {
   return { headline, week };
 }
 
-export const EMPTY_ENQUIRY = { fullName: '', email: '', phone: '', source: '', message: '', mayEmail: false, fax: '' };
+export const EMPTY_ENQUIRY = { fullName: '', email: '', phone: '', source: '', message: '', mayEmail: false, trap: '' };
 
 /** What stops the form being sent, in the words the server would use; null when it
  *  may go. The server checks it all again. */
@@ -62,7 +62,7 @@ export function enquiryBody(form, robotToken) {
   if (form.source !== '') body.source = form.source;
   if (message !== '') body.message = message;
   if (form.mayEmail) body.mayEmail = true;
-  if (form.fax !== '') body.fax = form.fax;
+  if (form.trap !== '') body.trap = form.trap;
   return body;
 }
 

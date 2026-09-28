@@ -1,9 +1,11 @@
 // A gym's own page (ROADMAP 20c-iv-a): the console's two routes behind sign-in, and the
 // two public ones anybody with the link uses — no cookie, no sign-in.
 //
-// The public form is limited per page and per internet address, both explicit: people
+// The public form is limited per internet address and per page, separately: people
 // behind one phone carrier's address, or at one gym's wi-fi, share an address, and the
-// robot check, not the address limit, is what stops robots.
+// robot check, not the address limit, is what stops robots. The page's allowance is
+// spent only by sends that passed the robot check (`service.sendEnquiry`), so robots
+// cannot use it up for the people after them.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import { z } from "zod";
@@ -47,6 +49,9 @@ const slugOf = (req: FastifyRequest): string | null => {
   const parsed = slugParamsSchema.safeParse(req.params);
   return parsed.success ? parsed.data.slug : null;
 };
+
+const ENQUIRY_PAGE_MAX = 120;
+const ENQUIRY_PAGE_WINDOW_S = 60 * 60;
 
 const notFound = (req: FastifyRequest, reply: FastifyReply): FastifyReply =>
   reply.status(404).send({ error: "page_not_found", message: ENQUIRY_WORDS.not_found, requestId: req.id });
@@ -94,15 +99,25 @@ export function registerGymPageRoutes(app: FastifyInstance, deps: GymPageRouteDe
     identifier: () => null,
     redis: deps.redis,
   });
-  /** The form: 120 messages an hour to one page, 60 an hour from one address. */
-  const enquiryLimit = createDualRateLimit({
+  /** The form: 60 sends an hour from one address, whatever they carry. */
+  const enquiryAddressLimit = createDualRateLimit({
     name: "gym_enquiry",
-    max: 120,
+    max: 60,
     ipMax: 60,
     windowMs: 60 * 60 * 1000,
-    identifier: slugOf,
+    identifier: () => null,
     redis: deps.redis,
   });
+  /** …and 120 messages an hour to one page, counted only once the robot check passed.
+   *  Redis down: let it through with a log, as the address limit does. */
+  const pageRoom = (req: FastifyRequest, slug: string) => async (): Promise<boolean> => {
+    const count = await deps.redis.incrWithTtl(`rl:gym_enquiry_page:${slug}`, ENQUIRY_PAGE_WINDOW_S);
+    if (count === null) {
+      req.log.warn({ event: "ratelimit.open_redis_down", limiter: "gym_enquiry_page" }, "rate limiter failing open (Redis unavailable)");
+      return true;
+    }
+    return count <= ENQUIRY_PAGE_MAX;
+  };
   const signedIn = { preHandler: [app.authenticate] };
 
   app.get("/v1/orgs/:gymId/page", signedIn, async (req, reply) => {
@@ -137,7 +152,10 @@ export function registerGymPageRoutes(app: FastifyInstance, deps: GymPageRouteDe
     if (slug === null) return notFound(req, reply);
     const body = parseOr400(gymEnquiryRequestSchema, req.body, req, reply);
     if (body === null) return;
-    const done = await service.sendEnquiry(pageDeps, slug, body, gate(enquiryLimit)(req, reply));
+    const done = await service.sendEnquiry(pageDeps, slug, body, {
+      address: gate(enquiryAddressLimit)(req, reply),
+      page: pageRoom(req, slug),
+    });
     if (done === null) return;
     return reply.status(202).send({ received: true });
   });
