@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, ChevronRight, Loader2, Search, Upload, UserMinus, UserPlus, X } from 'lucide-react';
 import { ConfirmInline, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
+import ScrollJump from '../../components/console/ScrollJump';
 import { orgService, errorText, errorCode } from '../../api/orgsApi';
 import { useConsoleOrg } from './useConsoleOrg';
 import ApplicationsQueue from './ApplicationsQueue';
@@ -617,6 +618,8 @@ export default function Members() {
           </ul>
         </section>
       ) : null}
+
+      {tab === 'app' ? <ScrollJump raised={canTick && rosterTicked.size > 0} /> : null}
 
       {/* The bar on a phone, just above the tab bar (§18.5). */}
       {tab === 'app' && canTick && rosterTicked.size > 0 ? (

@@ -3,6 +3,7 @@ import { AlertTriangle, Check, ChevronRight, Download, Loader2, Mail, Minus, Sea
 import { MEMBER_APP_FILTER_WORDS, MEMBER_LIST_QUERY_MAX_CHARS, MEMBER_LIST_TICKED_MAX } from '@app/shared';
 import { orgService, errorText, blobError, selectionChanged } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
+import ScrollJump from '../../components/console/ScrollJump';
 import MemberListInvite from './MemberListInvite';
 import MemberListPerson from './MemberListPerson';
 import MemberListRemove from './MemberListRemove';
@@ -880,6 +881,8 @@ export default function MemberListPanel({
           </ul>
         </section>
       ) : null}
+
+      <ScrollJump raised={picked > 0} />
 
       {/* The bar on a phone, just above the tab bar (§18.5). */}
       {picked > 0 ? (
