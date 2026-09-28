@@ -3338,7 +3338,10 @@ names of the people the file leaves out and their details, and its two answers, 
 left** and **They're still members**. The one addition is a tick beside each name: They've
 left moves the people ticked ("Move the 2 ticked to past members"), or everyone when nobody
 is ticked, as before; They're still members keeps everyone and opens no box. Import waits for
-one of the two answers. Import with anyone leaving opens a box first, as
+one of the two answers. Each person's details name what each word is ("Status: Cancelled ·
+Membership: Gold · Payment: Paid"; the line above: "Status: Active 20 · Frozen 5"), and above
+the card Review shows, beside the new members, how many are already on the list, each with
+See who (RULINGS 2026-09-29). Import with anyone leaving opens a box first, as
 Remove does (18.6): who moves to past members, who loses the app with them, who keeps it and
 why, how many stay; the large-change number is typed there. It is Remove's own rule on the
 records marked Left, worked out before the file is applied, with one exception that ends

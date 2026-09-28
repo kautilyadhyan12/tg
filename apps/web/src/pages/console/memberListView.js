@@ -172,11 +172,12 @@ export function missingOf(preview) {
   return { n, listSize: guard.listSize, needsTick: guard.needsTick, statuses, group };
 }
 
-/** The gym's own status words of the people missing from the file: "Frozen 5 · Active 1".
- *  An export of only the Active members leaves out every Frozen one, and this is where
- *  staff see it before answering. */
+/** The gym's own status words of the people missing from the file: "Status: Frozen 5 ·
+ *  Active 1". An export of only the Active members leaves out every Frozen one, and this is
+ *  where staff see it before answering. */
 export function missingStatusLine(missing) {
-  return missing.statuses.map((s) => `${s.label} ${count(s.n)}`).join(' · ');
+  const line = missing.statuses.map((s) => `${s.label} ${count(s.n)}`).join(' · ');
+  return line === '' ? '' : `Status: ${line}`;
 }
 
 /** The question's heading: "5 members aren't in this file", or, where the wrong-file

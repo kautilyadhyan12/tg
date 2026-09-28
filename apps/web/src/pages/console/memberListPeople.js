@@ -141,14 +141,20 @@ export function endsWords(entry, today = null) {
   return `${entry.endsOnKind === 'renews' ? 'Renews' : 'Ends'} ${shortDay(entry.endsOn, today)}`;
 }
 
-/** What the list says today about somebody an import leaves out, in the gym's own words —
- *  "Cancelled · Gold · Ended 31 Aug · Unpaid" — and how they came onto the list when it
- *  was not an import ("Added by hand · 20 Sep"), so staff can tell who has left (Kd,
- *  2026-09-27: "how can a gym simply decide they are member or have left just by looking
- *  at names"). */
+/** What the list says today about somebody an import leaves out, each of the gym's own
+ *  words with what it is — "Status: Cancelled · Membership: Gold · Ended 31 Aug · Payment:
+ *  Unpaid" — and how they came onto the list when it was not an import ("Added manually ·
+ *  20 Sep"), so staff can tell who has left (Kd, 2026-09-27: "how can a gym simply decide
+ *  they are member or have left just by looking at names"; 2026-09-29: "cancelled gold paid
+ *  … gym will get confused … something meaningful"). */
 export function goneWords(person, today = null) {
   const on = person.onList;
-  const facts = [person.wasStatus, on.membershipType, endsWords(on, today), on.paymentStatus].filter((w) => w !== null && w !== '');
+  const facts = [
+    person.wasStatus ? `Status: ${person.wasStatus}` : null,
+    on.membershipType ? `Membership: ${on.membershipType}` : null,
+    endsWords(on, today),
+    on.paymentStatus ? `Payment: ${on.paymentStatus}` : null,
+  ].filter((w) => w !== null && w !== '');
   const when = shortWhen(on.addedAt, today);
   const added = on.source === 'typed' ? `Added manually · ${when}` : on.source === 'member' ? `Added from the app · ${when}` : null;
   return { facts: facts.join(' · '), added };

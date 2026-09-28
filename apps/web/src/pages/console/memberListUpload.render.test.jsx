@@ -168,7 +168,7 @@ describe('the worst thing: nobody leaves who was not answered for', () => {
     const card = within(await screen.findByTestId('missing'));
     expect(card.getByText("25 of your 30 members aren't in this file")).toBeTruthy();
     expect(card.getByTestId('missing-help').textContent).toContain('members missing from it have usually left');
-    expect(card.getByTestId('missing-statuses').textContent).toBe('Active 20 · Frozen 5');
+    expect(card.getByTestId('missing-statuses').textContent).toBe('Status: Active 20 · Frozen 5');
     expect(screen.queryByText('No changes')).toBeNull();
     expect(orgService.getMemberListMissing).toHaveBeenCalledWith(GYM, UPLOAD);
     expect(orgService.getMemberListRows).not.toHaveBeenCalled();
@@ -179,8 +179,8 @@ describe('the worst thing: nobody leaves who was not answered for', () => {
       expect.stringContaining('Liam Hughes'),
       expect.stringContaining('Emma Price'),
     ]);
-    expect(within(rows[0]).getByTestId('gone-facts').textContent).toBe('Active · Gold · Paid');
-    expect(within(rows[1]).getByTestId('gone-facts').textContent).toMatch(/^Cancelled · Gold · Ended 31 Aug( 2026)? · Unpaid$/);
+    expect(within(rows[0]).getByTestId('gone-facts').textContent).toBe('Status: Active · Membership: Gold · Payment: Paid');
+    expect(within(rows[1]).getByTestId('gone-facts').textContent).toMatch(/^Status: Cancelled · Membership: Gold · Ended 31 Aug( 2026)? · Payment: Unpaid$/);
     expect(within(rows[2]).getByTestId('gone-added').textContent).toMatch(/^Added manually · 20 Sep( 2026)?$/);
     expect(within(rows[0]).getByText('In the app')).toBeTruthy();
     expect(within(rows[1]).queryByText('In the app')).toBeNull();
@@ -427,12 +427,29 @@ describe('a first import', () => {
     expect(screen.getByRole('button', { name: 'Show more (29)' })).toBeTruthy();
   });
 
+  it('beside the new members, everyone already on your list, and See who opens them (Kd, 2026-09-29)', async () => {
+    await reviewWith(preview({ list: list({ new: 3, unchanged: 35, canBeInvited: 3 }) }));
+    const hero = within(screen.getByTestId('hero'));
+    expect(within(hero.getByTestId('hero-new')).getByText('3')).toBeTruthy();
+    expect(within(hero.getByTestId('hero-new')).getByText('new members')).toBeTruthy();
+    const already = within(hero.getByTestId('hero-already'));
+    expect(already.getByText('35')).toBeTruthy();
+    expect(already.getByText('already on your list')).toBeTruthy();
+    orgService.getMemberListRows.mockResolvedValueOnce(page('unchanged', [person('Ada Lovelace')], 35, 1));
+    fireEvent.click(already.getByRole('button', { name: 'See who' }));
+    expect(await screen.findByText('Ada Lovelace')).toBeTruthy();
+    expect(orgService.getMemberListRows).toHaveBeenCalledWith(GYM, UPLOAD, 'unchanged', 0);
+    expect(already.getByRole('button', { name: 'Hide' })).toBeTruthy();
+    // The button still names only the new people: nobody else changes.
+    expect(importButton().textContent).toBe('Import 3 members');
+  });
+
   it('shows the tiles, not one number, when people are also updated', async () => {
     await reviewWith(preview({ list: list({ new: 3, changed: 6, unchanged: 30 }), mode: 'add' }));
     expect(screen.queryByTestId('hero')).toBeNull();
     expect(screen.getByRole('button', { name: /3\s*New/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /6\s*Updated/ })).toBeTruthy();
-    expect(screen.getByText('30 already up to date')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /30\s*Already on your list/ })).toBeTruthy();
     expect(importButton().textContent).toBe('Import');
   });
 });

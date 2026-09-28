@@ -11,6 +11,7 @@ import {
   Lock,
   RefreshCw,
   Upload,
+  UserCheck,
   UserPlus,
   X,
 } from 'lucide-react';
@@ -97,6 +98,25 @@ function Badge({ icon: Icon, tone, size = 32 }) {
     >
       <Icon style={{ width: size * 0.5, height: size * 0.5 }} strokeWidth={2.2} />
     </span>
+  );
+}
+
+/** One of Review's big numbers, with See who under it: "3 new members", "35 already on your
+ *  list" (Kd, 2026-09-29: "should show beside … 35 members already in your list and if
+ *  clicked … can see who these people are"). */
+function BigCount({ n, label, open, onToggle, testId }) {
+  return (
+    <div className="min-w-0" data-testid={testId}>
+      <div className="text-6xl font-extrabold tracking-tight" style={{ color: '#fff' }}>
+        {count(n)}
+      </div>
+      <div className="text-[17px] mt-1.5" style={{ color: C.soft }}>
+        {label}
+      </div>
+      <button type="button" onClick={onToggle} className={`${LINK} mt-2`} style={{ color: C.orange }}>
+        {open ? 'Hide' : 'See who'}
+      </button>
+    </div>
   );
 }
 
@@ -719,41 +739,49 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
           </button>
         </div>
 
-        {preview.needsMapping ? null : summary.hero !== null ? (
-          <div className="text-center pt-3 pb-1" data-testid="hero">
-            <div className="text-6xl font-extrabold tracking-tight" style={{ color: '#fff' }}>
-              {count(summary.hero)}
-            </div>
-            <div className="text-[17px] mt-1.5" style={{ color: C.soft }}>
-              new {peopleWord(summary.hero, words)}
-            </div>
-            <button type="button" onClick={() => toggleGroup('new')} className={`${LINK} mt-2`} style={{ color: C.orange }}>
-              {openGroup === 'new' ? 'Hide' : 'See who'}
-            </button>
-          </div>
-        ) : summary.nothing ? (
-          // Nothing new or updated. With people missing, the question below is the
-          // whole story, so only the unchanged count sits above it.
-          missing !== null ? (
-            summary.unchanged > 0 ? (
-              <p className="text-[13px] text-center" style={{ color: C.muted }}>
-                {count(summary.unchanged)} already up to date
-              </p>
-            ) : null
-          ) : (
-            <div className="text-center pt-3 pb-1">
-              <div className="text-2xl font-bold" style={{ color: '#fff' }}>
-                No changes
-              </div>
-              <div className="text-sm mt-1" style={{ color: C.muted }}>
-                {count(summary.unchanged)} already up to date
-              </div>
+        {preview.needsMapping ? null : summary.hero !== null || (summary.nothing && missing !== null) ? (
+          // The new members, and beside them everyone already on the list, each with who.
+          // With nothing new and people missing, the question below is the rest of it.
+          summary.hero === null && summary.unchanged === 0 ? null : (
+            <div
+              className={`text-center pt-3 pb-1 grid gap-2.5 ${summary.hero !== null && summary.unchanged > 0 ? 'grid-cols-2' : 'grid-cols-1'}`}
+              data-testid="hero"
+            >
+              {summary.hero !== null ? (
+                <BigCount n={summary.hero} label={`new ${peopleWord(summary.hero, words)}`} open={openGroup === 'new'} onToggle={() => toggleGroup('new')} testId="hero-new" />
+              ) : null}
+              {summary.unchanged > 0 ? (
+                <BigCount
+                  n={summary.unchanged}
+                  label="already on your list"
+                  open={openGroup === 'unchanged'}
+                  onToggle={() => toggleGroup('unchanged')}
+                  testId="hero-already"
+                />
+              ) : null}
             </div>
           )
+        ) : summary.nothing ? (
+          <div className="text-center pt-3 pb-1">
+            <div className="text-2xl font-bold" style={{ color: '#fff' }}>
+              No changes
+            </div>
+            <div className="text-sm mt-1" style={{ color: C.muted }}>
+              {count(summary.unchanged)} already on your list
+            </div>
+            {summary.unchanged > 0 ? (
+              <button type="button" onClick={() => toggleGroup('unchanged')} className={`${LINK} mt-2`} style={{ color: C.orange }}>
+                {openGroup === 'unchanged' ? 'Hide' : 'See who'}
+              </button>
+            ) : null}
+          </div>
         ) : (
           <div>
-            <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${String(summary.tiles.length)}, minmax(0, 1fr))` }}>
-              {summary.tiles.map((t) => {
+            <div
+              className="grid gap-2.5"
+              style={{ gridTemplateColumns: `repeat(${String(summary.tiles.length + (summary.unchanged > 0 ? 1 : 0))}, minmax(0, 1fr))` }}
+            >
+              {[...summary.tiles, ...(summary.unchanged > 0 ? [{ group: 'unchanged', n: summary.unchanged, label: 'Already on your list' }] : [])].map((t) => {
                 const isNew = t.group === 'new';
                 return (
                   <button
@@ -764,7 +792,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
                     className="rounded-[18px] p-3.5 text-left"
                     style={{ background: C.card, border: `1px solid ${openGroup === t.group ? 'rgba(255,138,31,0.55)' : C.line}` }}
                   >
-                    <Badge icon={isNew ? UserPlus : RefreshCw} tone={isNew ? 'green' : 'plain'} />
+                    <Badge icon={isNew ? UserPlus : t.group === 'unchanged' ? UserCheck : RefreshCw} tone={isNew ? 'green' : 'plain'} />
                     <span className="block text-[28px] font-extrabold leading-none mt-2.5" style={{ color: '#fff' }}>
                       {count(t.n)}
                     </span>
@@ -775,11 +803,6 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
                 );
               })}
             </div>
-            {summary.unchanged > 0 ? (
-              <p className="text-[13px] text-center mt-2.5" style={{ color: C.muted }}>
-                {count(summary.unchanged)} already up to date
-              </p>
-            ) : null}
           </div>
         )}
 

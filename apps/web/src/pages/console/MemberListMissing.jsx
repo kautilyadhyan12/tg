@@ -71,7 +71,7 @@ export default function MemberListMissing({ missing, left, onLeft, disabled }) {
                   </div>
                 ) : p.wasStatus ? (
                   <div className="text-xs mt-0.5" style={{ color: C.soft }} data-testid="gone-facts">
-                    {p.wasStatus}
+                    Status: {p.wasStatus}
                   </div>
                 ) : null}
                 {gone !== null && gone.added !== null ? (
