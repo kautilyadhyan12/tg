@@ -485,6 +485,8 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
   };
 
   const chooseLeft = () => {
+    // A number asked about keeping everyone is not the one They've left asks (re-check).
+    setKeepAsked(false);
     // From an add read the file is read as the whole list again, and the fresh question
     // is answered on its own names.
     if (preview.mode === 'add') void read(source, 'whole_list', mapping);

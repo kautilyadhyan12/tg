@@ -94,7 +94,7 @@ import * as repo from "./repo.js";
 import { inAppRecordIds, pastRecordOf } from "./whose.js";
 import { withdrawForAccounts, withdrawForAddresses } from "../invites/join.js";
 import { bustAfterRemoval } from "./byHandService.js";
-import { importLeaversPlanOn, importNeedsLargeTick, requireForPlan, requireRemoveForLeft, type RemovalPlan } from "./removeSelected.js";
+import { importLeaversPlanOn, importNeedsLargeTick, requireForPlan, type RemovalPlan } from "./removeSelected.js";
 
 export interface MemberListDeps {
   sql: Sql;
@@ -576,11 +576,8 @@ async function stagedOr409(
   gymId: string,
   uploadId: string,
   limit: () => Promise<boolean>,
-  /** A further role check, after `members.confirm` and before the allowance is spent. */
-  precheck?: (privileges: readonly string[]) => Promise<void>,
 ): Promise<repo.UploadRow | null> {
-  const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
-  if (precheck !== undefined) await precheck(privileges);
+  await requirePrivilege(deps, gymId, userId, "members.confirm");
   // After the gate, never before it (the file header says why): a stranger's 404
   // and a trainer's 403 must not spend the front desk's own allowance.
   if (!(await limit())) return null;
@@ -1035,12 +1032,12 @@ export async function previewLeavers(
   marks: MemberListMarks,
   limit: () => Promise<boolean>,
 ): Promise<MemberListLeavers | null> {
-  let privileges: readonly string[] = [];
-  const upload = await stagedOr409(deps, userId, gymId, uploadId, limit, async (held) => {
-    privileges = held;
-    await requireRemoveForLeft(deps.sql, gymId, held, marks.left);
-  });
+  const upload = await stagedOr409(deps, userId, gymId, uploadId, limit);
   if (upload === null) return null;
+  // Whether this needs `members.remove` is known only once the file is compared: its own
+  // writes can spare a leaver's app ("in_file"), so the check follows the comparison, as
+  // Remove's box does (re-check of round one).
+  const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   const state = await repo.listState(deps.sql, gymId);
   const version = state?.version ?? 0;
   if (version !== upload.baseVersion) {
@@ -1085,7 +1082,6 @@ export async function confirmUpload(
 ): Promise<ConfirmAnswer> {
   await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
-  if (input.marks !== null) await requireRemoveForLeft(deps.sql, gymId, privileges, input.marks.left);
   if (!(await limit())) return { kind: "rate_limited" };
   const at = deps.now();
   const settings = deps.invites ?? null;

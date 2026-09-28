@@ -576,6 +576,37 @@ d("Import: who has left, person by person (real Postgres)", () => {
   );
 
   it(
+    "a desk without app removal imports a file whose leaver keeps the app (the file writes to his email): the box and the press go through, and nobody's app ends (re-check Low)",
+    async () => {
+      const gym = await makeGym();
+      const park = addr(`desk-park-${String(gymCount)}`);
+      const leo = await add(gym, "Leo Park", park);
+      await add(gym, "Lily Park", park);
+      const leoUser = await signIn(park, "Leo Park");
+      await accept(leoUser);
+      const desk = await staffWith(gym, ["members.read", "members.confirm"]);
+      const uploadId = await upload(
+        gym,
+        [
+          ["Lily Park", park, "Active"],
+          ["Mia Park", park, "Active"],
+        ],
+        desk,
+      );
+      const missing = await missingOf(gym, uploadId, desk);
+      const marks = marksOf(missing, [leo]);
+      const box = await leaversOf(gym, uploadId, marks, desk);
+      expect(box.preview.endApp).toEqual([]);
+      expect(box.preview.kept.map((k) => k.reason)).toEqual(["in_file"]);
+      const res = await confirm(gym, uploadId, { marks, leaversDigest: box.preview.digest }, desk);
+      expect(res.statusCode, res.body).toBe(200);
+      expect(await former(gym, leo)).toBe(true);
+      expect(await inApp(gym, leoUser)).toBe(true);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "the box for a file that leaves nobody out says the list changed, not that someone is unmarked",
     async () => {
       const gym = await makeGym();

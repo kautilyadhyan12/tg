@@ -297,6 +297,43 @@ describe('the worst thing: nobody leaves who was not answered for', () => {
     });
   });
 
+  it("choosing They've left after a refused keep press forgets that number, so a later keep never shows They've left's (re-check Low)", async () => {
+    orgService.getMemberListMissing.mockResolvedValueOnce(missingRead([olivia]));
+    await reviewWith(oneMissing());
+    await screen.findAllByTestId('missing-row');
+    fireEvent.click(choice(/They're still members/));
+    tickPermission();
+    orgService.confirmMemberList.mockRejectedValueOnce(
+      refusal(409, {
+        error: 'large_change',
+        message: 'This would change more of your list than we apply without asking.',
+        guard: { entriesGoing: 0, listSize: 12, membersLeaving: 11, membersListedNow: 11, needsTick: true, mostOfListWouldGo: false },
+      }),
+    );
+    fireEvent.click(importButton());
+    expect(await screen.findByTestId('keep-typing')).toBeTruthy();
+
+    // They've left instead; its box's press is refused with the leavers' own numbers.
+    fireEvent.click(choice(/They've left/));
+    orgService.getMemberListLeavers.mockResolvedValueOnce(leaversRead({ move: [who('Olivia Walker', 1)] }));
+    fireEvent.click(importButton());
+    const box = within(await screen.findByTestId('leavers-box'));
+    orgService.confirmMemberList.mockRejectedValueOnce(
+      refusal(409, {
+        error: 'large_change',
+        message: 'This would change more of your list than we apply without asking.',
+        guard: { entriesGoing: 25, listSize: 30, membersLeaving: 0, membersListedNow: 4, needsTick: true, mostOfListWouldGo: true },
+      }),
+    );
+    fireEvent.click(box.getByRole('button', { name: 'Import and move 1 to past members' }));
+    await waitFor(() => expect(screen.queryByTestId('leavers-box')).toBeNull());
+
+    // Back to keep: no number from They've left is asked for.
+    fireEvent.click(choice(/They're still members/));
+    expect(screen.queryByTestId('keep-typing')).toBeNull();
+    expect(screen.queryByText(/would come off your list/)).toBeNull();
+  });
+
   it('the card says what a tick does, and with people ticked They\'re still members says it keeps them too (round one, Low-2)', async () => {
     orgService.getMemberListMissing.mockResolvedValueOnce(missingRead([olivia, liam]));
     await reviewWith(preview({ list: list({ unchanged: 4, gone: 2 }), guard: { ...calm, entriesGoing: 2, listSize: 6 } }));
