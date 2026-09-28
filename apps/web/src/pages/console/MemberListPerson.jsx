@@ -239,7 +239,9 @@ function CompareRecords({ keep, remove, fields, person }) {
   );
 }
 
-export default function MemberListPerson({ gymId, gym, entryId, list, words, readOnly, onClose, onChanged }) {
+// `canRemove` is the viewer's `members.remove`: without it nothing that ends somebody's app is
+// offered (the server refuses it too), as the In the app sheet hides its Remove.
+export default function MemberListPerson({ gymId, gym, entryId, list, words, readOnly, canRemove = false, onClose, onChanged }) {
   const titleId = useId();
   const dialogRef = useRef(null);
   const fields = list?.fields ?? [];
@@ -724,7 +726,9 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             ...(p.invitation?.state === 'pending' && action !== 'under_age'
               ? [{ label: 'Share the invitation', hint: 'Its words and link, to send yourself', icon: Copy, onPick: () => ask('share') }]
               : []),
-            { label: 'Remove', hint: `When they have left your ${words.it ?? 'gym'}`, icon: UserMinus, danger: true, onPick: () => ask('takeOff') },
+            ...(canRemove || !p.removeEndsApp
+              ? [{ label: 'Remove', hint: `When they have left your ${words.it ?? 'gym'}`, icon: UserMinus, danger: true, onPick: () => ask('takeOff') }]
+              : []),
             { label: 'Merge duplicate', hint: 'When this person is on your list twice', icon: ArrowLeftRight, onPick: startJoin },
           ]}
         />
@@ -769,10 +773,12 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           // Remove from app, as from "In the app" (Kd, 2026-09-27: one card in both places).
           <div className="c-callout items-center flex-wrap" data-testid="past-in-app">
             <AlertTriangle aria-hidden="true" className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--warn)' }} />
-            <span className="c-s14 flex-1 min-w-[180px]">{invitationView(p, gymToday(gym?.timezone)).detail ?? `${p.fullName || 'They'} still uses the app through your ${words.it ?? 'gym'}.`}</span>
-            <button type="button" onClick={() => ask('takeOff')} disabled={busy || readOnly} className="c-btn c-btn-s c-btn-sm">
-              Remove from app
-            </button>
+            <span className="c-s14 flex-1 min-w-[180px]">{invitationView(p, gymToday(gym?.timezone)).detail ?? `${p.fullName || 'They'} is still in the app through your ${words.it ?? 'gym'}.`}</span>
+            {canRemove ? (
+              <button type="button" onClick={() => ask('takeOff')} disabled={busy || readOnly} className="c-btn c-btn-s c-btn-sm">
+                Remove from app
+              </button>
+            ) : null}
           </div>
         ) : null}
         {renderButtons(p, action)}
@@ -807,13 +813,13 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
               <div key={m.userId} className="py-2 flex gap-3 items-start" data-testid="in-app-person">
                 <Smartphone aria-hidden="true" className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: 'var(--good)' }} />
                 <div className="c-s14 c-t2 flex-1 min-w-0">
-                  <span className="c-t1 c-w5">{m.displayName}</span> joined {whenWords(m.joinedAt)}
+                  <span className="c-t1 c-w5">{m.displayName}</span> · In the app since {whenWords(m.joinedAt)}
                   <span className="block c-s13 c-t3">
                     {m.visits === 1 ? '1 visit' : `${String(m.visits)} visits`}
                     {m.lastVisitOn !== null ? ` · last ${dayWords(m.lastVisitOn)}` : ''}
                   </span>
                 </div>
-                {p.formerAt === null && !m.sharedEmail ? (
+                {canRemove && p.formerAt === null && !m.sharedEmail ? (
                   <button
                     type="button"
                     onClick={() => {
@@ -966,7 +972,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           )}
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => void takeOff()} disabled={busy || readOnly} className={DANGER}>
-              Remove
+              {past ? 'Remove access' : 'Remove'}
             </button>
             {cancel()}
           </div>

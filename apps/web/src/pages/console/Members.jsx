@@ -546,6 +546,7 @@ export default function Members() {
           onActionTaken={clearAction}
           emptyExtra={<AlreadyInApp items={state.items} />}
           onRosterChanged={reloadRoster}
+          canRemove={canRemove}
         />
       ) : null}
 
@@ -678,6 +679,7 @@ export default function Members() {
           list={recordList}
           words={words}
           readOnly={readOnly}
+          canRemove={canRemove}
           onClose={() => setOpenRecord(null)}
           onChanged={() => {
             reloadRoster();

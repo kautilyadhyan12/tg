@@ -109,6 +109,7 @@ function openBox(entryId, extra = {}) {
       list={LIST}
       words={WORDS}
       readOnly={false}
+      canRemove
       onClose={onClose}
       onChanged={onChanged}
       {...extra}
@@ -611,6 +612,9 @@ describe('a person on the list', () => {
       openBox(ADA);
       const who = within(await screen.findByTestId('in-app-person'));
       expect(who.getByText('du')).toBeTruthy();
+      // Round one of 5b-v-c, L3: §18.3's words, never "joined".
+      expect(who.getByText(/· In the app since 7 September 2026/)).toBeTruthy();
+      expect(who.queryByText(/joined/)).toBeNull();
       expect(dialog().queryByText(/Check this is them/)).toBeNull();
       expect(who.getByRole('button', { name: 'Not Daniel Wu?' })).toBeTruthy();
     });
@@ -666,7 +670,9 @@ describe('a person on the list', () => {
     expect(box.getByText(/already a past member\. This removes their access to your gym in the app\./)).toBeTruthy();
     const done = { ...grace, inApp: false, removeEndsApp: false, app: { word: 'not_in_app', tone: 'grey', at: '2026-09-27T10:00:00.000Z', line: 'Removed from app', lineTone: 'plain' } };
     orgService.takeOffMemberListEntry.mockResolvedValue(written('removed_from_app', done));
-    fireEvent.click(box.getByRole('button', { name: 'Remove' }));
+    // Round one of 5b-v-c, L2: the button says what it takes away.
+    expect(box.queryByRole('button', { name: 'Remove' })).toBeNull();
+    fireEvent.click(box.getByRole('button', { name: 'Remove access' }));
     await waitFor(() => expect(orgService.takeOffMemberListEntry).toHaveBeenCalledWith(GYM, ADA));
     expect(await dialog().findByText('App access removed. They remain a past member.')).toBeTruthy();
   });
@@ -740,6 +746,40 @@ describe('a person on the list', () => {
     fireEvent.change(dialog().getByLabelText('Email'), { target: { value: 'nope' } });
     fireEvent.click(dialog().getByRole('button', { name: 'Save' }));
     expect(await dialog().findByText(/doesn't look right/)).toBeTruthy();
+  });
+
+  it("round one of 5b-v-c, L1: without members.remove, nothing that ends somebody's app is offered", async () => {
+    const DAN = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    const inApp = {
+      ...person(ADA, 'Daniel Wu'),
+      inApp: true,
+      removeEndsApp: true,
+      app: { word: 'in_app', tone: 'green', at: null, line: null, lineTone: 'plain' },
+      members: [{ userId: DAN, displayName: 'du', joinedAt: '2026-09-07T10:00:00.000Z', visits: 0, lastVisitOn: null }],
+    };
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer(inApp));
+    openBox(ADA, { canRemove: false });
+    const who = within(await screen.findByTestId('in-app-person'));
+    expect(who.queryByRole('button', { name: /^Not / })).toBeNull();
+    fireEvent.click(dialog().getByRole('button', { name: /^More/ }));
+    expect(dialog().queryByRole('menuitem', { name: /^Remove/ })).toBeNull();
+    expect(dialog().getByRole('menuitem', { name: /^Merge duplicate/ })).toBeTruthy();
+    cleanup();
+
+    // A past member still in the app: the amber line stays, its button goes.
+    const grace = { ...person(ADA, 'Grace Hall'), formerAt: '2026-09-25T10:00:00.000Z', inApp: true, removeEndsApp: true };
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer(grace));
+    openBox(ADA, { canRemove: false });
+    const line = within(await dialog().findByTestId('past-in-app'));
+    expect(line.getByText(/Grace Hall is still in the app through your gym\./)).toBeTruthy();
+    expect(line.queryByRole('button', { name: 'Remove from app' })).toBeNull();
+    cleanup();
+
+    // Nobody uses the app with this record: Remove only moves it, which the list's tick allows.
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer(ada));
+    openBox(ADA, { canRemove: false });
+    fireEvent.click(await dialog().findByRole('button', { name: /^More/ }));
+    expect(dialog().getByRole('menuitem', { name: /^Remove/ })).toBeTruthy();
   });
 
   it('greys every change on a gym whose plan has lapsed', async () => {

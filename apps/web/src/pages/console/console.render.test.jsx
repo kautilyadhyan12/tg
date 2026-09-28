@@ -1629,6 +1629,52 @@ describe('Removing a member', () => {
     expect(screen.queryByText('Add to your list')).toBeNull();
   });
 
+  it("round one of 5b-v-c, L1: a person's page offers Remove from app only to staff who hold members.remove", async () => {
+    const RECORD = '99999999-9999-4999-8999-999999999999';
+    const grace = { ...joinedMemberWithForbiddenExtras, userId: 'u9', displayName: 'Grace Hall', recordId: RECORD };
+    const page9 = {
+      data: {
+        entry: memberListEntryDetailSchema.parse({
+          entryId: RECORD,
+          fullName: 'Grace Hall',
+          email: 'grace@members.example',
+          phone: null,
+          memberNumber: null,
+          status: 'Active',
+          membershipType: null,
+          joinedOn: null,
+          endsOn: null,
+          endsOnKind: null,
+          paymentStatus: null,
+          dateOfBirth: null,
+          formerAt: '2026-09-25T09:00:00.000Z',
+          source: 'upload',
+          inApp: true,
+          invitation: null,
+          app: { word: 'in_app', tone: 'amber', at: null, line: 'Grace still uses the app through your gym.', lineTone: 'amber' },
+          extra: [],
+          handEdited: [],
+          members: [],
+          removeEndsApp: true,
+        }),
+      },
+    };
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, grace]));
+    orgService.getMemberListEntry.mockResolvedValue(page9);
+    drawMembers();
+    fireEvent.click(await screen.findByText('Grace Hall'));
+    let line = within(await screen.findByTestId('past-in-app'));
+    expect(line.getByRole('button', { name: 'Remove from app' })).toBeTruthy();
+    cleanup();
+    resetConsoleOrgs();
+
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'manager', privileges: ['members.read', 'members.confirm'] }] } });
+    drawMembers();
+    fireEvent.click(await screen.findByText('Grace Hall'));
+    line = within(await screen.findByTestId('past-in-app'));
+    expect(line.queryByRole('button', { name: 'Remove from app' })).toBeNull();
+  });
+
   it("Open their details (5b-v-c): someone not on your list opens the member who has their email, and only that member", async () => {
     const ARJUN = '88888888-8888-4888-8888-888888888888';
     const priya = {

@@ -239,6 +239,7 @@ export default function MemberListPanel({
   onActionTaken = () => undefined,
   emptyExtra = null,
   onRosterChanged = () => undefined,
+  canRemove = false,
 }) {
   const [list, setList] = useState(null);
   const [listError, setListError] = useState(null);
@@ -547,6 +548,7 @@ export default function MemberListPanel({
             gymId={gymId}
             gym={gym}
             entryId={openId}
+            canRemove={canRemove}
             list={list}
             words={words}
             readOnly={readOnly}
@@ -726,6 +728,7 @@ export default function MemberListPanel({
           filters={filters}
           words={words}
           readOnly={readOnly}
+          canRemove={canRemove}
           preview={null}
           selection={selection}
           onSelectionChanged={selectionMoved}
@@ -763,6 +766,7 @@ export default function MemberListPanel({
           filters={filters}
           words={words}
           readOnly={readOnly}
+          canRemove={canRemove}
           preview={invitePreview}
           onSent={() => {
             keepLoaded.current = page.entries.length;
@@ -910,6 +914,7 @@ export default function MemberListPanel({
           gymId={gymId}
           gym={gym}
           entryId={openId}
+          canRemove={canRemove}
           list={list}
           words={words}
           readOnly={readOnly}
