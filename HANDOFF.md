@@ -13,7 +13,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Cost** (mains, 2,592 MHz): adding a 2.0 MB photo 80–169 ms, answering nobody ≤ 30 ms; the public page 11–30 ms (≤ 7); its ten photos over HTTP 406–991 ms, ≤ 21 ms; reorder 47–310 ms, remove 50–82 ms (≤ 16).
 - **Seen in headless Edge (CDP, 1440 and 390):** the page and the panel fit the screen; the panel's tiles were uneven (one button on the main photo), now two rows each ("The main photo").
 - **Kd's click-through:** photos were cropped to their boxes (panel and page) and the panel had no way to see one whole. Now every photo is shown whole (`object-contain`; the main photo at its own shape, up to 70 % of the screen tall) and a tap opens it full size in the panel too, a photo not saved yet included (`PhotoViewer`, shared by both). Tests RED on the old screens, then web 40/40 in the three photo files. Seen in Edge at 1440 and 390.
-- **Open:** the rest of Kd's click-through, then round one of review. The two extra passes run once over 20c (i–v) before a real gym uses Leads.
+- **Kd's click-through: "all passed".**
+- **Open:** round one of review. The two extra passes run once over 20c (i–v) before a real gym uses Leads.
 
 ## 2026-09-28 · 5b-v-c (Folder A): a person's page (branch `members-person-page`)
 
