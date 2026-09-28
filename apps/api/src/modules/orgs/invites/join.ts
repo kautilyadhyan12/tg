@@ -332,3 +332,20 @@ export async function withdrawForAddress(
     at: input.at,
   });
 }
+
+/** `withdrawForAddress` for several records taken off together, asked once they are all
+ *  off: an address no current record holds any more has its invitation withdrawn. */
+export async function withdrawForAddresses(
+  tx: TransactionSql,
+  settings: InviteSettings | null,
+  input: { gymId: string; emails: readonly string[]; at: Date },
+): Promise<number> {
+  if (settings === null || input.emails.length === 0) return 0;
+  const held = await repo.heldAddresses(tx, input.gymId, input.emails);
+  const free = [...new Set(input.emails.map((email) => email.toLowerCase()))].filter((email) => !held.has(email));
+  return await repo.withdrawInvitations(tx, {
+    gymId: input.gymId,
+    hmacs: free.map((email) => emailHmac(settings.hmacKey, email)),
+    at: input.at,
+  });
+}

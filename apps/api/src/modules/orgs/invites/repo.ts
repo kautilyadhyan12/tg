@@ -150,6 +150,15 @@ export async function addressHolders(sql: SqlOrTx, gymId: string, email: string)
   return rows.map((row) => ({ entryId: row.id, phone: row.phone_e164, dateOfBirth: row.date_of_birth }));
 }
 
+/** Of these addresses, the ones a current record of this gym still holds. */
+export async function heldAddresses(sql: SqlOrTx, gymId: string, emails: readonly string[]): Promise<Set<string>> {
+  if (emails.length === 0) return new Set();
+  const rows = await sql<{ email: string }[]>`
+    SELECT DISTINCT lower(email::text) AS email FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND former_at IS NULL AND email = ANY(${[...emails]}::citext[])`;
+  return new Set(rows.map((row) => row.email));
+}
+
 /** The gym's time zone, for its own calendar day. */
 export async function gymTimeZone(sql: SqlOrTx, gymId: string): Promise<string> {
   const rows = await sql<{ timezone: string }[]>`SELECT timezone FROM gyms WHERE id = ${gymId}`;

@@ -1496,7 +1496,7 @@ export async function claimSeatByInvitation(
 
 /** How many paid places the gym's live members hold: `claimSeat`'s count, which Put back
  *  asks too (`placesFree`). */
-async function paidPlacesUsed(tx: SqlOrTx, gymId: string): Promise<number> {
+export async function paidPlacesUsed(tx: SqlOrTx, gymId: string): Promise<number> {
   const rows = await tx<{ n: number }[]>`
     SELECT count(*)::int AS n FROM gym_members m
     WHERE m.gym_id = ${gymId} AND m.removed_at IS NULL

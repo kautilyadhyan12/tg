@@ -446,7 +446,7 @@ export async function takeOff(
 
 /** After the commit, as a single removal does: their gym perks end at once. A failed bust
  *  leaves the cached answer to expire on its own (60 s), so it is warned about. */
-async function bustAfterRemoval(deps: MemberListDeps, gymId: string, userIds: readonly string[]): Promise<void> {
+export async function bustAfterRemoval(deps: MemberListDeps, gymId: string, userIds: readonly string[]): Promise<void> {
   if (userIds.length === 0) return;
   const results = await Promise.allSettled(userIds.map((member) => bustEntitlements(deps.redis, member)));
   const failed = results.filter((result) => result.status === "rejected").length;

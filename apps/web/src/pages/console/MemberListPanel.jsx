@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Check, ChevronRight, Download, Loader2, Mail, Minus, Search, SlidersHorizontal, Upload, UserPlus, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronRight, Download, Loader2, Mail, Minus, Search, SlidersHorizontal, Upload, UserMinus, UserPlus, X } from 'lucide-react';
 import { MEMBER_APP_FILTER_WORDS, MEMBER_LIST_QUERY_MAX_CHARS, MEMBER_LIST_TICKED_MAX } from '@app/shared';
 import { orgService, errorText, blobError, selectionChanged } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import MemberListInvite from './MemberListInvite';
 import MemberListPerson from './MemberListPerson';
+import MemberListRemove from './MemberListRemove';
 import MemberListUpload from './MemberListUpload';
 import {
   CHIP_KINDS,
@@ -39,9 +40,10 @@ import {
 //
 // Selecting people (§18.5; ROADMAP 5b-v-b-i): a tick box on every row and on the heading,
 // "Select all 312 members" once a page is ticked, and a bar over the people selected —
-// "3 selected · Invite to app · Download CSV · Clear" — which acts on them and nobody else
-// (CLAUDE.md §4). The toolbar's Invite stays for everyone the Filter's words choose (Kd,
-// 2026-09-28). A new filter or search clears the selection.
+// "3 selected · Invite to app · Remove · Download CSV · Clear" — which acts on them and nobody
+// else (CLAUDE.md §4). The toolbar's Invite stays for everyone the Filter's words choose (Kd,
+// 2026-09-28). A new filter or search clears the selection. Remove (5b-v-b-ii) opens a box
+// naming who moves to past members, who loses the app and who doesn't change.
 
 const count = (n) => n.toLocaleString('en');
 
@@ -159,7 +161,7 @@ function FilterBox({ list, filters, words, total, onChange, onClear, onClose }) 
 const NOBODY = new Set();
 
 /** A tick box (§18.5): on, off, or "some" (the heading, when only some rows are ticked). */
-function Tick({ state, label, onClick }) {
+export function Tick({ state, label, onClick }) {
   return (
     <button
       type="button"
@@ -261,6 +263,9 @@ export default function MemberListPanel({
   const [selNote, setSelNote] = useState(null);
   /** Invite's page opened from the bar, over the people selected. */
   const [invitingSelected, setInvitingSelected] = useState(false);
+  /** The people the Remove box was opened for: it keeps them after the list behind clears
+   *  its selection, so the box can say what was done. */
+  const [removeFor, setRemoveFor] = useState(null);
   /** The newest request for a page: an answer to an older one is dropped. */
   const latest = useRef(0);
   /** How many names were loaded when a change asked for the list again, so the re-read
@@ -475,6 +480,26 @@ export default function MemberListPanel({
     }
   };
   const matchWord = filtersAreEmpty(filters) ? '' : ' that match';
+  // The Remove box reads and presses for the people selected now; a "Select all" that moved
+  // gives a new selection, and so a new read.
+  const loadRemove = useCallback(() => orgService.previewRemoveSelected(gymId, removeFor).then((res) => res.data.preview), [gymId, removeFor]);
+  const pressRemove = useCallback(
+    (digest, large) => orgService.removeSelected(gymId, removeFor, digest, large).then((res) => res.data.removed),
+    [gymId, removeFor],
+  );
+  const removeMoved = useCallback(
+    (fresh) => {
+      selectionMoved(fresh);
+      setRemoveFor((r) => (r === null || r.kind !== 'all' ? r : { ...r, count: fresh.count, digest: fresh.digest }));
+    },
+    [selectionMoved],
+  );
+  const removedSelected = useCallback(() => {
+    setSel({ for: filters, ticked: NOBODY, all: null });
+    keepLoaded.current = page.entries.length;
+    setTick((n) => n + 1);
+    onRosterChanged();
+  }, [filters, page.entries.length, onRosterChanged]);
 
   const noList = list !== null && !list.hasList && list.counts.entries === 0 && former === 0;
   const today = gymToday(gym?.timezone);
@@ -542,13 +567,20 @@ export default function MemberListPanel({
   /** "12 members", "1 past member". */
   const peopleWords = (k) => `${count(k)} ${current ? '' : 'past '}${k === 1 ? words.person : words.people}`;
   // The bar's buttons (§18.5): Invite only for current members and a gym that can send;
-  // Download CSV always, a read-only gym included (it changes nobody).
+  // Remove for a gym that can change its list (past members: Remove from app); Download CSV
+  // always, a read-only gym included (it changes nobody).
   const barButtons = (
     <>
       {current && !readOnly ? (
         <button type="button" onClick={() => setInvitingSelected(true)} data-testid="bar-invite" className="c-btn c-btn-soft c-btn-sm">
           <Mail aria-hidden="true" className="w-4 h-4" />
           Invite to app
+        </button>
+      ) : null}
+      {!readOnly ? (
+        <button type="button" onClick={() => setRemoveFor(selection)} data-testid="bar-remove" className="c-btn c-btn-danger c-btn-sm">
+          <UserMinus aria-hidden="true" className="w-4 h-4" />
+          {current ? 'Remove' : 'Remove from app'}
         </button>
       ) : null}
       <button type="button" onClick={() => void download(selection)} disabled={downloading} data-testid="bar-download" className="c-btn c-btn-s c-btn-sm">
@@ -692,6 +724,19 @@ export default function MemberListPanel({
             onRosterChanged();
           }}
           onClose={() => setInvitingSelected(false)}
+        />
+      ) : null}
+
+      {removeFor !== null ? (
+        <MemberListRemove
+          door={current ? 'list' : 'past'}
+          gym={gym}
+          words={words}
+          load={loadRemove}
+          press={pressRemove}
+          onSelectionChanged={removeMoved}
+          onRemoved={removedSelected}
+          onClose={() => setRemoveFor(null)}
         />
       ) : null}
 

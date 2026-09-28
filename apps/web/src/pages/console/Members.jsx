@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, ChevronRight, Loader2, Search, Upload, UserPlus, X } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Loader2, Search, Upload, UserMinus, UserPlus, X } from 'lucide-react';
 import { ConfirmInline, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { orgService, errorText, errorCode } from '../../api/orgsApi';
 import { useConsoleOrg } from './useConsoleOrg';
 import ApplicationsQueue from './ApplicationsQueue';
-import MemberListPanel from './MemberListPanel';
+import MemberListPanel, { Tick } from './MemberListPanel';
 import MemberListPerson from './MemberListPerson';
-import { orgWords } from '@app/shared';
+import MemberListRemove from './MemberListRemove';
+import { MEMBER_REMOVE_TICKED_MAX, orgWords } from '@app/shared';
 import {
   canRemoveMembers,
   viewerPrivileges,
@@ -23,7 +24,9 @@ import PlanChoiceDialog from '../../components/console/PlanChoiceDialog';
 // The Members screen (spec Part 3 §4.3, §18.2), drawn from `console.css` (spec §17):
 // the title with the plan meter, Import and Add member, Waiting to join, and two tabs —
 // "Your list" (the gym's own list, `MemberListPanel`) and "In the app" (the roster; kept
-// as its own tab, Kd 2026-09-28).
+// as its own tab, Kd 2026-09-28). On "In the app", staff who may remove people tick them and
+// press Remove (5b-v-b-ii): a box names who loses the app, whose record moves to past
+// members, and who doesn't change.
 //
 // The roster holds EXACTLY to §2.4's visibility boundary: display name, the day they
 // joined, the label of the code that brought them in, whether their seat is
@@ -33,18 +36,24 @@ import PlanChoiceDialog from '../../components/console/PlanChoiceDialog';
 // exact count off the org row, never the length of a page of the roster.
 
 /** One person in the app, as Leads shows a lead: their name, since when, and one tag.
- *  Everything to do with them is on their panel (`RosterSheet`). */
-function RosterRow({ member, onOpen }) {
+ *  Everything to do with them is on their panel (`RosterSheet`). `picked` is null where
+ *  staff can't tick people (a trainer, a read-only gym). */
+function RosterRow({ member, onOpen, picked = null, onTick }) {
   // An app member the gym's list does not hold (3a-vi-b). Only staff who may see the
   // list are sent it.
   const off = offListView(member.offList);
   return (
-    <li className="border-t first:border-t-0" style={{ borderColor: 'var(--line)' }} data-testid={off ? 'member-off-list' : undefined}>
+    <li
+      className={`flex items-center border-t first:border-t-0 ${picked === null ? '' : 'pl-1'} ${picked ? 'c-picked' : ''}`}
+      style={{ borderColor: 'var(--line)' }}
+      data-testid={off ? 'member-off-list' : undefined}
+    >
+      {picked !== null ? <Tick state={picked ? 'on' : 'off'} label={`Select ${member.displayName}`} onClick={onTick} /> : null}
       <button
         type="button"
         onClick={onOpen}
         data-testid="roster-row"
-        className="grid w-full text-left min-h-11 px-4 py-3.5 md:px-5 gap-x-3 items-center"
+        className={`grid flex-grow min-w-0 text-left min-h-11 py-3.5 gap-x-3 items-center ${picked === null ? 'px-4 md:px-5' : 'pr-4 md:pr-5'}`}
         style={{ gridTemplateColumns: 'minmax(0, 1fr) auto 18px' }}
       >
         <span className="flex flex-col gap-0.5 min-w-0">
@@ -160,6 +169,10 @@ function RosterSheet({ member, words, seesList, canRemove, readOnly, busy, onClo
   );
 }
 
+const NOBODY_TICKED = new Set();
+/** "In the app" has no "Select all": nothing there can move under a selection. */
+const NOTHING = () => undefined;
+
 /** "Already in the app · 3" under an empty list (`MembersEmpty`). */
 function AlreadyInApp({ items }) {
   if (items.length === 0) return null;
@@ -203,6 +216,12 @@ export default function Members() {
   const [rosterQuery, setRosterQuery] = useState('');
   /** Bumped when a change here moves the list (One Remove, Put back), so it reads again. */
   const [listKey, setListKey] = useState(0);
+  /** The people ticked on "In the app", by id, and the search they were ticked under: a
+   *  new search is a new list, so the ticks belong to `for` and are empty for any other. */
+  const [rosterSel, setRosterSel] = useState({ for: '', ids: NOBODY_TICKED });
+  const [rosterNote, setRosterNote] = useState(null);
+  /** The people the Remove box was opened for, kept while the list behind is read again. */
+  const [rosterRemoveFor, setRosterRemoveFor] = useState(null);
   /** The bigger size opened from the "nearly full" line. */
   const [choosing, setChoosing] = useState(false);
   /** Import or Add member, pressed in the header, for the list to open. */
@@ -324,6 +343,16 @@ export default function Members() {
     }
   };
 
+  // The Remove box's read and press for the people ticked (§18.6), new when they change.
+  const loadRosterRemove = useCallback(
+    () => orgService.previewRemoveRoster(gymId, rosterRemoveFor ?? []).then((res) => res.data.preview),
+    [gymId, rosterRemoveFor],
+  );
+  const pressRosterRemove = useCallback(
+    (digest, large) => orgService.removeRoster(gymId, rosterRemoveFor ?? [], digest, large).then((res) => res.data.removed),
+    [gymId, rosterRemoveFor],
+  );
+
   const loadMore = async () => {
     if (gymId === null || state.nextCursor === null || loadingMore) return;
     setLoadingMore(true);
@@ -376,6 +405,52 @@ export default function Members() {
   }
 
   const openMember = openUserId === null ? null : (state.items.find((m) => m.userId === openUserId) ?? null);
+
+  // ── Ticking people on "In the app" (§18.5): staff who may remove people tick them; a
+  // trainer and a read-only gym have no tick boxes. ──
+  const canTick = canRemove && !readOnly;
+  const rosterTicked = rosterSel.for === rosterQuery ? rosterSel.ids : NOBODY_TICKED;
+  const clearRosterTicks = () => {
+    setRosterSel({ for: rosterQuery, ids: NOBODY_TICKED });
+    setRosterNote(null);
+  };
+  const tickRosterRow = (userId) => {
+    const next = new Set(rosterTicked);
+    if (next.has(userId)) next.delete(userId);
+    else if (next.size >= MEMBER_REMOVE_TICKED_MAX) {
+      setRosterNote(`You can select up to ${MEMBER_REMOVE_TICKED_MAX.toLocaleString('en')} people at a time.`);
+      return;
+    } else next.add(userId);
+    setRosterSel({ for: rosterQuery, ids: next });
+    setRosterNote(null);
+  };
+  const rosterShownIds = state.items.map((m) => m.userId).slice(0, MEMBER_REMOVE_TICKED_MAX);
+  const rosterAllTicked = rosterShownIds.length > 0 && rosterShownIds.every((id) => rosterTicked.has(id));
+  const tickRosterPage = () => {
+    if (rosterAllTicked) clearRosterTicks();
+    else {
+      setRosterSel({ for: rosterQuery, ids: new Set(rosterShownIds) });
+      setRosterNote(null);
+    }
+  };
+  const rosterHead = rosterAllTicked ? 'on' : rosterTicked.size > 0 ? 'some' : 'off';
+  const rosterRemoved = () => {
+    setRosterSel({ for: rosterQuery, ids: NOBODY_TICKED });
+    setListKey((n) => n + 1);
+    reloadRoster();
+  };
+  const rosterSelected = `${rosterTicked.size.toLocaleString('en')} selected`;
+  const rosterBar = (
+    <>
+      <button type="button" onClick={() => setRosterRemoveFor([...rosterTicked])} data-testid="roster-bar-remove" className="c-btn c-btn-danger c-btn-sm">
+        <UserMinus aria-hidden="true" className="w-4 h-4" />
+        Remove
+      </button>
+      <button type="button" onClick={clearRosterTicks} className="c-btn c-btn-sm c-btn-link">
+        Clear
+      </button>
+    </>
+  );
   // Somebody with a record of their own opens the same page as on "Your list" (Kd,
   // 2026-09-27: "those personal card should be same in both"); the rest open their panel.
   const openFromRoster = (m) => (canSeeList && m.recordId ? setOpenRecord(m.recordId) : setOpenUserId(m.userId));
@@ -504,14 +579,63 @@ export default function Members() {
         </section>
       ) : null}
 
+      {tab === 'app' && rosterNote !== null ? (
+        <p className="c-s14 c-t1" role="status">
+          {rosterNote}
+        </p>
+      ) : null}
+
       {tab === 'app' && state.items.length > 0 ? (
         <section className="c-card overflow-hidden">
+          {canTick && rosterTicked.size > 0 ? (
+            <div className="hidden md:block">
+              <div className="c-selbar" data-testid="roster-sel-bar">
+                <Tick state={rosterHead} label={rosterAllTicked ? 'Clear the selection' : 'Select everyone shown'} onClick={tickRosterPage} />
+                <span className="c-s14 c-w6 c-t1 flex-grow">{rosterSelected}</span>
+                {rosterBar}
+              </div>
+            </div>
+          ) : null}
+          {canTick && rosterTicked.size === 0 ? (
+            <div className="hidden md:flex items-center pl-1 border-b" style={{ borderColor: 'var(--line)' }}>
+              <Tick state="off" label="Select everyone shown" onClick={tickRosterPage} />
+              <span className="c-th py-2.5">Name</span>
+            </div>
+          ) : null}
           <ul>
             {state.items.map((m) => (
-              <RosterRow key={m.userId} member={m} onOpen={() => openFromRoster(m)} />
+              <RosterRow
+                key={m.userId}
+                member={m}
+                onOpen={() => openFromRoster(m)}
+                picked={canTick ? rosterTicked.has(m.userId) : null}
+                onTick={() => tickRosterRow(m.userId)}
+              />
             ))}
           </ul>
         </section>
+      ) : null}
+
+      {/* The bar on a phone, just above the tab bar (§18.5). */}
+      {tab === 'app' && canTick && rosterTicked.size > 0 ? (
+        <div className="c-selbar c-selbar-phone" data-testid="roster-sel-bar-phone">
+          <Tick state={rosterHead} label={rosterAllTicked ? 'Clear the selection' : 'Select everyone shown'} onClick={tickRosterPage} />
+          <span className="c-s14 c-w6 c-t1 flex-grow">{rosterSelected}</span>
+          {rosterBar}
+        </div>
+      ) : null}
+
+      {rosterRemoveFor !== null ? (
+        <MemberListRemove
+          door="app"
+          gym={org}
+          words={words}
+          load={loadRosterRemove}
+          press={pressRosterRemove}
+          onSelectionChanged={NOTHING}
+          onRemoved={rosterRemoved}
+          onClose={() => setRosterRemoveFor(null)}
+        />
       ) : null}
 
       {tab === 'app' && openMember !== null ? (

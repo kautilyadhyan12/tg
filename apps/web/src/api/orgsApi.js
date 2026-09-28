@@ -26,6 +26,9 @@ import {
   memberInvitePreviewResponseSchema,
   memberListSelectedAllResponseSchema,
   memberListSelectionChangedSchema,
+  memberRemovedSelectedResponseSchema,
+  memberRemovePreviewResponseSchema,
+  memberRemoveRefusedSchema,
   memberListConfirmResponseSchema,
   memberListEntriesResponseSchema,
   memberListEntryDeletedSchema,
@@ -660,6 +663,48 @@ export const orgService = {
     return { blob: res.data, filename: downloadName(res.headers?.['content-disposition']) };
   },
 
+  /** The Remove box for the people selected on "Your list" or "Past members": who moves
+   *  to past members, who loses the app, who doesn't change and why. */
+  previewRemoveSelected: (gymId, selection) =>
+    readThrough(
+      memberRemovePreviewResponseSchema,
+      'who would be removed',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/selected/remove-preview`, { selection }),
+    ),
+
+  /** Remove the people selected, as the box showed them (`digest`). A 409 answers with the
+   *  box as it is now (`removeRefused`), or a "Select all" that moved (`selectionChanged`). */
+  removeSelected: (gymId, selection, digest, acknowledgeLargeChange) =>
+    readThrough(
+      memberRemovedSelectedResponseSchema,
+      'the removal',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/selected/remove`, {
+        selection,
+        digest,
+        ...(acknowledgeLargeChange ? { acknowledgeLargeChange: true } : {}),
+      }),
+    ),
+
+  /** The Remove box for the people ticked on "In the app". */
+  previewRemoveRoster: (gymId, userIds) =>
+    readThrough(
+      memberRemovePreviewResponseSchema,
+      'who would be removed',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/members/selected/remove-preview`, { userIds }),
+    ),
+
+  /** Remove the people ticked on "In the app", as the box showed them. */
+  removeRoster: (gymId, userIds, digest, acknowledgeLargeChange) =>
+    readThrough(
+      memberRemovedSelectedResponseSchema,
+      'the removal',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/members/selected/remove`, {
+        userIds,
+        digest,
+        ...(acknowledgeLargeChange ? { acknowledgeLargeChange: true } : {}),
+      }),
+    ),
+
   /** POST …/member-list/entries/:entryId/invite — invite one person. */
   inviteMemberListEntry: (gymId, entryId) =>
     readThrough(
@@ -1226,6 +1271,14 @@ export function inviteChangedPreview(err) {
 export function selectionChanged(err) {
   const parsed = memberListSelectionChangedSchema.safeParse(err?.response?.data);
   return parsed.success ? { count: parsed.data.count, digest: parsed.data.digest } : null;
+}
+
+/** The box a refused Remove answers with, nothing done: `{ kind, preview }`, kind
+ *  'remove_changed' (the people changed) or 'large_change' (the tick is needed), or null
+ *  for any other failure. */
+export function removeRefused(err) {
+  const parsed = memberRemoveRefusedSchema.safeParse(err?.response?.data);
+  return parsed.success ? { kind: parsed.data.error, message: parsed.data.message, preview: parsed.data.preview } : null;
 }
 
 /** A failed download's body is a Blob: read as the JSON error it is, so `errorText`,

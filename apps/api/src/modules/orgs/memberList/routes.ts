@@ -27,11 +27,17 @@ import {
   memberListExportRequestSchema,
   memberListMergeRequestSchema,
   memberListNotThemRequestSchema,
+  memberListRemovePreviewRequestSchema,
+  memberListRemoveSelectedRequestSchema,
   memberListRemoveUnlistedRequestSchema,
   memberListRowsQuerySchema,
   memberListSelectAllRequestSchema,
   memberListUnlistedQuerySchema,
   memberListUploadRequestSchema,
+  memberRosterRemovePreviewRequestSchema,
+  memberRosterRemoveRequestSchema,
+  MEMBER_REMOVE_CHANGED_WORDS,
+  MEMBER_REMOVE_LARGE_WORDS,
 } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
@@ -41,6 +47,7 @@ import * as invites from "../invites/service.js";
 import type { InviteSettings } from "../invites/settings.js";
 import * as byHand from "./byHandService.js";
 import * as exporter from "./exportCsv.js";
+import * as removal from "./removeSelected.js";
 import { SelectionChanged, selectAll } from "./selection.js";
 import * as service from "./service.js";
 
@@ -583,6 +590,74 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
       if (err instanceof SelectionChanged) return await sendSelectionChanged(err, req, reply);
       throw err;
     }
+  });
+
+  // ── Remove the people selected (5b-v-b-ii; §18.5, §18.6) ──
+
+  /** The press's answer: done, or nothing done and the box as it is now. */
+  const sendRemoval = (req: FastifyRequest, reply: FastifyReply, answer: removal.RemoveSelectedAnswer): FastifyReply | undefined => {
+    switch (answer.kind) {
+      case "rate_limited":
+        return undefined;
+      case "removed":
+        return reply.status(200).send({ removed: answer.removed });
+      case "changed":
+        return reply.status(409).send({ error: "remove_changed", message: MEMBER_REMOVE_CHANGED_WORDS, preview: answer.preview, requestId: req.id });
+      case "large_change":
+        return reply.status(409).send({ error: "large_change", message: MEMBER_REMOVE_LARGE_WORDS, preview: answer.preview, requestId: req.id });
+    }
+  };
+
+  /** The box for the records selected on "Your list" or "Past members". */
+  app.post("/v1/orgs/:gymId/member-list/selected/remove-preview", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(memberListRemovePreviewRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    try {
+      const preview = await removal.previewRemoveSelected(listDeps, requireUserId(req), params.gymId, body, readGate(req, reply));
+      if (preview === null) return;
+      return await reply.status(200).send({ preview });
+    } catch (err) {
+      if (err instanceof SelectionChanged) return await sendSelectionChanged(err, req, reply);
+      throw err;
+    }
+  });
+
+  /** Remove the records selected: each to past members, and their app ended. */
+  app.post("/v1/orgs/:gymId/member-list/selected/remove", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(memberListRemoveSelectedRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    let answer: removal.RemoveSelectedAnswer;
+    try {
+      answer = await removal.removeSelected(listDeps, requireUserId(req), params.gymId, body, removeGate(req, reply));
+    } catch (err) {
+      if (err instanceof SelectionChanged) return await sendSelectionChanged(err, req, reply);
+      throw err;
+    }
+    return sendRemoval(req, reply, answer);
+  });
+
+  /** The box for the people ticked on "In the app". */
+  app.post("/v1/orgs/:gymId/members/selected/remove-preview", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(memberRosterRemovePreviewRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const preview = await removal.previewRemoveRoster(listDeps, requireUserId(req), params.gymId, body, readGate(req, reply));
+    if (preview === null) return;
+    return reply.status(200).send({ preview });
+  });
+
+  /** Remove the people ticked on "In the app": their app ended, their own record moved. */
+  app.post("/v1/orgs/:gymId/members/selected/remove", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(memberRosterRemoveRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    return sendRemoval(req, reply, await removal.removeRoster(listDeps, requireUserId(req), params.gymId, body, removeGate(req, reply)));
   });
 
   // Invitations that came back "Not me" (3b-ii-b; §10.2): the addresses to check.

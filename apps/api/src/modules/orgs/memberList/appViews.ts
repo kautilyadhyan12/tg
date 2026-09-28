@@ -9,7 +9,7 @@ import { emailHmac } from "../invites/address.js";
 import * as invitesRepo from "../invites/repo.js";
 import { invitationsOf } from "../invites/service.js";
 import type { InviteSettings } from "../invites/settings.js";
-import { gymSeatCap } from "../repo.js";
+import { gymHasLivePlan, gymSeatCap, paidPlacesUsed } from "../repo.js";
 import { appFact, type AppPerson, type AppReasonKind, type AppUnsure } from "./appWord.js";
 import type { MemberAgainstList, SqlOrTx } from "./repo.js";
 import * as repo from "./repo.js";
@@ -53,13 +53,16 @@ export async function appFactsOf(
   now: Date,
 ): Promise<AppFact[]> {
   if (rows.length === 0) return [];
-  const [invitations, optedOut, timeZone, cap] = await Promise.all([
+  const [invitations, optedOut, timeZone, cap, live, used] = await Promise.all([
     // The word never reads how many times an invitation was sent again.
     invitationsOf(sql, settings, gymId, rows, { countSentAgain: false }),
     optOutsOf(sql, settings, gymId, rows),
     repo.gymTimeZone(sql, gymId),
     gymSeatCap(sql, gymId),
+    gymHasLivePlan(sql, gymId),
+    paidPlacesUsed(sql, gymId),
   ]);
+  const places = { live, cap, used };
   const today = dayInTz(now, timeZone);
 
   // Each record's own people in the app (`whose.ts`), the people a shared email leaves
@@ -98,8 +101,9 @@ export async function appFactsOf(
       sharedWith: other?.name ?? null,
       invitation: invitations[at] ?? null,
       optedOut: optedOut[at] ?? null,
-      cap,
+      places,
       today,
+      timeZone,
     });
   });
 }
