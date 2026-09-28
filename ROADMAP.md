@@ -144,7 +144,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
          - 5b-v-a-i. [x] **The list, clean as Leads** — merged 2026-09-28 (PR #123).
          - ~~5b-v-a-ii. **One list**~~ **Not built (Kd, RULINGS 2026-09-28)**: the two tabs stay, "Using the app" renamed "In the app" in 5b-v-b-i.
        - 5b-v-b. **Select and act** (§18.5–18.6), split 2026-09-28 in two:
-         - 5b-v-b-i. [ ] **Tick boxes, Invite and Download CSV**: tick boxes, Select all, the bar; Invite and Download CSV on the people selected; the toolbar's Invite kept (RULINGS 2026-09-28).
+         - 5b-v-b-i. [x] **Tick boxes, Invite and Download CSV** — merged 2026-09-28 (PR #126).
          - 5b-v-b-ii. [ ] **Remove on the people selected**: the bar's Remove (One Remove for each), with the box naming who changes; the "In the app" tab's tick boxes; 5b-iii's last server part, then PR #121 closed. Also: a "plan was full" line says when ("Noah tried to join on 27 Sep, when your plan was full") and whether places are free now, never a stale "all 500 places are in use" (Kd, 2026-09-28).
        - 5b-v-c. [ ] **A person's page** (§18.6–18.7): every button kept, Invite asks first, Remove from app on the page, the page for someone not on your list, Add member and Edit restyled.
        - 5b-v-d. [ ] **Import, who has left** (§18.8, was 5b-iii-b): each missing person marked Left or Still a member; Upload and Review restyled. "They've left" ends the app too (RULINGS 2026-09-28).
