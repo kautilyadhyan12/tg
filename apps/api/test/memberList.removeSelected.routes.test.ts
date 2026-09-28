@@ -472,6 +472,14 @@ d("Remove on the people selected (real Postgres)", () => {
 
       const back = await post(`${listUrl(gym)}/entries/${olivia.entryId}/restore`, {}, gym.owner.cookies);
       expect(back.statusCode, back.body).toBe(200);
+      // Round one, High-3: the same box pressed again once she is back is not "already
+      // removed": nothing is done, and the new box names her.
+      const stale = await press(gym, ticked(olivia.entryId, ava), box.digest);
+      expect(stale.statusCode, stale.body).toBe(409);
+      const staleErr = errorOf(stale);
+      expect(staleErr.error).toBe("remove_changed");
+      expect(staleErr.preview?.move.map((p) => p.name)).toEqual(["Olivia Bennett"]);
+      expect(staleErr.preview?.endApp.map((p) => p.name)).toEqual(["Olivia Bennett"]);
       expect(memberListEntryWrittenSchema.parse(JSON.parse(back.body)).app).toBe("back");
       expect(await inApp(gym, olivia.user)).toBe(true);
       expect(await former(gym, olivia.entryId)).toBe(false);

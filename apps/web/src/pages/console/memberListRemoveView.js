@@ -41,11 +41,10 @@ export function removeChangeGroups(preview, words, gymName) {
     });
   }
   // Why some lose the app and others don't (Kd, 2026-09-28: "the reason why one is removed
-  // from app another is not"): only people who use the app have access to lose.
-  // A record's person in the app is named with that record, losing the app or kept as staff.
-  const staff = preview.kept.find((group) => group.reason === 'staff')?.people ?? [];
-  const usesApp = new Set([...preview.endApp, ...staff].map((p) => p.entryId).filter((id) => id !== null));
-  const others = preview.move.filter((p) => !usesApp.has(p.entryId)).length;
+  // from app another is not"): only people who use the app have access to lose. The server
+  // counts the moving records nobody in the app uses (a family's shared email in the app is
+  // somebody using it, whoever's it is).
+  const others = preview.movingNotInApp;
   const why =
     others <= 0
       ? ''
@@ -69,6 +68,7 @@ const KEPT_LINES = {
   staff: () => 'Owner and staff keep the app. Manage staff in Settings.',
   own_record: () => "Keep the app: they're on your list with their own details.",
   shared_email: () => "Keep the app: they share an email address with someone still on your list, so we can't tell whose it is.",
+  same_record: () => 'Keep the app: their record is the same as someone you selected, so it moves to past members with them.',
   not_in_app: () => "Not in the app, so there's nothing to remove.",
   gone: (words, door) => (door === 'app' ? 'No longer in the app.' : 'No longer on your list.'),
 };

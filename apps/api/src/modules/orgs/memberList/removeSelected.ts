@@ -61,7 +61,7 @@ const byNameThenId = (a: MemberRemovePerson, b: MemberRemovePerson): number => {
  *  that many may have more, so "every one of them selected" is never taken from it. */
 const SHARED_CONTACT_READ_MAX = 20;
 
-const KEPT_ORDER: readonly MemberRemoveKeptReason[] = ["staff", "own_record", "shared_email", "not_in_app", "gone"];
+const KEPT_ORDER: readonly MemberRemoveKeptReason[] = ["staff", "own_record", "shared_email", "same_record", "not_in_app", "gone"];
 
 /** The box's digest: what the press would do, and nothing else — the records moved, and
  *  each person losing the app with the record they are removed with. */
@@ -87,6 +87,7 @@ function finish(
   ends: { person: MemberRemovePerson; removedWith: string | null }[],
   kept: Map<MemberRemoveKeptReason, MemberRemovePerson[]>,
   scale: { listCurrent: number; seats: number },
+  movingNotInApp: number,
 ): RemovalPlan {
   move.sort(byNameThenId);
   ends.sort((a, b) => byNameThenId(a.person, b.person));
@@ -103,6 +104,7 @@ function finish(
         const people = kept.get(reason);
         return people === undefined || people.length === 0 ? [] : [{ reason, people: [...people].sort(byNameThenId) }];
       }),
+      movingNotInApp,
       large: largeRemoval(moveIds.length, endApp.length, scale),
       digest: removalDigest(gymId, moveIds, endApp),
     },
@@ -146,6 +148,14 @@ export function recordRemovalPlan(input: {
 
   const ends: { person: MemberRemovePerson; removedWith: string | null }[] = [];
   const pastReached = new Set<string>();
+  // The moving records somebody in the app uses: theirs for certain, or on a family's
+  // shared email in the app. The rest are "not in the app" in the box's own words.
+  const used = new Set<string>();
+  for (const member of input.members) {
+    const own = currentRecordOf(member);
+    if (own !== null) used.add(own);
+    for (const record of member.unsure?.records ?? []) used.add(record.id);
+  }
   for (const member of input.members) {
     const own = currentRecordOf(member);
     const pastOwn = pastRecordOf(member);
@@ -164,6 +174,14 @@ export function recordRemovalPlan(input: {
       else keep(kept, "staff", person);
       continue;
     }
+    // Joined with a past record ticked, and on the list again through another: in the app,
+    // and it stays theirs.
+    if (member.joinedEntryId !== null && past.has(member.joinedEntryId)) {
+      pastReached.add(member.joinedEntryId);
+      if (own !== null) keep(kept, "own_record", { ...person, entryId: own });
+      else keep(kept, "shared_email", { ...person, entryId: null });
+      continue;
+    }
     // Not theirs for certain. Named only when a record being moved reaches them.
     const reached =
       unsure.some((record) => current.has(record.id)) ||
@@ -176,7 +194,8 @@ export function recordRemovalPlan(input: {
   for (const id of past) {
     if (!pastReached.has(id)) keep(kept, "not_in_app", { name: found.get(id)?.fullName ?? "", entryId: id, userId: null });
   }
-  return finish(input.gymId, asked.length, move, ends, kept, input.scale);
+  const movingNotInApp = move.filter((person) => !used.has(person.entryId)).length;
+  return finish(input.gymId, asked.length, move, ends, kept, input.scale, movingNotInApp);
 }
 
 /** THE RULE FOR PEOPLE TICKED ON "IN THE APP". Pure.
@@ -185,11 +204,15 @@ export function recordRemovalPlan(input: {
  *  certainly theirs moves to past members with them (none for a family's shared email
  *  the list can't place), and they are removed with it, or with the past record they
  *  joined with. The owner, staff and a complimentary place are managed under Staff.
- *  `members` is the live members among those ticked. */
+ *  Only those ticked are looked up in `members`, whoever else it holds. Someone NOT ticked
+ *  whose record is the same as a ticked person's (two accounts on one record) keeps the
+ *  app and is named: their record moves with the ticked person. `reached` is everyone in
+ *  the app the moving records reach. */
 export function rosterRemovalPlan(input: {
   gymId: string;
   userIds: readonly string[];
   members: readonly repo.MemberAgainstList[];
+  reached?: readonly repo.MemberAgainstList[];
   scale: { listCurrent: number; seats: number };
 }): RemovalPlan {
   const live = new Map(input.members.map((member) => [member.userId, member]));
@@ -215,7 +238,15 @@ export function rosterRemovalPlan(input: {
     const removedWith = own ?? pastRecordOf(member);
     ends.push({ person: { name: member.fullName, entryId: removedWith, userId }, removedWith });
   }
-  return finish(input.gymId, asked.length, move, ends, kept, input.scale);
+  const ticked = new Set(asked);
+  const moving = new Set(move.map((person) => person.entryId));
+  for (const other of input.reached ?? []) {
+    const own = currentRecordOf(other);
+    if (!ticked.has(other.userId) && own !== null && moving.has(own)) {
+      keep(kept, "same_record", { name: other.fullName, entryId: own, userId: other.userId });
+    }
+  }
+  return finish(input.gymId, asked.length, move, ends, kept, input.scale, 0);
 }
 
 /** The plan for these records, read on `sql` (the pool, or the press's transaction). */
@@ -242,9 +273,20 @@ async function rosterPlanOn(sql: repo.SqlOrTx, gymId: string, userIds: readonly 
     repo.membersAgainstList(sql, gymId, { email: null, phone: null, userIds }),
     repo.removalScale(sql, gymId),
   ]);
-  // Only those ticked: the narrowed read is by user id, but be exact about it.
-  const ticked = new Set(userIds);
-  return rosterRemovalPlan({ gymId, userIds, members: members.filter((member) => ticked.has(member.userId)), scale });
+  // Everyone else the records that would move reach, to name anyone sharing one of them.
+  const owns = [...new Set(members.flatMap((member) => currentRecordOf(member) ?? []))];
+  const records = await repo.entriesBrief(sql, gymId, owns);
+  const reached =
+    records.length === 0
+      ? []
+      : await repo.membersAgainstList(sql, gymId, {
+          email: null,
+          phone: null,
+          emails: records.flatMap((record) => (record.email === null ? [] : [record.email])),
+          phones: records.flatMap((record) => (record.phone === null ? [] : [record.phone])),
+          entryIds: owns,
+        });
+  return rosterRemovalPlan({ gymId, userIds, members, reached, scale });
 }
 
 /** A record door that would end somebody's app needs `members.remove` as well; the
@@ -290,7 +332,10 @@ async function press(
     if (plan.preview.digest !== input.digest) {
       // The same press again (a retry, or a colleague's): the box is gone because that
       // press did it, so say so rather than showing an empty box.
-      const earlier = await repo.selectedRemovalByDigest(tx, gymId, input.digest, new Date(at.getTime() - REMOVAL_REPLAY_MS));
+      // Only while that press's work still stands: if anyone has been put back since, the
+      // box is shown again with them in it.
+      const nothingLeft = plan.moveIds.length === 0 && plan.endApp.length === 0;
+      const earlier = nothingLeft ? await repo.selectedRemovalByDigest(tx, gymId, input.digest, new Date(at.getTime() - REMOVAL_REPLAY_MS)) : null;
       if (earlier !== null) return { kind: "removed", removed: { ...earlier, alreadyRemoved: true } };
       return { kind: "changed", preview: plan.preview };
     }

@@ -147,13 +147,15 @@ describe("every class of record selected", () => {
     expect(out.endApp).toEqual([{ userId: who.userId, removedWith: grace.id }]);
   });
 
-  it("a past record whose person is on the list again through another record: nothing happens to them", () => {
+  // Round one, High-2: the box said "Not in the app · Grace Hall" of someone in the app.
+  it("a past record whose person is on the list again through another record: kept, named as in the app with their own record", () => {
     const old = record(1, "Grace Hall", { email: "g@example.com", former: true });
     const now = record(2, "Grace Hall", { email: "g@example.com" });
     const who = person(1, "Grace Hall", { email: "g@example.com", joinedEntryId: old.id, joinedFormer: true, onList: true, entryId: now.id });
     const out = plan([old], [old], [who]);
     expect(out.endApp).toEqual([]);
-    expect(keptOf(out.preview, "not_in_app")).toEqual(["Grace Hall"]);
+    expect(keptOf(out.preview, "not_in_app")).toEqual([]);
+    expect(out.preview.kept).toEqual([{ reason: "own_record", people: [{ name: "Grace Hall", entryId: now.id, userId: who.userId }] }]);
   });
 
   it("a past record with nobody in the app: named as not in the app, nothing to do", () => {
@@ -241,6 +243,64 @@ describe("every class of person ticked on In the app", () => {
     const out = roster([a.userId, b.userId], [a, b]);
     expect(out.moveIds).toEqual([dan.id]);
     expect(out.endApp).toHaveLength(2);
+    expect(out.preview.kept).toEqual([]);
+  });
+
+  // Round one, Low-3: B's record moved with A's without the box naming B.
+  it("two accounts on one record, one ticked: the other keeps the app and is named, their record moving with the one ticked", () => {
+    const dan = record(1, "Daniel Wu");
+    const a = on(1, "Daniel Wu", dan);
+    const b = on(2, "du", dan, { joinedEntryId: null });
+    const out = rosterRemovalPlan({ gymId: GYM, userIds: [a.userId], members: [a], reached: [a, b], scale: SCALE });
+    expect(out.moveIds).toEqual([dan.id]);
+    expect(out.endApp).toEqual([{ userId: a.userId, removedWith: dan.id }]);
+    expect(out.preview.kept).toEqual([{ reason: "same_record", people: [{ name: "du", entryId: dan.id, userId: b.userId }] }]);
+  });
+
+  it("only those ticked are looked up, whoever else the read holds", () => {
+    const dan = record(1, "Daniel Wu");
+    const a = on(1, "Daniel Wu", dan);
+    const stranger = on(2, "Olivia Bennett", record(2, "Olivia Bennett"));
+    const out = roster([a.userId], [a, stranger]);
+    expect(out.endApp.map((p) => p.userId)).toEqual([a.userId]);
+    expect(out.moveIds).toEqual([dan.id]);
+  });
+});
+
+// Round one, High-1: the box said "None of them use the app" of a record a family's shared
+// email in the app is on. The server counts the moving records nobody in the app uses.
+describe("how many of the records moving nobody in the app uses", () => {
+  it("one in the app and one not: 1", () => {
+    const olivia = record(1, "Olivia Bennett", { email: "o@example.com" });
+    const ava = record(2, "Ava Thompson", { email: "a@example.com" });
+    expect(plan([olivia, ava], [olivia, ava], [on(1, "Olivia Bennett", olivia)]).preview.movingNotInApp).toBe(1);
+  });
+
+  it("a record on a family's shared email in the app, the person kept: 0, never 'nobody uses it'", () => {
+    const email = "park@example.com";
+    const maria = record(1, "Maria Park", { email });
+    const leo = record(2, "Leo Park", { email });
+    const mum = person(1, "Mum", { email, onList: true, entryId: maria.id, unsure: { by: "email", records: [{ id: maria.id, fullName: "Maria Park" }, { id: leo.id, fullName: "Leo Park" }] } });
+    const out = plan([maria], [maria], [mum]);
+    expect(out.endApp).toEqual([]);
+    expect(out.preview.movingNotInApp).toBe(0);
+  });
+
+  it("a relative's record at the same email, whose person has their own record: the relative's counts as not used", () => {
+    const email = "park@example.com";
+    const leo = record(1, "Leo Park", { email });
+    const maria = record(2, "Maria Park", { email });
+    expect(plan([leo], [leo], [on(1, "Maria Park", maria)]).preview.movingNotInApp).toBe(1);
+  });
+
+  it("staff use the app: their record is not counted as unused", () => {
+    const dee = record(1, "Coach Dee");
+    expect(plan([dee], [dee], [on(1, "Coach Dee", dee, { seatCounted: false })]).preview.movingNotInApp).toBe(0);
+  });
+
+  it("nobody in the app: every record moving", () => {
+    const recs = [record(1, "A"), record(2, "B"), record(3, "C", { former: true })];
+    expect(plan(recs, recs, []).preview.movingNotInApp).toBe(2);
   });
 });
 

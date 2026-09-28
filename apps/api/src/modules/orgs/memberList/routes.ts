@@ -594,6 +594,20 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
 
   // ── Remove the people selected (5b-v-b-ii; §18.5, §18.6) ──
 
+  /** Remove on the people selected: 30 presses an hour each, 120 from one address (the front
+   *  desk, several staff); its own allowance, so a desk clearing leavers a page at a time
+   *  never spends that of "Remove all". */
+  const removeSelectedGate = gate(
+    createDualRateLimit({
+      name: "memberlist_remove_selected",
+      max: 30,
+      ipMax: 120,
+      windowMs: 60 * 60 * 1000,
+      identifier: (req) => req.authUser?.id ?? null,
+      redis: deps.redis,
+    }),
+  );
+
   /** The press's answer: done, or nothing done and the box as it is now. */
   const sendRemoval = (req: FastifyRequest, reply: FastifyReply, answer: removal.RemoveSelectedAnswer): FastifyReply | undefined => {
     switch (answer.kind) {
@@ -632,7 +646,7 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     if (body === null) return;
     let answer: removal.RemoveSelectedAnswer;
     try {
-      answer = await removal.removeSelected(listDeps, requireUserId(req), params.gymId, body, removeGate(req, reply));
+      answer = await removal.removeSelected(listDeps, requireUserId(req), params.gymId, body, removeSelectedGate(req, reply));
     } catch (err) {
       if (err instanceof SelectionChanged) return await sendSelectionChanged(err, req, reply);
       throw err;
@@ -657,7 +671,7 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     if (params === null) return;
     const body = parseOr400(memberRosterRemoveRequestSchema, req.body, req, reply);
     if (body === null) return;
-    return sendRemoval(req, reply, await removal.removeRoster(listDeps, requireUserId(req), params.gymId, body, removeGate(req, reply)));
+    return sendRemoval(req, reply, await removal.removeRoster(listDeps, requireUserId(req), params.gymId, body, removeSelectedGate(req, reply)));
   });
 
   // Invitations that came back "Not me" (3b-ii-b; §10.2): the addresses to check.

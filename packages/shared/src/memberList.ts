@@ -1596,9 +1596,11 @@ export type MemberRemovePerson = z.infer<typeof memberRemovePersonSchema>;
  *  - `own_record`: in the app with a record of their own that stays on the list;
  *  - `shared_email`: shares an email with records that stay, and the list can't say which
  *    is theirs, so their app is left alone;
+ *  - `same_record`: in the app with the same record as someone ticked on "In the app", and
+ *    not ticked: they keep the app, and their record moves to past members with that person;
  *  - `not_in_app`: a past member ticked with nobody in the app — nothing to remove;
  *  - `gone`: no longer on the list (or no longer in the app) since the page was read. */
-export const memberRemoveKeptReasonSchema = z.enum(["staff", "own_record", "shared_email", "not_in_app", "gone"]);
+export const memberRemoveKeptReasonSchema = z.enum(["staff", "own_record", "shared_email", "same_record", "not_in_app", "gone"]);
 export type MemberRemoveKeptReason = z.infer<typeof memberRemoveKeptReasonSchema>;
 
 /** A big removal needs its own tick: more than 10 and more than 10 % of the list (records moving)
@@ -1616,6 +1618,9 @@ export const memberRemovePreviewSchema = z
     move: z.array(memberRemovePersonSchema),
     endApp: z.array(memberRemovePersonSchema),
     kept: z.array(z.object({ reason: memberRemoveKeptReasonSchema, people: z.array(memberRemovePersonSchema) }).strict()),
+    /** Of the records moving, how many nobody in the app uses: no person in the app is
+     *  theirs, and no family's shared email in the app is on them. */
+    movingNotInApp: z.number().int().min(0),
     large: memberRemoveLargeSchema.nullable(),
     digest: sha256Schema,
   })

@@ -78,7 +78,7 @@ const entry = (fullName, over = {}) => {
 };
 const pageOf = (entries) => ({ data: { page: memberListEntriesPageSchema.parse({ total: entries.length, entries, cursor: null }) } });
 const who = (name, entryId = null, userId = null) => ({ name, entryId, userId });
-const box = (over = {}) => ({ data: { preview: memberRemovePreviewSchema.parse({ selected: 1, move: [], endApp: [], kept: [], large: null, digest: DIGEST, ...over }) } });
+const box = (over = {}) => ({ data: { preview: memberRemovePreviewSchema.parse({ selected: 1, move: [], endApp: [], kept: [], movingNotInApp: 0, large: null, digest: DIGEST, ...over }) } });
 const refusedWith = (error, preview) => ({ response: { status: 409, data: { error, message: error === 'remove_changed' ? MEMBER_REMOVE_CHANGED_WORDS : 'Tick the box', preview } } });
 
 let ada;
@@ -112,7 +112,7 @@ describe('Remove from the bar', () => {
     fireEvent.click(tickOf('Ben Carter'));
     fireEvent.click(tickOf('Cara Diaz'));
     orgService.previewRemoveSelected.mockResolvedValue(
-      box({ selected: 2, move: [who('Ben Carter', ben.entryId), who('Cara Diaz', cara.entryId)], endApp: [who('Ben Carter', ben.entryId, 'bbbbbbbb-bbbb-4bbb-8bbb-000000000001')] }),
+      box({ selected: 2, movingNotInApp: 1, move: [who('Ben Carter', ben.entryId), who('Cara Diaz', cara.entryId)], endApp: [who('Ben Carter', ben.entryId, 'bbbbbbbb-bbbb-4bbb-8bbb-000000000001')] }),
     );
     orgService.removeSelected.mockResolvedValue({ data: { removed: { moved: 2, endedApp: 1, alreadyRemoved: false } } });
     fireEvent.click(bar().getByTestId('bar-remove'));
@@ -151,6 +151,7 @@ describe('Remove from the bar', () => {
       move: [who('Cara Diaz', cara.entryId)],
       endApp: [who('Cara Diaz', cara.entryId, 'bbbbbbbb-bbbb-4bbb-8bbb-000000000002')],
       kept: [],
+      movingNotInApp: 0,
       large: null,
       digest: DIGEST2,
     });

@@ -14,7 +14,7 @@ import {
 const GYM = { people: 'members', person: 'member' };
 const STUDIO = { people: 'clients', person: 'client' };
 const p = (name, n) => ({ name, entryId: `aaaaaaaa-aaaa-4aaa-8aaa-${String(n).padStart(12, '0')}`, userId: null });
-const preview = (over = {}) => ({ selected: 1, move: [], endApp: [], kept: [], large: null, digest: 'a'.repeat(64), ...over });
+const preview = (over = {}) => ({ selected: 1, move: [], endApp: [], kept: [], movingNotInApp: 0, large: null, digest: 'a'.repeat(64), ...over });
 
 describe('the box for each door', () => {
   const cases = [
@@ -45,14 +45,14 @@ describe('who changes, and the button', () => {
   const ENDS = "They keep their own workouts and the free app, and the app tells them they're no longer a member of Iron House Gym.";
 
   it('one in the app and one not: says why only one loses access', () => {
-    expect(lines({ move: [olivia, ava], endApp: [oliviaApp] })).toEqual([
+    expect(lines({ move: [olivia, ava], endApp: [oliviaApp], movingNotInApp: 1 })).toEqual([
       ['move', '2 will move to past members', MOVE],
       ['endApp', '1 will lose access to the app', `Only people who use the app lose access. The other 1 doesn't use the app, so only their details move. ${ENDS}`],
     ]);
   });
 
   it('several who do not use the app are counted in the plural', () => {
-    expect(lines({ move: [olivia, ava, p('Tom Reed', 3), p('Zoe Adams', 4)], endApp: [oliviaApp] })[1][2]).toBe(
+    expect(lines({ move: [olivia, ava, p('Tom Reed', 3), p('Zoe Adams', 4)], endApp: [oliviaApp], movingNotInApp: 3 })[1][2]).toBe(
       `Only people who use the app lose access. The other 3 don't use the app, so only their details move. ${ENDS}`,
     );
   });
@@ -62,14 +62,23 @@ describe('who changes, and the button', () => {
   });
 
   it('nobody in the app: the move says nobody loses access', () => {
-    expect(lines({ move: [ava] })).toEqual([['move', '1 will move to past members', `${MOVE} None of them use the app, so nobody loses access to it.`]]);
+    expect(lines({ move: [ava], movingNotInApp: 1 })).toEqual([['move', '1 will move to past members', `${MOVE} None of them use the app, so nobody loses access to it.`]]);
+  });
+
+  // Round one, High-1: Maria's record ticked, "Mum" in the app on the email she shares with
+  // Leo. The box said "None of them use the app" above "Keep the app: they share an email…".
+  it('a record on a family shared email in the app: never "none of them use the app", never "the other doesn\u2019t"', () => {
+    const maria = p('Maria Park', 6);
+    const mum = { reason: 'shared_email', people: [{ name: 'Mum', entryId: null, userId: 'bbbbbbbb-bbbb-4bbb-8bbb-000000000006' }] };
+    expect(lines({ move: [maria], kept: [mum], movingNotInApp: 0 })).toEqual([['move', '1 will move to past members', MOVE]]);
+    expect(lines({ move: [maria, olivia], endApp: [oliviaApp], kept: [mum], movingNotInApp: 0 })[1][2]).toBe(`Only people who use the app lose access. ${ENDS}`);
   });
 
   it('staff use the app and keep it: never counted among those who do not use it', () => {
     const coach = p('Coach Dee', 5);
     const coachKept = { reason: 'staff', people: [{ ...coach, userId: 'bbbbbbbb-bbbb-4bbb-8bbb-000000000005' }] };
-    expect(lines({ move: [coach, olivia], endApp: [oliviaApp], kept: [coachKept] })[1][2]).toBe(`Only people who use the app lose access. ${ENDS}`);
-    expect(lines({ move: [coach], kept: [coachKept] })).toEqual([['move', '1 will move to past members', MOVE]]);
+    expect(lines({ move: [coach, olivia], endApp: [oliviaApp], kept: [coachKept], movingNotInApp: 0 })[1][2]).toBe(`Only people who use the app lose access. ${ENDS}`);
+    expect(lines({ move: [coach], kept: [coachKept], movingNotInApp: 0 })).toEqual([['move', '1 will move to past members', MOVE]]);
   });
 
   it('In the app: each record moving belongs to a person losing the app', () => {
@@ -102,16 +111,18 @@ describe("who doesn't change", () => {
         kept: [
           { reason: 'staff', people: [p('Coach Dee', 1)] },
           { reason: 'shared_email', people: [p('Kim', 2)] },
+          { reason: 'same_record', people: [p('du', 7)] },
           { reason: 'gone', people: [p('', 3), p('', 4)] },
         ],
       }),
       GYM,
       'list',
     );
-    expect(kept.heading).toBe("4 won't change");
+    expect(kept.heading).toBe("5 won't change");
     expect(kept.groups.map((g) => [g.key, g.line, g.people.length, g.count])).toEqual([
       ['staff', 'Owner and staff keep the app. Manage staff in Settings.', 1, 1],
       ['shared_email', "Keep the app: they share an email address with someone still on your list, so we can't tell whose it is.", 1, 1],
+      ['same_record', 'Keep the app: their record is the same as someone you selected, so it moves to past members with them.', 1, 1],
       ['gone', 'No longer on your list.', 0, 2],
     ]);
     expect(removeKept(preview({ kept: [{ reason: 'gone', people: [p('', 3)] }] }), GYM, 'app').groups[0].line).toBe('No longer in the app.');
