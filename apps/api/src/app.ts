@@ -150,7 +150,8 @@ export async function buildApp(
     // and the default is null — so without this line a custom header is sent
     // by the server and silently invisible to the client, exactly the shape of
     // the Card 4 preflight bug (inject() tests cannot see either).
-    exposedHeaders: ["Idempotent-Replay"],
+    // Content-Disposition carries a download's file name (the member list's CSV).
+    exposedHeaders: ["Idempotent-Replay", "Content-Disposition"],
   });
   await app.register(rateLimit, {
     global: true,

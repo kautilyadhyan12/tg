@@ -24,6 +24,8 @@ import {
   memberInviteOneResponseSchema,
   memberInvitePeopleResponseSchema,
   memberInvitePreviewResponseSchema,
+  memberListSelectedAllResponseSchema,
+  memberListSelectionChangedSchema,
   memberListConfirmResponseSchema,
   memberListEntriesResponseSchema,
   memberListEntryDeletedSchema,
@@ -621,6 +623,43 @@ export const orgService = {
       authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/invites`, body),
     ),
 
+  /** POST …/member-list/selection — "Select all": how many people the list's filter and
+   *  search match now, and a digest of exactly who, sent back with Invite or Download. */
+  selectAllMembers: (gymId, filter) =>
+    readThrough(
+      memberListSelectedAllResponseSchema,
+      'the members selected',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/selection`, { filter }),
+    ),
+
+  /** Invite's numbers for the people selected. A 409 `selection_changed` means a "Select
+   *  all" now matches other people (`selectionChanged`). */
+  getSelectedInvitePreview: (gymId, selection) =>
+    readThrough(
+      memberInvitePreviewResponseSchema,
+      'who would be invited',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/selected/invite-preview`, { selection }),
+    ),
+
+  /** Invite's page for the people selected. */
+  getSelectedInvitePeople: (gymId, selection, group, cursor) =>
+    readThrough(
+      memberInvitePeopleResponseSchema,
+      'who would be invited',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/selected/invite-people`, {
+        selection,
+        group,
+        ...(cursor ? { cursor } : {}),
+      }),
+    ),
+
+  /** POST …/member-list/export.csv — Download CSV of the people selected: the file and
+   *  the name the server gave it. */
+  downloadMembersCsv: async (gymId, selection) => {
+    const res = await authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/export.csv`, { selection }, { responseType: 'blob' });
+    return { blob: res.data, filename: downloadName(res.headers?.['content-disposition']) };
+  },
+
   /** POST …/member-list/entries/:entryId/invite — invite one person. */
   inviteMemberListEntry: (gymId, entryId) =>
     readThrough(
@@ -1180,6 +1219,42 @@ export function errorCode(err) {
 export function inviteChangedPreview(err) {
   const parsed = memberInviteChangedSchema.safeParse(err?.response?.data);
   return parsed.success ? parsed.data.preview : null;
+}
+
+/** The new count and digest a refused "Select all" answers with (409
+ *  `selection_changed`), or null for any other failure. */
+export function selectionChanged(err) {
+  const parsed = memberListSelectionChangedSchema.safeParse(err?.response?.data);
+  return parsed.success ? { count: parsed.data.count, digest: parsed.data.digest } : null;
+}
+
+/** A failed download's body is a Blob: read as the JSON error it is, so `errorText`,
+ *  `errorCode` and `selectionChanged` read it like any other. */
+export async function blobError(err) {
+  const data = err?.response?.data;
+  if (typeof Blob === 'undefined' || !(data instanceof Blob)) return err;
+  try {
+    const parsed = JSON.parse(await data.text());
+    return { ...err, response: { ...err.response, data: parsed } };
+  } catch {
+    return err;
+  }
+}
+
+/** The file name in a Content-Disposition header: the exact UTF-8 name when given
+ *  (RFC 6266), else the plain one, else a name of our own. */
+export function downloadName(header) {
+  const text = typeof header === 'string' ? header : '';
+  const exact = /filename\*=UTF-8''([^;]+)/i.exec(text);
+  if (exact) {
+    try {
+      return decodeURIComponent(exact[1]);
+    } catch {
+      // Fall through to the plain name.
+    }
+  }
+  const plain = /filename="([^"]+)"/i.exec(text);
+  return plain ? plain[1] : 'members.csv';
 }
 
 /** HTTP status, or null offline. Kept beside `errorCode` so a caller cannot

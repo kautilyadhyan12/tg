@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, Check, ChevronRight, Loader2, Mail, X } from 'lucide-react';
 import { MEMBER_INVITE_PERMISSION_WORDS } from '@app/shared';
-import { orgService, errorText, inviteChangedPreview } from '../../api/orgsApi';
+import { orgService, errorText, inviteChangedPreview, selectionChanged } from '../../api/orgsApi';
 import MemberListPerson from './MemberListPerson';
 import { ShareInvite } from './ShareInvite';
 import {
@@ -15,6 +15,8 @@ import {
   inviteSummary,
   inviteWhyNot,
   inviteWho,
+  selectedInviteBody,
+  selectedInviteSummary,
   skippedLines,
 } from './memberListPeople';
 
@@ -28,8 +30,17 @@ import {
 // reason can be fixed. Every number and every person is the server's, worked out by the
 // same rule as the Send button. A list that changed meanwhile invites nobody and shows
 // the new people. Afterwards it offers the invitation's words and link to send another way.
+//
+// Opened from the bar over the people selected (§18.5; ROADMAP 5b-v-b-i), it looks only at
+// them: `selection` is the rows ticked or a "Select all", and a "Select all" whose people
+// changed meanwhile invites nobody — the new count goes back up (`onSelectionChanged`) and
+// the lists are read again.
 
 const count = (k) => k.toLocaleString('en');
+
+/** One function for "nothing to tell": a default made in the call would be new every
+ *  render, and the reads that depend on it would run again forever. */
+const NOTHING = () => undefined;
 
 const GROUPS = [
   { key: 'reach', title: 'Recipients' },
@@ -63,6 +74,8 @@ export default function MemberListInvite({
   words,
   readOnly,
   preview: first,
+  selection = null,
+  onSelectionChanged = NOTHING,
   onSent,
   onListChanged = () => undefined,
   onClose,
@@ -87,24 +100,41 @@ export default function MemberListInvite({
   const tab = picked ?? (preview !== null && preview.reach === 0 ? 'left_out' : 'reach');
   const today = gymToday(gym?.timezone);
 
+  // A "Select all" that now holds other people: nothing was done. Its new count goes back
+  // to the list, the tick is asked again, and the numbers and names are read again.
+  const selectionMoved = useCallback(
+    (err) => {
+      const fresh = selectionChanged(err);
+      if (fresh === null) return;
+      setPermission(false);
+      setPeopleTick((t) => t + 1);
+      onSelectionChanged(fresh);
+    },
+    [onSelectionChanged],
+  );
+
   // Counted again as the page opens: the button's number may be minutes old.
   useEffect(() => {
     let live = true;
     Promise.resolve()
-      .then(() => orgService.getInvitePreview(gymId, inviteQueryString(filters)))
+      .then(() =>
+        selection === null ? orgService.getInvitePreview(gymId, inviteQueryString(filters)) : orgService.getSelectedInvitePreview(gymId, selection),
+      )
       .then((res) => res.data.preview)
       .then(
         (got) => {
           if (live) setPreview(got);
         },
         (err) => {
-          if (live) setError(errorText(err, "We couldn't count who would be invited."));
+          if (!live) return;
+          selectionMoved(err);
+          setError(errorText(err, "We couldn't count who would be invited."));
         },
       );
     return () => {
       live = false;
     };
-  }, [gymId, filters, countTick]);
+  }, [gymId, filters, selection, selectionMoved, countTick]);
 
   // A tab's first page, read when the tab is first shown and again after a change.
   useEffect(() => {
@@ -117,7 +147,11 @@ export default function MemberListInvite({
     let done = false;
     setGroups((g) => ({ ...g, [group]: LOADING }));
     Promise.resolve()
-      .then(() => orgService.getInvitePeople(gymId, invitePeopleQuery(filters, group)))
+      .then(() =>
+        selection === null
+          ? orgService.getInvitePeople(gymId, invitePeopleQuery(filters, group))
+          : orgService.getSelectedInvitePeople(gymId, selection, group),
+      )
       .then(
         (res) => {
           done = true;
@@ -125,7 +159,9 @@ export default function MemberListInvite({
         },
         (err) => {
           done = true;
-          if (live) setGroups((g) => ({ ...g, [group]: { ...LOADING, loading: false, error: errorText(err, "We couldn't load who would be invited.") } }));
+          if (!live) return;
+          selectionMoved(err);
+          setGroups((g) => ({ ...g, [group]: { ...LOADING, loading: false, error: errorText(err, "We couldn't load who would be invited.") } }));
         },
       );
     return () => {
@@ -133,7 +169,7 @@ export default function MemberListInvite({
       // Left before it answered: read it again when the tab comes back.
       if (!done) reads[group] = -1;
     };
-  }, [gymId, filters, tab, peopleTick, sent]);
+  }, [gymId, filters, selection, selectionMoved, tab, peopleTick, sent]);
 
   const loadMore = async () => {
     const group = tab;
@@ -142,7 +178,10 @@ export default function MemberListInvite({
     const at = readFor.current[group];
     setLoadingMore(true);
     try {
-      const res = await orgService.getInvitePeople(gymId, invitePeopleQuery(filters, group, shown.cursor));
+      const res =
+        selection === null
+          ? await orgService.getInvitePeople(gymId, invitePeopleQuery(filters, group, shown.cursor))
+          : await orgService.getSelectedInvitePeople(gymId, selection, group, shown.cursor);
       if (readFor.current[group] !== at) return;
       const p = res.data.page;
       // Each person once, whatever the list did between the pages.
@@ -163,7 +202,8 @@ export default function MemberListInvite({
     setSending(true);
     setError(null);
     try {
-      const res = await orgService.pressInvite(gymId, inviteBody(filters, preview, permission));
+      const body = selection === null ? inviteBody(filters, preview, permission) : selectedInviteBody(selection, preview, permission);
+      const res = await orgService.pressInvite(gymId, body);
       setSent(res.data.invited);
       onSent();
     } catch (err) {
@@ -174,6 +214,7 @@ export default function MemberListInvite({
         setPermission(false);
         setPeopleTick((t) => t + 1);
       }
+      selectionMoved(err);
       setError(errorText(err, "We couldn't send the invitations. Please try again."));
     } finally {
       setSending(false);
@@ -190,9 +231,9 @@ export default function MemberListInvite({
 
   const blocked = preview === null ? null : inviteBlockedWords(preview.blocked, words);
   const reach = preview?.reach ?? 0;
-  const ignores = inviteIgnores(filters);
-  const chosen = inviteWho(filters);
-  const summary = preview === null ? null : inviteSummary(preview, filters, words);
+  const ignores = selection === null ? inviteIgnores(filters) : null;
+  const chosen = selection === null ? inviteWho(filters) : null;
+  const summary = preview === null ? null : selection === null ? inviteSummary(preview, filters, words) : selectedInviteSummary(preview, words);
 
   let body;
   let footer;
@@ -270,7 +311,7 @@ export default function MemberListInvite({
               </>
             ) : null}
           </p>
-          {chosen !== 'Everyone on your list' ? (
+          {chosen !== null && chosen !== 'Everyone on your list' ? (
             <p className="c-s14 c-t2" data-testid="invite-who">
               Filtered by {chosen}
             </p>

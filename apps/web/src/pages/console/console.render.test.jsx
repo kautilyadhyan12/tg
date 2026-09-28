@@ -1284,7 +1284,7 @@ describe('Members: the two tabs (5b-i)', () => {
     expect(screen.getByRole('tab', { name: 'Your list' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.queryByText('Rita Sen')).toBeNull();
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Using the app' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'In the app' }));
     expect(await screen.findByText('Rita Sen')).toBeTruthy();
     expect(screen.queryByText('Lena List')).toBeNull();
   });

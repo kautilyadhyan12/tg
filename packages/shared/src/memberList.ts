@@ -1500,6 +1500,69 @@ export type MemberListEntriesPage = z.infer<typeof memberListEntriesPageSchema>;
 export const memberListEntriesResponseSchema = z.object({ page: memberListEntriesPageSchema });
 export type MemberListEntriesResponse = z.infer<typeof memberListEntriesResponseSchema>;
 
+// ── The people selected (5b-v-b-i; spec §18.5) ─────────────────────────────
+//
+// Staff tick people on the list, or tick the page and press "Select all 312 members".
+// Invite and Download CSV then act on exactly those people and nobody else (CLAUDE.md §4:
+// nothing happens to anyone who was not ticked).
+
+/** What `GET /entries` filters by, without the page's cursor: the set "Select all" means. */
+export const memberListFilterSchema = memberListEntriesQuerySchema.omit({ cursor: true });
+export type MemberListFilter = z.infer<typeof memberListFilterSchema>;
+
+/** The most people ticked one by one. Past it, "Select all" sends the filter instead. */
+export const MEMBER_LIST_TICKED_MAX = 500;
+
+/** Either the people ticked one by one, or everyone a filter matched when staff pressed
+ *  "Select all": the count and a digest of exactly who they were. A press whose filter
+ *  now matches anyone else is refused (`selection_changed`), and nothing happens. */
+export const memberListSelectionSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("ticked"),
+      entryIds: z.array(z.string().uuid()).min(1).max(MEMBER_LIST_TICKED_MAX),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("all"),
+      filter: memberListFilterSchema,
+      count: z.number().int().min(0),
+      digest: sha256Schema,
+    })
+    .strict(),
+]);
+export type MemberListSelection = z.infer<typeof memberListSelectionSchema>;
+
+/** "Select all": who the filter matches now, as a count and a digest to send back. */
+export const memberListSelectAllRequestSchema = z.object({ filter: memberListFilterSchema }).strict();
+export type MemberListSelectAllRequest = z.infer<typeof memberListSelectAllRequestSchema>;
+
+export const memberListSelectedAllSchema = z
+  .object({ count: z.number().int().min(0), digest: sha256Schema })
+  .strict();
+export type MemberListSelectedAll = z.infer<typeof memberListSelectedAllSchema>;
+
+export const memberListSelectedAllResponseSchema = z.object({ selection: memberListSelectedAllSchema });
+
+/** A "Select all" whose filter matches other people now: nothing was done, and the
+ *  answer carries the new count and digest. */
+export const MEMBER_LIST_SELECTION_CHANGED_WORDS =
+  "The members you selected have changed, so nothing was done. Check who is selected now and try again.";
+
+export const memberListSelectionChangedSchema = z.object({
+  error: z.literal("selection_changed"),
+  message: z.string(),
+  count: z.number().int().min(0),
+  digest: sha256Schema,
+  requestId: z.string().optional(),
+});
+export type MemberListSelectionChanged = z.infer<typeof memberListSelectionChangedSchema>;
+
+/** Download CSV of the people selected. */
+export const memberListExportRequestSchema = z.object({ selection: memberListSelectionSchema }).strict();
+export type MemberListExportRequest = z.infer<typeof memberListExportRequestSchema>;
+
 // ── Invite (3b-i-a; §9.12, §11.5) ───────────────────────────────────────────
 
 /** Who an Invite is for: the list's current people, narrowed by the gym's own words
@@ -1584,6 +1647,21 @@ export const memberInvitePeopleQuerySchema = z
   .strict();
 export type MemberInvitePeopleQuery = z.infer<typeof memberInvitePeopleQuerySchema>;
 
+/** Invite's numbers for the people selected (§18.5). A POST, because 500 ids do not fit
+ *  in an address. */
+export const memberInviteSelectedPreviewRequestSchema = z.object({ selection: memberListSelectionSchema }).strict();
+export type MemberInviteSelectedPreviewRequest = z.infer<typeof memberInviteSelectedPreviewRequestSchema>;
+
+/** Invite's page for the people selected: who of them gets an email, or is left out. */
+export const memberInviteSelectedPeopleRequestSchema = z
+  .object({
+    selection: memberListSelectionSchema,
+    group: z.enum(["reach", "left_out"]),
+    cursor: z.string().uuid().optional(),
+  })
+  .strict();
+export type MemberInviteSelectedPeopleRequest = z.infer<typeof memberInviteSelectedPeopleRequestSchema>;
+
 export const memberInvitePeopleSchema = z
   .object({
     total: z.number().int().min(0),
@@ -1602,11 +1680,17 @@ export type MemberInvitePreviewResponse = z.infer<typeof memberInvitePreviewResp
 export const memberInviteRequestSchema = z
   .object({
     ...inviteFilterShape,
+    /** The people ticked on the list (§18.5): only they are looked at. Sent in place of
+     *  the words, never with them. */
+    selection: memberListSelectionSchema.optional(),
     version: z.number().int().min(0),
     expectedCount: z.number().int().min(0),
     permissionConfirmed: z.boolean().optional(),
   })
-  .strict();
+  .strict()
+  .refine((body) => body.selection === undefined || (body.status === undefined && body.membershipType === undefined && body.paymentStatus === undefined), {
+    message: "Send the people selected or the words, not both.",
+  });
 export type MemberInviteRequest = z.infer<typeof memberInviteRequestSchema>;
 
 export const memberInvitedSchema = z

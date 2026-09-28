@@ -24,10 +24,12 @@ import {
   type MemberInvited,
   type MemberListInvitation,
   type MemberListNotMe,
+  type MemberListSelection,
 } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { gymHasLivePlan, insertAudit } from "../repo.js";
 import * as listRepo from "../memberList/repo.js";
+import { selectedIds } from "../memberList/selection.js";
 import type { MemberListDeps } from "../memberList/service.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { dayInTz } from "../../gamification/streak.js";
@@ -59,7 +61,25 @@ export const filtersOf = (query: MemberInvitePreviewQuery): repo.WordFilters => 
   statuses: folded(query.status),
   membershipTypes: folded(query.membershipType),
   paymentStatuses: folded(query.paymentStatus),
+  entryIds: null,
 });
+
+type Words = string | string[] | undefined;
+
+/** Who an Invite looks at: the Filter's words, or the people selected (§18.5). */
+export interface InviteWho {
+  status?: Words;
+  membershipType?: Words;
+  paymentStatus?: Words;
+  selection?: MemberListSelection | undefined;
+}
+
+/** The group's filters. The people selected are only those records; a "Select all" whose
+ *  filter now matches other people throws `SelectionChanged`, and nothing is done. */
+export async function filtersFor(deps: MemberListDeps, gymId: string, who: InviteWho): Promise<repo.WordFilters> {
+  if (who.selection === undefined) return filtersOf(who);
+  return { statuses: null, membershipTypes: null, paymentStatuses: null, entryIds: await selectedIds(deps, gymId, who.selection) };
+}
 
 interface Group {
   reach: { hmac: string; email: string }[];
@@ -177,7 +197,7 @@ export async function previewInvite(
   deps: MemberListDeps,
   userId: string,
   gymId: string,
-  query: MemberInvitePreviewQuery,
+  query: InviteWho,
   limit: () => Promise<boolean>,
 ): Promise<MemberInvitePreview | null> {
   const { org } = await requirePrivilege(deps, gymId, userId, "members.confirm");
@@ -186,7 +206,7 @@ export async function previewInvite(
   const state = await listRepo.listState(deps.sql, gymId);
   const blocked = await blockedFor(deps.sql, settings, gymId, org.status);
   if (settings === null) return { version: state?.version ?? 0, reach: 0, skipped: noneSkipped(), blocked };
-  const group = await workOutGroup(deps.sql, settings, gymId, filtersOf(query), dayInTz(deps.now(), org.timezone));
+  const group = await workOutGroup(deps.sql, settings, gymId, await filtersFor(deps, gymId, query), dayInTz(deps.now(), org.timezone));
   return { version: state?.version ?? 0, reach: group.reach.length, skipped: group.skipped, blocked };
 }
 
@@ -219,7 +239,7 @@ export async function pressInvite(
   if (!(await limit())) return null;
   const at = deps.now();
   const today = dayInTz(at, org.timezone);
-  const filters = filtersOf(request);
+  const filters = await filtersFor(deps, gymId, request);
   const changed = async (): Promise<InviteChanged> => {
     const version = (await listRepo.listState(deps.sql, gymId))?.version ?? 0;
     const group = await workOutGroup(deps.sql, settings, gymId, filters, today);
@@ -249,6 +269,7 @@ export async function pressInvite(
       meta: {
         reach: String(group.reach.length),
         version: String(version),
+        chosenBy: request.selection === undefined ? "words" : request.selection.kind,
         permissionConfirmed: "true",
         noEmail: String(group.skipped.noEmail),
         underAge: String(group.skipped.underAge),

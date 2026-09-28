@@ -1649,6 +1649,59 @@ export interface EntriesPageInput {
   limit: number;
 }
 
+/** Which records a filter chooses: a page's input without its place in the list. */
+export type EntriesFilterInput = Omit<EntriesPageInput, "cursor" | "limit">;
+
+/** THE ONE WHERE CLAUSE BEHIND A PAGE OF THE LIST AND "SELECT ALL", so the people staff
+ *  select are exactly the people the list shows them (spec §18.5). */
+function entriesWhere(sql: SqlOrTx, input: EntriesFilterInput) {
+  const statuses = input.statuses === null ? null : [...input.statuses];
+  const membershipTypes = input.membershipTypes === null ? null : [...input.membershipTypes];
+  const paymentStatuses = input.paymentStatuses === null ? null : [...input.paymentStatuses];
+  const invitedIds = input.invitation === null ? null : [...input.invitation.ids];
+  const invitedInclude = input.invitation?.include ?? true;
+  const appIds = input.appIds === null ? null : [...input.appIds];
+  return sql`
+        e.gym_id = ${input.gymId}
+        -- CURRENT RECORDS UNLESS THE FORMER ONES WERE ASKED FOR BY NAME (§11.5). The
+        -- default is what every screen means by the list; a former record appearing in
+        -- a page nobody asked for is somebody the gym believes it has removed standing
+        -- among its members.
+        AND (${input.records}::text = 'all'
+             OR (${input.records}::text = 'current' AND e.former_at IS NULL)
+             OR (${input.records}::text = 'former' AND e.former_at IS NOT NULL))
+        AND (${statuses}::text[] IS NULL
+             OR lower(coalesce(e.status, '')) = ANY(${statuses}::text[]))
+        AND (${membershipTypes}::text[] IS NULL
+             OR lower(coalesce(e.membership_type, '')) = ANY(${membershipTypes}::text[]))
+        AND (${paymentStatuses}::text[] IS NULL
+             OR lower(coalesce(e.payment_status, '')) = ANY(${paymentStatuses}::text[]))
+        AND (${input.like}::text IS NULL
+             OR e.full_name ILIKE ${input.like}::text
+             OR e.email::text ILIKE ${input.like}::text
+             OR coalesce(e.phone_e164, '') ILIKE ${input.like}::text
+             OR coalesce(e.member_number, '') ILIKE ${input.like}::text)
+        AND (${input.filter}::text = 'all'
+             OR (${input.filter}::text = 'in_app'
+                 AND e.id = ANY(${input.inAppEntryIds}::uuid[]))
+             OR (${input.filter}::text = 'not_in_app'
+                 AND e.id <> ALL(${input.inAppEntryIds}::uuid[])))
+        AND (${invitedIds}::uuid[] IS NULL
+             OR (${invitedInclude}::boolean AND e.id = ANY(${invitedIds}::uuid[]))
+             OR (NOT ${invitedInclude}::boolean AND e.id <> ALL(${invitedIds}::uuid[])))
+        AND (${appIds}::uuid[] IS NULL OR e.id = ANY(${appIds}::uuid[]))`;
+}
+
+/** Every record the filter chooses, in the list's order: who "Select all" selects. */
+export async function entryIdsMatching(sql: SqlOrTx, input: EntriesFilterInput): Promise<string[]> {
+  const rows = await sql<{ id: string }[]>`
+    SELECT e.id
+    FROM gym_member_list_entries e
+    WHERE ${entriesWhere(sql, input)}
+    ORDER BY e.full_name, e.id`;
+  return rows.map((row) => row.id);
+}
+
 /** ONE PAGE OF THE LIST, AND HOW MANY THE FILTERS MATCH IN ALL — one statement.
  *
  *  **THE TOTAL IS COUNTED OVER THE SAME FILTERED SET THE PAGE IS CUT FROM**, in the
@@ -1671,12 +1724,6 @@ export async function entriesPage(
   sql: SqlOrTx,
   input: EntriesPageInput,
 ): Promise<{ total: number; entries: EntryRow[] }> {
-  const statuses = input.statuses === null ? null : [...input.statuses];
-  const membershipTypes = input.membershipTypes === null ? null : [...input.membershipTypes];
-  const paymentStatuses = input.paymentStatuses === null ? null : [...input.paymentStatuses];
-  const invitedIds = input.invitation === null ? null : [...input.invitation.ids];
-  const invitedInclude = input.invitation?.include ?? true;
-  const appIds = input.appIds === null ? null : [...input.appIds];
   const rows = await sql<
     {
       total: number;
@@ -1708,34 +1755,7 @@ export async function entriesPage(
              e.former_at, e.source,
              (e.id = ANY(${input.inAppEntryIds}::uuid[])) AS in_app
       FROM gym_member_list_entries e
-      WHERE e.gym_id = ${input.gymId}
-        -- CURRENT RECORDS UNLESS THE FORMER ONES WERE ASKED FOR BY NAME (§11.5). The
-        -- default is what every screen means by the list; a former record appearing in
-        -- a page nobody asked for is somebody the gym believes it has removed standing
-        -- among its members.
-        AND (${input.records}::text = 'all'
-             OR (${input.records}::text = 'current' AND e.former_at IS NULL)
-             OR (${input.records}::text = 'former' AND e.former_at IS NOT NULL))
-        AND (${statuses}::text[] IS NULL
-             OR lower(coalesce(e.status, '')) = ANY(${statuses}::text[]))
-        AND (${membershipTypes}::text[] IS NULL
-             OR lower(coalesce(e.membership_type, '')) = ANY(${membershipTypes}::text[]))
-        AND (${paymentStatuses}::text[] IS NULL
-             OR lower(coalesce(e.payment_status, '')) = ANY(${paymentStatuses}::text[]))
-        AND (${input.like}::text IS NULL
-             OR e.full_name ILIKE ${input.like}::text
-             OR e.email::text ILIKE ${input.like}::text
-             OR coalesce(e.phone_e164, '') ILIKE ${input.like}::text
-             OR coalesce(e.member_number, '') ILIKE ${input.like}::text)
-        AND (${input.filter}::text = 'all'
-             OR (${input.filter}::text = 'in_app'
-                 AND e.id = ANY(${input.inAppEntryIds}::uuid[]))
-             OR (${input.filter}::text = 'not_in_app'
-                 AND e.id <> ALL(${input.inAppEntryIds}::uuid[])))
-        AND (${invitedIds}::uuid[] IS NULL
-             OR (${invitedInclude}::boolean AND e.id = ANY(${invitedIds}::uuid[]))
-             OR (NOT ${invitedInclude}::boolean AND e.id <> ALL(${invitedIds}::uuid[])))
-        AND (${appIds}::uuid[] IS NULL OR e.id = ANY(${appIds}::uuid[]))
+      WHERE ${entriesWhere(sql, input)}
     ),
     totals AS (SELECT count(*)::int AS total FROM filtered)
     SELECT t.total, f.id, f.full_name, f.email, f.phone_e164, f.member_number,
@@ -1778,6 +1798,91 @@ export async function entriesPage(
     });
   }
   return { total, entries };
+}
+
+/** One record as Download CSV writes it: the list's columns and the gym's own. */
+export interface ExportRow {
+  entryId: string;
+  fullName: string;
+  email: string | null;
+  phone: string | null;
+  memberNumber: string | null;
+  status: string | null;
+  membershipType: string | null;
+  joinedOn: string | null;
+  endsOn: string | null;
+  endsOnKind: "ends" | "renews" | null;
+  paymentStatus: string | null;
+  dateOfBirth: string | null;
+  formerAt: Date | null;
+  extra: Record<string, string>;
+}
+
+/** Of these records, how many carry an end date, a renewal date, and how many are past
+ *  members: the file's columns are chosen from them before its first line is written. */
+export async function exportShapeOf(
+  sql: SqlOrTx,
+  gymId: string,
+  ids: readonly string[],
+): Promise<{ ends: number; renews: number; former: number }> {
+  const rows = await sql<{ ends: number; renews: number; former: number }[]>`
+    SELECT (count(*) FILTER (WHERE ends_on IS NOT NULL AND ends_on_kind IS DISTINCT FROM 'renews'))::int AS ends,
+           (count(*) FILTER (WHERE ends_on IS NOT NULL AND ends_on_kind = 'renews'))::int AS renews,
+           (count(*) FILTER (WHERE former_at IS NOT NULL))::int AS former
+    FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND id = ANY(${[...ids]}::uuid[])`;
+  const row = rows[0];
+  return { ends: row?.ends ?? 0, renews: row?.renews ?? 0, former: row?.former ?? 0 };
+}
+
+/** These records of this gym, with the gym's own columns, in the list's order. A record
+ *  of another gym, or one deleted since, is simply not there. */
+export async function exportRows(sql: SqlOrTx, gymId: string, ids: readonly string[]): Promise<ExportRow[]> {
+  const rows = await sql<
+    {
+      id: string;
+      full_name: string;
+      email: string | null;
+      phone_e164: string | null;
+      member_number: string | null;
+      status: string | null;
+      membership_type: string | null;
+      joined_on: string | null;
+      ends_on: string | null;
+      ends_on_kind: string | null;
+      payment_status: string | null;
+      date_of_birth: string | null;
+      former_at: Date | null;
+      extra: unknown;
+    }[]
+  >`
+    SELECT e.id, e.full_name, e.email::text AS email, e.phone_e164, e.member_number,
+           e.status, e.membership_type,
+           e.joined_on::text     AS joined_on,
+           e.ends_on::text       AS ends_on,
+           e.ends_on_kind,
+           e.payment_status,
+           e.date_of_birth::text AS date_of_birth,
+           e.former_at, e.extra
+    FROM gym_member_list_entries e
+    WHERE e.gym_id = ${gymId} AND e.id = ANY(${[...ids]}::uuid[])
+    ORDER BY e.full_name, e.id`;
+  return rows.map((row) => ({
+    entryId: row.id,
+    fullName: row.full_name,
+    email: row.email,
+    phone: row.phone_e164,
+    memberNumber: row.member_number,
+    status: row.status,
+    membershipType: row.membership_type,
+    joinedOn: row.joined_on,
+    endsOn: row.ends_on,
+    endsOnKind: parseEndsOnKind(row.ends_on_kind, row.id),
+    paymentStatus: row.payment_status,
+    dateOfBirth: row.date_of_birth,
+    formerAt: row.former_at,
+    extra: parseExtra(row.extra, row.id),
+  }));
 }
 
 /** TELL POSTGRES WHAT IS NOW IN THE TABLE, after a confirm has filled it.

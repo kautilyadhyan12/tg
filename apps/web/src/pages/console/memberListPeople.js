@@ -231,6 +231,59 @@ export function inviteBody(filters, preview, permissionConfirmed) {
   return body;
 }
 
+// ── The people selected (spec Part 3 §18.5) ──
+
+/** The list's filter and search as the server reads them: what "Select all" means. The
+ *  same keys `entriesQueryString` sends, so the people selected are the people shown. */
+export function selectionFilter(filters) {
+  const out = {};
+  if (filters.records !== 'current') out.records = filters.records;
+  if (filters.records === 'current') {
+    if (filters.app.length > 0) out.app = [...filters.app];
+    for (const { kind } of CHIP_KINDS) if (filters[kind].length > 0) out[kind] = [...filters[kind]];
+  }
+  const query = filters.query.trim();
+  if (query !== '') out.query = query;
+  return out;
+}
+
+/** The selection a press sends: the rows ticked, or everyone "Select all" chose with the
+ *  count and digest the server gave. Null when nobody is selected. */
+export function selectionOf(ticked, all) {
+  if (all !== null) return { kind: 'all', filter: all.filter, count: all.count, digest: all.digest };
+  if (ticked.size === 0) return null;
+  return { kind: 'ticked', entryIds: [...ticked] };
+}
+
+/** How many people are selected. */
+export function selectedCount(ticked, all) {
+  return all !== null ? all.count : ticked.size;
+}
+
+/** "3 selected". */
+export function selectedWords(k) {
+  return `${n(k)} selected`;
+}
+
+/** The press on the people selected: the version and number the count showed, and the tick. */
+export function selectedInviteBody(selection, preview, permissionConfirmed) {
+  return { selection, version: preview.version, expectedCount: preview.reach, permissionConfirmed };
+}
+
+/** Invite's top line for the people selected, as `inviteSummary` says it for the list. */
+export function selectedInviteSummary(preview, words) {
+  const leftOut = Object.values(preview.skipped).reduce((sum, k) => sum + k, 0);
+  const total = preview.reach + leftOut;
+  let gets;
+  if (total === 0) gets = `None of the selected ${words.people} are on your list now`;
+  else if (preview.reach === 0) gets = `No ${words.people} to invite`;
+  else if (preview.reach === total)
+    gets = total === 1 ? `1 selected ${words.person} will receive an invitation email` : `All ${n(total)} selected ${words.people} will receive an invitation email`;
+  else gets = `${n(preview.reach)} of ${n(total)} selected ${words.people} will receive an invitation email`;
+  const wont = leftOut === 0 ? null : `${n(leftOut)} not included`;
+  return { gets, wont, leftOut };
+}
+
 /** Who an Invite is for, in the gym's own words. */
 export function inviteWho(filters) {
   const parts = CHIP_KINDS.filter(({ kind }) => filters[kind].length > 0).map(

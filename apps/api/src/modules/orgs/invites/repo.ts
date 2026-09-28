@@ -24,6 +24,8 @@ export interface WordFilters {
   statuses: readonly string[] | null;
   membershipTypes: readonly string[] | null;
   paymentStatuses: readonly string[] | null;
+  /** Only these records (the people selected, §18.5), or null for no such limit. */
+  entryIds: readonly string[] | null;
 }
 
 export interface Candidate {
@@ -44,6 +46,7 @@ export async function inviteCandidates(sql: SqlOrTx, gymId: string, filters: Wor
   const statuses = filters.statuses === null ? null : [...filters.statuses];
   const membershipTypes = filters.membershipTypes === null ? null : [...filters.membershipTypes];
   const paymentStatuses = filters.paymentStatuses === null ? null : [...filters.paymentStatuses];
+  const entryIds = filters.entryIds === null ? null : [...filters.entryIds];
   const rows = await sql<
     {
       id: string;
@@ -65,6 +68,7 @@ export async function inviteCandidates(sql: SqlOrTx, gymId: string, filters: Wor
            OR lower(coalesce(e.membership_type, '')) = ANY(${membershipTypes}::text[]))
       AND (${paymentStatuses}::text[] IS NULL
            OR lower(coalesce(e.payment_status, '')) = ANY(${paymentStatuses}::text[]))
+      AND (${entryIds}::uuid[] IS NULL OR e.id = ANY(${entryIds}::uuid[]))
     ORDER BY e.listed_seq`;
   return rows.map((row) => ({
     entryId: row.id,

@@ -5,6 +5,7 @@
 //
 // Registered from `registerOrgRoutes` rather than from `app.ts`, because these
 // are the same console behind the same gates and share its deps.
+import { Readable } from "node:stream";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
@@ -13,17 +14,22 @@ import {
   MEMBER_LIST_BY_HAND_WORDS,
   MEMBER_LIST_CONFIRM_REFUSAL_WORDS,
   MEMBER_INVITE_WORDS,
+  MEMBER_LIST_SELECTION_CHANGED_WORDS,
   memberInvitePeopleQuerySchema,
   memberInvitePreviewQuerySchema,
   memberInviteRequestSchema,
+  memberInviteSelectedPeopleRequestSchema,
+  memberInviteSelectedPreviewRequestSchema,
   memberListConfirmRequestSchema,
   memberListEntriesQuerySchema,
   memberListEntryInputSchema,
   memberListEntryPatchSchema,
+  memberListExportRequestSchema,
   memberListMergeRequestSchema,
   memberListNotThemRequestSchema,
   memberListRemoveUnlistedRequestSchema,
   memberListRowsQuerySchema,
+  memberListSelectAllRequestSchema,
   memberListUnlistedQuerySchema,
   memberListUploadRequestSchema,
 } from "@app/shared";
@@ -34,7 +40,20 @@ import { invitePeople } from "../invites/people.js";
 import * as invites from "../invites/service.js";
 import type { InviteSettings } from "../invites/settings.js";
 import * as byHand from "./byHandService.js";
+import * as exporter from "./exportCsv.js";
+import { SelectionChanged, selectAll } from "./selection.js";
 import * as service from "./service.js";
+
+/** A "Select all" whose filter now matches other people: nothing was done (§18.5). */
+function sendSelectionChanged(err: SelectionChanged, req: FastifyRequest, reply: FastifyReply): FastifyReply {
+  return reply.status(409).send({
+    error: "selection_changed",
+    message: MEMBER_LIST_SELECTION_CHANGED_WORDS,
+    count: err.now.count,
+    digest: err.now.digest,
+    requestId: req.id,
+  });
+}
 
 /** The body limit for an upload: the base64 ceiling plus room for the two other
  *  fields and JSON's own punctuation. Per-route, on the photo route's precedent —
@@ -476,6 +495,7 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
       if (invited === null) return;
       return await reply.status(200).send({ invited });
     } catch (err) {
+      if (err instanceof SelectionChanged) return await sendSelectionChanged(err, req, reply);
       if (!(err instanceof invites.InviteChanged)) throw err;
       return await reply.status(409).send({
         error: "invite_changed",
@@ -483,6 +503,85 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
         preview: err.preview,
         requestId: req.id,
       });
+    }
+  });
+
+  // ── The people selected (5b-v-b-i; §18.5) ──
+
+  /** "Select all": who the filter matches now, as a count and a digest. */
+  app.post("/v1/orgs/:gymId/member-list/selection", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(memberListSelectAllRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const selection = await selectAll(listDeps, requireUserId(req), params.gymId, body, readGate(req, reply));
+    if (selection === null) return;
+    return reply.status(200).send({ selection });
+  });
+
+  /** Invite's numbers for the people selected. */
+  app.post("/v1/orgs/:gymId/member-list/selected/invite-preview", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(memberInviteSelectedPreviewRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    try {
+      const preview = await invites.previewInvite(listDeps, requireUserId(req), params.gymId, body, readGate(req, reply));
+      if (preview === null) return;
+      return await reply.status(200).send({ preview });
+    } catch (err) {
+      if (err instanceof SelectionChanged) return await sendSelectionChanged(err, req, reply);
+      throw err;
+    }
+  });
+
+  /** Invite's page for the people selected. */
+  app.post("/v1/orgs/:gymId/member-list/selected/invite-people", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(memberInviteSelectedPeopleRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    try {
+      const page = await invitePeople(listDeps, requireUserId(req), params.gymId, body, readGate(req, reply));
+      if (page === null) return;
+      return await reply.status(200).send({ page });
+    } catch (err) {
+      if (err instanceof SelectionChanged) return await sendSelectionChanged(err, req, reply);
+      throw err;
+    }
+  });
+
+  /** A download holds people's details: 20 an hour each, 60 from one address (the front
+   *  desk, several staff). */
+  const exportGate = gate(
+    createDualRateLimit({
+      name: "memberlist_export",
+      max: 20,
+      ipMax: 60,
+      windowMs: 60 * 60 * 1000,
+      identifier: (req) => req.authUser?.id ?? null,
+      redis: deps.redis,
+    }),
+  );
+
+  /** Download CSV of the people selected. */
+  app.post("/v1/orgs/:gymId/member-list/export.csv", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(memberListExportRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    try {
+      const file = await exporter.exportSelected(listDeps, requireUserId(req), params.gymId, body, exportGate(req, reply));
+      if (file === null) return;
+      return await reply
+        .status(200)
+        .header("content-type", "text/csv; charset=utf-8")
+        .header("content-disposition", exporter.contentDisposition(file.filename))
+        .header("cache-control", "no-store")
+        .send(Readable.from(file.chunks));
+    } catch (err) {
+      if (err instanceof SelectionChanged) return await sendSelectionChanged(err, req, reply);
+      throw err;
     }
   });
 
