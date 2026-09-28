@@ -4,6 +4,7 @@ import { ChevronRight, FileUp, Globe, Loader2, Search, UserPlus } from 'lucide-r
 import { LEAD_FILE_WORDS, LEAD_QUERY_MAX_CHARS } from '@app/shared';
 import { orgService, errorStatus, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
+import ScrollJump from '../../components/console/ScrollJump';
 import GymPageSheet from './GymPageSheet';
 import LeadFileImport from './LeadFileImport';
 import LeadSheet from './LeadSheet';
@@ -31,6 +32,8 @@ import {
 // due a follow-up email today: a chip of its own, so it and a status chip are never on together.
 // Import leads (20c-iii) reads a file and adds its people after staff have seen who.
 // "Your gym page" (20c-iv-a) opens the gym's own page, whose form adds people here.
+// A long list keeps its tools on screen: search and chips pinned, Back to top and Go to the
+// bottom (RULINGS 2026-09-28, the rule Members set).
 
 const count = (n) => n.toLocaleString('en');
 
@@ -197,7 +200,9 @@ export default function Leads() {
         </section>
       ) : (
         <>
-          <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:gap-4">
+          {/* Search and the status chips stay at the top on a computer while the list
+              scrolls under them, as on Members (RULINGS 2026-09-28). */}
+          <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:gap-4 c-sticky-tools" data-testid="leads-tools">
             <label className="c-search w-full md:w-[340px]">
               <Search aria-hidden="true" className="w-[18px] h-[18px]" />
               <input
@@ -318,6 +323,8 @@ export default function Leads() {
           ) : null}
         </>
       )}
+
+      {!page.refused ? <ScrollJump /> : null}
 
       {pageOpen ? <GymPageSheet gymId={gymId} gym={org} words={words} readOnly={readOnly} onClose={() => setPageOpen(false)} /> : null}
 
