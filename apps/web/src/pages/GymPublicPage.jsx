@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { Check, Clock, Loader2, MapPin } from 'lucide-react';
 import { ENQUIRY_SOURCE_WORDS, ENQUIRY_WORDS, GYM_ENQUIRY_MAX_MESSAGE_CHARS, LEAD_SOURCES } from '@app/shared';
-import { orgService, errorCode, errorStatus, errorText } from '../api/orgsApi';
+import { orgService, errorCode, errorStatus, errorText, gymPhotoUrl } from '../api/orgsApi';
 import { EMPTY_ENQUIRY, enquiryBody, enquiryProblem, facilityLines, hoursView } from './gymPublicView';
 import { useRobotCheck } from './useRobotCheck';
+import PhotoViewer from '../components/common/PhotoViewer';
 
 // A gym's own page, `/gyms/{slug}` (ROADMAP 20c-iv-a; spec Part 3 §16.3): the gym's
-// name, town, opening hours, "About us" and facilities, and a form that makes the
+// name, town, photos (20c-iv-b), opening hours, "About us" and facilities, and a form that makes the
 // person one of its leads. Public: no sign-in. `?embed=1` is the form alone, for the
 // frame a gym puts in its own website. Whatever happened to the message, a sent form
 // says the same thanks.
@@ -175,6 +176,41 @@ function EnquiryForm({ slug, page }) {
   );
 }
 
+/** The gym's photos, each shown whole, never cropped: the main one at its own shape
+ *  (up to most of a screen tall), the rest in a row of boxes with space around them. A
+ *  tap opens one full size. */
+function Photos({ slug, page }) {
+  const [open, setOpen] = useState(null);
+  const photos = page.photos;
+  const count = photos.length;
+  if (count === 0) return null;
+  const alt = (i) => `${page.name}, photo ${i + 1} of ${count}`;
+  const shown = photos.map((photo, i) => ({ key: photo.id, src: gymPhotoUrl({ slug, photoId: photo.id }), alt: alt(i) }));
+  const [main, ...rest] = photos;
+  return (
+    <section aria-label="Photos" className="flex flex-col gap-2">
+      <button
+        type="button"
+        onClick={() => setOpen(0)}
+        className="flex items-center justify-center w-full rounded-2xl overflow-hidden"
+        style={{ background: LINE, maxHeight: '70vh', aspectRatio: `${main.width} / ${main.height}` }}
+      >
+        <img src={shown[0].src} alt={shown[0].alt} className="max-w-full max-h-full w-full h-full object-contain" />
+      </button>
+      {rest.length > 0 ? (
+        <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
+          {rest.map((photo, i) => (
+            <button key={photo.id} type="button" onClick={() => setOpen(i + 1)} className="block rounded-xl overflow-hidden p-1" style={{ aspectRatio: '1 / 1', background: LINE }}>
+              <img src={shown[i + 1].src} alt={shown[i + 1].alt} loading="lazy" className="w-full h-full object-contain" />
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {open !== null ? <PhotoViewer photos={shown} index={open} onIndex={setOpen} onClose={() => setOpen(null)} /> : null}
+    </section>
+  );
+}
+
 export default function GymPublicPage() {
   const { slug } = useParams();
   const [params] = useSearchParams();
@@ -263,6 +299,8 @@ export default function GymPublicPage() {
           ) : null}
         </div>
       </header>
+
+      <Photos slug={slug} page={page} />
 
       {page.about.trim() !== '' ? (
         <section className={card} style={cardStyle}>

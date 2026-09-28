@@ -13,6 +13,7 @@ describe("the robot check's keys", () => {
     NODE_ENV: "production",
     RESEND_API_KEY: "re_x",
     EMAIL_FROM: "AI Home Gym <hi@example.com>",
+    PHOTO_DIR: "/srv/aihg/photos",
   };
 
   it("production refuses to start without them, so the always-pass test pair can never be live", () => {

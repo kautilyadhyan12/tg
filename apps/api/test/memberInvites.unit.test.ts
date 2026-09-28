@@ -474,6 +474,7 @@ describe("invitation settings", () => {
     EMAIL_FROM: "AI Home Gym <hi@example.com>",
     TURNSTILE_SITE_KEY: "site",
     TURNSTILE_SECRET_KEY: "secret",
+    PHOTO_DIR: "/srv/aihg/photos",
   };
 
   it("production: the key alone keeps invitations readable; sending needs the sender and the api's address too", () => {
