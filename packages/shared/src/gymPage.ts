@@ -44,6 +44,15 @@ export const GYM_FACILITIES = [
 export const gymFacilitySchema = z.enum(GYM_FACILITIES);
 export type GymFacility = z.infer<typeof gymFacilitySchema>;
 
+/** A facility as a gym typed it: spaces tidied, and the list's own facility when the
+ *  words are one of the list's ("showers" is Showers), so nothing is on the page twice. */
+export function typedFacility(text: string): { kind: "listed"; facility: GymFacility } | { kind: "own"; name: string } | null {
+  const name = text.replace(/\s+/g, " ").trim();
+  if (name === "") return null;
+  const listed = GYM_FACILITIES.find((facility) => GYM_FACILITY_WORDS[facility].toLowerCase() === name.toLowerCase());
+  return listed === undefined ? { kind: "own", name } : { kind: "listed", facility: listed };
+}
+
 export const GYM_FACILITY_WORDS: Record<GymFacility, string> = {
   free_weights: "Free weights",
   weight_machines: "Weight machines",
@@ -69,7 +78,10 @@ export const GYM_FACILITY_WORDS: Record<GymFacility, string> = {
 };
 
 export const GYM_PAGE_MAX_ABOUT_CHARS = 1000;
-export const GYM_PAGE_MAX_OTHER_FACILITIES_CHARS = 200;
+/** Facilities a gym adds of its own, beside the list's, and how long each may be. */
+export const GYM_PAGE_MAX_OWN_FACILITIES = 10;
+export const GYM_PAGE_MAX_OWN_FACILITY_CHARS = 40;
+const ownFacilitySchema = z.string().trim().min(1).max(GYM_PAGE_MAX_OWN_FACILITY_CHARS);
 export const GYM_ENQUIRY_MAX_MESSAGE_CHARS = 1000;
 /** The messages one lead keeps from the form, newest first; an older one goes. */
 export const GYM_ENQUIRIES_KEPT_PER_LEAD = 20;
@@ -82,7 +94,8 @@ export const gymPageSchema = z
     shown: z.boolean(),
     about: z.string().max(GYM_PAGE_MAX_ABOUT_CHARS),
     facilities: z.array(gymFacilitySchema).max(GYM_FACILITIES.length),
-    otherFacilities: z.string().max(GYM_PAGE_MAX_OTHER_FACILITIES_CHARS),
+    /** The gym's own facilities, in the order it added them. */
+    ownFacilities: z.array(z.string()).max(GYM_PAGE_MAX_OWN_FACILITIES),
     /** The page's address is `/gyms/{slug}`. */
     slug: z.string().min(1),
     /** This person may change the page (the owner's `org.manage`); others see it. */
@@ -101,7 +114,10 @@ export const setGymPageRequestSchema = z
       .array(gymFacilitySchema)
       .max(GYM_FACILITIES.length)
       .refine((list) => new Set(list).size === list.length, { message: "a facility twice" }),
-    otherFacilities: z.string().max(GYM_PAGE_MAX_OTHER_FACILITIES_CHARS),
+    ownFacilities: z
+      .array(ownFacilitySchema)
+      .max(GYM_PAGE_MAX_OWN_FACILITIES)
+      .refine((list) => new Set(list.map((name) => name.toLowerCase())).size === list.length, { message: "a facility twice" }),
   })
   .strict();
 export type SetGymPageRequest = z.infer<typeof setGymPageRequestSchema>;
@@ -114,7 +130,7 @@ export const publicGymPageSchema = z
     orgType: orgTypeSchema,
     about: z.string(),
     facilities: z.array(gymFacilitySchema),
-    otherFacilities: z.string(),
+    ownFacilities: z.array(z.string()),
     hours: gymHoursSchema,
     /** The robot check's public site key, for the widget. */
     robotCheckKey: z.string().min(1),

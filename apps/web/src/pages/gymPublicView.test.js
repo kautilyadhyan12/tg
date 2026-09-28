@@ -11,13 +11,14 @@ const WEEK = [
 const hours = (over = {}) => ({ mode: 'scheduled', timezone: 'Europe/London', clockFormat: '24h', week: WEEK, savedWeek: [], closures: [], ...over });
 
 describe('the facilities', () => {
-  it('lists the ticked ones in words, then the gym\'s own line', () => {
-    expect(facilityLines({ facilities: ['showers', 'free_weights'], otherFacilities: ' Boxing ring ' })).toEqual([
+  it('lists the ticked ones in words, then the ones the gym added itself, as one list', () => {
+    expect(facilityLines({ facilities: ['showers', 'free_weights'], ownFacilities: ['Boxing ring', 'Rooftop track'] })).toEqual([
       'Showers',
       'Free weights',
       'Boxing ring',
+      'Rooftop track',
     ]);
-    expect(facilityLines({ facilities: [], otherFacilities: '' })).toEqual([]);
+    expect(facilityLines({ facilities: [], ownFacilities: [] })).toEqual([]);
   });
 });
 

@@ -20,7 +20,7 @@ const LeadSheet = (await import('./LeadSheet')).default;
 
 const GYM = '11111111-1111-4111-8111-111111111111';
 const WORDS = { it: 'gym', people: 'members', person: 'member', peopleCap: 'Members' };
-const PAGE = { shown: false, about: '', facilities: [], otherFacilities: '', slug: 'canal-street-gym', mayChange: true };
+const PAGE = { shown: false, about: '', facilities: [], ownFacilities: [], slug: 'canal-street-gym', mayChange: true };
 
 beforeEach(() => {
   for (const fn of Object.values(api)) fn.mockReset();
@@ -30,6 +30,10 @@ afterEach(() => cleanup());
 const drawSheet = (props = {}) =>
   render(<GymPageSheet gymId={GYM} gym={{ name: 'Canal Street Gym' }} words={WORDS} readOnly={false} onClose={() => undefined} {...props} />);
 const tick = (name) => screen.getByRole('checkbox', { name });
+const addOwn = (text) => {
+  fireEvent.change(screen.getByLabelText('Add a facility'), { target: { value: text } });
+  fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+};
 
 describe('the worst thing: a page switched on or changed by mistake', () => {
   it('nothing is saved until Save, and Save sends exactly what is on screen', async () => {
@@ -43,7 +47,7 @@ describe('the worst thing: a page switched on or changed by mistake', () => {
     fireEvent.click(tick('Showers'));
     fireEvent.click(tick('Free weights'));
     fireEvent.change(screen.getByLabelText('About us'), { target: { value: '  Open late.  ' } });
-    fireEvent.change(screen.getByLabelText('Other facilities'), { target: { value: 'Boxing ring' } });
+    addOwn('Boxing ring');
     expect(api.setGymPage).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -53,7 +57,7 @@ describe('the worst thing: a page switched on or changed by mistake', () => {
       shown: true,
       about: 'Open late.',
       facilities: ['free_weights', 'showers'],
-      otherFacilities: 'Boxing ring',
+      ownFacilities: ['Boxing ring'],
     });
   });
 
@@ -99,6 +103,45 @@ describe('the worst thing: a page switched on or changed by mistake', () => {
     const code = await screen.findByLabelText('Code for your website');
     expect(code.value).toContain(`src="${window.location.origin}/gyms/canal-street-gym?embed=1"`);
     expect(code.value).toContain('title="Get in touch with Canal Street Gym"');
+  });
+});
+
+describe("the gym's own facilities", () => {
+  it("are added to the same list, ticked; untick takes one off; the list's own words tick the list's facility", async () => {
+    api.getGymPage.mockResolvedValue({ data: { page: PAGE } });
+    drawSheet();
+    await screen.findByRole('checkbox', { name: 'Show my page' });
+    addOwn('  Rooftop   track ');
+    expect(tick('Rooftop track').getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByLabelText('Add a facility').value).toBe('');
+    // "showers" is the list's Showers: ticked there, not added twice.
+    addOwn('showers');
+    expect(tick('Showers').getAttribute('aria-checked')).toBe('true');
+    expect(screen.getAllByRole('checkbox', { name: /showers/i })).toHaveLength(1);
+    // The same one again is not added twice.
+    addOwn('rooftop track');
+    expect(screen.getAllByRole('checkbox', { name: /rooftop track/i })).toHaveLength(1);
+    fireEvent.click(tick('Rooftop track'));
+    expect(screen.queryByRole('checkbox', { name: 'Rooftop track' })).toBeNull();
+    expect(api.setGymPage).not.toHaveBeenCalled();
+  });
+
+  it('stops at ten, and says how to add another', async () => {
+    const ten = Array.from({ length: 10 }, (_, i) => `Own ${i + 1}`);
+    api.getGymPage.mockResolvedValue({ data: { page: { ...PAGE, ownFacilities: ten } } });
+    drawSheet();
+    await screen.findByRole('checkbox', { name: 'Own 10' });
+    addOwn('Eleventh');
+    expect(screen.getByRole('alert').textContent).toBe('You can add up to 10 of your own. Untick one to add another.');
+    expect(screen.queryByRole('checkbox', { name: 'Eleventh' })).toBeNull();
+  });
+
+  it('a manager sees them, and no box to add one', async () => {
+    api.getGymPage.mockResolvedValue({ data: { page: { ...PAGE, ownFacilities: ['Boxing ring'], mayChange: false } } });
+    drawSheet();
+    await screen.findByRole('checkbox', { name: 'Boxing ring' });
+    expect(tick('Boxing ring').disabled).toBe(true);
+    expect(screen.queryByLabelText('Add a facility')).toBeNull();
   });
 });
 

@@ -28,6 +28,8 @@ type App = Awaited<ReturnType<typeof buildApp>>;
 
 const TIMEOUT_MS = 90_000;
 const LIVE_PLAN = "zz_gym_page_routes";
+/** A name no other gym on a shared database has, so its address is the plain one. */
+const TWIN_NAME = `Canal Twin ${Date.now().toString(36)}`;
 
 interface CreatedOrg {
   org: { id: string; slug: string; name: string };
@@ -131,7 +133,7 @@ d("a gym's own page and its enquiry form (real Postgres)", () => {
   const pageUrl = (gymId: string) => `/v1/orgs/${gymId}/page`;
   const publicUrl = (slug: string) => `/v1/public/gyms/${slug}`;
   const formUrl = (slug: string) => `${publicUrl(slug)}/enquiries`;
-  const PAGE_ON = { shown: true, about: "Friendly gym by the canal.", facilities: ["showers", "free_weights"], otherFacilities: "Boxing ring" };
+  const PAGE_ON = { shown: true, about: "Friendly gym by the canal.", facilities: ["showers", "free_weights"], ownFacilities: ["Boxing ring"] };
 
   const switchOn = async (org: CreatedOrg, cookies: Record<string, string>) => {
     const res = await put(pageUrl(org.org.id), PAGE_ON, cookies);
@@ -189,13 +191,13 @@ d("a gym's own page and its enquiry form (real Postgres)", () => {
     async () => {
       const ownerA = await makeUser("worst-a");
       const ownerB = await makeUser("worst-b");
-      const gymA = await makeOrg(ownerA.cookies, "Canal Street Gym");
+      const gymA = await makeOrg(ownerA.cookies, TWIN_NAME);
       const gymB = await makeOrg(ownerB.cookies, "Hill Top Gym");
       await switchOn(gymA, ownerA.cookies);
       await switchOn(gymB, ownerB.cookies);
       // A newer gym of the same name, whose address starts with gym A's.
       const ownerTwin = await makeUser("worst-twin");
-      const twin = await makeOrg(ownerTwin.cookies, "Canal Street Gym");
+      const twin = await makeOrg(ownerTwin.cookies, TWIN_NAME);
       expect(twin.org.slug.startsWith(`${gymA.org.slug}-`)).toBe(true);
       await switchOn(twin, ownerTwin.cookies);
       // Gym B already has this person as a lead; gym A has never heard of them.
@@ -269,10 +271,10 @@ d("a gym's own page and its enquiry form (real Postgres)", () => {
         city: "Leeds",
         about: "Friendly gym by the canal.",
         facilities: ["free_weights", "showers"],
-        otherFacilities: "Boxing ring",
+        ownFacilities: ["Boxing ring"],
         robotCheckKey: "test-site-key",
       });
-      expect(Object.keys(page).sort()).toEqual(["about", "city", "facilities", "hours", "name", "orgType", "otherFacilities", "robotCheckKey"]);
+      expect(Object.keys(page).sort()).toEqual(["about", "city", "facilities", "hours", "name", "orgType", "ownFacilities", "robotCheckKey"]);
 
       // Off again.
       expect((await put(pageUrl(gym.org.id), { ...PAGE_ON, shown: false }, owner.cookies)).statusCode).toBe(200);
@@ -473,7 +475,7 @@ d("a gym's own page and its enquiry form (real Postgres)", () => {
         shown: false,
         about: "",
         facilities: [],
-        otherFacilities: "",
+        ownFacilities: [],
         slug: gym.org.slug,
         mayChange: true,
       });
@@ -495,6 +497,31 @@ d("a gym's own page and its enquiry form (real Postgres)", () => {
       expect((await get(pageUrl(gym.org.id), {})).statusCode).toBe(401);
       const stored = await sql<{ shown: boolean; about: string }[]>`SELECT shown, about FROM gym_pages WHERE gym_id = ${gym.org.id}`;
       expect(stored).toEqual([{ shown: true, about: "Open late." }]);
+
+      // The gym's own facilities: one in the list's words becomes that tick, one typed
+      // twice is kept once, in the order added; an eleventh, or one too long, is refused.
+      const own = await put(
+        pageUrl(gym.org.id),
+        { ...PAGE_ON, facilities: ["showers"], ownFacilities: ["Boxing ring", "  showers ", "Rooftop   track", "boxing ring"] },
+        owner.cookies,
+      );
+      expect(own.statusCode, "own facilities").toBe(400);
+      const ownSaved = await put(
+        pageUrl(gym.org.id),
+        { ...PAGE_ON, facilities: ["parking"], ownFacilities: ["Boxing ring", "  showers ", "Rooftop   track"] },
+        owner.cookies,
+      );
+      expect(ownSaved.statusCode).toBe(200);
+      expect((JSON.parse(ownSaved.body) as { page: GymPage }).page).toMatchObject({
+        facilities: ["showers", "parking"],
+        ownFacilities: ["Boxing ring", "Rooftop track"],
+      });
+      const ownStored = await sql<{ facilities: string[]; own_facilities: string[] }[]>`
+        SELECT facilities, own_facilities FROM gym_pages WHERE gym_id = ${gym.org.id}`;
+      expect(ownStored).toEqual([{ facilities: ["showers", "parking"], own_facilities: ["Boxing ring", "Rooftop track"] }]);
+      const eleven = Array.from({ length: 11 }, (_, i) => `Facility ${String(i + 1)}`);
+      expect((await put(pageUrl(gym.org.id), { ...PAGE_ON, ownFacilities: eleven }, owner.cookies)).statusCode).toBe(400);
+      expect((await put(pageUrl(gym.org.id), { ...PAGE_ON, ownFacilities: ["x".repeat(41)] }, owner.cookies)).statusCode).toBe(400);
 
       // A facility the list does not have, and one twice, are refused.
       expect((await put(pageUrl(gym.org.id), { ...PAGE_ON, facilities: ["helipad"] }, owner.cookies)).statusCode).toBe(400);

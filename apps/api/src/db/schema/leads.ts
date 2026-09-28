@@ -79,13 +79,13 @@ export const gymPages = pgTable(
     shown: boolean("shown").notNull().default(false),
     about: text("about").notNull().default(""),
     facilities: text("facilities").array().notNull().default(sql`'{}'`),
-    otherFacilities: text("other_facilities").notNull().default(""),
+    ownFacilities: text("own_facilities").array().notNull().default(sql`'{}'`),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     check("gym_pages_about_len_check", sql`char_length(${t.about}) <= 1000`),
     check("gym_pages_facilities_check", sql`cardinality(${t.facilities}) <= 40`),
-    check("gym_pages_other_len_check", sql`char_length(${t.otherFacilities}) <= 200`),
+    check("gym_pages_own_facilities_check", sql`cardinality(${t.ownFacilities}) <= 10`),
   ],
 );
 

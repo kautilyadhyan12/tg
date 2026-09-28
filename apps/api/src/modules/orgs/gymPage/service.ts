@@ -17,6 +17,7 @@ import {
   leadSourceSchema,
   leadStatusSchema,
   orgTypeSchema,
+  typedFacility,
   type GymEnquiryRequest,
   type GymFacility,
   type GymPage,
@@ -47,6 +48,20 @@ const notFound = (): OrgsError => new OrgsError(404, "page_not_found", ENQUIRY_W
  *  later is never shown. */
 const known = (stored: readonly string[]): GymFacility[] => GYM_FACILITIES.filter((facility) => stored.includes(facility));
 
+/** The ticks and the gym's own facilities as they are kept: one of its own that is the
+ *  list's words becomes that tick, and one it typed twice is kept once. */
+function facilitiesFrom(body: SetGymPageRequest): { facilities: GymFacility[]; ownFacilities: string[] } {
+  const ticked = new Set<string>(body.facilities);
+  const own: string[] = [];
+  for (const typed of body.ownFacilities) {
+    const read = typedFacility(typed);
+    if (read === null) continue;
+    if (read.kind === "listed") ticked.add(read.facility);
+    else if (!own.some((name) => name.toLowerCase() === read.name.toLowerCase())) own.push(read.name);
+  }
+  return { facilities: known([...ticked]), ownFacilities: own };
+}
+
 export async function getGymPage(deps: Pick<GymPageDeps, "sql">, userId: string, gymId: string, limit: Limit): Promise<GymPage | null> {
   const { org, privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
@@ -55,7 +70,7 @@ export async function getGymPage(deps: Pick<GymPageDeps, "sql">, userId: string,
     shown: page.shown,
     about: page.about,
     facilities: known(page.facilities),
-    otherFacilities: page.otherFacilities,
+    ownFacilities: page.ownFacilities,
     slug: org.slug,
     mayChange: privileges.includes("org.manage"),
   };
@@ -70,12 +85,7 @@ export async function setGymPage(
 ): Promise<GymPage | null> {
   const { org } = await requireWritablePrivilege(deps, gymId, userId, "org.manage");
   if (!(await limit())) return null;
-  const page: repo.PageRow = {
-    shown: body.shown,
-    about: body.about.trim(),
-    facilities: known(body.facilities),
-    otherFacilities: body.otherFacilities.trim(),
-  };
+  const page: repo.PageRow = { shown: body.shown, about: body.about.trim(), ...facilitiesFrom(body) };
   await deps.sql.begin(async (tx) => {
     await repo.writePage(tx, gymId, page, deps.now());
     await insertAudit(tx, {
@@ -108,7 +118,7 @@ export async function publicPage(deps: Pick<GymPageDeps, "sql" | "robotCheck">, 
     orgType: orgTypeSchema.parse(page.orgType),
     about: page.about,
     facilities: known(page.facilities),
-    otherFacilities: page.otherFacilities,
+    ownFacilities: page.ownFacilities,
     // The week as the gym's members see it; the week a gym open all day keeps
     // aside for later is the console's alone.
     hours: { ...toGymHours(hours), savedWeek: [] },

@@ -21,7 +21,7 @@ const PAGE = {
   orgType: 'gym',
   about: 'Friendly gym by the canal.',
   facilities: ['free_weights', 'showers'],
-  otherFacilities: 'Boxing ring',
+  ownFacilities: ['Boxing ring'],
   hours: { mode: 'open_24h', timezone: 'Europe/London', clockFormat: '24h', week: [], savedWeek: [], closures: [] },
   robotCheckKey: 'site-key',
 };

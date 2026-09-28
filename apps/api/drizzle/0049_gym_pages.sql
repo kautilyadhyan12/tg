@@ -7,11 +7,11 @@ CREATE TABLE gym_pages (
   shown boolean NOT NULL DEFAULT false,
   about text NOT NULL DEFAULT '',
   facilities text[] NOT NULL DEFAULT '{}',
-  other_facilities text NOT NULL DEFAULT '',
+  own_facilities text[] NOT NULL DEFAULT '{}',
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT gym_pages_about_len_check CHECK (char_length(about) <= 1000),
   CONSTRAINT gym_pages_facilities_check CHECK (cardinality(facilities) <= 40),
-  CONSTRAINT gym_pages_other_len_check CHECK (char_length(other_facilities) <= 200)
+  CONSTRAINT gym_pages_own_facilities_check CHECK (cardinality(own_facilities) <= 10)
 );--> statement-breakpoint
 ALTER TABLE gym_leads ADD COLUMN enquired_at timestamptz;--> statement-breakpoint
 -- What a message's (gym_id, lead_id) points at: a lead of the same gym.

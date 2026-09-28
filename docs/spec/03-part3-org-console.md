@@ -2625,8 +2625,10 @@ member is the same person: the record is made from the lead.
 **The gym's own page and its form (20c-iv-a; RULINGS 2026-09-28).** `/gyms/{slug}`, a
 page of ours anyone with the link opens without signing in: the gym's name, town, today's
 opening hours and the week (from Settings), its **About us** (1,000 characters) and the
-**Facilities** it ticked from a fixed list of 21 (`GYM_FACILITIES`) plus one line of its
-own, then **Get in touch**: name, email or phone, "How did you hear about us?" (the five
+**Facilities** it ticked from a fixed list of 21 (`GYM_FACILITIES`) and the ones it added
+itself (**Add a facility**: up to 10, 40 characters each, shown ticked in the same list and
+taken off by unticking; words that are the list's own tick the list's facility, and one
+typed twice is kept once — `typedFacility`), as one list, then **Get in touch**: name, email or phone, "How did you hear about us?" (the five
 sources in a visitor's words), a message (1,000), an unticked **Happy to hear from {gym}
 by email**, Cloudflare Turnstile's robot check, a hidden field only robots fill, and
 "Your details go only to {gym}, so they can reply." `?embed=1` is the form alone, and

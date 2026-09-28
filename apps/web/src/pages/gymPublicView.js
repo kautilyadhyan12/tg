@@ -4,11 +4,10 @@
 import { ENQUIRY_WORDS, GYM_FACILITY_WORDS } from '@app/shared';
 import { WEEKDAYS, dayLine, gymToday, isoWeekdayOfDay } from './console/hoursView';
 
-/** The facilities the gym ticked, as words, then its own "Other" line. */
+/** The facilities the gym ticked, as words, then the ones it added itself: one list. */
 export function facilityLines(page) {
   const lines = (page?.facilities ?? []).map((facility) => GYM_FACILITY_WORDS[facility]).filter(Boolean);
-  const other = (page?.otherFacilities ?? '').trim();
-  return other === '' ? lines : [...lines, other];
+  return [...lines, ...(page?.ownFacilities ?? [])];
 }
 
 /** The opening hours: a headline for today and, for a gym with a weekly pattern, the

@@ -1,17 +1,17 @@
 import { useEffect, useState } from 'react';
-import { Check, Copy, ExternalLink, Loader2, X } from 'lucide-react';
-import { GYM_PAGE_MAX_ABOUT_CHARS, GYM_PAGE_MAX_OTHER_FACILITIES_CHARS } from '@app/shared';
+import { Check, Copy, ExternalLink, Loader2, Plus, X } from 'lucide-react';
+import { GYM_PAGE_MAX_ABOUT_CHARS, GYM_PAGE_MAX_OWN_FACILITY_CHARS } from '@app/shared';
 import { orgService, errorText } from '../../api/orgsApi';
 import { ConfirmInline } from '../../components/console/ConsoleStates';
 import { embedCode, gymPageUrl } from '../gymPublicView';
-import { FACILITY_CHOICES, pageChanged, pageDraft, pageRequest, toggleFacility } from './gymPageView';
+import { FACILITY_CHOICES, addFacility, pageChanged, pageDraft, pageRequest, removeOwnFacility, toggleFacility } from './gymPageView';
 
 // The gym's own page (ROADMAP 20c-iv-a; spec Part 3 §16.3), opened from Leads: switch it
 // on, write "About us", tick the facilities, and copy the link or the code for the
 // gym's own website. Anybody with the link sees the page and its form; a person who
 // sends the form is added to Leads. Only the owner changes it (the server's
-// `org.manage`); other staff who keep leads see it and copy the link. One Save for
-// everything in the panel. Drawn as the lead's panel is (R3; spec Part 3 §17).
+// `org.manage`); other staff who keep leads see it and copy the link. A gym adds its own
+// facilities to the same tick list. One Save for everything in the panel. Drawn as the lead's panel is (R3; spec Part 3 §17).
 
 function Tick({ checked, label, hint = null, disabled, onChange }) {
   return (
@@ -62,6 +62,9 @@ export default function GymPageSheet({ gymId, gym, words, readOnly, onClose }) {
   const [done, setDone] = useState(null);
   const [busy, setBusy] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  /** What is typed in "Add a facility", and why it could not be added. */
+  const [typedOwn, setTypedOwn] = useState('');
+  const [ownProblem, setOwnProblem] = useState(null);
 
   useEffect(() => {
     let gone = false;
@@ -210,21 +213,48 @@ export default function GymPageSheet({ gymId, gym, words, readOnly, onClose }) {
                       onChange={() => edit(toggleFacility(draft, choice.key))}
                     />
                   ))}
+                  {/* The gym's own: ticked while they are on the page; untick takes one off. */}
+                  {draft.ownFacilities.map((name) => (
+                    <Tick key={`own-${name}`} checked label={name} disabled={off} onChange={() => edit(removeOwnFacility(draft, name))} />
+                  ))}
                 </div>
+                {mayChange ? (
+                  <form
+                    className="flex flex-wrap items-center gap-2 pt-1"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const added = addFacility(draft, typedOwn);
+                      setOwnProblem(added.problem);
+                      if (added.problem === null) {
+                        edit(added.draft);
+                        setTypedOwn('');
+                      }
+                    }}
+                  >
+                    <input
+                      aria-label="Add a facility"
+                      value={typedOwn}
+                      maxLength={GYM_PAGE_MAX_OWN_FACILITY_CHARS}
+                      disabled={off}
+                      onChange={(e) => {
+                        setTypedOwn(e.target.value);
+                        setOwnProblem(null);
+                      }}
+                      placeholder="Add a facility, e.g. Boxing ring"
+                      className="c-input flex-grow min-w-0"
+                      style={{ width: 'auto' }}
+                    />
+                    <button type="submit" disabled={off || typedOwn.trim() === ''} className="c-btn c-btn-sm c-btn-s">
+                      <Plus aria-hidden="true" className="w-4 h-4" /> Add
+                    </button>
+                  </form>
+                ) : null}
+                {ownProblem !== null ? (
+                  <span className="c-hint" role="alert" style={{ color: 'var(--bad)' }}>
+                    {ownProblem}
+                  </span>
+                ) : null}
               </div>
-
-              <label className="c-field">
-                <span className="c-label">Other facilities</span>
-                <input
-                  aria-label="Other facilities"
-                  maxLength={GYM_PAGE_MAX_OTHER_FACILITIES_CHARS}
-                  value={draft.otherFacilities}
-                  disabled={off}
-                  onChange={(e) => edit({ ...draft, otherFacilities: e.target.value })}
-                  placeholder="e.g. Boxing ring, rooftop track"
-                  className="c-input"
-                />
-              </label>
 
               <p className="c-s14 c-t2">Your page also shows your opening hours from Settings.</p>
 
