@@ -179,7 +179,7 @@ export function recordRemovalPlan(input: {
     if (member.joinedEntryId !== null && past.has(member.joinedEntryId)) {
       pastReached.add(member.joinedEntryId);
       if (own !== null) keep(kept, "own_record", { ...person, entryId: own });
-      else keep(kept, "shared_email", { ...person, entryId: null });
+      else if (unsure.length > 0) keep(kept, "shared_email", { ...person, entryId: null });
       continue;
     }
     // Not theirs for certain. Named only when a record being moved reaches them.
