@@ -24,12 +24,14 @@ import {
   inviteQueryString,
   patchFrom,
   personInviteAction,
+  pageTickState,
   rowWords,
   selectedInviteSummary,
   selectionFilter,
   skippedLines,
   toggleApp,
   toggleWord,
+  untickFromAll,
 } from './memberListPeople';
 import { FIELD_LABELS } from './memberListView';
 
@@ -418,5 +420,36 @@ describe('Invite for the people selected counts everyone selected', () => {
     const s = selectedInviteSummary({ version: 1, reach: 1, skipped, blocked: null }, words, 2);
     expect(s.gets).toBe('1 of 2 selected members will receive an invitation email');
     expect(s.goneLine).toBeNull();
+  });
+});
+
+// Past 500 rows loaded, the heading ticks the first 500, counts as ticked so Select all is
+// still offered, and unticking after Select all keeps at most 500 (round one, L4).
+describe('the heading box past 500 rows', () => {
+  const loaded = Array.from({ length: 600 }, (_, k) => `id-${String(k)}`);
+  it('ticks the first 500 and reads as ticked', () => {
+    const { pageIds } = pageTickState(loaded, new Set(), null);
+    expect(pageIds).toHaveLength(500);
+    expect(pageIds[499]).toBe('id-499');
+    expect(pageTickState(loaded, new Set(pageIds), null).pageTicked).toBe(true);
+  });
+  it('one of the 500 unticked is not the page ticked', () => {
+    const some = new Set(loaded.slice(1, 500));
+    expect(pageTickState(loaded, some, null).pageTicked).toBe(false);
+  });
+  it('under 500 rows, every row counts', () => {
+    const few = loaded.slice(0, 3);
+    expect(pageTickState(few, new Set(few.slice(0, 2)), null).pageTicked).toBe(false);
+    expect(pageTickState(few, new Set(few), null).pageTicked).toBe(true);
+    expect(pageTickState([], new Set(), null).pageTicked).toBe(false);
+  });
+  it('after Select all everything reads as ticked, and unticking one keeps 499', () => {
+    expect(pageTickState(loaded, new Set(), { count: 612 }).pageTicked).toBe(true);
+    const next = untickFromAll(loaded, 'id-7');
+    expect(next.size).toBe(499);
+    expect(next.has('id-7')).toBe(false);
+    expect(next.has('id-500')).toBe(false);
+    // Unticking a row past the 500 still leaves 500, never 600.
+    expect(untickFromAll(loaded, 'id-550').size).toBe(500);
   });
 });

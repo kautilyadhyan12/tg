@@ -1,4 +1,12 @@
-import { MEMBER_APP_FILTER_ORDER, MEMBER_APP_FILTER_WORDS, MEMBER_APP_WORDS, MEMBER_INVITE_WORDS, turns18On, underAgeOn } from '@app/shared';
+import {
+  MEMBER_APP_FILTER_ORDER,
+  MEMBER_APP_FILTER_WORDS,
+  MEMBER_APP_WORDS,
+  MEMBER_INVITE_WORDS,
+  MEMBER_LIST_TICKED_MAX,
+  turns18On,
+  underAgeOn,
+} from '@app/shared';
 import { dayWords } from './memberListView';
 
 // The gym's own list on the Members screen (ROADMAP 5b-i; spec Part 3 §9.14, §11.5,
@@ -253,6 +261,23 @@ export function selectionOf(ticked, all) {
   if (all !== null) return { kind: 'all', filter: all.filter, count: all.count, digest: all.digest };
   if (ticked.size === 0) return null;
   return { kind: 'ticked', entryIds: [...ticked] };
+}
+
+/** The rows the heading's box ticks — every row loaded, up to the most that can be ticked
+ *  one by one — and whether they are all ticked (or everyone, after Select all). Past
+ *  that many rows, "Select all" is the way (round one of 5b-v-b-i, L4). */
+export function pageTickState(loadedIds, ticked, all) {
+  const pageIds = loadedIds.slice(0, MEMBER_LIST_TICKED_MAX);
+  const pageTicked = all !== null || (pageIds.length > 0 && pageIds.every((id) => ticked.has(id)));
+  return { pageIds, pageTicked };
+}
+
+/** Unticking one person after "Select all": the rows loaded stay ticked, as many as can
+ *  be ticked one by one, without them. */
+export function untickFromAll(loadedIds, id) {
+  const next = new Set(loadedIds.slice(0, MEMBER_LIST_TICKED_MAX));
+  next.delete(id);
+  return next;
 }
 
 /** How many people are selected. */

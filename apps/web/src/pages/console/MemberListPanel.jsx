@@ -20,6 +20,7 @@ import {
   inviteQueryString,
   isTicked,
   pastSince,
+  pageTickState,
   rowWords,
   selectedCount,
   selectedWords,
@@ -27,6 +28,7 @@ import {
   selectionOf,
   toggleApp,
   toggleWord,
+  untickFromAll,
 } from './memberListPeople';
 
 // The gym's own list on the Members screen (spec Part 3 §18.2–18.4; ROADMAP 5b-v-a-i),
@@ -393,10 +395,7 @@ export default function MemberListPanel({
   const picked = selectedCount(ticked, all);
   const selection = useMemo(() => selectionOf(ticked, all), [ticked, all]);
   const loadedIds = page.entries.map((e) => e.entryId);
-  // The rows the heading's box ticks: every row loaded, up to the most that can be ticked
-  // one by one. Past that, "Select all" is the way (round one, L4).
-  const pageIds = loadedIds.slice(0, MEMBER_LIST_TICKED_MAX);
-  const pageTicked = all !== null || (pageIds.length > 0 && pageIds.every((id) => ticked.has(id)));
+  const { pageIds, pageTicked } = pageTickState(loadedIds, ticked, all);
   const headState = pageTicked ? 'on' : picked > 0 ? 'some' : 'off';
   const rowPicked = (id) => all !== null || ticked.has(id);
   const clearSelection = () => {
@@ -416,9 +415,7 @@ export default function MemberListPanel({
     // From "Select all", unticking one leaves the rest of the rows shown ticked, as many
     // as can be ticked one by one.
     if (all !== null) {
-      const next = new Set(pageIds);
-      next.delete(id);
-      setSel({ for: filters, ticked: next, all: null });
+      setSel({ for: filters, ticked: untickFromAll(loadedIds, id), all: null });
       setSelNote(loadedIds.length > MEMBER_LIST_TICKED_MAX ? tooMany : null);
       return;
     }

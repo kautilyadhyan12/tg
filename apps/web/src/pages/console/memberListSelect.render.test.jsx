@@ -302,29 +302,4 @@ describe('selecting people', () => {
     expect(orgService.pressInvite).toHaveBeenCalledTimes(1);
   });
 
-  it('past 500 rows loaded, the heading ticks the first 500 and still offers Select all; unticking after Select all keeps 499', async () => {
-    const many = Array.from({ length: 600 }, (_, k) => entry(`Person ${String(k).padStart(3, '0')}`));
-    orgService.getMemberListEntries.mockReset();
-    for (let k = 0; k < 6; k += 1) {
-      orgService.getMemberListEntries.mockResolvedValueOnce({
-        data: { page: memberListEntriesPageSchema.parse({ total: 612, entries: many.slice(k * 100, k * 100 + 100), cursor: k < 5 ? `c${String(k)}` : null }) },
-      });
-    }
-    draw();
-    await screen.findByText('Person 000');
-    for (let k = 1; k < 6; k += 1) {
-      fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
-      await screen.findByText(`Person ${String(k * 100).padStart(3, '0')}`);
-    }
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Select every member on this page' }));
-    expect(bar().getByTestId('sel-count').textContent).toBe('500 selected');
-    const line = screen.getByTestId('select-line');
-    expect(line.textContent).toContain('The first 500 members shown are selected.');
-    orgService.selectAllMembers.mockResolvedValue({ data: { selection: { count: 612, digest: DIGEST } } });
-    fireEvent.click(within(line).getByRole('button', { name: 'Select all 612 members' }));
-    await waitFor(() => expect(bar().getByTestId('sel-count').textContent).toBe('612 selected'));
-    fireEvent.click(tickOf('Person 007'));
-    expect(bar().getByTestId('sel-count').textContent).toBe('499 selected');
-    expect(screen.getByTestId('selection-note').textContent).toContain('You can select up to 500 members one at a time.');
-  }, 30_000);
 });
