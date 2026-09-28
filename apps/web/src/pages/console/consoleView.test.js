@@ -594,7 +594,7 @@ describe('offListView', () => {
   });
   it('round one of 5b-v-c, L4: a member with no name at their address is still named and can be opened', () => {
     const view = offListView({ reason: 'never_listed', at: null, sameEmailName: '', sameEmailEntryId: '88888888-8888-4888-8888-888888888888' });
-    expect(view.sameEmail).toBe('A member on your list has the same email');
+    expect(view.sameEmail).toBe('Someone on your list has the same email');
     expect(view.sameEmailEntryId).toBe('88888888-8888-4888-8888-888888888888');
   });
   it('says when their record came off, and who else on the list has their address', () => {

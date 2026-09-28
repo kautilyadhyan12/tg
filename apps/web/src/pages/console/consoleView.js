@@ -360,7 +360,7 @@ export function offListView(offList) {
     sameEmail: offList.sameEmailName
       ? `${offList.sameEmailName} on your list has the same email`
       : offList.sameEmailEntryId
-        ? 'A member on your list has the same email'
+        ? 'Someone on your list has the same email'
         : null,
     sameEmailEntryId: offList.sameEmailEntryId ?? null,
     // Only their own record taken off can be put back; otherwise a record is made.

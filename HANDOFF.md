@@ -14,7 +14,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Cost at full size:** no new read of people; the roster's existing same-email query returns one more column (not re-measured).
 - **Kd's click-through:** *"all passed"*. Kd also said yes to member photos on Members (5b-vi, after photo storage; RULINGS 2026-09-28).
 - **Round one: no Critical or High, 4 Low, all fixed (79f2bc2):** nothing that ends somebody's app without `members.remove` (the test RED with the permission not passed); a past member's box button **Remove access**; "In the app since", never "joined"; an unnamed member at the address still opens. Web 3,086 of 3,086.
-- **Next:** the re-check (`reviews/5b-v-c-3-recheck.md`), then merge on Kd's word, then 5b-v-d.
+- **Re-check closed the round** (*"Nothing Critical or High is open"*); its one Low (the unnamed line said "member" to a studio) fixed: "Someone on your list has the same email".
+- **Next:** merge on Kd's word (ROADMAP tick with it), then 5b-v-d.
 
 ## 2026-09-28 · 5b-v-b-ii (Folder A): Remove on the people selected (branch `members-remove-selected`)
 
