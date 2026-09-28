@@ -58,10 +58,17 @@ export function createDualRateLimit(
     return count <= max;
   };
 
+  // A REFUSED PRESS IS NOT CHARGED TO ANYONE ELSE (round one of 5b-v-b-i, L6). The
+  // person's own allowance is asked first: one they have used up refuses them without
+  // touching the address's, so one person pressing on at a shared front desk does not
+  // lock their colleagues out. A press the address refuses is given back to the person,
+  // so a busy desk does not use up somebody's own allowance for when they are elsewhere.
+  // Each bucket still counts every request it lets through.
   return async (req, reply) => {
-    const ipOk = await hit(req, "ip", req.ip);
     const id = opts.identifier(req);
     const idOk = id === null ? true : await hit(req, "id", id);
+    const ipOk = idOk ? await hit(req, "ip", req.ip) : true;
+    if (idOk && !ipOk && id !== null) await opts.redis.decrIfPositive(`rl:${opts.name}:id:${id}`);
     if (!ipOk || !idOk) {
       // Same client-facing shape as the global limiter's 429 (R8.1).
       await reply.status(429).send({

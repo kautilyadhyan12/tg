@@ -760,6 +760,46 @@
   }
 }
 
+/* Selecting people (§18.5): a tick box's cell, 44 px square so a thumb finds it, on each
+   row and on the heading; a selected row's tint; and the bar over the people selected —
+   the table's heading row on a computer, just above the tab bar on a phone. */
+.c-tickcell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  min-height: 44px;
+  flex-shrink: 0;
+}
+.c-picked {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+.c-selbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 4px 16px 4px 4px;
+  background: var(--raise);
+  border-bottom: 1px solid var(--line);
+  color: var(--t1);
+}
+.c-selbar-phone {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 64px;
+  z-index: 30;
+  border-top: 1px solid var(--raise-line);
+  border-bottom: 0;
+  padding-bottom: 6px;
+}
+@media (min-width: 768px) {
+  .c-selbar-phone {
+    display: none;
+  }
+}
+
 /* Invite's two lists (§18.6): on a phone the name, the gym's words on one line, and where
    the email goes or why it won't; from 768 px one row of the table under `c-th`. Sets no
    `display`. */

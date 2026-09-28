@@ -43,6 +43,7 @@ import {
   type MemberListCounts,
   type MemberListEntriesPage,
   type MemberListEntriesQuery,
+  type MemberListFilter,
   type MemberListGuard,
   type MemberListHandEdits,
   type MemberListMapping,
@@ -1256,6 +1257,54 @@ const foldedFilter = (asked: string | string[] | undefined): string[] | null => 
   return [...new Set(words.map((word) => word.trim().toLowerCase()))];
 };
 
+/** WHICH RECORDS A FILTER AND A SEARCH CHOOSE, as `entriesPage` reads them: the one
+ *  reading behind a page of the list and "Select all" (§18.5), so the people selected are
+ *  the people the list shows. `members` is the gym's live members by §9.7's match. */
+export async function entriesFilter(
+  deps: MemberListDeps,
+  gymId: string,
+  query: MemberListFilter,
+): Promise<{ input: repo.EntriesFilterInput; members: repo.MemberAgainstList[] }> {
+  // THE THREE KINDS OF THE GYM'S OWN WORD, FOLDED EXACTLY AS THE RULE FOLDS THEM, and
+  // "" is the people with none of that kind (§9.9, §11.5). One function for all three,
+  // because a second way of folding one of them would be a filter that quietly matched
+  // nobody.
+  const typed = (query.query ?? "").trim();
+  const members = await repo.membersAgainstList(deps.sql, gymId);
+  // A page that asked for the FORMER records has to be able to say which of them is a
+  // person who is in the app; every other reader keeps the set that leaves them out
+  // (round one, Low-2, and `inAppEntryIdsWithFormer`'s own note).
+  const records = query.records ?? "current";
+  const settings = deps.invites ?? null;
+  // THE APP CHOICES ASKED FOR (§18.4) are worked out for every current member by the one
+  // rule, and the page is cut from the records that answer to any of them. They are
+  // current members' words, so a page of past members is not narrowed by them.
+  const asked = query.app === undefined ? null : new Set(Array.isArray(query.app) ? query.app : [query.app]);
+  let appIds: string[] | null = null;
+  if (asked !== null && records === "current") {
+    const { choices } = await currentAppWords(deps.sql, settings, gymId, members, deps.now());
+    appIds = [...choices].flatMap(([id, mine]) => (mine.some((choice) => asked.has(choice)) ? [id] : []));
+  }
+  return {
+    members,
+    input: {
+      gymId,
+      inAppEntryIds: records === "current" ? inAppEntryIds(members) : inAppEntryIdsWithFormer(members),
+      statuses: foldedFilter(query.status),
+      membershipTypes: foldedFilter(query.membershipType),
+      paymentStatuses: foldedFilter(query.paymentStatus),
+      // CURRENT RECORDS UNLESS THE FORMER ONES WERE ASKED FOR BY NAME (§11.5): what every
+      // screen means by "the list" is the people on it.
+      records,
+      filter: query.filter ?? "all",
+      invitation:
+        query.invitation === undefined ? null : await invites.entriesByInvitation(deps.sql, settings, gymId, query.invitation),
+      appIds,
+      like: typed === "" ? null : `%${escapeLike(typed)}%`,
+    },
+  };
+}
+
 /** ONE PAGE OF THE LIST THE GYM KEEPS (§9.9's `GET /entries`).
  *
  *  **A PAGE IS FETCHED ONE LONGER THAN IT IS SHOWN**, which is how "is there a next
@@ -1279,43 +1328,9 @@ export async function readEntries(
     throw new OrgsError(400, "bad_cursor", "That page of the list could not be read. Open the list again.");
   }
 
-  // THE THREE KINDS OF THE GYM'S OWN WORD, FOLDED EXACTLY AS THE RULE FOLDS THEM, and
-  // "" is the people with none of that kind (§9.9, §11.5). One function for all three,
-  // because a second way of folding one of them would be a filter that quietly matched
-  // nobody.
-  const typed = (query.query ?? "").trim();
-  const members = await repo.membersAgainstList(deps.sql, gymId);
-  // A page that asked for the FORMER records has to be able to say which of them is a
-  // person who is in the app; every other reader keeps the set that leaves them out
-  // (round one, Low-2, and `inAppEntryIdsWithFormer`'s own note).
-  const records = query.records ?? "current";
   const settings = deps.invites ?? null;
-  // THE APP CHOICES ASKED FOR (§18.4) are worked out for every current member by the one
-  // rule, and the page is cut from the records that answer to any of them. They are
-  // current members' words, so a page of past members is not narrowed by them.
-  const asked = query.app === undefined ? null : new Set(Array.isArray(query.app) ? query.app : [query.app]);
-  let appIds: string[] | null = null;
-  if (asked !== null && records === "current") {
-    const { choices } = await currentAppWords(deps.sql, settings, gymId, members, deps.now());
-    appIds = [...choices].flatMap(([id, mine]) => (mine.some((choice) => asked.has(choice)) ? [id] : []));
-  }
-  const page = await repo.entriesPage(deps.sql, {
-    gymId,
-    inAppEntryIds: records === "current" ? inAppEntryIds(members) : inAppEntryIdsWithFormer(members),
-    statuses: foldedFilter(query.status),
-    membershipTypes: foldedFilter(query.membershipType),
-    paymentStatuses: foldedFilter(query.paymentStatus),
-    // CURRENT RECORDS UNLESS THE FORMER ONES WERE ASKED FOR BY NAME (§11.5): what every
-    // screen means by "the list" is the people on it.
-    records,
-    filter: query.filter ?? "all",
-    invitation:
-      query.invitation === undefined ? null : await invites.entriesByInvitation(deps.sql, settings, gymId, query.invitation),
-    appIds,
-    like: typed === "" ? null : `%${escapeLike(typed)}%`,
-    cursor,
-    limit: MEMBER_LIST_ENTRIES_PAGE + 1,
-  });
+  const { input, members } = await entriesFilter(deps, gymId, query);
+  const page = await repo.entriesPage(deps.sql, { ...input, cursor, limit: MEMBER_LIST_ENTRIES_PAGE + 1 });
   const shown = page.entries.slice(0, MEMBER_LIST_ENTRIES_PAGE);
   const last = page.entries.length > MEMBER_LIST_ENTRIES_PAGE ? shown[shown.length - 1] : undefined;
   const [invitations, app] = await Promise.all([

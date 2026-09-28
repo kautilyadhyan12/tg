@@ -1,4 +1,12 @@
-import { MEMBER_APP_FILTER_ORDER, MEMBER_APP_FILTER_WORDS, MEMBER_APP_WORDS, MEMBER_INVITE_WORDS, turns18On, underAgeOn } from '@app/shared';
+import {
+  MEMBER_APP_FILTER_ORDER,
+  MEMBER_APP_FILTER_WORDS,
+  MEMBER_APP_WORDS,
+  MEMBER_INVITE_WORDS,
+  MEMBER_LIST_TICKED_MAX,
+  turns18On,
+  underAgeOn,
+} from '@app/shared';
 import { dayWords } from './memberListView';
 
 // The gym's own list on the Members screen (ROADMAP 5b-i; spec Part 3 §9.14, §11.5,
@@ -229,6 +237,87 @@ export function inviteBody(filters, preview, permissionConfirmed) {
   const body = { version: preview.version, expectedCount: preview.reach, permissionConfirmed };
   for (const { kind } of CHIP_KINDS) if (filters[kind].length > 0) body[kind] = [...filters[kind]];
   return body;
+}
+
+// ── The people selected (spec Part 3 §18.5) ──
+
+/** The list's filter and search as the server reads them: what "Select all" means. The
+ *  same keys `entriesQueryString` sends, so the people selected are the people shown. */
+export function selectionFilter(filters) {
+  const out = {};
+  if (filters.records !== 'current') out.records = filters.records;
+  if (filters.records === 'current') {
+    if (filters.app.length > 0) out.app = [...filters.app];
+    for (const { kind } of CHIP_KINDS) if (filters[kind].length > 0) out[kind] = [...filters[kind]];
+  }
+  const query = filters.query.trim();
+  if (query !== '') out.query = query;
+  return out;
+}
+
+/** The selection a press sends: the rows ticked, or everyone "Select all" chose with the
+ *  count and digest the server gave. Null when nobody is selected. */
+export function selectionOf(ticked, all) {
+  if (all !== null) return { kind: 'all', filter: all.filter, count: all.count, digest: all.digest };
+  if (ticked.size === 0) return null;
+  return { kind: 'ticked', entryIds: [...ticked] };
+}
+
+/** The rows the heading's box ticks — every row loaded, up to the most that can be ticked
+ *  one by one — and whether they are all ticked (or everyone, after Select all). Past
+ *  that many rows, "Select all" is the way (round one of 5b-v-b-i, L4). */
+export function pageTickState(loadedIds, ticked, all) {
+  const pageIds = loadedIds.slice(0, MEMBER_LIST_TICKED_MAX);
+  const pageTicked = all !== null || (pageIds.length > 0 && pageIds.every((id) => ticked.has(id)));
+  return { pageIds, pageTicked };
+}
+
+/** Unticking one person after "Select all": the rows loaded stay ticked, as many as can
+ *  be ticked one by one, without them. */
+export function untickFromAll(loadedIds, id) {
+  const next = new Set(loadedIds.slice(0, MEMBER_LIST_TICKED_MAX));
+  next.delete(id);
+  return next;
+}
+
+/** How many people are selected. */
+export function selectedCount(ticked, all) {
+  return all !== null ? all.count : ticked.size;
+}
+
+/** "3 selected". */
+export function selectedWords(k) {
+  return `${n(k)} selected`;
+}
+
+/** The press on the people selected: the version and number the count showed, and the tick. */
+export function selectedInviteBody(selection, preview, permissionConfirmed) {
+  return { selection, version: preview.version, expectedCount: preview.reach, permissionConfirmed };
+}
+
+/** Invite's top line for the people selected, as `inviteSummary` says it for the list.
+ *  Counted from how many were selected (`selected`), so it agrees with the bar behind it:
+ *  anyone selected who has since left the list, or was never this gym's, is `gone` and
+ *  counted among those not included (round one, L2). */
+export function selectedInviteSummary(preview, words, selected) {
+  const skipped = Object.values(preview.skipped).reduce((sum, k) => sum + k, 0);
+  const total = Math.max(selected, preview.reach + skipped);
+  const gone = total - preview.reach - skipped;
+  const leftOut = skipped + gone;
+  let gets;
+  if (total === 0) gets = `None of the selected ${words.people} are on your list now`;
+  else if (preview.reach === 0) gets = `No ${words.people} to invite`;
+  else if (preview.reach === total)
+    gets = total === 1 ? `1 selected ${words.person} will receive an invitation email` : `All ${n(total)} selected ${words.people} will receive an invitation email`;
+  else gets = `${n(preview.reach)} of ${n(total)} selected ${words.people} will receive an invitation email`;
+  const wont = leftOut === 0 ? null : `${n(leftOut)} not included`;
+  const goneLine = gone === 0 ? null : `${n(gone)} ${gone === 1 ? 'is' : 'are'} no longer on your list`;
+  return { gets, wont, leftOut, goneLine };
+}
+
+/** How many people a selection holds. */
+export function selectionSize(selection) {
+  return selection === null ? 0 : selection.kind === 'all' ? selection.count : selection.entryIds.length;
 }
 
 /** Who an Invite is for, in the gym's own words. */

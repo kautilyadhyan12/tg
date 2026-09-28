@@ -22,8 +22,8 @@ import PlanChoiceDialog from '../../components/console/PlanChoiceDialog';
 
 // The Members screen (spec Part 3 §4.3, §18.2), drawn from `console.css` (spec §17):
 // the title with the plan meter, Import and Add member, Waiting to join, and two tabs —
-// "Your list" (the gym's own list, `MemberListPanel`) and "Using the app" (the roster)
-// until 5b-v-a-ii folds the roster into the one list.
+// "Your list" (the gym's own list, `MemberListPanel`) and "In the app" (the roster; kept
+// as its own tab, Kd 2026-09-28).
 //
 // The roster holds EXACTLY to §2.4's visibility boundary: display name, the day they
 // joined, the label of the code that brought them in, whether their seat is
@@ -436,7 +436,7 @@ export default function Members() {
         <div className="c-utabs" role="tablist">
           {[
             ['list', 'Your list'],
-            ['app', 'Using the app'],
+            ['app', 'In the app'],
           ].map(([key, label]) => (
             <button
               key={key}

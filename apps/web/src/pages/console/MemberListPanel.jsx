@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ChevronRight, Loader2, Mail, Search, SlidersHorizontal, Upload, UserPlus, X } from 'lucide-react';
-import { MEMBER_APP_FILTER_WORDS, MEMBER_LIST_QUERY_MAX_CHARS } from '@app/shared';
-import { orgService, errorText } from '../../api/orgsApi';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, Check, ChevronRight, Download, Loader2, Mail, Minus, Search, SlidersHorizontal, Upload, UserPlus, X } from 'lucide-react';
+import { MEMBER_APP_FILTER_WORDS, MEMBER_LIST_QUERY_MAX_CHARS, MEMBER_LIST_TICKED_MAX } from '@app/shared';
+import { orgService, errorText, blobError, selectionChanged } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import MemberListInvite from './MemberListInvite';
 import MemberListPerson from './MemberListPerson';
@@ -20,9 +20,15 @@ import {
   inviteQueryString,
   isTicked,
   pastSince,
+  pageTickState,
   rowWords,
+  selectedCount,
+  selectedWords,
+  selectionFilter,
+  selectionOf,
   toggleApp,
   toggleWord,
+  untickFromAll,
 } from './memberListPeople';
 
 // The gym's own list on the Members screen (spec Part 3 §18.2–18.4; ROADMAP 5b-v-a-i),
@@ -30,6 +36,12 @@ import {
 // "Check these", Search, Filter and the count over one list, a table on a computer and a
 // card per person on a phone. Each row carries the server's App word. Every number is
 // the server's. Invite opens its own page of who gets an email and who doesn't (§18.6).
+//
+// Selecting people (§18.5; ROADMAP 5b-v-b-i): a tick box on every row and on the heading,
+// "Select all 312 members" once a page is ticked, and a bar over the people selected —
+// "3 selected · Invite to app · Download CSV · Clear" — which acts on them and nobody else
+// (CLAUDE.md §4). The toolbar's Invite stays for everyone the Filter's words choose (Kd,
+// 2026-09-28). A new filter or search clears the selection.
 
 const count = (n) => n.toLocaleString('en');
 
@@ -83,7 +95,7 @@ function FilterBox({ list, filters, words, total, onChange, onClear, onClose }) 
             <X aria-hidden="true" className="w-5 h-5" />
           </button>
         </div>
-        <div className="flex flex-col gap-5 px-4 pt-2 pb-4 md:px-7 md:pt-3 md:pb-6 overflow-y-auto flex-grow">
+        <div className="flex flex-col gap-5 px-4 pt-2 pb-4 md:px-7 md:pt-3 md:pb-6 overflow-y-auto overscroll-contain flex-grow min-h-0">
           {list !== null && (former > 0 || past)
             ? group(
                 'Show',
@@ -142,6 +154,39 @@ function FilterBox({ list, filters, words, total, onChange, onClear, onClose }) 
       </div>
     </div>
   );
+}
+
+const NOBODY = new Set();
+
+/** A tick box (§18.5): on, off, or "some" (the heading, when only some rows are ticked). */
+function Tick({ state, label, onClick }) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={state === 'some' ? 'mixed' : state === 'on'}
+      aria-label={label}
+      onClick={onClick}
+      className="c-tickcell"
+    >
+      <span className={state === 'off' ? 'c-check' : 'c-check c-check-on'}>
+        {state === 'on' ? <Check aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={3} /> : null}
+        {state === 'some' ? <Minus aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={3} /> : null}
+      </span>
+    </button>
+  );
+}
+
+/** A file the browser saves under the name the server gave it. */
+function saveFile(blob, filename) {
+  const link = document.createElement('a');
+  const href = URL.createObjectURL(blob);
+  link.href = href;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 1000);
 }
 
 /** Whether the screen is phone-sized (under 768 px), following resizes; a computer
@@ -207,6 +252,15 @@ export default function MemberListPanel({
   const [inviting, setInviting] = useState(false);
   /** Invite's count for the words ticked now, or null while it is asked. */
   const [invitePreview, setInvitePreview] = useState(null);
+  /** The people selected, and the filters they were selected under: a new filter or search
+   *  is a new list, so the selection belongs to `for` and is read as empty for any other. */
+  const [sel, setSel] = useState({ for: EMPTY_FILTERS, ticked: NOBODY, all: null });
+  const [selecting, setSelecting] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  /** A line about the selection: its limit, or why a download or Select all failed. */
+  const [selNote, setSelNote] = useState(null);
+  /** Invite's page opened from the bar, over the people selected. */
+  const [invitingSelected, setInvitingSelected] = useState(false);
   /** The newest request for a page: an answer to an older one is dropped. */
   const latest = useRef(0);
   /** How many names were loaded when a change asked for the list again, so the re-read
@@ -334,6 +388,94 @@ export default function MemberListPanel({
     setTyped('');
     change({ ...EMPTY_FILTERS });
   };
+  // ── Selecting people (§18.5) ──
+  const mine = sel.for === filters ? sel : { for: filters, ticked: NOBODY, all: null };
+  const ticked = mine.ticked;
+  const all = mine.all;
+  const picked = selectedCount(ticked, all);
+  const selection = useMemo(() => selectionOf(ticked, all), [ticked, all]);
+  const loadedIds = page.entries.map((e) => e.entryId);
+  const { pageIds, pageTicked } = pageTickState(loadedIds, ticked, all);
+  const headState = pageTicked ? 'on' : picked > 0 ? 'some' : 'off';
+  const rowPicked = (id) => all !== null || ticked.has(id);
+  const clearSelection = () => {
+    setSel({ for: filters, ticked: NOBODY, all: null });
+    setSelNote(null);
+  };
+  const tickPage = () => {
+    if (pageTicked) {
+      clearSelection();
+      return;
+    }
+    setSel({ for: filters, ticked: new Set(pageIds), all: null });
+    setSelNote(null);
+  };
+  const tooMany = `You can select up to ${count(MEMBER_LIST_TICKED_MAX)} ${words.people} one at a time. To select more, tick the box at the top, then Select all.`;
+  const tickRow = (id) => {
+    // From "Select all", unticking one leaves the rest of the rows shown ticked, as many
+    // as can be ticked one by one.
+    if (all !== null) {
+      setSel({ for: filters, ticked: untickFromAll(loadedIds, id), all: null });
+      setSelNote(loadedIds.length > MEMBER_LIST_TICKED_MAX ? tooMany : null);
+      return;
+    }
+    const next = new Set(ticked);
+    if (next.has(id)) next.delete(id);
+    else if (next.size >= MEMBER_LIST_TICKED_MAX) {
+      setSelNote(tooMany);
+      return;
+    } else next.add(id);
+    setSel({ for: filters, ticked: next, all: null });
+    setSelNote(null);
+  };
+  const selectEveryone = async () => {
+    const asked = filters;
+    const filter = selectionFilter(asked);
+    setSelecting(true);
+    setSelNote(null);
+    try {
+      const res = await orgService.selectAllMembers(gymId, filter);
+      setSel({ for: asked, ticked: NOBODY, all: { filter, ...res.data.selection } });
+    } catch (err) {
+      setSelNote(errorText(err, `We couldn't select all the ${words.people}. Please try again.`));
+    } finally {
+      setSelecting(false);
+    }
+  };
+  // A "Select all" whose people changed: it now holds the server's new count.
+  const selectionMoved = useCallback((fresh) => {
+    setSel((s) => (s.all === null ? s : { ...s, all: { ...s.all, count: fresh.count, digest: fresh.digest } }));
+  }, []);
+  /** Download CSV of `chosen`: the people selected, or, from the toolbar with nobody
+   *  selected, everyone the list shows now (Kd, 2026-09-28: there by default). */
+  const download = async (chosen = selection) => {
+    if (downloading) return;
+    setDownloading(true);
+    setSelNote(null);
+    try {
+      let asked = chosen;
+      if (asked === null) {
+        const filter = selectionFilter(filters);
+        const res = await orgService.selectAllMembers(gymId, filter);
+        asked = { kind: 'all', filter, ...res.data.selection };
+      }
+      const file = await orgService.downloadMembersCsv(gymId, asked);
+      saveFile(file.blob, file.filename);
+    } catch (raw) {
+      const err = await blobError(raw);
+      const fresh = selectionChanged(err);
+      if (fresh !== null) {
+        selectionMoved(fresh);
+        setSelNote(`The ${words.people} you selected have changed, so nothing was downloaded. ${count(fresh.count)} are selected now.`);
+      } else {
+        setSelNote(errorText(err, "We couldn't download the file. Please try again."));
+      }
+    } finally {
+      setDownloading(false);
+    }
+  };
+  const matchWord = filtersAreEmpty(filters) ? '' : ' that match';
+
   const noList = list !== null && !list.hasList && list.counts.entries === 0 && former === 0;
   const today = gymToday(gym?.timezone);
   const needsCheck = list?.appWords.find((w) => w.word === 'needs_check')?.count ?? 0;
@@ -397,8 +539,55 @@ export default function MemberListPanel({
     ? `${count(page.total)} past ${page.total === 1 ? words.person : words.people}`
     : `${count(page.total)} ${page.total === 1 ? words.person : words.people}${empty ? '' : ' match'}`;
 
+  /** "12 members", "1 past member". */
+  const peopleWords = (k) => `${count(k)} ${current ? '' : 'past '}${k === 1 ? words.person : words.people}`;
+  // The bar's buttons (§18.5): Invite only for current members and a gym that can send;
+  // Download CSV always, a read-only gym included (it changes nobody).
+  const barButtons = (
+    <>
+      {current && !readOnly ? (
+        <button type="button" onClick={() => setInvitingSelected(true)} data-testid="bar-invite" className="c-btn c-btn-soft c-btn-sm">
+          <Mail aria-hidden="true" className="w-4 h-4" />
+          Invite to app
+        </button>
+      ) : null}
+      <button type="button" onClick={() => void download(selection)} disabled={downloading} data-testid="bar-download" className="c-btn c-btn-s c-btn-sm">
+        {downloading ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Download aria-hidden="true" className="w-4 h-4" />}
+        Download CSV
+      </button>
+      <button type="button" onClick={clearSelection} className="c-btn c-btn-sm c-btn-link">
+        Clear
+      </button>
+    </>
+  );
+  // Gmail's line under the bar: the page is selected, and everyone can be.
+  let selectLine = null;
+  if (all !== null) {
+    selectLine = (
+      <>
+        <span>{`All ${peopleWords(all.count)}${matchWord} ${all.count === 1 ? 'is' : 'are'} selected.`}</span>
+        <button type="button" onClick={clearSelection} className="c-btn-link c-w6">
+          Clear
+        </button>
+      </>
+    );
+  } else if (pageTicked && page.total > ticked.size) {
+    selectLine = (
+      <>
+        <span>
+          {ticked.size < loadedIds.length
+            ? `The first ${peopleWords(ticked.size)} shown are selected.`
+            : `All ${peopleWords(ticked.size)} on this page ${ticked.size === 1 ? 'is' : 'are'} selected.`}
+        </span>
+        <button type="button" onClick={() => void selectEveryone()} disabled={selecting} data-testid="select-everyone" className="c-btn-link c-w6">
+          {`Select all ${peopleWords(page.total)}${matchWord}`}
+        </button>
+      </>
+    );
+  }
+
   return (
-    <div className="flex flex-col gap-5 md:gap-6" data-testid="member-list-panel">
+    <div className={`flex flex-col gap-5 md:gap-6 ${picked > 0 ? 'pb-20 md:pb-0' : ''}`} data-testid="member-list-panel">
       <div className="flex flex-col gap-3">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-3">
           <label className="c-search w-full md:max-w-[460px] md:flex-grow">
@@ -420,10 +609,19 @@ export default function MemberListPanel({
               <SlidersHorizontal aria-hidden="true" className="w-4 h-4" />
               {shown.length > 0 ? `Filter · ${String(shown.length)}` : 'Filter'}
             </button>
-            {current ? (
+            {/* With people selected, the bar's Invite and Download are the ones: two buttons
+                with one name acting on two different sets would be a guess for staff, and
+                nothing may happen to anyone who was not ticked (CLAUDE.md §4). */}
+            {current && picked === 0 ? (
               <button type="button" onClick={() => setInviting(true)} disabled={readOnly} data-testid="invite-button" className="c-btn c-btn-soft c-btn-lg">
                 <Mail aria-hidden="true" className="w-4 h-4" />
                 Invite to app
+              </button>
+            ) : null}
+            {page.total > 0 && picked === 0 ? (
+              <button type="button" onClick={() => void download(null)} disabled={downloading} data-testid="download-shown" className="c-btn c-btn-s c-btn-lg">
+                {downloading ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Download aria-hidden="true" className="w-4 h-4" />}
+                Download CSV
               </button>
             ) : null}
             <span className="flex-grow" />
@@ -466,6 +664,36 @@ export default function MemberListPanel({
       </div>
 
       {listError !== null ? <p className="c-s14 c-t2">{listError}</p> : null}
+
+      {selNote !== null ? (
+        <p className="c-s14 c-t1" role="status" data-testid="selection-note">
+          {selNote}
+        </p>
+      ) : null}
+
+      {invitingSelected && selection !== null ? (
+        <MemberListInvite
+          gymId={gymId}
+          gym={gym}
+          list={list}
+          filters={filters}
+          words={words}
+          readOnly={readOnly}
+          preview={null}
+          selection={selection}
+          onSelectionChanged={selectionMoved}
+          onSent={() => {
+            keepLoaded.current = page.entries.length;
+            setTick((n) => n + 1);
+          }}
+          onListChanged={() => {
+            keepLoaded.current = page.entries.length;
+            setTick((n) => n + 1);
+            onRosterChanged();
+          }}
+          onClose={() => setInvitingSelected(false)}
+        />
+      ) : null}
 
       {inviting ? (
         <MemberListInvite
@@ -520,31 +748,58 @@ export default function MemberListPanel({
 
       {!page.loading && page.entries.length > 0 ? (
         <section className="c-card overflow-hidden">
-          <div className={`c-member-grid ${current ? '' : 'c-member-grid-past'} c-th hidden md:grid px-5 py-2.5`} data-testid="list-head">
-            <span style={{ gridArea: 'who' }}>Name</span>
-            <span style={{ gridArea: 'status' }}>Status</span>
-            <span style={{ gridArea: 'type' }}>Membership</span>
-            {current ? (
-              <>
-                <span style={{ gridArea: 'ends' }}>Renews or ends</span>
-                <span style={{ gridArea: 'pay' }}>Payment</span>
-              </>
-            ) : (
-              <span style={{ gridArea: 'ends' }}>Past {words.person} since</span>
-            )}
-            <span style={{ gridArea: 'app' }}>App</span>
-          </div>
+          {picked > 0 ? (
+            <div className="hidden md:block">
+              <div className="c-selbar" data-testid="sel-bar">
+                <Tick state={headState} label={pageTicked ? 'Clear the selection' : `Select every ${words.person} on this page`} onClick={tickPage} />
+                <span className="c-s14 c-w6 c-t1 flex-grow" data-testid="sel-count">
+                  {selectedWords(picked)}
+                </span>
+                {barButtons}
+              </div>
+            </div>
+          ) : (
+            <div className="hidden md:flex items-center pl-1" data-testid="list-head">
+              <Tick state={headState} label={`Select every ${words.person} on this page`} onClick={tickPage} />
+              <div className={`c-member-grid ${current ? '' : 'c-member-grid-past'} c-th grid flex-grow pr-5 py-2.5`}>
+                <span style={{ gridArea: 'who' }}>Name</span>
+                <span style={{ gridArea: 'status' }}>Status</span>
+                <span style={{ gridArea: 'type' }}>Membership</span>
+                {current ? (
+                  <>
+                    <span style={{ gridArea: 'ends' }}>Renews or ends</span>
+                    <span style={{ gridArea: 'pay' }}>Payment</span>
+                  </>
+                ) : (
+                  <span style={{ gridArea: 'ends' }}>Past {words.person} since</span>
+                )}
+                <span style={{ gridArea: 'app' }}>App</span>
+              </div>
+            </div>
+          )}
+          {selectLine !== null ? (
+            <div className="c-s14 c-t2 flex flex-wrap justify-center gap-x-2 gap-y-1 px-4 py-2.5 border-b text-center" style={{ borderColor: 'var(--line)' }} data-testid="select-line">
+              {selectLine}
+            </div>
+          ) : null}
           <ul>
             {page.entries.map((e, i) => {
               const app = appView(e.app, today);
               const past = e.formerAt !== null;
               return (
-                <li key={e.entryId} className={i > 0 ? 'border-t' : 'md:border-t'} style={{ borderColor: 'var(--line)' }}>
+                <li
+                  key={e.entryId}
+                  className={`flex items-start md:items-center pl-1 ${i > 0 ? 'border-t' : 'md:border-t'} ${rowPicked(e.entryId) ? 'c-picked' : ''}`}
+                  style={{ borderColor: 'var(--line)' }}
+                >
+                  <span className="pt-1 md:pt-0">
+                    <Tick state={rowPicked(e.entryId) ? 'on' : 'off'} label={`Select ${e.fullName || 'this person'}`} onClick={() => tickRow(e.entryId)} />
+                  </span>
                   <button
                     type="button"
                     data-testid="list-row"
                     onClick={() => setOpenId(e.entryId)}
-                    className={`c-member-grid ${past ? 'c-member-grid-past' : ''} grid w-full text-left min-h-11 px-4 py-3.5 md:px-5 md:py-3`}
+                    className={`c-member-grid ${past ? 'c-member-grid-past' : ''} grid flex-grow min-w-0 text-left min-h-11 pr-4 py-3.5 md:pr-5 md:py-3`}
                   >
                     <span className="flex flex-col gap-0.5 min-w-0" style={{ gridArea: 'who' }}>
                       <span className="c-s15 c-w6 c-t1 c-ell">{e.fullName || 'No name'}</span>
@@ -577,6 +832,15 @@ export default function MemberListPanel({
             })}
           </ul>
         </section>
+      ) : null}
+
+      {/* The bar on a phone, just above the tab bar (§18.5). */}
+      {picked > 0 ? (
+        <div className="c-selbar c-selbar-phone" data-testid="sel-bar-phone">
+          <Tick state={headState} label={pageTicked ? 'Clear the selection' : `Select every ${words.person} on this page`} onClick={tickPage} />
+          <span className="c-s14 c-w6 c-t1 flex-grow">{selectedWords(picked)}</span>
+          {barButtons}
+        </div>
       ) : null}
 
       {!page.loading && page.error === null && page.entries.length === 0 ? (
