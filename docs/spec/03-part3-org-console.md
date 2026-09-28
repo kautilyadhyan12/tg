@@ -2849,6 +2849,28 @@ never named. The words and the layout are the planning terminal's judgement (CLA
 §4 "Screens a new gym understands"); every feature Members had is kept (18.9). It is built in
 the console's new look (§17), so it is also Members' restyle (ROADMAP R8, folded in).
 
+**AMENDED 2026-09-28, after 5b-v-a-i merged (RULINGS 2026-09-28, three lines)** — where anything
+below says otherwise, this wins:
+- **The two tabs stay** ("Your list" · **In the app**, renamed from "Using the app"); 5b-v-a-ii
+  is not built. Someone in the app who isn't on the list stays on the In the app tab with its
+  amber "Not on your list" tag. Where 18.5 gives the bar to "Not on your list", 5b-v-b-ii gives
+  it to the In the app tab.
+- **The toolbar's Invite to app stays** and chooses by the Filter's words, as it did; the tick
+  boxes, "Select all" and the bar come beside it, and the bar's Invite reaches only the people
+  selected (5b-v-b-i). "Remove from app" in 18.5 and 18.6 is One Remove (2026-09-27): the bar's
+  Remove moves each selected member to past members and ends their app, in 5b-v-b-ii.
+- **Built in 5b-v-b-i:** a selection is the rows ticked (`kind: "ticked"`, at most 500 ids) or a
+  "Select all" (`kind: "all"`: the list's filter and search, the count and a digest of exactly
+  who, from `POST …/member-list/selection`). Invite's numbers, its page and the press, and
+  `POST …/member-list/export.csv`, take it; a "Select all" whose filter now matches anyone else
+  is refused with 409 `selection_changed` and the new count and digest, and nothing is done
+  (`memberList/selection.ts`). The file is 5b-iii's (formula cells guarded, email and phone as
+  checked, "Past member since" when past members are in it), named "Active members
+  2026-09-28.csv" for a Select all and "Selected members …" for rows ticked.
+- **An import's "They've left" ends the person's app** in the same step (One Remove), each
+  missing person marked by staff, the box naming who loses the app; Put back gives both back
+  (5b-v-d; amends §9.2 principle 1).
+
 **AMENDED 2026-09-28, the words** (Kd: *"use standard words this is not a school project … a
 professional software will not have this kind thing"*). Plain, neutral product wording, as
 email and gym software write it; where a quote below differs, these words win:
