@@ -146,7 +146,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 5b-v-b. **Select and act** (§18.5–18.6), split 2026-09-28 in two:
          - 5b-v-b-i. [x] **Tick boxes, Invite and Download CSV** — merged 2026-09-28 (PR #126).
          - 5b-v-b-ii. [x] **Remove on the people selected** — merged 2026-09-28 (PR #127).
-       - 5b-v-c. [ ] **A person's page** (§18.6–18.7): every button kept, Invite asks first, Remove from app on the page, the page for someone not on your list, Add member and Edit restyled.
+       - 5b-v-c. [x] **A person's page** — merged 2026-09-28 (PR #129).
        - 5b-v-d. [ ] **Import, who has left** (§18.8, was 5b-iii-b): each missing person marked Left or Still a member; Upload and Review restyled. "They've left" ends the app too (RULINGS 2026-09-28).
      - 5b-iv. [ ] **Possible duplicates** (RULINGS 2026-09-25): records alike by name, phone or member number listed as pairs ("2 people may be on your list twice · Review"), each opened side by side; Merge or "Different people" (remembered); never merged by the app.
      - 5b-vi. [ ] **Member photos** (Kd, RULINGS 2026-09-28): the photo a member adds in the app, small and round on each Members row and on their page, initials when there is none; only their own gym's staff see it, and not after they leave. Needs Stage 4 item 4 (photo storage); the check-in screen (16a) shows it once both are built.
