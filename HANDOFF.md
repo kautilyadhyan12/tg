@@ -12,8 +12,9 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Worst thing, first test:** Ada opened, closed, Bea opened — Ada's late page or late invitation never shows under Bea, and Bea's Invite asks for and sends Bea; the same after "Open that record" inside one panel. **Breaks, each RED, restored sha256-identical:** Invite sending the panel's first person; opening another record keeping the first on screen. A third (the list reusing one panel for everyone) stayed green: Close throws the panel away, so the guard there is the unmount, not the key.
 - **Tests:** api **4,104 of 4,104** (the new roster test: another gym's older record at the same email is never offered); web **3,083 of 3,083** (`poseAssets.contract` local Node 24); shared 233/233; tsc and eslint 0 on every changed file; `vite build` green. Seen in headless Edge at 1440 and 390, dark and light: nothing wider than the screen.
 - **Cost at full size:** no new read of people; the roster's existing same-email query returns one more column (not re-measured).
-- **Kd's click-through:** *"all passed"*.
-- **Next:** review round one (`reviews/5b-v-c-1-review.md`), then merge on Kd's word, then 5b-v-d.
+- **Kd's click-through:** *"all passed"*. Kd also said yes to member photos on Members (5b-vi, after photo storage; RULINGS 2026-09-28).
+- **Round one: no Critical or High, 4 Low, all fixed (79f2bc2):** nothing that ends somebody's app without `members.remove` (the test RED with the permission not passed); a past member's box button **Remove access**; "In the app since", never "joined"; an unnamed member at the address still opens. Web 3,086 of 3,086.
+- **Next:** the re-check (`reviews/5b-v-c-3-recheck.md`), then merge on Kd's word, then 5b-v-d.
 
 ## 2026-09-28 · 5b-v-b-ii (Folder A): Remove on the people selected (branch `members-remove-selected`)
 
