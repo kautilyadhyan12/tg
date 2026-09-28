@@ -24,6 +24,8 @@ export interface LeadRow {
   followUpLastAt: Date | null;
   /** YYYY-MM-DD, the gym's day. */
   followUpDueOn: string | null;
+  /** When the person last sent the gym page's form. */
+  enquiredAt: Date | null;
 }
 
 interface DbLead {
@@ -42,6 +44,7 @@ interface DbLead {
   follow_ups_sent: number;
   follow_up_last_at: Date | null;
   follow_up_due_on: string | null;
+  enquired_at: Date | null;
 }
 
 const toRow = (row: DbLead): LeadRow => ({
@@ -60,6 +63,7 @@ const toRow = (row: DbLead): LeadRow => ({
   followUpsSent: row.follow_ups_sent,
   followUpLastAt: row.follow_up_last_at,
   followUpDueOn: row.follow_up_due_on,
+  enquiredAt: row.enquired_at,
 });
 
 export interface LeadValues {
@@ -108,14 +112,22 @@ export async function leadHolding(
   return rows[0]?.id ?? null;
 }
 
-export async function insertLead(tx: TransactionSql, gymId: string, values: LeadValues, addedBy: string): Promise<LeadRow> {
+/** `addedBy` null: the person sent the gym page's form themselves (`enquiredAt`). */
+export async function insertLead(
+  tx: TransactionSql,
+  gymId: string,
+  values: LeadValues,
+  addedBy: string | null,
+  enquiredAt: Date | null = null,
+): Promise<LeadRow> {
   const rows = await tx<DbLead[]>`
     INSERT INTO gym_leads (gym_id, full_name, email, phone_e164, source, notes, email_ok_at, added_by,
-                           follow_ups_sent, follow_up_last_at, follow_up_due_on)
+                           follow_ups_sent, follow_up_last_at, follow_up_due_on, enquired_at)
     VALUES (${gymId}, ${values.fullName}, ${values.email}, ${values.phone}, ${values.source}, ${values.notes}, ${values.emailOkAt}, ${addedBy},
-            ${values.followUpsSent}, ${values.followUpLastAt}, ${values.followUpDueOn}::date)
+            ${values.followUpsSent}, ${values.followUpLastAt}, ${values.followUpDueOn}::date, ${enquiredAt})
     RETURNING id, full_name, email, phone_e164, source, status, notes, email_ok_at, entry_id, false AS on_list,
-              created_at, status_changed_at, follow_ups_sent, follow_up_last_at, follow_up_due_on::text AS follow_up_due_on`;
+              created_at, status_changed_at, follow_ups_sent, follow_up_last_at, follow_up_due_on::text AS follow_up_due_on,
+              enquired_at`;
   const row = rows[0];
   if (row === undefined) throw new Error("inserting a lead returned no row");
   return toRow(row);
@@ -125,7 +137,7 @@ export async function leadFor(sql: SqlOrTx, gymId: string, leadId: string): Prom
   const rows = await sql<DbLead[]>`
     SELECT l.id, l.full_name, l.email, l.phone_e164, l.source, l.status, l.notes, l.email_ok_at, l.entry_id,
            (e.id IS NOT NULL AND e.former_at IS NULL) AS on_list, l.created_at, l.status_changed_at,
-           l.follow_ups_sent, l.follow_up_last_at, l.follow_up_due_on::text AS follow_up_due_on
+           l.follow_ups_sent, l.follow_up_last_at, l.follow_up_due_on::text AS follow_up_due_on, l.enquired_at
     FROM gym_leads l
     LEFT JOIN gym_member_list_entries e ON e.gym_id = l.gym_id AND e.id = l.entry_id
     WHERE l.gym_id = ${gymId} AND l.id = ${leadId}`;
@@ -138,7 +150,7 @@ export async function lockLead(tx: TransactionSql, gymId: string, leadId: string
   const rows = await tx<DbLead[]>`
     SELECT l.id, l.full_name, l.email, l.phone_e164, l.source, l.status, l.notes, l.email_ok_at, l.entry_id,
            (e.id IS NOT NULL AND e.former_at IS NULL) AS on_list, l.created_at, l.status_changed_at,
-           l.follow_ups_sent, l.follow_up_last_at, l.follow_up_due_on::text AS follow_up_due_on
+           l.follow_ups_sent, l.follow_up_last_at, l.follow_up_due_on::text AS follow_up_due_on, l.enquired_at
     FROM gym_leads l
     LEFT JOIN gym_member_list_entries e ON e.gym_id = l.gym_id AND e.id = l.entry_id
     WHERE l.gym_id = ${gymId} AND l.id = ${leadId}
@@ -176,7 +188,7 @@ export async function writeLead(
     )
     SELECT w.id, w.full_name, w.email, w.phone_e164, w.source, w.status, w.notes, w.email_ok_at, w.entry_id,
            (e.id IS NOT NULL AND e.former_at IS NULL) AS on_list, w.created_at, w.status_changed_at,
-           w.follow_ups_sent, w.follow_up_last_at, w.follow_up_due_on::text AS follow_up_due_on
+           w.follow_ups_sent, w.follow_up_last_at, w.follow_up_due_on::text AS follow_up_due_on, w.enquired_at
     FROM written w
     LEFT JOIN gym_member_list_entries e ON e.gym_id = w.gym_id AND e.id = w.entry_id`;
   const row = rows[0];
@@ -224,7 +236,7 @@ export async function leadsPage(
   const rows = await sql<(DbLead & { cursor_at: string })[]>`
     SELECT l.id, l.full_name, l.email, l.phone_e164, l.source, l.status, l.notes, l.email_ok_at, l.entry_id,
            (e.id IS NOT NULL AND e.former_at IS NULL) AS on_list, l.created_at, l.status_changed_at,
-           l.follow_ups_sent, l.follow_up_last_at, l.follow_up_due_on::text AS follow_up_due_on,
+           l.follow_ups_sent, l.follow_up_last_at, l.follow_up_due_on::text AS follow_up_due_on, l.enquired_at,
            to_char(l.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_at
     FROM gym_leads l
     LEFT JOIN gym_member_list_entries e ON e.gym_id = l.gym_id AND e.id = l.entry_id
@@ -350,4 +362,103 @@ export async function insertLeadsFromFile(
     added += batch.length;
   }
   return added;
+}
+
+/** The lead a message from the gym page's form belongs to: the one with its email,
+ *  else the one with its phone. Locked for the rest of the caller's transaction. */
+export async function lockLeadForContact(
+  tx: TransactionSql,
+  gymId: string,
+  contact: { email: string | null; phone: string | null },
+): Promise<LeadRow | null> {
+  const rows = await tx<DbLead[]>`
+    SELECT l.id, l.full_name, l.email, l.phone_e164, l.source, l.status, l.notes, l.email_ok_at, l.entry_id,
+           (e.id IS NOT NULL AND e.former_at IS NULL) AS on_list, l.created_at, l.status_changed_at,
+           l.follow_ups_sent, l.follow_up_last_at, l.follow_up_due_on::text AS follow_up_due_on, l.enquired_at
+    FROM gym_leads l
+    LEFT JOIN gym_member_list_entries e ON e.gym_id = l.gym_id AND e.id = l.entry_id
+    WHERE l.gym_id = ${gymId}
+      AND ((${contact.email}::citext IS NOT NULL AND l.email = ${contact.email}::citext)
+        OR (${contact.phone}::text IS NOT NULL AND l.phone_e164 = ${contact.phone}::text))
+    ORDER BY (${contact.email}::citext IS NOT NULL AND l.email = ${contact.email}::citext) DESC, l.id
+    LIMIT 1
+    FOR UPDATE OF l`;
+  const row = rows[0];
+  return row === undefined ? null : toRow(row);
+}
+
+export interface EnquiryValues {
+  fullName: string;
+  email: string | null;
+  phone: string | null;
+  source: LeadSource | null;
+  message: string;
+  mayEmail: boolean;
+}
+
+/** Keeps a message on its lead, stamps the lead, and lets go of all but the newest
+ *  `kept` messages of that lead. */
+export async function addEnquiry(
+  tx: TransactionSql,
+  gymId: string,
+  leadId: string,
+  values: EnquiryValues,
+  at: Date,
+  kept: number,
+): Promise<void> {
+  await tx`
+    INSERT INTO gym_lead_enquiries (gym_id, lead_id, full_name, email, phone_e164, source, message, may_email, created_at)
+    VALUES (${gymId}, ${leadId}, ${values.fullName}, ${values.email}, ${values.phone}, ${values.source}, ${values.message},
+            ${values.mayEmail}, ${at})`;
+  await tx`UPDATE gym_leads SET enquired_at = ${at} WHERE gym_id = ${gymId} AND id = ${leadId}`;
+  await tx`
+    DELETE FROM gym_lead_enquiries
+    WHERE gym_id = ${gymId} AND lead_id = ${leadId}
+      AND id NOT IN (
+        SELECT id FROM gym_lead_enquiries
+        WHERE gym_id = ${gymId} AND lead_id = ${leadId}
+        ORDER BY created_at DESC, id DESC
+        LIMIT ${kept})`;
+}
+
+export interface EnquiryRow {
+  id: string;
+  fullName: string;
+  email: string | null;
+  phone: string | null;
+  source: string | null;
+  message: string;
+  mayEmail: boolean;
+  createdAt: Date;
+}
+
+/** A lead's messages from the form, newest first. */
+export async function enquiriesFor(sql: SqlOrTx, gymId: string, leadId: string, limit: number): Promise<EnquiryRow[]> {
+  const rows = await sql<
+    {
+      id: string;
+      full_name: string;
+      email: string | null;
+      phone_e164: string | null;
+      source: string | null;
+      message: string;
+      may_email: boolean;
+      created_at: Date;
+    }[]
+  >`
+    SELECT id, full_name, email::text AS email, phone_e164, source, message, may_email, created_at
+    FROM gym_lead_enquiries
+    WHERE gym_id = ${gymId} AND lead_id = ${leadId}
+    ORDER BY created_at DESC, id DESC
+    LIMIT ${limit}`;
+  return rows.map((row) => ({
+    id: row.id,
+    fullName: row.full_name,
+    email: row.email,
+    phone: row.phone_e164,
+    source: row.source,
+    message: row.message,
+    mayEmail: row.may_email,
+    createdAt: row.created_at,
+  }));
 }

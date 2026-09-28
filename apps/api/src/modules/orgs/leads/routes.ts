@@ -159,6 +159,15 @@ export function registerLeadRoutes(app: FastifyInstance, deps: LeadRouteDeps): v
     return reply.status(200).send({ lead });
   });
 
+  /** The messages a lead sent through the gym page's form (20c-iv-a). */
+  app.get("/v1/orgs/:gymId/leads/:leadId/enquiries", signedIn, async (req, reply) => {
+    const params = parseOr400(leadParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const enquiries = await service.listEnquiries(leadDeps, requireUserId(req), params.gymId, params.leadId, readGate(req, reply));
+    if (enquiries === null) return;
+    return reply.status(200).send({ enquiries });
+  });
+
   app.post("/v1/orgs/:gymId/leads", signedIn, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
     if (params === null) return;

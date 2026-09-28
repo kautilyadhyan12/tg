@@ -38,6 +38,7 @@ import { GeoError } from "./modules/geo/errors.js";
 import { registerOrgRoutes, type OrgRouteOverrides } from "./modules/orgs/routes.js";
 import { inviteSettings } from "./modules/orgs/invites/settings.js";
 import { registerUnsubscribeRoutes } from "./modules/orgs/invites/unsubscribe.js";
+import { createRobotCheck, type RobotCheck } from "./modules/orgs/gymPage/robotCheck.js";
 import { registerResendWebhookRoutes } from "./modules/webhooks/resendRoutes.js";
 import type { PaddleApi } from "./modules/billing/paddle.js";
 import { registerBillingRoutes } from "./modules/billing/routes.js";
@@ -74,6 +75,8 @@ export interface BuildAppOverrides {
   sentryTransport?: Sentry.NodeOptions["transport"];
   /** Tests replace Paddle's API with a fake; the keys in the config still switch it on. */
   paddleApi?: PaddleApi;
+  /** Tests answer the gym page's robot check themselves; unset asks Cloudflare. */
+  robotCheck?: RobotCheck;
   /** Tests hold a password check open to race it against an address's first proof;
    *  unset is argon2id. */
   passwordHasher?: PasswordHasher;
@@ -282,7 +285,11 @@ export async function buildApp(
   registerGeoRoutes(app, { sql, redis, config }, overrides.geo ?? {});
   const invites = inviteSettings(config);
   const paddle = paddleSettings(config, overrides.paddleApi);
-  registerOrgRoutes(app, { sql, redis, invites, onlinePayments: paddle !== null }, overrides.orgs ?? {});
+  registerOrgRoutes(
+    app,
+    { sql, redis, invites, onlinePayments: paddle !== null, robotCheck: overrides.robotCheck ?? createRobotCheck(config) },
+    overrides.orgs ?? {},
+  );
   // The unsubscribe link in every invitation: public, and not under /v1/orgs.
   registerUnsubscribeRoutes(app, { sql, redis, settings: invites });
   // What Resend reports about each email: signed, kept once, acted on by the worker.

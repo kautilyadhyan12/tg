@@ -39,6 +39,8 @@ describe("Paddle's settings", () => {
       REDIS_URL: "redis://localhost:6379",
       RESEND_API_KEY: "re_dummy",
       EMAIL_FROM: "AI Home Gym <hello@example.com>",
+      TURNSTILE_SITE_KEY: "site",
+      TURNSTILE_SECRET_KEY: "secret",
       PADDLE_API_KEY: SANDBOX_KEY,
       PADDLE_CLIENT_TOKEN: TOKEN,
     };

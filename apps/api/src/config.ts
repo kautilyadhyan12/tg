@@ -120,6 +120,11 @@ const envSchema = z.object({
   // Public: sent to the browser to open Paddle's checkout.
   PADDLE_CLIENT_TOKEN: z.string().regex(/^(test|live)_[a-zA-Z\d]{27}$/, "PADDLE_CLIENT_TOKEN must be a Paddle client-side token").optional(),
   PADDLE_WEBHOOK_SECRET: z.string().regex(/^pdl_ntfset_[A-Za-z0-9_+/=-]{10,200}$/, "PADDLE_WEBHOOK_SECRET must be a Paddle notification secret").optional(),
+  // Cloudflare Turnstile, the robot check on a gym page's enquiry form (ROADMAP
+  // 20c-iv-a). Set together; REQUIRED in production. Outside production, unset means
+  // Cloudflare's own test pair, which passes every check (`robotCheck.ts`).
+  TURNSTILE_SITE_KEY: z.string().trim().min(1).max(100).optional(),
+  TURNSTILE_SECRET_KEY: z.string().trim().min(1).max(100).optional(),
 });
 
 export type AppConfig = Readonly<z.infer<typeof envSchema>>;
@@ -141,6 +146,14 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     .refine((c) => c.INVITE_EMAIL_FROM === undefined || c.RESEND_API_KEY !== undefined, {
       path: ["RESEND_API_KEY"],
       message: "RESEND_API_KEY is required when INVITE_EMAIL_FROM is set",
+    })
+    .refine((c) => (c.TURNSTILE_SITE_KEY === undefined) === (c.TURNSTILE_SECRET_KEY === undefined), {
+      path: ["TURNSTILE_SECRET_KEY"],
+      message: "TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY are set together",
+    })
+    .refine((c) => c.NODE_ENV !== "production" || c.TURNSTILE_SECRET_KEY !== undefined, {
+      path: ["TURNSTILE_SECRET_KEY"],
+      message: "TURNSTILE_SECRET_KEY is required in production (the gym page's enquiry form)",
     })
     .refine((c) => (c.PADDLE_API_KEY === undefined) === (c.PADDLE_CLIENT_TOKEN === undefined), {
       path: ["PADDLE_CLIENT_TOKEN"],

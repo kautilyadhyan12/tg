@@ -25,6 +25,7 @@ import Achievements    from './pages/Achievements';
 import Settings        from './pages/Settings';
 import JoinGym         from './pages/JoinGym';
 import InvitationLink  from './pages/InvitationLink';
+import GymPublicPage   from './pages/GymPublicPage';
 import Invitations     from './pages/Invitations';
 import MyGyms          from './pages/MyGyms';
 import Running         from './pages/Running';
@@ -181,6 +182,8 @@ export default function App() {
                 exists it opens sign-in; the invitation itself hangs on the
                 address, never on this link. */}
             <Route path="/join/:slug" element={<InvitationLink />} />
+            {/* A gym's own page and its enquiry form (20c-iv-a): public, no sign-in. */}
+            <Route path="/gyms/:slug" element={<GymPublicPage />} />
             <Route path="/invitations" element={
               <ProtectedRoute requireInvitations={false}>
                 <AppLayout><Invitations /></AppLayout>

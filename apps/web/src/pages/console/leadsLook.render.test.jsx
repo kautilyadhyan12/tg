@@ -280,3 +280,36 @@ describe('"Email due" (20c-ii)', () => {
     expect(screen.queryByText('Email due')).toBeNull();
   });
 });
+
+describe('a long list keeps its tools on screen (RULINGS 2026-09-28)', () => {
+  const longPage = (scrollY) => {
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: scrollY });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
+    Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 5000 });
+  };
+  afterEach(() => {
+    longPage(0);
+    Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 0 });
+  });
+
+  it('search and the status chips are pinned, and Back to top and Go to the bottom show on a long page', async () => {
+    longPage(2000);
+    draw();
+    await screen.findAllByTestId('lead-row');
+    const tools = screen.getByTestId('leads-tools');
+    expect(tools.className).toContain('c-sticky-tools');
+    expect(within(tools).getByRole('searchbox', { name: 'Search your leads' })).toBeTruthy();
+    expect(within(tools).getByRole('button', { name: 'All 2' })).toBeTruthy();
+    expect(button('Back to top')).toBeTruthy();
+    expect(button('Go to the bottom')).toBeTruthy();
+  });
+
+  it('a role the server refuses gets no scroll buttons', async () => {
+    longPage(2000);
+    useOrg(NO_TICK);
+    api.getLeads.mockRejectedValue(Object.assign(new Error('403'), { response: { status: 403, data: { message: "Your role doesn't allow that." } } }));
+    draw();
+    await screen.findByText("Your role doesn't allow that.");
+    expect(button('Back to top')).toBeNull();
+  });
+});

@@ -2430,7 +2430,7 @@ function toWeekSchedule(sessions: readonly repo.GymSessionRow[]): GymHours["week
  *  caller: the console's own form. **Nothing member-facing may draw it** —
  *  `GymHoursNote` branches on the mode and reads `week`, which is why keeping
  *  the rows changes nothing a member sees. */
-function toGymHours(row: repo.GymHoursRow): GymHours {
+export function toGymHours(row: repo.GymHoursRow): GymHours {
   return {
     mode: row.mode,
     timezone: row.timezone,
