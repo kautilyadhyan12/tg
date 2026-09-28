@@ -26,6 +26,7 @@ import {
   type MemberAppView,
   type MemberListInvitation,
 } from "@app/shared";
+import { dayInTz } from "../../gamification/streak.js";
 
 /** Someone in the app whom this record reaches. */
 export interface AppPerson {
@@ -60,10 +61,35 @@ export interface AppWordInput {
   invitation: MemberListInvitation | null;
   /** This gym's unsubscribe or spam mark on the address, if any. */
   optedOut: "unsubscribed" | "complained" | null;
-  /** The plan's paid places, or null when nothing caps them. */
-  cap: number | null;
-  /** The gym's own calendar day, 'YYYY-MM-DD'. */
+  /** The plan's paid places now: whether the gym has a live plan, its cap (null when
+   *  nothing caps it) and how many are in use. */
+  places: { live: boolean; cap: number | null; used: number };
+  /** The gym's own calendar day, 'YYYY-MM-DD', and its time zone. */
   today: string;
+  timeZone: string;
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "27 Sep", or "27 Sep 2025" in another year than `today`. */
+export function shortDay(day: string, today: string): string {
+  const [year, month, date] = day.split("-");
+  const words = `${String(Number(date))} ${MONTHS[Number(month) - 1] ?? ""}`;
+  return year === today.slice(0, 4) ? words : `${words} ${year ?? ""}`;
+}
+
+/** A person who tried to join when the plan was full: when, and whether they can now
+ *  (Kd, 2026-09-28: never a stale "all 500 places are in use"). */
+function fullPlanLine(first: string, since: string, input: AppWordInput): string {
+  const when = `${first} tried to join on ${shortDay(dayInTz(new Date(since), input.timeZone), input.today)}, when your plan was full.`;
+  const { live, cap, used } = input.places;
+  if (!live) return `${when} You have no active plan now, so nobody can join until you choose one.`;
+  if (cap === null) return `${when} Your plan has free places now, so ask ${first} to try again.`;
+  if (used < cap) {
+    const free = cap - used;
+    return `${when} ${String(free)} ${free === 1 ? "place is" : "places are"} free now, so ask ${first} to try again.`;
+  }
+  return `${when} It's still full: upgrade your plan or remove a member who has left, then ask ${first} to try again.`;
 }
 
 const firstName = (fullName: string): string => fullName.trim().split(/\s+/)[0] || "this person";
@@ -194,13 +220,7 @@ export function appReason(input: AppWordInput): AppReason {
     }
     // 3
     if (inv.state === "pending" && inv.waitingSince !== null) {
-      const full = input.cap === null ? "your plan has no free places" : `all ${String(input.cap)} places on your plan are in use`;
-      return view(
-        "waiting",
-        "amber",
-        `${first} tried to join, but ${full}. Upgrade your plan or remove a member who has left, then ask ${first} to try again.`,
-        "amber",
-      );
+      return view("waiting", "amber", fullPlanLine(first, inv.waitingSince, input), "amber");
     }
     // 4: staff removed this record's own person; 4b: somebody else who used the address.
     if (inv.state === "withdrawn" && inv.removedAt !== null) return view("removed", "grey", null, "plain", inv.removedAt);

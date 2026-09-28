@@ -28,8 +28,9 @@ const base: AppWordInput = {
   sharedWith: null,
   invitation: null,
   optedOut: null,
-  cap: 500,
+  places: { live: true, cap: 500, used: 500 },
   today: "2026-09-27",
+  timeZone: "Europe/London",
 };
 
 const invitation = (over: Partial<MemberListInvitation> = {}): MemberListInvitation => ({
@@ -83,7 +84,7 @@ describe("the spec's table, one case a row (§18.4)", () => {
     [
       "3 waiting for a place",
       { invitation: invitation({ waitingSince: AT }) },
-      { reason: "waiting", tone: "amber", at: null, line: "Emma tried to join, but all 500 places on your plan are in use. Upgrade your plan or remove a member who has left, then ask Emma to try again.", lineTone: "amber" },
+      { reason: "waiting", tone: "amber", at: null, line: "Emma tried to join on 22 Sep, when your plan was full. It's still full: upgrade your plan or remove a member who has left, then ask Emma to try again.", lineTone: "amber" },
     ],
     ["4 removed from app", { invitation: invitation({ state: "withdrawn", removedAt: REMOVED }) }, { reason: "removed", tone: "grey", at: REMOVED, line: null, lineTone: "plain" }],
     [
@@ -140,6 +141,42 @@ describe("the spec's table, one case a row (§18.4)", () => {
   ];
   it.each(cases)("%s", (_name, over, expected) => {
     expect(reason(over)).toEqual(expected);
+  });
+});
+
+// Kd, 2026-09-28: seeded data showed Noah "all 500 places are in use" with 4 in the app. The
+// line says WHEN they tried, and how the plan stands NOW, never a stale "full".
+describe("someone who tried to join when the plan was full", () => {
+  const noah = { fullName: "Noah Brown", email: "noah@example.com" };
+  const tried = (waitingSince: string, over: Partial<AppWordInput> = {}) =>
+    reason({ ...noah, invitation: invitation({ waitingSince }), ...over }).line;
+  const cases: [string, string, Partial<AppWordInput>, string][] = [
+    ["still full", "2026-09-27T09:00:00.000Z", {}, "Noah tried to join on 27 Sep, when your plan was full. It's still full: upgrade your plan or remove a member who has left, then ask Noah to try again."],
+    ["over the cap after a smaller size", "2026-09-27T09:00:00.000Z", { places: { live: true, cap: 200, used: 214 } }, "Noah tried to join on 27 Sep, when your plan was full. It's still full: upgrade your plan or remove a member who has left, then ask Noah to try again."],
+    ["places free now", "2026-09-27T09:00:00.000Z", { places: { live: true, cap: 500, used: 4 } }, "Noah tried to join on 27 Sep, when your plan was full. 496 places are free now, so ask Noah to try again."],
+    ["one place free", "2026-09-27T09:00:00.000Z", { places: { live: true, cap: 500, used: 499 } }, "Noah tried to join on 27 Sep, when your plan was full. 1 place is free now, so ask Noah to try again."],
+    ["a plan with no cap now", "2026-09-27T09:00:00.000Z", { places: { live: true, cap: null, used: 900 } }, "Noah tried to join on 27 Sep, when your plan was full. Your plan has free places now, so ask Noah to try again."],
+    ["no active plan now", "2026-09-27T09:00:00.000Z", { places: { live: false, cap: null, used: 4 } }, "Noah tried to join on 27 Sep, when your plan was full. You have no active plan now, so nobody can join until you choose one."],
+    ["last year", "2025-12-31T12:00:00.000Z", {}, "Noah tried to join on 31 Dec 2025, when your plan was full. It's still full: upgrade your plan or remove a member who has left, then ask Noah to try again."],
+    // 23:30 in UTC is already the next morning at a gym in India.
+    ["the gym's own day, not UTC's", "2026-09-26T23:30:00.000Z", { timeZone: "Asia/Kolkata", places: { live: true, cap: 500, used: 4 } }, "Noah tried to join on 27 Sep, when your plan was full. 496 places are free now, so ask Noah to try again."],
+  ];
+  it.each(cases)("%s", (_name, since, over, line) => {
+    expect(tried(since, over)).toBe(line);
+  });
+
+  it("never says the plan is full while places are free", () => {
+    for (let used = 0; used <= 12; used += 1) {
+      for (const cap of [null, 1, 5, 10]) {
+        for (const live of [true, false]) {
+          const line = tried("2026-09-27T09:00:00.000Z", { places: { live, cap, used } }) ?? "";
+          const free = live && (cap === null || used < cap);
+          expect(line.endsWith("free now, so ask Noah to try again.") || line.endsWith("free places now, so ask Noah to try again."), `${String(live)} ${String(cap)} ${String(used)}`).toBe(free);
+          expect(line.includes("still full"), `${String(live)} ${String(cap)} ${String(used)}`).toBe(live && cap !== null && used >= cap);
+          expect(line).not.toMatch(/places on your plan are in use/);
+        }
+      }
+    }
   });
 });
 
@@ -332,7 +369,7 @@ describe("the three words a screen shows (Kd, 2026-09-27: the list showed too mu
     [
       "invited, waiting for a place: a line to check",
       { invitation: invitation({ waitingSince: AT }) },
-      { word: "invited", tone: "grey", at: null, line: "Emma tried to join, but all 500 places on your plan are in use. Upgrade your plan or remove a member who has left, then ask Emma to try again.", lineTone: "amber" },
+      { word: "invited", tone: "grey", at: null, line: "Emma tried to join on 22 Sep, when your plan was full. It's still full: upgrade your plan or remove a member who has left, then ask Emma to try again.", lineTone: "amber" },
     ],
     [
       "wrong email: not in the app, a red line to check",

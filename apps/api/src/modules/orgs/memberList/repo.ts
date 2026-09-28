@@ -850,11 +850,21 @@ export async function membersAgainstList(
    *  records, or who are these users (one person's page, one address's holders, one
    *  roster page). Each is still matched against the whole list, so the answer is the
    *  same one the full read gives for them. */
-  reaching?: { email: string | null; phone: string | null; entryIds?: readonly string[]; userIds?: readonly string[] },
+  reaching?: {
+    email: string | null;
+    phone: string | null;
+    /** Several records' emails and phones at once (removing the people selected). */
+    emails?: readonly string[];
+    phones?: readonly string[];
+    entryIds?: readonly string[];
+    userIds?: readonly string[];
+  },
 ): Promise<MemberAgainstList[]> {
   const narrowed = reaching !== undefined;
   const reachEmail = reaching?.email ?? null;
   const reachPhone = reaching?.phone ?? null;
+  const reachEmails = [...(reaching?.emails ?? [])];
+  const reachPhones = [...(reaching?.phones ?? [])];
   const reachEntries = [...(reaching?.entryIds ?? [])];
   const reachUsers = [...(reaching?.userIds ?? [])];
   const rows = await sql<
@@ -955,6 +965,8 @@ export async function membersAgainstList(
       AND (NOT ${narrowed}::boolean
            OR u.email = ${reachEmail}::citext
            OR (m.stated_phone_e164 IS NOT NULL AND m.stated_phone_e164 = ${reachPhone}::text)
+           OR u.email = ANY(${reachEmails}::citext[])
+           OR (m.stated_phone_e164 IS NOT NULL AND m.stated_phone_e164 = ANY(${reachPhones}::text[]))
            OR m.entry_id = ANY(${reachEntries}::uuid[])
            OR m.user_id = ANY(${reachUsers}::uuid[]))
     ORDER BY m.joined_at, m.user_id`;
@@ -2313,4 +2325,82 @@ export async function insertRemovalAudits(
     SELECT ${input.actorUserId}, ${input.gymId}, 'org.member_removed', 'gym_member', r.membership_id,
            jsonb_build_object('removedUserId', r.user_id, 'via', 'remove_unlisted', 'group', ${input.group}::text)
     FROM jsonb_to_recordset(${tx.json(payload)}) AS r(membership_id text, user_id text)`;
+}
+
+// ── Removing the people selected (5b-v-b-ii; spec §18.5, §18.6) ──
+
+/** The records of this gym among `ids`, current or past, as much as a removal needs.
+ *  Another gym's id is nobody. */
+export async function entriesBrief(
+  sql: SqlOrTx,
+  gymId: string,
+  ids: readonly string[],
+): Promise<{ id: string; fullName: string; email: string | null; phone: string | null; former: boolean }[]> {
+  if (ids.length === 0) return [];
+  const rows = await sql<{ id: string; full_name: string; email: string | null; phone_e164: string | null; former: boolean }[]>`
+    SELECT id, full_name, email::text AS email, phone_e164, (former_at IS NOT NULL) AS former
+    FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND id = ANY(${[...ids]}::uuid[])`;
+  return rows.map((row) => ({ id: row.id, fullName: row.full_name, email: row.email, phone: row.phone_e164, former: row.former }));
+}
+
+/** Records taken off the list together, as `setEntryFormer` takes one: those still
+ *  current become past members. Answers the ids moved. */
+export async function setEntriesFormer(tx: TransactionSql, gymId: string, ids: readonly string[], at: Date): Promise<string[]> {
+  if (ids.length === 0) return [];
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_member_list_entries
+    SET former_at = ${at}
+    WHERE gym_id = ${gymId} AND id = ANY(${[...ids]}::uuid[]) AND former_at IS NULL
+    RETURNING id`;
+  return rows.map((row) => row.id);
+}
+
+/** What a large removal is measured against: the list's current records and the paid
+ *  places in use (the join door's own count). */
+export async function removalScale(sql: SqlOrTx, gymId: string): Promise<{ listCurrent: number; seats: number }> {
+  const rows = await sql<{ list_current: number; seats: number }[]>`
+    SELECT (SELECT count(*)::int FROM gym_member_list_entries e WHERE e.gym_id = ${gymId} AND e.former_at IS NULL) AS list_current,
+           (SELECT count(*)::int FROM gym_members m
+             WHERE m.gym_id = ${gymId} AND m.removed_at IS NULL AND m.complimentary = false
+               AND NOT EXISTS (SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)) AS seats`;
+  return { listCurrent: rows[0]?.list_current ?? 0, seats: rows[0]?.seats ?? 0 };
+}
+
+/** Audit rows written together, each as `insertAudit` writes one. `meta` holds strings. */
+export async function insertAuditRows(
+  tx: TransactionSql,
+  input: {
+    actorUserId: string;
+    gymId: string;
+    rows: readonly { action: string; targetType: string; targetId: string; meta: Record<string, string> }[];
+  },
+): Promise<void> {
+  if (input.rows.length === 0) return;
+  const payload = input.rows.map((row) => ({ action: row.action, target_type: row.targetType, target_id: row.targetId, meta: row.meta }));
+  await tx`
+    INSERT INTO audit_log (actor_user_id, gym_id, action, target_type, target_id, meta)
+    SELECT ${input.actorUserId}, ${input.gymId}, r.action, r.target_type, r.target_id, r.meta
+    FROM jsonb_to_recordset(${tx.json(payload)}) AS r(action text, target_type text, target_id text, meta jsonb)`;
+}
+
+/** What an earlier removal of the people selected did, pressed with this box's digest
+ *  since `since`, or null when there was none: the summary audit row keeps the digest. */
+export async function selectedRemovalByDigest(
+  tx: TransactionSql,
+  gymId: string,
+  digest: string,
+  since: Date,
+): Promise<{ moved: number; endedApp: number } | null> {
+  const rows = await tx<{ moved: string | null; ended_app: string | null }[]>`
+    SELECT meta->>'moved' AS moved, meta->>'endedApp' AS ended_app
+    FROM audit_log
+    WHERE gym_id = ${gymId} AND at >= ${since}
+      AND action = 'org.member_list_selected_removed'
+      AND meta->>'digest' = ${digest}
+    ORDER BY at DESC
+    LIMIT 1`;
+  const row = rows[0];
+  if (row === undefined) return null;
+  return { moved: Number(row.moved ?? "0"), endedApp: Number(row.ended_app ?? "0") };
 }
