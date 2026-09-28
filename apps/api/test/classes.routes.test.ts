@@ -1449,9 +1449,12 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       // CHANGING A TIME SLOT IS PARSED AT THE SAME BOUNDARY: every field every
       // time, and a field it does not own is refused outright rather than
       // ignored (a `.strict()` schema).
+      // From tomorrow: a Monday 07:00 class starting today has begun on a Monday
+      // after 07:00, is kept when the repeat is deleted, and the "nothing written"
+      // check below then counted one class too many.
       const live = await post(
         repeatsUrl(org.org.id, type.id),
-        { ...RUN, weekdays: [MON], startMinute: at(7), startsOn: dayFromToday(0) },
+        { ...RUN, weekdays: [MON], startMinute: at(7), startsOn: dayFromToday(1) },
         owner.cookies,
       );
       expect(live.statusCode).toBe(201);
