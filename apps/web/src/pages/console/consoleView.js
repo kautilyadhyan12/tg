@@ -344,7 +344,8 @@ export function formatJoinedAt(iso) {
 
 /** WHY A MEMBER IS NOT ON THE GYM'S LIST, in the gym's words (ROADMAP 3a-vi-b), from
  *  the server's `offList`: the reason, the other name on their address if there is
- *  one, and what the button that puts it right says. Null when they are not off it. */
+ *  one and that member's record (for "Open their details", 5b-v-c), and what the button
+ *  that puts it right says. Null when they are not off it. */
 export function offListView(offList) {
   if (!offList) return null;
   const reason =
@@ -356,6 +357,7 @@ export function offListView(offList) {
   return {
     line: `Not on your list · ${reason}`,
     sameEmail: offList.sameEmailName ? `${offList.sameEmailName} on your list has the same email` : null,
+    sameEmailEntryId: offList.sameEmailName ? (offList.sameEmailEntryId ?? null) : null,
     // Only their own record taken off can be put back; otherwise a record is made.
     button: offList.reason === 'taken_off' ? 'Put back on your list' : 'Add to your list',
   };

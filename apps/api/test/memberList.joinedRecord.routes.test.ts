@@ -307,6 +307,34 @@ d("member list: an app member follows their record (real Postgres)", () => {
   );
 
   it(
+    "Open their details (5b-v-c): the roster names this gym's own record at the address, never another gym's listed earlier",
+    async () => {
+      const { priya, arjun, others } = castOf("h");
+      // Another gym lists a stranger at Priya's address first, so its record is the
+      // oldest anywhere holding it.
+      const elsewhere = await makeOwner("h-other");
+      const stranger: Person = { name: "Stranger Elsewhere", email: priya.email, phone: "07700 900999" };
+      await confirm(elsewhere.gymId, elsewhere.cookies, (await stage(elsewhere.gymId, elsewhere.cookies, csv([stranger, ...others]))).uploadId);
+
+      const { cookies, gymId } = await makeOwner("h");
+      await confirm(gymId, cookies, (await stage(gymId, cookies, csv([priya, ...others]))).uploadId);
+      const priyaUser = await joinByInvitation(gymId, priya.email);
+      // Next month's file leaves Priya out and lists her son at her address.
+      await confirm(gymId, cookies, (await stage(gymId, cookies, csv([arjun, ...others]))).uploadId);
+
+      const arjunRecord = await recordOf(gymId, arjun.name);
+      const priyaRow = (await roster(gymId, cookies)).find((item) => item.userId === priyaUser.userId);
+      expect(priyaRow?.offList).toMatchObject({ reason: "taken_off", sameEmailName: arjun.name, sameEmailEntryId: arjunRecord.id });
+      // The id opens Arjun's page in this gym, and nowhere else.
+      const page = await get(`/v1/orgs/${gymId}/member-list/entries/${arjunRecord.id}`, cookies);
+      expect(page.statusCode, page.body).toBe(200);
+      const theirs = await get(`/v1/orgs/${elsewhere.gymId}/member-list/entries/${arjunRecord.id}`, elsewhere.cookies);
+      expect(theirs.statusCode).toBe(404);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "staff changing a joined member's email by hand does not take them off; putting a member back brings back their own record, not a second one",
     async () => {
       const { cookies, gymId } = await makeOwner("b");
@@ -352,7 +380,7 @@ d("member list: an app member follows their record (real Postgres)", () => {
       const { emma, others } = castOf("e");
       await confirm(gymId, cookies, (await stage(gymId, cookies, csv([emma, ...others]))).uploadId);
       const niaRow = (await roster(gymId, cookies)).find((item) => item.userId === nia);
-      expect(niaRow?.offList).toEqual({ reason: "never_listed", at: null, sameEmailName: null });
+      expect(niaRow?.offList).toEqual({ reason: "never_listed", at: null, sameEmailName: null, sameEmailEntryId: null });
     },
     TEST_TIMEOUT_MS,
   );
@@ -403,6 +431,7 @@ d("member list: an app member follows their record (real Postgres)", () => {
         reason: "no_longer_listed",
         at: null,
         sameEmailName: null,
+        sameEmailEntryId: null,
       });
 
       const trainerEmail = addr("g-trainer");

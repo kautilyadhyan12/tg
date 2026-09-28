@@ -1629,6 +1629,58 @@ describe('Removing a member', () => {
     expect(screen.queryByText('Add to your list')).toBeNull();
   });
 
+  it("Open their details (5b-v-c): someone not on your list opens the member who has their email, and only that member", async () => {
+    const ARJUN = '88888888-8888-4888-8888-888888888888';
+    const priya = {
+      ...joinedMemberWithForbiddenExtras,
+      userId: 'u7',
+      displayName: 'Priya Shah',
+      offList: { reason: 'taken_off', at: '2026-09-25T09:00:00.000Z', sameEmailName: 'Arjun Shah', sameEmailEntryId: ARJUN },
+    };
+    const nia = { ...joinedMemberWithForbiddenExtras, userId: 'u8', displayName: 'Nia Cole', offList: { reason: 'never_listed', at: null, sameEmailName: null, sameEmailEntryId: null } };
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, priya, nia]));
+    orgService.getMemberListEntry.mockResolvedValue({
+      data: {
+        entry: memberListEntryDetailSchema.parse({
+          entryId: ARJUN,
+          fullName: 'Arjun Shah',
+          email: 'shah@members.example',
+          phone: null,
+          memberNumber: null,
+          status: 'Active',
+          membershipType: null,
+          joinedOn: null,
+          endsOn: null,
+          endsOnKind: null,
+          paymentStatus: null,
+          dateOfBirth: null,
+          formerAt: null,
+          source: 'upload',
+          inApp: false,
+          invitation: null,
+          app: { word: 'not_in_app', tone: 'grey', at: null, line: 'Priya Shah uses the app with this email address.', lineTone: 'plain' },
+          extra: [],
+          handEdited: [],
+          members: [],
+        }),
+      },
+    });
+    drawMembers();
+    // Nobody else holds Nia's address: nothing to open.
+    let panel = await openInApp('Nia Cole');
+    expect(panel.queryByRole('button', { name: 'Open their details' })).toBeNull();
+    fireEvent.click(panel.getByRole('button', { name: 'Close' }));
+
+    panel = await openInApp('Priya Shah');
+    fireEvent.click(panel.getByRole('button', { name: 'Open their details' }));
+    await waitFor(() => expect(orgService.getMemberListEntry).toHaveBeenCalledWith(ORG.id, ARJUN));
+    const page2 = within(screen.getByTestId('member-person'));
+    expect(await page2.findByRole('heading', { name: 'Arjun Shah' })).toBeTruthy();
+    // Priya's panel is closed, so one person is on screen.
+    expect(screen.queryByRole('dialog', { name: 'Priya Shah' })).toBeNull();
+    expect(orgService.getMemberListEntry).toHaveBeenCalledTimes(1);
+  });
+
   it('searches the people in the app by name once typing pauses, and says when nobody matches', async () => {
     orgService.getMembers.mockResolvedValue(page([ownerSeat, joinedMemberWithForbiddenExtras]));
     drawMembers();

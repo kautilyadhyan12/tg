@@ -2898,6 +2898,16 @@ below says otherwise, this wins:
   again." · "… It's still full: upgrade your plan or remove a member who has left, then ask
   Noah to try again." · "… Your plan has free places now …" (no cap) · "… You have no active
   plan now, so nobody can join until you choose one." Never "all 500 places are in use".
+- **Built in 5b-v-c: a person's page** in the new look, a side panel on a computer and the
+  whole screen on a phone. One orange button by state (Invite to app · Send again · Invite
+  again · Edit · Put back on your list); under More, Remove ("When they have left your
+  gym", One Remove: the drawing's separate "Move to past members" and "Remove from app"
+  items are gone) and Merge duplicate. **Invite to app asks first**: "Invite Ava Thompson to
+  the app?" / "One email goes to … with a link to the app." · **Send invitation** · Cancel.
+  A past member still in the app has the amber line with **Remove from app** on the page.
+  Sections Contact · Membership · Custom fields · App. Someone in the app not on your list
+  whose email a member on the list holds gets **Open their details** (the roster's
+  `offList.sameEmailEntryId`, this gym's record only).
 - **An import's "They've left" ends the person's app** in the same step (One Remove), each
   missing person marked by staff, the box naming who loses the app; Put back gives both back
   (5b-v-d; amends §9.2 principle 1).

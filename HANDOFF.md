@@ -4,6 +4,16 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-28 · 5b-v-c (Folder A): a person's page (branch `members-person-page`)
+
+- **Why this job:** next in Folder A's list. **Risky** (a person's details, a button that emails or removes them), Opus xhigh recommended; the plan was rewritten in simpler words at Kd's ask (*"as a beginner finding too to complex … english is not my fiorst languge"*), then Kd: *"go"*. No migration, no new package.
+- **Screen:** `MemberListPerson` in the console's look (§17), a side panel on a computer, the whole screen on a phone; the App word under the name; one orange button by state; Invite to app asks first (name and address); Remove ("When they have left your gym") and Merge duplicate under More; a past member still in the app has the amber line with Remove from app; sections Contact · Membership · Custom fields · App; Add member and Edit in the new look. `MemberPerson` drawing corrected to One Remove.
+- **Server:** the roster's `offList` gains `sameEmailEntryId` (this gym's first current record at that email), so "someone not on your list" has **Open their details**.
+- **Worst thing, first test:** Ada opened, closed, Bea opened — Ada's late page or late invitation never shows under Bea, and Bea's Invite asks for and sends Bea; the same after "Open that record" inside one panel. **Breaks, each RED, restored sha256-identical:** Invite sending the panel's first person; opening another record keeping the first on screen. A third (the list reusing one panel for everyone) stayed green: Close throws the panel away, so the guard there is the unmount, not the key.
+- **Tests:** api **4,104 of 4,104** (the new roster test: another gym's older record at the same email is never offered); web **3,083 of 3,083** (`poseAssets.contract` local Node 24); shared 233/233; tsc and eslint 0 on every changed file; `vite build` green. Seen in headless Edge at 1440 and 390, dark and light: nothing wider than the screen.
+- **Cost at full size:** no new read of people; the roster's existing same-email query returns one more column (not re-measured).
+- **Next:** review round one (`reviews/5b-v-c-1-review.md`), then merge on Kd's word, then 5b-v-d.
+
 ## 2026-09-28 · 5b-v-b-ii (Folder A): Remove on the people selected (branch `members-remove-selected`)
 
 - **Why this job:** next in Folder A's list. **Risky** (it removes people), Opus xhigh recommended; Kd: *"go"*. No migration, no new package.
