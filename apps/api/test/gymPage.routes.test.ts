@@ -282,7 +282,7 @@ d("a gym's own page and its enquiry form (real Postgres)", () => {
         ownFacilities: ["Boxing ring"],
         robotCheckKey: "test-site-key",
       });
-      expect(Object.keys(page).sort()).toEqual(["about", "city", "facilities", "hours", "name", "orgType", "ownFacilities", "robotCheckKey"]);
+      expect(Object.keys(page).sort()).toEqual(["about", "city", "facilities", "hours", "name", "orgType", "ownFacilities", "photos", "robotCheckKey"]);
 
       // Off again.
       expect((await put(pageUrl(gym.org.id), { ...PAGE_ON, shown: false }, owner.cookies)).statusCode).toBe(200);
@@ -599,6 +599,7 @@ d("a gym's own page and its enquiry form (real Postgres)", () => {
         about: "",
         facilities: [],
         ownFacilities: [],
+        photos: [],
         slug: gym.org.slug,
         mayChange: true,
       });

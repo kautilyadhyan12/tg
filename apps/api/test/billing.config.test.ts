@@ -41,6 +41,7 @@ describe("Paddle's settings", () => {
       EMAIL_FROM: "AI Home Gym <hello@example.com>",
       TURNSTILE_SITE_KEY: "site",
       TURNSTILE_SECRET_KEY: "secret",
+      PHOTO_DIR: "/srv/aihg/photos",
       PADDLE_API_KEY: SANDBOX_KEY,
       PADDLE_CLIENT_TOKEN: TOKEN,
     };

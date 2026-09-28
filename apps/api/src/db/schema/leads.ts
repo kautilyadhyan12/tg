@@ -6,7 +6,7 @@
 // table is on `USER_LINKED_NOT_PURGED_TABLES`, and a closed gym's leads are deleted
 // with its list (`archiveSweep.ts`).
 import { sql } from "drizzle-orm";
-import { boolean, check, date, foreignKey, index, pgTable, smallint, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, date, foreignKey, index, integer, pgTable, smallint, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { citext, createdAt } from "./common.js";
 import { users } from "./identity.js";
 import { gyms } from "./tenancy.js";
@@ -114,5 +114,35 @@ export const gymLeadEnquiries = pgTable(
     check("gym_lead_enquiries_source_check", sql`${t.source} IS NULL OR ${t.source} IN ('walk_in','website','social','friend','other')`),
     check("gym_lead_enquiries_message_len_check", sql`char_length(${t.message}) <= 1000`),
     index("gym_lead_enquiries_lead_idx").on(t.gymId, t.leadId, t.createdAt.desc(), t.id),
+  ],
+);
+
+/** The photos on a gym's page (20c-iv-b; `0050_gym_page_photos.sql`, which is the
+ *  record — its position constraint is DEFERRABLE there, which Drizzle cannot say). The
+ *  file is in the photo store under `storage_key`. */
+export const gymPagePhotos = pgTable(
+  "gym_page_photos",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    storageKey: text("storage_key").notNull(),
+    contentType: text("content_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    position: smallint("position").notNull(),
+    addedBy: uuid("added_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique("gym_page_photos_storage_key_uq").on(t.storageKey),
+    unique("gym_page_photos_position_uq").on(t.gymId, t.position),
+    check("gym_page_photos_type_check", sql`${t.contentType} IN ('image/jpeg','image/png','image/webp')`),
+    check("gym_page_photos_size_check", sql`${t.byteSize} BETWEEN 1 AND 2097152`),
+    check("gym_page_photos_width_check", sql`${t.width} BETWEEN 1 AND 8000`),
+    check("gym_page_photos_height_check", sql`${t.height} BETWEEN 1 AND 8000`),
+    check("gym_page_photos_position_check", sql`${t.position} BETWEEN 0 AND 9`),
   ],
 );

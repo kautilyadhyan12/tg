@@ -2654,8 +2654,22 @@ robot check, so robots cannot use a page up; a page over it says "This page is g
 lot of messages…", not "from here". Only our secret and the token are sent to Cloudflare.
 The public page carries only TODAY's closure: notes further ahead were written for
 members. A robot check that never loaded (a blocker) says to turn the blocker off or
-contact the gym, not to try again. Photos of the facilities are
-20c-iv-b (at most 10 a gym, 2 MB each).
+contact the gym, not to try again.
+
+**Photos (20c-iv-b).** At most 10 a gym, 2 MB each (`gym_page_photos`, the database's own
+position rule 0–9 refusing an eleventh). The owner adds, removes and picks the **Main
+photo** in the same panel, and they go on Save like everything else there; staff with
+`members.confirm` see them. The browser redraws a picked photo at most 2,000 px on its
+longest side as a JPEG, so a phone's photo fits. The server then checks the first bytes
+(JPEG, PNG or WebP only) and **rebuilds the file from what draws the picture and nothing
+else** (`photoBytes.ts`): no EXIF, XMP, IPTC, text chunk, thumbnail, or byte after the
+picture's end — so no GPS position, camera or time — keeping only the colour profile and,
+for a JPEG, the orientation in a block of its own. It keeps the file under a key it makes
+(`gym-page/{gym}/{photo}.{ext}`), on the server's disk (`PHOTO_DIR`, required in
+production) until Cloudflare R2 at deploy. The public page shows the main photo large and
+the rest in a row; a tap opens one full size. A photo is served at
+`/v1/public/gyms/{slug}/photos/{id}` only while the page shows (the same 404 otherwise),
+as its checked type with `nosniff` and a sandboxing CSP, cached five minutes.
 
 ### 16.4 At risk
 

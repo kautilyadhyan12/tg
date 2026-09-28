@@ -11,6 +11,8 @@
 import {
   acceptInvitationResponseSchema,
   gymEnquiryResponseSchema,
+  gymPagePhotoResponseSchema,
+  gymPagePhotosResponseSchema,
   gymPageResponseSchema,
   leadEnquiriesResponseSchema,
   publicGymPageResponseSchema,
@@ -107,6 +109,17 @@ async function readThrough(schema, what, request) {
   const parsed = schema.safeParse(res.data);
   if (!parsed.success) throw contractError(what);
   return { ...res, data: parsed.data };
+}
+
+/** Where a gym page's photo is shown from: the console's (staff, page on or off) or
+ *  the public page's (anybody, page on). Used as an <img> address, so it is the api's
+ *  full address; the browser sends the sign-in cookie with the console's. */
+export function gymPhotoUrl({ gymId = null, slug = null, photoId }) {
+  const base = authApi.defaults.baseURL ?? '';
+  const id = encodeURIComponent(photoId);
+  return slug !== null
+    ? `${base}/v1/public/gyms/${encodeURIComponent(slug)}/photos/${id}`
+    : `${base}/v1/orgs/${encodeURIComponent(gymId)}/page/photos/${id}`;
 }
 
 export const orgService = {
@@ -809,6 +822,22 @@ export const orgService = {
   /** PUT …/page — the owner saves the whole page. */
   setGymPage: (gymId, body) =>
     readThrough(gymPageResponseSchema, 'your page', authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/page`, body)),
+
+  /** POST …/page/photos — one photo, already shrunk by the browser (20c-iv-b). */
+  addGymPagePhoto: (gymId, contentBase64) =>
+    readThrough(gymPagePhotoResponseSchema, 'your photo', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/page/photos`, { contentBase64 })),
+
+  /** DELETE …/page/photos/:id — the page's photos left, in order. */
+  removeGymPagePhoto: (gymId, photoId) =>
+    readThrough(
+      gymPagePhotosResponseSchema,
+      'your photos',
+      authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/page/photos/${encodeURIComponent(photoId)}`),
+    ),
+
+  /** PUT …/page/photos/order — every photo the page has, in its new order. */
+  orderGymPagePhotos: (gymId, photoIds) =>
+    readThrough(gymPagePhotosResponseSchema, 'your photos', authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/page/photos/order`, { photoIds })),
 
   /** GET /v1/public/gyms/:slug — a gym's page as anybody with the link sees it. */
   getPublicGymPage: (slug) =>

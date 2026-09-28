@@ -9,10 +9,28 @@ import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-li
 import { MemoryRouter } from 'react-router-dom';
 import { leadSchema } from '@app/shared';
 
-const api = { getGymPage: vi.fn(), setGymPage: vi.fn(), getLead: vi.fn(), getLeadEnquiries: vi.fn() };
+const api = {
+  getGymPage: vi.fn(),
+  setGymPage: vi.fn(),
+  getLead: vi.fn(),
+  getLeadEnquiries: vi.fn(),
+  addGymPagePhoto: vi.fn(),
+  removeGymPagePhoto: vi.fn(),
+  orderGymPagePhotos: vi.fn(),
+};
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
   return { ...actual, orgService: api };
+});
+// The browser's drawing is its own test (gymPagePhotos.test.js); here a picked file is ready at once.
+vi.mock('./gymPagePhotos', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    preparePagePhoto: vi.fn((file) =>
+      file.name.endsWith('.heic') ? Promise.reject(new Error('unreadable')) : Promise.resolve({ key: `new-${file.name}`, base64: `b64-${file.name}`, preview: `blob:${file.name}` }),
+    ),
+  };
 });
 
 const GymPageSheet = (await import('./GymPageSheet')).default;
@@ -20,7 +38,7 @@ const LeadSheet = (await import('./LeadSheet')).default;
 
 const GYM = '11111111-1111-4111-8111-111111111111';
 const WORDS = { it: 'gym', people: 'members', person: 'member', peopleCap: 'Members' };
-const PAGE = { shown: false, about: '', facilities: [], ownFacilities: [], slug: 'canal-street-gym', mayChange: true };
+const PAGE = { shown: false, about: '', facilities: [], ownFacilities: [], photos: [], slug: 'canal-street-gym', mayChange: true };
 
 beforeEach(() => {
   for (const fn of Object.values(api)) fn.mockReset();
@@ -142,6 +160,90 @@ describe("the gym's own facilities", () => {
     await screen.findByRole('checkbox', { name: 'Boxing ring' });
     expect(tick('Boxing ring').disabled).toBe(true);
     expect(screen.queryByLabelText('Add a facility')).toBeNull();
+  });
+});
+
+describe('photos (20c-iv-b)', () => {
+  const A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const NEW = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  const withPhotos = (ids, over = {}) => ({ ...PAGE, photos: ids.map((id) => ({ id, width: 800, height: 600 })), ...over });
+  const pick = (...names) =>
+    fireEvent.change(screen.getByLabelText('Choose photos'), { target: { files: names.map((name) => new File(['x'], name, { type: 'image/jpeg' })) } });
+
+  it('nothing is sent until Save; then the removed one goes, the new one is added, and the new main photo is put first', async () => {
+    api.getGymPage.mockResolvedValueOnce({ data: { page: withPhotos([A, B]) } });
+    api.removeGymPagePhoto.mockResolvedValue({ data: { photos: [{ id: B, width: 800, height: 600 }] } });
+    api.addGymPagePhoto.mockResolvedValue({ data: { photo: { id: NEW, width: 2000, height: 1500 } } });
+    api.orderGymPagePhotos.mockResolvedValue({ data: { photos: [] } });
+    drawSheet();
+    await screen.findByRole('img', { name: 'Photo 1 of 2, the main photo' });
+    expect(screen.getByRole('img', { name: 'Photo 1 of 2, the main photo' }).getAttribute('src')).toContain(`/v1/orgs/${GYM}/page/photos/${A}`);
+    expect(screen.getByText('2 of 10 photos')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove photo 1' }));
+    pick('front-desk.jpg');
+    await screen.findByText('Not saved');
+    fireEvent.click(screen.getByRole('button', { name: 'Make photo 2 the main photo' }));
+    expect(screen.getByRole('img', { name: 'Photo 1 of 2, the main photo' }).getAttribute('src')).toBe('blob:front-desk.jpg');
+    expect(api.removeGymPagePhoto).not.toHaveBeenCalled();
+    expect(api.addGymPagePhoto).not.toHaveBeenCalled();
+
+    api.getGymPage.mockResolvedValueOnce({ data: { page: withPhotos([NEW, B]) } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await screen.findByText('Saved. Your page is off.');
+    expect(api.setGymPage).not.toHaveBeenCalled();
+    expect(api.removeGymPagePhoto).toHaveBeenCalledWith(GYM, A);
+    expect(api.addGymPagePhoto).toHaveBeenCalledWith(GYM, 'b64-front-desk.jpg');
+    expect(api.orderGymPagePhotos).toHaveBeenCalledWith(GYM, [NEW, B]);
+    // Removed before added, added before ordered.
+    const order = (fn) => fn.mock.invocationCallOrder[0];
+    expect(order(api.removeGymPagePhoto)).toBeLessThan(order(api.addGymPagePhoto));
+    expect(order(api.addGymPagePhoto)).toBeLessThan(order(api.orderGymPagePhotos));
+    expect(screen.queryByText('Not saved')).toBeNull();
+  });
+
+  it('a refused photo leaves what was saved on screen, and the photos not yet sent to try again', async () => {
+    api.getGymPage.mockResolvedValueOnce({ data: { page: withPhotos([A]) } });
+    api.addGymPagePhoto
+      .mockResolvedValueOnce({ data: { photo: { id: NEW, width: 2000, height: 1500 } } })
+      .mockRejectedValueOnce({ response: { status: 409, data: { error: 'photos_full', message: 'Your page has 10 photos, the most it can show. Remove one to add another.' } } });
+    drawSheet();
+    await screen.findByRole('img', { name: 'Photo 1 of 1, the main photo' });
+    pick('one.jpg', 'two.jpg');
+    await screen.findAllByText('Not saved');
+    api.getGymPage.mockResolvedValueOnce({ data: { page: withPhotos([A, NEW]) } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await screen.findByText('Your page has 10 photos, the most it can show. Remove one to add another.');
+    expect(screen.getAllByRole('img')).toHaveLength(3);
+    expect(screen.getAllByText('Not saved')).toHaveLength(1);
+    expect(screen.getByRole('img', { name: 'Photo 3 of 3' }).getAttribute('src')).toBe('blob:two.jpg');
+  });
+
+  it("says which photos could not be opened, and adds the rest", async () => {
+    api.getGymPage.mockResolvedValue({ data: { page: PAGE } });
+    drawSheet();
+    await screen.findByText('No photos yet.');
+    pick('IMG_2041.heic', 'squat-rack.jpg');
+    expect((await screen.findByRole('alert')).textContent).toBe("We couldn't open “IMG_2041.heic”. Choose a JPEG, PNG or WebP photo.");
+    expect(screen.getAllByRole('img')).toHaveLength(1);
+  });
+
+  it('ten photos: Add photos cannot be pressed', async () => {
+    const ten = Array.from({ length: 10 }, (_, i) => `00000000-0000-4000-8000-0000000000${String(i).padStart(2, '0')}`);
+    api.getGymPage.mockResolvedValue({ data: { page: withPhotos(ten) } });
+    drawSheet();
+    await screen.findByText('10 of 10 photos');
+    expect(screen.getByRole('button', { name: 'Add photos' }).disabled).toBe(true);
+  });
+
+  it('a manager sees the photos and nothing to change them with', async () => {
+    api.getGymPage.mockResolvedValue({ data: { page: withPhotos([A, B], { mayChange: false }) } });
+    drawSheet();
+    await screen.findByRole('img', { name: 'Photo 1 of 2, the main photo' });
+    expect(screen.queryByRole('button', { name: 'Add photos' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Remove photo/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /main photo/ })).toBeNull();
   });
 });
 

@@ -1,4 +1,5 @@
-// A GYM'S OWN PAGE AND ITS ENQUIRY FORM — spec Part 3 §16.3; ROADMAP 20c-iv-a.
+// A GYM'S OWN PAGE, ITS PHOTOS AND ITS ENQUIRY FORM — spec Part 3 §16.3; ROADMAP
+// 20c-iv-a, 20c-iv-b.
 //
 // The worst thing this could do to a real person: put somebody's enquiry on another
 // gym's leads, or tell a stranger who a gym already has. So a message is written only
@@ -9,10 +10,14 @@
 // Staff read the page with the Leads gate (`members.confirm`); only the owner's
 // `org.manage` changes it. The public page shows only when switched on, for an open gym
 // on a trial or a paid plan; anything else is the same 404.
+import { randomUUID } from "node:crypto";
 import {
   ENQUIRY_WORDS,
   GYM_ENQUIRIES_KEPT_PER_LEAD,
   GYM_FACILITIES,
+  GYM_PAGE_MAX_PHOTOS,
+  GYM_PAGE_PHOTO_WORDS,
+  type GymPagePhoto,
   LEADS_MAX_PER_GYM,
   orgTypeSchema,
   typedFacility,
@@ -30,6 +35,8 @@ import { holdsCard } from "../memberList/byHand.js";
 import { lockGym } from "../memberList/repo.js";
 import * as leadsRepo from "../leads/repo.js";
 import { cleanContact, followUpValues } from "../leads/service.js";
+import { cleanPhoto, type PhotoProblem } from "./photoBytes.js";
+import { photoKey, type PhotoStore } from "./photoStore.js";
 import * as repo from "./repo.js";
 import type { RobotCheck } from "./robotCheck.js";
 
@@ -37,6 +44,9 @@ export interface GymPageDeps {
   sql: Sql;
   now: () => Date;
   robotCheck: RobotCheck;
+  photos: PhotoStore;
+  /** A file left behind after its row went is said here, never thrown at the person. */
+  log: { warn: (obj: object, msg: string) => void };
 }
 
 type Limit = () => Promise<boolean>;
@@ -70,10 +80,13 @@ export async function getGymPage(deps: Pick<GymPageDeps, "sql">, userId: string,
     about: page.about,
     facilities: known(page.facilities),
     ownFacilities: page.ownFacilities,
+    photos: shownPhotos(await repo.photosFor(deps.sql, gymId)),
     slug: org.slug,
     mayChange: privileges.includes("org.manage"),
   };
 }
+
+const shownPhotos = (rows: readonly repo.PhotoRow[]): GymPagePhoto[] => rows.map((r) => ({ id: r.id, width: r.width, height: r.height }));
 
 export async function setGymPage(
   deps: Pick<GymPageDeps, "sql" | "now">,
@@ -96,7 +109,142 @@ export async function setGymPage(
       meta: { shown: String(page.shown) },
     });
   });
-  return { ...page, facilities: known(page.facilities), slug: org.slug, mayChange: true };
+  return { ...page, facilities: known(page.facilities), photos: shownPhotos(await repo.photosFor(deps.sql, gymId)), slug: org.slug, mayChange: true };
+}
+
+// ── PHOTOS (20c-iv-b) ─────────────────────────────────────────────────────────
+//
+// Only the owner's `org.manage` adds, removes or moves one; staff with the Leads gate
+// see them. A photo is cleaned (`photoBytes.ts`) before anything is stored: what is
+// kept is the picture, never where it was taken.
+
+const PHOTO_PROBLEM_STATUS: Record<PhotoProblem, { code: string; message: string }> = {
+  too_big: { code: "photo_too_big", message: GYM_PAGE_PHOTO_WORDS.too_big },
+  not_a_photo: { code: "photo_not_a_photo", message: GYM_PAGE_PHOTO_WORDS.not_a_photo },
+  damaged: { code: "photo_damaged", message: GYM_PAGE_PHOTO_WORDS.damaged },
+  too_many_pixels: { code: "photo_too_large", message: GYM_PAGE_PHOTO_WORDS.too_many_pixels },
+};
+
+/** Removes files whose rows are gone. A file that will not go is left and said in the
+ *  log: nothing points at it, so nobody can be shown it. */
+async function removeFiles(deps: Pick<GymPageDeps, "photos" | "log">, keys: readonly string[]): Promise<void> {
+  for (const key of keys) {
+    try {
+      await deps.photos.remove(key);
+    } catch (err) {
+      deps.log.warn({ event: "gym_page.photo_left_behind", err }, "a removed photo's file could not be deleted");
+    }
+  }
+}
+
+export async function addPhoto(
+  deps: GymPageDeps,
+  userId: string,
+  gymId: string,
+  bytes: Uint8Array,
+  limit: Limit,
+): Promise<GymPagePhoto | null> {
+  await requireWritablePrivilege(deps, gymId, userId, "org.manage");
+  if (!(await limit())) return null;
+  const read = cleanPhoto(bytes);
+  if (!read.ok) {
+    const problem = PHOTO_PROBLEM_STATUS[read.problem];
+    throw new OrgsError(400, problem.code, problem.message);
+  }
+  // A quick answer for a full page before the file is written; the count under the lock
+  // below is the one that decides.
+  if ((await repo.photosFor(deps.sql, gymId)).length >= GYM_PAGE_MAX_PHOTOS) {
+    throw new OrgsError(409, "photos_full", GYM_PAGE_PHOTO_WORDS.full);
+  }
+  const id = randomUUID();
+  const key = photoKey(gymId, id, read.type);
+  await deps.photos.put(key, read.bytes);
+  try {
+    await deps.sql.begin(async (tx) => {
+      await lockGym(tx, gymId);
+      const count = (await repo.photosFor(tx, gymId)).length;
+      if (count >= GYM_PAGE_MAX_PHOTOS) throw new OrgsError(409, "photos_full", GYM_PAGE_PHOTO_WORDS.full);
+      await repo.insertPhoto(
+        tx,
+        gymId,
+        { id, storageKey: key, contentType: read.type, byteSize: read.bytes.length, width: read.width, height: read.height, position: count },
+        userId,
+        deps.now(),
+      );
+      await insertAudit(tx, { actorUserId: userId, gymId, action: "org.page_photo_added", targetType: "gym", targetId: gymId, meta: { photo: id } });
+    });
+  } catch (err) {
+    await removeFiles(deps, [key]);
+    throw err;
+  }
+  return { id, width: read.width, height: read.height };
+}
+
+export async function removePhoto(deps: GymPageDeps, userId: string, gymId: string, photoId: string, limit: Limit): Promise<GymPagePhoto[] | null> {
+  await requireWritablePrivilege(deps, gymId, userId, "org.manage");
+  if (!(await limit())) return null;
+  const { key, photos } = await deps.sql.begin(async (tx) => {
+    await lockGym(tx, gymId);
+    const removed = await repo.deletePhoto(tx, gymId, photoId);
+    if (removed === null) throw new OrgsError(404, "photo_not_found", GYM_PAGE_PHOTO_WORDS.not_found);
+    const left = await repo.photosFor(tx, gymId);
+    await repo.setPhotoOrder(
+      tx,
+      gymId,
+      left.map((p) => p.id),
+    );
+    await insertAudit(tx, { actorUserId: userId, gymId, action: "org.page_photo_removed", targetType: "gym", targetId: gymId, meta: { photo: photoId } });
+    return { key: removed, photos: left };
+  });
+  await removeFiles(deps, [key]);
+  return shownPhotos(photos);
+}
+
+/** The page's photos in a new order. The list must be exactly the photos the page has
+ *  now: one added or removed elsewhere in the meantime is refused, never guessed at. */
+export async function orderPhotos(deps: GymPageDeps, userId: string, gymId: string, photoIds: readonly string[], limit: Limit): Promise<GymPagePhoto[] | null> {
+  await requireWritablePrivilege(deps, gymId, userId, "org.manage");
+  if (!(await limit())) return null;
+  const photos = await deps.sql.begin(async (tx) => {
+    await lockGym(tx, gymId);
+    const now = await repo.photosFor(tx, gymId);
+    const same = now.length === photoIds.length && now.every((p) => photoIds.includes(p.id));
+    if (!same) throw new OrgsError(409, "photos_changed", GYM_PAGE_PHOTO_WORDS.changed);
+    await repo.setPhotoOrder(tx, gymId, photoIds);
+    await insertAudit(tx, { actorUserId: userId, gymId, action: "org.page_photos_ordered", targetType: "gym", targetId: gymId, meta: {} });
+    return await repo.photosFor(tx, gymId);
+  });
+  return shownPhotos(photos);
+}
+
+export interface PhotoFile {
+  contentType: string;
+  bytes: Uint8Array;
+}
+
+async function fileFor(deps: Pick<GymPageDeps, "sql" | "photos">, gymId: string, photoId: string): Promise<PhotoFile | null> {
+  const photo = await repo.photoOf(deps.sql, gymId, photoId);
+  if (photo === null) return null;
+  const bytes = await deps.photos.get(photo.storageKey);
+  return bytes === null ? null : { contentType: photo.contentType, bytes };
+}
+
+/** A photo for staff, whether the page is on or off. */
+export async function staffPhoto(deps: GymPageDeps, userId: string, gymId: string, photoId: string, limit: Limit): Promise<PhotoFile | null> {
+  await requirePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return null;
+  const file = await fileFor(deps, gymId, photoId);
+  if (file === null) throw new OrgsError(404, "photo_not_found", GYM_PAGE_PHOTO_WORDS.not_found);
+  return file;
+}
+
+/** A photo on a page that is on: the same 404 as the page for anything else. */
+export async function publicPhoto(deps: GymPageDeps, slug: string, photoId: string): Promise<PhotoFile> {
+  const page = await livePage(deps.sql, slug);
+  if (page === null) throw notFound();
+  const file = await fileFor(deps, page.gymId, photoId);
+  if (file === null) throw notFound();
+  return file;
 }
 
 /** A page switched on, of an open gym on a trial or a paid plan; null otherwise. */
@@ -120,6 +268,7 @@ export async function publicPage(deps: Pick<GymPageDeps, "sql" | "robotCheck" | 
     about: page.about,
     facilities: known(page.facilities),
     ownFacilities: page.ownFacilities,
+    photos: shownPhotos(await repo.photosFor(deps.sql, page.gymId)),
     // The week as the gym's members see it; the week a gym open all day keeps
     // aside for later is the console's alone.
     // Only today's closure: the notes further ahead were written for members.

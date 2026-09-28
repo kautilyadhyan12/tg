@@ -6,7 +6,7 @@
 // the gym's name, town, opening hours, its own "About us" and the facilities it ticked,
 // and a form. A person who sends the form becomes one of the gym's leads, or, when a
 // lead already has their email or phone, a message on that lead. Off until the gym
-// switches it on. Photos are 20c-iv-b's.
+// switches it on. Up to ten photos of the gym (20c-iv-b).
 import { z } from "zod";
 import { leadSourceSchema, type LeadSource } from "./leads.js";
 import {
@@ -88,6 +88,68 @@ export const GYM_ENQUIRIES_KEPT_PER_LEAD = 20;
 /** A robot check's answer is at most this long (Cloudflare Turnstile's own limit). */
 export const ROBOT_CHECK_TOKEN_MAX_CHARS = 2048;
 
+// ── PHOTOS (20c-iv-b; RULINGS 2026-09-28: "just for people to see facilities") ──
+
+/** The most photos one page shows, and how big each may be once the browser has
+ *  shrunk it. */
+export const GYM_PAGE_MAX_PHOTOS = 10;
+export const GYM_PAGE_PHOTO_MAX_BYTES = 2 * 1024 * 1024;
+/** Longest side the browser shrinks a photo to before it is sent. */
+export const GYM_PAGE_PHOTO_SEND_SIDE = 2000;
+/** What the server takes from anything that did not go through the browser's shrink. */
+export const GYM_PAGE_PHOTO_MAX_SIDE = 8000;
+export const GYM_PAGE_PHOTO_MAX_PIXELS = 40_000_000;
+export const GYM_PAGE_PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+export type GymPagePhotoType = (typeof GYM_PAGE_PHOTO_TYPES)[number];
+
+/** One photo on a page, in the page's order. Its picture is at
+ *  `/v1/orgs/{gymId}/page/photos/{id}` for staff and `/v1/public/gyms/{slug}/photos/{id}`
+ *  for anybody while the page is on. */
+export const gymPagePhotoSchema = z
+  .object({
+    id: z.string().uuid(),
+    width: z.number().int().positive(),
+    height: z.number().int().positive(),
+  })
+  .strict();
+export type GymPagePhoto = z.infer<typeof gymPagePhotoSchema>;
+
+/** The photo's bytes as base64 (the member file's transport: JSON, no multipart). */
+export const addGymPagePhotoRequestSchema = z
+  .object({
+    contentBase64: z
+      .string()
+      .min(4)
+      .max(Math.ceil(GYM_PAGE_PHOTO_MAX_BYTES / 3) * 4)
+      .regex(/^[A-Za-z0-9+/]+={0,2}$/),
+  })
+  .strict();
+export type AddGymPagePhotoRequest = z.infer<typeof addGymPagePhotoRequestSchema>;
+export const gymPagePhotoResponseSchema = z.object({ photo: gymPagePhotoSchema }).strict();
+
+/** The page's photos in a new order: every photo it has, each once. */
+export const orderGymPagePhotosRequestSchema = z
+  .object({
+    photoIds: z
+      .array(z.string().uuid())
+      .max(GYM_PAGE_MAX_PHOTOS)
+      .refine((ids) => new Set(ids).size === ids.length, { message: "a photo twice" }),
+  })
+  .strict();
+export type OrderGymPagePhotosRequest = z.infer<typeof orderGymPagePhotosRequestSchema>;
+export const gymPagePhotosResponseSchema = z.object({ photos: z.array(gymPagePhotoSchema).max(GYM_PAGE_MAX_PHOTOS) }).strict();
+
+/** What staff read when a photo cannot be added or moved. */
+export const GYM_PAGE_PHOTO_WORDS = {
+  too_big: "This photo is bigger than 2 MB. Choose a smaller one.",
+  not_a_photo: "Choose a photo saved as JPEG, PNG or WebP.",
+  damaged: "We couldn't read this photo. Choose another, or save it again and add it.",
+  too_many_pixels: "This photo is too large. Choose a smaller one.",
+  full: `Your page has ${String(GYM_PAGE_MAX_PHOTOS)} photos, the most it can show. Remove one to add another.`,
+  changed: "Your photos were changed somewhere else. Close this panel and open it again.",
+  not_found: "This photo has already been removed.",
+} as const;
+
 /** The gym's page as its staff see it in the console. */
 export const gymPageSchema = z
   .object({
@@ -96,6 +158,8 @@ export const gymPageSchema = z
     facilities: z.array(gymFacilitySchema).max(GYM_FACILITIES.length),
     /** The gym's own facilities, in the order it added them. */
     ownFacilities: z.array(z.string()).max(GYM_PAGE_MAX_OWN_FACILITIES),
+    /** The page's photos; the first is the large one. */
+    photos: z.array(gymPagePhotoSchema).max(GYM_PAGE_MAX_PHOTOS),
     /** The page's address is `/gyms/{slug}`. */
     slug: z.string().min(1),
     /** This person may change the page (the owner's `org.manage`); others see it. */
@@ -131,6 +195,7 @@ export const publicGymPageSchema = z
     about: z.string(),
     facilities: z.array(gymFacilitySchema),
     ownFacilities: z.array(z.string()),
+    photos: z.array(gymPagePhotoSchema).max(GYM_PAGE_MAX_PHOTOS),
     hours: gymHoursSchema,
     /** The robot check's public site key, for the widget. */
     robotCheckKey: z.string().min(1),

@@ -39,6 +39,7 @@ import {
 import { registerClassRoutes } from "./classes/routes.js";
 import { registerLeadRoutes } from "./leads/routes.js";
 import { registerGymPageRoutes } from "./gymPage/routes.js";
+import type { PhotoStore } from "./gymPage/photoStore.js";
 import type { RobotCheck } from "./gymPage/robotCheck.js";
 import { registerInvitationRoutes } from "./invites/joinRoutes.js";
 import type { InviteSettings } from "./invites/settings.js";
@@ -80,7 +81,7 @@ export interface OrgRouteOverrides {
 
 export function registerOrgRoutes(
   app: FastifyInstance,
-  deps: { sql: Sql; redis: RedisLike; invites: InviteSettings | null; onlinePayments: boolean; robotCheck: RobotCheck },
+  deps: { sql: Sql; redis: RedisLike; invites: InviteSettings | null; onlinePayments: boolean; robotCheck: RobotCheck; photos: PhotoStore },
   overrides: OrgRouteOverrides = {},
 ): void {
   const orgDeps: service.OrgsDeps = {
@@ -106,7 +107,7 @@ export function registerOrgRoutes(
 
   // A gym's leads (Part 3 §16.3), and its own page whose form makes them (20c-iv-a).
   registerLeadRoutes(app, { sql: deps.sql, redis: deps.redis });
-  registerGymPageRoutes(app, { sql: deps.sql, redis: deps.redis, robotCheck: deps.robotCheck });
+  registerGymPageRoutes(app, { sql: deps.sql, redis: deps.redis, robotCheck: deps.robotCheck, photos: deps.photos });
 
   // A person's own invitations: what is waiting for their address, Join, No thanks
   // (Part 3 §10.2).

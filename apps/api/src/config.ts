@@ -125,6 +125,11 @@ const envSchema = z.object({
   // Cloudflare's own test pair, which passes every check (`robotCheck.ts`).
   TURNSTILE_SITE_KEY: z.string().trim().min(1).max(100).optional(),
   TURNSTILE_SECRET_KEY: z.string().trim().min(1).max(100).optional(),
+  // Where a gym page's photos are kept (ROADMAP 20c-iv-b): a folder on the server's own
+  // disk until Cloudflare R2 is connected at deploy (Stage 4 item 1). REQUIRED in
+  // production, so a deploy never keeps them in a temporary folder; elsewhere unset
+  // means one under the system's temporary folder.
+  PHOTO_DIR: z.string().trim().min(1).max(500).optional(),
 });
 
 export type AppConfig = Readonly<z.infer<typeof envSchema>>;
@@ -154,6 +159,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     .refine((c) => c.NODE_ENV !== "production" || c.TURNSTILE_SECRET_KEY !== undefined, {
       path: ["TURNSTILE_SECRET_KEY"],
       message: "TURNSTILE_SECRET_KEY is required in production (the gym page's enquiry form)",
+    })
+    .refine((c) => c.NODE_ENV !== "production" || c.PHOTO_DIR !== undefined, {
+      path: ["PHOTO_DIR"],
+      message: "PHOTO_DIR is required in production (a gym page's photos)",
     })
     .refine((c) => (c.PADDLE_API_KEY === undefined) === (c.PADDLE_CLIENT_TOKEN === undefined), {
       path: ["PADDLE_CLIENT_TOKEN"],
