@@ -70,6 +70,8 @@ const KEPT_LINES = {
   shared_email: () => "Keep the app: they share an email address with someone still on your list, so we can't tell whose it is.",
   same_record: () => 'Keep the app: their record is the same as someone you selected, so it moves to past members with them.',
   not_in_app: () => "Not in the app, so there's nothing to remove.",
+  in_file: () =>
+    "Keep the app for now: someone in this file has the same email or phone, so we can't tell yet whose it is. You can remove them from the app afterwards.",
   gone: (words, door) => (door === 'app' ? 'No longer in the app.' : 'No longer on your list.'),
 };
 

@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
+import { everyoneLeft } from "./memberListEveryoneLeft.js";
 import { loadConfig } from "../src/config.js";
 import { emailHmac } from "../src/modules/orgs/invites/address.js";
 import { inviteSettings } from "../src/modules/orgs/invites/settings.js";
@@ -112,7 +113,8 @@ d("member list: an app member follows their record (real Postgres)", () => {
       cookies,
       ...(payload === undefined ? {} : { headers: { "content-type": "application/json" }, payload: JSON.stringify(payload) }),
     });
-  const post = (path: string, payload: unknown, cookies: Record<string, string> = {}) => send("POST", path, cookies, payload);
+  const post = async (path: string, payload: unknown, cookies: Record<string, string> = {}) =>
+    send("POST", path, cookies, await everyoneLeft(api(), path, payload, cookies));
   const get = (path: string, cookies: Record<string, string>) => send("GET", path, cookies);
 
   const makeOwner = async (local: string) => {
@@ -162,6 +164,13 @@ d("member list: an app member follows their record (real Postgres)", () => {
     const accepted = await post(`/v1/orgs/invitations/${invitation.id}/accept`, {}, cookies);
     expect(accepted.statusCode, accepted.body).toBe(200);
     return { userId, cookies };
+  };
+
+  /** Someone an import took off the list before 5b-v-d, which never ended anybody's app:
+   *  their record past and still in the app. Imports end it now (RULINGS 2026-09-28); this
+   *  is the state the gyms' earlier imports left, which the screens still have to read. */
+  const stillInAppAsBefore = async (gymId: string, userId: string) => {
+    await sql`UPDATE gym_members SET removed_at = NULL, removed_entry_id = NULL WHERE gym_id = ${gymId} AND user_id = ${userId}`;
   };
 
   const recordOf = async (gymId: string, name: string) => {
@@ -350,11 +359,11 @@ d("member list: an app member follows their record (real Postgres)", () => {
       expect(changed.statusCode, changed.body).toBe(200);
       expect(await unlisted(gymId, cookies)).toEqual([]);
 
-      // Next month's file leaves Priya out: her record comes off and she stays in the app
-      // (removing her by hand would end her app too — One Remove, RULINGS 2026-09-27).
-      // Then staff put Priya back from her membership.
+      // Next month's file leaves Priya out: her record comes off and, as an import before
+      // 5b-v-d left her, she stays in the app. Then staff put Priya back from her membership.
       // The file carries the address staff typed for Emma, so it does not overwrite it.
       await confirm(gymId, cookies, (await stage(gymId, cookies, csv([{ ...emma, email: addr("b-emma.typed") }, ...others]))).uploadId);
+      await stillInAppAsBefore(gymId, priyaUser.userId);
       expect(await recordOf(gymId, priya.name)).toEqual({ id: priyaRecord.id, former: true });
       expect(await unlisted(gymId, cookies)).toEqual([priyaUser.userId]);
       const back = await post(`/v1/orgs/${gymId}/member-list/entries/from-member/${priyaUser.userId}`, {}, cookies);
@@ -393,8 +402,10 @@ d("member list: an app member follows their record (real Postgres)", () => {
       await confirm(gymId, cookies, (await stage(gymId, cookies, csv([emma, ...others]))).uploadId);
       const emmaUser = await joinByInvitation(gymId, emma.email);
       const emmaRecord = await recordOf(gymId, emma.name);
-      // Next month's file leaves Emma out: her record comes off and she stays in the app.
+      // Next month's file leaves Emma out: her record comes off and, as an import before
+      // 5b-v-d left her, she stays in the app.
       await confirm(gymId, cookies, (await stage(gymId, cookies, csv(others))).uploadId);
+      await stillInAppAsBefore(gymId, emmaUser.userId);
       expect(await recordOf(gymId, emma.name)).toEqual({ id: emmaRecord.id, former: true });
       const typed = await post(`/v1/orgs/${gymId}/member-list/entries`, { fullName: emma.name, email: emma.email, phone: "07700 900999" }, cookies);
       expect(typed.statusCode, typed.body).toBe(201);
@@ -427,6 +438,7 @@ d("member list: an app member follows their record (real Postgres)", () => {
       await confirm(gymId, cookies, (await stage(gymId, cookies, csv(others))).uploadId);
       expect((await roster(gymId, cookies)).find((item) => item.userId === walker)?.offList).toBeUndefined();
       await confirm(gymId, cookies, (await stage(gymId, cookies, csv(others.slice(1)))).uploadId);
+      await stillInAppAsBefore(gymId, walker);
       expect((await roster(gymId, cookies)).find((item) => item.userId === walker)?.offList).toEqual({
         reason: "no_longer_listed",
         at: null,

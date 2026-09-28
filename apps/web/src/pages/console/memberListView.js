@@ -172,11 +172,12 @@ export function missingOf(preview) {
   return { n, listSize: guard.listSize, needsTick: guard.needsTick, statuses, group };
 }
 
-/** The gym's own status words of the people missing from the file: "Frozen 5 · Active 1".
- *  An export of only the Active members leaves out every Frozen one, and this is where
- *  staff see it before answering. */
+/** The gym's own status words of the people missing from the file: "Status: Frozen 5 ·
+ *  Active 1". An export of only the Active members leaves out every Frozen one, and this is
+ *  where staff see it before answering. */
 export function missingStatusLine(missing) {
-  return missing.statuses.map((s) => `${s.label} ${count(s.n)}`).join(' · ');
+  const line = missing.statuses.map((s) => `${s.label} ${count(s.n)}`).join(' · ');
+  return line === '' ? '' : `Status: ${line}`;
 }
 
 /** The question's heading: "5 members aren't in this file", or, where the wrong-file
@@ -190,6 +191,21 @@ export function missingTitle(missing, needsTick, words) {
     return `${count(missing.n)} of your ${count(missing.listSize)} ${words.people} ${verb} in this file`;
   }
   return `${of(missing.n, words.person, words.people)} ${verb} in this file`;
+}
+
+// ── Who has left (5b-v-d-i; spec Part 3 §18.8; RULINGS 2026-09-28) ─────────
+
+/** What the server is sent for the card's answer. They've left: the people ticked, or
+ *  everyone when nobody is ticked, as the card always meant; the rest stay. They're still
+ *  members: everyone stays. */
+export function marksBody(missing, left, answer) {
+  const anyTicked = answer === 'left' && missing.people.some((p) => left.has(p.entryId));
+  const leaves = (p) => answer === 'left' && (!anyTicked || left.has(p.entryId));
+  return {
+    missingDigest: missing.digest,
+    left: missing.people.filter(leaves).map((p) => p.entryId),
+    stay: missing.people.filter((p) => !leaves(p)).map((p) => p.entryId),
+  };
 }
 
 /** "Ben Cole, Amy Shaw, Raj Patel and 2 more". */

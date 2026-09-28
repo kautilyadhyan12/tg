@@ -3346,6 +3346,29 @@ first. Nobody is emailed."). Over the large-change line the number of leavers is
 today. The confirm sends who left and who stays, with the digest of the missing set; a set
 that moved is refused as `list_changed`, nothing applied.
 
+**Built in 5b-v-d-i (2026-09-28), as Kd ruled at its click-through (RULINGS 2026-09-28, amended 2026-09-29):**
+Review keeps the look it had: the number of new members above, then this card with the
+names of the people the file leaves out and their details, and its two answers, **They've
+left** and **They're still members**. The one addition is a tick beside each name: They've
+left moves the people ticked ("Move the 2 ticked to past members"), or everyone when nobody
+is ticked, as before; They're still members keeps everyone and opens no box. Import waits for
+one of the two answers; a line under the status words says "Tick the people who have left. If
+you tick nobody, They've left moves everyone.", and with people ticked They're still members
+reads "Keep all 5 on the list, ticked or not". When the wrong-file check asks about They're
+still members (app members whose email the file changes), its number is typed on the card.
+Each person's details name what each word is ("Status: Cancelled ·
+Membership: Gold · Payment: Paid"; the line above: "Status: Active 20 · Frozen 5"), and above
+the card Review shows, beside the new members, how many are already on the list, each with
+See who (RULINGS 2026-09-29). Import with anyone leaving opens a box first, as
+Remove does (18.6): who moves to past members, who loses the app with them, who keeps it and
+why, how many stay; the large-change number is typed there. It is Remove's own rule on the
+records marked Left, worked out before the file is applied, with one exception that ends
+nobody's app by mistake: someone in the app whose email or phone the file itself writes to (a
+record added or brought back there, or one whose name, email or phone changes) keeps the app,
+named "Keep the app for now: someone in this file has the same email or phone", because once
+the file is in, a different record may be theirs. The press carries the box's digest; a box
+that moved is refused as `leavers_changed` with the new box, nothing applied.
+
 ### 18.9 Every feature kept
 
 | Today | In the redesign |

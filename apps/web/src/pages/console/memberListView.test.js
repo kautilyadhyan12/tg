@@ -159,7 +159,7 @@ describe('what the review shows', () => {
       { label: 'Frozen', n: 9 },
       { label: 'Expired', n: 3 },
     ]);
-    expect(missingStatusLine(missing)).toBe('Frozen 9 · Expired 3');
+    expect(missingStatusLine(missing)).toBe('Status: Frozen 9 · Expired 3');
     expect(missingStatusLine({ ...missing, statuses: [] })).toBe('');
   });
 

@@ -82,15 +82,15 @@ const BREAKS = [
   {
     name: "the wrong-file guard is dropped",
     file: SERVICE,
-    from: "    if (reconciled.guard.needsTick && !input.acknowledgeLargeChange) {",
-    to: "    if (false && reconciled.guard.needsTick && !input.acknowledgeLargeChange) {",
+    from: "    if (importNeedsLargeTick(reconciled.guard, leavers) && !input.acknowledgeLargeChange) {",
+    to: "    if (false && importNeedsLargeTick(reconciled.guard, leavers) && !input.acknowledgeLargeChange) {",
     suite: CONFIRM_SUITE,
   },
   {
     name: "the tick is remembered from a previous request (it is stored, not asked)",
     file: SERVICE,
-    from: "    if (reconciled.guard.needsTick && !input.acknowledgeLargeChange) {",
-    to: "    if (reconciled.guard.needsTick && !input.acknowledgeLargeChange && reconciled.gone.length !== 11) {",
+    from: "    if (importNeedsLargeTick(reconciled.guard, leavers) && !input.acknowledgeLargeChange) {",
+    to: "    if (importNeedsLargeTick(reconciled.guard, leavers) && !input.acknowledgeLargeChange && reconciled.gone.length !== 11) {",
     suite: CONFIRM_SUITE,
   },
   {

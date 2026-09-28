@@ -8,6 +8,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
+import { everyoneLeft } from "./memberListEveryoneLeft.js";
 import { loadConfig } from "../src/config.js";
 import { closeMemberships } from "../src/modules/orgs/memberList/repo.js";
 import {
@@ -98,7 +99,8 @@ d("member list: keeping it by hand (real Postgres)", () => {
       cookies,
       ...(payload === undefined ? {} : { headers: { "content-type": "application/json" }, payload: JSON.stringify(payload) }),
     });
-  const post = (path: string, payload: unknown, cookies: Record<string, string>, ip?: string) => send("POST", path, cookies, payload, ip);
+  const post = async (path: string, payload: unknown, cookies: Record<string, string>, ip?: string) =>
+    send("POST", path, cookies, await everyoneLeft(api(), path, payload, cookies), ip);
   const get = (path: string, cookies: Record<string, string>, ip?: string) => send("GET", path, cookies, undefined, ip);
   const patch = (path: string, payload: unknown, cookies: Record<string, string>, ip?: string) => send("PATCH", path, cookies, payload, ip);
   const del = (path: string, cookies: Record<string, string>, ip?: string) => send("DELETE", path, cookies, undefined, ip);

@@ -30,7 +30,10 @@ import {
   isLargeMemberListChange,
   MEMBER_FILE_MAX_BYTES,
   MEMBER_FILE_PARSE_TIMEOUT_MS,
+  MEMBER_LIST_CONFIRM_REFUSAL_WORDS,
   MEMBER_LIST_ENTRIES_PAGE,
+  MEMBER_LIST_MARKS_MAX,
+  MEMBER_LIST_TOO_MANY_MISSING_WORDS,
   MEMBER_LIST_MAX_EXTRA_FIELDS,
   MEMBER_LIST_PARSES_PER_GYM,
   MEMBER_LIST_ROWS_PAGE,
@@ -46,7 +49,10 @@ import {
   type MemberListFilter,
   type MemberListGuard,
   type MemberListHandEdits,
+  type MemberListLeavers,
   type MemberListMapping,
+  type MemberListMarks,
+  type MemberListMissing,
   type MemberListMode,
   type MemberListPreview,
   type MemberListRowGroup,
@@ -86,6 +92,9 @@ import {
 } from "./reconcile.js";
 import * as repo from "./repo.js";
 import { inAppRecordIds, pastRecordOf } from "./whose.js";
+import { withdrawForAccounts, withdrawForAddresses } from "../invites/join.js";
+import { bustAfterRemoval } from "./byHandService.js";
+import { importLeaversPlanOn, importNeedsLargeTick, requireForPlan, type RemovalPlan } from "./removeSelected.js";
 
 export interface MemberListDeps {
   sql: Sql;
@@ -185,6 +194,8 @@ async function measure(
    *  the lock; the preview's, worked out from the same pure rule. Both so that only the
    *  columns this gym really keeps are compared, and under the labels it knows them by. */
   catalogue: readonly FieldSlot[],
+  /** The missing records staff marked "Still a member" (§18.8). */
+  stay: ReadonlySet<string> = new Set(),
 ): Promise<{ measured: Measured; reconciled: Reconciled; kept: KeptField[]; over: number }> {
   const [entries, members, seatCap] = await Promise.all([
     repo.listEntries(sql, gymId),
@@ -201,6 +212,7 @@ async function measure(
     endsOnKind: understanding.endsOnKind,
     mode,
     hasList: state !== null,
+    stay,
   });
   const counts: MemberListUploadSummary = {
     file: understanding.counts,
@@ -223,7 +235,7 @@ async function measure(
       listSize:
         mode === "add"
           ? reconciled.guard.listSize + reconciled.counts.new
-          : reconciled.counts.new + reconciled.counts.changed + reconciled.counts.unchanged,
+          : reconciled.counts.new + reconciled.counts.changed + reconciled.counts.unchanged + (reconciled.missing.length - reconciled.gone.length),
     },
   };
   return {
@@ -520,6 +532,9 @@ export async function previewUpload(
   // points into what it KEPT — so the rows stored are the rule's own, never the
   // reader's, or a stored place would name somebody who was never on the list.
   const { measured, reconciled, over } = await measure(deps.sql, gymId, understood, input.mode, state, catalogue);
+  // Everyone a whole list leaves out is answered for at Import (§18.8), so a file that
+  // leaves out more than one answer can carry is refused here, before it is staged.
+  if (reconciled.missing.length > MEMBER_LIST_MARKS_MAX) throw new OrgsError(400, "too_many_missing", MEMBER_LIST_TOO_MANY_MISSING_WORDS);
   const file: MemberListStagedFile = {
     understanding: { ...withGymFieldsFull(understood, over), rows: reconciled.rows },
     groups: groupsOf(reconciled),
@@ -803,6 +818,10 @@ export type ConfirmAnswer =
   | { kind: "hand_edits"; handEdits: MemberListHandEdits }
   /** Staff did not tick that the gym may keep these details (§9.14); nothing applied. */
   | { kind: "permission_needed" }
+  /** The file leaves people out and not every one of them is marked (§18.8). */
+  | { kind: "marks_needed" }
+  /** The leavers box moved since staff read it (who moves, who loses the app). */
+  | { kind: "leavers_changed"; leavers: MemberListLeavers }
   /** The limiter has answered 429 itself and the handler is finished. */
   | { kind: "rate_limited" };
 
@@ -920,6 +939,123 @@ function toWrite(reconciled: Reconciled, kept: readonly KeptField[], endsOnKind:
   return { add, revive: reconciled.returning.map(asChange), change: reconciled.changed.map(asChange), cardsDropped };
 }
 
+// ── WHO THE FILE LEAVES OUT, PERSON BY PERSON (5b-v-d; spec Part 3 §18.8) ──
+
+/** The digest of the set of people a file leaves out: what staff were shown and marked. */
+export function missingDigest(gymId: string, uploadId: string, entryIds: readonly string[]): string {
+  const ids = [...entryIds].sort();
+  return createHash("sha256").update([gymId, uploadId, "missing", ...ids].join("\n"), "utf8").digest("hex");
+}
+
+/** Whether the marks are every missing person exactly once, Left or Still a member. */
+export function marksCover(marks: MemberListMarks, missing: readonly ReconciledPerson[]): boolean {
+  const want = new Set(missing.map((person) => person.entryId));
+  const seen = new Set<string>();
+  for (const id of [...marks.left, ...marks.stay]) {
+    if (!want.has(id) || seen.has(id)) return false;
+    seen.add(id);
+  }
+  return seen.size === want.size;
+}
+
+type Leaving = { kind: "marks_needed" } | { kind: "moved" } | { kind: "ok"; plan: RemovalPlan | null };
+
+/** The marks checked against the missing set of `reconciled` (worked out with their
+ *  "Still a member" ids), and the leavers' plan: Remove's rule on the records marked Left. */
+async function leaversFor(
+  sql: repo.SqlOrTx,
+  gymId: string,
+  uploadId: string,
+  reconciled: Reconciled,
+  marks: MemberListMarks | null,
+): Promise<Leaving> {
+  if (reconciled.missing.length === 0) return { kind: "ok", plan: null };
+  if (marks === null) return { kind: "marks_needed" };
+  const ids = reconciled.missing.map((person) => person.entryId ?? raise("a missing person has no record"));
+  if (marks.missingDigest !== missingDigest(gymId, uploadId, ids)) return { kind: "moved" };
+  if (!marksCover(marks, reconciled.missing)) return { kind: "marks_needed" };
+  return { kind: "ok", plan: await importLeaversPlanOn(sql, gymId, marks.left, reconciled.written) };
+}
+
+const leaversOf = (plan: RemovalPlan, reconciled: Reconciled): MemberListLeavers => ({
+  preview: plan.preview,
+  stay: reconciled.missing.length - reconciled.gone.length,
+  guard: reconciled.guard,
+});
+
+/** Everyone a whole-list file leaves out, as the list has them today, with the digest
+ *  their marks go back with. Nobody for an add. Null when the rate limit has answered. */
+export async function readMissing(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  uploadId: string,
+  limit: () => Promise<boolean>,
+): Promise<MemberListMissing | null> {
+  const upload = await stagedOr409(deps, userId, gymId, uploadId, limit);
+  if (upload === null) return null;
+  const read = await readStaged(deps, gymId, upload);
+  const gone = upload.mode === "whole_list" ? read.groups.gone : [];
+  const ids = gone.flatMap((person) => (person.entryId === null || person.entryId === undefined ? [] : [person.entryId]));
+  const [onList, reached] = await Promise.all([
+    repo.onListOf(deps.sql, gymId, ids),
+    ids.length === 0
+      ? Promise.resolve([])
+      : repo.membersAgainstList(deps.sql, gymId, {
+          email: null,
+          phone: null,
+          emails: gone.flatMap((person) => (person.email === null ? [] : [person.email])),
+          phones: gone.flatMap((person) => (person.phone === null ? [] : [person.phone])),
+          entryIds: ids,
+        }),
+  ]);
+  // "In the app" by the rule a person's own page and Remove use (`whose.ts`): never a son's
+  // record because his mother, on her own record, uses the family email (round one, High-2).
+  const inApp = new Set(inAppRecordIds(reached));
+  const people = gone.flatMap((person) => {
+    const entryId = person.entryId;
+    if (entryId === null || entryId === undefined) return [];
+    const { fullName, email, phone, memberNumber, wasStatus } = person;
+    return [{ entryId, fullName, email, phone, memberNumber, wasStatus, inApp: inApp.has(entryId), onList: onList.get(entryId) ?? null }];
+  });
+  return { total: people.length, digest: missingDigest(gymId, uploadId, ids), people };
+}
+
+/** THE BOX BEFORE AN IMPORT WITH LEAVERS: the marks checked, and who moves, who loses the
+ *  app and who keeps it and why, on the list as it is now. The confirm works it out again
+ *  under the gym's lock and does nothing unless it is this box. */
+export async function previewLeavers(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  uploadId: string,
+  marks: MemberListMarks,
+  limit: () => Promise<boolean>,
+): Promise<MemberListLeavers | null> {
+  const upload = await stagedOr409(deps, userId, gymId, uploadId, limit);
+  if (upload === null) return null;
+  // Whether this needs `members.remove` is known only once the file is compared: its own
+  // writes can spare a leaver's app ("in_file"), so the check follows the comparison, as
+  // Remove's box does (re-check of round one).
+  const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
+  const state = await repo.listState(deps.sql, gymId);
+  const version = state?.version ?? 0;
+  if (version !== upload.baseVersion) {
+    throw new OrgsError(409, "list_changed", MEMBER_LIST_CONFIRM_REFUSAL_WORDS.list_changed);
+  }
+  const file = await repo.stagedFile(deps.sql, gymId, uploadId);
+  if (file === null) throw expired();
+  const catalogue = growFields(await repo.listFields(deps.sql, gymId), file.understanding.extraFields, MEMBER_LIST_MAX_EXTRA_FIELDS).catalogue;
+  const { reconciled } = await measure(deps.sql, gymId, file.understanding, upload.mode, state, catalogue, new Set(marks.stay));
+  const leaving = await leaversFor(deps.sql, gymId, uploadId, reconciled, marks);
+  if (leaving.kind === "moved") throw new OrgsError(409, "list_changed", MEMBER_LIST_CONFIRM_REFUSAL_WORDS.list_changed);
+  if (leaving.kind === "marks_needed") throw new OrgsError(409, "marks_needed", MEMBER_LIST_CONFIRM_REFUSAL_WORDS.marks_needed);
+  // Nobody is missing: the file this box was asked about is not the one the list now gives.
+  if (leaving.plan === null) throw new OrgsError(409, "list_changed", MEMBER_LIST_CONFIRM_REFUSAL_WORDS.list_changed);
+  requireForPlan(leaving.plan, privileges);
+  return leaversOf(leaving.plan, reconciled);
+}
+
 /** APPLY A STAGED UPLOAD TO THE GYM'S LIST — the one transaction that writes it.
  *
  *  **EVERY STATEMENT INSIDE USES `tx` AND NOT `deps.sql`, AND THAT IS NOT A STYLE
@@ -935,12 +1071,21 @@ export async function confirmUpload(
   userId: string,
   gymId: string,
   uploadId: string,
-  input: { acknowledgeLargeChange: boolean; acknowledgeHandEdits: boolean; permissionConfirmed: boolean },
+  input: {
+    acknowledgeLargeChange: boolean;
+    acknowledgeHandEdits: boolean;
+    permissionConfirmed: boolean;
+    marks: MemberListMarks | null;
+    leaversDigest: string | null;
+  },
   limit: () => Promise<boolean>,
 ): Promise<ConfirmAnswer> {
   await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
+  const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return { kind: "rate_limited" };
   const at = deps.now();
+  const settings = deps.invites ?? null;
+  const closedUsers: string[] = [];
 
   const answer = await deps.sql.begin(async (tx): Promise<ConfirmAnswer> => {
     // THE MODULE'S LOCK ORDER: the gym's row, then the child rows (§9.7). The join
@@ -991,13 +1136,32 @@ export async function confirmUpload(
     // moved, the gym's own MEMBERS have no version at all — somebody joined, proved
     // an address or left while the preview was on the screen, and who is "already in
     // the app" moved with them (review of PR #87, High-1).
-    const { measured, reconciled, kept } = await measure(tx, gymId, file.understanding, upload.mode, before, grown.catalogue);
+    const stay = new Set(input.marks?.stay ?? []);
+    const { measured, reconciled, kept } = await measure(tx, gymId, file.understanding, upload.mode, before, grown.catalogue, stay);
+
+    // WHO THE FILE LEAVES OUT, EACH MARKED BY STAFF (§18.8; RULINGS 2026-09-28). Nothing is
+    // marked for them: every missing person is Left or Still a member, the set is the one
+    // they were shown, and the box of who loses the app is the one they read.
+    const leaving = await leaversFor(tx, gymId, uploadId, reconciled, input.marks);
+    if (leaving.kind === "marks_needed") return leaving;
+    if (leaving.kind === "moved") return { kind: "list_changed", baseVersion: upload.baseVersion, version };
+    const leavers = leaving.plan;
+    if (leavers !== null && leavers.moveIds.length !== reconciled.gone.length) {
+      raise(`an import's leavers box moves ${String(leavers.moveIds.length)} records where ${String(reconciled.gone.length)} are marked Left`);
+    }
+    // Nobody ticked as having left: no box was shown, and the plan moves and ends nothing.
+    if (leavers !== null && (input.marks?.left.length ?? 0) > 0) {
+      if (leavers.preview.digest !== input.leaversDigest) {
+        return { kind: "leavers_changed", leavers: leaversOf(leavers, reconciled) };
+      }
+      requireForPlan(leavers, privileges);
+    }
 
     // THE WRONG-FILE GUARD (§9.8), measured on THIS answer and ticked on THIS
     // request. A gym that acknowledged a large change an hour ago has acknowledged
     // nothing about this press, which is why the tick is a field of the request and
-    // never a flag on the upload.
-    if (reconciled.guard.needsTick && !input.acknowledgeLargeChange) {
+    // never a flag on the upload. The leavers' own app line counts too.
+    if (importNeedsLargeTick(reconciled.guard, leavers) && !input.acknowledgeLargeChange) {
       return { kind: "large_change", guard: reconciled.guard };
     }
 
@@ -1033,6 +1197,33 @@ export async function confirmUpload(
     const removed = await repo.markEntriesFormer(tx, gymId, reconciled.gone.map((person) => person.identityKey), at);
     expectApplied(removed, reconciled.gone.length, "removed", uploadId);
 
+    // "THEY'VE LEFT" ENDS THE APP TOO, as Remove does (RULINGS 2026-09-28): each leaver's
+    // membership closed with the record it is removed with (Put back gives both back),
+    // their invitations stopped, and an address no current record holds any more loses
+    // its invitation. After the file's own writes, so a record it adds or brings back
+    // keeps its address's invitation.
+    const leaverEmails = reconciled.gone.flatMap((person) => (person.email === null ? [] : [person.email]));
+    await withdrawForAddresses(tx, settings, { gymId, emails: leaverEmails, at });
+    const endApp = leavers?.endApp ?? [];
+    const closed = await repo.closeMemberships(tx, gymId, endApp, at);
+    if (closed.length !== endApp.length) {
+      throw new Error(`an import closed ${String(closed.length)} memberships where the rule chose ${String(endApp.length)}`);
+    }
+    await withdrawForAccounts(tx, settings, { gymId, userIds: closed.map((row) => row.userId), at });
+    if (closed.length > 0) {
+      await repo.insertAuditRows(tx, {
+        actorUserId: userId,
+        gymId,
+        rows: closed.map((row) => ({
+          action: "org.member_removed",
+          targetType: "gym_member",
+          targetId: row.membershipId,
+          meta: { removedUserId: row.userId, via: "import" },
+        })),
+      });
+    }
+    closedUsers.push(...closed.map((row) => row.userId));
+
     // "THIS GYM HAS YOU ON ITS LIST, AS OF NOW" — on everybody the old list held or
     // the new one does, so what the preview called "no longer listed" still reads
     // that way after the confirm instead of falling back to "never listed".
@@ -1064,6 +1255,8 @@ export async function confirmUpload(
         removed: String(removed),
         unchanged: String(reconciled.counts.unchanged),
         membersLeaving: String(reconciled.members.leaving),
+        markedStay: String(reconciled.missing.length - reconciled.gone.length),
+        endedApp: String(closed.length),
         version: String(after),
         permissionConfirmed: "true",
         ...(input.acknowledgeLargeChange ? { acknowledgedLargeChange: "true" } : {}),
@@ -1103,6 +1296,7 @@ export async function confirmUpload(
       },
     };
   });
+  await bustAfterRemoval(deps, gymId, closedUsers);
 
   // A confirm bulk-loads a gym's people into a table whose statistics may still say
   // it holds almost nothing, and the planner then costs the per-member lookup behind

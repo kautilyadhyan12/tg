@@ -23,7 +23,7 @@ import {
 // tick)` removes; the parent gives both for its own door ('list', 'past' or 'app').
 
 /** One group's names: the first few, "and N more · See all", then 100 at a time. */
-function Names({ people, testId }) {
+export function Names({ people, testId }) {
   const [shown, setShown] = useState(REMOVE_NAMES_SHOWN);
   const { list, more } = namesShown(people, shown);
   if (people.length === 0) return null;
@@ -52,7 +52,7 @@ function Names({ people, testId }) {
   );
 }
 
-function Tick({ checked, onChange, children }) {
+export function Tick({ checked, onChange, children }) {
   return (
     <button type="button" role="checkbox" aria-checked={checked} onClick={() => onChange(!checked)} className="self-start flex items-start gap-3 min-h-11 text-left">
       <span className={checked ? 'c-check c-check-on mt-px' : 'c-check mt-px'}>

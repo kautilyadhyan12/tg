@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import {
   AlertTriangle,
   CalendarDays,
@@ -11,6 +11,7 @@ import {
   Lock,
   RefreshCw,
   Upload,
+  UserCheck,
   UserPlus,
   X,
 } from 'lucide-react';
@@ -28,6 +29,7 @@ import {
   groupNote,
   guardNumber,
   importedColumnCount,
+  marksBody,
   missingOf,
   missingStatusLine,
   missingTitle,
@@ -45,6 +47,8 @@ import {
   withDateOrder,
 } from './memberListView';
 import { goneWords, gymToday } from './memberListPeople';
+import MemberListImportLeavers from './MemberListImportLeavers';
+import MemberListMissing from './MemberListMissing';
 
 // Importing a member list (ROADMAP 5a; spec Part 3 §9.14): Upload, then Review. The
 // server reads, counts and applies; this box shows what matters and sends staff's
@@ -94,6 +98,25 @@ function Badge({ icon: Icon, tone, size = 32 }) {
     >
       <Icon style={{ width: size * 0.5, height: size * 0.5 }} strokeWidth={2.2} />
     </span>
+  );
+}
+
+/** One of Review's big numbers, with See who under it: "3 new members", "35 already on your
+ *  list" (Kd, 2026-09-29: "should show beside … 35 members already in your list and if
+ *  clicked … can see who these people are"). */
+function BigCount({ n, label, open, onToggle, testId }) {
+  return (
+    <div className="min-w-0" data-testid={testId}>
+      <div className="text-6xl font-extrabold tracking-tight" style={{ color: '#fff' }}>
+        {count(n)}
+      </div>
+      <div className="text-[17px] mt-1.5" style={{ color: C.soft }}>
+        {label}
+      </div>
+      <button type="button" onClick={onToggle} className={`${LINK} mt-2`} style={{ color: C.orange }}>
+        {open ? 'Hide' : 'See who'}
+      </button>
+    </div>
   );
 }
 
@@ -249,7 +272,7 @@ export function Tick({ checked, onChange, children, tone = 'plain' }) {
 }
 
 /** The import box. Opened from the Members screen's "Import" card. */
-export default function MemberListUpload({ gymId, words, readOnly, onClose, onImported }) {
+export default function MemberListUpload({ gymId, gym = null, words, readOnly, onClose, onImported }) {
   const titleId = useId();
   const dialogRef = useRef(null);
   const fileInput = useRef(null);
@@ -269,6 +292,14 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
   const [handEdits, setHandEdits] = useState(null);
   const [missing, setMissing] = useState(null);
   const [missingNames, setMissingNames] = useState([]);
+  // Everyone the file leaves out (§18.8): { people, digest }, 'loading' or 'error'; and the
+  // ones staff ticked as having left (the rest stay on the list).
+  const [missingSet, setMissingSet] = useState(null);
+  const [left, setLeft] = useState(() => new Set());
+  const [leaversOpen, setLeaversOpen] = useState(false);
+  // The server's wrong-file check asked about a "They're still members" press: its number is
+  // then typed on the card (round one, High-1).
+  const [keepAsked, setKeepAsked] = useState(false);
   const [answer, setAnswer] = useState(null);
   const [typed, setTyped] = useState('');
   const [permission, setPermission] = useState(false);
@@ -339,6 +370,22 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
       );
   };
 
+  /** Everyone the file leaves out, all at once, so staff can mark them by status or all
+   *  together. Nothing is marked for them. */
+  const loadMissing = (uploadId) => {
+    setMissingSet('loading');
+    return Promise.resolve()
+      .then(() => orgService.getMemberListMissing(gymId, uploadId))
+      .then(
+        (res) => {
+          if (shown.current === uploadId) setMissingSet(res.data.missing);
+        },
+        () => {
+          if (shown.current === uploadId) setMissingSet('error');
+        },
+      );
+  };
+
   /** Reads a file. Every read is the whole list except the one "They're still members"
    *  asks for, which reads the same bytes as people to add. The review asks about anybody
    *  missing only when there is somebody. */
@@ -366,7 +413,11 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
         setMissing(m);
         setMissingNames([]);
         missingGroup.current = m?.group ?? null;
-        if (m !== null) void loadPage(p.uploadId, m.group, 0);
+        setLeft(new Set());
+        setKeepAsked(false);
+        setMissingSet(null);
+        if (m?.group === 'gone') void loadMissing(p.uploadId);
+        else if (m !== null) void loadPage(p.uploadId, m.group, 0);
         // AN ANSWER IS ABOUT THE PEOPLE STAFF WERE SHOWN. Any read of the whole list can
         // change who is missing (a colleague's walk-ins, another column choice), so the
         // question is always asked afresh, with nothing picked.
@@ -407,6 +458,10 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
     setHandEdits(null);
     setMissing(null);
     setMissingNames([]);
+    setMissingSet(null);
+    setLeft(new Set());
+    setKeepAsked(false);
+    setLeaversOpen(false);
     setAnswer(null);
     setTyped('');
     setPermission(false);
@@ -430,19 +485,71 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
   };
 
   const chooseLeft = () => {
+    // A number asked about keeping everyone is not the one They've left asks (re-check).
+    setKeepAsked(false);
     // From an add read the file is read as the whole list again, and the fresh question
     // is answered on its own names.
     if (preview.mode === 'add') void read(source, 'whole_list', mapping);
     else setAnswer('left');
   };
   const chooseKeep = () => {
-    if (preview.mode === 'whole_list') void read(source, 'add', mapping);
+    // The list's own people who are missing are answered with the marks; only app members
+    // leaving with no record missing are read again as people to add, as before.
+    if (missingGroup.current === 'gone') setAnswer('keep');
+    else if (preview.mode === 'whole_list') void read(source, 'add', mapping);
   };
   /** Any other read of the same file — again after a refusal, with other columns, a date
    *  swapped — is the whole list, and asks about the missing people afresh. */
   const readAgain = (map) => read(source, 'whole_list', map);
 
-  const confirm = async () => {
+  const finished = (confirmed) => {
+    setLeaversOpen(false);
+    setDone(confirmed);
+    setStage('done');
+    onImported?.();
+  };
+
+  /** A refused Import: the numbers it carries go on screen, with its sentence. */
+  const refused = (err) => {
+    const code = errorCode(err);
+    const body = err?.response?.data;
+    if (code === 'large_change' && body?.guard) {
+      setGuard(body.guard);
+      setTyped('');
+    }
+    if (code === 'hand_edits' && body?.handEdits) {
+      setHandEdits(body.handEdits);
+      setHandTick(false);
+    }
+    setError({ text: errorText(err, "We couldn't import the list. Please try again."), readAgain: READ_AGAIN.includes(code) });
+  };
+
+  /** The box's press: the marks, the box's digest and, for a big change, its answer. */
+  const pressWithLeavers = async (leaversDigest, acknowledgeLargeChange) => {
+    const res = await orgService.confirmMemberList(gymId, preview.uploadId, {
+      permissionConfirmed: permission,
+      acknowledgeLargeChange,
+      acknowledgeHandEdits: handEdits.entries > 0 && handTick,
+      marks: marksBody(missingSet, left, 'left'),
+      leaversDigest,
+    });
+    return res.data.confirmed;
+  };
+
+  const uploadId = preview?.uploadId ?? null;
+  const loadLeavers = useCallback(
+    () => orgService.getMemberListLeavers(gymId, uploadId, marksBody(missingSet, left, 'left')).then((res) => res.data.leavers),
+    [gymId, uploadId, missingSet, left],
+  );
+  const leaversFailed = useCallback((err) => {
+    setLeaversOpen(false);
+    // `refused` only sets state, so the first render's is as good as any.
+    refused(err);
+  }, []);
+
+  /** Import with no box: nobody moved to past members by this press. `extra` carries the
+   *  marks when the file left people out and nobody was ticked (everyone stays). */
+  const confirm = async (extra = {}) => {
     setBusy('importing');
     setError(null);
     try {
@@ -450,22 +557,12 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
         permissionConfirmed: permission,
         acknowledgeLargeChange: preview.mode === 'whole_list' && guard.needsTick && answer === 'left' && typedMatches(typed, guard),
         acknowledgeHandEdits: handEdits.entries > 0 && handTick,
+        ...extra,
       });
-      setDone(res.data.confirmed);
-      setStage('done');
-      onImported?.();
+      finished(res.data.confirmed);
     } catch (err) {
-      const code = errorCode(err);
-      const body = err?.response?.data;
-      if (code === 'large_change' && body?.guard) {
-        setGuard(body.guard);
-        setTyped('');
-      }
-      if (code === 'hand_edits' && body?.handEdits) {
-        setHandEdits(body.handEdits);
-        setHandTick(false);
-      }
-      setError({ text: errorText(err, "We couldn't import the list. Please try again."), readAgain: READ_AGAIN.includes(code) });
+      if (extra.marks !== undefined && errorCode(err) === 'large_change') setKeepAsked(true);
+      refused(err);
     } finally {
       setBusy(null);
     }
@@ -605,6 +702,13 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
     const skipped = preview.file.noContact + preview.file.duplicates;
     const wholeList = preview.mode === 'whole_list';
     const needsTyping = wholeList && guard.needsTick;
+    // The list's own people missing from the file (§18.8): a tick beside each name, and the
+    // card's two answers. The big-change number is typed in the box Import opens, which
+    // names who moves and who loses the app.
+    const marking = missing?.group === 'gone';
+    const markSet = marking && missingSet !== null && typeof missingSet === 'object' ? missingSet : null;
+    const ticked = markSet === null ? 0 : markSet.people.filter((p) => left.has(p.entryId)).length;
+    const keepTyping = marking && answer === 'keep' && keepAsked && guard.needsTick;
     const canImport =
       busy === null &&
       !readOnly &&
@@ -612,7 +716,7 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
       !dirty &&
       permission &&
       (missing === null || answer !== null) &&
-      (!needsTyping || (answer === 'left' && typedMatches(typed, guard))) &&
+      (marking ? markSet !== null && (!keepTyping || typedMatches(typed, guard)) : !needsTyping || (answer === 'left' && typedMatches(typed, guard))) &&
       (handEdits.entries === 0 || handTick);
     // "Import 3 members" only when nobody is moved to past members by the same press.
     const importLabel =
@@ -644,41 +748,49 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
           </button>
         </div>
 
-        {preview.needsMapping ? null : summary.hero !== null ? (
-          <div className="text-center pt-3 pb-1" data-testid="hero">
-            <div className="text-6xl font-extrabold tracking-tight" style={{ color: '#fff' }}>
-              {count(summary.hero)}
-            </div>
-            <div className="text-[17px] mt-1.5" style={{ color: C.soft }}>
-              new {peopleWord(summary.hero, words)}
-            </div>
-            <button type="button" onClick={() => toggleGroup('new')} className={`${LINK} mt-2`} style={{ color: C.orange }}>
-              {openGroup === 'new' ? 'Hide' : 'See who'}
-            </button>
-          </div>
-        ) : summary.nothing ? (
-          // Nothing new or updated. With people missing, the question below is the
-          // whole story, so only the unchanged count sits above it.
-          missing !== null ? (
-            summary.unchanged > 0 ? (
-              <p className="text-[13px] text-center" style={{ color: C.muted }}>
-                {count(summary.unchanged)} already up to date
-              </p>
-            ) : null
-          ) : (
-            <div className="text-center pt-3 pb-1">
-              <div className="text-2xl font-bold" style={{ color: '#fff' }}>
-                No changes
-              </div>
-              <div className="text-sm mt-1" style={{ color: C.muted }}>
-                {count(summary.unchanged)} already up to date
-              </div>
+        {preview.needsMapping ? null : summary.hero !== null || (summary.nothing && missing !== null) ? (
+          // The new members, and beside them everyone already on the list, each with who.
+          // With nothing new and people missing, the question below is the rest of it.
+          summary.hero === null && summary.unchanged === 0 ? null : (
+            <div
+              className={`text-center pt-3 pb-1 grid gap-2.5 ${summary.hero !== null && summary.unchanged > 0 ? 'grid-cols-2' : 'grid-cols-1'}`}
+              data-testid="hero"
+            >
+              {summary.hero !== null ? (
+                <BigCount n={summary.hero} label={`new ${peopleWord(summary.hero, words)}`} open={openGroup === 'new'} onToggle={() => toggleGroup('new')} testId="hero-new" />
+              ) : null}
+              {summary.unchanged > 0 ? (
+                <BigCount
+                  n={summary.unchanged}
+                  label="already on your list"
+                  open={openGroup === 'unchanged'}
+                  onToggle={() => toggleGroup('unchanged')}
+                  testId="hero-already"
+                />
+              ) : null}
             </div>
           )
+        ) : summary.nothing ? (
+          <div className="text-center pt-3 pb-1">
+            <div className="text-2xl font-bold" style={{ color: '#fff' }}>
+              No changes
+            </div>
+            <div className="text-sm mt-1" style={{ color: C.muted }}>
+              {count(summary.unchanged)} already on your list
+            </div>
+            {summary.unchanged > 0 ? (
+              <button type="button" onClick={() => toggleGroup('unchanged')} className={`${LINK} mt-2`} style={{ color: C.orange }}>
+                {openGroup === 'unchanged' ? 'Hide' : 'See who'}
+              </button>
+            ) : null}
+          </div>
         ) : (
           <div>
-            <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${String(summary.tiles.length)}, minmax(0, 1fr))` }}>
-              {summary.tiles.map((t) => {
+            <div
+              className="grid gap-2.5"
+              style={{ gridTemplateColumns: `repeat(${String(summary.tiles.length + (summary.unchanged > 0 ? 1 : 0))}, minmax(0, 1fr))` }}
+            >
+              {[...summary.tiles, ...(summary.unchanged > 0 ? [{ group: 'unchanged', n: summary.unchanged, label: 'Already on your list' }] : [])].map((t) => {
                 const isNew = t.group === 'new';
                 return (
                   <button
@@ -689,7 +801,7 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
                     className="rounded-[18px] p-3.5 text-left"
                     style={{ background: C.card, border: `1px solid ${openGroup === t.group ? 'rgba(255,138,31,0.55)' : C.line}` }}
                   >
-                    <Badge icon={isNew ? UserPlus : RefreshCw} tone={isNew ? 'green' : 'plain'} />
+                    <Badge icon={isNew ? UserPlus : t.group === 'unchanged' ? UserCheck : RefreshCw} tone={isNew ? 'green' : 'plain'} />
                     <span className="block text-[28px] font-extrabold leading-none mt-2.5" style={{ color: '#fff' }}>
                       {count(t.n)}
                     </span>
@@ -700,11 +812,6 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
                 );
               })}
             </div>
-            {summary.unchanged > 0 ? (
-              <p className="text-[13px] text-center mt-2.5" style={{ color: C.muted }}>
-                {count(summary.unchanged)} already up to date
-              </p>
-            ) : null}
           </div>
         )}
 
@@ -734,14 +841,74 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
                   {missingStatusLine(missing)}
                 </div>
               ) : null}
+              {marking ? (
+                <div className="text-[13px] mt-1" style={{ color: C.soft }} data-testid="missing-tick-help">
+                  Tick the people who have left. If you tick nobody, They&apos;ve left moves everyone.
+                </div>
+              ) : null}
             </div>
             {/* Every one of them, with what the list says of them, before the question. */}
-            {wholeList ? namesFor(missing.group) : null}
+            {!marking ? (
+              wholeList ? namesFor(missing.group) : null
+            ) : markSet !== null ? (
+              <MemberListMissing missing={markSet} left={left} onLeft={setLeft} disabled={busy !== null || readOnly} />
+            ) : missingSet === 'error' ? (
+              <div role="alert" className="rounded-2xl px-4 py-3 text-sm flex items-center justify-between gap-3" style={{ background: C.redBg, color: '#fca5a5' }}>
+                We couldn&apos;t load the names.
+                <button type="button" onClick={() => void loadMissing(preview.uploadId)} className={LINK} style={{ color: C.orange }}>
+                  Try again
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-sm" style={{ color: C.muted }}>
+                <Loader2 className="w-4 h-4 animate-spin" /> Loading names…
+              </div>
+            )}
             <div role="radiogroup" aria-label="What happened to them?" className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <Choice on={answer === 'left'} title="They've left" sub={missing.group === 'gone' ? `Move to past ${words.people}` : 'Mark them as not on your list'} onClick={chooseLeft} disabled={busy !== null} />
-              <Choice on={answer === 'keep'} title={`They're still ${words.people}`} sub="Leave them on the list" onClick={chooseKeep} disabled={busy !== null} />
+              <Choice
+                on={answer === 'left'}
+                title="They've left"
+                sub={
+                  missing.group !== 'gone'
+                    ? 'Mark them as not on your list'
+                    : ticked > 0
+                      ? `Move the ${count(ticked)} ticked to past ${words.people}`
+                      : `Move to past ${words.people}`
+                }
+                onClick={chooseLeft}
+                disabled={busy !== null}
+              />
+              <Choice
+                on={answer === 'keep'}
+                title={`They're still ${words.people}`}
+                sub={marking && ticked > 0 ? `Keep all ${count(markSet.people.length)} on the list, ticked or not` : 'Leave them on the list'}
+                onClick={chooseKeep}
+                disabled={busy !== null}
+              />
             </div>
-            {answer === 'left' && needsTyping ? (
+            {keepTyping ? (
+              <div className="flex flex-col gap-2" data-testid="keep-typing">
+                <p className="text-sm" style={{ color: C.soft }}>
+                  {guard.entriesGoing > 0
+                    ? `${count(guard.entriesGoing)} ${peopleWord(guard.entriesGoing, words)} would come off your list.`
+                    : `${count(guard.membersLeaving)} ${guard.membersLeaving === 1 ? 'person who uses' : 'people who use'} the app would no longer be on your list.`}
+                </p>
+                <label className="flex items-center gap-3 text-[15px]" style={{ color: C.soft }}>
+                  <span>
+                    Type <b style={{ color: '#fff' }}>{count(guardNumber(guard))}</b> to confirm
+                  </span>
+                  <input
+                    aria-label="Type the number to confirm"
+                    inputMode="numeric"
+                    value={typed}
+                    onChange={(e) => setTyped(e.target.value)}
+                    className="w-28 rounded-xl px-3 min-h-[44px] text-base outline-none"
+                    style={{ background: C.card2, color: '#fff', border: '1px solid rgba(255,255,255,0.18)' }}
+                  />
+                </label>
+              </div>
+            ) : null}
+            {answer === 'left' && needsTyping && !marking ? (
               <label className="flex items-center gap-3 text-[15px]" style={{ color: C.soft }}>
                 <span>
                   Type <b style={{ color: '#fff' }}>{count(guardNumber(guard))}</b> to confirm
@@ -924,9 +1091,21 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
               </Tick>
             ) : null}
             <Tick checked={permission} onChange={setPermission}>
-              {MEMBER_LIST_PERMISSION_WORDS.replace('{people}', words.people)}
+              {MEMBER_LIST_PERMISSION_WORDS.replace('{gym}', gym?.name ?? 'your gym').replace('{people}', words.people)}
             </Tick>
-            <button type="button" onClick={confirm} disabled={!canImport} className={`${PRIMARY} mt-2`} style={primaryStyle(canImport)}>
+            <button
+              type="button"
+              onClick={
+                !marking
+                  ? () => void confirm()
+                  : answer === 'left'
+                    ? () => setLeaversOpen(true)
+                    : () => void confirm({ marks: marksBody(markSet, left, 'keep'), acknowledgeLargeChange: keepTyping && typedMatches(typed, guard) })
+              }
+              disabled={!canImport}
+              className={`${PRIMARY} mt-2`}
+              style={primaryStyle(canImport)}
+            >
               {busy === 'importing' ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
               {importLabel}
             </button>
@@ -999,6 +1178,17 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
           {body}
         </div>
       </div>
+      {leaversOpen && stage === 'review' ? (
+        <MemberListImportLeavers
+          gym={gym}
+          words={words}
+          load={loadLeavers}
+          press={pressWithLeavers}
+          onDone={finished}
+          onFailed={leaversFailed}
+          onClose={() => setLeaversOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
