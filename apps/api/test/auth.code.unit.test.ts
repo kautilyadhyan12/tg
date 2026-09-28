@@ -81,6 +81,7 @@ describe("config: email service", () => {
       EMAIL_FROM: "AI Home Gym <hi@example.com>",
       TURNSTILE_SITE_KEY: "site",
       TURNSTILE_SECRET_KEY: "secret",
+      PHOTO_DIR: "/srv/aihg/photos",
     });
     expect(prod.EMAIL_FROM).toBe("AI Home Gym <hi@example.com>");
   });

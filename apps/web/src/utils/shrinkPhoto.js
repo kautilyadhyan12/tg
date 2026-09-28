@@ -24,9 +24,10 @@ export function fitWithin(width, height, maxEdge = MAX_EDGE_PX) {
 }
 
 /** file (a File or Blob the browser can show) → a JPEG Blob no longer than
- *  MAX_EDGE_PX on its longest side. Rejects with one plain message when the
- *  picture cannot be read or drawn. */
-export async function shrinkPhoto(file, dom = globalThis) {
+ *  maxEdge (MAX_EDGE_PX unless said) on its longest side. Rejects with one plain
+ *  message when the picture cannot be read or drawn. A gym page's photo passes a
+ *  larger edge (20c-iv-b). */
+export async function shrinkPhoto(file, dom = globalThis, { maxEdge = MAX_EDGE_PX, quality = JPEG_QUALITY } = {}) {
   const url = dom.URL.createObjectURL(file);
   try {
     const img = new dom.Image();
@@ -36,7 +37,7 @@ export async function shrinkPhoto(file, dom = globalThis) {
     } catch {
       throw new Error(UNREADABLE);
     }
-    const { width, height } = fitWithin(img.naturalWidth, img.naturalHeight);
+    const { width, height } = fitWithin(img.naturalWidth, img.naturalHeight, maxEdge);
     const canvas = dom.document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
@@ -46,7 +47,7 @@ export async function shrinkPhoto(file, dom = globalThis) {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, width, height);
     ctx.drawImage(img, 0, 0, width, height);
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', JPEG_QUALITY));
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
     if (!blob) throw new Error(UNREADABLE);
     return blob;
   } finally {

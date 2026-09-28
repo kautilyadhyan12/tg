@@ -32,6 +32,84 @@ export async function writePage(tx: TransactionSql, gymId: string, page: PageRow
         own_facilities = EXCLUDED.own_facilities, updated_at = EXCLUDED.updated_at`;
 }
 
+// ── PHOTOS (20c-iv-b) ─────────────────────────────────────────────────────────
+
+export interface PhotoRow {
+  id: string;
+  storageKey: string;
+  contentType: string;
+  width: number;
+  height: number;
+  uploadKey: string;
+}
+
+type PhotoDbRow = { id: string; storage_key: string; content_type: string; width: number; height: number; upload_key: string };
+const photoRow = (r: PhotoDbRow): PhotoRow => ({
+  id: r.id,
+  storageKey: r.storage_key,
+  contentType: r.content_type,
+  width: r.width,
+  height: r.height,
+  uploadKey: r.upload_key,
+});
+
+/** A gym's photos in the page's order. */
+export async function photosFor(sql: SqlOrTx, gymId: string): Promise<PhotoRow[]> {
+  const rows = await sql<PhotoDbRow[]>`
+    SELECT id, storage_key, content_type, width, height, upload_key
+    FROM gym_page_photos WHERE gym_id = ${gymId}
+    ORDER BY position`;
+  return rows.map(photoRow);
+}
+
+/** One of this gym's photos, or null — never another gym's. */
+export async function photoOf(sql: SqlOrTx, gymId: string, photoId: string): Promise<PhotoRow | null> {
+  const rows = await sql<PhotoDbRow[]>`
+    SELECT id, storage_key, content_type, width, height, upload_key
+    FROM gym_page_photos WHERE gym_id = ${gymId} AND id = ${photoId}`;
+  const r = rows[0];
+  return r === undefined ? null : photoRow(r);
+}
+
+/** The photo this gym already keeps under the browser's key, or null. */
+export async function photoByUploadKey(sql: SqlOrTx, gymId: string, uploadKey: string): Promise<PhotoRow | null> {
+  const rows = await sql<PhotoDbRow[]>`
+    SELECT id, storage_key, content_type, width, height, upload_key
+    FROM gym_page_photos WHERE gym_id = ${gymId} AND upload_key = ${uploadKey}`;
+  const r = rows[0];
+  return r === undefined ? null : photoRow(r);
+}
+
+export async function insertPhoto(
+  tx: TransactionSql,
+  gymId: string,
+  photo: { id: string; storageKey: string; contentType: string; byteSize: number; width: number; height: number; position: number; uploadKey: string },
+  addedBy: string,
+  at: Date,
+): Promise<void> {
+  await tx`
+    INSERT INTO gym_page_photos (id, gym_id, storage_key, content_type, byte_size, width, height, position, upload_key, added_by, created_at)
+    VALUES (${photo.id}, ${gymId}, ${photo.storageKey}, ${photo.contentType}, ${photo.byteSize},
+            ${photo.width}, ${photo.height}, ${photo.position}, ${photo.uploadKey}, ${addedBy}, ${at})`;
+}
+
+/** Deletes one of this gym's photos; its store key, or null when it had none. */
+export async function deletePhoto(tx: TransactionSql, gymId: string, photoId: string): Promise<string | null> {
+  const rows = await tx<{ storage_key: string }[]>`
+    DELETE FROM gym_page_photos WHERE gym_id = ${gymId} AND id = ${photoId} RETURNING storage_key`;
+  return rows[0]?.storage_key ?? null;
+}
+
+/** Numbers this gym's photos 0, 1, 2… in the order given, which is every photo it has.
+ *  The position rule is checked at commit, so two photos can swap places. */
+export async function setPhotoOrder(tx: TransactionSql, gymId: string, photoIds: readonly string[]): Promise<void> {
+  const positions = photoIds.map((_, i) => i);
+  await tx`
+    UPDATE gym_page_photos p SET position = o.position
+    FROM unnest(${photoIds}::uuid[], ${positions}::int[]) AS o(id, position)
+    WHERE p.gym_id = ${gymId} AND p.id = o.id`;
+}
+
 export interface ShownPageRow extends PageRow {
   gymId: string;
   name: string;

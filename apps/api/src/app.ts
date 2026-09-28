@@ -1,6 +1,8 @@
 // Fastify app factory (P0.4). Route order doctrine (R3.3) applies per-module
 // from P2.1 on; here only platform concerns: logging, CORS, rate limit,
 // error mapping, /health.
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
@@ -39,6 +41,7 @@ import { registerOrgRoutes, type OrgRouteOverrides } from "./modules/orgs/routes
 import { inviteSettings } from "./modules/orgs/invites/settings.js";
 import { registerUnsubscribeRoutes } from "./modules/orgs/invites/unsubscribe.js";
 import { createRobotCheck, type RobotCheck } from "./modules/orgs/gymPage/robotCheck.js";
+import { createDiskPhotoStore, type PhotoStore } from "./modules/orgs/gymPage/photoStore.js";
 import { registerResendWebhookRoutes } from "./modules/webhooks/resendRoutes.js";
 import type { PaddleApi } from "./modules/billing/paddle.js";
 import { registerBillingRoutes } from "./modules/billing/routes.js";
@@ -77,6 +80,8 @@ export interface BuildAppOverrides {
   paddleApi?: PaddleApi;
   /** Tests answer the gym page's robot check themselves; unset asks Cloudflare. */
   robotCheck?: RobotCheck;
+  /** Tests keep a gym page's photos where they can look; unset is `PHOTO_DIR`. */
+  photoStore?: PhotoStore;
   /** Tests hold a password check open to race it against an address's first proof;
    *  unset is argon2id. */
   passwordHasher?: PasswordHasher;
@@ -287,7 +292,15 @@ export async function buildApp(
   const paddle = paddleSettings(config, overrides.paddleApi);
   registerOrgRoutes(
     app,
-    { sql, redis, invites, onlinePayments: paddle !== null, robotCheck: overrides.robotCheck ?? createRobotCheck(config) },
+    {
+      sql,
+      redis,
+      invites,
+      onlinePayments: paddle !== null,
+      robotCheck: overrides.robotCheck ?? createRobotCheck(config),
+      // The server's own disk until Cloudflare R2 is connected at deploy (Stage 4 item 1).
+      photos: overrides.photoStore ?? createDiskPhotoStore(config.PHOTO_DIR ?? join(tmpdir(), "aihg-gym-photos")),
+    },
     overrides.orgs ?? {},
   );
   // The unsubscribe link in every invitation: public, and not under /v1/orgs.

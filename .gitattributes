@@ -2,3 +2,7 @@
 # and its code page must reach every checkout unchanged (core.autocrlf would
 # otherwise rewrite them on Windows).
 apps/api/test/fixtures/member-list/** -text
+# The gym page's phone photos (20c-iv-b): their bytes are the test, too.
+apps/api/test/fixtures/photos/*.jpg binary
+apps/api/test/fixtures/photos/*.png binary
+apps/api/test/fixtures/photos/*.webp binary

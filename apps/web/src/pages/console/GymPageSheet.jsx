@@ -1,10 +1,28 @@
-import { useEffect, useState } from 'react';
-import { Check, Copy, ExternalLink, Loader2, Plus, X } from 'lucide-react';
-import { GYM_PAGE_MAX_ABOUT_CHARS, GYM_PAGE_MAX_OWN_FACILITY_CHARS } from '@app/shared';
-import { orgService, errorText } from '../../api/orgsApi';
+import { useEffect, useRef, useState } from 'react';
+import { Check, Copy, ExternalLink, ImagePlus, Loader2, Plus, Star, Trash2, X } from 'lucide-react';
+import { GYM_PAGE_MAX_ABOUT_CHARS, GYM_PAGE_MAX_OWN_FACILITY_CHARS, GYM_PAGE_MAX_PHOTOS } from '@app/shared';
+import { orgService, errorStatus, errorText, gymPhotoUrl } from '../../api/orgsApi';
+import PhotoViewer from '../../components/common/PhotoViewer';
 import { ConfirmInline } from '../../components/console/ConsoleStates';
 import { embedCode, gymPageUrl } from '../gymPublicView';
-import { FACILITY_CHOICES, addFacility, pageChanged, pageDraft, pageRequest, removeOwnFacility, toggleFacility } from './gymPageView';
+import { pickProblem, preparePagePhoto } from './gymPagePhotos';
+import {
+  FACILITY_CHOICES,
+  addFacility,
+  addPhotos,
+  fieldsChanged,
+  makeMainPhoto,
+  orderedIds,
+  pageChanged,
+  pageDraft,
+  pageRequest,
+  photoPlan,
+  photosChanged,
+  removeOwnFacility,
+  removePhoto,
+  toggleFacility,
+  unsentPhotos,
+} from './gymPageView';
 
 // The gym's own page (ROADMAP 20c-iv-a; spec Part 3 §16.3), opened from Leads: switch it
 // on, write "About us", tick the facilities, and copy the link or the code for the
@@ -65,6 +83,12 @@ export default function GymPageSheet({ gymId, gym, words, readOnly, onClose }) {
   /** What is typed in "Add a facility", and why it could not be added. */
   const [typedOwn, setTypedOwn] = useState('');
   const [ownProblem, setOwnProblem] = useState(null);
+  /** Photos being made ready, and why some could not be added. */
+  const [preparing, setPreparing] = useState(false);
+  const [photoProblem, setPhotoProblem] = useState(null);
+  const pickerRef = useRef(null);
+  /** The photo open full size, by its place in the list, or null. */
+  const [viewing, setViewing] = useState(null);
 
   useEffect(() => {
     let gone = false;
@@ -85,11 +109,18 @@ export default function GymPageSheet({ gymId, gym, words, readOnly, onClose }) {
 
   const origin = typeof window === 'undefined' ? '' : window.location.origin;
   const mayChange = page?.mayChange === true && !readOnly;
-  const off = busy || !mayChange;
+  const off = busy || preparing || !mayChange;
   const changed = page !== null && pageChanged(draft, page);
   const link = page === null ? '' : gymPageUrl(origin, page.slug);
   const code = page === null ? '' : embedCode(origin, page.slug, gym?.name ?? '');
   const title = `Your ${words.it} page`;
+  /** Each photo in the draft as the viewer and the tiles show it: a saved one from the
+   *  server, a new one from the device until Save. */
+  const shownPhotos = draft.photos.map((photo, i) => ({
+    key: photo.key,
+    src: photo.id === null ? photo.preview : gymPhotoUrl({ gymId, photoId: photo.id }),
+    alt: `Photo ${i + 1} of ${draft.photos.length}`,
+  }));
 
   const edit = (next) => {
     setDone(null);
@@ -97,17 +128,67 @@ export default function GymPageSheet({ gymId, gym, words, readOnly, onClose }) {
     setDraft(next);
   };
 
+  /** Photos picked from the device, shrunk and added to the draft (they go on Save). */
+  const pickPhotos = async (files) => {
+    setPhotoProblem(null);
+    setPreparing(true);
+    const prepared = [];
+    const unreadable = [];
+    const tooBig = [];
+    for (const file of files) {
+      try {
+        prepared.push(await preparePagePhoto(file));
+      } catch (err) {
+        (err.message === 'too_big' ? tooBig : unreadable).push(file.name);
+      }
+    }
+    setPreparing(false);
+    const added = addPhotos(draft, prepared);
+    for (const unused of prepared.slice(prepared.length - added.left)) URL.revokeObjectURL?.(unused.preview);
+    edit(added.draft);
+    setPhotoProblem(pickProblem({ unreadable, tooBig, left: added.left }));
+  };
+
+  /** Save: the words and ticks, then the photos removed, added and ordered. A photo
+   *  refused part way leaves the page as the server has it, with the photos not yet
+   *  sent still in the panel to try again. */
   const save = async () => {
     if (busy || !changed) return;
     setBusy(true);
     setError(null);
+    let fresh = page;
+    const idsByKey = {};
     try {
-      const res = await orgService.setGymPage(gymId, pageRequest(draft));
-      setPage(res.data.page);
-      setDraft(pageDraft(res.data.page));
-      setDone(res.data.page.shown ? 'Saved. Your page is on.' : 'Saved. Your page is off.');
+      if (fieldsChanged(draft, page)) fresh = (await orgService.setGymPage(gymId, pageRequest(draft))).data.page;
+      const plan = photoPlan(draft, page);
+      for (const id of plan.remove) {
+        try {
+          await orgService.removeGymPagePhoto(gymId, id);
+        } catch (err) {
+          // Removed already, in another window: what Save wanted.
+          if (errorStatus(err) !== 404) throw err;
+        }
+      }
+      for (const photo of plan.add) {
+        idsByKey[photo.key] = (await orgService.addGymPagePhoto(gymId, photo.base64, photo.uploadKey)).data.photo.id;
+      }
+      if (plan.reorder) await orgService.orderGymPagePhotos(gymId, orderedIds(draft, idsByKey));
+      if (photosChanged(draft, page)) fresh = (await orgService.getGymPage(gymId)).data.page;
+      for (const photo of plan.add) URL.revokeObjectURL?.(photo.preview);
+      setPage(fresh);
+      setDraft(pageDraft(fresh));
+      setDone(fresh.shown ? 'Saved. Your page is on.' : 'Saved. Your page is off.');
     } catch (err) {
       setError(errorText(err, "We couldn't save your page. Please try again."));
+      try {
+        fresh = (await orgService.getGymPage(gymId)).data.page;
+        const unsent = unsentPhotos(draft, fresh);
+        const kept = fieldsChanged(draft, fresh) ? draft : pageDraft(fresh);
+        setPage(fresh);
+        setDraft({ ...kept, photos: [...pageDraft(fresh).photos, ...unsent] });
+      } catch {
+        // The page could not be read again: the panel stays as it was, and Save tries all of it.
+      }
     } finally {
       setBusy(false);
     }
@@ -202,6 +283,95 @@ export default function GymPageSheet({ gymId, gym, words, readOnly, onClose }) {
               </label>
 
               <div className="c-field">
+                <span className="c-label">Photos</span>
+                <span className="c-hint">
+                  Show people your gym: the floor, the equipment, the changing rooms. The main photo is the big one at the top of your page. Tap a
+                  photo to see it full size.
+                </span>
+                {draft.photos.length > 0 ? (
+                  <ul className="grid grid-cols-2 gap-3 pt-1" aria-label="Photos">
+                    {draft.photos.map((photo, index) => {
+                      const label = `Photo ${index + 1} of ${draft.photos.length}`;
+                      return (
+                        <li key={photo.key} className="flex flex-col gap-1.5">
+                          {/* The whole photo, never cropped; a tap opens it full size. */}
+                          <button
+                            type="button"
+                            onClick={() => setViewing(index)}
+                            aria-label={`Open photo ${index + 1} full size`}
+                            className="relative block w-full rounded-lg overflow-hidden"
+                            style={{ aspectRatio: '4 / 3', background: 'var(--raise)' }}
+                          >
+                            <img
+                              src={shownPhotos[index].src}
+                              alt={index === 0 ? `${label}, the main photo` : label}
+                              loading="lazy"
+                              className="absolute inset-0 w-full h-full object-contain"
+                            />
+                            {index === 0 ? <span className="c-tag c-tag-soft absolute left-2 top-2">Main photo</span> : null}
+                            {photo.id === null ? <span className="c-tag c-tag-plain absolute right-2 top-2">Not saved</span> : null}
+                          </button>
+                          {mayChange ? (
+                            <div className="flex flex-col items-start gap-1.5">
+                              {/* Every tile two rows, so the grid stays even: the main photo says so where the others have the button. */}
+                              {index > 0 ? (
+                                <button type="button" disabled={off} onClick={() => edit(makeMainPhoto(draft, photo.key))} className="c-btn c-btn-sm c-btn-s" aria-label={`Make photo ${index + 1} the main photo`}>
+                                  <Star aria-hidden="true" className="w-4 h-4" /> Make main photo
+                                </button>
+                              ) : (
+                                <span className="c-s14 c-t2 flex items-center gap-1.5 h-8">
+                                  <Star aria-hidden="true" className="w-4 h-4" /> The main photo
+                                </span>
+                              )}
+                              <button type="button" disabled={off} onClick={() => edit(removePhoto(draft, photo.key))} className="c-btn c-btn-sm c-btn-s" aria-label={`Remove photo ${index + 1}`}>
+                                <Trash2 aria-hidden="true" className="w-4 h-4" /> Remove
+                              </button>
+                            </div>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p className="c-s14 c-t3">No photos yet.</p>
+                )}
+                {mayChange ? (
+                  <div className="flex flex-wrap items-center gap-3 pt-1">
+                    <input
+                      ref={pickerRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                      multiple
+                      hidden
+                      aria-label="Choose photos"
+                      onChange={(e) => {
+                        const files = [...(e.target.files ?? [])];
+                        e.target.value = '';
+                        if (files.length > 0) void pickPhotos(files);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => pickerRef.current?.click()}
+                      disabled={off || preparing || draft.photos.length >= GYM_PAGE_MAX_PHOTOS}
+                      className="c-btn c-btn-sm c-btn-s"
+                    >
+                      {preparing ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <ImagePlus aria-hidden="true" className="w-4 h-4" />}
+                      {preparing ? 'Getting photos ready…' : 'Add photos'}
+                    </button>
+                    <span className="c-hint">
+                      {draft.photos.length} of {GYM_PAGE_MAX_PHOTOS} photos
+                    </span>
+                  </div>
+                ) : null}
+                {photoProblem !== null ? (
+                  <span className="c-hint" role="alert" style={{ color: 'var(--bad)' }}>
+                    {photoProblem}
+                  </span>
+                ) : null}
+              </div>
+
+              <div className="c-field">
                 <span className="c-label">Facilities</span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4" role="group" aria-label="Facilities">
                   {FACILITY_CHOICES.map((choice) => (
@@ -291,7 +461,7 @@ export default function GymPageSheet({ gymId, gym, words, readOnly, onClose }) {
                 Save
               </button>
               {changed ? (
-                <button type="button" onClick={() => edit(pageDraft(page))} disabled={busy} className="c-btn c-btn-s">
+                <button type="button" onClick={() => edit(pageDraft(page))} disabled={busy || preparing} className="c-btn c-btn-s">
                   Cancel
                 </button>
               ) : null}
@@ -299,6 +469,9 @@ export default function GymPageSheet({ gymId, gym, words, readOnly, onClose }) {
           ) : null}
         </div>
       </div>
+      {viewing !== null ? (
+        <PhotoViewer photos={shownPhotos} index={viewing} onIndex={setViewing} onClose={() => setViewing(null)} />
+      ) : null}
     </div>
   );
 }

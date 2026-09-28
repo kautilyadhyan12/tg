@@ -203,7 +203,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 20c-iii. [x] **Leads from a file** — merged 2026-09-28 (PR #125).
      - 20c-iv. **Each gym's own page with its lead form** (RULINGS 2026-09-25): split 2026-09-28 in two (RULINGS that day).
        - 20c-iv-a. [x] **The gym's page, its facilities and the enquiry form** — merged 2026-09-28 (PR #128).
-       - 20c-iv-b. [ ] **Photos on the gym's page**: photo storage (Stage 4 item 4's first part, local first, Cloudflare R2 at deploy), at most 10 photos a gym, 2 MB each.
+       - 20c-iv-b. [x] **Photos on the gym's page** — merged 2026-09-29 (PR #130).
      - 20c-v. [ ] **"Send them for me"** (RULINGS 2026-09-27): a Settings switch; the app sends the three follow-ups itself through the invitations' checks, caps and unsubscribe, for at most 100 leads a gym a month on every plan, then the reminders again. After 20c-ii.
    - 20d. [ ] **At risk, and the owner's weekly summary** — it takes the place of item 2's "slipping away"; it reads visits (after 16a).
 21. **Reports** (RULINGS 2026-09-22; spec Part 3 §16.5) — it takes in item 12's reports. Opus xhigh (a rule that thresholds, other people's data).

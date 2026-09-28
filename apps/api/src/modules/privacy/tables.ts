@@ -369,6 +369,9 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // gym_member_list_uploads' footing: the gym's record, and the lead itself is a
   // person the gym told us about, not an account. Deleted when the gym closes.
   "gym_leads",
+  // gym_page_photos.added_by — which member of staff put a photo on the gym's page
+  // (`0050`), on gym_leads' footing: the gym's record of its own page; `ON DELETE set null`.
+  "gym_page_photos",
   "api_cost_events",
   "usage_daily",
   "trace_samples",

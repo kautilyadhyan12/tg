@@ -22,6 +22,7 @@ const PAGE = {
   about: 'Friendly gym by the canal.',
   facilities: ['free_weights', 'showers'],
   ownFacilities: ['Boxing ring'],
+  photos: [],
   hours: { mode: 'open_24h', timezone: 'Europe/London', clockFormat: '24h', week: [], savedWeek: [], closures: [] },
   robotCheckKey: 'site-key',
 };
@@ -198,5 +199,60 @@ describe('the form', () => {
     pass('tok-2');
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));
     await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('Too many messages have been sent from here. Please try again later.'));
+  });
+});
+
+describe('photos (20c-iv-b)', () => {
+  const ids = ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'];
+  const withPhotos = (list) => ({ ...PAGE, photos: list.map((id) => ({ id, width: 2000, height: 1500 })) });
+
+  it("the main photo is the large one, each from this page's own address, and a tap opens it full size", async () => {
+    api.getPublicGymPage.mockResolvedValue({ data: { page: withPhotos(ids) } });
+    draw();
+    const main = await screen.findByRole('img', { name: 'Canal Street Gym, photo 1 of 3' });
+    expect(main.getAttribute('src')).toMatch(new RegExp(`/v1/public/gyms/canal-street-gym/photos/${ids[0]}$`));
+    expect(screen.getByRole('img', { name: 'Canal Street Gym, photo 3 of 3' }).getAttribute('src')).toMatch(new RegExp(`/photos/${ids[2]}$`));
+
+    fireEvent.click(screen.getByRole('img', { name: 'Canal Street Gym, photo 2 of 3' }).closest('button'));
+    const viewer = screen.getByRole('dialog', { name: 'Canal Street Gym, photo 2 of 3' });
+    expect(viewer.textContent).toContain('2 of 3');
+    fireEvent.click(screen.getByRole('button', { name: 'Next photo' }));
+    expect(screen.getByRole('dialog', { name: 'Canal Street Gym, photo 3 of 3' })).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(screen.getByRole('dialog', { name: 'Canal Street Gym, photo 1 of 3' })).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('no photo is cropped: each is shown whole, the main one at its own shape (Kd, click-through)', async () => {
+    api.getPublicGymPage.mockResolvedValue({ data: { page: { ...PAGE, photos: [{ id: ids[0], width: 1500, height: 2000 }, { id: ids[1], width: 2000, height: 1500 }] } } });
+    draw();
+    const main = await screen.findByRole('img', { name: 'Canal Street Gym, photo 1 of 2' });
+    for (const img of screen.getAllByRole('img')) {
+      expect(img.className).toContain('object-contain');
+      expect(img.className).not.toContain('object-cover');
+    }
+    expect(main.closest('button').style.aspectRatio).toBe('1500 / 2000');
+  });
+
+  it('one photo has no Previous or Next; no photos, no photo section', async () => {
+    api.getPublicGymPage.mockResolvedValue({ data: { page: withPhotos(ids.slice(0, 1)) } });
+    draw();
+    fireEvent.click((await screen.findByRole('img', { name: 'Canal Street Gym, photo 1 of 1' })).closest('button'));
+    expect(screen.queryByRole('button', { name: 'Next photo' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    cleanup();
+    api.getPublicGymPage.mockResolvedValue({ data: { page: withPhotos([]) } });
+    draw();
+    await screen.findByRole('heading', { name: 'Canal Street Gym' });
+    expect(screen.queryByRole('region', { name: 'Photos' })).toBeNull();
+    expect(screen.queryAllByRole('img')).toHaveLength(0);
+  });
+
+  it("inside a gym's own website the form stays alone, with no photos", async () => {
+    api.getPublicGymPage.mockResolvedValue({ data: { page: withPhotos(ids) } });
+    draw('/gyms/canal-street-gym?embed=1');
+    await screen.findByRole('heading', { name: 'Get in touch with Canal Street Gym' });
+    expect(screen.queryAllByRole('img')).toHaveLength(0);
   });
 });
