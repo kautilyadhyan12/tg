@@ -61,7 +61,7 @@ const byNameThenId = (a: MemberRemovePerson, b: MemberRemovePerson): number => {
  *  that many may have more, so "every one of them selected" is never taken from it. */
 const SHARED_CONTACT_READ_MAX = 20;
 
-const KEPT_ORDER: readonly MemberRemoveKeptReason[] = ["staff", "own_record", "shared_email", "same_record", "not_in_app", "gone"];
+const KEPT_ORDER: readonly MemberRemoveKeptReason[] = ["staff", "own_record", "shared_email", "in_file", "same_record", "not_in_app", "gone"];
 
 /** The box's digest: what the press would do, and nothing else — the records moved, and
  *  each person losing the app with the record they are removed with. */
@@ -249,8 +249,75 @@ export function rosterRemovalPlan(input: {
   return finish(input.gymId, asked.length, move, ends, kept, input.scale, 0);
 }
 
-/** The plan for these records, read on `sql` (the pool, or the press's transaction). */
-async function recordPlanOn(sql: repo.SqlOrTx, gymId: string, ids: readonly string[]): Promise<RemovalPlan> {
+/** What an import's file writes (`Reconciled.written`): folded emails and phones, old and
+ *  new, and the records it changes. */
+export interface FileWrites {
+  emails: ReadonlySet<string>;
+  phones: ReadonlySet<string>;
+  entryIds: ReadonlySet<string>;
+}
+
+/** Whether a file's writes reach this person in the app: once it is applied, the record
+ *  that is theirs may be another one. */
+export function reachedByFile(member: repo.MemberAgainstList, written: FileWrites): boolean {
+  const email = (member.email ?? "").trim().toLowerCase();
+  const phone = (member.statedPhone ?? "").trim();
+  return (
+    (email !== "" && written.emails.has(email)) ||
+    (phone !== "" && written.phones.has(phone)) ||
+    (member.joinedEntryId !== null && written.entryIds.has(member.joinedEntryId)) ||
+    (member.entryId !== null && written.entryIds.has(member.entryId)) ||
+    (member.unsure?.records ?? []).some((record) => written.entryIds.has(record.id))
+  );
+}
+
+/** THE RULE FOR AN IMPORT'S LEAVERS (RULINGS 2026-09-28; ROADMAP 5b-v-d). Pure.
+ *
+ *  "They've left" is Remove on the records marked Left: `recordRemovalPlan`, worked out on
+ *  the list before the file is applied, and nobody else touched. One exception, in the
+ *  direction that ends nobody's app by mistake: someone the file's own writes reach (a
+ *  record added or brought back at their email or phone, or one whose name, email or phone
+ *  changes there) keeps the app and is
+ *  named ("in_file"), because once the file is in, a different record may be theirs — a
+ *  mother brought back on the family email her son leaves from. Staff can remove them
+ *  from the app afterwards. */
+export function importLeaversPlan(input: {
+  gymId: string;
+  leftIds: readonly string[];
+  records: readonly RecordBrief[];
+  members: readonly repo.MemberAgainstList[];
+  written: FileWrites;
+  scale: { listCurrent: number; seats: number };
+}): RemovalPlan {
+  const plan = recordRemovalPlan({ gymId: input.gymId, selectedIds: input.leftIds, records: input.records, members: input.members, scale: input.scale });
+  const reached = new Set(input.members.filter((member) => reachedByFile(member, input.written)).map((member) => member.userId));
+  const spared = plan.preview.endApp.filter((person) => person.userId !== null && reached.has(person.userId));
+  if (spared.length === 0) return plan;
+  const endApp = plan.endApp.filter((person) => !reached.has(person.userId));
+  const kept = new Map<MemberRemoveKeptReason, MemberRemovePerson[]>(plan.preview.kept.map((group) => [group.reason, [...group.people]]));
+  for (const person of spared) keep(kept, "in_file", person);
+  return {
+    moveIds: plan.moveIds,
+    endApp,
+    preview: {
+      ...plan.preview,
+      endApp: plan.preview.endApp.filter((person) => person.userId === null || !reached.has(person.userId)),
+      kept: KEPT_ORDER.flatMap((reason) => {
+        const people = kept.get(reason);
+        return people === undefined || people.length === 0 ? [] : [{ reason, people: [...people].sort(byNameThenId) }];
+      }),
+      large: largeRemoval(plan.moveIds.length, endApp.length, input.scale),
+      digest: removalDigest(input.gymId, plan.moveIds, endApp),
+    },
+  };
+}
+
+/** What the rule for these records reads, on `sql` (the pool, or a transaction). */
+async function recordInputsOn(
+  sql: repo.SqlOrTx,
+  gymId: string,
+  ids: readonly string[],
+): Promise<{ records: RecordBrief[]; members: repo.MemberAgainstList[]; scale: { listCurrent: number; seats: number } }> {
   const records = await repo.entriesBrief(sql, gymId, ids);
   const current = records.filter((record) => !record.former);
   const [members, scale] = await Promise.all([
@@ -265,7 +332,19 @@ async function recordPlanOn(sql: repo.SqlOrTx, gymId: string, ids: readonly stri
         }),
     repo.removalScale(sql, gymId),
   ]);
+  return { records, members, scale };
+}
+
+/** The plan for these records, read on `sql` (the pool, or the press's transaction). */
+async function recordPlanOn(sql: repo.SqlOrTx, gymId: string, ids: readonly string[]): Promise<RemovalPlan> {
+  const { records, members, scale } = await recordInputsOn(sql, gymId, ids);
   return recordRemovalPlan({ gymId, selectedIds: ids, records, members, scale });
+}
+
+/** An import's leavers box, read on `sql` before the file is applied. */
+export async function importLeaversPlanOn(sql: repo.SqlOrTx, gymId: string, leftIds: readonly string[], written: FileWrites): Promise<RemovalPlan> {
+  const { records, members, scale } = await recordInputsOn(sql, gymId, leftIds);
+  return importLeaversPlan({ gymId, leftIds, records, members, written, scale });
 }
 
 async function rosterPlanOn(sql: repo.SqlOrTx, gymId: string, userIds: readonly string[]): Promise<RemovalPlan> {
@@ -291,7 +370,7 @@ async function rosterPlanOn(sql: repo.SqlOrTx, gymId: string, userIds: readonly 
 
 /** A record door that would end somebody's app needs `members.remove` as well; the
  *  roster door that would move somebody's record needs `members.confirm` as well. */
-function requireForPlan(plan: RemovalPlan, privileges: readonly string[]): void {
+export function requireForPlan(plan: RemovalPlan, privileges: readonly string[]): void {
   if (plan.endApp.length > 0 && !privileges.includes("members.remove")) {
     throw new OrgsError(403, "forbidden", MEMBER_LIST_BY_HAND_WORDS.remove_needs_app);
   }

@@ -1155,9 +1155,29 @@ export type MemberListRowsResponse = z.infer<typeof memberListRowsResponseSchema
  *  the wrong file; "this would replace corrections your own staff typed in" is about
  *  the file being right and somebody's work being lost anyway. A screen that asked
  *  them together would let a yes to either stand for a yes to both. */
+/** At most this many people can be missing from one file and marked (§18.8). */
+export const MEMBER_LIST_MARKS_MAX = 20_000;
+
+/** STAFF'S MARK ON EACH PERSON THE FILE LEAVES OUT (spec Part 3 §18.8; ROADMAP 5b-v-d):
+ *  Left or Still a member, every one of them, nothing marked for staff. `missingDigest`
+ *  names the set they were shown (`memberListMissingSchema`); a set that moved is refused. */
+export const memberListMarksSchema = z
+  .object({
+    missingDigest: sha256Schema,
+    left: z.array(z.string().uuid()).max(MEMBER_LIST_MARKS_MAX),
+    stay: z.array(z.string().uuid()).max(MEMBER_LIST_MARKS_MAX),
+  })
+  .strict()
+  .refine((marks) => marks.left.length + marks.stay.length <= MEMBER_LIST_MARKS_MAX, { message: "Too many marks." });
+export type MemberListMarks = z.infer<typeof memberListMarksSchema>;
+
 export const memberListConfirmRequestSchema = z
   .object({
     acknowledgeLargeChange: z.boolean().optional(),
+    /** Required when a whole-list file leaves people out: each one marked. */
+    marks: memberListMarksSchema.optional(),
+    /** The leavers box's digest (`memberListLeaversSchema`), sent with `marks`. */
+    leaversDigest: sha256Schema.optional(),
     acknowledgeHandEdits: z.boolean().optional(),
     /** Staff's tick that the gym may keep these people's details here (§9.14). Asked
      *  of every confirm, and recorded on its audit row with who pressed it. */
@@ -1167,7 +1187,7 @@ export const memberListConfirmRequestSchema = z
 
 /** The words of that tick (RULINGS 2026-09-24). `{people}` is the organisation's word
  *  for its people ("members", "clients"), put in by the screen. */
-export const MEMBER_LIST_PERMISSION_WORDS = "I have permission to store these {people}' details.";
+export const MEMBER_LIST_PERMISSION_WORDS = "These are {gym}'s {people}, and I have permission to store their details.";
 export type MemberListConfirmRequest = z.infer<typeof memberListConfirmRequestSchema>;
 
 /** WHAT PRESSING CONFIRM DID.
@@ -1218,6 +1238,8 @@ export const MEMBER_LIST_CONFIRM_REFUSAL_WORDS = {
   hand_edits:
     "This file would replace details your staff typed in here. Check the fields below, then confirm again to let the file win.",
   permission_needed: "Tick the permission box first. Nothing was imported.",
+  marks_needed: "Mark everyone who isn't in this file as Left or Still a member first. Nothing was imported.",
+  leavers_changed: "Who would lose the app changed while you were looking, so nothing was imported. Look at the names again.",
 } as const;
 
 export const memberListHandEditsRefusalSchema = z.object({
@@ -1599,8 +1621,10 @@ export type MemberRemovePerson = z.infer<typeof memberRemovePersonSchema>;
  *  - `same_record`: in the app with the same record as someone ticked on "In the app", and
  *    not ticked: they keep the app, and their record moves to past members with that person;
  *  - `not_in_app`: a past member ticked with nobody in the app — nothing to remove;
- *  - `gone`: no longer on the list (or no longer in the app) since the page was read. */
-export const memberRemoveKeptReasonSchema = z.enum(["staff", "own_record", "shared_email", "same_record", "not_in_app", "gone"]);
+ *  - `gone`: no longer on the list (or no longer in the app) since the page was read;
+ *  - `in_file`: an import's leaver whose email or phone is also on someone in the file, so
+ *    the list can't yet say whose record they are: their app is left alone. */
+export const memberRemoveKeptReasonSchema = z.enum(["staff", "own_record", "shared_email", "same_record", "not_in_app", "gone", "in_file"]);
 export type MemberRemoveKeptReason = z.infer<typeof memberRemoveKeptReasonSchema>;
 
 /** A big removal needs its own tick: more than 10 and more than 10 % of the list (records moving)
@@ -1628,6 +1652,59 @@ export const memberRemovePreviewSchema = z
 export type MemberRemovePreview = z.infer<typeof memberRemovePreviewSchema>;
 
 export const memberRemovePreviewResponseSchema = z.object({ preview: memberRemovePreviewSchema });
+
+/** ONE PERSON A WHOLE-LIST FILE LEAVES OUT, as the list has them today (§18.8). */
+export const memberListMissingPersonSchema = z
+  .object({
+    entryId: z.string().uuid(),
+    fullName: z.string(),
+    email: z.string().nullable(),
+    phone: z.string().nullable(),
+    memberNumber: z.string().nullable(),
+    /** Their status on the list today. */
+    wasStatus: z.string().nullable(),
+    inApp: z.boolean(),
+    onList: memberListOnListSchema.nullable(),
+  })
+  .strict();
+export type MemberListMissingPerson = z.infer<typeof memberListMissingPersonSchema>;
+
+/** EVERYONE THE FILE LEAVES OUT, at once, so staff can mark them by status or all
+ *  together. `digest` names the set and goes back with the marks. */
+export const memberListMissingSchema = z
+  .object({
+    total: z.number().int().min(0),
+    digest: sha256Schema,
+    people: z.array(memberListMissingPersonSchema).max(MEMBER_LIST_MARKS_MAX),
+  })
+  .strict();
+export type MemberListMissing = z.infer<typeof memberListMissingSchema>;
+export const memberListMissingResponseSchema = z.object({ missing: memberListMissingSchema });
+
+export const memberListLeaversRequestSchema = z.object({ marks: memberListMarksSchema }).strict();
+export type MemberListLeaversRequest = z.infer<typeof memberListLeaversRequestSchema>;
+
+/** THE BOX BEFORE AN IMPORT WITH LEAVERS (RULINGS 2026-09-28): who moves to past members,
+ *  who loses the app with them, who keeps it and why (Remove's own box), how many stay on
+ *  the list, and the wrong-file guard measured on these marks. `preview.digest` goes back
+ *  with the confirm as `leaversDigest`. */
+export const memberListLeaversSchema = z
+  .object({
+    preview: memberRemovePreviewSchema,
+    stay: z.number().int().min(0),
+    guard: memberListGuardSchema,
+  })
+  .strict();
+export type MemberListLeavers = z.infer<typeof memberListLeaversSchema>;
+export const memberListLeaversResponseSchema = z.object({ leavers: memberListLeaversSchema });
+
+/** The confirm's refusal when the box moved: nothing imported, the new box. */
+export const memberListLeaversChangedSchema = z.object({
+  error: z.literal("leavers_changed"),
+  message: z.string(),
+  leavers: memberListLeaversSchema,
+  requestId: z.string().optional(),
+});
 
 /** The box for the people selected on "Your list" or "Past members". */
 export const memberListRemovePreviewRequestSchema = z.object({ selection: memberListSelectionSchema }).strict();

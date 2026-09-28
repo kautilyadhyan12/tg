@@ -4,6 +4,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
+import { everyoneLeft } from "./memberListEveryoneLeft.js";
 import { loadConfig } from "../src/config.js";
 import type { MemberListConfirmed, MemberListPreview } from "@app/shared";
 
@@ -69,8 +70,15 @@ d("member list: the same person next month (real Postgres)", () => {
     await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
   };
 
-  const post = (path: string, payload: unknown, cookies: Record<string, string> = {}) =>
-    api().inject({ method: "POST", url: path, remoteAddress: nextIp(), headers: { "content-type": "application/json" }, cookies, payload: JSON.stringify(payload) });
+  const post = async (path: string, payload: unknown, cookies: Record<string, string> = {}) =>
+    api().inject({
+      method: "POST",
+      url: path,
+      remoteAddress: nextIp(),
+      headers: { "content-type": "application/json" },
+      cookies,
+      payload: JSON.stringify(await everyoneLeft(api(), path, payload, cookies)),
+    });
   const patch = (path: string, payload: unknown, cookies: Record<string, string>) =>
     api().inject({ method: "PATCH", url: path, remoteAddress: nextIp(), headers: { "content-type": "application/json" }, cookies, payload: JSON.stringify(payload) });
 

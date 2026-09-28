@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import {
   AlertTriangle,
   CalendarDays,
@@ -25,9 +25,12 @@ import {
   datesToCheck,
   disbelieved,
   doneWords,
+  firstUnmarkedLine,
   groupNote,
   guardNumber,
   importedColumnCount,
+  markCounts,
+  marksBody,
   missingOf,
   missingStatusLine,
   missingTitle,
@@ -45,6 +48,8 @@ import {
   withDateOrder,
 } from './memberListView';
 import { goneWords, gymToday } from './memberListPeople';
+import MemberListImportLeavers from './MemberListImportLeavers';
+import MemberListMissing from './MemberListMissing';
 
 // Importing a member list (ROADMAP 5a; spec Part 3 §9.14): Upload, then Review. The
 // server reads, counts and applies; this box shows what matters and sends staff's
@@ -249,7 +254,7 @@ export function Tick({ checked, onChange, children, tone = 'plain' }) {
 }
 
 /** The import box. Opened from the Members screen's "Import" card. */
-export default function MemberListUpload({ gymId, words, readOnly, onClose, onImported }) {
+export default function MemberListUpload({ gymId, gym = null, words, readOnly, onClose, onImported }) {
   const titleId = useId();
   const dialogRef = useRef(null);
   const fileInput = useRef(null);
@@ -269,6 +274,11 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
   const [handEdits, setHandEdits] = useState(null);
   const [missing, setMissing] = useState(null);
   const [missingNames, setMissingNames] = useState([]);
+  // Everyone the file leaves out (§18.8): { people, digest }, 'loading' or 'error'; and
+  // staff's mark on each (entryId → 'left' | 'stay').
+  const [missingSet, setMissingSet] = useState(null);
+  const [marks, setMarks] = useState(() => new Map());
+  const [leaversOpen, setLeaversOpen] = useState(false);
   const [answer, setAnswer] = useState(null);
   const [typed, setTyped] = useState('');
   const [permission, setPermission] = useState(false);
@@ -339,6 +349,22 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
       );
   };
 
+  /** Everyone the file leaves out, all at once, so staff can mark them by status or all
+   *  together. Nothing is marked for them. */
+  const loadMissing = (uploadId) => {
+    setMissingSet('loading');
+    return Promise.resolve()
+      .then(() => orgService.getMemberListMissing(gymId, uploadId))
+      .then(
+        (res) => {
+          if (shown.current === uploadId) setMissingSet(res.data.missing);
+        },
+        () => {
+          if (shown.current === uploadId) setMissingSet('error');
+        },
+      );
+  };
+
   /** Reads a file. Every read is the whole list except the one "They're still members"
    *  asks for, which reads the same bytes as people to add. The review asks about anybody
    *  missing only when there is somebody. */
@@ -366,7 +392,10 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
         setMissing(m);
         setMissingNames([]);
         missingGroup.current = m?.group ?? null;
-        if (m !== null) void loadPage(p.uploadId, m.group, 0);
+        setMarks(new Map());
+        setMissingSet(null);
+        if (m?.group === 'gone') void loadMissing(p.uploadId);
+        else if (m !== null) void loadPage(p.uploadId, m.group, 0);
         // AN ANSWER IS ABOUT THE PEOPLE STAFF WERE SHOWN. Any read of the whole list can
         // change who is missing (a colleague's walk-ins, another column choice), so the
         // question is always asked afresh, with nothing picked.
@@ -407,6 +436,9 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
     setHandEdits(null);
     setMissing(null);
     setMissingNames([]);
+    setMissingSet(null);
+    setMarks(new Map());
+    setLeaversOpen(false);
     setAnswer(null);
     setTyped('');
     setPermission(false);
@@ -442,6 +474,51 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
    *  swapped — is the whole list, and asks about the missing people afresh. */
   const readAgain = (map) => read(source, 'whole_list', map);
 
+  const finished = (confirmed) => {
+    setLeaversOpen(false);
+    setDone(confirmed);
+    setStage('done');
+    onImported?.();
+  };
+
+  /** A refused Import: the numbers it carries go on screen, with its sentence. */
+  const refused = (err) => {
+    const code = errorCode(err);
+    const body = err?.response?.data;
+    if (code === 'large_change' && body?.guard) {
+      setGuard(body.guard);
+      setTyped('');
+    }
+    if (code === 'hand_edits' && body?.handEdits) {
+      setHandEdits(body.handEdits);
+      setHandTick(false);
+    }
+    setError({ text: errorText(err, "We couldn't import the list. Please try again."), readAgain: READ_AGAIN.includes(code) });
+  };
+
+  /** The box's press: the marks, the box's digest and, for a big change, its answer. */
+  const pressWithLeavers = async (leaversDigest, acknowledgeLargeChange) => {
+    const res = await orgService.confirmMemberList(gymId, preview.uploadId, {
+      permissionConfirmed: permission,
+      acknowledgeLargeChange,
+      acknowledgeHandEdits: handEdits.entries > 0 && handTick,
+      marks: marksBody(missingSet, marks),
+      leaversDigest,
+    });
+    return res.data.confirmed;
+  };
+
+  const uploadId = preview?.uploadId ?? null;
+  const loadLeavers = useCallback(
+    () => orgService.getMemberListLeavers(gymId, uploadId, marksBody(missingSet, marks)).then((res) => res.data.leavers),
+    [gymId, uploadId, missingSet, marks],
+  );
+  const leaversFailed = useCallback((err) => {
+    setLeaversOpen(false);
+    // `refused` only sets state, so the first render's is as good as any.
+    refused(err);
+  }, []);
+
   const confirm = async () => {
     setBusy('importing');
     setError(null);
@@ -451,21 +528,9 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
         acknowledgeLargeChange: preview.mode === 'whole_list' && guard.needsTick && answer === 'left' && typedMatches(typed, guard),
         acknowledgeHandEdits: handEdits.entries > 0 && handTick,
       });
-      setDone(res.data.confirmed);
-      setStage('done');
-      onImported?.();
+      finished(res.data.confirmed);
     } catch (err) {
-      const code = errorCode(err);
-      const body = err?.response?.data;
-      if (code === 'large_change' && body?.guard) {
-        setGuard(body.guard);
-        setTyped('');
-      }
-      if (code === 'hand_edits' && body?.handEdits) {
-        setHandEdits(body.handEdits);
-        setHandTick(false);
-      }
-      setError({ text: errorText(err, "We couldn't import the list. Please try again."), readAgain: READ_AGAIN.includes(code) });
+      refused(err);
     } finally {
       setBusy(null);
     }
@@ -605,18 +670,25 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
     const skipped = preview.file.noContact + preview.file.duplicates;
     const wholeList = preview.mode === 'whole_list';
     const needsTyping = wholeList && guard.needsTick;
+    // The people the file leaves out are marked one by one (§18.8); the big-change number
+    // is then typed in the box Import opens, which names who moves and who loses the app.
+    const marking = missing?.group === 'gone';
+    const markSet = marking && missingSet !== null && typeof missingSet === 'object' ? missingSet : null;
+    const allMarked = markSet !== null && markCounts(markSet.people, marks).unmarked === 0;
+    const unmarkedLine = markSet === null ? null : firstUnmarkedLine(markSet.people, marks);
     const canImport =
       busy === null &&
       !readOnly &&
       !preview.needsMapping &&
       !dirty &&
       permission &&
-      (missing === null || answer !== null) &&
-      (!needsTyping || (answer === 'left' && typedMatches(typed, guard))) &&
+      (marking
+        ? allMarked
+        : (missing === null || answer !== null) && (!needsTyping || (answer === 'left' && typedMatches(typed, guard)))) &&
       (handEdits.entries === 0 || handTick);
     // "Import 3 members" only when nobody is moved to past members by the same press.
     const importLabel =
-      summary.hero !== null && (missing === null || answer === 'keep') ? `Import ${count(summary.hero)} ${peopleWord(summary.hero, words)}` : 'Import';
+      summary.hero !== null && (missing === null || (!marking && answer === 'keep')) ? `Import ${count(summary.hero)} ${peopleWord(summary.hero, words)}` : 'Import';
     const namesFor = (group) => (
       <Names
         page={pages[group]}
@@ -710,7 +782,24 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
 
         {openGroup !== null && openGroup !== missing?.group ? namesFor(openGroup) : null}
 
-        {missing !== null && !preview.needsMapping ? (
+        {marking && !preview.needsMapping ? (
+          markSet !== null ? (
+            <MemberListMissing missing={markSet} marks={marks} onMarks={setMarks} listSize={guard.listSize} words={words} disabled={busy !== null || readOnly} />
+          ) : missingSet === 'error' ? (
+            <div role="alert" className="rounded-2xl px-4 py-3 text-sm flex items-center justify-between gap-3" style={{ background: C.redBg, color: '#fca5a5' }}>
+              We couldn&apos;t load who isn&apos;t in this file.
+              <button type="button" onClick={() => void loadMissing(preview.uploadId)} className={LINK} style={{ color: C.orange }}>
+                Try again
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-sm" style={{ color: C.muted }}>
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading who isn&apos;t in this file…
+            </div>
+          )
+        ) : null}
+
+        {missing !== null && !marking && !preview.needsMapping ? (
           <div className="rounded-[18px] p-4 flex flex-col gap-3.5" style={{ background: C.card, border: '1px solid rgba(255,138,31,0.45)' }} data-testid="missing">
             <div>
               <div className="text-[17px] font-bold" style={{ color: '#fff' }}>
@@ -924,14 +1013,20 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
               </Tick>
             ) : null}
             <Tick checked={permission} onChange={setPermission}>
-              {MEMBER_LIST_PERMISSION_WORDS.replace('{people}', words.people)}
+              {MEMBER_LIST_PERMISSION_WORDS.replace('{gym}', gym?.name ?? 'your gym').replace('{people}', words.people)}
             </Tick>
-            <button type="button" onClick={confirm} disabled={!canImport} className={`${PRIMARY} mt-2`} style={primaryStyle(canImport)}>
+            <button
+              type="button"
+              onClick={marking ? () => setLeaversOpen(true) : confirm}
+              disabled={!canImport}
+              className={`${PRIMARY} mt-2`}
+              style={primaryStyle(canImport)}
+            >
               {busy === 'importing' ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
               {importLabel}
             </button>
             <p className="text-[13px] text-center mt-1.5" style={{ color: C.muted }}>
-              {dirty ? 'Apply your column changes first.' : 'Nobody is emailed.'}
+              {dirty ? 'Apply your column changes first.' : unmarkedLine !== null ? `${unmarkedLine} Nobody is emailed.` : 'Nobody is emailed.'}
             </p>
           </div>
         ) : null}
@@ -999,6 +1094,17 @@ export default function MemberListUpload({ gymId, words, readOnly, onClose, onIm
           {body}
         </div>
       </div>
+      {leaversOpen && stage === 'review' ? (
+        <MemberListImportLeavers
+          gym={gym}
+          words={words}
+          load={loadLeavers}
+          press={pressWithLeavers}
+          onDone={finished}
+          onFailed={leaversFailed}
+          onClose={() => setLeaversOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

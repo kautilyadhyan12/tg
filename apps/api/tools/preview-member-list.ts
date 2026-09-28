@@ -221,6 +221,9 @@ try {
         acknowledgeHandEdits: process.argv.includes("--acknowledge-hand-edits"),
         // Whoever runs --confirm is the one saying the gym may keep this list.
         permissionConfirmed: true,
+        // Who has left is marked person by person on the screen (§18.8), never here.
+        marks: null,
+        leaversDigest: null,
       },
       () => Promise.resolve(true),
     );
@@ -237,6 +240,9 @@ try {
           `${String(answer.guard.membersLeaving)} of ${String(answer.guard.membersListedNow)} app members would be marked as dropped off.\n` +
           "NOTHING was changed. Re-run with --acknowledge-large-change to go ahead.",
       );
+      process.exitCode = 1;
+    } else if (answer.kind === "marks_needed" || answer.kind === "leavers_changed") {
+      console.log("REFUSED (marks_needed): this file leaves people out. Mark each one on the Review screen.\nNOTHING was changed.");
       process.exitCode = 1;
     } else if (answer.kind === "hand_edits") {
       console.log(

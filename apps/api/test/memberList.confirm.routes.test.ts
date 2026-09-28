@@ -21,6 +21,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
+import { everyoneLeft } from "./memberListEveryoneLeft.js";
 import { loadConfig } from "../src/config.js";
 import { expireStagedMemberListUploads } from "../src/modules/orgs/memberList/expiry.js";
 import { MEMBER_LIST_STATUS_CHIPS_MAX } from "@app/shared";
@@ -132,14 +133,14 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
     await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
   };
 
-  const post = (path: string, payload: unknown, cookies: Record<string, string> = {}, ip = nextIp()) =>
+  const post = async (path: string, payload: unknown, cookies: Record<string, string> = {}, ip = nextIp()) =>
     api().inject({
       method: "POST",
       url: path,
       remoteAddress: ip,
       headers: { "content-type": "application/json" },
       cookies,
-      payload: JSON.stringify(payload),
+      payload: JSON.stringify(await everyoneLeft(api(), path, payload, cookies)),
     });
 
   const get = (path: string, cookies: Record<string, string> = {}, ip = nextIp()) =>
@@ -574,11 +575,11 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       expect(after[0]?.at).not.toBeNull();
       expect(after[0]?.at?.getTime()).toBeGreaterThanOrEqual(before[0]?.at?.getTime() ?? 0);
 
-      // AND NOBODY WAS REMOVED FROM THE GYM. Coming off a list is not being
-      // removed from a gym — that is 3a-iv, behind a guard and a count.
-      const live = await sql<{ n: number }[]>`
-        SELECT count(*)::int AS n FROM gym_members WHERE gym_id = ${org.org.id} AND removed_at IS NULL`;
-      expect(live[0]?.n).toBe(3);
+      // "THEY'VE LEFT" ENDS THE APP TOO (RULINGS 2026-09-28): the member marked Left is
+      // removed from the gym with their record, and nobody else is.
+      const live = await sql<{ user_id: string }[]>`
+        SELECT user_id FROM gym_members WHERE gym_id = ${org.org.id} AND removed_at IS NULL`;
+      expect(live.map((r) => r.user_id).sort()).toEqual([owner.userId, stays.userId].sort());
     },
     TEST_TIMEOUT_MS,
   );

@@ -3332,6 +3332,16 @@ first. Nobody is emailed."). Over the large-change line the number of leavers is
 today. The confirm sends who left and who stays, with the digest of the missing set; a set
 that moved is refused as `list_changed`, nothing applied.
 
+**Built in 5b-v-d-i (2026-09-28).** Import with anyone marked Left opens a box first, as
+Remove does (18.6): who moves to past members, who loses the app with them, who keeps it and
+why, how many stay; the large-change number is typed there. It is Remove's own rule on the
+records marked Left, worked out before the file is applied, with one exception that ends
+nobody's app by mistake: someone in the app whose email or phone the file itself writes to (a
+record added or brought back there, or one whose name, email or phone changes) keeps the app,
+named "Keep the app for now: someone in this file has the same email or phone", because once
+the file is in, a different record may be theirs. The press carries the box's digest; a box
+that moved is refused as `leavers_changed` with the new box, nothing applied.
+
 ### 18.9 Every feature kept
 
 | Today | In the redesign |

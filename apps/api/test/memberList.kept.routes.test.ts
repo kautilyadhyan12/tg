@@ -20,6 +20,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
+import { everyoneLeft } from "./memberListEveryoneLeft.js";
 import { loadConfig } from "../src/config.js";
 import { MEMBER_LIST_MAX_EXTRA_FIELDS } from "@app/shared";
 import type { MemberListConfirmed, MemberListEntriesPage, MemberListPreview, MemberListView } from "@app/shared";
@@ -169,18 +170,25 @@ d("member list: the wider record, kept (real Postgres)", () => {
     await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
   };
 
-  const post = (path: string, payload: unknown, cookies: Record<string, string> = {}, ip = nextIp()) =>
+  const post = async (path: string, payload: unknown, cookies: Record<string, string> = {}, ip = nextIp()) =>
     api().inject({
       method: "POST",
       url: path,
       remoteAddress: ip,
       headers: { "content-type": "application/json" },
       cookies,
-      payload: JSON.stringify(payload),
+      payload: JSON.stringify(await everyoneLeft(api(), path, payload, cookies)),
     });
 
   const get = (path: string, cookies: Record<string, string> = {}, ip = nextIp()) =>
     api().inject({ method: "GET", url: path, remoteAddress: ip, cookies });
+
+  /** Someone an import took off the list before 5b-v-d, which never ended anybody's app:
+   *  their record past and still in the app. Imports end it now (RULINGS 2026-09-28); this
+   *  is the state the gyms' earlier imports left, which the screens still have to read. */
+  const stillInAppAsBefore = async (gymId: string, userId: string) => {
+    await sql`UPDATE gym_members SET removed_at = NULL, removed_entry_id = NULL WHERE gym_id = ${gymId} AND user_id = ${userId}`;
+  };
 
   const makeUser = async (local: string) => {
     const email = `mkept-t-${local}@example.com`;
@@ -493,6 +501,7 @@ d("member list: the wider record, kept (real Postgres)", () => {
       const second = [{ ...person(2), status: "Active" }];
       const applied = await apply(org.org.id, owner.cookies, file(second));
       expect(applied.applied).toMatchObject({ gone: 1, new: 0, changed: 0, unchanged: 1 });
+      await stillInAppAsBefore(org.org.id, leaver.userId);
 
       // **THE RECORD IS STILL THERE**, with the day they came off.
       expect(await countsOf(org.org.id)).toEqual({ current: 1, former: 1 });
@@ -702,6 +711,7 @@ d("member list: the wider record, kept (real Postgres)", () => {
 
       // Now they come off the list.
       await apply(org.org.id, owner.cookies, file([person(2)]));
+      await stillInAppAsBefore(org.org.id, leaver.userId);
       const formerPage = pageOf(await get(`${listUrl(org.org.id)}/entries?records=former`, owner.cookies));
       expect(formerPage.entries.map((e) => e.memberNumber)).toEqual(["K-1"]);
       // Who uses the app with the record's email is said, by name; that it is the

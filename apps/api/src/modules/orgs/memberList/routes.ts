@@ -21,6 +21,7 @@ import {
   memberInviteSelectedPeopleRequestSchema,
   memberInviteSelectedPreviewRequestSchema,
   memberListConfirmRequestSchema,
+  memberListLeaversRequestSchema,
   memberListEntriesQuerySchema,
   memberListEntryInputSchema,
   memberListEntryPatchSchema,
@@ -212,6 +213,26 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
   );
 
 
+  /** Everyone a whole-list file leaves out, for staff to mark one by one (§18.8). */
+  app.get("/v1/orgs/:gymId/member-list/uploads/:uploadId/missing", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(memberListParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const missing = await service.readMissing(listDeps, requireUserId(req), params.gymId, params.uploadId, readGate(req, reply));
+    if (missing === null) return;
+    return reply.status(200).send({ missing });
+  });
+
+  /** The box before an import with leavers: who moves, who loses the app, who keeps it. */
+  app.post("/v1/orgs/:gymId/member-list/uploads/:uploadId/leavers", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(memberListParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(memberListLeaversRequestSchema, req.body ?? {}, req, reply);
+    if (body === null) return;
+    const leavers = await service.previewLeavers(listDeps, requireUserId(req), params.gymId, params.uploadId, body.marks, readGate(req, reply));
+    if (leavers === null) return;
+    return reply.status(200).send({ leavers });
+  });
+
   /** CONFIRMING IS ITS OWN ALLOWANCE, and a much looser one than uploading: it
    *  reads no file and spawns no worker, and staff correcting a mapping and
    *  pressing again must not be throttled into thinking the button is broken.
@@ -246,6 +267,8 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
           acknowledgeLargeChange: body.acknowledgeLargeChange ?? false,
           acknowledgeHandEdits: body.acknowledgeHandEdits ?? false,
           permissionConfirmed: body.permissionConfirmed ?? false,
+          marks: body.marks ?? null,
+          leaversDigest: body.leaversDigest ?? null,
         },
         confirmGate(req, reply),
       );
@@ -277,6 +300,20 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
           return reply.status(409).send({
             error: "permission_needed",
             message: MEMBER_LIST_CONFIRM_REFUSAL_WORDS.permission_needed,
+            requestId: req.id,
+          });
+        case "marks_needed":
+          return reply.status(409).send({
+            error: "marks_needed",
+            message: MEMBER_LIST_CONFIRM_REFUSAL_WORDS.marks_needed,
+            requestId: req.id,
+          });
+        case "leavers_changed":
+          // The new box, so the screen shows who would move and lose the app now.
+          return reply.status(409).send({
+            error: "leavers_changed",
+            message: MEMBER_LIST_CONFIRM_REFUSAL_WORDS.leavers_changed,
+            leavers: answer.leavers,
             requestId: req.id,
           });
         case "hand_edits":

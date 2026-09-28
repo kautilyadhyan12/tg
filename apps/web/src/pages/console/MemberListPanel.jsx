@@ -533,6 +533,7 @@ export default function MemberListPanel({
         {importing ? (
           <MemberListUpload
             gymId={gymId}
+            gym={gym}
             words={words}
             readOnly={readOnly}
             onClose={() => setImporting(false)}
@@ -796,6 +797,7 @@ export default function MemberListPanel({
       {importing ? (
         <MemberListUpload
           gymId={gymId}
+          gym={gym}
           words={words}
           readOnly={readOnly}
           onClose={() => setImporting(false)}

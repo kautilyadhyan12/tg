@@ -192,6 +192,78 @@ export function missingTitle(missing, needsTick, words) {
   return `${of(missing.n, words.person, words.people)} ${verb} in this file`;
 }
 
+// ── Who has left, person by person (5b-v-d; spec Part 3 §18.8) ─────────────
+
+/** "4 of your 340 members aren't in this file". */
+export function missingMarkTitle(n, listSize, words) {
+  const verb = n === 1 ? "isn't" : "aren't";
+  if (listSize > n) return `${count(n)} of your ${count(listSize)} ${words.people} ${verb} in this file`;
+  return `${of(n, words.person, words.people)} ${verb} in this file`;
+}
+
+/** The status words of the missing people with how many carry each, most first, for
+ *  selecting them together. Someone with no status is "No status". */
+export function missingStatusChips(people) {
+  const counts = new Map();
+  for (const p of people) {
+    const label = p.wasStatus === null || p.wasStatus === '' ? 'No status' : p.wasStatus;
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  return [...counts].map(([label, n]) => ({ label, n })).sort((a, b) => b.n - a.n || (a.label < b.label ? -1 : 1));
+}
+
+/** Whether a person carries this chip's status word. */
+export function hasStatusChip(person, label) {
+  return label === 'No status' ? person.wasStatus === null || person.wasStatus === '' : person.wasStatus === label;
+}
+
+/** How many are marked each way: { left, stay, unmarked }. `marks` maps entryId to
+ *  'left' or 'stay'. */
+export function markCounts(people, marks) {
+  let left = 0;
+  let stay = 0;
+  for (const p of people) {
+    const mark = marks.get(p.entryId);
+    if (mark === 'left') left += 1;
+    else if (mark === 'stay') stay += 1;
+  }
+  return { left, stay, unmarked: people.length - left - stay };
+}
+
+/** "2 left · 1 still a member · 1 not marked yet". */
+export function markTally(people, marks, words) {
+  const { left, stay, unmarked } = markCounts(people, marks);
+  return [`${count(left)} left`, `${count(stay)} still ${stay === 1 ? `a ${words.person}` : words.people}`, `${count(unmarked)} not marked yet`].join(' · ');
+}
+
+/** "Mark Leo Park first." / "Mark Leo Park and 2 more first.", or null when everyone is
+ *  marked. */
+export function firstUnmarkedLine(people, marks) {
+  const unmarked = people.filter((p) => !marks.has(p.entryId));
+  if (unmarked.length === 0) return null;
+  const name = unmarked[0].fullName || 'No name';
+  return unmarked.length === 1 ? `Mark ${name} first.` : `Mark ${name} and ${count(unmarked.length - 1)} more first.`;
+}
+
+/** What the server is sent: every missing person Left or Still a member. */
+export function marksBody(missing, marks) {
+  const left = [];
+  const stay = [];
+  for (const p of missing.people) {
+    const mark = marks.get(p.entryId);
+    if (mark === 'left') left.push(p.entryId);
+    else if (mark === 'stay') stay.push(p.entryId);
+  }
+  return { missingDigest: missing.digest, left, stay };
+}
+
+/** The marks with these people marked `mark`. */
+export function withMarks(marks, entryIds, mark) {
+  const next = new Map(marks);
+  for (const id of entryIds) next.set(id, mark);
+  return next;
+}
+
 /** "Ben Cole, Amy Shaw, Raj Patel and 2 more". */
 export function someNames(names, total) {
   if (names.length === 0) return '';

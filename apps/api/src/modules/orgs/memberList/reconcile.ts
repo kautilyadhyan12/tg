@@ -176,6 +176,10 @@ export interface ReconcileInput {
    *  marks at all (§9.7): with nothing to be missing from, "never listed" beside
    *  every member would be an accusation about nobody. */
   hasList: boolean;
+  /** Records missing from a whole-list file that staff marked "Still a member" (spec Part 3
+   *  §18.8): they stay on the list. Absent, every missing record is `gone`. Ignored in
+   *  `add` mode. */
+  stay?: ReadonlySet<string>;
 }
 
 /** What the console prints beside one of the gym's members, measured against the
@@ -267,6 +271,13 @@ export interface Reconciled {
    *  really left and would put them in the wrong-file guard's numbers for every upload
    *  for ever — the same mistake `leaving` avoids on the members' side. */
   gone: ReconciledPerson[];
+  /** Every current record a whole-list file does not hold: `gone` and the ones marked
+   *  "Still a member". What staff mark one by one (§18.8). Empty in `add` mode. */
+  missing: ReconciledPerson[];
+  /** The contacts and records this file writes that can change whose record someone is
+   *  (added, coming back, or a name, email or phone changed; old and new values). Someone in the app these reach may be another record's person once it is
+   *  applied, so an import's leavers never end their app (5b-v-d). */
+  written: { emails: Set<string>; phones: Set<string>; entryIds: Set<string> };
   /** FIELD BY FIELD, WHAT THE `changed` PEOPLE'S RECORDS WOULD MOVE (§11.4), and the
    *  same for the gym's own columns. Only fields something would really change appear,
    *  and the order is the fields' own.
@@ -648,6 +659,7 @@ export function inviteCounts(
  *  then the guard's numbers. */
 export function reconcile(input: ReconcileInput): Reconciled {
   const { entries, members, mode, hasList, keptFields, carries, endsOnKind } = input;
+  const stay = mode === "add" ? new Set<string>() : (input.stay ?? new Set<string>());
 
   // THE LIST AS IT STANDS IS THE CURRENT RECORDS, and every count, every match and
   // every "who comes off" below is about those alone. The FORMER records are still
@@ -688,7 +700,7 @@ export function reconcile(input: ReconcileInput): Reconciled {
   // everybody already on the list beside it. Every "would this member still be
   // listed" question below is asked of this, which is what makes `add` mode take
   // nobody off without a single branch saying so.
-  const newList = namedContacts(mode === "add" ? [...rows, ...current] : rows);
+  const newList = namedContacts(mode === "add" ? [...rows, ...current] : [...rows, ...current.filter((entry) => stay.has(entry.id))]);
 
   const fresh: ReconciledPerson[] = [];
   const added: ReconciledPerson[] = [];
@@ -789,7 +801,7 @@ export function reconcile(input: ReconcileInput): Reconciled {
   // than an empty set handed in, because `rows: []` in whole-list mode is a real
   // answer: an export of nobody would empty the list, and the guard is what
   // stops that going through unnoticed.
-  const gone: ReconciledPerson[] =
+  const missing: ReconciledPerson[] =
     mode === "add"
       ? []
       : current
@@ -811,6 +823,21 @@ export function reconcile(input: ReconcileInput): Reconciled {
             // to them is a date on their own record (§11.1).
             moved: [],
           }));
+  // Staff marked each missing person (§18.8): "Still a member" stays on the list.
+  const gone = missing.filter((person) => person.entryId === null || !stay.has(person.entryId));
+
+  // Only what can change whose record someone is (`whose.ts`): a record added or brought
+  // back, or one whose name, email or phone moves. A status or date changing is not it.
+  const written = { emails: new Set<string>(), phones: new Set<string>(), entryIds: new Set<string>() };
+  const who = new Set<string>(["fullName", "email", "phone"]);
+  for (const person of [...added, ...returning, ...changed.filter((one) => one.moved.some((field) => who.has(field)))]) {
+    addContact(person, written.emails, written.phones);
+    const entry = person.at === null ? undefined : matched[person.at]?.entry;
+    if (entry !== undefined) {
+      addContact(entry, written.emails, written.phones);
+      written.entryIds.add(entry.id);
+    }
+  }
 
   // THE GYM'S OWN MEMBERS. `listedNow` is how many of them the list being
   // replaced holds; `leaving` is how many of THOSE the new list does not.
@@ -860,6 +887,7 @@ export function reconcile(input: ReconcileInput): Reconciled {
   const listedAfter = new Set<string>();
   for (const match of matched) if (match !== null) listedAfter.add(match.entry.id);
   if (mode === "add") for (const entry of current) listedAfter.add(entry.id);
+  for (const person of missing) if (person.entryId !== null && stay.has(person.entryId)) listedAfter.add(person.entryId);
   const onTheList = members
     .filter((member) => member.seatCounted)
     .map((member) => {
@@ -926,6 +954,8 @@ export function reconcile(input: ReconcileInput): Reconciled {
     changed,
     unchanged,
     gone,
+    missing,
+    written,
     fieldChanges,
     extraChanges,
     handEdits,

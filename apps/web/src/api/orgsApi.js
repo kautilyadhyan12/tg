@@ -33,6 +33,9 @@ import {
   memberRemovedSelectedResponseSchema,
   memberRemovePreviewResponseSchema,
   memberRemoveRefusedSchema,
+  memberListLeaversChangedSchema,
+  memberListLeaversResponseSchema,
+  memberListMissingResponseSchema,
   memberListConfirmResponseSchema,
   memberListEntriesResponseSchema,
   memberListEntryDeletedSchema,
@@ -886,6 +889,24 @@ export const orgService = {
       ),
     ),
 
+  /** GET …/uploads/:uploadId/missing — everyone a whole-list file leaves out, to mark
+   *  one by one (§18.8), with the digest the marks go back with. */
+  getMemberListMissing: (gymId, uploadId) =>
+    readThrough(
+      memberListMissingResponseSchema,
+      'the names',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/uploads/${encodeURIComponent(uploadId)}/missing`),
+    ),
+
+  /** POST …/uploads/:uploadId/leavers — the box before Import: who moves to past members,
+   *  who loses the app with them, who keeps it and why. */
+  getMemberListLeavers: (gymId, uploadId, marks) =>
+    readThrough(
+      memberListLeaversResponseSchema,
+      'who has left',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/uploads/${encodeURIComponent(uploadId)}/leavers`, { marks }),
+    ),
+
   /** POST …/uploads/:uploadId/confirm — apply it. The ticks belong to THIS press; a
    *  second press of an applied upload is a 200 with the same numbers. */
   confirmMemberList: (gymId, uploadId, body) =>
@@ -1308,6 +1329,12 @@ export function selectionChanged(err) {
 /** The box a refused Remove answers with, nothing done: `{ kind, preview }`, kind
  *  'remove_changed' (the people changed) or 'large_change' (the tick is needed), or null
  *  for any other failure. */
+/** An Import refused because the leavers box moved: the new box, or null. */
+export function leaversChanged(err) {
+  const parsed = memberListLeaversChangedSchema.safeParse(err?.response?.data);
+  return parsed.success ? { message: parsed.data.message, leavers: parsed.data.leavers } : null;
+}
+
 export function removeRefused(err) {
   const parsed = memberRemoveRefusedSchema.safeParse(err?.response?.data);
   return parsed.success ? { kind: parsed.data.error, message: parsed.data.message, preview: parsed.data.preview } : null;
