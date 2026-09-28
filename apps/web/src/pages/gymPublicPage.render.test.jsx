@@ -224,6 +224,17 @@ describe('photos (20c-iv-b)', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  it('no photo is cropped: each is shown whole, the main one at its own shape (Kd, click-through)', async () => {
+    api.getPublicGymPage.mockResolvedValue({ data: { page: { ...PAGE, photos: [{ id: ids[0], width: 1500, height: 2000 }, { id: ids[1], width: 2000, height: 1500 }] } } });
+    draw();
+    const main = await screen.findByRole('img', { name: 'Canal Street Gym, photo 1 of 2' });
+    for (const img of screen.getAllByRole('img')) {
+      expect(img.className).toContain('object-contain');
+      expect(img.className).not.toContain('object-cover');
+    }
+    expect(main.closest('button').style.aspectRatio).toBe('1500 / 2000');
+  });
+
   it('one photo has no Previous or Next; no photos, no photo section', async () => {
     api.getPublicGymPage.mockResolvedValue({ data: { page: withPhotos(ids.slice(0, 1)) } });
     draw();

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, Copy, ExternalLink, ImagePlus, Loader2, Plus, Star, Trash2, X } from 'lucide-react';
 import { GYM_PAGE_MAX_ABOUT_CHARS, GYM_PAGE_MAX_OWN_FACILITY_CHARS, GYM_PAGE_MAX_PHOTOS } from '@app/shared';
 import { orgService, errorStatus, errorText, gymPhotoUrl } from '../../api/orgsApi';
+import PhotoViewer from '../../components/common/PhotoViewer';
 import { ConfirmInline } from '../../components/console/ConsoleStates';
 import { embedCode, gymPageUrl } from '../gymPublicView';
 import { pickProblem, preparePagePhoto } from './gymPagePhotos';
@@ -85,6 +86,8 @@ export default function GymPageSheet({ gymId, gym, words, readOnly, onClose }) {
   const [preparing, setPreparing] = useState(false);
   const [photoProblem, setPhotoProblem] = useState(null);
   const pickerRef = useRef(null);
+  /** The photo open full size, by its place in the list, or null. */
+  const [viewing, setViewing] = useState(null);
 
   useEffect(() => {
     let gone = false;
@@ -110,6 +113,13 @@ export default function GymPageSheet({ gymId, gym, words, readOnly, onClose }) {
   const link = page === null ? '' : gymPageUrl(origin, page.slug);
   const code = page === null ? '' : embedCode(origin, page.slug, gym?.name ?? '');
   const title = `Your ${words.it} page`;
+  /** Each photo in the draft as the viewer and the tiles show it: a saved one from the
+   *  server, a new one from the device until Save. */
+  const shownPhotos = draft.photos.map((photo, i) => ({
+    key: photo.key,
+    src: photo.id === null ? photo.preview : gymPhotoUrl({ gymId, photoId: photo.id }),
+    alt: `Photo ${i + 1} of ${draft.photos.length}`,
+  }));
 
   const edit = (next) => {
     setDone(null);
@@ -274,7 +284,8 @@ export default function GymPageSheet({ gymId, gym, words, readOnly, onClose }) {
               <div className="c-field">
                 <span className="c-label">Photos</span>
                 <span className="c-hint">
-                  Show people your gym: the floor, the equipment, the changing rooms. The main photo is the big one at the top of your page.
+                  Show people your gym: the floor, the equipment, the changing rooms. The main photo is the big one at the top of your page. Tap a
+                  photo to see it full size.
                 </span>
                 {draft.photos.length > 0 ? (
                   <ul className="grid grid-cols-2 gap-3 pt-1" aria-label="Photos">
@@ -282,16 +293,23 @@ export default function GymPageSheet({ gymId, gym, words, readOnly, onClose }) {
                       const label = `Photo ${index + 1} of ${draft.photos.length}`;
                       return (
                         <li key={photo.key} className="flex flex-col gap-1.5">
-                          <div className="relative rounded-lg overflow-hidden" style={{ aspectRatio: '4 / 3', background: 'var(--raise)' }}>
+                          {/* The whole photo, never cropped; a tap opens it full size. */}
+                          <button
+                            type="button"
+                            onClick={() => setViewing(index)}
+                            aria-label={`Open photo ${index + 1} full size`}
+                            className="relative block w-full rounded-lg overflow-hidden"
+                            style={{ aspectRatio: '4 / 3', background: 'var(--raise)' }}
+                          >
                             <img
-                              src={photo.id === null ? photo.preview : gymPhotoUrl({ gymId, photoId: photo.id })}
+                              src={shownPhotos[index].src}
                               alt={index === 0 ? `${label}, the main photo` : label}
                               loading="lazy"
-                              className="absolute inset-0 w-full h-full object-cover"
+                              className="absolute inset-0 w-full h-full object-contain"
                             />
                             {index === 0 ? <span className="c-tag c-tag-soft absolute left-2 top-2">Main photo</span> : null}
                             {photo.id === null ? <span className="c-tag c-tag-plain absolute right-2 top-2">Not saved</span> : null}
-                          </div>
+                          </button>
                           {mayChange ? (
                             <div className="flex flex-col items-start gap-1.5">
                               {/* Every tile two rows, so the grid stays even: the main photo says so where the others have the button. */}
@@ -450,6 +468,9 @@ export default function GymPageSheet({ gymId, gym, words, readOnly, onClose }) {
           ) : null}
         </div>
       </div>
+      {viewing !== null ? (
+        <PhotoViewer photos={shownPhotos} index={viewing} onIndex={setViewing} onClose={() => setViewing(null)} />
+      ) : null}
     </div>
   );
 }

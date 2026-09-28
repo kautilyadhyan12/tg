@@ -229,6 +229,28 @@ describe('photos (20c-iv-b)', () => {
     expect(screen.getAllByRole('img')).toHaveLength(1);
   });
 
+  it('every photo is shown whole, and a tap opens it full size, a new one before Save too (Kd, click-through)', async () => {
+    api.getGymPage.mockResolvedValue({ data: { page: withPhotos([A, B]) } });
+    drawSheet();
+    await screen.findByRole('img', { name: 'Photo 1 of 2, the main photo' });
+    pick('front-desk.jpg');
+    await screen.findByText('Not saved');
+    for (const img of screen.getAllByRole('img')) {
+      expect(img.className).toContain('object-contain');
+      expect(img.className).not.toContain('object-cover');
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Open photo 3 full size' }));
+    const viewer = screen.getByRole('dialog', { name: 'Photo 3 of 3' });
+    expect(within(viewer).getByRole('img').getAttribute('src')).toBe('blob:front-desk.jpg');
+    fireEvent.click(within(viewer).getByRole('button', { name: 'Next photo' }));
+    expect(within(screen.getByRole('dialog', { name: 'Photo 1 of 3' })).getByRole('img').getAttribute('src')).toContain(`/page/photos/${A}`);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: /Photo/ })).toBeNull();
+    // The panel is still open, and nothing was sent.
+    expect(screen.getByRole('dialog', { name: 'Your gym page' })).toBeTruthy();
+    expect(api.addGymPagePhoto).not.toHaveBeenCalled();
+  });
+
   it('ten photos: Add photos cannot be pressed', async () => {
     const ten = Array.from({ length: 10 }, (_, i) => `00000000-0000-4000-8000-0000000000${String(i).padStart(2, '0')}`);
     api.getGymPage.mockResolvedValue({ data: { page: withPhotos(ten) } });

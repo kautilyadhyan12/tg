@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { Check, ChevronLeft, ChevronRight, Clock, Loader2, MapPin, X } from 'lucide-react';
+import { Check, Clock, Loader2, MapPin } from 'lucide-react';
 import { ENQUIRY_SOURCE_WORDS, ENQUIRY_WORDS, GYM_ENQUIRY_MAX_MESSAGE_CHARS, LEAD_SOURCES } from '@app/shared';
 import { orgService, errorCode, errorStatus, errorText, gymPhotoUrl } from '../api/orgsApi';
 import { EMPTY_ENQUIRY, enquiryBody, enquiryProblem, facilityLines, hoursView } from './gymPublicView';
 import { useRobotCheck } from './useRobotCheck';
+import PhotoViewer from '../components/common/PhotoViewer';
 
 // A gym's own page, `/gyms/{slug}` (ROADMAP 20c-iv-a; spec Part 3 §16.3): the gym's
 // name, town, photos (20c-iv-b), opening hours, "About us" and facilities, and a form that makes the
@@ -175,69 +176,37 @@ function EnquiryForm({ slug, page }) {
   );
 }
 
-/** The gym's photos: the main one large, the rest in a row under it; a tap opens one
- *  full size, with Previous, Next and Close (Esc and the arrow keys too). */
+/** The gym's photos, each shown whole, never cropped: the main one at its own shape
+ *  (up to most of a screen tall), the rest in a row of boxes with space around them. A
+ *  tap opens one full size. */
 function Photos({ slug, page }) {
   const [open, setOpen] = useState(null);
   const photos = page.photos;
   const count = photos.length;
-  const closeRef = useRef(null);
-
-  useEffect(() => {
-    if (open === null) return undefined;
-    closeRef.current?.focus();
-    const onKey = (e) => {
-      if (e.key === 'Escape') setOpen(null);
-      if (e.key === 'ArrowRight') setOpen((i) => (i + 1) % count);
-      if (e.key === 'ArrowLeft') setOpen((i) => (i - 1 + count) % count);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, count]);
-
   if (count === 0) return null;
-  const src = (photo) => gymPhotoUrl({ slug, photoId: photo.id });
   const alt = (i) => `${page.name}, photo ${i + 1} of ${count}`;
+  const shown = photos.map((photo, i) => ({ key: photo.id, src: gymPhotoUrl({ slug, photoId: photo.id }), alt: alt(i) }));
   const [main, ...rest] = photos;
   return (
     <section aria-label="Photos" className="flex flex-col gap-2">
-      <button type="button" onClick={() => setOpen(0)} className="block w-full rounded-2xl overflow-hidden" style={{ aspectRatio: '16 / 9', background: LINE }}>
-        <img src={src(main)} alt={alt(0)} className="w-full h-full object-cover" />
+      <button
+        type="button"
+        onClick={() => setOpen(0)}
+        className="flex items-center justify-center w-full rounded-2xl overflow-hidden"
+        style={{ background: LINE, maxHeight: '70vh', aspectRatio: `${main.width} / ${main.height}` }}
+      >
+        <img src={shown[0].src} alt={shown[0].alt} className="max-w-full max-h-full w-full h-full object-contain" />
       </button>
       {rest.length > 0 ? (
         <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
           {rest.map((photo, i) => (
-            <button key={photo.id} type="button" onClick={() => setOpen(i + 1)} className="block rounded-xl overflow-hidden" style={{ aspectRatio: '1 / 1', background: LINE }}>
-              <img src={src(photo)} alt={alt(i + 1)} loading="lazy" className="w-full h-full object-cover" />
+            <button key={photo.id} type="button" onClick={() => setOpen(i + 1)} className="block rounded-xl overflow-hidden p-1" style={{ aspectRatio: '1 / 1', background: LINE }}>
+              <img src={shown[i + 1].src} alt={shown[i + 1].alt} loading="lazy" className="w-full h-full object-contain" />
             </button>
           ))}
         </div>
       ) : null}
-      {open !== null ? (
-        <div role="dialog" aria-modal="true" aria-label={alt(open)} className="fixed inset-0 z-50 flex flex-col" style={{ background: 'rgba(12, 11, 10, 0.94)' }}>
-          <div className="flex items-center justify-between px-4 py-3 text-white">
-            <span className="text-sm">
-              {open + 1} of {count}
-            </span>
-            <button ref={closeRef} type="button" aria-label="Close" onClick={() => setOpen(null)} className="w-11 h-11 flex items-center justify-center rounded-full">
-              <X aria-hidden="true" className="w-6 h-6" />
-            </button>
-          </div>
-          <div className="relative flex-grow min-h-0 flex items-center justify-center px-2 pb-6">
-            <img src={src(photos[open])} alt={alt(open)} className="max-w-full max-h-full object-contain" />
-            {count > 1 ? (
-              <>
-                <button type="button" aria-label="Previous photo" onClick={() => setOpen((open - 1 + count) % count)} className="absolute left-2 w-11 h-11 flex items-center justify-center rounded-full text-white" style={{ background: 'rgba(0,0,0,0.45)' }}>
-                  <ChevronLeft aria-hidden="true" className="w-6 h-6" />
-                </button>
-                <button type="button" aria-label="Next photo" onClick={() => setOpen((open + 1) % count)} className="absolute right-2 w-11 h-11 flex items-center justify-center rounded-full text-white" style={{ background: 'rgba(0,0,0,0.45)' }}>
-                  <ChevronRight aria-hidden="true" className="w-6 h-6" />
-                </button>
-              </>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
+      {open !== null ? <PhotoViewer photos={shown} index={open} onIndex={setOpen} onClose={() => setOpen(null)} /> : null}
     </section>
   );
 }
