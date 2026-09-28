@@ -1563,6 +1563,117 @@ export type MemberListSelectionChanged = z.infer<typeof memberListSelectionChang
 export const memberListExportRequestSchema = z.object({ selection: memberListSelectionSchema }).strict();
 export type MemberListExportRequest = z.infer<typeof memberListExportRequestSchema>;
 
+// ── Remove the people selected (5b-v-b-ii; spec §18.5, §18.6) ────────────────
+//
+// ONE REMOVE (RULINGS 2026-09-27) for everyone ticked: each member's record moves to past
+// members and their app ends, in one step. From "Your list" the people are records; from
+// "In the app" they are people in the app. The box first names who changes and who
+// doesn't; the press sends back the digest of exactly that, and if it has moved, nothing
+// happens and the answer carries the new box.
+
+/** The most people ticked on "In the app" (one by one, as on the list). */
+export const MEMBER_REMOVE_TICKED_MAX = MEMBER_LIST_TICKED_MAX;
+
+/** People in the app, ticked on "In the app". */
+export const memberRosterSelectionSchema = z
+  .object({ userIds: z.array(z.string().uuid()).min(1).max(MEMBER_REMOVE_TICKED_MAX) })
+  .strict();
+export type MemberRosterSelection = z.infer<typeof memberRosterSelectionSchema>;
+
+/** One person the box names: a record (its name on the list), or someone in the app (the
+ *  name they gave the app), or both. */
+export const memberRemovePersonSchema = z
+  .object({
+    name: z.string(),
+    entryId: z.string().uuid().nullable(),
+    userId: z.string().uuid().nullable(),
+  })
+  .strict();
+export type MemberRemovePerson = z.infer<typeof memberRemovePersonSchema>;
+
+/** Why someone the removal reaches does not change, each its own line in the box:
+ *  - `staff`: the owner, staff or a complimentary place keep the app (managed under Staff);
+ *  - `own_record`: in the app with a record of their own that stays on the list;
+ *  - `shared_email`: shares an email with records that stay, and the list can't say which
+ *    is theirs, so their app is left alone;
+ *  - `same_record`: in the app with the same record as someone ticked on "In the app", and
+ *    not ticked: they keep the app, and their record moves to past members with that person;
+ *  - `not_in_app`: a past member ticked with nobody in the app — nothing to remove;
+ *  - `gone`: no longer on the list (or no longer in the app) since the page was read. */
+export const memberRemoveKeptReasonSchema = z.enum(["staff", "own_record", "shared_email", "same_record", "not_in_app", "gone"]);
+export type MemberRemoveKeptReason = z.infer<typeof memberRemoveKeptReasonSchema>;
+
+/** A big removal needs its own tick: more than 10 and more than 10 % of the list (records moving)
+ *  or of the paid places (people losing the app). */
+export const memberRemoveLargeSchema = z
+  .object({ kind: z.enum(["list", "app"]), removing: z.number().int().min(0), of: z.number().int().min(0) })
+  .strict();
+export type MemberRemoveLarge = z.infer<typeof memberRemoveLargeSchema>;
+
+/** The box: who moves to past members, who loses the app, and who doesn't change and why.
+ *  `digest` names exactly this and is sent back with the press. */
+export const memberRemovePreviewSchema = z
+  .object({
+    selected: z.number().int().min(0),
+    move: z.array(memberRemovePersonSchema),
+    endApp: z.array(memberRemovePersonSchema),
+    kept: z.array(z.object({ reason: memberRemoveKeptReasonSchema, people: z.array(memberRemovePersonSchema) }).strict()),
+    /** Of the records moving, how many nobody in the app uses: no person in the app is
+     *  theirs, and no family's shared email in the app is on them. */
+    movingNotInApp: z.number().int().min(0),
+    large: memberRemoveLargeSchema.nullable(),
+    digest: sha256Schema,
+  })
+  .strict();
+export type MemberRemovePreview = z.infer<typeof memberRemovePreviewSchema>;
+
+export const memberRemovePreviewResponseSchema = z.object({ preview: memberRemovePreviewSchema });
+
+/** The box for the people selected on "Your list" or "Past members". */
+export const memberListRemovePreviewRequestSchema = z.object({ selection: memberListSelectionSchema }).strict();
+export type MemberListRemovePreviewRequest = z.infer<typeof memberListRemovePreviewRequestSchema>;
+
+/** Press Remove: the selection, the box's digest and, for a big removal, the tick. */
+export const memberListRemoveSelectedRequestSchema = z
+  .object({ selection: memberListSelectionSchema, digest: sha256Schema, acknowledgeLargeChange: z.boolean().optional() })
+  .strict();
+export type MemberListRemoveSelectedRequest = z.infer<typeof memberListRemoveSelectedRequestSchema>;
+
+/** The box for the people ticked on "In the app". */
+export const memberRosterRemovePreviewRequestSchema = memberRosterSelectionSchema;
+export type MemberRosterRemovePreviewRequest = z.infer<typeof memberRosterRemovePreviewRequestSchema>;
+
+export const memberRosterRemoveRequestSchema = memberRosterSelectionSchema
+  .extend({ digest: sha256Schema, acknowledgeLargeChange: z.boolean().optional() })
+  .strict();
+export type MemberRosterRemoveRequest = z.infer<typeof memberRosterRemoveRequestSchema>;
+
+/** Done: how many records moved to past members and how many people lost the app.
+ *  `alreadyRemoved` answers the same press again (a retry, or a colleague's): nothing
+ *  was done now, because that press already did it. */
+export const memberRemovedSelectedSchema = z
+  .object({ moved: z.number().int().min(0), endedApp: z.number().int().min(0), alreadyRemoved: z.boolean() })
+  .strict();
+export type MemberRemovedSelected = z.infer<typeof memberRemovedSelectedSchema>;
+
+export const memberRemovedSelectedResponseSchema = z.object({ removed: memberRemovedSelectedSchema });
+
+/** The box has moved since it was shown: nobody was removed, and here is the new box. */
+export const MEMBER_REMOVE_CHANGED_WORDS =
+  "Some of these people changed while you were looking, so nobody was removed. Check the names again.";
+
+/** A press refused with nothing done: the box moved (`remove_changed`), or a big removal
+ *  came without its tick (`large_change`). Either way the answer is the box as it is now. */
+export const memberRemoveRefusedSchema = z.object({
+  error: z.enum(["remove_changed", "large_change"]),
+  message: z.string(),
+  preview: memberRemovePreviewSchema,
+  requestId: z.string().optional(),
+});
+
+/** A big removal pressed without its tick. */
+export const MEMBER_REMOVE_LARGE_WORDS = "This removes more people than we do without asking. Tick the box to confirm, then press Remove again.";
+
 // ── Invite (3b-i-a; §9.12, §11.5) ───────────────────────────────────────────
 
 /** Who an Invite is for: the list's current people, narrowed by the gym's own words

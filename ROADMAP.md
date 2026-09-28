@@ -145,7 +145,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
          - ~~5b-v-a-ii. **One list**~~ **Not built (Kd, RULINGS 2026-09-28)**: the two tabs stay, "Using the app" renamed "In the app" in 5b-v-b-i.
        - 5b-v-b. **Select and act** (§18.5–18.6), split 2026-09-28 in two:
          - 5b-v-b-i. [x] **Tick boxes, Invite and Download CSV** — merged 2026-09-28 (PR #126).
-         - 5b-v-b-ii. [ ] **Remove on the people selected**: the bar's Remove (One Remove for each), with the box naming who changes; the "In the app" tab's tick boxes; 5b-iii's last server part, then PR #121 closed. Also: a "plan was full" line says when ("Noah tried to join on 27 Sep, when your plan was full") and whether places are free now, never a stale "all 500 places are in use" (Kd, 2026-09-28).
+         - 5b-v-b-ii. [x] **Remove on the people selected** — merged 2026-09-28 (PR #127).
        - 5b-v-c. [ ] **A person's page** (§18.6–18.7): every button kept, Invite asks first, Remove from app on the page, the page for someone not on your list, Add member and Edit restyled.
        - 5b-v-d. [ ] **Import, who has left** (§18.8, was 5b-iii-b): each missing person marked Left or Still a member; Upload and Review restyled. "They've left" ends the app too (RULINGS 2026-09-28).
      - 5b-iv. [ ] **Possible duplicates** (RULINGS 2026-09-25): records alike by name, phone or member number listed as pairs ("2 people may be on your list twice · Review"), each opened side by side; Merge or "Different people" (remembered); never merged by the app.

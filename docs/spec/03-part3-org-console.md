@@ -2894,6 +2894,37 @@ below says otherwise, this wins:
   (`memberList/selection.ts`). The file is 5b-iii's (formula cells guarded, email and phone as
   checked, "Past member since" when past members are in it), named "Active members
   2026-09-28.csv" for a Select all and "Selected members …" for rows ticked.
+- **Built in 5b-v-b-ii: Remove on the people selected.** The bar's **Remove** ("Remove from app"
+  on Past members; "Remove" on the In the app tab, which now has tick boxes too, ticked one by
+  one, at most 500) opens the box of 18.6: "You selected 4 members." · "4 will move to past
+  members" and names · "2 will lose access to the app" and names · "3 won't change", a line per
+  reason (Owner and staff keep the app · Keep the app: on your list with their own details ·
+  Keep the app: they share an email with someone still on your list · Not in the app · No
+  longer on your list) · the large-change tick (more than 10 and more than 10 % of the paid
+  places, or of the list) · **Remove 4 members** (red). One rule decides it, for the box and the
+  press (`memberList/removeSelected.ts`): a record's person loses the app when the record is
+  certainly theirs (`whose.ts`), or when a family's shared email has EVERY one of its records
+  ticked (whichever is theirs was ticked; at 20 or more records on one email, never); staff and
+  complimentary places never. The press carries the box's digest; if anyone changed, nobody is
+  removed and the answer is the new box (409 `remove_changed`); "These members were already
+  removed" only while that earlier press's work still stands. Put back undoes each person.
+  Routes: `POST …/member-list/selected/remove-preview`, `…/selected/remove`,
+  `POST …/members/selected/remove-preview`, `…/members/selected/remove`; the presses have
+  their own limit (30 an hour each, 120 from one address). The box says why only some lose
+  the app ("Only people who use the app lose access. The other 1 doesn't use the app, so only
+  their details move."), from the server's count of moving records nobody in the app uses;
+  on In the app, someone NOT ticked whose record moves with a ticked person is named ("Keep
+  the app: their record is the same as someone you selected…"). Also from Kd's click-through:
+  on a computer the toolbar and the bar stay at the top of the screen as the list scrolls, and
+  Back to top / Go to the bottom buttons sit at the bottom right. Cost at the ceiling (10,000
+  on the list, 2,000 in the app; mains): the box for everyone 431–481 ms (a 1.09 MB reply of
+  names), 500 ticked 62–74 ms; Remove 500 272–294 ms; removing 8,250 at once 2.0 s; answering
+  nobody at most 47 ms throughout. A gym of 200: at most 291 ms, 17 ms.
+- **The "plan was full" line says when, and how the plan stands now** (Kd, 2026-09-28): "Noah
+  tried to join on 27 Sep, when your plan was full. 496 places are free now, so ask Noah to try
+  again." · "… It's still full: upgrade your plan or remove a member who has left, then ask
+  Noah to try again." · "… Your plan has free places now …" (no cap) · "… You have no active
+  plan now, so nobody can join until you choose one." Never "all 500 places are in use".
 - **An import's "They've left" ends the person's app** in the same step (One Remove), each
   missing person marked by staff, the box naming who loses the app; Put back gives both back
   (5b-v-d; amends §9.2 principle 1).
