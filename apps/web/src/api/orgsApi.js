@@ -823,9 +823,14 @@ export const orgService = {
   setGymPage: (gymId, body) =>
     readThrough(gymPageResponseSchema, 'your page', authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/page`, body)),
 
-  /** POST …/page/photos — one photo, already shrunk by the browser (20c-iv-b). */
-  addGymPagePhoto: (gymId, contentBase64) =>
-    readThrough(gymPagePhotoResponseSchema, 'your photo', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/page/photos`, { contentBase64 })),
+  /** POST …/page/photos — one photo, already shrunk by the browser (20c-iv-b), with the
+   *  key it was picked under: sent again, it is the same photo. */
+  addGymPagePhoto: (gymId, contentBase64, uploadKey) =>
+    readThrough(
+      gymPagePhotoResponseSchema,
+      'your photo',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/page/photos`, { contentBase64, uploadKey }),
+    ),
 
   /** DELETE …/page/photos/:id — the page's photos left, in order. */
   removeGymPagePhoto: (gymId, photoId) =>

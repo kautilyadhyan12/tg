@@ -35,6 +35,25 @@ function jpegBlocks(b: Uint8Array): { blocks: { marker: number; at: number; body
   return { blocks, scanAt, header: text(b.subarray(0, scanAt)), afterEnd: b.length - (end + 2) };
 }
 
+/** Every block of a JPEG, between and after its passes too, and how many passes. */
+function everyJpegBlock(b: Uint8Array): { blocks: { marker: number; afterScan: boolean; body: Uint8Array }[]; scans: number } {
+  const blocks: { marker: number; afterScan: boolean; body: Uint8Array }[] = [];
+  let at = 2;
+  let scans = 0;
+  for (;;) {
+    const marker = b[at + 1] ?? -1;
+    if (marker === 0xd9) return { blocks, scans };
+    const length = ((b[at + 2] ?? 0) << 8) | (b[at + 3] ?? 0);
+    if (marker !== 0xda) blocks.push({ marker, afterScan: scans > 0, body: b.subarray(at + 4, at + 2 + length) });
+    at += 2 + length;
+    if (marker === 0xda) {
+      scans += 1;
+      // The compressed pass runs to the next FF that is not 00, a restart or a fill byte.
+      while (!(b[at] === 0xff && ![0x00, 0xff, 0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7].includes(b[at + 1] ?? 0))) at += 1;
+    }
+  }
+}
+
 /** Every chunk type of a PNG. */
 function pngChunks(b: Uint8Array): string[] {
   const types: string[] = [];
@@ -71,10 +90,10 @@ const clean = (bytes: Uint8Array) => {
 
 describe("THE WORST THING: a photo on a public page with the place it was taken still inside it", () => {
   it.each([
-    ["iphone16.jpg", "iPhone 16", 1],
-    ["samsung-a56-meta.jpg", "Galaxy A56 5G", 6],
-    ["pixel7-meta.jpg", "Pixel 7", 1],
-  ])("%s: the phone's EXIF, XMP, IPTC and everything after the picture's end are gone", (name, model, orientation) => {
+    ["iphone16.jpg", "iPhone 16", 1, false],
+    ["samsung-a56-meta.jpg", "Galaxy A56 5G", 6, true],
+    ["pixel7-meta.jpg", "Pixel 7", 1, true],
+  ])("%s: the phone's EXIF, XMP, IPTC and everything after the picture's end are gone", (name, model, orientation, hasIcc) => {
     const original = fixture(name);
     // The file really is a phone's, with a GPS position (the GPS block's tag, 0x8825).
     expect(jpegBlocks(original).header).toContain(model);
@@ -108,6 +127,34 @@ describe("THE WORST THING: a photo on a public page with the place it was taken 
     // The picture is shown the way up the phone held it.
     const exif = app.find((b) => b.marker === 0xe1);
     expect(exif === undefined ? 1 : exifOrientation(exif.body)).toBe(orientation);
+    // …and in its true colours: the colour profile the phone wrote is kept.
+    expect(app.some((b) => b.marker === 0xe2 && text(b.body.subarray(0, 12)) === "ICC_PROFILE\0")).toBe(hasIcc);
+    if (hasIcc) expect(jpegBlocks(original).header).toContain("ICC_PROFILE\0");
+  });
+
+  it("a progressive photo with the phone's EXIF after its first pass: every block of the file is checked, not only those before the picture", () => {
+    const original = fixture("progressive-exif-between-scans.jpg");
+    const before = everyJpegBlock(original);
+    expect(before.scans).toBe(10);
+    const late = before.blocks.find((b) => b.marker === 0xe1);
+    expect(late?.afterScan).toBe(true);
+    expect(text(late?.body ?? new Uint8Array())).toContain("samsung");
+    expect(text(late?.body ?? new Uint8Array())).toMatch(/%|%/);
+
+    const read = clean(original);
+    const after = everyJpegBlock(read.bytes);
+    expect(after.scans).toBe(10);
+    // An EXIF block after a pass is no phone's: it goes whole, orientation and all.
+    expect(after.blocks.filter((b) => b.marker === 0xe1)).toEqual([]);
+    expect(after.blocks.every((b) => !(b.marker >= 0xe3 && b.marker <= 0xef) && b.marker !== 0xfe)).toBe(true);
+    expect(text(read.bytes)).not.toContain("samsung");
+  });
+
+  it("a photo the phone held sideways is kept at the size it is shown, not the size it was stored", () => {
+    // The Galaxy's picture is stored 96 wide and 72 high, with orientation 6: shown 72 × 96.
+    const read = clean(fixture("samsung-a56-meta.jpg"));
+    expect([read.width, read.height]).toEqual([72, 96]);
+    expect(clean(fixture("pixel7-meta.jpg"))).toMatchObject({ width: 54, height: 96 });
   });
 
   it("the Samsung's trailer and the Pixel's second picture are really there before cleaning", () => {
@@ -178,6 +225,44 @@ describe("what is refused", () => {
     big.set([0xff, 0xd8, 0xff]);
     expect(cleanPhoto(big)).toEqual({ ok: false, problem: "too_big" });
     expect(cleanPhoto(new Uint8Array(GYM_PAGE_PHOTO_MAX_BYTES))).toEqual({ ok: false, problem: "not_a_photo" });
+  });
+
+  it("a file with no picture in it is damaged: a PNG with no IDAT, a JPEG with no pass, a WebP with no image", () => {
+    const png = fixture("iphone16-exif.png");
+    const noIdat: Uint8Array[] = [png.subarray(0, 8)];
+    for (let at = 8; at < png.length; ) {
+      const length = Buffer.from(png).readUInt32BE(at);
+      if (text(png.subarray(at + 4, at + 8)) !== "IDAT") noIdat.push(png.subarray(at, at + 12 + length));
+      at += 12 + length;
+    }
+    expect(cleanPhoto(Buffer.concat(noIdat))).toEqual({ ok: false, problem: "damaged" });
+
+    const jpeg = fixture("pixel7-meta.jpg");
+    const { scanAt } = jpegBlocks(jpeg);
+    expect(cleanPhoto(Buffer.concat([jpeg.subarray(0, scanAt), Buffer.from([0xff, 0xd9])]))).toEqual({ ok: false, problem: "damaged" });
+
+    // A VP8X header saying 120 × 101, and nothing to draw.
+    const vp8x = Buffer.from([0x56, 0x50, 0x38, 0x58, 10, 0, 0, 0, 0, 0, 0, 0, 119, 0, 0, 100, 0, 0]);
+    const riff = Buffer.concat([Buffer.from("RIFF"), Buffer.from([0, 0, 0, 0]), Buffer.from("WEBP"), vp8x]);
+    riff.writeUInt32LE(riff.length - 8, 4);
+    expect(cleanPhoto(riff)).toEqual({ ok: false, problem: "damaged" });
+  });
+
+  it("a file of thousands of empty blocks is refused as damaged, and quickly", () => {
+    // 2 MB of empty JPEG comments (FF FE 00 02), and of empty private PNG chunks, before
+    // the picture (the review's case: 85 ms and 131 ms of the server answering nobody).
+    const jpeg = fixture("pixel7-meta.jpg");
+    const comments = Buffer.alloc(500_000 * 4);
+    for (let i = 0; i < 500_000; i++) comments.set([0xff, 0xfe, 0x00, 0x02], i * 4);
+    const bigJpeg = Buffer.concat([jpeg.subarray(0, 2), comments, jpeg.subarray(2)]).subarray(0, GYM_PAGE_PHOTO_MAX_BYTES);
+    const png = fixture("iphone16-exif.png");
+    const empty = Buffer.from([0, 0, 0, 0, 0x71, 0x71, 0x71, 0x71, 0, 0, 0, 0]); // "qqqq", no data
+    const bigPng = Buffer.concat([png.subarray(0, 33), ...Array.from({ length: 170_000 }, () => empty), png.subarray(33)]).subarray(0, GYM_PAGE_PHOTO_MAX_BYTES);
+    for (const file of [bigJpeg, bigPng]) {
+      const start = performance.now();
+      expect(cleanPhoto(file)).toEqual({ ok: false, problem: "damaged" });
+      expect(performance.now() - start).toBeLessThan(50);
+    }
   });
 
   it("a picture that says it is huge is refused, whatever its file size", () => {

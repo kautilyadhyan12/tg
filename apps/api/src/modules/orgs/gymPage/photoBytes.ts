@@ -25,6 +25,11 @@ export type PhotoReading =
 
 class Damaged extends Error {}
 
+/** The most blocks (JPEG segments, PNG or WebP chunks) one photo may have. A phone's has a
+ *  few dozen, a large PNG a few hundred; past this it is a file built to keep the server
+ *  busy, and is refused as damaged. */
+const MAX_BLOCKS = 4096;
+
 function byteAt(b: Uint8Array, i: number): number {
   const v = b[i];
   if (v === undefined) throw new Damaged();
@@ -103,7 +108,13 @@ function cleanJpeg(b: Uint8Array): { width: number; height: number; bytes: Uint8
   let at = 2;
   let size: { width: number; height: number } | null = null;
   let orientationDone = false;
+  let rotated = false;
+  let scans = 0;
+  let blocks = 0;
   for (;;) {
+    // A photo has a few dozen blocks; thousands of empty ones only make the server work.
+    blocks += 1;
+    if (blocks > MAX_BLOCKS) throw new Damaged();
     if (byteAt(b, at) !== 0xff) throw new Damaged();
     // Fill bytes: any number of 0xFF before a marker.
     let marker = byteAt(b, at + 1);
@@ -113,9 +124,10 @@ function cleanJpeg(b: Uint8Array): { width: number; height: number; bytes: Uint8
     }
     if (marker === 0xd9) {
       // The end of the image. Whatever follows (a second picture, a trailer) is not copied.
-      if (size === null) throw new Damaged();
+      if (size === null || scans === 0) throw new Damaged();
       out.push(Uint8Array.from([0xff, 0xd9]));
-      return { ...size, bytes: join(out) };
+      // Orientations 5 to 8 turn the picture a quarter: it is shown the other way round.
+      return { width: rotated ? size.height : size.width, height: rotated ? size.width : size.height, bytes: join(out) };
     }
     if (marker === 0xd8 || marker === 0x00 || (marker >= 0xd0 && marker <= 0xd7) || marker === 0x01) throw new Damaged();
     const length = u16be(b, at + 2);
@@ -140,6 +152,7 @@ function cleanJpeg(b: Uint8Array): { width: number; height: number; bytes: Uint8
         }
         break;
       }
+      scans += 1;
       out.push(segment, slice(b, at, end));
       at = end;
       continue;
@@ -167,7 +180,9 @@ function cleanJpeg(b: Uint8Array): { width: number; height: number; bytes: Uint8
     if (marker === 0xe1) {
       // EXIF (where the GPS position lives) or XMP (which can repeat it): neither is
       // copied. The first EXIF block's orientation is written into a block of its own.
-      if (!orientationDone && startsWith(segment, 4, "Exif\0\0")) {
+      // Only a block before the picture says which way up it is: one after a pass is
+      // no phone's, and goes whole.
+      if (!orientationDone && scans === 0 && startsWith(segment, 4, "Exif\0\0")) {
         orientationDone = true;
         let orientation: number | null = null;
         try {
@@ -176,7 +191,10 @@ function cleanJpeg(b: Uint8Array): { width: number; height: number; bytes: Uint8
           // A broken EXIF block is dropped like any other; the picture is still fine.
           if (!(err instanceof Damaged)) throw err;
         }
-        if (orientation !== null) out.push(orientationApp1(orientation));
+        if (orientation !== null) {
+          out.push(orientationApp1(orientation));
+          rotated = orientation >= 5;
+        }
       }
       continue;
     }
@@ -223,7 +241,11 @@ function cleanPng(b: Uint8Array): { width: number; height: number; bytes: Uint8A
   const out: Uint8Array[] = [slice(b, 0, 8)];
   let at = 8;
   let size: { width: number; height: number } | null = null;
+  let hasPicture = false;
+  let blocks = 0;
   for (;;) {
+    blocks += 1;
+    if (blocks > MAX_BLOCKS) throw new Damaged();
     const length = u32be(b, at);
     const type = ascii(b, at + 4, 4);
     const chunk = slice(b, at, at + 12 + length);
@@ -236,7 +258,11 @@ function cleanPng(b: Uint8Array): { width: number; height: number; bytes: Uint8A
       throw new Damaged();
     }
     if (PNG_KEPT.has(type)) out.push(chunk);
-    if (type === "IEND") return { ...size, bytes: join(out) };
+    if (type === "IDAT") hasPicture = true;
+    if (type === "IEND") {
+      if (!hasPicture) throw new Damaged();
+      return { ...size, bytes: join(out) };
+    }
   }
 }
 
@@ -268,7 +294,11 @@ function cleanWebp(b: Uint8Array): { width: number; height: number; bytes: Uint8
   const chunks: Uint8Array[] = [];
   let at = 12;
   let size: { width: number; height: number } | null = null;
+  let hasPicture = false;
+  let blocks = 0;
   while (at < riffEnd) {
+    blocks += 1;
+    if (blocks > MAX_BLOCKS) throw new Damaged();
     const type = ascii(b, at, 4);
     const length = u32le(b, at + 4);
     const padded = length + (length % 2);
@@ -279,6 +309,7 @@ function cleanWebp(b: Uint8Array): { width: number; height: number; bytes: Uint8
       size = webpSize(type, chunk.subarray(8));
     }
     if (!WEBP_KEPT.has(type)) continue;
+    if (type === "VP8 " || type === "VP8L" || type === "ANMF") hasPicture = true;
     if (type === "VP8X") {
       const fixed = Uint8Array.from(chunk);
       fixed[8] = byteAt(fixed, 8) & ~(VP8X_EXIF | VP8X_XMP);
@@ -287,7 +318,7 @@ function cleanWebp(b: Uint8Array): { width: number; height: number; bytes: Uint8
       chunks.push(chunk);
     }
   }
-  if (size === null || size.width === 0 || size.height === 0) throw new Damaged();
+  if (size === null || !hasPicture || size.width === 0 || size.height === 0) throw new Damaged();
   const body = join(chunks);
   const header = new Uint8Array(12);
   header.set([0x52, 0x49, 0x46, 0x46], 0); // "RIFF"

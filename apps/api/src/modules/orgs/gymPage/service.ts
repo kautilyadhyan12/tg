@@ -18,6 +18,7 @@ import {
   GYM_PAGE_MAX_PHOTOS,
   GYM_PAGE_PHOTO_WORDS,
   type GymPagePhoto,
+  type GymPageStaffPhoto,
   LEADS_MAX_PER_GYM,
   orgTypeSchema,
   typedFacility,
@@ -86,7 +87,11 @@ export async function getGymPage(deps: Pick<GymPageDeps, "sql">, userId: string,
   };
 }
 
-const shownPhotos = (rows: readonly repo.PhotoRow[]): GymPagePhoto[] => rows.map((r) => ({ id: r.id, width: r.width, height: r.height }));
+/** The photos as staff see them, with each one's upload key. */
+const shownPhotos = (rows: readonly repo.PhotoRow[]): GymPageStaffPhoto[] =>
+  rows.map((r) => ({ id: r.id, width: r.width, height: r.height, uploadKey: r.uploadKey }));
+/** The photos as anybody sees them: the picture and its size, nothing else. */
+const publicPhotos = (rows: readonly repo.PhotoRow[]): GymPagePhoto[] => rows.map((r) => ({ id: r.id, width: r.width, height: r.height }));
 
 export async function setGymPage(
   deps: Pick<GymPageDeps, "sql" | "now">,
@@ -142,10 +147,14 @@ export async function addPhoto(
   userId: string,
   gymId: string,
   bytes: Uint8Array,
+  uploadKey: string,
   limit: Limit,
-): Promise<GymPagePhoto | null> {
+): Promise<GymPageStaffPhoto | null> {
   await requireWritablePrivilege(deps, gymId, userId, "org.manage");
   if (!(await limit())) return null;
+  // Sent before (its reply lost on the way back): the photo already kept, nothing more.
+  const kept = await repo.photoByUploadKey(deps.sql, gymId, uploadKey);
+  if (kept !== null) return shownPhotos([kept])[0] ?? null;
   const read = cleanPhoto(bytes);
   if (!read.ok) {
     const problem = PHOTO_PROBLEM_STATUS[read.problem];
@@ -159,28 +168,36 @@ export async function addPhoto(
   const id = randomUUID();
   const key = photoKey(gymId, id, read.type);
   await deps.photos.put(key, read.bytes);
+  let photo: GymPageStaffPhoto;
   try {
-    await deps.sql.begin(async (tx) => {
+    photo = await deps.sql.begin(async (tx) => {
       await lockGym(tx, gymId);
+      // The same key sent twice at once: the second waits here and finds the first.
+      const first = await repo.photoByUploadKey(tx, gymId, uploadKey);
+      if (first !== null) {
+        await removeFiles(deps, [key]);
+        return { id: first.id, width: first.width, height: first.height, uploadKey };
+      }
       const count = (await repo.photosFor(tx, gymId)).length;
       if (count >= GYM_PAGE_MAX_PHOTOS) throw new OrgsError(409, "photos_full", GYM_PAGE_PHOTO_WORDS.full);
       await repo.insertPhoto(
         tx,
         gymId,
-        { id, storageKey: key, contentType: read.type, byteSize: read.bytes.length, width: read.width, height: read.height, position: count },
+        { id, storageKey: key, contentType: read.type, byteSize: read.bytes.length, width: read.width, height: read.height, position: count, uploadKey },
         userId,
         deps.now(),
       );
       await insertAudit(tx, { actorUserId: userId, gymId, action: "org.page_photo_added", targetType: "gym", targetId: gymId, meta: { photo: id } });
+      return { id, width: read.width, height: read.height, uploadKey };
     });
   } catch (err) {
     await removeFiles(deps, [key]);
     throw err;
   }
-  return { id, width: read.width, height: read.height };
+  return photo;
 }
 
-export async function removePhoto(deps: GymPageDeps, userId: string, gymId: string, photoId: string, limit: Limit): Promise<GymPagePhoto[] | null> {
+export async function removePhoto(deps: GymPageDeps, userId: string, gymId: string, photoId: string, limit: Limit): Promise<GymPageStaffPhoto[] | null> {
   await requireWritablePrivilege(deps, gymId, userId, "org.manage");
   if (!(await limit())) return null;
   const { key, photos } = await deps.sql.begin(async (tx) => {
@@ -202,12 +219,13 @@ export async function removePhoto(deps: GymPageDeps, userId: string, gymId: stri
 
 /** The page's photos in a new order. The list must be exactly the photos the page has
  *  now: one added or removed elsewhere in the meantime is refused, never guessed at. */
-export async function orderPhotos(deps: GymPageDeps, userId: string, gymId: string, photoIds: readonly string[], limit: Limit): Promise<GymPagePhoto[] | null> {
+export async function orderPhotos(deps: GymPageDeps, userId: string, gymId: string, photoIds: readonly string[], limit: Limit): Promise<GymPageStaffPhoto[] | null> {
   await requireWritablePrivilege(deps, gymId, userId, "org.manage");
   if (!(await limit())) return null;
   const photos = await deps.sql.begin(async (tx) => {
     await lockGym(tx, gymId);
     const now = await repo.photosFor(tx, gymId);
+    // Every photo named, and (the request's schema refuses an id twice) no other.
     const same = now.length === photoIds.length && now.every((p) => photoIds.includes(p.id));
     if (!same) throw new OrgsError(409, "photos_changed", GYM_PAGE_PHOTO_WORDS.changed);
     await repo.setPhotoOrder(tx, gymId, photoIds);
@@ -268,7 +286,7 @@ export async function publicPage(deps: Pick<GymPageDeps, "sql" | "robotCheck" | 
     about: page.about,
     facilities: known(page.facilities),
     ownFacilities: page.ownFacilities,
-    photos: shownPhotos(await repo.photosFor(deps.sql, page.gymId)),
+    photos: publicPhotos(await repo.photosFor(deps.sql, page.gymId)),
     // The week as the gym's members see it; the week a gym open all day keeps
     // aside for later is the console's alone.
     // Only today's closure: the notes further ahead were written for members.

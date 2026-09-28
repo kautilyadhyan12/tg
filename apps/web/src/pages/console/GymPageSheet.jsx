@@ -21,6 +21,7 @@ import {
   removeOwnFacility,
   removePhoto,
   toggleFacility,
+  unsentPhotos,
 } from './gymPageView';
 
 // The gym's own page (ROADMAP 20c-iv-a; spec Part 3 §16.3), opened from Leads: switch it
@@ -169,7 +170,7 @@ export default function GymPageSheet({ gymId, gym, words, readOnly, onClose }) {
         }
       }
       for (const photo of plan.add) {
-        idsByKey[photo.key] = (await orgService.addGymPagePhoto(gymId, photo.base64)).data.photo.id;
+        idsByKey[photo.key] = (await orgService.addGymPagePhoto(gymId, photo.base64, photo.uploadKey)).data.photo.id;
       }
       if (plan.reorder) await orgService.orderGymPagePhotos(gymId, orderedIds(draft, idsByKey));
       if (photosChanged(draft, page)) fresh = (await orgService.getGymPage(gymId)).data.page;
@@ -181,7 +182,7 @@ export default function GymPageSheet({ gymId, gym, words, readOnly, onClose }) {
       setError(errorText(err, "We couldn't save your page. Please try again."));
       try {
         fresh = (await orgService.getGymPage(gymId)).data.page;
-        const unsent = draft.photos.filter((p) => p.id === null && idsByKey[p.key] === undefined);
+        const unsent = unsentPhotos(draft, fresh);
         const kept = fieldsChanged(draft, fresh) ? draft : pageDraft(fresh);
         setPage(fresh);
         setDraft({ ...kept, photos: [...pageDraft(fresh).photos, ...unsent] });
@@ -460,7 +461,7 @@ export default function GymPageSheet({ gymId, gym, words, readOnly, onClose }) {
                 Save
               </button>
               {changed ? (
-                <button type="button" onClick={() => edit(pageDraft(page))} disabled={busy} className="c-btn c-btn-s">
+                <button type="button" onClick={() => edit(pageDraft(page))} disabled={busy || preparing} className="c-btn c-btn-s">
                   Cancel
                 </button>
               ) : null}

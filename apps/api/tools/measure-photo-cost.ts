@@ -7,6 +7,7 @@
 //
 // It makes its own owner and gym (`gphoto-cost-*`) and deletes them after.
 import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { devNull, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -85,7 +86,7 @@ try {
   const ids: string[] = [];
   const adds: string[] = [];
   for (let i = 0; i < 10; i++) {
-    const r = await measure(() => inject("POST", `/v1/orgs/${gym.id}/page/photos`, { contentBase64 }, cookies));
+    const r = await measure(() => inject("POST", `/v1/orgs/${gym.id}/page/photos`, { contentBase64, uploadKey: randomUUID() }, cookies));
     if (r.value.statusCode !== 201) throw new Error(`add ${String(i)}: ${String(r.value.statusCode)} ${r.value.body}`);
     ids.push((JSON.parse(r.value.body) as { photo: { id: string } }).photo.id);
     adds.push(`${r.ms.toFixed(0)} ms (stall ≤ ${r.stallMs.toFixed(1)})`);

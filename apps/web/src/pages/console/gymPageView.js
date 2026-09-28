@@ -29,7 +29,9 @@ export function pageDraft(page) {
  *  many did not fit. */
 export function addPhotos(draft, prepared) {
   const room = Math.max(0, GYM_PAGE_MAX_PHOTOS - draft.photos.length);
-  const taken = prepared.slice(0, room).map((photo) => ({ key: photo.key, id: null, base64: photo.base64, preview: photo.preview }));
+  const taken = prepared
+    .slice(0, room)
+    .map((photo) => ({ key: photo.key, id: null, uploadKey: photo.uploadKey, base64: photo.base64, preview: photo.preview }));
   return { draft: { ...draft, photos: [...draft.photos, ...taken] }, left: prepared.length - taken.length };
 }
 
@@ -54,6 +56,13 @@ export function photoPlan(draft, page) {
   const serverOrder = [...kept, ...add.map((p) => p.key)];
   const wanted = draft.photos.map((p) => p.key);
   return { remove, add, reorder: serverOrder.join() !== wanted.join() };
+}
+
+/** After a Save that stopped part way: the new photos the server does not have yet. One
+ *  it kept whose reply was lost is known by its upload key, so it is not listed twice. */
+export function unsentPhotos(draft, serverPage) {
+  const kept = new Set((serverPage?.photos ?? []).map((p) => p.uploadKey));
+  return draft.photos.filter((p) => p.id === null && !kept.has(p.uploadKey));
 }
 
 /** The draft's order, with each new photo's key replaced by the id the server gave it. */

@@ -28,7 +28,7 @@ vi.mock('./gymPagePhotos', async (importOriginal) => {
   return {
     ...actual,
     preparePagePhoto: vi.fn((file) =>
-      file.name.endsWith('.heic') ? Promise.reject(new Error('unreadable')) : Promise.resolve({ key: `new-${file.name}`, base64: `b64-${file.name}`, preview: `blob:${file.name}` }),
+      file.name.endsWith('.heic') ? Promise.reject(new Error('unreadable')) : Promise.resolve({ key: `new-${file.name}`, uploadKey: `key-${file.name}`, base64: `b64-${file.name}`, preview: `blob:${file.name}` }),
     ),
   };
 });
@@ -167,7 +167,7 @@ describe('photos (20c-iv-b)', () => {
   const A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
   const B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
   const NEW = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
-  const withPhotos = (ids, over = {}) => ({ ...PAGE, photos: ids.map((id) => ({ id, width: 800, height: 600 })), ...over });
+  const withPhotos = (ids, over = {}) => ({ ...PAGE, photos: ids.map((id) => ({ id, width: 800, height: 600, uploadKey: `key-${id}` })), ...over });
   const pick = (...names) =>
     fireEvent.change(screen.getByLabelText('Choose photos'), { target: { files: names.map((name) => new File(['x'], name, { type: 'image/jpeg' })) } });
 
@@ -194,7 +194,7 @@ describe('photos (20c-iv-b)', () => {
     await screen.findByText('Saved. Your page is off.');
     expect(api.setGymPage).not.toHaveBeenCalled();
     expect(api.removeGymPagePhoto).toHaveBeenCalledWith(GYM, A);
-    expect(api.addGymPagePhoto).toHaveBeenCalledWith(GYM, 'b64-front-desk.jpg');
+    expect(api.addGymPagePhoto).toHaveBeenCalledWith(GYM, 'b64-front-desk.jpg', 'key-front-desk.jpg');
     expect(api.orderGymPagePhotos).toHaveBeenCalledWith(GYM, [NEW, B]);
     // Removed before added, added before ordered.
     const order = (fn) => fn.mock.invocationCallOrder[0];
@@ -212,12 +212,64 @@ describe('photos (20c-iv-b)', () => {
     await screen.findByRole('img', { name: 'Photo 1 of 1, the main photo' });
     pick('one.jpg', 'two.jpg');
     await screen.findAllByText('Not saved');
-    api.getGymPage.mockResolvedValueOnce({ data: { page: withPhotos([A, NEW]) } });
+    // The server keeps "one.jpg" under the key it was sent with.
+    api.getGymPage.mockResolvedValueOnce({
+      data: { page: { ...PAGE, photos: [...withPhotos([A]).photos, { id: NEW, width: 2000, height: 1500, uploadKey: 'key-one.jpg' }] } },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await screen.findByText('Your page has 10 photos, the most it can show. Remove one to add another.');
     expect(screen.getAllByRole('img')).toHaveLength(3);
     expect(screen.getAllByText('Not saved')).toHaveLength(1);
     expect(screen.getByRole('img', { name: 'Photo 3 of 3' }).getAttribute('src')).toBe('blob:two.jpg');
+  });
+
+  it('a photo kept whose reply was lost is shown once, as saved, and never sent again (review L3)', async () => {
+    api.getGymPage.mockResolvedValueOnce({ data: { page: withPhotos([A]) } });
+    // The server kept "one.jpg", and the phone's network lost its reply.
+    api.addGymPagePhoto.mockRejectedValueOnce(new Error('Network Error'));
+    drawSheet();
+    await screen.findByRole('img', { name: 'Photo 1 of 1, the main photo' });
+    pick('one.jpg', 'two.jpg');
+    await screen.findAllByText('Not saved');
+    const kept = { id: NEW, width: 2000, height: 1500, uploadKey: 'key-one.jpg' };
+    api.getGymPage.mockResolvedValueOnce({ data: { page: { ...withPhotos([A]), photos: [...withPhotos([A]).photos, kept] } } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.getAllByRole('img')).toHaveLength(3));
+    expect(screen.getAllByText('Not saved')).toHaveLength(1);
+    expect(screen.getByRole('img', { name: 'Photo 2 of 3' }).getAttribute('src')).toContain(`/page/photos/${NEW}`);
+    expect(screen.getByRole('img', { name: 'Photo 3 of 3' }).getAttribute('src')).toBe('blob:two.jpg');
+    // Save again sends only the one not kept, under its own key.
+    api.addGymPagePhoto.mockReset();
+    api.addGymPagePhoto.mockResolvedValue({ data: { photo: { id: B, width: 2000, height: 1500, uploadKey: 'key-two.jpg' } } });
+    api.getGymPage.mockResolvedValueOnce({ data: { page: { ...PAGE, photos: [...withPhotos([A]).photos, kept, { id: B, width: 2000, height: 1500, uploadKey: 'key-two.jpg' }] } } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await screen.findByText('Saved. Your page is off.');
+    expect(api.addGymPagePhoto).toHaveBeenCalledTimes(1);
+    expect(api.addGymPagePhoto).toHaveBeenCalledWith(GYM, 'b64-two.jpg', 'key-two.jpg');
+  });
+
+  it('while photos are being made ready, nothing else in the panel can be changed, Cancel included (review L7)', async () => {
+    const { preparePagePhoto } = await import('./gymPagePhotos');
+    let finish = () => undefined;
+    preparePagePhoto.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = () => resolve({ key: 'new-slow', uploadKey: 'key-slow', base64: 'b64-slow', preview: 'blob:slow' });
+        }),
+    );
+    api.getGymPage.mockResolvedValue({ data: { page: PAGE } });
+    drawSheet();
+    await screen.findByText('No photos yet.');
+    fireEvent.click(tick('Showers'));
+    pick('slow.jpg');
+    await screen.findByText('Getting photos ready…');
+    expect(screen.getByRole('button', { name: 'Cancel' }).disabled).toBe(true);
+    expect(tick('Show my page').disabled).toBe(true);
+    finish();
+    await screen.findByText('Not saved');
+    expect(screen.getByRole('button', { name: 'Cancel' }).disabled).toBe(false);
+    // What was ticked before the photo is still ticked: nothing was undone behind the wait.
+    expect(tick('Showers').getAttribute('aria-checked')).toBe('true');
   });
 
   it("says which photos could not be opened, and adds the rest", async () => {

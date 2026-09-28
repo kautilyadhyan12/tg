@@ -3,7 +3,7 @@
 // drawing, as `utils/shrinkPhoto.test.js` does.
 import { describe, expect, it } from 'vitest';
 import { GYM_PAGE_MAX_PHOTOS, GYM_PAGE_PHOTO_MAX_BYTES } from '@app/shared';
-import { addPhotos, makeMainPhoto, orderedIds, pageChanged, pageDraft, photoPlan, photosChanged, removePhoto } from './gymPageView';
+import { addPhotos, makeMainPhoto, orderedIds, pageChanged, pageDraft, photoPlan, photosChanged, removePhoto, unsentPhotos } from './gymPageView';
 import { pickProblem, preparePagePhoto } from './gymPagePhotos';
 
 const A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -32,6 +32,19 @@ describe('the draft', () => {
     expect(draft.photos.map((p) => p.key)).toEqual([C, B]);
     expect(pageChanged(draft, saved)).toBe(true);
     expect(pageChanged(pageDraft(saved), saved)).toBe(false);
+  });
+});
+
+describe('after a Save that stopped part way', () => {
+  it('a new photo the server kept (its reply lost) is known by its upload key and not listed again', () => {
+    const saved = page([A]);
+    const draft = addPhotos(pageDraft(saved), [
+      { ...fresh('new-1'), uploadKey: 'k-1' },
+      { ...fresh('new-2'), uploadKey: 'k-2' },
+    ]).draft;
+    const server = { ...saved, photos: [...saved.photos, { id: B, width: 800, height: 600, uploadKey: 'k-1' }] };
+    expect(unsentPhotos(draft, server).map((p) => p.key)).toEqual(['new-2']);
+    expect(unsentPhotos(draft, saved).map((p) => p.key)).toEqual(['new-1', 'new-2']);
   });
 });
 
@@ -102,6 +115,7 @@ function fakeDom({ decodes = true, sizes = [1000] } = {}) {
     Image,
     document: { createElement: () => canvas },
     URL: { createObjectURL: () => { made.push('blob'); return `blob:${made.length}`; }, revokeObjectURL: () => undefined },
+    crypto: { randomUUID: () => `11111111-1111-4111-8111-${String(made.length).padStart(12, '0')}` },
   };
   return { dom, canvas, qualities };
 }
@@ -115,6 +129,8 @@ describe('a picked photo made ready', () => {
     expect(atob(ready.base64)).toHaveLength(900_000);
     expect(ready.preview).toMatch(/^blob:/);
     expect(ready.key).toMatch(/^new-\d+$/);
+    // Its own key for the server, so a lost reply never makes a second copy.
+    expect(ready.uploadKey).toMatch(/^[0-9a-f-]{36}$/);
   });
 
   it('a photo still over 2 MB is drawn again at lower quality, and refused after the third', async () => {

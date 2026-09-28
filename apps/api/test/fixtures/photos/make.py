@@ -76,3 +76,18 @@ info = PngImagePlugin.PngInfo()
 info.add_itxt("XML:com.adobe.xmp", xmp.decode("utf-8", "replace") if isinstance(xmp, bytes) else str(xmp))
 small.save(here / "iphone16-exif.png", "PNG", exif=exif, pnginfo=info)
 small.save(here / "iphone16-exif.webp", "WEBP", exif=exif, xmp=xmp, quality=80)
+
+# A progressive JPEG (the picture in several passes) with a phone's EXIF where a simple
+# reader stops looking: after the first pass. Pillow draws the picture; the EXIF block is
+# the Galaxy A56's own, as its phone wrote it (review of 20c-iv-b, round one, test 3).
+samsung = (src / "samsung-a56.jpg").read_bytes()
+meta, _ = segments(samsung)
+exif_block = next(samsung[s:e] for m, s, e in meta if m == 0xE1 and samsung[s + 4:s + 10] == b"Exif\0\0")
+prog = io.BytesIO()
+small.convert("RGB").save(prog, "JPEG", quality=80, progressive=True)
+p = prog.getvalue()
+_, first_scan = segments(p)
+at = first_scan + 2 + int.from_bytes(p[first_scan + 2:first_scan + 4], "big")
+while not (p[at] == 0xFF and p[at + 1] not in (0x00, 0xFF, *range(0xD0, 0xD8))):
+    at += 1
+(here / "progressive-exif-between-scans.jpg").write_bytes(p[:at] + exif_block + p[at:])

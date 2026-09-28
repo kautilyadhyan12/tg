@@ -4,6 +4,7 @@
 // The first block is the worst thing this job could do to a real person: a phone photo
 // published with the place it was taken. It is checked on the file the store really
 // holds and on the bytes a stranger on the internet is really sent.
+import { randomUUID } from "node:crypto";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -58,6 +59,36 @@ interface CreatedOrg {
   org: { id: string; slug: string; name: string };
   joinCode: { code: string; label: string };
 }
+
+/** Every chunk type of a PNG or a WebP, as a reader of this test's own walks them. */
+function chunkTypes(b: Uint8Array): string[] {
+  const buf = Buffer.from(b);
+  const types: string[] = [];
+  if (buf.subarray(0, 4).toString("latin1") === "RIFF") {
+    for (let at = 12; at < buf.length; ) {
+      const length = buf.readUInt32LE(at + 4);
+      types.push(buf.subarray(at, at + 4).toString("latin1"));
+      at += 8 + length + (length % 2);
+    }
+  } else {
+    for (let at = 8; at < buf.length; ) {
+      const length = buf.readUInt32BE(at);
+      types.push(buf.subarray(at + 4, at + 8).toString("latin1"));
+      at += 12 + length;
+    }
+  }
+  return types;
+}
+
+let puts = 0;
+let gate: { need: number; arrived: number; open: () => void; opened: Promise<void> } | null = null;
+const closeGate = (need: number): void => {
+  let open: () => void = () => undefined;
+  const opened = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  gate = { need, arrived: 0, open, opened };
+};
 
 d("photos on a gym's page (real Postgres, real disk)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
@@ -134,7 +165,7 @@ d("photos on a gym's page (real Postgres, real disk)", () => {
     expect((await put(`/v1/orgs/${org.org.id}/page`, { shown, about: "", facilities: [], ownFacilities: [] }, cookies)).statusCode).toBe(200);
   };
   const add = async (org: CreatedOrg, cookies: Record<string, string>, contentBase64 = IPHONE): Promise<GymPagePhoto> => {
-    const res = await post(photosUrl(org.org.id), { contentBase64 }, cookies);
+    const res = await post(photosUrl(org.org.id), { contentBase64, uploadKey: randomUUID() }, cookies);
     expect(res.statusCode, res.body).toBe(201);
     return (JSON.parse(res.body) as { photo: GymPagePhoto }).photo;
   };
@@ -156,10 +187,25 @@ d("photos on a gym's page (real Postgres, real disk)", () => {
       INSERT INTO plans (code, audience, name_key, price_minor, currency, interval, seat_cap, trial_days, rank, entitlements, member_entitlements)
       VALUES (${LIVE_PLAN}, 'org', ${"plan." + LIVE_PLAN}, 0, 'INR', 'month', 100000, 0, 10, '{}'::jsonb, '{}'::jsonb)
       ON CONFLICT (code) DO UPDATE SET active = true`;
+    const disk = createDiskPhotoStore(folder);
     const overrides = {
       emailSender: { sendVerificationEmail: () => Promise.resolve(), sendPasswordResetEmail: () => Promise.resolve(), sendSignInCodeEmail: () => Promise.resolve() },
       robotCheck: passing,
-      photoStore: createDiskPhotoStore(folder),
+      // The disk store, with a gate a test can close: every write waits there until the
+      // number it names have arrived, so two requests are proved to be past the same point.
+      photoStore: {
+        put: async (key: string, bytes: Uint8Array) => {
+          puts += 1;
+          if (gate !== null) {
+            gate.arrived += 1;
+            if (gate.arrived >= gate.need) gate.open();
+            await gate.opened;
+          }
+          await disk.put(key, bytes);
+        },
+        get: (key: string) => disk.get(key),
+        remove: (key: string) => disk.remove(key),
+      },
     };
     app = await buildApp(loadConfig(baseEnv), overrides);
     await api().ready();
@@ -201,6 +247,11 @@ d("photos on a gym's page (real Postgres, real disk)", () => {
         const onDisk = new Uint8Array(await readFile(join(folder, ...(row?.storage_key ?? "").split("/"))));
         expect(hasGps(onDisk), `${name} on disk`).toBe(false);
         expect(Buffer.from(onDisk).toString("latin1"), `${name} on disk`).not.toContain(maker);
+        // A PNG's or WebP's metadata is in chunks of its own: none of them is on disk.
+        if (type !== "image/jpeg") {
+          expect(chunkTypes(new Uint8Array(sent))).toEqual(expect.arrayContaining(type === "image/png" ? ["eXIf", "iTXt"] : ["EXIF", "XMP "]));
+          for (const chunk of ["eXIf", "iTXt", "tEXt", "zTXt", "EXIF", "XMP "]) expect(chunkTypes(onDisk), `${name} on disk`).not.toContain(chunk);
+        }
         // …and what anybody on the internet is sent.
         const shown = await get(publicPhotoUrl(gym.org.slug, added.id));
         expect(shown.statusCode).toBe(200);
@@ -210,7 +261,8 @@ d("photos on a gym's page (real Postgres, real disk)", () => {
       // The iPhone photo was one the server read, not a stand-in: its real size.
       const page = JSON.parse((await get(`/v1/public/gyms/${gym.org.slug}`)).body) as { page: PublicGymPage };
       expect(page.page.photos[0]).toMatchObject({ width: 2935, height: 2479 });
-      expect(page.page.photos[1]).toMatchObject({ width: 96, height: 72 });
+      // The Galaxy's photo, held sideways (orientation 6): kept at the size it is shown.
+      expect(page.page.photos[1]).toMatchObject({ width: 72, height: 96 });
     },
     TIMEOUT_MS,
   );
@@ -234,16 +286,16 @@ d("photos on a gym's page (real Postgres, real disk)", () => {
       const seen = await get(staffPhotoUrl(gym.org.id, mine.id), manager.cookies);
       expect(seen.statusCode).toBe(200);
       expect(seen.headers["cache-control"]).toBe("private, no-store");
-      expect((await post(photosUrl(gym.org.id), { contentBase64: PNG }, manager.cookies)).statusCode).toBe(403);
+      expect((await post(photosUrl(gym.org.id), { contentBase64: PNG, uploadKey: randomUUID() }, manager.cookies)).statusCode).toBe(403);
       expect((await del(staffPhotoUrl(gym.org.id, mine.id), manager.cookies)).statusCode).toBe(403);
       expect((await put(`${photosUrl(gym.org.id)}/order`, { photoIds: [mine.id] }, manager.cookies)).statusCode).toBe(403);
       // A trainer has no Leads gate at all.
       expect((await get(staffPhotoUrl(gym.org.id, mine.id), trainer.cookies)).statusCode).toBe(403);
-      expect((await post(photosUrl(gym.org.id), { contentBase64: PNG }, trainer.cookies)).statusCode).toBe(403);
+      expect((await post(photosUrl(gym.org.id), { contentBase64: PNG, uploadKey: randomUUID() }, trainer.cookies)).statusCode).toBe(403);
       // Another gym's owner and a stranger: this gym does not exist for them.
       for (const outsider of [rival, stranger]) {
         expect((await get(staffPhotoUrl(gym.org.id, mine.id), outsider.cookies)).statusCode).toBe(404);
-        expect((await post(photosUrl(gym.org.id), { contentBase64: PNG }, outsider.cookies)).statusCode).toBe(404);
+        expect((await post(photosUrl(gym.org.id), { contentBase64: PNG, uploadKey: randomUUID() }, outsider.cookies)).statusCode).toBe(404);
         expect((await del(staffPhotoUrl(gym.org.id, mine.id), outsider.cookies)).statusCode).toBe(404);
         expect((await put(`${photosUrl(gym.org.id)}/order`, { photoIds: [mine.id] }, outsider.cookies)).statusCode).toBe(404);
       }
@@ -311,7 +363,7 @@ d("photos on a gym's page (real Postgres, real disk)", () => {
       const owner = await makeUser("refuse-owner");
       const gym = await makeOrg(owner.cookies, "Refuse Gym");
       const refused = async (contentBase64: string) => {
-        const res = await post(photosUrl(gym.org.id), { contentBase64 }, owner.cookies);
+        const res = await post(photosUrl(gym.org.id), { contentBase64, uploadKey: randomUUID() }, owner.cookies);
         return { status: res.statusCode, ...(JSON.parse(res.body) as { error: string; message: string }) };
       };
       expect(await refused(Buffer.from("<svg onload=alert(1)>").toString("base64"))).toMatchObject({
@@ -324,9 +376,9 @@ d("photos on a gym's page (real Postgres, real disk)", () => {
         error: "photo_damaged",
       });
       expect((await refused("not base64 at all!")).status).toBe(400);
-      expect((await post(photosUrl(gym.org.id), { contentBase64: PNG, name: "x.png" }, owner.cookies)).statusCode).toBe(400);
+      expect((await post(photosUrl(gym.org.id), { contentBase64: PNG, uploadKey: randomUUID(), name: "x.png" }, owner.cookies)).statusCode).toBe(400);
       // Over the cap the body itself is refused before anything reads it.
-      const tooBig = await post(photosUrl(gym.org.id), { contentBase64: "A".repeat(3_000_000) }, owner.cookies);
+      const tooBig = await post(photosUrl(gym.org.id), { contentBase64: "A".repeat(3_000_000), uploadKey: randomUUID() }, owner.cookies);
       expect([400, 413]).toContain(tooBig.statusCode);
       expect(await stored(gym.org.id)).toEqual([]);
       expect(await filesOf(gym.org.id)).toEqual([]);
@@ -342,10 +394,16 @@ d("photos on a gym's page (real Postgres, real disk)", () => {
       for (let i = 0; i < GYM_PAGE_MAX_PHOTOS - 1; i++) await add(gym, owner.cookies, WEBP);
       const other = second;
       if (other === undefined) throw new Error("no second api");
+      // Both are held at the file write, past the early count, until both have got there:
+      // only the count under the gym's lock can tell them apart.
+      closeGate(2);
+      const putsBefore = puts;
       const both = await Promise.all([
-        send(api(), "POST", photosUrl(gym.org.id), { contentBase64: PNG }, owner.cookies),
-        send(other, "POST", photosUrl(gym.org.id), { contentBase64: PNG }, owner.cookies),
+        send(api(), "POST", photosUrl(gym.org.id), { contentBase64: PNG, uploadKey: randomUUID() }, owner.cookies),
+        send(other, "POST", photosUrl(gym.org.id), { contentBase64: PNG, uploadKey: randomUUID() }, owner.cookies),
       ]);
+      gate = null;
+      expect(puts - putsBefore).toBe(2);
       expect(both.map((r) => r.statusCode).sort()).toEqual([201, 409]);
       const refused = both.find((r) => r.statusCode === 409);
       expect(JSON.parse(refused?.body ?? "{}")).toMatchObject({
@@ -356,7 +414,93 @@ d("photos on a gym's page (real Postgres, real disk)", () => {
       expect(rows.map((r) => r.position)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
       // The refused photo's file went with it.
       expect(await filesOf(gym.org.id)).toEqual(rows.map((r) => r.storage_key.split("/")[2]).sort());
-      expect((await post(photosUrl(gym.org.id), { contentBase64: PNG }, owner.cookies)).statusCode).toBe(409);
+      expect((await post(photosUrl(gym.org.id), { contentBase64: PNG, uploadKey: randomUUID() }, owner.cookies)).statusCode).toBe(409);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "the same photo sent again under its upload key is the photo already kept, sent twice at once too",
+    async () => {
+      const owner = await makeUser("again-owner");
+      const gym = await makeOrg(owner.cookies, "Again Gym");
+      const uploadKey = randomUUID();
+      const first = await post(photosUrl(gym.org.id), { contentBase64: PNG, uploadKey }, owner.cookies);
+      expect(first.statusCode).toBe(201);
+      // Its reply was lost on the way back; the browser sends it again.
+      const again = await post(photosUrl(gym.org.id), { contentBase64: PNG, uploadKey }, owner.cookies);
+      expect(again.statusCode).toBe(201);
+      expect(JSON.parse(again.body)).toEqual(JSON.parse(first.body));
+      expect(await stored(gym.org.id)).toHaveLength(1);
+      expect(await filesOf(gym.org.id)).toHaveLength(1);
+
+      // Two at the same instant, through two apis, both past the first look.
+      const other = second;
+      if (other === undefined) throw new Error("no second api");
+      const twinKey = randomUUID();
+      closeGate(2);
+      const twins = await Promise.all([
+        send(api(), "POST", photosUrl(gym.org.id), { contentBase64: WEBP, uploadKey: twinKey }, owner.cookies),
+        send(other, "POST", photosUrl(gym.org.id), { contentBase64: WEBP, uploadKey: twinKey }, owner.cookies),
+      ]);
+      gate = null;
+      expect(twins.map((r) => r.statusCode)).toEqual([201, 201]);
+      expect(JSON.parse(twins[0].body)).toEqual(JSON.parse(twins[1].body));
+      expect(await stored(gym.org.id)).toHaveLength(2);
+      expect(await filesOf(gym.org.id)).toHaveLength(2);
+      // The key is this gym's: another gym may use the same one for a photo of its own.
+      const rival = await makeUser("again-rival");
+      const rivalGym = await makeOrg(rival.cookies, "Again Rival Gym");
+      const theirs = await post(photosUrl(rivalGym.org.id), { contentBase64: PNG, uploadKey }, rival.cookies);
+      expect(theirs.statusCode).toBe(201);
+      const idOf = (res: { body: string }) => (JSON.parse(res.body) as { photo: GymPagePhoto }).photo.id;
+      expect(idOf(theirs)).not.toBe(idOf(first));
+      expect(await stored(rivalGym.org.id)).toHaveLength(1);
+
+      // The tenth photo's reply lost: sent again to a page now full, it is still the photo
+      // kept, not "your page has 10 photos", and nothing is written for it.
+      for (let i = 2; i < GYM_PAGE_MAX_PHOTOS - 1; i++) await add(gym, owner.cookies, WEBP);
+      const tenthKey = randomUUID();
+      const tenth = await post(photosUrl(gym.org.id), { contentBase64: PNG, uploadKey: tenthKey }, owner.cookies);
+      expect(tenth.statusCode).toBe(201);
+      expect(await stored(gym.org.id)).toHaveLength(GYM_PAGE_MAX_PHOTOS);
+      const putsBefore = puts;
+      const replay = await post(photosUrl(gym.org.id), { contentBase64: PNG, uploadKey: tenthKey }, owner.cookies);
+      expect(replay.statusCode, replay.body).toBe(201);
+      expect(idOf(replay)).toBe(idOf(tenth));
+      expect(puts).toBe(putsBefore);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "a gym's id in capitals is the same gym: its photo is kept, not a server error",
+    async () => {
+      const owner = await makeUser("caps-owner");
+      const gym = await makeOrg(owner.cookies, "Caps Gym");
+      const res = await post(photosUrl(gym.org.id.toUpperCase()), { contentBase64: PNG, uploadKey: randomUUID() }, owner.cookies);
+      expect(res.statusCode, res.body).toBe(201);
+      const rows = await stored(gym.org.id);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.storage_key).toBe(rows[0]?.storage_key.toLowerCase());
+      expect(await filesOf(gym.org.id)).toHaveLength(1);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "swapping a full page of ten photos three times in an hour is not stopped half way",
+    async () => {
+      const owner = await makeUser("swap-owner");
+      const gym = await makeOrg(owner.cookies, "Swap Gym");
+      for (let i = 0; i < GYM_PAGE_MAX_PHOTOS; i++) await add(gym, owner.cookies, WEBP);
+      for (let round = 0; round < 3; round++) {
+        for (const row of await stored(gym.org.id)) expect((await del(staffPhotoUrl(gym.org.id, row.id), owner.cookies)).statusCode).toBe(200);
+        for (let i = 0; i < GYM_PAGE_MAX_PHOTOS; i++) await add(gym, owner.cookies, WEBP);
+        const ids = (await stored(gym.org.id)).map((r) => r.id).reverse();
+        expect((await put(`${photosUrl(gym.org.id)}/order`, { photoIds: ids }, owner.cookies)).statusCode).toBe(200);
+      }
+      expect(await stored(gym.org.id)).toHaveLength(GYM_PAGE_MAX_PHOTOS);
     },
     TIMEOUT_MS,
   );

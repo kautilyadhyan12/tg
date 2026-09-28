@@ -12,7 +12,9 @@ const QUALITIES = [0.85, 0.7, 0.55];
 
 let made = 0;
 
-/** file → `{ key, base64, preview }`, or throws `unreadable` / `too_big`. */
+/** file → `{ key, uploadKey, base64, preview }`, or throws `unreadable` / `too_big`.
+ *  `uploadKey` is sent with the photo: sent again after a lost reply, the server answers
+ *  with the photo it already kept. */
 export async function preparePagePhoto(file, dom = globalThis) {
   for (const quality of QUALITIES) {
     let blob;
@@ -25,6 +27,7 @@ export async function preparePagePhoto(file, dom = globalThis) {
       made += 1;
       return {
         key: `new-${made}`,
+        uploadKey: dom.crypto.randomUUID(),
         base64: bytesToBase64(new Uint8Array(await blob.arrayBuffer())),
         preview: dom.URL.createObjectURL(blob),
       };

@@ -22,7 +22,8 @@ const KEY = new RegExp(`^gym-page/${UUID}/${UUID}\\.(jpg|png|webp)$`);
 const EXTENSION = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" } as const;
 
 export function photoKey(gymId: string, photoId: string, type: keyof typeof EXTENSION): string {
-  const key = `gym-page/${gymId}/${photoId}.${EXTENSION[type]}`;
+  // An id may arrive in capitals (a UUID is the same either way); a key is always lower case.
+  const key = `gym-page/${gymId.toLowerCase()}/${photoId.toLowerCase()}.${EXTENSION[type]}`;
   if (!KEY.test(key)) throw new Error("photo key out of shape");
   return key;
 }

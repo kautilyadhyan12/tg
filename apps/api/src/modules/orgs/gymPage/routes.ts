@@ -146,12 +146,14 @@ export function registerGymPageRoutes(app: FastifyInstance, deps: GymPageRouteDe
     }
     return count <= ENQUIRY_PAGE_MAX;
   };
-  /** Adding, removing and moving photos: at most 10 on a page, so 60 an hour is room
-   *  to change one's mind many times. */
+  /** Adding, removing and moving photos. Each photo is its own request, so swapping a
+   *  full page of ten is 21 (ten removes, ten adds, one order): 300 an hour is fourteen
+   *  such swaps for one person, across every gym they own, and 1,000 an address lets
+   *  several owners at one address (a co-working space, a carrier's gateway) do the same. */
   const photoWriteLimit = createDualRateLimit({
     name: "gym_page_photo_write",
-    max: 60,
-    ipMax: 200,
+    max: 300,
+    ipMax: 1000,
     windowMs: 60 * 60 * 1000,
     identifier: (req) => req.authUser?.id ?? null,
     redis: deps.redis,
@@ -193,7 +195,7 @@ export function registerGymPageRoutes(app: FastifyInstance, deps: GymPageRouteDe
     const body = parseOr400(addGymPagePhotoRequestSchema, req.body, req, reply);
     if (body === null) return;
     const bytes = new Uint8Array(Buffer.from(body.contentBase64, "base64"));
-    const photo = await service.addPhoto(pageDeps, requireUserId(req), params.gymId, bytes, gate(photoWriteLimit)(req, reply));
+    const photo = await service.addPhoto(pageDeps, requireUserId(req), params.gymId, bytes, body.uploadKey, gate(photoWriteLimit)(req, reply));
     if (photo === null) return;
     return reply.status(201).send({ photo });
   });

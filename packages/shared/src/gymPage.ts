@@ -113,6 +113,10 @@ export const gymPagePhotoSchema = z
   })
   .strict();
 export type GymPagePhoto = z.infer<typeof gymPagePhotoSchema>;
+/** A photo as staff see it: with the key the browser sent it under, so a photo whose
+ *  reply was lost is recognised as kept, never sent twice. */
+export const gymPageStaffPhotoSchema = gymPagePhotoSchema.extend({ uploadKey: z.string().uuid() }).strict();
+export type GymPageStaffPhoto = z.infer<typeof gymPageStaffPhotoSchema>;
 
 /** The photo's bytes as base64 (the member file's transport: JSON, no multipart). */
 export const addGymPagePhotoRequestSchema = z
@@ -122,10 +126,12 @@ export const addGymPagePhotoRequestSchema = z
       .min(4)
       .max(Math.ceil(GYM_PAGE_PHOTO_MAX_BYTES / 3) * 4)
       .regex(/^[A-Za-z0-9+/]+={0,2}$/),
+    /** The browser's key for this one picked photo; the same key again is the same photo. */
+    uploadKey: z.string().uuid(),
   })
   .strict();
 export type AddGymPagePhotoRequest = z.infer<typeof addGymPagePhotoRequestSchema>;
-export const gymPagePhotoResponseSchema = z.object({ photo: gymPagePhotoSchema }).strict();
+export const gymPagePhotoResponseSchema = z.object({ photo: gymPageStaffPhotoSchema }).strict();
 
 /** The page's photos in a new order: every photo it has, each once. */
 export const orderGymPagePhotosRequestSchema = z
@@ -137,7 +143,7 @@ export const orderGymPagePhotosRequestSchema = z
   })
   .strict();
 export type OrderGymPagePhotosRequest = z.infer<typeof orderGymPagePhotosRequestSchema>;
-export const gymPagePhotosResponseSchema = z.object({ photos: z.array(gymPagePhotoSchema).max(GYM_PAGE_MAX_PHOTOS) }).strict();
+export const gymPagePhotosResponseSchema = z.object({ photos: z.array(gymPageStaffPhotoSchema).max(GYM_PAGE_MAX_PHOTOS) }).strict();
 
 /** What staff read when a photo cannot be added or moved. */
 export const GYM_PAGE_PHOTO_WORDS = {
@@ -159,7 +165,7 @@ export const gymPageSchema = z
     /** The gym's own facilities, in the order it added them. */
     ownFacilities: z.array(z.string()).max(GYM_PAGE_MAX_OWN_FACILITIES),
     /** The page's photos; the first is the large one. */
-    photos: z.array(gymPagePhotoSchema).max(GYM_PAGE_MAX_PHOTOS),
+    photos: z.array(gymPageStaffPhotoSchema).max(GYM_PAGE_MAX_PHOTOS),
     /** The page's address is `/gyms/{slug}`. */
     slug: z.string().min(1),
     /** This person may change the page (the owner's `org.manage`); others see it. */
