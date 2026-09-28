@@ -297,6 +297,9 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
   const [missingSet, setMissingSet] = useState(null);
   const [left, setLeft] = useState(() => new Set());
   const [leaversOpen, setLeaversOpen] = useState(false);
+  // The server's wrong-file check asked about a "They're still members" press: its number is
+  // then typed on the card (round one, High-1).
+  const [keepAsked, setKeepAsked] = useState(false);
   const [answer, setAnswer] = useState(null);
   const [typed, setTyped] = useState('');
   const [permission, setPermission] = useState(false);
@@ -411,6 +414,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
         setMissingNames([]);
         missingGroup.current = m?.group ?? null;
         setLeft(new Set());
+        setKeepAsked(false);
         setMissingSet(null);
         if (m?.group === 'gone') void loadMissing(p.uploadId);
         else if (m !== null) void loadPage(p.uploadId, m.group, 0);
@@ -456,6 +460,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
     setMissingNames([]);
     setMissingSet(null);
     setLeft(new Set());
+    setKeepAsked(false);
     setLeaversOpen(false);
     setAnswer(null);
     setTyped('');
@@ -554,6 +559,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
       });
       finished(res.data.confirmed);
     } catch (err) {
+      if (extra.marks !== undefined && errorCode(err) === 'large_change') setKeepAsked(true);
       refused(err);
     } finally {
       setBusy(null);
@@ -700,6 +706,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
     const marking = missing?.group === 'gone';
     const markSet = marking && missingSet !== null && typeof missingSet === 'object' ? missingSet : null;
     const ticked = markSet === null ? 0 : markSet.people.filter((p) => left.has(p.entryId)).length;
+    const keepTyping = marking && answer === 'keep' && keepAsked && guard.needsTick;
     const canImport =
       busy === null &&
       !readOnly &&
@@ -707,7 +714,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
       !dirty &&
       permission &&
       (missing === null || answer !== null) &&
-      (marking ? markSet !== null : !needsTyping || (answer === 'left' && typedMatches(typed, guard))) &&
+      (marking ? markSet !== null && (!keepTyping || typedMatches(typed, guard)) : !needsTyping || (answer === 'left' && typedMatches(typed, guard))) &&
       (handEdits.entries === 0 || handTick);
     // "Import 3 members" only when nobody is moved to past members by the same press.
     const importLabel =
@@ -832,6 +839,11 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
                   {missingStatusLine(missing)}
                 </div>
               ) : null}
+              {marking ? (
+                <div className="text-[13px] mt-1" style={{ color: C.soft }} data-testid="missing-tick-help">
+                  Tick the people who have left. If you tick nobody, They&apos;ve left moves everyone.
+                </div>
+              ) : null}
             </div>
             {/* Every one of them, with what the list says of them, before the question. */}
             {!marking ? (
@@ -864,8 +876,36 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
                 onClick={chooseLeft}
                 disabled={busy !== null}
               />
-              <Choice on={answer === 'keep'} title={`They're still ${words.people}`} sub="Leave them on the list" onClick={chooseKeep} disabled={busy !== null} />
+              <Choice
+                on={answer === 'keep'}
+                title={`They're still ${words.people}`}
+                sub={marking && ticked > 0 ? `Keep all ${count(markSet.people.length)} on the list, ticked or not` : 'Leave them on the list'}
+                onClick={chooseKeep}
+                disabled={busy !== null}
+              />
             </div>
+            {keepTyping ? (
+              <div className="flex flex-col gap-2" data-testid="keep-typing">
+                <p className="text-sm" style={{ color: C.soft }}>
+                  {guard.entriesGoing > 0
+                    ? `${count(guard.entriesGoing)} ${peopleWord(guard.entriesGoing, words)} would come off your list.`
+                    : `${count(guard.membersLeaving)} ${guard.membersLeaving === 1 ? 'person who uses' : 'people who use'} the app would no longer be on your list.`}
+                </p>
+                <label className="flex items-center gap-3 text-[15px]" style={{ color: C.soft }}>
+                  <span>
+                    Type <b style={{ color: '#fff' }}>{count(guardNumber(guard))}</b> to confirm
+                  </span>
+                  <input
+                    aria-label="Type the number to confirm"
+                    inputMode="numeric"
+                    value={typed}
+                    onChange={(e) => setTyped(e.target.value)}
+                    className="w-28 rounded-xl px-3 min-h-[44px] text-base outline-none"
+                    style={{ background: C.card2, color: '#fff', border: '1px solid rgba(255,255,255,0.18)' }}
+                  />
+                </label>
+              </div>
+            ) : null}
             {answer === 'left' && needsTyping && !marking ? (
               <label className="flex items-center gap-3 text-[15px]" style={{ color: C.soft }}>
                 <span>
@@ -1054,7 +1094,11 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
             <button
               type="button"
               onClick={
-                !marking ? () => void confirm() : answer === 'left' ? () => setLeaversOpen(true) : () => void confirm({ marks: marksBody(markSet, left, 'keep') })
+                !marking
+                  ? () => void confirm()
+                  : answer === 'left'
+                    ? () => setLeaversOpen(true)
+                    : () => void confirm({ marks: marksBody(markSet, left, 'keep'), acknowledgeLargeChange: keepTyping && typedMatches(typed, guard) })
               }
               disabled={!canImport}
               className={`${PRIMARY} mt-2`}

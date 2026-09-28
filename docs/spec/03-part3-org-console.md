@@ -3338,7 +3338,11 @@ names of the people the file leaves out and their details, and its two answers, 
 left** and **They're still members**. The one addition is a tick beside each name: They've
 left moves the people ticked ("Move the 2 ticked to past members"), or everyone when nobody
 is ticked, as before; They're still members keeps everyone and opens no box. Import waits for
-one of the two answers. Each person's details name what each word is ("Status: Cancelled ·
+one of the two answers; a line under the status words says "Tick the people who have left. If
+you tick nobody, They've left moves everyone.", and with people ticked They're still members
+reads "Keep all 5 on the list, ticked or not". When the wrong-file check asks about They're
+still members (app members whose email the file changes), its number is typed on the card.
+Each person's details name what each word is ("Status: Cancelled ·
 Membership: Gold · Payment: Paid"; the line above: "Status: Active 20 · Frozen 5"), and above
 the card Review shows, beside the new members, how many are already on the list, each with
 See who (RULINGS 2026-09-29). Import with anyone leaving opens a box first, as

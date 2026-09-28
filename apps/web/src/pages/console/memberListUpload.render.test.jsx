@@ -264,6 +264,49 @@ describe('the worst thing: nobody leaves who was not answered for', () => {
     });
   });
 
+  it("They're still members while the wrong-file check asks: the number to type is on the card, and the press sends it (round one, High-1)", async () => {
+    orgService.getMemberListMissing.mockResolvedValueOnce(missingRead([olivia]));
+    await reviewWith(oneMissing());
+    await screen.findAllByTestId('missing-row');
+    fireEvent.click(choice(/They're still members/));
+    tickPermission();
+    const keepGuard = { entriesGoing: 0, listSize: 12, membersLeaving: 11, membersListedNow: 11, needsTick: true, mostOfListWouldGo: false };
+    orgService.confirmMemberList.mockRejectedValueOnce(
+      refusal(409, {
+        error: 'large_change',
+        message: 'This would change more of your list than we apply without asking. Check the numbers below, then confirm again to go ahead.',
+        guard: keepGuard,
+      }),
+    );
+    fireEvent.click(importButton());
+    expect(await screen.findByText('11 people who use the app would no longer be on your list.')).toBeTruthy();
+    const box = screen.getByLabelText('Type the number to confirm');
+    expect(importButton().disabled).toBe(true);
+    fireEvent.change(box, { target: { value: '10' } });
+    expect(importButton().disabled).toBe(true);
+    fireEvent.change(box, { target: { value: '11' } });
+    expect(importButton().disabled).toBe(false);
+    orgService.confirmMemberList.mockResolvedValueOnce({ data: { confirmed: confirmedAnswer() } });
+    fireEvent.click(importButton());
+    await screen.findByTestId('member-import-done');
+    expect(orgService.confirmMemberList.mock.calls[1][2]).toEqual({
+      permissionConfirmed: true,
+      acknowledgeLargeChange: true,
+      acknowledgeHandEdits: false,
+      marks: { missingDigest: DIGEST, left: [], stay: [olivia.entryId] },
+    });
+  });
+
+  it('the card says what a tick does, and with people ticked They\'re still members says it keeps them too (round one, Low-2)', async () => {
+    orgService.getMemberListMissing.mockResolvedValueOnce(missingRead([olivia, liam]));
+    await reviewWith(preview({ list: list({ unchanged: 4, gone: 2 }), guard: { ...calm, entriesGoing: 2, listSize: 6 } }));
+    const card = within(await screen.findByTestId('missing'));
+    expect(card.getByTestId('missing-tick-help').textContent).toBe("Tick the people who have left. If you tick nobody, They've left moves everyone.");
+    expect(choice(/They're still members/).textContent).toContain('Leave them on the list');
+    fireEvent.click(await card.findByLabelText('Liam Hughes has left'));
+    expect(choice(/They're still members/).textContent).toContain('Keep all 2 on the list, ticked or not');
+  });
+
   it('who loses the app is named in the box, and a box that moved is shown again before anything is imported', async () => {
     orgService.getMemberListMissing.mockResolvedValueOnce(missingRead([olivia]));
     await reviewWith(oneMissing());

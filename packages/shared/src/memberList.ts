@@ -27,6 +27,13 @@ export const MEMBER_FILE_MAX_INFLATED_BYTES = 25 * 1024 * 1024;
 export const MEMBER_FILE_MAX_ARCHIVE_ENTRIES = 1_000;
 /** The most people one list may hold. */
 export const MEMBER_LIST_MAX_DATA_ROWS = 10_000;
+
+/** At most this many people can be missing from one whole-list file and answered for
+ *  (§18.8). A file that leaves out more is refused as it is read (`too_many_missing`). */
+export const MEMBER_LIST_MARKS_MAX = 20_000;
+
+/** That refusal's sentence: a 400 `too_many_missing` from the upload. */
+export const MEMBER_LIST_TOO_MANY_MISSING_WORDS = `More than ${MEMBER_LIST_MARKS_MAX.toLocaleString("en")} people on your list aren't in this file, which is more than one import can ask about. Check that this is your whole member list, and upload it again.`;
 /** How far down a sheet the header row is looked for (3a-ii). */
 export const MEMBER_FILE_HEADER_SCAN_ROWS = 20;
 /** Where a sheet is cut: the most people plus room for a title block above the
@@ -1155,9 +1162,6 @@ export type MemberListRowsResponse = z.infer<typeof memberListRowsResponseSchema
  *  the wrong file; "this would replace corrections your own staff typed in" is about
  *  the file being right and somebody's work being lost anyway. A screen that asked
  *  them together would let a yes to either stand for a yes to both. */
-/** At most this many people can be missing from one file and marked (§18.8). */
-export const MEMBER_LIST_MARKS_MAX = 20_000;
-
 /** STAFF'S MARK ON EACH PERSON THE FILE LEAVES OUT (spec Part 3 §18.8; ROADMAP 5b-v-d):
  *  Left or Still a member, every one of them, nothing marked for staff. `missingDigest`
  *  names the set they were shown (`memberListMissingSchema`); a set that moved is refused. */
@@ -1238,7 +1242,7 @@ export const MEMBER_LIST_CONFIRM_REFUSAL_WORDS = {
   hand_edits:
     "This file would replace details your staff typed in here. Check the fields below, then confirm again to let the file win.",
   permission_needed: "Tick the permission box first. Nothing was imported.",
-  marks_needed: "Mark everyone who isn't in this file as Left or Still a member first. Nothing was imported.",
+  marks_needed: "Choose They've left or They're still members first. Nothing was imported.",
   leavers_changed: "Who would lose the app changed while you were looking, so nothing was imported. Look at the names again.",
 } as const;
 

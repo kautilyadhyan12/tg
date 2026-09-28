@@ -222,13 +222,26 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     return reply.status(200).send({ missing });
   });
 
+  /** The box compares the whole file with the list, as a confirm does, so it has an
+   *  allowance of its own rather than the page reads': 60 an hour each, 240 from one
+   *  address (the front desk is one address with several staff). */
+  const leaversLimit = createDualRateLimit({
+    name: "memberlist_leavers",
+    max: 60,
+    ipMax: 240,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+  const leaversGate = gate(leaversLimit);
+
   /** The box before an import with leavers: who moves, who loses the app, who keeps it. */
   app.post("/v1/orgs/:gymId/member-list/uploads/:uploadId/leavers", { preHandler: [app.authenticate] }, async (req, reply) => {
     const params = parseOr400(memberListParamsSchema, req.params, req, reply);
     if (params === null) return;
     const body = parseOr400(memberListLeaversRequestSchema, req.body ?? {}, req, reply);
     if (body === null) return;
-    const leavers = await service.previewLeavers(listDeps, requireUserId(req), params.gymId, params.uploadId, body.marks, readGate(req, reply));
+    const leavers = await service.previewLeavers(listDeps, requireUserId(req), params.gymId, params.uploadId, body.marks, leaversGate(req, reply));
     if (leavers === null) return;
     return reply.status(200).send({ leavers });
   });

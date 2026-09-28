@@ -32,6 +32,8 @@ import {
   MEMBER_FILE_PARSE_TIMEOUT_MS,
   MEMBER_LIST_CONFIRM_REFUSAL_WORDS,
   MEMBER_LIST_ENTRIES_PAGE,
+  MEMBER_LIST_MARKS_MAX,
+  MEMBER_LIST_TOO_MANY_MISSING_WORDS,
   MEMBER_LIST_MAX_EXTRA_FIELDS,
   MEMBER_LIST_PARSES_PER_GYM,
   MEMBER_LIST_ROWS_PAGE,
@@ -92,7 +94,7 @@ import * as repo from "./repo.js";
 import { inAppRecordIds, pastRecordOf } from "./whose.js";
 import { withdrawForAccounts, withdrawForAddresses } from "../invites/join.js";
 import { bustAfterRemoval } from "./byHandService.js";
-import { importLeaversPlanOn, requireForPlan, type RemovalPlan } from "./removeSelected.js";
+import { importLeaversPlanOn, importNeedsLargeTick, requireForPlan, requireRemoveForLeft, type RemovalPlan } from "./removeSelected.js";
 
 export interface MemberListDeps {
   sql: Sql;
@@ -530,6 +532,9 @@ export async function previewUpload(
   // points into what it KEPT — so the rows stored are the rule's own, never the
   // reader's, or a stored place would name somebody who was never on the list.
   const { measured, reconciled, over } = await measure(deps.sql, gymId, understood, input.mode, state, catalogue);
+  // Everyone a whole list leaves out is answered for at Import (§18.8), so a file that
+  // leaves out more than one answer can carry is refused here, before it is staged.
+  if (reconciled.missing.length > MEMBER_LIST_MARKS_MAX) throw new OrgsError(400, "too_many_missing", MEMBER_LIST_TOO_MANY_MISSING_WORDS);
   const file: MemberListStagedFile = {
     understanding: { ...withGymFieldsFull(understood, over), rows: reconciled.rows },
     groups: groupsOf(reconciled),
@@ -571,8 +576,11 @@ async function stagedOr409(
   gymId: string,
   uploadId: string,
   limit: () => Promise<boolean>,
+  /** A further role check, after `members.confirm` and before the allowance is spent. */
+  precheck?: (privileges: readonly string[]) => Promise<void>,
 ): Promise<repo.UploadRow | null> {
-  await requirePrivilege(deps, gymId, userId, "members.confirm");
+  const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
+  if (precheck !== undefined) await precheck(privileges);
   // After the gate, never before it (the file header says why): a stranger's 404
   // and a trainer's 403 must not spend the front desk's own allowance.
   if (!(await limit())) return null;
@@ -992,12 +1000,26 @@ export async function readMissing(
   const read = await readStaged(deps, gymId, upload);
   const gone = upload.mode === "whole_list" ? read.groups.gone : [];
   const ids = gone.flatMap((person) => (person.entryId === null || person.entryId === undefined ? [] : [person.entryId]));
-  const onList = await repo.onListOf(deps.sql, gymId, ids);
+  const [onList, reached] = await Promise.all([
+    repo.onListOf(deps.sql, gymId, ids),
+    ids.length === 0
+      ? Promise.resolve([])
+      : repo.membersAgainstList(deps.sql, gymId, {
+          email: null,
+          phone: null,
+          emails: gone.flatMap((person) => (person.email === null ? [] : [person.email])),
+          phones: gone.flatMap((person) => (person.phone === null ? [] : [person.phone])),
+          entryIds: ids,
+        }),
+  ]);
+  // "In the app" by the rule a person's own page and Remove use (`whose.ts`): never a son's
+  // record because his mother, on her own record, uses the family email (round one, High-2).
+  const inApp = new Set(inAppRecordIds(reached));
   const people = gone.flatMap((person) => {
     const entryId = person.entryId;
     if (entryId === null || entryId === undefined) return [];
     const { fullName, email, phone, memberNumber, wasStatus } = person;
-    return [{ entryId, fullName, email, phone, memberNumber, wasStatus, inApp: read.inApp({ email, phone, entryId }), onList: onList.get(entryId) ?? null }];
+    return [{ entryId, fullName, email, phone, memberNumber, wasStatus, inApp: inApp.has(entryId), onList: onList.get(entryId) ?? null }];
   });
   return { total: people.length, digest: missingDigest(gymId, uploadId, ids), people };
 }
@@ -1013,9 +1035,12 @@ export async function previewLeavers(
   marks: MemberListMarks,
   limit: () => Promise<boolean>,
 ): Promise<MemberListLeavers | null> {
-  const upload = await stagedOr409(deps, userId, gymId, uploadId, limit);
+  let privileges: readonly string[] = [];
+  const upload = await stagedOr409(deps, userId, gymId, uploadId, limit, async (held) => {
+    privileges = held;
+    await requireRemoveForLeft(deps.sql, gymId, held, marks.left);
+  });
   if (upload === null) return null;
-  const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   const state = await repo.listState(deps.sql, gymId);
   const version = state?.version ?? 0;
   if (version !== upload.baseVersion) {
@@ -1028,7 +1053,8 @@ export async function previewLeavers(
   const leaving = await leaversFor(deps.sql, gymId, uploadId, reconciled, marks);
   if (leaving.kind === "moved") throw new OrgsError(409, "list_changed", MEMBER_LIST_CONFIRM_REFUSAL_WORDS.list_changed);
   if (leaving.kind === "marks_needed") throw new OrgsError(409, "marks_needed", MEMBER_LIST_CONFIRM_REFUSAL_WORDS.marks_needed);
-  if (leaving.plan === null) throw new OrgsError(409, "marks_needed", MEMBER_LIST_CONFIRM_REFUSAL_WORDS.marks_needed);
+  // Nobody is missing: the file this box was asked about is not the one the list now gives.
+  if (leaving.plan === null) throw new OrgsError(409, "list_changed", MEMBER_LIST_CONFIRM_REFUSAL_WORDS.list_changed);
   requireForPlan(leaving.plan, privileges);
   return leaversOf(leaving.plan, reconciled);
 }
@@ -1059,6 +1085,7 @@ export async function confirmUpload(
 ): Promise<ConfirmAnswer> {
   await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
+  if (input.marks !== null) await requireRemoveForLeft(deps.sql, gymId, privileges, input.marks.left);
   if (!(await limit())) return { kind: "rate_limited" };
   const at = deps.now();
   const settings = deps.invites ?? null;
@@ -1138,7 +1165,7 @@ export async function confirmUpload(
     // request. A gym that acknowledged a large change an hour ago has acknowledged
     // nothing about this press, which is why the tick is a field of the request and
     // never a flag on the upload. The leavers' own app line counts too.
-    if ((reconciled.guard.needsTick || (leavers?.preview.large ?? null) !== null) && !input.acknowledgeLargeChange) {
+    if (importNeedsLargeTick(reconciled.guard, leavers) && !input.acknowledgeLargeChange) {
       return { kind: "large_change", guard: reconciled.guard };
     }
 

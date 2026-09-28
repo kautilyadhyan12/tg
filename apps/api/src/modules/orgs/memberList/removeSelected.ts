@@ -16,6 +16,7 @@ import {
   MEMBER_LIST_BY_HAND_WORDS,
   type MemberListRemovePreviewRequest,
   type MemberListRemoveSelectedRequest,
+  type MemberListGuard,
   type MemberRemoveKeptReason,
   type MemberRemoveLarge,
   type MemberRemovePerson,
@@ -310,6 +311,27 @@ export function importLeaversPlan(input: {
       digest: removalDigest(input.gymId, plan.moveIds, endApp),
     },
   };
+}
+
+/** Whether an import needs its large-change answer (the typed number, or the tick): the
+ *  wrong-file check asks, or the leavers' own line does, as Remove's box asks
+ *  (`largeRemoval`). Pure. */
+export function importNeedsLargeTick(guard: MemberListGuard, leavers: RemovalPlan | null): boolean {
+  return guard.needsTick || (leavers?.preview.large ?? null) !== null;
+}
+
+/** Nothing written by a file: the leavers' rule as Remove alone decides it. */
+const NO_WRITES: FileWrites = { emails: new Set(), phones: new Set(), entryIds: new Set() };
+
+/** THE ROLE CHECK BEFORE THE WORK (CLAUDE.md §4 route order; round one, Low-3). Someone
+ *  without `members.remove` who marks a person in the app as having left is refused before
+ *  the file is compared or the allowance spent. Remove's rule on the records marked Left,
+ *  with nothing written: a file's writes only ever spare people, so this never lets through
+ *  what the full rule would refuse (it can refuse a leaver the file itself would spare; the
+ *  owner can import that). */
+export async function requireRemoveForLeft(sql: repo.SqlOrTx, gymId: string, privileges: readonly string[], leftIds: readonly string[]): Promise<void> {
+  if (leftIds.length === 0 || privileges.includes("members.remove")) return;
+  requireForPlan(await importLeaversPlanOn(sql, gymId, leftIds, NO_WRITES), privileges);
 }
 
 /** What the rule for these records reads, on `sql` (the pool, or a transaction). */

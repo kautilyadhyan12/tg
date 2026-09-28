@@ -18,6 +18,8 @@ import { emailHmac } from "../src/modules/orgs/invites/address.js";
 import { inviteSettings } from "../src/modules/orgs/invites/settings.js";
 import {
   MEMBER_LIST_CONFIRM_REFUSAL_WORDS,
+  MEMBER_LIST_MARKS_MAX,
+  MEMBER_LIST_TOO_MANY_MISSING_WORDS,
   memberListConfirmResponseSchema,
   memberListEntryWrittenSchema,
   memberListLeaversChangedSchema,
@@ -205,6 +207,23 @@ d("Import: who has left, person by person (real Postgres)", () => {
     invites: await sql`SELECT email_hmac, state FROM gym_invites WHERE gym_id = ${gym.id} ORDER BY email_hmac`,
   });
 
+  const inviteState = async (gym: Gym, email: string) =>
+    (await sql<{ state: string }[]>`
+      SELECT state FROM gym_invites WHERE gym_id = ${gym.id} AND email_hmac = ${emailHmac(settings.hmacKey, email)}`)[0]?.state ?? null;
+
+  /** Someone in the app who joined before records were linked: matched to the list by the
+   *  proved email alone. */
+  const inAppByEmail = async (gym: Gym, email: string, name: string): Promise<string> => {
+    const [row] = await sql<{ id: string }[]>`
+      INSERT INTO users (email, display_name, password_hash) VALUES (${email}, ${name}, 'x') RETURNING id`;
+    if (row === undefined) throw new Error("no user");
+    await sql`
+      INSERT INTO one_time_tokens (user_id, purpose, token_hash, expires_at, used_at)
+      VALUES (${row.id}, 'verify_email', ${emailHmac(settings.hmacKey, `token-${email}`)}, now() + interval '1 day', now())`;
+    await sql`INSERT INTO gym_members (gym_id, user_id, complimentary, consent_at, last_listed_at) VALUES (${gym.id}, ${row.id}, false, now(), now())`;
+    return row.id;
+  };
+
   let staffCount = 0;
   const staffWith = async (gym: Gym, privileges: string[]): Promise<User> => {
     const who = await register(addr(`staff-${String(++staffCount)}`));
@@ -272,6 +291,9 @@ d("Import: who has left, person by person (real Postgres)", () => {
       expect(missing.people.find((p) => p.entryId === f.bo)?.wasStatus).toBe("Frozen");
       expect(missing.people.find((p) => p.entryId === f.ana)?.inApp).toBe(true);
       expect(missing.people.find((p) => p.entryId === f.bo)?.inApp).toBe(false);
+      // Round one, High-2: Leo shares Maria's email, and she is in the app with her own
+      // record, so his row never says "In the app" (his own page doesn't either).
+      expect(missing.people.find((p) => p.entryId === f.leo)?.inApp).toBe(false);
 
       const marks = marksOf(missing, [f.leo, f.ana]);
       const box = await leaversOf(f.gym, uploadId, marks);
@@ -445,6 +467,148 @@ d("Import: who has left, person by person (real Postgres)", () => {
       expect([done.applied.new, done.applied.changed, done.applied.gone]).toEqual([1, 1, 0]);
       for (const id of [f.leo, f.ana, f.bo, f.cy, f.maria]) expect(await former(f.gym, id)).toBe(false);
       for (const who of [f.anaUser, f.cyUser, f.mariaUser]) expect(await inApp(f.gym, who)).toBe(true);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // =========================================================================
+  // ROUND ONE: WHAT THE REVIEW FOUND
+  // =========================================================================
+
+  it(
+    "invitations after an import: a leaver's address loses its invitation unless someone on the list still holds it; an app member's ends with them, and Put back gives it back",
+    async () => {
+      const gym = await makeGym();
+      const tag = String(gymCount);
+      const park = addr(`inv-park-${tag}`);
+      const eve = addr(`inv-eve-${tag}`);
+      const fam = addr(`inv-fam-${tag}`);
+      const ana = addr(`inv-ana-${tag}`);
+      await add(gym, "Maria Park", park);
+      const leo = await add(gym, "Leo Park", park);
+      await accept(await signIn(park, "Maria Park"));
+      const eveId = await add(gym, "Eve Stone", eve);
+      const fay = await add(gym, "Fay Hill", fam);
+      await add(gym, "Gus Hill", fam);
+      const anaId = await add(gym, "Ana Silva", ana);
+      const anaUser = await signIn(ana, "Ana Silva");
+      await accept(anaUser);
+      // Ben joined with his invitation; staff later typed a new email on his record, so only
+      // his account still leads to the invitation he accepted.
+      const ben = addr(`inv-ben-${tag}`);
+      const benId = await add(gym, "Ben Cole", ben);
+      const benUser = await signIn(ben, "Ben Cole");
+      await accept(benUser);
+      const retyped = await send("PATCH", `${listUrl(gym)}/entries/${benId}`, gym.owner.cookies, { email: addr(`inv-ben-typed-${tag}`) });
+      expect(retyped.statusCode, retyped.body).toBe(200);
+      expect([await inviteState(gym, park), await inviteState(gym, eve), await inviteState(gym, fam), await inviteState(gym, ana), await inviteState(gym, ben)]).toEqual([
+        "accepted",
+        "pending",
+        "pending",
+        "accepted",
+        "accepted",
+      ]);
+
+      const uploadId = await upload(gym, [
+        ["Maria Park", park, "Active"],
+        ["Gus Hill", fam, "Active"],
+      ]);
+      const missing = await missingOf(gym, uploadId);
+      expect(missing.people.map((p) => p.entryId).sort()).toEqual([leo, eveId, fay, anaId, benId].sort());
+      const marks = marksOf(missing, [leo, eveId, fay, anaId, benId]);
+      const box = await leaversOf(gym, uploadId, marks);
+      expect((await confirm(gym, uploadId, { marks, leaversDigest: box.preview.digest })).statusCode).toBe(200);
+
+      // Maria still holds the Park address; Gus holds the Hill one.
+      expect([await inviteState(gym, park), await inviteState(gym, eve), await inviteState(gym, fam), await inviteState(gym, ana), await inviteState(gym, ben)]).toEqual([
+        "accepted",
+        "withdrawn",
+        "pending",
+        "withdrawn",
+        "withdrawn",
+      ]);
+      expect(await inApp(gym, benUser)).toBe(false);
+      const back = await post(`${listUrl(gym)}/entries/${anaId}/restore`, {}, gym.owner.cookies);
+      expect(back.statusCode, back.body).toBe(200);
+      expect(await inviteState(gym, ana)).toBe("accepted");
+      expect(await inApp(gym, anaUser)).toBe(true);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "They're still members while the wrong-file check asks (app members whose email the file changes): refused without the number, applied with it, nobody moves",
+    async () => {
+      const gym = await makeGym();
+      const tag = String(gymCount);
+      const old = (n: number) => addr(`guard-${tag}-${String(n)}`);
+      const fresh = (n: number) => addr(`guard-${tag}-${String(n)}.new`);
+      const numbers = Array.from({ length: 11 }, (_, i) => i + 1);
+      for (const n of numbers) {
+        const res = await post(`${listUrl(gym)}/entries`, { fullName: `Guard Person ${String(n)}`, email: old(n), memberNumber: `G-${String(n)}`, status: "Active" }, gym.owner.cookies);
+        expect([200, 201], res.body).toContain(res.statusCode);
+      }
+      const kim = await add(gym, "Kim Lane", addr(`guard-${tag}-kim`));
+      for (const n of numbers) await inAppByEmail(gym, old(n), `Guard Person ${String(n)}`);
+
+      // Next month's file: the same people under the same numbers with new emails; Kim left out.
+      const csv = ["Full Name,Email,Member No,Status", ...numbers.map((n) => `Guard Person ${String(n)},${fresh(n)},G-${String(n)},Active`)].join("\r\n");
+      const staged = await post(`${listUrl(gym)}/uploads`, { contentBase64: Buffer.from(csv, "utf8").toString("base64"), mode: "whole_list" }, gym.owner.cookies);
+      expect(staged.statusCode, staged.body).toBe(201);
+      const preview = memberListPreviewResponseSchema.parse(JSON.parse(staged.body)).preview;
+      const missing = await missingOf(gym, preview.uploadId);
+      expect(missing.people.map((p) => p.entryId)).toEqual([kim]);
+      const keep = marksOf(missing, []);
+
+      const refused = await confirm(gym, preview.uploadId, { marks: keep });
+      expect(refused.statusCode, refused.body).toBe(409);
+      const body = JSON.parse(refused.body) as { error: string; guard: { entriesGoing: number; membersLeaving: number; needsTick: boolean } };
+      expect(body.error).toBe("large_change");
+      expect(body.guard).toMatchObject({ entriesGoing: 0, membersLeaving: 11, needsTick: true });
+
+      const applied = await confirm(gym, preview.uploadId, { marks: keep, acknowledgeLargeChange: true });
+      expect(applied.statusCode, applied.body).toBe(200);
+      expect(await former(gym, kim)).toBe(false);
+      const ended = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_members WHERE gym_id = ${gym.id} AND removed_at IS NOT NULL`;
+      expect(ended[0]?.n).toBe(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "the box for a file that leaves nobody out says the list changed, not that someone is unmarked",
+    async () => {
+      const gym = await makeGym();
+      const ann = addr(`none-${String(gymCount)}`);
+      await add(gym, "Ann Full", ann);
+      const uploadId = await upload(gym, [["Ann Full", ann, "Active"]]);
+      const missing = await missingOf(gym, uploadId);
+      expect(missing.total).toBe(0);
+      const res = await post(`${listUrl(gym)}/uploads/${uploadId}/leavers`, { marks: { missingDigest: missing.digest, left: [], stay: [] } }, gym.owner.cookies);
+      expect(res.statusCode, res.body).toBe(409);
+      expect(errorOf(res).error).toBe("list_changed");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a whole list that leaves out more than 20,000 people is refused as it is read, with its own sentence, and nothing is staged",
+    async () => {
+      const gym = await makeGym();
+      await sql`INSERT INTO gym_member_lists (gym_id, version, last_confirmed_at) VALUES (${gym.id}, 1, now()) ON CONFLICT (gym_id) DO NOTHING`;
+      await sql`
+        INSERT INTO gym_member_list_entries (gym_id, full_name, email, status, identity_key, source)
+        SELECT ${gym.id}, 'Bulk ' || i, 'bulk-' || i || ${`@${DOMAIN}`}, 'Active', encode(sha256((${gym.id}::text || i::text)::bytea), 'hex'), 'upload'
+        FROM generate_series(1, ${MEMBER_LIST_MARKS_MAX + 1}) AS i`;
+      const res = await post(
+        `${listUrl(gym)}/uploads`,
+        { contentBase64: fileOf([["Somebody Else", addr(`bulk-${String(gymCount)}`), "Active"]]), mode: "whole_list" },
+        gym.owner.cookies,
+      );
+      expect(res.statusCode, res.body).toBe(400);
+      expect(errorOf(res)).toMatchObject({ error: "too_many_missing", message: MEMBER_LIST_TOO_MANY_MISSING_WORDS });
+      const staged = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_member_list_uploads WHERE gym_id = ${gym.id}`;
+      expect(staged[0]?.n).toBe(0);
     },
     TEST_TIMEOUT_MS,
   );

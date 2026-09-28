@@ -8,7 +8,13 @@ import { describe, expect, it } from "vitest";
 import type { MemberListRow } from "@app/shared";
 import { identityKey } from "../src/modules/orgs/memberList/fields.js";
 import { reconcile, type CarriedFields, type ListEntry, type ListMember } from "../src/modules/orgs/memberList/reconcile.js";
-import { importLeaversPlan, recordRemovalPlan, type FileWrites, type RecordBrief } from "../src/modules/orgs/memberList/removeSelected.js";
+import {
+  importLeaversPlan,
+  importNeedsLargeTick,
+  recordRemovalPlan,
+  type FileWrites,
+  type RecordBrief,
+} from "../src/modules/orgs/memberList/removeSelected.js";
 import type { MemberAgainstList } from "../src/modules/orgs/memberList/repo.js";
 
 // ── reconcile, with marks ──
@@ -208,5 +214,32 @@ describe("whose app ends with a leaver", () => {
     const out = plan(writes({ emails: ["park@example.com"] }), [inApp(1, leo, { seatCounted: false })]);
     expect(out.endApp).toEqual([]);
     expect(out.preview.kept.map((k) => k.reason)).toEqual(["staff"]);
+  });
+});
+
+describe("when an import asks for its large-change answer (round one, test gap 3)", () => {
+  const calm = { entriesGoing: 0, listSize: 1000, membersLeaving: 0, membersListedNow: 1000, needsTick: false, mostOfListWouldGo: false };
+  const asks = { ...calm, entriesGoing: 200, needsTick: true };
+  const people = Array.from({ length: 11 }, (_, i) => record(100 + i, `Leaver ${String(i)}`, { email: `leaver${String(i)}@example.com` }));
+  const inAppPeople = people.map((rec, i) => inApp(100 + i, rec));
+  /** Eleven leavers in the app, on a plan whose paid places are `seats`, of `listCurrent` records. */
+  const planOf = (scale: { listCurrent: number; seats: number }, withApp = true) =>
+    importLeaversPlan({ gymId: GYM, leftIds: people.map((p) => p.id), records: people, members: withApp ? inAppPeople : [], written: writes(), scale });
+  const cases: [string, typeof calm, ReturnType<typeof planOf> | null, boolean][] = [
+    ["nobody leaves and the file is ordinary", calm, null, false],
+    ["leavers too few to ask about", calm, planOf({ listCurrent: 1000, seats: 1000 }), false],
+    ["the wrong-file check asks", asks, planOf({ listCurrent: 1000, seats: 1000 }), true],
+    ["the leavers' app line alone asks (11 of 12 paid places)", calm, planOf({ listCurrent: 1000, seats: 12 }), true],
+    ["the leavers' list line alone asks (11 of 12 records)", calm, planOf({ listCurrent: 12, seats: 1000 }, false), true],
+    ["both ask", asks, planOf({ listCurrent: 1000, seats: 12 }), true],
+  ];
+  for (const [name, guard, plan, expected] of cases) {
+    it(`${name}: ${expected ? "asks" : "does not ask"}`, () => {
+      expect(importNeedsLargeTick(guard, plan)).toBe(expected);
+    });
+  }
+  it("the app line is the one Remove's box shows", () => {
+    expect(planOf({ listCurrent: 1000, seats: 12 }).preview.large).toEqual({ kind: "app", removing: 11, of: 12 });
+    expect(planOf({ listCurrent: 12, seats: 1000 }, false).preview.large).toEqual({ kind: "list", removing: 11, of: 12 });
   });
 });
