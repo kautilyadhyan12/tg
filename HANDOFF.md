@@ -4,6 +4,16 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-28 · 20c-iv-b (Folder B): photos on the gym's page (branch `gym-page-photos`)
+
+- **Why this job:** next on Folder B's list (1d waits on Razorpay; deploy on Kd's domain and hosting); it is Stage 4 item 4's first part. **Risky (uploads, a public page), Opus xhigh; Kd said *"go"*.** Migration `0050_gym_page_photos`; no new package.
+- **Built:** Leads → Your gym page → **Photos** (Add photos, Make main photo, Remove, "4 of 10 photos"; on Save like the rest); the browser shrinks to 2,000 px (`shrinkPhoto` takes an edge now). Server: `photoBytes.ts` rebuilds each JPEG/PNG/WebP from what draws it (allowlist; only a JPEG's orientation kept, in a block of its own; nothing after the end), `photoStore.ts` on disk (`PHOTO_DIR`, required in production) until R2 at deploy. Routes: `POST/DELETE …/page/photos[/:id]`, `PUT …/photos/order`, `GET …/photos/:id` (staff), `GET /v1/public/gyms/:slug/photos/:id` (page on only; nosniff, sandbox CSP, 5 min cache). Public page: main photo large, the rest in a row, a viewer with Previous · Next · Close.
+- **Worst thing, first test:** a phone photo published with where it was taken. Real CC0 photos from an iPhone 16, a Galaxy A56 (orientation 6, Samsung trailer) and a Pixel 7 (MPF second picture), plus the iPhone's EXIF in a PNG and a WebP: on disk and as served, no GPS block, no maker. Pillow, an outside reader, read 0 GPS tags on all seven cleaned files, all decode, pixels identical. **Three breaks, each RED, restored sha256-identical:** EXIF passed through (3 red), bytes after the end kept (2), the server storing the upload instead of the cleaned copy (route test red).
+- **Verified:** api **4,145 of 4,145** on `aihg_b` · web 3,123 of 3,123 (`poseAssets.contract` local Node 24) · shared 233/233 · tsc and eslint 0 (api, shared, web changed files) · `vite build` green. Two uploads at once for the last place: one 201, one 409, the refused file gone.
+- **Cost** (mains, 2,592 MHz): adding a 2.0 MB photo 80–169 ms, answering nobody ≤ 30 ms; the public page 11–30 ms (≤ 7); its ten photos over HTTP 406–991 ms, ≤ 21 ms; reorder 47–310 ms, remove 50–82 ms (≤ 16).
+- **Seen in headless Edge (CDP, 1440 and 390):** the page and the panel fit the screen; the panel's tiles were uneven (one button on the main photo), now two rows each ("The main photo").
+- **Open:** Kd's click-through, then round one of review. The two extra passes run once over 20c (i–v) before a real gym uses Leads.
+
 ## 2026-09-28 · 20c-iv-a (Folder B): the gym's page, its facilities and the enquiry form (branch `gym-page-and-form`)
 
 - **Why this job:** next on Folder B's list; 1d (Razorpay) still waits — its test account now answers reads (two list calls, 200), and Razorpay told Kd it will reply within 48 hours. Kd split 20c-iv (no QR code; facilities and photos on the page; photos are 20c-iv-b, at most 10 a gym, 2 MB each), took Cloudflare Turnstile, and said *"go"*. **Risky (strangers' details from the internet), Opus xhigh.** Migration `0049_gym_pages` (`gym_pages`, `gym_lead_enquiries`, `gym_leads.enquired_at`); no new package.
