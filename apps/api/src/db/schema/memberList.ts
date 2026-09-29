@@ -157,6 +157,12 @@ export const gymMemberListEntries = pgTable(
      *  wins and the names it wrote are cleared. Empty is the ordinary case, and the
      *  screen that fills it is 3a-iv's. */
     handEdited: text("hand_edited").array().notNull().default(sql`'{}'::text[]`),
+    /** WHAT AN IMPORT FOUND WRONG ON THIS RECORD, one `problem:field` per item and never a
+     *  cell (5b-v-d-iv). Its items go when staff edit that field, press It's correct, or a
+     *  later file brings a good value; `review_checked` holds the It's correct presses
+     *  until the field's value changes, so next month's file does not mark them again. */
+    needsReview: text("needs_review").array().notNull().default(sql`'{}'::text[]`),
+    reviewChecked: text("review_checked").array().notNull().default(sql`'{}'::text[]`),
     identityKey: text("identity_key").notNull(),
     source: text("source").notNull(),
     // WHERE THIS PERSON CAME IN THE LIST, and the only column that can say so.
@@ -192,6 +198,10 @@ export const gymMemberListEntries = pgTable(
     // The gym's list in its own order, which every preview and every confirm reads
     // whole: an ordered index scan instead of a sort of up to ten thousand rows.
     index("gym_member_list_entries_gym_seq_idx").on(t.gymId, t.listedSeq),
+    // The Members sign and the menu's dot count only these, so the count reads the few.
+    index("gym_member_list_entries_needs_review_idx")
+      .on(t.gymId, t.listedSeq)
+      .where(sql`${t.formerAt} IS NULL AND ${t.needsReview} <> '{}'::text[]`),
     check("gym_member_list_entries_full_name_check", sql`length(${t.fullName}) <= 120`),
     check("gym_member_list_entries_email_check", sql`${t.email} IS NULL OR length(${t.email}) <= 254`),
     check("gym_member_list_entries_phone_check", sql`${t.phoneE164} IS NULL OR ${t.phoneE164} ~ '^\\+[1-9][0-9]{6,14}$'`),
@@ -222,6 +232,10 @@ export const gymMemberListEntries = pgTable(
     // catalogue, so it is bounded by construction rather than by assertion.
     // Field NAMES, never values, and never more of them than there are fields.
     check("gym_member_list_entries_hand_edited_check", sql`array_length(${t.handEdited}, 1) IS NULL OR array_length(${t.handEdited}, 1) <= 52`),
+    check(
+      "gym_member_list_entries_review_size_check",
+      sql`cardinality(${t.needsReview}) <= 104 AND cardinality(${t.reviewChecked}) <= 104`,
+    ),
     check("gym_member_list_entries_identity_key_check", sql`${t.identityKey} ~ '^[0-9a-f]{64}$'`),
     check("gym_member_list_entries_source_check", sql`${t.source} IN ('upload','typed','member')`),
     check("gym_member_list_entries_contact_check", sql`${t.email} IS NOT NULL OR ${t.phoneE164} IS NOT NULL`),

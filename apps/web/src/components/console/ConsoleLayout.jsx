@@ -49,6 +49,16 @@ function GymSwitcher({ org, fallback, compact }) {
   );
 }
 
+/** The glowing dot beside Members, and what it means to a screen reader. */
+function ReviewDot({ count, words }) {
+  return (
+    <>
+      <span className="c-glow-dot" aria-hidden="true" data-testid="review-dot" />
+      <span className="sr-only">{`, ${String(count)} ${count === 1 ? `${words.person} needs` : `${words.people} need`} review`}</span>
+    </>
+  );
+}
+
 export default function ConsoleLayout({ children }) {
   const { orgSlug } = useParams();
   const { pathname, search } = useLocation();
@@ -61,6 +71,10 @@ export default function ConsoleLayout({ children }) {
   const words = orgWords(org?.orgType);
   const consoleName = `${words.itCap} console`;
   const menu = orgSlug ? consoleMenu(orgSlug, viewerPrivileges(org), org?.orgType) : null;
+  // Members glows while an import left anybody to review (5b-v-d-iv; Kd: "if gym dont see
+  // them they will forget"). The server counts it only for staff who may see the list.
+  const toReview = org?.membersNeedReview ?? 0;
+  const reviewDot = (page) => (page.key === 'members' && toReview > 0 ? <ReviewDot count={toReview} words={words} /> : null);
   const moreOn = menu ? moreIsCurrent(menu, pathname) : false;
   const name = user?.displayName || user?.email || '';
   const role = org ? roleLabel(org.staffRole, org.orgType) : '';
@@ -86,6 +100,7 @@ export default function ConsoleLayout({ children }) {
                   >
                     <Icon size={20} />
                     <span>{page.label}</span>
+                    {reviewDot(page)}
                   </NavLink>
                 );
               })}
@@ -177,7 +192,10 @@ export default function ConsoleLayout({ children }) {
                 end={page.end}
                 className={({ isActive }) => `c-tab${isActive ? ' c-tab-on' : ''}`}
               >
-                <Icon size={22} />
+                <span className="c-tab-icon">
+                  <Icon size={22} />
+                  {reviewDot(page)}
+                </span>
                 <span>{page.label}</span>
               </NavLink>
             );

@@ -1,26 +1,13 @@
 // The member import's plain helpers (ROADMAP 5a; spec Part 3 §9.14, §11.2–§11.3):
 // which column holds what, what the review shows, and its short words. No React
 // here, so each rule is tested on its own.
-import { MEMBER_LIST_FIELD_WORDS, memberListFieldSchema } from '@app/shared';
+import { MEMBER_LIST_FIELD_LABELS, MEMBER_LIST_FIELD_WORDS, memberListFieldSchema } from '@app/shared';
 
 export const FIELDS = memberListFieldSchema.options;
 const LIST_FIELDS = ['email', 'phone'];
 
 /** Each field as the column dropdown names it. */
-export const FIELD_LABELS = {
-  fullName: 'Name',
-  firstName: 'First name',
-  lastName: 'Last name',
-  email: 'Email',
-  phone: 'Phone',
-  memberNumber: 'Member number',
-  status: 'Status',
-  membershipType: 'Membership',
-  joinedOn: 'Join date',
-  endsOn: 'End or renewal date',
-  paymentStatus: 'Payment status',
-  dateOfBirth: 'Date of birth',
-};
+export const FIELD_LABELS = MEMBER_LIST_FIELD_LABELS;
 
 // ── Columns ─────────────────────────────────────────────────────────────────
 

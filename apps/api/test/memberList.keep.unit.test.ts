@@ -62,6 +62,7 @@ const OTHER: Who = { fullName: "Bo Fenwick", email: "bo@members.example", phone:
 
 const row = (who: Who, over: Partial<MemberListRow> = {}): MemberListRow => ({
   row: 2,
+  review: [],
   fullName: who.fullName,
   email: who.email,
   phone: who.phone,
@@ -79,6 +80,7 @@ const row = (who: Who, over: Partial<MemberListRow> = {}): MemberListRow => ({
 
 const entry = (who: Who, over: Partial<ListEntry> = {}): ListEntry => ({
   id: identityKey(who),
+  review: { needsReview: [], reviewChecked: [] },
   identityKey: identityKey(who),
   fullName: who.fullName,
   email: who.email,

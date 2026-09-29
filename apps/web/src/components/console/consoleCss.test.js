@@ -127,3 +127,17 @@ describe('big enough for a thumb (rule 8)', () => {
     expect(parseInt(d.height ?? d['min-height'], 10)).toBeGreaterThanOrEqual(44);
   });
 });
+
+describe('the Review needed dot (5b-v-d-iv)', () => {
+  it("is drawn in the looks' named amber, the menu's own on the menu, and glows", () => {
+    expect(declarations('.c-glow-dot').color).toBe('var(--warn)');
+    expect(declarations('.c-glow-dot').background).toBe('currentColor');
+    expect(declarations('.c-rail .c-glow-dot').color).toBe('var(--rail-warn)');
+    expect(declarations('.c-tabbar .c-glow-dot').color).toBe('var(--rail-warn)');
+    expect(declarations('.c-glow-dot').animation).toMatch(/^c-glow /);
+  });
+
+  it('keeps still for anyone who asks for less motion', () => {
+    expect(declarations('.c-glow-dot', '(prefers-reduced-motion: reduce)').animation).toBe('none');
+  });
+});

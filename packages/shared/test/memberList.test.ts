@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  isMemberListReviewKey,
+  memberListReviewKey,
+  memberListReviewProblemSchema,
+  memberListReviewWords,
+  parseMemberListReviewKey,
   MEMBER_APP_FILTER_ORDER,
   MEMBER_APP_FILTER_WORDS,
   memberAppViewSchema,
@@ -496,7 +501,8 @@ describe("pressing confirm, and the list you keep (3a-iii-b's own shapes)", () =
       fields: [],
       appWords: [{ word: "in_app" as const, count: 3 }, { word: "needs_check" as const, count: 1 }],
     };
-    expect(memberListViewSchema.parse(view)).toEqual(view);
+    // An api older than 5b-v-d-iv sends no review: nobody is shown as needing one.
+    expect(memberListViewSchema.parse(view)).toEqual({ ...view, review: { count: 0, people: [] } });
     // A GYM WITH NO LIST IS A SCREEN, NOT A MISSING ONE: every field still has to
     // be answerable at zero.
     expect(
@@ -684,7 +690,8 @@ describe("the wider record, kept (3a-v-b's own shapes)", () => {
       fields: [{ key: "locker_no", label: "Locker No" }],
       appWords: [],
     };
-    expect(memberListViewSchema.parse(view)).toEqual(view);
+    // An api older than 5b-v-d-iv sends no review: nobody is shown as needing one.
+    expect(memberListViewSchema.parse(view)).toEqual({ ...view, review: { count: 0, people: [] } });
     // A GYM THAT HAS NEVER CONFIRMED ONE IS A SCREEN, not a missing route: every field
     // still has to be answerable at zero, including the three added here.
     const empty = memberListViewSchema.parse({
@@ -785,7 +792,7 @@ describe("the wider record, kept (3a-v-b's own shapes)", () => {
     };
     // The invitation (3b-i-a) is null for a person never invited, and for a row from a
     // server too old to send it.
-    expect(memberListEntrySchema.parse(entry)).toEqual({ ...entry, invitation: null });
+    expect(memberListEntrySchema.parse(entry)).toEqual({ ...entry, invitation: null, needsReview: false });
     // EVERY FIELD A GYM MAY LEAVE EMPTY IS NULLABLE — a gym whose export has four
     // columns is not a gym with a broken record.
     expect(
@@ -901,5 +908,40 @@ describe("keeping the list by hand (3a-iv's own shapes)", () => {
     for (const words of Object.values(MEMBER_LIST_BY_HAND_WORDS)) expect(words).toMatch(/^[A-Z].*[.!]$/);
     expect(memberListCardTypedWords("status")).toContain("status");
     expect(memberListCardTypedWords("status")).not.toMatch(/\d/);
+  });
+});
+
+describe("Review needed (5b-v-d-iv)", () => {
+  it("a record's item is read back as it was written, one of the gym's columns included", () => {
+    for (const item of [
+      { problem: "phone_unusual" as const, field: "phone" },
+      { problem: "cell_cut" as const, field: "extra:locker_notes" },
+      { problem: "not_a_date" as const, field: "dateOfBirth" },
+    ]) {
+      expect(parseMemberListReviewKey(memberListReviewKey(item))).toEqual(item);
+    }
+  });
+
+  it("an item this build does not know is refused, never guessed", () => {
+    for (const key of ["", "phone", ":phone", "made_up:phone", "phone_unusual:shoe size", "phone_unusual:extra:Bad Key", "cell_cut:extra:"]) {
+      expect(parseMemberListReviewKey(key)).toBeNull();
+    }
+  });
+
+  it("the quick check read back from a record agrees with the full one, item for item", () => {
+    const keys = ["phone_unusual:phone", "cell_cut:extra:locker_notes", "letters_lost:fullName", "not_a_date:dateOfBirth", `cell_cut:extra:${"a".repeat(80)}`];
+    for (const key of [...keys, "", "phone", ":phone", "made_up:phone", "phone_unusual:shoe size", "phone_unusual:extra:Bad Key", "cell_cut:extra:", "phone_unusual:phone ", "xphone_unusual:phone"]) {
+      expect(isMemberListReviewKey(key)).toBe(parseMemberListReviewKey(key) !== null);
+    }
+  });
+
+  it("every problem has its sentence, and none quotes a person's details", () => {
+    for (const problem of memberListReviewProblemSchema.options) {
+      const words = memberListReviewWords(problem, "phone");
+      expect(words.length).toBeGreaterThan(20);
+      expect(words).not.toMatch(/@/);
+    }
+    expect(memberListReviewWords("front_desk", "email")).toContain("email");
+    expect(memberListReviewWords("front_desk", "phone")).toContain("phone number");
   });
 });

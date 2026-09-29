@@ -14,7 +14,13 @@ import {
   UserPlus,
   X,
 } from 'lucide-react';
-import { MEMBER_INVITE_AGAIN_PER_PERSON, MEMBER_INVITE_AGAIN_PERSON_DAYS, MEMBER_INVITE_WORDS, MEMBER_LIST_QUERY_MAX_CHARS } from '@app/shared';
+import {
+  MEMBER_INVITE_AGAIN_PER_PERSON,
+  MEMBER_INVITE_AGAIN_PERSON_DAYS,
+  MEMBER_INVITE_WORDS,
+  MEMBER_LIST_QUERY_MAX_CHARS,
+  memberListReviewWords,
+} from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import DatePick from '../../components/console/DatePick';
 import { ShareInvite } from './ShareInvite';
@@ -94,6 +100,38 @@ function Fact({ label, value, edited }) {
         {edited ? <span className="block c-s13 c-t3 font-normal">Changed by hand</span> : null}
       </dd>
     </div>
+  );
+}
+
+/** WHAT AN IMPORT FOUND WRONG ON THIS PERSON (5b-v-d-iv; RULINGS 2026-09-29), one line a
+ *  field: what the file had, what to do, and It's correct for a value that is right. Edit
+ *  fixes the rest; each line goes once its field is fixed. */
+function ReviewBox({ lines, busy, readOnly, onCorrect }) {
+  return (
+    <section className="c-callout flex-col" data-testid="review-box">
+      <div className="flex items-center gap-2">
+        <span className="c-glow-dot" aria-hidden="true" />
+        <h3 className="c-s15 c-w6 c-t1 m-0">Review needed</h3>
+      </div>
+      <p className="c-s14 c-t2 m-0">
+        {lines.length === 1
+          ? "Your import found something to check. Fix it with Edit, or press It's correct if it's right."
+          : `Your import found ${String(lines.length)} things to check. Fix them with Edit, or press It's correct on any that's right.`}
+      </p>
+      <ul className="flex flex-col gap-3 m-0 p-0">
+        {lines.map((line) => (
+          <li key={`${line.problem}:${line.field}`} className="flex flex-wrap items-start gap-x-3 gap-y-2" data-testid="review-line">
+            <span className="flex flex-col gap-0.5 flex-1 min-w-[200px]">
+              <span className="c-s14 c-w6">{line.label}</span>
+              <span className="c-s14 c-t2">{memberListReviewWords(line.problem, line.field)}</span>
+            </span>
+            <button type="button" onClick={() => onCorrect(line)} disabled={busy || readOnly} className="c-btn c-btn-s c-btn-sm">
+              It&apos;s correct
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -475,6 +513,24 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     }
   };
 
+  /** It's correct: the problem leaves this page and the list's count, the value stays. */
+  const markCorrect = async (line) => {
+    const asked = shown.entryId;
+    setBusy(true);
+    setNotice(null);
+    setRefusal(null);
+    try {
+      const res = await orgService.reviewChecked(gymId, asked, { problem: line.problem, field: line.field });
+      if (wanted.current !== asked) return;
+      setEntry(res.data.entry);
+      onChanged();
+    } catch (err) {
+      if (wanted.current === asked) refused(err, "We couldn't save that. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const putBack = () => {
     const asked = shown.entryId;
     return run(asked, () => orgService.restoreMemberListEntry(gymId, asked), "We couldn't put this person back.");
@@ -781,6 +837,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             ) : null}
           </div>
         ) : null}
+        {(p.review ?? []).length > 0 ? <ReviewBox lines={p.review} busy={busy} readOnly={readOnly} onCorrect={(line) => void markCorrect(line)} /> : null}
         {renderButtons(p, action)}
         <Section title="Contact">
           {contact.length === 0 ? <Fact label="Email or phone" value="None" /> : null}

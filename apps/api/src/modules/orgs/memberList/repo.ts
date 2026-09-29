@@ -18,7 +18,10 @@ import type { Sql, TransactionSql } from "postgres";
 import {
   MEMBER_LIST_MAX_EDITED_FIELDS,
   MEMBER_LIST_MAX_ENTRY_MEMBERS,
+  MEMBER_LIST_MAX_REVIEW_ITEMS,
+  MEMBER_LIST_REVIEW_NAMES_SHOWN,
   MEMBER_LIST_STATUS_CHIPS_MAX,
+  isMemberListReviewKey,
   memberListEditedFieldSchema,
   memberListEntrySourceSchema,
   memberListExtraDocumentSchema,
@@ -38,6 +41,7 @@ import {
   memberListOnListSchema,
   type MemberListOnList,
   type MemberListStoredPerson,
+  type MemberListReviewSign,
   type MemberListRowGroup,
   type MemberListStagedFile,
   type MemberListStagedShell,
@@ -46,6 +50,7 @@ import {
 } from "@app/shared";
 import type { EntryValues } from "./byHand.js";
 import type { CarriedFields, ListEntry, ListMember } from "./reconcile.js";
+import type { ReviewState } from "./review.js";
 import { sameName } from "./samePerson.js";
 
 export type SqlOrTx = Sql | TransactionSql;
@@ -206,6 +211,8 @@ export async function listEntries(sql: SqlOrTx, gymId: string): Promise<ListEntr
       date_of_birth: string | null;
       extra: unknown;
       hand_edited: string[];
+      needs_review: string[];
+      review_checked: string[];
       former: boolean;
     }[]
   >`
@@ -217,7 +224,7 @@ export async function listEntries(sql: SqlOrTx, gymId: string): Promise<ListEntr
            payment_status,
            date_of_birth::text AS date_of_birth,
            extra,
-           hand_edited,
+           hand_edited, needs_review, review_checked,
            (former_at IS NOT NULL) AS former
     FROM gym_member_list_entries
     WHERE gym_id = ${gymId}
@@ -238,6 +245,7 @@ export async function listEntries(sql: SqlOrTx, gymId: string): Promise<ListEntr
     dateOfBirth: row.date_of_birth,
     extra: parseExtra(row.extra, row.identity_key),
     handEdited: parseHandEdited(row.hand_edited, row.identity_key),
+    review: reviewOf(row, row.identity_key),
     former: row.former,
   }));
 }
@@ -259,6 +267,18 @@ function parseHandEdited(value: readonly string[], identityKey: string): string[
   const parsed = z.array(memberListEditedFieldSchema).max(MEMBER_LIST_MAX_EDITED_FIELDS).safeParse(value);
   if (!parsed.success) throw new Error(`member-list entry ${identityKey} holds hand-edited field names that no longer parse`);
   return parsed.data;
+}
+
+/** A record's review items read back (5b-v-d-iv): each one this build knows, or loud. */
+function parseReview(value: readonly string[], identityKey: string): string[] {
+  if (value.length > MEMBER_LIST_MAX_REVIEW_ITEMS || !value.every(isMemberListReviewKey)) {
+    throw new Error(`member-list entry ${identityKey} holds review items that no longer parse`);
+  }
+  return [...value];
+}
+
+function reviewOf(row: { needs_review: string[]; review_checked: string[] }, identityKey: string): ReviewState {
+  return { needsReview: parseReview(row.needs_review, identityKey), reviewChecked: parseReview(row.review_checked, identityKey) };
 }
 
 /** "Ends" or "renews", as the gym's own heading said (§11.1). A CHECK on the table
@@ -1647,6 +1667,8 @@ export interface EntryRow {
   formerAt: Date | null;
   source: MemberListEntrySource;
   inApp: boolean;
+  /** A current record an import found a problem with (5b-v-d-iv). */
+  needsReview: boolean;
 }
 
 export interface EntriesPageInput {
@@ -1768,6 +1790,7 @@ export async function entriesPage(
       former_at: Date | null;
       source: string | null;
       in_app: boolean | null;
+      needs_review: boolean | null;
     }[]
   >`
     WITH filtered AS (
@@ -1779,14 +1802,15 @@ export async function entriesPage(
              e.payment_status,
              e.date_of_birth::text AS date_of_birth,
              e.former_at, e.source,
-             (e.id = ANY(${input.inAppEntryIds}::uuid[])) AS in_app
+             (e.id = ANY(${input.inAppEntryIds}::uuid[])) AS in_app,
+             (e.former_at IS NULL AND e.needs_review <> '{}'::text[]) AS needs_review
       FROM gym_member_list_entries e
       WHERE ${entriesWhere(sql, input)}
     ),
     totals AS (SELECT count(*)::int AS total FROM filtered)
     SELECT t.total, f.id, f.full_name, f.email, f.phone_e164, f.member_number,
            f.status, f.membership_type, f.joined_on, f.ends_on, f.ends_on_kind,
-           f.payment_status, f.date_of_birth, f.former_at, f.source, f.in_app
+           f.payment_status, f.date_of_birth, f.former_at, f.source, f.in_app, f.needs_review
     FROM totals t
     LEFT JOIN LATERAL (
       SELECT *
@@ -1821,6 +1845,7 @@ export async function entriesPage(
       formerAt: row.former_at,
       source: source.data,
       inApp: row.in_app ?? false,
+      needsReview: row.needs_review ?? false,
     });
   }
   return { total, entries };
@@ -1956,6 +1981,7 @@ export interface StoredEntry {
   identityKey: string;
   values: EntryValues;
   handEdited: string[];
+  review: ReviewState;
   formerAt: Date | null;
   source: MemberListEntrySource;
 }
@@ -1976,6 +2002,8 @@ interface StoredEntryRow {
   date_of_birth: string | null;
   extra: unknown;
   hand_edited: string[];
+  needs_review: string[];
+  review_checked: string[];
   former_at: Date | null;
   source: string;
 }
@@ -2001,6 +2029,7 @@ function toStored(row: StoredEntryRow): StoredEntry {
       extra: parseExtra(row.extra, row.id),
     },
     handEdited: parseHandEdited(row.hand_edited, row.id),
+    review: reviewOf(row, row.id),
     formerAt: row.former_at,
     source: source.data,
   };
@@ -2016,7 +2045,7 @@ export async function entryFor(sql: SqlOrTx, gymId: string, entryId: string): Pr
            ends_on::text       AS ends_on,
            ends_on_kind, payment_status,
            date_of_birth::text AS date_of_birth,
-           extra, hand_edited, former_at, source
+           extra, hand_edited, needs_review, review_checked, former_at, source
     FROM gym_member_list_entries
     WHERE gym_id = ${gymId} AND id = ${entryId}`;
   const row = rows[0];
@@ -2417,4 +2446,68 @@ export async function selectedRemovalByDigest(
   const row = rows[0];
   if (row === undefined) return null;
   return { moved: Number(row.moved ?? "0"), endedApp: Number(row.ended_app ?? "0") };
+}
+
+// ── REVIEW NEEDED (5b-v-d-iv) ──
+
+/** One record's review items, written whole: an edit or an It's correct press. */
+export async function writeReview(tx: TransactionSql, gymId: string, entryId: string, review: ReviewState): Promise<void> {
+  await tx`
+    UPDATE gym_member_list_entries
+    SET needs_review = ${[...review.needsReview]}::text[], review_checked = ${[...review.reviewChecked]}::text[]
+    WHERE gym_id = ${gymId} AND id = ${entryId}`;
+}
+
+/** An import's review items for the records it holds, by the key each has once written.
+ *  One statement whatever the file's size; the caller leaves out records it leaves as
+ *  they were. Safe to run twice. */
+export async function writeReviews(
+  tx: TransactionSql,
+  gymId: string,
+  reviews: readonly { identityKey: string; review: ReviewState }[],
+): Promise<number> {
+  if (reviews.length === 0) return 0;
+  const payload = reviews.map((each) => ({
+    identity_key: each.identityKey,
+    needs_review: [...each.review.needsReview],
+    review_checked: [...each.review.reviewChecked],
+  }));
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_member_list_entries e
+    SET needs_review = r.needs_review, review_checked = r.review_checked
+    FROM jsonb_to_recordset(${tx.json(payload)}) AS r(identity_key text, needs_review text[], review_checked text[])
+    WHERE e.gym_id = ${gymId} AND e.identity_key = r.identity_key
+    RETURNING e.id`;
+  return rows.length;
+}
+
+/** The Members page's sign: how many current members need review, and the first of them
+ *  by name. Reads only the marked records (`gym_member_list_entries_needs_review_idx`). */
+export async function reviewSign(sql: SqlOrTx, gymId: string): Promise<MemberListReviewSign> {
+  const rows = await sql<{ total: number; id: string | null; full_name: string | null }[]>`
+    WITH marked AS (
+      SELECT id, full_name FROM gym_member_list_entries
+      WHERE gym_id = ${gymId} AND former_at IS NULL AND needs_review <> '{}'::text[]
+    )
+    SELECT (SELECT count(*)::int FROM marked) AS total, f.id, f.full_name
+    FROM (SELECT 1) one
+    LEFT JOIN LATERAL (
+      SELECT id, full_name FROM marked ORDER BY full_name, id LIMIT ${MEMBER_LIST_REVIEW_NAMES_SHOWN}
+    ) f ON true`;
+  const people: MemberListReviewSign["people"] = [];
+  for (const row of rows) if (row.id !== null) people.push({ entryId: row.id, fullName: row.full_name ?? "" });
+  return { count: rows[0]?.total ?? 0, people };
+}
+
+/** How many current members need review at each of these gyms, for the menu's dot. */
+export async function reviewCounts(sql: SqlOrTx, gymIds: readonly string[]): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (gymIds.length === 0) return counts;
+  const rows = await sql<{ gym_id: string; count: number }[]>`
+    SELECT gym_id, count(*)::int AS count
+    FROM gym_member_list_entries
+    WHERE gym_id = ANY(${[...gymIds]}::uuid[]) AND former_at IS NULL AND needs_review <> '{}'::text[]
+    GROUP BY gym_id`;
+  for (const row of rows) counts.set(row.gym_id, row.count);
+  return counts;
 }

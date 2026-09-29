@@ -45,6 +45,7 @@ const person = (over: Partial<Person> & { fullName: string }): Person => ({
  *  empty here and `reconcile.wider` covers them on their own. */
 const row = (at: number, who: Person, status: string | null, wider: Partial<MemberListRow> = {}): MemberListRow => ({
   row: at,
+  review: [],
   fullName: who.fullName,
   email: who.email,
   phone: who.phone,
@@ -66,6 +67,7 @@ const row = (at: number, who: Person, status: string | null, wider: Partial<Memb
  *  the wider record's own comparisons. */
 const entry = (who: Person, status: string | null, over: Partial<ListEntry> = {}): ListEntry => ({
   id: identityKey(who),
+  review: { needsReview: [], reviewChecked: [] },
   identityKey: identityKey(who),
   fullName: who.fullName,
   email: who.email,

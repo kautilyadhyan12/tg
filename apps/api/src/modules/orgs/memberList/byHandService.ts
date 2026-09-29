@@ -12,6 +12,8 @@ import {
   isLargeMemberListChange,
   MEMBER_LIST_BY_HAND_WORDS,
   MEMBER_LIST_ENTRIES_PAGE,
+  MEMBER_LIST_EXTRA_FIELD_PREFIX,
+  MEMBER_LIST_FIELD_LABELS,
   MEMBER_LIST_MAX_EDITED_FIELDS,
   MEMBER_LIST_MAX_NAME_CHARS,
   type MemberListEntryDeleted,
@@ -21,6 +23,10 @@ import {
   type MemberListEntryPatch,
   type MemberListEntryWritten,
   type MemberListNotThemRequest,
+  type MemberListReviewCheckedRequest,
+  type MemberListReviewLine,
+  memberListFieldSchema,
+  parseMemberListReviewKey,
   type MemberListRemoveUnlistedRequest,
   type MemberListUnlistedGroup,
   type MemberListUnlistedPage,
@@ -43,6 +49,7 @@ import { cut, identityKey } from "./fields.js";
 import { withoutCardNumbers } from "./neverKeep.js";
 import { readCountry } from "./phone.js";
 import * as repo from "./repo.js";
+import { reviewAfterChecked, reviewAfterEdit, sameReview } from "./review.js";
 import { appOrThrow, type MemberListDeps } from "./service.js";
 import { unlistedDigest, unlistedGroup, unlistedPage } from "./unlisted.js";
 
@@ -104,8 +111,11 @@ async function detailOf(
     inApp: mine.length > 0 || shared.size > 0,
     invitation: invitation[0] ?? null,
     app: appOrThrow(app[0]),
+    needsReview: entry.formerAt === null && entry.review.needsReview.length > 0,
     extra: fields.map((field) => ({ key: field.key, label: field.label, value: values.extra[field.key] ?? "" })),
     handEdited: entry.handEdited,
+    // A past member is not on the list, so nothing of theirs is waiting to be reviewed.
+    review: entry.formerAt === null ? reviewLines(entry.review.needsReview, fields) : [],
     removeEndsApp: ends.length > 0,
     removeEndsAppFor: ends,
     members: visits.map((row) => ({
@@ -117,6 +127,23 @@ async function detailOf(
       sharedEmail: shared.has(row.userId),
     })),
   };
+}
+
+/** Each review item under the name staff know its field by: the screens' own label, or
+ *  the gym's heading for one of its columns. */
+function reviewLines(keys: readonly string[], fields: readonly { key: string; label: string }[]): MemberListReviewLine[] {
+  const lines: MemberListReviewLine[] = [];
+  for (const key of keys) {
+    const item = parseMemberListReviewKey(key);
+    if (item === null) continue;
+    const standard = memberListFieldSchema.safeParse(item.field);
+    const extraKey = item.field.slice(MEMBER_LIST_EXTRA_FIELD_PREFIX.length);
+    const label = standard.success
+      ? MEMBER_LIST_FIELD_LABELS[standard.data]
+      : (fields.find((field) => field.key === extraKey)?.label ?? "One of your columns");
+    lines.push({ ...item, label });
+  }
+  return lines;
 }
 
 async function detailAfter(deps: MemberListDeps, gymId: string, entryId: string): Promise<MemberListEntryDetail> {
@@ -378,6 +405,9 @@ export async function changeEntry(
     const reached = contactMoved ? await membersOf(tx, gymId, stored) : [];
     const handEdited = [...new Set([...stored.handEdited, ...applied.edited])].slice(0, MEMBER_LIST_MAX_EDITED_FIELDS);
     await repo.writeEntry(tx, gymId, entryId, { values: applied.values, identityKey: key, handEdited, formerAt: stored.formerAt });
+    // A field staff changed is theirs now: what the file had wrong there is gone (5b-v-d-iv).
+    const review = reviewAfterEdit(stored.review, [...applied.identityFields, ...applied.edited]);
+    if (!sameReview(review, stored.review)) await repo.writeReview(tx, gymId, entryId, review);
     const lost = await leftOff(tx, gymId, stored.values, [entryId], reached);
     if (lost > 0 && patch.acknowledgeLeavesList !== true) throw new LeavesList(lost, "change");
     const current = stored.formerAt === null;
@@ -402,6 +432,40 @@ export async function changeEntry(
   if ("kind" in done) return done;
   if ("clash" in done) return { kind: "already_on_list", entryId: done.clash, former: done.former };
   return await finish(deps, gymId, done);
+}
+
+/** It's correct (5b-v-d-iv): staff checked what the import found on one field and the
+ *  value stays. The item leaves the review, and the next file with the same value does
+ *  not mark it again. Pressing it twice, or on an item already fixed, changes nothing. */
+export async function checkReview(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  entryId: string,
+  item: MemberListReviewCheckedRequest,
+  limit: () => Promise<boolean>,
+): Promise<{ kind: "checked"; entry: MemberListEntryDetail } | { kind: "rate_limited" }> {
+  await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return { kind: "rate_limited" };
+  await deps.sql.begin(async (tx) => {
+    // The import writes every record's review under this lock, so a press is never lost.
+    await repo.lockGym(tx, gymId);
+    const stored = await repo.entryFor(tx, gymId, entryId);
+    if (stored === null) throw notFound();
+    const review = reviewAfterChecked(stored.review, item);
+    if (sameReview(review, stored.review)) return;
+    await repo.writeReview(tx, gymId, entryId, review);
+    // The field and the problem, never the value.
+    await insertAudit(tx, {
+      actorUserId: userId,
+      gymId,
+      action: "org.member_list_review_checked",
+      targetType: "member_list_entry",
+      targetId: entryId,
+      meta: { field: item.field, problem: item.problem },
+    });
+  });
+  return { kind: "checked", entry: await detailAfter(deps, gymId, entryId) };
 }
 
 /** Take a person off the list: their record becomes FORMER, never deleted (§11.1). */

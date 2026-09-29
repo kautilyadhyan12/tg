@@ -23,6 +23,8 @@ import {
   isTicked,
   pastSince,
   pageTickState,
+  reviewMoreWords,
+  reviewSignWords,
   rowWords,
   selectedCount,
   selectedWords,
@@ -223,6 +225,44 @@ function AppWord({ view }) {
       <AlertTriangle aria-hidden="true" className="w-3.5 h-3.5" />
       {view.text}
     </span>
+  );
+}
+
+/** THE SIGN ATOP MEMBERS WHILE AN IMPORT LEFT ANYBODY TO REVIEW (5b-v-d-iv; RULINGS
+ *  2026-09-29): it glows until nobody is left. No filter (Kd: "no filter needed"): See who
+ *  names them, each opening their page, and the list tags every one. */
+function ReviewSign({ review, words, onOpen }) {
+  const [open, setOpen] = useState(false);
+  const more = reviewMoreWords(review.count, review.people.length);
+  return (
+    <section className="c-callout items-start" data-testid="review-sign">
+      <span className="c-glow-dot mt-[7px]" aria-hidden="true" />
+      <div className="flex flex-col gap-2 flex-1 min-w-0">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="c-s15 c-w6">{reviewSignWords(review.count, words)}</span>
+          <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="c-btn-link c-s14 c-w6" data-testid="review-see-who">
+            {open ? 'Hide' : 'See who'}
+          </button>
+        </div>
+        <span className="c-s14 c-t2">
+          {`An import found something to check. Open a ${words.person} to see what, then fix it or press It's correct.`}
+        </span>
+        {open ? (
+          <div className="flex flex-col gap-2">
+            <ul className="flex flex-wrap gap-2" data-testid="review-names">
+              {review.people.map((p) => (
+                <li key={p.entryId}>
+                  <button type="button" onClick={() => onOpen(p.entryId)} className="c-chip">
+                    {p.fullName || 'No name'}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {more !== null ? <span className="c-s14 c-t2">{more}</span> : null}
+          </div>
+        ) : null}
+      </div>
+    </section>
   );
 }
 
@@ -624,6 +664,7 @@ export default function MemberListPanel({
 
   return (
     <div className={`flex flex-col gap-5 md:gap-6 ${picked > 0 ? 'pb-20 md:pb-0' : ''}`} data-testid="member-list-panel">
+      {(list?.review?.count ?? 0) > 0 ? <ReviewSign review={list.review} words={words} onOpen={setOpenId} /> : null}
       {/* The toolbar stays at the top of the screen on a computer while the list scrolls, and
           with people selected the bar over them sits in it (Kd, 2026-09-28: at the bottom of
           the list he had to scroll back up to act), as Gmail and HubSpot keep theirs. */}
@@ -858,6 +899,12 @@ export default function MemberListPanel({
                     <span className="flex flex-col gap-0.5 min-w-0" style={{ gridArea: 'who' }}>
                       <span className="c-s15 c-w6 c-t1 c-ell">{e.fullName || 'No name'}</span>
                       <span className="c-s13 c-t2 c-ell">{contactWords(e)}</span>
+                      {/* Under the name and never beside it, so the tag never cuts a name short. */}
+                      {e.needsReview ? (
+                        <span className="c-tag c-tag-warn self-start mt-1" data-testid="review-tag">
+                          Review needed
+                        </span>
+                      ) : null}
                     </span>
                     <span className="md:hidden c-s13 c-t2" style={{ gridArea: 'words' }}>
                       {rowWords(e, today, words.person).join(' · ')}

@@ -19,6 +19,7 @@
 import { createHash } from "node:crypto";
 import {
   MEMBER_LIST_DATE_FIELDS,
+  MEMBER_LIST_EXTRA_FIELD_PREFIX,
   MEMBER_LIST_MAX_DATA_ROWS,
   MEMBER_LIST_MAX_EXTRA_CHARS,
   MEMBER_LIST_MAX_EXTRA_FIELDS,
@@ -43,6 +44,7 @@ import {
   type MemberListExtraField,
   type MemberListField,
   type MemberListMapping,
+  type MemberListReviewItem,
   type MemberListRow,
   type MemberListSkipped,
   type MemberListUnderstandResult,
@@ -278,6 +280,8 @@ interface WideFound {
   cut: Spot[];
   /** Cells in a date column that are no date. */
   notDates: Spot[];
+  /** The same two, as the problems the person's record keeps (5b-v-d-iv). */
+  review: MemberListReviewItem[];
 }
 
 interface Wide {
@@ -294,7 +298,7 @@ interface Wide {
  *  this is the only place a gym's own column is read at all — and a column
  *  §11.2 dropped never reaches here, because it is not in the plan. */
 function wideRow(row: readonly string[], plan: WidePlan): Wide {
-  const found: WideFound = { cards: [], cut: [], notDates: [] };
+  const found: WideFound = { cards: [], cut: [], notDates: [], review: [] };
   const word = (at: WordPlan | null): string | null => {
     if (at === null) return null;
     const raw = row[at.column] ?? "";
@@ -314,6 +318,7 @@ function wideRow(row: readonly string[], plan: WidePlan): Wide {
       if (isWritten(raw)) {
         date.notRead++;
         found.notDates.push({ column: date.column, raw });
+        found.review.push({ problem: "not_a_date", field: date.field });
       }
       continue;
     }
@@ -339,6 +344,7 @@ function wideRow(row: readonly string[], plan: WidePlan): Wide {
     const text = scrubbed.text;
     if (text.length > MEMBER_LIST_MAX_EXTRA_CHARS) {
       found.cut.push({ column: field.column, raw: text });
+      found.review.push({ problem: "cell_cut", field: `${MEMBER_LIST_EXTRA_FIELD_PREFIX}${field.key}` });
       extra.push(cut(text, MEMBER_LIST_MAX_EXTRA_CHARS));
       continue;
     }
@@ -768,6 +774,17 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
       continue;
     }
     keys.set(key, draft.row);
+    // WHAT THIS PERSON'S OWN CELLS HAD WRONG, kept on their record by the import (5b-v-d-iv).
+    // Only a kept row's: a repeat or a row with no contact is nobody's record.
+    const review: MemberListReviewItem[] = [];
+    if (QUESTION_MARK_IN_NAME.test(draft.fullName)) review.push({ problem: "letters_lost", field: "fullName" });
+    if (GARBLED_NEXT_TO_LETTER.test(draft.fullName) || GARBLED_INSIDE_A_WORD.test(draft.fullName)) review.push({ problem: "letters_garbled", field: "fullName" });
+    if (draft.shortened !== null) review.push({ problem: "number_cut", field: draft.shortened.column === mapping.memberNumber ? "memberNumber" : "phone" });
+    if (draft.needsCountry !== null) review.push({ problem: "no_country", field: "phone" });
+    if (phone !== null && draft.unusualPhone !== null) review.push({ problem: "phone_unusual", field: "phone" });
+    if (email !== draft.email) review.push({ problem: "front_desk", field: "email" });
+    if (phone !== draft.phone) review.push({ problem: "front_desk", field: "phone" });
+    review.push(...draft.found.review);
     keptRows.push({
       row: draft.row,
       ...person,
@@ -778,6 +795,7 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
       dateOfBirth: draft.dateOfBirth,
       extra: draft.extra,
       identityKey: key,
+      review,
     });
     if (email !== null) {
       counts.withEmail++;

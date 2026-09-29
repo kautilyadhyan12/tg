@@ -35,6 +35,7 @@ import {
   type MemberListStatusChange,
 } from "@app/shared";
 import { fold, identityKey } from "./fields.js";
+import type { ReviewState } from "./review.js";
 import { matchRows, sameName } from "./samePerson.js";
 
 /** One person the gym's list holds — on it, or FORMER (§11.1).
@@ -69,6 +70,8 @@ export interface ListEntry {
    *  A standard field by its own name, one of the gym's own columns as
    *  `extra:<key>`. */
   handEdited: readonly string[];
+  /** What an import found wrong on this record and what staff checked (5b-v-d-iv). */
+  review: ReviewState;
   /** This person has been taken off the list and is kept as a FORMER record
    *  (§11.1). A former record is not on the list: it is in no group's `gone`, in no
    *  count of the list's size, invited by nothing, and it makes no member read "on

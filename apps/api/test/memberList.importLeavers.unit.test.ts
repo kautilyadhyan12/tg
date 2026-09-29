@@ -29,6 +29,7 @@ const who = (fullName: string, email: string | null, phone: string | null = null
 
 const row = (at: number, p: Who, status: string): MemberListRow => ({
   row: at,
+  review: [],
   ...p,
   status,
   membershipType: null,
@@ -41,6 +42,7 @@ const row = (at: number, p: Who, status: string): MemberListRow => ({
 });
 const entry = (p: Who, status: string, over: Partial<ListEntry> = {}): ListEntry => ({
   id: identityKey(p),
+  review: { needsReview: [], reviewChecked: [] },
   identityKey: identityKey(p),
   ...p,
   status,

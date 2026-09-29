@@ -54,6 +54,7 @@
   --rail-on-t: #FF9F45;
   --rail-seg: #2C2824;
   --rail-gym: #2E1D0E;
+  --rail-warn: #F2C35B;
 }
 
 .t-dark {
@@ -883,6 +884,49 @@
   border-radius: 14px;
   background: var(--warn-bg);
   color: var(--t1);
+}
+
+/* Review needed (5b-v-d-iv): an amber dot that glows while anybody is left to review, on
+   Members in the menu and on the page's sign. Still for anyone who asks for less motion. */
+.c-glow-dot {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  color: var(--warn);
+  background: currentColor;
+  animation: c-glow 1.8s ease-in-out infinite;
+}
+.c-rail .c-glow-dot,
+.c-tabbar .c-glow-dot {
+  color: var(--rail-warn);
+}
+.c-nav .c-glow-dot {
+  margin-left: auto;
+}
+.c-tab-icon {
+  position: relative;
+  display: inline-flex;
+}
+.c-tab-icon .c-glow-dot {
+  position: absolute;
+  top: -1px;
+  right: -3px;
+}
+@keyframes c-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  50% {
+    box-shadow: 0 0 6px 2px currentColor;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .c-glow-dot {
+    animation: none;
+  }
 }
 
 /* The banner above every page (Part 3 §4.2): a problem, a deadline or a wall, news. */
