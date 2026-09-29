@@ -730,4 +730,42 @@ d("Import: who has left, person by person (real Postgres)", () => {
     },
     TEST_TIMEOUT_MS,
   );
+  it(
+    "a record added by hand becomes the file's by the key it has AFTER the file's writes: a changed name, and one brought back (round one, test gap 2)",
+    async () => {
+      const gym = await makeGym();
+      const ana = addr("key-ana");
+      const raj = addr("key-raj");
+      const lena = addr("key-lena");
+      const first = await upload(gym, [["Ana Lee", ana, "Active"]]);
+      expect((await confirm(gym, first, {})).statusCode).toBe(200);
+      const rajId = await add(gym, "Raj Patel", raj);
+      const lenaId = await add(gym, "Lena Ford", lena);
+      const recordOf = async (id: string) =>
+        (await sql<{ source: string; full_name: string; former: boolean }[]>`
+          SELECT source, full_name, (former_at IS NOT NULL) AS former FROM gym_member_list_entries WHERE gym_id = ${gym.id} AND id = ${id}`)[0];
+
+      // Lena has left: a file without her, and staff mark her so. She is past, and still typed.
+      const without = await upload(gym, [["Ana Lee", ana, "Active"], ["Raj Patel", raj, "Active"]]);
+      const missing = await missingOf(gym, without);
+      const marks = marksOf(missing, [lenaId]);
+      const box = await leaversOf(gym, without, marks);
+      expect((await confirm(gym, without, { marks, leaversDigest: box.preview.digest })).statusCode).toBe(200);
+      expect(await recordOf(lenaId)).toMatchObject({ source: "typed", former: true });
+      // Raj was in that file as written, so he is the file's already.
+      expect((await recordOf(rajId))?.source).toBe("upload");
+
+      // A second gym member added by hand, whose NAME the file changes: found by the email, his
+      // identity key moves with the name, and the new key is the one marked.
+      const omar = addr("key-omar");
+      const omarId = await add(gym, "Omar Haddad", omar);
+      const next = await upload(gym, [["Ana Lee", ana, "Active"], ["Raj Patel", raj, "Active"], ["Omar Haddad-Khan", omar, "Active"], ["Lena Ford", lena, "Active"]]);
+      expect((await missingOf(gym, next)).people).toEqual([]);
+      expect((await confirm(gym, next, {})).statusCode).toBe(200);
+      expect(await recordOf(omarId)).toMatchObject({ full_name: "Omar Haddad-Khan", source: "upload" });
+      // Lena is brought back, the same record, and is the file's now.
+      expect(await recordOf(lenaId)).toMatchObject({ source: "upload", former: false });
+    },
+    TEST_TIMEOUT_MS,
+  );
 });

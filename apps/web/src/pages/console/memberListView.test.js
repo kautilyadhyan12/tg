@@ -156,6 +156,11 @@ describe('what the review shows', () => {
     expect(missingOf(preview)).toEqual(want);
   });
 
+  it('people with no status are "No status", the Filter\'s own word, never a blank', () => {
+    expect(missingStatusLine({ statuses: [{ label: 'Active', n: 2 }, { label: '', n: 1 }] })).toBe('Status: Active 2 · No status 1');
+    expect(missingStatusLine({ statuses: [{ label: '', n: 3 }] })).toBe('Status: No status 3');
+  });
+
   it("names the statuses of who is missing, so an export of only Active members shows itself", () => {
     const status = (label, gone, rest = 0) => ({ label, count: rest, new: 0, changed: 0, unchanged: rest, gone });
     const missing = missingOf(
@@ -354,14 +359,37 @@ describe('who leaves: the one rule', () => {
   });
 });
 
+// The buckets as the server sends them (`reconcile.ts` statusBreakdown): one per status folded
+// (spaces and case ignored), labelled with the spelling first seen, and "" for everyone with
+// no status. The people added here are taken out by the same fold (round one, High-1).
 describe("the card's numbers once the people added here are counted apart", () => {
-  const missing = { n: 6, listSize: 13, needsTick: false, group: 'gone', statuses: [{ label: 'Active', n: 1 }, { label: 'Cancelled', n: 4 }, { label: 'Expired', n: 1 }] };
+  const missing = (n, statuses) => ({ n, listSize: 13, needsTick: false, group: 'gone', statuses });
   it.each([
-    ['nobody added here: the preview\'s own figures', [], { n: 6, statuses: missing.statuses }],
-    ['Priya, Active, added here: one fewer, and Active gone from the line', [{ wasStatus: 'Active' }], { n: 5, statuses: [{ label: 'Cancelled', n: 4 }, { label: 'Expired', n: 1 }] }],
-    ['two added here, one with no status', [{ wasStatus: 'Cancelled' }, { wasStatus: null }], { n: 4, statuses: [{ label: 'Active', n: 1 }, { label: 'Cancelled', n: 3 }, { label: 'Expired', n: 1 }] }],
-    ['everyone is added here: none left for the card', Array.from({ length: 6 }, () => ({ wasStatus: null })), { n: 0, statuses: missing.statuses }],
-  ])('%s', (_, hand, want) => {
-    expect(fileMissingOf(missing, hand)).toMatchObject(want);
+    ["nobody added here: the preview's own figures", missing(6, [{ label: 'Active', n: 1 }, { label: 'Cancelled', n: 5 }]), [], { n: 6, statuses: [{ label: 'Active', n: 1 }, { label: 'Cancelled', n: 5 }] }],
+    ['Priya, Active, added here: one fewer, and Active gone from the line', missing(6, [{ label: 'Active', n: 1 }, { label: 'Cancelled', n: 4 }, { label: 'Expired', n: 1 }]), [{ wasStatus: 'Active' }], { n: 5, statuses: [{ label: 'Cancelled', n: 4 }, { label: 'Expired', n: 1 }] }],
+    [
+      'someone added from the app has no status: out of the "" bucket',
+      missing(3, [{ label: 'Cancelled', n: 2 }, { label: '', n: 1 }]),
+      [{ wasStatus: null }],
+      { n: 2, statuses: [{ label: 'Cancelled', n: 2 }] },
+    ],
+    [
+      'typed as "active", the file wrote "Active": out of the Active bucket',
+      missing(4, [{ label: 'Cancelled', n: 2 }, { label: '', n: 1 }, { label: 'Active', n: 1 }]),
+      [{ wasStatus: null }, { wasStatus: 'active' }],
+      { n: 2, statuses: [{ label: 'Cancelled', n: 2 }] },
+    ],
+    ['spaces around a word fold too', missing(2, [{ label: 'Frozen', n: 2 }]), [{ wasStatus: ' Frozen ' }], { n: 1, statuses: [{ label: 'Frozen', n: 1 }] }],
+    ['an empty word is no status', missing(2, [{ label: 'Frozen', n: 1 }, { label: '', n: 1 }]), [{ wasStatus: '  ' }], { n: 1, statuses: [{ label: 'Frozen', n: 1 }] }],
+    ['everyone is added here: none left for the card', missing(6, [{ label: '', n: 6 }]), Array.from({ length: 6 }, () => ({ wasStatus: null })), { n: 0, statuses: [] }],
+  ])('%s', (_, from, hand, want) => {
+    expect(fileMissingOf(from, hand)).toEqual({ ...from, ...want });
+  });
+
+  it('the line under the card adds up to its heading', () => {
+    const from = missing(4, [{ label: 'Cancelled', n: 2 }, { label: '', n: 1 }, { label: 'Active', n: 1 }]);
+    const card = fileMissingOf(from, [{ wasStatus: null }, { wasStatus: 'ACTIVE' }]);
+    expect(card.statuses.reduce((sum, st) => sum + st.n, 0)).toBe(card.n);
+    expect(missingStatusLine(card)).toBe('Status: Cancelled 2');
   });
 });

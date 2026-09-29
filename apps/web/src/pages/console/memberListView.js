@@ -176,7 +176,8 @@ export function missingOf(preview) {
  *  Active 1". An export of only the Active members leaves out every Frozen one, and this is
  *  where staff see it before answering. */
 export function missingStatusLine(missing) {
-  const line = missing.statuses.map((s) => `${s.label} ${count(s.n)}`).join(' · ');
+  // People with no status are "No status", the Filter's word (round one, Low-1).
+  const line = missing.statuses.map((s) => `${s.label === '' ? 'No status' : s.label} ${count(s.n)}`).join(' · ');
   return line === '' ? '' : `Status: ${line}`;
 }
 
@@ -225,12 +226,15 @@ export function marksBody(missing, left, answer, kept = null) {
  *  theirs. Nobody added here missing: the preview's figures as they are. */
 export function fileMissingOf(missing, handGroup) {
   if (handGroup.length === 0) return missing;
+  // The server's own fold (`reconcile.ts` foldStatus): spaces and case ignored, "" for no
+  // status, so "active" typed here comes out of the file's "Active" (round one, High-1).
+  const fold = (word) => (word ?? '').trim().toLowerCase();
   const less = new Map();
-  for (const p of handGroup) if (p.wasStatus) less.set(p.wasStatus, (less.get(p.wasStatus) ?? 0) + 1);
+  for (const p of handGroup) less.set(fold(p.wasStatus), (less.get(fold(p.wasStatus)) ?? 0) + 1);
   return {
     ...missing,
     n: Math.max(0, missing.n - handGroup.length),
-    statuses: missing.statuses.map((st) => ({ ...st, n: st.n - (less.get(st.label) ?? 0) })).filter((st) => st.n > 0),
+    statuses: missing.statuses.map((st) => ({ ...st, n: st.n - (less.get(fold(st.label)) ?? 0) })).filter((st) => st.n > 0),
   };
 }
 

@@ -207,7 +207,7 @@ describe('the worst thing: nobody leaves who was not answered for', () => {
     const sentMarks = { missingDigest: DIGEST, left: [liam.entryId, emma.entryId], stay: [olivia.entryId] };
     expect(orgService.getMemberListLeavers).toHaveBeenCalledWith(GYM, UPLOAD, sentMarks);
     expect(box.getByText('2 will move to past members')).toBeTruthy();
-    expect(box.getByTestId('leavers-stay').textContent).toBe('1 stays on your list.');
+    expect(box.getByTestId('leavers-stay').textContent).toBe('1 stays on your list: not ticked as having left, or added in this app and kept.');
     const go = box.getByRole('button', { name: 'Import and move 2 to past members' });
     expect(go.disabled).toBe(true);
     fireEvent.change(box.getByLabelText('Type the number to confirm'), { target: { value: '25' } });
