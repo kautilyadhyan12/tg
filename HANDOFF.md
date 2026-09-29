@@ -4,6 +4,18 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-29 · 5b-v-d-ii (Folder A): the member Import box in the console's look (branch `members-import-new-look`)
+
+- **Why this job:** next in Folder A's list. Sized **Risky** (it shows members' names and its Import ends people's app), Opus xhigh; Kd: *"go"*. No server change, no migration, no new package.
+- **Built:** Upload, Review and Done drawn with console.css's named colours and `c-` blocks (spec §17), both looks; every step, line, tick, word and button where it was, checked beside a "before" set shot from master. Left out: the drawing's step line and pinned bar (Kd at 5b-v-d-i: the screen as he knows it). A disabled Import is plain grey, never a dim orange (it would read as §17.3's pale second action). "Uses the app" → "In the app" (§18.3). Colours by §17.2's meanings: the lines to check amber, "Card numbers not imported" grey (protection, not a problem), "In the app" green as on Members.
+- **Found on the way:** the Members page's Import and tabs wiped the whole address, so the development build's `?look=light` fell back to dark on Import; `showTab` now changes only `view` (test red before the fix).
+- **Worst thing, first test:** every part of Upload, Review and Done in its order, green on master's screen before any change, then on the new one; a guard that the three Import files write no colour of their own (red on master). **Breaks of the one core rule, each RED, restored sha256-identical:** a row's tick ticking the first person (1 red), They've left wired to They're still members (6 red), the box before Import sent everyone as leaving (1 red).
+- **Tests:** web **3,156 of 3,156** (`poseAssets.contract` local Node 24); import screen 38/38, look guard 4/4, console render 124/124; eslint 0 on every changed file (CI lints web out); `vite build` green. api and shared untouched.
+- **Seen in headless Edge** (real app, local api; 1200 and 390, dark and light; two October files): every part shown; at 390 the page is 390 wide on every step; in every run only the ticked Isla became a past member and lost the app.
+- **Cost at full size:** no new read or write of people; the same routes as before (not re-measured).
+- **Click-through data:** `.cost/demo-5b-v-d-ii.ts` rebuilds Kd Demo Gym (staff typed Olivia's phone) and writes `kd-demo-october.csv` (3 new · 7 already · 5 missing) and `kd-demo-october-b.csv` (+1 updated, the staff-edit tick, 2 skipped rows, a card number) to Downloads.
+- **Open:** Kd's click-through; review round one (`reviews/5b-v-d-ii-1-review.md`); merge on Kd's word, ROADMAP ticked with it.
+
 ## 2026-09-28 · 5b-v-d-i (Folder A): the import's who-has-left, person by person (branch `members-import-who-left`)
 
 - **Why this job:** next in Folder A's list. 5b-v-d split in two (i: the marks; ii: Upload and Review restyled). **Risky** (it removes people and ends their app), Opus xhigh recommended; Kd: *"go"*. No migration, no new package.
