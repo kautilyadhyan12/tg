@@ -1199,6 +1199,8 @@ export async function confirmUpload(
     expectApplied(revived, writing.revive.length, "revived", uploadId);
     const updated = await repo.updateEntries(tx, gymId, writing.change, carries, false);
     expectApplied(updated, writing.change.length, "changed", uploadId);
+    // Everybody this file holds is the file's now, whoever first added them.
+    await repo.markFromFile(tx, gymId, [...reconciled.changed, ...reconciled.unchanged, ...reconciled.returning].map((person) => person.identityKey));
     // MARKED FORMER WITH THE INSTANT THEY CAME OFF, never deleted (§11.1).
     const removed = await repo.markEntriesFormer(tx, gymId, reconciled.gone.map((person) => person.identityKey), at);
     expectApplied(removed, reconciled.gone.length, "removed", uploadId);

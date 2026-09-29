@@ -9,6 +9,7 @@ import {
   FileSpreadsheet,
   Loader2,
   Lock,
+  PenLine,
   RefreshCw,
   Upload,
   UserCheck,
@@ -18,6 +19,7 @@ import {
 import { MEMBER_FILE_MAX_BYTES, MEMBER_LIST_PERMISSION_WORDS, memberListWarningWords } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import {
+  addedHere,
   FIELDS,
   FIELD_LABELS,
   bytesToBase64,
@@ -42,6 +44,7 @@ import {
   skippedLine,
   skippedTitle,
   someNames,
+  fileMissingOf,
   summaryOf,
   typedMatches,
   warningTitle,
@@ -118,9 +121,10 @@ function IconButton({ label, onClick, children }) {
 /** One line of the review's list: an icon, a short title, and at most one action — a button
  *  that looks like one, beside the words on a computer and under them on a phone (Kd,
  *  2026-09-29, of the orange word "Check": "did not see any option like that"). */
-function Line({ icon, tone, title, sub, action, onAction, actionDisabled = false, detail, testId }) {
+function Line({ icon, tone, title, sub, action, onAction, actionDisabled = false, detail, below = null, testId }) {
   return (
-    <div className="px-4 py-3 border-t first:border-t-0" style={{ borderColor: 'var(--line)' }} data-testid={testId}>
+    <div className="border-t first:border-t-0" style={{ borderColor: 'var(--line)' }} data-testid={testId}>
+      <div className="px-4 py-3">
       <div className="flex items-start sm:items-center gap-3">
         <Badge icon={icon} tone={tone} />
         <div className="min-w-0 flex-1 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
@@ -136,6 +140,8 @@ function Line({ icon, tone, title, sub, action, onAction, actionDisabled = false
         </div>
       </div>
       {detail ? <div className="c-s14 c-t2 mt-2 pl-11">{detail}</div> : null}
+      </div>
+      {below}
     </div>
   );
 }
@@ -229,6 +235,9 @@ export function Tick({ checked, onChange, children }) {
   );
 }
 
+/** The tiles side by side; four go two by two on a phone. */
+const TILE_COLUMNS = { 1: 'grid-cols-1', 2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-2 sm:grid-cols-4' };
+
 /** How many names show before "and N more · See all". */
 const NAMES_FIRST = 3;
 
@@ -294,6 +303,9 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
   // ones staff ticked as having left (the rest stay on the list).
   const [missingSet, setMissingSet] = useState(null);
   const [left, setLeft] = useState(() => new Set());
+  // The people added in this app whom the file leaves out and who stay: all of them until
+  // staff untick one (RULINGS 2026-09-29).
+  const [kept, setKept] = useState(() => new Set());
   const [leaversOpen, setLeaversOpen] = useState(false);
   // The server's wrong-file check asked about a "They're still members" press: its number is
   // then typed on the card (round one, High-1).
@@ -376,7 +388,9 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
       .then(() => orgService.getMemberListMissing(gymId, uploadId))
       .then(
         (res) => {
-          if (shown.current === uploadId) setMissingSet(res.data.missing);
+          if (shown.current !== uploadId) return;
+          setMissingSet(res.data.missing);
+          setKept(new Set(res.data.missing.people.filter(addedHere).map((p) => p.entryId)));
         },
         () => {
           if (shown.current === uploadId) setMissingSet('error');
@@ -412,6 +426,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
         setMissingNames([]);
         missingGroup.current = m?.group ?? null;
         setLeft(new Set());
+        setKept(new Set());
         setKeepAsked(false);
         setMissingSet(null);
         if (m?.group === 'gone') void loadMissing(p.uploadId);
@@ -458,6 +473,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
     setMissingNames([]);
     setMissingSet(null);
     setLeft(new Set());
+    setKept(new Set());
     setKeepAsked(false);
     setLeaversOpen(false);
     setAnswer(null);
@@ -528,7 +544,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
       permissionConfirmed: permission,
       acknowledgeLargeChange,
       acknowledgeHandEdits: handEdits.entries > 0 && handTick,
-      marks: marksBody(missingSet, left, 'left'),
+      marks: marksBody(missingSet, left, answer, kept),
       leaversDigest,
     });
     return res.data.confirmed;
@@ -536,8 +552,8 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
 
   const uploadId = preview?.uploadId ?? null;
   const loadLeavers = useCallback(
-    () => orgService.getMemberListLeavers(gymId, uploadId, marksBody(missingSet, left, 'left')).then((res) => res.data.leavers),
-    [gymId, uploadId, missingSet, left],
+    () => orgService.getMemberListLeavers(gymId, uploadId, marksBody(missingSet, left, answer, kept)).then((res) => res.data.leavers),
+    [gymId, uploadId, missingSet, left, answer, kept],
   );
   const leaversFailed = useCallback((err) => {
     setLeaversOpen(false);
@@ -681,7 +697,17 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
     // names who moves and who loses the app.
     const marking = missing?.group === 'gone';
     const markSet = marking && missingSet !== null && typeof missingSet === 'object' ? missingSet : null;
-    const ticked = markSet === null ? 0 : markSet.people.filter((p) => left.has(p.entryId)).length;
+    // Two groups (RULINGS 2026-09-29): the file's own people, asked on the card, and the
+    // people added in this app, counted beside the new members and kept unless unticked.
+    const fileGroup = markSet === null ? null : markSet.people.filter((p) => !addedHere(p));
+    const handGroup = markSet === null ? [] : markSet.people.filter(addedHere);
+    const cardMissing = missing === null ? null : fileMissingOf(missing, handGroup);
+    // With only people added here missing, there is nothing for the card to ask.
+    const showCard = cardMissing !== null && cardMissing.n > 0;
+    const statusLine = cardMissing === null ? '' : missingStatusLine(cardMissing);
+    const ticked = fileGroup === null ? 0 : fileGroup.filter((p) => left.has(p.entryId)).length;
+    const marks = markSet === null ? null : marksBody(markSet, left, answer, kept);
+    const leaving = marks === null ? 0 : marks.left.length;
     const keepTyping = marking && answer === 'keep' && keepAsked && guard.needsTick;
     const canImport =
       busy === null &&
@@ -689,12 +715,21 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
       !preview.needsMapping &&
       !dirty &&
       permission &&
-      (missing === null || answer !== null) &&
+      (!showCard || answer !== null) &&
       (marking ? markSet !== null && (!keepTyping || typedMatches(typed, guard)) : !needsTyping || (answer === 'left' && typedMatches(typed, guard))) &&
       (handEdits.entries === 0 || handTick);
     // "Import 3 members" only when nobody is moved to past members by the same press.
-    const importLabel =
-      summary.hero !== null && (missing === null || answer === 'keep') ? `Import ${count(summary.hero)} ${peopleWord(summary.hero, words)}` : 'Import';
+    const nobodyLeaves = missing === null || (marking ? marks !== null && leaving === 0 && (!showCard || answer !== null) : answer === 'keep');
+    const importLabel = summary.hero !== null && nobodyLeaves ? `Import ${count(summary.hero)} ${peopleWord(summary.hero, words)}` : 'Import';
+    const allKept = handGroup.every((p) => kept.has(p.entryId));
+    const unkept = handGroup.length - handGroup.filter((p) => kept.has(p.entryId)).length;
+    const tiles = [
+      ...summary.tiles,
+      ...(summary.unchanged > 0 ? [{ group: 'unchanged', n: summary.unchanged, label: 'Already on your list' }] : []),
+      ...(handGroup.length > 0 ? [{ group: 'hand', n: handGroup.length, label: 'Added manually, not in this file' }] : []),
+    ];
+    // The people added here open as the other groups do, with their ticks.
+    const toggleHand = () => setOpenGroup((open) => (open === 'hand' ? null : 'hand'));
     const namesFor = (group) => (
       <Names
         page={pages[group]}
@@ -723,9 +758,10 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
         {preview.needsMapping ? null : summary.hero !== null || (summary.nothing && missing !== null) ? (
           // The new members, and beside them everyone already on the list, each with who.
           // With nothing new and people missing, the question below is the rest of it.
-          summary.hero === null && summary.unchanged === 0 ? null : (
+          summary.hero === null && summary.unchanged === 0 && handGroup.length === 0 ? null : (
             <div
-              className={`text-center pt-3 pb-1 grid gap-2.5 ${summary.hero !== null && summary.unchanged > 0 ? 'grid-cols-2' : 'grid-cols-1'}`}
+              className="text-center pt-3 pb-1 grid gap-2.5"
+              style={{ gridTemplateColumns: `repeat(${String([summary.hero !== null, summary.unchanged > 0, handGroup.length > 0].filter(Boolean).length)}, minmax(0, 1fr))` }}
               data-testid="hero"
             >
               {summary.hero !== null ? (
@@ -739,6 +775,9 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
                   onToggle={() => toggleGroup('unchanged')}
                   testId="hero-already"
                 />
+              ) : null}
+              {handGroup.length > 0 ? (
+                <BigCount n={handGroup.length} label="added manually, not in this file" open={openGroup === 'hand'} onToggle={toggleHand} testId="hero-hand" />
               ) : null}
             </div>
           )
@@ -756,22 +795,19 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
           </div>
         ) : (
           <div>
-            <div
-              className="grid gap-2.5"
-              style={{ gridTemplateColumns: `repeat(${String(summary.tiles.length + (summary.unchanged > 0 ? 1 : 0))}, minmax(0, 1fr))` }}
-            >
-              {[...summary.tiles, ...(summary.unchanged > 0 ? [{ group: 'unchanged', n: summary.unchanged, label: 'Already on your list' }] : [])].map((t) => {
+            <div className={`grid gap-2.5 ${TILE_COLUMNS[tiles.length] ?? 'grid-cols-2 sm:grid-cols-4'}`}>
+              {tiles.map((t) => {
                 const isNew = t.group === 'new';
                 return (
                   <button
                     key={t.group}
                     type="button"
                     aria-pressed={openGroup === t.group}
-                    onClick={() => toggleGroup(t.group)}
+                    onClick={() => (t.group === 'hand' ? toggleHand() : toggleGroup(t.group))}
                     className={`c-card p-3.5 text-left min-w-0 ${openGroup === t.group ? 'c-picked' : ''}`}
                     style={openGroup === t.group ? { borderColor: 'var(--accent)' } : undefined}
                   >
-                    <Badge icon={isNew ? UserPlus : t.group === 'unchanged' ? UserCheck : RefreshCw} tone={isNew ? 'green' : 'plain'} />
+                    <Badge icon={isNew ? UserPlus : t.group === 'unchanged' ? UserCheck : t.group === 'hand' ? PenLine : RefreshCw} tone={isNew ? 'green' : 'plain'} />
                     <span className="block c-t1 c-num mt-2.5" style={{ fontSize: 28, lineHeight: '34px', fontWeight: 700, fontStretch: '108%' }}>
                       {count(t.n)}
                     </span>
@@ -783,26 +819,57 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
           </div>
         )}
 
-        {openGroup !== null && openGroup !== missing?.group ? namesFor(openGroup) : null}
+        {openGroup !== null && openGroup !== 'hand' && openGroup !== missing?.group ? namesFor(openGroup) : null}
 
-        {missing !== null && !preview.needsMapping ? (
+        {openGroup === 'hand' && handGroup.length > 0 ? (
+          <section className="c-card p-4 flex flex-col gap-3" data-testid="hand">
+            <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3">
+              <p className="c-s14 c-t2 flex-1" data-testid="hand-help">
+                Added by your staff in this app, so your file may not have them yet. They stay on your list. Untick anyone who has left.
+              </p>
+              <button
+                type="button"
+                onClick={() => setKept(allKept ? new Set() : new Set(handGroup.map((p) => p.entryId)))}
+                disabled={busy !== null || readOnly}
+                className="c-btn c-btn-s c-btn-sm self-start flex-shrink-0"
+              >
+                {allKept ? 'Untick all' : 'Tick all'}
+              </button>
+            </div>
+            <MemberListMissing
+              people={handGroup}
+              ticked={kept}
+              onTicked={setKept}
+              tickLabel={(name) => `${name} stays on your list`}
+              disabled={busy !== null || readOnly}
+              testId="hand-rows"
+              rowTestId="hand-row"
+            />
+            {unkept > 0 ? (
+              <p className="c-s14 c-w6" style={{ color: 'var(--warn)' }} data-testid="hand-leaving">
+                {`${count(unkept)} unticked ${unkept === 1 ? 'moves' : 'move'} to past ${words.people} when you import.`}
+              </p>
+            ) : null}
+          </section>
+        ) : null}
+
+        {showCard && !preview.needsMapping ? (
           <section className="c-card p-4 flex flex-col gap-3.5" aria-labelledby={`${titleId}-missing`} data-testid="missing">
             <div>
               <h3 id={`${titleId}-missing`} className="c-h2">
-                {missingTitle(missing, missing.needsTick, words)}
+                {missingTitle(cardMissing, missing.needsTick, words)}
               </h3>
               {missing.group === 'gone' ? (
                 <div className="c-s14 c-t2 mt-1" data-testid="missing-help">
-                  Your file should include all current {words.people}, so {words.people} missing from it have usually left. {words.peopleCap ?? 'Members'} added
-                  manually may not be in your export yet.
+                  Your file should include all current {words.people}, so {words.people} missing from it have usually left.
                 </div>
               ) : null}
               {/* Read again as people to add, the file no longer says who was missing, so
                   the names kept from before stand in for the list. */}
               {!wholeList && missingNames.length > 0 ? <div className="c-s14 c-t2 mt-0.5">{someNames(missingNames, missing.n)}</div> : null}
-              {missingStatusLine(missing) !== '' ? (
+              {statusLine !== '' ? (
                 <div className="c-s13 c-w6 c-t1 mt-1" data-testid="missing-statuses">
-                  {missingStatusLine(missing)}
+                  {statusLine}
                 </div>
               ) : null}
               {marking ? (
@@ -815,7 +882,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
             {!marking ? (
               wholeList ? namesFor(missing.group) : null
             ) : markSet !== null ? (
-              <MemberListMissing missing={markSet} left={left} onLeft={setLeft} disabled={busy !== null || readOnly} />
+              <MemberListMissing people={fileGroup} ticked={left} onTicked={setLeft} tickLabel={(name) => `${name} has left`} disabled={busy !== null || readOnly} />
             ) : missingSet === 'error' ? (
               <div role="alert" className="c-banner-danger rounded-xl px-4 py-3 c-s14 c-w5 flex items-center justify-between gap-3">
                 We couldn&apos;t load the names.
@@ -845,7 +912,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
               <Choice
                 on={answer === 'keep'}
                 title={`They're still ${words.people}`}
-                sub={marking && ticked > 0 ? `Keep all ${count(markSet.people.length)} on the list, ticked or not` : 'Leave them on the list'}
+                sub={marking && ticked > 0 && fileGroup !== null ? `Keep all ${count(fileGroup.length)} on the list, ticked or not` : 'Leave them on the list'}
                 onClick={chooseKeep}
                 disabled={busy !== null}
               />
@@ -892,6 +959,82 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
               sub={preview.needsMapping ? 'Pick which column is which' : null}
               action={columnsOpen ? 'Hide columns' : 'See columns'}
               onAction={() => setColumnsOpen((o) => !o)}
+              below={
+                columnsOpen ? (
+                <div className="border-t" style={{ borderColor: 'var(--line)', background: 'var(--raise)' }} data-testid="columns">
+                  {/* Kd, 2026-09-27: the examples read as if the columns matched for one person. */}
+                  <div className="px-4 pt-3 pb-1 c-s13 c-t2" data-testid="columns-note">
+                    Examples are from the first row of your file.
+                  </div>
+                  {preview.columns.map((c) => {
+                    const date = preview.dateColumns.find((d) => d.column === c.index && d.example !== null);
+                    // A switch only where nothing in the file settled the order: where the file
+                    // proves it, the file decides and there is nothing to switch.
+                    const switchable = date !== undefined && (date.from === 'country' || date.from === 'chosen');
+                    const reading = date === undefined ? null : dateReading(date.example);
+                    return (
+                      <div key={c.index} data-testid={`column-${String(c.index)}`} className="flex items-center gap-3 px-4 py-3 border-t" style={{ borderColor: 'var(--line)' }}>
+                        <div className="min-w-0 flex-1">
+                          <div className="c-s15 c-w6 c-t1 c-ell">{columnName(c)}</div>
+                          {c.neverKept === null && disbelieved(c) ? (
+                            <div className="c-s13 c-w6" style={{ color: 'var(--warn)' }}>
+                              Doesn&apos;t look like {FIELD_LABELS[c.headerSays].toLowerCase()}
+                            </div>
+                          ) : reading !== null ? (
+                            <div className="c-s13 c-t2 flex items-center gap-1.5 flex-wrap">
+                              <CalendarDays aria-hidden="true" className="w-3.5 h-3.5" />
+                              {reading.read}
+                              {switchable ? (
+                                <>
+                                  {' · '}
+                                  <button type="button" onClick={() => swap(date.column, date.order)} disabled={busy !== null} className="c-btn c-btn-link c-s13 c-w6">
+                                    {reading.other}
+                                  </button>
+                                </>
+                              ) : null}
+                            </div>
+                          ) : c.samples.length > 0 ? (
+                            <div className="c-s13 c-t2 c-ell">{c.samples[0]}</div>
+                          ) : null}
+                        </div>
+                        {c.neverKept !== null ? (
+                          <span className="c-tag c-tag-plain flex-shrink-0">
+                            <Lock aria-hidden="true" className="w-3.5 h-3.5" /> Never stored
+                          </span>
+                        ) : (
+                          <select
+                            aria-label={`${columnName(c)} imports as`}
+                            value={roleOfColumn(mapping, c.index)}
+                            onChange={(e) => setMapping((m) => withColumnRole(m, c.index, e.target.value))}
+                            className="c-input flex-shrink-0 max-w-[48%]"
+                            style={{ width: 'auto' }}
+                          >
+                            {FIELDS.map((field) => (
+                              <option key={field} value={field}>
+                                {FIELD_LABELS[field]}
+                              </option>
+                            ))}
+                            <option value="extra">Keep as its own column</option>
+                            <option value="dontKeep">Don&apos;t import</option>
+                          </select>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {dirty ? (
+                    <div className="flex gap-2.5 p-3 border-t" style={{ borderColor: 'var(--line)' }}>
+                      <button type="button" onClick={() => setMapping(preview.mapping)} className="c-btn c-btn-s c-btn-lg">
+                        Undo
+                      </button>
+                      <button type="button" onClick={() => readAgain(mapping)} disabled={busy !== null} className="c-btn c-btn-p c-btn-lg flex-1">
+                        {busy === 'reading' ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+                        Apply changes
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+                ) : null
+              }
             />
             {dates.map((d) => (
               <Line
@@ -941,80 +1084,6 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
           </div>
         </div>
 
-        {columnsOpen ? (
-          <div className="c-card overflow-hidden" data-testid="columns">
-            {/* Kd, 2026-09-27: the examples read as if the columns matched for one person. */}
-            <div className="px-4 pt-3 pb-1 c-s13 c-t2" data-testid="columns-note">
-              Examples are from the first row of your file.
-            </div>
-            {preview.columns.map((c) => {
-              const date = preview.dateColumns.find((d) => d.column === c.index && d.example !== null);
-              // A switch only where nothing in the file settled the order: where the file
-              // proves it, the file decides and there is nothing to switch.
-              const switchable = date !== undefined && (date.from === 'country' || date.from === 'chosen');
-              const reading = date === undefined ? null : dateReading(date.example);
-              return (
-                <div key={c.index} data-testid={`column-${String(c.index)}`} className="flex items-center gap-3 px-4 py-3 border-t" style={{ borderColor: 'var(--line)' }}>
-                  <div className="min-w-0 flex-1">
-                    <div className="c-s15 c-w6 c-t1 c-ell">{columnName(c)}</div>
-                    {c.neverKept === null && disbelieved(c) ? (
-                      <div className="c-s13 c-w6" style={{ color: 'var(--warn)' }}>
-                        Doesn&apos;t look like {FIELD_LABELS[c.headerSays].toLowerCase()}
-                      </div>
-                    ) : reading !== null ? (
-                      <div className="c-s13 c-t2 flex items-center gap-1.5 flex-wrap">
-                        <CalendarDays aria-hidden="true" className="w-3.5 h-3.5" />
-                        {reading.read}
-                        {switchable ? (
-                          <>
-                            {' · '}
-                            <button type="button" onClick={() => swap(date.column, date.order)} disabled={busy !== null} className="c-btn c-btn-link c-s13 c-w6">
-                              {reading.other}
-                            </button>
-                          </>
-                        ) : null}
-                      </div>
-                    ) : c.samples.length > 0 ? (
-                      <div className="c-s13 c-t2 c-ell">{c.samples[0]}</div>
-                    ) : null}
-                  </div>
-                  {c.neverKept !== null ? (
-                    <span className="c-tag c-tag-plain flex-shrink-0">
-                      <Lock aria-hidden="true" className="w-3.5 h-3.5" /> Never stored
-                    </span>
-                  ) : (
-                    <select
-                      aria-label={`${columnName(c)} imports as`}
-                      value={roleOfColumn(mapping, c.index)}
-                      onChange={(e) => setMapping((m) => withColumnRole(m, c.index, e.target.value))}
-                      className="c-input flex-shrink-0 max-w-[48%]"
-                      style={{ width: 'auto' }}
-                    >
-                      {FIELDS.map((field) => (
-                        <option key={field} value={field}>
-                          {FIELD_LABELS[field]}
-                        </option>
-                      ))}
-                      <option value="extra">Keep as its own column</option>
-                      <option value="dontKeep">Don&apos;t import</option>
-                    </select>
-                  )}
-                </div>
-              );
-            })}
-            {dirty ? (
-              <div className="flex gap-2.5 p-3 border-t" style={{ borderColor: 'var(--line)' }}>
-                <button type="button" onClick={() => setMapping(preview.mapping)} className="c-btn c-btn-s c-btn-lg">
-                  Undo
-                </button>
-                <button type="button" onClick={() => readAgain(mapping)} disabled={busy !== null} className="c-btn c-btn-p c-btn-lg flex-1">
-                  {busy === 'reading' ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-                  Apply changes
-                </button>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
 
         {!preview.needsMapping ? (
           <div className="flex flex-col gap-1">
@@ -1027,9 +1096,9 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
               onClick={
                 !marking
                   ? () => void confirm()
-                  : answer === 'left'
+                  : leaving > 0
                     ? () => setLeaversOpen(true)
-                    : () => void confirm({ marks: marksBody(markSet, left, 'keep'), acknowledgeLargeChange: keepTyping && typedMatches(typed, guard) })
+                    : () => void confirm({ marks, acknowledgeLargeChange: keepTyping && typedMatches(typed, guard) })
               }
               disabled={!canImport}
               {...primary(canImport, 'mt-2')}

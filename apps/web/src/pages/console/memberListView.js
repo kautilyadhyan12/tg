@@ -195,16 +195,42 @@ export function missingTitle(missing, needsTick, words) {
 
 // ── Who has left (5b-v-d-i; spec Part 3 §18.8; RULINGS 2026-09-28) ─────────
 
-/** What the server is sent for the card's answer. They've left: the people ticked, or
- *  everyone when nobody is ticked, as the card always meant; the rest stay. They're still
- *  members: everyone stays. */
-export function marksBody(missing, left, answer) {
-  const anyTicked = answer === 'left' && missing.people.some((p) => left.has(p.entryId));
-  const leaves = (p) => answer === 'left' && (!anyTicked || left.has(p.entryId));
+/** Somebody staff added in this app (by hand, or from the app) whom no file has held yet:
+ *  the gym's export may not have them, so an import that leaves them out asks separately
+ *  and keeps them unless unticked (Kd, 2026-09-29: "manually added one should not be in
+ *  the same list … by default added … untick or untick all"). Once a file holds them the
+ *  server makes them the file's, and they are missing like anybody else. */
+export function addedHere(person) {
+  return person.onList !== null && person.onList !== undefined && person.onList.source !== 'upload';
+}
+
+/** WHO LEAVES, the one rule, and what the server is sent. The file's own people answer to
+ *  the card: They've left moves the ones ticked in `left`, or all of them when none is
+ *  ticked; They're still members keeps them all. The people added here answer to their own
+ *  ticks: `kept` holds those staying, and anyone unticked leaves, whatever the card says.
+ *  Everyone missing is in `left` or `stay`, never both. */
+export function marksBody(missing, left, answer, kept = null) {
+  const file = missing.people.filter((p) => !addedHere(p));
+  const anyTicked = answer === 'left' && file.some((p) => left.has(p.entryId));
+  const leaves = (p) => (addedHere(p) ? kept !== null && !kept.has(p.entryId) : answer === 'left' && (!anyTicked || left.has(p.entryId)));
   return {
     missingDigest: missing.digest,
     left: missing.people.filter(leaves).map((p) => p.entryId),
     stay: missing.people.filter((p) => !leaves(p)).map((p) => p.entryId),
+  };
+}
+
+/** The card's own numbers once the people added here are counted apart: how many of the
+ *  file's own people are missing, and their status words, the preview's figures less
+ *  theirs. Nobody added here missing: the preview's figures as they are. */
+export function fileMissingOf(missing, handGroup) {
+  if (handGroup.length === 0) return missing;
+  const less = new Map();
+  for (const p of handGroup) if (p.wasStatus) less.set(p.wasStatus, (less.get(p.wasStatus) ?? 0) + 1);
+  return {
+    ...missing,
+    n: Math.max(0, missing.n - handGroup.length),
+    statuses: missing.statuses.map((st) => ({ ...st, n: st.n - (less.get(st.label) ?? 0) })).filter((st) => st.n > 0),
   };
 }
 

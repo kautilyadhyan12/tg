@@ -1308,6 +1308,20 @@ export async function updateEntries(
   return rows.length;
 }
 
+/** A RECORD STAFF ADDED BY HAND BECOMES THE FILE'S ONCE A FILE HOLDS THEM: from then on
+ *  the gym's export has them, and leaving it out next month means what it means for
+ *  anybody else. Until then an import that leaves them out keeps them unless staff untick
+ *  them (5b-v-d-ii; Kd, 2026-09-29: "manually added one should not be in the same list").
+ *  Keys only, after the file's own writes, so every key is the one the record now has;
+ *  safe to run twice. */
+export async function markFromFile(tx: TransactionSql, gymId: string, identityKeys: readonly string[]): Promise<void> {
+  if (identityKeys.length === 0) return;
+  await tx`
+    UPDATE gym_member_list_entries
+    SET source = 'upload'
+    WHERE gym_id = ${gymId} AND identity_key = ANY(${identityKeys}::text[]) AND source <> 'upload' AND former_at IS NULL`;
+}
+
 /** THE PEOPLE COMING OFF — marked FORMER with the instant they came off, never deleted
  *  (§11.1). One statement, keys only.
  *

@@ -85,7 +85,7 @@ export default function MemberListImportLeavers({ gym, words, load, press, onDon
         ))}
         {leavers.stay > 0 ? (
           <p className="c-s15 c-t1" data-testid="leavers-stay">
-            {`${count(leavers.stay)} not ticked ${leavers.stay === 1 ? 'stays' : 'stay'} on your list.`}
+            {`${count(leavers.stay)} ${leavers.stay === 1 ? 'stays' : 'stay'} on your list.`}
           </p>
         ) : null}
         {kept.heading !== null ? (

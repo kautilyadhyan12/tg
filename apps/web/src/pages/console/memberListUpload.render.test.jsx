@@ -158,7 +158,7 @@ describe('the worst thing: nobody leaves who was not answered for', () => {
     });
   const olivia = missingOne(1, 'Olivia Walker', { inApp: true });
   const liam = missingOne(2, 'Liam Hughes', { wasStatus: 'Cancelled' }, { endsOn: '2026-08-31', endsOnKind: 'ends', paymentStatus: 'Unpaid' });
-  const emma = missingOne(3, 'Emma Price', { wasStatus: 'Frozen' }, { membershipType: null, paymentStatus: null, source: 'typed', addedAt: '2026-09-20T09:30:00.000Z' });
+  const emma = missingOne(3, 'Emma Price', { wasStatus: 'Frozen' }, { membershipType: null, paymentStatus: null });
   const oneMissing = () => preview({ list: list({ unchanged: 4, gone: 1 }), guard: { ...calm, entriesGoing: 1, listSize: 5 } });
   const choice = (name) => screen.getByRole('radio', { name });
 
@@ -182,7 +182,6 @@ describe('the worst thing: nobody leaves who was not answered for', () => {
     expect(within(rows[0]).getByTestId('gone-facts').textContent).toBe('Status: Active · Membership: Gold · Payment: Paid');
     // The end date beside the status: a Cancelled reads with when (Kd, 2026-09-29).
     expect(within(rows[1]).getByTestId('gone-facts').textContent).toMatch(/^Status: Cancelled · Ended 31 Aug( 2026)? · Membership: Gold · Payment: Unpaid$/);
-    expect(within(rows[2]).getByTestId('gone-added').textContent).toMatch(/^Added manually · 20 Sep( 2026)?$/);
     expect(within(rows[0]).getByText('In the app')).toBeTruthy();
     expect(within(rows[1]).queryByText('In the app')).toBeNull();
 
@@ -208,7 +207,7 @@ describe('the worst thing: nobody leaves who was not answered for', () => {
     const sentMarks = { missingDigest: DIGEST, left: [liam.entryId, emma.entryId], stay: [olivia.entryId] };
     expect(orgService.getMemberListLeavers).toHaveBeenCalledWith(GYM, UPLOAD, sentMarks);
     expect(box.getByText('2 will move to past members')).toBeTruthy();
-    expect(box.getByTestId('leavers-stay').textContent).toBe('1 not ticked stays on your list.');
+    expect(box.getByTestId('leavers-stay').textContent).toBe('1 stays on your list.');
     const go = box.getByRole('button', { name: 'Import and move 2 to past members' });
     expect(go.disabled).toBe(true);
     fireEvent.change(box.getByLabelText('Type the number to confirm'), { target: { value: '25' } });
@@ -226,6 +225,126 @@ describe('the worst thing: nobody leaves who was not answered for', () => {
       marks: sentMarks,
       leaversDigest: DIGEST_BOX,
     });
+  });
+
+  // Kd, 2026-09-29: "manually added one should not be in the same list as people not in
+  // should be separate … by default added … untick or untick all at once". THE WORST THING:
+  // a member the front desk added today, whom the gym's export cannot hold yet, moved to
+  // past members and out of the app by a They've left meant for the file's own people.
+  it("members added in this app are counted apart and stay unless unticked: They've left with nobody ticked moves only the file's own people", async () => {
+    const priya = missingOne(4, 'Priya Nair', {}, { source: 'typed', addedAt: '2026-09-20T09:00:00.000Z', paymentStatus: null });
+    const tom = missingOne(5, 'Tom Reid', { inApp: true }, { source: 'member', addedAt: '2026-09-18T09:00:00.000Z' });
+    orgService.getMemberListMissing.mockResolvedValueOnce(missingRead([olivia, liam, priya, tom]));
+    await reviewWith(
+      preview({
+        list: list({ new: 3, unchanged: 7, gone: 4, canBeInvited: 3 }),
+        statuses: [
+          { label: 'Active', count: 10, new: 3, changed: 0, unchanged: 4, gone: 3 },
+          { label: 'Cancelled', count: 4, new: 0, changed: 0, unchanged: 3, gone: 1 },
+        ],
+        guard: { ...calm, entriesGoing: 4, listSize: 11 },
+      }),
+    );
+    const card = within(await screen.findByTestId('missing'));
+    await card.findAllByTestId('missing-row');
+    // The card asks only about the file's own people, and its numbers are theirs.
+    expect(card.getAllByTestId('missing-row').map((r) => within(r).getByText(/^(Olivia|Liam)/).textContent)).toEqual(['Olivia Walker', 'Liam Hughes']);
+    expect(card.getByText("2 members aren't in this file")).toBeTruthy();
+    expect(card.getByTestId('missing-statuses').textContent).toBe('Status: Active 1 · Cancelled 1');
+    expect(card.queryByText('Priya Nair')).toBeNull();
+    // Beside the new members and those already on the list: the people added here.
+    const hand = within(screen.getByTestId('hero-hand'));
+    expect(hand.getByText('2')).toBeTruthy();
+    expect(hand.getByText('added manually, not in this file')).toBeTruthy();
+    fireEvent.click(hand.getByRole('button', { name: 'See who' }));
+    const group = within(screen.getByTestId('hand'));
+    expect(group.getByTestId('hand-help').textContent).toBe(
+      'Added by your staff in this app, so your file may not have them yet. They stay on your list. Untick anyone who has left.',
+    );
+    const handRows = group.getAllByTestId('hand-row');
+    expect(within(handRows[0]).getByTestId('gone-added').textContent).toMatch(/^Added manually · 20 Sep( 2026)?$/);
+    expect(within(handRows[1]).getByTestId('gone-added').textContent).toMatch(/^Added from the app · 18 Sep( 2026)?$/);
+    expect(within(handRows[1]).getByText('In the app')).toBeTruthy();
+    // Ticked for them already: they stay.
+    expect([group.getByLabelText('Priya Nair stays on your list'), group.getByLabelText('Tom Reid stays on your list')].map((b) => b.checked)).toEqual([true, true]);
+
+    // They've left with nobody ticked: the file's two, never Priya or Tom.
+    fireEvent.click(choice(/They've left/));
+    tickPermission();
+    orgService.getMemberListLeavers.mockResolvedValueOnce(leaversRead({ move: [who('Liam Hughes', 2), who('Olivia Walker', 1)], stay: 2 }));
+    fireEvent.click(importButton());
+    await screen.findByTestId('leavers-box');
+    expect(orgService.getMemberListLeavers).toHaveBeenLastCalledWith(GYM, UPLOAD, {
+      missingDigest: DIGEST,
+      left: [olivia.entryId, liam.entryId],
+      stay: [priya.entryId, tom.entryId],
+    });
+    fireEvent.click(within(screen.getByTestId('leavers-box')).getByRole('button', { name: 'Cancel' }));
+
+    // Unticked, Priya leaves with them, and the group says so before Import.
+    fireEvent.click(group.getByLabelText('Priya Nair stays on your list'));
+    expect(group.getByTestId('hand-leaving').textContent).toBe('1 unticked moves to past members when you import.');
+    orgService.getMemberListLeavers.mockResolvedValueOnce(leaversRead({ move: [who('Liam Hughes', 2), who('Olivia Walker', 1), who('Priya Nair', 4)], stay: 1 }));
+    fireEvent.click(importButton());
+    await screen.findByTestId('leavers-box');
+    expect(orgService.getMemberListLeavers).toHaveBeenLastCalledWith(GYM, UPLOAD, {
+      missingDigest: DIGEST,
+      left: [olivia.entryId, liam.entryId, priya.entryId],
+      stay: [tom.entryId],
+    });
+    fireEvent.click(within(screen.getByTestId('leavers-box')).getByRole('button', { name: 'Cancel' }));
+
+    // Untick all, then Tick all: one press each way.
+    fireEvent.click(group.getByRole('button', { name: 'Tick all' }));
+    expect(group.getAllByRole('checkbox').map((b) => b.checked)).toEqual([true, true]);
+    fireEvent.click(group.getByRole('button', { name: 'Untick all' }));
+    expect(group.getAllByRole('checkbox').map((b) => b.checked)).toEqual([false, false]);
+    expect(group.getByTestId('hand-leaving').textContent).toBe('2 unticked move to past members when you import.');
+    fireEvent.click(group.getByRole('button', { name: 'Tick all' }));
+
+    // They're still members, everyone added here ticked: nobody leaves, and no box.
+    fireEvent.click(choice(/They're still members/));
+    expect(importButton().textContent).toBe('Import 3 members');
+    orgService.confirmMemberList.mockResolvedValueOnce({ data: { confirmed: confirmedAnswer() } });
+    fireEvent.click(importButton());
+    await screen.findByTestId('member-import-done');
+    expect(orgService.confirmMemberList).toHaveBeenCalledWith(GYM, UPLOAD, {
+      permissionConfirmed: true,
+      acknowledgeLargeChange: false,
+      acknowledgeHandEdits: false,
+      marks: { missingDigest: DIGEST, left: [], stay: [olivia.entryId, liam.entryId, priya.entryId, tom.entryId] },
+    });
+  });
+
+  it('with only people added in this app missing, there is no question to answer, and they stay', async () => {
+    const priya = missingOne(4, 'Priya Nair', {}, { source: 'typed', addedAt: '2026-09-20T09:00:00.000Z' });
+    orgService.getMemberListMissing.mockResolvedValueOnce(missingRead([priya]));
+    await reviewWith(preview({ list: list({ new: 3, unchanged: 7, gone: 1, canBeInvited: 3 }), guard: { ...calm, entriesGoing: 1, listSize: 8 } }));
+    await screen.findByTestId('hero-hand');
+    expect(screen.queryByTestId('missing')).toBeNull();
+    expect(screen.queryByRole('radio', { name: /They've left/ })).toBeNull();
+    tickPermission();
+    expect(importButton().textContent).toBe('Import 3 members');
+    orgService.confirmMemberList.mockResolvedValueOnce({ data: { confirmed: confirmedAnswer() } });
+    fireEvent.click(importButton());
+    await screen.findByTestId('member-import-done');
+    expect(orgService.confirmMemberList.mock.calls[0][2].marks).toEqual({ missingDigest: DIGEST, left: [], stay: [priya.entryId] });
+  });
+
+  it('someone added here and unticked leaves through the box before Import, whatever the card says', async () => {
+    const priya = missingOne(4, 'Priya Nair', { inApp: true }, { source: 'typed', addedAt: '2026-09-20T09:00:00.000Z' });
+    orgService.getMemberListMissing.mockResolvedValueOnce(missingRead([olivia, priya]));
+    await reviewWith(preview({ list: list({ unchanged: 7, gone: 2 }), guard: { ...calm, entriesGoing: 2, listSize: 9 } }));
+    fireEvent.click(within(await screen.findByTestId('hero-hand')).getByRole('button', { name: 'See who' }));
+    fireEvent.click(screen.getByLabelText('Priya Nair stays on your list'));
+    fireEvent.click(choice(/They're still members/));
+    tickPermission();
+    expect(importButton().textContent).toBe('Import');
+    orgService.getMemberListLeavers.mockResolvedValueOnce(leaversRead({ move: [who('Priya Nair', 4)], endApp: [who('Priya Nair', 4)], stay: 1 }));
+    fireEvent.click(importButton());
+    await screen.findByTestId('leavers-box');
+    expect(orgService.getMemberListLeavers).toHaveBeenCalledWith(GYM, UPLOAD, { missingDigest: DIGEST, left: [priya.entryId], stay: [olivia.entryId] });
+    expect(orgService.confirmMemberList).not.toHaveBeenCalled();
   });
 
   it("They've left with nobody ticked moves everyone, as before", async () => {
@@ -782,6 +901,8 @@ describe('the checks', () => {
     expect(screen.getByTestId('columns-line').textContent).toContain('4 of 5 columns matched');
     fireEvent.click(within(screen.getByTestId('columns-line')).getByRole('button', { name: 'See columns' }));
     expect(screen.getByTestId('columns-note').textContent).toBe('Examples are from the first row of your file.');
+    // They open right under their own line, not at the bottom (Kd, 2026-09-29).
+    expect(within(screen.getByTestId('columns-line')).getByTestId('columns')).toBeTruthy();
   });
 
   it('a date the file itself settled is not asked about', async () => {

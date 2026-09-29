@@ -697,4 +697,37 @@ d("Import: who has left, person by person (real Postgres)", () => {
     },
     TEST_TIMEOUT_MS,
   );
+  it(
+    "someone added by hand is the gym's own until a file holds them; from then on they are the file's (5b-v-d-ii)",
+    async () => {
+      const gym = await makeGym();
+      const ana = addr("hand-ana");
+      const priya = addr("hand-priya");
+      const first = await upload(gym, [["Ana Lee", ana, "Active"]]);
+      expect((await confirm(gym, first, {})).statusCode).toBe(200);
+      const priyaId = await add(gym, "Priya Nair", priya);
+      const sourceOf = async () =>
+        (await sql<{ source: string }[]>`SELECT source FROM gym_member_list_entries WHERE gym_id = ${gym.id} AND id = ${priyaId}`)[0]?.source;
+      expect(await sourceOf()).toBe("typed");
+
+      // A file without her: she is missing, and the read says she was added by hand.
+      const without = await upload(gym, [["Ana Lee", ana, "Active"]]);
+      const missing = await missingOf(gym, without);
+      expect(missing.people.map((p) => [p.fullName, p.onList?.source])).toEqual([["Priya Nair", "typed"]]);
+      expect((await confirm(gym, without, { marks: marksOf(missing, []) })).statusCode).toBe(200);
+      // Kept by staff's answer, and still the gym's own: no file has held her.
+      expect(await sourceOf()).toBe("typed");
+      expect(await former(gym, priyaId)).toBe(false);
+
+      // A file that holds her makes her the file's.
+      const withHer = await upload(gym, [["Ana Lee", ana, "Active"], ["Priya Nair", priya, "Active"]]);
+      expect((await confirm(gym, withHer, {})).statusCode).toBe(200);
+      expect(await sourceOf()).toBe("upload");
+
+      // So when a later file leaves her out, she is missing like anybody else.
+      const later = await upload(gym, [["Ana Lee", ana, "Active"]]);
+      expect((await missingOf(gym, later)).people.map((p) => [p.fullName, p.onList?.source])).toEqual([["Priya Nair", "upload"]]);
+    },
+    TEST_TIMEOUT_MS,
+  );
 });

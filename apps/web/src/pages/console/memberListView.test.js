@@ -5,7 +5,9 @@ import {
   dayWords,
   doneWords,
   guardNumber,
+  addedHere,
   handEditWords,
+  marksBody,
   importedColumnCount,
   missingOf,
   missingStatusLine,
@@ -13,6 +15,7 @@ import {
   neverKeptLines,
   skippedLine,
   skippedTitle,
+  fileMissingOf,
   roleOfColumn,
   someNames,
   summaryOf,
@@ -302,5 +305,63 @@ describe('details staff typed that a file would replace: whose, what, and the ti
     expect(handEditWords({ entries: 2, fields: ['status'], names: ['A', 'B'] }, { people: 'clients', person: 'client' }).lead).toBe(
       'Your staff changed the status of 2 clients in this app. This file has different ones:',
     );
+  });
+});
+
+// WHO LEAVES (5b-v-d-i, amended 2026-09-29 by Kd: "manually added one should not be in the
+// same list … by default added … untick or untick all"). Every class of person against
+// every answer: the file's own people follow the card (They've left: the ticked, or all
+// when none is ticked; They're still members: nobody); people added here follow their own
+// tick, kept unless unticked, whatever the card says.
+describe('who leaves: the one rule', () => {
+  const on = (source) => ({ membershipType: null, endsOn: null, endsOnKind: null, paymentStatus: null, source, addedAt: '2026-09-29T09:00:00.000Z' });
+  const Leo = { entryId: 'leo', onList: on('upload') };
+  const Ana = { entryId: 'ana', onList: on('upload') };
+  const Priya = { entryId: 'priya', onList: on('typed') };
+  const Tom = { entryId: 'tom', onList: on('member') };
+  const missing = { digest: 'd', people: [Leo, Ana, Priya, Tom] };
+  const set = (...ids) => new Set(ids);
+  const bothKept = set('priya', 'tom');
+
+  it('who counts as added here: by hand or from the app, never a file record', () => {
+    expect([Leo, Priya, Tom].map(addedHere)).toEqual([false, true, true]);
+    expect(addedHere({ entryId: 'x', onList: null })).toBe(false);
+  });
+
+  it.each([
+    // [what, left ticks, answer, kept, who leaves]
+    ["They've left, nobody ticked: all the file's people, none added here", set(), 'left', bothKept, ['leo', 'ana']],
+    ["They've left, Leo ticked: only Leo", set('leo'), 'left', bothKept, ['leo']],
+    ["They've left, both ticked: both", set('leo', 'ana'), 'left', bothKept, ['leo', 'ana']],
+    ["They're still members: nobody", set(), 'keep', bothKept, []],
+    ["They're still members, Leo ticked: still nobody", set('leo'), 'keep', bothKept, []],
+    ["They're still members, Priya unticked: Priya only", set(), 'keep', set('tom'), ['priya']],
+    ["They've left, nobody ticked, everyone added here unticked: all four", set(), 'left', set(), ['leo', 'ana', 'priya', 'tom']],
+    ["They've left, Ana ticked, Tom unticked: Ana and Tom", set('ana'), 'left', set('priya'), ['ana', 'tom']],
+    ['no answer yet (only people added here are missing), Tom unticked: Tom', set(), null, set('priya'), ['tom']],
+    ['no answer, everyone added here kept: nobody', set(), null, bothKept, []],
+    // A tick in `left` on somebody added here means nothing: only their own tick counts.
+    ["They've left with Priya in `left`: the file's two, Priya kept", set('priya'), 'left', bothKept, ['leo', 'ana']],
+  ])('%s', (_, left, answer, kept, leaving) => {
+    const body = marksBody(missing, left, answer, kept);
+    expect(body.left).toEqual(leaving);
+    expect(body.stay).toEqual(missing.people.map((p) => p.entryId).filter((id) => !leaving.includes(id)));
+    expect(body.missingDigest).toBe('d');
+  });
+
+  it('with no ticks of their own given, people added here stay', () => {
+    expect(marksBody(missing, set(), 'left').left).toEqual(['leo', 'ana']);
+  });
+});
+
+describe("the card's numbers once the people added here are counted apart", () => {
+  const missing = { n: 6, listSize: 13, needsTick: false, group: 'gone', statuses: [{ label: 'Active', n: 1 }, { label: 'Cancelled', n: 4 }, { label: 'Expired', n: 1 }] };
+  it.each([
+    ['nobody added here: the preview\'s own figures', [], { n: 6, statuses: missing.statuses }],
+    ['Priya, Active, added here: one fewer, and Active gone from the line', [{ wasStatus: 'Active' }], { n: 5, statuses: [{ label: 'Cancelled', n: 4 }, { label: 'Expired', n: 1 }] }],
+    ['two added here, one with no status', [{ wasStatus: 'Cancelled' }, { wasStatus: null }], { n: 4, statuses: [{ label: 'Active', n: 1 }, { label: 'Cancelled', n: 3 }, { label: 'Expired', n: 1 }] }],
+    ['everyone is added here: none left for the card', Array.from({ length: 6 }, () => ({ wasStatus: null })), { n: 0, statuses: missing.statuses }],
+  ])('%s', (_, hand, want) => {
+    expect(fileMissingOf(missing, hand)).toMatchObject(want);
   });
 });
