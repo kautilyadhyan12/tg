@@ -2664,7 +2664,15 @@ from every gym, and a complaint keeps it from that gym and takes the lead's tick
 it is still at that address, as Stop does (the panel then says why, and staff may tick
 it again for a person who asks). The gym's stop (§9.12: bounces past 2 %, or a complaint
 among its first 100) counts its invitations and these emails together, and stops both;
-the operator's note says so. A lead from the gym's page, ticked by the person on the form, is emailed like
+the operator's note says so. **Found on the list** (RULINGS 2026-09-29): a New lead whose
+address bounces or is refused, or who marked one of the gym's emails as spam, is tagged on
+its Leads row ("Email bounces" · "Marked as spam", `emailProblem`) and counted in an
+**Email problems** chip that shows only them (`followUp=problem`; the address's HMAC is
+worked out in the database with pgcrypto, the same rule as `emailHmac`); a bounced address
+is said on the lead's panel whoever sends the next email ("Emails to this address bounce.
+Check the address with them."); a spam report reads "they marked one of your emails as
+spam" (`optedOutHow`); and a gym whose emails through the app are stopped is told at the
+top of Leads as in Settings. A lead from the gym's page, ticked by the person on the form, is emailed like
 any other, as gym software does (RULINGS 2026-09-29): a stranger could type somebody
 else's address, which is met the standard way, as for invitations — the robot check, the
 form's limits, Stop in every email, the address check — and 20c-v-b is built before any
