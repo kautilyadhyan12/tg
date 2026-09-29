@@ -31,7 +31,7 @@ export const billingCheckouts = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    check("billing_checkouts_provider_check", sql`${t.provider} IN ('paddle')`),
+    check("billing_checkouts_provider_check", sql`${t.provider} IN ('paddle','razorpay')`),
     check(
       "billing_checkouts_state_check",
       sql`${t.state} IN ('creating','open','superseded','failed','paid')`,
@@ -71,7 +71,7 @@ export const billingRefunds = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    check("billing_refunds_provider_check", sql`${t.provider} IN ('paddle')`),
+    check("billing_refunds_provider_check", sql`${t.provider} IN ('paddle','razorpay')`),
     check("billing_refunds_reason_check", sql`${t.reason} IN ('duplicate','unmatched')`),
     check("billing_refunds_state_check", sql`${t.state} IN ('owed','requested','not_needed','failed')`),
     check("billing_refunds_tries_check", sql`${t.tries} >= 0`),

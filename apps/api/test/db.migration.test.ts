@@ -238,11 +238,11 @@ d("0001_init on a real database", () => {
       ["org_b3_us_m", 19900, "USD", 1000],
       ["org_b4_us_m", 27900, "USD", 1500],
       ["org_b5_us_m", 37900, "USD", 2000],
-      ["org_b1_in_m", 850000, "INR", 200],
-      ["org_b2_in_m", 1350000, "INR", 500],
-      ["org_b3_in_m", 2250000, "INR", 1000],
-      ["org_b4_in_m", 3150000, "INR", 1500],
-      ["org_b5_in_m", 4300000, "INR", 2000],
+      ["org_b1_in_m", 750000, "INR", 200],
+      ["org_b2_in_m", 1250000, "INR", 500],
+      ["org_b3_in_m", 1900000, "INR", 1000],
+      ["org_b4_in_m", 2650000, "INR", 1500],
+      ["org_b5_in_m", 3650000, "INR", 2000],
     ];
     for (const [code, minor, currency, seatCap] of bands) {
       const r = row(code);

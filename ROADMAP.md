@@ -234,7 +234,10 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 1c-i. [x] **Paddle's own page, and a failed payment** — merged 2026-09-25 (PR #105).
      - 1c-ii. [x] **A bigger size as members grow, and paying before the trial ends** — merged 2026-09-25 (PR #109).
      - 1c-iii. [x] **A smaller size** — merged 2026-09-25 (PR #112).
-   - 1d. [ ] **Indian gyms through Razorpay**, UPI Autopay; GST off until Kd is registered (RULINGS 2026-09-24). Needs Kd's free Razorpay test account (made 2026-09-25) to have Subscriptions switched on by Razorpay (asked that day).
+   - 1d. **Indian gyms through Razorpay** (card, or UPI up to ₹15,000 a month; no GST until Kd is registered, then on top: RULINGS 2026-09-29). Subscriptions switched on by 2026-09-29. Split that day in three, as 1a–1c were:
+     - 1d-i. [ ] **Subscribe in rupees**: Razorpay's window, the first payment when the gym's own trial ends, renewals and failed payments by webhook, the 2-day grace, a second plan cancelled and refunded.
+     - 1d-ii. [ ] **A failed payment paid, a card changed, a plan cancelled**, from the console.
+     - 1d-iii. [ ] **A bigger or smaller size** (Razorpay cannot change a UPI subscription: a new mandate for it).
 2. **Trials enforced** (split 2026-09-08 after Kd's trial-abuse ruling; no approval queue, ever).
    - 2a. [x] **The price list, the 10-day gym trial at 200 members, no individual trial, one free scan a day** — merged 2026-09-24 (PR #101).
    - 2b. [ ] Same person, new spelling: Gmail dots and `+tags` collapse for trial counting; throwaway email domains refused at the Manage door.

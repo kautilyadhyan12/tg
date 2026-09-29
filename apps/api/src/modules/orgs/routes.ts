@@ -9,6 +9,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
 import type { RedisLike } from "../../redis.js";
+import type { OnlinePayments } from "../billing/online.js";
 import { createDualRateLimit } from "../auth/rateLimit.js";
 import {
   addOrgStaffRequestSchema,
@@ -81,7 +82,7 @@ export interface OrgRouteOverrides {
 
 export function registerOrgRoutes(
   app: FastifyInstance,
-  deps: { sql: Sql; redis: RedisLike; invites: InviteSettings | null; onlinePayments: boolean; robotCheck: RobotCheck; photos: PhotoStore },
+  deps: { sql: Sql; redis: RedisLike; invites: InviteSettings | null; onlinePayments: OnlinePayments; robotCheck: RobotCheck; photos: PhotoStore },
   overrides: OrgRouteOverrides = {},
 ): void {
   const orgDeps: service.OrgsDeps = {

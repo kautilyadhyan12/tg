@@ -225,3 +225,38 @@ describe('a failed payment', () => {
     expect(screen.queryByTestId('plan-modal')).toBeNull();
   });
 });
+
+describe('a plan paid through Razorpay (an Indian gym, 1d-i)', () => {
+  const INDIA = { ...OWNER, country: 'IN', currencyDisplay: 'INR' };
+  const rupees = (patch = {}) => plan({ priceLabel: '₹12,500', subscribed: true, paidThrough: 'razorpay', ...patch });
+
+  it("says it is paid through Razorpay, and draws no Paddle page and no size change it cannot make", async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: rupees() }));
+    renderOverview();
+    expect(await screen.findByTestId('paid-through-razorpay')).toBeTruthy();
+    expect(screen.getByText(/paid through razorpay, which emails you about each payment/i)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /manage payment|update payment method|change size/i })).toBeNull();
+  });
+
+  it("a failed payment: the banner says Razorpay tries again and has emailed a link, with no Paddle button", async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: rupees({ status: 'past_due' }) }));
+    renderOverview();
+    expect(
+      await screen.findByText(
+        "A payment for your gym didn't go through. Razorpay tries again by itself over the next 3 days, and has emailed a link to pay it to the address used to subscribe. Your members keep everything for 2 days after a failed payment.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /update payment method|manage payment/i })).toBeNull();
+  });
+
+  it("after the grace: the prompt names Razorpay's email and offers no Paddle page", async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...overdue(INDIA), paymentOverdueThrough: 'razorpay' }));
+    renderOverview();
+    expect(await screen.findByRole('heading', { name: 'A payment is overdue' })).toBeTruthy();
+    expect(screen.getByTestId('overdue-razorpay').textContent).toBe(
+      "Razorpay has emailed a link to pay it to the address used to subscribe. Once it's paid, everything opens again on its own.",
+    );
+    expect(screen.queryByRole('button', { name: /update payment method|manage payment|subscribe/i })).toBeNull();
+    expect(orgService.openBillingPortal).not.toHaveBeenCalled();
+  });
+});

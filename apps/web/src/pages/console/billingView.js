@@ -170,13 +170,38 @@ export function consoleReadOnlyBanner(orgType) {
 
 /** The read-only banner when a paid plan's payment is overdue (its grace ended): the fix
  *  is the payment method, which pays what is owed and opens everything again. Staff who
- *  cannot manage billing are told who can, never to press a button they are not shown. */
-export function paymentOverdueBanner(orgType, canPay) {
+ *  cannot manage billing are told who can, never to press a button they are not shown.
+ *  A plan paid through Razorpay is paid from Razorpay's own email (1d-i). */
+export function paymentOverdueBanner(orgType, canPay, through = 'paddle') {
   const words = orgWords(orgType);
-  const fix = canPay
-    ? 'Update your payment method to pay now; Paddle also tries your card again by itself.'
-    : 'Whoever manages billing can update the payment method; Paddle also tries the card again by itself.';
+  const fix =
+    through === 'razorpay'
+      ? `${RAZORPAY_PAY_LINK}; once it's paid, everything opens again by itself.`
+      : canPay
+        ? 'Update your payment method to pay now; Paddle also tries your card again by itself.'
+        : 'Whoever manages billing can update the payment method; Paddle also tries the card again by itself.';
   return `A payment for your ${words.it} is overdue. Nothing here can be changed and your ${words.people} get the free app only until it is paid. ${fix}`;
+}
+
+/** Where an Indian gym's overdue payment is paid (1d-i): Razorpay emails the payer a link
+ *  when a payment fails (its docs, "Subscription States": pending), and nothing here can
+ *  take the payment yet. */
+export const RAZORPAY_PAY_LINK = 'Razorpay has emailed a link to pay it to the address used to subscribe';
+
+/** Paid through Razorpay (an Indian gym, 1d-i): its size and how it pays are not changed
+ *  here yet, so neither button is drawn. */
+export function isPaidThroughRazorpay(org) {
+  return org?.subscription?.paidThrough === 'razorpay';
+}
+
+/** THE LINE UNDER THE PRICES when the gym can pay online. An Indian gym pays through
+ *  Razorpay with no GST added while Kd is not registered for it (Kd, RULINGS 2026-09-29),
+ *  and Razorpay takes UPI only up to ₹15,000 a charge (its Subscriptions FAQ, read that
+ *  day); every other gym pays through Paddle, with tax added where the law asks. */
+export function pricesNote(currency) {
+  return currency === 'INR'
+    ? 'Prices are a month, with no GST added. Pay by card, or by UPI on a plan up to ₹15,000 a month.'
+    : 'Prices are a month. Tax is added at checkout where it applies.';
 }
 
 /** HAS THIS GYM CHOSEN AND PAID FOR A PLAN THROUGH US? During a free trial that means its
@@ -187,17 +212,10 @@ export function isSubscribed(org) {
 }
 
 /** MAY THIS VIEWER PAY NOW, DURING THE FREE TRIAL? Only billing staff, only in the gym's
- *  own trial (not one already paid for), never on a read-only console, and not in rupees
- *  yet (Razorpay, ROADMAP Stage 3 item 1d). The server refuses anyone else; this only
- *  stops a button it would refuse. */
+ *  own trial (not one already paid for), and never on a read-only console. The server
+ *  refuses anyone else; this only stops a button it would refuse. */
 export function canPayDuringTrial(org) {
-  return (
-    canManageBilling(viewerPrivileges(org)) &&
-    isTrialing(org) &&
-    !isSubscribed(org) &&
-    !consoleIsReadOnly(org) &&
-    org?.currencyDisplay !== 'INR'
-  );
+  return canManageBilling(viewerPrivileges(org)) && isTrialing(org) && !isSubscribed(org) && !consoleIsReadOnly(org);
 }
 
 /** MAY THIS VIEWER CHANGE SIZE (bigger or smaller)? A plan paid through us, in good standing
@@ -207,6 +225,7 @@ export function canChangeSize(org) {
   return (
     canManageBilling(viewerPrivileges(org)) &&
     isSubscribed(org) &&
+    !isPaidThroughRazorpay(org) &&
     (sub?.status === 'active' || sub?.status === 'trialing') &&
     sub?.cancelAtPeriodEnd !== true &&
     !consoleIsReadOnly(org)
@@ -619,7 +638,7 @@ export function bannerFor(org, now = Date.now()) {
       tone: 'danger',
       text:
         org?.paymentOverdue === true
-          ? paymentOverdueBanner(org?.orgType, canManageBilling(viewerPrivileges(org)))
+          ? paymentOverdueBanner(org?.orgType, canManageBilling(viewerPrivileges(org)), org?.paymentOverdueThrough ?? 'paddle')
           : consoleReadOnlyBanner(org?.orgType),
       // §4.2 gives this row no dismissal and it would be wrong to invent one:
       // the only dismissible state is `trial_info`, where putting the notice
@@ -630,12 +649,15 @@ export function bannerFor(org, now = Date.now()) {
   }
 
   if (sub?.status === 'past_due') {
-    // Paddle retries the card by itself; the days are the grace the worker gives a
-    // paying gym before its members lose the plan (Part 5 §8, ROADMAP 1c-i).
+    // Paddle retries the card by itself, Razorpay for three days (its docs, "Payment
+    // Retries"); the days are the grace the worker gives a paying gym before its members
+    // lose the plan (Part 5 §8, ROADMAP 1c-i).
     return {
       key: 'past_due',
       tone: 'warn',
-      text: canManageBilling(viewerPrivileges(org))
+      text: isPaidThroughRazorpay(org)
+        ? `A payment for your ${words.it} didn't go through. Razorpay tries again by itself over the next 3 days, and has emailed a link to pay it to the address used to subscribe. Your ${words.people} keep everything for ${PAID_PLAN_GRACE_DAYS} days after a failed payment.`
+        : canManageBilling(viewerPrivileges(org))
         ? `A payment for your ${words.it} didn't go through. Paddle will try your card again by itself, or you can update your payment method under Plan on the Overview. Your ${words.people} keep everything for ${PAID_PLAN_GRACE_DAYS} days after a failed payment.`
         : `A payment for your ${words.it} didn't go through. Paddle will try the card again by itself, or whoever manages billing can update the payment method. Your ${words.people} keep everything for ${PAID_PLAN_GRACE_DAYS} days after a failed payment.`,
       dismissible: false,

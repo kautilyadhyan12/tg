@@ -8,6 +8,7 @@ import {
   firstPaymentText,
   planPriceText,
   planSeatLabel,
+  pricesNote,
   sizeChargeText,
   sizeRows,
   trialEndDateLabel,
@@ -59,7 +60,7 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState(null);
   const [changed, setChanged] = useState(null);
-  const { paying, payNote, payError, paid, subscribe } = usePaddleSubscribe(gymId);
+  const { paying, payNote, payError, paid, subscribe } = usePaddleSubscribe(gymId, org?.name ?? '');
   const dialogRef = useRef(null);
 
   useEffect(() => {
@@ -334,7 +335,7 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
                   : payNote !== null
                     ? payNote
                     : plans.payOnline === 'available'
-                      ? 'Prices are a month. Tax is added at checkout where it applies.'
+                      ? pricesNote(org?.currencyDisplay)
                       : plans.payOnline === 'coming_soon'
                         ? `Paying online in rupees is coming soon. We'll be in touch about setting your ${words.it} up.`
                         : `There's no way to pay online yet. We'll be in touch about setting your ${words.it} up.`}

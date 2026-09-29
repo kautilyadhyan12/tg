@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { orgService, errorCode, errorText, isRetryable } from '../../api/orgsApi';
 import { applyStartedTrial, refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
-import { planPriceText, planPromptFor, planSeatLabel } from '../../pages/console/billingView';
+import { RAZORPAY_PAY_LINK, planPriceText, planPromptFor, planSeatLabel, pricesNote } from '../../pages/console/billingView';
 import ManagePaymentButton from './ManagePaymentButton';
 import { usePaddleSubscribe } from './usePaddleSubscribe';
 
@@ -128,7 +128,7 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
   const [attempt, setAttempt] = useState(0);
   const gymId = org?.id ?? null;
   /** A payment under way, in Paddle's window; the prompt closes once it is on the gym. */
-  const { paying, payNote, payError, subscribe } = usePaddleSubscribe(gymId);
+  const { paying, payNote, payError, subscribe } = usePaddleSubscribe(gymId, org?.name ?? '');
   /** Said once Paddle's page is open for an overdue payment; null before. */
   const [overdueNote, setOverdueNote] = useState(null);
   const watching = useRef(false);
@@ -311,7 +311,9 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
           {showing === 'trial'
             ? `Start your ${words.it}'s free trial`
             : showing === 'overdue'
-              ? 'Update payment method'
+              ? org?.paymentOverdueThrough === 'razorpay'
+                ? 'A payment is overdue'
+                : 'Update payment method'
               : `Choose your ${words.it}'s plan`}
         </h2>
 
@@ -321,13 +323,23 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
               A payment for your {words.it} didn&apos;t go through, so your {words.people} get the free
               app only and nothing here can be changed.
             </p>
-            <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.6)' }}>
-              Updating your payment method pays what&apos;s owed and opens everything again. Paddle
-              also tries your card again by itself; if that works, everything opens again on its own.
-            </p>
-            <div className="mt-5">
-              <ManagePaymentButton gymId={gymId} label="Update payment method" onOpened={watchForPayment} />
-            </div>
+            {org?.paymentOverdueThrough === 'razorpay' ? (
+              // Paid through Razorpay (1d-i): its own email carries the link, and nothing here
+              // can take the payment yet.
+              <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.6)' }} data-testid="overdue-razorpay">
+                {RAZORPAY_PAY_LINK}. Once it&apos;s paid, everything opens again on its own.
+              </p>
+            ) : (
+              <>
+                <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                  Updating your payment method pays what&apos;s owed and opens everything again. Paddle
+                  also tries your card again by itself; if that works, everything opens again on its own.
+                </p>
+                <div className="mt-5">
+                  <ManagePaymentButton gymId={gymId} label="Update payment method" onOpened={watchForPayment} />
+                </div>
+              </>
+            )}
             {overdueNote !== null ? (
               <p className="text-sm mt-4" style={{ color: 'rgba(255,255,255,0.6)' }}>
                 {overdueNote}
@@ -462,7 +474,7 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
               : payNote !== null
                 ? payNote
                 : plans.payOnline === 'available'
-                  ? 'Prices are a month. Tax is added at checkout where it applies.'
+                  ? pricesNote(org?.currencyDisplay)
                   : plans.payOnline === 'coming_soon'
                     ? `Paying online in rupees is coming soon. We'll be in touch about setting your ${words.it} up.`
                     : `There's no way to pay online yet. We'll be in touch about setting your ${words.it} up.`}

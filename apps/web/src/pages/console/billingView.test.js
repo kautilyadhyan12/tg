@@ -15,6 +15,8 @@
 import { describe, expect, it, beforeEach, vi, afterEach } from 'vitest';
 import {
   consoleReadOnlyBanner,
+  paymentOverdueBanner,
+  pricesNote,
   readOnlyNote,
   readOnlyQueueNote,
   SEAT_PRESSURE_RATIO,
@@ -745,7 +747,9 @@ describe('who is offered which choice', () => {
 
   it.each([
     ['the gym’s own free trial', trialing(6), { subscribed: false, pay: true, bigger: false }],
-    ['a free trial in rupees (Razorpay is not built)', trialing(6, { currencyDisplay: 'INR' }), { subscribed: false, pay: false, bigger: false }],
+    ['a free trial in rupees (Razorpay, 1d-i)', trialing(6, { currencyDisplay: 'INR' }), { subscribed: false, pay: true, bigger: false }],
+    ['a trial paid for through Razorpay (its size is not changed here yet)', paidTrial({ currencyDisplay: 'INR', subscription: { paidThrough: 'razorpay', priceLabel: '₹12,500' } }), { subscribed: true, pay: false, bigger: false }],
+    ['a plan paid through Razorpay', paying({ paidThrough: 'razorpay', priceLabel: '₹12,500' }, { currencyDisplay: 'INR' }), { subscribed: true, pay: false, bigger: false }],
     ['a trial the gym has paid for', paidTrial(), { subscribed: true, pay: false, bigger: true }],
     ['a paid plan in good standing', paying(), { subscribed: true, pay: false, bigger: true }],
     ['a paid plan set to end', paying({ cancelAtPeriodEnd: true }), { subscribed: true, pay: false, bigger: false }],
@@ -1014,5 +1018,21 @@ describe('re-check N2 (1c-iii): no remove-by time once it has passed', () => {
     expect(pendingFit(org, Date.parse('2026-10-31T21:05:00.000Z'))?.text).toBe(
       `You have 52 members. Remove 2 to move to 50. Otherwise you'll stay on ${(5000).toLocaleString()} members at $20 a month.`,
     );
+  });
+});
+describe('an Indian gym paying through Razorpay (1d-i)', () => {
+  it('the line under the prices says card or UPI and no GST in rupees, and tax at checkout elsewhere', () => {
+    expect(pricesNote('INR')).toBe('Prices are a month, with no GST added. Pay by card, or by UPI on a plan up to ₹15,000 a month.');
+    expect(pricesNote('USD')).toBe('Prices are a month. Tax is added at checkout where it applies.');
+    expect(pricesNote(undefined)).toBe('Prices are a month. Tax is added at checkout where it applies.');
+  });
+
+  it("an overdue payment names Razorpay's email, never Paddle's page or a card to update", () => {
+    const text = paymentOverdueBanner('gym', true, 'razorpay');
+    expect(text).toBe(
+      "A payment for your gym is overdue. Nothing here can be changed and your members get the free app only until it is paid. Razorpay has emailed a link to pay it to the address used to subscribe; once it's paid, everything opens again by itself.",
+    );
+    expect(paymentOverdueBanner('gym', false, 'razorpay')).toBe(text);
+    expect(paymentOverdueBanner('gym', true)).toMatch(/Paddle also tries your card/);
   });
 });

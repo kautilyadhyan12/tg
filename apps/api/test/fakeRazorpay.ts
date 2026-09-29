@@ -1,0 +1,193 @@
+// Razorpay's API as the billing tests need it (not a test file itself): subscriptions our
+// server creates, and the steps Razorpay takes after its window — the mandate given
+// (`authenticate`), a payment taken (`charge`), one failed (`fail`) — shaped as Razorpay
+// sends them (checked on Kd's test account, 2026-09-29).
+import { randomBytes } from "node:crypto";
+import type { RazorpayInvoice, RazorpayPayment, RazorpayPlan, RazorpaySubscription } from "@app/shared";
+import type { RazorpayApi, RazorpayResult } from "../src/modules/billing/razorpay.js";
+
+const ALPHANUM = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+export const razorpayId = (prefix: string) =>
+  `${prefix}_${Array.from(randomBytes(14), (b) => ALPHANUM[b % ALPHANUM.length] ?? "A").join("")}`;
+
+const MONTH_S = 30 * 24 * 60 * 60;
+
+export class FakeRazorpay implements RazorpayApi {
+  plans = new Map<string, RazorpayPlan>();
+  subs = new Map<string, RazorpaySubscription>();
+  invoices = new Map<string, RazorpayInvoice[]>();
+  payments = new Map<string, RazorpayPayment>();
+  cancelled: string[] = [];
+  refunds: string[] = [];
+  /** Every subscription asked for, as asked. */
+  created: { planId: string; startAt: Date | null; notes: Record<string, string> }[] = [];
+  down = false;
+  /** Make the next subscription's plan carry a different amount than the one on record. */
+  wrongAmount = false;
+  /** Answer this many refund requests with a 503, making nothing. */
+  refundFailures = 0;
+  /** Razorpay's clock, in seconds. */
+  clock = Math.floor(Date.parse("2026-10-01T00:00:00Z") / 1000);
+
+  addPlan(amount: number, currency = "INR"): string {
+    const id = razorpayId("plan");
+    this.plans.set(id, {
+      id,
+      entity: "plan",
+      period: "monthly",
+      interval: 1,
+      item: { active: true, amount, currency, name: `Monthly, ${String(amount)}` },
+      notes: {},
+    });
+    return id;
+  }
+
+  private ok<T>(value: T): RazorpayResult<T> {
+    return this.down ? { kind: "unavailable", status: 503 } : { kind: "ok", value };
+  }
+
+  createSubscription(input: { planId: string; startAt: Date | null; notes: Record<string, string> }): Promise<RazorpayResult<RazorpaySubscription>> {
+    if (this.down) return Promise.resolve({ kind: "unavailable", status: 503 });
+    const plan = this.plans.get(input.planId);
+    if (plan === undefined) return Promise.resolve({ kind: "refused", status: 400, code: "BAD_REQUEST_ERROR" });
+    this.created.push({ ...input });
+    const id = razorpayId("sub");
+    const startAt = input.startAt === null ? null : Math.ceil(input.startAt.getTime() / 1000);
+    const sub: RazorpaySubscription = {
+      id,
+      entity: "subscription",
+      plan_id: input.planId,
+      customer_id: null,
+      status: "created",
+      current_start: null,
+      current_end: null,
+      ended_at: null,
+      charge_at: startAt,
+      start_at: startAt,
+      quantity: 1,
+      total_count: 120,
+      paid_count: 0,
+      notes: { ...input.notes },
+      created_at: this.clock,
+    };
+    this.subs.set(id, sub);
+    const shown = this.wrongAmount ? { ...plan, item: { ...plan.item, amount: plan.item.amount + 100 } } : plan;
+    this.wrongAmount = false;
+    return Promise.resolve({ kind: "ok", value: { ...sub, plan: shown } });
+  }
+
+  getSubscription(id: string): Promise<RazorpayResult<RazorpaySubscription>> {
+    const sub = this.subs.get(id);
+    if (sub === undefined) return Promise.resolve({ kind: "not_found" });
+    return Promise.resolve(this.ok({ ...sub }));
+  }
+
+  cancelSubscriptionNow(id: string): Promise<RazorpayResult<RazorpaySubscription>> {
+    if (this.down) return Promise.resolve({ kind: "unavailable", status: 503 });
+    const sub = this.subs.get(id);
+    if (sub === undefined) return Promise.resolve({ kind: "not_found" });
+    this.cancelled.push(id);
+    const ended = { ...sub, status: "cancelled" as const, ended_at: this.clock, charge_at: null };
+    this.subs.set(id, ended);
+    return Promise.resolve({ kind: "ok", value: ended });
+  }
+
+  listSubscriptionInvoices(subscriptionId: string): Promise<RazorpayResult<RazorpayInvoice[]>> {
+    return Promise.resolve(this.ok([...(this.invoices.get(subscriptionId) ?? [])]));
+  }
+
+  getPayment(id: string): Promise<RazorpayResult<RazorpayPayment>> {
+    const payment = this.payments.get(id);
+    if (payment === undefined) return Promise.resolve({ kind: "not_found" });
+    return Promise.resolve(this.ok({ ...payment }));
+  }
+
+  refundPayment(id: string): Promise<RazorpayResult<null>> {
+    if (this.down) return Promise.resolve({ kind: "unavailable", status: 503 });
+    if (this.refundFailures > 0) {
+      this.refundFailures -= 1;
+      return Promise.resolve({ kind: "unavailable", status: 503 });
+    }
+    const payment = this.payments.get(id);
+    if (payment === undefined) return Promise.resolve({ kind: "not_found" });
+    this.refunds.push(id);
+    this.payments.set(id, { ...payment, status: "refunded", amount_refunded: payment.amount });
+    return Promise.resolve({ kind: "ok", value: null });
+  }
+
+  getPlan(id: string): Promise<RazorpayResult<RazorpayPlan>> {
+    const plan = this.plans.get(id);
+    if (plan === undefined) return Promise.resolve({ kind: "not_found" });
+    return Promise.resolve(this.ok(plan));
+  }
+
+  private sub(id: string): RazorpaySubscription {
+    const sub = this.subs.get(id);
+    if (sub === undefined) throw new Error(`fake Razorpay has no ${id}`);
+    return sub;
+  }
+
+  /** The window is paid: with a start date the mandate is given and nothing charged yet;
+   *  without one the first payment is taken at once. */
+  authenticate(id: string): void {
+    const sub = this.sub(id);
+    const customer = razorpayId("cust");
+    if (sub.start_at !== null && sub.start_at > this.clock) {
+      this.subs.set(id, { ...sub, status: "authenticated", customer_id: customer });
+      return;
+    }
+    this.subs.set(id, { ...sub, customer_id: customer });
+    this.charge(id);
+  }
+
+  /** Razorpay takes a month's payment: the first, or the next. */
+  charge(id: string): string {
+    const sub = this.sub(id);
+    const plan = this.plans.get(sub.plan_id);
+    if (plan === undefined) throw new Error("fake Razorpay lost a plan");
+    const start = sub.current_end ?? Math.max(sub.start_at ?? this.clock, this.clock);
+    const paymentId = razorpayId("pay");
+    this.payments.set(paymentId, { id: paymentId, entity: "payment", amount: plan.item.amount, currency: plan.item.currency, status: "captured", amount_refunded: 0 });
+    const list = this.invoices.get(id) ?? [];
+    list.push({ id: razorpayId("inv"), entity: "invoice", status: "paid", subscription_id: id, payment_id: paymentId, amount_paid: plan.item.amount });
+    this.invoices.set(id, list);
+    this.subs.set(id, {
+      ...sub,
+      status: "active",
+      current_start: start,
+      current_end: start + MONTH_S,
+      charge_at: start + MONTH_S,
+      paid_count: sub.paid_count + 1,
+    });
+    return paymentId;
+  }
+
+  /** A payment fails: Razorpay retries (`pending`), then gives up (`halted`). */
+  fail(id: string, status: "pending" | "halted" = "pending"): void {
+    this.subs.set(id, { ...this.sub(id), status });
+  }
+
+  /** A subscription made by something other than our server on the same Razorpay account. */
+  foreign(planId: string): string {
+    const id = razorpayId("sub");
+    this.subs.set(id, {
+      id,
+      entity: "subscription",
+      plan_id: planId,
+      customer_id: razorpayId("cust"),
+      status: "created",
+      current_start: null,
+      current_end: null,
+      ended_at: null,
+      charge_at: null,
+      start_at: null,
+      quantity: 1,
+      total_count: 12,
+      paid_count: 0,
+      notes: { app: "travel" },
+      created_at: this.clock,
+    });
+    this.charge(id);
+    return id;
+  }
+}

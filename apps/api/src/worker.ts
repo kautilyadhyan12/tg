@@ -37,8 +37,8 @@ import { rollUpGymDays } from "./modules/orgs/rollup.js";
 import { sweepJoinApplications } from "./modules/orgs/sweep.js";
 import { expireLapsedGymTrials } from "./modules/orgs/trialSweep.js";
 import { purgeDueUsers, purgeShortfall } from "./modules/privacy/purge.js";
-import { processPaddleEvents } from "./modules/billing/events.js";
-import { paddleSettings } from "./modules/billing/settings.js";
+import { processPaddleEvents, processRazorpayEvents } from "./modules/billing/events.js";
+import { paddleSettings, razorpaySettings } from "./modules/billing/settings.js";
 // The worker busts no entitlement cache: a gym's members pick a change up within the cache's 60 s.
 import { createMemoryRedis } from "./redis.js";
 import { sentryOptions } from "./sentry.js";
@@ -435,18 +435,19 @@ if (invites === null || inviteSender === null) {
   });
 }
 
-// PADDLE'S EVENTS (ROADMAP Stage 3 item 1a). Their own queue, every minute: each event
-// the webhook kept is fetched from Paddle and written through the one rule. Only when
-// Paddle is set up.
+// PADDLE'S AND RAZORPAY'S EVENTS (ROADMAP Stage 3 items 1a and 1d-i). Their own queue, every
+// minute: each event the webhooks kept is fetched from its provider and written through the
+// one rule. Only when one of them is set up.
 export const BILLING_QUEUE = "billing";
 export const BILLING_PADDLE_EVENTS_JOB = "billing.paddle_events";
 
 const paddle = paddleSettings(config);
+const razorpay = razorpaySettings(config);
 let billingQueue: Queue | null = null;
 let billingWorker: Worker | null = null;
-if (paddle === null) {
-  log.warn({ event: "worker.billing_off" }, "Paddle events are not acted on: PADDLE_API_KEY or PADDLE_CLIENT_TOKEN is missing");
-} else {
+if (paddle === null) log.warn({ event: "worker.billing_off" }, "Paddle events are not acted on: PADDLE_API_KEY or PADDLE_CLIENT_TOKEN is missing");
+if (razorpay === null) log.warn({ event: "worker.razorpay_off" }, "Razorpay events are not acted on: RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET is missing");
+if (paddle !== null || razorpay !== null) {
   billingQueue = new Queue(BILLING_QUEUE, { connection });
   try {
     await billingQueue.upsertJobScheduler(
@@ -472,11 +473,22 @@ if (paddle === null) {
     BILLING_QUEUE,
     async (job) => {
       if (job.name !== BILLING_PADDLE_EVENTS_JOB) throw new Error(`unknown job on ${BILLING_QUEUE}: ${job.name}`);
-      const startedAt = Date.now();
-      const run = await processPaddleEvents({ sql, redis: createMemoryRedis(), paddle, log, now: () => new Date(), mail: billingMail });
-      const refunds = run.refunds.requested + run.refunds.notNeeded + run.refunds.deferred + run.refunds.failed;
-      if (run.applied + run.unchanged + run.deferred + run.givenUp + run.forgotten + refunds + run.pendingSizes.applied + run.pendingSizes.waiting + run.pendingSizes.kept + run.pendingSizes.warned > 0) {
-        log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
+      const deps = { sql, redis: createMemoryRedis(), paddle, razorpay, log, now: () => new Date(), mail: billingMail };
+      if (razorpay !== null) {
+        const startedAt = Date.now();
+        const run = await processRazorpayEvents(deps);
+        const refunds = run.refunds.requested + run.refunds.notNeeded + run.refunds.deferred + run.refunds.failed;
+        if (run.applied + run.unchanged + run.deferred + run.givenUp + run.forgotten + refunds + run.gracesEnded > 0) {
+          log.info({ ...run, provider: "razorpay", durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
+        }
+      }
+      if (paddle !== null) {
+        const startedAt = Date.now();
+        const run = await processPaddleEvents(deps);
+        const refunds = run.refunds.requested + run.refunds.notNeeded + run.refunds.deferred + run.refunds.failed;
+        if (run.applied + run.unchanged + run.deferred + run.givenUp + run.forgotten + refunds + run.pendingSizes.applied + run.pendingSizes.waiting + run.pendingSizes.kept + run.pendingSizes.warned > 0) {
+          log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
+        }
       }
     },
     { connection },

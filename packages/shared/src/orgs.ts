@@ -505,10 +505,13 @@ export const orgSubscriptionSchema = z.object({
    *  `cancelAtPeriodEnd`. Null during a free trial. */
   currentPeriodEnd: z.string().nullable().default(null),
   cancelAtPeriodEnd: z.boolean().default(false),
-  /** The gym has chosen a plan and paid for it through us (Paddle). During a free trial
+  /** The gym has chosen a plan and paid for it through us (Paddle or Razorpay). During a free trial
    *  this means its card is saved and the first payment is taken when the trial ends
    *  (`currentPeriodEnd`); `priceLabel` is then the plan's price (Kd, RULINGS 2026-09-25). */
   subscribed: z.boolean().default(false),
+  /** Who takes the payments of a plan the gym has paid for through us: Paddle, or Razorpay
+   *  for an Indian gym (1d-i). Null during a free trial not yet paid for. */
+  paidThrough: z.enum(["paddle", "razorpay"]).nullable().default(null),
   /** A trial the gym has paid for keeps its free trial's limit (`seatCap`) until a payment
    *  is taken, a failed first charge included; this is the chosen plan's, from then. Null
    *  otherwise. */
@@ -667,9 +670,9 @@ export type OrgPlanOffer = z.infer<typeof orgPlanOfferSchema>;
  *  already does one function over. Not decided here (R1.1). */
 export const orgPlansResponseSchema = z.object({
   plans: z.array(orgPlanOfferSchema),
-  /** Whether this gym can pay online now: `available` (Paddle), `coming_soon` (an
-   *  Indian gym, until Razorpay is connected, ROADMAP Stage 3 item 1d) or
-   *  `unavailable` (payments not set up on this server). */
+  /** Whether this gym can pay online now: `available` (Paddle, or Razorpay for an Indian
+   *  gym) or `unavailable` (not set up on this server). `coming_soon` was an Indian gym's
+   *  answer until Razorpay was connected (ROADMAP Stage 3 item 1d-i); no server sends it now. */
   payOnline: z.enum(["available", "coming_soon", "unavailable"]).default("unavailable"),
 });
 export type OrgPlansResponse = z.infer<typeof orgPlansResponseSchema>;
@@ -1132,6 +1135,9 @@ export const myOrgSchema = orgSummarySchema.extend({
    *  grace ended): the fix is the card on Paddle's page, never a new plan. Null
    *  for a caller who is not staff, or an api too old to send it. */
   paymentOverdue: z.boolean().nullable().default(null),
+  /** Who is owed that payment: Paddle, or Razorpay for an Indian gym (ROADMAP 1d-i), whose
+   *  own emails carry the link to pay. Null whenever `paymentOverdue` is not true. */
+  paymentOverdueThrough: z.enum(["paddle", "razorpay"]).nullable().default(null),
   /** The gym's postal address for its invitations (Part 3 §9.12). Staff only; null
    *  for a member, for a gym with none, and from an api too old to send it. */
   postalAddress: z.string().nullable().default(null),

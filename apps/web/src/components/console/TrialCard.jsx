@@ -12,6 +12,7 @@ import {
   canManageBilling,
   canPayDuringTrial,
   firstPaymentText,
+  isPaidThroughRazorpay,
   isSubscribed,
   nextPaymentText,
   nextSizeText,
@@ -169,6 +170,7 @@ export default function TrialCard({ org }) {
   const nextPayment = nextPaymentText(sub);
   const payNow = canPayDuringTrial(org);
   const resize = canChangeSize(org);
+  const razorpay = isPaidThroughRazorpay(org);
   const change = pendingChangeText(sub, org?.orgType);
   const fit = pendingFit(org);
   const kept = sizeKeptText(sub, org?.orgType) ?? sizeFittedText(sub, org?.orgType);
@@ -267,6 +269,12 @@ export default function TrialCard({ org }) {
       ) : null}
 
       <SeatLine org={org} />
+      {razorpay ? (
+        <div className="text-sm mt-3" style={muted} data-testid="paid-through-razorpay">
+          Paid through Razorpay, which emails you about each payment. Changing your size or how you pay isn&apos;t
+          available here yet.
+        </div>
+      ) : null}
       {payNow ? (
         <div className="text-sm mt-3" style={muted}>
           Choose a plan now and keep your free days: the plan and its first payment start when the trial ends.
@@ -275,8 +283,9 @@ export default function TrialCard({ org }) {
       <div className="mt-4 flex flex-col sm:flex-row gap-2">
         {payNow ? <CardButton onClick={() => setChoosing('subscribe')}>Choose a plan</CardButton> : null}
         {resize ? <CardButton onClick={() => setChoosing('size')}>Change size</CardButton> : null}
-        {/* A plan paid through us is managed on Paddle's own page: the card, cancelling, invoices. */}
-        {subscribed || sub.status === 'active' || sub.status === 'past_due' ? (
+        {/* A plan paid through Paddle is managed on Paddle's own page: the card, cancelling,
+            invoices. One paid through Razorpay is not managed here yet (1d-ii). */}
+        {!razorpay && (subscribed || sub.status === 'active' || sub.status === 'past_due') ? (
           <ManagePaymentButton gymId={org.id} label={sub.status === 'past_due' ? 'Update payment method' : 'Manage payment'} />
         ) : null}
       </div>

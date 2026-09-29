@@ -124,6 +124,8 @@ export interface MyOrgRow extends OrgRow {
   /** The console is read-only because a paid plan's payment is overdue, not because a
    *  trial ended: the fix is the card on Paddle's page (ROADMAP Stage 3 item 1c-i). */
   paymentOverdue: boolean;
+  /** Who is owed that payment: Paddle, or Razorpay for an Indian gym (1d-i). Null when none is. */
+  paymentOverdueThrough: "paddle" | "razorpay" | null;
   /** THE NEWEST CHEER THIS GYM HAS SENT THE CALLER, or null — Kd's :29961
    *  ruling 4 reaching the member, and the whole of its delivery.
    *
@@ -456,6 +458,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
       sub_fitted_asked_seat_cap: number | null;
       sub_fitted_members: number | null;
       payment_overdue: boolean;
+      overdue_provider: string | null;
       seats_used: number;
       owner_trial_used: boolean;
       postal_address: string | null;
@@ -489,11 +492,17 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
            sub.kept_members AS sub_kept_members,
            sub.fitted_asked_seat_cap AS sub_fitted_asked_seat_cap,
            sub.fitted_members AS sub_fitted_members,
-           -- A paid plan whose grace ended while Paddle still retries (1c-i).
+           -- A paid plan whose grace ended while Paddle or Razorpay still retries (1c-i, 1d-i).
            EXISTS (
              SELECT 1 FROM subscriptions so
              WHERE so.owner_type = 'gym' AND so.owner_id = g.id AND so.cancel_reason = 'grace_expired'
            ) AS payment_overdue,
+           (
+             SELECT so.provider FROM subscriptions so
+             WHERE so.owner_type = 'gym' AND so.owner_id = g.id AND so.cancel_reason = 'grace_expired'
+             ORDER BY so.ended_at DESC NULLS LAST, so.id
+             LIMIT 1
+           ) AS overdue_provider,
            -- THE SEAT METER'S NUMERATOR, and the three conditions are
            -- claimSeat's own, written out for the third time on purpose.
            --
@@ -699,6 +708,10 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
     consoleReadOnly: r.sub_status === null,
     // Only while there is no live plan: a gym on a plan again owes nothing.
     paymentOverdue: r.sub_status === null && r.payment_overdue,
+    paymentOverdueThrough:
+      r.sub_status === null && r.payment_overdue && (r.overdue_provider === "paddle" || r.overdue_provider === "razorpay")
+        ? r.overdue_provider
+        : null,
     // BOTH HALVES OR NEITHER. The lateral either matched a row or did not, so a
     // preset without an instant is impossible — and writing it as two
     // independent `=== null` tests would let a future edit produce a cheer with

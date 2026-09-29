@@ -13,7 +13,7 @@ import {
   orgWords,
 } from "@app/shared";
 import * as billingRepo from "../billing/repo.js";
-import { onlinePaymentFor } from "../billing/online.js";
+import { onlinePaymentFor, type OnlinePayments } from "../billing/online.js";
 import { bustEntitlements } from "../entitlements/service.js";
 import { onAttendanceMarked } from "../gamification/service.js";
 import { getUserSyncContext } from "../users/service.js";
@@ -162,8 +162,9 @@ export interface OrgsDeps {
    *  object" was zero objects. Required costs nothing and removes the silent
    *  path. */
   log: { warn: (obj: Record<string, unknown>, msg: string) => void };
-  /** Paddle is set up on this server (ROADMAP Stage 3 item 1a). */
-  onlinePayments: boolean;
+  /** Which payment companies are set up on this server: Paddle (ROADMAP Stage 3 item 1a),
+   *  Razorpay for Indian gyms (1d). */
+  onlinePayments: OnlinePayments;
 }
 
 /** Part 3 §4.0 step 4 names the first code "Front Desk". */
@@ -528,6 +529,7 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
       consoleReadOnly: r.staffRole === null ? null : r.consoleReadOnly,
       // Why it is read-only, for staff alike: an overdue payment, paid on Paddle's page.
       paymentOverdue: r.staffRole === null ? null : r.paymentOverdue,
+      paymentOverdueThrough: r.staffRole === null ? null : r.paymentOverdueThrough,
       // A fact about the gym for its staff (the Settings box and the Invite screen).
       postalAddress: r.staffRole === null ? null : r.postalAddress,
       // THE NEWEST CHEER THIS GYM SENT **THIS CALLER** — and it is the one field
@@ -1135,7 +1137,8 @@ export async function startOrgTrial(
 export function toOrgSubscription(row: repo.GymSubscriptionRow, fallback: { code: string; seatCap: number; priceMinor: number } | null = null): OrgSubscription {
   // A free trial has no price and no billing month; a paid plan shows both, and so does a
   // trial the gym has paid for (its month starts when the trial ends).
-  const subscribed = row.provider === "paddle";
+  const paidThrough = row.provider === "paddle" || row.provider === "razorpay" ? row.provider : null;
+  const subscribed = paidThrough !== null;
   const paid = row.status === "active" || row.status === "past_due" || (subscribed && row.status === "trialing");
   // A smaller size waiting, and one that was not made, are a paying plan's: in a paid trial
   // a smaller size is made at once.
@@ -1149,6 +1152,7 @@ export function toOrgSubscription(row: repo.GymSubscriptionRow, fallback: { code
     currentPeriodEnd: paid ? (row.currentPeriodEnd?.toISOString() ?? null) : null,
     cancelAtPeriodEnd: paid && row.cancelAtPeriodEnd,
     subscribed,
+    paidThrough,
     // The chosen size waits for the first payment: through the trial, and a failed charge.
     nextSeatCap: subscribed && row.trialSeatCap !== null && row.planSeatCap !== row.seatCap ? row.planSeatCap : null,
     pendingSize:

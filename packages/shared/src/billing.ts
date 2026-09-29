@@ -4,6 +4,7 @@
 // fields freely, so its objects are not strict.
 import { z } from "zod";
 import { orgSubscriptionSchema } from "./orgs.js";
+import { razorpayKeyIdSchema, razorpaySubscriptionIdSchema } from "./razorpay.js";
 
 const paddleId = (prefix: string) => z.string().regex(new RegExp(`^${prefix}_[a-z\\d]{26}$`));
 
@@ -24,14 +25,25 @@ export const PAID_PLAN_GRACE_DAYS = 2;
 export const orgCheckoutRequestSchema = z.object({ planCode: z.string().min(1).max(64) }).strict();
 export type OrgCheckoutRequest = z.infer<typeof orgCheckoutRequestSchema>;
 
-/** What the browser needs to open Paddle's checkout for the transaction our server made. */
-export const orgCheckoutResponseSchema = z.object({
-  checkoutId: z.string().uuid(),
-  provider: z.literal("paddle"),
-  environment: z.enum(["sandbox", "production"]),
-  clientToken: z.string().min(1).max(200),
-  transactionId: paddleTransactionIdSchema,
-});
+/** What the browser needs to open the payment window for the checkout our server made:
+ *  Paddle's for the transaction, or Razorpay's for the subscription (an Indian gym, 1d-i). */
+export const orgCheckoutResponseSchema = z.discriminatedUnion("provider", [
+  z.object({
+    checkoutId: z.string().uuid(),
+    provider: z.literal("paddle"),
+    environment: z.enum(["sandbox", "production"]),
+    clientToken: z.string().min(1).max(200),
+    transactionId: paddleTransactionIdSchema,
+  }),
+  z.object({
+    checkoutId: z.string().uuid(),
+    provider: z.literal("razorpay"),
+    keyId: razorpayKeyIdSchema,
+    subscriptionId: razorpaySubscriptionIdSchema,
+    /** What the window says is being paid for ("Up to 200 members, monthly"). */
+    description: z.string().min(1).max(200),
+  }),
+]);
 export type OrgCheckoutResponse = z.infer<typeof orgCheckoutResponseSchema>;
 
 /** After Paddle's window says the payment went: has it reached the gym yet? `waiting`
