@@ -675,7 +675,15 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
     if (into.where.length >= MEMBER_LIST_WARNING_ROWS_SHOWN) return;
     into.where.push({ row: draft.row, name: quotable(draft.fullName, MEMBER_LIST_MAX_NAME_CHARS) ?? "", column: column === null ? null : labelOf(column), cell: cell === null ? null : quotable(cell, MEMBER_LIST_WARNING_CELL_CHARS), sameAsRow });
   };
-  const nameColumn = mapping.fullName ?? mapping.firstName ?? mapping.lastName;
+  // The name is the full-name cell where it is written, else first and last (`cleanName`).
+  const holdsCard = (text: string): boolean => cardShapedCell(text) || withoutCardNumbers(text).removed > 0;
+  const nameCardColumns = (row: readonly string[]): (number | null)[] => {
+    const full = mapping.fullName;
+    if (full !== null && tidyCell(row[full] ?? "") !== "") return [full];
+    const parts = [mapping.firstName, mapping.lastName].filter((column) => column !== null && holdsCard(tidyCell(row[column] ?? "")));
+    // A card split across the two cells is named by the first.
+    return parts.length > 0 ? parts : [mapping.firstName ?? mapping.lastName];
+  };
 
   const drafts: (Draft & Wide)[] = [];
   const emailRows = new Map<string, number>();
@@ -692,8 +700,9 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
     if (cardName) draft.fullName = "";
     if (draft.cardCell !== null) note(cards, draft, draft.cardCell, null);
     for (const column of draft.found.cards) note(cards, draft, column, null);
-    // `cleanName` has already taken a card out of a name's words; that is a card too.
-    if (cardName || draft.fullName.includes(CARD_REDACTED)) note(cards, draft, nameColumn, null);
+    // `cleanName` has already taken a card out of a name's words; that is a card too, in
+    // whichever name cell held it.
+    if (cardName || draft.fullName.includes(CARD_REDACTED)) for (const column of nameCardColumns(row)) note(cards, draft, column, null);
     for (const spot of draft.found.cut) note(cellsCut, draft, spot.column, spot.raw);
     for (const spot of draft.found.notDates) note(datesNotRead, draft, spot.column, spot.raw);
     if (QUESTION_MARK_IN_NAME.test(draft.fullName)) note(questionMarks, draft, null, null);

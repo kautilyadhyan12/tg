@@ -16,7 +16,7 @@ import {
   type MemberListWarningRow,
   memberListUnderstandResultSchema,
 } from "@app/shared";
-import { type UnderstandOptions, understandMemberGrid } from "../src/modules/orgs/memberList/understand.js";
+import { type UnderstandOptions, quotable, understandMemberGrid } from "../src/modules/orgs/memberList/understand.js";
 
 const gridOf = (rows: string[][]): MemberFileGrid => ({
   ok: true,
@@ -146,6 +146,39 @@ describe("the worst thing — a card number quoted in a warning", () => {
         for (const [card] of ODDLY_TYPED) expect({ cell, has: digits.includes(card) }).toEqual({ cell, has: false });
       }
     }
+  });
+
+  it("hides a card whatever stands between its groups, by rule and not by a list", () => {
+    // Re-check of round one: four or more characters between the groups got through. Every
+    // non-letter a person might type, one to six of it, between each group, whole and in words.
+    const marks = Array.from(" -–—_.:/*·()|+#,;~=\\[]{}<>'\"!?&%$@^`");
+    const joins = [...marks.flatMap((mark) => [1, 2, 3, 4, 5, 6].map((n) => mark.repeat(n))), " -- ", " - - ", ") (", " | ", " :: ", " / - / "];
+    for (const [card, groups] of [
+      ["4242424242424242", [4, 4, 4, 4]],
+      ["378282246310005", [4, 6, 5]],
+      [MIR, [4, 4, 4, 4]],
+    ] as const) {
+      for (const join of joins) {
+        const typed = spaced(card, [...groups], join);
+        for (const cell of [typed, `paid by ${typed} today`, `room 7: ${typed}`]) {
+          const quoted = quotable(cell, 2_000) ?? "";
+          expect({ cell, has: quoted.replace(/[^0-9]/g, "").includes(card) }).toEqual({ cell, has: false });
+        }
+      }
+    }
+  });
+
+  it("names the name column the card was really in, first or last", () => {
+    const found = read([
+      ["First Name", "Last Name", "Email"],
+      ["Ann", "Lee", "ann@example.com"],
+      ["Bo", "Chen 4242 4242 4242 4242", "bo@example.com"],
+      ["5555 5555 5555 4444", "Diaz", "cy@example.com"],
+    ]);
+    expect(rowsOf(found, "card_cells_dropped").map((w) => [w.row, w.column])).toEqual([
+      [3, "Last Name"],
+      [4, "First Name"],
+    ]);
   });
 
   it("counts a card in the name like any other card, by the name's column", () => {

@@ -176,9 +176,9 @@ export function withoutCardNumbers(text: string): { text: string; removed: numbe
 /** What stands in a quoted cell for a number that might be a card. */
 export const NUMBER_HIDDEN = "[number hidden]";
 
-/** Digits joined by anything but letters, at most three characters apart: "4242 · 4242",
- *  "(4242) 4242", "4242_4242", "42 42 42". */
-const NUMBER_STRETCH = /\d(?:[^\p{L}\d]{0,3}\d)*/gu;
+/** Digits joined by anything but letters, however much of it: "4242 · 4242", "(4242) 4242",
+ *  "4242 -- 4242", "42 42 42". Linear: the joining class never matches a digit. */
+const NUMBER_STRETCH = /\d(?:[^\p{L}\d]*\d)*/gu;
 
 /** Whether any 13–19 digits in a row of these pass Luhn's check. */
 function holdsLuhnRun(digits: string): boolean {
