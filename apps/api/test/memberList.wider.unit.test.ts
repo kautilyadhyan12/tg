@@ -35,12 +35,17 @@ import {
   MEMBER_LIST_MAX_EXTRA_CHARS,
   MEMBER_LIST_MAX_EXTRA_FIELDS,
   MEMBER_LIST_MAX_STATUS_CHARS,
+  MEMBER_LIST_WARNING_CELL_CHARS,
   type MemberFileGrid,
   type MemberListMapping,
   type MemberListUnderstanding,
+  type MemberListWarningRow,
   memberListUnderstandResultSchema,
 } from "@app/shared";
 import { type UnderstandOptions, understandMemberGrid } from "../src/modules/orgs/memberList/understand.js";
+
+/** One row a warning names, as the screen gets it. */
+const at = (row: number, name: string, column: string | null = null, cell: string | null = null): MemberListWarningRow => ({ row, name, column, cell, sameAsRow: null });
 
 const gridOf = (rows: string[][]): MemberFileGrid => ({
   ok: true,
@@ -149,7 +154,8 @@ describe("the worst thing — a payment card number, in a column called anything
     ]);
     expect(everythingSaid(found)).not.toContain(VISA_TEST_CARD);
     expect(extraOf(found, "Notes")).toEqual(["Prefers mornings", "", "Knee injury cleared by her doctor"]);
-    expect(found.warnings).toContainEqual({ code: "card_cells_dropped", rows: 1 });
+    // The row and the column are named; the card never is.
+    expect(found.warnings).toContainEqual({ code: "card_cells_dropped", rows: 1, where: [at(3, "Bo Chen", "Notes")] });
   });
 
   it("drops a card number typed into the NAME column", () => {
@@ -207,7 +213,7 @@ describe("the worst thing — the round-one Criticals, driven end to end", () =>
     expect(found.rows.map((row) => row.memberNumber)).toEqual(["M1001", "M1002", null, null, "M1005", "M1006"]);
     expect(everythingSaid(found)).not.toContain("4111");
     // …and both drops are counted, which the member-number one never was.
-    expect(found.warnings).toContainEqual({ code: "card_cells_dropped", rows: 2 });
+    expect(found.warnings).toContainEqual({ code: "card_cells_dropped", rows: 2, where: [at(4, "Cara Diaz", "Member ID"), at(5, "Dan Ellis", "Member ID")] });
   });
 
   it.each([["Fathers Name"], ["Guardians Email"], ["Parents Email"], ["Mothers Mobile"], ["Nominees Email"], ["Spouses Email"], ["Relatives Phone"], ["Fathers Date of Birth"]])("never reads %s as the member's own", (header) => {
@@ -758,7 +764,7 @@ describe("dates, settled once for a whole column", () => {
     const found = read(withJoinDates("25/12/2025", "not known", "31/02/2026", "03/04/2026", "01/05/2026", "02/06/2026"));
     expect(found.rows.map((row) => row.joinedOn)).toEqual(["2025-12-25", null, null, "2026-04-03", "2026-05-01", "2026-06-02"]);
     expect(found.dateColumns[0]?.notRead).toBe(2);
-    expect(found.warnings).toContainEqual({ code: "dates_not_read", rows: 2 });
+    expect(found.warnings).toContainEqual({ code: "dates_not_read", rows: 2, where: [at(3, "Person 1", "Join Date", "not known"), at(4, "Person 2", "Join Date", "31/02/2026")] });
   });
 
   it("reads each date column its own way round, not the file's", () => {
@@ -952,7 +958,7 @@ describe("the gym's own columns", () => {
       ["Ann Lee", "ann@example.com", long],
     ]);
     expect(found.rows[0]?.extra[0]?.length).toBe(MEMBER_LIST_MAX_EXTRA_CHARS);
-    expect(found.warnings).toContainEqual({ code: "cells_cut", rows: 1 });
+    expect(found.warnings).toContainEqual({ code: "cells_cut", rows: 1, where: [at(2, "Ann Lee", "Notes", `${"a".repeat(MEMBER_LIST_WARNING_CELL_CHARS - 1)}…`)] });
   });
 
   it("keeps at most forty, and says how many it left out", () => {

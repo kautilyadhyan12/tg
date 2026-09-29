@@ -336,6 +336,31 @@ export function skippedLine(s) {
   return `${who}: no email or phone number, so they can't be matched or invited. Add one to your file to import them.`;
 }
 
+/** One row a warning is about, so staff can find it in their file and fix it (Kd,
+ *  2026-09-29: "no option to check or correct or see what is even wrong"). A cell the
+ *  server would not quote (a card number) is named by its column alone. */
+export function warningRowLine(code, w) {
+  const who = w.name ? `Row ${String(w.row)}, ${w.name}` : `Row ${String(w.row)}`;
+  const said = w.cell === null || w.cell === undefined ? null : `“${w.cell}”`;
+  const inColumn = w.column ? ` in ${w.column}` : '';
+  switch (code) {
+    case 'question_marks_in_names':
+    case 'garbled_names':
+      return who;
+    case 'card_cells_dropped':
+      return `${who}: a card number${inColumn} was removed`;
+    case 'shared_emails':
+      return w.sameAsRow ? `${who}: ${w.cell}, also on row ${String(w.sameAsRow)}` : `${who}: ${w.cell}`;
+    case 'placeholders':
+      return `${who}: ${w.cell} left out`;
+    case 'cells_cut':
+      return said ? `${who}: ${w.column} ${said}` : `${who}: ${w.column}`;
+    default:
+      // A phone, a number or a date, as the file wrote it.
+      return said ? `${who}: ${w.column ? `${w.column} ` : ''}${said}` : `${who}${inColumn}`;
+  }
+}
+
 /** "phone number", "phone number and status", "email, phone number and status". */
 function andList(items) {
   return items.length <= 1 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;

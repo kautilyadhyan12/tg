@@ -925,6 +925,25 @@ describe('the checks', () => {
     expect(screen.getByText(/look like a normal number for their country/)).toBeTruthy();
   });
 
+  it('a warning with its rows opens on "See which": what to do, then each row as the file has it', async () => {
+    const where = Array.from({ length: 30 }, (_, i) => ({ row: i + 2, name: `Person ${String(i)}`, column: 'Mobile', cell: `0000000${String(1000 + i)}`, sameAsRow: null }));
+    await reviewWith(preview({ warnings: [{ code: 'phones_unusual', rows: 45, where }] }));
+    const warning = screen.getByTestId('warning-phones_unusual');
+    expect(within(warning).queryByText(/look like a normal number/)).toBeNull();
+    fireEvent.click(within(warning).getByRole('button', { name: 'See which' }));
+    expect(within(warning).getByText(/correct any that are wrong in your file and upload it again/)).toBeTruthy();
+    const listed = () => within(within(warning).getByTestId('warning-rows')).getAllByRole('listitem').map((li) => li.textContent);
+    expect(listed()).toHaveLength(20);
+    expect(listed()[0]).toBe('Row 2, Person 0: Mobile “00000001000”');
+    // Show all lists the rest the server sent, then says how many more it did not.
+    fireEvent.click(within(warning).getByRole('button', { name: 'Show all 30' }));
+    expect(listed()).toHaveLength(30);
+    expect(listed()[29]).toBe('Row 31, Person 29: Mobile “00000001029”');
+    expect(within(warning).getByText('and 15 more like these')).toBeTruthy();
+    fireEvent.click(within(warning).getByRole('button', { name: 'Hide' }));
+    expect(within(warning).queryByTestId('warning-rows')).toBeNull();
+  });
+
   it('a file with no email or phone column cannot be imported until the columns are picked', async () => {
     await reviewWith(preview({ needsMapping: true, list: list() }));
     expect(screen.getByText('No email or phone column found')).toBeTruthy();

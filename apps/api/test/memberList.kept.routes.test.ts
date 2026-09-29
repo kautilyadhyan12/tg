@@ -1070,5 +1070,45 @@ d("member list: the wider record, kept (real Postgres)", () => {
     await apply(org.org.id, owner.cookies, file([person(1)]));
     expect((await get(`${listUrl(org.org.id)}/entries?membership_type=gold`, owner.cookies)).statusCode).toBe(400);
     expect((await get(`${listUrl(org.org.id)}/entries?records=deleted`, owner.cookies)).statusCode).toBe(400);
-  });
+  }, TEST_TIMEOUT_MS);
+
+  it(
+    "each warning names its rows on the Review as it is read back later, never a card, and only to the gym's own staff",
+    async () => {
+      // ROADMAP 5b-v-d-iii. The rows ride in the staged file and come back on every read
+      // of the preview, so this reads it back rather than trusting the upload's answer.
+      const owner = await makeUser("rows-owner");
+      const org = await makeOrg(owner.cookies, "Warning Rows Gym");
+      const stranger = await makeUser("rows-stranger");
+      await makeOrg(stranger.cookies, "Other Rows Gym");
+      const staged = await stage(
+        org.org.id,
+        owner.cookies,
+        file([
+          person(1),
+          person(2, { joined: "sometime in March" }),
+          person(3, { gotra: "Card 4242 4242 4242 4242 on file" }),
+          person(4, { ends: "5555-5555-5555-4444" }),
+          person(5),
+        ]),
+      );
+      const read = await get(`${uploadsUrl(org.org.id)}/${staged.uploadId}`, owner.cookies);
+      expect(read.statusCode).toBe(200);
+      const preview = (JSON.parse(read.body) as { preview: MemberListPreview }).preview;
+      const rowsOf = (code: string) => {
+        const warning = preview.warnings.find((w) => w.code === code);
+        return warning !== undefined && "where" in warning ? warning.where : [];
+      };
+      expect(rowsOf("dates_not_read").map((w) => [w.row, w.name, w.column, w.cell])).toEqual([
+        [3, "Kept 0002", "Join Date", "sometime in March"],
+        [5, "Kept 0004", "Expiry Date", null],
+      ]);
+      expect(rowsOf("card_cells_dropped").map((w) => [w.row, w.column, w.cell])).toEqual([[4, "Gotra", null]]);
+      expect(read.body.replace(/[\s-]/g, "")).not.toContain("4242424242424242");
+      expect(read.body.replace(/[\s-]/g, "")).not.toContain("5555555555554444");
+      // Another gym's owner reads nothing of it.
+      expect((await get(`${uploadsUrl(org.org.id)}/${staged.uploadId}`, stranger.cookies)).statusCode).toBe(404);
+    },
+    TEST_TIMEOUT_MS,
+  );
 });

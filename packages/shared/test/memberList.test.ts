@@ -291,17 +291,17 @@ describe("the words a warning is shown with", () => {
     { code: "hidden_rows_or_columns" },
     { code: "encoding_guessed" },
     { code: "no_header_row" },
-    { code: "question_marks_in_names", rows: 1 },
-    { code: "garbled_names", rows: 2 },
-    { code: "shortened_by_excel", rows: 3 },
-    { code: "phones_need_country", rows: 1 },
-    { code: "phones_unusual", rows: 4 },
-    { code: "shared_emails", rows: 2 },
-    { code: "placeholders", rows: 300, values: ["frontdesk@example.com"] },
+    { code: "question_marks_in_names", rows: 1, where: [] },
+    { code: "garbled_names", rows: 2, where: [] },
+    { code: "shortened_by_excel", rows: 3, where: [] },
+    { code: "phones_need_country", rows: 1, where: [] },
+    { code: "phones_unusual", rows: 4, where: [] },
+    { code: "shared_emails", rows: 2, where: [] },
+    { code: "placeholders", rows: 300, values: ["frontdesk@example.com"], where: [] },
     { code: "other_sheets_ignored", sheets: ["Staff", "Classes"] },
-    { code: "cells_cut", rows: 12 },
-    { code: "dates_not_read", rows: 5 },
-    { code: "card_cells_dropped", rows: 2 },
+    { code: "cells_cut", rows: 12, where: [] },
+    { code: "dates_not_read", rows: 5, where: [] },
+    { code: "card_cells_dropped", rows: 2, where: [] },
     { code: "extra_columns_left_out", columns: 7 },
     { code: "gym_fields_full", columns: 2 },
   ];
@@ -321,10 +321,18 @@ describe("the words a warning is shown with", () => {
     expect(new Set(words).size).toBe(every.length);
   });
 
+  it("a warning staged before it named its rows still reads, with none listed", () => {
+    expect(memberListWarningSchema.parse({ code: "phones_unusual", rows: 3 })).toEqual({ code: "phones_unusual", rows: 3, where: [] });
+    expect(memberListWarningSchema.parse({ code: "placeholders", rows: 6, values: ["desk@example.com"] })).toMatchObject({ where: [] });
+    // A row may not carry anything the contract does not name.
+    const extra = { row: 2, name: "Ann Lee", column: "Mobile", cell: "0000", sameAsRow: null, raw: "0000" };
+    expect(memberListWarningSchema.safeParse({ code: "phones_unusual", rows: 1, where: [extra] }).success).toBe(false);
+  });
+
   it("say one and many, and name what they are about", () => {
-    expect(memberListWarningWords({ code: "shortened_by_excel", rows: 1 })).toContain("1 row has");
-    expect(memberListWarningWords({ code: "shortened_by_excel", rows: 12 })).toContain("12 rows have");
-    expect(memberListWarningWords({ code: "placeholders", rows: 300, values: ["desk@example.com"] })).toContain("desk@example.com");
+    expect(memberListWarningWords({ code: "shortened_by_excel", rows: 1, where: [] })).toContain("1 row has");
+    expect(memberListWarningWords({ code: "shortened_by_excel", rows: 12, where: [] })).toContain("12 rows have");
+    expect(memberListWarningWords({ code: "placeholders", rows: 300, values: ["desk@example.com"], where: [] })).toContain("desk@example.com");
     expect(memberListWarningWords({ code: "other_sheets_ignored", sheets: ["Staff"] })).toContain("Staff");
   });
 

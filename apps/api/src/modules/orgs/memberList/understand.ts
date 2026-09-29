@@ -24,12 +24,15 @@ import {
   MEMBER_LIST_MAX_EXTRA_FIELDS,
   MEMBER_LIST_MAX_FIELD_KEY_CHARS,
   MEMBER_LIST_MAX_FIELD_LABEL_CHARS,
+  MEMBER_LIST_MAX_NAME_CHARS,
   MEMBER_LIST_MAX_STATUS_WORDS,
   MEMBER_LIST_MAX_TYPE_WORDS,
   MEMBER_LIST_MOST_COLUMNS_PER_FIELD,
   MEMBER_LIST_PLACEHOLDERS_SHOWN,
   MEMBER_LIST_PLACEHOLDER_ROWS,
   MEMBER_LIST_SKIPPED_SHOWN,
+  MEMBER_LIST_WARNING_CELL_CHARS,
+  MEMBER_LIST_WARNING_ROWS_SHOWN,
   type MemberFileGrid,
   type MemberFileSheet,
   type MemberListColumn,
@@ -44,6 +47,7 @@ import {
   type MemberListSkipped,
   type MemberListUnderstandResult,
   type MemberListWarning,
+  type MemberListWarningRow,
 } from "@app/shared";
 import type { CountryCode } from "libphonenumber-js/max";
 import { tidyCell } from "./cells.js";
@@ -214,6 +218,12 @@ export function chooseSheet(sheets: readonly MemberFileSheet[], country: Country
   return 0;
 }
 
+/** One cell of a row, by its column: where a warning points staff to. */
+interface Spot {
+  column: number;
+  raw: string;
+}
+
 interface Draft {
   row: number;
   fullName: string;
@@ -221,12 +231,13 @@ interface Draft {
   phone: string | null;
   memberNumber: string | null;
   status: string | null;
-  unusualPhone: boolean;
-  shortened: boolean;
-  needsCountry: boolean;
+  /** The phone cell the number was read from, where it is not the usual shape. */
+  unusualPhone: Spot | null;
+  shortened: Spot | null;
+  needsCountry: Spot | null;
   /** The member-number cell was a payment card and was dropped (§11.2), so it
    *  is counted with every other card cell rather than silently. */
-  cardCell: boolean;
+  cardCell: number | null;
 }
 
 /** One date column, its order already settled for the whole column (§11.3). */
@@ -259,11 +270,14 @@ interface WidePlan {
   extra: readonly MemberListExtraField[];
 }
 
-interface WideCounts {
-  /** Cells dropped on their own for being shaped like a payment card (§11.2). */
-  cards: number;
+/** What one row's wider cells had wrong, each by its column. */
+interface WideFound {
+  /** Cells dropped, or cut into, for holding a payment card number (§11.2). */
+  cards: number[];
   /** Cells of the gym's own columns that were longer than we keep. */
-  cellsCut: number;
+  cut: Spot[];
+  /** Cells in a date column that are no date. */
+  notDates: Spot[];
 }
 
 interface Wide {
@@ -273,19 +287,21 @@ interface Wide {
   paymentStatus: string | null;
   dateOfBirth: string | null;
   extra: string[];
+  found: WideFound;
 }
 
 /** One row's wider cells. A card-shaped cell is dropped wherever it sits, so
  *  this is the only place a gym's own column is read at all — and a column
  *  §11.2 dropped never reaches here, because it is not in the plan. */
-function wideRow(row: readonly string[], plan: WidePlan, counts: WideCounts): Wide {
+function wideRow(row: readonly string[], plan: WidePlan): Wide {
+  const found: WideFound = { cards: [], cut: [], notDates: [] };
   const word = (at: WordPlan | null): string | null => {
     if (at === null) return null;
     const raw = row[at.column] ?? "";
     const value = at.words === null ? cleanStatus(raw) : booleanStatus(raw, at.words);
     if (value === null) return null;
     if (cardShapedCell(value)) {
-      counts.cards++;
+      found.cards.push(at.column);
       return null;
     }
     return value;
@@ -295,7 +311,10 @@ function wideRow(row: readonly string[], plan: WidePlan, counts: WideCounts): Wi
     const raw = row[date.column] ?? "";
     const day = readDay(raw, date.order);
     if (day === null) {
-      if (isWritten(raw)) date.notRead++;
+      if (isWritten(raw)) {
+        date.notRead++;
+        found.notDates.push({ column: date.column, raw });
+      }
       continue;
     }
     days[date.field] = day;
@@ -307,7 +326,7 @@ function wideRow(row: readonly string[], plan: WidePlan, counts: WideCounts): Wi
   for (const field of plan.extra) {
     const raw = tidyCell(row[field.column] ?? "");
     if (raw !== "" && cardShapedCell(raw)) {
-      counts.cards++;
+      found.cards.push(field.column);
       extra.push("");
       continue;
     }
@@ -316,10 +335,10 @@ function wideRow(row: readonly string[], plan: WidePlan, counts: WideCounts): Wi
     // not drop it and the cell rule does not either — which left a live card number in
     // the database under a member's name. Only the card's own digits go.
     const scrubbed = withoutCardNumbers(raw);
-    counts.cards += scrubbed.removed;
+    if (scrubbed.removed > 0) found.cards.push(field.column);
     const text = scrubbed.text;
     if (text.length > MEMBER_LIST_MAX_EXTRA_CHARS) {
-      counts.cellsCut++;
+      found.cut.push({ column: field.column, raw: text });
       extra.push(cut(text, MEMBER_LIST_MAX_EXTRA_CHARS));
       continue;
     }
@@ -332,6 +351,7 @@ function wideRow(row: readonly string[], plan: WidePlan, counts: WideCounts): Wi
     paymentStatus: word(plan.paymentStatus),
     dateOfBirth: days.dateOfBirth,
     extra,
+    found,
   };
 }
 
@@ -346,15 +366,21 @@ function draftRow(row: readonly string[], at: number, mapping: MemberListMapping
     if (email !== null) break;
   }
   let phone: PhoneReading = { e164: null, unusual: false, shortened: false, needsCountry: false };
-  let shortened = false;
-  let needsCountry = false;
+  let phoneAt: Spot | null = null;
+  let shortened: Spot | null = null;
+  let needsCountry: Spot | null = null;
   for (const index of mapping.phone) {
-    phone = readPhone(cell(index), country);
-    shortened = shortened || phone.shortened;
-    needsCountry = needsCountry || phone.needsCountry;
-    if (phone.e164 !== null) break;
+    const raw = cell(index);
+    phone = readPhone(raw, country);
+    if (phone.shortened) shortened ??= { column: index, raw };
+    if (phone.needsCountry) needsCountry ??= { column: index, raw };
+    if (phone.e164 !== null) {
+      phoneAt = { column: index, raw };
+      break;
+    }
   }
   const memberNumber = cleanMemberNumber(cell(mapping.memberNumber));
+  const numberShortened = mapping.memberNumber !== null && memberNumber.value === null && memberNumber.shortened ? { column: mapping.memberNumber, raw: cell(mapping.memberNumber) } : null;
   return {
     row: at + 1,
     fullName: cleanName({ full: cell(mapping.fullName), first: cell(mapping.firstName), last: cell(mapping.lastName) }),
@@ -362,10 +388,10 @@ function draftRow(row: readonly string[], at: number, mapping: MemberListMapping
     phone: phone.e164,
     memberNumber: memberNumber.value,
     status,
-    unusualPhone: phone.unusual,
-    shortened: (phone.e164 === null && shortened) || (memberNumber.value === null && memberNumber.shortened),
-    needsCountry: phone.e164 === null && needsCountry,
-    cardCell: memberNumber.card,
+    unusualPhone: phone.unusual ? phoneAt : null,
+    shortened: (phone.e164 === null ? shortened : null) ?? numberShortened,
+    needsCountry: phone.e164 === null ? needsCountry : null,
+    cardCell: memberNumber.card ? mapping.memberNumber : null,
   };
 }
 
@@ -409,6 +435,22 @@ function standsFor(header: string, field: MemberListField): string | null {
   const reading = readHeader(header);
   if (header === "" || (reading.field === field && reading.rank === 0)) return null;
   return header.replace(LEADING_IS, "");
+}
+
+/** A counted warning as the rows go by: how many, and the first few by row. */
+interface Noted {
+  rows: number;
+  where: MemberListWarningRow[];
+}
+const noted = (): Noted => ({ rows: 0, where: [] });
+
+/** A cell as a warning may quote it: never a payment card (§11.2), whole or inside
+ *  other text, and cut to a line. Null where the whole cell is a card. */
+export function quotable(raw: string, most: number): string | null {
+  const text = tidyCell(raw);
+  if (cardShapedCell(text)) return null;
+  const scrubbed = withoutCardNumbers(text).text;
+  return scrubbed.length <= most ? scrubbed : `${cut(scrubbed, most - 1)}…`;
 }
 
 const countUp = (counts: Map<string, number>, value: string | null): void => {
@@ -611,15 +653,31 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
     extraFields.push({ key: extraKey(stat.header, takenKeys, unnamedSoFar), label, column: stat.index });
   }
   const plan: WidePlan = { membershipType: membershipTypePlan, paymentStatus: paymentStatusPlan, dates: datePlans, extra: extraFields };
-  const wideCounts: WideCounts = { cards: 0, cellsCut: 0 };
+  // Each counted warning keeps its count and its first rows, so staff can find them.
+  const labelOf = (column: number): string => {
+    const header = tidyCell(stats[column]?.header ?? "");
+    return header === "" ? placeholderLabel(column) : cut(header, MEMBER_LIST_MAX_FIELD_LABEL_CHARS);
+  };
+  const note = (into: Noted, draft: { row: number; fullName: string }, column: number | null, cell: string | null, sameAsRow: number | null = null): void => {
+    into.rows++;
+    if (into.where.length >= MEMBER_LIST_WARNING_ROWS_SHOWN) return;
+    into.where.push({ row: draft.row, name: quotable(draft.fullName, MEMBER_LIST_MAX_NAME_CHARS) ?? "", column: column === null ? null : labelOf(column), cell: cell === null ? null : quotable(cell, MEMBER_LIST_WARNING_CELL_CHARS), sameAsRow });
+  };
+  const questionMarks = noted();
+  const garbled = noted();
+  const shortened = noted();
+  const needsCountry = noted();
+  const unusualPhones = noted();
+  const sharedEmails = noted();
+  const cellsCut = noted();
+  const datesNotRead = noted();
+  const cards = noted();
+  const placeholders = noted();
+  const nameColumn = mapping.fullName ?? mapping.firstName ?? mapping.lastName;
 
   const drafts: (Draft & Wide)[] = [];
   const emailRows = new Map<string, number>();
   const phoneRows = new Map<string, number>();
-  let questionMarks = 0;
-  let garbled = 0;
-  let shortened = 0;
-  let needsCountry = 0;
   for (let r = firstDataRow; r < rows.length; r++) {
     const row = rows[r];
     if (row === undefined || !row.some(isWritten)) continue;
@@ -627,16 +685,18 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
     const status = statusWords === null ? cleanStatus(raw) : booleanStatus(raw, statusWords);
     const narrow = draftRow(row, r, mapping, country, status);
     // A name that is a card number is a card number, whatever column it sat in.
-    const draft: Draft & Wide = { ...narrow, ...wideRow(row, plan, wideCounts) };
-    if (draft.cardCell) wideCounts.cards++;
-    if (cardShapedCell(draft.fullName)) {
-      wideCounts.cards++;
-      draft.fullName = "";
-    }
-    if (QUESTION_MARK_IN_NAME.test(draft.fullName)) questionMarks++;
-    if (GARBLED_NEXT_TO_LETTER.test(draft.fullName) || GARBLED_INSIDE_A_WORD.test(draft.fullName)) garbled++;
-    if (draft.shortened) shortened++;
-    if (draft.needsCountry) needsCountry++;
+    const draft: Draft & Wide = { ...narrow, ...wideRow(row, plan) };
+    const cardName = cardShapedCell(draft.fullName);
+    if (cardName) draft.fullName = "";
+    if (draft.cardCell !== null) note(cards, draft, draft.cardCell, null);
+    for (const column of draft.found.cards) note(cards, draft, column, null);
+    if (cardName) note(cards, draft, nameColumn, null);
+    for (const spot of draft.found.cut) note(cellsCut, draft, spot.column, spot.raw);
+    for (const spot of draft.found.notDates) note(datesNotRead, draft, spot.column, spot.raw);
+    if (QUESTION_MARK_IN_NAME.test(draft.fullName)) note(questionMarks, draft, null, null);
+    if (GARBLED_NEXT_TO_LETTER.test(draft.fullName) || GARBLED_INSIDE_A_WORD.test(draft.fullName)) note(garbled, draft, null, null);
+    if (draft.shortened !== null) note(shortened, draft, draft.shortened.column, draft.shortened.raw);
+    if (draft.needsCountry !== null) note(needsCountry, draft, draft.needsCountry.column, draft.needsCountry.raw);
     countUp(emailRows, draft.email);
     countUp(phoneRows, draft.phone);
     drafts.push(draft);
@@ -645,7 +705,6 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
   const placeholderEmails = placeholdersIn(emailRows);
   const placeholderPhones = placeholdersIn(phoneRows);
   const placeholderValues = [...placeholderEmails, ...placeholderPhones];
-  let placeholderCount = 0;
 
   const keptRows: MemberListRow[] = [];
   const skipped: MemberListSkipped[] = [];
@@ -660,10 +719,10 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
     if (already === undefined) into.set(folded, { label, count: 1 });
     else already.count++;
   };
-  const keptEmails = new Map<string, number>();
+  // Each address's first two rows: enough to name another row for every one sharing it.
+  const keptEmails = new Map<string, number[]>();
   let noContact = 0;
   let duplicates = 0;
-  let unusualPhones = 0;
   const counts = {
     withEmail: 0,
     withPhone: 0,
@@ -681,7 +740,8 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
   for (const draft of drafts) {
     const email = draft.email !== null && placeholderEmails.has(draft.email) ? null : draft.email;
     const phone = draft.phone !== null && placeholderPhones.has(draft.phone) ? null : draft.phone;
-    if (email !== draft.email || phone !== draft.phone) placeholderCount++;
+    if (email !== draft.email) note(placeholders, draft, null, draft.email);
+    else if (phone !== draft.phone) note(placeholders, draft, null, draft.phone);
     if (email === null && phone === null) {
       noContact++;
       skip(draft.row, "no_contact", draft.fullName, null);
@@ -709,11 +769,13 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
     });
     if (email !== null) {
       counts.withEmail++;
-      keptEmails.set(email, (keptEmails.get(email) ?? 0) + 1);
+      const holders = keptEmails.get(email);
+      if (holders === undefined) keptEmails.set(email, [draft.row]);
+      else if (holders.length < 2) holders.push(draft.row);
     }
     if (phone !== null) {
       counts.withPhone++;
-      if (draft.unusualPhone) unusualPhones++;
+      if (draft.unusualPhone !== null) note(unusualPhones, draft, draft.unusualPhone.column, draft.unusualPhone.raw);
     }
     if (draft.memberNumber !== null) counts.withMemberNumber++;
     if (draft.status !== null) {
@@ -732,23 +794,26 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
     if (draft.endsOn !== null) counts.withEndsOn++;
     if (draft.dateOfBirth !== null) counts.withDateOfBirth++;
   }
-  let sharedEmails = 0;
-  for (const row of keptRows) if (row.email !== null && (keptEmails.get(row.email) ?? 0) > 1) sharedEmails++;
+  for (const row of keptRows) {
+    const holders = row.email === null ? undefined : keptEmails.get(row.email);
+    if (holders === undefined || holders.length < 2) continue;
+    note(sharedEmails, row, null, row.email, holders[0] === row.row ? (holders[1] ?? null) : (holders[0] ?? null));
+  }
 
-  const counted: MemberListWarning[] = [
-    { code: "question_marks_in_names", rows: questionMarks },
-    { code: "garbled_names", rows: garbled },
-    { code: "shortened_by_excel", rows: shortened },
-    { code: "phones_need_country", rows: needsCountry },
-    { code: "phones_unusual", rows: unusualPhones },
-    { code: "shared_emails", rows: sharedEmails },
-    { code: "cells_cut", rows: wideCounts.cellsCut },
-    { code: "dates_not_read", rows: datePlans.reduce((sum, date) => sum + date.notRead, 0) },
-    { code: "card_cells_dropped", rows: wideCounts.cards },
-  ];
-  for (const warning of counted) if ("rows" in warning && warning.rows > 0) warnings.push(warning);
+  const counted = [
+    ["question_marks_in_names", questionMarks],
+    ["garbled_names", garbled],
+    ["shortened_by_excel", shortened],
+    ["phones_need_country", needsCountry],
+    ["phones_unusual", unusualPhones],
+    ["shared_emails", sharedEmails],
+    ["cells_cut", cellsCut],
+    ["dates_not_read", datesNotRead],
+    ["card_cells_dropped", cards],
+  ] as const;
+  for (const [code, found] of counted) if (found.rows > 0) warnings.push({ code, rows: found.rows, where: found.where });
   if (extraLeftOut > 0) warnings.push({ code: "extra_columns_left_out", columns: extraLeftOut });
-  if (placeholderCount > 0) warnings.push({ code: "placeholders", rows: placeholderCount, values: placeholderValues.slice(0, MEMBER_LIST_PLACEHOLDERS_SHOWN) });
+  if (placeholders.rows > 0) warnings.push({ code: "placeholders", rows: placeholders.rows, values: placeholderValues.slice(0, MEMBER_LIST_PLACEHOLDERS_SHOWN), where: placeholders.where });
 
   return {
     ok: true,
