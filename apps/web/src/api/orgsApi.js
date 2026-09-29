@@ -15,6 +15,7 @@ import {
   gymPagePhotosResponseSchema,
   gymPageResponseSchema,
   leadEnquiriesResponseSchema,
+  leadEmailSettingsResponseSchema,
   publicGymPageResponseSchema,
   closeGymDayResponseSchema,
   confirmApplicationResponseSchema,
@@ -877,6 +878,23 @@ export const orgService = {
       leadResponseSchema,
       'this lead',
       authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/leads/${encodeURIComponent(leadId)}/follow-up`, { step, email }),
+    ),
+
+  /** GET …/leads/email-settings — Settings' "Send them for me" (20c-v): the switch, where
+   *  replies go, and how many new leads the app has emailed this month. */
+  getLeadEmailSettings: (gymId) =>
+    readThrough(
+      leadEmailSettingsResponseSchema,
+      'your follow-up email settings',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/leads/email-settings`),
+    ),
+
+  /** PUT …/leads/email-settings — `{ sendForMe, replyTo }`, the owner's (`org.manage`). */
+  updateLeadEmailSettings: (gymId, body) =>
+    readThrough(
+      leadEmailSettingsResponseSchema,
+      'your follow-up email settings',
+      authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/leads/email-settings`, body),
     ),
 
   deleteLead: (gymId, leadId) => authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/leads/${encodeURIComponent(leadId)}`),

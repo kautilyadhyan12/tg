@@ -19,6 +19,7 @@ import {
   addedWords,
   candidateLine,
   leadsQueryString,
+  showsEmailDue,
   sourceWord,
   statusChips,
   statusWord,
@@ -302,7 +303,7 @@ export default function Leads() {
                         style={{ gridArea: 'tag' }}
                       >
                         <span className={`c-tag ${STATUS_TAG[lead.status] ?? 'c-tag-plain'}`}>{statusWord(lead.status)}</span>
-                        {lead.followUp?.dueNow ? <span className="c-tag c-tag-warn">{DUE_CHIP_LABEL}</span> : null}
+                        {showsEmailDue(lead) ? <span className="c-tag c-tag-warn">{DUE_CHIP_LABEL}</span> : null}
                         {lead.enquiredAt ? <span className="c-tag c-tag-soft">{FROM_PAGE_TAG}</span> : null}
                       </span>
                       <ChevronRight aria-hidden="true" className="w-[18px] h-[18px] c-t3" style={{ gridArea: 'go' }} />

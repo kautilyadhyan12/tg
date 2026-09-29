@@ -9,6 +9,8 @@ import {
   joinedWords,
   leadProblem,
   leadsQueryString,
+  SENT_FOR_YOU_NOTE,
+  showsEmailDue,
   statusChips,
   updateLeadRequest,
 } from './leadsView';
@@ -151,13 +153,14 @@ describe('the follow-up emails (20c-ii)', () => {
 
   it('says which is due and when, what went, and why they stopped', () => {
     const now = new Date('2026-09-27T12:00:00');
-    expect(followUpState(due({}), now)).toEqual({ next: 1, headline: 'Email 1 of 3 is due today', due: true, sentLine: null });
+    expect(followUpState(due({}), now)).toEqual({ next: 1, headline: 'Email 1 of 3 is due today', due: true, sentLine: null, note: null });
     // Before its day it is only announced: nothing to send yet.
     expect(followUpState(due({ sent: 1, dueOn: '2026-09-30', dueNow: false, overdue: false, lastSentAt: '2026-09-27T09:00:00.000Z' }), now)).toEqual({
       next: null,
       headline: 'Email 2 of 3 is due Wed 30 Sept',
       due: false,
       sentLine: '1 of 3 sent, the last today.',
+      note: null,
     });
     expect(followUpState(due({ sent: 3, dueOn: null, dueNow: false, overdue: false, lastSentAt: '2026-09-20T09:00:00.000Z' }), now)).toMatchObject({
       next: null,
@@ -178,10 +181,67 @@ describe('the follow-up emails (20c-ii)', () => {
       headline: 'Email 1 of 3 was due Mon 7 Sept',
       due: true,
       sentLine: null,
+      note: null,
     });
     // A due day on a lead that is not New, or has no tick, is never offered.
     expect(followUpState({ ...due({}), status: 'lost' }, now).next).toBeNull();
     expect(followUpState({ ...due({}), mayEmail: false }, now)).toBeNull();
+  });
+
+  it('with "Send them for me" on, says when the app sends it and offers nothing to press (20c-v)', () => {
+    const now = new Date('2026-09-27T12:00:00');
+    expect(followUpState(due({ by: 'app' }), now)).toEqual({
+      next: null,
+      headline: 'Email 1 of 3 will be sent for you today',
+      due: false,
+      sentLine: null,
+      note: SENT_FOR_YOU_NOTE,
+    });
+    // Late (the night, or the whole app's day full): still the app's, still today.
+    expect(followUpState(due({ by: 'app', dueOn: '2026-09-25', overdue: true }), now).headline).toBe('Email 1 of 3 will be sent for you today');
+    expect(
+      followUpState(due({ by: 'app', sent: 1, dueOn: '2026-09-30', dueNow: false, lastSentAt: '2026-09-27T09:00:00.000Z' }), now),
+    ).toEqual({
+      next: null,
+      headline: 'Email 2 of 3 will be sent for you on Wed 30 Sept',
+      due: false,
+      sentLine: '1 of 3 sent, the last today.',
+      note: SENT_FOR_YOU_NOTE,
+    });
+  });
+
+  it('when the app could not send one, staff get it back with the reason', () => {
+    const now = new Date('2026-09-27T12:00:00');
+    expect(followUpState(due({ by: 'you', notSent: 'bounced' }), now)).toEqual({
+      next: 1,
+      headline: 'Email 1 of 3 is due today',
+      due: true,
+      sentLine: null,
+      note: 'Not sent for you: emails to this address bounce.',
+    });
+    expect(followUpState(due({ by: 'you', notSent: 'on_member_list' }), now).note).toBe(
+      'Not sent for you: this email address is on your member list.',
+    );
+    expect(followUpState(due({ by: 'you', notSent: 'something_new' }), now).note).toBe("Not sent for you: our email service didn't take it.");
+  });
+
+  it('a person who asked to stop is said so, with or without any sent', () => {
+    const now = new Date('2026-09-27T12:00:00');
+    const stopped = { ...lead, mayEmail: false, followUp: { sent: 1, dueOn: null, dueNow: false, overdue: false, lastSentAt: '2026-09-26T09:00:00.000Z', by: null, notSent: null, optedOutAt: '2026-09-26T10:00:00.000Z' } };
+    expect(followUpState(stopped, now).headline).toBe('Follow-up emails stopped: they asked not to get your emails through AI Home Gym');
+    expect(followUpState({ ...stopped, followUp: { ...stopped.followUp, sent: 0, lastSentAt: null } }, now)).toMatchObject({
+      next: null,
+      headline: 'Follow-up emails stopped: they asked not to get your emails through AI Home Gym',
+      sentLine: null,
+    });
+  });
+
+  it('"Email due" on a row only when it is due now and staff send it', () => {
+    expect(showsEmailDue(due({}))).toBe(true);
+    expect(showsEmailDue(due({ by: 'you' }))).toBe(true);
+    expect(showsEmailDue(due({ by: 'app' }))).toBe(false);
+    expect(showsEmailDue(due({ dueNow: false }))).toBe(false);
+    expect(showsEmailDue(lead)).toBe(false);
   });
 
   it('a lead who never said yes and has had none gets no box, and nothing to send', () => {

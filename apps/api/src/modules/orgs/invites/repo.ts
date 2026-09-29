@@ -603,6 +603,18 @@ export async function gateFacts(sql: SqlOrTx, now: Date): Promise<{ gymId: strin
   }));
 }
 
+/** Emails the whole app sent in the last 24 hours, or is sending now: invitations and
+ *  the lead follow-ups the app sends (20c-v), which share INVITE_EMAILS_PER_DAY. */
+export async function emailsUsedToday(sql: SqlOrTx, now: Date): Promise<number> {
+  const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const rows = await sql<{ n: number }[]>`
+    SELECT ((SELECT count(*) FROM gym_invite_sends
+            WHERE (state = 'sent' AND finished_at > ${dayAgo}) OR (state = 'sending' AND lease_until >= ${now}))
+         + (SELECT count(*) FROM gym_lead_sends
+            WHERE (state = 'sent' AND finished_at > ${dayAgo}) OR (state = 'sending' AND lease_until >= ${now})))::int AS n`;
+  return rows[0]?.n ?? 0;
+}
+
 /** Take the next email that is due and within every cap, and lease it. A gym that is
  *  stopped, or waiting for its first 50 emails' results, is passed over. Claims are
  *  serialised by a transaction-level advisory lock, so two workers cannot both take
@@ -634,11 +646,7 @@ export async function claimNextSend(sql: Sql, limits: ClaimLimits): Promise<Clai
       RETURNING u.id, u.gym_id, u.invite_id, u.kind, u.email::text AS email, u.attempts, u.maybe_sent_at, u.created_at`;
     const retry = again[0];
     if (retry !== undefined) return toClaimed(retry);
-    const used = await tx<{ n: number }[]>`
-      SELECT count(*)::int AS n FROM gym_invite_sends
-      WHERE (state = 'sent' AND finished_at > ${dayAgo})
-         OR (state = 'sending' AND lease_until >= ${limits.now})`;
-    if ((used[0]?.n ?? 0) >= limits.platformPerDay) return "capped";
+    if ((await emailsUsedToday(tx, limits.now)) >= limits.platformPerDay) return "capped";
     const waiting = (await gateFacts(tx, limits.now)).flatMap((gym) => (mayGymSend(gym.facts, limits.now) ? [] : [gym.gymId]));
     const rows = await tx<ClaimedRow[]>`
       WITH busy AS (

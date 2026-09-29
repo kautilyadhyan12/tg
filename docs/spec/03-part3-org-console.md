@@ -2622,6 +2622,35 @@ after its day, to the address the lead has now. A due day is the gym's day when 
 worked out; a gym that later changes its time zone may see one a day early or late. A lead who becomes a
 member is the same person: the record is made from the lead.
 
+**"Send them for me" (20c-v-a; RULINGS 2026-09-27).** Settings → **Follow-up emails to
+leads**: the owner's switch (`org.manage`; off until turned on; a change needs a live
+plan) and **Replies go to**, the gym's own address (the owner's own filled in when the
+switch is first ticked), because the app's sending address has no inbox. Switching on
+needs the gym's postal address and a name an email can show. With it on, the worker sends
+each New, ticked lead's next follow-up on its day, from 8:00 to 20:00 by the gym's clock:
+the same three letters the panel writes (`leadFollowUpLetter`), "Hi {first name}" (the
+name cleaned as the gym's own words are, so a name typed as a web address carries no
+link), signed with the gym's name and postal address, from "{gym} via AI Home Gym" on the
+invitations' mailbox with Reply-To the gym's address, and a one-click **Stop** (RFC 8058).
+Up to **100 new leads a gym's month** (`LEAD_EMAILS_PER_MONTH`): a lead counts once, when
+the app first emails it under its tick, and its later emails go outside the count; past
+100 the rest are staff's, as in 20c-ii. Through the invitations' checks (the address rule,
+the domain's MX, shared mailboxes, suppressions, a gym stopped for bounces or a complaint),
+their whole-app day (`INVITE_EMAILS_PER_DAY`, the two counted together), their kill switch
+and their handling of Resend's answers (unclear: again under the same key; after 20 hours
+taken as sent, since the same email twice is worse than one missing); and never to an
+address a current record on the member list holds. `gym_lead_sends` keeps one row per
+lead, tick and step (UNIQUE), whatever became of it: the worker takes a due lead under its
+lock, looks again with the lead locked just before sending, and staff pressing Mark as
+sent on an email the app has taken are refused (`follow_up_sent_for_you`). Stop keeps the
+address from every email of that gym through the app (invitations too) and takes the
+lead's tick off; staff may tick it again for a person who asks at the desk and send by
+hand, but the app never emails that address for the gym again. Each lead says who sends
+its next one (`followUp.by`), why the app did not (`notSent`) and when the person asked to
+stop (`optedOutAt`); **Email due** counts only staff's. **20c-v-b**: Resend's reports on
+these emails (a bounce, a complaint) act as they do for invitations and count toward the
+gym's stop.
+
 **The gym's own page and its form (20c-iv-a; RULINGS 2026-09-28).** `/gyms/{slug}`, a
 page of ours anyone with the link opens without signing in: the gym's name, town, today's
 opening hours and the week (from Settings), its **About us** (1,000 characters) and the

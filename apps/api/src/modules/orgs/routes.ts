@@ -106,7 +106,7 @@ export function registerOrgRoutes(
   registerClassRoutes(app, { sql: deps.sql, redis: deps.redis });
 
   // A gym's leads (Part 3 §16.3), and its own page whose form makes them (20c-iv-a).
-  registerLeadRoutes(app, { sql: deps.sql, redis: deps.redis });
+  registerLeadRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites });
   registerGymPageRoutes(app, { sql: deps.sql, redis: deps.redis, robotCheck: deps.robotCheck, photos: deps.photos });
 
   // A person's own invitations: what is waiting for their address, Join, No thanks

@@ -216,8 +216,8 @@ d("a lead's follow-up emails (real Postgres)", () => {
       expect((await mark(gym, sentThenLost.id, 1, owner.cookies)).statusCode).toBe(200);
 
       // Each is due on the day of the tick, before anything moves.
-      expect(yes.followUp).toEqual({ sent: 0, dueOn: today(), dueNow: true, overdue: false, lastSentAt: null });
-      expect(noTick.followUp).toEqual({ sent: 0, dueOn: null, dueNow: false, overdue: false, lastSentAt: null });
+      expect(yes.followUp).toEqual({ sent: 0, dueOn: today(), dueNow: true, overdue: false, lastSentAt: null, by: "you", notSent: null, optedOutAt: null });
+      expect(noTick.followUp).toEqual({ sent: 0, dueOn: null, dueNow: false, overdue: false, lastSentAt: null, by: null, notSent: null, optedOutAt: null });
       expect(phoneOnly.followUp.dueOn).toBeNull();
 
       expect((await patch(leadUrl(gym, contacted.id), { status: "contacted" }, owner.cookies)).statusCode).toBe(200);
@@ -387,9 +387,9 @@ d("a lead's follow-up emails (real Postgres)", () => {
 
       // A new address clears the tick; ticked again, the three start again for it.
       const moved = leadOf(await patch(leadUrl(gym, lead.id), { email: "priya.shah@example.com" }, owner.cookies));
-      expect(moved.followUp).toEqual({ sent: 0, dueOn: null, dueNow: false, overdue: false, lastSentAt: null });
+      expect(moved.followUp).toEqual({ sent: 0, dueOn: null, dueNow: false, overdue: false, lastSentAt: null, by: null, notSent: null, optedOutAt: null });
       const reticked = leadOf(await patch(leadUrl(gym, lead.id), { mayEmail: true }, owner.cookies));
-      expect(reticked.followUp).toEqual({ sent: 0, dueOn: today(), dueNow: true, overdue: false, lastSentAt: null });
+      expect(reticked.followUp).toEqual({ sent: 0, dueOn: today(), dueNow: true, overdue: false, lastSentAt: null, by: "you", notSent: null, optedOutAt: null });
 
       // The same address in other capitals is the same address: nothing restarts.
       expect((await mark(gym, lead.id, 1, owner.cookies)).statusCode).toBe(200);

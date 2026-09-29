@@ -38,6 +38,10 @@ export const resendTagsSchema = z
 /** The tag every invitation email carries: the id of its row in `gym_invite_sends`. */
 export const INVITE_SEND_TAG = "invite_send";
 
+/** The tag every lead follow-up the app sends carries: the id of its row in
+ *  `gym_lead_sends` (20c-v). */
+export const LEAD_SEND_TAG = "lead_send";
+
 /** A webhook body. `bounce.type` is "Permanent" in Resend's example; any other word is
  *  not taken as a hard bounce. Tags that do not read are dropped, never the event. */
 export const resendWebhookBodySchema = z.object({
