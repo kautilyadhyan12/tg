@@ -800,11 +800,18 @@ describe('biggerPlans', () => {
 
 describe('the words for money', () => {
   it('names the first payment of a paid trial, and nothing for a free one', () => {
-    // Kd's own trial at the click-through: free until 9 Oct, then a month from 9 Oct to 9 Nov.
-    const oct9 = trialEndDateLabel('2026-10-09T16:54:41.000Z');
-    const nov9 = trialEndDateLabel('2026-11-09T16:54:41.000Z');
+    // Kd's own trial at the click-through: free until 8 Oct, then the month 9 Oct to 8 Nov.
+    const at = (iso) => trialEndDateLabel(iso);
     expect(firstPaymentText({ status: 'trialing', subscribed: true, priceLabel: '₹7,500', currentPeriodEnd: '2026-10-09T16:54:41.000Z' })).toBe(
-      `Your plan starts on ${oct9}: ₹7,500 is paid then, for ${oct9} to ${nov9}. Your free trial carries on until then.`,
+      `Free trial until ${at('2026-10-08T16:54:41.000Z')}. Your plan starts on ${at('2026-10-09T16:54:41.000Z')}: ₹7,500 is paid that day, for ${at('2026-10-09T16:54:41.000Z')} to ${at('2026-11-08T16:54:41.000Z')}.`,
+    );
+    // A plan starting on 31 Jan is next paid on 28 Feb (February has no 31st), so its first
+    // month is 31 Jan to 27 Feb; a trial ending on the 1st has its last free day the month before.
+    expect(firstPaymentText({ status: 'trialing', subscribed: true, priceLabel: '$79', currentPeriodEnd: '2027-01-31T12:00:00.000Z' })).toBe(
+      `Free trial until ${at('2027-01-30T12:00:00.000Z')}. Your plan starts on ${at('2027-01-31T12:00:00.000Z')}: $79 is paid that day, for ${at('2027-01-31T12:00:00.000Z')} to ${at('2027-02-27T12:00:00.000Z')}.`,
+    );
+    expect(firstPaymentText({ status: 'trialing', subscribed: true, priceLabel: '$79', currentPeriodEnd: '2026-11-01T12:00:00.000Z' })).toMatch(
+      new RegExp(`^Free trial until ${at('2026-10-31T12:00:00.000Z')}\\. `),
     );
     expect(firstPaymentText({ status: 'trialing', trialEndsAt: inDays(6) })).toBeNull();
     expect(firstPaymentText({ status: 'active', subscribed: true, priceLabel: '$129', currentPeriodEnd: inDays(6) })).toBeNull();
@@ -839,7 +846,7 @@ describe('the banner for a trial the gym has paid for', () => {
 
   it('counts down in good English and names the first payment', () => {
     const first = (days) => firstPaymentText(paidTrial(days).subscription);
-    expect(first(6)).toMatch(/^Your plan starts on .+: \$129 is paid then, for .+ to .+\. Your free trial carries on until then\.$/);
+    expect(first(6)).toMatch(/^Free trial until .+\. Your plan starts on .+: \$129 is paid that day, for .+ to .+\.$/);
     expect(bannerFor(paidTrial(6), NOW)?.text).toBe(`Free trial — 6 days left. ${first(6)}`);
     expect(bannerFor(paidTrial(1), NOW)?.text).toBe(`Free trial — 1 day left. ${first(1)}`);
     expect(bannerFor(paidTrial(0), NOW)?.text).toBe(`Free trial — last day. ${first(0)}`);

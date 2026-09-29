@@ -451,9 +451,10 @@ function nextDecideAt(periodEnd) {
   return new Date(at.getTime() - SMALLER_SIZE_DECIDE_HOURS * 60 * 60 * 1000).toISOString();
 }
 
-/** A PAID TRIAL'S NEXT STEP: when the plan starts, what its first payment covers, and that the
- *  free trial carries on until then (Kd at 1d-i's click-through: *"should say payment will count
- *  from 9 and end date , and can keep trying the free mode"*). Null for anything
+/** A PAID TRIAL'S NEXT STEP, every date named (Kd at 1d-i's click-through: *"wording need to be
+ *  precise"*): the last free day, the day the plan starts and its first payment is taken, and
+ *  the month that payment covers, first and last day. "Free trial until 8 Oct. Your plan starts
+ *  on 9 Oct: ₹7,500 is paid that day, for 9 Oct to 8 Nov." Null for anything
  *  else, or when the server has not said the price or the date. */
 export function firstPaymentText(sub) {
   if (sub?.status !== 'trialing' || sub?.subscribed !== true) return null;
@@ -461,10 +462,19 @@ export function firstPaymentText(sub) {
   const price = typeof sub.priceLabel === 'string' && sub.priceLabel !== '' ? sub.priceLabel : null;
   if (date === null || price === null) return null;
   const start = new Date(sub.currentPeriodEnd);
-  const end = new Date(start.getTime());
-  end.setMonth(end.getMonth() + 1);
-  const until = trialEndDateLabel(end.toISOString());
-  return `Your plan starts on ${date}: ${price} is paid then, for ${date} to ${until}. Your free trial carries on until then.`;
+  const lastFree = new Date(start.getTime());
+  lastFree.setDate(lastFree.getDate() - 1);
+  // The next payment is a month on, on the same day, or the month's last day when it has no
+  // such day (31 Jan, then 28 Feb); the month paid for ends the day before it.
+  const nextPayment = new Date(start.getTime());
+  nextPayment.setDate(1);
+  nextPayment.setMonth(nextPayment.getMonth() + 1);
+  const daysInNext = new Date(nextPayment.getFullYear(), nextPayment.getMonth() + 1, 0).getDate();
+  nextPayment.setDate(Math.min(start.getDate(), daysInNext));
+  const lastPaid = new Date(nextPayment.getTime());
+  lastPaid.setDate(lastPaid.getDate() - 1);
+  const day = (d) => trialEndDateLabel(d.toISOString());
+  return `Free trial until ${day(lastFree)}. Your plan starts on ${date}: ${price} is paid that day, for ${date} to ${day(lastPaid)}.`;
 }
 
 /** WHAT A BIGGER SIZE COSTS, IN ONE SENTENCE, from the server's preview of Paddle's own
