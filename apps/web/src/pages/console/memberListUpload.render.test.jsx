@@ -345,6 +345,8 @@ describe('the worst thing: nobody leaves who was not answered for', () => {
     await screen.findByTestId('leavers-box');
     expect(orgService.getMemberListLeavers).toHaveBeenCalledWith(GYM, UPLOAD, { missingDigest: DIGEST, left: [priya.entryId], stay: [olivia.entryId] });
     expect(orgService.confirmMemberList).not.toHaveBeenCalled();
+    // Olivia stays by the answer, not by a tick (re-check, New-Low-1).
+    expect(screen.getByTestId('leavers-stay').textContent).toBe("1 stays on your list: you answered They're still members, or they were added in this app and kept.");
   });
 
   it("They've left with nobody ticked moves everyone, as before", async () => {

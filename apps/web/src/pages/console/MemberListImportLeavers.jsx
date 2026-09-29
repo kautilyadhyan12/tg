@@ -13,7 +13,15 @@ import { guardNumber, typedMatches } from './memberListView';
 
 const count = (n) => n.toLocaleString('en');
 
-export default function MemberListImportLeavers({ gym, words, load, press, onDone, onFailed, onClose }) {
+/** Why the people who stay stay, by the card's answer (re-check, New-Low-1: after They're still
+ *  members a person ticked on the card stays too). No answer: only people added here were missing. */
+const STAY_WHY = {
+  left: 'not ticked as having left, or added in this app and kept',
+  keep: "you answered They're still members, or they were added in this app and kept",
+  none: 'added in this app and kept',
+};
+
+export default function MemberListImportLeavers({ gym, words, answer = null, load, press, onDone, onFailed, onClose }) {
   const [leavers, setLeavers] = useState(null);
   const [note, setNote] = useState(null);
   const [typed, setTyped] = useState('');
@@ -85,7 +93,7 @@ export default function MemberListImportLeavers({ gym, words, load, press, onDon
         ))}
         {leavers.stay > 0 ? (
           <p className="c-s15 c-t1" data-testid="leavers-stay">
-            {`${count(leavers.stay)} ${leavers.stay === 1 ? 'stays' : 'stay'} on your list: not ticked as having left, or added in this app and kept.`}
+            {`${count(leavers.stay)} ${leavers.stay === 1 ? 'stays' : 'stay'} on your list: ${STAY_WHY[answer ?? 'none']}.`}
           </p>
         ) : null}
         {kept.heading !== null ? (

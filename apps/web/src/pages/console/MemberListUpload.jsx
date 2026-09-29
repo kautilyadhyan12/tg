@@ -1169,6 +1169,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
         <MemberListImportLeavers
           gym={gym}
           words={words}
+          answer={answer}
           load={loadLeavers}
           press={pressWithLeavers}
           onDone={finished}
