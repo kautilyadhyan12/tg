@@ -173,6 +173,32 @@ export function withoutCardNumbers(text: string): { text: string; removed: numbe
   return { text: out, removed };
 }
 
+/** What stands in a quoted cell for a number that might be a card. */
+export const NUMBER_HIDDEN = "[number hidden]";
+
+/** Digits joined by anything but letters, however much of it: "4242 · 4242", "(4242) 4242",
+ *  "4242 -- 4242", "42 42 42". Linear: the joining class never matches a digit. */
+const NUMBER_STRETCH = /\d(?:[^\p{L}\d]*\d)*/gu;
+
+/** Whether any 13–19 digits in a row of these pass Luhn's check. */
+function holdsLuhnRun(digits: string): boolean {
+  for (let length = 13; length <= 19; length++) {
+    for (let at = 0; at + length <= digits.length; at++) if (looksLikeAPaymentCard(digits.slice(at, at + length))) return true;
+  }
+  return false;
+}
+
+/** A cell as a screen may QUOTE it (5b-v-d-iii): stricter than what storage drops, because a
+ *  quote can afford to hide a long phone number and must never show a card however it was
+ *  typed. Any stretch of 13 or more digits, whatever joins them and whatever their first
+ *  digits, that holds a Luhn-valid run is replaced whole. */
+export function withoutLongNumbers(text: string): string {
+  return text.replace(NUMBER_STRETCH, (stretch) => {
+    const digits = stretch.replace(/\D/g, "");
+    return digits.length >= 13 && holdsLuhnRun(digits) ? NUMBER_HIDDEN : stretch;
+  });
+}
+
 /** An IBAN by its own check digits (ISO 13616): the country and check digits
  *  moved to the end, every letter written as two digits, the whole read as a
  *  number modulo 97, which must be 1. Nothing else is shaped like one. */

@@ -20,6 +20,7 @@ import {
   someNames,
   summaryOf,
   typedMatches,
+  warningRowLine,
   warningTitle,
   withColumnRole,
   withDateOrder,
@@ -196,7 +197,7 @@ describe('what the review shows', () => {
     [{ code: 'phones_unusual', rows: 30 }, '30 phone numbers look unusual'],
     [{ code: 'shared_emails', rows: 2 }, '2 people share an email'],
     [{ code: 'dates_not_read', rows: 1 }, "1 date couldn't be read"],
-    [{ code: 'card_cells_dropped', rows: 3 }, '3 card numbers removed'],
+    [{ code: 'card_cells_dropped', rows: 3 }, 'Card numbers removed from 3 cells'],
     [{ code: 'placeholders', rows: 4, values: ['desk@gym.example'] }, 'Front-desk details left out of 4 rows'],
     [{ code: 'other_sheets_ignored', sheets: ['Staff'] }, 'Only one sheet was read'],
     [{ code: 'extra_columns_left_out', columns: 2 }, '2 columns on the right left out'],
@@ -243,6 +244,30 @@ describe('the finished screen', () => {
 // Kd, 2026-09-29, at 5b-v-d-ii's click-through: "Row 12: no email or phone … will not be
 // understood by a human" and "Replace what staff typed for 1 person … have no context".
 // Every line says whose row or whose details, what, and what happens.
+// Kd, 2026-09-29, at 5b-v-d-ii's click-through, of "9 phone numbers look unusual":
+// "asking to check but no option to check or correct or see what is even wrong".
+describe('the rows each warning is about', () => {
+  const row = (over) => ({ row: 6, name: 'Di Park', column: 'Mobile', cell: '00000000000', sameAsRow: null, ...over });
+  it.each([
+    ['phones_unusual', row(), 'Row 6, Di Park: Mobile “00000000000”'],
+    ['phones_need_country', row({ column: 'Phone', cell: '07911 123457' }), 'Row 6, Di Park: Phone “07911 123457”'],
+    ['shortened_by_excel', row({ column: 'Member No', cell: '1.23457E+15' }), 'Row 6, Di Park: Member No “1.23457E+15”'],
+    ['dates_not_read', row({ column: 'Joined', cell: 'sometime in March' }), 'Row 6, Di Park: Joined “sometime in March”'],
+    ['cells_cut', row({ column: 'Notes', cell: 'Knee injury cleared…' }), 'Row 6, Di Park: Notes “Knee injury cleared…”'],
+    ['question_marks_in_names', row({ name: '?ukasz Nowak', column: null, cell: null }), 'Row 6, ?ukasz Nowak'],
+    ['garbled_names', row({ name: 'H‚lŠne Dupont', column: null, cell: null }), 'Row 6, H‚lŠne Dupont'],
+    ['card_cells_dropped', row({ column: 'Notes', cell: null }), 'Row 6, Di Park: a card number in Notes was removed'],
+    ['shared_emails', row({ column: null, cell: 'family@example.com', sameAsRow: 9 }), 'Row 6, Di Park: family@example.com, also on row 9'],
+    ['placeholders', row({ column: null, cell: 'desk@gym.example' }), 'Row 6, Di Park: desk@gym.example left out'],
+    // A row with no name is found by its number alone.
+    ['phones_unusual', row({ name: '' }), 'Row 6: Mobile “00000000000”'],
+    // A cell the server would not quote is named by its column.
+    ['dates_not_read', row({ column: 'Joined', cell: null }), 'Row 6, Di Park: Joined held a card number, not shown'],
+  ])('%s %o', (code, w, words) => {
+    expect(warningRowLine(code, w)).toBe(words);
+  });
+});
+
 describe('rows a file leaves out, in words a front desk reads', () => {
   it.each([
     [{ row: 12, reason: 'no_contact', name: 'Walk-in Guest', sameAsRow: null }, "Row 12, Walk-in Guest: no email or phone number, so they can't be matched or invited. Add one to your file to import them."],

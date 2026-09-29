@@ -6,7 +6,7 @@
 // beside it, run over files nobody here typed.
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
-import { MEMBER_LIST_COLUMN_SAMPLES, type MemberFileGrid, memberFileRefusalWords, memberFileResultSchema, memberListUnderstandResultSchema, type MemberListUnderstanding } from "@app/shared";
+import { MEMBER_LIST_COLUMN_SAMPLES, type MemberFileGrid, memberFileRefusalWords, memberFileResultSchema, memberListUnderstandResultSchema, type MemberListUnderstanding, type MemberListWarningRow } from "@app/shared";
 import { memberFilesOpen, understandMemberFile } from "../src/modules/orgs/memberList/parseMemberFile.js";
 import { openMemberFileContents } from "../src/modules/orgs/memberList/openFile.js";
 import { sniffMemberFile } from "../src/modules/orgs/memberList/sniff.js";
@@ -28,6 +28,14 @@ async function understand(file: string, country: string | null = "IN"): Promise<
   if (!result.ok) throw new Error(`refused: ${result.refusal.code}`);
   return result;
 }
+
+/** One row a warning names, as the screen gets it. */
+const at = (row: number, name: string, column: string | null = null, cell: string | null = null): MemberListWarningRow => ({ row, name, column, cell, sameAsRow: null });
+
+/** The two numbers Excel and Google cut short, by the file's own row numbers (the
+ *  headings are row 1, and Ann Lee's name on two lines is still one row). */
+const LUKASZ_MOBILE = at(4, "Łukasz Nowak", "Mobile", "9.19877E+11");
+const LONG_ID_NUMBER = at(6, 'Long Id, With "Quote"', "Member No", "1.23457E+15");
 
 const NAMES = ["José Álvarez", "Zoë Müller", "Łukasz Nowak", "अमित Sharma", 'Long Id, With "Quote"', "Hélène Dupont", "Ann Lee"];
 const EMAILS = ["jose@example.com", "zoe.muller@example.com", "lukasz@example.com", "amit@example.com", "long@example.com", "helene@example.com", "ann.lee@example.com"];
@@ -96,7 +104,7 @@ describe("every CSV kind Excel saves", () => {
     expect(found.statuses).toEqual(STATUSES);
     // Łukasz's 12-digit mobile and the 16-digit member number are gone from
     // the file itself: two rows, never guessed back.
-    expect(found.warnings).toContainEqual({ code: "shortened_by_excel", rows: 2 });
+    expect(found.warnings).toContainEqual({ code: "shortened_by_excel", rows: 2, where: [LUKASZ_MOBILE, LONG_ID_NUMBER] });
     expect(found.rows[2]?.phone).toBe(null);
     expect(found.rows[4]?.memberNumber).toBe(null);
   });
@@ -111,15 +119,17 @@ describe("every CSV kind Excel saves", () => {
     const found = await understand("excel/csv-comma.csv");
     expect(found.counts.kept).toBe(7);
     expect(found.rows[2]?.fullName).toBe("?ukasz Nowak");
-    expect(found.warnings).toContainEqual({ code: "question_marks_in_names", rows: 2 });
+    expect(found.warnings).toContainEqual({ code: "question_marks_in_names", rows: 2, where: [at(4, "?ukasz Nowak"), at(5, "???? Sharma")] });
+    expect(found.warnings).toContainEqual({ code: "shortened_by_excel", rows: 2, where: [{ ...LUKASZ_MOBILE, name: "?ukasz Nowak" }, LONG_ID_NUMBER] });
     expect(found.warnings).toContainEqual({ code: "encoding_guessed" });
   });
 
   it("CSV (MS-DOS): names read in the wrong code page are counted as garbled", async () => {
     const found = await understand("excel/csv-msdos.csv");
+    // José, Zoë and Hélène: the three whose letters DOS wrote in another alphabet.
     const garbled = found.warnings.find((warning) => warning.code === "garbled_names");
     expect(garbled).toBeDefined();
-    if (garbled !== undefined && "rows" in garbled) expect(garbled.rows).toBeGreaterThanOrEqual(2);
+    if (garbled !== undefined && "where" in garbled) expect(garbled.where.map((w) => w.row)).toEqual([2, 3, 7]);
   });
 });
 
@@ -145,7 +155,7 @@ describe("Google Sheets, as Kd downloaded it", () => {
   it("the CSV: the member number Google shortened is said to be shortened", async () => {
     const found = await understand("google/google-sheets.csv");
     expect(found.rows[4]?.memberNumber).toBe(null);
-    expect(found.warnings).toContainEqual({ code: "shortened_by_excel", rows: 1 });
+    expect(found.warnings).toContainEqual({ code: "shortened_by_excel", rows: 1, where: [LONG_ID_NUMBER] });
   });
 });
 
@@ -255,7 +265,18 @@ describe("a gym with no country set", () => {
   it("reads only the numbers written with their own country code, and says so", async () => {
     const found = await understand("excel/book.xlsx", null);
     expect(found.rows.map((row) => row.phone)).toEqual(["+447911123456", null, null, null, null, "+33612345678", null]);
-    expect(found.warnings).toContainEqual({ code: "phones_need_country", rows: 5 });
+    // Each as the workbook wrote it, so the gym can find the cell it has to fix.
+    expect(found.warnings).toContainEqual({
+      code: "phones_need_country",
+      rows: 5,
+      where: [
+        at(3, "Zoë Müller", "Mobile", "07911 123456"),
+        at(4, "Łukasz Nowak", "Mobile", "919876543210"),
+        at(5, "अमित Sharma", "Mobile", "9876543210"),
+        at(6, 'Long Id, With "Quote"', "Mobile", "4155552671"),
+        at(8, "Ann Lee", "Mobile", "(415) 555-0100"),
+      ],
+    });
     expect(found.counts.kept).toBe(7);
   });
 });

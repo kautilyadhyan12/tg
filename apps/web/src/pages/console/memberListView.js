@@ -310,7 +310,7 @@ export function warningTitle(w) {
     case 'dates_not_read':
       return `${of(w.rows, "date couldn't", "dates couldn't")} be read`;
     case 'card_cells_dropped':
-      return `${of(w.rows, 'card number', 'card numbers')} removed`;
+      return `Card numbers removed from ${of(w.rows, 'cell', 'cells')}`;
     case 'extra_columns_left_out':
       return `${of(w.columns, 'column', 'columns')} on the right left out`;
     case 'gym_fields_full':
@@ -334,6 +334,33 @@ export function skippedLine(s) {
     return `${who}: the same person as ${first}, so they're imported once.`;
   }
   return `${who}: no email or phone number, so they can't be matched or invited. Add one to your file to import them.`;
+}
+
+/** One row a warning is about, so staff can find it in their file and fix it (Kd,
+ *  2026-09-29: "no option to check or correct or see what is even wrong"). A cell the
+ *  server would not quote (a card number) is named by its column alone. */
+export function warningRowLine(code, w) {
+  const who = w.name ? `Row ${String(w.row)}, ${w.name}` : `Row ${String(w.row)}`;
+  const said = w.cell === null || w.cell === undefined ? null : `“${w.cell}”`;
+  const inColumn = w.column ? ` in ${w.column}` : '';
+  switch (code) {
+    case 'question_marks_in_names':
+    case 'garbled_names':
+      return who;
+    case 'card_cells_dropped':
+      return `${who}: a card number${inColumn} was removed`;
+    case 'shared_emails':
+      return w.sameAsRow ? `${who}: ${w.cell}, also on row ${String(w.sameAsRow)}` : `${who}: ${w.cell}`;
+    case 'placeholders':
+      return `${who}: ${w.cell} left out`;
+    case 'cells_cut':
+      return said ? `${who}: ${w.column} ${said}` : `${who}: ${w.column}`;
+    default:
+      // A phone, a number or a date, as the file wrote it.
+      if (said) return `${who}: ${w.column ? `${w.column} ` : ''}${said}`;
+      // The server quotes every cell but a whole card number.
+      return `${who}: ${w.column ?? 'the cell'} held a card number, not shown`;
+  }
 }
 
 /** "phone number", "phone number and status", "email, phone number and status". */

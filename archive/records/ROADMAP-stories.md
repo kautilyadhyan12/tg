@@ -173,3 +173,5 @@ stage. History, never a rule: RULINGS wins where they differ.
 5b-v-d-ii. [x] **Upload and Review restyled** in the console's look (§17), every step, line and tick kept. Built with Kd's two click-throughs (RULINGS 2026-09-29): Review's lines say whose and why, the end date beside the status, and people added in this app counted apart and kept unless unticked; merged 2026-09-29 (PR #133).
 
 - 20c-v-b, as it stood when it finished (2026-09-29): **What comes back**: Resend's bounce and complaint reports on these emails, acted on as for invitations and counted in the gym's stop. Built before any real gym switches 20c-v-a on (RULINGS 2026-09-29).
+
+5b-v-d-iii. [x] **Each warning says which rows** (Kd at 5b-v-d-ii's click-through: *"asking to check but no option to check or correct or see what is even wrong"*): every counted Review warning lists its first 100 rows (row, name, column, the cell as written) behind See which, with how to fix it in the file or in the app after importing; a card number is never quoted, however it is typed. Merged 2026-09-29 (PR #135).
