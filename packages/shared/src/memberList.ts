@@ -243,6 +243,10 @@ export const MEMBER_LIST_PLACEHOLDER_ROWS = 5;
 export const MEMBER_LIST_PLACEHOLDERS_SHOWN = 5;
 /** How many skipped rows are listed with their row numbers and reasons. */
 export const MEMBER_LIST_SKIPPED_SHOWN = 200;
+/** How many rows each warning lists, so staff can find them in their file. */
+export const MEMBER_LIST_WARNING_ROWS_SHOWN = 100;
+/** The most characters of one cell a warning's row quotes. */
+export const MEMBER_LIST_WARNING_CELL_CHARS = 60;
 /** The most columns one field may be read from. A list of "Email" and
  *  "Secondary email" is real; a sixth is a file nobody exported on purpose,
  *  and each one is another number to read on every one of ten thousand rows. */
@@ -574,13 +578,30 @@ const COUNTED_WARNINGS = [
 ] as const;
 const PLAIN_WARNINGS = ["hidden_rows_or_columns", "encoding_guessed", "no_header_row"] as const;
 
+/** One row a warning is about, so staff can find it in their file (Kd, 2026-09-29:
+ *  "no option to check or correct or see what is even wrong"). `column` is the
+ *  heading the cell sat under and `cell` what it said; a card number is never
+ *  quoted (§11.2). `sameAsRow` is another row holding the same email. */
+export const memberListWarningRowSchema = z
+  .object({
+    row: z.number().int().positive(),
+    name: z.string().max(MEMBER_LIST_MAX_NAME_CHARS),
+    column: z.string().max(MEMBER_LIST_MAX_FIELD_LABEL_CHARS).nullable(),
+    cell: z.string().max(MEMBER_LIST_WARNING_CELL_CHARS).nullable(),
+    sameAsRow: z.number().int().positive().nullable(),
+  })
+  .strict();
+export type MemberListWarningRow = z.infer<typeof memberListWarningRowSchema>;
+/** The first rows of a counted warning; an upload staged before they existed has none. */
+const warningRowsSchema = z.array(memberListWarningRowSchema).max(MEMBER_LIST_WARNING_ROWS_SHOWN).default([]);
+
 /** What was noticed about the file as a whole (§9.5). Nothing here stops an
  *  upload; each one is a sentence staff can act on. */
 export const memberListWarningSchema = z.discriminatedUnion("code", [
   z.object({ code: z.enum(PLAIN_WARNINGS) }),
-  z.object({ code: z.enum(COUNTED_WARNINGS), rows: z.number().int().positive() }),
+  z.object({ code: z.enum(COUNTED_WARNINGS), rows: z.number().int().positive(), where: warningRowsSchema }),
   z.object({ code: z.literal("other_sheets_ignored"), sheets: z.array(z.string()) }),
-  z.object({ code: z.literal("placeholders"), rows: z.number().int().positive(), values: z.array(z.string()) }),
+  z.object({ code: z.literal("placeholders"), rows: z.number().int().positive(), values: z.array(z.string()), where: warningRowsSchema }),
   /** A file wider than the extra fields a gym may hold (§11.1). The columns
    *  furthest to the right are left out, and this says how many. */
   z.object({ code: z.literal("extra_columns_left_out"), columns: z.number().int().positive() }),
@@ -668,15 +689,15 @@ export function memberListWarningWords(warning: MemberListWarning): string {
     case "no_header_row":
       return "This file has no row of headings, so each column was worked out from what is in it. Check the columns below before you confirm.";
     case "question_marks_in_names":
-      return `${numberWords(warning.rows, "name holds", "names hold")} a “?” where a letter should be. The export lost those letters — from Excel, choose “CSV UTF-8” and export again.`;
+      return `${numberWords(warning.rows, "name holds", "names hold")} a “?” where a letter should be. The export lost those letters — from Excel, choose “CSV UTF-8” and export again, or correct the names in the app after you import.`;
     case "garbled_names":
-      return `${numberWords(warning.rows, "name has", "names have")} letters that came out wrong, such as “H‚lŠne” for “Hélène”. The file was saved in an older alphabet — export it again as “CSV UTF-8”.`;
+      return `${numberWords(warning.rows, "name has", "names have")} letters that came out wrong, such as “H‚lŠne” for “Hélène”. The file was saved in an older alphabet — export it again as “CSV UTF-8”, or correct the names in the app after you import.`;
     case "shortened_by_excel":
-      return `${numberWords(warning.rows, "row has", "rows have")} a number the spreadsheet shortened, such as 9.19877E+11, so its last digits are gone. We never guess them back: set that column to Text in your spreadsheet and export again.`;
+      return `${numberWords(warning.rows, "row has", "rows have")} a number the spreadsheet shortened, such as 9.19877E+11, so its last digits are gone. We never guess them back: set that column to Text in your spreadsheet and export again, or type the whole number in the app after you import.`;
     case "phones_need_country":
-      return `${numberWords(warning.rows, "phone number was", "phone numbers were")} left out because this gym has no country set. Set the gym's country in Settings, or write the numbers with their country code, and upload again.`;
+      return `${numberWords(warning.rows, "phone number was", "phone numbers were")} left out because this gym has no country set. Set the gym's country in Settings, or write the numbers with their country code, and upload again — or add them in the app after you import.`;
     case "phones_unusual":
-      return `${numberWords(warning.rows, "phone number doesn't", "phone numbers don't")} look like a normal number for their country. They have been kept — check them before you invite anyone.`;
+      return `${numberWords(warning.rows, "phone number doesn't", "phone numbers don't")} look like a normal number for their country. They have been kept — check them before you invite anyone. Correct any that are wrong in your file and upload it again, or in the app after you import.`;
     case "shared_emails":
       return `${numberWords(warning.rows, "person shares", "people share")} an email address with someone else on the list, as a family often does. Everyone is kept, but only one person can join the app with each address — add the others' own email to invite them.`;
     case "placeholders":
@@ -684,11 +705,11 @@ export function memberListWarningWords(warning: MemberListWarning): string {
     case "other_sheets_ignored":
       return `This file has more than one sheet. Only the one with the members was read; these were ignored: ${warning.sheets.join(", ")}.`;
     case "cells_cut":
-      return `${numberWords(warning.rows, "cell was", "cells were")} longer than ${String(MEMBER_LIST_MAX_EXTRA_CHARS)} characters and were cut to fit. The rest of each one is not kept.`;
+      return `${numberWords(warning.rows, "cell was", "cells were")} longer than ${String(MEMBER_LIST_MAX_EXTRA_CHARS)} characters and were cut to fit. The rest of each one is not kept; if it matters, shorten the cell in your file and upload it again, or write it in the app after you import.`;
     case "dates_not_read":
-      return `${numberWords(warning.rows, "cell in a date column is", "cells in date columns are")} not a date, so they were left empty rather than guessed. Check the date columns below.`;
+      return `${numberWords(warning.rows, "cell in a date column is", "cells in date columns are")} not a date, so they were left empty rather than guessed. Write them as dates in your file, such as 5 Jan 2024, and upload it again, or add the dates in the app after you import.`;
     case "card_cells_dropped":
-      return `${numberWords(warning.rows, "cell was dropped because it is shaped like a payment card number", "cells were dropped because they are shaped like payment card numbers")}. We never store card details, wherever they sit in a file.`;
+      return `${numberWords(warning.rows, "cell held a payment card number, which was removed", "cells held payment card numbers, which were removed")}. We never store card details, wherever they sit in a file; delete them from your own file too.`;
     case "extra_columns_left_out":
       return `This file has more of the gym's own columns than we keep. The ${String(warning.columns)} furthest to the right were left out; move the ones you need further left and upload again.`;
     case "gym_fields_full":

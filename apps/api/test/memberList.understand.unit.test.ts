@@ -12,12 +12,16 @@ import {
   type MemberFileWarning,
   type MemberListMapping,
   type MemberListUnderstanding,
+  type MemberListWarningRow,
   memberFileRefusalWords,
   memberListUnderstandResultSchema,
 } from "@app/shared";
 import { type UnderstandOptions, fingerprintOf, understandMemberGrid } from "../src/modules/orgs/memberList/understand.js";
 
 const ch = (code: number): string => String.fromCodePoint(code);
+
+/** One row a warning names, as the screen gets it. */
+const at = (row: number, name: string, column: string | null = null, cell: string | null = null, sameAsRow: number | null = null): MemberListWarningRow => ({ row, name, column, cell, sameAsRow });
 
 interface SheetInput {
   name?: string | null;
@@ -206,7 +210,11 @@ describe("the same person twice", () => {
     const rows = [["Full Name", "Email"], ["Ann Lee", "family@example.com"], ["Bo Lee", "family@example.com"]];
     const found = read(rows);
     expect(found.counts.kept).toBe(2);
-    expect(found.warnings).toContainEqual({ code: "shared_emails", rows: 2 });
+    expect(found.warnings).toContainEqual({
+      code: "shared_emails",
+      rows: 2,
+      where: [at(2, "Ann Lee", null, "family@example.com", 3), at(3, "Bo Lee", null, "family@example.com", 2)],
+    });
   });
 });
 
@@ -223,7 +231,12 @@ describe("the front desk's own details", () => {
     expect(found.counts).toMatchObject({ dataRows: 7, kept: 1, noContact: 6 });
     expect(found.rows).toHaveLength(1);
     expect(found.rows[0]?.email).toBe("ann@example.com");
-    expect(found.warnings).toContainEqual({ code: "placeholders", rows: 6, values: ["frontdesk@example.com", "+919876543210"] });
+    expect(found.warnings).toContainEqual({
+      code: "placeholders",
+      rows: 6,
+      values: ["frontdesk@example.com", "+919876543210"],
+      where: [2, 3, 4, 5, 6, 7].map((row) => at(row, `Person ${String(row - 2)}`, null, "frontdesk@example.com and +919876543210")),
+    });
   });
 
   it("are somebody's own details at five", () => {
@@ -265,7 +278,7 @@ describe("what the file says about itself", () => {
       ["Cara Diaz", "cara@example.com", "9876543212"],
       ["Dev Rao", "dev@example.com", "9876543213"],
     ];
-    expect(read(rows).warnings).toContainEqual({ code: "shortened_by_excel", rows: 1 });
+    expect(read(rows).warnings).toContainEqual({ code: "shortened_by_excel", rows: 1, where: [at(2, "Ann Lee", "Mobile", "9.19877E+11")] });
   });
 
   it("counts the numbers it could not read for want of a country", () => {
@@ -277,18 +290,18 @@ describe("what the file says about itself", () => {
       ["Dev Rao", "dev@example.com", "+14155552673"],
     ];
     const found = read(rows, { country: null });
-    expect(found.warnings).toContainEqual({ code: "phones_need_country", rows: 1 });
+    expect(found.warnings).toContainEqual({ code: "phones_need_country", rows: 1, where: [at(2, "Ann Lee", "Mobile", "9876543210")] });
     expect(found.counts.withPhone).toBe(3);
   });
 
   it("counts the numbers that are not the shape their country hands out", () => {
     const rows = [["Full Name", "Email", "Mobile"], ["Ann Lee", "ann@example.com", "00000000000"], ["Bo Chen", "bo@example.com", "9876543211"]];
-    expect(read(rows).warnings).toContainEqual({ code: "phones_unusual", rows: 1 });
+    expect(read(rows).warnings).toContainEqual({ code: "phones_unusual", rows: 1, where: [at(2, "Ann Lee", "Mobile", "00000000000")] });
   });
 
   it("counts the names an export turned into question marks", () => {
     const rows = [["Full Name", "Email"], ["?ukasz Nowak", "lukasz@example.com"], ["Ann Lee", "ann@example.com"]];
-    expect(read(rows).warnings).toContainEqual({ code: "question_marks_in_names", rows: 1 });
+    expect(read(rows).warnings).toContainEqual({ code: "question_marks_in_names", rows: 1, where: [at(2, "?ukasz Nowak")] });
   });
 
   it("counts the names read in the wrong alphabet, and leaves a real name alone", () => {
@@ -298,7 +311,7 @@ describe("what the file says about itself", () => {
       [`${ch(0x160)}imun Bak${ch(0x161)}`, "simun@example.com"],
       ["Ann Lee", "ann@example.com"],
     ];
-    expect(read(rows).warnings).toContainEqual({ code: "garbled_names", rows: 1 });
+    expect(read(rows).warnings).toContainEqual({ code: "garbled_names", rows: 1, where: [at(2, `H${ch(0x201a)}l${ch(0x160)}ne Dupont`)] });
   });
 
   it("names the sheets it did not read", () => {

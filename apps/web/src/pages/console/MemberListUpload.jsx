@@ -47,6 +47,7 @@ import {
   fileMissingOf,
   summaryOf,
   typedMatches,
+  warningRowLine,
   warningTitle,
   withColumnRole,
   withDateOrder,
@@ -142,6 +143,29 @@ function Line({ icon, tone, title, sub, action, onAction, actionDisabled = false
       {detail ? <div className="c-s14 c-t2 mt-2 pl-11">{detail}</div> : null}
       </div>
       {below}
+    </div>
+  );
+}
+
+/** A warning opened: what to do about it, then its rows as the file has them. */
+function WarningRows({ warning }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? warning.where : warning.where.slice(0, 20);
+  const unlisted = warning.rows - warning.where.length;
+  return (
+    <div className="flex flex-col gap-2">
+      <p>{memberListWarningWords(warning)}</p>
+      <ul className="flex flex-col gap-1 c-t1" data-testid="warning-rows">
+        {shown.map((w, i) => (
+          <li key={`${String(w.row)}-${String(i)}`}>{warningRowLine(warning.code, w)}</li>
+        ))}
+      </ul>
+      {!all && warning.where.length > shown.length ? (
+        <button type="button" onClick={() => setAll(true)} className="c-btn c-btn-s c-btn-sm self-start">
+          {unlisted > 0 ? `Show the first ${count(warning.where.length)}` : `Show all ${count(warning.where.length)}`}
+        </button>
+      ) : null}
+      {unlisted > 0 ? <p>{count(warning.rows)} in all; the list shows the first {count(warning.where.length)}.</p> : null}
     </div>
   );
 }
@@ -1051,17 +1075,21 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
             {never.map((n) => (
               <Line key={n.reason} icon={Lock} tone="plain" title={n.title} sub={n.columns} />
             ))}
-            {preview.warnings.map((w) => (
-              <Line
-                key={w.code}
-                icon={AlertTriangle}
-                tone="amber"
-                title={warningTitle(w)}
-                action={why === w.code ? 'Hide' : 'Why?'}
-                onAction={() => setWhy((open) => (open === w.code ? null : w.code))}
-                detail={why === w.code ? memberListWarningWords(w) : null}
-              />
-            ))}
+            {preview.warnings.map((w) => {
+              const listed = w.where?.length > 0;
+              return (
+                <Line
+                  key={w.code}
+                  icon={AlertTriangle}
+                  tone="amber"
+                  title={warningTitle(w)}
+                  action={why === w.code ? 'Hide' : listed ? 'See which' : 'Why?'}
+                  onAction={() => setWhy((open) => (open === w.code ? null : w.code))}
+                  detail={why === w.code ? listed ? <WarningRows warning={w} /> : memberListWarningWords(w) : null}
+                  testId={`warning-${w.code}`}
+                />
+              );
+            })}
             {skipped > 0 ? (
               <Line
                 icon={AlertTriangle}
