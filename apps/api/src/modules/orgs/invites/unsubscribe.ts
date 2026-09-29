@@ -1,6 +1,9 @@
 // The two public links in every invitation: "Not me" (§10.2), below the unsubscribe
 // handlers, and the unsubscribe link.
 //
+// The Stop link in a lead's follow-up the app sent (§16.3; ROADMAP 20c-v-a) is the same
+// shape, at its own address, with a token of its own purpose naming the email.
+//
 // The unsubscribe link (Part 3 §9.12; RFC 8058). Public: no
 // cookie, no sign-in, no redirect. The token names the invitation and carries a MAC,
 // so only a link we made can unsubscribe anybody, and it keeps that address from THIS
@@ -18,6 +21,8 @@ import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { cleanGymText, GYM_TEXT_IN_EMAIL_CHARS, gymNameForEmail } from "./gymText.js";
 import * as repo from "./repo.js";
 import { notMeByLink } from "./join.js";
+import { stopLeadEmails } from "../leads/emailSettings.js";
+import { sendForStop } from "../leads/emailsRepo.js";
 import type { InviteSettings } from "./settings.js";
 import { readInviteLinkToken, readUnsubscribeToken } from "./token.js";
 
@@ -158,6 +163,34 @@ export function registerUnsubscribeRoutes(
         case "withdrawn":
           return page(reply, 200, "Nothing to do", `<p>${gym} has already taken this invitation back.</p>`);
       }
+    });
+
+    // A lead's follow-up (20c-v): the email a lead asked for, so the page says so.
+    scope.get("/v1/email/leads/unsubscribe", { preHandler: [limit] }, async (req, reply) => {
+      const token = tokenOf(req);
+      const sendId = settings === null || token === null ? null : readInviteLinkToken(settings.hmacKey, "lead_unsubscribe", token);
+      if (sendId === null) return notValid(reply);
+      const gymName = (await sendForStop(deps.sql, sendId))?.gymName ?? null;
+      if (gymName === null) return page(reply, 200, "Nothing to unsubscribe from", "<p>This email no longer exists, so nothing more will be sent about it.</p>");
+      const gym = cleanGymText(gymName, GYM_TEXT_IN_EMAIL_CHARS);
+      return page(
+        reply,
+        200,
+        `Stop emails from ${gym}?`,
+        `<p>${escapeHtml(gym)} won't be able to email you through ${APP_NAME} again.</p>` +
+          `<form method="post"><button type="submit">Unsubscribe</button></form>`,
+      );
+    });
+
+    scope.post("/v1/email/leads/unsubscribe", { preHandler: [limit] }, async (req, reply) => {
+      const token = tokenOf(req);
+      const sendId = settings === null || token === null ? null : readInviteLinkToken(settings.hmacKey, "lead_unsubscribe", token);
+      const oneClick = isOneClick(req.headers["content-type"], req.body);
+      if (settings === null || sendId === null) return oneClick ? reply.status(404).send() : notValid(reply);
+      const done = await stopLeadEmails(deps.sql, settings.hmacKey, sendId, (deps.now ?? (() => new Date()))());
+      if (oneClick) return reply.status(200).send();
+      const gym = done === null ? "The gym" : done.gymName;
+      return page(reply, 200, "You're unsubscribed", `<p>${escapeHtml(gym)} won't email you through ${APP_NAME} again.</p>`);
     });
 
     scope.post("/v1/email/unsubscribe", { preHandler: [limit] }, async (req, reply) => {

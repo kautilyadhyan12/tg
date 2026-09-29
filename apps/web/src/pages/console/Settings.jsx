@@ -4,6 +4,7 @@ import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/con
 import GymDetailsPanel from '../../components/console/GymDetailsPanel';
 import OpeningHoursPanel from '../../components/console/OpeningHoursPanel';
 import AttendanceSettingsPanel from '../../components/console/AttendanceSettingsPanel';
+import LeadEmailsPanel from '../../components/console/LeadEmailsPanel';
 import StaffPanel from '../../components/console/StaffPanel';
 import { useConsoleOrg } from './useConsoleOrg';
 import { canManageStaff } from './staffView';
@@ -182,6 +183,11 @@ export default function Settings() {
           readOnly={readOnly}
         />
       ) : null}
+
+      {/* FOLLOW-UP EMAILS TO LEADS (20c-v): the owner's "Send them for me", on the
+          privilege the server gates it with. Keyed per gym for the panels' reason above:
+          it holds a draft. */}
+      {canEditGym ? <LeadEmailsPanel key={`lead-emails-${org.id}`} org={org} readOnly={readOnly} /> : null}
 
       {/* KEYED FOR THE SAME REASON, AND IT IS THE CLASS HALF OF THE FIX ABOVE.
           Found by probing for the sibling rather than by the review, which named

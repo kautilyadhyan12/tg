@@ -43,13 +43,13 @@ export const INVITE_SENDING = {
   holdMs: 7 * 24 * 60 * 60 * 1000,
 } as const;
 
-/** The sender outside production with no invitations mailbox configured: it writes the
- *  join link and the send's key to the log, never the address or the unsubscribe token,
- *  and reports the email sent. */
+/** The sender outside production with no invitations mailbox configured, for invitations
+ *  and a lead's follow-ups (20c-v): it writes the join link and the send's key to the log,
+ *  never the address or an unsubscribe token, and reports the email sent. */
 export function devInviteTransport(log: { info: (obj: object, msg: string) => void }): InviteTransport {
   return {
     send(message) {
-      const links = (message.text.match(/https?:\/\/\S+/g) ?? []).filter((link) => !link.includes("/v1/email/unsubscribe"));
+      const links = (message.text.match(/https?:\/\/\S+/g) ?? []).filter((link) => !/\/v1\/email\/(?:leads\/)?unsubscribe/.test(link));
       log.info(
         { event: "email.invite.dev", idempotencyKey: message.idempotencyKey, subject: message.subject, links },
         "DEV ONLY — invitation email (no invitations mailbox configured)",

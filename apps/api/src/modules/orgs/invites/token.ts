@@ -7,11 +7,13 @@ import { MEMBER_INVITE_UNSUBSCRIBE_TOKEN } from "@app/shared";
 
 const MAC_BYTES = 16;
 
-export type InviteLinkPurpose = "unsubscribe" | "not_me";
+/** `lead_unsubscribe` names a lead follow-up the app sent (20c-v), not an invitation. */
+export type InviteLinkPurpose = "unsubscribe" | "not_me" | "lead_unsubscribe";
 
 const DOMAIN: Readonly<Record<InviteLinkPurpose, string>> = {
   unsubscribe: "member-invite-unsubscribe:",
   not_me: "member-invite-not-me:",
+  lead_unsubscribe: "lead-follow-up-unsubscribe:",
 };
 
 const macOf = (key: Buffer, purpose: InviteLinkPurpose, id: Buffer): Buffer =>

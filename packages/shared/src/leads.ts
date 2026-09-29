@@ -5,8 +5,9 @@
 // member list, linked to a record already there when it is the same person
 // (`leadJoinDecision` on the server), and never makes a second copy of them.
 // The three follow-up emails (20c-ii) are sent by the gym from its own mailbox: the
-// app says when each is due and keeps what staff marked as sent. Leads from a file are
-// 20c-iii's.
+// app says when each is due and keeps what staff marked as sent. With "Send them for
+// me" on (20c-v) the app sends them itself, for up to 100 new leads a gym a month.
+// Leads from a file are 20c-iii's.
 import { z } from "zod";
 import {
   MEMBER_LIST_MAX_EMAIL_CHARS,
@@ -37,6 +38,120 @@ export const LEADS_MAX_PER_GYM = 10000;
 /** Follow-up emails a lead gets, at most: day 0, day 3 and day 7 (RULINGS 2026-09-27). */
 export const LEAD_FOLLOW_UPS = 3;
 
+/** New leads a gym's follow-ups are sent for by the app in one of the gym's months, on
+ *  every plan (RULINGS 2026-09-27). A lead counts once, when the app first emails it. */
+export const LEAD_EMAILS_PER_MONTH = 100;
+
+/** Why the app did not send a follow-up it was due to send (20c-v). The email waits for
+ *  staff, as it did before the switch. */
+export const LEAD_EMAIL_NOT_SENT = [
+  "unsubscribed",
+  "complained",
+  "bounced",
+  "refused",
+  "on_member_list",
+  "bad_address",
+  "shared_address",
+  "no_mail_domain",
+  "could_not_send",
+] as const;
+export type LeadEmailNotSent = (typeof LEAD_EMAIL_NOT_SENT)[number];
+
+/** The end of "Not sent for you: …", said to staff. */
+export const LEAD_EMAIL_NOT_SENT_WORDS: Record<LeadEmailNotSent, string> = {
+  unsubscribed: "they asked not to get your emails through AI Home Gym",
+  complained: "they marked one of your emails as spam",
+  bounced: "emails to this address bounce",
+  refused: "our email service won't send to this address",
+  on_member_list: "this email address is on your member list",
+  bad_address: "this doesn't look like a working email address",
+  shared_address: "it's a shared address, like info@, which we don't email for you",
+  no_mail_domain: "this address can't receive email",
+  could_not_send: "our email service didn't take it",
+};
+
+/** The three follow-up emails' words, the same whoever sends them: the lead's panel
+ *  writes them into the gym's own email (20c-ii) and the app sends them (20c-v).
+ *  `gymName` is the gym's name as shown; the greeting and sign-off are the caller's. */
+export function leadFollowUpLetter(step: number, gymName: string): { subject: string; lines: string[] } | null {
+  switch (step) {
+    case 1:
+      return {
+        subject: `Thanks for asking about ${gymName}`,
+        lines: [
+          `Thanks for asking about ${gymName}. We'd love to show you around.`,
+          "Come in any time we are open, or reply to this email with any questions.",
+        ],
+      };
+    case 2:
+      return {
+        subject: `Come and see us at ${gymName}`,
+        lines: [
+          "Just checking in. Would you like to come in for a look around, or try a session?",
+          "Reply with a day that suits you and we'll have it ready.",
+        ],
+      };
+    case 3:
+      return {
+        subject: `Still thinking about ${gymName}?`,
+        lines: [
+          "This is our last note, so we won't fill your inbox.",
+          "If you'd like to join or have a question, just reply. We'd be glad to see you.",
+        ],
+      };
+    default:
+      return null;
+  }
+}
+
+/** "Hi Priya," from a lead's full name, or "Hi," when it has no first word. */
+export function leadGreeting(firstName: string): string {
+  return firstName === "" ? "Hi," : `Hi ${firstName},`;
+}
+
+/** The first word of a lead's name. */
+export const leadFirstName = (fullName: string): string => fullName.trim().split(/\s+/)[0] ?? "";
+
+/** Settings → Follow-up emails to leads (20c-v). `usedThisMonth` counts new leads the
+ *  app has emailed in the gym's month; `hasPostalAddress`, `stopped` and `appSending`
+ *  say why it may not send. */
+export const leadEmailSettingsSchema = z
+  .object({
+    sendForMe: z.boolean(),
+    replyTo: z.string().nullable(),
+    perMonth: z.number().int().positive(),
+    usedThisMonth: z.number().int().nonnegative(),
+    hasPostalAddress: z.boolean(),
+    stopped: z.boolean(),
+    /** Whether emails through the app can go at all: "paused" by the operator's kill
+     *  switch, or "off" when sending is not set up. */
+    appSending: z.enum(["on", "paused", "off"]),
+  })
+  .strict();
+export type LeadEmailSettings = z.infer<typeof leadEmailSettingsSchema>;
+
+export const leadEmailSettingsResponseSchema = z.object({ settings: leadEmailSettingsSchema }).strict();
+
+/** Replies go to `replyTo`, the gym's own address: the app's sending address has no
+ *  inbox. Needed while the switch is on. */
+export const updateLeadEmailSettingsRequestSchema = z
+  .object({
+    sendForMe: z.boolean(),
+    replyTo: z.string().trim().toLowerCase().max(254).email().nullable(),
+  })
+  .strict()
+  .refine((body) => !body.sendForMe || body.replyTo !== null, { message: "replyTo is needed to switch it on", path: ["replyTo"] });
+export type UpdateLeadEmailSettingsRequest = z.infer<typeof updateLeadEmailSettingsRequestSchema>;
+
+export const LEAD_EMAIL_SETTINGS_WORDS = {
+  needs_postal_address: "Add your postal address under your gym's details first. The law asks for it at the foot of these emails.",
+  gym_name: "Your gym's name can't be shown in an email as it is. Change it under your gym's details first.",
+  sending_stopped:
+    "Emails from your gym through AI Home Gym are stopped, because too many bounced or one was marked as spam. Send follow-ups yourself from each lead's panel.",
+  paused: "Emails through AI Home Gym are paused just now. Until they start again, your leads' follow-ups wait for you on the Leads page.",
+  invites_off: "Emails through AI Home Gym aren't set up yet, so this can't be switched on.",
+} as const;
+
 export const leadFollowUpSchema = z
   .object({
     /** How many staff have marked as sent, 0 to 3. */
@@ -49,6 +164,18 @@ export const leadFollowUpSchema = z
     /** Its day has passed without it being marked sent. */
     overdue: z.boolean(),
     lastSentAt: z.string().datetime({ offset: true }).nullable(),
+    /** Who sends the next one (20c-v): the app, with "Send them for me" on, emails able
+     *  to go and room in the month, or staff. Null when none is due. */
+    by: z.enum(["app", "you"]).nullable().default(null),
+    /** When the app sends a due one: later today, tomorrow morning (after 20:00 by the
+     *  gym's clock), or it is waiting (held for another try, or its day has passed).
+     *  Null unless `by` is "app" and it is due now. */
+    appWhen: z.enum(["today", "tomorrow", "waiting"]).nullable().default(null),
+    /** Why the app did not send the next one, which staff may then send themselves. */
+    notSent: z.enum(LEAD_EMAIL_NOT_SENT).nullable().default(null),
+    /** When the person asked this gym to stop emailing them through the app: Stop
+     *  pressed in an email, or an email marked as spam. */
+    optedOutAt: z.string().datetime({ offset: true }).nullable().default(null),
   })
   .strict();
 export type LeadFollowUp = z.infer<typeof leadFollowUpSchema>;
@@ -239,6 +366,7 @@ export const LEAD_WORDS = {
   join_choose: "Somebody on your list has the same email or phone. Choose the record that is this person, or add them as someone new.",
   join_stale: "Your list changed while you were choosing. Choose again.",
   follow_up_not_due: "This lead isn't waiting for that follow-up email. It may have been marked already, or the lead changed.",
+  follow_up_sent_for_you: "This email is being sent for you, so there's nothing to mark.",
   join_exact:
     "Your list already has a record with exactly this name and contact. If it is this person, choose it. If not, change the lead's name, email or phone first.",
 } as const;
