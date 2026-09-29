@@ -354,7 +354,7 @@ describe("an Indian gym's mobile for payments in Settings (1d-i)", () => {
   });
 
   it('a number that is not an Indian mobile stops Save and says why', () => {
-    expect(gymDetailsProblem({ ...gymDetailsDraft(gym), billingMobile: '020 2612 3456' }, 'gym')).toBe('Check the mobile number: 10 digits, starting with 6, 7, 8 or 9.');
+    expect(gymDetailsProblem({ ...gymDetailsDraft(gym), billingMobile: '020 2612 3456' }, 'gym')).toBe("This isn't a mobile number. Type your 10-digit mobile number, for example 98765 43210.");
     expect(gymDetailsProblem({ ...gymDetailsDraft(gym), billingMobile: '' }, 'gym')).toBeNull();
   });
 });

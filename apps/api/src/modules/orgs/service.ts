@@ -295,7 +295,7 @@ function billingMobileAt(country: string, typed: string | null | undefined): str
   if (given === null) return null;
   if (country !== "IN") throw new OrgsError(400, "mobile_india_only", "A mobile number for payments is asked only of gyms in India.");
   const mobile = normaliseIndianMobile(given);
-  if (mobile === null) throw new OrgsError(400, "mobile_invalid", "Check the mobile number: 10 digits, starting with 6, 7, 8 or 9.");
+  if (mobile === null) throw new OrgsError(400, "mobile_invalid", "This isn't a mobile number. Type your 10-digit mobile number, for example 98765 43210.");
   return mobile;
 }
 

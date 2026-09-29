@@ -423,7 +423,7 @@ describe('Create a gym', () => {
     expect(screen.getByText('For your payments only: Razorpay uses it to message you about them. Your staff and members never see it.')).toBeTruthy();
     // Create waits for a real Indian mobile, and says what is wrong with one that is not.
     fireEvent.change(screen.getByLabelText('Your mobile number'), { target: { value: '020 2612 3456' } });
-    expect(screen.getByTestId('mobile-check').textContent).toBe('Check the number: 10 digits, starting with 6, 7, 8 or 9.');
+    expect(screen.getByTestId('mobile-check').textContent).toBe("This isn't a mobile number. Type your 10-digit mobile number, for example 98765 43210.");
     fireEvent.click(screen.getByText('Create'));
     await waitFor(() => expect(orgService.createOrg).not.toHaveBeenCalled());
 

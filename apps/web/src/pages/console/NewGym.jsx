@@ -380,7 +380,7 @@ export default function NewGym() {
               />
               {mobile.trim() !== '' && !mobileOk ? (
                 <span className="block text-xs mt-1.5" style={{ color: '#FF8A1F' }} data-testid="mobile-check">
-                  Check the number: 10 digits, starting with 6, 7, 8 or 9.
+                  This isn&apos;t a mobile number. Type your 10-digit mobile number, for example 98765 43210.
                 </span>
               ) : null}
             </Field>

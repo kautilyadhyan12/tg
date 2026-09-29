@@ -159,7 +159,7 @@ export function gymDetailsProblem(draft, orgType) {
   }
   const mobile = (draft?.billingMobile ?? '').trim();
   if (mobile !== '' && normaliseIndianMobile(mobile) === null) {
-    return 'Check the mobile number: 10 digits, starting with 6, 7, 8 or 9.';
+    return "This isn't a mobile number. Type your 10-digit mobile number, for example 98765 43210.";
   }
   return null;
 }
