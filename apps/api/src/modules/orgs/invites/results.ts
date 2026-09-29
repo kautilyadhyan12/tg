@@ -206,7 +206,7 @@ async function processOne(deps: ResultsDeps, event: webhooks.ClaimedEvent): Prom
   const name = (await repo.gymName(deps.sql, send.gymId)) ?? "";
   deps.log.warn(
     { event: "invite.gym_stopped", gymId: send.gymId, reason: done.stopped.reason, sent: done.stopped.counts.sent, bounced: done.stopped.counts.bounced },
-    "a gym's invitations were stopped",
+    "a gym's emails through the app were stopped",
   );
   await deps.tellOperator({
     gymId: send.gymId,

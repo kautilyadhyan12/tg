@@ -48,6 +48,8 @@ export interface GymPageDeps {
   photos: PhotoStore;
   /** A file left behind after its row went is said here, never thrown at the person. */
   log: { warn: (obj: object, msg: string) => void };
+  /** The key a lead's address is kept under, for the Leads list's email problems (20c-v-b). */
+  addressKey: Buffer | null;
 }
 
 type Limit = () => Promise<boolean>;
@@ -373,6 +375,7 @@ export async function sendEnquiry(
           ...followUpValues({ status: "new", emailOkAt: okAt, sent: 0, lastAt: null }, page.timezone),
         },
         null,
+        deps.addressKey,
         at,
       );
       leadId = inserted.id;

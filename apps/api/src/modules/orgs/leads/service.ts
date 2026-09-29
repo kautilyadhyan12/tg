@@ -72,17 +72,22 @@ export interface LeadSendingView {
   notSent: LeadEmailNotSent | null;
   optedOutAt: Date | null;
   optedOutHow: "unsubscribed" | "complained" | null;
-  emailProblem: "bounced" | "complained" | null;
+  emailProblem: "bounced" | "refused" | "complained" | null;
 }
 
 const NOBODY_SENDING: LeadSendingView = { by: null, appWhen: null, notSent: null, optedOutAt: null, optedOutHow: null, emailProblem: null };
 
 /** The list's problem tag for a New lead, from its address's stop: the same rule as
- *  `repo.emailProblemCondition`, which counts and filters them in the database. */
-function emailProblemOf(status: string, stop: emailsRepo.AddressStopView | undefined): LeadSendingView["emailProblem"] {
-  if (status !== "new" || stop === undefined) return null;
-  if (stop.reason === "bounced" || stop.reason === "refused") return "bounced";
-  return stop.optedOutHow === "complained" ? "complained" : null;
+ *  `repo.emailProblemCondition`, which counts and filters them in the database. A spam
+ *  report counts only while the lead is unticked: staff who tick the person again at
+ *  their own request have dealt with it. */
+export function emailProblemOf(
+  lead: { status: string; ticked: boolean },
+  stop: Pick<emailsRepo.AddressStopView, "reason" | "optedOutHow"> | undefined,
+): LeadSendingView["emailProblem"] {
+  if (lead.status !== "new" || stop === undefined) return null;
+  if (stop.reason === "bounced" || stop.reason === "refused") return stop.reason;
+  return stop.optedOutHow === "complained" && !lead.ticked ? "complained" : null;
 }
 
 const notSentSchema = z.enum(LEAD_EMAIL_NOT_SENT);
@@ -192,7 +197,7 @@ async function sendingViews(
         notSent,
         optedOutAt: stop?.optedOutAt ?? null,
         optedOutHow: stop?.optedOutHow ?? null,
-        emailProblem: emailProblemOf(row.status, stop),
+        emailProblem: emailProblemOf({ status: row.status, ticked: row.emailOkAt !== null }, stop),
       };
       return [row.id, view];
     }),
@@ -357,12 +362,11 @@ export async function listLeads(
       digits: phoneDigits(typed),
       dueBy: query.followUp === "due" ? today : null,
       problemOnly: query.followUp === "problem",
-      addressKey: deps.addressKey,
       app,
       cursor,
       limit: LEADS_PAGE + 1,
     }),
-    repo.leadCounts(deps.sql, gymId, today, app, deps.addressKey),
+    repo.leadCounts(deps.sql, gymId, today, app),
   ]);
   const shown = page.rows.slice(0, LEADS_PAGE);
   const last = page.rows.length > LEADS_PAGE ? shown[shown.length - 1] : undefined;
@@ -460,6 +464,7 @@ export async function createLead(
         ...followUpValues({ status: "new", emailOkAt: okAt, sent: 0, lastAt: null }, org.timezone),
       },
       userId,
+      deps.addressKey,
     );
     await insertAudit(tx, {
       actorUserId: userId,
@@ -520,6 +525,7 @@ export async function updateLead(
         ),
       },
       at,
+      deps.addressKey,
     );
     await insertAudit(tx, {
       actorUserId: userId,
@@ -589,6 +595,7 @@ export async function markFollowUpSent(
         ...followUpValues({ status, emailOkAt: stored.emailOkAt, sent: body.step, lastAt: at }, org.timezone),
       },
       at,
+      deps.addressKey,
     );
     await insertAudit(tx, {
       actorUserId: userId,
@@ -721,6 +728,7 @@ export async function joinLead(
         ),
       },
       at,
+      deps.addressKey,
     );
     await insertAudit(tx, {
       actorUserId: userId,

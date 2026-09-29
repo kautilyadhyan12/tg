@@ -44,6 +44,8 @@ export const gymLeads = pgTable(
     followUpDueOn: date("follow_up_due_on", { mode: "string" }),
     /** When the person last sent the gym page's form (20c-iv-a). */
     enquiredAt: timestamp("enquired_at", { withTimezone: true }),
+    /** The address under the invitations' key (20c-v-b), for the list's email problems. */
+    emailHmac: text("email_hmac"),
   },
   (t) => [
     check("gym_leads_name_len_check", sql`char_length(${t.fullName}) BETWEEN 1 AND 120`),
@@ -53,6 +55,8 @@ export const gymLeads = pgTable(
     check("gym_leads_notes_len_check", sql`char_length(${t.notes}) <= 2000`),
     check("gym_leads_email_ok_check", sql`${t.emailOkAt} IS NULL OR ${t.email} IS NOT NULL`),
     check("gym_leads_entry_check", sql`${t.entryId} IS NULL OR ${t.status} = 'joined'`),
+    check("gym_leads_email_hmac_check", sql`${t.emailHmac} IS NULL OR (${t.email} IS NOT NULL AND ${t.emailHmac} ~ '^[0-9a-f]{64}$')`),
+    index("gym_leads_email_hmac_idx").on(t.emailHmac).where(sql`${t.emailHmac} IS NOT NULL`),
     uniqueIndex("gym_leads_gym_email_uq").on(t.gymId, t.email).where(sql`${t.email} IS NOT NULL`),
     uniqueIndex("gym_leads_gym_phone_uq").on(t.gymId, t.phoneE164).where(sql`${t.phoneE164} IS NOT NULL`),
     index("gym_leads_gym_created_idx").on(t.gymId, t.createdAt, t.id),

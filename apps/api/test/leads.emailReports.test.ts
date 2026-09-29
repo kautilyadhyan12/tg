@@ -44,7 +44,7 @@ const LIVE_PLAN = "zz_lead_email_reports";
 const ZONE = "Europe/London";
 const USERS = "leadrep-%@example.com";
 /** Every address this suite emails, so its every-gym suppressions can be cleared. */
-const PEOPLE = ["priya", "kit", "ana", "bo", "cy", "dee", "eli", "fay", "gus", "hal", "ivy", "jon", "kay", "liv"];
+const PEOPLE = ["priya", "kit", "ana", "bo", "cy", "dee", "eli", "fay", "gus", "hal", "ivy", "jon", "kay", "liv", "mia", "ned", "ora", "pam", "quin", "rex", "sam", "ted", "uma"];
 const personAddr = (name: string) => `${name}.leadrep@example.com`;
 
 let ipCounter = 0;
@@ -386,6 +386,73 @@ d("what comes back from a lead's follow-up (real Postgres)", () => {
       ]);
       expect(lastTo("priya").message.subject).toContain("Gym B");
       expect((await readLead(gymA, priyaA.id, ownerA)).followUp).toMatchObject({ by: "you", notSent: "complained" });
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "the list's email problems, every kind of lead: the count, the chip's filter and each row's tag agree, and only what staff can act on is counted",
+    async () => {
+      const gym = await makeGym(ownerA, "Problem Table Gym");
+      const other = await makeGym(ownerB, "Problem Table Other Gym");
+      ourGyms.push(gym, other);
+      // Each lead is added through the app, so its address key is the app's own write.
+      const cases: { name: string; status?: "contacted"; tickedAgain?: boolean; stop: { gym: "this" | "other" | "every"; reason: string } | null; expected: string | null }[] = [
+        { name: "mia", stop: { gym: "every", reason: "bounced" }, expected: "bounced" },
+        { name: "ned", stop: { gym: "every", reason: "refused" }, expected: "refused" },
+        { name: "ora", stop: { gym: "this", reason: "complained" }, expected: "complained" },
+        { name: "pam", stop: { gym: "this", reason: "complained" }, tickedAgain: true, expected: null },
+        { name: "quin", stop: { gym: "this", reason: "unsubscribed" }, expected: null },
+        { name: "rex", status: "contacted", stop: { gym: "every", reason: "bounced" }, expected: null },
+        { name: "sam", stop: { gym: "other", reason: "complained" }, expected: null },
+        { name: "ted", stop: null, expected: null },
+      ];
+      const ids = new Map<string, string>();
+      for (const c of cases) {
+        const lead = await addLead(gym, ownerA, c.name);
+        ids.set(c.name, lead.id);
+        if (c.status !== undefined) expect((await send("PATCH", `/v1/orgs/${gym}/leads/${lead.id}`, { status: c.status }, ownerA)).statusCode).toBe(200);
+        if (c.stop !== null) {
+          const where = c.stop.gym === "every" ? null : c.stop.gym === "this" ? gym : other;
+          await sql`INSERT INTO email_suppressions (email_hmac, gym_id, reason) VALUES (${hmacOf(personAddr(c.name))}, ${where}, ${c.stop.reason})`;
+        }
+        // A spam report takes the tick off, as the worker does; staff may tick it again.
+        if (c.stop?.reason === "complained" && c.stop.gym === "this") {
+          await sql`UPDATE gym_leads SET email_ok_at = NULL, follow_up_due_on = NULL WHERE id = ${lead.id}`;
+          if (c.tickedAgain === true) expect((await send("PATCH", `/v1/orgs/${gym}/leads/${lead.id}`, { mayEmail: true }, ownerA)).statusCode).toBe(200);
+        }
+      }
+      const list = await listOf(gym, ownerA);
+      const tags = new Map(list.leads.map((lead) => [lead.id, lead.emailProblem]));
+      for (const c of cases) expect([c.name, tags.get(ids.get(c.name) ?? "")]).toEqual([c.name, c.expected]);
+      const expected = cases.filter((c) => c.expected !== null).map((c) => ids.get(c.name)).sort();
+      expect(list.counts.emailProblems).toBe(expected.length);
+      expect((await listOf(gym, ownerA, "?followUp=problem")).leads.map((lead) => lead.id).sort()).toEqual(expected);
+      // Sam's complaint at the other gym is not this gym's problem either way.
+      expect((await listOf(other, ownerB)).counts.emailProblems).toBe(0);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "a report tagged with a lead's email that Resend's record does not carry that tag for is not acted on, even with no Resend id to compare",
+    async () => {
+      const gym = await makeGym(ownerA, "Untagged Record Gym");
+      ourGyms.push(gym);
+      const uma = await addLead(gym, ownerA, "uma");
+      await runSender();
+      const toUma = lastTo("uma");
+      // Left "couldn't confirm": the row has no Resend id, so only the tag ties a report to it.
+      await sql`UPDATE gym_lead_sends SET state = 'failed', reason = 'send_unknown', provider_id = NULL WHERE provider_id = ${toUma.providerId}`;
+      const stranger = `re_${randomUUID()}`;
+      resendRecords.set(stranger, "complained");
+      resendTags.set(stranger, [{ name: LEAD_SEND_TAG, value: randomUUID() }]);
+      expect((await report("email.complained", stranger, { tag: tagOf(toUma) })).statusCode).toBe(200);
+      await processAll();
+      expect(await suppressionsOf("uma")).toEqual([]);
+      expect((await storedLead(uma.id))?.ok).not.toBeNull();
+      const row = (await sql<{ state: string }[]>`SELECT state FROM gym_lead_sends WHERE lead_id = ${uma.id}`)[0];
+      expect(row?.state).toBe("failed");
     },
     TIMEOUT_MS,
   );

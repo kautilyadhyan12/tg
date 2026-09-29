@@ -223,9 +223,11 @@ export const leadSchema = z
      *  an answer written before the form existed, so it defaults to null. */
     enquiredAt: z.string().datetime({ offset: true }).nullable().default(null),
     /** A New lead's address that emails cannot reach — it bounces, or the email service
-     *  refuses it — or from which one of this gym's emails was marked as spam (20c-v-b).
-     *  Shown on the list, so staff need not open each lead to find it. */
-    emailProblem: z.enum(["bounced", "complained"]).nullable().default(null),
+     *  refuses it (its own list, which a spam report anywhere can put an address on, so
+     *  never called a bounce) — or who marked one of this gym's emails as spam and has not
+     *  been ticked again since (20c-v-b). Shown on the list, so staff need not open each
+     *  lead to find it. */
+    emailProblem: z.enum(["bounced", "refused", "complained"]).nullable().default(null),
   })
   .strict();
 export type Lead = z.infer<typeof leadSchema>;

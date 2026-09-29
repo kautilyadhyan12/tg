@@ -69,6 +69,7 @@ export interface GymPageRouteDeps {
   redis: RedisLike;
   robotCheck: RobotCheck;
   photos: PhotoStore;
+  addressKey: Buffer | null;
 }
 
 const photoParamsSchema = z.object({ gymId: z.string().uuid(), photoId: z.string().uuid() }).strict();
@@ -91,7 +92,7 @@ function sendPhoto(reply: FastifyReply, file: service.PhotoFile, cache: string):
 }
 
 export function registerGymPageRoutes(app: FastifyInstance, deps: GymPageRouteDeps): void {
-  const pageDeps: service.GymPageDeps = { sql: deps.sql, now: () => new Date(), robotCheck: deps.robotCheck, photos: deps.photos, log: app.log };
+  const pageDeps: service.GymPageDeps = { sql: deps.sql, now: () => new Date(), robotCheck: deps.robotCheck, photos: deps.photos, log: app.log, addressKey: deps.addressKey };
 
   const gate =
     (limit: (req: FastifyRequest, reply: FastifyReply) => Promise<void>) =>

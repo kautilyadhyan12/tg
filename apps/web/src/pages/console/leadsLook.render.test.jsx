@@ -259,6 +259,14 @@ describe('email problems on the list (20c-v-b)', () => {
     expect(screen.getByRole('button', { name: 'All 2' }).getAttribute('aria-pressed')).toBe('false');
   });
 
+  it("an address our email service refuses is never called a bounce on the list", async () => {
+    api.getLeads.mockResolvedValue({ data: { leads: [arjun, { ...tom, emailProblem: 'refused' }], total: 2, cursor: null, counts: { ...COUNTS, emailProblems: 1 } } });
+    draw();
+    await screen.findAllByTestId('lead-row');
+    expect(within(row('Tom Reid')).getByText("Can't be emailed")).toBeTruthy();
+    expect(within(row('Tom Reid')).queryByText('Email bounces')).toBeNull();
+  });
+
   it('no chip, no tag and no stopped line when nothing is wrong', async () => {
     api.getLeads.mockResolvedValue(PAGE);
     draw();

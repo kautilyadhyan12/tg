@@ -194,8 +194,18 @@ export const ADDRESS_NOTES = {
 
 /** What the lead's follow-up box says, or null when there is nothing to say: a lead
  *  who never said yes and has had none. `next` is the step staff may send now, or null;
- *  `note` a line under it: the app sends it, or why the app did not. */
+ *  `note` a line under it: the app sends it, or why the app did not. Whenever the lead's
+ *  address cannot be emailed, that is the note, and the box shows even with nothing
+ *  else to say: the list tags such a lead, so opening it always explains the tag (20c-v-b). */
 export function followUpState(lead, now = new Date()) {
+  const story = followUpStory(lead, now);
+  const addressNote = ADDRESS_NOTES[lead.emailProblem] ?? null;
+  if (addressNote === null) return story;
+  if (story === null) return { next: null, headline: addressNote, due: false, sentLine: null, note: null };
+  return { ...story, note: addressNote };
+}
+
+function followUpStory(lead, now) {
   const f = lead.followUp;
   if (f === undefined || f === null) return null;
   const sentLine = f.sent === 0 ? null : `${f.sent} of ${LEAD_FOLLOW_UPS} sent${lastSentWords(f.lastSentAt, now)}.`;
@@ -244,7 +254,7 @@ export const DUE_CHIP_LABEL = 'Email due';
 /** The chip for New leads whose address emails can't reach or who marked an email as
  *  spam (20c-v-b), and each such row's tag: found on the list, not lead by lead. */
 export const PROBLEM_CHIP_LABEL = 'Email problems';
-export const EMAIL_PROBLEM_TAG = { bounced: 'Email bounces', complained: 'Marked as spam' };
+export const EMAIL_PROBLEM_TAG = { bounced: 'Email bounces', refused: "Can't be emailed", complained: 'Marked as spam' };
 
 /** The tag on a lead who sent the form on the gym's own page (20c-iv-a). */
 export const FROM_PAGE_TAG = 'From your page';

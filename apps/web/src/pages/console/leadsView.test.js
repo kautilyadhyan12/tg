@@ -249,6 +249,18 @@ describe('the follow-up emails (20c-ii)', () => {
     });
   });
 
+  it('a lead tagged on the list for its address says so on its panel, with or without a follow-up to come (20c-v-b)', () => {
+    const now = new Date('2026-09-27T12:00:00');
+    const none = { ...lead, mayEmail: false, emailProblem: 'bounced', followUp: { sent: 0, dueOn: null, dueNow: false, overdue: false, lastSentAt: null, by: null, notSent: null, optedOutAt: null } };
+    expect(followUpState(none, now)).toEqual({ next: null, headline: 'Emails to this address bounce. Check the address with them.', due: false, sentLine: null, note: null });
+    const allSent = { ...none, emailProblem: 'refused', followUp: { ...none.followUp, sent: 3, lastSentAt: '2026-09-26T09:00:00.000Z' } };
+    expect(followUpState(allSent, now)).toMatchObject({
+      headline: 'All 3 follow-up emails sent',
+      note: "Our email service won't send to this address. Check the address with them.",
+    });
+    expect(followUpState({ ...none, emailProblem: null }, now)).toBeNull();
+  });
+
   it('a person who marked an email as spam is said so, not that they pressed Stop', () => {
     const now = new Date('2026-09-27T12:00:00');
     const spam = { ...lead, mayEmail: false, followUp: { sent: 1, dueOn: null, dueNow: false, overdue: false, lastSentAt: '2026-09-26T09:00:00.000Z', by: null, notSent: null, optedOutAt: '2026-09-26T10:00:00.000Z', optedOutHow: 'complained' } };
