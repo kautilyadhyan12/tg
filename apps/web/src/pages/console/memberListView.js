@@ -232,7 +232,7 @@ export function groupNote(preview, group, words) {
   const { list } = preview;
   if (group === 'new') {
     return [
-      list.alreadyInApp > 0 ? `${count(list.alreadyInApp)} already use the app` : null,
+      list.alreadyInApp > 0 ? `${count(list.alreadyInApp)} already in the app` : null,
       list.noEmail > 0 ? `${count(list.noEmail)} have no email` : null,
       list.returning > 0 ? `${count(list.returning)} were ${words.people} before` : null,
     ]
@@ -240,10 +240,13 @@ export function groupNote(preview, group, words) {
       .join(' · ');
   }
   if (group === 'changed') {
-    return [
-      ...preview.fieldChanges.map((c) => `${MEMBER_LIST_FIELD_WORDS[c.field]} ${count(c.count)}`),
-      ...preview.extraChanges.map((c) => `${c.label} ${count(c.count)}`),
-    ].join(' · ');
+    // "What changes: status for 27 · phone number for 2", never "status 27" (Kd, 2026-09-29,
+    // of the import's short lines: "will not be understood by a human").
+    const parts = [
+      ...preview.fieldChanges.map((c) => `${MEMBER_LIST_FIELD_WORDS[c.field]} for ${count(c.count)}`),
+      ...preview.extraChanges.map((c) => `${c.label} for ${count(c.count)}`),
+    ];
+    return parts.length === 0 ? '' : `What changes: ${parts.join(' · ')}`;
   }
   return '';
 }
@@ -287,9 +290,50 @@ export function warningTitle(w) {
   }
 }
 
-const SKIP_WORDS = { no_contact: 'no email or phone', duplicate: 'same person as an earlier row' };
-export function skipWords(reason) {
-  return SKIP_WORDS[reason];
+/** The line over the rows a file leaves out: "2 rows weren't imported". */
+export function skippedTitle(n) {
+  return `${count(n)} ${n === 1 ? "row wasn't" : "rows weren't"} imported`;
+}
+
+/** One row the file leaves out, in words a front desk reads: which row, whose, and why
+ *  (Kd, 2026-09-29: "Row 12: no email or phone … will not be understood by a human"). */
+export function skippedLine(s) {
+  const who = s.name ? `Row ${String(s.row)}, ${s.name}` : `Row ${String(s.row)}`;
+  if (s.reason === 'duplicate') {
+    const first = s.sameAsRow ? `row ${String(s.sameAsRow)}` : 'an earlier row';
+    return `${who}: the same person as ${first}, so they're imported once.`;
+  }
+  return `${who}: no email or phone number, so they can't be matched or invited. Add one to your file to import them.`;
+}
+
+/** "phone number", "phone number and status", "email, phone number and status". */
+function andList(items) {
+  return items.length <= 1 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
+/** The box over the tick that lets a file replace what staff typed in the app, naming who
+ *  and what (Kd, 2026-09-29: "Replace what staff typed for 1 person … have no context").
+ *  `lead` is the sentence, `names` the people when there are several, `tick` the tick's own
+ *  words. A refusal carries no names (a person's name never goes in an error reply), and
+ *  neither does a preview staged before names were sent: both still read. */
+export function handEditWords(handEdits, words) {
+  const n = handEdits.entries;
+  const what = andList(handEdits.fields);
+  const one = handEdits.fields.length === 1;
+  const names = handEdits.names ?? [];
+  if (n === 1) {
+    const whose = names[0] ? `${names[0]}'s` : `One ${words.person}'s`;
+    return {
+      lead: `${whose} ${what} ${one ? 'was' : 'were'} changed by your staff in this app. This file has ${one ? 'a different one' : 'different ones'}.`,
+      names: [],
+      tick: `Use the ${what} from this file`,
+    };
+  }
+  return {
+    lead: `Your staff changed the ${what} of ${count(n)} ${words.people} in this app. This file has different ones${names.length > 0 ? ':' : '.'}`,
+    names,
+    tick: `Use the ${what} from this file for all ${count(n)}`,
+  };
 }
 
 /** The finished screen's heading and line. */

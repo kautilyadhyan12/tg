@@ -649,7 +649,8 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
 
   const keptRows: MemberListRow[] = [];
   const skipped: MemberListSkipped[] = [];
-  const keys = new Set<string>();
+  // Each person once, with the row they were first seen on: a repeat names it.
+  const keys = new Map<string, number>();
   const statuses = new Map<string, { label: string; count: number }>();
   const membershipTypes = new Map<string, { label: string; count: number }>();
   const paymentStatuses = new Map<string, { label: string; count: number }>();
@@ -674,8 +675,8 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
     withPaymentStatus: 0,
     withDateOfBirth: 0,
   };
-  const skip = (row: number, reason: "no_contact" | "duplicate"): void => {
-    if (skipped.length < MEMBER_LIST_SKIPPED_SHOWN) skipped.push({ row, reason });
+  const skip = (row: number, reason: "no_contact" | "duplicate", name: string, sameAsRow: number | null): void => {
+    if (skipped.length < MEMBER_LIST_SKIPPED_SHOWN) skipped.push({ row, reason, name, sameAsRow });
   };
   for (const draft of drafts) {
     const email = draft.email !== null && placeholderEmails.has(draft.email) ? null : draft.email;
@@ -683,17 +684,18 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
     if (email !== draft.email || phone !== draft.phone) placeholderCount++;
     if (email === null && phone === null) {
       noContact++;
-      skip(draft.row, "no_contact");
+      skip(draft.row, "no_contact", draft.fullName, null);
       continue;
     }
     const person = { fullName: draft.fullName, email, phone, memberNumber: draft.memberNumber, status: draft.status };
     const key = identityKey(person);
-    if (keys.has(key)) {
+    const first = keys.get(key);
+    if (first !== undefined) {
       duplicates++;
-      skip(draft.row, "duplicate");
+      skip(draft.row, "duplicate", draft.fullName, first);
       continue;
     }
-    keys.add(key);
+    keys.set(key, draft.row);
     keptRows.push({
       row: draft.row,
       ...person,

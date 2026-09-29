@@ -5,11 +5,14 @@ import {
   dayWords,
   doneWords,
   guardNumber,
+  handEditWords,
   importedColumnCount,
   missingOf,
   missingStatusLine,
   missingTitle,
   neverKeptLines,
+  skippedLine,
+  skippedTitle,
   roleOfColumn,
   someNames,
   summaryOf,
@@ -226,5 +229,78 @@ describe('the finished screen', () => {
     [done({ new: 30 }, true), { title: 'Already imported', detail: 'Nothing changed this time.' }],
   ])('%j', (confirmed, want) => {
     expect(doneWords(confirmed, WORDS)).toEqual(want);
+  });
+});
+
+// Kd, 2026-09-29, at 5b-v-d-ii's click-through: "Row 12: no email or phone … will not be
+// understood by a human" and "Replace what staff typed for 1 person … have no context".
+// Every line says whose row or whose details, what, and what happens.
+describe('rows a file leaves out, in words a front desk reads', () => {
+  it.each([
+    [{ row: 12, reason: 'no_contact', name: 'Walk-in Guest', sameAsRow: null }, "Row 12, Walk-in Guest: no email or phone number, so they can't be matched or invited. Add one to your file to import them."],
+    [{ row: 12, reason: 'no_contact', name: '', sameAsRow: null }, "Row 12: no email or phone number, so they can't be matched or invited. Add one to your file to import them."],
+    [{ row: 13, reason: 'duplicate', name: 'Ethan Brooks', sameAsRow: 10 }, "Row 13, Ethan Brooks: the same person as row 10, so they're imported once."],
+    [{ row: 13, reason: 'duplicate', name: '', sameAsRow: 10 }, "Row 13: the same person as row 10, so they're imported once."],
+    // A preview staged before rows carried a name or the row they repeat still reads.
+    [{ row: 13, reason: 'duplicate' }, "Row 13: the same person as an earlier row, so they're imported once."],
+    [{ row: 12, reason: 'no_contact' }, "Row 12: no email or phone number, so they can't be matched or invited. Add one to your file to import them."],
+  ])('%o', (s, words) => {
+    expect(skippedLine(s)).toBe(words);
+  });
+
+  it.each([
+    [1, "1 row wasn't imported"],
+    [2, "2 rows weren't imported"],
+    [1200, "1,200 rows weren't imported"],
+  ])('%i: %s', (n, words) => {
+    expect(skippedTitle(n)).toBe(words);
+  });
+});
+
+describe('details staff typed that a file would replace: whose, what, and the tick', () => {
+  const WORDS = { people: 'members', person: 'member' };
+  it.each([
+    [
+      'one person, one field',
+      { entries: 1, fields: ['phone number'], names: ['Olivia Bennett'] },
+      { lead: "Olivia Bennett's phone number was changed by your staff in this app. This file has a different one.", names: [], tick: 'Use the phone number from this file' },
+    ],
+    [
+      'one person, two fields',
+      { entries: 1, fields: ['phone number', 'status'], names: ['Olivia Bennett'] },
+      { lead: "Olivia Bennett's phone number and status were changed by your staff in this app. This file has different ones.", names: [], tick: 'Use the phone number and status from this file' },
+    ],
+    [
+      'one person with no name on the list',
+      { entries: 1, fields: ['email'], names: [''] },
+      { lead: "One member's email was changed by your staff in this app. This file has a different one.", names: [], tick: 'Use the email from this file' },
+    ],
+    [
+      'several people, three fields',
+      { entries: 4, fields: ['email', 'phone number', 'Locker'], names: ['Ada Lee', 'Bo Chen', 'Cy Diaz', 'Di Evans'] },
+      {
+        lead: 'Your staff changed the email, phone number and Locker of 4 members in this app. This file has different ones:',
+        names: ['Ada Lee', 'Bo Chen', 'Cy Diaz', 'Di Evans'],
+        tick: 'Use the email, phone number and Locker from this file for all 4',
+      },
+    ],
+    [
+      'a preview staged before names were sent',
+      { entries: 3, fields: ['status'] },
+      { lead: 'Your staff changed the status of 3 members in this app. This file has different ones.', names: [], tick: 'Use the status from this file for all 3' },
+    ],
+    [
+      'a refusal, which never names a person',
+      { entries: 3, fields: ['status'], names: [] },
+      { lead: 'Your staff changed the status of 3 members in this app. This file has different ones.', names: [], tick: 'Use the status from this file for all 3' },
+    ],
+  ])('%s', (_, handEdits, said) => {
+    expect(handEditWords(handEdits, WORDS)).toEqual(said);
+  });
+
+  it("a studio's clients are clients", () => {
+    expect(handEditWords({ entries: 2, fields: ['status'], names: ['A', 'B'] }, { people: 'clients', person: 'client' }).lead).toBe(
+      'Your staff changed the status of 2 clients in this app. This file has different ones:',
+    );
   });
 });

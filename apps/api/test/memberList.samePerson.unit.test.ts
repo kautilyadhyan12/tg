@@ -486,6 +486,7 @@ describe("the same person next month: the record the upload writes", () => {
     const before = entry(olivia, { handEdited: ["phone"] });
     const out = run([row(2, { ...olivia, phone: "+447700900999" })], [before]);
     expect(out.handEdits).toEqual({ entries: 1, fields: ["phone number"] });
+    expect(out.handEditNames).toEqual(["Olivia Bennett"]);
     expect(out.changed[0]?.moved).toEqual(["phone"]);
   });
 

@@ -440,6 +440,9 @@ function assemble(input: {
   fileSha256: string;
   shell: MemberListStagedShell;
   measured: Measured;
+  /** Whose corrections the file would write over: worked out with the counts and never
+   *  stored with them, so a preview read back later names nobody. */
+  handEditNames: readonly string[];
 }): Omit<MemberListPreview, "uploadId"> {
   const { shell, measured } = input;
   return {
@@ -459,7 +462,7 @@ function assemble(input: {
     statuses: measured.counts.statuses,
     fieldChanges: measured.counts.fieldChanges,
     extraChanges: measured.counts.extraChanges,
-    handEdits: measured.counts.handEdits,
+    handEdits: { ...measured.counts.handEdits, names: [...input.handEditNames] },
     members: measured.counts.members,
     skipped: shell.skipped,
     warnings: shell.warnings,
@@ -539,7 +542,7 @@ export async function previewUpload(
     understanding: { ...withGymFieldsFull(understood, over), rows: reconciled.rows },
     groups: groupsOf(reconciled),
   };
-  const body = assemble({ mode: input.mode, expiresAt, fileSha256, shell: shellOf(file), measured });
+  const body = assemble({ mode: input.mode, expiresAt, fileSha256, shell: shellOf(file), measured, handEditNames: reconciled.handEditNames });
 
   const uploadId = await repo.stageUpload(deps.sql, {
     gymId,
@@ -693,6 +696,7 @@ export async function readPreview(
       fileSha256: upload.fileSha256,
       shell: read.shell,
       measured: { counts: read.counts, seat: read.counts.seat, lastFileSha256: read.lastFileSha256 },
+      handEditNames: [],
     }),
   };
 }
@@ -1171,6 +1175,8 @@ export async function confirmUpload(
     // lock, asked of THIS press, and nothing is written when it is missing — the whole
     // refusal happens before the first statement.
     if (reconciled.handEdits.entries > 0 && !input.acknowledgeHandEdits) {
+      // FIELD NAMES, NEVER A PERSON (the refusal's own shape cannot hold one): a refusal can
+      // reach a log or an error report (memberList.leak); whose they are is the preview's.
       return { kind: "hand_edits", handEdits: reconciled.handEdits };
     }
 

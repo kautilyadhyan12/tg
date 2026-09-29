@@ -180,7 +180,8 @@ describe('the worst thing: nobody leaves who was not answered for', () => {
       expect.stringContaining('Emma Price'),
     ]);
     expect(within(rows[0]).getByTestId('gone-facts').textContent).toBe('Status: Active · Membership: Gold · Payment: Paid');
-    expect(within(rows[1]).getByTestId('gone-facts').textContent).toMatch(/^Status: Cancelled · Membership: Gold · Ended 31 Aug( 2026)? · Payment: Unpaid$/);
+    // The end date beside the status: a Cancelled reads with when (Kd, 2026-09-29).
+    expect(within(rows[1]).getByTestId('gone-facts').textContent).toMatch(/^Status: Cancelled · Ended 31 Aug( 2026)? · Membership: Gold · Payment: Unpaid$/);
     expect(within(rows[2]).getByTestId('gone-added').textContent).toMatch(/^Added manually · 20 Sep( 2026)?$/);
     expect(within(rows[0]).getByText('In the app')).toBeTruthy();
     expect(within(rows[1]).queryByText('In the app')).toBeNull();
@@ -410,7 +411,7 @@ describe('the worst thing: nobody leaves who was not answered for', () => {
     const card = within(await screen.findByTestId('missing'));
     fireEvent.click(await card.findByLabelText('Olivia Walker has left'));
     fireEvent.click(choice(/They've left/));
-    fireEvent.click(screen.getByRole('button', { name: 'Check' }));
+    fireEvent.click(screen.getByRole('button', { name: 'See columns' }));
     fireEvent.change(screen.getByLabelText('Status imports as'), { target: { value: 'membershipType' } });
     orgService.uploadMemberList.mockResolvedValueOnce({ data: { preview: oneMissing() } });
     orgService.getMemberListMissing.mockResolvedValueOnce(missingRead([olivia]));
@@ -471,8 +472,8 @@ describe('every part of the box, in its order', () => {
         guard: { ...calm, entriesGoing: 2, listSize: 37 },
         dateColumns: [{ column: 3, field: 'joinedOn', order: 'dayFirst', from: 'country', example: { raw: '03/04/2026', read: '2026-04-03' }, notRead: 0 }],
         warnings: [{ code: 'phones_unusual', rows: 4 }],
-        skipped: [{ row: 7, reason: 'no_contact' }, { row: 9, reason: 'duplicate' }],
-        handEdits: { entries: 2, fields: ['phone number'] },
+        skipped: [{ row: 7, reason: 'no_contact', name: 'Walk-in Guest' }, { row: 9, reason: 'duplicate', name: 'Ada Lovelace', sameAsRow: 2 }],
+        handEdits: { entries: 2, fields: ['phone number'], names: ['Ada Lovelace', 'Bo Chen'] },
       }),
     );
     await screen.findAllByTestId('missing-row');
@@ -500,13 +501,17 @@ describe('every part of the box, in its order', () => {
       screen.getByRole('radio', { name: /They've left/ }),
       screen.getByRole('radio', { name: /They're still members/ }),
       at('4 of 5 columns matched'),
-      screen.getByRole('button', { name: 'Check' }),
+      screen.getByRole('button', { name: 'See columns' }),
       at('03/04/2026 is read as 3 April 2026'),
       screen.getByRole('button', { name: 'Change to 4 March 2026' }),
       at('Card numbers not imported'),
       at('4 phone numbers look unusual'),
-      at('2 rows skipped'),
-      screen.getByLabelText('Replace what staff typed for 2 people (phone number)'),
+      at("2 rows weren't imported"),
+      screen.getByRole('button', { name: 'See which' }),
+      at('Your staff changed the phone number of 2 members in this app. This file has different ones:'),
+      at('Ada Lovelace, Bo Chen'),
+      screen.getByLabelText('Use the phone number from this file for all 2'),
+      at('Or correct your file and import it again.'),
       screen.getByLabelText("These are Iron House Gym's members, and I have permission to store their details."),
       importButton(),
       at('Nobody is emailed.'),
@@ -516,16 +521,14 @@ describe('every part of the box, in its order', () => {
     expect(within(rows[0]).getByText('olivia@members.example')).toBeTruthy();
     expect(within(rows[0]).getByTestId('gone-facts').textContent).toBe('Status: Active · Membership: Gold · Payment: Paid');
     expect(within(rows[1]).getByTestId('gone-facts').textContent).toBe('Status: Cancelled · Membership: Gold · Payment: Paid');
-    // Every Why? opens its words, and the skipped rows say which and why.
-    const whys = screen.getAllByRole('button', { name: 'Why?' });
-    expect(whys).toHaveLength(2);
-    fireEvent.click(whys[0]);
+    // Why? opens the warning's words, and See which names each row left out and why.
+    fireEvent.click(screen.getByRole('button', { name: 'Why?' }));
     expect(screen.getByText(/look like a normal number for their country/)).toBeTruthy();
-    fireEvent.click(screen.getAllByRole('button', { name: 'Why?' })[0]);
-    expect(at('Row 7: no email or phone')).toBeTruthy();
-    expect(at('Row 9: same person as an earlier row')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'See which' }));
+    expect(at("Row 7, Walk-in Guest: no email or phone number, so they can't be matched or invited. Add one to your file to import them.")).toBeTruthy();
+    expect(at("Row 9, Ada Lovelace: the same person as row 2, so they're imported once.")).toBeTruthy();
     // The columns open with every column, its example, what it imports as, and Never stored.
-    fireEvent.click(screen.getByRole('button', { name: 'Check' }));
+    fireEvent.click(screen.getByRole('button', { name: 'See columns' }));
     expect(screen.getByTestId('columns-note')).toBeTruthy();
     expect(within(screen.getByTestId('column-0')).getByText('Ada Lovelace')).toBeTruthy();
     expect(screen.getByLabelText('Name imports as').value).toBe('fullName');
@@ -546,8 +549,23 @@ describe('every part of the box, in its order', () => {
     expect(within(row).getByText('ada@members.example · Active')).toBeTruthy();
     // One word for one thing (spec §18.3): "In the app", as on Members, never "Uses the app".
     expect(within(row).getByText('In the app')).toBeTruthy();
-    expect(screen.getByText('1 already use the app · 1 have no email')).toBeTruthy();
+    expect(screen.getByText('1 already in the app · 1 have no email')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Show more (2)' })).toBeTruthy();
+  });
+
+  it("the Updated names say what changes and for how many, in words (Kd, 2026-09-29)", async () => {
+    await reviewWith(
+      preview({
+        list: list({ new: 0, changed: 29, unchanged: 30 }),
+        mode: 'add',
+        fieldChanges: [{ field: 'status', count: 27 }, { field: 'phone', count: 2 }],
+        extraChanges: [{ key: 'locker', label: 'Locker', count: 1 }],
+      }),
+    );
+    orgService.getMemberListRows.mockResolvedValueOnce(page('changed', [person('Ada Lovelace', { wasStatus: 'Active', status: 'Frozen' })], 29, 1));
+    fireEvent.click(screen.getByRole('button', { name: /29\s*Updated/ }));
+    expect(await screen.findByText('What changes: status for 27 · phone number for 2 · Locker for 1')).toBeTruthy();
+    expect(within(screen.getByTestId('names-row')).getByText('ada@members.example · Active → Frozen')).toBeTruthy();
   });
 
   it('Done: what was imported, nobody emailed, Import another and Done', async () => {
@@ -724,7 +742,7 @@ describe('the checks', () => {
   it('names a column that is never imported, and it cannot be switched on', async () => {
     await reviewWith(preview());
     expect(screen.getByText('Card numbers not imported')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Check' }));
+    fireEvent.click(screen.getByRole('button', { name: 'See columns' }));
     const card = within(screen.getByTestId('column-4'));
     expect(card.getByText('Never stored')).toBeTruthy();
     expect(card.queryByRole('combobox')).toBeNull();
@@ -732,7 +750,7 @@ describe('the checks', () => {
 
   it("a changed column is sent back as staff's mapping, and Import waits until it is applied", async () => {
     await reviewWith(preview());
-    fireEvent.click(screen.getByRole('button', { name: 'Check' }));
+    fireEvent.click(screen.getByRole('button', { name: 'See columns' }));
     fireEvent.change(screen.getByLabelText('Status imports as'), { target: { value: 'membershipType' } });
     tickPermission();
     expect(importButton().disabled).toBe(true);
@@ -762,7 +780,7 @@ describe('the checks', () => {
   it('says how many of the columns it understood, and where the examples come from', async () => {
     await reviewWith(preview());
     expect(screen.getByTestId('columns-line').textContent).toContain('4 of 5 columns matched');
-    fireEvent.click(within(screen.getByTestId('columns-line')).getByRole('button', { name: 'Check' }));
+    fireEvent.click(within(screen.getByTestId('columns-line')).getByRole('button', { name: 'See columns' }));
     expect(screen.getByTestId('columns-note').textContent).toBe('Examples are from the first row of your file.');
   });
 
@@ -822,16 +840,49 @@ describe('Import and its refusals', () => {
     await reviewWith(preview());
     tickPermission();
     orgService.confirmMemberList.mockRejectedValueOnce(
-      refusal(409, { error: 'hand_edits', message: 'This file would replace details your staff typed in here.', handEdits: { entries: 3, fields: ['phone number', 'membership type'] } }),
+      // As the server sends it: field names, never a person's name, in a refusal.
+      refusal(409, {
+        error: 'hand_edits',
+        message: 'This file would replace details your staff typed in here.',
+        handEdits: { entries: 3, fields: ['phone number', 'membership type'], names: [] },
+      }),
     );
     fireEvent.click(importButton());
-    const tick = await screen.findByLabelText('Replace what staff typed for 3 people (phone number, membership type)');
+    const tick = await screen.findByLabelText('Use the phone number and membership type from this file for all 3');
+    expect(screen.getByText('Your staff changed the phone number and membership type of 3 members in this app. This file has different ones.')).toBeTruthy();
     expect(importButton().disabled).toBe(true);
     fireEvent.click(tick);
     orgService.confirmMemberList.mockResolvedValueOnce({ data: { confirmed: confirmedAnswer() } });
     fireEvent.click(importButton());
     await screen.findByTestId('member-import-done');
     expect(orgService.confirmMemberList.mock.calls[1][2]).toEqual({ permissionConfirmed: true, acknowledgeLargeChange: false, acknowledgeHandEdits: true });
+  });
+
+  it("several people's details staff typed: the first three by name, and N more, and See all names everyone", async () => {
+    await reviewWith(
+      preview({ handEdits: { entries: 5, fields: ['phone number', 'membership type'], names: ['Ada Lee', 'Bo Chen', 'Cy Diaz', 'Di Evans', 'Ed Fox'] } }),
+    );
+    const box = within(screen.getByTestId('hand-edits'));
+    expect(box.getByText('Your staff changed the phone number and membership type of 5 members in this app. This file has different ones:')).toBeTruthy();
+    expect(box.getByTestId('hand-edit-names').textContent).toBe('Ada Lee, Bo Chen, Cy Diaz and 2 more · See all');
+    fireEvent.click(box.getByRole('button', { name: 'See all' }));
+    expect(box.getByTestId('hand-edit-names').textContent).toBe('Ada Lee, Bo Chen, Cy Diaz, Di Evans, Ed Fox');
+    expect(box.getByLabelText('Use the phone number and membership type from this file for all 5')).toBeTruthy();
+  });
+
+  it("one person's details staff typed: the sentence names them and what, and Import waits for the tick", async () => {
+    await reviewWith(preview({ handEdits: { entries: 1, fields: ['phone number'], names: ['Olivia Bennett'] } }));
+    tickPermission();
+    const box = within(screen.getByTestId('hand-edits'));
+    expect(box.getByText("Olivia Bennett's phone number was changed by your staff in this app. This file has a different one.")).toBeTruthy();
+    expect(box.queryByTestId('hand-edit-names')).toBeNull();
+    expect(importButton().disabled).toBe(true);
+    fireEvent.click(box.getByLabelText('Use the phone number from this file'));
+    expect(importButton().disabled).toBe(false);
+    orgService.confirmMemberList.mockResolvedValueOnce({ data: { confirmed: confirmedAnswer() } });
+    fireEvent.click(importButton());
+    await screen.findByTestId('member-import-done');
+    expect(orgService.confirmMemberList.mock.calls[0][2]).toEqual({ permissionConfirmed: true, acknowledgeLargeChange: false, acknowledgeHandEdits: true });
   });
 
   it('a list changed meanwhile offers to read the same file again', async () => {

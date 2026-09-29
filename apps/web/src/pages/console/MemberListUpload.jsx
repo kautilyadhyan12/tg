@@ -38,7 +38,9 @@ import {
   peopleWord,
   roleOfColumn,
   sameMapping,
-  skipWords,
+  handEditWords,
+  skippedLine,
+  skippedTitle,
   someNames,
   summaryOf,
   typedMatches,
@@ -113,21 +115,25 @@ function IconButton({ label, onClick, children }) {
   );
 }
 
-/** One line of the review's list: an icon, a short title, and at most one action. */
+/** One line of the review's list: an icon, a short title, and at most one action — a button
+ *  that looks like one, beside the words on a computer and under them on a phone (Kd,
+ *  2026-09-29, of the orange word "Check": "did not see any option like that"). */
 function Line({ icon, tone, title, sub, action, onAction, actionDisabled = false, detail, testId }) {
   return (
     <div className="px-4 py-3 border-t first:border-t-0" style={{ borderColor: 'var(--line)' }} data-testid={testId}>
-      <div className="flex items-center gap-3">
+      <div className="flex items-start sm:items-center gap-3">
         <Badge icon={icon} tone={tone} />
-        <div className="min-w-0 flex-1">
-          <div className="c-s15 c-t1">{title}</div>
-          {sub ? <div className="c-s13 c-t2 c-ell">{sub}</div> : null}
+        <div className="min-w-0 flex-1 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="c-s15 c-t1">{title}</div>
+            {sub ? <div className="c-s13 c-t2 c-ell">{sub}</div> : null}
+          </div>
+          {action ? (
+            <button type="button" onClick={onAction} disabled={actionDisabled} className="c-btn c-btn-s c-btn-sm self-start sm:self-auto flex-shrink-0">
+              {action}
+            </button>
+          ) : null}
         </div>
-        {action ? (
-          <button type="button" onClick={onAction} disabled={actionDisabled} className={LINK}>
-            {action}
-          </button>
-        ) : null}
       </div>
       {detail ? <div className="c-s14 c-t2 mt-2 pl-11">{detail}</div> : null}
     </div>
@@ -207,11 +213,10 @@ function Choice({ on, title, sub, onClick, disabled }) {
 }
 
 /** A tick box in the console's look; the real checkbox underneath keeps the label, the
- *  keyboard and screen readers working. `tone="warn"`: a tick that changes what staff
- *  typed reads in the "look at this" colour. */
-export function Tick({ checked, onChange, children, tone = 'plain' }) {
+ *  keyboard and screen readers working. */
+export function Tick({ checked, onChange, children }) {
   return (
-    <label className={`flex items-center gap-3 cursor-pointer min-h-[44px] c-s15 c-w5 ${tone === 'warn' ? '' : 'c-t1'}`} style={tone === 'warn' ? { color: 'var(--warn)' } : undefined}>
+    <label className="flex items-center gap-3 cursor-pointer min-h-[44px] c-s15 c-w5 c-t1">
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="sr-only peer" />
       <span
         aria-hidden="true"
@@ -221,6 +226,46 @@ export function Tick({ checked, onChange, children, tone = 'plain' }) {
       </span>
       <span>{children}</span>
     </label>
+  );
+}
+
+/** How many names show before "and N more · See all". */
+const NAMES_FIRST = 3;
+
+/** "Olivia Bennett, Noah Patel, Leo Walker and 4 more · See all". */
+function SomeNames({ names, total }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? names : names.slice(0, NAMES_FIRST);
+  const more = total - shown.length;
+  return (
+    <p className="c-s14 c-w6 c-t1" data-testid="hand-edit-names">
+      {shown.map((name) => name || 'No name').join(', ')}
+      {more > 0 ? ` and ${count(more)} more` : ''}
+      {!all && names.length > shown.length ? (
+        <>
+          {' · '}
+          <button type="button" onClick={() => setAll(true)} className="c-btn c-btn-link c-s14 c-w6">
+            See all
+          </button>
+        </>
+      ) : null}
+    </p>
+  );
+}
+
+/** A file that would replace details staff typed in the app: whose, what, and the tick that
+ *  lets it (§11.4). Without the tick Import waits; the other way is a corrected file. */
+function HandEdits({ handEdits, words, checked, onChange }) {
+  const said = handEditWords(handEdits, words);
+  return (
+    <div className="c-callout flex-col mb-2" style={{ gap: 8 }} data-testid="hand-edits">
+      <p className="c-s14 c-t1">{said.lead}</p>
+      {said.names.length > 0 ? <SomeNames names={said.names} total={handEdits.entries} /> : null}
+      <Tick checked={checked} onChange={onChange}>
+        {said.tick}
+      </Tick>
+      <p className="c-s13 c-t2">Or correct your file and import it again.</p>
+    </div>
   );
 }
 
@@ -845,7 +890,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
                     : `${count(importedColumnCount(preview.columns, mapping))} of ${count(preview.columns.length)} columns matched`
               }
               sub={preview.needsMapping ? 'Pick which column is which' : null}
-              action={columnsOpen ? 'Hide' : 'Check'}
+              action={columnsOpen ? 'Hide columns' : 'See columns'}
               onAction={() => setColumnsOpen((o) => !o)}
             />
             {dates.map((d) => (
@@ -878,16 +923,14 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
               <Line
                 icon={AlertTriangle}
                 tone="plain"
-                title={`${count(skipped)} ${skipped === 1 ? 'row' : 'rows'} skipped`}
-                action={why === 'skipped' ? 'Hide' : 'Why?'}
+                title={skippedTitle(skipped)}
+                action={why === 'skipped' ? 'Hide' : 'See which'}
                 onAction={() => setWhy((open) => (open === 'skipped' ? null : 'skipped'))}
                 detail={
                   why === 'skipped' ? (
-                    <ul className="flex flex-col gap-0.5">
+                    <ul className="flex flex-col gap-1">
                       {preview.skipped.slice(0, 20).map((s) => (
-                        <li key={s.row}>
-                          Row {s.row}: {skipWords(s.reason)}
-                        </li>
+                        <li key={s.row}>{skippedLine(s)}</li>
                       ))}
                       {skipped > 20 ? <li>and {count(skipped - 20)} more</li> : null}
                     </ul>
@@ -975,11 +1018,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
 
         {!preview.needsMapping ? (
           <div className="flex flex-col gap-1">
-            {handEdits.entries > 0 ? (
-              <Tick checked={handTick} onChange={setHandTick} tone="warn">
-                Replace what staff typed for {count(handEdits.entries)} {handEdits.entries === 1 ? 'person' : 'people'} ({handEdits.fields.join(', ')})
-              </Tick>
-            ) : null}
+            {handEdits.entries > 0 ? <HandEdits handEdits={handEdits} words={words} checked={handTick} onChange={setHandTick} /> : null}
             <Tick checked={permission} onChange={setPermission}>
               {MEMBER_LIST_PERMISSION_WORDS.replace('{gym}', gym?.name ?? 'your gym').replace('{people}', words.people)}
             </Tick>

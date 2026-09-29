@@ -21,6 +21,7 @@ import {
   isLargeMemberListChange,
   MEMBER_LIST_EXTRA_FIELD_PREFIX,
   MEMBER_LIST_FIELD_WORDS,
+  MEMBER_LIST_HAND_EDIT_NAMES_SHOWN,
   MEMBER_LIST_MOST_OF_LIST_SHARE,
   type MemberListChangeCounts,
   type MemberListExtraChange,
@@ -294,6 +295,9 @@ export interface Reconciled {
    *  `returning`, because losing a correction on a record coming back is the same
    *  loss. `entries: 0` is the ordinary case and needs no tick. */
   handEdits: MemberListHandEdits;
+  /** Whose corrections those are, their names on the list in the file's order (the first
+   *  `MEMBER_LIST_HAND_EDIT_NAMES_SHOWN`): for the preview's tick only, never stored. */
+  handEditNames: string[];
   /** The gym's own app members who would be marked as having dropped off. */
   membersLeaving: ReconciledPerson[];
   counts: MemberListChangeCounts;
@@ -715,6 +719,7 @@ export function reconcile(input: ReconcileInput): Reconciled {
   const extraCounts = new Map<string, { label: string; count: number }>();
   const editedFields = new Set<string>();
   let editedEntries = 0;
+  const editedNames: string[] = [];
 
   /** What this file would write over that a member of staff typed in (§11.4), counted
    *  for one record. NAMES ONLY: the entry says WHICH fields were edited and this asks
@@ -734,7 +739,10 @@ export function reconcile(input: ReconcileInput): Reconciled {
       editedFields.add(field.label);
       any = true;
     }
-    if (any) editedEntries += 1;
+    if (!any) return;
+    editedEntries += 1;
+    // The name the list knows them by: the tick says whose typing goes.
+    if (editedNames.length < MEMBER_LIST_HAND_EDIT_NAMES_SHOWN) editedNames.push(entry.fullName);
   };
 
   for (const [at, row] of rows.entries()) {
@@ -959,6 +967,7 @@ export function reconcile(input: ReconcileInput): Reconciled {
     fieldChanges,
     extraChanges,
     handEdits,
+    handEditNames: editedNames,
     membersLeaving,
     counts,
     statuses: statusBreakdown({ rows, entries: current }, { new: fresh, changed, unchanged, gone }),
