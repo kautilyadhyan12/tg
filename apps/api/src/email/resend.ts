@@ -45,6 +45,9 @@ export interface InviteEmail extends EmailMessage {
   /** Resend tags, returned on every webhook about this email: they name the send row, so
    *  a report finds its email even before Resend's id for it is known. */
   tags: { name: string; value: string }[];
+  /** Where replies go, when not to the sender: a lead's follow-up goes to the gym's own
+   *  address (20c-v), since the sending address has no inbox. */
+  replyTo?: string;
 }
 
 /** What became of one invitation email. `sent` with a null id is a retry Resend
@@ -87,6 +90,7 @@ export function createResendInviteTransport(opts: { apiKey: string; fetchImpl?: 
             html: message.html,
             headers: message.headers,
             tags: message.tags,
+            ...(message.replyTo === undefined ? {} : { reply_to: message.replyTo }),
           }),
           signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
         });

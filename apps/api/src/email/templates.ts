@@ -2,6 +2,7 @@
 // HTML twin for the ones that render it. The two CODE emails carry no link at
 // all: a code is typed, never clicked, so there is nothing there to phish
 // with. The deletion-undo email carries exactly one link, to our own origin.
+import { leadFollowUpLetter, leadGreeting } from "@app/shared";
 import type { EmailMessage } from "./resend.js";
 
 const APP_NAME = "AI Home Gym";
@@ -84,6 +85,39 @@ export function memberInviteEmail(words: {
     `<p>${escapeHtml(lines.why)}</p>` +
     `<p style="color:#666;font-size:12px">${escapeHtml(lines.footer)}<br>${escapeHtml(lines.stop)} ${link(words.unsubscribeLink)}</p>`;
   return { to: words.to, subject: `You're a member of ${gym} — get the app`, text, html };
+}
+
+/** A lead's follow-up email `step`, sent by the app for the gym (Part 3 §16.3; ROADMAP
+ *  20c-v): the letter the lead's panel writes (`leadFollowUpLetter`), signed by the
+ *  gym, then who sent it, the gym's postal address and the Stop link. The name, gym
+ *  name and address arrive already cleaned (`cleanGymText`), so none can carry a link.
+ *  Null for a step that has no letter. */
+export function leadFollowUpEmail(words: {
+  to: string;
+  step: number;
+  firstName: string;
+  gymName: string;
+  postalAddress: string;
+  unsubscribeLink: string;
+}): EmailMessage | null {
+  const letter = leadFollowUpLetter(words.step, words.gymName);
+  if (letter === null) return null;
+  const gym = words.gymName;
+  const lines = {
+    why: `You're getting this because you asked ${gym} about joining and said they could email you.`,
+    footer: `Sent by ${APP_NAME} on behalf of ${gym}, ${words.postalAddress}.`,
+    stop: `Stop emails from ${gym} through ${APP_NAME}:`,
+  };
+  const body = [leadGreeting(words.firstName), ...letter.lines];
+  const text =
+    `${body.join("\n\n")}\n\n${gym}\n${words.postalAddress}\n\n` +
+    `${lines.why}\n${lines.footer}\n${lines.stop} ${words.unsubscribeLink}\n`;
+  const link = (href: string) => `<a href="${escapeHtml(href)}">${escapeHtml(href)}</a>`;
+  const html =
+    body.map((line) => `<p>${escapeHtml(line)}</p>`).join("") +
+    `<p>${escapeHtml(gym)}<br>${escapeHtml(words.postalAddress)}</p>` +
+    `<p style="color:#666;font-size:12px">${escapeHtml(lines.why)}<br>${escapeHtml(lines.footer)}<br>${escapeHtml(lines.stop)} ${link(words.unsubscribeLink)}</p>`;
+  return { to: words.to, subject: letter.subject, text, html };
 }
 
 /** Part 4 §5.2's Day-0 undo email: the one link, to our own restore page,

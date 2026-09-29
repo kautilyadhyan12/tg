@@ -149,7 +149,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 5b-v-c. [x] **A person's page** — merged 2026-09-28 (PR #129).
        - 5b-v-d. **Import, who has left** (§18.8, was 5b-iii-b), split 2026-09-28 in two:
         - 5b-v-d-i. [x] **Who has left, on the card as it was** — merged 2026-09-29 (PR #131).
-        - 5b-v-d-ii. [ ] **Upload and Review restyled** in the console's look (§17), every step, line and tick kept.
+        - 5b-v-d-ii. [x] **Upload and Review restyled** — merged 2026-09-29 (PR #133).
         - 5b-v-d-iii. [ ] **Each warning says which rows** (Kd at 5b-v-d-ii's click-through: *"asking to check but no option to check or correct or see what is even wrong"*): every Review warning that counts rows (unusual phones, broken names, dates not read, shared emails, cells cut) lists them — row, name, what was read — and how to fix it. Next in Folder A after 5b-v-d-ii (Kd, 2026-09-29: *"yes"*).
      - 5b-iv. [ ] **Possible duplicates** (RULINGS 2026-09-25): records alike by name, phone or member number listed as pairs ("2 people may be on your list twice · Review"), each opened side by side; Merge or "Different people" (remembered); never merged by the app.
      - 5b-vi. [ ] **Member photos** (Kd, RULINGS 2026-09-28): the photo a member adds in the app, small and round on each Members row and on their page, initials when there is none; only their own gym's staff see it, and not after they leave. Needs Stage 4 item 4 (photo storage); the check-in screen (16a) shows it once both are built.
@@ -207,7 +207,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 20c-iv. **Each gym's own page with its lead form** (RULINGS 2026-09-25): split 2026-09-28 in two (RULINGS that day).
        - 20c-iv-a. [x] **The gym's page, its facilities and the enquiry form** — merged 2026-09-28 (PR #128).
        - 20c-iv-b. [x] **Photos on the gym's page** — merged 2026-09-29 (PR #130).
-     - 20c-v. [ ] **"Send them for me"** (RULINGS 2026-09-27): a Settings switch; the app sends the three follow-ups itself through the invitations' checks, caps and unsubscribe, for at most 100 leads a gym a month on every plan, then the reminders again. After 20c-ii.
+     - 20c-v. **"Send them for me"** (RULINGS 2026-09-27): split 2026-09-29 in two, as 3b-i was (RULINGS that day; the line as first written is in `archive/records/ROADMAP-stories.md`).
+       - 20c-v-a. [x] **The switch, and the emails go** — merged 2026-09-29 (PR #132).
+       - 20c-v-b. [ ] **What comes back**: Resend's bounce and complaint reports on these emails, acted on as for invitations and counted in the gym's stop. Built before any real gym switches 20c-v-a on (RULINGS 2026-09-29).
    - 20d. [ ] **At risk, and the owner's weekly summary** — it takes the place of item 2's "slipping away"; it reads visits (after 16a).
 21. **Reports** (RULINGS 2026-09-22; spec Part 3 §16.5) — it takes in item 12's reports. Opus xhigh (a rule that thresholds, other people's data).
    - 21a. [ ] **Members and attendance**: active, new, left, churn, retention, average stay; visits by day and week, busiest hours, visits a member, how full classes are, no-shows; every figure with how it is worked out; "not enough data yet" before three full months; the CSV; the cost measured at 2,000 members.

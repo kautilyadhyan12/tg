@@ -165,8 +165,9 @@ function NotesBox({ value, onChange, disabled }) {
 }
 
 /** The follow-up emails (20c-ii): which is due and when, "Email Priya", which opens the
- *  gym's own email program with the words written, and "Mark as sent". Nothing is sent
- *  by the app. */
+ *  gym's own email program with the words written, and "Mark as sent". With "Send them
+ *  for me" on (20c-v) it says when the app sends it instead, and has no buttons; when
+ *  the app could not send one, it says why and the buttons come back. */
 function FollowUpBox({ lead, gym, readOnly, busy, working, onMark }) {
   const state = followUpState(lead);
   if (state === null) return null;
@@ -177,6 +178,7 @@ function FollowUpBox({ lead, gym, readOnly, busy, working, onMark }) {
       <div className="flex flex-col gap-0.5">
         <p className="c-s15 c-w6 c-t1">{state.headline}</p>
         {state.sentLine !== null ? <p className="c-s14 c-t2">{state.sentLine}</p> : null}
+        {state.note ? <p className="c-s14 c-t2">{state.note}</p> : null}
       </div>
       {email !== null ? (
         <>

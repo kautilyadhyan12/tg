@@ -14,11 +14,14 @@ import {
   leadFileCheckRequestSchema,
   leadFollowUpSentRequestSchema,
   leadsQuerySchema,
+  updateLeadEmailSettingsRequestSchema,
   updateLeadRequestSchema,
 } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
+import type { InviteSettings } from "../invites/settings.js";
 import { leadParamsSchema, orgParamsSchema } from "../schemas.js";
+import * as emailSettings from "./emailSettings.js";
 import * as fileService from "./fileService.js";
 import * as service from "./service.js";
 
@@ -54,10 +57,17 @@ function requireUserId(req: FastifyRequest): string {
 export interface LeadRouteDeps {
   sql: Sql;
   redis: RedisLike;
+  invites: InviteSettings | null;
 }
 
 export function registerLeadRoutes(app: FastifyInstance, deps: LeadRouteDeps): void {
-  const leadDeps: service.LeadsDeps = { sql: deps.sql, now: () => new Date() };
+  const invites = deps.invites;
+  const leadDeps: service.LeadsDeps = {
+    sql: deps.sql,
+    now: () => new Date(),
+    addressKey: invites?.hmacKey ?? null,
+    sending: invites === null || invites.sender === null ? "off" : invites.paused ? "paused" : "on",
+  };
 
   /** Reads follow a search box (one read after each pause in typing): the member
    *  list's read allowance. */
@@ -195,6 +205,26 @@ export function registerLeadRoutes(app: FastifyInstance, deps: LeadRouteDeps): v
     const done = await service.deleteLead(leadDeps, requireUserId(req), params.gymId, params.leadId, writeGate(req, reply));
     if (done === null) return;
     return reply.status(204).send();
+  });
+
+  /** Settings → Follow-up emails to leads (20c-v): the owner's "Send them for me". A
+   *  static path, so it is never read as a lead's id. */
+  app.get("/v1/orgs/:gymId/leads/email-settings", signedIn, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const settings = await emailSettings.readEmailSettings(leadDeps, requireUserId(req), params.gymId, readGate(req, reply));
+    if (settings === null) return;
+    return reply.status(200).send({ settings });
+  });
+
+  app.put("/v1/orgs/:gymId/leads/email-settings", signedIn, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(updateLeadEmailSettingsRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const settings = await emailSettings.writeEmailSettings(leadDeps, requireUserId(req), params.gymId, body, writeGate(req, reply));
+    if (settings === null) return;
+    return reply.status(200).send({ settings });
   });
 
   /** A follow-up email sent from the gym's own mailbox (20c-ii). The same request

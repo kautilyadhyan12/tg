@@ -10,6 +10,8 @@ import {
   LEAD_JOIN_CHOOSE_ERROR,
   LEAD_JOIN_MAX_CANDIDATES,
   LEAD_JOIN_STALE_ERROR,
+  LEAD_EMAIL_NOT_SENT,
+  LEAD_EMAILS_PER_MONTH,
   LEAD_FOLLOW_UPS,
   LEAD_WORDS,
   LEADS_MAX_PER_GYM,
@@ -21,6 +23,7 @@ import {
   type JoinLeadResponse,
   type Lead,
   type LeadFollowUpSentRequest,
+  type LeadEmailNotSent,
   type LeadEnquiry,
   type LeadJoinCandidate,
   type LeadStatus,
@@ -37,6 +40,10 @@ import { applyTyped, EMPTY_VALUES, holdsCard } from "../memberList/byHand.js";
 import { placeLeadInTx } from "../memberList/byHandService.js";
 import { entryFor, lockGym } from "../memberList/repo.js";
 import { readCountry } from "../memberList/phone.js";
+import { emailHmac } from "../invites/address.js";
+import { heldAddresses } from "../invites/repo.js";
+import { gymNameForEmail } from "../invites/gymText.js";
+import * as emailsRepo from "./emailsRepo.js";
 import { followUpDueOn } from "./followUp.js";
 import { leadJoinDecision, sharesContact, type ListRecord } from "./joinRule.js";
 import * as repo from "./repo.js";
@@ -44,14 +51,150 @@ import * as repo from "./repo.js";
 export interface LeadsDeps {
   sql: Sql;
   now: () => Date;
+  /** The key addresses are kept under (the invitations'), to find who asked a gym to
+   *  stop emailing them; null while invitations are off. */
+  addressKey: Buffer | null;
+  /** Whether emails through the app can go at all, by the invitations' settings: "paused"
+   *  by the operator's kill switch, "off" when sending is not set up. The worker sends
+   *  leads' follow-ups only when it is "on", so only then are they the app's. */
+  sending: "on" | "paused" | "off";
 }
 
 type Limit = () => Promise<boolean>;
 
 const notFound = (): OrgsError => new OrgsError(404, "lead_not_found", LEAD_WORDS.lead_not_found);
 
+/** Who sends a lead's next follow-up (20c-v), when the app sends it, why the app did not,
+ *  and when the person asked the gym to stop emailing them. */
+export interface LeadSendingView {
+  by: "app" | "you" | null;
+  appWhen: "today" | "tomorrow" | "waiting" | null;
+  notSent: LeadEmailNotSent | null;
+  optedOutAt: Date | null;
+}
+
+const NOBODY_SENDING: LeadSendingView = { by: null, appWhen: null, notSent: null, optedOutAt: null };
+
+const notSentSchema = z.enum(LEAD_EMAIL_NOT_SENT);
+
+/** Who sends a due follow-up. With the switch on (`app.on`: the gym able to send, and
+ *  emails through the app going), the app takes a lead it has already emailed under
+ *  this tick, or any lead while the month has room, unless its try at this very email
+ *  ended without sending; staff send the rest. The list's "Email due" asks the same in
+ *  SQL (`staffDueCondition`). */
+export function whoSends(
+  dueOn: string | null,
+  app: { on: boolean; roomLeft: boolean },
+  state: emailsRepo.LeadSendState | undefined,
+): { by: "app" | "you" | null; notSent: LeadEmailNotSent | null } {
+  if (dueOn === null) return { by: null, notSent: null };
+  const next = state?.next ?? null;
+  const ended = next !== null && (next.state === "skipped" || (next.state === "failed" && next.reason !== "send_unknown"));
+  let notSent: LeadEmailNotSent | null = null;
+  if (ended) {
+    const word = notSentSchema.safeParse(next.reason);
+    notSent = next.state === "skipped" && word.success ? word.data : "could_not_send";
+  }
+  const takes = app.on && !ended && (app.roomLeft || state?.continuing === true);
+  return { by: takes ? "app" : "you", notSent };
+}
+
+/** When the app sends a due follow-up it takes: later today; tomorrow morning, after its
+ *  sending hours; or it is waiting — held for another try, or its day passed in the
+ *  sending hours without it going. Null when it is not due yet (its day is said). */
+export function appWhen(
+  dueOn: string | null,
+  today: string,
+  localHour: number,
+  state: emailsRepo.LeadSendState | undefined,
+): "today" | "tomorrow" | "waiting" | null {
+  if (dueOn === null || dueOn > today) return null;
+  if (state?.next?.state === "queued") return "waiting";
+  if (localHour >= emailsRepo.SENDING_HOURS.until) return "tomorrow";
+  if (dueOn < today && localHour >= emailsRepo.SENDING_HOURS.from) return "waiting";
+  return "today";
+}
+
+/** Whether the app is sending this gym's follow-ups now, whether its month has room, and
+ *  the gym's hour. */
+export interface AppSending {
+  on: boolean;
+  roomLeft: boolean;
+  localHour: number;
+}
+
+export function appSending(gym: emailsRepo.GymSendingFacts | null, sending: LeadsDeps["sending"]): AppSending {
+  if (gym === null) return { on: false, roomLeft: false, localHour: 0 };
+  const on =
+    sending === "on" &&
+    gym.sendForMe &&
+    gym.replyTo !== null &&
+    gym.hasPostalAddress &&
+    !gym.stopped &&
+    gym.active &&
+    gym.onPlan &&
+    gymNameForEmail(gym.name) !== "";
+  return { on, roomLeft: gym.usedThisMonth < LEAD_EMAILS_PER_MONTH, localHour: gym.localHour };
+}
+
+/** The sending view of each of these leads, read in four statements whatever their number. */
+async function sendingViews(
+  deps: LeadsDeps,
+  gymId: string,
+  rows: readonly repo.LeadRow[],
+  app: AppSending,
+  today: string,
+): Promise<Map<string, LeadSendingView>> {
+  const due = rows.filter((row) => row.followUpDueOn !== null);
+  const states = await emailsRepo.leadSendStates(
+    deps.sql,
+    gymId,
+    due.map((row) => row.id),
+  );
+  const members = await heldAddresses(
+    deps.sql,
+    gymId,
+    due.flatMap((row) => (row.email === null ? [] : [row.email])),
+  );
+  const key = deps.addressKey;
+  const hmacs = new Map<string, string>();
+  if (key !== null) for (const row of rows) if (row.email !== null) hmacs.set(row.id, emailHmac(key, row.email));
+  const stops = await emailsRepo.addressStops(deps.sql, gymId, [...new Set(hmacs.values())]);
+  return new Map(
+    rows.map((row) => {
+      const hmac = hmacs.get(row.id);
+      const stop = hmac === undefined ? undefined : stops.get(hmac);
+      const state = states.get(row.id);
+      let { by, notSent } = whoSends(row.followUpDueOn, app, state);
+      // An address the app's own check refuses (stopped, bounced, or on the member list)
+      // is staff's from now, not from the worker's next try, and the panel says why.
+      if (by === "app" && stop !== undefined) {
+        by = "you";
+        notSent = stop.reason;
+      } else if (by === "app" && row.email !== null && members.has(row.email.toLowerCase())) {
+        by = "you";
+        notSent = "on_member_list";
+      }
+      const view: LeadSendingView = {
+        by,
+        appWhen: by === "app" ? appWhen(row.followUpDueOn, today, app.localHour, state) : null,
+        notSent,
+        optedOutAt: stop?.optedOutAt ?? null,
+      };
+      return [row.id, view];
+    }),
+  );
+}
+
+/** One lead as a reply shows it, with who sends its next follow-up. */
+async function leadWithSending(deps: LeadsDeps, gymId: string, row: repo.LeadRow, today: string): Promise<Lead> {
+  const app = appSending(await emailsRepo.gymSendingFacts(deps.sql, gymId, deps.now()), deps.sending);
+  const views = await sendingViews(deps, gymId, [row], app, today);
+  return toLead(row, today, views.get(row.id));
+}
+
 /** `today` is the gym's day, which says whether a follow-up is due now. */
-export function toLead(row: repo.LeadRow, today: string): Lead {
+export function toLead(row: repo.LeadRow, today: string, sending: LeadSendingView = NOBODY_SENDING): Lead {
   return {
     id: row.id,
     fullName: row.fullName,
@@ -72,6 +215,10 @@ export function toLead(row: repo.LeadRow, today: string): Lead {
       dueNow: row.followUpDueOn !== null && row.followUpDueOn <= today,
       overdue: row.followUpDueOn !== null && row.followUpDueOn < today,
       lastSentAt: row.followUpLastAt === null ? null : row.followUpLastAt.toISOString(),
+      by: sending.by,
+      appWhen: sending.appWhen,
+      notSent: sending.notSent,
+      optedOutAt: sending.optedOutAt === null ? null : sending.optedOutAt.toISOString(),
     },
     enquiredAt: row.enquiredAt === null ? null : row.enquiredAt.toISOString(),
   };
@@ -185,6 +332,7 @@ export async function listLeads(
     if (cursor === null) throw new OrgsError(400, "validation_error", "cursor: not a cursor");
   }
   const typed = (query.q ?? "").trim();
+  const app = appSending(await emailsRepo.gymSendingFacts(deps.sql, gymId, deps.now()), deps.sending);
   const [page, counts] = await Promise.all([
     repo.leadsPage(deps.sql, {
       gymId,
@@ -192,15 +340,17 @@ export async function listLeads(
       like: typed === "" ? null : `%${escapeLike(typed)}%`,
       digits: phoneDigits(typed),
       dueBy: query.followUp === "due" ? today : null,
+      app,
       cursor,
       limit: LEADS_PAGE + 1,
     }),
-    repo.leadCounts(deps.sql, gymId, today),
+    repo.leadCounts(deps.sql, gymId, today, app),
   ]);
   const shown = page.rows.slice(0, LEADS_PAGE);
   const last = page.rows.length > LEADS_PAGE ? shown[shown.length - 1] : undefined;
+  const views = await sendingViews(deps, gymId, shown, app, today);
   return {
-    leads: shown.map((row) => toLead(row, today)),
+    leads: shown.map((row) => toLead(row, today, views.get(row.id))),
     total: page.total,
     cursor: last === undefined ? null : encodeCursor({ at: last.cursorAt, id: last.id }),
     counts,
@@ -212,7 +362,7 @@ export async function getLead(deps: LeadsDeps, userId: string, gymId: string, le
   if (!(await limit())) return null;
   const row = await repo.leadFor(deps.sql, gymId, leadId);
   if (row === null) throw notFound();
-  return toLead(row, dayInTz(deps.now(), org.timezone));
+  return await leadWithSending(deps, gymId, row, dayInTz(deps.now(), org.timezone));
 }
 
 /** The messages a lead sent through the gym page's form, newest first (20c-iv-a). */
@@ -302,7 +452,7 @@ export async function createLead(
     });
     return inserted;
   }));
-  return toLead(row, dayInTz(at, org.timezone));
+  return await leadWithSending(deps, gymId, row, dayInTz(at, org.timezone));
 }
 
 export async function updateLead(
@@ -362,7 +512,7 @@ export async function updateLead(
     });
     return written;
   }));
-  return toLead(row, dayInTz(at, org.timezone));
+  return await leadWithSending(deps, gymId, row, dayInTz(at, org.timezone));
 }
 
 /** Staff sent follow-up `step` from the gym's own mailbox to `email`. Counted only as
@@ -384,6 +534,10 @@ export async function markFollowUpSent(
     const stored = await repo.lockLead(tx, gymId, leadId);
     if (stored === null) throw notFound();
     if (stored.followUpsSent >= body.step) return stored;
+    // The app is sending this very email (20c-v): marking it too would mean two.
+    if (await emailsRepo.appHasStep(tx, gymId, leadId, body.step)) {
+      throw new OrgsError(409, "follow_up_sent_for_you", LEAD_WORDS.follow_up_sent_for_you);
+    }
     const status = leadStatusSchema.parse(stored.status);
     const due = followUpValues(
       { status, emailOkAt: stored.emailOkAt, sent: stored.followUpsSent, lastAt: stored.followUpLastAt },
@@ -427,7 +581,7 @@ export async function markFollowUpSent(
     });
     return written;
   });
-  return toLead(row, today);
+  return await leadWithSending(deps, gymId, row, today);
 }
 
 export async function deleteLead(deps: LeadsDeps, userId: string, gymId: string, leadId: string, limit: Limit): Promise<boolean | null> {

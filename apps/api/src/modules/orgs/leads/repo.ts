@@ -2,6 +2,7 @@
 // WHERE; a lead id is never looked up on its own.
 import type { Sql, TransactionSql } from "postgres";
 import type { LeadCounts, LeadSource, LeadStatus } from "@app/shared";
+import { staffDueCondition } from "./emailsRepo.js";
 import type { ListRecord } from "./joinRule.js";
 
 type SqlOrTx = Sql | TransactionSql;
@@ -219,7 +220,8 @@ export interface LeadsPageRow extends LeadRow {
 
 /** Newest first. `like` is an escaped ILIKE pattern for the name and email; `digits`
  *  the digits of a phone search (at least four), or null; `dueBy` the gym's today when
- *  only leads due a follow-up are wanted. */
+ *  only leads due a follow-up from staff are wanted — not those the app sends (`app`,
+ *  20c-v). */
 export async function leadsPage(
   sql: SqlOrTx,
   input: {
@@ -228,11 +230,13 @@ export async function leadsPage(
     like: string | null;
     digits: string | null;
     dueBy: string | null;
+    app: { on: boolean; roomLeft: boolean };
     cursor: LeadCursor | null;
     limit: number;
   },
 ): Promise<{ rows: LeadsPageRow[]; total: number }> {
   const { gymId, status, like, digits, dueBy, cursor } = input;
+  const due = dueBy === null ? sql`true` : staffDueCondition(sql, dueBy, input.app);
   const rows = await sql<(DbLead & { cursor_at: string })[]>`
     SELECT l.id, l.full_name, l.email, l.phone_e164, l.source, l.status, l.notes, l.email_ok_at, l.entry_id,
            (e.id IS NOT NULL AND e.former_at IS NULL) AS on_list, l.created_at, l.status_changed_at,
@@ -242,7 +246,7 @@ export async function leadsPage(
     LEFT JOIN gym_member_list_entries e ON e.gym_id = l.gym_id AND e.id = l.entry_id
     WHERE l.gym_id = ${gymId}
       AND (${status}::text IS NULL OR l.status = ${status}::text)
-      AND (${dueBy}::date IS NULL OR l.follow_up_due_on <= ${dueBy}::date)
+      AND ${due}
       AND ((${like}::text IS NULL AND ${digits}::text IS NULL)
            OR l.full_name ILIKE ${like}::text
            OR l.email::text ILIKE ${like}::text
@@ -259,7 +263,7 @@ export async function leadsPage(
     FROM gym_leads l
     WHERE l.gym_id = ${gymId}
       AND (${status}::text IS NULL OR l.status = ${status}::text)
-      AND (${dueBy}::date IS NULL OR l.follow_up_due_on <= ${dueBy}::date)
+      AND ${due}
       AND ((${like}::text IS NULL AND ${digits}::text IS NULL)
            OR l.full_name ILIKE ${like}::text
            OR l.email::text ILIKE ${like}::text
@@ -267,11 +271,16 @@ export async function leadsPage(
   return { rows: rows.map((row) => ({ ...toRow(row), cursorAt: row.cursor_at })), total: totals[0]?.n ?? 0 };
 }
 
-/** The gym's leads by status, and how many are due a follow-up by `today`. */
-export async function leadCounts(sql: SqlOrTx, gymId: string, today: string): Promise<LeadCounts> {
+/** The gym's leads by status, and how many are due a follow-up from staff by `today`. */
+export async function leadCounts(
+  sql: SqlOrTx,
+  gymId: string,
+  today: string,
+  app: { on: boolean; roomLeft: boolean },
+): Promise<LeadCounts> {
   const rows = await sql<{ status: string; n: number; due: number }[]>`
-    SELECT status, count(*)::int AS n, (count(*) FILTER (WHERE follow_up_due_on <= ${today}::date))::int AS due
-    FROM gym_leads WHERE gym_id = ${gymId} GROUP BY status`;
+    SELECT l.status, count(*)::int AS n, (count(*) FILTER (WHERE ${staffDueCondition(sql, today, app)}))::int AS due
+    FROM gym_leads l WHERE l.gym_id = ${gymId} GROUP BY l.status`;
   const counts: LeadCounts = { all: 0, new: 0, contacted: 0, on_trial: 0, joined: 0, lost: 0, followUpsDue: 0 };
   for (const row of rows) {
     counts.all += row.n;

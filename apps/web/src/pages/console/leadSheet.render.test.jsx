@@ -27,6 +27,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
 
 const { orgService } = await import('../../api/orgsApi');
 const LeadSheet = (await import('./LeadSheet')).default;
+const { SENT_FOR_YOU_NOTE } = await import('./leadsView');
 
 const GYM = '11111111-1111-4111-8111-111111111111';
 const ARJUN = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -526,5 +527,21 @@ describe('the follow-up emails (20c-ii): the gym sends them, the app reminds', (
     expect(screen.queryByRole('link', { name: 'Email Tom' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Email Tom' }).disabled).toBe(true);
     expect(screen.getByRole('button', { name: 'Mark email 1 as sent' }).disabled).toBe(true);
+  });
+
+  it('with "Send them for me" on, the panel says the app sends it and offers nothing to email or mark (20c-v)', async () => {
+    await open({ ...dueTom, followUp: { ...dueTom.followUp, by: 'app', notSent: null, optedOutAt: null } });
+    expect(screen.getByText('Email 1 of 3 will be sent for you today')).toBeTruthy();
+    expect(screen.getByText(SENT_FOR_YOU_NOTE)).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Email Tom' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Email Tom' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Mark email/ })).toBeNull();
+  });
+
+  it('when the app could not send it, the buttons come back with the reason', async () => {
+    await open({ ...dueTom, followUp: { ...dueTom.followUp, by: 'you', notSent: 'bounced', optedOutAt: null } });
+    expect(screen.getByText('Not sent for you: emails to this address bounce.')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Email Tom' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Mark email 1 as sent' })).toBeTruthy();
   });
 });

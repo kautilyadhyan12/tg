@@ -64,8 +64,80 @@ export const gymLeads = pgTable(
       "gym_leads_follow_up_due_check",
       sql`${t.followUpDueOn} IS NULL OR (${t.status} = 'new' AND ${t.emailOkAt} IS NOT NULL AND ${t.followUpsSent} < 3)`,
     ),
-    index("gym_leads_follow_up_due_idx").on(t.gymId, t.followUpDueOn).where(sql`${t.followUpDueOn} IS NOT NULL`),
+    index("gym_leads_follow_up_due_order_idx").on(t.gymId, t.followUpDueOn, t.createdAt, t.id).where(sql`${t.followUpDueOn} IS NOT NULL`),
     uniqueIndex("gym_leads_gym_id_uq").on(t.gymId, t.id),
+  ],
+);
+
+/** "Send them for me" (20c-v; `0051_lead_emails_sent_for_you.sql`): the gym's switch, and
+ *  where replies go, since the app's sending address has no inbox. */
+export const gymLeadEmailSettings = pgTable(
+  "gym_lead_email_settings",
+  {
+    gymId: uuid("gym_id")
+      .primaryKey()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    sendForMe: boolean("send_for_me").notNull().default(false),
+    replyTo: citext("reply_to"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check("gym_lead_email_settings_reply_to_check", sql`${t.replyTo} IS NULL OR length(${t.replyTo}) BETWEEN 3 AND 254`),
+    check("gym_lead_email_settings_on_check", sql`NOT ${t.sendForMe} OR ${t.replyTo} IS NOT NULL`),
+  ],
+);
+
+/** Each follow-up the app takes (20c-v): one row per lead, tick and step, whatever
+ *  became of it. The foreign key `(gym_id, lead_id)` → the lead, ON DELETE SET NULL
+ *  (lead_id), is written in `0051_lead_emails_sent_for_you.sql`. The address is kept
+ *  only while the email is being sent (a CHECK); its HMAC stays for the unsubscribe
+ *  link. */
+export const gymLeadSends = pgTable(
+  "gym_lead_sends",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    leadId: uuid("lead_id"),
+    okAt: timestamp("ok_at", { withTimezone: true }).notNull(),
+    step: smallint("step").notNull(),
+    month: text("month").notNull(),
+    counted: boolean("counted").notNull(),
+    email: citext("email"),
+    emailHmac: text("email_hmac").notNull(),
+    state: text("state").notNull().default("sending"),
+    reason: text("reason"),
+    attempts: integer("attempts").notNull().default(1),
+    notBefore: timestamp("not_before", { withTimezone: true }).notNull(),
+    leaseUntil: timestamp("lease_until", { withTimezone: true }),
+    maybeSentAt: timestamp("maybe_sent_at", { withTimezone: true }),
+    providerId: text("provider_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("gym_lead_sends_step_uq").on(t.leadId, t.okAt, t.step),
+    index("gym_lead_sends_lead_idx").on(t.gymId, t.leadId, t.okAt),
+    index("gym_lead_sends_due_idx").on(t.notBefore, t.id).where(sql`${t.state} IN ('queued','sending')`),
+    index("gym_lead_sends_month_idx").on(t.gymId, t.month).where(sql`${t.counted}`),
+    index("gym_lead_sends_sent_idx").on(t.finishedAt).where(sql`${t.state} = 'sent'`),
+    check("gym_lead_sends_step_check", sql`${t.step} BETWEEN 1 AND 3`),
+    check("gym_lead_sends_month_check", sql`${t.month} ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'`),
+    check("gym_lead_sends_email_hmac_check", sql`${t.emailHmac} ~ '^[0-9a-f]{64}$'`),
+    check("gym_lead_sends_state_check", sql`${t.state} IN ('queued','sending','sent','skipped','failed')`),
+    check("gym_lead_sends_email_check", sql`${t.state} IN ('queued','sending') OR ${t.email} IS NULL`),
+    check("gym_lead_sends_email_length_check", sql`${t.email} IS NULL OR length(${t.email}) <= 254`),
+    check("gym_lead_sends_lease_check", sql`(${t.state} = 'sending') = (${t.leaseUntil} IS NOT NULL)`),
+    check("gym_lead_sends_finished_check", sql`(${t.state} IN ('sent','skipped','failed')) = (${t.finishedAt} IS NOT NULL)`),
+    check("gym_lead_sends_reason_check", sql`(${t.state} IN ('skipped','failed')) = (${t.reason} IS NOT NULL)`),
+    check("gym_lead_sends_reason_shape_check", sql`${t.reason} IS NULL OR ${t.reason} ~ '^[a-z_]{1,40}$'`),
+    check("gym_lead_sends_provider_check", sql`${t.providerId} IS NULL OR (${t.state} = 'sent' AND length(${t.providerId}) <= 100)`),
+    check("gym_lead_sends_attempts_check", sql`${t.attempts} >= 0`),
+    check(
+      "gym_lead_sends_counted_check",
+      sql`NOT ${t.counted} OR ${t.state} IN ('queued','sending','sent') OR ${t.reason} = 'send_unknown'`,
+    ),
   ],
 );
 

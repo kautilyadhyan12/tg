@@ -28,6 +28,7 @@ import { cachedMailDomainCheck, systemResolver } from "./modules/orgs/invites/ma
 import { operatorTeller } from "./modules/orgs/invites/operatorNote.js";
 import { processInviteResults } from "./modules/orgs/invites/results.js";
 import { devInviteTransport, sendDueInvites } from "./modules/orgs/invites/sender.js";
+import { sendDueLeadEmails } from "./modules/orgs/leads/sender.js";
 import { inviteSettings } from "./modules/orgs/invites/settings.js";
 import { archiveLapsedGyms } from "./modules/orgs/archiveSweep.js";
 import { fillClassSessionsJob } from "./modules/orgs/classes/fill.js";
@@ -407,6 +408,22 @@ if (invites === null || inviteSender === null) {
       });
       if (run.sent + run.skipped + run.failed + run.retried + run.held > 0 || run.capped || run.stoppedByProvider) {
         log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
+      }
+      // Leads' follow-ups for the gyms that switched "Send them for me" on (20c-v), after
+      // the invitations and under the same caps, kill switch and sender.
+      const leadsStartedAt = Date.now();
+      const leads = await sendDueLeadEmails({
+        sql,
+        log,
+        settings: invites,
+        sender: inviteSender,
+        transport: inviteTransport,
+        mailDomain,
+        now: () => new Date(),
+        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      });
+      if (leads.sent + leads.skipped + leads.dropped + leads.failed + leads.retried + leads.held > 0 || leads.capped || leads.stoppedByProvider) {
+        log.info({ ...leads, durationMs: Date.now() - leadsStartedAt, event: "job.finished", job: "invites.lead_follow_ups" }, "job finished");
       }
     },
     { connection },
