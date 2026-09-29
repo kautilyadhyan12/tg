@@ -283,7 +283,8 @@ async function startRazorpayCheckout(
       if (fetched.kind === "unavailable") throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
       if (fetched.kind === "ok" && fetched.value.status === "created") {
         const plan = await razorpay.api.getPlan(fetched.value.plan_id);
-        if (plan.kind === "ok") return razorpayResponse(razorpay, checkout.id, fetched.value.id, plan.value.item.name);
+        const contact = await repo.gymBillingMobile(deps.sql, input.gymId);
+        if (plan.kind === "ok") return razorpayResponse(razorpay, checkout.id, fetched.value.id, plan.value.item.name, contact);
       }
     }
     throw replayRefusal(checkout);
@@ -333,11 +334,19 @@ async function startRazorpayCheckout(
     await razorpay.api.cancelSubscriptionNow(sub.id);
     throw new OrgsError(409, "checkout_replaced", "That payment window has closed. Press Subscribe again.");
   }
-  return razorpayResponse(razorpay, checkoutId, sub.id, plan.item.name);
+  return razorpayResponse(razorpay, checkoutId, sub.id, plan.item.name, await repo.gymBillingMobile(deps.sql, input.gymId));
 }
 
-function razorpayResponse(razorpay: RazorpaySettings, checkoutId: string, subscriptionId: string, description: string): OrgCheckoutResponse {
-  return { checkoutId, provider: "razorpay", keyId: razorpay.keyId, subscriptionId, description: description.slice(0, 200) || "Monthly plan" };
+/** The window's details. `contact` is the owner's mobile for payments, for Razorpay's window to
+ *  fill in (Kd, RULINGS 2026-09-29); only billing staff, who alone may open a checkout, get it. */
+function razorpayResponse(
+  razorpay: RazorpaySettings,
+  checkoutId: string,
+  subscriptionId: string,
+  description: string,
+  contact: string | null,
+): OrgCheckoutResponse {
+  return { checkoutId, provider: "razorpay", keyId: razorpay.keyId, subscriptionId, description: description.slice(0, 200) || "Monthly plan", contact };
 }
 
 /** A trial checkout's own price: exactly the days asked for, marked with the plan's code. */

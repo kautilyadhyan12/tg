@@ -1,6 +1,7 @@
 import { useMemo, useState, useSyncExternalStore } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
+import { normaliseIndianMobile } from '@app/shared';
 import Select from '../../components/common/Select';
 import JoinCodeCard from '../../components/console/JoinCodeCard';
 import PlanModal from '../../components/console/PlanModal';
@@ -115,6 +116,9 @@ export default function NewGym() {
   // rate than the one that was already rejected. Empty, and `canSubmit` below
   // holds the button until a person chooses.
   const [country, setCountry] = useState('');
+  // An Indian gym's owner's mobile, for its payments only (ROADMAP 1d-i; Kd, RULINGS
+  // 2026-09-29): Razorpay's window is given it, so it asks nothing.
+  const [mobile, setMobile] = useState('');
   // Prefilled from the device (§4.0 step 1) — and `timezoneOptions` guarantees
   // whatever it detected is in the list, so the prefill cannot be silently
   // replaced by the first alphabetical zone.
@@ -154,7 +158,9 @@ export default function NewGym() {
   const { signingOut, signOut } = useConsoleSignOut();
   const words = orgWords(orgType);
 
-  const canSubmit = name.trim() !== '' && country !== '' && timezone.trim() !== '' && !submitting;
+  const inIndia = country === 'IN';
+  const mobileOk = !inIndia || normaliseIndianMobile(mobile) !== null;
+  const canSubmit = name.trim() !== '' && country !== '' && timezone.trim() !== '' && mobileOk && !submitting;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -171,6 +177,7 @@ export default function NewGym() {
         orgType,
         country,
         timezone: timezone.trim(),
+        ...(inIndia ? { billingMobile: mobile } : {}),
       });
       // THE CONSOLE HAS TO BE TOLD, AND THIS IS THE ONLY PLACE THAT CAN TELL IT
       // (T3 C/H-1). Every console screen reads one kept answer to "which gyms do
@@ -356,6 +363,28 @@ export default function NewGym() {
               style={inputStyle}
             />
           </Field>
+
+          {inIndia ? (
+            <Field label="Your mobile number" hint="For your payments only: Razorpay uses it to message you about them. Your staff and members never see it.">
+              <input
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                value={mobile}
+                onChange={(e) => setMobile(e.target.value)}
+                maxLength={40}
+                placeholder="98765 43210"
+                aria-label="Your mobile number"
+                className="w-full rounded-xl px-4 py-3 text-sm"
+                style={inputStyle}
+              />
+              {mobile.trim() !== '' && !mobileOk ? (
+                <span className="block text-xs mt-1.5" style={{ color: '#FF8A1F' }} data-testid="mobile-check">
+                  Check the number: 10 digits, starting with 6, 7, 8 or 9.
+                </span>
+              ) : null}
+            </Field>
+          ) : null}
 
           <Field label="Timezone" hint="Your daily figures use this.">
             {zones.length > 0 ? (

@@ -210,6 +210,35 @@ function isValidLocale(tag: string): boolean {
   }
 }
 
+/** AN INDIAN GYM OWNER'S MOBILE NUMBER, for the gym's payments (ROADMAP 1d-i; Kd, RULINGS
+ *  2026-09-29): given to Razorpay so its window asks nothing, as apps that sign in by mobile
+ *  do. Stored as `+91` and the ten digits. */
+export const INDIAN_MOBILE_E164 = /^\+91[6-9]\d{9}$/;
+
+/** A mobile number as people type it — "98765 43210", "+91 98765-43210", "098765 43210",
+ *  "91 9876543210", "0091…" — to `+919876543210`, or null when it is not an Indian mobile:
+ *  ten digits starting 6, 7, 8 or 9 (TRAI's mobile numbering), after at most one `+91`,
+ *  `0091`, `91` or `0` in front. Spaces, dashes, dots and brackets are ignored; any other
+ *  character is not a number. */
+export function normaliseIndianMobile(typed: string): string | null {
+  const trimmed = typed.trim();
+  if (!/^[\d\s\-.()+]+$/.test(trimmed)) return null;
+  // At most one `+`, and only before every digit ("(+91) 98765 43210").
+  const plus = trimmed.indexOf("+");
+  if (plus !== trimmed.lastIndexOf("+") || (plus >= 0 && /\d/.test(trimmed.slice(0, plus)))) return null;
+  const digits = trimmed.replace(/\D/g, "");
+  let national: string;
+  if (digits.length === 10) national = digits;
+  else if (digits.length === 11 && digits.startsWith("0")) national = digits.slice(1);
+  else if (digits.length === 12 && digits.startsWith("91")) national = digits.slice(2);
+  else if (digits.length === 14 && digits.startsWith("0091")) national = digits.slice(4);
+  else return null;
+  // A leading `+` is only ever the country's: "+98765 43210" is not an Indian number.
+  if (plus >= 0 && !(digits.length === 12 || digits.length === 14)) return null;
+  const e164 = `+91${national}`;
+  return INDIAN_MOBILE_E164.test(e164) ? e164 : null;
+}
+
 /** Part 3 §4.0 step 1's fields, plus `country`.
  *
  *  `country` is an ADDITION to the wizard the spec describes, and it is here
@@ -245,6 +274,9 @@ export const createOrgRequestSchema = z
       .max(16)
       .refine(isValidLocale, { message: "not a well-formed locale" })
       .default("en"),
+    /** An Indian gym's owner's mobile, as typed (`normaliseIndianMobile`). The create screen
+     *  asks a gym in India for it; the server reads it, stores it, and refuses it elsewhere. */
+    billingMobile: z.string().max(40).optional(),
   })
   .strict();
 export type CreateOrgRequest = z.infer<typeof createOrgRequestSchema>;
@@ -421,6 +453,9 @@ export const updateOrgRequestSchema = z
      *  null clears it. The server tidies it (lines joined, links and `@` taken out)
      *  and refuses it when that leaves more than `GYM_POSTAL_ADDRESS_MAX_CHARS`. */
     postalAddress: z.string().max(GYM_POSTAL_ADDRESS_MAX_CHARS * 2).nullable(),
+    /** An Indian gym's owner's mobile for its payments, as typed; null clears it. Only staff
+     *  who manage billing may change it, and only on a gym in India. */
+    billingMobile: z.string().max(40).nullable(),
   })
   .partial()
   .strict()
@@ -441,6 +476,8 @@ export const updateOrgResponseSchema = z.object({
   /** The gym's postal address as stored. On this response and on `/mine` for staff,
    *  never on the summary members read. */
   postalAddress: z.string().nullable().default(null),
+  /** The owner's mobile for payments (`+91…`), for staff who manage billing only. */
+  billingMobile: z.string().nullable().default(null),
 });
 export type UpdateOrgResponse = z.infer<typeof updateOrgResponseSchema>;
 
@@ -1141,6 +1178,9 @@ export const myOrgSchema = orgSummarySchema.extend({
   /** The gym's postal address for its invitations (Part 3 §9.12). Staff only; null
    *  for a member, for a gym with none, and from an api too old to send it. */
   postalAddress: z.string().nullable().default(null),
+  /** An Indian gym's owner's mobile for its payments (`+91…`, ROADMAP 1d-i). Only for staff
+   *  who manage billing; null for everybody else and for a gym with none. */
+  billingMobile: z.string().nullable().default(null),
   /** THE NEWEST CHEER THIS GYM HAS SENT THE CALLER, or null — Kd's ruling of
    *  2026-09-02 (:29961 ruling 4), reaching the member.
    *

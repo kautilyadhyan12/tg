@@ -100,6 +100,7 @@ export function usePaddleSubscribe(gymId, gymName = '') {
           name: gymName || 'AI Home Gym',
           description: res.data.description,
           email: user?.email ?? '',
+          contact: res.data.contact ?? '',
           onEvent,
         });
       } else {

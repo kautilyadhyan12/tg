@@ -9,6 +9,7 @@ import {
   ORG_TYPES_PHRASE,
   SMALLER_SIZE_DECIDE_HOURS,
   currencyForCountry,
+  normaliseIndianMobile,
   normaliseJoinCode,
   orgWords,
 } from "@app/shared";
@@ -231,6 +232,7 @@ export async function createOrg(
   req: CreateOrgRequest,
 ): Promise<CreateOrgResponse> {
   const currencyDisplay = resolveCurrency(req.country);
+  const billingMobile = billingMobileAt(normaliseCountry(req.country), req.billingMobile);
 
   const base = slugifyName(req.name);
 
@@ -255,6 +257,7 @@ export async function createOrg(
         currencyDisplay,
         code: codeFromBytes(deps.randomBytes(6)),
         codeLabel: FIRST_CODE_LABEL,
+        billingMobile,
         // §4.0 step 1's owner row starts with the owner role's whole set. Same
         // source as an appointment's, so "what does an owner start with" has
         // one answer in one place.
@@ -281,6 +284,19 @@ export async function createOrg(
     "org_create_unavailable",
     `Could not create the ${orgWords(req.orgType).it} just now. Please try again.`,
   );
+}
+
+/** An Indian gym's owner's mobile for its payments (ROADMAP 1d-i; Kd, RULINGS 2026-09-29): the
+ *  create screen asks a gym in India for one, and Razorpay's window is given it so it asks
+ *  nothing. None given is allowed (Razorpay's window then asks for it); a number given must be
+ *  an Indian mobile, and is refused anywhere else, where nothing would use it. */
+function billingMobileAt(country: string, typed: string | null | undefined): string | null {
+  const given = typed === undefined || typed === null || typed.trim() === "" ? null : typed;
+  if (given === null) return null;
+  if (country !== "IN") throw new OrgsError(400, "mobile_india_only", "A mobile number for payments is asked only of gyms in India.");
+  const mobile = normaliseIndianMobile(given);
+  if (mobile === null) throw new OrgsError(400, "mobile_invalid", "Check the mobile number: 10 digits, starting with 6, 7, 8 or 9.");
+  return mobile;
 }
 
 /** THE SENTENCE A GYM OWNER READS WHEN THE CURRENCY LOCK REFUSES THEM.
@@ -383,6 +399,14 @@ export async function updateOrg(
     }
     patch.postalAddress = tidied === "" ? null : tidied;
   }
+  // The owner's mobile for payments: only staff who manage billing may change it (it is where
+  // Razorpay sends the gym's payment messages), and only on a gym in India.
+  const seesMobile = await holdsPrivilege(deps, gymId, userId, "billing.manage");
+  if ("billingMobile" in req && req.billingMobile !== undefined) {
+    if (!seesMobile) throw new OrgsError(403, "forbidden", "Only staff who manage billing can change the mobile number for payments.");
+    if (req.billingMobile === null || req.billingMobile.trim() === "") patch.billingMobile = null;
+    else patch.billingMobile = billingMobileAt(patch.country ?? org.country ?? "", req.billingMobile);
+  }
 
   const outcome = await repo.updateOrg(deps.sql, { gymId, patch, actorUserId: userId });
 
@@ -393,7 +417,11 @@ export async function updateOrg(
     // a no-op is deliberately absent.
     case "updated":
     case "unchanged":
-      return updateOrgResponseSchema.parse({ org: toOrgSummary(outcome.org), postalAddress: outcome.postalAddress });
+      return updateOrgResponseSchema.parse({
+        org: toOrgSummary(outcome.org),
+        postalAddress: outcome.postalAddress,
+        billingMobile: seesMobile ? outcome.billingMobile : null,
+      });
     case "currency_locked":
       // KD RULING 2026-08-26. The sentence names the reason and the way out,
       // because a refusal an owner cannot act on is a dead end — and the way out
@@ -532,6 +560,8 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
       paymentOverdueThrough: r.staffRole === null ? null : r.paymentOverdueThrough,
       // A fact about the gym for its staff (the Settings box and the Invite screen).
       postalAddress: r.staffRole === null ? null : r.postalAddress,
+      // The owner's mobile for payments: only for staff who manage billing (ROADMAP 1d-i).
+      billingMobile: privileges.includes("billing.manage") ? r.billingMobile : null,
       // THE NEWEST CHEER THIS GYM SENT **THIS CALLER** — and it is the one field
       // on this response that is NOT withheld from a plain member.
       //

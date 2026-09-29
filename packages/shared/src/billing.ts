@@ -42,6 +42,9 @@ export const orgCheckoutResponseSchema = z.discriminatedUnion("provider", [
     subscriptionId: razorpaySubscriptionIdSchema,
     /** What the window says is being paid for ("Up to 200 members, monthly"). */
     description: z.string().min(1).max(200),
+    /** The owner's mobile for payments (`+91…`), for Razorpay's window to fill in; null when
+     *  the gym has none, and Razorpay asks for it. */
+    contact: z.string().regex(/^\+91[6-9]\d{9}$/).nullable(),
   }),
 ]);
 export type OrgCheckoutResponse = z.infer<typeof orgCheckoutResponseSchema>;

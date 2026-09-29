@@ -222,6 +222,13 @@ export async function checkoutForRazorpaySubscription(sql: SqlOrTx, subscription
   return row === undefined ? null : toCheckout(row);
 }
 
+/** An Indian gym's owner's mobile for its payments (`+91…`), or null: Razorpay's window is
+ *  given it so it asks nothing (Kd, RULINGS 2026-09-29). */
+export async function gymBillingMobile(sql: SqlOrTx, gymId: string): Promise<string | null> {
+  const rows = await sql<{ billing_mobile: string | null }[]>`SELECT billing_mobile FROM gyms WHERE id = ${gymId}`;
+  return rows[0]?.billing_mobile ?? null;
+}
+
 /** Which of our rupee plans a Razorpay plan is: only by the id `tools/razorpay-plans.ts` recorded. */
 export async function planForRazorpayPlan(sql: SqlOrTx, razorpayPlanId: string): Promise<{ id: string } | null> {
   const rows = await sql<{ id: string }[]>`

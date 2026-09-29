@@ -30,20 +30,21 @@ function loadScript() {
 /** Open Razorpay's window for the subscription our server made. `onEvent` hears `completed`
  *  (the mandate was given, or the first payment taken) and `closed`. Resolves once the window
  *  is asked to open; rejects when Razorpay's script cannot be loaded. */
-export async function openRazorpayCheckout({ keyId, subscriptionId, name, description, email, onEvent }) {
+export async function openRazorpayCheckout({ keyId, subscriptionId, name, description, email, contact, onEvent }) {
   const Razorpay = await loadScript();
   const instance = new Razorpay({
     key: keyId,
     subscription_id: subscriptionId,
     name,
     description,
-    // Razorpay asks every payer for a mobile number and an email unless told otherwise. The
-    // owner's sign-in email is filled in and its box hidden, as apps that already know the
-    // payer do; the app has no mobile number (sign-in is by email), so that box is hidden
-    // too — Razorpay's `hidden.contact` makes it optional (its checkout options, read
-    // 2026-09-29) — and the payer's own UPI app or bank holds their number.
-    ...(email ? { prefill: { email }, readonly: { email: true } } : {}),
-    hidden: { contact: true, ...(email ? { email: true } : {}) },
+    // Razorpay asks every payer for a mobile number and an email, unless the app already knows
+    // them, as apps that sign in by mobile do (its checkout options `prefill`, `readonly` and
+    // `hidden`, read 2026-09-29). The owner's sign-in email, and the mobile an Indian gym gave
+    // for its payments (Kd, RULINGS 2026-09-29), are filled in and their boxes hidden; one the
+    // app does not have, Razorpay asks for.
+    prefill: { ...(email ? { email } : {}), ...(contact ? { contact } : {}) },
+    readonly: { email: Boolean(email), contact: Boolean(contact) },
+    hidden: { email: Boolean(email), contact: Boolean(contact) },
     // The console's accent (console.css --accent): Razorpay's window takes a colour, not a name.
     theme: { color: '#FF8A1F' },
     handler: () => onEvent({ type: 'completed' }),

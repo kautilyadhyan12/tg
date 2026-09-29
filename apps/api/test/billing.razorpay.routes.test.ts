@@ -143,7 +143,7 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
     post(`/v1/orgs/${gymId}/billing/checkout`, { planCode }, cookies, { "idempotency-key": key });
   const opened = (res: { statusCode: number; body: string }) => {
     expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body) as { checkoutId: string; provider: string; keyId: string; subscriptionId: string; description: string };
+    const body = JSON.parse(res.body) as { checkoutId: string; provider: string; keyId: string; subscriptionId: string; description: string; contact: string | null };
     expect(body.provider).toBe("razorpay");
     return body;
   };
@@ -167,9 +167,86 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
       SELECT status, provider_ref, cancel_reason FROM subscriptions
       WHERE owner_type = 'gym' AND owner_id = ${gymId} AND provider = 'razorpay' ORDER BY created_at`;
   const myGym = async (gymId: string, cookies: Cookies) =>
-    (JSON.parse((await get("/v1/orgs/mine", cookies)).body) as { orgs: { id: string; subscription: Record<string, unknown> | null; paymentOverdue: boolean | null; paymentOverdueThrough: string | null; consoleReadOnly: boolean | null }[] }).orgs.find(
+    (JSON.parse((await get("/v1/orgs/mine", cookies)).body) as { orgs: { id: string; subscription: Record<string, unknown> | null; paymentOverdue: boolean | null; paymentOverdueThrough: string | null; consoleReadOnly: boolean | null; billingMobile: string | null }[] }).orgs.find(
       (o) => o.id === gymId,
     );
+
+  const patch = (path: string, payload: unknown, cookies: Cookies) =>
+    api().inject({ method: "PATCH", url: path, remoteAddress: nextIp(), headers: { "content-type": "application/json" }, cookies, payload: JSON.stringify(payload) });
+  const createGym = (cookies: Cookies, extra: Record<string, unknown>) =>
+    post("/v1/orgs", { name: `Mobile Gym ${String(seq++)}`, city: "Pune", country: "IN", timezone: "Asia/Kolkata", ...extra }, cookies);
+  const addStaff = async (gymId: string, userId: string, role: "manager" | "trainer", privileges: string[]) => {
+    await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${userId}, ${role}, ${privileges})`;
+  };
+
+  it(
+    "WORST THING: an owner's mobile reaches nobody but their own gym's billing staff — not a manager, a trainer, a member, another gym or the gym's public page",
+    async () => {
+      const owner1 = await makeUser();
+      const created = await createGym(owner1.cookies, { billingMobile: "+91 98765-43210" });
+      expect(created.statusCode).toBe(201);
+      const gymId = (JSON.parse(created.body) as { org: { id: string; slug: string } }).org.id;
+      const slug = (JSON.parse(created.body) as { org: { slug: string } }).org.slug;
+      expect(created.body).not.toContain("9876543210");
+      expect((await post(`/v1/orgs/${gymId}/trial`, {}, owner1.cookies)).statusCode).toBe(200);
+      expect(await myGym(gymId, owner1.cookies)).toMatchObject({ billingMobile: "+919876543210" });
+
+      const manager = await makeUser();
+      const trainer = await makeUser();
+      const member = await makeUser();
+      const stranger = await owner();
+      await addStaff(gymId, manager.userId, "manager", ["members.read", "codes.invite", "members.confirm", "org.manage"]);
+      await addStaff(gymId, trainer.userId, "trainer", ["members.read", "codes.invite"]);
+      await sql`INSERT INTO gym_members (gym_id, user_id) VALUES (${gymId}, ${member.userId})`;
+
+      for (const who of [manager, trainer, member, stranger]) {
+        const mineRes = await get("/v1/orgs/mine", who.cookies);
+        expect(mineRes.statusCode).toBe(200);
+        expect(mineRes.body).not.toContain("9876543210");
+      }
+      expect((await get(`/v1/public/gyms/${slug}`, stranger.cookies)).body).not.toContain("9876543210");
+      // A manager may rename the gym but neither sees nor changes where its payment messages go.
+      const renamed = await patch(`/v1/orgs/${gymId}`, { name: "Renamed by the manager" }, manager.cookies);
+      expect(renamed.statusCode).toBe(200);
+      expect(renamed.body).not.toContain("9876543210");
+      expect((await patch(`/v1/orgs/${gymId}`, { billingMobile: "70123 45678" }, manager.cookies)).statusCode).toBe(403);
+      expect([403, 404]).toContain((await patch(`/v1/orgs/${gymId}`, { billingMobile: "70123 45678" }, stranger.cookies)).statusCode);
+      // Nobody but billing staff can open a window, so nobody else is handed it there either.
+      expect([403, 404]).toContain((await checkout(gymId, manager.cookies, BIG)).statusCode);
+      expect((await sql`SELECT billing_mobile FROM gyms WHERE id = ${gymId}`)[0]).toEqual({ billing_mobile: "+919876543210" });
+
+      // The owner's own window is filled in with it.
+      expect(opened(await checkout(gymId, owner1.cookies, BIG))).toMatchObject({ contact: "+919876543210" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "the mobile for payments: an Indian mobile or none, only in India, changed or cleared by billing staff in Settings",
+    async () => {
+      const user = await makeUser();
+      expect(JSON.parse((await post("/v1/orgs", { name: `Austin Gym ${String(seq++)}`, country: "US", timezone: "America/Chicago", billingMobile: "9876543210" }, user.cookies)).body)).toMatchObject({ error: "mobile_india_only" });
+      for (const bad of ["020 2612 3456", "12345", "+44 7911 123456"]) {
+        const res = await createGym(user.cookies, { billingMobile: bad });
+        expect([res.statusCode, JSON.parse(res.body)]).toMatchObject([400, { error: "mobile_invalid" }]);
+      }
+      // None given: allowed, and Razorpay's window asks for it.
+      const none = await createGym(user.cookies, {});
+      expect(none.statusCode).toBe(201);
+      const gymId = (JSON.parse(none.body) as { org: { id: string } }).org.id;
+      expect((await post(`/v1/orgs/${gymId}/trial`, {}, user.cookies)).statusCode).toBe(200);
+      expect(opened(await checkout(gymId, user.cookies, BIG))).toMatchObject({ contact: null });
+
+      const set = await patch(`/v1/orgs/${gymId}`, { billingMobile: "(+91) 70123 45678" }, user.cookies);
+      expect([set.statusCode, JSON.parse(set.body)]).toMatchObject([200, { billingMobile: "+917012345678" }]);
+      expect(await sql`SELECT 1 FROM audit_log WHERE gym_id = ${gymId} AND action = 'org.updated' AND meta->'changed' ? 'billingMobile'`).toHaveLength(1);
+      expect(JSON.parse((await patch(`/v1/orgs/${gymId}`, { billingMobile: "5876543210" }, user.cookies)).body)).toMatchObject({ error: "mobile_invalid" });
+      const cleared = await patch(`/v1/orgs/${gymId}`, { billingMobile: null }, user.cookies);
+      expect(JSON.parse(cleared.body)).toMatchObject({ billingMobile: null });
+      expect((await sql`SELECT billing_mobile FROM gyms WHERE id = ${gymId}`)[0]).toEqual({ billing_mobile: null });
+    },
+    TEST_TIMEOUT_MS,
+  );
 
   it(
     "WORST THING: nothing opens a plan until Razorpay itself says it is paid, and one gym's payment never lands on another",
