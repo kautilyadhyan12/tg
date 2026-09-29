@@ -230,6 +230,9 @@ export async function leadsPage(
     like: string | null;
     digits: string | null;
     dueBy: string | null;
+    /** Only New leads with an email problem (`emailProblemCondition`). */
+    problemOnly: boolean;
+    addressKey: Buffer | null;
     app: { on: boolean; roomLeft: boolean };
     cursor: LeadCursor | null;
     limit: number;
@@ -237,6 +240,7 @@ export async function leadsPage(
 ): Promise<{ rows: LeadsPageRow[]; total: number }> {
   const { gymId, status, like, digits, dueBy, cursor } = input;
   const due = dueBy === null ? sql`true` : staffDueCondition(sql, dueBy, input.app);
+  const problem = input.problemOnly ? emailProblemCondition(sql, input.addressKey) : sql`true`;
   const rows = await sql<(DbLead & { cursor_at: string })[]>`
     SELECT l.id, l.full_name, l.email, l.phone_e164, l.source, l.status, l.notes, l.email_ok_at, l.entry_id,
            (e.id IS NOT NULL AND e.former_at IS NULL) AS on_list, l.created_at, l.status_changed_at,
@@ -247,6 +251,7 @@ export async function leadsPage(
     WHERE l.gym_id = ${gymId}
       AND (${status}::text IS NULL OR l.status = ${status}::text)
       AND ${due}
+      AND ${problem}
       AND ((${like}::text IS NULL AND ${digits}::text IS NULL)
            OR l.full_name ILIKE ${like}::text
            OR l.email::text ILIKE ${like}::text
@@ -264,6 +269,7 @@ export async function leadsPage(
     WHERE l.gym_id = ${gymId}
       AND (${status}::text IS NULL OR l.status = ${status}::text)
       AND ${due}
+      AND ${problem}
       AND ((${like}::text IS NULL AND ${digits}::text IS NULL)
            OR l.full_name ILIKE ${like}::text
            OR l.email::text ILIKE ${like}::text
@@ -271,20 +277,38 @@ export async function leadsPage(
   return { rows: rows.map((row) => ({ ...toRow(row), cursorAt: row.cursor_at })), total: totals[0]?.n ?? 0 };
 }
 
-/** The gym's leads by status, and how many are due a follow-up from staff by `today`. */
+/** A New lead whose address this gym's emails cannot reach — a hard bounce or an address
+ *  the email service refuses, for every gym — or from which one of this gym's emails was
+ *  marked as spam (20c-v-b). Its address's HMAC is worked out in the database with the
+ *  key and the rule of `emailHmac` (trimmed, lower-cased), so the list can count and
+ *  filter them without reading every lead. No key: none. */
+export const emailProblemCondition = (sql: SqlOrTx, key: Buffer | null) =>
+  key === null
+    ? sql`false`
+    : sql`(l.status = 'new' AND l.email IS NOT NULL AND EXISTS (
+        SELECT 1 FROM email_suppressions x
+        WHERE x.email_hmac = encode(hmac(convert_to(lower(btrim(l.email::text)), 'UTF8'), ${key}::bytea, 'sha256'), 'hex')
+          AND (x.gym_id = l.gym_id OR x.gym_id IS NULL)
+          AND x.reason IN ('bounced','refused','complained')))`;
+
+/** The gym's leads by status, how many are due a follow-up from staff by `today`, and
+ *  how many New leads have an email problem. */
 export async function leadCounts(
   sql: SqlOrTx,
   gymId: string,
   today: string,
   app: { on: boolean; roomLeft: boolean },
+  addressKey: Buffer | null,
 ): Promise<LeadCounts> {
-  const rows = await sql<{ status: string; n: number; due: number }[]>`
-    SELECT l.status, count(*)::int AS n, (count(*) FILTER (WHERE ${staffDueCondition(sql, today, app)}))::int AS due
+  const rows = await sql<{ status: string; n: number; due: number; problems: number }[]>`
+    SELECT l.status, count(*)::int AS n, (count(*) FILTER (WHERE ${staffDueCondition(sql, today, app)}))::int AS due,
+           (count(*) FILTER (WHERE ${emailProblemCondition(sql, addressKey)}))::int AS problems
     FROM gym_leads l WHERE l.gym_id = ${gymId} GROUP BY l.status`;
-  const counts: LeadCounts = { all: 0, new: 0, contacted: 0, on_trial: 0, joined: 0, lost: 0, followUpsDue: 0 };
+  const counts: LeadCounts = { all: 0, new: 0, contacted: 0, on_trial: 0, joined: 0, lost: 0, followUpsDue: 0, emailProblems: 0 };
   for (const row of rows) {
     counts.all += row.n;
     counts.followUpsDue += row.due;
+    counts.emailProblems += row.problems;
     if (row.status === "new") counts.new = row.n;
     else if (row.status === "contacted") counts.contacted = row.n;
     else if (row.status === "on_trial") counts.on_trial = row.n;

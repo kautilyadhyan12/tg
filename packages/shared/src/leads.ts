@@ -222,6 +222,10 @@ export const leadSchema = z
     /** When the person last sent the gym page's form (20c-iv-a), or null. Absent from
      *  an answer written before the form existed, so it defaults to null. */
     enquiredAt: z.string().datetime({ offset: true }).nullable().default(null),
+    /** A New lead's address that emails cannot reach — it bounces, or the email service
+     *  refuses it — or from which one of this gym's emails was marked as spam (20c-v-b).
+     *  Shown on the list, so staff need not open each lead to find it. */
+    emailProblem: z.enum(["bounced", "complained"]).nullable().default(null),
   })
   .strict();
 export type Lead = z.infer<typeof leadSchema>;
@@ -230,8 +234,9 @@ export const leadsQuerySchema = z
   .object({
     status: leadStatusSchema.optional(),
     q: z.string().max(LEAD_QUERY_MAX_CHARS).optional(),
-    /** Only leads due a follow-up email today or earlier. */
-    followUp: z.literal("due").optional(),
+    /** `due`: only leads due a follow-up email today or earlier. `problem`: only New
+     *  leads with an email problem (`emailProblem`). */
+    followUp: z.enum(["due", "problem"]).optional(),
     cursor: z.string().max(400).optional(),
   })
   .strict();
@@ -247,6 +252,8 @@ export const leadCountsSchema = z
     lost: z.number().int().nonnegative(),
     /** Leads due a follow-up email today or earlier. */
     followUpsDue: z.number().int().nonnegative(),
+    /** New leads with an email problem (20c-v-b). */
+    emailProblems: z.number().int().nonnegative(),
   })
   .strict();
 export type LeadCounts = z.infer<typeof leadCountsSchema>;
@@ -259,6 +266,9 @@ export const leadsResponseSchema = z
     cursor: z.string().nullable(),
     /** The gym's leads by status, before the search. */
     counts: leadCountsSchema,
+    /** The gym's emails through the app are stopped for bounces or a complaint (§9.12):
+     *  the Leads page says so, not only Settings. */
+    sendingStopped: z.boolean().default(false),
   })
   .strict();
 export type LeadsResponse = z.infer<typeof leadsResponseSchema>;

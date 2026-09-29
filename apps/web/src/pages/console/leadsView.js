@@ -20,10 +20,11 @@ export function statusChips(counts) {
 
 /** The page's query: a status of 'all' is no status; `due` keeps only leads due a
  *  follow-up email. */
-export function leadsQueryString({ status, query, due = false }, cursor = null) {
+export function leadsQueryString({ status, query, due = false, problem = false }, cursor = null) {
   const params = new URLSearchParams();
   if (status !== 'all') params.set('status', status);
   if (due) params.set('followUp', 'due');
+  else if (problem) params.set('followUp', 'problem');
   const q = query.trim();
   if (q !== '') params.set('q', q);
   if (cursor !== null) params.set('cursor', cursor);
@@ -239,6 +240,11 @@ export const showsEmailDue = (lead) => Boolean(lead.followUp?.dueNow) && lead.fo
 
 /** The toggle beside the status chips. */
 export const DUE_CHIP_LABEL = 'Email due';
+
+/** The chip for New leads whose address emails can't reach or who marked an email as
+ *  spam (20c-v-b), and each such row's tag: found on the list, not lead by lead. */
+export const PROBLEM_CHIP_LABEL = 'Email problems';
+export const EMAIL_PROBLEM_TAG = { bounced: 'Email bounces', complained: 'Marked as spam' };
 
 /** The tag on a lead who sent the form on the gym's own page (20c-iv-a). */
 export const FROM_PAGE_TAG = 'From your page';

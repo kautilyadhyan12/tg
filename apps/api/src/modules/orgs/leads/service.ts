@@ -72,9 +72,18 @@ export interface LeadSendingView {
   notSent: LeadEmailNotSent | null;
   optedOutAt: Date | null;
   optedOutHow: "unsubscribed" | "complained" | null;
+  emailProblem: "bounced" | "complained" | null;
 }
 
-const NOBODY_SENDING: LeadSendingView = { by: null, appWhen: null, notSent: null, optedOutAt: null, optedOutHow: null };
+const NOBODY_SENDING: LeadSendingView = { by: null, appWhen: null, notSent: null, optedOutAt: null, optedOutHow: null, emailProblem: null };
+
+/** The list's problem tag for a New lead, from its address's stop: the same rule as
+ *  `repo.emailProblemCondition`, which counts and filters them in the database. */
+function emailProblemOf(status: string, stop: emailsRepo.AddressStopView | undefined): LeadSendingView["emailProblem"] {
+  if (status !== "new" || stop === undefined) return null;
+  if (stop.reason === "bounced" || stop.reason === "refused") return "bounced";
+  return stop.optedOutHow === "complained" ? "complained" : null;
+}
 
 const notSentSchema = z.enum(LEAD_EMAIL_NOT_SENT);
 
@@ -183,6 +192,7 @@ async function sendingViews(
         notSent,
         optedOutAt: stop?.optedOutAt ?? null,
         optedOutHow: stop?.optedOutHow ?? null,
+        emailProblem: emailProblemOf(row.status, stop),
       };
       return [row.id, view];
     }),
@@ -225,6 +235,7 @@ export function toLead(row: repo.LeadRow, today: string, sending: LeadSendingVie
       optedOutHow: sending.optedOutHow,
     },
     enquiredAt: row.enquiredAt === null ? null : row.enquiredAt.toISOString(),
+    emailProblem: sending.emailProblem,
   };
 }
 
@@ -336,7 +347,8 @@ export async function listLeads(
     if (cursor === null) throw new OrgsError(400, "validation_error", "cursor: not a cursor");
   }
   const typed = (query.q ?? "").trim();
-  const app = appSending(await emailsRepo.gymSendingFacts(deps.sql, gymId, deps.now()), deps.sending);
+  const facts = await emailsRepo.gymSendingFacts(deps.sql, gymId, deps.now());
+  const app = appSending(facts, deps.sending);
   const [page, counts] = await Promise.all([
     repo.leadsPage(deps.sql, {
       gymId,
@@ -344,11 +356,13 @@ export async function listLeads(
       like: typed === "" ? null : `%${escapeLike(typed)}%`,
       digits: phoneDigits(typed),
       dueBy: query.followUp === "due" ? today : null,
+      problemOnly: query.followUp === "problem",
+      addressKey: deps.addressKey,
       app,
       cursor,
       limit: LEADS_PAGE + 1,
     }),
-    repo.leadCounts(deps.sql, gymId, today, app),
+    repo.leadCounts(deps.sql, gymId, today, app, deps.addressKey),
   ]);
   const shown = page.rows.slice(0, LEADS_PAGE);
   const last = page.rows.length > LEADS_PAGE ? shown[shown.length - 1] : undefined;
@@ -358,6 +372,7 @@ export async function listLeads(
     total: page.total,
     cursor: last === undefined ? null : encodeCursor({ at: last.cursorAt, id: last.id }),
     counts,
+    sendingStopped: facts?.stopped ?? false,
   };
 }
 

@@ -19,7 +19,7 @@ import { INVITE_RESULTS, processInviteResults, type StoppedGym } from "../src/mo
 import { inviteSettings } from "../src/modules/orgs/invites/settings.js";
 import { sendDueLeadEmails, type LeadSendRun } from "../src/modules/orgs/leads/sender.js";
 import { RESEND_WEBHOOK_PATH } from "../src/modules/webhooks/resendRoutes.js";
-import { LEAD_SEND_TAG, type Lead } from "@app/shared";
+import { LEAD_SEND_TAG, leadsResponseSchema, type Lead } from "@app/shared";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -134,6 +134,12 @@ d("what comes back from a lead's follow-up (real Postgres)", () => {
     const res = await send("GET", `/v1/orgs/${gymId}/leads/${leadId}`, undefined, cookies);
     expect(res.statusCode, res.body).toBe(200);
     return (JSON.parse(res.body) as { lead: Lead }).lead;
+  };
+  /** The Leads list as staff see it: every page's rows, the counts and the stopped line. */
+  const listOf = async (gymId: string, cookies: Record<string, string>, query = "") => {
+    const res = await send("GET", `/v1/orgs/${gymId}/leads${query}`, undefined, cookies);
+    expect(res.statusCode, res.body).toBe(200);
+    return leadsResponseSchema.parse(JSON.parse(res.body));
   };
   const storedLead = async (leadId: string) =>
     (await sql<{ sent: number; ok: Date | null }[]>`SELECT follow_ups_sent AS sent, email_ok_at AS ok FROM gym_leads WHERE id = ${leadId}`)[0];
@@ -352,6 +358,19 @@ d("what comes back from a lead's follow-up (real Postgres)", () => {
       expect(await stoppedReason(gymB)).toBeNull();
       expect(await gymCounts(sql, gymB)).toEqual({ sent: 1, bounced: 0, complainedEarly: false });
 
+      // Found on the list, not lead by lead: gym A's Leads count her, tag her, filter to her
+      // and say A is stopped; gym B's list, with the same person on it, shows nothing wrong.
+      const listA = await listOf(gymA, ownerA);
+      expect(listA.counts.emailProblems).toBe(1);
+      expect(listA.sendingStopped).toBe(true);
+      expect(listA.leads.filter((lead) => lead.emailProblem !== null).map((lead) => [lead.id, lead.emailProblem])).toEqual([[priyaA.id, "complained"]]);
+      expect((await listOf(gymA, ownerA, "?followUp=problem")).leads.map((lead) => lead.id)).toEqual([priyaA.id]);
+      const listB = await listOf(gymB, ownerB);
+      expect(listB.counts.emailProblems).toBe(0);
+      expect(listB.sendingStopped).toBe(false);
+      expect(listB.leads.every((lead) => lead.emailProblem === null)).toBe(true);
+      expect((await listOf(gymB, ownerB, "?followUp=problem")).leads).toEqual([]);
+
       // Days pass and gym A is started again after a look; staff tick Priya again at the
       // desk. Kit's next email goes; Priya's never does, from gym A. Gym B's does.
       expect(await resumeGym(sql, gymA, new Date())).toBe(true);
@@ -398,6 +417,13 @@ d("what comes back from a lead's follow-up (real Postgres)", () => {
       expect(await gymCounts(sql, gymA)).toEqual({ sent: 2, bounced: 1, complainedEarly: false });
       expect(await stoppedReason(gymA)).toBeNull();
       expect(await gymCounts(sql, gymB)).toEqual({ sent: 1, bounced: 0, complainedEarly: false });
+      // A dead address is every gym's problem: both lists tag Ana and find her by the chip.
+      for (const [gymId, cookies, leadId] of [[gymA, ownerA, anaA.id], [gymB, ownerB, anaB.id]] as const) {
+        const list = await listOf(gymId, cookies);
+        expect(list.counts.emailProblems).toBe(1);
+        expect(list.leads.find((lead) => lead.id === leadId)?.emailProblem).toBe("bounced");
+        expect((await listOf(gymId, cookies, "?followUp=problem")).leads.map((lead) => lead.id)).toEqual([leadId]);
+      }
 
       // A second bounce, this time an invitation of the same gym: the two count together.
       const invitation = await seedInvitationSent(gymA, "cy");

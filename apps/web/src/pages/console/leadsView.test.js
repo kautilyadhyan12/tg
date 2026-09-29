@@ -273,6 +273,7 @@ describe('the follow-up emails (20c-ii)', () => {
 
   it('"Email due" asks the server for due leads only', () => {
     expect(leadsQueryString({ status: 'all', query: '', due: true })).toBe('followUp=due');
+    expect(leadsQueryString({ status: 'all', query: '', problem: true })).toBe('followUp=problem');
     expect(leadsQueryString({ status: 'new', query: 'pri', due: false })).toBe('status=new&q=pri');
   });
 });
