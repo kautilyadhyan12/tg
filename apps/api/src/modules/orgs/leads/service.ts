@@ -71,9 +71,10 @@ export interface LeadSendingView {
   appWhen: "today" | "tomorrow" | "waiting" | null;
   notSent: LeadEmailNotSent | null;
   optedOutAt: Date | null;
+  optedOutHow: "unsubscribed" | "complained" | null;
 }
 
-const NOBODY_SENDING: LeadSendingView = { by: null, appWhen: null, notSent: null, optedOutAt: null };
+const NOBODY_SENDING: LeadSendingView = { by: null, appWhen: null, notSent: null, optedOutAt: null, optedOutHow: null };
 
 const notSentSchema = z.enum(LEAD_EMAIL_NOT_SENT);
 
@@ -180,6 +181,7 @@ async function sendingViews(
         appWhen: by === "app" ? appWhen(row.followUpDueOn, today, app.localHour, state) : null,
         notSent,
         optedOutAt: stop?.optedOutAt ?? null,
+        optedOutHow: stop?.optedOutHow ?? null,
       };
       return [row.id, view];
     }),
@@ -219,6 +221,7 @@ export function toLead(row: repo.LeadRow, today: string, sending: LeadSendingVie
       appWhen: sending.appWhen,
       notSent: sending.notSent,
       optedOutAt: sending.optedOutAt === null ? null : sending.optedOutAt.toISOString(),
+      optedOutHow: sending.optedOutHow,
     },
     enquiredAt: row.enquiredAt === null ? null : row.enquiredAt.toISOString(),
   };

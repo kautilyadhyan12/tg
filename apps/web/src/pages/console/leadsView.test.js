@@ -248,6 +248,15 @@ describe('the follow-up emails (20c-ii)', () => {
     });
   });
 
+  it('a person who marked an email as spam is said so, not that they pressed Stop', () => {
+    const now = new Date('2026-09-27T12:00:00');
+    const spam = { ...lead, mayEmail: false, followUp: { sent: 1, dueOn: null, dueNow: false, overdue: false, lastSentAt: '2026-09-26T09:00:00.000Z', by: null, notSent: null, optedOutAt: '2026-09-26T10:00:00.000Z', optedOutHow: 'complained' } };
+    expect(followUpState(spam, now).headline).toBe('Follow-up emails stopped: they marked one of your emails as spam');
+    expect(followUpState({ ...spam, followUp: { ...spam.followUp, optedOutHow: 'unsubscribed' } }, now).headline).toBe(
+      'Follow-up emails stopped: they asked not to get your emails through AI Home Gym',
+    );
+  });
+
   it('"Email due" on a row only when it is due now and staff send it', () => {
     expect(showsEmailDue(due({}))).toBe(true);
     expect(showsEmailDue(due({ by: 'you' }))).toBe(true);

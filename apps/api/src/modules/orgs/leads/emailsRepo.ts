@@ -118,28 +118,39 @@ export type AddressStop = "unsubscribed" | "complained" | "bounced" | "refused";
 
 /** Of these address HMACs, the ones the app will not email for this gym: why (the most
  *  serious reason, as in `suppressionsFor`: this gym's unsubscribes and complaints, and
- *  every gym's bounces and refusals), and when the person asked THIS gym to stop, if
- *  they did. */
+ *  every gym's bounces and refusals), and when and how the person asked THIS gym to
+ *  stop, if they did: Stop pressed, or an email marked as spam (the more serious, when
+ *  both). */
+export interface AddressStopView {
+  reason: AddressStop;
+  optedOutAt: Date | null;
+  optedOutHow: "unsubscribed" | "complained" | null;
+}
+
 export async function addressStops(
   sql: SqlOrTx,
   gymId: string,
   hmacs: readonly string[],
-): Promise<Map<string, { reason: AddressStop; optedOutAt: Date | null }>> {
+): Promise<Map<string, AddressStopView>> {
   if (hmacs.length === 0) return new Map();
   const rows = await sql<{ email_hmac: string; reason: string; created_at: Date }[]>`
     SELECT email_hmac, reason, created_at
     FROM email_suppressions
     WHERE email_hmac = ANY(${[...hmacs]}::text[]) AND (gym_id = ${gymId} OR gym_id IS NULL)
     ORDER BY CASE reason WHEN 'bounced' THEN 0 WHEN 'refused' THEN 1 WHEN 'complained' THEN 2 ELSE 3 END, created_at`;
-  const found = new Map<string, { reason: AddressStop; optedOutAt: Date | null }>();
+  const found = new Map<string, AddressStopView>();
   for (const row of rows) {
     if (row.reason !== "unsubscribed" && row.reason !== "complained" && row.reason !== "bounced" && row.reason !== "refused") {
       throw new Error("email suppression holds a reason that no longer parses");
     }
     const kept = found.get(row.email_hmac);
-    const optedOut = row.reason === "unsubscribed" || row.reason === "complained" ? row.created_at : null;
-    if (kept === undefined) found.set(row.email_hmac, { reason: row.reason, optedOutAt: optedOut });
-    else if (kept.optedOutAt === null && optedOut !== null) kept.optedOutAt = optedOut;
+    const how = row.reason === "unsubscribed" || row.reason === "complained" ? row.reason : null;
+    const optedOut = how === null ? null : row.created_at;
+    if (kept === undefined) found.set(row.email_hmac, { reason: row.reason, optedOutAt: optedOut, optedOutHow: how });
+    else if (kept.optedOutAt === null && optedOut !== null) {
+      kept.optedOutAt = optedOut;
+      kept.optedOutHow = how;
+    }
   }
   return found;
 }

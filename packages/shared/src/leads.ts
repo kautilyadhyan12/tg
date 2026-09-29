@@ -176,6 +176,8 @@ export const leadFollowUpSchema = z
     /** When the person asked this gym to stop emailing them through the app: Stop
      *  pressed in an email, or an email marked as spam. */
     optedOutAt: z.string().datetime({ offset: true }).nullable().default(null),
+    /** How: Stop pressed, or an email marked as spam (20c-v-b). */
+    optedOutHow: z.enum(["unsubscribed", "complained"]).nullable().default(null),
   })
   .strict();
 export type LeadFollowUp = z.infer<typeof leadFollowUpSchema>;

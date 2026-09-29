@@ -343,6 +343,7 @@ d("what comes back from a lead's follow-up (real Postgres)", () => {
       expect((await storedLead(priyaA.id))?.ok).toBeNull();
       const panel = (await readLead(gymA, priyaA.id, ownerA)).followUp;
       expect(panel.optedOutAt).not.toBeNull();
+      expect(panel.optedOutHow).toBe("complained");
       // A complaint in a gym's first 100 stops it, and the operator is told which gym.
       expect(await stoppedReason(gymA)).toBe("complaint");
       expect(toldOperator.map((stopped) => stopped.gymId)).toEqual([gymA]);

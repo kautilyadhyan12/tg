@@ -218,7 +218,7 @@ export function followUpState(lead, now = new Date()) {
   if (f.sent === 0 && !lead.mayEmail && !optedOut) return null;
   if (f.sent === 0 && lead.status === 'new' && lead.mayEmail) return null;
   const why = optedOut
-    ? LEAD_EMAIL_NOT_SENT_WORDS.unsubscribed
+    ? LEAD_EMAIL_NOT_SENT_WORDS[f.optedOutHow === 'complained' ? 'complained' : 'unsubscribed']
     : !lead.mayEmail
       ? 'the "Happy to hear from us" tick is off'
       : `they're marked ${statusWord(lead.status)}`;
