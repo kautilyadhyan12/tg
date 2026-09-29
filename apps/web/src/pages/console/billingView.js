@@ -454,7 +454,7 @@ function nextDecideAt(periodEnd) {
 /** A PAID TRIAL'S NEXT STEP, every date named (Kd at 1d-i's click-through: *"wording need to be
  *  precise"*): the last free day, the day the plan starts and its first payment is taken, and
  *  the month that payment covers, first and last day. "Free trial until 8 Oct. Your plan starts
- *  on 9 Oct: ₹7,500 is paid that day, for 9 Oct to 8 Nov." Null for anything
+ *  on 9 Oct: ₹7,500 is paid for 9 Oct to 8 Nov." Null for anything
  *  else, or when the server has not said the price or the date. */
 export function firstPaymentText(sub) {
   if (sub?.status !== 'trialing' || sub?.subscribed !== true) return null;
@@ -474,7 +474,7 @@ export function firstPaymentText(sub) {
   const lastPaid = new Date(nextPayment.getTime());
   lastPaid.setDate(lastPaid.getDate() - 1);
   const day = (d) => trialEndDateLabel(d.toISOString());
-  return `Free trial until ${day(lastFree)}. Your plan starts on ${date}: ${price} is paid that day, for ${date} to ${day(lastPaid)}.`;
+  return `Free trial until ${day(lastFree)}. Your plan starts on ${date}: ${price} is paid for ${date} to ${day(lastPaid)}.`;
 }
 
 /** WHAT A BIGGER SIZE COSTS, IN ONE SENTENCE, from the server's preview of Paddle's own

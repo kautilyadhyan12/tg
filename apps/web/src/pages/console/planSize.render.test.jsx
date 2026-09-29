@@ -159,7 +159,7 @@ describe('paying during the free trial', () => {
   it('shows a paid trial’s first payment on the card, and offers Change size instead', async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: paidTrial }));
     renderOverview();
-    const card = (await screen.findAllByText(new RegExp(`Your plan starts on ${trialEndDateLabel(TRIAL_END)}: \\$79 is paid that day, for `)))[0];
+    const card = (await screen.findAllByText(new RegExp(`Your plan starts on ${trialEndDateLabel(TRIAL_END)}: \\$79 is paid for `)))[0];
     expect(card).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Choose a plan' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Change size' })).toBeTruthy();
