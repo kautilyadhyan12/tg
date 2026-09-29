@@ -30,13 +30,16 @@ function loadScript() {
 /** Open Razorpay's window for the subscription our server made. `onEvent` hears `completed`
  *  (the mandate was given, or the first payment taken) and `closed`. Resolves once the window
  *  is asked to open; rejects when Razorpay's script cannot be loaded. */
-export async function openRazorpayCheckout({ keyId, subscriptionId, name, description, onEvent }) {
+export async function openRazorpayCheckout({ keyId, subscriptionId, name, description, email, onEvent }) {
   const Razorpay = await loadScript();
   const instance = new Razorpay({
     key: keyId,
     subscription_id: subscriptionId,
     name,
     description,
+    // Razorpay asks every payer for a mobile number and an email; the owner's sign-in email
+    // is filled in for them, as Razorpay's checkout option `prefill` allows.
+    ...(email ? { prefill: { email } } : {}),
     // The console's accent (console.css --accent): Razorpay's window takes a colour, not a name.
     theme: { color: '#FF8A1F' },
     handler: () => onEvent({ type: 'completed' }),

@@ -60,7 +60,7 @@ vi.mock('../../utils/razorpayCheckout', () => ({ openRazorpayCheckout: vi.fn(), 
 
 const logout = vi.fn();
 vi.mock('../../context/AuthContext', () => ({
-  useAuth: () => ({ user: { id: 'u1' }, logout }),
+  useAuth: () => ({ user: { id: 'u1', email: 'owner@example.com' }, logout }),
 }));
 
 const { orgService } = await import('../../api/orgsApi');
@@ -710,7 +710,7 @@ describe('subscribing from the prompt', () => {
     await waitFor(() => expect(openRazorpayCheckout).toHaveBeenCalledTimes(1));
     expect(openPaddleCheckout).not.toHaveBeenCalled();
     const opened = openRazorpayCheckout.mock.calls[0][0];
-    expect(opened).toMatchObject({ keyId: 'rzp_test_AAAAAAAAAAAAAA', subscriptionId: 'sub_AAAAAAAAAAAAAA', name: spent.name, description: 'Monthly, up to 200 members' });
+    expect(opened).toMatchObject({ keyId: 'rzp_test_AAAAAAAAAAAAAA', subscriptionId: 'sub_AAAAAAAAAAAAAA', name: spent.name, description: 'Monthly, up to 200 members', email: 'owner@example.com' });
 
     opened.onEvent({ type: 'completed' });
     await waitFor(() => expect(screen.queryByTestId('plan-modal')).toBeNull(), { timeout: 5000 });
