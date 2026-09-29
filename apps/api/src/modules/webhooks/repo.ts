@@ -7,12 +7,15 @@ import { z } from "zod";
 type SqlOrTx = Sql | TransactionSql;
 
 /** What is kept of a Resend event: never the address or the subject. `sendId` is the
- *  invitation tag's value, the row in `gym_invite_sends` the email was sent for. */
+ *  invitation tag's value, the row in `gym_invite_sends` the email was sent for;
+ *  `leadSendId` the lead follow-up tag's, a row in `gym_lead_sends` (20c-v-b; events
+ *  kept before it have none). */
 export const storedResendEventSchema = z
   .object({
     type: resendEmailEventTypeSchema,
     emailId: z.string().min(1).max(100),
     sendId: z.string().uuid().nullable(),
+    leadSendId: z.string().uuid().nullable().default(null),
     bounceType: z.string().max(40).nullable(),
     bounceSubType: z.string().max(40).nullable(),
   })
@@ -42,9 +45,16 @@ export interface ClaimedEvent {
 }
 
 /** Take the next Resend event that is due and hold it for `leaseMs`: a second worker
- *  skips it until then, and a worker that dies leaves it to be taken again. */
-export async function claimDueEvent(sql: Sql, now: Date, leaseMs: number): Promise<ClaimedEvent | null> {
-  const row = await claimDue(sql, "resend", now, leaseMs);
+ *  skips it until then, and a worker that dies leaves it to be taken again. `eventIds`:
+ *  only these events, for a test that shares its database with other suites; production
+ *  passes null. */
+export async function claimDueEvent(
+  sql: Sql,
+  now: Date,
+  leaseMs: number,
+  eventIds: readonly string[] | null = null,
+): Promise<ClaimedEvent | null> {
+  const row = await claimDue(sql, "resend", now, leaseMs, eventIds);
   if (row === null) return null;
   const payload = storedResendEventSchema.safeParse(row.payload);
   return { ...row, payload: payload.success ? payload.data : null };
@@ -55,11 +65,13 @@ async function claimDue(
   provider: "resend" | "paddle",
   now: Date,
   leaseMs: number,
+  eventIds: readonly string[] | null = null,
 ): Promise<{ id: string; attempts: number; tries: number; receivedAt: Date; payload: unknown } | null> {
   const rows = await sql<{ id: string; attempts: number; tries: number; received_at: Date; payload: unknown }[]>`
     WITH next AS (
       SELECT id FROM webhook_events
       WHERE provider = ${provider} AND status = 'pending' AND not_before <= ${now}
+        AND (${eventIds === null}::boolean OR event_id = ANY(${[...(eventIds ?? [])]}::text[]))
       ORDER BY not_before, received_at, id
       LIMIT 1
       FOR UPDATE SKIP LOCKED

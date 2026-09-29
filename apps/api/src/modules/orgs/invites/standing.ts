@@ -9,7 +9,8 @@
 //   hour after the 50th went.
 // - A gym stops when its hard bounces pass 2 % of what it sent (counted as if it had
 //   sent at least 50, so a second bounce in the first 50 stops it), or on any complaint
-//   about one of its first 100.
+//   about one of its first 100. What it sent is its invitations and the lead follow-ups
+//   the app sent for it, together (20c-v-b).
 import type { MemberInviteEmailResult } from "@app/shared";
 import type { StoredResendEvent } from "../../webhooks/repo.js";
 
@@ -28,7 +29,7 @@ export interface ReportEffect {
   suppress: "bounced" | "refused" | "complained" | null;
 }
 
-export function effectOf(event: StoredResendEvent): ReportEffect {
+export function effectOf(event: Pick<StoredResendEvent, "type" | "bounceType" | "bounceSubType">): ReportEffect {
   switch (event.type) {
     case "email.delivered":
       return { result: "delivered", suppress: null };

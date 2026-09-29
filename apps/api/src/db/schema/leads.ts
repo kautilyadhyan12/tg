@@ -115,6 +115,9 @@ export const gymLeadSends = pgTable(
     providerId: text("provider_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
+    /** What Resend reported about an email that went, once confirmed (20c-v-b). */
+    result: text("result"),
+    resultAt: timestamp("result_at", { withTimezone: true }),
   },
   (t) => [
     uniqueIndex("gym_lead_sends_step_uq").on(t.leadId, t.okAt, t.step),
@@ -122,6 +125,8 @@ export const gymLeadSends = pgTable(
     index("gym_lead_sends_due_idx").on(t.notBefore, t.id).where(sql`${t.state} IN ('queued','sending')`),
     index("gym_lead_sends_month_idx").on(t.gymId, t.month).where(sql`${t.counted}`),
     index("gym_lead_sends_sent_idx").on(t.finishedAt).where(sql`${t.state} = 'sent'`),
+    index("gym_lead_sends_gym_sent_idx").on(t.gymId, t.finishedAt).where(sql`${t.state} = 'sent'`),
+    index("gym_lead_sends_provider_idx").on(t.providerId).where(sql`${t.providerId} IS NOT NULL`),
     check("gym_lead_sends_step_check", sql`${t.step} BETWEEN 1 AND 3`),
     check("gym_lead_sends_month_check", sql`${t.month} ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'`),
     check("gym_lead_sends_email_hmac_check", sql`${t.emailHmac} ~ '^[0-9a-f]{64}$'`),
@@ -134,6 +139,9 @@ export const gymLeadSends = pgTable(
     check("gym_lead_sends_reason_shape_check", sql`${t.reason} IS NULL OR ${t.reason} ~ '^[a-z_]{1,40}$'`),
     check("gym_lead_sends_provider_check", sql`${t.providerId} IS NULL OR (${t.state} = 'sent' AND length(${t.providerId}) <= 100)`),
     check("gym_lead_sends_attempts_check", sql`${t.attempts} >= 0`),
+    check("gym_lead_sends_result_check", sql`${t.result} IS NULL OR ${t.result} IN ('delivered','bounced','complained','failed','refused')`),
+    check("gym_lead_sends_result_state_check", sql`${t.result} IS NULL OR ${t.state} = 'sent'`),
+    check("gym_lead_sends_result_at_check", sql`(${t.result} IS NULL) = (${t.resultAt} IS NULL)`),
     check(
       "gym_lead_sends_counted_check",
       sql`NOT ${t.counted} OR ${t.state} IN ('queued','sending','sent') OR ${t.reason} = 'send_unknown'`,

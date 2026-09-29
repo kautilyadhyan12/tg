@@ -2656,9 +2656,15 @@ Settings says emails are paused; with sending not set up the switch cannot be tu
 day gone by in the sending hours. Every try, a first or another, waits for those hours.
 An address stopped, bounced or on the member list is staff's at once on the panel; the
 list's Email due counts it from the worker's next try, since it cannot read the keyed
-address list. **20c-v-b**: Resend's reports on
-these emails (a bounce, a complaint) act as they do for invitations and count toward the
-gym's stop. A lead from the gym's page, ticked by the person on the form, is emailed like
+address list. **What comes back (20c-v-b)**: Resend's reports on these emails are kept
+by the invitations' webhook (the `lead_send` tag names the row) and acted on by the same
+worker, only once Resend's own record of the email agrees: the email keeps its result
+(`gym_lead_sends.result`), a hard bounce or an address Resend refuses keeps the address
+from every gym, and a complaint keeps it from that gym and takes the lead's tick off if
+it is still at that address, as Stop does (the panel then says why, and staff may tick
+it again for a person who asks). The gym's stop (§9.12: bounces past 2 %, or a complaint
+among its first 100) counts its invitations and these emails together, and stops both;
+the operator's note says so. A lead from the gym's page, ticked by the person on the form, is emailed like
 any other, as gym software does (RULINGS 2026-09-29): a stranger could type somebody
 else's address, which is met the standard way, as for invitations — the robot check, the
 form's limits, Stop in every email, the address check — and 20c-v-b is built before any
