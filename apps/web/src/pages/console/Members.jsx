@@ -246,7 +246,17 @@ export default function Members() {
   // Which tab, kept in the address so a reload stays on it.
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = canSeeList && searchParams.get('view') !== 'app' ? 'list' : 'app';
-  const showTab = (next) => setSearchParams(next === 'app' ? { view: 'app' } : {}, { replace: true });
+  // Only the tab changes: the rest of the address (the development build's `?look=light`) stays.
+  const showTab = (next) =>
+    setSearchParams(
+      (was) => {
+        const params = new URLSearchParams(was);
+        if (next === 'app') params.set('view', 'app');
+        else params.delete('view');
+        return params;
+      },
+      { replace: true },
+    );
   // Part 3 §4.2's read-only console, off the org row this screen already holds.
   const readOnly = consoleIsReadOnly(org);
   // A gym has members, a studio and a trainer have clients.

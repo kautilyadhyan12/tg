@@ -16,6 +16,7 @@ import {
   compareRecords,
   entriesQueryString,
   formFrom,
+  goneWords,
   gymToday,
   handEditedWords,
   inputFrom,
@@ -451,5 +452,25 @@ describe('the heading box past 500 rows', () => {
     expect(next.has('id-500')).toBe(false);
     // Unticking a row past the 500 still leaves 500, never 600.
     expect(untickFromAll(loaded, 'id-550').size).toBe(500);
+  });
+});
+
+// Kd, 2026-09-29: "Status: Cancelled should show when was cancelled … same for the other
+// scenario". The end date the file gave stands beside the status; none given, none shown.
+describe('someone a file leaves out: the status with its date, then the rest', () => {
+  const TODAY = '2026-09-29';
+  const person = (wasStatus, onList) => ({
+    wasStatus,
+    onList: { membershipType: 'Gold', endsOn: null, endsOnKind: null, paymentStatus: 'Paid', source: 'upload', addedAt: '2026-01-05T10:00:00.000Z', ...onList },
+  });
+  it.each([
+    ['Cancelled, ended', person('Cancelled', { endsOn: '2026-09-05', endsOnKind: 'ends' }), 'Status: Cancelled · Ended 5 Sep · Membership: Gold · Payment: Paid'],
+    ['Expired, a renewal date passed', person('Expired', { endsOn: '2026-09-01', endsOnKind: 'renews' }), 'Status: Expired · Ended 1 Sep · Membership: Gold · Payment: Paid'],
+    ['Active, renews', person('Active', { endsOn: '2026-10-04', endsOnKind: 'renews' }), 'Status: Active · Renews 4 Oct · Membership: Gold · Payment: Paid'],
+    ['Frozen, ends next year', person('Frozen', { endsOn: '2027-01-02', endsOnKind: 'ends' }), 'Status: Frozen · Ends 2 Jan 2027 · Membership: Gold · Payment: Paid'],
+    ['Cancelled, the file gave no date', person('Cancelled', {}), 'Status: Cancelled · Membership: Gold · Payment: Paid'],
+    ['no status, a date', person(null, { endsOn: '2026-08-31', endsOnKind: 'ends' }), 'Ended 31 Aug · Membership: Gold · Payment: Paid'],
+  ])('%s', (_, who, words) => {
+    expect(goneWords(who, TODAY).facts).toBe(words);
   });
 });

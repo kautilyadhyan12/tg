@@ -3425,6 +3425,13 @@ named "Keep the app for now: someone in this file has the same email or phone", 
 the file is in, a different record may be theirs. The press carries the box's digest; a box
 that moved is refused as `leavers_changed` with the new box, nothing applied.
 
+**5b-v-d-ii (RULINGS 2026-09-29):** people added in this app (by hand, or from the app) whom no
+file has held yet are counted apart beside the new members ("1 added manually, not in this
+file", See who); each is ticked to stay, with Untick all, and anyone unticked moves to past
+members through the same box. The card, its number and status line, and They've left are about
+the file's own people only, and the card is not shown when only people added here are missing.
+An import makes every record it holds the file's (`source` becomes `upload`).
+
 ### 18.9 Every feature kept
 
 | Today | In the redesign |

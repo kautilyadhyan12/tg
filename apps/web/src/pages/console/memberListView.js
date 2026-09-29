@@ -176,7 +176,8 @@ export function missingOf(preview) {
  *  Active 1". An export of only the Active members leaves out every Frozen one, and this is
  *  where staff see it before answering. */
 export function missingStatusLine(missing) {
-  const line = missing.statuses.map((s) => `${s.label} ${count(s.n)}`).join(' · ');
+  // People with no status are "No status", the Filter's word (round one, Low-1).
+  const line = missing.statuses.map((s) => `${s.label === '' ? 'No status' : s.label} ${count(s.n)}`).join(' · ');
   return line === '' ? '' : `Status: ${line}`;
 }
 
@@ -195,16 +196,45 @@ export function missingTitle(missing, needsTick, words) {
 
 // ── Who has left (5b-v-d-i; spec Part 3 §18.8; RULINGS 2026-09-28) ─────────
 
-/** What the server is sent for the card's answer. They've left: the people ticked, or
- *  everyone when nobody is ticked, as the card always meant; the rest stay. They're still
- *  members: everyone stays. */
-export function marksBody(missing, left, answer) {
-  const anyTicked = answer === 'left' && missing.people.some((p) => left.has(p.entryId));
-  const leaves = (p) => answer === 'left' && (!anyTicked || left.has(p.entryId));
+/** Somebody staff added in this app (by hand, or from the app) whom no file has held yet:
+ *  the gym's export may not have them, so an import that leaves them out asks separately
+ *  and keeps them unless unticked (Kd, 2026-09-29: "manually added one should not be in
+ *  the same list … by default added … untick or untick all"). Once a file holds them the
+ *  server makes them the file's, and they are missing like anybody else. */
+export function addedHere(person) {
+  return person.onList !== null && person.onList !== undefined && person.onList.source !== 'upload';
+}
+
+/** WHO LEAVES, the one rule, and what the server is sent. The file's own people answer to
+ *  the card: They've left moves the ones ticked in `left`, or all of them when none is
+ *  ticked; They're still members keeps them all. The people added here answer to their own
+ *  ticks: `kept` holds those staying, and anyone unticked leaves, whatever the card says.
+ *  Everyone missing is in `left` or `stay`, never both. */
+export function marksBody(missing, left, answer, kept = null) {
+  const file = missing.people.filter((p) => !addedHere(p));
+  const anyTicked = answer === 'left' && file.some((p) => left.has(p.entryId));
+  const leaves = (p) => (addedHere(p) ? kept !== null && !kept.has(p.entryId) : answer === 'left' && (!anyTicked || left.has(p.entryId)));
   return {
     missingDigest: missing.digest,
     left: missing.people.filter(leaves).map((p) => p.entryId),
     stay: missing.people.filter((p) => !leaves(p)).map((p) => p.entryId),
+  };
+}
+
+/** The card's own numbers once the people added here are counted apart: how many of the
+ *  file's own people are missing, and their status words, the preview's figures less
+ *  theirs. Nobody added here missing: the preview's figures as they are. */
+export function fileMissingOf(missing, handGroup) {
+  if (handGroup.length === 0) return missing;
+  // The server's own fold (`reconcile.ts` foldStatus): spaces and case ignored, "" for no
+  // status, so "active" typed here comes out of the file's "Active" (round one, High-1).
+  const fold = (word) => (word ?? '').trim().toLowerCase();
+  const less = new Map();
+  for (const p of handGroup) less.set(fold(p.wasStatus), (less.get(fold(p.wasStatus)) ?? 0) + 1);
+  return {
+    ...missing,
+    n: Math.max(0, missing.n - handGroup.length),
+    statuses: missing.statuses.map((st) => ({ ...st, n: st.n - (less.get(fold(st.label)) ?? 0) })).filter((st) => st.n > 0),
   };
 }
 
@@ -232,7 +262,7 @@ export function groupNote(preview, group, words) {
   const { list } = preview;
   if (group === 'new') {
     return [
-      list.alreadyInApp > 0 ? `${count(list.alreadyInApp)} already use the app` : null,
+      list.alreadyInApp > 0 ? `${count(list.alreadyInApp)} already in the app` : null,
       list.noEmail > 0 ? `${count(list.noEmail)} have no email` : null,
       list.returning > 0 ? `${count(list.returning)} were ${words.people} before` : null,
     ]
@@ -240,10 +270,13 @@ export function groupNote(preview, group, words) {
       .join(' · ');
   }
   if (group === 'changed') {
-    return [
-      ...preview.fieldChanges.map((c) => `${MEMBER_LIST_FIELD_WORDS[c.field]} ${count(c.count)}`),
-      ...preview.extraChanges.map((c) => `${c.label} ${count(c.count)}`),
-    ].join(' · ');
+    // "What changes: status for 27 · phone number for 2", never "status 27" (Kd, 2026-09-29,
+    // of the import's short lines: "will not be understood by a human").
+    const parts = [
+      ...preview.fieldChanges.map((c) => `${MEMBER_LIST_FIELD_WORDS[c.field]} for ${count(c.count)}`),
+      ...preview.extraChanges.map((c) => `${c.label} for ${count(c.count)}`),
+    ];
+    return parts.length === 0 ? '' : `What changes: ${parts.join(' · ')}`;
   }
   return '';
 }
@@ -287,9 +320,50 @@ export function warningTitle(w) {
   }
 }
 
-const SKIP_WORDS = { no_contact: 'no email or phone', duplicate: 'same person as an earlier row' };
-export function skipWords(reason) {
-  return SKIP_WORDS[reason];
+/** The line over the rows a file leaves out: "2 rows weren't imported". */
+export function skippedTitle(n) {
+  return `${count(n)} ${n === 1 ? "row wasn't" : "rows weren't"} imported`;
+}
+
+/** One row the file leaves out, in words a front desk reads: which row, whose, and why
+ *  (Kd, 2026-09-29: "Row 12: no email or phone … will not be understood by a human"). */
+export function skippedLine(s) {
+  const who = s.name ? `Row ${String(s.row)}, ${s.name}` : `Row ${String(s.row)}`;
+  if (s.reason === 'duplicate') {
+    const first = s.sameAsRow ? `row ${String(s.sameAsRow)}` : 'an earlier row';
+    return `${who}: the same person as ${first}, so they're imported once.`;
+  }
+  return `${who}: no email or phone number, so they can't be matched or invited. Add one to your file to import them.`;
+}
+
+/** "phone number", "phone number and status", "email, phone number and status". */
+function andList(items) {
+  return items.length <= 1 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
+/** The box over the tick that lets a file replace what staff typed in the app, naming who
+ *  and what (Kd, 2026-09-29: "Replace what staff typed for 1 person … have no context").
+ *  `lead` is the sentence, `names` the people when there are several, `tick` the tick's own
+ *  words. A refusal carries no names (a person's name never goes in an error reply), and
+ *  neither does a preview staged before names were sent: both still read. */
+export function handEditWords(handEdits, words) {
+  const n = handEdits.entries;
+  const what = andList(handEdits.fields);
+  const one = handEdits.fields.length === 1;
+  const names = handEdits.names ?? [];
+  if (n === 1) {
+    const whose = names[0] ? `${names[0]}'s` : `One ${words.person}'s`;
+    return {
+      lead: `${whose} ${what} ${one ? 'was' : 'were'} changed by your staff in this app. This file has ${one ? 'a different one' : 'different ones'}.`,
+      names: [],
+      tick: `Use the ${what} from this file`,
+    };
+  }
+  return {
+    lead: `Your staff changed the ${what} of ${count(n)} ${words.people} in this app. This file has different ones${names.length > 0 ? ':' : '.'}`,
+    names,
+    tick: `Use the ${what} from this file for all ${count(n)}`,
+  };
 }
 
 /** The finished screen's heading and line. */

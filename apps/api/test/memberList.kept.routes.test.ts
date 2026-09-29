@@ -611,7 +611,7 @@ d("member list: the wider record, kept (real Postgres)", () => {
         { field: "endsOn", count: 3 },
       ]);
       expect(preview.extraChanges).toEqual([{ key: "locker_no", label: "Locker No", count: 1 }]);
-      expect(preview.handEdits).toEqual({ entries: 0, fields: [] });
+      expect(preview.handEdits).toEqual({ entries: 0, fields: [], names: [] });
     },
     TEST_TIMEOUT_MS,
   );
@@ -762,7 +762,12 @@ d("member list: the wider record, kept (real Postgres)", () => {
       const next = csv([wider, ...[person(1, { type: "Gold" }), person(2)].map((p) => [...row(p), "Ola"])]);
       const fieldsBefore = (await fieldsOf(org.org.id)).map((f) => f.key);
       const preview = await stage(org.org.id, owner.cookies, next);
-      expect(preview.handEdits).toEqual({ entries: 1, fields: ["membership type"] });
+      // The preview names whose correction goes, for the tick's words; the upload's stored
+      // record never does, so a name cannot outlive Delete for good in it.
+      expect(preview.handEdits).toEqual({ entries: 1, fields: ["membership type"], names: ["Kept 0001"] });
+      const staged = await sql<{ summary: unknown }[]>`SELECT summary FROM gym_member_list_uploads WHERE id = ${preview.uploadId}`;
+      expect(JSON.stringify(staged[0]?.summary)).toContain("membership type");
+      expect(JSON.stringify(staged[0]?.summary)).not.toContain("Kept 0001");
 
       const refused = await post(confirmUrl(org.org.id, preview.uploadId), { permissionConfirmed: true }, owner.cookies);
       expect(refused.statusCode).toBe(409);
@@ -784,6 +789,8 @@ d("member list: the wider record, kept (real Postgres)", () => {
       // THE TICK BELONGS TO THE REQUEST. The same upload, pressed again with it.
       const applied = await post(confirmUrl(org.org.id, preview.uploadId), { permissionConfirmed: true, acknowledgeHandEdits: true }, owner.cookies);
       expect(applied.statusCode).toBe(200);
+      const confirmed = await sql<{ summary: unknown }[]>`SELECT summary FROM gym_member_list_uploads WHERE id = ${preview.uploadId}`;
+      expect(JSON.stringify(confirmed[0]?.summary)).not.toContain("Kept 0001");
       // …and NOW the catalogue grows, because the confirm went through.
       expect((await fieldsOf(org.org.id)).map((f) => f.key)).toContain("trainer_name");
       const after = await recordOf(org.org.id, "K-1");
