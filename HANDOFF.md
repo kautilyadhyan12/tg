@@ -16,7 +16,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Click-through data:** `.cost/demo-5b-v-d-ii.ts` rebuilds Kd Demo Gym (Priya Nair added by hand; staff typed Olivia's phone; end dates on the cancelled and expired) and writes `kd-demo-october.csv` and `kd-demo-october-b.csv` to Downloads.
 - **Split off:** 5b-v-d-iii, each warning says which rows (Kd: *"no option to check or correct or see what is even wrong"*); its place in the order is Kd's.
 - **Kd's click-through of round 2: *"all passed"*.**
-- **Open:** review round one (`reviews/5b-v-d-ii-1-review.md`); the branch is not pushed (the permission check refused `git push`; Kd pushes); merge on Kd's word, ROADMAP ticked with it.
+- **Round one (df93297): 1 High, 4 Low, 2 test gaps, all fixed**, each RED first. H1 the card's status line took people added here out by their exact word, so no status (everyone added from the app) or another case stayed in it ("2 members" over a line of 4): folded as the server does. L1 "No status", never a blank. L2 the box says why people stay. L3 the fixture carries the "" bucket. L4 the colour guard refuses hsl(), any non-`var(--…)` style colour and every Tailwind colour family, proven on samples. Gaps: a hand-added record whose name the file changes, and one brought back, become the file's (RED by the old key); 201 staff-edited people name 200 (RED without the cap). Member-list api 1,738 of 1,739 (`kept.routes` "unknown filter" timed out at 5,017 ms under load; 15/15 alone); web 3,220 of 3,220.
+- **Open:** the re-check (`reviews/5b-v-d-ii-3-recheck.md`, the same reviewer terminal); PR #133's checks; merge on Kd's word, ROADMAP ticked with it.
 
 ## 2026-09-28 · 5b-v-d-i (Folder A): the import's who-has-left, person by person (branch `members-import-who-left`)
 
