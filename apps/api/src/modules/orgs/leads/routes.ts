@@ -61,7 +61,13 @@ export interface LeadRouteDeps {
 }
 
 export function registerLeadRoutes(app: FastifyInstance, deps: LeadRouteDeps): void {
-  const leadDeps: service.LeadsDeps = { sql: deps.sql, now: () => new Date(), addressKey: deps.invites?.hmacKey ?? null };
+  const invites = deps.invites;
+  const leadDeps: service.LeadsDeps = {
+    sql: deps.sql,
+    now: () => new Date(),
+    addressKey: invites?.hmacKey ?? null,
+    sending: invites === null || invites.sender === null ? "off" : invites.paused ? "paused" : "on",
+  };
 
   /** Reads follow a search box (one read after each pause in typing): the member
    *  list's read allowance. */

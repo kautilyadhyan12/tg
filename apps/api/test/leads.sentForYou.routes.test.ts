@@ -13,6 +13,7 @@ import type { InviteEmail, InviteSendResult, InviteTransport } from "../src/emai
 import { dayInTz } from "../src/modules/gamification/streak.js";
 import type { MailCheck } from "../src/modules/orgs/invites/decide.js";
 import { inviteSettings } from "../src/modules/orgs/invites/settings.js";
+import { writeEmailSettings } from "../src/modules/orgs/leads/emailSettings.js";
 import { sendDueLeadEmails, type LeadSendRun, type LeadSenderDeps } from "../src/modules/orgs/leads/sender.js";
 import { LEAD_EMAILS_PER_MONTH, leadEmailSettingsResponseSchema, type Lead, type LeadEmailSettings, type LeadsResponse } from "@app/shared";
 
@@ -290,6 +291,8 @@ d("the app sends a lead's follow-ups (real Postgres)", () => {
       ).toBeLessThan(300);
       const member = await addLead(gym, owner.cookies, { fullName: "Ray Low", email: "ray@example.com" });
 
+      // Staff's from the start: the panel says why before the worker has tried.
+      expect(member.followUp).toMatchObject({ by: "you", notSent: "on_member_list" });
       expect((await patch(leadUrl(gym, untick.id), { mayEmail: false }, owner.cookies)).statusCode).toBe(200);
       expect((await patch(leadUrl(gym, contacted.id), { status: "contacted" }, owner.cookies)).statusCode).toBe(200);
       expect((await patch(leadUrl(gym, onTrial.id), { status: "on_trial" }, owner.cookies)).statusCode).toBe(200);
@@ -326,7 +329,10 @@ d("the app sends a lead's follow-ups (real Postgres)", () => {
       expect(afterStop.mayEmail).toBe(false);
       expect(afterStop.followUp.optedOutAt).not.toBeNull();
 
-      expect((await patch(leadUrl(gym, priya.id), { mayEmail: true }, owner.cookies)).statusCode).toBe(200);
+      const reticked = await patch(leadUrl(gym, priya.id), { mayEmail: true }, owner.cookies);
+      expect(reticked.statusCode).toBe(200);
+      // Ticked again at the desk: staff's at once, and said why, before the worker tries.
+      expect(leadOf(reticked).followUp).toMatchObject({ by: "you", notSent: "unsubscribed" });
       await daysPass(priya.id, 3);
       await runSender();
       await runSender();
@@ -613,6 +619,22 @@ d("the app sends a lead's follow-ups (real Postgres)", () => {
       const tomorrow = new Date((await at(8)).getTime() + 24 * 60 * 60_000);
       await runSender({ now: () => tomorrow });
       expect(emailsTo("ned.night@example.com")).toHaveLength(1);
+
+      // One that may have gone, at 19:59, is not tried again at night either: if the first
+      // try never reached the email service, the next is the one that arrives.
+      await addLead(gym, owner.cookies, { fullName: "Uma Unclear", email: "uma.night@example.com" });
+      const evening = new Date((await at(19)).getTime() + 59 * 60_000);
+      nextAnswers.push({ kind: "unclear", status: null });
+      expect(await runSender({ now: () => evening })).toMatchObject({ retried: 1 });
+      const late = new Date((await at(21)).getTime());
+      await runSender({ now: () => late });
+      expect(calls.filter((m) => m.to === "uma.night@example.com")).toHaveLength(1);
+      const morning = new Date((await at(8)).getTime() + 24 * 60 * 60_000);
+      await runSender({ now: () => morning });
+      const tries = calls.filter((m) => m.to === "uma.night@example.com");
+      expect(tries).toHaveLength(2);
+      expect(tries[0]?.idempotencyKey).toBe(tries[1]?.idempotencyKey);
+      expect(emailsTo("uma.night@example.com")).toHaveLength(1);
     },
     TIMEOUT_MS,
   );
@@ -646,6 +668,7 @@ d("the app sends a lead's follow-ups (real Postgres)", () => {
       expect(await runSender()).toMatchObject({ stoppedByProvider: true, held: 1 });
       expect(await storedLead(kay.id)).toMatchObject({ sent: 0 });
       expect((await sendsOf(gym)).filter((s) => s.lead_id === kay.id)).toMatchObject([{ state: "queued", counted: true }]);
+      expect((await readLead(gym, kay.id, owner.cookies)).followUp).toMatchObject({ by: "app", appWhen: "waiting" });
       await runSender({ now: () => new Date(midday().getTime() + 5 * 60_000) });
       expect(emailsTo("kay.answers@example.com")).toHaveLength(1);
 
@@ -664,25 +687,96 @@ d("the app sends a lead's follow-ups (real Postgres)", () => {
   );
 
   it(
-    "the kill switch sends nothing; the whole app's day is shared with invitations; a gym stopped for bounces sends nothing and its leads are staff's",
+    "with emails through the app paused, a due lead is staff's — its buttons, Email due, and Settings saying so — and the sender sends nothing; unpaused, it is the app's again",
     async () => {
-      const owner = await makeUser("caps-owner");
-      const org = await makeGym(owner.cookies, "Caps Sent Gym");
+      const owner = await makeUser("paused-owner");
+      const org = await makeGym(owner.cookies, "Paused Sent Gym");
       const gym = org.org.id;
       await switchOn(gym, owner.cookies);
-      const lead = await addLead(gym, owner.cookies, { fullName: "Cap Stone", email: "cap.caps@example.com" });
+      const lead = await addLead(gym, owner.cookies, { fullName: "Pat Paused", email: "pat.paused@example.com" });
+      // The api as it runs with the operator's kill switch on.
+      const paused = await buildApp(loadConfig({ ...baseEnv, INVITES_PAUSED: "true" }), {
+        emailSender: { sendVerificationEmail: () => Promise.resolve(), sendPasswordResetEmail: () => Promise.resolve(), sendSignInCodeEmail: () => Promise.resolve() },
+      });
+      try {
+        await paused.ready();
+        const at = (method: "GET" | "POST", url: string, cookies: Record<string, string>, payload?: unknown) =>
+          paused.inject({
+            method,
+            url,
+            remoteAddress: nextIp(),
+            cookies,
+            ...(payload === undefined ? {} : { headers: { "content-type": "application/json" }, payload: JSON.stringify(payload) }),
+          });
+        const login = await at("POST", "/v1/auth/login", {}, { email: owner.email, password: PASSWORD });
+        expect(login.statusCode).toBe(200);
+        const cookies = cookieMap(login);
+        expect(leadOf(await at("GET", leadUrl(gym, lead.id), cookies)).followUp).toMatchObject({ dueNow: true, by: "you", appWhen: null });
+        const due = pageOf(await at("GET", `${leadsUrl(gym)}?followUp=due`, cookies));
+        expect(due.counts.followUpsDue).toBe(1);
+        expect(due.leads.map((l) => l.id)).toEqual([lead.id]);
+        expect(settingsOf(await at("GET", settingsUrl(gym), cookies))).toMatchObject({ sendForMe: true, appSending: "paused" });
+      } finally {
+        await paused.close();
+      }
       outbox.length = 0;
       expect(await runSender({ settings: { ...settings, paused: true } })).toMatchObject({ paused: true, sent: 0 });
-      const [{ used } = { used: 0 }] = await sql<{ used: number }[]>`
-        SELECT ((SELECT count(*) FROM gym_invite_sends WHERE state = 'sent' AND finished_at > now() - interval '1 day')
-              + (SELECT count(*) FROM gym_lead_sends WHERE state = 'sent' AND finished_at > now() - interval '1 day'))::int AS used`;
-      expect(await runSender({ settings: { ...settings, perDay: Math.max(used, 1) }, now: () => new Date() })).toMatchObject({ capped: true, sent: 0 });
-      expect(emailsTo("cap.caps@example.com")).toEqual([]);
+      expect(emailsTo("pat.paused@example.com")).toEqual([]);
+      expect((await readLead(gym, lead.id, owner.cookies)).followUp).toMatchObject({ by: "app" });
+      expect(settingsOf(await get(settingsUrl(gym), owner.cookies)).appSending).toBe("on");
+    },
+    TIMEOUT_MS,
+  );
 
+  it(
+    "the whole app's day counts invitations: one invitation sent that day fills a day of one, and a day of two sends the lead's",
+    async () => {
+      const owner = await makeUser("day-owner");
+      const org = await makeGym(owner.cookies, "Day Cap Sent Gym");
+      const gym = org.org.id;
+      await switchOn(gym, owner.cookies);
+      await addLead(gym, owner.cookies, { fullName: "Dan Day", email: "dan.daycap@example.com" });
+      // A day ten years on, which nothing else in the database reaches: only this test's
+      // own invitation, sent an hour before it, is in that day.
+      const future = new Date(midday().getTime() + 3650 * 24 * 60 * 60_000);
+      const sentAt = new Date(future.getTime() - 60 * 60_000);
+      const [invite] = await sql<{ id: string }[]>`
+        INSERT INTO gym_invites (gym_id, email_hmac) VALUES (${gym}, ${"f".repeat(64)}) RETURNING id`;
+      if (invite === undefined) throw new Error("no invitation row");
+      await sql`
+        INSERT INTO gym_invite_sends (gym_id, invite_id, kind, state, attempts, not_before, created_at, finished_at)
+        VALUES (${gym}, ${invite.id}, 'first', 'sent', 1, ${sentAt}, ${sentAt}, ${sentAt})`;
+      try {
+        outbox.length = 0;
+        // This gym's leads only: the other tests' leads are due on that day too.
+        expect(await runSender({ gymIds: [gym], now: () => future, settings: { ...settings, perDay: 1 } })).toMatchObject({ capped: true, sent: 0 });
+        expect(emailsTo("dan.daycap@example.com")).toEqual([]);
+        // One place left: the lead's email takes it, and then the day is full.
+        expect(await runSender({ gymIds: [gym], now: () => future, settings: { ...settings, perDay: 2 } })).toMatchObject({ sent: 1, capped: true });
+        expect(emailsTo("dan.daycap@example.com")).toHaveLength(1);
+      } finally {
+        // Nothing dated ten years on is left for another suite's day.
+        await sql`DELETE FROM gym_invites WHERE id = ${invite.id}`;
+        await sql`DELETE FROM gym_lead_sends WHERE gym_id = ${gym}`;
+      }
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "a gym stopped for bounces or a complaint sends nothing, and its leads are staff's",
+    async () => {
+      const owner = await makeUser("stopped-owner");
+      const org = await makeGym(owner.cookies, "Stopped Sent Gym");
+      const gym = org.org.id;
+      await switchOn(gym, owner.cookies);
+      const lead = await addLead(gym, owner.cookies, { fullName: "Cap Stone", email: "cap.stopped@example.com" });
       await sql`UPDATE gyms SET invites_stopped_at = now(), invites_stopped_reason = 'bounces' WHERE id = ${gym}`;
+      outbox.length = 0;
       await runSender();
-      expect(emailsTo("cap.caps@example.com")).toEqual([]);
+      expect(emailsTo("cap.stopped@example.com")).toEqual([]);
       expect((await readLead(gym, lead.id, owner.cookies)).followUp).toMatchObject({ by: "you" });
+      expect(pageOf(await get(`${leadsUrl(gym)}?followUp=due`, owner.cookies)).counts.followUpsDue).toBe(1);
       expect(settingsOf(await get(settingsUrl(gym), owner.cookies))).toMatchObject({ stopped: true, sendForMe: true });
     },
     TIMEOUT_MS,
@@ -703,6 +797,7 @@ d("the app sends a lead's follow-ups (real Postgres)", () => {
         usedThisMonth: 0,
         hasPostalAddress: false,
         stopped: false,
+        appSending: "on",
       });
       const noPostal = await put(settingsUrl(gym), { sendForMe: true, replyTo: "desk@example.com" }, owner.cookies);
       expect(noPostal.statusCode).toBe(409);
@@ -721,6 +816,17 @@ d("the app sends a lead's follow-ups (real Postgres)", () => {
       const audit = await sql<{ meta: { sendForMe: string } }[]>`
         SELECT meta FROM audit_log WHERE gym_id = ${gym} AND action = 'org.lead_emails_changed' ORDER BY at, id`;
       expect(audit.map((row) => row.meta.sendForMe)).toEqual(["true", "false"]);
+
+      // Sending not set up (production without the invitations' mailbox): nothing could go,
+      // so the switch is refused as the invitations are; off is always allowed.
+      const offDeps = { sql, now: () => new Date(), addressKey: null, sending: "off" as const };
+      await expect(
+        writeEmailSettings(offDeps, owner.userId, gym, { sendForMe: true, replyTo: "desk@example.com" }, () => Promise.resolve(true)),
+      ).rejects.toMatchObject({ statusCode: 503, code: "invites_off" });
+      expect(await writeEmailSettings(offDeps, owner.userId, gym, { sendForMe: false, replyTo: null }, () => Promise.resolve(true))).toMatchObject({
+        sendForMe: false,
+        appSending: "off",
+      });
 
       // A lapsed gym can read the switch and not change it.
       await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gym}`;

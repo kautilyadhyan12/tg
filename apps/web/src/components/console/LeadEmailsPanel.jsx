@@ -120,6 +120,11 @@ export default function LeadEmailsPanel({ org, readOnly }) {
               {LEAD_EMAIL_SETTINGS_WORDS.sending_stopped}
             </p>
           ) : null}
+          {settings.appSending === 'paused' ? (
+            <p className="text-sm" style={{ color: '#ef4444' }}>
+              {LEAD_EMAIL_SETTINGS_WORDS.paused}
+            </p>
+          ) : null}
 
           <label className={`flex items-start gap-3 ${readOnly ? '' : 'cursor-pointer'}`}>
             <input

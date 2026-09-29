@@ -45,7 +45,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
        *  switched it on. */
       getLeadEmailSettings: vi.fn(() =>
         Promise.resolve({
-          data: { settings: { sendForMe: false, replyTo: null, perMonth: 100, usedThisMonth: 0, hasPostalAddress: true, stopped: false } },
+          data: { settings: { sendForMe: false, replyTo: null, perMonth: 100, usedThisMonth: 0, hasPostalAddress: true, stopped: false, appSending: 'on' } },
         }),
       ),
       updateLeadEmailSettings: vi.fn(),

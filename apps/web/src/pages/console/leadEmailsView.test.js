@@ -8,7 +8,7 @@ import {
   usedThisMonthLine,
 } from './leadEmailsView';
 
-const OFF = { sendForMe: false, replyTo: null, perMonth: 100, usedThisMonth: 0, hasPostalAddress: true, stopped: false };
+const OFF = { sendForMe: false, replyTo: null, perMonth: 100, usedThisMonth: 0, hasPostalAddress: true, stopped: false, appSending: 'on' };
 const ON = { ...OFF, sendForMe: true, replyTo: 'desk@ironhouse.example.com', usedThisMonth: 37 };
 
 describe('Settings → Follow-up emails to leads (20c-v)', () => {
@@ -32,6 +32,11 @@ describe('Settings → Follow-up emails to leads (20c-v)', () => {
     expect(leadEmailsProblem({ sendForMe: true, replyTo: '' }, OFF)).toBe('Add the email address replies should go to.');
     expect(leadEmailsProblem({ sendForMe: true, replyTo: 'not an address' }, OFF)).toBe('Add the email address replies should go to.');
     expect(leadEmailsProblem({ sendForMe: false, replyTo: 'nonsense' }, { ...OFF, hasPostalAddress: false })).toBeNull();
+    // Sending not set up: it cannot be switched on; off always can.
+    expect(leadEmailsProblem({ sendForMe: true, replyTo: 'desk@gym.com' }, { ...OFF, appSending: 'off' })).toMatch(/aren't set up yet/);
+    expect(leadEmailsProblem({ sendForMe: false, replyTo: '' }, { ...OFF, appSending: 'off' })).toBeNull();
+    // Paused is the operator's for a while: the switch may be on through it.
+    expect(leadEmailsProblem({ sendForMe: true, replyTo: 'desk@gym.com' }, { ...OFF, appSending: 'paused' })).toBeNull();
   });
 
   it('sends the address as the server keeps it, and a change of case or spaces is no change', () => {

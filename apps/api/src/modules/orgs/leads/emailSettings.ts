@@ -22,19 +22,20 @@ import type { LeadsDeps } from "./service.js";
 
 type Limit = () => Promise<boolean>;
 
-const toSettings = (facts: emailsRepo.GymSendingFacts): LeadEmailSettings => ({
+const toSettings = (facts: emailsRepo.GymSendingFacts, sending: LeadsDeps["sending"]): LeadEmailSettings => ({
   sendForMe: facts.sendForMe,
   replyTo: facts.replyTo,
   perMonth: LEAD_EMAILS_PER_MONTH,
   usedThisMonth: facts.usedThisMonth,
   hasPostalAddress: facts.hasPostalAddress,
   stopped: facts.stopped,
+  appSending: sending,
 });
 
 async function readBack(deps: LeadsDeps, gymId: string): Promise<LeadEmailSettings> {
   const facts = await emailsRepo.gymSendingFacts(deps.sql, gymId, deps.now());
   if (facts === null) throw new Error(`gym ${gymId} vanished after its privilege was checked`);
-  return toSettings(facts);
+  return toSettings(facts, deps.sending);
 }
 
 export async function readEmailSettings(deps: LeadsDeps, userId: string, gymId: string, limit: Limit): Promise<LeadEmailSettings | null> {
@@ -52,6 +53,9 @@ export async function writeEmailSettings(
 ): Promise<LeadEmailSettings | null> {
   await requireWritablePrivilege(deps, gymId, userId, "org.manage");
   if (!(await limit())) return null;
+  // As the invitations refuse: with sending not set up, nothing could ever go. A pause
+  // is the operator's for a while, so the switch may be on through it.
+  if (body.sendForMe && deps.sending === "off") throw new OrgsError(503, "invites_off", LEAD_EMAIL_SETTINGS_WORDS.invites_off);
   const at = deps.now();
   await deps.sql.begin(async (tx) => {
     // The gym's lock, as its details take: a postal address cleared at the same moment

@@ -126,7 +126,7 @@ export function detailsRequest(lead, draft) {
 
 /** The words beside the "Happy to hear from us" tick. */
 export const MAY_EMAIL_LABEL = 'Happy to hear from us by email';
-export const MAY_EMAIL_HINT = "Tick only if they said yes. They'll get 3 follow-up emails over a week.";
+export const MAY_EMAIL_HINT = "Tick only if they said yes. They're due 3 follow-up emails over a week.";
 
 /** What Joined did, in one sentence. */
 export function joinedWords(outcome, name, words) {
@@ -181,6 +181,9 @@ function lastSentWords(iso, now) {
 /** Under a follow-up the app will send: when, and where replies go. */
 export const SENT_FOR_YOU_NOTE = 'Sent for you from 8 in the morning, by your clock. Replies go to the address in Settings.';
 
+/** Under one the app is waiting to send. */
+export const WAITING_FOR_YOU_NOTE = "We'll keep trying. If it can't go within a week, it comes back to you here.";
+
 /** What the lead's follow-up box says, or null when there is nothing to say: a lead
  *  who never said yes and has had none. `next` is the step staff may send now, or null;
  *  `note` a line under it: the app sends it, or why the app did not. */
@@ -192,9 +195,17 @@ export function followUpState(lead, now = new Date()) {
   if (f.dueOn !== null && lead.status === 'new' && lead.mayEmail) {
     const step = f.sent + 1;
     const of = `Email ${step} of ${LEAD_FOLLOW_UPS}`;
-    // The app sends it: nothing for staff to press.
+    // The app sends it: nothing for staff to press. The server says when.
     if (f.by === 'app') {
-      const headline = f.dueNow ? `${of} will be sent for you today` : `${of} will be sent for you on ${dueDayWords(f.dueOn)}`;
+      if (f.appWhen === 'waiting') {
+        const due = f.overdue ? dueDayWords(f.dueOn) : 'today';
+        return { next: null, headline: `${of} is waiting to be sent for you (due ${due})`, due: false, sentLine, note: WAITING_FOR_YOU_NOTE };
+      }
+      const headline = !f.dueNow
+        ? `${of} will be sent for you on ${dueDayWords(f.dueOn)}`
+        : f.appWhen === 'tomorrow'
+          ? `${of} will be sent for you tomorrow morning`
+          : `${of} will be sent for you today`;
       return { next: null, headline, due: false, sentLine, note: SENT_FOR_YOU_NOTE };
     }
     const headline = f.overdue ? `${of} was due ${dueDayWords(f.dueOn)}` : f.dueNow ? `${of} is due today` : `${of} is due ${dueDayWords(f.dueOn)}`;

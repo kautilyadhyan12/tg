@@ -23,7 +23,7 @@ const { orgService } = await import('../../api/orgsApi');
 const LeadEmailsPanel = (await import('./LeadEmailsPanel')).default;
 
 const ORG = { id: '11111111-1111-1111-1111-111111111111', name: 'Iron House', orgType: 'gym' };
-const OFF = { sendForMe: false, replyTo: null, perMonth: 100, usedThisMonth: 0, hasPostalAddress: true, stopped: false };
+const OFF = { sendForMe: false, replyTo: null, perMonth: 100, usedThisMonth: 0, hasPostalAddress: true, stopped: false, appSending: 'on' };
 const answer = (settings) => Promise.resolve({ data: { settings } });
 
 /** Opens the section, which starts closed like its neighbours. */
@@ -77,6 +77,20 @@ describe('Follow-up emails to leads', () => {
     expect(screen.getByText('37 of 100 new leads emailed for you this month.')).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Replies go to'), { target: { value: '' } });
     expect(screen.getByText('Add the email address replies should go to.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Save changes' }).disabled).toBe(true);
+  });
+
+  it('says so when emails through the app are paused, or not set up', async () => {
+    vi.mocked(orgService.getLeadEmailSettings).mockReturnValue(answer({ ...OFF, sendForMe: true, replyTo: 'desk@ironhouse.example.com', appSending: 'paused' }));
+    render(<LeadEmailsPanel org={ORG} readOnly={false} />);
+    await open();
+    expect(screen.getByText(LEAD_EMAIL_SETTINGS_WORDS.paused)).toBeTruthy();
+    cleanup();
+
+    vi.mocked(orgService.getLeadEmailSettings).mockReturnValue(answer({ ...OFF, appSending: 'off' }));
+    render(<LeadEmailsPanel org={ORG} readOnly={false} />);
+    fireEvent.click(await open());
+    expect(screen.getByText(LEAD_EMAIL_SETTINGS_WORDS.invites_off)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Save changes' }).disabled).toBe(true);
   });
 

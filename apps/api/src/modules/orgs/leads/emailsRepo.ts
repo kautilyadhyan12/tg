@@ -42,6 +42,8 @@ export interface GymSendingFacts extends LeadEmailSwitch {
   active: boolean;
   onPlan: boolean;
   usedThisMonth: number;
+  /** The hour now by the gym's clock, 0–23. */
+  localHour: number;
 }
 
 export async function gymSendingFacts(sql: SqlOrTx, gymId: string, now: Date): Promise<GymSendingFacts | null> {
@@ -55,6 +57,7 @@ export async function gymSendingFacts(sql: SqlOrTx, gymId: string, now: Date): P
       status: string;
       on_plan: boolean;
       used: number;
+      local_hour: number;
     }[]
   >`
     SELECT s.send_for_me, s.reply_to::text AS reply_to, g.name,
@@ -66,7 +69,8 @@ export async function gymSendingFacts(sql: SqlOrTx, gymId: string, now: Date): P
              WHERE sub.owner_type = 'gym' AND sub.owner_id = g.id AND sub.status IN ('trialing','active','past_due')) AS on_plan,
            (SELECT count(*)::int FROM gym_lead_sends m
             WHERE m.gym_id = g.id AND m.counted
-              AND m.month = to_char(${now}::timestamptz AT TIME ZONE g.timezone, 'YYYY-MM')) AS used
+              AND m.month = to_char(${now}::timestamptz AT TIME ZONE g.timezone, 'YYYY-MM')) AS used,
+           EXTRACT(HOUR FROM ${now}::timestamptz AT TIME ZONE g.timezone)::int AS local_hour
     FROM gyms g
     LEFT JOIN gym_lead_email_settings s ON s.gym_id = g.id
     WHERE g.id = ${gymId}`;
@@ -81,6 +85,7 @@ export async function gymSendingFacts(sql: SqlOrTx, gymId: string, now: Date): P
     active: row.status === "active",
     onPlan: row.on_plan,
     usedThisMonth: row.used,
+    localHour: row.local_hour,
   };
 }
 
@@ -108,24 +113,32 @@ export async function leadSendStates(sql: SqlOrTx, gymId: string, leadIds: reado
   );
 }
 
-/** Of these address HMACs, the ones that asked this gym to stop (an unsubscribe or a
- *  complaint), how, and when. */
-export async function optedOut(
+export type AddressStop = "unsubscribed" | "complained" | "bounced" | "refused";
+
+/** Of these address HMACs, the ones the app will not email for this gym: why (the most
+ *  serious reason, as in `suppressionsFor`: this gym's unsubscribes and complaints, and
+ *  every gym's bounces and refusals), and when the person asked THIS gym to stop, if
+ *  they did. */
+export async function addressStops(
   sql: SqlOrTx,
   gymId: string,
   hmacs: readonly string[],
-): Promise<Map<string, { reason: "unsubscribed" | "complained"; at: Date }>> {
+): Promise<Map<string, { reason: AddressStop; optedOutAt: Date | null }>> {
   if (hmacs.length === 0) return new Map();
   const rows = await sql<{ email_hmac: string; reason: string; created_at: Date }[]>`
     SELECT email_hmac, reason, created_at
     FROM email_suppressions
-    WHERE gym_id = ${gymId} AND reason IN ('unsubscribed','complained') AND email_hmac = ANY(${[...hmacs]}::text[])`;
-  const found = new Map<string, { reason: "unsubscribed" | "complained"; at: Date }>();
+    WHERE email_hmac = ANY(${[...hmacs]}::text[]) AND (gym_id = ${gymId} OR gym_id IS NULL)
+    ORDER BY CASE reason WHEN 'bounced' THEN 0 WHEN 'refused' THEN 1 WHEN 'complained' THEN 2 ELSE 3 END, created_at`;
+  const found = new Map<string, { reason: AddressStop; optedOutAt: Date | null }>();
   for (const row of rows) {
-    const reason = row.reason === "complained" ? "complained" : "unsubscribed";
+    if (row.reason !== "unsubscribed" && row.reason !== "complained" && row.reason !== "bounced" && row.reason !== "refused") {
+      throw new Error("email suppression holds a reason that no longer parses");
+    }
     const kept = found.get(row.email_hmac);
-    // A complaint says more than an unsubscribe.
-    if (kept === undefined || (reason === "complained" && kept.reason !== "complained")) found.set(row.email_hmac, { reason, at: row.created_at });
+    const optedOut = row.reason === "unsubscribed" || row.reason === "complained" ? row.created_at : null;
+    if (kept === undefined) found.set(row.email_hmac, { reason: row.reason, optedOutAt: optedOut });
+    else if (kept.optedOutAt === null && optedOut !== null) kept.optedOutAt = optedOut;
   }
   return found;
 }
@@ -134,7 +147,9 @@ export async function optedOut(
  *  With the switch on (`app.on`, and the gym able to send), the app takes a lead it has
  *  already emailed under this tick, or any lead while the month has room, unless its
  *  try at this very email ended without sending. Kept beside `whoSends`, its twin for
- *  one lead. */
+ *  one lead. It cannot see a stopped address (kept as a keyed HMAC) or one on the member
+ *  list, which a lead's panel says at once: such a lead joins Email due when the worker
+ *  next tries it (within a minute in the gym's sending hours, else at 8:00). */
 export const staffDueCondition = (sql: SqlOrTx, today: string, app: { on: boolean; roomLeft: boolean }) => sql`
   l.follow_up_due_on <= ${today}::date
   AND NOT (
@@ -207,8 +222,8 @@ export interface LeadClaimLimits {
 
 /** Take the next follow-up that is due, and lease it. First an email already taken
  *  that waits to be tried again, or whose lease ran out (one that may already have
- *  gone before the whole app's cap and at any hour: it is the same email again, and
- *  Resend forgets its key after a day); then a New, ticked lead whose next one is due today by its gym's
+ *  gone before the whole app's cap: it is the same email again, and Resend forgets its
+ *  key after a day), in the gym's sending hours; then a New, ticked lead whose next one is due today by its gym's
  *  clock, in the gym's sending hours, with the switch on and the gym able to send, the
  *  app not yet having tried that one under this tick, and room in the gym's month
  *  unless the app already emails this lead. The lead is locked while its row is
@@ -229,12 +244,14 @@ export async function claimNextLeadSend(sql: Sql, limits: LeadClaimLimits): Prom
         SELECT s.id FROM gym_lead_sends s
         WHERE ((s.state = 'queued' AND s.not_before <= ${now}) OR (s.state = 'sending' AND s.lease_until < ${now}))
           AND (s.maybe_sent_at IS NOT NULL) = ${mayHaveGone}
-          -- One that certainly has not gone waits for the gym's sending hours, as a new one does.
-          AND (${mayHaveGone}::boolean OR EXISTS (
+          -- Another try waits for the gym's sending hours, as a first one does: an email that
+          -- may have gone may not have, and then this try is the one that arrives. Tried
+          -- again from 8:00 after one at 19:59 is 12 hours on, inside Resend's 24-hour key.
+          AND EXISTS (
             SELECT 1 FROM gyms g
             WHERE g.id = s.gym_id
               AND EXTRACT(HOUR FROM ${now}::timestamptz AT TIME ZONE g.timezone) >= ${SENDING_HOURS.from}
-              AND EXTRACT(HOUR FROM ${now}::timestamptz AT TIME ZONE g.timezone) < ${SENDING_HOURS.until}))
+              AND EXTRACT(HOUR FROM ${now}::timestamptz AT TIME ZONE g.timezone) < ${SENDING_HOURS.until})
           AND (${everyGym}::boolean OR s.gym_id = ANY(${onlyGyms}::uuid[]))
           AND s.gym_id <> ALL(${skipGyms}::uuid[])
         ORDER BY s.not_before, s.id

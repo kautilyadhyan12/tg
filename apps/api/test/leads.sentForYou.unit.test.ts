@@ -7,7 +7,8 @@ import { leadFollowUpEmail } from "../src/email/templates.js";
 import { inviteLinkToken, readInviteLinkToken, readUnsubscribeToken } from "../src/modules/orgs/invites/token.js";
 import type { LeadSendState } from "../src/modules/orgs/leads/emailsRepo.js";
 import { decideLeadSend, type LeadSendFacts } from "../src/modules/orgs/leads/sendRule.js";
-import { whoSends } from "../src/modules/orgs/leads/service.js";
+import { appSending, appWhen, whoSends } from "../src/modules/orgs/leads/service.js";
+import type { GymSendingFacts } from "../src/modules/orgs/leads/emailsRepo.js";
 
 // =========================================================================
 // THE RULE: MAY THIS FOLLOW-UP GO NOW?
@@ -115,6 +116,71 @@ describe("whoSends — every class of case", () => {
       expect(whoSends(dueOn, app, sendState)).toEqual(expected);
     });
   }
+});
+
+// =========================================================================
+// WHEN THE APP SENDS ONE IT TAKES, AND WHETHER IT IS SENDING AT ALL
+// =========================================================================
+
+describe("appWhen — every class of case", () => {
+  const today = "2026-10-01";
+  const held: LeadSendState = { continuing: true, next: { state: "queued", reason: null } };
+  const cases: [string, string | null, number, LeadSendState | undefined, ReturnType<typeof appWhen>][] = [
+    ["nothing due", null, 12, undefined, null],
+    ["due another day: its day is said instead", "2026-10-03", 12, undefined, null],
+    ["due today, before 8", today, 7, undefined, "today"],
+    ["due today, at 8", today, 8, undefined, "today"],
+    ["due today, at 19", today, 19, undefined, "today"],
+    ["due today, at 20: tomorrow morning", today, 20, undefined, "tomorrow"],
+    ["due today, at 23", today, 23, undefined, "tomorrow"],
+    ["due yesterday, before 8 (last night's form)", "2026-09-30", 7, undefined, "today"],
+    ["due yesterday, in the hours: the app is behind", "2026-09-30", 9, undefined, "waiting"],
+    ["due yesterday, after 20", "2026-09-30", 21, undefined, "tomorrow"],
+    ["held for another try, in the hours", today, 10, held, "waiting"],
+    ["held for another try, at night", today, 22, held, "waiting"],
+    ["being sent now", today, 10, { continuing: true, next: { state: "sending", reason: null } }, "today"],
+  ];
+  for (const [name, dueOn, hour, state, expected] of cases) {
+    it(name, () => {
+      expect(appWhen(dueOn, today, hour, state)).toBe(expected);
+    });
+  }
+});
+
+describe("appSending — the app sends only when emails can go and the gym can send", () => {
+  const ready: GymSendingFacts = {
+    sendForMe: true,
+    replyTo: "desk@gym.example.com",
+    name: "Iron House",
+    hasPostalAddress: true,
+    stopped: false,
+    active: true,
+    onPlan: true,
+    usedThisMonth: 3,
+    localHour: 10,
+  };
+  const cases: [string, Partial<GymSendingFacts>, "on" | "paused" | "off", boolean][] = [
+    ["everything ready", {}, "on", true],
+    ["the kill switch on", {}, "paused", false],
+    ["sending not set up", {}, "off", false],
+    ["the switch off", { sendForMe: false }, "on", false],
+    ["no reply address", { replyTo: null }, "on", false],
+    ["no postal address", { hasPostalAddress: false }, "on", false],
+    ["the gym stopped", { stopped: true }, "on", false],
+    ["the gym closed", { active: false }, "on", false],
+    ["no plan", { onPlan: false }, "on", false],
+    ["a name no email can show", { name: "@@@" }, "on", false],
+  ];
+  for (const [name, change, sending, on] of cases) {
+    it(name, () => {
+      expect(appSending({ ...ready, ...change }, sending).on).toBe(on);
+    });
+  }
+  it("room in the month is under 100; no gym is nothing", () => {
+    expect(appSending({ ...ready, usedThisMonth: 99 }, "on").roomLeft).toBe(true);
+    expect(appSending({ ...ready, usedThisMonth: 100 }, "on").roomLeft).toBe(false);
+    expect(appSending(null, "on")).toMatchObject({ on: false, roomLeft: false });
+  });
 });
 
 // =========================================================================

@@ -17,6 +17,7 @@ export function tickSendForMe(draft, on, ownEmail) {
 /** Why Save cannot go yet, or null. */
 export function leadEmailsProblem(draft, settings) {
   if (!draft.sendForMe) return null;
+  if (settings.appSending === 'off') return LEAD_EMAIL_SETTINGS_WORDS.invites_off;
   if (!settings.hasPostalAddress) return LEAD_EMAIL_SETTINGS_WORDS.needs_postal_address;
   if (!authEmailSchema.safeParse(draft.replyTo).success) return 'Add the email address replies should go to.';
   return null;

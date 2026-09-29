@@ -2647,7 +2647,16 @@ address from every email of that gym through the app (invitations too) and takes
 lead's tick off; staff may tick it again for a person who asks at the desk and send by
 hand, but the app never emails that address for the gym again. Each lead says who sends
 its next one (`followUp.by`), why the app did not (`notSent`) and when the person asked to
-stop (`optedOutAt`); **Email due** counts only staff's. **20c-v-b**: Resend's reports on
+stop (`optedOutAt`); **Email due** counts only staff's. The app's they are only while emails
+through it can go: with the operator's kill switch on (`INVITES_PAUSED`) they are staff's and
+Settings says emails are paused; with sending not set up the switch cannot be turned on
+(503 `invites_off`, as for invitations). The panel says when the app sends one
+(`followUp.appWhen`): today; tomorrow morning, after 20:00 by the gym's clock; or
+"waiting to be sent for you" — held for another try (a week of that gives it back), or its
+day gone by in the sending hours. Every try, a first or another, waits for those hours.
+An address stopped, bounced or on the member list is staff's at once on the panel; the
+list's Email due counts it from the worker's next try, since it cannot read the keyed
+address list. **20c-v-b**: Resend's reports on
 these emails (a bounce, a complaint) act as they do for invitations and count toward the
 gym's stop.
 

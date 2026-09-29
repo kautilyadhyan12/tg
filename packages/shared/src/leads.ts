@@ -113,8 +113,8 @@ export function leadGreeting(firstName: string): string {
 export const leadFirstName = (fullName: string): string => fullName.trim().split(/\s+/)[0] ?? "";
 
 /** Settings → Follow-up emails to leads (20c-v). `usedThisMonth` counts new leads the
- *  app has emailed in the gym's month; `hasPostalAddress` and `stopped` say why it may
- *  not send. */
+ *  app has emailed in the gym's month; `hasPostalAddress`, `stopped` and `appSending`
+ *  say why it may not send. */
 export const leadEmailSettingsSchema = z
   .object({
     sendForMe: z.boolean(),
@@ -123,6 +123,9 @@ export const leadEmailSettingsSchema = z
     usedThisMonth: z.number().int().nonnegative(),
     hasPostalAddress: z.boolean(),
     stopped: z.boolean(),
+    /** Whether emails through the app can go at all: "paused" by the operator's kill
+     *  switch, or "off" when sending is not set up. */
+    appSending: z.enum(["on", "paused", "off"]),
   })
   .strict();
 export type LeadEmailSettings = z.infer<typeof leadEmailSettingsSchema>;
@@ -145,6 +148,8 @@ export const LEAD_EMAIL_SETTINGS_WORDS = {
   gym_name: "Your gym's name can't be shown in an email as it is. Change it under your gym's details first.",
   sending_stopped:
     "Emails from your gym through AI Home Gym are stopped, because too many bounced or one was marked as spam. Send follow-ups yourself from each lead's panel.",
+  paused: "Emails through AI Home Gym are paused just now. Until they start again, your leads' follow-ups wait for you on the Leads page.",
+  invites_off: "Emails through AI Home Gym aren't set up yet, so this can't be switched on.",
 } as const;
 
 export const leadFollowUpSchema = z
@@ -159,9 +164,13 @@ export const leadFollowUpSchema = z
     /** Its day has passed without it being marked sent. */
     overdue: z.boolean(),
     lastSentAt: z.string().datetime({ offset: true }).nullable(),
-    /** Who sends the next one (20c-v): the app, with "Send them for me" on and room in
-     *  the month, or staff. Null when none is due. */
+    /** Who sends the next one (20c-v): the app, with "Send them for me" on, emails able
+     *  to go and room in the month, or staff. Null when none is due. */
     by: z.enum(["app", "you"]).nullable().default(null),
+    /** When the app sends a due one: later today, tomorrow morning (after 20:00 by the
+     *  gym's clock), or it is waiting (held for another try, or its day has passed).
+     *  Null unless `by` is "app" and it is due now. */
+    appWhen: z.enum(["today", "tomorrow", "waiting"]).nullable().default(null),
     /** Why the app did not send the next one, which staff may then send themselves. */
     notSent: z.enum(LEAD_EMAIL_NOT_SENT).nullable().default(null),
     /** When the person asked this gym to stop emailing them through the app: Stop

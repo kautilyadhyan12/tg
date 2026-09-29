@@ -10,6 +10,7 @@ import {
   leadProblem,
   leadsQueryString,
   SENT_FOR_YOU_NOTE,
+  WAITING_FOR_YOU_NOTE,
   showsEmailDue,
   statusChips,
   updateLeadRequest,
@@ -190,15 +191,26 @@ describe('the follow-up emails (20c-ii)', () => {
 
   it('with "Send them for me" on, says when the app sends it and offers nothing to press (20c-v)', () => {
     const now = new Date('2026-09-27T12:00:00');
-    expect(followUpState(due({ by: 'app' }), now)).toEqual({
+    expect(followUpState(due({ by: 'app', appWhen: 'today' }), now)).toEqual({
       next: null,
       headline: 'Email 1 of 3 will be sent for you today',
       due: false,
       sentLine: null,
       note: SENT_FOR_YOU_NOTE,
     });
-    // Late (the night, or the whole app's day full): still the app's, still today.
-    expect(followUpState(due({ by: 'app', dueOn: '2026-09-25', overdue: true }), now).headline).toBe('Email 1 of 3 will be sent for you today');
+    // After 8 in the evening by the gym's clock, it goes in the morning (round one, H3).
+    expect(followUpState(due({ by: 'app', appWhen: 'tomorrow' }), now).headline).toBe('Email 1 of 3 will be sent for you tomorrow morning');
+    // Held for another try, or its day gone by in the sending hours: waiting, never "today".
+    expect(followUpState(due({ by: 'app', appWhen: 'waiting' }), now)).toEqual({
+      next: null,
+      headline: 'Email 1 of 3 is waiting to be sent for you (due today)',
+      due: false,
+      sentLine: null,
+      note: WAITING_FOR_YOU_NOTE,
+    });
+    expect(followUpState(due({ by: 'app', appWhen: 'waiting', dueOn: '2026-09-25', overdue: true }), now).headline).toBe(
+      'Email 1 of 3 is waiting to be sent for you (due Fri 25 Sept)',
+    );
     expect(
       followUpState(due({ by: 'app', sent: 1, dueOn: '2026-09-30', dueNow: false, lastSentAt: '2026-09-27T09:00:00.000Z' }), now),
     ).toEqual({
