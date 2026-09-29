@@ -7,6 +7,8 @@ Current entries:
 
 - `load-usda-food-table.md` — filling the USDA food table in a new environment
   (ROADMAP Stage 4 item 1)
+- `fill-lead-email-keys.md` — the Leads list's email problems for leads written before
+  migration 0052 (ROADMAP 20c-v-b)
 - (P0.4b adds deploy/rollback; Part 8 tasks add alerts, backup/restore drill,
   break-glass, secret rotation)
 

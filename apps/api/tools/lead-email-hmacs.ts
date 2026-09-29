@@ -6,8 +6,10 @@
 //
 //   DATABASE_URL=postgres://aihg:aihg@localhost:5433/aihg_b corepack pnpm --filter api exec tsx tools/lead-email-hmacs.ts
 //
-// The key comes from INVITE_HMAC_SECRET, or the development default when it is not set,
-// as `loadConfig` gives it to the api.
+// The key comes from INVITE_HMAC_SECRET, as `loadConfig` gives it to the api. Without it
+// the development key is used, which a live server does not, so the tool refuses to run
+// on any database but a local one; it fills only empty keys, so a wrong fill would stay.
+// The deploy step is `RUNBOOK/fill-lead-email-keys.md`.
 import postgres from "postgres";
 import { loadConfig } from "../src/config.js";
 import { emailHmac } from "../src/modules/orgs/invites/address.js";
@@ -15,6 +17,10 @@ import { inviteSettings } from "../src/modules/orgs/invites/settings.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
 if (url === "") throw new Error("DATABASE_URL is required");
+const local = /@(localhost|127\.0\.0\.1)[:/]/.test(url);
+if (!local && (process.env["INVITE_HMAC_SECRET"] ?? "") === "") {
+  throw new Error("INVITE_HMAC_SECRET must be set, the same as the api's, for any database that is not local");
+}
 
 const config = loadConfig({
   ...process.env,
