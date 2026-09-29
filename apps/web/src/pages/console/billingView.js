@@ -195,13 +195,12 @@ export function isPaidThroughRazorpay(org) {
 }
 
 /** THE LINE UNDER THE PRICES when the gym can pay online. An Indian gym pays through
- *  Razorpay with no GST added while Kd is not registered for it (Kd, RULINGS 2026-09-29),
- *  and Razorpay takes UPI only up to ₹15,000 a charge (its Subscriptions FAQ, read that
- *  day); every other gym pays through Paddle, with tax added where the law asks. */
+ *  Razorpay with no GST added while Kd is not registered for it (Kd, RULINGS 2026-09-29);
+ *  the ways to pay are Razorpay's own window's, which on Kd's account offered cards and bank
+ *  mandates but not yet UPI (seen 2026-09-29), so none is promised here. Every other gym
+ *  pays through Paddle, with tax added where the law asks. */
 export function pricesNote(currency) {
-  return currency === 'INR'
-    ? 'Prices are a month, with no GST added. Pay by card, or by UPI on a plan up to ₹15,000 a month.'
-    : 'Prices are a month. Tax is added at checkout where it applies.';
+  return currency === 'INR' ? 'Prices are a month, with no GST added.' : 'Prices are a month. Tax is added at checkout where it applies.';
 }
 
 /** HAS THIS GYM CHOSEN AND PAID FOR A PLAN THROUGH US? During a free trial that means its

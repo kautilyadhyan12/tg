@@ -689,7 +689,7 @@ describe('subscribing from the prompt', () => {
     expect(screen.getByText(/more members than this plan allows/i)).toBeTruthy();
   });
 
-  it("opens Razorpay's window for an Indian gym, says card or UPI and no GST, and goes once the payment reaches the gym", async () => {
+  it("opens Razorpay's window for an Indian gym, says no GST is added, and goes once the payment reaches the gym", async () => {
     const india = { ...spent, country: 'IN', currencyDisplay: 'INR' };
     const RUPEES = { ...PAID, priceLabel: '₹7,500', seatCap: 200, subscribed: true, paidThrough: 'razorpay' };
     orgService.getMine.mockResolvedValueOnce(mineIs(india));
@@ -704,7 +704,7 @@ describe('subscribing from the prompt', () => {
     renderConsole(Overview);
 
     await screen.findByTestId('plan-list');
-    expect(screen.getByText('Prices are a month, with no GST added. Pay by card, or by UPI on a plan up to ₹15,000 a month.')).toBeTruthy();
+    expect(screen.getByText('Prices are a month, with no GST added.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /^subscribe$/i }));
 
     await waitFor(() => expect(openRazorpayCheckout).toHaveBeenCalledTimes(1));

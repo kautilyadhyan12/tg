@@ -36,5 +36,6 @@ and Razorpay's webhook for renewals and failed payments.
 
 - `SELECT code, razorpay_plan_id FROM plans WHERE currency = 'INR' AND active;` has an id on
   every row.
-- An Indian gym's plan list says "Pay by card, or by UPI on a plan up to ₹15,000 a month".
+- An Indian gym's plan list says "Prices are a month, with no GST added." and Subscribe opens Razorpay's window.
+- UPI for monthly payments is switched on by Razorpay per account (its Subscriptions FAQ calls it early access): ask Razorpay's support, as for Subscriptions, and check that Razorpay's window lists UPI.
 - Razorpay's webhook page shows the last deliveries answered 200.

@@ -1021,8 +1021,8 @@ describe('re-check N2 (1c-iii): no remove-by time once it has passed', () => {
   });
 });
 describe('an Indian gym paying through Razorpay (1d-i)', () => {
-  it('the line under the prices says card or UPI and no GST in rupees, and tax at checkout elsewhere', () => {
-    expect(pricesNote('INR')).toBe('Prices are a month, with no GST added. Pay by card, or by UPI on a plan up to ₹15,000 a month.');
+  it('the line under the prices says no GST in rupees, and tax at checkout elsewhere', () => {
+    expect(pricesNote('INR')).toBe('Prices are a month, with no GST added.');
     expect(pricesNote('USD')).toBe('Prices are a month. Tax is added at checkout where it applies.');
     expect(pricesNote(undefined)).toBe('Prices are a month. Tax is added at checkout where it applies.');
   });
