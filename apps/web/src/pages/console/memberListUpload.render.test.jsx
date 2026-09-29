@@ -931,7 +931,7 @@ describe('the checks', () => {
     const warning = screen.getByTestId('warning-phones_unusual');
     expect(within(warning).queryByText(/look like a normal number/)).toBeNull();
     fireEvent.click(within(warning).getByRole('button', { name: 'See which' }));
-    expect(within(warning).getByText(/correct any that are wrong in your file and upload it again/)).toBeTruthy();
+    expect(within(warning).getByText(/Correct any that are wrong in your file and upload it again, or in the app after you import\./)).toBeTruthy();
     const listed = () => within(within(warning).getByTestId('warning-rows')).getAllByRole('listitem').map((li) => li.textContent);
     expect(listed()).toHaveLength(20);
     expect(listed()[0]).toBe('Row 2, Person 0: Mobile “00000001000”');

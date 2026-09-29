@@ -4,6 +4,16 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-29 · 5b-v-d-iii (Folder A): each import warning says which rows (branch `import-warnings-which-rows`)
+
+- **Why this job:** next in Folder A (Kd at 5b-v-d-ii's click-through: *"no option to check or correct or see what is even wrong"*). **Risky** (members' names and an uploaded file's cells on a screen), Opus xhigh; Kd: *"go"*. No migration, no new package.
+- **Built (3588931):** every counted warning (broken names, numbers Excel cut, phones left out or unusual, shared emails, cells cut, dates not read, card numbers removed, front-desk details) carries its first 100 rows — row, name, column, the cell as written (`where`, default `[]` so an older staged upload still reads). Review: **See which** opens the fix sentence and the rows, 20 then Show all, then "and N more like these". Card cells in a note now count once per cell. The three fix sentences that lacked one say how to fix.
+- **Worst thing, first test:** Stripe's published test cards, typed as people type them, in date, phone and long-note cells, with and without a country: none quoted. Every quoted cell goes through `quotable`. **Breaks, each RED, restored sha256-identical:** quotable skipped (1 red), no card inside words (1), no whole-cell check (1, found by a Luhn-only number the scrub alone misses).
+- **Real files:** the Excel and Google exports name Łukasz's "9.19877E+11" (row 4) and the "1.23457E+15" member number (row 6); Kd's demo phones 07700 900xxx are Ofcom's drama range, which is why his "9 look unusual" was right.
+- **Cost at full size** (mains, 2,592 MHz, 20 runs): the staged Review grows from ~4 KB to at most 327 KB (every warning 100 full rows); reading it back 2.7 ms and sending it 2.4 ms median on the request thread. The file is still read on the worker.
+- **Kd's click-through: *"all passed"*** (Kd Demo Gym, `kd-demo-october-c.csv` from `.cost/demo-5b-v-d-iii.ts`). Then Kd: each fix sentence also offers correcting it in the app after importing (every field is editable there) — added beside "fix your file and upload again".
+- **Tests:** member-list api 1,746 of 1,747 (`kept.routes` "unknown filter" timed out at 5 s under load, 16/16 alone; given the file's 60 s like its neighbours); shared 233/233; web 3,251 of 3,252 (`settingsHealth` 9/9 alone; `poseAssets.contract` local Node 24); tsc and eslint 0.
+
 ## 2026-09-29 · 5b-v-d-ii (Folder A): the member Import box in the console's look (branch `members-import-new-look`)
 
 - **Why this job:** next in Folder A's list. Sized **Risky** (members' names; its Import ends people's app), Opus xhigh; Kd: *"go"*. No migration, no new package.
