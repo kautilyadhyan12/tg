@@ -3,9 +3,10 @@
 // and leave the rest to the worker, which asks Resend itself before acting on it.
 //
 // Only what the worker needs is kept — the event's type, Resend's id for the email, the
-// invitation tag (the send row it names) and a bounce's type and sub-type. The body
+// invitation or lead follow-up tag (the send row it names; 20c-v-b) and a bounce's type
+// and sub-type. The body
 // also holds the recipient's address and the subject; they are never stored or logged.
-import { INVITE_SEND_TAG, resendEmailEventTypeSchema, resendWebhookBodySchema, svixHeadersSchema } from "@app/shared";
+import { INVITE_SEND_TAG, LEAD_SEND_TAG, resendEmailEventTypeSchema, resendWebhookBodySchema, svixHeadersSchema } from "@app/shared";
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import type { Sql } from "postgres";
@@ -64,8 +65,9 @@ export function registerResendWebhookRoutes(
           if (!event.success) req.log.warn({ event: "webhook.resend_unreadable" }, "a signed Resend webhook body did not parse");
           return reply.status(200).send();
         }
-        const sendTag = event.data.data?.tags?.find((tag) => tag.name === INVITE_SEND_TAG)?.value;
-        const sendId = z.string().uuid().safeParse(sendTag);
+        const tagged = (name: string) => z.string().uuid().safeParse(event.data.data?.tags?.find((tag) => tag.name === name)?.value);
+        const sendId = tagged(INVITE_SEND_TAG);
+        const leadSendId = tagged(LEAD_SEND_TAG);
         await repo.keepEvent(deps.sql, {
           provider: "resend",
           eventId: signed.id,
@@ -73,6 +75,7 @@ export function registerResendWebhookRoutes(
             type: type.data,
             emailId,
             sendId: sendId.success ? sendId.data : null,
+            leadSendId: leadSendId.success ? leadSendId.data : null,
             bounceType: event.data.data?.bounce?.type ?? null,
             bounceSubType: event.data.data?.bounce?.subType ?? null,
           },

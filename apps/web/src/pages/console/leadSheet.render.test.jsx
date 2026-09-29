@@ -540,7 +540,7 @@ describe('the follow-up emails (20c-ii): the gym sends them, the app reminds', (
 
   it('when the app could not send it, the buttons come back with the reason', async () => {
     await open({ ...dueTom, followUp: { ...dueTom.followUp, by: 'you', notSent: 'bounced', optedOutAt: null } });
-    expect(screen.getByText('Not sent for you: emails to this address bounce.')).toBeTruthy();
+    expect(screen.getByText('Emails to this address bounce. Check the address with them.')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Email Tom' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Mark email 1 as sent' })).toBeTruthy();
   });

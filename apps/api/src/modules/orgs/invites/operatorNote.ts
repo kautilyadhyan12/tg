@@ -1,5 +1,6 @@
-// The note to the app's operator when a gym's invitations are stopped (Part 3 §9.12;
-// RULINGS 2026-09-08, the "have a look" list: an email to Kd until the admin panel).
+// The note to the app's operator when a gym's emails through the app are stopped (Part 3
+// §9.12; RULINGS 2026-09-08, the "have a look" list: an email to Kd until the admin
+// panel). Its invitations and the lead follow-ups sent for it count together (20c-v-b).
 // It goes through the sign-in codes' sender, never the invitations' sub-domain, and it
 // never throws: the stop is already written, and `tools/invites-stopped.ts` lists it.
 import type { EmailTransport } from "../../../email/resend.js";
@@ -15,17 +16,17 @@ export function operatorNote(stopped: StoppedGym): { subject: string; text: stri
   const name = oneLine(stopped.gymName) || "A gym";
   const why =
     stopped.reason === "complaint"
-      ? "Somebody marked one of its first 100 invitations as spam."
-      : `${String(stopped.bounced)} of its ${String(stopped.sent)} invitations bounced, more than 2 %.`;
+      ? "Somebody marked one of its first 100 emails (invitations and lead follow-ups) as spam."
+      : `${String(stopped.bounced)} of its ${String(stopped.sent)} emails (invitations and lead follow-ups) bounced, more than 2 %.`;
   const resume = `corepack pnpm --filter api exec tsx tools/invites-stopped.ts resume ${stopped.gymId}`;
   const lines = [
-    `${name}'s invitations were stopped. ${why}`,
+    `${name}'s invitations and lead follow-ups were stopped. ${why}`,
     `Gym id: ${stopped.gymId}`,
     "Nothing more is sent for it. To start it again after a look:",
     resume,
   ];
   return {
-    subject: `Invitations stopped: ${name}`,
+    subject: `Emails stopped: ${name}`,
     text: lines.join("\n\n"),
     html: lines.map((line) => `<p>${escapeHtml(line)}</p>`).join(""),
   };

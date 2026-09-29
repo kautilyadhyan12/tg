@@ -2656,9 +2656,26 @@ Settings says emails are paused; with sending not set up the switch cannot be tu
 day gone by in the sending hours. Every try, a first or another, waits for those hours.
 An address stopped, bounced or on the member list is staff's at once on the panel; the
 list's Email due counts it from the worker's next try, since it cannot read the keyed
-address list. **20c-v-b**: Resend's reports on
-these emails (a bounce, a complaint) act as they do for invitations and count toward the
-gym's stop. A lead from the gym's page, ticked by the person on the form, is emailed like
+address list. **What comes back (20c-v-b)**: Resend's reports on these emails are kept
+by the invitations' webhook (the `lead_send` tag names the row) and acted on by the same
+worker, only once Resend's own record of the email agrees: the email keeps its result
+(`gym_lead_sends.result`), a hard bounce or an address Resend refuses keeps the address
+from every gym, and a complaint keeps it from that gym and takes the lead's tick off if
+it is still at that address, as Stop does (the panel then says why, and staff may tick
+it again for a person who asks). The gym's stop (§9.12: bounces past 2 %, or a complaint
+among its first 100) counts its invitations and these emails together, and stops both;
+the operator's note says so. **Found on the list** (RULINGS 2026-09-29): a New lead whose
+address bounces, or that the email service refuses (its own list, which a spam report
+anywhere can put an address on, so never called a bounce), or who marked one of the gym's
+emails as spam and has not been ticked again since, is tagged on its Leads row ("Email
+bounces" · "Can't be emailed" · "Marked as spam", `emailProblem`) and counted in an
+**Email problems** chip that shows only them (`followUp=problem`; found by the address's
+HMAC kept on the lead, `gym_leads.email_hmac`, written by the app with every address and
+filled for older leads by `tools/lead-email-hmacs.ts`); the lead's panel says the same
+whoever sends the next email, or with none to come ("Emails to this address bounce. Check
+the address with them."); a spam report reads "they marked one of your emails as
+spam" (`optedOutHow`); and a gym whose emails through the app are stopped is told at the
+top of Leads as in Settings. A lead from the gym's page, ticked by the person on the form, is emailed like
 any other, as gym software does (RULINGS 2026-09-29): a stranger could type somebody
 else's address, which is met the standard way, as for invitations — the robot check, the
 form's limits, Stop in every email, the address check — and 20c-v-b is built before any

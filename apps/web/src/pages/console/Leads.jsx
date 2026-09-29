@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ChevronRight, FileUp, Globe, Loader2, Search, UserPlus } from 'lucide-react';
-import { LEAD_FILE_WORDS, LEAD_QUERY_MAX_CHARS } from '@app/shared';
+import { LEAD_EMAIL_SETTINGS_WORDS, LEAD_FILE_WORDS, LEAD_QUERY_MAX_CHARS } from '@app/shared';
 import { orgService, errorStatus, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import ScrollJump from '../../components/console/ScrollJump';
@@ -13,7 +13,9 @@ import { orgWords, viewerPrivileges } from './consoleView';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
 import {
   DUE_CHIP_LABEL,
+  EMAIL_PROBLEM_TAG,
   FROM_PAGE_TAG,
+  PROBLEM_CHIP_LABEL,
   STATUS_TAG,
   addedDay,
   addedWords,
@@ -46,7 +48,7 @@ export default function Leads() {
   const readOnly = consoleIsReadOnly(org);
   const mayKeep = viewerPrivileges(org).includes('members.confirm');
 
-  const [filters, setFilters] = useState({ status: 'all', query: '', due: false });
+  const [filters, setFilters] = useState({ status: 'all', query: '', due: false, problem: false });
   const [typed, setTyped] = useState('');
   const [page, setPage] = useState({ loading: true, error: null, refused: false, leads: [], total: 0, cursor: null, counts: null });
   const [loadingMore, setLoadingMore] = useState(false);
@@ -75,7 +77,16 @@ export default function Leads() {
         (res) => {
           if (latest.current !== asked) return;
           const d = res.data;
-          setPage({ loading: false, error: null, refused: false, leads: d.leads, total: d.total, cursor: d.cursor, counts: d.counts });
+          setPage({
+            loading: false,
+            error: null,
+            refused: false,
+            leads: d.leads,
+            total: d.total,
+            cursor: d.cursor,
+            counts: d.counts,
+            sendingStopped: d.sendingStopped === true,
+          });
         },
         (err) => {
           if (latest.current !== asked) return;
@@ -142,7 +153,7 @@ export default function Leads() {
   }
 
   const noLeads = page.counts !== null && page.counts.all === 0;
-  const searching = filters.query.trim() !== '' || filters.status !== 'all' || filters.due;
+  const searching = filters.query.trim() !== '' || filters.status !== 'all' || filters.due || filters.problem;
   const openLead = (id) => {
     setNotice(null);
     setOpenId(id);
@@ -195,6 +206,13 @@ export default function Leads() {
         </section>
       ) : null}
 
+      {/* Stopped for bounces or a complaint: said here too, not only in Settings (20c-v-b). */}
+      {page.sendingStopped ? (
+        <section className="c-callout" role="status" data-testid="leads-sending-stopped">
+          <p className="c-s14">{LEAD_EMAIL_SETTINGS_WORDS.sending_stopped}</p>
+        </section>
+      ) : null}
+
       {page.refused ? (
         <section className="c-card p-5 md:p-6">
           <p className="c-s15 c-t2">{page.error}</p>
@@ -222,9 +240,9 @@ export default function Leads() {
                   <button
                     key={chip.key}
                     type="button"
-                    aria-pressed={!filters.due && filters.status === chip.key}
-                    onClick={() => change({ ...filters, status: chip.key, due: false })}
-                    className={!filters.due && filters.status === chip.key ? 'c-chip c-chip-on' : 'c-chip'}
+                    aria-pressed={!filters.due && !filters.problem && filters.status === chip.key}
+                    onClick={() => change({ ...filters, status: chip.key, due: false, problem: false })}
+                    className={!filters.due && !filters.problem && filters.status === chip.key ? 'c-chip c-chip-on' : 'c-chip'}
                   >
                     {chip.label} <span className="c-n">{count(chip.count)}</span>
                   </button>
@@ -233,10 +251,20 @@ export default function Leads() {
                   <button
                     type="button"
                     aria-pressed={filters.due}
-                    onClick={() => change({ ...filters, status: 'all', due: !filters.due })}
+                    onClick={() => change({ ...filters, status: 'all', due: !filters.due, problem: false })}
                     className={filters.due ? 'c-chip c-chip-on' : 'c-chip'}
                   >
                     {DUE_CHIP_LABEL} <span className="c-n">{count(page.counts.followUpsDue)}</span>
+                  </button>
+                ) : null}
+                {page.counts.emailProblems > 0 || filters.problem ? (
+                  <button
+                    type="button"
+                    aria-pressed={filters.problem}
+                    onClick={() => change({ ...filters, status: 'all', due: false, problem: !filters.problem })}
+                    className={filters.problem ? 'c-chip c-chip-on' : 'c-chip'}
+                  >
+                    {PROBLEM_CHIP_LABEL} <span className="c-n">{count(page.counts.emailProblems ?? 0)}</span>
                   </button>
                 ) : null}
               </div>
@@ -304,6 +332,7 @@ export default function Leads() {
                       >
                         <span className={`c-tag ${STATUS_TAG[lead.status] ?? 'c-tag-plain'}`}>{statusWord(lead.status)}</span>
                         {showsEmailDue(lead) ? <span className="c-tag c-tag-warn">{DUE_CHIP_LABEL}</span> : null}
+                        {EMAIL_PROBLEM_TAG[lead.emailProblem] ? <span className="c-tag c-tag-bad">{EMAIL_PROBLEM_TAG[lead.emailProblem]}</span> : null}
                         {lead.enquiredAt ? <span className="c-tag c-tag-soft">{FROM_PAGE_TAG}</span> : null}
                       </span>
                       <ChevronRight aria-hidden="true" className="w-[18px] h-[18px] c-t3" style={{ gridArea: 'go' }} />

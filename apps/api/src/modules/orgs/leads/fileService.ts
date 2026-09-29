@@ -41,6 +41,8 @@ export interface LeadFileDeps {
   sql: Sql;
   redis: RedisLike;
   log: { warn: (obj: object, msg: string) => void };
+  /** The key a lead's address is kept under, for the list's email problems (20c-v-b). */
+  addressKey: Buffer | null;
   /** The reader, so a route test can stand in for the worker. Production passes nothing. */
   read?: typeof readLeadFile;
   /** Runs after Add has read the file and before it takes the gym's lock; a test
@@ -183,7 +185,7 @@ export async function addLeadFile(
       throw new OrgsError(409, "leads_full", LEAD_FILE_WORDS.full(Math.max(0, LEADS_MAX_PER_GYM - known.leadsNow), plan.add.length));
     }
     if (plan.add.length === 0) return { added: 0 };
-    const added = await repo.insertLeadsFromFile(tx, gymId, plan.add, userId);
+    const added = await repo.insertLeadsFromFile(tx, gymId, plan.add, userId, deps.addressKey);
     await insertAudit(tx, {
       actorUserId: userId,
       gymId,

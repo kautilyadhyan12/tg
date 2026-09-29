@@ -330,6 +330,7 @@ d("the app sends a lead's follow-ups (real Postgres)", () => {
       const afterStop = await readLead(gym, priya.id, owner.cookies);
       expect(afterStop.mayEmail).toBe(false);
       expect(afterStop.followUp.optedOutAt).not.toBeNull();
+      expect(afterStop.followUp.optedOutHow).toBe("unsubscribed");
 
       const reticked = await patch(leadUrl(gym, priya.id), { mayEmail: true }, owner.cookies);
       expect(reticked.statusCode).toBe(200);

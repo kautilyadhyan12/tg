@@ -44,6 +44,8 @@ export const gymLeads = pgTable(
     followUpDueOn: date("follow_up_due_on", { mode: "string" }),
     /** When the person last sent the gym page's form (20c-iv-a). */
     enquiredAt: timestamp("enquired_at", { withTimezone: true }),
+    /** The address under the invitations' key (20c-v-b), for the list's email problems. */
+    emailHmac: text("email_hmac"),
   },
   (t) => [
     check("gym_leads_name_len_check", sql`char_length(${t.fullName}) BETWEEN 1 AND 120`),
@@ -53,6 +55,8 @@ export const gymLeads = pgTable(
     check("gym_leads_notes_len_check", sql`char_length(${t.notes}) <= 2000`),
     check("gym_leads_email_ok_check", sql`${t.emailOkAt} IS NULL OR ${t.email} IS NOT NULL`),
     check("gym_leads_entry_check", sql`${t.entryId} IS NULL OR ${t.status} = 'joined'`),
+    check("gym_leads_email_hmac_check", sql`${t.emailHmac} IS NULL OR (${t.email} IS NOT NULL AND ${t.emailHmac} ~ '^[0-9a-f]{64}$')`),
+    index("gym_leads_email_hmac_idx").on(t.emailHmac).where(sql`${t.emailHmac} IS NOT NULL`),
     uniqueIndex("gym_leads_gym_email_uq").on(t.gymId, t.email).where(sql`${t.email} IS NOT NULL`),
     uniqueIndex("gym_leads_gym_phone_uq").on(t.gymId, t.phoneE164).where(sql`${t.phoneE164} IS NOT NULL`),
     index("gym_leads_gym_created_idx").on(t.gymId, t.createdAt, t.id),
@@ -115,6 +119,9 @@ export const gymLeadSends = pgTable(
     providerId: text("provider_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
+    /** What Resend reported about an email that went, once confirmed (20c-v-b). */
+    result: text("result"),
+    resultAt: timestamp("result_at", { withTimezone: true }),
   },
   (t) => [
     uniqueIndex("gym_lead_sends_step_uq").on(t.leadId, t.okAt, t.step),
@@ -122,6 +129,8 @@ export const gymLeadSends = pgTable(
     index("gym_lead_sends_due_idx").on(t.notBefore, t.id).where(sql`${t.state} IN ('queued','sending')`),
     index("gym_lead_sends_month_idx").on(t.gymId, t.month).where(sql`${t.counted}`),
     index("gym_lead_sends_sent_idx").on(t.finishedAt).where(sql`${t.state} = 'sent'`),
+    index("gym_lead_sends_gym_sent_idx").on(t.gymId, t.finishedAt).where(sql`${t.state} = 'sent'`),
+    index("gym_lead_sends_provider_idx").on(t.providerId).where(sql`${t.providerId} IS NOT NULL`),
     check("gym_lead_sends_step_check", sql`${t.step} BETWEEN 1 AND 3`),
     check("gym_lead_sends_month_check", sql`${t.month} ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'`),
     check("gym_lead_sends_email_hmac_check", sql`${t.emailHmac} ~ '^[0-9a-f]{64}$'`),
@@ -134,6 +143,9 @@ export const gymLeadSends = pgTable(
     check("gym_lead_sends_reason_shape_check", sql`${t.reason} IS NULL OR ${t.reason} ~ '^[a-z_]{1,40}$'`),
     check("gym_lead_sends_provider_check", sql`${t.providerId} IS NULL OR (${t.state} = 'sent' AND length(${t.providerId}) <= 100)`),
     check("gym_lead_sends_attempts_check", sql`${t.attempts} >= 0`),
+    check("gym_lead_sends_result_check", sql`${t.result} IS NULL OR ${t.result} IN ('delivered','bounced','complained','failed','refused')`),
+    check("gym_lead_sends_result_state_check", sql`${t.result} IS NULL OR ${t.state} = 'sent'`),
+    check("gym_lead_sends_result_at_check", sql`(${t.result} IS NULL) = (${t.resultAt} IS NULL)`),
     check(
       "gym_lead_sends_counted_check",
       sql`NOT ${t.counted} OR ${t.state} IN ('queued','sending','sent') OR ${t.reason} = 'send_unknown'`,

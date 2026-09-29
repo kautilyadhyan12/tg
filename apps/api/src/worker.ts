@@ -385,6 +385,7 @@ if (invites === null || inviteSender === null) {
           sql,
           log,
           reader,
+          hmacKey: invites.hmacKey,
           tellOperator,
           now: () => new Date(),
           sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
