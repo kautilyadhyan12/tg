@@ -142,17 +142,19 @@ export function endsWords(entry, today = null) {
 }
 
 /** What the list says today about somebody an import leaves out, each of the gym's own
- *  words with what it is — "Status: Cancelled · Membership: Gold · Ended 31 Aug · Payment:
+ *  words with what it is — "Status: Cancelled · Ended 31 Aug · Membership: Gold · Payment:
  *  Unpaid" — and how they came onto the list when it was not an import ("Added manually ·
  *  20 Sep"), so staff can tell who has left (Kd, 2026-09-27: "how can a gym simply decide
  *  they are member or have left just by looking at names"; 2026-09-29: "cancelled gold paid
- *  … gym will get confused … something meaningful"). */
+ *  … gym will get confused … something meaningful"). The end date stands beside the status,
+ *  so a Cancelled or Expired reads with when (Kd, 2026-09-29: "Status: Cancelled should show
+ *  when was cancelled"); the app knows it only when the file gives one. */
 export function goneWords(person, today = null) {
   const on = person.onList;
   const facts = [
     person.wasStatus ? `Status: ${person.wasStatus}` : null,
-    on.membershipType ? `Membership: ${on.membershipType}` : null,
     endsWords(on, today),
+    on.membershipType ? `Membership: ${on.membershipType}` : null,
     on.paymentStatus ? `Payment: ${on.paymentStatus}` : null,
   ].filter((w) => w !== null && w !== '');
   const when = shortWhen(on.addedAt, today);

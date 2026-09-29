@@ -24,6 +24,8 @@
 // Name", "Gender", "Address 1"), including ones no list of ours has ever heard of.
 import { describe, expect, it } from "vitest";
 import {
+  MEMBER_LIST_HAND_EDIT_NAMES_SHOWN,
+  memberListPreviewHandEditsSchema,
   MEMBER_LIST_MAX_EXTRA_CHARS,
   MEMBER_LIST_MAX_EXTRA_FIELDS,
   MEMBER_LIST_MAX_STATUS_CHARS,
@@ -724,6 +726,7 @@ describe("hand edits: a correction is never written over without a tick", () => 
       hasList: true,
     });
     expect(out.handEdits).toEqual({ entries: 1, fields: ["status"] });
+    expect(out.handEditNames).toEqual([WHO.fullName]);
   });
 
   it("the NAMES are plain English, not the field's own spelling in the code", () => {
@@ -735,6 +738,7 @@ describe("hand edits: a correction is never written over without a tick", () => 
       hasList: true,
     });
     expect(out.handEdits).toEqual({ entries: 1, fields: ["end or renewal date", "date of birth"] });
+    expect(out.handEditNames).toEqual([WHO.fullName]);
   });
 
   it("A FIELD STAFF TYPED IN THAT THIS FILE AGREES WITH IS NOT REPORTED — there is nothing to lose", () => {
@@ -746,6 +750,7 @@ describe("hand edits: a correction is never written over without a tick", () => 
       hasList: true,
     });
     expect(out.handEdits).toEqual({ entries: 0, fields: [] });
+    expect(out.handEditNames).toEqual([]);
   });
 
   it("…and neither is one the file does not CARRY at all", () => {
@@ -758,6 +763,7 @@ describe("hand edits: a correction is never written over without a tick", () => 
       carries: { ...ALL, membershipType: false },
     });
     expect(out.handEdits).toEqual({ entries: 0, fields: [] });
+    expect(out.handEditNames).toEqual([]);
   });
 
   it("one of the GYM'S OWN columns is reported by the gym's own heading, which is the only name staff know it by", () => {
@@ -775,6 +781,7 @@ describe("hand edits: a correction is never written over without a tick", () => 
       keptFields: [kept("emergency_contact_name", "Emergency Contact Name", 0)],
     });
     expect(out.handEdits).toEqual({ entries: 1, fields: ["Emergency Contact Name"] });
+    expect(out.handEditNames).toEqual([WHO.fullName]);
   });
 
   it("A RETURNING RECORD'S CORRECTIONS COUNT TOO — coming back rewrites the whole record from the file", () => {
@@ -787,6 +794,7 @@ describe("hand edits: a correction is never written over without a tick", () => 
     });
     expect(out.counts.returning).toBe(1);
     expect(out.handEdits).toEqual({ entries: 1, fields: ["status"] });
+    expect(out.handEditNames).toEqual([WHO.fullName]);
   });
 
   it("the count is RECORDS and the names are a set, so ten people losing one field is one field and ten records", () => {
@@ -803,7 +811,28 @@ describe("hand edits: a correction is never written over without a tick", () => 
       mode: "whole_list",
       hasList: true,
     });
+    // Each of the ten named, in the file's order, so the tick says whose typing goes.
     expect(out.handEdits).toEqual({ entries: 10, fields: ["status"] });
+    expect(out.handEditNames).toEqual(people.map((who) => who.fullName));
+  });
+
+  it("names at most 200, while the count says everyone, so the preview's names always fit its shape (round one, test gap 3)", () => {
+    const people = Array.from({ length: MEMBER_LIST_HAND_EDIT_NAMES_SHOWN + 1 }, (_, i) => ({
+      fullName: `P${String(i).padStart(3, "0")}`,
+      email: `p${String(i)}@members.example`,
+      phone: null,
+      memberNumber: null,
+    }));
+    const out = run({
+      rows: people.map((who, i) => ({ ...row(who, { status: "Frozen" }), row: i + 2 })),
+      entries: people.map((who) => entry(who, { status: "Active", handEdited: ["status"] })),
+      members: [],
+      mode: "whole_list",
+      hasList: true,
+    });
+    expect(out.handEdits.entries).toBe(201);
+    expect(out.handEditNames).toEqual(people.slice(0, 200).map((who) => who.fullName));
+    expect(memberListPreviewHandEditsSchema.safeParse({ ...out.handEdits, names: out.handEditNames }).success).toBe(true);
   });
 
   it("`moved` names exactly the fields this file overwrote, so only those marks are cleared", () => {
@@ -829,12 +858,14 @@ describe("hand edits: a correction is never written over without a tick", () => 
     });
     expect(out.changed[0]?.moved).toEqual(["status"]);
     expect(out.handEdits).toEqual({ entries: 1, fields: ["status"] });
+    expect(out.handEditNames).toEqual([WHO.fullName]);
   });
 
   it("nobody the file ADDS has anything to lose, so a fresh row's `moved` is empty", () => {
     const out = run({ rows: [row(WHO, { status: "Active" })], entries: [], members: [], mode: "whole_list", hasList: true });
     expect(out.added[0]?.moved).toEqual([]);
     expect(out.handEdits).toEqual({ entries: 0, fields: [] });
+    expect(out.handEditNames).toEqual([]);
   });
 });
 

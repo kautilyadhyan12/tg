@@ -158,8 +158,8 @@ describe("a row that cannot be used", () => {
     const found = read(rows);
     expect(found.counts).toMatchObject({ dataRows: 3, kept: 1, noContact: 2 });
     expect(found.skipped).toEqual([
-      { row: 3, reason: "no_contact" },
-      { row: 4, reason: "no_contact" },
+      { row: 3, reason: "no_contact", name: "Bo Chen", sameAsRow: null },
+      { row: 4, reason: "no_contact", name: "Totals", sameAsRow: null },
     ]);
   });
 
@@ -190,7 +190,8 @@ describe("the same person twice", () => {
     const rows = [["Full Name", "Email"], ["Ann Lee", "ann@example.com"], ["Ann Lee", "ANN@example.com"], ["Bo Chen", "bo@example.com"]];
     const found = read(rows);
     expect(found.counts).toMatchObject({ kept: 2, duplicates: 1 });
-    expect(found.skipped).toEqual([{ row: 3, reason: "duplicate" }]);
+    // The repeat names itself and the row it repeats, so staff can find both.
+    expect(found.skipped).toEqual([{ row: 3, reason: "duplicate", name: "Ann Lee", sameAsRow: 2 }]);
   });
 
   it("is not two people because their status changed", () => {
@@ -505,7 +506,7 @@ describe("whose email would be invited", () => {
     // Bo Chen has nothing of his own in the file, so he is reported as having
     // no contact details — never invited at the address beside his name.
     expect(found.counts).toMatchObject({ dataRows: 3, kept: 2, noContact: 1 });
-    expect(found.skipped).toEqual([{ row: 3, reason: "no_contact" }]);
+    expect(found.skipped).toEqual([{ row: 3, reason: "no_contact", name: "Bo Chen", sameAsRow: null }]);
     expect(found.columns[0]).toMatchObject({ header: "Nominee Email", headerSays: "email", guess: null });
   });
 

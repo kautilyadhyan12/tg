@@ -543,6 +543,11 @@ export type MemberListSkipReason = z.infer<typeof memberListSkipReasonSchema>;
 export const memberListSkippedSchema = z.object({
   row: z.number().int().positive(),
   reason: memberListSkipReasonSchema,
+  /** The row's name as the file has it ("" when it has none), so staff can find the row
+   *  (Kd, 2026-09-29: "Row 12: no email or phone … will not be understood by a human"). */
+  name: z.string().max(MEMBER_LIST_MAX_NAME_CHARS).default(""),
+  /** A repeat: the earlier row of the file it repeats. */
+  sameAsRow: z.number().int().positive().nullable().default(null),
 });
 export type MemberListSkipped = z.infer<typeof memberListSkippedSchema>;
 
@@ -826,6 +831,24 @@ export const memberListHandEditsSchema = z
   .strict();
 export type MemberListHandEdits = z.infer<typeof memberListHandEditsSchema>;
 
+/** How many of the people a file would write over staff's typing the preview names. */
+export const MEMBER_LIST_HAND_EDIT_NAMES_SHOWN = 200;
+
+/** THE PREVIEW'S OWN: the same, with whose details they are, so the tick can name them
+ *  (CLAUDE.md §4, "a box names who will change"; Kd, 2026-09-29, of "Replace what staff
+ *  typed for 1 person": "have no context"). Worked out each time the preview is, and never
+ *  in the stored summary or a refusal, which keep the shape above: a name kept in a
+ *  confirmed upload's record would outlive Delete for good, and a refusal can reach a log. */
+export const memberListPreviewHandEditsSchema = z
+  .object({
+    entries: z.number().int().min(0),
+    fields: z.array(z.string().max(MEMBER_LIST_MAX_FIELD_LABEL_CHARS)).max(MEMBER_LIST_MAX_EDITED_FIELDS),
+    /** Their names on the list, in the file's order, at most the first 200. */
+    names: z.array(z.string().max(MEMBER_LIST_MAX_NAME_CHARS)).max(MEMBER_LIST_HAND_EDIT_NAMES_SHOWN).default([]),
+  })
+  .strict();
+export type MemberListPreviewHandEdits = z.infer<typeof memberListPreviewHandEditsSchema>;
+
 /** One of the gym's own status words, with what the upload does to the people
  *  carrying it. The app attaches no meaning to the word itself. */
 export const memberListStatusChangeSchema = z.object({
@@ -909,7 +932,7 @@ export const memberListPreviewSchema = z.object({
   extraChanges: z.array(memberListExtraChangeSchema).max(MEMBER_LIST_MAX_EXTRA_FIELDS).default([]),
   /** Staff's own corrections this file would write over (§11.4). `entries: 0` means
    *  none, and the confirm needs no tick for them. */
-  handEdits: memberListHandEditsSchema.default({ entries: 0, fields: [] }),
+  handEdits: memberListPreviewHandEditsSchema.default({ entries: 0, fields: [], names: [] }),
   members: memberListMembersSchema,
   skipped: z.array(memberListSkippedSchema).max(MEMBER_LIST_SKIPPED_SHOWN),
   warnings: z.array(memberListWarningSchema),

@@ -1302,6 +1302,25 @@ describe('Members: the two tabs (5b-i)', () => {
     expect(await screen.findByRole('dialog', { name: 'Add member' })).toBeTruthy();
   });
 
+  it('Import and the tabs change only the tab in the address: the light look a click-through opened stays light (5b-v-d-ii)', async () => {
+    orgService.getMemberList.mockResolvedValue(listView);
+    orgService.getMemberListEntries.mockResolvedValue(listPage);
+    orgService.getNotMe.mockResolvedValue({ data: { items: [] } });
+    orgService.getMembers.mockResolvedValue(page([ownerSeat]));
+    const { container } = drawShellAround(<Members />, '/console/iron-house/members?view=app&look=light', '/console/:orgSlug/members');
+    expect(await screen.findByText('Kd Owner')).toBeTruthy();
+    const look = () => container.querySelector('.c-console').className;
+    expect(look()).toContain('t-light');
+    fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+    expect(await screen.findByTestId('member-import')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Your list' }).getAttribute('aria-selected')).toBe('true');
+    expect(look()).toContain('t-light');
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'In the app' }));
+    expect(await screen.findByText('Kd Owner')).toBeTruthy();
+    expect(look()).toContain('t-light');
+  });
+
   it("greys the header's Import and Add member on a gym whose plan has lapsed, and a trainer gets neither", async () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, consoleReadOnly: true }] } });
     drawAt('/console/iron-house/members', <Members />, '/console/:orgSlug/members');
