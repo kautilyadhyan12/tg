@@ -434,6 +434,136 @@ describe('the worst thing: nobody leaves who was not answered for', () => {
   });
 });
 
+// THE NEW LOOK (5b-v-d-ii) CHANGES HOW THE BOX LOOKS, NEVER WHAT IT SHOWS: every step,
+// line and tick below was on the screen before the restyle, in this order.
+describe('every part of the box, in its order', () => {
+  /** True when every text is on the page once or more, each after the one before it. */
+  const inOrder = (nodes) => {
+    for (let i = 1; i < nodes.length; i += 1) {
+      expect(nodes[i - 1].compareDocumentPosition(nodes[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  };
+
+  it('Upload: both ways in, the drop box and its words, and pasted rows with Continue', async () => {
+    renderBox();
+    expect(screen.getByRole('heading', { name: 'Import members' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Upload a file' }).getAttribute('aria-selected')).toBe('true');
+    const drop = within(screen.getByTestId('drop-zone'));
+    expect(drop.getByText('Drop your file here')).toBeTruthy();
+    expect(screen.getByTestId('drop-zone').textContent).toContain('or choose a file · CSV or Excel');
+    fireEvent.click(screen.getByRole('tab', { name: 'Paste rows' }));
+    expect(screen.getByLabelText('Paste your rows').getAttribute('placeholder')).toBe(
+      'Copy the rows in your spreadsheet, with the headings, and paste them here.',
+    );
+    expect(screen.getByRole('button', { name: 'Continue' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Close' })).toBeTruthy();
+  });
+
+  it('Review with everything at once: the file, the numbers, who is missing and the two answers, every check line, both ticks, Import', async () => {
+    orgService.getMemberListMissing.mockResolvedValueOnce(
+      missingRead([missingOne(1, 'Olivia Walker', { inApp: true }), missingOne(2, 'Liam Hughes', { wasStatus: 'Cancelled' })]),
+    );
+    await reviewWith(
+      preview({
+        file: counts({ dataRows: 40, noContact: 1, duplicates: 1 }),
+        list: list({ new: 3, changed: 2, unchanged: 33, gone: 2, canBeInvited: 3 }),
+        statuses: [{ label: 'Active', count: 36, new: 3, changed: 2, unchanged: 31, gone: 1 }, { label: 'Cancelled', count: 2, new: 0, changed: 0, unchanged: 2, gone: 1 }],
+        guard: { ...calm, entriesGoing: 2, listSize: 37 },
+        dateColumns: [{ column: 3, field: 'joinedOn', order: 'dayFirst', from: 'country', example: { raw: '03/04/2026', read: '2026-04-03' }, notRead: 0 }],
+        warnings: [{ code: 'phones_unusual', rows: 4 }],
+        skipped: [{ row: 7, reason: 'no_contact' }, { row: 9, reason: 'duplicate' }],
+        handEdits: { entries: 2, fields: ['phone number'] },
+      }),
+    );
+    await screen.findAllByTestId('missing-row');
+    const box = screen.getByTestId('member-import');
+    const at = (text) => within(box).getByText(text);
+    inOrder([
+      screen.getByRole('button', { name: 'Back' }),
+      screen.getByRole('heading', { name: 'Review' }),
+      screen.getByRole('button', { name: 'Close' }),
+      at('Pasted rows'),
+      at('40 rows'),
+      screen.getByRole('button', { name: 'Change' }),
+      screen.getByRole('button', { name: /3\s*New/ }),
+      screen.getByRole('button', { name: /2\s*Updated/ }),
+      screen.getByRole('button', { name: /33\s*Already on your list/ }),
+      at('2 members aren\'t in this file'),
+      screen.getByTestId('missing-help'),
+      at('Status: Active 1 · Cancelled 1'),
+      at("Tick the people who have left. If you tick nobody, They've left moves everyone."),
+      screen.getByLabelText('Olivia Walker has left'),
+      at('Olivia Walker'),
+      at('In the app'),
+      screen.getByLabelText('Liam Hughes has left'),
+      at('Liam Hughes'),
+      screen.getByRole('radio', { name: /They've left/ }),
+      screen.getByRole('radio', { name: /They're still members/ }),
+      at('4 of 5 columns matched'),
+      screen.getByRole('button', { name: 'Check' }),
+      at('03/04/2026 is read as 3 April 2026'),
+      screen.getByRole('button', { name: 'Change to 4 March 2026' }),
+      at('Card numbers not imported'),
+      at('4 phone numbers look unusual'),
+      at('2 rows skipped'),
+      screen.getByLabelText('Replace what staff typed for 2 people (phone number)'),
+      screen.getByLabelText("These are Iron House Gym's members, and I have permission to store their details."),
+      importButton(),
+      at('Nobody is emailed.'),
+    ]);
+    // Each person's line says what each word is, and what the file says of them.
+    const rows = screen.getAllByTestId('missing-row');
+    expect(within(rows[0]).getByText('olivia@members.example')).toBeTruthy();
+    expect(within(rows[0]).getByTestId('gone-facts').textContent).toBe('Status: Active · Membership: Gold · Payment: Paid');
+    expect(within(rows[1]).getByTestId('gone-facts').textContent).toBe('Status: Cancelled · Membership: Gold · Payment: Paid');
+    // Every Why? opens its words, and the skipped rows say which and why.
+    const whys = screen.getAllByRole('button', { name: 'Why?' });
+    expect(whys).toHaveLength(2);
+    fireEvent.click(whys[0]);
+    expect(screen.getByText(/look like a normal number for their country/)).toBeTruthy();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Why?' })[0]);
+    expect(at('Row 7: no email or phone')).toBeTruthy();
+    expect(at('Row 9: same person as an earlier row')).toBeTruthy();
+    // The columns open with every column, its example, what it imports as, and Never stored.
+    fireEvent.click(screen.getByRole('button', { name: 'Check' }));
+    expect(screen.getByTestId('columns-note')).toBeTruthy();
+    expect(within(screen.getByTestId('column-0')).getByText('Ada Lovelace')).toBeTruthy();
+    expect(screen.getByLabelText('Name imports as').value).toBe('fullName');
+    expect(within(screen.getByTestId('column-3')).getByRole('button', { name: 'Change to 4 March 2026' })).toBeTruthy();
+    expect(within(screen.getByTestId('column-4')).getByText('Never stored')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Status imports as'), { target: { value: 'dontKeep' } });
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Apply changes' })).toBeTruthy();
+    expect(at('Apply your column changes first.')).toBeTruthy();
+  });
+
+  it('a group opened by its tile shows its names, its note and Show more', async () => {
+    await reviewWith(preview({ list: list({ new: 3, changed: 2, unchanged: 30, alreadyInApp: 1, noEmail: 1 }), mode: 'add' }));
+    orgService.getMemberListRows.mockResolvedValueOnce(page('new', [person('Ada Lovelace', { inApp: true })], 3, 1));
+    fireEvent.click(screen.getByRole('button', { name: /3\s*New/ }));
+    const row = await screen.findByTestId('names-row');
+    expect(within(row).getByText('Ada Lovelace')).toBeTruthy();
+    expect(within(row).getByText('ada@members.example · Active')).toBeTruthy();
+    // One word for one thing (spec §18.3): "In the app", as on Members, never "Uses the app".
+    expect(within(row).getByText('In the app')).toBeTruthy();
+    expect(screen.getByText('1 already use the app · 1 have no email')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Show more (2)' })).toBeTruthy();
+  });
+
+  it('Done: what was imported, nobody emailed, Import another and Done', async () => {
+    await reviewWith(preview());
+    tickPermission();
+    orgService.confirmMemberList.mockResolvedValueOnce({ data: { confirmed: confirmedAnswer() } });
+    fireEvent.click(importButton());
+    const done = within(await screen.findByTestId('member-import-done'));
+    inOrder([done.getByText('30 members imported'), done.getByText('Nobody has been emailed yet.'), done.getByRole('button', { name: 'Import another' }), done.getByRole('button', { name: 'Done' })]);
+    fireEvent.click(done.getByRole('button', { name: 'Import another' }));
+    expect(screen.getByRole('heading', { name: 'Import members' })).toBeTruthy();
+    // Back on the way in it was used (Paste), emptied for the next file.
+    expect(screen.getByLabelText('Paste your rows').value).toBe('');
+  });
+});
+
 describe('app members leaving with nobody else missing (the question as before)', () => {
   it('"Keep them" reads the same file again as people to add', async () => {
     orgService.getMemberListRows.mockResolvedValueOnce(page('members_leaving', [person('Amy Shaw', { inApp: true })], 2));

@@ -52,28 +52,14 @@ import MemberListMissing from './MemberListMissing';
 
 // Importing a member list (ROADMAP 5a; spec Part 3 §9.14): Upload, then Review. The
 // server reads, counts and applies; this box shows what matters and sends staff's
-// answers back. Nobody is emailed here.
+// answers back. Nobody is emailed here. Drawn in the console's look (§17; 5b-v-d-ii):
+// every colour is one of console.css's names, so it reads in the dark and light looks.
 
-const C = {
-  panel: '#0f0e0d',
-  card: '#141210',
-  card2: '#1a1816',
-  line: 'rgba(255,255,255,0.07)',
-  muted: 'rgba(255,255,255,0.5)',
-  soft: 'rgba(255,255,255,0.8)',
-  orange: '#FF8A1F',
-  orangeBg: 'rgba(255,138,31,0.12)',
-  green: '#34d399',
-  greenBg: 'rgba(52,211,153,0.12)',
-  red: '#f87171',
-  redBg: 'rgba(248,113,113,0.1)',
-  plain: 'rgba(255,255,255,0.06)',
-};
+/** The icon tile's colours by what a line means (§17.2 rule 4): good, look at this, plain. */
 const TONES = {
-  green: [C.greenBg, C.green],
-  orange: [C.orangeBg, C.orange],
-  red: [C.redBg, C.red],
-  plain: [C.plain, C.soft],
+  green: ['var(--good-bg)', 'var(--good)'],
+  amber: ['var(--warn-bg)', 'var(--warn)'],
+  plain: ['var(--raise)', 'var(--t2)'],
 };
 
 /** The server refuses a stale preview with one of these; reading the same file
@@ -82,12 +68,15 @@ const READ_AGAIN = ['list_changed', 'upload_expired', 'upload_superseded'];
 
 const count = (n) => n.toLocaleString('en');
 
-const PRIMARY = 'w-full rounded-2xl min-h-[52px] px-5 text-base font-bold flex items-center justify-center gap-2 disabled:cursor-not-allowed';
-/** The main button is orange when it can be pressed and plainly grey when it cannot,
- *  so a dimmed orange is never mistaken for a live one. */
-const primaryStyle = (enabled) => (enabled ? { background: C.orange, color: '#000' } : { background: C.plain, color: 'rgba(255,255,255,0.35)' });
-const GHOST = 'rounded-2xl min-h-[48px] px-4 text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-40';
-const LINK = 'text-sm font-semibold whitespace-nowrap disabled:opacity-40';
+const LINK = 'c-btn c-btn-link c-s14 c-w6';
+/** The main button is orange when it can be pressed and plainly grey when it cannot: a
+ *  dimmed orange would read as the pale orange of a second action (§17.3). */
+const primary = (enabled, extra = '') => ({
+  className: `c-btn c-btn-lg w-full ${enabled ? 'c-btn-p' : ''} ${extra}`,
+  style: enabled ? undefined : { background: 'var(--raise)', color: 'var(--t3)', opacity: 1 },
+});
+/** The same title as the box before import. */
+const TITLE = { fontSize: 22, lineHeight: '28px', fontWeight: 700, fontStretch: '108%', letterSpacing: '-0.01em' };
 
 function Badge({ icon: Icon, tone, size = 32 }) {
   const [bg, fg] = TONES[tone];
@@ -96,7 +85,7 @@ function Badge({ icon: Icon, tone, size = 32 }) {
       className="flex items-center justify-center flex-shrink-0"
       style={{ width: size, height: size, borderRadius: size * 0.31, background: bg, color: fg }}
     >
-      <Icon style={{ width: size * 0.5, height: size * 0.5 }} strokeWidth={2.2} />
+      <Icon aria-hidden="true" style={{ width: size * 0.5, height: size * 0.5 }} strokeWidth={2.2} />
     </span>
   );
 }
@@ -106,14 +95,10 @@ function Badge({ icon: Icon, tone, size = 32 }) {
  *  clicked … can see who these people are"). */
 function BigCount({ n, label, open, onToggle, testId }) {
   return (
-    <div className="min-w-0" data-testid={testId}>
-      <div className="text-6xl font-extrabold tracking-tight" style={{ color: '#fff' }}>
-        {count(n)}
-      </div>
-      <div className="text-[17px] mt-1.5" style={{ color: C.soft }}>
-        {label}
-      </div>
-      <button type="button" onClick={onToggle} className={`${LINK} mt-2`} style={{ color: C.orange }}>
+    <div className="min-w-0 flex flex-col items-center" data-testid={testId}>
+      <div className="c-big c-t1">{count(n)}</div>
+      <div className="c-s15 c-t2 mt-1">{label}</div>
+      <button type="button" onClick={onToggle} className={`${LINK} mt-1`}>
         {open ? 'Hide' : 'See who'}
       </button>
     </div>
@@ -122,13 +107,7 @@ function BigCount({ n, label, open, onToggle, testId }) {
 
 function IconButton({ label, onClick, children }) {
   return (
-    <button
-      type="button"
-      aria-label={label}
-      onClick={onClick}
-      className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-      style={{ background: C.plain, color: C.soft }}
-    >
+    <button type="button" aria-label={label} onClick={onClick} className="c-icon-btn">
       {children}
     </button>
   );
@@ -137,30 +116,20 @@ function IconButton({ label, onClick, children }) {
 /** One line of the review's list: an icon, a short title, and at most one action. */
 function Line({ icon, tone, title, sub, action, onAction, actionDisabled = false, detail, testId }) {
   return (
-    <div className="px-4 py-3.5" style={{ borderTop: `1px solid ${C.line}` }} data-testid={testId}>
+    <div className="px-4 py-3 border-t first:border-t-0" style={{ borderColor: 'var(--line)' }} data-testid={testId}>
       <div className="flex items-center gap-3">
         <Badge icon={icon} tone={tone} />
         <div className="min-w-0 flex-1">
-          <div className="text-[15px]" style={{ color: '#fff' }}>
-            {title}
-          </div>
-          {sub ? (
-            <div className="text-[13px] truncate" style={{ color: C.muted }}>
-              {sub}
-            </div>
-          ) : null}
+          <div className="c-s15 c-t1">{title}</div>
+          {sub ? <div className="c-s13 c-t2 c-ell">{sub}</div> : null}
         </div>
         {action ? (
-          <button type="button" onClick={onAction} disabled={actionDisabled} className={LINK} style={{ color: C.orange }}>
+          <button type="button" onClick={onAction} disabled={actionDisabled} className={LINK}>
             {action}
           </button>
         ) : null}
       </div>
-      {detail ? (
-        <div className="text-[13px] mt-2 pl-11" style={{ color: C.soft }}>
-          {detail}
-        </div>
-      ) : null}
+      {detail ? <div className="c-s14 c-t2 mt-2 pl-11">{detail}</div> : null}
     </div>
   );
 }
@@ -169,12 +138,8 @@ function Names({ page, note, onMore, onRetry }) {
   if (page === undefined) return null;
   const today = gymToday();
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ background: C.card2, border: `1px solid ${C.line}` }}>
-      {note ? (
-        <div className="px-4 pt-3 text-[13px]" style={{ color: C.muted }}>
-          {note}
-        </div>
-      ) : null}
+    <div className="rounded-xl overflow-hidden border" style={{ background: 'var(--raise)', borderColor: 'var(--raise-line)' }}>
+      {note ? <div className="px-4 pt-3 c-s13 c-t2">{note}</div> : null}
       <ul className="py-1 max-h-[360px] overflow-y-auto">
         {page.people.map((p, i) => {
           // Somebody the file leaves out is shown as the list knows them today.
@@ -184,47 +149,39 @@ function Names({ page, note, onMore, onRetry }) {
           return (
             <li key={`${String(p.row)}-${String(i)}`} className="flex items-center gap-3 px-4 py-2.5" data-testid="names-row">
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium truncate" style={{ color: '#fff' }}>
-                  {p.fullName || 'No name'}
-                </div>
-                <div className="text-xs truncate" style={{ color: C.muted }}>
-                  {[p.email ?? p.phone, status].filter((v) => v !== null && v !== '').join(' · ')}
-                </div>
+                <div className="c-s14 c-w6 c-t1 c-ell">{p.fullName || 'No name'}</div>
+                <div className="c-s13 c-t2 c-ell">{[p.email ?? p.phone, status].filter((v) => v !== null && v !== '').join(' · ')}</div>
                 {gone !== null && gone.facts !== '' ? (
-                  <div className="text-xs mt-0.5" style={{ color: C.soft }} data-testid="gone-facts">
+                  <div className="c-s13 c-t2 mt-0.5" data-testid="gone-facts">
                     {gone.facts}
                   </div>
                 ) : null}
                 {gone !== null && gone.added !== null ? (
-                  <div className="text-xs font-semibold mt-0.5" style={{ color: C.orange }} data-testid="gone-added">
+                  <div className="c-s13 c-w6 mt-0.5" style={{ color: 'var(--warn)' }} data-testid="gone-added">
                     {gone.added}
                   </div>
                 ) : null}
               </div>
-              {p.inApp ? (
-                <span className="text-[11px] font-semibold rounded-full px-2 py-0.5 flex-shrink-0" style={{ background: C.orangeBg, color: C.orange }}>
-                  Uses the app
-                </span>
-              ) : null}
+              {p.inApp ? <span className="c-tag c-tag-good flex-shrink-0">In the app</span> : null}
             </li>
           );
         })}
       </ul>
       {page.loading ? (
-        <div className="px-4 pb-3 flex items-center gap-2 text-sm" style={{ color: C.muted }}>
-          <Loader2 className="w-4 h-4 animate-spin" /> Loading names…
+        <div className="px-4 pb-3 flex items-center gap-2 c-s14 c-t2">
+          <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> Loading names…
         </div>
       ) : null}
       {page.error !== null ? (
-        <div className="px-4 pb-3 flex items-center justify-between gap-3 text-sm" style={{ color: '#fca5a5' }}>
+        <div className="px-4 pb-3 flex items-center justify-between gap-3 c-s14" style={{ color: 'var(--bad)' }}>
           {page.error}
-          <button type="button" onClick={onRetry} className={LINK} style={{ color: C.orange }}>
+          <button type="button" onClick={onRetry} className={LINK}>
             Try again
           </button>
         </div>
       ) : null}
       {!page.loading && page.error === null && page.cursor !== null && page.total !== null ? (
-        <button type="button" onClick={onMore} className="w-full py-3 text-sm font-semibold" style={{ color: C.orange, borderTop: `1px solid ${C.line}` }}>
+        <button type="button" onClick={onMore} className={`${LINK} w-full py-3 border-t`} style={{ borderColor: 'var(--raise-line)' }}>
           Show more ({count(page.total - page.people.length)})
         </button>
       ) : null}
@@ -240,31 +197,27 @@ function Choice({ on, title, sub, onClick, disabled }) {
       aria-checked={on}
       onClick={onClick}
       disabled={disabled}
-      className="rounded-2xl px-4 py-3.5 text-center disabled:opacity-50"
-      style={{ background: on ? 'rgba(255,138,31,0.08)' : C.card2, border: `1px solid ${on ? C.orange : C.line}` }}
+      className={`rounded-xl px-4 py-3 min-h-[44px] text-center border disabled:opacity-50 ${on ? 'c-picked' : ''}`}
+      style={{ background: on ? undefined : 'var(--card)', borderColor: on ? 'var(--accent)' : 'var(--ctl-line)' }}
     >
-      <span className="block text-[15px] font-semibold" style={{ color: '#fff' }}>
-        {title}
-      </span>
-      <span className="block text-[13px] mt-0.5" style={{ color: C.muted }}>
-        {sub}
-      </span>
+      <span className="block c-s15 c-w6 c-t1">{title}</span>
+      <span className="block c-s13 c-t2 mt-0.5">{sub}</span>
     </button>
   );
 }
 
-/** A tick box drawn in the console's colours; the real checkbox underneath keeps the
- *  label, the keyboard and screen readers working. */
+/** A tick box in the console's look; the real checkbox underneath keeps the label, the
+ *  keyboard and screen readers working. `tone="warn"`: a tick that changes what staff
+ *  typed reads in the "look at this" colour. */
 export function Tick({ checked, onChange, children, tone = 'plain' }) {
   return (
-    <label className="flex items-center gap-3 cursor-pointer min-h-[44px] text-[15px]" style={{ color: tone === 'orange' ? C.orange : C.soft }}>
+    <label className={`flex items-center gap-3 cursor-pointer min-h-[44px] c-s15 c-w5 ${tone === 'warn' ? '' : 'c-t1'}`} style={tone === 'warn' ? { color: 'var(--warn)' } : undefined}>
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="sr-only peer" />
       <span
         aria-hidden="true"
-        className="w-[22px] h-[22px] rounded-[7px] flex items-center justify-center flex-shrink-0 peer-focus-visible:ring-2 peer-focus-visible:ring-[#FF8A1F] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-[#0f0e0d]"
-        style={{ background: checked ? C.orange : 'transparent', border: `2px solid ${checked ? C.orange : 'rgba(255,255,255,0.3)'}` }}
+        className={`${checked ? 'c-check c-check-on' : 'c-check'} peer-focus-visible:ring-2 peer-focus-visible:ring-[color:var(--accent)] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-[color:var(--sheet)]`}
       >
-        {checked ? <Check className="w-3.5 h-3.5" style={{ color: '#000' }} strokeWidth={3.5} /> : null}
+        {checked ? <Check className="w-3.5 h-3.5" strokeWidth={3} /> : null}
       </span>
       <span>{children}</span>
     </label>
@@ -570,16 +523,10 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
 
   const errorBox =
     error !== null ? (
-      <div role="alert" className="rounded-2xl px-4 py-3 text-sm flex flex-col gap-2" style={{ background: C.redBg, color: '#fca5a5' }}>
+      <div role="alert" className="c-banner-danger rounded-xl px-4 py-3 c-s14 c-w5 flex flex-col items-start gap-2">
         <span>{error.text}</span>
         {error.readAgain && source !== null && preview !== null ? (
-          <button
-            type="button"
-            onClick={() => readAgain(mapping)}
-            disabled={busy !== null}
-            className={GHOST}
-            style={{ color: C.orange, border: `1px solid ${C.line}` }}
-          >
+          <button type="button" onClick={() => readAgain(mapping)} disabled={busy !== null} className="c-btn c-btn-s c-t1">
             Read the file again
           </button>
         ) : null}
@@ -594,7 +541,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
       <>
         {/* Two ways in, both in plain sight: a quiet second tab went unseen at Kd's
             click-through, so each carries its icon and full-strength words. */}
-        <div role="tablist" className="grid grid-cols-2 gap-1 rounded-2xl p-1" style={{ background: C.plain }}>
+        <div role="tablist" className="grid grid-cols-2 gap-0.5 rounded-xl p-[3px] border" style={{ borderColor: 'var(--ctl-line)', background: 'var(--card)' }}>
           {[
             ['file', 'Upload a file', Upload],
             ['paste', 'Paste rows', ClipboardPaste],
@@ -605,14 +552,10 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
               role="tab"
               aria-selected={tab === key}
               onClick={() => setTab(key)}
-              className="rounded-xl min-h-[44px] text-[15px] font-semibold flex items-center justify-center gap-2"
-              style={
-                tab === key
-                  ? { background: C.card2, color: '#fff', border: '1px solid rgba(255,138,31,0.45)' }
-                  : { color: C.soft, border: '1px solid transparent' }
-              }
+              className="rounded-[9px] min-h-[44px] c-s15 c-w6 flex items-center justify-center gap-2"
+              style={tab === key ? { background: 'var(--sel)', color: 'var(--on-sel)' } : { color: 'var(--t1)' }}
             >
-              <Icon className="w-4 h-4" style={{ color: tab === key ? C.orange : C.soft }} />
+              <Icon aria-hidden="true" className="w-4 h-4" />
               {label}
             </button>
           ))}
@@ -634,22 +577,15 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
                 setDragging(false);
                 void takeFile(e.dataTransfer?.files?.[0]);
               }}
-              className="w-full rounded-3xl px-4 py-12 flex flex-col items-center text-center"
-              style={{
-                border: `2px dashed ${dragging ? C.orange : 'rgba(255,138,31,0.35)'}`,
-                background: dragging
-                  ? 'rgba(255,138,31,0.08)'
-                  : 'radial-gradient(circle at 50% 0%, rgba(255,138,31,0.10), transparent 70%)',
-              }}
+              className={`w-full rounded-2xl px-4 py-12 flex flex-col items-center text-center border-2 border-dashed ${dragging ? 'c-picked' : ''}`}
+              style={{ borderColor: dragging ? 'var(--accent)' : 'var(--ctl-line)', background: dragging ? undefined : 'var(--card)' }}
             >
-              <span className="w-16 h-16 rounded-[20px] flex items-center justify-center" style={{ background: C.orangeBg, color: C.orange }}>
-                {busy !== null ? <Loader2 className="w-8 h-8 animate-spin" /> : <Upload className="w-8 h-8" />}
+              <span className="w-16 h-16 rounded-[18px] flex items-center justify-center" style={{ background: 'var(--soft)', color: 'var(--soft-t)' }}>
+                {busy !== null ? <Loader2 aria-hidden="true" className="w-8 h-8 animate-spin" /> : <Upload aria-hidden="true" className="w-8 h-8" />}
               </span>
-              <span className="text-lg font-bold mt-4" style={{ color: '#fff' }}>
-                {busy !== null ? 'Reading your file…' : 'Drop your file here'}
-              </span>
-              <span className="text-[13px] mt-1" style={{ color: C.muted }}>
-                or <span style={{ color: C.orange, fontWeight: 600 }}>choose a file</span> · CSV or Excel
+              <span className="c-h2 mt-4">{busy !== null ? 'Reading your file…' : 'Drop your file here'}</span>
+              <span className="c-s14 c-t2 mt-1">
+                or <span className="c-lk c-w6">choose a file</span> · CSV or Excel
               </span>
             </button>
             <input
@@ -675,17 +611,10 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
               value={paste}
               onChange={(e) => setPaste(e.target.value)}
               rows={8}
-              className="w-full rounded-2xl p-4 text-base outline-none"
-              style={{ background: C.card, color: '#fff', border: `1px solid ${C.line}` }}
+              className="c-area"
             />
-            <button
-              type="button"
-              onClick={takePaste}
-              disabled={busy !== null || readOnly || paste.trim() === ''}
-              className={PRIMARY}
-              style={primaryStyle(busy === null && !readOnly && paste.trim() !== '')}
-            >
-              {busy !== null ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
+            <button type="button" onClick={takePaste} disabled={busy !== null || readOnly || paste.trim() === ''} {...primary(busy === null && !readOnly && paste.trim() !== '')}>
+              {busy !== null ? <Loader2 aria-hidden="true" className="w-5 h-5 animate-spin" /> : null}
               Continue
             </button>
           </>
@@ -733,17 +662,15 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
 
     body = (
       <>
-        <div className="flex items-center gap-3 rounded-2xl px-3.5 py-3" style={{ background: C.card, border: `1px solid ${C.line}` }}>
+        <div className="c-card flex items-center gap-3 px-3.5 py-3">
           <Badge icon={FileSpreadsheet} tone="green" size={40} />
           <div className="min-w-0 flex-1">
-            <div className="font-semibold truncate" style={{ color: '#fff' }}>
-              {source.label}
-            </div>
-            <div className="text-[13px]" style={{ color: C.muted }}>
+            <div className="c-s15 c-w6 c-t1 c-ell">{source.label}</div>
+            <div className="c-s13 c-t2">
               {count(preview.file.dataRows)} {preview.file.dataRows === 1 ? 'row' : 'rows'}
             </div>
           </div>
-          <button type="button" onClick={() => startOver(false)} className={LINK} style={{ color: C.orange }}>
+          <button type="button" onClick={() => startOver(false)} className={LINK}>
             Change
           </button>
         </div>
@@ -771,15 +698,13 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
             </div>
           )
         ) : summary.nothing ? (
-          <div className="text-center pt-3 pb-1">
-            <div className="text-2xl font-bold" style={{ color: '#fff' }}>
+          <div className="text-center pt-3 pb-1 flex flex-col items-center">
+            <div className="c-t1" style={TITLE}>
               No changes
             </div>
-            <div className="text-sm mt-1" style={{ color: C.muted }}>
-              {count(summary.unchanged)} already on your list
-            </div>
+            <div className="c-s14 c-t2 mt-1">{count(summary.unchanged)} already on your list</div>
             {summary.unchanged > 0 ? (
-              <button type="button" onClick={() => toggleGroup('unchanged')} className={`${LINK} mt-2`} style={{ color: C.orange }}>
+              <button type="button" onClick={() => toggleGroup('unchanged')} className={`${LINK} mt-1`}>
                 {openGroup === 'unchanged' ? 'Hide' : 'See who'}
               </button>
             ) : null}
@@ -798,16 +723,14 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
                     type="button"
                     aria-pressed={openGroup === t.group}
                     onClick={() => toggleGroup(t.group)}
-                    className="rounded-[18px] p-3.5 text-left"
-                    style={{ background: C.card, border: `1px solid ${openGroup === t.group ? 'rgba(255,138,31,0.55)' : C.line}` }}
+                    className={`c-card p-3.5 text-left min-w-0 ${openGroup === t.group ? 'c-picked' : ''}`}
+                    style={openGroup === t.group ? { borderColor: 'var(--accent)' } : undefined}
                   >
                     <Badge icon={isNew ? UserPlus : t.group === 'unchanged' ? UserCheck : RefreshCw} tone={isNew ? 'green' : 'plain'} />
-                    <span className="block text-[28px] font-extrabold leading-none mt-2.5" style={{ color: '#fff' }}>
+                    <span className="block c-t1 c-num mt-2.5" style={{ fontSize: 28, lineHeight: '34px', fontWeight: 700, fontStretch: '108%' }}>
                       {count(t.n)}
                     </span>
-                    <span className="block text-sm mt-1" style={{ color: C.soft }}>
-                      {t.label}
-                    </span>
+                    <span className="block c-s14 c-t2 mt-0.5">{t.label}</span>
                   </button>
                 );
               })}
@@ -818,31 +741,27 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
         {openGroup !== null && openGroup !== missing?.group ? namesFor(openGroup) : null}
 
         {missing !== null && !preview.needsMapping ? (
-          <div className="rounded-[18px] p-4 flex flex-col gap-3.5" style={{ background: C.card, border: '1px solid rgba(255,138,31,0.45)' }} data-testid="missing">
+          <section className="c-card p-4 flex flex-col gap-3.5" aria-labelledby={`${titleId}-missing`} data-testid="missing">
             <div>
-              <div className="text-[17px] font-bold" style={{ color: '#fff' }}>
+              <h3 id={`${titleId}-missing`} className="c-h2">
                 {missingTitle(missing, missing.needsTick, words)}
-              </div>
+              </h3>
               {missing.group === 'gone' ? (
-                <div className="text-sm mt-1" style={{ color: C.soft }} data-testid="missing-help">
+                <div className="c-s14 c-t2 mt-1" data-testid="missing-help">
                   Your file should include all current {words.people}, so {words.people} missing from it have usually left. {words.peopleCap ?? 'Members'} added
                   manually may not be in your export yet.
                 </div>
               ) : null}
               {/* Read again as people to add, the file no longer says who was missing, so
                   the names kept from before stand in for the list. */}
-              {!wholeList && missingNames.length > 0 ? (
-                <div className="text-sm mt-0.5" style={{ color: C.muted }}>
-                  {someNames(missingNames, missing.n)}
-                </div>
-              ) : null}
+              {!wholeList && missingNames.length > 0 ? <div className="c-s14 c-t2 mt-0.5">{someNames(missingNames, missing.n)}</div> : null}
               {missingStatusLine(missing) !== '' ? (
-                <div className="text-[13px] mt-1" style={{ color: C.soft }} data-testid="missing-statuses">
+                <div className="c-s13 c-w6 c-t1 mt-1" data-testid="missing-statuses">
                   {missingStatusLine(missing)}
                 </div>
               ) : null}
               {marking ? (
-                <div className="text-[13px] mt-1" style={{ color: C.soft }} data-testid="missing-tick-help">
+                <div className="c-s13 c-t2 mt-1" data-testid="missing-tick-help">
                   Tick the people who have left. If you tick nobody, They&apos;ve left moves everyone.
                 </div>
               ) : null}
@@ -853,15 +772,15 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
             ) : markSet !== null ? (
               <MemberListMissing missing={markSet} left={left} onLeft={setLeft} disabled={busy !== null || readOnly} />
             ) : missingSet === 'error' ? (
-              <div role="alert" className="rounded-2xl px-4 py-3 text-sm flex items-center justify-between gap-3" style={{ background: C.redBg, color: '#fca5a5' }}>
+              <div role="alert" className="c-banner-danger rounded-xl px-4 py-3 c-s14 c-w5 flex items-center justify-between gap-3">
                 We couldn&apos;t load the names.
-                <button type="button" onClick={() => void loadMissing(preview.uploadId)} className={LINK} style={{ color: C.orange }}>
+                <button type="button" onClick={() => void loadMissing(preview.uploadId)} className={LINK}>
                   Try again
                 </button>
               </div>
             ) : (
-              <div className="flex items-center gap-2 text-sm" style={{ color: C.muted }}>
-                <Loader2 className="w-4 h-4 animate-spin" /> Loading names…
+              <div className="flex items-center gap-2 c-s14 c-t2">
+                <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> Loading names…
               </div>
             )}
             <div role="radiogroup" aria-label="What happened to them?" className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -888,50 +807,36 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
             </div>
             {keepTyping ? (
               <div className="flex flex-col gap-2" data-testid="keep-typing">
-                <p className="text-sm" style={{ color: C.soft }}>
+                <p className="c-s14 c-t2">
                   {guard.entriesGoing > 0
                     ? `${count(guard.entriesGoing)} ${peopleWord(guard.entriesGoing, words)} would come off your list.`
                     : `${count(guard.membersLeaving)} ${guard.membersLeaving === 1 ? 'person who uses' : 'people who use'} the app would no longer be on your list.`}
                 </p>
-                <label className="flex items-center gap-3 text-[15px]" style={{ color: C.soft }}>
+                <label className="flex items-center gap-3 c-s15 c-t2">
                   <span>
-                    Type <b style={{ color: '#fff' }}>{count(guardNumber(guard))}</b> to confirm
+                    Type <b className="c-t1">{count(guardNumber(guard))}</b> to confirm
                   </span>
-                  <input
-                    aria-label="Type the number to confirm"
-                    inputMode="numeric"
-                    value={typed}
-                    onChange={(e) => setTyped(e.target.value)}
-                    className="w-28 rounded-xl px-3 min-h-[44px] text-base outline-none"
-                    style={{ background: C.card2, color: '#fff', border: '1px solid rgba(255,255,255,0.18)' }}
-                  />
+                  <input aria-label="Type the number to confirm" inputMode="numeric" value={typed} onChange={(e) => setTyped(e.target.value)} className="c-input w-28" />
                 </label>
               </div>
             ) : null}
             {answer === 'left' && needsTyping && !marking ? (
-              <label className="flex items-center gap-3 text-[15px]" style={{ color: C.soft }}>
+              <label className="flex items-center gap-3 c-s15 c-t2">
                 <span>
-                  Type <b style={{ color: '#fff' }}>{count(guardNumber(guard))}</b> to confirm
+                  Type <b className="c-t1">{count(guardNumber(guard))}</b> to confirm
                 </span>
-                <input
-                  aria-label="Type the number to confirm"
-                  inputMode="numeric"
-                  value={typed}
-                  onChange={(e) => setTyped(e.target.value)}
-                  className="w-28 rounded-xl px-3 min-h-[44px] text-base outline-none"
-                  style={{ background: C.card2, color: '#fff', border: '1px solid rgba(255,255,255,0.18)' }}
-                />
+                <input aria-label="Type the number to confirm" inputMode="numeric" value={typed} onChange={(e) => setTyped(e.target.value)} className="c-input w-28" />
               </label>
             ) : null}
-          </div>
+          </section>
         ) : null}
 
-        <div className="rounded-[18px] overflow-hidden" style={{ background: C.card, border: `1px solid ${C.line}` }}>
-          <div style={{ marginTop: -1 }}>
+        <div className="c-card overflow-hidden">
+          <div>
             <Line
               testId="columns-line"
               icon={Columns3}
-              tone={preview.needsMapping || toCheck > 0 ? 'orange' : 'green'}
+              tone={preview.needsMapping || toCheck > 0 ? 'amber' : 'green'}
               title={
                 preview.needsMapping
                   ? 'No email or phone column found'
@@ -956,13 +861,13 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
               />
             ))}
             {never.map((n) => (
-              <Line key={n.reason} icon={Lock} tone="red" title={n.title} sub={n.columns} />
+              <Line key={n.reason} icon={Lock} tone="plain" title={n.title} sub={n.columns} />
             ))}
             {preview.warnings.map((w) => (
               <Line
                 key={w.code}
                 icon={AlertTriangle}
-                tone="orange"
+                tone="amber"
                 title={warningTitle(w)}
                 action={why === w.code ? 'Hide' : 'Why?'}
                 onAction={() => setWhy((open) => (open === w.code ? null : w.code))}
@@ -994,9 +899,9 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
         </div>
 
         {columnsOpen ? (
-          <div className="rounded-[18px] overflow-hidden" style={{ background: C.card, border: `1px solid ${C.line}` }} data-testid="columns">
+          <div className="c-card overflow-hidden" data-testid="columns">
             {/* Kd, 2026-09-27: the examples read as if the columns matched for one person. */}
-            <div className="px-4 pt-3 pb-1 text-[13px]" style={{ color: C.muted }} data-testid="columns-note">
+            <div className="px-4 pt-3 pb-1 c-s13 c-t2" data-testid="columns-note">
               Examples are from the first row of your file.
             </div>
             {preview.columns.map((c) => {
@@ -1006,50 +911,41 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
               const switchable = date !== undefined && (date.from === 'country' || date.from === 'chosen');
               const reading = date === undefined ? null : dateReading(date.example);
               return (
-                <div
-                  key={c.index}
-                  data-testid={`column-${String(c.index)}`}
-                  className="flex items-center gap-3 px-4 py-3"
-                  style={{ borderTop: `1px solid ${C.line}` }}
-                >
+                <div key={c.index} data-testid={`column-${String(c.index)}`} className="flex items-center gap-3 px-4 py-3 border-t" style={{ borderColor: 'var(--line)' }}>
                   <div className="min-w-0 flex-1">
-                    <div className="text-[15px] font-semibold truncate" style={{ color: '#fff' }}>
-                      {columnName(c)}
-                    </div>
+                    <div className="c-s15 c-w6 c-t1 c-ell">{columnName(c)}</div>
                     {c.neverKept === null && disbelieved(c) ? (
-                      <div className="text-[13px]" style={{ color: C.orange }}>
+                      <div className="c-s13 c-w6" style={{ color: 'var(--warn)' }}>
                         Doesn&apos;t look like {FIELD_LABELS[c.headerSays].toLowerCase()}
                       </div>
                     ) : reading !== null ? (
-                      <div className="text-[13px] flex items-center gap-1.5 flex-wrap" style={{ color: C.muted }}>
-                        <CalendarDays className="w-3.5 h-3.5" />
+                      <div className="c-s13 c-t2 flex items-center gap-1.5 flex-wrap">
+                        <CalendarDays aria-hidden="true" className="w-3.5 h-3.5" />
                         {reading.read}
                         {switchable ? (
                           <>
                             {' · '}
-                            <button type="button" onClick={() => swap(date.column, date.order)} disabled={busy !== null} className={LINK} style={{ color: C.orange }}>
+                            <button type="button" onClick={() => swap(date.column, date.order)} disabled={busy !== null} className="c-btn c-btn-link c-s13 c-w6">
                               {reading.other}
                             </button>
                           </>
                         ) : null}
                       </div>
                     ) : c.samples.length > 0 ? (
-                      <div className="text-[13px] truncate" style={{ color: C.muted }}>
-                        {c.samples[0]}
-                      </div>
+                      <div className="c-s13 c-t2 c-ell">{c.samples[0]}</div>
                     ) : null}
                   </div>
                   {c.neverKept !== null ? (
-                    <span className="text-[13px] flex items-center gap-1.5 flex-shrink-0" style={{ color: C.red }}>
-                      <Lock className="w-3.5 h-3.5" /> Never stored
+                    <span className="c-tag c-tag-plain flex-shrink-0">
+                      <Lock aria-hidden="true" className="w-3.5 h-3.5" /> Never stored
                     </span>
                   ) : (
                     <select
                       aria-label={`${columnName(c)} imports as`}
                       value={roleOfColumn(mapping, c.index)}
                       onChange={(e) => setMapping((m) => withColumnRole(m, c.index, e.target.value))}
-                      className="rounded-xl px-3 min-h-[40px] text-sm flex-shrink-0 max-w-[48%]"
-                      style={{ background: C.card2, color: '#fff', border: '1px solid rgba(255,255,255,0.12)' }}
+                      className="c-input flex-shrink-0 max-w-[48%]"
+                      style={{ width: 'auto' }}
                     >
                       {FIELDS.map((field) => (
                         <option key={field} value={field}>
@@ -1064,18 +960,12 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
               );
             })}
             {dirty ? (
-              <div className="flex gap-2.5 p-3" style={{ borderTop: `1px solid ${C.line}` }}>
-                <button type="button" onClick={() => setMapping(preview.mapping)} className={GHOST} style={{ color: C.soft, border: '1px solid rgba(255,255,255,0.14)' }}>
+              <div className="flex gap-2.5 p-3 border-t" style={{ borderColor: 'var(--line)' }}>
+                <button type="button" onClick={() => setMapping(preview.mapping)} className="c-btn c-btn-s c-btn-lg">
                   Undo
                 </button>
-                <button
-                  type="button"
-                  onClick={() => readAgain(mapping)}
-                  disabled={busy !== null}
-                  className={`${GHOST} flex-1 font-bold`}
-                  style={{ background: C.orange, color: '#000' }}
-                >
-                  {busy === 'reading' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                <button type="button" onClick={() => readAgain(mapping)} disabled={busy !== null} className="c-btn c-btn-p c-btn-lg flex-1">
+                  {busy === 'reading' ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
                   Apply changes
                 </button>
               </div>
@@ -1086,7 +976,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
         {!preview.needsMapping ? (
           <div className="flex flex-col gap-1">
             {handEdits.entries > 0 ? (
-              <Tick checked={handTick} onChange={setHandTick} tone="orange">
+              <Tick checked={handTick} onChange={setHandTick} tone="warn">
                 Replace what staff typed for {count(handEdits.entries)} {handEdits.entries === 1 ? 'person' : 'people'} ({handEdits.fields.join(', ')})
               </Tick>
             ) : null}
@@ -1103,15 +993,12 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
                     : () => void confirm({ marks: marksBody(markSet, left, 'keep'), acknowledgeLargeChange: keepTyping && typedMatches(typed, guard) })
               }
               disabled={!canImport}
-              className={`${PRIMARY} mt-2`}
-              style={primaryStyle(canImport)}
+              {...primary(canImport, 'mt-2')}
             >
-              {busy === 'importing' ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
+              {busy === 'importing' ? <Loader2 aria-hidden="true" className="w-5 h-5 animate-spin" /> : null}
               {importLabel}
             </button>
-            <p className="text-[13px] text-center mt-1.5" style={{ color: C.muted }}>
-              {dirty ? 'Apply your column changes first.' : 'Nobody is emailed.'}
-            </p>
+            <p className="c-s13 c-t2 text-center mt-1.5">{dirty ? 'Apply your column changes first.' : 'Nobody is emailed.'}</p>
           </div>
         ) : null}
         {errorBox}
@@ -1121,27 +1008,19 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
     const said = doneWords(done, words);
     body = (
       <div className="text-center pt-6 pb-2" data-testid="member-import-done">
-        <span className="inline-flex items-center justify-center w-[76px] h-[76px] rounded-full" style={{ background: C.greenBg, color: C.green }}>
-          <Check className="w-10 h-10" strokeWidth={2.4} />
+        <span className="inline-flex items-center justify-center w-[76px] h-[76px] rounded-full" style={{ background: 'var(--good-bg)', color: 'var(--good)' }}>
+          <Check aria-hidden="true" className="w-10 h-10" strokeWidth={2.4} />
         </span>
-        <h3 className="text-2xl font-bold mt-4" style={{ color: '#fff' }}>
+        <h3 className="c-t1 mt-4" style={{ ...TITLE, margin: '16px 0 0' }}>
           {said.title}
         </h3>
-        {said.detail ? (
-          <p className="text-[15px] mt-1" style={{ color: C.soft }}>
-            {said.detail}
-          </p>
-        ) : null}
-        {!done.alreadyConfirmed ? (
-          <p className="text-sm mt-1" style={{ color: C.muted }}>
-            Nobody has been emailed yet.
-          </p>
-        ) : null}
+        {said.detail ? <p className="c-s15 c-t2 mt-1">{said.detail}</p> : null}
+        {!done.alreadyConfirmed ? <p className="c-s14 c-t2 mt-1">Nobody has been emailed yet.</p> : null}
         <div className="grid grid-cols-2 gap-2.5 mt-6">
-          <button type="button" onClick={() => startOver(true)} className={GHOST} style={{ color: C.soft, border: '1px solid rgba(255,255,255,0.14)' }}>
+          <button type="button" onClick={() => startOver(true)} className="c-btn c-btn-s c-btn-lg">
             Import another
           </button>
-          <button type="button" onClick={onClose} className={`${GHOST} font-bold`} style={{ background: C.orange, color: '#000' }}>
+          <button type="button" onClick={onClose} className="c-btn c-btn-p c-btn-lg">
             Done
           </button>
         </div>
@@ -1150,7 +1029,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
   }
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto" style={{ background: 'rgba(10,9,8,0.88)' }} data-testid="member-import">
+    <div className="fixed inset-0 z-50 overflow-y-auto" style={{ background: 'var(--scrim)' }} data-testid="member-import">
       <div className="min-h-full flex items-start sm:items-center justify-center sm:p-6">
         <div
           ref={dialogRef}
@@ -1159,20 +1038,20 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
           aria-labelledby={titleId}
           tabIndex={-1}
           onKeyDown={keepFocusInside}
-          className="w-full sm:max-w-[640px] min-h-[100dvh] sm:min-h-0 sm:rounded-[28px] p-5 sm:p-6 flex flex-col gap-4 outline-none"
-          style={{ background: C.panel, border: `1px solid ${C.line}` }}
+          className="c-sheet w-full sm:max-w-[660px] min-h-[100dvh] sm:min-h-0 sm:rounded-[20px] sm:border p-4 sm:p-7 flex flex-col gap-4 outline-none"
+          style={{ borderColor: 'var(--card-line)' }}
         >
           <div className="flex items-center gap-3">
             {stage === 'review' ? (
               <IconButton label="Back" onClick={() => startOver(false)}>
-                <ChevronLeft className="w-5 h-5" />
+                <ChevronLeft aria-hidden="true" className="w-5 h-5" />
               </IconButton>
             ) : null}
-            <h2 id={titleId} className={`text-xl font-bold flex-1 ${stage === 'review' ? 'text-center' : ''}`} style={{ color: '#fff' }}>
+            <h2 id={titleId} className={`c-t1 flex-1 ${stage === 'review' ? 'text-center' : ''}`} style={{ ...TITLE, margin: 0 }}>
               {title}
             </h2>
             <IconButton label="Close" onClick={onClose}>
-              <X className="w-5 h-5" />
+              <X aria-hidden="true" className="w-5 h-5" />
             </IconButton>
           </div>
           {body}
