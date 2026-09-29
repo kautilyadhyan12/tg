@@ -451,14 +451,20 @@ function nextDecideAt(periodEnd) {
   return new Date(at.getTime() - SMALLER_SIZE_DECIDE_HOURS * 60 * 60 * 1000).toISOString();
 }
 
-/** A PAID TRIAL'S NEXT STEP: "Your first payment of $79 is on 3 Oct." Null for anything
+/** A PAID TRIAL'S NEXT STEP: when the plan starts, what its first payment covers, and that the
+ *  free trial carries on until then (Kd at 1d-i's click-through: *"should say payment will count
+ *  from 9 and end date , and can keep trying the free mode"*). Null for anything
  *  else, or when the server has not said the price or the date. */
 export function firstPaymentText(sub) {
   if (sub?.status !== 'trialing' || sub?.subscribed !== true) return null;
   const date = trialEndDateLabel(sub.currentPeriodEnd);
   const price = typeof sub.priceLabel === 'string' && sub.priceLabel !== '' ? sub.priceLabel : null;
   if (date === null || price === null) return null;
-  return `Your first payment of ${price} is on ${date}.`;
+  const start = new Date(sub.currentPeriodEnd);
+  const end = new Date(start.getTime());
+  end.setMonth(end.getMonth() + 1);
+  const until = trialEndDateLabel(end.toISOString());
+  return `Your plan starts on ${date}: ${price} is paid then, for ${date} to ${until}. Your free trial carries on until then.`;
 }
 
 /** WHAT A BIGGER SIZE COSTS, IN ONE SENTENCE, from the server's preview of Paddle's own

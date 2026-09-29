@@ -800,8 +800,12 @@ describe('biggerPlans', () => {
 
 describe('the words for money', () => {
   it('names the first payment of a paid trial, and nothing for a free one', () => {
-    const on = trialEndDateLabel(inDays(6));
-    expect(firstPaymentText({ status: 'trialing', subscribed: true, priceLabel: '$129', currentPeriodEnd: inDays(6) })).toBe(`Your first payment of $129 is on ${on}.`);
+    // Kd's own trial at the click-through: free until 9 Oct, then a month from 9 Oct to 9 Nov.
+    const oct9 = trialEndDateLabel('2026-10-09T16:54:41.000Z');
+    const nov9 = trialEndDateLabel('2026-11-09T16:54:41.000Z');
+    expect(firstPaymentText({ status: 'trialing', subscribed: true, priceLabel: '₹7,500', currentPeriodEnd: '2026-10-09T16:54:41.000Z' })).toBe(
+      `Your plan starts on ${oct9}: ₹7,500 is paid then, for ${oct9} to ${nov9}. Your free trial carries on until then.`,
+    );
     expect(firstPaymentText({ status: 'trialing', trialEndsAt: inDays(6) })).toBeNull();
     expect(firstPaymentText({ status: 'active', subscribed: true, priceLabel: '$129', currentPeriodEnd: inDays(6) })).toBeNull();
     expect(firstPaymentText({ status: 'trialing', subscribed: true, priceLabel: null, currentPeriodEnd: inDays(6) })).toBeNull();
@@ -834,10 +838,11 @@ describe('the banner for a trial the gym has paid for', () => {
   });
 
   it('counts down in good English and names the first payment', () => {
-    const on = (days) => trialEndDateLabel(inDays(days));
-    expect(bannerFor(paidTrial(6), NOW)?.text).toBe(`Free trial — 6 days left. Your first payment of $129 is on ${on(6)}.`);
-    expect(bannerFor(paidTrial(1), NOW)?.text).toBe(`Free trial — 1 day left. Your first payment of $129 is on ${on(1)}.`);
-    expect(bannerFor(paidTrial(0), NOW)?.text).toBe(`Free trial — last day. Your first payment of $129 is on ${on(0)}.`);
+    const first = (days) => firstPaymentText(paidTrial(days).subscription);
+    expect(first(6)).toMatch(/^Your plan starts on .+: \$129 is paid then, for .+ to .+\. Your free trial carries on until then\.$/);
+    expect(bannerFor(paidTrial(6), NOW)?.text).toBe(`Free trial — 6 days left. ${first(6)}`);
+    expect(bannerFor(paidTrial(1), NOW)?.text).toBe(`Free trial — 1 day left. ${first(1)}`);
+    expect(bannerFor(paidTrial(0), NOW)?.text).toBe(`Free trial — last day. ${first(0)}`);
   });
 
   it('tells a free trial’s billing staff, near the end, that they can pay now', () => {

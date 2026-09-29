@@ -166,7 +166,7 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
         {changed !== null || paid !== null ? (
           <>
             <p className="text-sm mt-4" style={{ color: 'rgba(255,255,255,0.85)' }} data-testid="plan-choice-done">
-              {changed !== null ? doneText(changed, words, firstPaymentOn) : `Your card is saved. ${firstPaymentText(paid) ?? ''}`.trim()}
+              {changed !== null ? doneText(changed, words, firstPaymentOn) : `You're subscribed. ${firstPaymentText(paid) ?? ''}`.trim()}
             </p>
             {doneWarning !== null ? (
               <p className="text-sm mt-2" style={warn}>
@@ -189,7 +189,7 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
                 ? inTrial
                   ? `Your trial allows up to ${sub?.seatCap} ${words.people} until your first payment${firstPaymentOn === null ? '' : ` on ${firstPaymentOn}`}; the size you choose starts then. Nothing is charged now.`
                   : `A bigger size starts at once and you pay the difference for the rest of this month. A smaller one starts with your next payment${firstPaymentOn === null ? '' : ` on ${firstPaymentOn}`}; until then you keep your whole size.`
-                : `Your free trial carries on at up to ${sub?.seatCap} ${words.people}. Your card is saved now; the plan you choose and its first payment start when the trial ends${trialEnds === null ? '' : ` on ${trialEnds}`}.`}
+                : `Your free trial carries on at up to ${sub?.seatCap} ${words.people}. You give your payment details now; the plan you choose and its first payment start when the trial ends${trialEnds === null ? '' : ` on ${trialEnds}`}.`}
             </p>
 
             {plans.loading ? (
