@@ -37,9 +37,11 @@ export async function openRazorpayCheckout({ keyId, subscriptionId, name, descri
     subscription_id: subscriptionId,
     name,
     description,
-    // Razorpay asks every payer for a mobile number and an email; the owner's sign-in email
-    // is filled in for them, as Razorpay's checkout option `prefill` allows.
-    ...(email ? { prefill: { email } } : {}),
+    // Razorpay asks every payer for a mobile number and an email: the bank sends its notice
+    // 24 hours before each monthly charge to them (RBI's e-mandate rule). The owner's sign-in
+    // email is filled in and its box hidden, as apps that already know the payer do; the app
+    // has no mobile number (sign-in is by email), so Razorpay asks for that one.
+    ...(email ? { prefill: { email }, readonly: { email: true }, hidden: { email: true } } : {}),
     // The console's accent (console.css --accent): Razorpay's window takes a colour, not a name.
     theme: { color: '#FF8A1F' },
     handler: () => onEvent({ type: 'completed' }),
