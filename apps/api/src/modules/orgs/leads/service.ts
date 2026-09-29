@@ -168,9 +168,10 @@ async function sendingViews(
       const state = states.get(row.id);
       let { by, notSent } = whoSends(row.followUpDueOn, app, state);
       // An address the app's own check refuses (stopped, bounced, or on the member list)
-      // is staff's from now, not from the worker's next try, and the panel says why.
-      if (by === "app" && stop !== undefined) {
-        by = "you";
+      // is staff's from now, not from the worker's next try, and the panel says why —
+      // whoever sends the next one, so staff never email a dead address unwarned.
+      if (stop !== undefined && row.followUpDueOn !== null) {
+        if (by === "app") by = "you";
         notSent = stop.reason;
       } else if (by === "app" && row.email !== null && members.has(row.email.toLowerCase())) {
         by = "you";

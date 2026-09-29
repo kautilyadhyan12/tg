@@ -229,8 +229,9 @@ describe('the follow-up emails (20c-ii)', () => {
       headline: 'Email 1 of 3 is due today',
       due: true,
       sentLine: null,
-      note: 'Not sent for you: emails to this address bounce.',
+      note: 'Emails to this address bounce. Check the address with them.',
     });
+    expect(followUpState(due({ by: 'you', notSent: 'refused' }), now).note).toBe("Our email service won't send to this address. Check the address with them.");
     expect(followUpState(due({ by: 'you', notSent: 'on_member_list' }), now).note).toBe(
       'Not sent for you: this email address is on your member list.',
     );

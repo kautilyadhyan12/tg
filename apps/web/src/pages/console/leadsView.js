@@ -184,6 +184,13 @@ export const SENT_FOR_YOU_NOTE = 'Sent for you from 8 in the morning, by your cl
 /** Under one the app is waiting to send. */
 export const WAITING_FOR_YOU_NOTE = "We'll keep trying. If it can't go within a week, it comes back to you here.";
 
+/** An address nobody can email, said as it is whoever sends the next one: a gym whose
+ *  emails through the app are stopped or off still learns the address is dead. */
+export const ADDRESS_NOTES = {
+  bounced: 'Emails to this address bounce. Check the address with them.',
+  refused: "Our email service won't send to this address. Check the address with them.",
+};
+
 /** What the lead's follow-up box says, or null when there is nothing to say: a lead
  *  who never said yes and has had none. `next` is the step staff may send now, or null;
  *  `note` a line under it: the app sends it, or why the app did not. */
@@ -209,7 +216,9 @@ export function followUpState(lead, now = new Date()) {
       return { next: null, headline, due: false, sentLine, note: SENT_FOR_YOU_NOTE };
     }
     const headline = f.overdue ? `${of} was due ${dueDayWords(f.dueOn)}` : f.dueNow ? `${of} is due today` : `${of} is due ${dueDayWords(f.dueOn)}`;
-    const note = f.notSent ? `Not sent for you: ${LEAD_EMAIL_NOT_SENT_WORDS[f.notSent] ?? LEAD_EMAIL_NOT_SENT_WORDS.could_not_send}.` : null;
+    const note = f.notSent
+      ? (ADDRESS_NOTES[f.notSent] ?? `Not sent for you: ${LEAD_EMAIL_NOT_SENT_WORDS[f.notSent] ?? LEAD_EMAIL_NOT_SENT_WORDS.could_not_send}.`)
+      : null;
     // Before its day it is only announced: nothing to send yet.
     return { next: f.dueNow ? step : null, headline, due: f.dueNow, sentLine, note };
   }

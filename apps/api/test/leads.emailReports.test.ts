@@ -406,6 +406,8 @@ d("what comes back from a lead's follow-up (real Postgres)", () => {
       await processAll();
       expect(await gymCounts(sql, gymA)).toEqual({ sent: 3, bounced: 2, complainedEarly: false });
       expect(await stoppedReason(gymA)).toBe("bounces");
+      // Stopped, the gym sends by hand: Ana's panel still says her address bounces, before her next day.
+      expect((await readLead(gymA, anaA.id, ownerA)).followUp).toMatchObject({ by: "you", notSent: "bounced", dueNow: false });
       expect(await stoppedReason(gymB)).toBeNull();
     },
     TIMEOUT_MS,
