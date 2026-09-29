@@ -256,6 +256,8 @@ d("the app sends a lead's follow-ups (real Postgres)", () => {
         sendPasswordResetEmail: () => Promise.resolve(),
         sendSignInCodeEmail: () => Promise.resolve(),
       },
+      // The gym page's robot check, passed: the form is what is under test here.
+      robotCheck: { siteKey: "test-site-key", verify: () => Promise.resolve("passed") },
     });
     await api().ready();
   }, TIMEOUT_MS);
@@ -415,6 +417,40 @@ d("the app sends a lead's follow-ups (real Postgres)", () => {
       await runSender();
       await runSender();
       expect(emailsTo("oli.moment@example.com")).toHaveLength(1);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "a lead from the gym's own page, ticked by the person on the form, is emailed as gym software does (RULINGS 2026-09-29); one not ticked is not; its Stop works",
+    async () => {
+      const owner = await makeUser("page-owner");
+      const org = await makeGym(owner.cookies, "Page Sent Gym");
+      const gym = org.org.id;
+      await switchOn(gym, owner.cookies);
+      expect((await put(`/v1/orgs/${gym}/page`, { shown: true, about: "", facilities: [], ownFacilities: [] }, owner.cookies)).statusCode).toBe(200);
+      const form = (body: Record<string, unknown>) =>
+        api().inject({
+          method: "POST",
+          url: `/v1/public/gyms/${org.org.slug}/enquiries`,
+          remoteAddress: nextIp(),
+          headers: { "content-type": "application/json" },
+          payload: JSON.stringify({ fullName: "Asha Rao", source: "social", message: "Evening classes?", robotToken: "ok-token", ...body }),
+        });
+      expect((await form({ email: "asha.page@example.com", mayEmail: true })).statusCode).toBe(202);
+      expect((await form({ fullName: "Bo Lin", email: "bo.page@example.com", mayEmail: false })).statusCode).toBe(202);
+      outbox.length = 0;
+      await runSender();
+      await runSender();
+      expect(emailsTo("asha.page@example.com").map((m) => m.subject)).toEqual(["Thanks for asking about Page Sent Gym"]);
+      expect(emailsTo("bo.page@example.com")).toEqual([]);
+
+      const [first] = emailsTo("asha.page@example.com");
+      if (first === undefined) throw new Error("no email went");
+      expect((await pressStop(first)).statusCode).toBe(200);
+      const [asha] = await sql<{ ok: Date | null; due: string | null }[]>`
+        SELECT email_ok_at AS ok, follow_up_due_on::text AS due FROM gym_leads WHERE gym_id = ${gym} AND email = 'asha.page@example.com'`;
+      expect(asha).toEqual({ ok: null, due: null });
     },
     TIMEOUT_MS,
   );

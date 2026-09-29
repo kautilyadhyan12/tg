@@ -2658,7 +2658,11 @@ An address stopped, bounced or on the member list is staff's at once on the pane
 list's Email due counts it from the worker's next try, since it cannot read the keyed
 address list. **20c-v-b**: Resend's reports on
 these emails (a bounce, a complaint) act as they do for invitations and count toward the
-gym's stop.
+gym's stop. A lead from the gym's page, ticked by the person on the form, is emailed like
+any other, as gym software does (RULINGS 2026-09-29): a stranger could type somebody
+else's address, which is met the standard way, as for invitations — the robot check, the
+form's limits, Stop in every email, the address check — and 20c-v-b is built before any
+real gym switches this on.
 
 **The gym's own page and its form (20c-iv-a; RULINGS 2026-09-28).** `/gyms/{slug}`, a
 page of ours anyone with the link opens without signing in: the gym's name, town, today's
