@@ -15,7 +15,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Cost at full size:** no new read of people; the confirm's added statement is keys only (not re-measured).
 - **Click-through data:** `.cost/demo-5b-v-d-ii.ts` rebuilds Kd Demo Gym (Priya Nair added by hand; staff typed Olivia's phone; end dates on the cancelled and expired) and writes `kd-demo-october.csv` and `kd-demo-october-b.csv` to Downloads.
 - **Split off:** 5b-v-d-iii, each warning says which rows (Kd: *"no option to check or correct or see what is even wrong"*); its place in the order is Kd's.
-- **Open:** Kd's click-through of round 2; review round one (`reviews/5b-v-d-ii-1-review.md`); the branch is not pushed (the permission check refused `git push`; Kd pushes); merge on Kd's word, ROADMAP ticked with it.
+- **Kd's click-through of round 2: *"all passed"*.**
+- **Open:** review round one (`reviews/5b-v-d-ii-1-review.md`); the branch is not pushed (the permission check refused `git push`; Kd pushes); merge on Kd's word, ROADMAP ticked with it.
 
 ## 2026-09-28 · 5b-v-d-i (Folder A): the import's who-has-left, person by person (branch `members-import-who-left`)
 
