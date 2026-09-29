@@ -1103,7 +1103,10 @@ d("member list: the wider record, kept (real Postgres)", () => {
         [3, "Kept 0002", "Join Date", "sometime in March"],
         [5, "Kept 0004", "Expiry Date", null],
       ]);
-      expect(rowsOf("card_cells_dropped").map((w) => [w.row, w.column, w.cell])).toEqual([[4, "Gotra", null]]);
+      expect(rowsOf("card_cells_dropped").map((w) => [w.row, w.column, w.cell])).toEqual([
+        [4, "Gotra", null],
+        [5, "Expiry Date", null],
+      ]);
       expect(read.body.replace(/[\s-]/g, "")).not.toContain("4242424242424242");
       expect(read.body.replace(/[\s-]/g, "")).not.toContain("5555555555554444");
       // Another gym's owner reads nothing of it.

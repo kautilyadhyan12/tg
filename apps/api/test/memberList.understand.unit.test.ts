@@ -235,7 +235,7 @@ describe("the front desk's own details", () => {
       code: "placeholders",
       rows: 6,
       values: ["frontdesk@example.com", "+919876543210"],
-      where: [2, 3, 4, 5, 6, 7].map((row) => at(row, `Person ${String(row - 2)}`, null, "frontdesk@example.com")),
+      where: [2, 3, 4, 5, 6, 7].map((row) => at(row, `Person ${String(row - 2)}`, null, "frontdesk@example.com and +919876543210")),
     });
   });
 

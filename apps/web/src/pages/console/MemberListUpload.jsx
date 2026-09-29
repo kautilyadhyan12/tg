@@ -162,10 +162,10 @@ function WarningRows({ warning }) {
       </ul>
       {!all && warning.where.length > shown.length ? (
         <button type="button" onClick={() => setAll(true)} className="c-btn c-btn-s c-btn-sm self-start">
-          Show all {count(warning.where.length)}
+          {unlisted > 0 ? `Show the first ${count(warning.where.length)}` : `Show all ${count(warning.where.length)}`}
         </button>
       ) : null}
-      {unlisted > 0 && (all || warning.where.length <= 20) ? <p>and {count(unlisted)} more like these</p> : null}
+      {unlisted > 0 ? <p>{count(warning.rows)} in all; the list shows the first {count(warning.where.length)}.</p> : null}
     </div>
   );
 }

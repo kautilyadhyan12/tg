@@ -40,6 +40,52 @@ const rowsOf = (found: MemberListUnderstanding, code: MemberListWarning["code"])
   return warning !== undefined && "where" in warning ? warning.where : [];
 };
 
+/** A card number's last digit, by Luhn's rule, so a card from a range nobody here listed is a real one. */
+const withCheckDigit = (body: string): string => {
+  for (let d = 0; d <= 9; d++) {
+    const digits = `${body}${String(d)}`;
+    let sum = 0;
+    for (let i = 0; i < digits.length; i++) {
+      const n = Number(digits[digits.length - 1 - i]);
+      const doubled = i % 2 === 1 ? n * 2 : n;
+      sum += doubled > 9 ? doubled - 9 : doubled;
+    }
+    if (sum % 10 === 0) return digits;
+  }
+  throw new Error("no check digit");
+};
+/** Mir (Russia, 2200–2204) and Troy (Turkey, 9792): real card ranges `neverKeep.ts` does not list. */
+const MIR = withCheckDigit("220070012345600");
+const TROY = withCheckDigit("979212345678900");
+const spaced = (digits: string, sizes: number[], sep: string): string => {
+  const parts: string[] = [];
+  let at = 0;
+  for (const size of sizes) {
+    parts.push(digits.slice(at, at + size));
+    at += size;
+  }
+  return parts.join(sep);
+};
+
+/** Round one of 5b-v-d-iii, High 1: cards written the ways the storage rules do not read,
+ *  each of which was quoted on the Review. */
+const ODDLY_TYPED: [string, string][] = [
+  ["4242424242424242", "4242 4242-4242 4242"],
+  ["4242424242424242", "(4242) 4242 4242 4242"],
+  ["4242424242424242", "4242_4242_4242_4242"],
+  ["4242424242424242", "4242*4242*4242*4242"],
+  ["4242424242424242", "4242 · 4242 · 4242 · 4242"],
+  ["4242424242424242", "4242:4242:4242:4242"],
+  ["4242424242424242", "4242.4242.4242.4242"],
+  ["4242424242424242", "42424 24242 424242"],
+  ["4242424242424242", "42 42 42 42 42 42 42 42"],
+  ["5555555555554444", "5555 / 5555 / 5555 / 4444"],
+  // A number written just before it, so the card is not where the digits start.
+  ["4242424242424242", "room 7: 4242_4242_4242_4242"],
+  [MIR, spaced(MIR, [4, 4, 4, 4], " ")],
+  [TROY, spaced(TROY, [4, 4, 4, 4], "-")],
+];
+
 /** Stripe's test cards: Visa, Mastercard, Amex, Discover, Diners, JCB, UnionPay. */
 const STRIPE_CARDS = ["4242424242424242", "5555555555554444", "378282246310005", "6011111111111117", "3056930009020004", "3566002020360505", "6200000000000005"];
 /** …written as people write them: in fours with spaces, with dashes, and Amex's 4-6-5. */
@@ -63,12 +109,11 @@ describe("the worst thing — a card number quoted in a warning", () => {
     // the phone column is asked about too.
     for (const country of ["IN", null]) {
       const found = read(rows, { country });
-      const said = JSON.stringify(found.warnings).replace(/[^0-9]/g, " ");
-      const squashed = JSON.stringify(found.warnings).replace(/[\s\-‐-―]/g, "");
-      for (const card of STRIPE_CARDS) {
-        expect(squashed).not.toContain(card);
-        // …nor any run of its digits long enough to be the start of it.
-        expect(said).not.toContain(card.slice(0, 12));
+      // Each quoted cell's digits, whatever sat between them, never hold a card.
+      const quoted = found.warnings.flatMap((w) => ("where" in w ? w.where.map((r) => r.cell ?? "") : []));
+      for (const cell of quoted) {
+        const digits = cell.replace(/[^0-9]/g, "");
+        for (const card of STRIPE_CARDS) expect({ cell, has: digits.includes(card) }).toEqual({ cell, has: false });
       }
       // A number shaped like a card with no card company's first digits is dropped from a
       // cell all the same (§11.2), so it is not quoted either.
@@ -78,6 +123,54 @@ describe("the worst thing — a card number quoted in a warning", () => {
       expect(rowsOf(found, "dates_not_read").map((w) => w.row)).toHaveLength(AS_TYPED.length * 2 + 1);
       expect(rowsOf(found, "cells_cut").map((w) => w.row)).toHaveLength(AS_TYPED.length);
     }
+  });
+
+  it("never quotes a card however it is written, in a date cell or a phone cell, whole or inside words", () => {
+    // Enough real dates that Joined stays a date column, so each odd cell is quoted as a date.
+    const rows: string[][] = [["Name", "Email", "Mobile", "Joined"]];
+    for (let i = 0; i < 200; i++) rows.push([`Ok Person ${String(i)}`, `ok${String(i)}@example.com`, `9876${String(500000 + i)}`, "2024-01-05"]);
+    ODDLY_TYPED.forEach(([, typed], i) => {
+      rows.push([`Date Whole ${String(i)}`, `dw${String(i)}@example.com`, `98765411${String(10 + i)}`, typed]);
+      rows.push([`Date Words ${String(i)}`, `dd${String(i)}@example.com`, `98765422${String(10 + i)}`, `paid by ${typed} today`]);
+      rows.push([`Phone Words ${String(i)}`, `pw${String(i)}@example.com`, `card ${typed}`, "2024-01-05"]);
+    });
+    for (const country of ["IN", null]) {
+      const found = read(rows, { country });
+      // Every odd date cell was quoted (or, a whole card, named by its column alone).
+      expect(rowsOf(found, "dates_not_read").map((w) => w.name).sort()).toEqual(
+        ODDLY_TYPED.flatMap((_, i) => [`Date Whole ${String(i)}`, `Date Words ${String(i)}`]).sort(),
+      );
+      const quoted = found.warnings.flatMap((w) => ("where" in w ? w.where.map((r) => r.cell ?? "") : []));
+      for (const cell of quoted) {
+        const digits = cell.replace(/[^0-9]/g, "");
+        for (const [card] of ODDLY_TYPED) expect({ cell, has: digits.includes(card) }).toEqual({ cell, has: false });
+      }
+    }
+  });
+
+  it("counts a card in the name like any other card, by the name's column", () => {
+    const found = read([
+      ["Name", "Email"],
+      ["4242 4242 4242 4242", "one@example.com"],
+      ["Ann 5555555555554444", "ann@example.com"],
+      ["Bo Chen", "bo@example.com"],
+    ]);
+    expect(rowsOf(found, "card_cells_dropped").map((w) => [w.row, w.column, w.cell])).toEqual([
+      [2, "Name", null],
+      [3, "Name", null],
+    ]);
+  });
+
+  it("a whole card in a date column is listed as a card too, so staff are told to delete it", () => {
+    const found = read([
+      ["Name", "Email", "Joined"],
+      ["Ann Lee", "ann@example.com", "2024-01-05"],
+      ["Bo Chen", "bo@example.com", "4242 4242 4242 4242"],
+      ["Cy Shah", "cy@example.com", "2024-01-07"],
+      ["Di Park", "di@example.com", "2024-01-08"],
+    ]);
+    expect(rowsOf(found, "card_cells_dropped")).toEqual([at(3, "Bo Chen", "Joined")]);
+    expect(rowsOf(found, "dates_not_read")).toEqual([at(3, "Bo Chen", "Joined", null)]);
   });
 
   it("names the row and column of a card it dropped, and never the card", () => {
@@ -141,6 +234,15 @@ describe("each warning names exactly its own rows", () => {
       { country: null },
     );
     expect(rowsOf(found, "phones_need_country")).toEqual([at(3, "Bo Chen", "Phone", "07911 123457"), at(5, "Di Park", "Phone", "(415) 555-0100")]);
+  });
+
+  it("a row that lost both its email and its phone to the front desk's details names both", () => {
+    const rows: string[][] = [["Name", "Email", "Mobile"]];
+    for (let i = 0; i < 6; i++) rows.push([`Desk ${String(i)}`, "desk@gym.example", "9999999999"]);
+    rows.push(["Ann Lee", "ann@example.com", "9876543210"]);
+    const where = rowsOf(read(rows), "placeholders");
+    expect(where).toHaveLength(6);
+    expect(where[0]).toEqual(at(2, "Desk 0", null, "desk@gym.example and +919999999999"));
   });
 
   it("with three on one address, each names another of them", () => {

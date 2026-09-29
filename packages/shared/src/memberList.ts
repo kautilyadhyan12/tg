@@ -709,7 +709,7 @@ export function memberListWarningWords(warning: MemberListWarning): string {
     case "dates_not_read":
       return `${numberWords(warning.rows, "cell in a date column is", "cells in date columns are")} not a date, so they were left empty rather than guessed. Write them as dates in your file, such as 5 Jan 2024, and upload it again, or add the dates in the app after you import.`;
     case "card_cells_dropped":
-      return `${numberWords(warning.rows, "cell was dropped because it is shaped like a payment card number", "cells were dropped because they are shaped like payment card numbers")}. We never store card details, wherever they sit in a file; delete them from your own file too.`;
+      return `${numberWords(warning.rows, "cell held a payment card number, which was removed", "cells held payment card numbers, which were removed")}. We never store card details, wherever they sit in a file; delete them from your own file too.`;
     case "extra_columns_left_out":
       return `This file has more of the gym's own columns than we keep. The ${String(warning.columns)} furthest to the right were left out; move the ones you need further left and upload again.`;
     case "gym_fields_full":

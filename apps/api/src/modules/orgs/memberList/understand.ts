@@ -56,7 +56,7 @@ import { evidenceInColumn, evidenceOf, mostlyDates, readDay, settleOrder } from 
 import { booleanStatus, cleanEmail, cleanMemberNumber, cleanName, cleanStatus, cut, fold, identityKey, isBooleanWord } from "./fields.js";
 import { isWritten } from "./grid.js";
 import { endsOrRenews, normaliseHeader, readHeader } from "./headerWords.js";
-import { type SheetHints, cardShapedCell, sheetHints, withoutCardNumbers } from "./neverKeep.js";
+import { CARD_REDACTED, type SheetHints, cardShapedCell, sheetHints, withoutCardNumbers, withoutLongNumbers } from "./neverKeep.js";
 import { type PhoneReading, readCountry, readPhone } from "./phone.js";
 
 /** A `?` anywhere in a name: a Windows export of a name in an alphabet the code
@@ -449,7 +449,7 @@ const noted = (): Noted => ({ rows: 0, where: [] });
 export function quotable(raw: string, most: number): string | null {
   const text = tidyCell(raw);
   if (cardShapedCell(text)) return null;
-  const scrubbed = withoutCardNumbers(text).text;
+  const scrubbed = withoutLongNumbers(withoutCardNumbers(text).text);
   return scrubbed.length <= most ? scrubbed : `${cut(scrubbed, most - 1)}…`;
 }
 
@@ -658,11 +658,6 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
     const header = tidyCell(stats[column]?.header ?? "");
     return header === "" ? placeholderLabel(column) : cut(header, MEMBER_LIST_MAX_FIELD_LABEL_CHARS);
   };
-  const note = (into: Noted, draft: { row: number; fullName: string }, column: number | null, cell: string | null, sameAsRow: number | null = null): void => {
-    into.rows++;
-    if (into.where.length >= MEMBER_LIST_WARNING_ROWS_SHOWN) return;
-    into.where.push({ row: draft.row, name: quotable(draft.fullName, MEMBER_LIST_MAX_NAME_CHARS) ?? "", column: column === null ? null : labelOf(column), cell: cell === null ? null : quotable(cell, MEMBER_LIST_WARNING_CELL_CHARS), sameAsRow });
-  };
   const questionMarks = noted();
   const garbled = noted();
   const shortened = noted();
@@ -673,6 +668,13 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
   const datesNotRead = noted();
   const cards = noted();
   const placeholders = noted();
+  const note = (into: Noted, draft: { row: number; fullName: string }, column: number | null, cell: string | null, sameAsRow: number | null = null): void => {
+    // A whole card in a date or phone cell is a card as well, so staff are told to delete it.
+    if (cell !== null && into !== cards && cardShapedCell(tidyCell(cell))) note(cards, draft, column, null);
+    into.rows++;
+    if (into.where.length >= MEMBER_LIST_WARNING_ROWS_SHOWN) return;
+    into.where.push({ row: draft.row, name: quotable(draft.fullName, MEMBER_LIST_MAX_NAME_CHARS) ?? "", column: column === null ? null : labelOf(column), cell: cell === null ? null : quotable(cell, MEMBER_LIST_WARNING_CELL_CHARS), sameAsRow });
+  };
   const nameColumn = mapping.fullName ?? mapping.firstName ?? mapping.lastName;
 
   const drafts: (Draft & Wide)[] = [];
@@ -690,7 +692,8 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
     if (cardName) draft.fullName = "";
     if (draft.cardCell !== null) note(cards, draft, draft.cardCell, null);
     for (const column of draft.found.cards) note(cards, draft, column, null);
-    if (cardName) note(cards, draft, nameColumn, null);
+    // `cleanName` has already taken a card out of a name's words; that is a card too.
+    if (cardName || draft.fullName.includes(CARD_REDACTED)) note(cards, draft, nameColumn, null);
     for (const spot of draft.found.cut) note(cellsCut, draft, spot.column, spot.raw);
     for (const spot of draft.found.notDates) note(datesNotRead, draft, spot.column, spot.raw);
     if (QUESTION_MARK_IN_NAME.test(draft.fullName)) note(questionMarks, draft, null, null);
@@ -740,8 +743,8 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
   for (const draft of drafts) {
     const email = draft.email !== null && placeholderEmails.has(draft.email) ? null : draft.email;
     const phone = draft.phone !== null && placeholderPhones.has(draft.phone) ? null : draft.phone;
-    if (email !== draft.email) note(placeholders, draft, null, draft.email);
-    else if (phone !== draft.phone) note(placeholders, draft, null, draft.phone);
+    const leftOut = [email !== draft.email ? draft.email : null, phone !== draft.phone ? draft.phone : null].filter((value) => value !== null);
+    if (leftOut.length > 0) note(placeholders, draft, null, leftOut.join(" and "));
     if (email === null && phone === null) {
       noContact++;
       skip(draft.row, "no_contact", draft.fullName, null);

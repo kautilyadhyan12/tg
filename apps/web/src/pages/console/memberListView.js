@@ -310,7 +310,7 @@ export function warningTitle(w) {
     case 'dates_not_read':
       return `${of(w.rows, "date couldn't", "dates couldn't")} be read`;
     case 'card_cells_dropped':
-      return `${of(w.rows, 'card number', 'card numbers')} removed`;
+      return `Card numbers removed from ${of(w.rows, 'cell', 'cells')}`;
     case 'extra_columns_left_out':
       return `${of(w.columns, 'column', 'columns')} on the right left out`;
     case 'gym_fields_full':
@@ -357,7 +357,9 @@ export function warningRowLine(code, w) {
       return said ? `${who}: ${w.column} ${said}` : `${who}: ${w.column}`;
     default:
       // A phone, a number or a date, as the file wrote it.
-      return said ? `${who}: ${w.column ? `${w.column} ` : ''}${said}` : `${who}${inColumn}`;
+      if (said) return `${who}: ${w.column ? `${w.column} ` : ''}${said}`;
+      // The server quotes every cell but a whole card number.
+      return `${who}: ${w.column ?? 'the cell'} held a card number, not shown`;
   }
 }
 

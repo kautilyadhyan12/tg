@@ -935,13 +935,35 @@ describe('the checks', () => {
     const listed = () => within(within(warning).getByTestId('warning-rows')).getAllByRole('listitem').map((li) => li.textContent);
     expect(listed()).toHaveLength(20);
     expect(listed()[0]).toBe('Row 2, Person 0: Mobile “00000001000”');
-    // Show all lists the rest the server sent, then says how many more it did not.
-    fireEvent.click(within(warning).getByRole('button', { name: 'Show all 30' }));
+    // More than the server listed: said from the start, and the button never says "all".
+    expect(within(warning).getByText('45 in all; the list shows the first 30.')).toBeTruthy();
+    fireEvent.click(within(warning).getByRole('button', { name: 'Show the first 30' }));
     expect(listed()).toHaveLength(30);
     expect(listed()[29]).toBe('Row 31, Person 29: Mobile “00000001029”');
-    expect(within(warning).getByText('and 15 more like these')).toBeTruthy();
     fireEvent.click(within(warning).getByRole('button', { name: 'Hide' }));
     expect(within(warning).queryByTestId('warning-rows')).toBeNull();
+  });
+
+  it('at the server\'s hundred, of a hundred and fifty, the words say so; with every row listed, Show all', async () => {
+    const rowAt = (i) => ({ row: i + 2, name: `Person ${String(i)}`, column: 'Mobile', cell: '0000', sameAsRow: null });
+    await reviewWith(
+      preview({
+        warnings: [
+          { code: 'phones_unusual', rows: 150, where: Array.from({ length: 100 }, (_, i) => rowAt(i)) },
+          { code: 'dates_not_read', rows: 25, where: Array.from({ length: 25 }, (_, i) => ({ ...rowAt(i), column: 'Joined', cell: 'soon' })) },
+        ],
+      }),
+    );
+    const phones = screen.getByTestId('warning-phones_unusual');
+    fireEvent.click(within(phones).getByRole('button', { name: 'See which' }));
+    expect(within(phones).getByText('150 in all; the list shows the first 100.')).toBeTruthy();
+    fireEvent.click(within(phones).getByRole('button', { name: 'Show the first 100' }));
+    expect(within(within(phones).getByTestId('warning-rows')).getAllByRole('listitem')).toHaveLength(100);
+    const dates = screen.getByTestId('warning-dates_not_read');
+    fireEvent.click(within(dates).getByRole('button', { name: 'See which' }));
+    expect(within(dates).queryByText(/in all/)).toBeNull();
+    fireEvent.click(within(dates).getByRole('button', { name: 'Show all 25' }));
+    expect(within(within(dates).getByTestId('warning-rows')).getAllByRole('listitem')).toHaveLength(25);
   });
 
   it('a file with no email or phone column cannot be imported until the columns are picked', async () => {
