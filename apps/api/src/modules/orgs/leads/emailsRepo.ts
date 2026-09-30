@@ -40,6 +40,8 @@ export interface GymSendingFacts extends LeadEmailSwitch {
   name: string;
   hasPostalAddress: boolean;
   stopped: boolean;
+  /** The app's emails to leads the page ticked are paused (their reports; RULINGS 2026-09-30). */
+  pageStopped: boolean;
   active: boolean;
   onPlan: boolean;
   usedThisMonth: number;
@@ -55,6 +57,7 @@ export async function gymSendingFacts(sql: SqlOrTx, gymId: string, now: Date): P
       name: string;
       has_postal: boolean;
       stopped: boolean;
+      page_stopped: boolean;
       status: string;
       on_plan: boolean;
       used: number;
@@ -64,6 +67,7 @@ export async function gymSendingFacts(sql: SqlOrTx, gymId: string, now: Date): P
     SELECT s.send_for_me, s.reply_to::text AS reply_to, g.name,
            g.postal_address IS NOT NULL AS has_postal,
            g.invites_stopped_at IS NOT NULL AS stopped,
+           g.page_emails_stopped_at IS NOT NULL AS page_stopped,
            g.status,
            EXISTS (
              SELECT 1 FROM subscriptions sub
@@ -83,6 +87,7 @@ export async function gymSendingFacts(sql: SqlOrTx, gymId: string, now: Date): P
     name: row.name,
     hasPostalAddress: row.has_postal,
     stopped: row.stopped,
+    pageStopped: row.page_stopped,
     active: row.status === "active",
     onPlan: row.on_plan,
     usedThisMonth: row.used,
@@ -96,21 +101,27 @@ export async function gymSendingFacts(sql: SqlOrTx, gymId: string, now: Date): P
 export interface LeadSendState {
   continuing: boolean;
   next: { state: string; reason: string | null } | null;
+  /** The app's try at the next email is still in flight (waiting, going, or may have gone),
+   *  under this tick or an earlier one: the email is the app's until it settles. */
+  open: boolean;
 }
 
 export async function leadSendStates(sql: SqlOrTx, gymId: string, leadIds: readonly string[]): Promise<Map<string, LeadSendState>> {
   if (leadIds.length === 0) return new Map();
-  const rows = await sql<{ id: string; continuing: boolean; state: string | null; reason: string | null }[]>`
+  const rows = await sql<{ id: string; continuing: boolean; state: string | null; reason: string | null; open: boolean }[]>`
     SELECT l.id,
            EXISTS (
              SELECT 1 FROM gym_lead_sends c
              WHERE c.gym_id = l.gym_id AND c.lead_id = l.id AND c.ok_at = l.email_ok_at AND c.counted) AS continuing,
-           x.state, x.reason
+           x.state, x.reason, ${openTry(sql)} AS open
     FROM gym_leads l
     LEFT JOIN gym_lead_sends x ON x.lead_id = l.id AND x.ok_at = l.email_ok_at AND x.step = l.follow_ups_sent + 1
     WHERE l.gym_id = ${gymId} AND l.id = ANY(${[...leadIds]}::uuid[])`;
   return new Map(
-    rows.map((row) => [row.id, { continuing: row.continuing, next: row.state === null ? null : { state: row.state, reason: row.reason } }]),
+    rows.map((row) => [
+      row.id,
+      { continuing: row.continuing, next: row.state === null ? null : { state: row.state, reason: row.reason }, open: row.open },
+    ]),
   );
 }
 
@@ -155,17 +166,28 @@ export async function addressStops(
   return found;
 }
 
+/** The app's try at lead `l`'s next email still in flight — waiting, going, or may have gone —
+ *  under ANY tick: until it settles, that email is the app's (reviews 2026-09-30). A tick
+ *  taken off and put back while a try waits must not start a second one. */
+const openTry = (sql: SqlOrTx) => sql`EXISTS (
+  SELECT 1 FROM gym_lead_sends o
+  WHERE o.lead_id = l.id AND o.step = l.follow_ups_sent + 1 AND o.state IN ('queued','sending'))`;
+
 /** The staff's own "Email due": a follow-up due by `today` that the app will not send.
  *  With the switch on (`app.on`, and the gym able to send), the app takes a lead it has
  *  already emailed under this tick, or any lead while the month has room, unless its
- *  try at this very email ended without sending. Kept beside `whoSends`, its twin for
+ *  try at this very email ended without sending; a try still in flight is always the app's,
+ *  and a lead the page ticked is staff's while the gym's page emails are paused. Kept
+ *  beside `whoSends`, its twin for
  *  one lead. It cannot see a stopped address (kept as a keyed HMAC) or one on the member
  *  list, which a lead's panel says at once: such a lead joins Email due when the worker
  *  next tries it (within a minute in the gym's sending hours, else at 8:00). */
-export const staffDueCondition = (sql: SqlOrTx, today: string, app: { on: boolean; roomLeft: boolean }) => sql`
+export const staffDueCondition = (sql: SqlOrTx, today: string, app: { on: boolean; roomLeft: boolean; pageStopped: boolean }) => sql`
   l.follow_up_due_on <= ${today}::date
+  AND NOT ${openTry(sql)}
   AND NOT (
     ${app.on}::boolean
+    AND NOT (l.email_ok_by_page AND ${app.pageStopped}::boolean)
     AND NOT EXISTS (
       SELECT 1 FROM gym_lead_sends x
       WHERE x.lead_id = l.id AND x.ok_at = l.email_ok_at AND x.step = l.follow_ups_sent + 1
@@ -282,9 +304,9 @@ export async function claimNextLeadSend(sql: Sql, limits: LeadClaimLimits): Prom
     if (held !== undefined) return toClaimed(held);
 
     // The gyms that may send now, each with its day, its month and whether the month has room.
-    const gyms = await tx<{ id: string; today: string; month: string; has_room: boolean }[]>`
+    const gyms = await tx<{ id: string; today: string; month: string; has_room: boolean; page_stopped: boolean }[]>`
       WITH gym AS (
-        SELECT g.id,
+        SELECT g.id, g.page_emails_stopped_at IS NOT NULL AS page_stopped,
                (${now}::timestamptz AT TIME ZONE g.timezone)::date::text AS today,
                to_char(${now}::timestamptz AT TIME ZONE g.timezone, 'YYYY-MM') AS month
         FROM gym_lead_email_settings s
@@ -301,7 +323,7 @@ export async function claimNextLeadSend(sql: Sql, limits: LeadClaimLimits): Prom
           AND (${everyGym}::boolean OR g.id = ANY(${onlyGyms}::uuid[]))
           AND g.id <> ALL(${skipGyms}::uuid[])
       )
-      SELECT gym.id, gym.today, gym.month,
+      SELECT gym.id, gym.today, gym.month, gym.page_stopped,
              (SELECT count(*) FROM gym_lead_sends m
               WHERE m.gym_id = gym.id AND m.counted AND m.month = gym.month) < ${limits.perMonth} AS has_room
       FROM gym
@@ -328,6 +350,8 @@ export async function claimNextLeadSend(sql: Sql, limits: LeadClaimLimits): Prom
               AND NOT EXISTS (
                 SELECT 1 FROM gym_lead_sends x
                 WHERE x.lead_id = l.id AND x.ok_at = l.email_ok_at AND x.step = l.follow_ups_sent + 1)
+              AND NOT ${openTry(tx)}
+              AND NOT (l.email_ok_by_page AND ${gym.page_stopped}::boolean)
             ORDER BY l.follow_up_due_on, l.created_at, l.id
             LIMIT 1
             FOR UPDATE OF l SKIP LOCKED`
@@ -346,6 +370,8 @@ export async function claimNextLeadSend(sql: Sql, limits: LeadClaimLimits): Prom
               AND NOT EXISTS (
                 SELECT 1 FROM gym_lead_sends x
                 WHERE x.lead_id = l.id AND x.ok_at = l.email_ok_at AND x.step = l.follow_ups_sent + 1)
+              AND NOT ${openTry(tx)}
+              AND NOT (l.email_ok_by_page AND ${gym.page_stopped}::boolean)
             ORDER BY l.follow_up_due_on, l.created_at, l.id
             LIMIT 1
             FOR UPDATE OF l SKIP LOCKED`;
@@ -359,9 +385,9 @@ export async function claimNextLeadSend(sql: Sql, limits: LeadClaimLimits): Prom
     // The tick is copied inside the database: a JavaScript Date would drop its microseconds.
     const rows = await tx<ClaimedRow[]>`
       INSERT INTO gym_lead_sends (gym_id, lead_id, ok_at, step, month, counted, email, email_hmac,
-                                  state, attempts, not_before, lease_until, created_at)
+                                  state, attempts, not_before, lease_until, created_at, from_page)
       SELECT l.gym_id, l.id, l.email_ok_at, ${lead.step}, ${lead.month}, ${!lead.continuing}, l.email, ${limits.hmacOf(lead.email)},
-             'sending', 1, ${now}, ${leaseUntil}, ${now}
+             'sending', 1, ${now}, ${leaseUntil}, ${now}, l.email_ok_by_page
       FROM gym_leads l
       WHERE l.gym_id = ${lead.gym_id} AND l.id = ${lead.id}
       RETURNING id, gym_id, lead_id, step, email::text AS email, email_hmac, attempts, maybe_sent_at, created_at`;
@@ -409,7 +435,12 @@ export async function lockSendContext(tx: TransactionSql, send: ClaimedLeadSend,
       reply_to: string | null;
     }[]
   >`
-    SELECT g.name, g.postal_address, g.timezone, g.status, g.invites_stopped_at IS NOT NULL AS stopped,
+    SELECT g.name, g.postal_address, g.timezone, g.status,
+           -- The gym's sending stopped, or, for an email to a lead the page ticked, the
+           -- gym's page emails paused (RULINGS 2026-09-30).
+           (g.invites_stopped_at IS NOT NULL
+            OR (g.page_emails_stopped_at IS NOT NULL
+                AND EXISTS (SELECT 1 FROM gym_lead_sends x WHERE x.id = ${send.id} AND x.gym_id = g.id AND x.from_page))) AS stopped,
            s.send_for_me, s.reply_to::text AS reply_to,
            EXISTS (
              SELECT 1 FROM subscriptions sub
@@ -559,13 +590,15 @@ export async function writeLeadSent(
 }
 
 /** An app email that is going, may have gone or went, for this lead's `step` under its
- *  current tick: staff marking the same one by hand would send it twice. */
+ *  current tick — or one still in flight under an earlier tick: staff marking the same one
+ *  by hand would send it twice. */
 export async function appHasStep(tx: TransactionSql, gymId: string, leadId: string, step: number): Promise<boolean> {
   const rows = await tx<{ id: string }[]>`
     SELECT s.id FROM gym_lead_sends s
     JOIN gym_leads l ON l.gym_id = s.gym_id AND l.id = s.lead_id
-    WHERE s.gym_id = ${gymId} AND s.lead_id = ${leadId} AND s.ok_at = l.email_ok_at AND s.step = ${step}
-      AND (s.state IN ('queued','sending','sent') OR s.reason = 'send_unknown')
+    WHERE s.gym_id = ${gymId} AND s.lead_id = ${leadId} AND s.step = ${step}
+      AND (s.state IN ('queued','sending')
+           OR (s.ok_at = l.email_ok_at AND (s.state = 'sent' OR s.reason = 'send_unknown')))
     LIMIT 1`;
   return rows.length > 0;
 }
@@ -602,7 +635,7 @@ export async function lockLeadForStop(
 /** Take a lead's "Happy to hear from us" tick off, and with it every follow-up due. */
 export async function untickLead(tx: TransactionSql, gymId: string, leadId: string, at: Date): Promise<void> {
   await tx`
-    UPDATE gym_leads SET email_ok_at = NULL, follow_up_due_on = NULL, updated_at = ${at}
+    UPDATE gym_leads SET email_ok_at = NULL, email_ok_by_page = false, follow_up_due_on = NULL, updated_at = ${at}
     WHERE gym_id = ${gymId} AND id = ${leadId}`;
 }
 
@@ -616,6 +649,8 @@ export interface ReportedLeadSend {
   state: string;
   reason: string | null;
   providerId: string | null;
+  /** To a lead the page ticked: its report counts apart from the gym's (RULINGS 2026-09-30). */
+  fromPage: boolean;
 }
 
 export async function leadSendForReport(
@@ -624,17 +659,17 @@ export async function leadSendForReport(
 ): Promise<ReportedLeadSend | null> {
   const rows =
     report.leadSendId !== null
-      ? await sql<{ id: string; gym_id: string; state: string; reason: string | null; provider_id: string | null }[]>`
-          SELECT id, gym_id, state, reason, provider_id FROM gym_lead_sends WHERE id = ${report.leadSendId}`
-      : await sql<{ id: string; gym_id: string; state: string; reason: string | null; provider_id: string | null }[]>`
-          SELECT id, gym_id, state, reason, provider_id FROM gym_lead_sends
+      ? await sql<{ id: string; gym_id: string; state: string; reason: string | null; provider_id: string | null; from_page: boolean }[]>`
+          SELECT id, gym_id, state, reason, provider_id, from_page FROM gym_lead_sends WHERE id = ${report.leadSendId}`
+      : await sql<{ id: string; gym_id: string; state: string; reason: string | null; provider_id: string | null; from_page: boolean }[]>`
+          SELECT id, gym_id, state, reason, provider_id, from_page FROM gym_lead_sends
           WHERE provider_id = ${report.providerId} AND state = 'sent'
           ORDER BY finished_at, id
           LIMIT 1`;
   const row = rows[0];
   return row === undefined
     ? null
-    : { id: row.id, gymId: row.gym_id, state: row.state, reason: row.reason, providerId: row.provider_id };
+    : { id: row.id, gymId: row.gym_id, state: row.state, reason: row.reason, providerId: row.provider_id, fromPage: row.from_page };
 }
 
 /** A follow-up the sender could not confirm, which Resend's own record shows went: it is

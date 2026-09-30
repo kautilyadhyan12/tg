@@ -19,6 +19,7 @@ import {
 } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
+import { pageTurnedAwayKey } from "../gymPage/service.js";
 import type { InviteSettings } from "../invites/settings.js";
 import { leadParamsSchema, orgParamsSchema } from "../schemas.js";
 import * as emailSettings from "./emailSettings.js";
@@ -67,6 +68,7 @@ export function registerLeadRoutes(app: FastifyInstance, deps: LeadRouteDeps): v
     now: () => new Date(),
     addressKey: invites?.hmacKey ?? null,
     sending: invites === null || invites.sender === null ? "off" : invites.paused ? "paused" : "on",
+    turnedAway: async (slug) => Number((await deps.redis.get(pageTurnedAwayKey(slug))) ?? "0"),
   };
 
   /** Reads follow a search box (one read after each pause in typing): the member

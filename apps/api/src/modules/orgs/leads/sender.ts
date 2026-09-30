@@ -78,6 +78,14 @@ const RETRY_AFTER_MS = [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000, 3 * 60 * 6
 /** What one email came to, as the run counts it. */
 type Tally = "sent" | "skipped" | "failed" | "retried" | "held";
 
+/** The first name an email greets, from a name anybody could type into the gym's page:
+ *  cleaned as the gym's own words are (a web address taken out whole), then only letters,
+ *  their marks, apostrophes and hyphens kept, which is all a first name needs — so no dot of
+ *  any script, slash or colon is left to make one (the security pass over 20c, 2026-09-30). */
+export function firstNameForEmail(fullName: string): string {
+  return cleanGymText(leadFirstName(fullName), FIRST_NAME_IN_EMAIL_CHARS).replace(/[^\p{L}\p{M}'’-]/gu, "");
+}
+
 /** Send what is due, up to one run's worth. Safe to run twice at once. */
 export async function sendDueLeadEmails(deps: LeadSenderDeps): Promise<LeadSendRun> {
   const run: LeadSendRun = {
@@ -253,8 +261,7 @@ function leadMessage(
   const letter = leadFollowUpEmail({
     to: email,
     step: claim.step,
-    // A name anybody could type into the gym's page: cleaned as the gym's own words are.
-    firstName: cleanGymText(leadFirstName(words.fullName), FIRST_NAME_IN_EMAIL_CHARS),
+    firstName: firstNameForEmail(words.fullName),
     gymName: words.gymName,
     postalAddress: words.postal,
     unsubscribeLink,

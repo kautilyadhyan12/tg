@@ -270,7 +270,8 @@ export const LEAD_FILE_WORDS = {
   needs_contact: "Choose which column has their email or phone number.",
   full: (room: number, adding: number): string =>
     `You can keep ${LEADS_MAX_PER_GYM.toLocaleString("en")} leads and have room for ${count(room, "more", "more")}, so these ${adding.toLocaleString("en")} won't fit. Delete old leads or split the file, then check it again.`,
-  added: (n: number): string => `${count(n, "lead", "leads")} added.`,
+  added: (n: number): string =>
+    n === 0 ? "Nobody new was added: everyone in this file is already one of your leads or members." : `${count(n, "lead", "leads")} added.`,
 } as const;
 
 /** Why somebody is not added, said beside their name. */

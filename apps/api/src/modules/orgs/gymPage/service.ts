@@ -56,6 +56,13 @@ type Limit = () => Promise<boolean>;
 
 const notFound = (): OrgsError => new OrgsError(404, "page_not_found", ENQUIRY_WORDS.not_found);
 
+/** The form stops taking new people once the gym holds this many leads its page made that
+ *  are still New: a tenth of the gym's 10,000, so staff always have room. */
+export const PAGE_NEW_LEADS_MAX = 1000;
+
+/** Messages a gym's page turned away in the last hour (it was busy), for its Leads page. */
+export const pageTurnedAwayKey = (slug: string): string => `rl:gym_enquiry_turned_away:${slug}`;
+
 /** The facilities the app knows, in the page's order: a word dropped from the list
  *  later is never shown. */
 const known = (stored: readonly string[]): GymFacility[] => GYM_FACILITIES.filter((facility) => stored.includes(facility));
@@ -325,21 +332,30 @@ function visitorContact(
  *  one, New, as the form's own, ticked by their own tick. Answered `received` in every
  *  case, and a full gym refuses everybody alike, so the reply never says who a gym has.
  *
- *  Order: the address's allowance, the hidden field, the robot check, the page's own
- *  allowance, the write. Only a send that passed the robot check spends the page's, so
- *  robots cannot use it up for the people who come after them. */
+ *  Order: this address's failed robot checks at this page (too many, and it is refused
+ *  before the check is asked again), the hidden field, the robot check (a failure counted
+ *  apart), then the address's allowance and the page's own, the write. Only a send that
+ *  passed the robot check spends either allowance, so robots cannot use them up for the
+ *  people who come after them (the security pass over 20c, 2026-09-30). */
 export async function sendEnquiry(
   deps: GymPageDeps,
   slug: string,
   body: GymEnquiryRequest,
-  limits: { address: Limit; page: () => Promise<boolean> },
+  limits: { robotRoom: Limit; robotFailed: () => Promise<void>; address: Limit; page: () => Promise<boolean> },
 ): Promise<"received" | null> {
-  if (!(await limits.address())) return null;
+  if (!(await limits.robotRoom())) return null;
   // The field no person sees: filled, it was a robot, and nothing is kept.
-  if ((body.trap ?? "").trim() !== "") return "received";
+  if ((body.trap ?? "").trim() !== "") {
+    await limits.robotFailed();
+    return "received";
+  }
   const checked = await deps.robotCheck.verify(body.robotToken);
   if (checked === "unavailable") throw new OrgsError(503, "robot_check_unavailable", ENQUIRY_WORDS.robot_unavailable);
-  if (checked === "failed") throw new OrgsError(400, "robot_check_failed", ENQUIRY_WORDS.robot);
+  if (checked === "failed") {
+    await limits.robotFailed();
+    throw new OrgsError(400, "robot_check_failed", ENQUIRY_WORDS.robot);
+  }
+  if (!(await limits.address())) return null;
 
   const page = await livePage(deps.sql, slug);
   if (page === null) throw notFound();
@@ -354,8 +370,13 @@ export async function sendEnquiry(
 
   await deps.sql.begin(async (tx) => {
     await lockGym(tx, page.gymId);
-    // Before anybody is looked up: a full gym answers everybody the same.
-    if ((await leadsRepo.countLeads(tx, page.gymId)) >= LEADS_MAX_PER_GYM) {
+    // Before anybody is looked up: a full gym answers everybody the same. The form has a
+    // ceiling of its own, far under the gym's, so a flood of it can never leave staff
+    // unable to add a walk-in (the security pass over 20c, 2026-09-30).
+    if (
+      (await leadsRepo.countLeads(tx, page.gymId)) >= LEADS_MAX_PER_GYM ||
+      (await leadsRepo.countPageNewLeads(tx, page.gymId)) >= PAGE_NEW_LEADS_MAX
+    ) {
       throw new OrgsError(409, "enquiries_full", ENQUIRY_WORDS.full);
     }
     const lead = await leadsRepo.lockLeadForContact(tx, page.gymId, contact);
@@ -377,6 +398,7 @@ export async function sendEnquiry(
         null,
         deps.addressKey,
         at,
+        true,
       );
       leadId = inserted.id;
     }

@@ -58,6 +58,8 @@ export interface LeadsDeps {
    *  by the operator's kill switch, "off" when sending is not set up. The worker sends
    *  leads' follow-ups only when it is "on", so only then are they the app's. */
   sending: "on" | "paused" | "off";
+  /** Messages this gym's page turned away in the last hour; 0 where nobody counts them. */
+  turnedAway?: (slug: string) => Promise<number>;
 }
 
 type Limit = () => Promise<boolean>;
@@ -92,17 +94,23 @@ export function emailProblemOf(
 
 const notSentSchema = z.enum(LEAD_EMAIL_NOT_SENT);
 
-/** Who sends a due follow-up. With the switch on (`app.on`: the gym able to send, and
- *  emails through the app going), the app takes a lead it has already emailed under
- *  this tick, or any lead while the month has room, unless its try at this very email
- *  ended without sending; staff send the rest. The list's "Email due" asks the same in
- *  SQL (`staffDueCondition`). */
+/** Who sends a due follow-up. A try of the app's still in flight — waiting, going, or may
+ *  have gone, under any tick — is the app's whatever the switch says now, so staff are
+ *  never told to send an email the app may already have sent (reviews 2026-09-30). Else,
+ *  with the switch on (`app.on`: the gym able to send, and emails through the app going),
+ *  the app takes a lead it has already emailed under this tick, or any lead while the
+ *  month has room, unless its try at this very email ended without sending, or the page
+ *  ticked the lead while the gym's page emails are paused; staff send the rest. The list's
+ *  "Email due" asks the same in SQL (`staffDueCondition`). */
 export function whoSends(
   dueOn: string | null,
-  app: { on: boolean; roomLeft: boolean },
+  app: { on: boolean; roomLeft: boolean; pageStopped: boolean },
   state: emailsRepo.LeadSendState | undefined,
+  tickedByPage = false,
 ): { by: "app" | "you" | null; notSent: LeadEmailNotSent | null } {
   if (dueOn === null) return { by: null, notSent: null };
+  if (state?.open === true) return { by: "app", notSent: null };
+  if (tickedByPage && app.pageStopped) return { by: "you", notSent: "page_emails_stopped" };
   const next = state?.next ?? null;
   const ended = next !== null && (next.state === "skipped" || (next.state === "failed" && next.reason !== "send_unknown"));
   let notSent: LeadEmailNotSent | null = null;
@@ -124,7 +132,7 @@ export function appWhen(
   state: emailsRepo.LeadSendState | undefined,
 ): "today" | "tomorrow" | "waiting" | null {
   if (dueOn === null || dueOn > today) return null;
-  if (state?.next?.state === "queued") return "waiting";
+  if (state?.open === true || state?.next?.state === "queued") return "waiting";
   if (localHour >= emailsRepo.SENDING_HOURS.until) return "tomorrow";
   if (dueOn < today && localHour >= emailsRepo.SENDING_HOURS.from) return "waiting";
   return "today";
@@ -135,11 +143,13 @@ export function appWhen(
 export interface AppSending {
   on: boolean;
   roomLeft: boolean;
+  /** The app's emails to leads the page ticked are paused (RULINGS 2026-09-30). */
+  pageStopped: boolean;
   localHour: number;
 }
 
 export function appSending(gym: emailsRepo.GymSendingFacts | null, sending: LeadsDeps["sending"]): AppSending {
-  if (gym === null) return { on: false, roomLeft: false, localHour: 0 };
+  if (gym === null) return { on: false, roomLeft: false, pageStopped: false, localHour: 0 };
   const on =
     sending === "on" &&
     gym.sendForMe &&
@@ -149,7 +159,7 @@ export function appSending(gym: emailsRepo.GymSendingFacts | null, sending: Lead
     gym.active &&
     gym.onPlan &&
     gymNameForEmail(gym.name) !== "";
-  return { on, roomLeft: gym.usedThisMonth < LEAD_EMAILS_PER_MONTH, localHour: gym.localHour };
+  return { on, roomLeft: gym.usedThisMonth < LEAD_EMAILS_PER_MONTH, pageStopped: gym.pageStopped, localHour: gym.localHour };
 }
 
 /** The sending view of each of these leads, read in four statements whatever their number. */
@@ -180,15 +190,18 @@ async function sendingViews(
       const hmac = hmacs.get(row.id);
       const stop = hmac === undefined ? undefined : stops.get(hmac);
       const state = states.get(row.id);
-      let { by, notSent } = whoSends(row.followUpDueOn, app, state);
+      let { by, notSent } = whoSends(row.followUpDueOn, app, state, row.emailOkByPage);
       // An address the app's own check refuses (stopped, bounced, or on the member list)
       // is staff's from now, not from the worker's next try, and the panel says why —
       // whoever sends the next one, so staff never email a dead address unwarned.
+      // A try of the app's still in flight stays the app's until it settles: staff are told
+      // why the next one will not go, never to send one the app may already have sent.
+      const inFlight = state?.open === true;
       if (stop !== undefined && row.followUpDueOn !== null) {
-        if (by === "app") by = "you";
+        if (by === "app" && !inFlight) by = "you";
         notSent = stop.reason;
       } else if (by === "app" && row.email !== null && members.has(row.email.toLowerCase())) {
-        by = "you";
+        if (!inFlight) by = "you";
         notSent = "on_member_list";
       }
       const view: LeadSendingView = {
@@ -377,6 +390,8 @@ export async function listLeads(
     cursor: last === undefined ? null : encodeCursor({ at: last.cursorAt, id: last.id }),
     counts,
     sendingStopped: facts?.stopped ?? false,
+    pageEmailsStopped: facts?.pageStopped ?? false,
+    pageTurnedAway: deps.turnedAway === undefined ? 0 : await deps.turnedAway(org.slug),
   };
 }
 
@@ -494,6 +509,8 @@ export async function updateLead(
     await lockGym(tx, gymId);
     const stored = await repo.lockLead(tx, gymId, leadId);
     if (stored === null) throw notFound();
+    // A panel opened before somebody moved the lead on (marked it Joined, say) never undoes it.
+    if (body.fromStatus !== undefined && body.fromStatus !== stored.status) throw new OrgsError(409, "lead_changed", LEAD_WORDS.lead_changed);
     const contact = cleanContact(
       {
         fullName: body.fullName ?? stored.fullName,

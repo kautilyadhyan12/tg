@@ -579,6 +579,33 @@ d("the app sends a lead's follow-ups (real Postgres)", () => {
   );
 
   it(
+    "an email the app is already sending stays the app's while it is out, even when the address turns up on the member list; staff get it once the try settles",
+    async () => {
+      const owner = await makeUser("flight-owner");
+      const org = await makeGym(owner.cookies, "Flight Sent Gym");
+      const gym = org.org.id;
+      await switchOn(gym, owner.cookies);
+      const lead = await addLead(gym, owner.cookies, { fullName: "Flo Air", email: "flo.flight@example.com" });
+      expect(lead.followUp.by).toBe("app");
+      // The worker has taken its first email and may be sending it right now.
+      await sql`
+        INSERT INTO gym_lead_sends (gym_id, lead_id, ok_at, step, month, counted, email, email_hmac, state, attempts, not_before, created_at, lease_until)
+        SELECT gym_id, id, email_ok_at, 1, '2026-09', true, email, lpad('f1', 64, '0'), 'sending', 1, now(), now(), now() + interval '5 minutes'
+        FROM gym_leads WHERE id = ${lead.id}`;
+      expect(
+        (await post(`/v1/orgs/${gym}/member-list/entries`, { fullName: "Flo Air", email: "flo.flight@example.com" }, owner.cookies)).statusCode,
+      ).toBeLessThan(300);
+      // Staff are told why the next one will not go, never offered to send this one again.
+      expect((await readLead(gym, lead.id, owner.cookies)).followUp).toMatchObject({ by: "app", notSent: "on_member_list" });
+      expect(pageOf(await get(`${leadsUrl(gym)}?followUp=due`, owner.cookies)).leads.map((l) => l.id)).not.toContain(lead.id);
+      // The try settles without sending: now it is staff's.
+      await sql`UPDATE gym_lead_sends SET state = 'skipped', reason = 'on_member_list', email = NULL, counted = false, lease_until = NULL, finished_at = now() WHERE lead_id = ${lead.id}`;
+      expect((await readLead(gym, lead.id, owner.cookies)).followUp).toMatchObject({ by: "you", notSent: "on_member_list" });
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
     "the 101st new lead in a month goes back to staff; a lead the app already emails goes on outside the count; the Settings box says how many",
     async () => {
       const owner = await makeUser("month-owner");
@@ -923,6 +950,53 @@ d("the app sends a lead's follow-ups (real Postgres)", () => {
       // An invitation's own unsubscribe link does not read a lead's token, nor the other way round.
       const token = path.slice(path.indexOf("?t=") + 3);
       expect((await api().inject({ method: "GET", url: `/v1/email/unsubscribe?t=${token}`, remoteAddress: nextIp() })).statusCode).toBe(404);
+    },
+    TIMEOUT_MS,
+  );
+
+  // ── The two passes over 20c (reviews 2026-09-30): a try that may have gone ──
+
+  it(
+    "WORST THING: a follow-up whose first try may have gone is never sent again under a new tick, nor marked by hand meanwhile",
+    async () => {
+      const owner = await makeUser("retick-owner");
+      const org = await makeGym(owner.cookies, "Retick Sent Gym");
+      const gym = org.org.id;
+      await switchOn(gym, owner.cookies);
+      const lead = await addLead(gym, owner.cookies, { fullName: "Priya Retick", email: "priya.retick@example.com" });
+      calls.length = 0;
+      nextAnswers.push({ kind: "unclear", status: null });
+      expect(await runSender()).toMatchObject({ retried: 1, sent: 0 });
+      // Staff untick and tick again while the first try waits.
+      expect((await patch(leadUrl(gym, lead.id), { mayEmail: false }, owner.cookies)).statusCode).toBe(200);
+      expect((await patch(leadUrl(gym, lead.id), { mayEmail: true }, owner.cookies)).statusCode).toBe(200);
+      // Marking it by hand now would send it twice.
+      expect(errorOf(await post(`${leadUrl(gym, lead.id)}/follow-up`, { step: 1, email: "priya.retick@example.com" }, owner.cookies))).toBe("follow_up_sent_for_you");
+      await runSender();
+      await runSender({ now: () => new Date(midday().getTime() + 5 * 60_000) });
+      await runSender({ now: () => new Date(midday().getTime() + 4 * 60 * 60_000) });
+      const keys = new Set(calls.filter((m) => m.to === "priya.retick@example.com").map((m) => m.idempotencyKey));
+      expect(keys.size).toBe(1);
+      expect(emailsTo("priya.retick@example.com").length).toBeLessThanOrEqual(1);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "a follow-up the app is still trying is the app's, even with the switch turned off: staff are never told to send it and then refused",
+    async () => {
+      const owner = await makeUser("waiting-owner");
+      const org = await makeGym(owner.cookies, "Waiting Sent Gym");
+      const gym = org.org.id;
+      await switchOn(gym, owner.cookies);
+      const lead = await addLead(gym, owner.cookies, { fullName: "Kit Ray", email: "kit.waiting@example.com" });
+      nextAnswers.push({ kind: "unclear", status: 503 });
+      expect(await runSender()).toMatchObject({ retried: 1 });
+      expect((await put(settingsUrl(gym), { sendForMe: false, replyTo: "desk@ironhouse.example.com" }, owner.cookies)).statusCode).toBe(200);
+      const panel = await readLead(gym, lead.id, owner.cookies);
+      expect(panel.followUp).toMatchObject({ by: "app", appWhen: "waiting" });
+      const due = pageOf(await get(`${leadsUrl(gym)}?followUp=due`, owner.cookies));
+      expect(due.leads.map((l) => l.fullName)).not.toContain("Kit Ray");
     },
     TIMEOUT_MS,
   );

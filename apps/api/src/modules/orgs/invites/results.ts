@@ -190,6 +190,17 @@ async function processOne(deps: ResultsDeps, event: webhooks.ClaimedEvent): Prom
       if (replacesResult(effect.result, current.result)) await rows.setResult(tx, send.gymId, send.id, effect.result, at);
       if (effect.suppress === "bounced" || effect.suppress === "refused") await repo.suppressEveryGym(tx, current.hmac, effect.suppress);
       if (effect.suppress === "complained") await repo.suppressForGym(tx, send.gymId, current.hmac, "complained");
+      // An email to a lead the gym's page ticked counts apart, and can pause only such
+      // emails, never the gym's invitations: anybody can type an address into the page
+      // (the security pass over 20c; Kd, RULINGS 2026-09-30).
+      if (send.kind === "lead" && send.fromPage) {
+        const pageReason = judgeGym(await repo.pageCounts(tx, send.gymId));
+        if (pageReason !== null && (await repo.stopPageEmails(tx, send.gymId, pageReason, at))) {
+          deps.log.warn({ event: "lead.page_emails_stopped", gymId: send.gymId, reason: pageReason }, "a gym's emails to leads from its page were paused");
+        }
+        if (!(await webhooks.finishEvent(tx, event, "done", at))) throw new LeaseLost();
+        return { mine: true, stopped: null };
+      }
       const counts = await repo.gymCounts(tx, send.gymId);
       const reason = judgeGym(counts);
       const stopped = reason !== null && (await repo.stopGym(tx, send.gymId, reason, at)) ? { reason, counts } : null;

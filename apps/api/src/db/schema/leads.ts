@@ -46,6 +46,10 @@ export const gymLeads = pgTable(
     enquiredAt: timestamp("enquired_at", { withTimezone: true }),
     /** The address under the invitations' key (20c-v-b), for the list's email problems. */
     emailHmac: text("email_hmac"),
+    /** Made by the gym's page form (0055): the form stops at 1,000 of these still New. */
+    fromPage: boolean("from_page").notNull().default(false),
+    /** "Happy to hear from us" ticked by the person on the page form, not by staff (0055). */
+    emailOkByPage: boolean("email_ok_by_page").notNull().default(false),
   },
   (t) => [
     check("gym_leads_name_len_check", sql`char_length(${t.fullName}) BETWEEN 1 AND 120`),
@@ -55,6 +59,8 @@ export const gymLeads = pgTable(
     check("gym_leads_notes_len_check", sql`char_length(${t.notes}) <= 2000`),
     check("gym_leads_email_ok_check", sql`${t.emailOkAt} IS NULL OR ${t.email} IS NOT NULL`),
     check("gym_leads_entry_check", sql`${t.entryId} IS NULL OR ${t.status} = 'joined'`),
+    check("gym_leads_email_ok_by_page_check", sql`NOT ${t.emailOkByPage} OR ${t.emailOkAt} IS NOT NULL`),
+    index("gym_leads_page_new_idx").on(t.gymId).where(sql`${t.fromPage} AND ${t.status} = 'new'`),
     check("gym_leads_email_hmac_check", sql`${t.emailHmac} IS NULL OR (${t.email} IS NOT NULL AND ${t.emailHmac} ~ '^[0-9a-f]{64}$')`),
     index("gym_leads_email_hmac_idx").on(t.emailHmac).where(sql`${t.emailHmac} IS NOT NULL`),
     uniqueIndex("gym_leads_gym_email_uq").on(t.gymId, t.email).where(sql`${t.email} IS NOT NULL`),
@@ -108,6 +114,8 @@ export const gymLeadSends = pgTable(
     step: smallint("step").notNull(),
     month: text("month").notNull(),
     counted: boolean("counted").notNull(),
+    /** To a lead the page ticked (0055): its reports count apart, never against invitations. */
+    fromPage: boolean("from_page").notNull().default(false),
     email: citext("email"),
     emailHmac: text("email_hmac").notNull(),
     state: text("state").notNull().default("sending"),
@@ -125,6 +133,7 @@ export const gymLeadSends = pgTable(
   },
   (t) => [
     uniqueIndex("gym_lead_sends_step_uq").on(t.leadId, t.okAt, t.step),
+    uniqueIndex("gym_lead_sends_open_step_uq").on(t.leadId, t.step).where(sql`${t.state} IN ('queued','sending')`),
     index("gym_lead_sends_lead_idx").on(t.gymId, t.leadId, t.okAt),
     index("gym_lead_sends_due_idx").on(t.notBefore, t.id).where(sql`${t.state} IN ('queued','sending')`),
     index("gym_lead_sends_month_idx").on(t.gymId, t.month).where(sql`${t.counted}`),

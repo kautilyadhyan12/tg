@@ -92,28 +92,37 @@ describe("decideLeadSend — every class of case", () => {
 // =========================================================================
 
 describe("whoSends — every class of case", () => {
-  const on = { on: true, roomLeft: true };
-  const full = { on: true, roomLeft: false };
-  const off = { on: false, roomLeft: true };
-  const state = (continuing: boolean, next: LeadSendState["next"] = null): LeadSendState => ({ continuing, next });
-  const cases: [string, string | null, { on: boolean; roomLeft: boolean }, LeadSendState | undefined, ReturnType<typeof whoSends>][] = [
-    ["nothing due", null, on, undefined, { by: null, notSent: null }],
-    ["nothing due, even with a skipped try", null, on, state(false, { state: "skipped", reason: "bounced" }), { by: null, notSent: null }],
-    ["switch off", "2026-10-01", off, undefined, { by: "you", notSent: null }],
-    ["switch on, room in the month", "2026-10-01", on, undefined, { by: "app", notSent: null }],
-    ["switch on, month full, a new lead", "2026-10-01", full, state(false), { by: "you", notSent: null }],
-    ["switch on, month full, a lead the app already emails", "2026-10-01", full, state(true), { by: "app", notSent: null }],
-    ["being sent now", "2026-10-01", full, state(true, { state: "sending", reason: null }), { by: "app", notSent: null }],
-    ["may have gone", "2026-10-01", on, state(true, { state: "failed", reason: "send_unknown" }), { by: "app", notSent: null }],
-    ["skipped: they pressed Stop", "2026-10-01", on, state(true, { state: "skipped", reason: "unsubscribed" }), { by: "you", notSent: "unsubscribed" }],
-    ["skipped: on the member list", "2026-10-01", on, state(false, { state: "skipped", reason: "on_member_list" }), { by: "you", notSent: "on_member_list" }],
-    ["gave up after a week", "2026-10-01", on, state(false, { state: "failed", reason: "provider_refused" }), { by: "you", notSent: "could_not_send" }],
-    ["a reason no longer known", "2026-10-01", on, state(false, { state: "skipped", reason: "something_new" }), { by: "you", notSent: "could_not_send" }],
-    ["switch off after a skip still says why", "2026-10-01", off, state(false, { state: "skipped", reason: "bounced" }), { by: "you", notSent: "bounced" }],
+  const on = { on: true, roomLeft: true, pageStopped: false };
+  const full = { on: true, roomLeft: false, pageStopped: false };
+  const off = { on: false, roomLeft: true, pageStopped: false };
+  const pagePaused = { on: true, roomLeft: true, pageStopped: true };
+  const state = (continuing: boolean, next: LeadSendState["next"] = null, open = false): LeadSendState => ({ continuing, next, open });
+  const cases: [string, string | null, { on: boolean; roomLeft: boolean; pageStopped: boolean }, LeadSendState | undefined, boolean, ReturnType<typeof whoSends>][] = [
+    ["nothing due", null, on, undefined, false, { by: null, notSent: null }],
+    ["nothing due, even with a skipped try", null, on, state(false, { state: "skipped", reason: "bounced" }), false, { by: null, notSent: null }],
+    ["switch off", "2026-10-01", off, undefined, false, { by: "you", notSent: null }],
+    ["switch on, room in the month", "2026-10-01", on, undefined, false, { by: "app", notSent: null }],
+    ["switch on, month full, a new lead", "2026-10-01", full, state(false), false, { by: "you", notSent: null }],
+    ["switch on, month full, a lead the app already emails", "2026-10-01", full, state(true), false, { by: "app", notSent: null }],
+    ["being sent now", "2026-10-01", full, state(true, { state: "sending", reason: null }, true), false, { by: "app", notSent: null }],
+    ["may have gone", "2026-10-01", on, state(true, { state: "failed", reason: "send_unknown" }), false, { by: "app", notSent: null }],
+    ["skipped: they pressed Stop", "2026-10-01", on, state(true, { state: "skipped", reason: "unsubscribed" }), false, { by: "you", notSent: "unsubscribed" }],
+    ["skipped: on the member list", "2026-10-01", on, state(false, { state: "skipped", reason: "on_member_list" }), false, { by: "you", notSent: "on_member_list" }],
+    ["gave up after a week", "2026-10-01", on, state(false, { state: "failed", reason: "provider_refused" }), false, { by: "you", notSent: "could_not_send" }],
+    ["a reason no longer known", "2026-10-01", on, state(false, { state: "skipped", reason: "something_new" }), false, { by: "you", notSent: "could_not_send" }],
+    ["switch off after a skip still says why", "2026-10-01", off, state(false, { state: "skipped", reason: "bounced" }), false, { by: "you", notSent: "bounced" }],
+    // The two passes over 20c (2026-09-30).
+    ["a try in flight, switch turned off since: still the app's", "2026-10-01", off, state(false, { state: "queued", reason: null }, true), false, { by: "app", notSent: null }],
+    ["a try in flight under an earlier tick: the app's", "2026-10-01", on, state(false, null, true), false, { by: "app", notSent: null }],
+    ["a try in flight, sending paused (the operator): the app's", "2026-10-01", { on: false, roomLeft: false, pageStopped: false }, state(false, null, true), false, { by: "app", notSent: null }],
+    ["ticked on the page, page emails paused: staff's, and why", "2026-10-01", pagePaused, undefined, true, { by: "you", notSent: "page_emails_stopped" }],
+    ["ticked on the page, page emails going: the app's", "2026-10-01", on, undefined, true, { by: "app", notSent: null }],
+    ["ticked by staff, page emails paused: the app's", "2026-10-01", pagePaused, undefined, false, { by: "app", notSent: null }],
+    ["ticked on the page, paused, a try already in flight: the app's", "2026-10-01", pagePaused, state(false, null, true), true, { by: "app", notSent: null }],
   ];
-  for (const [name, dueOn, app, sendState, expected] of cases) {
+  for (const [name, dueOn, app, sendState, byPage, expected] of cases) {
     it(name, () => {
-      expect(whoSends(dueOn, app, sendState)).toEqual(expected);
+      expect(whoSends(dueOn, app, sendState, byPage)).toEqual(expected);
     });
   }
 });
@@ -124,7 +133,7 @@ describe("whoSends — every class of case", () => {
 
 describe("appWhen — every class of case", () => {
   const today = "2026-10-01";
-  const held: LeadSendState = { continuing: true, next: { state: "queued", reason: null } };
+  const held: LeadSendState = { continuing: true, next: { state: "queued", reason: null }, open: true };
   const cases: [string, string | null, number, LeadSendState | undefined, ReturnType<typeof appWhen>][] = [
     ["nothing due", null, 12, undefined, null],
     ["due another day: its day is said instead", "2026-10-03", 12, undefined, null],
@@ -138,7 +147,8 @@ describe("appWhen — every class of case", () => {
     ["due yesterday, after 20", "2026-09-30", 21, undefined, "tomorrow"],
     ["held for another try, in the hours", today, 10, held, "waiting"],
     ["held for another try, at night", today, 22, held, "waiting"],
-    ["being sent now", today, 10, { continuing: true, next: { state: "sending", reason: null } }, "today"],
+    ["being sent now", today, 10, { continuing: true, next: { state: "sending", reason: null }, open: false }, "today"],
+    ["a try in flight under an earlier tick, in the hours", today, 10, { continuing: false, next: null, open: true }, "waiting"],
   ];
   for (const [name, dueOn, hour, state, expected] of cases) {
     it(name, () => {
@@ -154,6 +164,7 @@ describe("appSending — the app sends only when emails can go and the gym can s
     name: "Iron House",
     hasPostalAddress: true,
     stopped: false,
+    pageStopped: false,
     active: true,
     onPlan: true,
     usedThisMonth: 3,
@@ -167,6 +178,7 @@ describe("appSending — the app sends only when emails can go and the gym can s
     ["no reply address", { replyTo: null }, "on", false],
     ["no postal address", { hasPostalAddress: false }, "on", false],
     ["the gym stopped", { stopped: true }, "on", false],
+    ["only its page emails paused: it still sends staff's leads' emails", { pageStopped: true }, "on", true],
     ["the gym closed", { active: false }, "on", false],
     ["no plan", { onPlan: false }, "on", false],
     ["a name no email can show", { name: "@@@" }, "on", false],
