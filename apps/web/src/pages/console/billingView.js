@@ -204,9 +204,10 @@ export function pricesNote(currency) {
   return currency === 'INR' ? 'Prices are a month, with no GST added.' : 'Prices are a month. Tax is added at checkout where it applies.';
 }
 
-/** HAS THIS GYM CHOSEN AND PAID FOR A PLAN THROUGH US? During a free trial that means its
- *  card is saved and the first payment is taken when the trial ends (Kd, RULINGS
- *  2026-09-25); the server says so, and an api too old to say reads as no. */
+/** HAS THIS GYM CHOSEN AND PAID FOR A PLAN THROUGH US? In a trial this is only a paid trial
+ *  made before 2026-09-30, its card saved and the first payment taken when the trial ends;
+ *  paying now ends the trial (Kd, RULINGS 2026-09-30). The server says so, and an api too old
+ *  to say reads as no. */
 export function isSubscribed(org) {
   return org?.subscription?.subscribed === true;
 }
@@ -704,7 +705,7 @@ export function bannerFor(org, now = Date.now()) {
         days < 0
           ? `Your trial is past its end date. Your ${words.people} keep your ${words.it}'s features while it is still running.`
           : `Trial ends ${date ?? 'soon'}. Your ${words.people} keep your ${words.it}'s features only while a plan is active.` +
-            (canPayDuringTrial(org) ? ' Choose a plan under Plan on the Overview; you pay when the trial ends.' : '');
+            (canPayDuringTrial(org) ? ' To keep them, choose a plan under Plan on the Overview: you pay today and get its full size at once.' : '');
       return { key: 'trial_urgent', tone: 'warn', text, dismissible: false };
     }
   }

@@ -13,8 +13,10 @@
 // Every checkout charges now. A gym in its own free trial that pays ends the trial when the
 // payment lands and gets the plan's full size at once; keeping the trial is not paying yet
 // (Kd, RULINGS 2026-09-30). Paid trials made before then (1c-ii, 1d-i: the card saved and the
-// first payment taken when the trial ends) are still followed to their end. A paying gym may move to a bigger size: Paddle charges the rest of
-// the month at once, and changes nothing if that charge fails.
+// first payment taken when the trial ends) are still followed to their end.
+//
+// A paying gym may move to a bigger size: Paddle charges the rest of the month at once, and
+// changes nothing if that charge fails.
 import {
   PAID_PLAN_GRACE_DAYS,
   SMALLER_SIZE_DECIDE_HOURS,
@@ -465,7 +467,7 @@ export async function openBillingPortal(
 const SIZE_REFUSALS: Record<string, { status: number; message: string }> = {
   no_paid_plan_trial: {
     status: 409,
-    message: "Your free trial isn't paid for yet. Choose a plan with Subscribe; you're charged when the trial ends.",
+    message: "Your free trial isn't paid for yet. Choose a plan to pay today and get its full size at once.",
   },
   no_paid_plan: { status: 409, message: "This plan isn't paid through us, so its size can't be changed here." },
   paid_through_razorpay: { status: 409, message: "A plan paid through Razorpay can't change size here yet." },

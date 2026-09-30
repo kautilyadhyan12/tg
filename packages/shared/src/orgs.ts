@@ -542,9 +542,10 @@ export const orgSubscriptionSchema = z.object({
    *  `cancelAtPeriodEnd`. Null during a free trial. */
   currentPeriodEnd: z.string().nullable().default(null),
   cancelAtPeriodEnd: z.boolean().default(false),
-  /** The gym has chosen a plan and paid for it through us (Paddle or Razorpay). During a free trial
-   *  this means its card is saved and the first payment is taken when the trial ends
-   *  (`currentPeriodEnd`); `priceLabel` is then the plan's price (Kd, RULINGS 2026-09-25). */
+  /** The gym has chosen a plan and paid for it through us (Paddle or Razorpay). In a trial this
+   *  is only a paid trial made before 2026-09-30: its card saved and the first payment taken when
+   *  the trial ends (`currentPeriodEnd`), `priceLabel` the plan's price. Paying now ends the
+   *  trial (Kd, RULINGS 2026-09-30). */
   subscribed: z.boolean().default(false),
   /** Who takes the payments of a plan the gym has paid for through us: Paddle, or Razorpay
    *  for an Indian gym (1d-i). Null during a free trial not yet paid for. */

@@ -852,8 +852,10 @@ describe('the banner for a trial the gym has paid for', () => {
     expect(bannerFor(paidTrial(0), NOW)?.text).toBe(`Free trial — last day. ${first(0)}`);
   });
 
-  it('tells a free trial’s billing staff, near the end, that they can pay now', () => {
-    expect(bannerFor(trialing(2), NOW)?.text).toContain('Choose a plan under Plan on the Overview; you pay when the trial ends.');
+  it('tells a free trial’s billing staff, near the end, that choosing a plan is paying today', () => {
+    const text = bannerFor(trialing(2), NOW)?.text;
+    expect(text).toContain('To keep them, choose a plan under Plan on the Overview: you pay today and get its full size at once.');
+    expect(text).not.toContain('when the trial ends');
     expect(bannerFor(trialing(2, { staffRole: 'trainer', privileges: ['members.read'] }), NOW)?.text).not.toContain('Choose a plan');
   });
 

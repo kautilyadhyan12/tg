@@ -144,7 +144,9 @@ describe('paying during the free trial', () => {
     expect(await within(dialog).findByText("You're subscribed. Up to 500 members can now join.")).toBeTruthy();
   });
 
-  it('says nothing was charged when the server cancelled a trial saved too late', async () => {
+  // The server gives this answer only for a trial window made before 2f-i and paid after the
+  // gym's trial ended; the page's words for it are what this checks, whichever window it was.
+  it('says nothing was charged when the server answers that an old trial window did not start', async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: freeTrial }));
     orgService.startCheckout.mockResolvedValue({
       data: { checkoutId: '22222222-2222-2222-2222-222222222222', provider: 'paddle', environment: 'sandbox', clientToken: 'test_x', transactionId: 'txn_01j7zbyqs3vah3aafp4jf62qaw' },
