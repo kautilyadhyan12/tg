@@ -821,7 +821,7 @@ d("join by invitation (real Postgres)", () => {
       expect((await accept(xena, await inviteIdOf(gym, addr("xena")))).statusCode).toBe(200);
       expect((await membershipsOf(gym, xena))[0]?.entry_id).toBe(old.entry.entryId);
 
-      const kept = await post(entriesUrl(gym), { fullName: "Xena Kay", phone: "+44 7911 123456" }, gym.owner.cookies);
+      const kept = await post(entriesUrl(gym), { fullName: "Xena Kay", phone: "+44 7911 123456", acknowledgePossibleDuplicates: true }, gym.owner.cookies);
       expect([200, 201], kept.body).toContain(kept.statusCode);
       const keptId = memberListEntryWrittenSchema.parse(JSON.parse(kept.body)).entry.entryId;
       const merged = await post(`${entryUrl(gym, old.entry.entryId)}/merge`, { keepEntryId: keptId, acknowledgeLeavesList: true }, gym.owner.cookies);

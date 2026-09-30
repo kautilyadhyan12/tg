@@ -454,7 +454,8 @@ d("the people selected (real Postgres)", () => {
       // Formula-injection payloads as OWASP's CSV Injection page lists them.
       const hostile = ["=HYPERLINK(\"http://example.com\",\"x\")", "+SUM(1+1)", "-2+3+cmd|' /C calc'!A0", "@SUM(1+1)"];
       for (const [i, name] of hostile.entries()) {
-        await typeIn(gym, owner, { fullName: name, email: addr(`hostile${String(i)}`), status: "Active" });
+        // Two of the payloads are one name to the duplicates rule: added anyway (5b-iv-b).
+        await typeIn(gym, owner, { fullName: name, email: addr(`hostile${String(i)}`), status: "Active", acknowledgePossibleDuplicates: true });
       }
       await typeIn(gym, owner, { fullName: "Quinn Phone", phone: "+44 7700 900123", status: "Active" });
       const rae = await typeIn(gym, owner, { fullName: "Rae Past", email: addr("rae"), status: "Cancelled" });

@@ -42,6 +42,7 @@ import {
   type MemberListStoredPerson,
   type MemberListReviewSign,
   type MemberListDuplicatePair,
+  type MemberListPossibleMatch,
   type MemberListDuplicatesSign,
   type MemberListRowGroup,
   type MemberListStagedFile,
@@ -2607,6 +2608,74 @@ function duplicatePairs(sql: SqlOrTx, gymId: string) {
           WHERE n.gym_id = ${gymId} AND n.first_entry_id = alike.low AND n.second_entry_id = alike.high
         )
     )`;
+}
+
+interface MatchSqlRow {
+  id: string;
+  full_name: string;
+  email: string | null;
+  phone_e164: string | null;
+  member_number: string | null;
+  past: boolean;
+  same_name: boolean;
+  same_phone: boolean;
+  same_number: boolean;
+}
+
+/** "May already be on your list" (5b-iv-b): the records a NEW record with these details
+ *  would be paired with on the possible-duplicates page, by `duplicatePairs`' own rule.
+ *  A value counts only while fewer than `DUPLICATE_SHARED_MAX` records hold it, so that
+ *  with the new record its group is still one that pairs; a record whose date of birth
+ *  differs from the one typed is somebody else. The new record is a current one, so past
+ *  members count. Each value is one lookup on its own index. */
+export async function possibleMatches(
+  sql: SqlOrTx,
+  gymId: string,
+  typed: { nameKey: string; phone: string | null; memberNumber: string | null; dateOfBirth: string | null },
+): Promise<MemberListPossibleMatch[]> {
+  const rows = await sql<MatchSqlRow[]>`
+    WITH named AS (
+      SELECT id FROM gym_member_list_entries
+      WHERE gym_id = ${gymId} AND ${typed.nameKey} <> '' AND name_key = ${typed.nameKey}
+      LIMIT ${DUPLICATE_SHARED_MAX}
+    ),
+    phoned AS (
+      SELECT id FROM gym_member_list_entries
+      WHERE gym_id = ${gymId} AND phone_e164 = ${typed.phone}::text
+      LIMIT ${DUPLICATE_SHARED_MAX}
+    ),
+    numbered AS (
+      SELECT id FROM gym_member_list_entries
+      WHERE gym_id = ${gymId} AND lower(member_number) = lower(${typed.memberNumber}::text)
+      LIMIT ${DUPLICATE_SHARED_MAX}
+    ),
+    alike AS (
+      SELECT id FROM named WHERE (SELECT count(*) FROM named) < ${DUPLICATE_SHARED_MAX}
+      UNION
+      SELECT id FROM phoned WHERE (SELECT count(*) FROM phoned) < ${DUPLICATE_SHARED_MAX}
+      UNION
+      SELECT id FROM numbered WHERE (SELECT count(*) FROM numbered) < ${DUPLICATE_SHARED_MAX}
+    )
+    SELECT e.id, e.full_name, e.email::text AS email, e.phone_e164, e.member_number,
+           (e.former_at IS NOT NULL) AS past,
+           (${typed.nameKey} <> '' AND e.name_key = ${typed.nameKey}) AS same_name,
+           coalesce(e.phone_e164 = ${typed.phone}::text, false) AS same_phone,
+           coalesce(lower(e.member_number) = lower(${typed.memberNumber}::text), false) AS same_number
+    FROM alike
+    JOIN gym_member_list_entries e ON e.gym_id = ${gymId} AND e.id = alike.id
+    WHERE NOT (${typed.dateOfBirth}::date IS NOT NULL AND e.date_of_birth IS NOT NULL AND e.date_of_birth <> ${typed.dateOfBirth}::date)
+    ORDER BY e.full_name, e.id`;
+  return rows.map((row) => ({
+    entryId: row.id,
+    fullName: row.full_name,
+    email: row.email,
+    phone: row.phone_e164,
+    memberNumber: row.member_number,
+    past: row.past,
+    sameName: row.same_name,
+    samePhone: row.same_phone,
+    sameMemberNumber: row.same_number,
+  }));
 }
 
 /** The Members sign: how many pairs may be one person twice. */

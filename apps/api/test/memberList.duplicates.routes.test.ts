@@ -180,9 +180,9 @@ d("member list: possible duplicates (real Postgres)", () => {
   const dupUrl = (gymId: string) => `${listUrl(gymId)}/duplicates`;
   const differentUrl = (gymId: string) => `${dupUrl(gymId)}/different`;
 
-  /** Add one person by hand; answers their record's id. */
+  /** Add one person by hand, alike or not (Add anyway, 5b-iv-b); answers their record's id. */
   const add = async (gymId: string, owner: User, person: Record<string, string>): Promise<string> => {
-    const res = await post(`${listUrl(gymId)}/entries`, person, owner.cookies);
+    const res = await post(`${listUrl(gymId)}/entries`, { ...person, acknowledgePossibleDuplicates: true }, owner.cookies);
     expect(res.statusCode, res.body).toBe(201);
     return memberListEntryWrittenSchema.parse(JSON.parse(res.body)).entry.entryId;
   };

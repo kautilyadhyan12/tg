@@ -31,6 +31,7 @@ import {
   memberListEntriesPageSchema,
   memberListEntryDetailSchema,
   memberListEntryWrittenSchema,
+  memberListMayBeOnListSchema,
   type MemberInvitePreview,
   type MemberListEntryWritten,
 } from "@app/shared";
@@ -1006,6 +1007,30 @@ d("press Invite (real Postgres)", () => {
       expect(shown.invite).toBeUndefined();
       const sends = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_invite_sends WHERE gym_id = ${gym}`;
       expect(sends[0]?.n).toBe(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "Add and invite on somebody who may already be on the list sends nothing until Add and invite anyway",
+    async () => {
+      const owner = await makeUser("maybe-owner");
+      const gym = (await makeGym(owner, "Maybe Gym")).org.id;
+      const count = async (table: "gym_member_list_entries" | "gym_invite_sends" | "gym_invites") =>
+        (await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM ${sql(table)} WHERE gym_id = ${gym}`)[0]?.n;
+      const first = await post(entriesUrl(gym), { fullName: "Lou Park", email: addr("lou-park") }, owner.cookies);
+      expect(first.statusCode, first.body).toBe(201);
+
+      const typed = { fullName: "Lou Park", email: addr("lou-park-2"), invite: true };
+      const warned = await post(entriesUrl(gym), typed, owner.cookies);
+      expect(warned.statusCode, warned.body).toBe(409);
+      expect(memberListMayBeOnListSchema.parse(JSON.parse(warned.body)).people.map((m) => m.fullName)).toEqual(["Lou Park"]);
+      expect([await count("gym_member_list_entries"), await count("gym_invites"), await count("gym_invite_sends")]).toEqual([1, 0, 0]);
+
+      const anyway = await post(entriesUrl(gym), { ...typed, acknowledgePossibleDuplicates: true }, owner.cookies);
+      expect(anyway.statusCode, anyway.body).toBe(201);
+      expect(memberListEntryWrittenSchema.parse(JSON.parse(anyway.body)).invite?.outcome).toBe("queued");
+      expect([await count("gym_member_list_entries"), await count("gym_invites"), await count("gym_invite_sends")]).toEqual([2, 1, 1]);
     },
     TEST_TIMEOUT_MS,
   );

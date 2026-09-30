@@ -63,6 +63,8 @@ import {
   memberListEntryInputSchema,
   memberListEntryPatchSchema,
   memberListEntryWrittenSchema,
+  memberListMayBeOnListSchema,
+  MEMBER_LIST_POSSIBLE_MATCHES_MAX,
   memberListMergeRequestSchema,
   memberListRemoveUnlistedRequestSchema,
   memberListRemovedSchema,
@@ -862,6 +864,28 @@ describe("keeping the list by hand (3a-iv's own shapes)", () => {
     expect(memberListEntryInputSchema.safeParse({ extra: { locker_no: "x".repeat(501) } }).success).toBe(false);
     const tooMany = Object.fromEntries(Array.from({ length: 41 }, (_, i) => [`f${String(i)}`, "v"]));
     expect(memberListEntryInputSchema.safeParse({ extra: tooMany }).success).toBe(false);
+  });
+
+  it("Add anyway is a yes or no, and the warning names one to twelve records, each with what it shares", () => {
+    expect(memberListEntryInputSchema.safeParse({ email: "ann@x.example", acknowledgePossibleDuplicates: true }).success).toBe(true);
+    expect(memberListEntryInputSchema.safeParse({ email: "ann@x.example", acknowledgePossibleDuplicates: "yes" }).success).toBe(false);
+    const match = {
+      entryId: "11111111-1111-4111-8111-111111111111",
+      fullName: "Liam Hughes",
+      email: null,
+      phone: "+919876543210",
+      memberNumber: null,
+      past: false,
+      sameName: true,
+      samePhone: true,
+      sameMemberNumber: false,
+    };
+    const warning = (people: unknown[]) => memberListMayBeOnListSchema.safeParse({ error: "may_be_on_list", message: MEMBER_LIST_BY_HAND_WORDS.may_be_on_list, people });
+    expect(warning([match]).success).toBe(true);
+    expect(warning([]).success).toBe(false);
+    expect(warning(Array.from({ length: MEMBER_LIST_POSSIBLE_MATCHES_MAX + 1 }, () => match)).success).toBe(false);
+    expect(warning([{ ...match, samePhone: undefined }]).success).toBe(false);
+    expect(warning([{ ...match, extra: 1 }]).success).toBe(false);
   });
 
   it("a change needs at least one field, and null empties one", () => {

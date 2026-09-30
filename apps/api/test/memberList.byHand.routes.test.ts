@@ -669,7 +669,7 @@ d("member list: keeping it by hand (real Postgres)", () => {
       const org = await makeOrg(owner, "Clash Gym");
       const gym = org.org.id;
       const a = await typeIn(gym, owner, { fullName: "Pat Doe", email: "mhand-t-pat@example.com" });
-      const b = await typeIn(gym, owner, { fullName: "Pat Doe", email: "mhand-t-pat2@example.com" });
+      const b = await typeIn(gym, owner, { fullName: "Pat Doe", email: "mhand-t-pat2@example.com", acknowledgePossibleDuplicates: true });
       const before = await listState(gym);
 
       const clash = await patch(entryUrl(gym, b.entry.entryId), { email: "mhand-t-pat@example.com" }, owner.cookies);

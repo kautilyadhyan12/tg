@@ -4,6 +4,16 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-30 · 5b-iv-b (Folder A): Add member warns "may already be on your list" (branch `members-add-warning`)
+
+- **Why this job:** next in Folder A, the last of Possible duplicates (RULINGS 2026-09-30). **Risky** (other people's records shown to staff), Opus xhigh; Kd: *"go"*. No migration, no new package, no new cost.
+- **Built:** Add member and Add and invite stop, under the gym's lock, when records share the typed name, phone or member number by 5b-iv-a's own rule (a value held by five records warns about nobody, a different date of birth is somebody else, past members count). A yellow box names each, with what it shares and **Open**; **Add anyway** / **Add and invite anyway** sends exactly the details warned about; changing a box takes the box away; Open keeps the typed details under "Back to adding Liam Hughes". The exact "already on your list" and a past member coming back are untouched. No email before "anyway".
+- **Worst thing, first test:** the warning never names another gym's member (same name, phone and member number held by a rival); a stranger 404, a trainer 403. **Breaks, each RED, restored sha256-identical:** the gym left out of the final join plus the name, the phone or the member-number lookup (3 of 3; the name break went red by the whole database's Liam Hughes reading as a placeholder, the other two by naming the rival).
+- **Real spellings:** "HUGHES, LIAM", José/Jose, Mary-Jane/Mary Jane, an Indian desk phone, "gg-0042"; not caught: Bill/William, "P. Shah", a family email. Every case checks the warning names exactly whom the Review page pairs after Add anyway. Two staff adding one person at once: one added, one warned.
+- **Cost at full size** (mains, 2,592 MHz): answering nobody median 1.2–1.6 ms at 200, 10,000 and 20,000 records (one 18 ms and one 55 ms run); the query 0.28 ms, three index scans.
+- **Tests:** api 150/150 files (83 files 1,732 tests in one run, 67 in a run the memory guard stopped; the first full run's 8 reds were setups typing a second copy on purpose, now Add anyway); shared 274/274; web 3,309/3,309 (`poseAssets.contract` local Node 24); tsc and eslint 0; `vite build` green. Seen in headless Edge, dark and light, 1200 and 390 (`.cost/look-5b-iv-b.mjs`).
+- **Open:** round one, then the feature's two extra passes (security, data integrity) over 5b-iv-a and 5b-iv-b before anybody uses Possible duplicates.
+
 ## 2026-09-30 · 5b-iv-a (Folder A): possible duplicates, a Review page of pairs (branch `members-possible-duplicates`)
 
 - **Why this job:** next in Folder A. Kd: both a Review page and a warning when adding, the exact "already on your list" untouched (RULINGS 2026-09-30); split 5b-iv-a (this) and 5b-iv-b (the warning). **Risky** (other people's records, merges), Opus xhigh; *"for this kind of scenario yes do"*. Migration `0056_members_possible_duplicates` (renumbered from 0055 when Folder B's 20c-vi merged first with 0055); no new package, no new cost.

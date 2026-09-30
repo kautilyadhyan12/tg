@@ -9,7 +9,13 @@
 // refused; and Join removes exactly the record shown under "Remove".
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
-import { MEMBER_LIST_QUERY_MAX_CHARS, memberListEntryDetailSchema, memberListEntriesPageSchema, memberListViewSchema } from '@app/shared';
+import {
+  MEMBER_LIST_QUERY_MAX_CHARS,
+  memberListEntryDetailSchema,
+  memberListEntriesPageSchema,
+  memberListMayBeOnListSchema,
+  memberListViewSchema,
+} from '@app/shared';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -836,5 +842,105 @@ describe('Add member', () => {
     fireEvent.click(dialog().getByRole('button', { name: 'Add member' }));
     expect(await dialog().findByText('They are already on your list.')).toBeTruthy();
     expect(dialog().getByText('Bea Hart')).toBeTruthy();
+  });
+});
+
+// ── May already be on your list (5b-iv-b; RULINGS 2026-09-30) ──
+describe('Add member: may already be on your list', () => {
+  const LIAM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const LIAM_PAST = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+  const maybeRefusal = () =>
+    refusal(
+      409,
+      memberListMayBeOnListSchema.parse({
+        error: 'may_be_on_list',
+        message: 'This person may already be on your list. Open a record to check, or add them anyway.',
+        people: [
+          { entryId: LIAM, fullName: 'Liam Hughes', email: 'liam@members.example', phone: null, memberNumber: 'GG-0042', past: false, sameName: true, samePhone: false, sameMemberNumber: true },
+          { entryId: LIAM_PAST, fullName: 'Hughes, Liam', email: null, phone: '+919876543210', memberNumber: null, past: true, sameName: true, samePhone: true, sameMemberNumber: false },
+        ],
+      }),
+    );
+  const typeLiam = () => {
+    fireEvent.change(dialog().getByLabelText('Name'), { target: { value: 'Liam Hughes' } });
+    fireEvent.change(dialog().getByLabelText('Phone'), { target: { value: '9876543210' } });
+  };
+
+  it('names each record alike and what it shares, adds nobody, and Add anyway sends exactly the details warned about', async () => {
+    orgService.addMemberListEntry.mockRejectedValueOnce(maybeRefusal());
+    openBox(null);
+    typeLiam();
+    fireEvent.click(dialog().getByRole('button', { name: 'Add member' }));
+    const box = within(await dialog().findByTestId('maybe-box'));
+    expect(box.getByRole('heading', { name: 'Liam Hughes may already be on your list' })).toBeTruthy();
+    const rows = box.getAllByTestId('maybe-match').map((li) => li.textContent);
+    expect(rows).toEqual([
+      'Liam Hughesliam@members.example · Member number GG-0042Same name and member numberOpen',
+      'Hughes, LiamPast member+919876543210Same name and phoneOpen',
+    ]);
+    expect(dialog().queryByText('Member added.')).toBeNull();
+    expect(onChanged).not.toHaveBeenCalled();
+
+    orgService.addMemberListEntry.mockResolvedValueOnce(written('added', person(ADA, 'Liam Hughes', { phone: '+919876543210' })));
+    fireEvent.click(box.getByRole('button', { name: 'Add anyway' }));
+    await waitFor(() =>
+      expect(orgService.addMemberListEntry).toHaveBeenLastCalledWith(GYM, { fullName: 'Liam Hughes', phone: '9876543210', acknowledgePossibleDuplicates: true }),
+    );
+    expect(await dialog().findByText('Member added.')).toBeTruthy();
+    expect(dialog().queryByTestId('maybe-box')).toBeNull();
+  });
+
+  it('Add and invite warns first, and only Add and invite anyway invites', async () => {
+    orgService.addMemberListEntry.mockRejectedValueOnce(maybeRefusal());
+    openBox(null);
+    typeLiam();
+    fireEvent.click(dialog().getByRole('button', { name: 'Add and invite' }));
+    const box = within(await dialog().findByTestId('maybe-box'));
+    expect(box.queryByRole('button', { name: 'Add anyway' })).toBeNull();
+    orgService.addMemberListEntry.mockResolvedValueOnce(written('added', person(ADA, 'Liam Hughes')));
+    fireEvent.click(box.getByRole('button', { name: 'Add and invite anyway' }));
+    await waitFor(() =>
+      expect(orgService.addMemberListEntry).toHaveBeenLastCalledWith(GYM, {
+        fullName: 'Liam Hughes',
+        phone: '9876543210',
+        invite: true,
+        acknowledgePossibleDuplicates: true,
+      }),
+    );
+  });
+
+  it('changing a box takes the warning away, so Add anyway never sends details it did not warn about', async () => {
+    orgService.addMemberListEntry.mockRejectedValueOnce(maybeRefusal());
+    openBox(null);
+    typeLiam();
+    fireEvent.click(dialog().getByRole('button', { name: 'Add member' }));
+    await dialog().findByTestId('maybe-box');
+    fireEvent.change(dialog().getByLabelText('Phone'), { target: { value: '9876500000' } });
+    expect(dialog().queryByTestId('maybe-box')).toBeNull();
+    expect(dialog().queryByRole('button', { name: 'Add anyway' })).toBeNull();
+    fireEvent.click(dialog().getByRole('button', { name: 'Add member' }));
+    await waitFor(() => expect(orgService.addMemberListEntry).toHaveBeenLastCalledWith(GYM, { fullName: 'Liam Hughes', phone: '9876500000' }));
+  });
+
+  it('Open shows that record, and Back to adding brings back every detail typed, sending nothing', async () => {
+    orgService.addMemberListEntry.mockRejectedValueOnce(maybeRefusal());
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer(person(LIAM, 'Liam Hughes', { memberNumber: 'GG-0042' })));
+    openBox(null);
+    typeLiam();
+    fireEvent.change(dialog().getByLabelText('Locker'), { target: { value: '12' } });
+    fireEvent.click(dialog().getByRole('button', { name: 'Add member' }));
+    const box = within(await dialog().findByTestId('maybe-box'));
+    fireEvent.click(box.getAllByRole('button', { name: 'Open' })[0]);
+    expect(await dialog().findByText('liam@members.example')).toBeTruthy();
+    expect(orgService.getMemberListEntry).toHaveBeenCalledWith(GYM, LIAM);
+    expect(dialog().queryByTestId('maybe-box')).toBeNull();
+
+    fireEvent.click(dialog().getByRole('button', { name: 'Back to adding Liam Hughes' }));
+    expect(dialog().getByRole('heading', { name: 'Add member' })).toBeTruthy();
+    expect(dialog().getByLabelText('Name').value).toBe('Liam Hughes');
+    expect(dialog().getByLabelText('Phone').value).toBe('9876543210');
+    expect(dialog().getByLabelText('Locker').value).toBe('12');
+    expect(dialog().queryByTestId('back-to-adding')).toBeNull();
+    expect(orgService.addMemberListEntry).toHaveBeenCalledTimes(1);
   });
 });

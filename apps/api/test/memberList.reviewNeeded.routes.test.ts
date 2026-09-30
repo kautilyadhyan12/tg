@@ -336,8 +336,9 @@ d("member list: review needed (real Postgres)", () => {
       const gym = org.org.id;
       await importFile(gym, owner, FIRST_MONTH);
       const entriesUrl = `${listUrl(gym)}/entries`;
+      // A second record of somebody already on the list, on purpose: added anyway (5b-iv-b).
       const added = async (body: Record<string, unknown>): Promise<string> => {
-        const res = await post(entriesUrl, body, owner.cookies);
+        const res = await post(entriesUrl, { ...body, acknowledgePossibleDuplicates: true }, owner.cookies);
         expect(res.statusCode).toBe(201);
         return (JSON.parse(res.body) as { entry: { entryId: string } }).entry.entryId;
       };

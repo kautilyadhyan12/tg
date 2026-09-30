@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import {
   AlertTriangle,
+  ArrowLeft,
   ArrowLeftRight,
   Check,
   Copy,
@@ -40,7 +41,10 @@ import {
   invitationView,
   inviteOutcomeWords,
   listNames,
+  matchDetailWords,
+  mayBeOnListWords,
   outcomeWords,
+  pairWhyWords,
   personInviteAction,
   pastWords,
   patchFrom,
@@ -101,6 +105,51 @@ function Fact({ label, value, edited }) {
         {edited ? <span className="block c-s13 c-t3 font-normal">Changed by hand</span> : null}
       </dd>
     </div>
+  );
+}
+
+/** MAY ALREADY BE ON YOUR LIST (5b-iv-b; RULINGS 2026-09-30): Add member found records alike by
+ *  name, phone or member number, and nobody was added or invited. Staff Open one to check (the
+ *  details typed wait for them), or add anyway; the exact "already on your list" is untouched. */
+function MaybeBox({ maybe, words, busy, readOnly, onOpen, onAnyway, onBack }) {
+  return (
+    <section className="c-callout flex-col" role="alert" data-testid="maybe-box">
+      <div className="flex items-center gap-2">
+        <AlertTriangle aria-hidden="true" className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--warn)' }} />
+        <h3 className="c-s15 c-w6 c-t1 m-0">{mayBeOnListWords(maybe.input.fullName)}</h3>
+      </div>
+      <p className="c-s14 c-t2 m-0">Open a record to check it isn&apos;t the same person. Nobody is added until you choose.</p>
+      <ul className="flex flex-col gap-3 m-0 p-0 list-none">
+        {maybe.people.map((m) => (
+          <li key={m.entryId} className="flex flex-wrap items-center gap-x-3 gap-y-2" data-testid="maybe-match">
+            <span className="flex flex-col gap-0.5 flex-1 min-w-[200px]">
+              <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="c-s14 c-w6 c-t1">{m.fullName || 'No name'}</span>
+                {m.past ? <span className="c-tag c-tag-plain">{`Past ${words.person}`}</span> : null}
+              </span>
+              <span className="c-s13 c-t2" style={{ overflowWrap: 'anywhere' }}>
+                {matchDetailWords(m)}
+              </span>
+              <span className="c-s13 c-w6" style={{ color: 'var(--warn)' }}>
+                {pairWhyWords(m)}
+              </span>
+            </span>
+            <button type="button" onClick={() => onOpen(m.entryId)} disabled={busy} className="c-btn c-btn-s c-btn-sm">
+              Open
+            </button>
+          </li>
+        ))}
+      </ul>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={() => void onAnyway()} disabled={busy || readOnly} className={SECOND}>
+          {maybe.input.invite === true ? <Mail aria-hidden="true" className="w-4 h-4" /> : <UserPlus aria-hidden="true" className="w-4 h-4" />}
+          {maybe.input.invite === true ? 'Add and invite anyway' : 'Add anyway'}
+        </button>
+        <button type="button" onClick={onBack} className={PLAIN}>
+          Back to the form
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -367,6 +416,10 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const [notice, setNotice] = useState(null);
   /** A refusal: its sentence, and what can be done about it. */
   const [refusal, setRefusal] = useState(null);
+  /** Add member's warning: the records alike, and exactly the details it was about. */
+  const [maybe, setMaybe] = useState(null);
+  /** The details typed for somebody new, kept while staff Open a record the warning named. */
+  const [draft, setDraft] = useState(null);
   const [deleted, setDeleted] = useState(null);
   // Join: the search, the record picked, and which of the two is kept.
   const [joinQuery, setJoinQuery] = useState('');
@@ -414,10 +467,26 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     setMode('view');
     setNotice(null);
     setRefusal(null);
+    setMaybe(null);
     setJoinPick(null);
     setJoinResults(null);
     setJoinQuery('');
     setKeepId(null);
+  };
+
+  /** Open a record the warning named; the details typed wait under "Back to adding". */
+  const openMatch = (next) => {
+    setDraft(form);
+    openRecord(next);
+  };
+
+  /** Back to the new person, with every detail as it was typed: Add asks again. */
+  const backToAdding = () => {
+    const typed = draft;
+    openRecord(null);
+    setForm(typed);
+    setMode('edit');
+    setDraft(null);
   };
 
   useEffect(() => {
@@ -534,11 +603,29 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     }
   };
 
+  /** Add member, and its warning: records alike stop the add until staff Open one or add
+   *  anyway, which sends exactly the details warned about, never the form as it is by then. */
+  const addPerson = async (input) => {
+    setBusy(true);
+    setNotice(null);
+    setRefusal(null);
+    setMaybe(null);
+    try {
+      written(null, await orgService.addMemberListEntry(gymId, input));
+    } catch (err) {
+      if (wanted.current !== null) return;
+      const people = err?.response?.data?.people;
+      if (errorCode(err) === 'may_be_on_list' && Array.isArray(people) && people.length > 0) setMaybe({ people, input });
+      else refused(err, "We couldn't add this person.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   /** Save the form. Adding, `invite` is "Add and invite": both happen, or neither. */
   const save = async (invite = false) => {
     if (shown === null) {
-      const input = invite ? { ...inputFrom(form), invite: true } : inputFrom(form);
-      await run(null, () => orgService.addMemberListEntry(gymId, input), "We couldn't add this person.");
+      await addPerson(invite ? { ...inputFrom(form), invite: true } : inputFrom(form));
       return;
     }
     const asked = shown.entryId;
@@ -736,10 +823,12 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   // as it stood, and Save sends the form as it is now.
   const setField = (key, value) => {
     setRefusal(null);
+    setMaybe(null);
     setForm((f) => ({ ...f, [key]: value }));
   };
   const setExtra = (key, value) => {
     setRefusal(null);
+    setMaybe(null);
     setForm((f) => ({ ...f, extra: { ...f.extra, [key]: value } }));
   };
   /** Leave a step (Back, Swap, Cancel): a refusal about what was on screen goes with it. */
@@ -1365,6 +1454,12 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           </button>
         </div>
         <div className="flex flex-col gap-4 px-4 py-5 md:px-7">
+          {draft !== null && id !== null ? (
+            <button type="button" onClick={backToAdding} className="c-s14 c-w6 c-lk self-start flex items-center gap-1.5" data-testid="back-to-adding">
+              <ArrowLeft aria-hidden="true" className="w-4 h-4" />
+              {`Back to adding ${draft.fullName.trim() || `the new ${words.person}`}`}
+            </button>
+          ) : null}
           {notice !== null ? (
             <p className="c-s14 c-w5 m-0 flex items-center gap-2" style={{ color: 'var(--good)' }} role="status">
               <Check aria-hidden="true" className="w-4 h-4" />
@@ -1387,6 +1482,17 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
                 ) : null}
               </div>
             </div>
+          ) : null}
+          {maybe !== null && id === null ? (
+            <MaybeBox
+              maybe={maybe}
+              words={words}
+              busy={busy}
+              readOnly={readOnly}
+              onOpen={openMatch}
+              onAnyway={() => addPerson({ ...maybe.input, acknowledgePossibleDuplicates: true })}
+              onBack={() => setMaybe(null)}
+            />
           ) : null}
           {body}
         </div>

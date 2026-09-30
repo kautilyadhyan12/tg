@@ -24,6 +24,8 @@ import {
   invitationView,
   inviteBody,
   inviteQueryString,
+  matchDetailWords,
+  mayBeOnListWords,
   patchFrom,
   personInviteAction,
   pageTickState,
@@ -557,5 +559,22 @@ describe('someone a file leaves out: the status with its date, then the rest', (
     ['no status, a date', person(null, { endsOn: '2026-08-31', endsOnKind: 'ends' }), 'Ended 31 Aug · Membership: Gold · Payment: Paid'],
   ])('%s', (_, who, words) => {
     expect(goneWords(who, TODAY).facts).toBe(words);
+  });
+});
+
+describe('Add member: may already be on your list (5b-iv-b)', () => {
+  it('heads the warning with the name as typed, or This person when none was', () => {
+    expect(mayBeOnListWords('  Liam Hughes ')).toBe('Liam Hughes may already be on your list');
+    expect(mayBeOnListWords('')).toBe('This person may already be on your list');
+    expect(mayBeOnListWords(undefined)).toBe('This person may already be on your list');
+  });
+
+  it('says every detail that tells two people apart, and says so when there is none', () => {
+    const m = (over) => ({ email: null, phone: null, memberNumber: null, ...over });
+    expect(matchDetailWords(m({ email: 'liam@members.example', phone: '+919876543210', memberNumber: 'GG-0042' }))).toBe(
+      'liam@members.example · +919876543210 · Member number GG-0042',
+    );
+    expect(matchDetailWords(m({ memberNumber: 'GG-0042' }))).toBe('Member number GG-0042');
+    expect(matchDetailWords(m({}))).toBe('No email or phone');
   });
 });

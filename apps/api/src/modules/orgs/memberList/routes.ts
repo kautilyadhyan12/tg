@@ -436,6 +436,13 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
           requestId: req.id,
         });
       }
+      case "may_be_on_list":
+        return reply.status(409).send({
+          error: "may_be_on_list",
+          message: MEMBER_LIST_BY_HAND_WORDS.may_be_on_list,
+          people: answer.people,
+          requestId: req.id,
+        });
       case "leaves_list":
         return reply.status(409).send({
           error: "leaves_list",

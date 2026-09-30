@@ -407,7 +407,7 @@ d("member list: an app member follows their record (real Postgres)", () => {
       await confirm(gymId, cookies, (await stage(gymId, cookies, csv(others))).uploadId);
       await stillInAppAsBefore(gymId, emmaUser.userId);
       expect(await recordOf(gymId, emma.name)).toEqual({ id: emmaRecord.id, former: true });
-      const typed = await post(`/v1/orgs/${gymId}/member-list/entries`, { fullName: emma.name, email: emma.email, phone: "07700 900999" }, cookies);
+      const typed = await post(`/v1/orgs/${gymId}/member-list/entries`, { fullName: emma.name, email: emma.email, phone: "07700 900999", acknowledgePossibleDuplicates: true }, cookies);
       expect(typed.statusCode, typed.body).toBe(201);
       const typedId = memberListEntryWrittenSchema.parse(JSON.parse(typed.body)).entry.entryId;
 
