@@ -140,8 +140,8 @@ describe('a pair opened side by side', () => {
     drawPage();
     fireEvent.click((await pairRows())[1]);
     const compare = within(await person().findByTestId('merge-compare'));
-    expect(compare.getByTestId('join-keep-fullName').textContent).toBe('Beatrice Hart');
-    expect(compare.getByTestId('join-remove-fullName').textContent).toBe('Bea Hart');
+    expect(compare.getByTestId('join-first-fullName').textContent).toBe('Bea Hart');
+    expect(compare.getByTestId('join-second-fullName').textContent).toBe('Beatrice Hart');
     expect(person().getByTestId('pair-why').textContent).toBe('These two may be the same member: same phone.');
     // Both of Bea's records were read, and nobody else's.
     expect(orgService.getMemberListEntry.mock.calls.map((c) => c[1]).sort()).toEqual([BEA_1, BEA_2]);
@@ -154,7 +154,7 @@ describe('a pair opened side by side', () => {
     await waitFor(() => expect(screen.getAllByTestId('duplicate-pair')).toHaveLength(1));
   });
 
-  it("Merge sends the two records on screen, the one under Remove removed and the one under Keep kept; Swap turns them round", async () => {
+  it('Merge sends the two records on screen: the column chosen kept, the other removed', async () => {
     orgService.getMemberListDuplicates.mockResolvedValue(pairsPage([ADA_PAIR]));
     orgService.mergeMemberListEntries.mockResolvedValue({
       data: memberListEntryWrittenSchema.parse({ outcome: 'merged', entry: RECORDS[ADA_1], version: 4 }),
@@ -162,9 +162,14 @@ describe('a pair opened side by side', () => {
     drawPage();
     fireEvent.click((await pairRows())[0]);
     const compare = within(await person().findByTestId('merge-compare'));
-    expect(compare.getByTestId('join-keep-fullName').textContent).toBe('Lovelace, Ada');
-    fireEvent.click(person().getByRole('button', { name: 'Swap' }));
-    expect(within(person().getByTestId('merge-compare')).getByTestId('join-keep-fullName').textContent).toBe('Ada Lovelace');
+    expect(compare.getByTestId('join-first-fullName').textContent).toBe('Ada Lovelace');
+    expect(person().getByRole('button', { name: 'Merge' }).disabled).toBe(true);
+    fireEvent.click(person().getByTestId('keep-first'));
+    // The preview says what the one record will hold: Ada's own email, and her phone from the other.
+    const after = within(person().getByTestId('merge-preview'));
+    expect(after.getByTestId('after-email').textContent).toBe('ada@members.example');
+    expect(after.queryByTestId('after-phone')).toBeNull();
+    expect(after.getByTestId('lost-phone').textContent).toContain('+447700900111');
     fireEvent.click(person().getByRole('button', { name: 'Merge' }));
     await waitFor(() => expect(orgService.mergeMemberListEntries).toHaveBeenCalledWith(GYM, ADA_2, ADA_1, false));
     expect(orgService.markDifferentPeople).not.toHaveBeenCalled();

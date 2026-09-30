@@ -14,6 +14,7 @@ import {
   activeFilters,
   appView,
   compareRecords,
+  mergePreview,
   entriesQueryString,
   formFrom,
   goneWords,
@@ -276,19 +277,91 @@ describe("Merge duplicate's side-by-side view", () => {
     expect(rows.map((r) => r.label)).toEqual([
       'Name', 'Email', 'Phone', 'Member number', 'Date of birth', 'Join date', 'Status', 'Membership', 'End or renewal date', 'On the list', 'In the app', 'Locker',
     ]);
-    expect(row('fullName')).toMatchObject({ keep: 'Ada Lovelace', remove: 'Ada Lovelace', differs: false });
-    expect(row('dateOfBirth')).toMatchObject({ keep: '12 March 1990', remove: '12 March 1990', differs: false });
-    expect(row('email')).toMatchObject({ remove: 'ada.old@members.example', differs: true });
-    expect(row('phone')).toMatchObject({ keep: '+447700900123', remove: '—', differs: true });
-    expect(row('memberNumber')).toMatchObject({ keep: 'M-1', remove: '—', differs: true });
-    expect(row('list')).toMatchObject({ keep: 'On the list', remove: 'Past member', differs: true });
-    expect(row('app')).toMatchObject({ keep: 'Yes', remove: 'No', differs: true });
+    expect(row('fullName')).toMatchObject({ first: 'Ada Lovelace', second: 'Ada Lovelace', differs: false });
+    expect(row('dateOfBirth')).toMatchObject({ first: '12 March 1990', second: '12 March 1990', differs: false });
+    expect(row('email')).toMatchObject({ second: 'ada.old@members.example', differs: true });
+    expect(row('phone')).toMatchObject({ first: '+447700900123', second: '—', differs: true });
+    expect(row('memberNumber')).toMatchObject({ first: 'M-1', second: '—', differs: true });
+    expect(row('list')).toMatchObject({ first: 'On the list', second: 'Past member', differs: true });
+    expect(row('app')).toMatchObject({ first: 'Yes', second: 'No', differs: true });
     expect(row('paymentStatus')).toBeUndefined();
-    expect(row('extra:locker')).toMatchObject({ keep: '12', remove: '—', differs: true });
+    expect(row('extra:locker')).toMatchObject({ first: '12', second: '—', differs: true });
     // A custom field neither record holds is left out.
     expect(row('extra:notes_2')).toBeUndefined();
   });
 });
+describe("Merge duplicate's preview of the one record it leaves (the server's rule, RULINGS 2026-09-23)", () => {
+  const keep = entry({
+    email: 'ada@members.example',
+    phone: null,
+    memberNumber: null,
+    status: 'Frozen',
+    membershipType: null,
+    joinedOn: '2025-01-04',
+    endsOn: null,
+    endsOnKind: null,
+    paymentStatus: null,
+    dateOfBirth: '1990-03-12',
+    formerAt: '2026-08-01T10:00:00.000Z',
+    extra: [{ key: 'locker', label: 'Locker', value: '' }],
+  });
+  const gone = entry({
+    entryId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    fullName: 'Lovelace, Ada',
+    email: 'ada.old@members.example',
+    phone: '+447700900999',
+    memberNumber: 'M-7',
+    status: 'Active',
+    membershipType: 'Gold',
+    joinedOn: '2024-06-01',
+    endsOn: '2026-10-03',
+    endsOnKind: 'renews',
+    paymentStatus: 'Paid',
+    dateOfBirth: '1990-03-12',
+    formerAt: null,
+    extra: [{ key: 'locker', label: 'Locker', value: '9' }],
+  });
+  const { rows, lost } = mergePreview(keep, gone, FIELDS);
+  const after = Object.fromEntries(rows.map((r) => [r.key, [r.value, r.fromOther]]));
+  const why = Object.fromEntries(lost.map((l) => [l.key, `${l.value} | ${l.why}`]));
+
+  it("keeps the kept record's name, email, phone and member number, never the other's, and says what is lost", () => {
+    expect(after.fullName).toEqual(['Ada Lovelace', false]);
+    expect(after.email).toEqual(['ada@members.example', false]);
+    // The kept record has no phone or member number: they stay empty, and the other's are named as lost.
+    expect(after.phone).toBeUndefined();
+    expect(after.memberNumber).toBeUndefined();
+    expect(why.fullName).toBe("Lovelace, Ada | The kept record keeps its own name.");
+    expect(why.email).toBe('ada.old@members.example | The kept record keeps its own email.');
+    expect(why.phone).toBe("+447700900999 | The kept record's name, email, phone and member number are never changed by a merge.");
+    expect(why.memberNumber).toBe("M-7 | The kept record's name, email, phone and member number are never changed by a merge.");
+  });
+
+  it('fills every other detail and custom field only where the kept record has none, and is on the list if either was', () => {
+    expect(after.status).toEqual(['Frozen', false]);
+    expect(after.membershipType).toEqual(['Gold', true]);
+    expect(after.joinedOn).toEqual(['4 January 2025', false]);
+    expect(after.endsOn[1]).toBe(true);
+    expect(after.endsOn[0]).toMatch(/^Renews /);
+    expect(after.paymentStatus).toEqual(['Paid', true]);
+    expect(after.dateOfBirth).toEqual(['12 March 1990', false]);
+    expect(after['extra:locker']).toEqual(['9', true]);
+    expect(after.list).toEqual(['On the list', false]);
+    expect(why.status).toBe('Active | The kept record keeps its own status.');
+    expect(why.joinedOn).toBe('1 June 2024 | The kept record keeps its own join date.');
+    // The same value on both is not lost; a value taken across is not lost.
+    expect(why.dateOfBirth).toBeUndefined();
+    expect(why.membershipType).toBeUndefined();
+    expect(why['extra:locker']).toBeUndefined();
+    expect(Object.keys(why).sort()).toEqual(['email', 'fullName', 'joinedOn', 'memberNumber', 'phone', 'status']);
+  });
+
+  it('two past members stay a past member', () => {
+    const both = mergePreview({ ...keep, formerAt: '2026-08-01T10:00:00.000Z' }, { ...gone, formerAt: '2026-07-01T10:00:00.000Z' }, FIELDS);
+    expect(both.rows.find((r) => r.key === 'list').value).toBe('Past member');
+  });
+});
+
 describe("what a person's page offers about the invitation — every class", () => {
   const inv = (over = {}, email = { state: 'sent', reason: null, at: '2026-09-20T10:01:00.000Z', result: 'delivered' }) => ({
     state: 'pending',

@@ -9,6 +9,7 @@ import {
   MEMBER_LIST_MAX_EXTRA_CHARS,
   MEMBER_LIST_MAX_NAME_CHARS,
   MEMBER_LIST_MAX_STATUS_CHARS,
+  MEMBER_LIST_MERGE_FILLS,
   authEmailSchema,
   memberListCardTypedWords,
   type MemberListEntryPatch,
@@ -249,7 +250,7 @@ export function changedFields(before: EntryValues, after: EntryValues): string[]
 export function mergeValues(keep: EntryValues, gone: EntryValues): { values: EntryValues; filled: string[] } {
   const values: EntryValues = { ...keep, extra: { ...keep.extra } };
   const filled: string[] = [];
-  for (const field of MARKED_FIELDS) {
+  for (const field of MEMBER_LIST_MERGE_FILLS) {
     if (field === "endsOn") {
       if (keep.endsOn === null && gone.endsOn !== null) {
         values.endsOn = gone.endsOn;
