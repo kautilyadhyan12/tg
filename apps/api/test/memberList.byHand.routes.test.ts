@@ -1049,7 +1049,7 @@ d("member list: keeping it by hand (real Postgres)", () => {
     expect(refs.map((r) => r.ref).sort()).toEqual([
       "gym_leads.entry_id",
       "gym_leads.gym_id",
-      // A pair staff marked Different people (0055): goes with either record, never moved,
+      // A pair staff marked Different people (0056): goes with either record, never moved,
       // since the kept record was never checked against the third one
       // (`memberList.duplicates.routes.test.ts`).
       "gym_member_list_not_duplicates.first_entry_id",

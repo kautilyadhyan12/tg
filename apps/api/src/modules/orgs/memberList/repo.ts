@@ -2706,3 +2706,30 @@ export async function markNotDuplicates(tx: TransactionSql, gymId: string, a: st
     RETURNING gym_id`;
   return rows.length === 1;
 }
+
+/** Records with no name key yet (written before 0056), a batch after `after` in id order;
+ *  `gymIds` narrows it to those gyms. */
+export async function entriesWithoutNameKey(
+  sql: SqlOrTx,
+  input: { after: string; limit: number; gymIds: readonly string[] | null },
+): Promise<{ id: string; fullName: string }[]> {
+  const rows = await sql<{ id: string; full_name: string }[]>`
+    SELECT id, full_name FROM gym_member_list_entries
+    WHERE name_key IS NULL AND id > ${input.after}::uuid
+      AND (${input.gymIds === null} OR gym_id = ANY(${input.gymIds === null ? [] : [...input.gymIds]}::uuid[]))
+    ORDER BY id
+    LIMIT ${input.limit}`;
+  return rows.map((row) => ({ id: row.id, fullName: row.full_name }));
+}
+
+/** Each record's key, written only while it still has none and still holds the name the
+ *  key was worked out from: a rename in between writes its own key. */
+export async function writeNameKeys(sql: SqlOrTx, rows: readonly { id: string; fullName: string; nameKey: string }[]): Promise<number> {
+  if (rows.length === 0) return 0;
+  const written = await sql`
+    UPDATE gym_member_list_entries e SET name_key = v.name_key
+    FROM unnest(${rows.map((r) => r.id)}::uuid[], ${rows.map((r) => r.fullName)}::text[], ${rows.map((r) => r.nameKey)}::text[])
+      AS v(id, full_name, name_key)
+    WHERE e.id = v.id AND e.name_key IS NULL AND e.full_name = v.full_name`;
+  return written.count;
+}

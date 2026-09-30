@@ -1,9 +1,9 @@
 # Fill the member name keys (once per database that already holds member lists)
 
-ROADMAP 5b-iv-a; migration `0055_members_possible_duplicates`. Possible duplicates find two
+ROADMAP 5b-iv-a; migration `0056_members_possible_duplicates`. Possible duplicates find two
 records with the same name by the key kept on each record, `gym_member_list_entries.name_key`
-("Shah, Priya" and "Priya Shah" are one key). The api writes it with every name from 0055
-on; records written before 0055 have none until this is run.
+("Shah, Priya" and "Priya Shah" are one key). The api writes it with every name from 0056
+on; records written before 0056 have none until this is run.
 
 ## Symptoms
 

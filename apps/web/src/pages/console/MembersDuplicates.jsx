@@ -42,6 +42,8 @@ export default function MembersDuplicates() {
 
   const [page, setPage] = useState({ loading: true, error: null, pairs: [], total: 0, cursor: null });
   const [list, setList] = useState(null);
+  /** The gym's columns could not be read: a pair would compare and preview without them. */
+  const [listError, setListError] = useState(null);
   const [tick, setTick] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   /** The pair open side by side: its first record, the other, and what they share. */
@@ -82,11 +84,14 @@ export default function MembersDuplicates() {
   useEffect(() => {
     if (gymId === null) return undefined;
     let live = true;
+    setListError(null);
     orgService.getMemberList(gymId).then(
       (res) => {
         if (live) setList(res.data.list);
       },
-      () => undefined,
+      (err) => {
+        if (live) setListError(errorText(err, `We couldn't load your list's columns.`));
+      },
     );
     return () => {
       live = false;
@@ -154,11 +159,12 @@ export default function MembersDuplicates() {
 
       {page.loading ? <ConsoleLoading label="Loading…" newLook /> : null}
       {page.error !== null ? <ConsoleFailed message={page.error} onRetry={() => setTick((n) => n + 1)} newLook /> : null}
+      {listError !== null ? <ConsoleFailed message={listError} onRetry={() => setTick((n) => n + 1)} newLook /> : null}
 
       {!page.loading && page.error === null && page.total === 0 ? (
         <section className="c-card px-6 py-12 flex flex-col items-center gap-3 text-center" data-testid="duplicates-none">
-          <h2 className="c-h2">No possible duplicates</h2>
-          <p className="c-s15 c-t2 max-w-[460px]">{`No two ${words.people} on your list share a name, a phone or a member number.`}</p>
+          <h2 className="c-h2">No possible duplicates to review</h2>
+          <p className="c-s15 c-t2 max-w-[460px]">Pairs you marked as different people aren&apos;t shown again.</p>
           <Link to={back} className="c-btn c-btn-s c-btn-lg mt-2">
             {`Back to ${words.people}`}
           </Link>
@@ -168,7 +174,7 @@ export default function MembersDuplicates() {
       {!page.loading && page.pairs.length > 0 ? (
         <>
           <p className="c-s14 c-t2 c-num" data-testid="duplicates-total">
-            {duplicatesSignWords(page.total, words)}
+            {duplicatesSignWords(page.total)}
           </p>
           <section className="c-card overflow-hidden">
             <ul>
@@ -177,6 +183,7 @@ export default function MembersDuplicates() {
                   <button
                     type="button"
                     data-testid="duplicate-pair"
+                    disabled={list === null}
                     onClick={() => setOpen({ id: pair.first.entryId, pair: { otherId: pair.second.entryId, why: pairWhyWords(pair) } })}
                     className="w-full flex items-center gap-3 text-left min-h-11 px-4 py-3.5 md:px-5"
                   >

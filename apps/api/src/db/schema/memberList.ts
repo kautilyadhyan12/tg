@@ -165,7 +165,7 @@ export const gymMemberListEntries = pgTable(
     reviewChecked: text("review_checked").array().notNull().default(sql`'{}'::text[]`),
     /** THE NAME'S WORDS, FOLDED AND SORTED (`samePerson.ts` `nameKey`), written with the name
      *  by every write, so possible duplicates (5b-iv-a) are found by one indexed join; '' for
-     *  a name with no words, NULL on a record older than 0055 until
+     *  a name with no words, NULL on a record older than 0056 until
      *  `tools/member-name-keys.ts` fills it. */
     nameKey: text("name_key"),
     identityKey: text("identity_key").notNull(),

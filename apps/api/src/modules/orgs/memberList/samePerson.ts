@@ -58,7 +58,7 @@ const nameWords = (fullName: string): string | null => {
 };
 const nameWordsOf = (who: WhoFields): string | null => nameWords(who.fullName);
 
-/** The most characters a stored name key holds (0055's CHECK). A name is at most 120
+/** The most characters a stored name key holds (0056's CHECK). A name is at most 120
  *  characters, but folding can lengthen one (NFKD spells some signs out whole). */
 export const NAME_KEY_MAX_CHARS = 400;
 

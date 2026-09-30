@@ -36,6 +36,7 @@ import {
   untickFromAll,
 } from './memberListPeople';
 import { FIELD_LABELS } from './memberListView';
+import CONTRACT from '../../../../../packages/shared/test/fixtures/mergeContract.json';
 
 const FIELDS = [
   { key: 'locker', label: 'Locker' },
@@ -354,6 +355,17 @@ describe("Merge duplicate's preview of the one record it leaves (the server's ru
     expect(why.membershipType).toBeUndefined();
     expect(why['extra:locker']).toBeUndefined();
     expect(Object.keys(why).sort()).toEqual(['email', 'fullName', 'joinedOn', 'memberNumber', 'phone', 'status']);
+  });
+
+  it("shows exactly what the server's merge leaves (the contract its api test runs for real)", () => {
+    const asEntry = (r, entryId) =>
+      entry({ ...r, entryId, formerAt: null, extra: CONTRACT.fields.map((f) => ({ key: f.key, label: f.label, value: r.extra[f.key] ?? '' })) });
+    const values = (preview) => preview.rows.map((r) => [r.key, r.value]);
+    const shown = mergePreview(asEntry(CONTRACT.keep, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'), asEntry(CONTRACT.gone, 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'), CONTRACT.fields);
+    // The server's result, read the same way: a record merged with nothing is itself.
+    const empty = asEntry({ fullName: '', email: null, phone: null, memberNumber: null, status: null, membershipType: null, joinedOn: null, endsOn: null, endsOnKind: null, paymentStatus: null, dateOfBirth: null, extra: {} }, 'cccccccc-cccc-4ccc-8ccc-cccccccccccc');
+    const server = mergePreview(asEntry(CONTRACT.merged, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'), empty, CONTRACT.fields);
+    expect(values(shown)).toEqual(values(server));
   });
 
   it('two past members stay a past member', () => {

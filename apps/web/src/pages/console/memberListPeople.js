@@ -701,9 +701,11 @@ export function reviewSignWords(n, words) {
 
 // ── Possible duplicates (5b-iv-a; RULINGS 2026-09-25, 2026-09-30) ──────────
 
-/** The Members sign: one pair is one member who may be there twice. */
-export function duplicatesSignWords(n, words) {
-  return n === 1 ? `1 ${words.person} may be on your list twice` : `${n.toLocaleString('en')} ${words.people} may be on your list twice`;
+/** The Members sign and the page's count: what is counted is PAIRS, so it says pairs
+ *  ("possible duplicates", as HubSpot's tool does). Three records of one name are three
+ *  pairs, and "3 members may be on your list twice" would be false. */
+export function duplicatesSignWords(n) {
+  return n === 1 ? '1 possible duplicate' : `${n.toLocaleString('en')} possible duplicates`;
 }
 
 /** What a pair's two records share: "Same name", "Same name and phone". */

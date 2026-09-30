@@ -197,7 +197,20 @@ describe('the possible duplicates page', () => {
     expect(rows[1].textContent).toContain('Beatrice Hart');
     expect(within(rows[1]).getAllByText('Past member')).toHaveLength(1);
     expect(within(rows[0]).queryByText('Past member')).toBeNull();
-    expect(screen.getByTestId('duplicates-total').textContent).toBe('2 members may be on your list twice');
+    expect(screen.getByTestId('duplicates-total').textContent).toBe('2 possible duplicates');
+  });
+
+  it("when the gym's columns cannot be read, says so and opens no pair (it would leave out the custom fields)", async () => {
+    orgService.getMemberListDuplicates.mockResolvedValue(pairsPage([ADA_PAIR]));
+    orgService.getMemberList.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ data: { list: view({ count: 1 }) } });
+    drawPage();
+    const row = (await pairRows())[0];
+    expect(await screen.findByText(/Couldn't reach the server/)).toBeTruthy();
+    expect(row.disabled).toBe(true);
+    fireEvent.click(row);
+    expect(screen.queryByTestId('member-person')).toBeNull();
+    fireEvent.click(screen.getAllByRole('button', { name: /Try again/ })[0]);
+    await waitFor(() => expect(screen.getAllByTestId('duplicate-pair')[0].disabled).toBe(false));
   });
 
   it('brings the next fifty with Load more, after the ones already shown', async () => {
@@ -209,10 +222,13 @@ describe('the possible duplicates page', () => {
     expect(orgService.getMemberListDuplicates).toHaveBeenLastCalledWith(GYM, 'next');
   });
 
-  it('with no pairs left says so, with the way back to Members', async () => {
+  it('with no pairs left says so, never that no two records share anything, with the way back to Members', async () => {
     orgService.getMemberListDuplicates.mockResolvedValue(pairsPage([]));
     drawPage();
-    expect(await screen.findByTestId('duplicates-none')).toBeTruthy();
+    const none = await screen.findByTestId('duplicates-none');
+    expect(none.textContent).toContain('No possible duplicates to review');
+    expect(none.textContent).toContain("Pairs you marked as different people aren't shown again.");
+    expect(none.textContent).not.toMatch(/share a name/);
     fireEvent.click(screen.getByRole('link', { name: 'Back to members' }));
     expect(await screen.findByText('the members page')).toBeTruthy();
   });
@@ -232,7 +248,7 @@ describe('the sign atop Members', () => {
   it('says how many, and Review goes to the page', async () => {
     drawPanel();
     const sign = await screen.findByTestId('duplicates-sign');
-    expect(within(sign).getByText('2 members may be on your list twice')).toBeTruthy();
+    expect(within(sign).getByText('2 possible duplicates')).toBeTruthy();
     fireEvent.click(within(sign).getByTestId('duplicates-review'));
     expect(await screen.findByText('the duplicates page')).toBeTruthy();
   });
@@ -252,7 +268,9 @@ describe('the words', () => {
     expect(
       [pair(true, false, false), pair(false, true, false), pair(false, false, true), pair(true, true, false), pair(true, true, true), pair(false, true, true)].map(pairWhyWords),
     ).toEqual(['Same name', 'Same phone', 'Same member number', 'Same name and phone', 'Same name, phone and member number', 'Same phone and member number']);
-    expect(duplicatesSignWords(1, WORDS)).toBe('1 member may be on your list twice');
-    expect(duplicatesSignWords(1200, WORDS)).toBe('1,200 members may be on your list twice');
+    // The count is of pairs, and says pairs: three records of one name are three pairs.
+    expect(duplicatesSignWords(1)).toBe('1 possible duplicate');
+    expect(duplicatesSignWords(3)).toBe('3 possible duplicates');
+    expect(duplicatesSignWords(1200)).toBe('1,200 possible duplicates');
   });
 });

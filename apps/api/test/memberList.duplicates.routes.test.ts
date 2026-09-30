@@ -10,6 +10,9 @@ import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { everyoneLeft } from "./memberListEveryoneLeft.js";
 import { loadConfig } from "../src/config.js";
+import { readFileSync } from "node:fs";
+import { fillNameKeys } from "../src/modules/orgs/memberList/nameKeys.js";
+import { writeNameKeys } from "../src/modules/orgs/memberList/repo.js";
 import { nameKey } from "../src/modules/orgs/memberList/samePerson.js";
 import {
   memberListDuplicatesPageResponseSchema,
@@ -19,6 +22,28 @@ import {
   type MemberListDuplicatePair,
   type MemberListPreview,
 } from "@app/shared";
+
+/** Merge duplicate's contract, shared with the web test of the preview
+ *  (`memberListPeople.test.js`): the server's merge of `gone` into `keep` leaves `merged`. */
+interface ContractRecord {
+  fullName: string;
+  email: string | null;
+  phone: string | null;
+  memberNumber: string | null;
+  status: string | null;
+  membershipType: string | null;
+  joinedOn: string | null;
+  endsOn: string | null;
+  endsOnKind: string | null;
+  paymentStatus: string | null;
+  dateOfBirth: string | null;
+  extra: Record<string, string>;
+}
+const CONTRACT = JSON.parse(readFileSync(new URL("../../../packages/shared/test/fixtures/mergeContract.json", import.meta.url), "utf8")) as {
+  keep: ContractRecord;
+  gone: ContractRecord;
+  merged: ContractRecord;
+};
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -492,6 +517,148 @@ d("member list: possible duplicates (real Postgres)", () => {
       expect(all).toHaveLength(60);
       expect(new Set(all.map((pair) => `${pair.first.entryId}/${pair.second.entryId}`)).size).toBe(60);
       expect(all.map((pair) => pair.first.fullName)).toEqual([...all.map((pair) => pair.first.fullName)].sort());
+    },
+    TEST_TIMEOUT_MS,
+  );
+  it(
+    "Merge leaves exactly the record the screen's preview shows (the shared contract)",
+    async () => {
+      const owner = await makeUser("contract-owner");
+      const org = await makeOrg(owner, "Duplicates Contract Gym");
+      const gym = org.org.id;
+      const cell = (v: string | null) => v ?? "";
+      const local = (phone: string | null) => (phone === null ? "" : phone.replace("+91", ""));
+      const row = (r: ContractRecord) => [
+        r.fullName, cell(r.email), local(r.phone), cell(r.memberNumber), cell(r.status), cell(r.membershipType),
+        cell(r.joinedOn), cell(r.endsOn), cell(r.paymentStatus), cell(r.dateOfBirth), r.extra["locker"] ?? "", r.extra["notes"] ?? "",
+      ];
+      await importFile(gym, owner, [
+        ["Name", "Email", "Mobile", "Member number", "Status", "Membership", "Join date", "Renewal date", "Payment status", "Date of birth", "Locker", "Notes"],
+        row(CONTRACT.keep),
+        row(CONTRACT.gone),
+      ]);
+      const read = async (): Promise<(ContractRecord & { id: string })[]> =>
+        (
+          await sql<
+            {
+              id: string;
+              full_name: string;
+              email: string | null;
+              phone_e164: string | null;
+              member_number: string | null;
+              status: string | null;
+              membership_type: string | null;
+              joined_on: string | null;
+              ends_on: string | null;
+              ends_on_kind: string | null;
+              payment_status: string | null;
+              date_of_birth: string | null;
+              extra: Record<string, string>;
+            }[]
+          >`
+            SELECT id, full_name, email::text AS email, phone_e164, member_number, status, membership_type,
+                   joined_on::text AS joined_on, ends_on::text AS ends_on, ends_on_kind, payment_status,
+                   date_of_birth::text AS date_of_birth, extra
+            FROM gym_member_list_entries WHERE gym_id = ${gym} ORDER BY full_name`
+        ).map((r) => ({
+          id: r.id,
+          fullName: r.full_name,
+          email: r.email,
+          phone: r.phone_e164,
+          memberNumber: r.member_number,
+          status: r.status,
+          membershipType: r.membership_type,
+          joinedOn: r.joined_on,
+          endsOn: r.ends_on,
+          endsOnKind: r.ends_on_kind,
+          paymentStatus: r.payment_status,
+          dateOfBirth: r.date_of_birth,
+          extra: { locker: r.extra["locker"] ?? "", notes: r.extra["notes"] ?? "" },
+        }));
+      const before = await read();
+      const keep = before.find((r) => r.fullName === CONTRACT.keep.fullName);
+      const gone = before.find((r) => r.fullName === CONTRACT.gone.fullName);
+      if (keep === undefined || gone === undefined) throw new Error("the file did not make both records");
+      // The file wrote the two records exactly as the contract has them.
+      expect({ ...keep, id: undefined }).toEqual({ ...CONTRACT.keep, id: undefined });
+      expect({ ...gone, id: undefined }).toEqual({ ...CONTRACT.gone, id: undefined });
+      const merged = await post(`${listUrl(gym)}/entries/${gone.id}/merge`, { keepEntryId: keep.id }, owner.cookies);
+      expect(merged.statusCode, merged.body).toBe(200);
+      const after = await read();
+      expect(after).toHaveLength(1);
+      expect({ ...after[0], id: undefined }).toEqual({ ...CONTRACT.merged, id: undefined });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "the rule's edges: five records on one phone are ten pairs and six are none; three of one name are three pairs, and the sign counts pairs",
+    async () => {
+      const owner = await makeUser("edges-owner");
+      const org = await makeOrg(owner, "Duplicates Edges Gym");
+      const gym = org.org.id;
+      for (const name of ["Ann A", "Ben B", "Cat C", "Dan D", "Eve E"]) await add(gym, owner, { fullName: name, phone: "9876500020" });
+      for (const name of ["Fay F", "Gus G", "Hal H", "Ida I", "Jo J", "Kit K"]) await add(gym, owner, { fullName: name, phone: "9876500021" });
+      for (let i = 0; i < 3; i++) await add(gym, owner, { fullName: "Lee Triple", email: `lee${String(i)}@members.example` });
+      const pairs = await pairsOf(gym, owner);
+      expect(pairs.filter((p) => p.samePhone && p.first.phone === "+919876500020")).toHaveLength(10);
+      expect(pairs.filter((p) => p.first.phone === "+919876500021")).toHaveLength(0);
+      expect(pairs.filter((p) => p.sameName && p.first.fullName === "Lee Triple")).toHaveLength(3);
+      expect(pairs).toHaveLength(13);
+      // The sign counts pairs, and the screen words it as pairs ("13 possible duplicates").
+      expect(await signOf(gym, owner)).toBe(13);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a page break between two pairs that share their first record loses neither",
+    async () => {
+      const owner = await makeUser("break-owner");
+      const org = await makeOrg(owner, "Duplicates Break Gym");
+      const gym = org.org.id;
+      const rows: string[][] = [["Name", "Email"]];
+      for (let i = 0; i < 49; i++) {
+        const name = `Pair ${String(i).padStart(2, "0")} Person`;
+        rows.push([name, `q${String(i)}a@members.example`], [name, `q${String(i)}b@members.example`]);
+      }
+      // Three records of one name, last in the order: pairs 50, 51 and 52, the first two
+      // sharing their first record, across the page's end at fifty.
+      for (const letter of ["a", "b", "c"]) rows.push(["Pair 49 Person", `q49${letter}@members.example`]);
+      await importFile(gym, owner, rows);
+      const first = memberListDuplicatesPageResponseSchema.parse(JSON.parse((await get(dupUrl(gym), owner.cookies)).body)).page;
+      expect(first.pairs).toHaveLength(50);
+      const fiftieth = first.pairs[49];
+      expect(fiftieth?.first.fullName).toBe("Pair 49 Person");
+      const all = await pairsOf(gym, owner);
+      expect(all).toHaveLength(52);
+      expect(new Set(all.map((pair) => `${pair.first.entryId}/${pair.second.entryId}`)).size).toBe(52);
+      expect(all.filter((pair) => pair.first.fullName === "Pair 49 Person")).toHaveLength(3);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "the fill tool gives older records the key of their name, and never a stale one over a rename",
+    async () => {
+      const owner = await makeUser("fill-owner");
+      const org = await makeOrg(owner, "Duplicates Fill Gym");
+      const gym = org.org.id;
+      const a = await add(gym, owner, { fullName: "Shah, Priya", email: "p1@members.example" });
+      const b = await add(gym, owner, { fullName: "José  Álvarez", email: "j1@members.example" });
+      const c = await add(gym, owner, { fullName: "Old Name", email: "o1@members.example" });
+      // As a record written before 0056 holds it.
+      await sql`UPDATE gym_member_list_entries SET name_key = NULL WHERE gym_id = ${gym}`;
+      expect(await signOf(gym, owner)).toBe(0);
+      // A key worked out from a name the record no longer holds is not written.
+      await sql`UPDATE gym_member_list_entries SET full_name = 'New Name' WHERE id = ${c}`;
+      expect(await writeNameKeys(sql, [{ id: c, fullName: "Old Name", nameKey: nameKey("Old Name") }])).toBe(0);
+      expect(await fillNameKeys(sql, [gym])).toBe(3);
+      expect(await fillNameKeys(sql, [gym])).toBe(0);
+      const keys = await sql<{ id: string; full_name: string; name_key: string | null }[]>`
+        SELECT id, full_name, name_key FROM gym_member_list_entries WHERE gym_id = ${gym}`;
+      for (const row of keys) expect(row.name_key, row.full_name).toBe(nameKey(row.full_name));
+      expect(Object.fromEntries(keys.map((r) => [r.id, r.name_key]))).toEqual({ [a]: "priya shah", [b]: "alvarez jose", [c]: "name new" });
     },
     TEST_TIMEOUT_MS,
   );
