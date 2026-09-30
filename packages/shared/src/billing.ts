@@ -26,14 +26,14 @@ export const PAID_PLAN_GRACE_DAYS = 2;
 export const orgCheckoutRequestSchema = z.object({ planCode: z.string().min(1).max(64) }).strict();
 export type OrgCheckoutRequest = z.infer<typeof orgCheckoutRequestSchema>;
 
-/** What the browser needs to open the payment window for the checkout our server made:
- *  Paddle's for the transaction, or Razorpay's for the subscription (an Indian gym, 1d-i). */
 /** An email a payment window can be filled in with. The server sends an owner's email only
  *  when it passes this, and none otherwise (the window then asks), since a stored email may
  *  be in a shape this refuses (a Google or migrated account) and the console reads the reply
  *  through this schema. */
 export const payerEmailSchema = z.string().email().max(254);
 
+/** What the browser needs to open the payment window for the checkout our server made:
+ *  Paddle's for the transaction, or Razorpay's for the subscription (an Indian gym, 1d-i). */
 export const orgCheckoutResponseSchema = z.discriminatedUnion("provider", [
   z.object({
     checkoutId: z.string().uuid(),

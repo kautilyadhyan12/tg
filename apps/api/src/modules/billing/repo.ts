@@ -574,9 +574,6 @@ export async function managedPlanFor(sql: SqlOrTx, gymId: string): Promise<Manag
   };
 }
 
-/** The other gyms paid by this Paddle customer. Paddle keeps one customer per email and
- *  reuses it at checkout, and its portal signs in as the whole customer, so every one of
- *  these gyms' plans, invoices and card is on the page this gym's staff would open. */
 /** The gym's owner, for the words of a refusal: their account and the name they go by. */
 export async function gymOwner(sql: SqlOrTx, gymId: string): Promise<{ userId: string; displayName: string } | null> {
   const rows = await sql<{ id: string; display_name: string }[]>`
@@ -585,6 +582,9 @@ export async function gymOwner(sql: SqlOrTx, gymId: string): Promise<{ userId: s
   return row === undefined ? null : { userId: row.id, displayName: row.display_name };
 }
 
+/** The other gyms paid by this Paddle customer. Paddle keeps one customer per email and
+ *  reuses it at checkout, and its portal signs in as the whole customer, so every one of
+ *  these gyms' plans, invoices and card is on the page this gym's staff would open. */
 export async function otherGymsOfCustomer(sql: SqlOrTx, input: { customerRef: string; gymId: string }): Promise<string[]> {
   const rows = await sql<{ owner_id: string }[]>`
     SELECT DISTINCT owner_id FROM subscriptions
