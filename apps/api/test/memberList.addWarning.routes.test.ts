@@ -437,6 +437,19 @@ d("member list: may already be on your list (real Postgres)", () => {
       expect(warnings).toHaveLength(1);
       expect(warnings[0]?.map((m) => m.entryId)).toEqual(added.map((x) => ("added" in x ? x.added : "")));
       expect(await recordsIn(gym)).toHaveLength(1);
+
+      // Two desks both shown Zara's record press Add anyway at the same instant: one is added,
+      // the other is warned again, naming Zara and the record just added.
+      const zara = added.map((x) => ("added" in x ? x.added : ""))[0] ?? "";
+      const [c, e] = await Promise.all([
+        tryAdd(gym, owner, { fullName: "Zara Khan", phone: "9876500202", acknowledgedDuplicates: [zara] }),
+        tryAdd(gym, owner, { fullName: "Zara Khan", phone: "9876500203", acknowledgedDuplicates: [zara] }),
+      ]);
+      const addedNow = [c, e].flatMap((x) => ("added" in x ? [x.added] : []));
+      const warnedAgain = [c, e].flatMap((x) => ("warned" in x ? [x.warned] : []));
+      expect(addedNow).toHaveLength(1);
+      expect(new Set(warnedAgain[0]?.map((m) => m.entryId))).toEqual(new Set([zara, ...addedNow]));
+      expect(await recordsIn(gym)).toHaveLength(2);
     },
     TEST_TIMEOUT_MS,
   );

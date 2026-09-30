@@ -15,7 +15,9 @@ import { readFileSync } from "node:fs";
 import { fillNameKeys } from "../src/modules/orgs/memberList/nameKeys.js";
 import { writeNameKeys } from "../src/modules/orgs/memberList/repo.js";
 import { nameKey } from "../src/modules/orgs/memberList/samePerson.js";
+import { identityKey } from "../src/modules/orgs/memberList/fields.js";
 import {
+  MEMBER_LIST_DUPLICATES_KEPT,
   memberListDuplicatesPageResponseSchema,
   memberListEntryWrittenSchema,
   memberListNotDuplicatesResponseSchema,
@@ -197,7 +199,8 @@ d("member list: possible duplicates (real Postgres)", () => {
   };
 
   /** Every pair on the gym's page, walked to the end, as the page says them. */
-  const pairsOf = async (gymId: string, who: User): Promise<MemberListDuplicatePair[]> => {
+  /** Every pair on the gym's page, walked to the end; `shown` when fewer than all are kept. */
+  const pairsOf = async (gymId: string, who: User, shown?: number): Promise<MemberListDuplicatePair[]> => {
     const all: MemberListDuplicatePair[] = [];
     let cursor: string | null = null;
     for (let pages = 0; pages < 20; pages++) {
@@ -207,7 +210,7 @@ d("member list: possible duplicates (real Postgres)", () => {
       all.push(...page.pairs);
       cursor = page.cursor;
       if (cursor === null) {
-        expect(all.length).toBe(page.total);
+        expect(all.length).toBe(shown ?? page.total);
         return all;
       }
     }
@@ -660,6 +663,134 @@ d("member list: possible duplicates (real Postgres)", () => {
         SELECT id, full_name, name_key FROM gym_member_list_entries WHERE gym_id = ${gym}`;
       for (const row of keys) expect(row.name_key, row.full_name).toBe(nameKey(row.full_name));
       expect(Object.fromEntries(keys.map((r) => [r.id, r.name_key]))).toEqual({ [a]: "priya shah", [b]: "alvarez jose", [c]: "name new" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // ── THE PAIRS KEPT (the feature's security pass, H1) ──
+  // A page is read from the pairs worked out once, never worked out per read: a gym built to
+  // the rule's worst shape cannot keep the one database connection busy for every other gym.
+
+  /** The stored pairs' physical rows: the same after a read means the read wrote nothing. */
+  const storedRows = async (gymId: string): Promise<string[]> =>
+    (await sql<{ ctid: string }[]>`SELECT ctid::text AS ctid FROM gym_member_list_pairs WHERE gym_id = ${gymId} ORDER BY 1`).map((r) => r.ctid);
+  const listRow = async (gymId: string) =>
+    (
+      await sql<{ pairs_stamp: string | null; pairs_count: number | null; pairs_kept: number | null }[]>`
+        SELECT pairs_stamp, pairs_count, pairs_kept FROM gym_member_lists WHERE gym_id = ${gymId}`
+    )[0];
+
+  it(
+    "a read with nothing changed writes nothing; a change to one record is on the next read",
+    async () => {
+      const owner = await makeUser("kept-owner");
+      const gym = (await makeOrg(owner, "Kept Gym")).org.id;
+      const a = await add(gym, owner, { fullName: "Ivy Moss", email: "ivy@members.example" });
+      await add(gym, owner, { fullName: "Ivy Moss", phone: "9876512001" });
+      const c = await add(gym, owner, { fullName: "Kit Lane", phone: "9876512002" });
+      expect((await pairsOf(gym, owner)).map(said)).toEqual(["Ivy Moss | Ivy Moss | name"]);
+      const rows = await storedRows(gym);
+      expect(rows).toHaveLength(1);
+      expect(await signOf(gym, owner)).toBe(1);
+      await pairsOf(gym, owner);
+      expect(await storedRows(gym)).toEqual(rows);
+
+      // Kit given Ivy's first record's phone by Edit: a new pair on the next read.
+      expect((await patch(`${listUrl(gym)}/entries/${c}`, { phone: "9876512001" }, owner.cookies)).statusCode).toBe(200);
+      expect((await pairsOf(gym, owner)).map(saidEitherWay).sort()).toEqual(["Ivy Moss | Ivy Moss | name", "Ivy Moss | Kit Lane | phone"]);
+      // Ivy's first record renamed: her name pair goes on the next read.
+      expect((await patch(`${listUrl(gym)}/entries/${a}`, { fullName: "Ivy Mossley" }, owner.cookies)).statusCode).toBe(200);
+      expect((await pairsOf(gym, owner)).map(saidEitherWay)).toEqual(["Ivy Moss | Kit Lane | phone"]);
+      expect(await signOf(gym, owner)).toBe(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "past the pairs kept, the page lists the first ones by name, the count is exact, and the next ones come once those are dealt with",
+    async () => {
+      const owner = await makeUser("cap-owner");
+      const gym = (await makeOrg(owner, "Cap Gym")).org.id;
+      await add(gym, owner, { fullName: "Aaron Ames", email: "aaron@members.example" });
+      // 1,005 records, 201 names held by five each: 2,010 pairs.
+      const people = Array.from({ length: 1005 }, (_, i) => {
+        const fullName = `Cap Name ${String(Math.floor(i / 5)).padStart(3, "0")}`;
+        const email = `cap${String(i)}@members.example`;
+        return { full_name: fullName, name_key: nameKey(fullName), email, identity_key: identityKey({ fullName, email, phone: null, memberNumber: null }) };
+      });
+      await sql`
+        INSERT INTO gym_member_list_entries (gym_id, full_name, name_key, email, identity_key, source)
+        SELECT ${gym}, r.full_name, r.name_key, r.email, r.identity_key, 'upload'
+        FROM jsonb_to_recordset(${sql.json(people)}) AS r(full_name text, name_key text, email text, identity_key text)`;
+      expect(await signOf(gym, owner)).toBe(2010);
+      const shown = await pairsOf(gym, owner, MEMBER_LIST_DUPLICATES_KEPT);
+      expect(shown).toHaveLength(MEMBER_LIST_DUPLICATES_KEPT);
+      expect(shown[0]?.first.fullName).toBe("Cap Name 000");
+      expect(shown[shown.length - 1]?.first.fullName).toBe("Cap Name 099");
+      expect(await listRow(gym)).toMatchObject({ pairs_count: 2010, pairs_kept: MEMBER_LIST_DUPLICATES_KEPT });
+
+      // Different people on two records that are no pair, past the kept ones: whether it was
+      // one is not known without working them out, so the count is not guessed down.
+      const lone = await add(gym, owner, { fullName: "Zed Lone", phone: "9876512100" });
+      const aaron = (await sql<{ id: string }[]>`SELECT id FROM gym_member_list_entries WHERE gym_id = ${gym} AND full_name = 'Aaron Ames'`)[0]?.id ?? "";
+      expect(await signOf(gym, owner)).toBe(2010);
+      const marked = await post(differentUrl(gym), { entryIds: [lone, aaron] }, owner.cookies);
+      expect(marked.statusCode).toBe(200);
+      expect(memberListNotDuplicatesResponseSchema.parse(JSON.parse(marked.body)).duplicates).toEqual({ count: 2010 });
+      expect(await signOf(gym, owner)).toBe(2010);
+
+      // Every kept pair dealt with (as if merged or marked): the next read brings the next ones.
+      await sql`DELETE FROM gym_member_list_pairs WHERE gym_id = ${gym}`;
+      await sql`UPDATE gym_member_lists SET pairs_kept = 0 WHERE gym_id = ${gym}`;
+      const next = memberListDuplicatesPageResponseSchema.parse(JSON.parse((await get(dupUrl(gym), owner.cookies)).body)).page;
+      expect(next).toMatchObject({ total: 2010, kept: MEMBER_LIST_DUPLICATES_KEPT });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "pairs worked out slowly moments ago are read as they are for a minute; Different people still takes its pair off at once",
+    async () => {
+      const owner = await makeUser("rest-owner");
+      const gym = (await makeOrg(owner, "Rest Gym")).org.id;
+      const a = await add(gym, owner, { fullName: "Nia Cole", email: "nia@members.example" });
+      const b = await add(gym, owner, { fullName: "Nia Cole", phone: "9876512201" });
+      await add(gym, owner, { fullName: "Oli Park", email: "oli@members.example" });
+      expect(await signOf(gym, owner)).toBe(1);
+      // As if that took two seconds, just now.
+      await sql`UPDATE gym_member_lists SET pairs_cost_ms = 2000, pairs_built_at = now() WHERE gym_id = ${gym}`;
+      await add(gym, owner, { fullName: "Oli Park", phone: "9876512202" });
+      expect(await signOf(gym, owner)).toBe(1);
+
+      expect((await post(differentUrl(gym), { entryIds: [a, b] }, owner.cookies)).statusCode).toBe(200);
+      expect(await pairsOf(gym, owner)).toEqual([]);
+      expect(await signOf(gym, owner)).toBe(0);
+
+      // A minute on: worked out again, Oli's pair shows.
+      await sql`UPDATE gym_member_lists SET pairs_built_at = now() - interval '2 minutes' WHERE gym_id = ${gym}`;
+      expect((await pairsOf(gym, owner)).map(said)).toEqual(["Oli Park | Oli Park | name"]);
+      // Quick work never rests: another pair shows on the very next read.
+      await add(gym, owner, { fullName: "Nia Cole", phone: "9876512203", memberNumber: "N-9" });
+      expect(await signOf(gym, owner)).toBe(3);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "Different people is refused, and nothing remembered, for a gym with no plan; one record twice says why",
+    async () => {
+      const owner = await makeUser("noplan-owner");
+      const gym = (await makeOrg(owner, "No Plan Gym")).org.id;
+      const a = await add(gym, owner, { fullName: "Rae Dunn", email: "rae@members.example" });
+      const b = await add(gym, owner, { fullName: "Rae Dunn", phone: "9876512301" });
+      const twice = await post(differentUrl(gym), { entryIds: [a, a.toUpperCase()] }, owner.cookies);
+      expect(twice.statusCode).toBe(400);
+      expect((JSON.parse(twice.body) as { message: string }).message).toBe("entryIds: Two different records are needed.");
+      await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gym}`;
+      const refused = await post(differentUrl(gym), { entryIds: [a, b] }, owner.cookies);
+      expect(refused.statusCode).toBe(409);
+      expect((JSON.parse(refused.body) as { error: string }).error).toBe("gym_not_on_plan");
+      expect(await remembered(gym)).toEqual([]);
     },
     TEST_TIMEOUT_MS,
   );

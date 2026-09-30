@@ -91,7 +91,9 @@ const side = (id, past = false) => {
 };
 const ADA_PAIR = { first: side(ADA_1), second: side(ADA_2), sameName: true, samePhone: false, sameMemberNumber: false };
 const BEA_PAIR = { first: side(BEA_1), second: side(BEA_2, true), sameName: false, samePhone: true, sameMemberNumber: false };
-const pairsPage = (pairs, total = pairs.length, cursor = null) => ({ data: { page: memberListDuplicatesPageSchema.parse({ total, pairs, cursor }) } });
+const pairsPage = (pairs, total = pairs.length, cursor = null, kept = Math.min(total, 1000)) => ({
+  data: { page: memberListDuplicatesPageSchema.parse({ total, kept, pairs, cursor }) },
+});
 
 const gymRow = {
   id: GYM,
@@ -198,6 +200,21 @@ describe('the possible duplicates page', () => {
     expect(within(rows[1]).getAllByText('Past member')).toHaveLength(1);
     expect(within(rows[0]).queryByText('Past member')).toBeNull();
     expect(screen.getByTestId('duplicates-total').textContent).toBe('2 possible duplicates');
+  });
+
+  it('past the pairs kept ready, says which ones it lists and that the next ones follow; a normal list says nothing more', async () => {
+    orgService.getMemberListDuplicates.mockResolvedValue(pairsPage([ADA_PAIR, BEA_PAIR], 60000, null, 1000));
+    drawPage();
+    await pairRows();
+    expect(screen.getByTestId('duplicates-total').textContent).toBe('60,000 possible duplicates');
+    expect(screen.getByTestId('duplicates-kept').textContent).toBe(
+      'Showing the first 1,000 of 60,000. Merge them or choose Different people, and the next ones will show here.',
+    );
+    cleanup();
+    orgService.getMemberListDuplicates.mockResolvedValue(pairsPage([ADA_PAIR, BEA_PAIR]));
+    drawPage();
+    await pairRows();
+    expect(screen.queryByTestId('duplicates-kept')).toBeNull();
   });
 
   it("when the gym's columns cannot be read, says so and opens no pair (it would leave out the custom fields)", async () => {

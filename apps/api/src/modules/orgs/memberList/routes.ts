@@ -83,10 +83,10 @@ function parseOr400<S extends z.ZodTypeAny>(
   const parsed: z.SafeParseReturnType<unknown, z.output<S>> = schema.safeParse(value);
   if (!parsed.success) {
     // Issue paths and codes only, never the offending value (R3.10): the value
-    // here is a member list.
+    // here is a member list. A check of our own says its own sentence, which holds none.
     void reply.status(400).send({
       error: "validation_error",
-      message: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.code}`).join("; "),
+      message: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.code === "custom" ? i.message : i.code}`).join("; "),
       requestId: req.id,
     });
     return null;

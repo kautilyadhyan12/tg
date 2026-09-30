@@ -722,6 +722,12 @@ export function duplicatesSignWords(n) {
   return n === 1 ? '1 possible duplicate' : `${n.toLocaleString('en')} possible duplicates`;
 }
 
+/** Past the pairs kept ready (MEMBER_LIST_DUPLICATES_KEPT): which ones this page lists, and
+ *  that the rest follow. */
+export function duplicatesKeptWords(kept, total) {
+  return `Showing the first ${kept.toLocaleString('en')} of ${total.toLocaleString('en')}. Merge them or choose Different people, and the next ones will show here.`;
+}
+
 /** What a pair's two records share: "Same name", "Same name and phone". */
 export function pairWhyWords(pair) {
   const what = [pair.sameName ? 'name' : null, pair.samePhone ? 'phone' : null, pair.sameMemberNumber ? 'member number' : null].filter((w) => w !== null);

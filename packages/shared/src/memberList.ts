@@ -540,6 +540,10 @@ export type MemberListReviewQuery = z.infer<typeof memberListReviewQuerySchema>;
 export const memberListDuplicatesSignSchema = z.object({ count: z.number().int().min(0) }).strict();
 export type MemberListDuplicatesSign = z.infer<typeof memberListDuplicatesSignSchema>;
 export const MEMBER_LIST_DUPLICATES_PAGE = 50;
+/** The most pairs kept ready to page through (the feature's security pass, H1): the first
+ *  1,000 by name, twenty pages. A gym with more is told so, and the next ones show as staff
+ *  merge or mark these. A real list has a few per hundred records. */
+export const MEMBER_LIST_DUPLICATES_KEPT = 1_000;
 export const memberListDuplicatePersonSchema = z
   .object({
     entryId: z.string().uuid(),
@@ -565,6 +569,9 @@ export type MemberListDuplicatePair = z.infer<typeof memberListDuplicatePairSche
 export const memberListDuplicatesPageSchema = z
   .object({
     total: z.number().int().min(0),
+    /** How many of `total` are kept ready to page through; fewer than `total` only past
+     *  `MEMBER_LIST_DUPLICATES_KEPT`. */
+    kept: z.number().int().min(0).max(MEMBER_LIST_DUPLICATES_KEPT),
     pairs: z.array(memberListDuplicatePairSchema).max(MEMBER_LIST_DUPLICATES_PAGE),
     cursor: z.string().nullable(),
   })

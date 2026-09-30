@@ -36,6 +36,7 @@ export async function readDuplicatesPage(
   const last = page.pairs.length > MEMBER_LIST_DUPLICATES_PAGE ? shown[shown.length - 1] : undefined;
   return {
     total: page.total,
+    kept: page.kept,
     pairs: shown,
     cursor: last === undefined ? null : encodePairCursor({ name: last.first.fullName, id: last.first.entryId, second: last.second.entryId }),
   };
@@ -57,8 +58,10 @@ export async function markDifferentPeople(
     await repo.lockGym(tx, gymId);
     const [a, b] = await Promise.all([repo.entryFor(tx, gymId, entryIds[0]), repo.entryFor(tx, gymId, entryIds[1])]);
     if (a === null || b === null) throw notFound();
+    const before = await repo.pairsStamp(tx, gymId);
     // The ids as stored, so the pair's order is the database's own.
     if (!(await repo.markNotDuplicates(tx, gymId, a.id, b.id))) return;
+    await repo.dropMarkedPair(tx, gymId, a.id, b.id, before);
     await insertAudit(tx, {
       actorUserId: userId,
       gymId,
