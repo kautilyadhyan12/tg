@@ -856,7 +856,7 @@ describe('the banner for a trial the gym has paid for', () => {
     const text = bannerFor(trialing(2), NOW)?.text;
     expect(text).toContain('To keep them, choose a plan under Plan on the Overview: you pay today and get its full size at once.');
     expect(text).not.toContain('when the trial ends');
-    expect(bannerFor(trialing(2, { staffRole: 'trainer', privileges: ['members.read'] }), NOW)?.text).not.toContain('Choose a plan');
+    expect(bannerFor(trialing(2, { staffRole: 'trainer', privileges: ['members.read'] }), NOW)?.text).not.toContain('choose a plan');
   });
 
   it('never points a full trial at a bigger size, paid for or not', () => {
