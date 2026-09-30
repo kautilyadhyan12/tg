@@ -25,6 +25,9 @@ import {
   type MemberListNotThemRequest,
   type MemberListReviewCheckedRequest,
   type MemberListReviewLine,
+  type MemberListReviewPage,
+  type MemberListReviewQuery,
+  MEMBER_LIST_REVIEW_PAGE,
   memberListFieldSchema,
   parseMemberListReviewKey,
   type MemberListRemoveUnlistedRequest,
@@ -50,6 +53,7 @@ import { withoutCardNumbers } from "./neverKeep.js";
 import { readCountry } from "./phone.js";
 import * as repo from "./repo.js";
 import { reviewAfterChecked, reviewAfterEdit, sameReview } from "./review.js";
+import { decodeEntryCursor, encodeEntryCursor } from "./cursor.js";
 import { appOrThrow, type MemberListDeps } from "./service.js";
 import { unlistedDigest, unlistedGroup, unlistedPage } from "./unlisted.js";
 
@@ -432,6 +436,41 @@ export async function changeEntry(
   if ("kind" in done) return done;
   if ("clash" in done) return { kind: "already_on_list", entryId: done.clash, former: done.former };
   return await finish(deps, gymId, done);
+}
+
+/** THE REVIEW PAGE (5b-v-d-iv; Kd at its click-through: "make a separate page"): the current
+ *  members an import found a problem with, by name, a page at a time, each with what is
+ *  wrong. Fetched one longer than shown, so a cursor never leads to an empty page. */
+export async function readReviewPage(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  query: MemberListReviewQuery,
+  limit: () => Promise<boolean>,
+): Promise<MemberListReviewPage | null> {
+  await requirePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return null;
+  const cursor = query.cursor === undefined ? null : decodeEntryCursor(query.cursor);
+  if (query.cursor !== undefined && cursor === null) {
+    throw new OrgsError(400, "bad_cursor", "That page of the list could not be read. Open the list again.");
+  }
+  const [page, fields] = await Promise.all([
+    repo.reviewPage(deps.sql, { gymId, cursor, limit: MEMBER_LIST_REVIEW_PAGE + 1 }),
+    repo.listFields(deps.sql, gymId),
+  ]);
+  const shown = page.people.slice(0, MEMBER_LIST_REVIEW_PAGE);
+  const last = page.people.length > MEMBER_LIST_REVIEW_PAGE ? shown[shown.length - 1] : undefined;
+  return {
+    total: page.total,
+    people: shown.map((person) => ({
+      entryId: person.entryId,
+      fullName: person.fullName,
+      email: person.email,
+      phone: person.phone,
+      review: reviewLines(person.needsReview, fields),
+    })),
+    cursor: last === undefined ? null : encodeEntryCursor({ name: last.fullName, id: last.entryId }),
+  };
 }
 
 /** It's correct (5b-v-d-iv): staff checked what the import found on one field and the

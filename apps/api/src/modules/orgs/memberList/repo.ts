@@ -19,7 +19,6 @@ import {
   MEMBER_LIST_MAX_EDITED_FIELDS,
   MEMBER_LIST_MAX_ENTRY_MEMBERS,
   MEMBER_LIST_MAX_REVIEW_ITEMS,
-  MEMBER_LIST_REVIEW_NAMES_SHOWN,
   MEMBER_LIST_STATUS_CHIPS_MAX,
   isMemberListReviewKey,
   memberListEditedFieldSchema,
@@ -2481,22 +2480,58 @@ export async function writeReviews(
   return rows.length;
 }
 
-/** The Members page's sign: how many current members need review, and the first of them
- *  by name. Reads only the marked records (`gym_member_list_entries_needs_review_idx`). */
+/** The Members page's sign: how many current members need review. Reads only the marked
+ *  records (`gym_member_list_entries_needs_review_idx`). */
 export async function reviewSign(sql: SqlOrTx, gymId: string): Promise<MemberListReviewSign> {
-  const rows = await sql<{ total: number; id: string | null; full_name: string | null }[]>`
+  const rows = await sql<{ total: number }[]>`
+    SELECT count(*)::int AS total FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND former_at IS NULL AND needs_review <> '{}'::text[]`;
+  return { count: rows[0]?.total ?? 0 };
+}
+
+/** One of the review page's people: their record's name, contact and review items. */
+export interface ReviewRow {
+  entryId: string;
+  fullName: string;
+  email: string | null;
+  phone: string | null;
+  needsReview: string[];
+}
+
+/** The review page: the current records needing review, by name, one page after `cursor`,
+ *  and how many there are in all, in one statement over the marked records only. */
+export async function reviewPage(
+  sql: SqlOrTx,
+  input: { gymId: string; cursor: { name: string; id: string } | null; limit: number },
+): Promise<{ total: number; people: ReviewRow[] }> {
+  const rows = await sql<
+    { total: number; id: string | null; full_name: string | null; email: string | null; phone_e164: string | null; needs_review: string[] | null }[]
+  >`
     WITH marked AS (
-      SELECT id, full_name FROM gym_member_list_entries
-      WHERE gym_id = ${gymId} AND former_at IS NULL AND needs_review <> '{}'::text[]
+      SELECT id, full_name, email::text AS email, phone_e164, needs_review FROM gym_member_list_entries
+      WHERE gym_id = ${input.gymId} AND former_at IS NULL AND needs_review <> '{}'::text[]
     )
-    SELECT (SELECT count(*)::int FROM marked) AS total, f.id, f.full_name
+    SELECT (SELECT count(*)::int FROM marked) AS total, f.id, f.full_name, f.email, f.phone_e164, f.needs_review
     FROM (SELECT 1) one
     LEFT JOIN LATERAL (
-      SELECT id, full_name FROM marked ORDER BY full_name, id LIMIT ${MEMBER_LIST_REVIEW_NAMES_SHOWN}
+      SELECT * FROM marked
+      WHERE ${input.cursor === null}
+         OR (marked.full_name, marked.id) > (${input.cursor?.name ?? ""}::text, ${input.cursor?.id ?? EMPTY_UUID}::uuid)
+      ORDER BY marked.full_name, marked.id
+      LIMIT ${input.limit}
     ) f ON true`;
-  const people: MemberListReviewSign["people"] = [];
-  for (const row of rows) if (row.id !== null) people.push({ entryId: row.id, fullName: row.full_name ?? "" });
-  return { count: rows[0]?.total ?? 0, people };
+  const people: ReviewRow[] = [];
+  for (const row of rows) {
+    if (row.id === null) continue;
+    people.push({
+      entryId: row.id,
+      fullName: row.full_name ?? "",
+      email: row.email,
+      phone: row.phone_e164,
+      needsReview: parseReview(row.needs_review ?? [], row.id),
+    });
+  }
+  return { total: rows[0]?.total ?? 0, people };
 }
 
 /** How many current members need review at each of these gyms, for the menu's dot. */

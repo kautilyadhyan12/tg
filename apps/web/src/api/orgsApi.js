@@ -44,6 +44,7 @@ import {
   memberListEntryDeletedSchema,
   memberListEntryResponseSchema,
   memberListEntryWrittenSchema,
+  memberListReviewPageResponseSchema,
   memberListViewResponseSchema,
   memberListNotMeResponseSchema,
   memberListPreviewResponseSchema,
@@ -769,6 +770,15 @@ export const orgService = {
     ),
 
   /** "Not this person" (§18.4): that account is taken out of the app; the record stays. */
+  /** GET …/member-list/review — the review page: who an import found a problem with, a
+   *  hundred at a time after `cursor` (5b-v-d-iv). */
+  getMemberListReview: (gymId, cursor) =>
+    readThrough(
+      memberListReviewPageResponseSchema,
+      'who needs review',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/review${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
+    ),
+
   /** POST …/entries/:entryId/review/checked — It's correct: staff checked one problem an
    *  import found, and the value stays (5b-v-d-iv). Answers with the person's page. */
   reviewChecked: (gymId, entryId, item) =>

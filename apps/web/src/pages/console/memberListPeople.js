@@ -646,9 +646,3 @@ export function outcomeWords(outcome, words = { person: 'member', personCap: 'Me
 export function reviewSignWords(n, words) {
   return n === 1 ? `1 ${words.person} needs review` : `${n.toLocaleString('en')} ${words.people} need review`;
 }
-
-/** Under the names the sign shows, how many more are only tagged in the list. */
-export function reviewMoreWords(count, shown) {
-  const more = count - shown;
-  return more > 0 ? `and ${more.toLocaleString('en')} more, each tagged Review needed in the list` : null;
-}

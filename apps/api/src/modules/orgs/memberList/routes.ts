@@ -29,6 +29,7 @@ import {
   memberListMergeRequestSchema,
   memberListNotThemRequestSchema,
   memberListReviewCheckedRequestSchema,
+  memberListReviewQuerySchema,
   memberListRemovePreviewRequestSchema,
   memberListRemoveSelectedRequestSchema,
   memberListRemoveUnlistedRequestSchema,
@@ -464,6 +465,17 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
     if (params === null) return;
     return sendWrite(req, reply, await byHand.restore(listDeps, requireUserId(req), params.gymId, params.entryId, editGate(req, reply)));
+  });
+
+  // The review page (5b-v-d-iv): who an import found a problem with, a page at a time.
+  app.get("/v1/orgs/:gymId/member-list/review", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(memberListReviewQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const page = await byHand.readReviewPage(listDeps, requireUserId(req), params.gymId, query, readGate(req, reply));
+    if (page === null) return;
+    return reply.status(200).send({ page });
   });
 
   // It's correct (5b-v-d-iv): one problem an import found, checked by staff and kept as it is.

@@ -475,18 +475,57 @@ export function memberListReviewWords(problem: MemberListReviewProblem, field: s
 export const memberListReviewCheckedRequestSchema = memberListReviewItemSchema;
 export type MemberListReviewCheckedRequest = z.infer<typeof memberListReviewCheckedRequestSchema>;
 
-/** The Members page's sign: how many current members need review, and the first of them
- *  by name, each opening their page. */
-export const MEMBER_LIST_REVIEW_NAMES_SHOWN = 50;
-export const memberListReviewSignSchema = z
+/** The Members page's sign: how many current members need review. Who they are is the
+ *  review page's (Kd at the click-through: names in the sign would pile up). */
+export const memberListReviewSignSchema = z.object({ count: z.number().int().min(0) }).strict();
+export type MemberListReviewSign = z.infer<typeof memberListReviewSignSchema>;
+
+/** The same problem in a few words, for a row of the review page ("Phone: looks unusual"). */
+export function memberListReviewShortWords(problem: MemberListReviewProblem): string {
+  switch (problem) {
+    case "letters_lost":
+      return "letters lost";
+    case "letters_garbled":
+      return "letters came out wrong";
+    case "number_cut":
+      return "cut short by the spreadsheet";
+    case "no_country":
+      return "left out, no country set";
+    case "phone_unusual":
+      return "looks unusual";
+    case "front_desk":
+      return "the gym's own, left out";
+    case "cell_cut":
+      return "too long, cut";
+    case "not_a_date":
+      return "not a date";
+  }
+}
+
+/** THE REVIEW PAGE (Kd at 5b-v-d-iv's click-through: "make a separate page"): the current
+ *  members an import found a problem with, by name, a page at a time, each with its lines. */
+export const MEMBER_LIST_REVIEW_PAGE = 100;
+export const memberListReviewPersonSchema = z
   .object({
-    count: z.number().int().min(0),
-    people: z
-      .array(z.object({ entryId: z.string().uuid(), fullName: z.string() }).strict())
-      .max(MEMBER_LIST_REVIEW_NAMES_SHOWN),
+    entryId: z.string().uuid(),
+    fullName: z.string(),
+    email: z.string().nullable(),
+    phone: z.string().nullable(),
+    review: z.array(memberListReviewLineSchema).max(MEMBER_LIST_MAX_REVIEW_ITEMS),
   })
   .strict();
-export type MemberListReviewSign = z.infer<typeof memberListReviewSignSchema>;
+export type MemberListReviewPerson = z.infer<typeof memberListReviewPersonSchema>;
+export const memberListReviewPageSchema = z
+  .object({
+    total: z.number().int().min(0),
+    people: z.array(memberListReviewPersonSchema).max(MEMBER_LIST_REVIEW_PAGE),
+    cursor: z.string().nullable(),
+  })
+  .strict();
+export type MemberListReviewPage = z.infer<typeof memberListReviewPageSchema>;
+export const memberListReviewPageResponseSchema = z.object({ page: memberListReviewPageSchema });
+export const memberListReviewQuerySchema = z.object({ cursor: z.string().max(512).optional() }).strict();
+export type MemberListReviewQuery = z.infer<typeof memberListReviewQuerySchema>;
 
 /** Which way round a column's two-number dates are read. `dayFirst` is
  *  03/04/2026 → 3 April; `monthFirst` is 3 April → March 4. */
@@ -1580,7 +1619,7 @@ export const memberListViewSchema = z.object({
    *  order, choices holding nobody left out. */
   appWords: z.array(memberAppWordCountSchema).max(MEMBER_APP_FILTER_ORDER.length).default([]),
   /** The current members an import found a problem with, until staff fix it (5b-v-d-iv). */
-  review: memberListReviewSignSchema.default({ count: 0, people: [] }),
+  review: memberListReviewSignSchema.default({ count: 0 }),
 });
 export type MemberListView = z.infer<typeof memberListViewSchema>;
 

@@ -502,7 +502,7 @@ describe("pressing confirm, and the list you keep (3a-iii-b's own shapes)", () =
       appWords: [{ word: "in_app" as const, count: 3 }, { word: "needs_check" as const, count: 1 }],
     };
     // An api older than 5b-v-d-iv sends no review: nobody is shown as needing one.
-    expect(memberListViewSchema.parse(view)).toEqual({ ...view, review: { count: 0, people: [] } });
+    expect(memberListViewSchema.parse(view)).toEqual({ ...view, review: { count: 0 } });
     // A GYM WITH NO LIST IS A SCREEN, NOT A MISSING ONE: every field still has to
     // be answerable at zero.
     expect(
@@ -691,7 +691,7 @@ describe("the wider record, kept (3a-v-b's own shapes)", () => {
       appWords: [],
     };
     // An api older than 5b-v-d-iv sends no review: nobody is shown as needing one.
-    expect(memberListViewSchema.parse(view)).toEqual({ ...view, review: { count: 0, people: [] } });
+    expect(memberListViewSchema.parse(view)).toEqual({ ...view, review: { count: 0 } });
     // A GYM THAT HAS NEVER CONFIRMED ONE IS A SCREEN, not a missing route: every field
     // still has to be answerable at zero, including the three added here.
     const empty = memberListViewSchema.parse({

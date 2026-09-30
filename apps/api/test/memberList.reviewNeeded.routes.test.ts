@@ -12,6 +12,7 @@ import { loadConfig } from "../src/config.js";
 import {
   memberListEntriesResponseSchema,
   memberListEntryResponseSchema,
+  memberListReviewPageResponseSchema,
   memberListViewResponseSchema,
   myOrgsResponseSchema,
   type MemberListPreview,
@@ -238,7 +239,11 @@ d("member list: review needed (real Postgres)", () => {
       expect(await myCount(rivalOwner, rival.org.id)).toBe(0);
       expect(await myCount(rivalOwner, gym)).toBeUndefined();
       const view = await get(listUrl(rival.org.id), rivalOwner.cookies);
-      expect(memberListViewResponseSchema.parse(JSON.parse(view.body)).list.review).toEqual({ count: 0, people: [] });
+      expect(memberListViewResponseSchema.parse(JSON.parse(view.body)).list.review).toEqual({ count: 0 });
+      // The review page: the rival's own is empty, and gym A's is not theirs to read.
+      const own = memberListReviewPageResponseSchema.parse(JSON.parse((await get(`${listUrl(rival.org.id)}/review`, rivalOwner.cookies)).body)).page;
+      expect(own).toEqual({ total: 0, people: [], cursor: null });
+      expect((await get(`${listUrl(gym)}/review`, rivalOwner.cookies)).statusCode).toBe(404);
       expect((await get(entryUrl(gym, di), rivalOwner.cookies)).statusCode).toBe(404);
       expect((await post(checkedUrl(gym, di), { problem: "phone_unusual", field: "phone" }, rivalOwner.cookies)).statusCode).toBe(404);
       // The rival's own gym in the path with A's record: the record is not theirs either.
@@ -250,6 +255,7 @@ d("member list: review needed (real Postgres)", () => {
       await appointTrainer(trainer, org, owner);
       expect(await myCount(trainer, gym)).toBe(0);
       expect((await post(checkedUrl(gym, di), { problem: "phone_unusual", field: "phone" }, trainer.cookies)).statusCode).toBe(403);
+      expect((await get(`${listUrl(gym)}/review`, trainer.cookies)).statusCode).toBe(403);
       expect((await marksIn(gym))["Di Park"]).toEqual(["phone_unusual:phone"]);
     },
     TEST_TIMEOUT_MS,
@@ -265,8 +271,19 @@ d("member list: review needed (real Postgres)", () => {
 
       expect(await myCount(owner, gym)).toBe(4);
       const view = memberListViewResponseSchema.parse(JSON.parse((await get(listUrl(gym), owner.cookies)).body)).list;
-      expect(view.review.count).toBe(4);
-      expect(view.review.people.map((p) => p.fullName)).toEqual(["Cy Shah", "Di Park", "Ed Moss", "Flo Kerr"]);
+      expect(view.review).toEqual({ count: 4 });
+      // The review page names them, each with what is wrong; a cursor that is not ours is refused.
+      const reviewPage = memberListReviewPageResponseSchema.parse(JSON.parse((await get(`${listUrl(gym)}/review`, owner.cookies)).body)).page;
+      expect(reviewPage.total).toBe(4);
+      expect(reviewPage.cursor).toBeNull();
+      expect(reviewPage.people.map((p) => [p.fullName, p.review.map((line) => `${line.label}: ${line.problem}`)])).toEqual([
+        ["Cy Shah", ["Phone: number_cut"]],
+        ["Di Park", ["Phone: phone_unusual"]],
+        ["Ed Moss", ["Join date: not_a_date"]],
+        ["Flo Kerr", ["Notes: cell_cut"]],
+      ]);
+      expect((await get(`${listUrl(gym)}/review?cursor=not-ours`, owner.cookies)).statusCode).toBe(400);
+      expect((await get(`${listUrl(gym)}/review?cursor=x&extra=1`, owner.cookies)).statusCode).toBe(400);
       const page = memberListEntriesResponseSchema.parse(JSON.parse((await get(`${listUrl(gym)}/entries`, owner.cookies)).body)).page;
       expect(page.entries.filter((e) => e.needsReview).map((e) => e.fullName)).toEqual(["Cy Shah", "Di Park", "Ed Moss", "Flo Kerr"]);
 
@@ -306,6 +323,31 @@ d("member list: review needed (real Postgres)", () => {
       expect((await patch(entryUrl(gym, cy), { status: "Active" }, owner.cookies)).statusCode).toBe(200);
       expect((await marksIn(gym))["Cy Shah"]).toEqual(["number_cut:phone"]);
       expect(await myCount(owner, gym)).toBe(2);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "the review page comes a hundred at a time, each person once, and says how many in all",
+    async () => {
+      const owner = await makeUser("pages-owner");
+      const org = await makeOrg(owner, "Review Pages Gym");
+      const gym = org.org.id;
+      const rows: string[][] = [];
+      for (let i = 0; i < 105; i++) rows.push([`Person ${String(i).padStart(3, "0")}`, `p${String(i)}@members.example`, "00000000000", "2024-01-05", ""]);
+      await importFile(gym, owner, rows);
+      const first = memberListReviewPageResponseSchema.parse(JSON.parse((await get(`${listUrl(gym)}/review`, owner.cookies)).body)).page;
+      expect(first.total).toBe(105);
+      expect(first.people).toHaveLength(100);
+      expect(first.cursor).not.toBeNull();
+      const second = memberListReviewPageResponseSchema.parse(
+        JSON.parse((await get(`${listUrl(gym)}/review?cursor=${first.cursor ?? ""}`, owner.cookies)).body),
+      ).page;
+      expect(second.people).toHaveLength(5);
+      expect(second.cursor).toBeNull();
+      const names = [...first.people, ...second.people].map((p) => p.fullName);
+      expect(new Set(names).size).toBe(105);
+      expect(names).toEqual([...names].sort());
     },
     TEST_TIMEOUT_MS,
   );
