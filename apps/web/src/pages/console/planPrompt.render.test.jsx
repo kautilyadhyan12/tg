@@ -56,14 +56,16 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
 });
 
 vi.mock('../../utils/paddleCheckout', () => ({ openPaddleCheckout: vi.fn(), closePaddleCheckout: vi.fn() }));
+vi.mock('../../utils/razorpayCheckout', () => ({ openRazorpayCheckout: vi.fn(), closeRazorpayCheckout: vi.fn() }));
 
 const logout = vi.fn();
 vi.mock('../../context/AuthContext', () => ({
-  useAuth: () => ({ user: { id: 'u1' }, logout }),
+  useAuth: () => ({ user: { id: 'u1', email: 'owner@example.com' }, logout }),
 }));
 
 const { orgService } = await import('../../api/orgsApi');
 const { openPaddleCheckout, closePaddleCheckout } = await import('../../utils/paddleCheckout');
+const { openRazorpayCheckout, closeRazorpayCheckout } = await import('../../utils/razorpayCheckout');
 const { resetConsoleOrgs } = await import('./consoleOrgs');
 const { setCurrentUserId } = await import('../../utils/storage');
 const ConsoleLayout = (await import('../../components/console/ConsoleLayout')).default;
@@ -687,16 +689,50 @@ describe('subscribing from the prompt', () => {
     expect(screen.getByText(/more members than this plan allows/i)).toBeTruthy();
   });
 
-  it('tells an Indian gym paying in rupees is coming soon, with no button', async () => {
-    orgService.getMine.mockResolvedValue(mineIs({ ...spent, country: 'IN', currencyDisplay: 'INR' }));
+  it("opens Razorpay's window for an Indian gym, says no GST is added, and goes once the payment reaches the gym", async () => {
+    const india = { ...spent, country: 'IN', currencyDisplay: 'INR' };
+    const RUPEES = { ...PAID, priceLabel: '₹7,500', seatCap: 200, subscribed: true, paidThrough: 'razorpay' };
+    orgService.getMine.mockResolvedValueOnce(mineIs(india));
+    orgService.getMine.mockResolvedValue(mineIs({ ...india, subscription: RUPEES, consoleReadOnly: false }));
     orgService.getPlans.mockResolvedValue({
-      data: { plans: [{ code: 'org_b1_in_m', priceLabel: '₹8,500', currency: 'INR', interval: 'month', seatCap: 200, fits: true }], payOnline: 'coming_soon' },
+      data: { plans: [{ code: 'org_b1_in_m', priceLabel: '₹7,500', currency: 'INR', interval: 'month', seatCap: 200, fits: true }], payOnline: 'available' },
     });
+    orgService.startCheckout.mockResolvedValue({
+      data: {
+        checkoutId: 'c9',
+        provider: 'razorpay',
+        keyId: 'rzp_test_AAAAAAAAAAAAAA',
+        subscriptionId: 'sub_AAAAAAAAAAAAAA',
+        description: 'Monthly, up to 200 members',
+        contact: '+917012345678',
+        email: 'the-owner@example.com',
+      },
+    });
+    orgService.syncCheckout.mockResolvedValue({ data: { state: 'paid', subscription: RUPEES } });
     renderConsole(Overview);
+
     await screen.findByTestId('plan-list');
-    expect(screen.getByText(/paying online in rupees is coming soon/i)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /subscribe/i })).toBeNull();
-  });
+    expect(screen.getByText('Prices are a month, with no GST added.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /^subscribe$/i }));
+
+    await waitFor(() => expect(openRazorpayCheckout).toHaveBeenCalledTimes(1));
+    expect(openPaddleCheckout).not.toHaveBeenCalled();
+    const opened = openRazorpayCheckout.mock.calls[0][0];
+    // The owner's email and mobile, from the server — not the signed-in viewer's (owner@example.com here).
+    expect(opened).toMatchObject({
+      keyId: 'rzp_test_AAAAAAAAAAAAAA',
+      subscriptionId: 'sub_AAAAAAAAAAAAAA',
+      name: spent.name,
+      description: 'Monthly, up to 200 members',
+      email: 'the-owner@example.com',
+      contact: '+917012345678',
+    });
+
+    opened.onEvent({ type: 'completed' });
+    await waitFor(() => expect(screen.queryByTestId('plan-modal')).toBeNull(), { timeout: 5000 });
+    expect(orgService.syncCheckout).toHaveBeenCalledWith(GYM_ID, 'c9');
+    expect(closeRazorpayCheckout).toHaveBeenCalled();
+  }, 10_000);
 
   it('prints the server’s refusal and opens nothing', async () => {
     orgService.getMine.mockResolvedValue(mineIs(spent));

@@ -535,10 +535,13 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       expect((await checkout(a.gymId, a.cookies, "org_nope")).statusCode).toBe(404);
       expect((await checkout(a.gymId, a.cookies, "org_b1_in_m")).statusCode).toBe(404);
 
+      // A rupee gym pays through Razorpay, never Paddle: on a server without Razorpay it cannot pay.
       const india = await owner("IN");
+      const txnsBefore = paddle.txns.size;
       const rupees = await checkout(india.gymId, india.cookies, "org_b1_in_m");
-      expect(rupees.statusCode).toBe(409);
-      expect(JSON.parse(rupees.body)).toMatchObject({ error: "pay_online_soon" });
+      expect(rupees.statusCode).toBe(503);
+      expect(JSON.parse(rupees.body)).toMatchObject({ error: "payments_unavailable" });
+      expect(paddle.txns.size).toBe(txnsBefore);
 
       const full = await owner();
       for (const person of [await makeUser(), await makeUser()]) {
@@ -552,7 +555,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       expect(plans.plans.find((p) => p.code === SMALL)?.fits).toBe(false);
       expect(plans.plans.find((p) => p.code === BIG)?.fits).toBe(true);
       const indianPlans = JSON.parse((await get(`/v1/orgs/${india.gymId}/plans`, india.cookies)).body) as { payOnline: string };
-      expect(indianPlans.payOnline).toBe("coming_soon");
+      expect(indianPlans.payOnline).toBe("unavailable");
 
       paddle.wrongAmount = true;
       const wrong = await checkout(a.gymId, a.cookies, BIG);

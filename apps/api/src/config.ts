@@ -120,6 +120,14 @@ const envSchema = z.object({
   // Public: sent to the browser to open Paddle's checkout.
   PADDLE_CLIENT_TOKEN: z.string().regex(/^(test|live)_[a-zA-Z\d]{27}$/, "PADDLE_CLIENT_TOKEN must be a Paddle client-side token").optional(),
   PADDLE_WEBHOOK_SECRET: z.string().regex(/^pdl_ntfset_[A-Za-z0-9_+/=-]{10,200}$/, "PADDLE_WEBHOOK_SECRET must be a Paddle notification secret").optional(),
+  // Razorpay sells our plans to Indian gyms (ROADMAP Stage 3 item 1d; Kd, RULINGS
+  // 2026-09-24). A test key (`rzp_test_…`) until Kd's live account is approved. The key id
+  // is public (the browser's checkout needs it); the secret and the webhook secret never
+  // leave the server. Unset: an Indian gym is told paying in rupees is coming soon.
+  RAZORPAY_KEY_ID: z.string().regex(/^rzp_(test|live)_[A-Za-z0-9]{14}$/, "RAZORPAY_KEY_ID must be a Razorpay key id").optional(),
+  RAZORPAY_KEY_SECRET: z.string().regex(/^[A-Za-z0-9]{20,40}$/, "RAZORPAY_KEY_SECRET must be a Razorpay key secret").optional(),
+  // Chosen by Kd when the webhook is added in Razorpay's dashboard.
+  RAZORPAY_WEBHOOK_SECRET: z.string().regex(/^[\x21-\x7e]{12,200}$/,"RAZORPAY_WEBHOOK_SECRET must be 12 to 200 visible characters").optional(),
   // Cloudflare Turnstile, the robot check on a gym page's enquiry form (ROADMAP
   // 20c-iv-a). Set together; REQUIRED in production. Outside production, unset means
   // Cloudflare's own test pair, which passes every check (`robotCheck.ts`).
@@ -186,6 +194,17 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
         c.PADDLE_CLIENT_TOKEN === undefined ||
         c.PADDLE_CLIENT_TOKEN.startsWith(c.PADDLE_ENV === "sandbox" ? "test_" : "live_"),
       { path: ["PADDLE_CLIENT_TOKEN"], message: "PADDLE_CLIENT_TOKEN belongs to the other Paddle environment" },
+    )
+    .refine((c) => (c.RAZORPAY_KEY_ID === undefined) === (c.RAZORPAY_KEY_SECRET === undefined), {
+      path: ["RAZORPAY_KEY_SECRET"],
+      message: "RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are set together",
+    })
+    .refine(
+      (c) => c.NODE_ENV !== "production" || c.RAZORPAY_KEY_ID === undefined || c.RAZORPAY_WEBHOOK_SECRET !== undefined,
+      {
+        path: ["RAZORPAY_WEBHOOK_SECRET"],
+        message: "RAZORPAY_WEBHOOK_SECRET is required in production when Razorpay is set up (renewals and failed payments arrive by webhook)",
+      },
     )
     .safeParse(env);
   if (!parsed.success) {

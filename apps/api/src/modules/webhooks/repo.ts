@@ -1,6 +1,6 @@
 // `webhook_events`: every provider event kept once by its own id (Part 4 §3.3), so a
 // webhook answers at once and the worker acts on each event, however often it arrives.
-import { paddleSubscriptionIdSchema, resendEmailEventTypeSchema } from "@app/shared";
+import { paddleSubscriptionIdSchema, razorpaySubscriptionIdSchema, resendEmailEventTypeSchema } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { z } from "zod";
 
@@ -62,7 +62,7 @@ export async function claimDueEvent(
 
 async function claimDue(
   sql: Sql,
-  provider: "resend" | "paddle",
+  provider: "resend" | "paddle" | "razorpay",
   now: Date,
   leaseMs: number,
   eventIds: readonly string[] | null = null,
@@ -121,6 +121,47 @@ export async function forgetOldPaddleEvents(sql: SqlOrTx, before: Date, limit: n
     WHERE id IN (
       SELECT id FROM webhook_events
       WHERE provider = 'paddle' AND status <> 'pending' AND processed_at < ${before}
+      LIMIT ${limit})
+    RETURNING id`;
+  return rows.length;
+}
+
+/** What is kept of a Razorpay event: its type and the subscription it names. The worker
+ *  asks Razorpay for the subscription itself before acting (Part 5 §0). */
+export const storedRazorpayEventSchema = z
+  .object({ type: z.string().min(1).max(100), subscriptionId: razorpaySubscriptionIdSchema })
+  .strict();
+export type StoredRazorpayEvent = z.infer<typeof storedRazorpayEventSchema>;
+
+export async function keepRazorpayEvent(sql: SqlOrTx, event: { eventId: string; payload: StoredRazorpayEvent }): Promise<void> {
+  await sql`
+    INSERT INTO webhook_events (provider, event_id, payload)
+    VALUES ('razorpay', ${event.eventId}, ${sql.json(event.payload)})
+    ON CONFLICT (provider, event_id) DO NOTHING`;
+}
+
+export interface ClaimedRazorpayEvent {
+  id: string;
+  attempts: number;
+  tries: number;
+  receivedAt: Date;
+  payload: StoredRazorpayEvent | null;
+}
+
+export async function claimDueRazorpayEvent(sql: Sql, now: Date, leaseMs: number): Promise<ClaimedRazorpayEvent | null> {
+  const row = await claimDue(sql, "razorpay", now, leaseMs);
+  if (row === null) return null;
+  const payload = storedRazorpayEventSchema.safeParse(row.payload);
+  return { ...row, payload: payload.success ? payload.data : null };
+}
+
+/** Forget Razorpay's finished events after 90 days (Part 4 §5.1). */
+export async function forgetOldRazorpayEvents(sql: SqlOrTx, before: Date, limit: number): Promise<number> {
+  const rows = await sql<{ id: string }[]>`
+    DELETE FROM webhook_events
+    WHERE id IN (
+      SELECT id FROM webhook_events
+      WHERE provider = 'razorpay' AND status <> 'pending' AND processed_at < ${before}
       LIMIT ${limit})
     RETURNING id`;
   return rows.length;

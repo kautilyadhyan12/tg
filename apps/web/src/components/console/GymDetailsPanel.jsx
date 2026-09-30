@@ -3,7 +3,7 @@ import { GYM_POSTAL_ADDRESS_MAX_CHARS, orgWords } from '@app/shared';
 import { Loader2 } from 'lucide-react';
 import Select from '../common/Select';
 import { ConsoleFailed, ConsoleSection } from './ConsoleStates';
-import { countryOptions, detectTimezone } from '../../pages/console/consoleView';
+import { countryOptions, detectTimezone, viewerPrivileges } from '../../pages/console/consoleView';
 import {
   canManageOrg,
   gymDetailsDraft,
@@ -12,7 +12,7 @@ import {
   sameGymDetails,
   timezoneChoices,
 } from '../../pages/console/gymDetailsView';
-import { readOnlyNote } from '../../pages/console/billingView';
+import { canManageBilling, readOnlyNote } from '../../pages/console/billingView';
 import { refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
 import { orgService, errorText } from '../../api/orgsApi';
 
@@ -217,7 +217,9 @@ export default function GymDetailsPanel({ org, privileges, readOnly = false }) {
       // that follows will bring it level. Moving it here is what made the first
       // version of this fix revert the boxes to the pre-save row.
       // The postal address rides beside the gym on this answer, as members never read it.
-      setDraft(gymDetailsDraft({ ...res.data?.org, postalAddress: res.data?.postalAddress ?? null }));
+      setDraft(
+        gymDetailsDraft({ ...res.data?.org, postalAddress: res.data?.postalAddress ?? null, billingMobile: res.data?.billingMobile ?? null }),
+      );
       setSaved(true);
       // AND THE REST OF THE CONSOLE FOLLOWS. The shell's gym name, "Your gyms"
       // and the Overview header all read the same kept answer, and without this
@@ -374,6 +376,23 @@ export default function GymDetailsPanel({ org, privileges, readOnly = false }) {
             style={inputStyle}
           />
         </Field>
+
+        {draft.country === 'IN' && canManageBilling(viewerPrivileges(org)) ? (
+          <Field label="Mobile number for payments" hint="The owner's: Razorpay uses it for messages about this gym's payments. Only people who manage billing here can see it.">
+            <input
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              value={draft.billingMobile}
+              onChange={(e) => edit('billingMobile', e.target.value)}
+              maxLength={40}
+              placeholder="98765 43210"
+              aria-label="Mobile number for payments"
+              className="w-full rounded-xl px-4 py-3 text-sm"
+              style={inputStyle}
+            />
+          </Field>
+        ) : null}
 
         {problem !== null ? (
           <p className="text-sm" style={{ color: '#ef4444' }}>

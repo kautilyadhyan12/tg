@@ -1238,6 +1238,33 @@ describe('the gym’s own details', () => {
     expect(screen.getByLabelText('Postal address').value).toBe('12 High Street, Leeds LS1 1AA');
   });
 
+  it("shows an Indian gym's billing staff the owner's mobile for payments, saves it as typed, and keeps the server's form", async () => {
+    const INDIA = { ...ORG, country: 'IN', currencyDisplay: 'INR', timezone: 'Asia/Kolkata', billingMobile: '+919876543210' };
+    orgService.getMine.mockResolvedValue({ data: { orgs: [INDIA] } });
+    orgService.updateOrg.mockResolvedValue({ data: { org: INDIA, postalAddress: null, billingMobile: '+917012345678' } });
+    await openSettings();
+    expect(screen.getByLabelText('Mobile number for payments').value).toBe('+919876543210');
+    fireEvent.change(screen.getByLabelText('Mobile number for payments'), { target: { value: '70123 45678' } });
+    fireEvent.click(screen.getByText('Save changes'));
+    await waitFor(() => expect(orgService.updateOrg).toHaveBeenCalledWith(ORG.id, { billingMobile: '+917012345678' }));
+    expect(await screen.findByText('Saved.')).toBeTruthy();
+    expect(screen.getByLabelText('Mobile number for payments').value).toBe('+917012345678');
+  });
+
+  it("never draws the mobile box for staff who do not manage billing, nor for a gym outside India", async () => {
+    const INDIA = { ...ORG, country: 'IN', currencyDisplay: 'INR', timezone: 'Asia/Kolkata', billingMobile: null };
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...INDIA, staffRole: 'manager', privileges: ['members.read', 'org.manage'] }] } });
+    const { unmount } = drawSettings();
+    await openSection('Gym details');
+    await screen.findByLabelText('Gym name');
+    expect(screen.queryByLabelText('Mobile number for payments')).toBeNull();
+    unmount();
+
+    orgService.getMine.mockResolvedValue({ data: { orgs: [ORG] } });
+    await openSettings();
+    expect(screen.queryByLabelText('Mobile number for payments')).toBeNull();
+  });
+
   it('clears a city with null rather than an empty string', async () => {
     await openSettings();
     fireEvent.change(screen.getByLabelText('City'), { target: { value: '' } });

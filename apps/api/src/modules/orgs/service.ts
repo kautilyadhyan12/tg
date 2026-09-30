@@ -9,11 +9,12 @@ import {
   ORG_TYPES_PHRASE,
   SMALLER_SIZE_DECIDE_HOURS,
   currencyForCountry,
+  normaliseIndianMobile,
   normaliseJoinCode,
   orgWords,
 } from "@app/shared";
 import * as billingRepo from "../billing/repo.js";
-import { onlinePaymentFor } from "../billing/online.js";
+import { onlinePaymentFor, type OnlinePayments } from "../billing/online.js";
 import { bustEntitlements } from "../entitlements/service.js";
 import { onAttendanceMarked } from "../gamification/service.js";
 import { getUserSyncContext } from "../users/service.js";
@@ -162,8 +163,9 @@ export interface OrgsDeps {
    *  object" was zero objects. Required costs nothing and removes the silent
    *  path. */
   log: { warn: (obj: Record<string, unknown>, msg: string) => void };
-  /** Paddle is set up on this server (ROADMAP Stage 3 item 1a). */
-  onlinePayments: boolean;
+  /** Which payment companies are set up on this server: Paddle (ROADMAP Stage 3 item 1a),
+   *  Razorpay for Indian gyms (1d). */
+  onlinePayments: OnlinePayments;
 }
 
 /** Part 3 §4.0 step 4 names the first code "Front Desk". */
@@ -230,6 +232,7 @@ export async function createOrg(
   req: CreateOrgRequest,
 ): Promise<CreateOrgResponse> {
   const currencyDisplay = resolveCurrency(req.country);
+  const billingMobile = billingMobileAt(normaliseCountry(req.country), req.billingMobile);
 
   const base = slugifyName(req.name);
 
@@ -254,6 +257,7 @@ export async function createOrg(
         currencyDisplay,
         code: codeFromBytes(deps.randomBytes(6)),
         codeLabel: FIRST_CODE_LABEL,
+        billingMobile,
         // §4.0 step 1's owner row starts with the owner role's whole set. Same
         // source as an appointment's, so "what does an owner start with" has
         // one answer in one place.
@@ -280,6 +284,19 @@ export async function createOrg(
     "org_create_unavailable",
     `Could not create the ${orgWords(req.orgType).it} just now. Please try again.`,
   );
+}
+
+/** An Indian gym's owner's mobile for its payments (ROADMAP 1d-i; Kd, RULINGS 2026-09-29): the
+ *  create screen asks a gym in India for one, and Razorpay's window is given it so it asks
+ *  nothing. None given is allowed (Razorpay's window then asks for it); a number given must be
+ *  an Indian mobile, and is refused anywhere else, where nothing would use it. */
+function billingMobileAt(country: string, typed: string | null | undefined): string | null {
+  const given = typed === undefined || typed === null || typed.trim() === "" ? null : typed;
+  if (given === null) return null;
+  if (country !== "IN") throw new OrgsError(400, "mobile_india_only", "A mobile number for payments is asked only of gyms in India.");
+  const mobile = normaliseIndianMobile(given);
+  if (mobile === null) throw new OrgsError(400, "mobile_invalid", "This isn't a mobile number. Type your 10-digit mobile number, for example 98765 43210.");
+  return mobile;
 }
 
 /** THE SENTENCE A GYM OWNER READS WHEN THE CURRENCY LOCK REFUSES THEM.
@@ -382,6 +399,17 @@ export async function updateOrg(
     }
     patch.postalAddress = tidied === "" ? null : tidied;
   }
+  // The owner's mobile for payments: only staff who manage billing may change it (it is where
+  // Razorpay sends the gym's payment messages), and only on a gym in India.
+  const seesMobile = await holdsPrivilege(deps, gymId, userId, "billing.manage");
+  if ("billingMobile" in req && req.billingMobile !== undefined) {
+    if (!seesMobile) throw new OrgsError(403, "forbidden", "Only staff who manage billing can change the mobile number for payments.");
+    if (req.billingMobile === null || req.billingMobile.trim() === "") patch.billingMobile = null;
+    else patch.billingMobile = billingMobileAt(patch.country ?? org.country ?? "", req.billingMobile);
+  } else if (patch.country !== undefined && patch.country !== "IN") {
+    // Nothing uses it outside India (the ruling's purpose is an Indian gym's payments).
+    patch.billingMobile = null;
+  }
 
   const outcome = await repo.updateOrg(deps.sql, { gymId, patch, actorUserId: userId });
 
@@ -392,7 +420,11 @@ export async function updateOrg(
     // a no-op is deliberately absent.
     case "updated":
     case "unchanged":
-      return updateOrgResponseSchema.parse({ org: toOrgSummary(outcome.org), postalAddress: outcome.postalAddress });
+      return updateOrgResponseSchema.parse({
+        org: toOrgSummary(outcome.org),
+        postalAddress: outcome.postalAddress,
+        billingMobile: seesMobile ? outcome.billingMobile : null,
+      });
     case "currency_locked":
       // KD RULING 2026-08-26. The sentence names the reason and the way out,
       // because a refusal an owner cannot act on is a dead end — and the way out
@@ -528,8 +560,11 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
       consoleReadOnly: r.staffRole === null ? null : r.consoleReadOnly,
       // Why it is read-only, for staff alike: an overdue payment, paid on Paddle's page.
       paymentOverdue: r.staffRole === null ? null : r.paymentOverdue,
+      paymentOverdueThrough: r.staffRole === null ? null : r.paymentOverdueThrough,
       // A fact about the gym for its staff (the Settings box and the Invite screen).
       postalAddress: r.staffRole === null ? null : r.postalAddress,
+      // The owner's mobile for payments: only for staff who manage billing (ROADMAP 1d-i).
+      billingMobile: privileges.includes("billing.manage") ? r.billingMobile : null,
       // THE NEWEST CHEER THIS GYM SENT **THIS CALLER** — and it is the one field
       // on this response that is NOT withheld from a plain member.
       //
@@ -1135,7 +1170,8 @@ export async function startOrgTrial(
 export function toOrgSubscription(row: repo.GymSubscriptionRow, fallback: { code: string; seatCap: number; priceMinor: number } | null = null): OrgSubscription {
   // A free trial has no price and no billing month; a paid plan shows both, and so does a
   // trial the gym has paid for (its month starts when the trial ends).
-  const subscribed = row.provider === "paddle";
+  const paidThrough = row.provider === "paddle" || row.provider === "razorpay" ? row.provider : null;
+  const subscribed = paidThrough !== null;
   const paid = row.status === "active" || row.status === "past_due" || (subscribed && row.status === "trialing");
   // A smaller size waiting, and one that was not made, are a paying plan's: in a paid trial
   // a smaller size is made at once.
@@ -1149,6 +1185,7 @@ export function toOrgSubscription(row: repo.GymSubscriptionRow, fallback: { code
     currentPeriodEnd: paid ? (row.currentPeriodEnd?.toISOString() ?? null) : null,
     cancelAtPeriodEnd: paid && row.cancelAtPeriodEnd,
     subscribed,
+    paidThrough,
     // The chosen size waits for the first payment: through the trial, and a failed charge.
     nextSeatCap: subscribed && row.trialSeatCap !== null && row.planSeatCap !== row.seatCap ? row.planSeatCap : null,
     pendingSize:

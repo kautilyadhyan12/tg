@@ -44,8 +44,9 @@ import { createRobotCheck, type RobotCheck } from "./modules/orgs/gymPage/robotC
 import { createDiskPhotoStore, type PhotoStore } from "./modules/orgs/gymPage/photoStore.js";
 import { registerResendWebhookRoutes } from "./modules/webhooks/resendRoutes.js";
 import type { PaddleApi } from "./modules/billing/paddle.js";
+import type { RazorpayApi } from "./modules/billing/razorpay.js";
 import { registerBillingRoutes } from "./modules/billing/routes.js";
-import { paddleSettings } from "./modules/billing/settings.js";
+import { paddleSettings, razorpaySettings } from "./modules/billing/settings.js";
 import { OrgsError } from "./modules/orgs/service.js";
 import { ExportError } from "./modules/privacy/export.js";
 import { safeErrorSerializer, safeRequestSerializer, scrubbedForSentry } from "./logSafety.js";
@@ -78,6 +79,7 @@ export interface BuildAppOverrides {
   sentryTransport?: Sentry.NodeOptions["transport"];
   /** Tests replace Paddle's API with a fake; the keys in the config still switch it on. */
   paddleApi?: PaddleApi;
+  razorpayApi?: RazorpayApi;
   /** Tests answer the gym page's robot check themselves; unset asks Cloudflare. */
   robotCheck?: RobotCheck;
   /** Tests keep a gym page's photos where they can look; unset is `PHOTO_DIR`. */
@@ -290,13 +292,14 @@ export async function buildApp(
   registerGeoRoutes(app, { sql, redis, config }, overrides.geo ?? {});
   const invites = inviteSettings(config);
   const paddle = paddleSettings(config, overrides.paddleApi);
+  const razorpay = razorpaySettings(config, overrides.razorpayApi);
   registerOrgRoutes(
     app,
     {
       sql,
       redis,
       invites,
-      onlinePayments: paddle !== null,
+      onlinePayments: { paddle: paddle !== null, razorpay: razorpay !== null },
       robotCheck: overrides.robotCheck ?? createRobotCheck(config),
       // The server's own disk until Cloudflare R2 is connected at deploy (Stage 4 item 1).
       photos: overrides.photoStore ?? createDiskPhotoStore(config.PHOTO_DIR ?? join(tmpdir(), "aihg-gym-photos")),
@@ -311,14 +314,16 @@ export async function buildApp(
     secret: config.RESEND_WEBHOOK_SECRET,
     nowSeconds: () => Math.floor(Date.now() / 1000),
   });
-  // A gym paying us through Paddle, and Paddle's webhook.
+  // A gym paying us through Paddle, or Razorpay for an Indian gym, and their webhooks.
   registerBillingRoutes(app, {
     sql,
     redis,
     paddle,
+    razorpay,
     log: app.log,
     now: () => new Date(),
     webhookSecret: config.PADDLE_WEBHOOK_SECRET,
+    razorpayWebhookSecret: config.RAZORPAY_WEBHOOK_SECRET,
     nowSeconds: () => Math.floor(Date.now() / 1000),
   });
 

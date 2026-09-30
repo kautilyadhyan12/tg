@@ -1,19 +1,29 @@
-// A gym paying us (ROADMAP Stage 3 items 1a, 1c-i, 1c-ii and 1c-iii). Order per CLAUDE.md §4: authenticate →
-// rate limit → parse → service (which checks `billing.manage` on the gym) → repo.
-// Paddle's webhook: signature on the raw body, kept once by Paddle's event id, 200;
-// the worker asks Paddle for the subscription before anything changes.
-import { orgCheckoutRequestSchema, orgPlanChangeRequestSchema, paddleSubscriptionIdSchema, paddleWebhookBodySchema } from "@app/shared";
+// A gym paying us (ROADMAP Stage 3 items 1a, 1c-i, 1c-ii, 1c-iii and 1d-i). Order per CLAUDE.md §4:
+// authenticate → rate limit → parse → service (which checks `billing.manage` on the gym) → repo.
+// Paddle's and Razorpay's webhooks: signature on the raw body, kept once by the provider's
+// event id, 200; the worker asks the provider for the subscription before anything changes.
+import { createHash } from "node:crypto";
+import {
+  orgCheckoutRequestSchema,
+  orgPlanChangeRequestSchema,
+  paddleSubscriptionIdSchema,
+  paddleWebhookBodySchema,
+  razorpaySubscriptionIdSchema,
+  razorpayWebhookBodySchema,
+} from "@app/shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { RedisLike } from "../../redis.js";
 import { createDualRateLimit } from "../auth/rateLimit.js";
 import * as webhooks from "../webhooks/repo.js";
 import { verifyPaddleSignature } from "./paddleSignature.js";
+import { verifyRazorpaySignature } from "./razorpaySignature.js";
 import * as service from "./service.js";
 
 export const PADDLE_WEBHOOK_PATH = "/v1/webhooks/paddle";
+export const RAZORPAY_WEBHOOK_PATH = "/v1/webhooks/razorpay";
 
-/** Paddle's subscription bodies are a few kilobytes; this leaves room and no more. */
+/** Paddle's and Razorpay's subscription bodies are a few kilobytes; this leaves room and no more. */
 const WEBHOOK_BODY_LIMIT = 256 * 1024;
 
 const gymParams = z.object({ gymId: z.string().uuid() }).strict();
@@ -41,7 +51,12 @@ function requireUserId(req: FastifyRequest): string {
 
 export function registerBillingRoutes(
   app: FastifyInstance,
-  deps: service.BillingDeps & { redis: RedisLike; webhookSecret: string | undefined; nowSeconds: () => number },
+  deps: service.BillingDeps & {
+    redis: RedisLike;
+    webhookSecret: string | undefined;
+    razorpayWebhookSecret?: string | undefined;
+    nowSeconds: () => number;
+  },
 ): void {
   // An owner subscribes once; these leave room for a slow network and a changed mind.
   const checkoutLimit = createDualRateLimit({
@@ -222,6 +237,50 @@ export function registerBillingRoutes(
         await webhooks.keepPaddleEvent(deps.sql, {
           eventId: event.data.event_id,
           payload: { type: event.data.event_type, subscriptionId: subscriptionId.data },
+        });
+        return reply.status(200).send();
+      },
+    );
+
+    scope.post(
+      RAZORPAY_WEBHOOK_PATH,
+      // Razorpay delivers from a few addresses; an unsigned request costs one HMAC.
+      { config: { rateLimit: { max: 1200, timeWindow: "1 minute" } } },
+      async (req, reply) => {
+        // Not set up: 503, so Razorpay keeps the events and tries again later.
+        const secret = deps.razorpayWebhookSecret;
+        if (secret === undefined) return reply.status(503).send();
+        const header = req.headers["x-razorpay-signature"];
+        const body = req.body;
+        if (typeof header !== "string" || !Buffer.isBuffer(body)) return reply.status(401).send();
+        if (!verifyRazorpaySignature(secret, header, body)) return reply.status(401).send();
+
+        let json: unknown;
+        try {
+          json = JSON.parse(body.toString("utf8"));
+        } catch {
+          json = null;
+        }
+        const event = razorpayWebhookBodySchema.safeParse(json);
+        if (!event.success) {
+          req.log.warn({ event: "webhook.razorpay_unreadable" }, "a signed Razorpay webhook body did not parse");
+          return reply.status(200).send();
+        }
+        // Only subscription events are acted on; the rest are acknowledged and dropped.
+        const subscriptionId = razorpaySubscriptionIdSchema.safeParse(event.data.payload.subscription?.entity.id);
+        if (!event.data.event.startsWith("subscription.") || !subscriptionId.success) {
+          return reply.status(200).send();
+        }
+        // Razorpay's id for the event, sent the same on every delivery of it; without one,
+        // the body's own hash: a second delivery of the same bytes is the same event.
+        const idHeader = req.headers["x-razorpay-event-id"];
+        const eventId =
+          typeof idHeader === "string" && /^[\x21-\x7e]{1,100}$/.test(idHeader)
+            ? idHeader
+            : `body:${createHash("sha256").update(body).digest("hex")}`;
+        await webhooks.keepRazorpayEvent(deps.sql, {
+          eventId,
+          payload: { type: event.data.event, subscriptionId: subscriptionId.data },
         });
         return reply.status(200).send();
       },

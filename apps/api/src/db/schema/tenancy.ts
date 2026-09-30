@@ -103,6 +103,9 @@ export const gyms = pgTable(
     /** The gym's postal address, printed in the footer of every invitation it sends
      *  (CAN-SPAM, CASL; Part 3 §9.12). A gym without one cannot send invitations. */
     postalAddress: text("postal_address"),
+    /** An Indian gym's owner's mobile for its payments (`+91…`), given to Razorpay's window so
+     *  it asks nothing (ROADMAP 1d-i). Seen and changed only by staff who manage billing. */
+    billingMobile: text("billing_mobile"),
     /** Set when too many of the gym's invitations bounced or one was marked as spam
      *  (Part 3 §9.12): it sends none until started again. */
     invitesStoppedAt: timestamp("invites_stopped_at", { withTimezone: true }),
@@ -112,6 +115,7 @@ export const gyms = pgTable(
     createdAt: createdAt(),
   },
   (t) => [
+    check("gyms_billing_mobile_check", sql`${t.billingMobile} IS NULL OR ${t.billingMobile} ~ '^\\+91[6-9][0-9]{9}$'`),
     check("gyms_postal_address_check", sql`${t.postalAddress} IS NULL OR length(${t.postalAddress}) BETWEEN 1 AND 200`),
     check(
       "gyms_invites_stopped_reason_check",
