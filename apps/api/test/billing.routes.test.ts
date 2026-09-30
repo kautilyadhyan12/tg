@@ -2,7 +2,8 @@
 // fake Paddle in place of Paddle's API. DATABASE_URL-gated.
 //
 // THE WORST THING THIS JOB COULD DO: charge an owner twice for one gym, or let their
-// payment switch on a different gym. The first three tests are those. Managing a paid
+// payment switch on a different gym. The first three tests are those; the fourth, that
+// Paddle's window is filled in with nobody's details but this gym owner's (1e). Managing a paid
 // plan (1c-i: Paddle's own page, the 2-day grace) and a bigger size (1c-ii) are at the
 // end, with their own.
 import { createHmac, randomBytes } from "node:crypto";
@@ -276,6 +277,46 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       await signedWebhook(subscriptionEvent(extraSub, "subscription.canceled"));
       await runWorker();
       expect(paddle.refunds).toHaveLength(refundsBefore);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "WORST THING: Paddle's window is filled in with THIS gym's owner's email and THIS gym's country, whoever of its billing staff opens it — never the opener's, another gym's, or anybody's for staff who may not pay",
+    async () => {
+      const emailOf = async (userId: string) => (await sql<{ email: string }[]>`SELECT email FROM users WHERE id = ${userId}`)[0]?.email;
+      const vienna = await owner("AT");
+      const austin = await owner("US");
+      // The clerk pays for Vienna and owns a gym of their own in Ireland.
+      const clerk = await owner("IE");
+      await addStaff(vienna.gymId, clerk.userId, "manager", ["members.read", "billing.manage"]);
+      const desk = await makeUser();
+      await addStaff(vienna.gymId, desk.userId, "manager", ["members.read", "org.manage"]);
+      const [viennaEmail, austinEmail, clerkEmail] = [await emailOf(vienna.userId), await emailOf(austin.userId), await emailOf(clerk.userId)];
+
+      const key = randomBytes(8).toString("hex");
+      const byClerk = await checkout(vienna.gymId, clerk.cookies, BIG, key);
+      expect(opened(byClerk)).toMatchObject({ email: viennaEmail, country: "AT" });
+      expect(byClerk.body).not.toContain(clerkEmail);
+      // The same press again reopens the same window, filled in the same way.
+      expect(opened(await checkout(vienna.gymId, clerk.cookies, BIG, key))).toMatchObject({ email: viennaEmail, country: "AT" });
+      // The clerk's own gym gets the clerk's own details.
+      expect(opened(await checkout(clerk.gymId, clerk.cookies, BIG))).toMatchObject({ email: clerkEmail, country: "IE" });
+      // Paddle takes a US address only with a ZIP code: the email alone, and the payer types the rest.
+      const byAustin = await checkout(austin.gymId, austin.cookies, BIG);
+      expect(opened(byAustin)).toMatchObject({ email: austinEmail, country: null });
+      expect(byAustin.body).not.toContain(viennaEmail);
+
+      // Staff who may not pay, and strangers, open nothing and are told nobody's email.
+      for (const who of [desk, austin]) {
+        const refused = await checkout(vienna.gymId, who.cookies, BIG);
+        expect([403, 404]).toContain(refused.statusCode);
+        expect(refused.body).not.toContain(viennaEmail);
+      }
+
+      // A gym saved without a country: the email only.
+      await sql`UPDATE gyms SET country = NULL WHERE id = ${vienna.gymId}`;
+      expect(opened(await checkout(vienna.gymId, vienna.cookies, BIG))).toMatchObject({ email: viennaEmail, country: null });
     },
     TEST_TIMEOUT_MS,
   );

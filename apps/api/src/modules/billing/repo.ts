@@ -211,13 +211,17 @@ export async function checkoutForRazorpaySubscription(sql: SqlOrTx, subscription
   return row === undefined ? null : toCheckout(row);
 }
 
-/** Who pays for the gym, as Razorpay's window is told (Kd, RULINGS 2026-09-29): its owner's
- *  email and the mobile given for its payments (`+91…`), each null when there is none. */
-export async function gymPayer(sql: SqlOrTx, gymId: string): Promise<{ email: string | null; mobile: string | null }> {
-  const rows = await sql<{ email: string | null; billing_mobile: string | null }[]>`
-    SELECT u.email, g.billing_mobile FROM gyms g LEFT JOIN users u ON u.id = g.owner_user_id
+/** Who pays for the gym, as the payment window is told (Kd, RULINGS 2026-09-29 and 2026-09-30):
+ *  its owner's email, the mobile given for its payments (`+91…`) and the gym's country, each
+ *  null when there is none. */
+export async function gymPayer(
+  sql: SqlOrTx,
+  gymId: string,
+): Promise<{ email: string | null; mobile: string | null; country: string | null }> {
+  const rows = await sql<{ email: string | null; billing_mobile: string | null; country: string | null }[]>`
+    SELECT u.email, g.billing_mobile, g.country FROM gyms g LEFT JOIN users u ON u.id = g.owner_user_id
     WHERE g.id = ${gymId}`;
-  return { email: rows[0]?.email ?? null, mobile: rows[0]?.billing_mobile ?? null };
+  return { email: rows[0]?.email ?? null, mobile: rows[0]?.billing_mobile ?? null, country: rows[0]?.country ?? null };
 }
 
 /** Which of our rupee plans a Razorpay plan is: only by the id `tools/razorpay-plans.ts` recorded. */

@@ -28,10 +28,18 @@ function loadScript() {
   return loading;
 }
 
+/** What Paddle's window is filled in with: the gym owner's email and the gym's country, as
+ *  the server sends them (ROADMAP Stage 3 item 1e). Null when there is no email; the country
+ *  is left to Paddle when the server sends none. */
+export function paddleCustomer(email, country) {
+  if (!email) return null;
+  return country ? { email, address: { countryCode: country } } : { email };
+}
+
 /** Open Paddle's window for the transaction our server made. `onEvent` hears
  *  `completed` (with Paddle's transaction id) and `closed`. Resolves once the window
  *  is asked to open; rejects when Paddle's script cannot be loaded. */
-export async function openPaddleCheckout({ environment, clientToken, transactionId, onEvent }) {
+export async function openPaddleCheckout({ environment, clientToken, transactionId, email = null, country = null, onEvent }) {
   const Paddle = await loadScript();
   listener = onEvent;
   const key = `${environment}:${clientToken}`;
@@ -47,8 +55,10 @@ export async function openPaddleCheckout({ environment, clientToken, transaction
     });
     initialisedWith = key;
   }
+  const customer = paddleCustomer(email, country);
   Paddle.Checkout.open({
     transactionId,
+    ...(customer ? { customer } : {}),
     settings: { displayMode: 'overlay', theme: 'dark', locale: 'en', allowLogout: false },
   });
 }

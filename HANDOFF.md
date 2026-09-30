@@ -4,6 +4,17 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-30 · 1e (Folder B): Paddle's window filled in (branch `paddle-window-filled`)
+
+- **Why this job:** next on Folder B's list after 2f-i (RULINGS 2026-09-30). **Risky** (money; a person's email sent to Paddle), Opus xhigh; Kd: *"go"*. No migration, no new package, no new cost.
+- **Built:** the checkout reply for Paddle carries the gym OWNER's email and the gym's country (as Razorpay's already carries the email and mobile), whoever of the billing staff opens it; the browser hands them to `Paddle.Checkout.open` as `customer`. A gym with no country: the email alone.
+- **Changed from the plan (engineering):** the server was to make the customer at Paddle; Kd's sandbox key may not (`403 not authorized to create customer`), and Paddle's own window takes `customer` beside `transactionId` (tried in its sandbox), so no new key permission is needed.
+- **Paddle's limit, measured:** its `GET /countries` lists 10 countries whose address it takes only with a postcode (AU CA DE ES FR GB IN IT NL US); given one without, the window drops the address and guesses the country from where the payer is. Those countries get the email only (`paddleWindowCountry`); of the 24 a gym can choose, 16 get the country filled in.
+- **Worst thing, first test:** Paddle's window is filled in with THIS gym's owner's email and THIS gym's country, whoever of its billing staff opens it; never the opener's (a clerk who owns another gym), another gym's, or anybody's for staff who may not pay. **Breaks, each RED, restored sha256-identical:** the newest gym's owner for every gym, the opener's email, the country sent unfiltered.
+- **Real run (api on :3011 with `.env.paddle.local`, a throwaway owner):** an Austrian gym's window went straight to the card, "$94.80 now" ($79 + 20 % VAT); a US gym's showed the email filled in, the country guessed, the ZIP to type. Both transactions and 7 earlier probes cancelled at Paddle; the owner deleted from `aihg_b`.
+- **Verified:** api 4,423 of 4,423 tests on `aihg_b`; `leads.routes` and `orgs.routes` hooks timed out under the full load and pass alone 176/176; billing Paddle 55/55; shared 273/273; web 3,306 of 3,306 (`poseAssets.contract` local Node 24); tsc 0 (api, shared); eslint 0 (api, shared, changed web files).
+- **Open:** Kd's click-through; round one review; merge on Kd's word, then tick 1e.
+
 ## 2026-09-30 · 2f-i (Folder B): paying in the trial means paying today (branch `trial-pay-choice`)
 
 - **Why this job:** next on Folder B's list (RULINGS 2026-09-29, straight after 1d-i). **Risky (money), Opus xhigh; Kd: *"go"*.** No migration, no new package, no new cost.

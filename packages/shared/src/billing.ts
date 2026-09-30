@@ -35,6 +35,11 @@ export const orgCheckoutResponseSchema = z.discriminatedUnion("provider", [
     environment: z.enum(["sandbox", "production"]),
     clientToken: z.string().min(1).max(200),
     transactionId: paddleTransactionIdSchema,
+    /** The gym owner's email, for Paddle's window to fill in, whoever opens it (1e). */
+    email: z.string().email().max(254).nullable(),
+    /** The gym's country for Paddle's window to fill in; null when the gym has none, or when
+     *  Paddle takes that country only with a postcode, which the payer types. */
+    country: z.string().regex(/^[A-Z]{2}$/).nullable(),
   }),
   z.object({
     checkoutId: z.string().uuid(),

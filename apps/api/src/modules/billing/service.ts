@@ -37,7 +37,7 @@ import { formatPriceMinor, holdsPrivilege, OrgsError, requirePrivilege, toOrgSub
 import { dayLabel, momentLabel, sizeFittedEmail, sizeKeptEmail, sizeWarningEmail } from "./emails.js";
 import type { Snapshot } from "./machine.js";
 import { onlinePaymentFor } from "./online.js";
-import type { PaddleApi, PaddleEnvironment, ProrationMode } from "./paddle.js";
+import { paddleWindowCountry, type PaddleApi, type PaddleEnvironment, type ProrationMode } from "./paddle.js";
 import type { RazorpayApi } from "./razorpay.js";
 import * as repo from "./repo.js";
 
@@ -116,7 +116,7 @@ export async function startOrgCheckout(
   if (outcome.kind === "replay") {
     const { checkout } = outcome;
     if (checkout.state === "open" && checkout.providerRef !== null && checkout.provider === "paddle") {
-      return checkoutResponse(paddle, checkout.id, checkout.providerRef);
+      return checkoutResponse(paddle, checkout.id, checkout.providerRef, await repo.gymPayer(deps.sql, input.gymId));
     }
     throw replayRefusal(checkout);
   }
@@ -158,7 +158,7 @@ export async function startOrgCheckout(
     await paddle.api.cancelTransaction(txn.id);
     throw new OrgsError(409, "checkout_replaced", "That payment window has closed. Press Subscribe again.");
   }
-  return checkoutResponse(paddle, checkoutId, txn.id);
+  return checkoutResponse(paddle, checkoutId, txn.id, await repo.gymPayer(deps.sql, input.gymId));
 }
 
 /** A press that repeats an earlier one's key, when that checkout can no longer be opened. */
@@ -339,13 +339,23 @@ function razorpayResponse(
   };
 }
 
-function checkoutResponse(paddle: PaddleSettings, checkoutId: string, transactionId: string): OrgCheckoutResponse {
+/** Paddle's window, filled in with the owner's email and the gym's country (Kd, RULINGS
+ *  2026-09-30), whoever of the billing staff opens it; only billing staff, who alone may open a
+ *  checkout, get them. */
+function checkoutResponse(
+  paddle: PaddleSettings,
+  checkoutId: string,
+  transactionId: string,
+  payer: { email: string | null; country: string | null },
+): OrgCheckoutResponse {
   return {
     checkoutId,
     provider: "paddle",
     environment: paddle.environment,
     clientToken: paddle.clientToken,
     transactionId,
+    email: payer.email,
+    country: paddleWindowCountry(payer.country),
   };
 }
 

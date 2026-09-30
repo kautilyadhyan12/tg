@@ -3,7 +3,8 @@
 // with `subscription_ids`, developer.paddle.com, read 2026-09-24), its documented reply read
 // back, and an id not in Paddle's shape never sent.
 import { describe, expect, it } from "vitest";
-import { createPaddleApi } from "../src/modules/billing/paddle.js";
+import { SUPPORTED_COUNTRIES } from "@app/shared";
+import { createPaddleApi, paddleWindowCountry } from "../src/modules/billing/paddle.js";
 
 const CUSTOMER = "ctm_01grnn4zta5a1mf02jjze7y2ys";
 const SUB = "sub_01h04vsc0qhwtsbsxh3422wjs4";
@@ -78,5 +79,26 @@ describe("Paddle's customer portal session, the real adapter", () => {
     tampered.data.urls.general.overview = "https://evil.example/cpl_x";
     const off = recording(201, tampered);
     expect((await off.api.createPortalSession(CUSTOMER, [SUB])).kind).toBe("unavailable");
+  });
+});
+
+// Which country Paddle's window is given (ROADMAP Stage 3 item 1e). The postcode list is Paddle's
+// own reply, not ours: `GET /countries` on the sandbox, 2026-09-30, the 252 countries with
+// `uses_postal_code: true`. Given one of them without a postcode, the window drops the address
+// (seen that day for GB and US: "Invalid values for fields in request", the country guessed).
+describe("paddleWindowCountry", () => {
+  const PADDLE_SAYS_POSTCODE = ["AU", "CA", "DE", "ES", "FR", "GB", "IN", "IT", "NL", "US"];
+
+  it("gives every country a gym can choose, except those Paddle takes only with a postcode", () => {
+    for (const country of SUPPORTED_COUNTRIES) {
+      expect([country, paddleWindowCountry(country)]).toEqual([country, PADDLE_SAYS_POSTCODE.includes(country) ? null : country]);
+    }
+    // Countries no gym can choose yet, both ways.
+    expect(paddleWindowCountry("AE")).toBe("AE");
+    expect(paddleWindowCountry("AU")).toBeNull();
+  });
+
+  it("gives nothing for no country, or one not in the two-letter shape", () => {
+    for (const bad of [null, "", "at", "AUT", "A1", " AT"]) expect(paddleWindowCountry(bad)).toBeNull();
   });
 });
