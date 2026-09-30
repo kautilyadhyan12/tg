@@ -153,7 +153,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
         - 5b-v-d-iii. [x] **Each warning says which rows** — merged 2026-09-29 (PR #135).
         - 5b-v-d-iv. [x] **Import problems stay marked on the person** — merged 2026-09-30 (PR #137).
      - 5b-iv. **Possible duplicates** (RULINGS 2026-09-25, 2026-09-30), split 2026-09-30 in two:
-      - 5b-iv-a. [ ] **The Review page of pairs**: "5 possible duplicates · Review", each pair side by side, Merge or Different people (remembered); never merged by the app.
+      - 5b-iv-a. [x] **The Review page of pairs** — merged 2026-09-30 (PR #138).
       - 5b-iv-b. [ ] **The warning when adding**: "Liam Hughes may already be on your list · Open · Add anyway" on a shared name, phone or member number; the exact "already on your list" stays.
      - 5b-vi. [ ] **Member photos** (Kd, RULINGS 2026-09-28): the photo a member adds in the app, small and round on each Members row and on their page, initials when there is none; only their own gym's staff see it, and not after they leave. Needs Stage 4 item 4 (photo storage); the check-in screen (16a) shows it once both are built.
    - 5c. [ ] **Which software are you leaving?** (spec §11.7; RULINGS 2026-09-24): each product's export steps in plain words and a preset that fills in the column matching, as data in `@app/shared`, from real exports or the vendor's own template only.
