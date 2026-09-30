@@ -240,6 +240,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 1d-i. [x] **Subscribe in rupees** — merged 2026-09-30 (PR #136).
      - 1d-ii. [ ] **A failed payment paid, a card changed, a plan cancelled**, from the console.
      - 1d-iii. [ ] **A bigger or smaller size** (Razorpay cannot change a UPI subscription: a new mandate for it).
+   - 1e. [ ] **Paddle's window filled in**: the owner's email and the gym's country given to Paddle's checkout, as Razorpay's already is; the payer types only the card and postcode (Kd, RULINGS 2026-09-30). Next in Folder B after 2f-i.
 2. **Trials enforced** (split 2026-09-08 after Kd's trial-abuse ruling; no approval queue, ever).
    - 2a. [x] **The price list, the 10-day gym trial at 200 members, no individual trial, one free scan a day** — merged 2026-09-24 (PR #101).
    - 2b. [ ] Same person, new spelling: Gmail dots and `+tags` collapse for trial counting; throwaway email domains refused at the Manage door.
