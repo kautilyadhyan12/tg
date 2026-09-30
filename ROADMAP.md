@@ -250,7 +250,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 2d. [ ] The trial belongs to the gym: a new organisation whose first members were members of an already-trialled organisation gets no second trial and sees the subscribe prompt; the owner's own device counts as member one.
    - 2e. [ ] Allow now, look later: the "have a look" list for weaker clues (an email to Kd until the admin panel; pause and remove already exist) and the second-trial code for a real owner of two gyms.
    - 2f. **Paying during the trial** (Kd, RULINGS 2026-09-29 and 2026-09-30).
-     - 2f-i. [ ] **Paying in the trial means paying today**: the full size at once and the trial ends; keeping the trial is not paying yet; a new trial holds 100 (was 200). Paddle and Razorpay.
+     - 2f-i. [x] **Paying in the trial means paying today** — merged 2026-09-30 (PR #140).
      - 2f-ii. ~~"Start my plan now" for a gym that kept its trial~~ **Struck 2026-09-30, never built** (RULINGS that day): paying in the trial always starts the plan now.
 3. ~~Gym-collects-from-members~~ **Re-planned 2026-09-22 as Stage 2 item 18** (18c is this line; 18a, 18b and the Connect buttons are new).
 
