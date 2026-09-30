@@ -107,6 +107,9 @@ export function usePaddleSubscribe(gymId, gymName = '') {
           environment: res.data.environment,
           clientToken: res.data.clientToken,
           transactionId: res.data.transactionId,
+          // The gym owner's email and the gym's country, from the server, whoever opens it.
+          email: res.data.email ?? null,
+          country: res.data.country ?? null,
           onEvent,
         });
       }

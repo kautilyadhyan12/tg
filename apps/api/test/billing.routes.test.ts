@@ -2,7 +2,8 @@
 // fake Paddle in place of Paddle's API. DATABASE_URL-gated.
 //
 // THE WORST THING THIS JOB COULD DO: charge an owner twice for one gym, or let their
-// payment switch on a different gym. The first three tests are those. Managing a paid
+// payment switch on a different gym. The first three tests are those; the fourth, that
+// Paddle's window is filled in with nobody's details but this gym owner's (1e). Managing a paid
 // plan (1c-i: Paddle's own page, the 2-day grace) and a bigger size (1c-ii) are at the
 // end, with their own.
 import { createHmac, randomBytes } from "node:crypto";
@@ -14,6 +15,7 @@ import { loadConfig } from "../src/config.js";
 import { processPaddleEvents } from "../src/modules/billing/events.js";
 import { gymSeatCap } from "../src/modules/orgs/repo.js";
 import { expireLapsedGymTrials } from "../src/modules/orgs/trialSweep.js";
+import { orgCheckoutResponseSchema } from "@app/shared";
 import { FakePaddle, paddleId } from "./fakePaddle.js";
 import { createMemoryRedis } from "../src/redis.js";
 
@@ -276,6 +278,62 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       await signedWebhook(subscriptionEvent(extraSub, "subscription.canceled"));
       await runWorker();
       expect(paddle.refunds).toHaveLength(refundsBefore);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "WORST THING: Paddle's window is filled in with THIS gym's owner's email and THIS gym's country, whoever of its billing staff opens it — never the opener's, another gym's, or anybody's for staff who may not pay",
+    async () => {
+      const emailOf = async (userId: string) => (await sql<{ email: string }[]>`SELECT email FROM users WHERE id = ${userId}`)[0]?.email;
+      const vienna = await owner("AT");
+      const austin = await owner("US");
+      // The clerk pays for Vienna and owns a gym of their own in Ireland.
+      const clerk = await owner("IE");
+      await addStaff(vienna.gymId, clerk.userId, "manager", ["members.read", "billing.manage"]);
+      const desk = await makeUser();
+      await addStaff(vienna.gymId, desk.userId, "manager", ["members.read", "org.manage"]);
+      const [viennaEmail, austinEmail, clerkEmail] = [await emailOf(vienna.userId), await emailOf(austin.userId), await emailOf(clerk.userId)];
+
+      const key = randomBytes(8).toString("hex");
+      const byClerk = await checkout(vienna.gymId, clerk.cookies, BIG, key);
+      expect(opened(byClerk)).toMatchObject({ email: viennaEmail, country: "AT" });
+      expect(byClerk.body).not.toContain(clerkEmail);
+      // The same press again reopens the same window, filled in the same way.
+      expect(opened(await checkout(vienna.gymId, clerk.cookies, BIG, key))).toMatchObject({ email: viennaEmail, country: "AT" });
+      // The clerk's own gym gets the clerk's own details.
+      expect(opened(await checkout(clerk.gymId, clerk.cookies, BIG))).toMatchObject({ email: clerkEmail, country: "IE" });
+      // Paddle takes a US address only with a ZIP code: the email alone, and the payer types the rest.
+      const byAustin = await checkout(austin.gymId, austin.cookies, BIG);
+      expect(opened(byAustin)).toMatchObject({ email: austinEmail, country: null });
+      expect(byAustin.body).not.toContain(viennaEmail);
+
+      // Staff who may not pay, and strangers, open nothing and are told nobody's email.
+      for (const who of [desk, austin]) {
+        const refused = await checkout(vienna.gymId, who.cookies, BIG);
+        expect([403, 404]).toContain(refused.statusCode);
+        expect(refused.body).not.toContain(viennaEmail);
+      }
+
+      // A gym saved without a country: the email only.
+      await sql`UPDATE gyms SET country = NULL WHERE id = ${vienna.gymId}`;
+      expect(opened(await checkout(vienna.gymId, vienna.cookies, BIG))).toMatchObject({ email: viennaEmail, country: null });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "an owner's stored email the console can't read back is left out, and Paddle's window asks for it; the reply still reads",
+    async () => {
+      const odd = await owner("AT");
+      // A dot before the @, as a migrated or Google account may hold.
+      const oddEmail = `billing-t-odd-${String(seq++)}.@example.com`;
+      await sql`UPDATE users SET email = ${oddEmail} WHERE id = ${odd.userId}`;
+      const res = await checkout(odd.gymId, odd.cookies, BIG);
+      expect(res.statusCode).toBe(200);
+      const reply: unknown = JSON.parse(res.body);
+      expect(reply).toMatchObject({ email: null, country: "AT" });
+      expect(orgCheckoutResponseSchema.safeParse(reply).success).toBe(true);
     },
     TEST_TIMEOUT_MS,
   );
@@ -664,7 +722,10 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       for (const who of [bookkeeper.cookies, a.cookies]) {
         const refused = await openPortal(a.gymId, who);
         expect(refused.statusCode).toBe(409);
-        expect(JSON.parse(refused.body)).toMatchObject({ error: "shared_payer" });
+        // Gym B's payer is not A's owner, who can't open it either: nobody is named.
+        const body = JSON.parse(refused.body) as { error: string; message: string };
+        expect(body.error).toBe("shared_payer");
+        expect(body.message).toMatch(/The person who pays can open it\.$/);
       }
       expect(paddle.portalCalls.length).toBe(asked);
 
@@ -673,6 +734,35 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       expect((await openPortal(a.gymId, a.cookies)).statusCode).toBe(200);
       expect(paddle.portalCalls.at(-1)).toEqual({ customerId: a.customerId, subscriptionIds: [a.subId] });
       expect((await openPortal(a.gymId, bookkeeper.cookies)).statusCode).toBe(409);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "an owner's two gyms paid through windows filled in with the owner's email share one Paddle account: a clerk of one gym is told to ask the owner, by name, and the owner opens it",
+    async () => {
+      const boss = await owner("AT");
+      const dublin = await makeGym(boss.cookies, "IE");
+      await sql`UPDATE users SET display_name = 'Aoife Byrne' WHERE id = ${boss.userId}`;
+      const clerk = await makeUser();
+      await addStaff(boss.gymId, clerk.userId, "manager", ["members.read", "billing.manage"]);
+
+      // The clerk pays for Vienna and the owner for Dublin; both windows carry the owner's email.
+      const vienna = opened(await checkout(boss.gymId, clerk.cookies, BIG)) as ReturnType<typeof opened> & { email: string | null };
+      const second = opened(await checkout(dublin, boss.cookies, BIG)) as ReturnType<typeof opened> & { email: string | null };
+      expect(vienna.email).not.toBeNull();
+      expect(second.email).toBe(vienna.email);
+      paddle.pay(vienna.transactionId, "api", true, vienna.email);
+      paddle.pay(second.transactionId, "api", true, second.email);
+      expect((await post(`/v1/orgs/${boss.gymId}/billing/checkouts/${vienna.checkoutId}/sync`, {}, clerk.cookies)).statusCode).toBe(200);
+      expect((await post(`/v1/orgs/${dublin}/billing/checkouts/${second.checkoutId}/sync`, {}, boss.cookies)).statusCode).toBe(200);
+
+      const refused = await openPortal(boss.gymId, clerk.cookies);
+      expect(refused.statusCode).toBe(409);
+      const body = JSON.parse(refused.body) as { error: string; message: string };
+      expect(body.error).toBe("shared_payer");
+      expect(body.message).toMatch(/Ask Aoife Byrne, the owner, to open it\.$/);
+      expect((await openPortal(boss.gymId, boss.cookies)).statusCode).toBe(200);
     },
     TEST_TIMEOUT_MS,
   );

@@ -15,6 +15,7 @@ import { applyRazorpaySubscription } from "../src/modules/billing/service.js";
 import { gymSeatCap } from "../src/modules/orgs/repo.js";
 import { expireLapsedGymTrials } from "../src/modules/orgs/trialSweep.js";
 import { createMemoryRedis } from "../src/redis.js";
+import { orgCheckoutResponseSchema } from "@app/shared";
 import { FakeRazorpay } from "./fakeRazorpay.js";
 
 const url = process.env["DATABASE_URL"];
@@ -701,6 +702,21 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
       const leaving = await patch(`/v1/orgs/${gymId}`, { country: "US" }, owner1.cookies);
       expect(leaving.statusCode).toBe(200);
       expect((await sql`SELECT billing_mobile FROM gyms WHERE id = ${gymId}`)[0]).toEqual({ billing_mobile: null });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "an owner's stored email the console can't read back is left out, and Razorpay's window asks for it; the reply still reads",
+    async () => {
+      const odd = await owner();
+      // A dot before the @, as a migrated or Google account may hold.
+      await sql`UPDATE users SET email = ${`billing-rzp-odd-${String(seq++)}.@example.com`} WHERE id = ${odd.userId}`;
+      const res = await checkout(odd.gymId, odd.cookies, BIG);
+      expect(res.statusCode).toBe(200);
+      const reply: unknown = JSON.parse(res.body);
+      expect(reply).toMatchObject({ provider: "razorpay", email: null });
+      expect(orgCheckoutResponseSchema.safeParse(reply).success).toBe(true);
     },
     TEST_TIMEOUT_MS,
   );
