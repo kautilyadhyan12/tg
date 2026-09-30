@@ -242,13 +242,16 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 1d-i. [x] **Subscribe in rupees** — merged 2026-09-30 (PR #136).
      - 1d-ii. [ ] **A failed payment paid, a card changed, a plan cancelled**, from the console.
      - 1d-iii. [ ] **A bigger or smaller size** (Razorpay cannot change a UPI subscription: a new mandate for it).
+   - 1e. [ ] **Paddle's window filled in**: the owner's email and the gym's country given to Paddle's checkout, as Razorpay's already is; the payer types only the card and postcode (Kd, RULINGS 2026-09-30). Next in Folder B after 2f-i.
 2. **Trials enforced** (split 2026-09-08 after Kd's trial-abuse ruling; no approval queue, ever).
    - 2a. [x] **The price list, the 10-day gym trial at 200 members, no individual trial, one free scan a day** — merged 2026-09-24 (PR #101).
    - 2b. [ ] Same person, new spelling: Gmail dots and `+tags` collapse for trial counting; throwaway email domains refused at the Manage door.
    - 2c. [ ] One device, one trial, whatever the email: a browser mark on the web, the stores on the phone.
    - 2d. [ ] The trial belongs to the gym: a new organisation whose first members were members of an already-trialled organisation gets no second trial and sees the subscribe prompt; the owner's own device counts as member one.
    - 2e. [ ] Allow now, look later: the "have a look" list for weaker clues (an email to Kd until the admin panel; pause and remove already exist) and the second-trial code for a real owner of two gyms.
-   - 2f. [ ] **Paying during the trial: the gym's choice** (Kd, RULINGS 2026-09-29): keep the free trial to its last day at **100 members**, or start the paid plan today at its full size. Both Paddle and Razorpay; a free trial becomes 100 members (was 200).
+   - 2f. **Paying during the trial** (Kd, RULINGS 2026-09-29 and 2026-09-30).
+     - 2f-i. [x] **Paying in the trial means paying today** — merged 2026-09-30 (PR #140).
+     - 2f-ii. ~~"Start my plan now" for a gym that kept its trial~~ **Struck 2026-09-30, never built** (RULINGS that day): paying in the trial always starts the plan now.
 3. ~~Gym-collects-from-members~~ **Re-planned 2026-09-22 as Stage 2 item 18** (18c is this line; 18a, 18b and the Connect buttons are new).
 
 ## Stage 4 — Launch readiness

@@ -2,7 +2,7 @@
 // Stage 3 items 1a, 1c-i, 1c-ii, 1c-iii and, for an Indian gym through Razorpay, 1d-i).
 // Every checkout is read with its gym in the WHERE; a Paddle or Razorpay subscription is
 // placed on a gym only through a checkout row our server wrote.
-import type { PaddleSubscription } from "@app/shared";
+import { GYM_TRIAL_MEMBERS, type PaddleSubscription } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { insertAudit, lockOrgRow } from "../orgs/repo.js";
 import { decide, type Decision, type LocalStatus, type Snapshot } from "./machine.js";
@@ -14,10 +14,6 @@ export const GRACE_EXPIRED = "grace_expired";
 /** `cancel_reason` of a free trial ended because the gym paid during it (1c-ii). */
 export const TRIAL_SUBSCRIBED = "subscribed";
 
-/** A trial checkout is sold only while this much of the gym's own trial is left; with less,
- *  the checkout charges at once. */
-export const TRIAL_CHECKOUT_MIN_MS = 60 * 60 * 1000;
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type CheckoutState = "creating" | "open" | "superseded" | "failed" | "paid";
 
@@ -80,12 +76,6 @@ export type BeginCheckoutOutcome =
       currency: string;
       /** The checkouts this press replaced, still open at their provider: the caller closes each. */
       superseded: { provider: PayProvider; ref: string }[];
-      /** During the gym's own free trial: the whole days left, rounded up (Paddle's trial
-       *  counts days), so the first payment falls when the trial ends. */
-      trialDays: number | null;
-      /** When the gym's own free trial ends, with `trialDays`: Razorpay takes the first
-       *  payment at exactly this time. */
-      trialEndsAt: Date | null;
     }
   | { kind: "replay"; checkout: CheckoutRow }
   | { kind: "key_reused" }
@@ -99,10 +89,12 @@ export type BeginCheckoutOutcome =
 
 /** Start a checkout for one plan: under the gym's lock, so two presses at once cannot
  *  both pass the checks, and any checkout still open for this gym is superseded (its
- *  Paddle transaction is cancelled by the caller) so only one can be paid. */
+ *  Paddle transaction is cancelled by the caller) so only one can be paid. Every checkout
+ *  charges now, in the gym's own free trial too: paying ends the trial and opens the plan's
+ *  full size (Kd, RULINGS 2026-09-30). */
 export async function beginCheckout(
   sql: Sql,
-  input: { gymId: string; userId: string; planCode: string; idempotencyKey: string; currency: string; provider: PayProvider; now: Date },
+  input: { gymId: string; userId: string; planCode: string; idempotencyKey: string; currency: string; provider: PayProvider },
 ): Promise<BeginCheckoutOutcome> {
   return await sql.begin(async (tx) => {
     await lockOrgRow(tx, input.gymId); // subscription-writer lock
@@ -125,12 +117,9 @@ export async function beginCheckout(
       WHERE owner_type = 'gym' AND owner_id = ${input.gymId}
         AND status IN ('trialing','active','past_due')`;
     const current = live[0];
-    // The gym's own free trial may be paid for now, charged when it ends (Kd, RULINGS
-    // 2026-09-25); anything else live is a plan already chosen.
+    // The gym's own free trial may be paid for now, and ends when that payment lands; anything
+    // else live is a plan already chosen.
     if (current !== undefined && !isLocalTrial(current)) return { kind: "already_subscribed" };
-    const trialEnd = current?.trial_ends_at ?? null;
-    const trialLeftMs = trialEnd === null ? 0 : trialEnd.getTime() - input.now.getTime();
-    const trialDays = trialLeftMs >= TRIAL_CHECKOUT_MIN_MS ? Math.ceil(trialLeftMs / DAY_MS) : null;
     // An unpaid plan its provider still retries: paying it there opens it, a second plan would double it.
     const overdue = await tx`
       SELECT 1 FROM subscriptions
@@ -156,9 +145,8 @@ export async function beginCheckout(
       WHERE gym_id = ${input.gymId} AND state IN ('creating','open')
       RETURNING provider, provider_ref`;
     const inserted = await tx<RawCheckout[]>`
-      INSERT INTO billing_checkouts (gym_id, plan_id, created_by, idempotency_key, provider, trial_ends_at)
-      VALUES (${input.gymId}, ${plan.id}, ${input.userId}, ${input.idempotencyKey}, ${input.provider},
-              ${trialDays === null ? null : trialEnd})
+      INSERT INTO billing_checkouts (gym_id, plan_id, created_by, idempotency_key, provider)
+      VALUES (${input.gymId}, ${plan.id}, ${input.userId}, ${input.idempotencyKey}, ${input.provider})
       RETURNING id, gym_id, plan_id, ${input.planCode}::text AS plan_code, state, provider, provider_ref`;
     const row = inserted[0];
     if (row === undefined) throw new Error("checkout insert returned no row");
@@ -168,7 +156,7 @@ export async function beginCheckout(
       action: "billing.checkout_started",
       targetType: "billing_checkout",
       targetId: row.id,
-      meta: { plan: input.planCode, provider: input.provider, ...(trialDays === null ? {} : { trialDays: String(trialDays) }) },
+      meta: { plan: input.planCode, provider: input.provider },
     });
     return {
       kind: "created",
@@ -180,8 +168,6 @@ export async function beginCheckout(
         const provider = PROVIDERS.find((p) => p === s.provider);
         return s.provider_ref === null || provider === undefined ? [] : [{ provider, ref: s.provider_ref }];
       }),
-      trialDays,
-      trialEndsAt: trialDays === null ? null : trialEnd,
     };
   });
 }
@@ -252,18 +238,19 @@ export async function checkoutsForTransactions(sql: SqlOrTx, transactionIds: rea
   return rows.map(toCheckout);
 }
 
-/** The member limit of the gym's own free trial: its latest one's plan, or the trial band
- *  of its price list (the smallest plan with a trial, as starting a trial picks it). */
+/** The member limit of the gym's own free trial: its latest one's (the trial's own limit, or
+ *  its plan's for a trial started before it had one), or the trial band of its price list
+ *  (the smallest plan with a trial, as starting a trial picks it) at the trial's limit. */
 async function freeTrialSeatCap(tx: SqlOrTx, gymId: string): Promise<number | null> {
   const own = await tx<{ seat_cap: number | null }[]>`
-    SELECT p.seat_cap FROM subscriptions s JOIN plans p ON p.id = s.plan_id
+    SELECT LEAST(p.seat_cap, s.trial_seat_cap) AS seat_cap FROM subscriptions s JOIN plans p ON p.id = s.plan_id
     WHERE s.owner_type = 'gym' AND s.owner_id = ${gymId}
       AND s.provider IN ('none','pilot') AND s.trial_ends_at IS NOT NULL
     ORDER BY s.created_at DESC
     LIMIT 1`;
   if (own[0] !== undefined) return own[0].seat_cap;
   const band = await tx<{ seat_cap: number | null }[]>`
-    SELECT p.seat_cap FROM plans p JOIN gyms g ON g.id = ${gymId}
+    SELECT LEAST(p.seat_cap, ${GYM_TRIAL_MEMBERS}::int) AS seat_cap FROM plans p JOIN gyms g ON g.id = ${gymId}
     WHERE p.audience = 'org' AND p.currency = g.currency_display AND p.active = true
       AND p.interval = 'month' AND p.trial_days > 0
     ORDER BY p.seat_cap ASC NULLS LAST, p.price_minor ASC

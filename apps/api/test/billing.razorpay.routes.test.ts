@@ -151,6 +151,28 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
   };
   const checkout = (gymId: string, cookies: Cookies, planCode: string, key: string = randomBytes(8).toString("hex")) =>
     post(`/v1/orgs/${gymId}/billing/checkout`, { planCode }, cookies, { "idempotency-key": key });
+  /** A paid trial's window, as a press before 2f-i made it (1d-i): Razorpay's subscription
+   *  starts when the gym's own trial ends, so the mandate is given now and the first payment
+   *  taken then. No press makes one now (Kd, RULINGS 2026-09-30), but those already made are
+   *  still followed, so this writes the checkout row and the subscription that press made. */
+  const trialWindow = async (a: { gymId: string; userId: string }, planCode: string) => {
+    const own = (await sql<{ trial_ends_at: Date }[]>`
+      SELECT trial_ends_at FROM subscriptions WHERE owner_id = ${a.gymId} AND provider = 'none' AND status = 'trialing'`)[0];
+    if (own === undefined) throw new Error("no free trial");
+    const row = (await sql<{ id: string }[]>`
+      INSERT INTO billing_checkouts (gym_id, plan_id, created_by, idempotency_key, provider, trial_ends_at)
+      VALUES (${a.gymId}, (SELECT id FROM plans WHERE code = ${planCode}), ${a.userId}, ${randomBytes(8).toString("hex")}, 'razorpay', ${own.trial_ends_at})
+      RETURNING id`)[0];
+    if (row === undefined) throw new Error("no checkout row");
+    const made = await razorpay.createSubscription({
+      planId: planCode === BIG ? BIG_PLAN : SMALL_PLAN,
+      startAt: own.trial_ends_at,
+      notes: { app: "aihg", gym_id: a.gymId, checkout_id: row.id },
+    });
+    if (made.kind !== "ok") throw new Error("fake Razorpay made no subscription");
+    await sql`UPDATE billing_checkouts SET state = 'open', provider_ref = ${made.value.id} WHERE id = ${row.id}`;
+    return { checkoutId: row.id, subscriptionId: made.value.id };
+  };
   const opened = (res: { statusCode: number; body: string }) => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as { checkoutId: string; provider: string; keyId: string; subscriptionId: string; description: string; contact: string | null; email: string | null };
@@ -372,13 +394,13 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
   );
 
   it(
-    "a gym pays during its free trial: the mandate now, the first payment when the trial ends, the trial's 200 members until then",
+    "a paid trial made before 2f-i: the mandate given, the first payment when the trial ends, the trial's 100 members until then",
     async () => {
       const a = await owner();
       expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
       const own = (await sql<{ trial_ends_at: Date }[]>`
         SELECT trial_ends_at FROM subscriptions WHERE owner_id = ${a.gymId} AND provider = 'none'`)[0];
-      const win = opened(await checkout(a.gymId, a.cookies, BIG));
+      const win = await trialWindow(a, BIG);
       // Razorpay starts the subscription at the gym's own trial end, to the second.
       expect(razorpay.created.at(-1)?.startAt?.getTime()).toBe(own?.trial_ends_at.getTime());
       const startAt = razorpay.subs.get(win.subscriptionId)?.start_at ?? 0;
@@ -389,10 +411,10 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
       const trialEnd = new Date(startAt * 1000).toISOString();
       expect(synced).toMatchObject({
         state: "paid",
-        subscription: { status: "trialing", subscribed: true, paidThrough: "razorpay", priceLabel: "₹200", seatCap: 200, nextSeatCap: 5000, currentPeriodEnd: trialEnd },
+        subscription: { status: "trialing", subscribed: true, paidThrough: "razorpay", priceLabel: "₹200", seatCap: 100, nextSeatCap: 5000, currentPeriodEnd: trialEnd },
       });
       expect(razorpay.invoices.get(win.subscriptionId) ?? []).toEqual([]);
-      expect(await gymSeatCap(sql, a.gymId)).toBe(200);
+      expect(await gymSeatCap(sql, a.gymId)).toBe(100);
 
       // The trial's last day: Razorpay takes the first payment, and the chosen size starts.
       razorpay.clock = startAt;
@@ -406,11 +428,32 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
   );
 
   it(
+    "WORST THING: a gym that pays in its free trial is charged now at the plan's own price, and gets its full size at once; the trial ends (Razorpay)",
+    async () => {
+      const a = await owner();
+      expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
+      const win = opened(await checkout(a.gymId, a.cookies, BIG));
+      // No start date: Razorpay charges when the window is paid, never at the trial's end.
+      expect(razorpay.created.at(-1)?.startAt ?? null).toBeNull();
+      expect(razorpay.subs.get(win.subscriptionId)?.start_at ?? null).toBeNull();
+      razorpay.authenticate(win.subscriptionId);
+      expect((razorpay.invoices.get(win.subscriptionId) ?? []).map((i) => i.amount_paid)).toEqual([20000]);
+      const synced = JSON.parse((await sync(a.gymId, win.checkoutId, a.cookies)).body) as { state: string };
+      expect(synced).toMatchObject({ state: "paid", subscription: { status: "active", seatCap: 5000, nextSeatCap: null, paidThrough: "razorpay" } });
+      const ownRow = (await sql<{ status: string; cancel_reason: string | null }[]>`
+        SELECT status, cancel_reason FROM subscriptions WHERE owner_id = ${a.gymId} AND provider = 'none'`)[0];
+      expect(ownRow).toEqual({ status: "expired", cancel_reason: "subscribed" });
+      expect(await gymSeatCap(sql, a.gymId)).toBe(5000);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "a trial window not paid before the trial ends is told so, nothing charged",
     async () => {
       const a = await owner();
       expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
-      const win = opened(await checkout(a.gymId, a.cookies, SMALL));
+      const win = await trialWindow(a, SMALL);
       const sub = razorpay.subs.get(win.subscriptionId);
       if (sub === undefined) throw new Error("no subscription");
       razorpay.subs.set(win.subscriptionId, { ...sub, status: "expired", ended_at: sub.start_at });
@@ -484,7 +527,7 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
     async () => {
       const a = await owner();
       expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
-      const win = opened(await checkout(a.gymId, a.cookies, BIG));
+      const win = await trialWindow(a, BIG);
       razorpay.authenticate(win.subscriptionId);
       await sync(a.gymId, win.checkoutId, a.cookies);
       const firstCharge = (razorpay.subs.get(win.subscriptionId)?.start_at ?? 0) * 1000;

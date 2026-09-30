@@ -19,8 +19,9 @@ import { usePaddleSubscribe } from './usePaddleSubscribe';
 // CHOOSING A PLAN FROM THE PLAN CARD (ROADMAP Stage 3 items 1c-ii and 1c-iii; Kd, RULINGS
 // 2026-09-25).
 //
-// `subscribe`: a gym in its own free trial pays now in Paddle's window; its card is
-// saved and the first payment is taken when the trial ends. `size`: a gym on a plan paid
+// `subscribe`: a gym in its own free trial pays today in its payment company's window and
+// gets the size it chose at once; its free trial ends then (Kd, RULINGS 2026-09-30). Keeping
+// the trial is not paying yet. `size`: a gym on a plan paid
 // through us sees every size, its own marked. A bigger one shows what Paddle will charge
 // now; a smaller one starts with the next payment, nothing charged or given back, and the
 // gym keeps its whole size until then; if it has more members than the smaller size holds,
@@ -32,6 +33,14 @@ import { usePaddleSubscribe } from './usePaddleSubscribe';
 const muted = { color: 'rgba(255,255,255,0.6)' };
 const warn = { color: '#FF8A1F' };
 
+/** What the dialog says once a plan is paid for in the free trial. */
+function paidText(paid, words) {
+  if (paid.status === 'trialing') return `You're subscribed. ${firstPaymentText(paid) ?? ''}`.trim();
+  return Number.isFinite(paid.seatCap)
+    ? `You're subscribed. Up to ${paid.seatCap.toLocaleString()} ${words.people} can now join.`
+    : `You're subscribed. Your plan has no ${words.person} limit.`;
+}
+
 /** What the dialog says once a size is changed or chosen. */
 function doneText(changed, words, firstPaymentOn) {
   const pending = changed.pendingSize;
@@ -42,7 +51,9 @@ function doneText(changed, words, firstPaymentOn) {
     return `Done. You'll move to ${pending.seatCap.toLocaleString()} ${words.people} (${pending.priceLabel} a month)${on === null ? ' at your next payment' : ` on ${on}`}.${keep}`;
   }
   if (changed.status === 'trialing') {
-    return `Done. Up to ${chosenSeatCap(changed)} ${words.people} from ${firstPaymentOn ?? 'your first payment'}, when your first payment is taken.`;
+    return firstPaymentOn === null
+      ? `Done. Up to ${chosenSeatCap(changed)} ${words.people} once your first payment goes through.`
+      : `Done. Up to ${chosenSeatCap(changed)} ${words.people} from ${firstPaymentOn}.`;
   }
   return Number.isFinite(changed.seatCap)
     ? `Done. Up to ${changed.seatCap.toLocaleString()} ${words.people} can now join.`
@@ -120,7 +131,6 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
     }
   };
 
-  const trialEnds = trialEndDateLabel(sub?.trialEndsAt);
   // In a trial, even a paid one, the limit stays the trial's until the first payment.
   const inTrial = sub?.status === 'trialing';
   const firstPaymentOn = trialEndDateLabel(sub?.currentPeriodEnd);
@@ -166,7 +176,7 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
         {changed !== null || paid !== null ? (
           <>
             <p className="text-sm mt-4" style={{ color: 'rgba(255,255,255,0.85)' }} data-testid="plan-choice-done">
-              {changed !== null ? doneText(changed, words, firstPaymentOn) : `You're subscribed. ${firstPaymentText(paid) ?? ''}`.trim()}
+              {changed !== null ? doneText(changed, words, firstPaymentOn) : paidText(paid, words)}
             </p>
             {doneWarning !== null ? (
               <p className="text-sm mt-2" style={warn}>
@@ -189,7 +199,7 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
                 ? inTrial
                   ? `Your trial allows up to ${sub?.seatCap} ${words.people} until your first payment${firstPaymentOn === null ? '' : ` on ${firstPaymentOn}`}; the size you choose starts then. Nothing is charged now.`
                   : `A bigger size starts at once and you pay the difference for the rest of this month. A smaller one starts with your next payment${firstPaymentOn === null ? '' : ` on ${firstPaymentOn}`}; until then you keep your whole size.`
-                : `Your free trial carries on at up to ${sub?.seatCap} ${words.people}. You give your payment details now; the plan you choose and its first payment start when the trial ends${trialEnds === null ? '' : ` on ${trialEnds}`}.`}
+                : `You pay today and get the size you choose at once. Your free trial ends then.`}
             </p>
 
             {plans.loading ? (
@@ -216,6 +226,7 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
                     busy={paying !== null}
                     working={paying?.planCode === p.code}
                     onSubscribe={subscribe}
+                    buttonText="Subscribe and pay today"
                   />
                 ))}
               </ul>

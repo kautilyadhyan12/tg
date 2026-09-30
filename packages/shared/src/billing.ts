@@ -21,7 +21,8 @@ export const paddleCustomerIdSchema = paddleId("ctm");
  *  §8 said 5). The worker ends the grace and the console's banner says the number. */
 export const PAID_PLAN_GRACE_DAYS = 2;
 
-/** Subscribe to one plan of the gym's own price list. The server prices it. */
+/** Subscribe to one plan of the gym's own price list. The server prices it, and charges it
+ *  now: in the gym's own free trial too, which then ends (Kd, RULINGS 2026-09-30). */
 export const orgCheckoutRequestSchema = z.object({ planCode: z.string().min(1).max(64) }).strict();
 export type OrgCheckoutRequest = z.infer<typeof orgCheckoutRequestSchema>;
 

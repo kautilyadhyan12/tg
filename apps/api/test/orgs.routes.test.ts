@@ -5760,10 +5760,10 @@ d("orgs routes (real Postgres)", () => {
    *  gets. A fixture plan here would assert the mechanism and say nothing about
    *  the ruling — :18652's C/H-1 exactly, tests pointed at a plan nobody is on.
    *
-   *  200 members and 10 days since RULINGS 2026-09-22 and 2026-09-23 (the length
-   *  is `GYM_TRIAL_DAYS` in `@app/shared`); the window is wide because the clock is the
-   *  database's, not this process's. */
-  it("an owner starts the gym's 10-day trial and gets the 200-seat band", { timeout: 30_000 }, async () => {
+   *  100 members (RULINGS 2026-09-29; 200 before) and 10 days (RULINGS 2026-09-23; the
+   *  length is `GYM_TRIAL_DAYS` in `@app/shared`); the window is wide because the clock is
+   *  the database's, not this process's. */
+  it("an owner starts the gym's 10-day trial and gets 100 members", { timeout: 30_000 }, async () => {
     const owner = await makeUser("trial-ok");
     const org = await makeOrg(owner.cookies, "Orgs Test Trial Ok", { country: "US", plan: null });
 
@@ -5772,7 +5772,7 @@ d("orgs routes (real Postgres)", () => {
     const body = JSON.parse(res.body) as TrialBody;
     expect(body.outcome).toBe("started");
     expect(body.subscription.status).toBe("trialing");
-    expect(body.subscription.seatCap).toBe(200);
+    expect(body.subscription.seatCap).toBe(100);
 
     const endsAt = body.subscription.trialEndsAt;
     if (endsAt === null) throw new Error("a trial with no end date is not a trial");
@@ -5794,7 +5794,7 @@ d("orgs routes (real Postgres)", () => {
       SELECT action, target_id, meta FROM audit_log
       WHERE gym_id = ${org.org.id} AND action = 'org.trial_started'`;
     expect(audit).toHaveLength(1);
-    expect(audit[0]?.meta["seatCap"]).toBe("200");
+    expect(audit[0]?.meta["seatCap"]).toBe("100");
     // THE ROW POINTS AT THE SUBSCRIPTION IT NAMES (T3 round 1, Low-6). It said
     // `targetType: 'subscription'` while carrying the GYM's id, so it could not
     // be joined to the thing it was about — and P3's Done gate asks that any
@@ -5805,10 +5805,10 @@ d("orgs routes (real Postgres)", () => {
     expect(audit[0]?.target_id).not.toBe(org.org.id);
   });
 
-  /** A trial lets in 200 members, not 201 (RULINGS 2026-09-22), on the real
-   *  seeded band. 199 members are written straight in; the 200th and 201st come
+  /** A trial lets in 100 members, not 101 (RULINGS 2026-09-29), on the real
+   *  seeded band. 99 members are written straight in; the 100th and 101st come
    *  through the front desk's Confirm. */
-  it("a trial confirms the 200th member and refuses the 201st", { timeout: 60_000 }, async () => {
+  it("a trial confirms the 100th member and refuses the 101st", { timeout: 60_000 }, async () => {
     const owner = await makeUser("trial-fill");
     const org = await makeOrg(owner.cookies, "Orgs Test Trial Fill", { country: "US", plan: null });
     const started = await post(`/v1/orgs/${org.org.id}/trial`, {}, { cookies: owner.cookies });
@@ -5817,17 +5817,17 @@ d("orgs routes (real Postgres)", () => {
     const filler = await sql<{ id: string }[]>`
       INSERT INTO users (display_name, email)
       SELECT 'Trial fill', 'orgs-t-trial-fill-' || g || '-' || ${org.org.id} || '@example.com'
-      FROM generate_series(1, 199) g
+      FROM generate_series(1, 99) g
       RETURNING id`;
     await sql`
       INSERT INTO gym_members (gym_id, user_id, complimentary)
       SELECT ${org.org.id}, id, false FROM users WHERE id IN ${sql(filler.map((u) => u.id))}`;
 
-    const two00 = await makeUser("trial-fill-200");
-    await joinAsMember(two00.cookies, org, owner.cookies);
+    const one00 = await makeUser("trial-fill-100");
+    await joinAsMember(one00.cookies, org, owner.cookies);
 
-    const two01 = await makeUser("trial-fill-201");
-    const application = await applyWithCode(two01.cookies, org.joinCode.code);
+    const one01 = await makeUser("trial-fill-101");
+    const application = await applyWithCode(one01.cookies, org.joinCode.code);
     const full = await post(
       `/v1/orgs/${org.org.id}/applications/${application}/confirm`,
       {},
@@ -5836,7 +5836,7 @@ d("orgs routes (real Postgres)", () => {
     expect(full.statusCode).toBe(409);
     const body = JSON.parse(full.body) as { error: string; message: string };
     expect(body.error).toBe("seat_cap_reached");
-    expect(body.message).toMatch(/\b200\b/);
+    expect(body.message).toMatch(/\b100\b/);
   });
 
   /** THE PROMISE THE WHOLE CARD IS FOR: the gym starts paying (in trial), and its
@@ -5886,7 +5886,7 @@ d("orgs routes (real Postgres)", () => {
     expect(second.statusCode).toBe(200);
     const body = JSON.parse(second.body) as TrialBody;
     expect(body.outcome).toBe("already_subscribed");
-    expect(body.subscription.seatCap).toBe(200);
+    expect(body.subscription.seatCap).toBe(100);
     expect(await readSubs(org.org.id)).toHaveLength(1);
   });
 
@@ -6190,9 +6190,9 @@ d("orgs routes (real Postgres)", () => {
 
     const row = await mineRow(owner.cookies, org.org.id);
     expect(row.subscription?.status).toBe("trialing");
-    // The REAL band off the seeded book, the same 200 the trial response
-    // asserts — the two readers must not be able to disagree about the cap.
-    expect(row.subscription?.seatCap).toBe(200);
+    // The trial's own 100, the same the trial response asserts — the two
+    // readers must not be able to disagree about the cap.
+    expect(row.subscription?.seatCap).toBe(100);
     expect(row.subscription?.trialEndsAt).not.toBeNull();
   });
 
