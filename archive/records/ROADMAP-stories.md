@@ -179,3 +179,5 @@ stage. History, never a rule: RULINGS wins where they differ.
 - 1d-i, as it stood when it finished (2026-09-30): **Subscribe in rupees**: Razorpay's window, the first payment when the gym's own trial ends, renewals and failed payments by webhook, the 2-day grace, a second plan cancelled and refunded.
 
 5b-v-d-iv. [x] **Import problems stay marked on the person** (RULINGS 2026-09-29, 2026-09-30): one "Review needed" tag on the person's Members row, what is wrong on their page with It's correct, a glowing sign on Members ("5 members need review · See who") and a dot on Members in the menu until nobody is left; See who opens "Members who need review" (Kd at the click-through). Stored at import, gone once staff fix it. Merged 2026-09-30 (PR #137).
+
+20c-vi. [x] **The two extra passes' fixes** (reviews 2026-09-30): a stranger on a gym's page can no longer stop its invitations (RULINGS 2026-09-30), the form cannot fill the gym, the same email never twice, and seven smaller mix-ups; the re-checks' Lows too (robot failures counted apart, the busy-page share, Leads says what the page turned away). Merged 2026-09-30 (PR #139).

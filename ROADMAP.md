@@ -211,7 +211,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 20c-v. **"Send them for me"** (RULINGS 2026-09-27): split 2026-09-29 in two, as 3b-i was (RULINGS that day; the line as first written is in `archive/records/ROADMAP-stories.md`).
        - 20c-v-a. [x] **The switch, and the emails go** — merged 2026-09-29 (PR #132).
        - 20c-v-b. [x] **What comes back** — merged 2026-09-29 (PR #134).
-     - 20c-vi. [ ] **The two extra passes' fixes** (reviews 2026-09-30): a stranger on a gym's page can no longer stop its invitations (RULINGS 2026-09-30), the form cannot fill the gym, the same email never twice, and seven smaller mix-ups.
+     - 20c-vi. [x] **The two extra passes' fixes** — merged 2026-09-30 (PR #139).
      - 20c-vii. [ ] **Delete many leads at once**: tick boxes and one action bar, as Gmail and HubSpot do, with a box naming who goes; clears a flood of form messages in one step. Kd's order.
    - 20d. [ ] **At risk, and the owner's weekly summary** — it takes the place of item 2's "slipping away"; it reads visits (after 16a).
 21. **Reports** (RULINGS 2026-09-22; spec Part 3 §16.5) — it takes in item 12's reports. Opus xhigh (a rule that thresholds, other people's data).
