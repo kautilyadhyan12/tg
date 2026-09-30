@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ChevronRight, FileUp, Globe, Loader2, Search, UserPlus } from 'lucide-react';
-import { LEAD_EMAIL_SETTINGS_WORDS, LEAD_FILE_WORDS, LEAD_QUERY_MAX_CHARS } from '@app/shared';
+import { LEAD_EMAIL_SETTINGS_WORDS, LEAD_FILE_WORDS, LEAD_LIST_WORDS, LEAD_QUERY_MAX_CHARS } from '@app/shared';
 import { orgService, errorStatus, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import ScrollJump from '../../components/console/ScrollJump';
@@ -86,6 +86,8 @@ export default function Leads() {
             cursor: d.cursor,
             counts: d.counts,
             sendingStopped: d.sendingStopped === true,
+            pageEmailsStopped: d.pageEmailsStopped === true,
+            pageTurnedAway: typeof d.pageTurnedAway === 'number' ? d.pageTurnedAway : 0,
           });
         },
         (err) => {
@@ -210,6 +212,19 @@ export default function Leads() {
       {page.sendingStopped ? (
         <section className="c-callout" role="status" data-testid="leads-sending-stopped">
           <p className="c-s14">{LEAD_EMAIL_SETTINGS_WORDS.sending_stopped}</p>
+        </section>
+      ) : null}
+
+      {/* Paused for bounces or spam reports on emails to people who asked on the page: said
+          on the list, not lead by lead (RULINGS 2026-09-30). */}
+      {page.pageEmailsStopped && !page.sendingStopped ? (
+        <section className="c-callout" role="status" data-testid="leads-page-emails-stopped">
+          <p className="c-s14">{LEAD_LIST_WORDS.pageEmailsStopped}</p>
+        </section>
+      ) : null}
+      {page.pageTurnedAway > 0 ? (
+        <section className="c-callout" role="status" data-testid="leads-page-turned-away">
+          <p className="c-s14">{LEAD_LIST_WORDS.pageTurnedAway(page.pageTurnedAway)}</p>
         </section>
       ) : null}
 

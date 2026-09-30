@@ -802,4 +802,22 @@ d("a gym's leads (real Postgres)", () => {
     },
     TIMEOUT_MS,
   );
+
+  it(
+    "a panel opened before another person marked the lead Joined cannot undo the join: its save is refused and it looks again",
+    async () => {
+      const owner = await makeUser("stale-owner");
+      const org = await makeOrg(owner.cookies, "Stale Panel Gym");
+      const sam = await addLead(org.org.id, owner.cookies, { fullName: "Sam Gold", email: "sam.gold@example.com" });
+      expect(sam.status).toBe("new");
+      expect((await post(joinUrl(org.org.id, sam.id), {}, owner.cookies)).statusCode).toBe(200);
+      // The desk's panel still shows New and saves Contacted.
+      const stale = await patch(leadUrl(org.org.id, sam.id), { status: "contacted", fromStatus: "new" }, owner.cookies);
+      expect([stale.statusCode, (JSON.parse(stale.body) as { error: string }).error]).toEqual([409, "lead_changed"]);
+      expect((await storedLeads(org.org.id)).map((l) => [l.status, l.entry_id !== null])).toEqual([["joined", true]]);
+      // A panel that saw Joined may still move it on.
+      expect((await patch(leadUrl(org.org.id, sam.id), { notes: "Came back", fromStatus: "joined" }, owner.cookies)).statusCode).toBe(200);
+    },
+    TIMEOUT_MS,
+  );
 });

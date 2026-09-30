@@ -18,6 +18,7 @@ import { gymCounts, resumeGym } from "../src/modules/orgs/invites/repo.js";
 import { INVITE_RESULTS, processInviteResults, type StoppedGym } from "../src/modules/orgs/invites/results.js";
 import { inviteSettings } from "../src/modules/orgs/invites/settings.js";
 import { sendDueLeadEmails, type LeadSendRun } from "../src/modules/orgs/leads/sender.js";
+import { fillLeadEmailHmacs } from "../src/modules/orgs/leads/repo.js";
 import { RESEND_WEBHOOK_PATH } from "../src/modules/webhooks/resendRoutes.js";
 import { LEAD_SEND_TAG, leadsResponseSchema, type Lead } from "@app/shared";
 
@@ -309,6 +310,8 @@ d("what comes back from a lead's follow-up (real Postgres)", () => {
         sendPasswordResetEmail: () => Promise.resolve(),
         sendSignInCodeEmail: () => Promise.resolve(),
       },
+      // The gym page's robot check, passed: what the form's people do is under test.
+      robotCheck: { siteKey: "test-site-key", verify: () => Promise.resolve("passed") },
     });
     await api().ready();
     ownerA = await makeOwner("a");
@@ -632,6 +635,117 @@ d("what comes back from a lead's follow-up (real Postgres)", () => {
         bounceSubType: null,
       });
       expect(JSON.stringify(kept?.payload)).not.toContain("example.com");
+    },
+    TIMEOUT_MS,
+  );
+
+  // ── The two passes over 20c (reviews 2026-09-30) ──
+
+  let formIp = 0;
+  /** The gym page's form, sent by a stranger with no sign-in, ticked "happy to hear". */
+  const pageForm = async (gymId: string, name: string) => {
+    const slug = (await sql<{ slug: string }[]>`SELECT slug FROM gyms WHERE id = ${gymId}`)[0]?.slug ?? "";
+    return await api().inject({
+      method: "POST",
+      url: `/v1/public/gyms/${slug}/enquiries`,
+      remoteAddress: `10.78.${String(Math.floor(formIp / 250))}.${String((formIp++ % 250) + 1)}`,
+      headers: { "content-type": "application/json" },
+      payload: JSON.stringify({ fullName: `${name} Stranger`, email: personAddr(name), source: "social", message: "Hello", mayEmail: true, robotToken: "ok" }),
+    });
+  };
+  const showPage = async (gymId: string, cookies: Record<string, string>) => {
+    const res = await send("PUT", `/v1/orgs/${gymId}/page`, { shown: true, about: "", facilities: [], ownFacilities: [] }, cookies);
+    expect(res.statusCode, res.body).toBe(200);
+  };
+  const leadIdOf = async (gymId: string, name: string) =>
+    (await sql<{ id: string }[]>`SELECT id FROM gym_leads WHERE gym_id = ${gymId} AND email = ${personAddr(name)}`)[0]?.id ?? "";
+
+  it(
+    "WORST THING: a stranger who sends the gym's page form and marks the email as spam — or gives addresses that bounce — never stops the gym's invitations or its staff's leads' emails",
+    async () => {
+      const gym = await makeGym(ownerA, "Page Attack Gym");
+      ourGyms.push(gym);
+      await showPage(gym, ownerA);
+      expect((await pageForm(gym, "mal")).statusCode).toBe(202);
+      await addLead(gym, ownerA, "walkin");
+      await runSender();
+      await reportOn(lastTo("mal"), "email.complained", "complained");
+      await processAll();
+
+      // The gym's own standing is untouched: its invitations and its staff's leads go on.
+      expect(await stoppedReason(gym)).toBeNull();
+      expect(toldOperator.map((stopped) => stopped.gymId)).not.toContain(gym);
+      expect(await gymCounts(sql, gym)).toEqual({ sent: 1, bounced: 0, complainedEarly: false });
+      await addLead(gym, ownerA, "walktwo");
+      await runSender();
+      expect(emailsTo("walktwo")).toHaveLength(1);
+      // Only the app's emails to people the page ticked pause: staff send those, and are told why.
+      expect((await pageForm(gym, "nia")).statusCode).toBe(202);
+      await runSender();
+      expect(emailsTo("nia")).toEqual([]);
+      expect((await readLead(gym, await leadIdOf(gym, "nia"), ownerA)).followUp).toMatchObject({ by: "you", notSent: "page_emails_stopped" });
+
+      // Two made-up addresses that bounce, at another gym: its invitations go on too.
+      const other = await makeGym(ownerB, "Page Bounce Gym");
+      ourGyms.push(other);
+      await showPage(other, ownerB);
+      // Fresh made-up addresses each run: a bounce keeps an address from every gym for good.
+      const nobodies = ["one", "two"].map((n) => `nobody${n}${String(Date.now() % 1_000_000)}`);
+      for (const name of nobodies) expect((await pageForm(other, name)).statusCode).toBe(202);
+      await runSender();
+      await runSender();
+      for (const name of nobodies) await reportOn(lastTo(name), "email.bounced", "bounced", "Permanent");
+      await processAll();
+      expect(await stoppedReason(other)).toBeNull();
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "a person who presses Stop and then marks the email as spam is kept as a spam report, and the list says so",
+    async () => {
+      const gym = await makeGym(ownerA, "Stop Then Spam Gym");
+      ourGyms.push(gym);
+      const lead = await addLead(gym, ownerA, "stopspam");
+      await runSender();
+      const sent = lastTo("stopspam");
+      const link = /<([^>]+)>/.exec(sent.message.headers["List-Unsubscribe"] ?? "")?.[1] ?? "";
+      const stop = await api().inject({
+        method: "POST",
+        url: link.slice(link.indexOf("/v1/")),
+        remoteAddress: "10.79.0.1",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        payload: "List-Unsubscribe=One-Click",
+      });
+      expect(stop.statusCode).toBe(200);
+      await reportOn(sent, "email.complained", "complained");
+      await processAll();
+      expect(await suppressionsOf("stopspam")).toEqual([{ gym_id: gym, reason: "complained" }]);
+      const seen = await readLead(gym, lead.id, ownerA);
+      expect(seen.followUp.optedOutHow).toBe("complained");
+      expect(seen.emailProblem).toBe("complained");
+      expect((await listOf(gym, ownerA)).counts.emailProblems).toBe(1);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "the key fill never stores the old address's key for an address changed while it ran",
+    async () => {
+      const gym = await makeGym(ownerA, "Key Fill Gym");
+      ourGyms.push(gym);
+      const lead = await addLead(gym, ownerA, "keyold");
+      await sql`UPDATE gym_leads SET email_hmac = NULL WHERE id = ${lead.id}`;
+      // An api from before 0052 changes the address between the tool's read and its write.
+      await fillLeadEmailHmacs(sql, settings.hmacKey, async () => {
+        await sql`UPDATE gym_leads SET email = ${personAddr("keynew")} WHERE id = ${lead.id}`;
+      });
+      const key = async () => (await sql<{ k: string | null }[]>`SELECT email_hmac AS k FROM gym_leads WHERE id = ${lead.id}`)[0]?.k ?? null;
+      expect(await key()).not.toBe(hmacOf(personAddr("keyold")));
+      while ((await fillLeadEmailHmacs(sql, settings.hmacKey)).read > 0) {
+        // the next batches give it the new address's key
+      }
+      expect(await key()).toBe(hmacOf(personAddr("keynew")));
     },
     TIMEOUT_MS,
   );

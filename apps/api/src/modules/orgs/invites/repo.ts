@@ -500,10 +500,14 @@ export async function lockInvitationById(
 
 /** Keep this address from this gym's invitations. Twice is once. */
 export async function suppressForGym(sql: SqlOrTx, gymId: string, hmac: string, reason: "unsubscribed" | "complained"): Promise<void> {
+  // A spam report after Stop is kept as the spam report, the more serious; never the other
+  // way round (the integrity pass over 20c, 2026-09-30).
   await sql`
     INSERT INTO email_suppressions (email_hmac, gym_id, reason)
     VALUES (${hmac}, ${gymId}, ${reason})
-    ON CONFLICT (email_hmac, gym_id) WHERE gym_id IS NOT NULL DO NOTHING`;
+    ON CONFLICT (email_hmac, gym_id) WHERE gym_id IS NOT NULL
+    DO UPDATE SET reason = EXCLUDED.reason
+    WHERE email_suppressions.reason = 'unsubscribed' AND EXCLUDED.reason = 'complained'`;
 }
 
 // ── The worker ───────────────────────────────────────────────────────────────
@@ -890,7 +894,9 @@ export async function suppressEveryGym(sql: SqlOrTx, hmac: string, reason: "boun
 }
 
 /** What the gym has sent since its counts start, and what came back: its invitations
- *  and the lead follow-ups the app sent for it (20c-v-b), together. An email Resend
+ *  and the lead follow-ups the app sent for it (20c-v-b), together — except those to leads
+ *  its page ticked, which anybody can make and which count apart (`pageCounts`; Kd,
+ *  RULINGS 2026-09-30), so a stranger can never stop a gym's invitations. An email Resend
  *  refused to deliver never reached anybody, so it is not counted at all. */
 export async function gymCounts(sql: SqlOrTx, gymId: string): Promise<GymCounts> {
   const rows = await sql<{ sent: number; bounced: number; complained_early: boolean }[]>`
@@ -905,7 +911,7 @@ export async function gymCounts(sql: SqlOrTx, gymId: string): Promise<GymCounts>
       SELECT y.result, y.finished_at, y.id
       FROM gym_lead_sends y, since
       WHERE y.gym_id = ${gymId} AND y.state = 'sent' AND y.result IS DISTINCT FROM 'refused'
-        AND y.finished_at >= since.at
+        AND y.finished_at >= since.at AND NOT y.from_page
     )
     SELECT (SELECT count(*)::int FROM counted) AS sent,
            (SELECT count(*)::int FROM counted WHERE result = 'bounced') AS bounced,
@@ -915,6 +921,44 @@ export async function gymCounts(sql: SqlOrTx, gymId: string): Promise<GymCounts>
              ) early WHERE early.result = 'complained') AS complained_early`;
   const row = rows[0];
   return { sent: row?.sent ?? 0, bounced: row?.bounced ?? 0, complainedEarly: row?.complained_early ?? false };
+}
+
+/** The app's emails to leads the gym's page ticked, since their counts start, and what came
+ *  back: judged by the gym's own rule, they can pause only these emails. */
+export async function pageCounts(sql: SqlOrTx, gymId: string): Promise<GymCounts> {
+  const rows = await sql<{ sent: number; bounced: number; complained_early: boolean }[]>`
+    WITH since AS (
+      SELECT coalesce(page_emails_counted_from, '-infinity'::timestamptz) AS at FROM gyms WHERE id = ${gymId}
+    ), counted AS (
+      SELECT y.result, y.finished_at, y.id
+      FROM gym_lead_sends y, since
+      WHERE y.gym_id = ${gymId} AND y.state = 'sent' AND y.result IS DISTINCT FROM 'refused'
+        AND y.finished_at >= since.at AND y.from_page
+    )
+    SELECT (SELECT count(*)::int FROM counted) AS sent,
+           (SELECT count(*)::int FROM counted WHERE result = 'bounced') AS bounced,
+           EXISTS (
+             SELECT 1 FROM (
+               SELECT result FROM counted ORDER BY finished_at, id LIMIT ${INVITE_STANDING.complaintWindow}
+             ) early WHERE early.result = 'complained') AS complained_early`;
+  const row = rows[0];
+  return { sent: row?.sent ?? 0, bounced: row?.bounced ?? 0, complainedEarly: row?.complained_early ?? false };
+}
+
+/** Pause the app's emails to leads the gym's page ticked: those leads' follow-ups become
+ *  staff's. Their waiting emails that certainly have not gone are skipped; one that may
+ *  have gone is stopped by the worker's own check. True only for the call that paused them. */
+export async function stopPageEmails(tx: TransactionSql, gymId: string, reason: StopReason, at: Date): Promise<boolean> {
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gyms SET page_emails_stopped_at = ${at}, page_emails_stopped_reason = ${reason}
+    WHERE id = ${gymId} AND page_emails_stopped_at IS NULL
+    RETURNING id`;
+  if (rows.length === 0) return false;
+  await tx`
+    UPDATE gym_lead_sends
+    SET state = 'skipped', reason = 'sending_stopped', email = NULL, finished_at = ${at}
+    WHERE gym_id = ${gymId} AND from_page AND state = 'queued' AND maybe_sent_at IS NULL`;
+  return true;
 }
 
 /** Stop the gym's invitations. Its waiting emails that certainly have not gone are
@@ -954,8 +998,11 @@ export async function stoppedGyms(
  *  again. False if it was not stopped. */
 export async function resumeGym(sql: SqlOrTx, gymId: string, at: Date): Promise<boolean> {
   const rows = await sql<{ id: string }[]>`
-    UPDATE gyms SET invites_stopped_at = NULL, invites_stopped_reason = NULL, invites_counted_from = ${at}
-    WHERE id = ${gymId} AND invites_stopped_at IS NOT NULL
+    UPDATE gyms SET invites_stopped_at = NULL, invites_stopped_reason = NULL, invites_counted_from = ${at},
+                    -- Its page emails start again with it, their counts afresh too.
+                    page_emails_stopped_at = NULL, page_emails_stopped_reason = NULL,
+                    page_emails_counted_from = CASE WHEN page_emails_stopped_at IS NULL THEN page_emails_counted_from ELSE ${at} END
+    WHERE id = ${gymId} AND (invites_stopped_at IS NOT NULL OR page_emails_stopped_at IS NOT NULL)
     RETURNING id`;
   return rows.length === 1;
 }

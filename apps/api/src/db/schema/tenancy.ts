@@ -112,6 +112,11 @@ export const gyms = pgTable(
     invitesStoppedReason: text("invites_stopped_reason"),
     /** Where its bounce and complaint counts start; null for its first email. */
     invitesCountedFrom: timestamp("invites_counted_from", { withTimezone: true }),
+    /** The app's emails to leads the page ticked, paused by their bounces or spam reports
+     *  (0055; Kd, RULINGS 2026-09-30): never the gym's invitations. */
+    pageEmailsStoppedAt: timestamp("page_emails_stopped_at", { withTimezone: true }),
+    pageEmailsStoppedReason: text("page_emails_stopped_reason"),
+    pageEmailsCountedFrom: timestamp("page_emails_counted_from", { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [
@@ -122,6 +127,10 @@ export const gyms = pgTable(
       sql`${t.invitesStoppedReason} IS NULL OR ${t.invitesStoppedReason} IN ('bounces','complaint')`,
     ),
     check("gyms_invites_stopped_check", sql`(${t.invitesStoppedAt} IS NULL) = (${t.invitesStoppedReason} IS NULL)`),
+    check(
+      "gyms_page_emails_stopped_check",
+      sql`(${t.pageEmailsStoppedAt} IS NULL) = (${t.pageEmailsStoppedReason} IS NULL) AND (${t.pageEmailsStoppedReason} IS NULL OR ${t.pageEmailsStoppedReason} IN ('bounces','complaint'))`,
+    ),
     check(
       "gyms_org_type_check",
       sql`${t.orgType} IN ('gym','studio','personal_trainer','clinic')`,

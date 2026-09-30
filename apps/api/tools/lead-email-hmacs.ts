@@ -12,8 +12,8 @@
 // The deploy step is `RUNBOOK/fill-lead-email-keys.md`.
 import postgres from "postgres";
 import { loadConfig } from "../src/config.js";
-import { emailHmac } from "../src/modules/orgs/invites/address.js";
 import { inviteSettings } from "../src/modules/orgs/invites/settings.js";
+import { fillLeadEmailHmacs } from "../src/modules/orgs/leads/repo.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
 if (url === "") throw new Error("DATABASE_URL is required");
@@ -37,19 +37,9 @@ const sql = postgres(url, { prepare: false, max: 2 });
 try {
   let filled = 0;
   for (;;) {
-    const rows = await sql<{ id: string; email: string }[]>`
-      SELECT id, email::text AS email FROM gym_leads
-      WHERE email IS NOT NULL AND email_hmac IS NULL
-      ORDER BY id
-      LIMIT 1000`;
-    if (rows.length === 0) break;
-    const ids = rows.map((row) => row.id);
-    const hmacs = rows.map((row) => emailHmac(settings.hmacKey, row.email));
-    await sql`
-      UPDATE gym_leads l SET email_hmac = v.hmac
-      FROM unnest(${ids}::uuid[], ${hmacs}::text[]) AS v(id, hmac)
-      WHERE l.id = v.id AND l.email_hmac IS NULL`;
-    filled += rows.length;
+    const batch = await fillLeadEmailHmacs(sql, settings.hmacKey);
+    if (batch.read === 0) break;
+    filled += batch.filled;
   }
   console.log(`Leads given their address key: ${String(filled)}`);
 } finally {

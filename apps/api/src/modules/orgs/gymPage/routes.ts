@@ -23,6 +23,7 @@ import { orgParamsSchema } from "../schemas.js";
 import type { PhotoStore } from "./photoStore.js";
 import type { RobotCheck } from "./robotCheck.js";
 import * as service from "./service.js";
+import { pageTurnedAwayKey } from "./service.js";
 
 /** The slug in a page's address: what `slugifyName` makes, and nothing else. */
 const slugParamsSchema = z.object({ slug: z.string().regex(/^[a-z0-9-]{1,100}$/) }).strict();
@@ -59,6 +60,12 @@ const slugOf = (req: FastifyRequest): string | null => {
 };
 
 const ENQUIRY_PAGE_MAX = 120;
+/** Of a page's 120 an hour, what one address may spend once the page has taken 60. */
+const ENQUIRY_PAGE_ADDRESS_SHARE = 10;
+const ENQUIRY_PAGE_BUSY_FROM = 60;
+/** Failed robot checks one address may make at one page in an hour. */
+const ENQUIRY_ROBOT_FAILS_MAX = 30;
+
 const ENQUIRY_PAGE_WINDOW_S = 60 * 60;
 
 const notFound = (req: FastifyRequest, reply: FastifyReply): FastifyReply =>
@@ -128,24 +135,48 @@ export function registerGymPageRoutes(app: FastifyInstance, deps: GymPageRouteDe
     identifier: () => null,
     redis: deps.redis,
   });
-  /** The form: 60 sends an hour from one address, whatever they carry. */
+  /** The form: 60 messages an hour from one address to one page, and 600 from one address to
+   *  every page together, spent only once the robot check passed. Per page, never one
+   *  allowance for the whole app: a mobile carrier puts thousands of phones behind one
+   *  address (the security pass over 20c, 2026-09-30). */
   const enquiryAddressLimit = createDualRateLimit({
     name: "gym_enquiry",
     max: 60,
-    ipMax: 60,
+    ipMax: 600,
     windowMs: 60 * 60 * 1000,
-    identifier: () => null,
+    identifier: (req) => `${slugOf(req) ?? ""}:${req.ip}`,
     redis: deps.redis,
   });
-  /** …and 120 messages an hour to one page, counted only once the robot check passed.
+  /** …and 120 messages an hour to one page, counted only once the robot check passed. Once
+   *  the page has taken half its hour, one address may take only 10 of it: nobody can keep a
+   *  gym's page "busy" alone, and a quiet page never refuses people sharing one address (the
+   *  security pass over 20c, 2026-09-30). A refusal is counted for the gym's Leads page.
    *  Redis down: let it through with a log, as the address limit does. */
   const pageRoom = (req: FastifyRequest, slug: string) => async (): Promise<boolean> => {
-    const count = await deps.redis.incrWithTtl(`rl:gym_enquiry_page:${slug}`, ENQUIRY_PAGE_WINDOW_S);
-    if (count === null) {
+    const taken = Number((await deps.redis.get(`rl:gym_enquiry_page:${slug}`)) ?? "0");
+    const share = await deps.redis.incrWithTtl(`rl:gym_enquiry_page_addr:${slug}:${req.ip}`, ENQUIRY_PAGE_WINDOW_S);
+    const busy = taken >= ENQUIRY_PAGE_BUSY_FROM && share !== null && share > ENQUIRY_PAGE_ADDRESS_SHARE;
+    const count = busy ? null : await deps.redis.incrWithTtl(`rl:gym_enquiry_page:${slug}`, ENQUIRY_PAGE_WINDOW_S);
+    if (!busy && (count === null || share === null)) {
       req.log.warn({ event: "ratelimit.open_redis_down", limiter: "gym_enquiry_page" }, "rate limiter failing open (Redis unavailable)");
       return true;
     }
-    return count <= ENQUIRY_PAGE_MAX;
+    const room = !busy && count !== null && count <= ENQUIRY_PAGE_MAX;
+    if (!room) await deps.redis.incrWithTtl(pageTurnedAwayKey(slug), ENQUIRY_PAGE_WINDOW_S);
+    return room;
+  };
+  /** A page's robot checks that failed from one address: past 30 an hour, that address is
+   *  refused at that page before the check is asked again. Real people there are never
+   *  counted, and another gym's page is not touched. */
+  const robotKey = (req: FastifyRequest, slug: string) => `rl:gym_enquiry_robot:${slug}:${req.ip}`;
+  const robotRoom = (req: FastifyRequest, reply: FastifyReply, slug: string) => async (): Promise<boolean> => {
+    const failed = Number((await deps.redis.get(robotKey(req, slug))) ?? "0");
+    if (failed < ENQUIRY_ROBOT_FAILS_MAX) return true;
+    await reply.status(429).send({ error: "rate_limited", message: "Too many attempts. Please try again later.", requestId: req.id });
+    return false;
+  };
+  const robotFailed = (req: FastifyRequest, slug: string) => async (): Promise<void> => {
+    await deps.redis.incrWithTtl(robotKey(req, slug), ENQUIRY_PAGE_WINDOW_S);
   };
   /** Adding, removing and moving photos. Each photo is its own request, so swapping a
    *  full page of ten is 21 (ten removes, ten adds, one order): 300 an hour is fourteen
@@ -253,6 +284,8 @@ export function registerGymPageRoutes(app: FastifyInstance, deps: GymPageRouteDe
     const body = parseOr400(gymEnquiryRequestSchema, req.body, req, reply);
     if (body === null) return;
     const done = await service.sendEnquiry(pageDeps, slug, body, {
+      robotRoom: robotRoom(req, reply, slug),
+      robotFailed: robotFailed(req, slug),
       address: gate(enquiryAddressLimit)(req, reply),
       page: pageRoom(req, slug),
     });

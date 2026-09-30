@@ -517,14 +517,18 @@ d("leads from a file (real Postgres, real worker)", () => {
       );
       expect(swapped.statusCode).toBe(409);
 
-      // Pressed twice at once: one adds, the other adds nothing — refused as changed,
-      // or as busy while the first is still reading the file (one file a gym at a time).
+      // Pressed twice at once: one adds, the other adds nothing — answered "0 added" once
+      // the first has added them, or busy while the first is still reading the file (one
+      // file a gym at a time).
       const both = await Promise.all([add(gym, owner.cookies, file, again), add(gym, owner.cookies, file, again)]);
-      const codes = both.map((r) => r.statusCode).sort();
-      expect(codes[0]).toBe(200);
-      expect([409, 429]).toContain(codes[1]);
-      // Pressed again afterwards: changed, nothing added.
-      expect((await add(gym, owner.cookies, file, again)).statusCode).toBe(409);
+      const answers = both.map((r) => [r.statusCode, r.statusCode === 200 ? (JSON.parse(r.body) as { added: number }).added : null]);
+      expect(answers).toContainEqual([200, 1]);
+      expect(answers.filter(([code, added]) => !(code === 200 && added === 1))).toSatisfy((rest: unknown[][]) =>
+        rest.length === 1 && ((rest[0]?.[0] === 200 && rest[0][1] === 0) || rest[0]?.[0] === 429),
+      );
+      // Pressed again afterwards: nothing added, and said so truly.
+      const later = await add(gym, owner.cookies, file, again);
+      expect([later.statusCode, JSON.parse(later.body)]).toEqual([200, { added: 0 }]);
       expect((await storedLeads(gym)).map((l) => l.full_name)).toEqual(["Quin Reed", "Rosa Sims"]);
     },
     TIMEOUT_MS,
@@ -661,6 +665,22 @@ d("leads from a file (real Postgres, real worker)", () => {
       expect(stored.map((l) => l.notes)).toEqual(["", ""]);
       expect(JSON.stringify(stored)).not.toContain("Asthma");
       expect(JSON.stringify(stored)).not.toContain("1111");
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "Add pressed again after it worked (its answer lost on the way) says nothing was added, truly, and adds nobody twice",
+    async () => {
+      const owner = await makeUser("again-owner");
+      const org = await makeOrg(owner.cookies, "Again File Gym");
+      const file = csv(["Name,Email", "Ana Again,ana.again@example.com", "Bo Again,bo.again@example.com"]);
+      const preview = await check(org.org.id, owner.cookies, file);
+      const first = await add(org.org.id, owner.cookies, file, preview);
+      expect([first.statusCode, JSON.parse(first.body)]).toEqual([200, { added: 2 }]);
+      const again = await add(org.org.id, owner.cookies, file, preview);
+      expect([again.statusCode, JSON.parse(again.body)]).toEqual([200, { added: 0 }]);
+      expect((await storedLeads(org.org.id)).length).toBe(2);
     },
     TIMEOUT_MS,
   );

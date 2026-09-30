@@ -178,13 +178,19 @@ export async function addLeadFile(
     await lockGym(tx, gymId);
     const known = await repo.contactsKnown(tx, gymId, contactsOf(file.rows));
     const plan = leadFilePlan(file.rows, known.leads, known.members);
+    // Everyone in the file already a lead or a member — Add pressed again after it worked, its
+    // answer lost on the way — is answered as it is: nothing added, and nothing wrong (the
+    // integrity pass, 2026-09-30). Anything else that no longer adds what Check showed is a
+    // changed file.
+    if (file.rows.length > 0 && plan.add.length === 0 && plan.alreadyLead.length + plan.alreadyMember.length === file.rows.length) {
+      return { added: 0 };
+    }
     if (planKey(plan.add) !== body.expected) {
       throw new OrgsError(409, LEAD_FILE_CHANGED_ERROR, LEAD_FILE_WORDS.changed);
     }
     if (known.leadsNow + plan.add.length > LEADS_MAX_PER_GYM) {
       throw new OrgsError(409, "leads_full", LEAD_FILE_WORDS.full(Math.max(0, LEADS_MAX_PER_GYM - known.leadsNow), plan.add.length));
     }
-    if (plan.add.length === 0) return { added: 0 };
     const added = await repo.insertLeadsFromFile(tx, gymId, plan.add, userId, deps.addressKey);
     await insertAudit(tx, {
       actorUserId: userId,

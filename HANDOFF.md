@@ -4,6 +4,17 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-30 · 20c-vi (Folder B): the two extra passes over Leads, fixed (branch `leads-safety-fixes`)
+
+- **Why this job:** Leads (20c) was finished, so its two extra passes (security, data integrity) ran in fresh terminals before anybody uses it. **Risky** (a public form, other people's emails), Opus xhigh. Migration `0055_leads_safety`; no new package, no new cost.
+- **Kd's decision (RULINGS 2026-09-30):** bounces and spam reports on the app's emails to people who asked on a gym's page count apart. They can pause only those emails, never the gym's invitations (Kd: *"yes"*).
+- **Security, 2 High fixed:** (1) a stranger could stop a gym's emails with one form send and one spam click. Page emails are now counted apart, and once paused they go to staff's Email due. (2) the form could fill a gym to its lead limit. It now stops at 1,000 untouched page leads, so staff can always add.
+- **Security, Lows fixed:** a greeted name keeps only letters, and look-alike dots count as dots. Limits are per page and per address: 60 an hour, and 600 per address across all pages. Robot-check failures are counted apart (30 per page and address), so a robot never spends a person's allowance. The 10-per-address share applies only once a page has taken 60 in the hour. Leads now says how many messages the page turned away, and when page emails are paused.
+- **Integrity, 2 High fixed:** (1) the same email could be sent twice after a re-tick. A try in flight now stays the app's everywhere, backed by a partial unique index. (2) staff were told "send it yourself", then refused.
+- **Integrity, Lows fixed:** a stale panel can't undo Joined (409 `lead_changed`); Add pressed again says "0 added" truly; the same message twice is kept once; a spam report after Stop is kept; the key fill checks the address it read. **N1**: a try still out stays the app's even when its address turns up on the member list.
+- **Tests:** each fix's test went red first. N1 was broken by hand, went red, and was put back. **Both re-checks closed their rounds** ("Nothing Critical or High is open"). Their Lows were fixed without another re-check (§2.6). Low A (clearing a flood) is ROADMAP **20c-vii**.
+- **Verified:** api 4,398 of 4,404 on `aihg_b`; the 6 are member-list upload tests that ran alongside the web suite, and their 2 files pass alone 59/59. gymPage 16/16. Web 3,288 of 3,289, plus 2 new render tests: `settingsHealth` passes alone 9/9, and `poseAssets.contract` is the local Node 24 file. Shared 273/273. tsc 0. eslint 0 on every changed file.
+- **Merged on Kd's word (PR #139, 2026-09-30)**, all six checks green; ROADMAP ticked. **Open:** run `RUNBOOK/fill-lead-email-keys.md` once the new api is serving. Folder A's database needs 0053 and 0055 migrated. **Next in Folder B: 2f.**
 ## 2026-09-30 · 5b-v-d-iv (Folder A): import problems stay marked on the person (branch `members-review-needed`)
 
 - **Why this job:** next in Folder A (RULINGS 2026-09-29, Kd: *"if gym dont see them they will forget"*). **Risky** (members' records from an uploaded file), Opus xhigh; Kd: *"go"*. Migration `0054_members_review_needed` (renumbered from 0052 when Folder B's 1d-i merged first with 0052 and 0053) (`needs_review`, `review_checked` text[], a partial index); no new package, no new cost.

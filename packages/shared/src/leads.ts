@@ -54,6 +54,9 @@ export const LEAD_EMAIL_NOT_SENT = [
   "shared_address",
   "no_mail_domain",
   "could_not_send",
+  /** The gym's emails to people who asked on its page are paused: some bounced or were
+   *  marked as spam (RULINGS 2026-09-30). The gym's own emails go on. */
+  "page_emails_stopped",
 ] as const;
 export type LeadEmailNotSent = (typeof LEAD_EMAIL_NOT_SENT)[number];
 
@@ -68,6 +71,7 @@ export const LEAD_EMAIL_NOT_SENT_WORDS: Record<LeadEmailNotSent, string> = {
   shared_address: "it's a shared address, like info@, which we don't email for you",
   no_mail_domain: "this address can't receive email",
   could_not_send: "our email service didn't take it",
+  page_emails_stopped: "emails to people who asked on your page are paused, because some bounced or were marked as spam",
 };
 
 /** The three follow-up emails' words, the same whoever sends them: the lead's panel
@@ -271,6 +275,11 @@ export const leadsResponseSchema = z
     /** The gym's emails through the app are stopped for bounces or a complaint (§9.12):
      *  the Leads page says so, not only Settings. */
     sendingStopped: z.boolean().default(false),
+    /** The app's emails to people who asked on the gym's page are paused for bounces or spam
+     *  reports; its other emails go on (RULINGS 2026-09-30). */
+    pageEmailsStopped: z.boolean().default(false),
+    /** Messages the gym's page turned away in the last hour because it was busy. */
+    pageTurnedAway: z.number().int().nonnegative().default(0),
   })
   .strict();
 export type LeadsResponse = z.infer<typeof leadsResponseSchema>;
@@ -300,9 +309,13 @@ export const updateLeadRequestSchema = z
     notes: z.string().max(LEAD_MAX_NOTES_CHARS).optional(),
     status: leadSettableStatusSchema.optional(),
     mayEmail: z.boolean().optional(),
+    /** The status the panel was showing when it was saved: if somebody has moved the lead on
+     *  since (marked it Joined, say), the save is refused and the panel looks again, so an
+     *  old panel never undoes what another person did. Not a change on its own. */
+    fromStatus: leadStatusSchema.optional(),
   })
   .strict()
-  .refine((body) => Object.keys(body).length > 0, { message: "nothing to change" });
+  .refine((body) => Object.keys(body).some((key) => key !== "fromStatus"), { message: "nothing to change" });
 export type UpdateLeadRequest = z.infer<typeof updateLeadRequestSchema>;
 
 /** Joined. Empty: the server decides. `entryId`: staff chose that record as this
@@ -369,6 +382,14 @@ export type LeadJoinChoose = z.infer<typeof leadJoinChooseSchema>;
 /** The most candidates a choice lists. */
 export const LEAD_JOIN_MAX_CANDIDATES = 10;
 
+/** Lines the Leads list says about the gym's page (the passes over 20c, 2026-09-30). */
+export const LEAD_LIST_WORDS = {
+  pageEmailsStopped:
+    "Emails we send for you to people who asked on your page are paused, because some bounced or were marked as spam. Your other emails go on. Their follow-ups are in Email due, for you to send.",
+  pageTurnedAway: (n: number): string =>
+    `Your page turned away ${n === 1 ? "1 message" : `${n.toLocaleString("en")} messages`} in the last hour because it was getting a lot of them. They were asked to try again later.`,
+} as const;
+
 export const LEAD_WORDS = {
   lead_not_found: "That lead could not be found.",
   needs_name: "Add the person's name.",
@@ -381,6 +402,7 @@ export const LEAD_WORDS = {
   join_stale: "Your list changed while you were choosing. Choose again.",
   follow_up_not_due: "This lead isn't waiting for that follow-up email. It may have been marked already, or the lead changed.",
   follow_up_sent_for_you: "This email is being sent for you, so there's nothing to mark.",
+  lead_changed: "Somebody changed this lead while you had it open. Look at it again, then make your change.",
   join_exact:
     "Your list already has a record with exactly this name and contact. If it is this person, choose it. If not, change the lead's name, email or phone first.",
 } as const;
