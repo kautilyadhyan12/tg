@@ -52,7 +52,6 @@ import {
   seatMeter,
   trialDaysLeft,
   trialEndDateLabel,
-  trialStartChoices,
 } from './billingView';
 import { setCurrentUserId } from '../../utils/storage';
 
@@ -1047,39 +1046,5 @@ describe('an Indian gym paying through Razorpay (1d-i)', () => {
     );
     expect(paymentOverdueBanner('gym', false, 'razorpay')).toBe(text);
     expect(paymentOverdueBanner('gym', true)).toMatch(/Paddle also tries your card/);
-  });
-});
-
-describe('trialStartChoices — when a plan bought in the free trial starts (2f)', () => {
-  const NOW = Date.parse('2026-10-01T12:00:00.000Z');
-  const HOUR = 60 * 60 * 1000;
-  const day = (ms) => trialEndDateLabel(new Date(ms).toISOString());
-  const at = (ms) => new Date(ms).toISOString();
-  const END = NOW + 7 * 24 * HOUR;
-  const TODAY = {
-    start: 'today',
-    title: 'Start my plan today',
-    text: 'You pay today and get the size you choose at once. Your free trial ends now.',
-    button: 'Subscribe and pay today',
-  };
-
-  it.each([
-    ['a week left, 100 members', { trialEndsAt: at(END), seatCap: 100 }, 'gym', `Free until ${day(END - 24 * HOUR)}, up to 100 members. Your plan and its first payment start on ${day(END)}. Nothing is charged today.`],
-    ['a studio says clients', { trialEndsAt: at(END), seatCap: 100 }, 'studio', `Free until ${day(END - 24 * HOUR)}, up to 100 clients. Your plan and its first payment start on ${day(END)}. Nothing is charged today.`],
-    ['an older trial of 200', { trialEndsAt: at(END), seatCap: 200 }, 'gym', `Free until ${day(END - 24 * HOUR)}, up to 200 members. Your plan and its first payment start on ${day(END)}. Nothing is charged today.`],
-    ['no limit said', { trialEndsAt: at(END), seatCap: null }, 'gym', `Free until ${day(END - 24 * HOUR)}. Your plan and its first payment start on ${day(END)}. Nothing is charged today.`],
-    ['exactly an hour left', { trialEndsAt: at(NOW + HOUR), seatCap: 100 }, 'gym', `Free until ${day(NOW + HOUR - 24 * HOUR)}, up to 100 members. Your plan and its first payment start on ${day(NOW + HOUR)}. Nothing is charged today.`],
-    ['a minute under an hour', { trialEndsAt: at(NOW + HOUR - 60_000), seatCap: 100 }, 'gym', null],
-    ['already ended', { trialEndsAt: at(NOW - HOUR), seatCap: 100 }, 'gym', null],
-    ['no end date', { trialEndsAt: null, seatCap: 100 }, 'gym', null],
-    ['no subscription at all', null, 'gym', null],
-  ])('%s', (_name, sub, orgType, keepText) => {
-    const choices = trialStartChoices(sub, orgType, NOW);
-    expect(choices.today).toEqual(TODAY);
-    if (keepText === null) {
-      expect(choices.after_trial).toBeNull();
-    } else {
-      expect(choices.after_trial).toEqual({ start: 'after_trial', title: 'Keep my free trial', text: keepText, button: 'Subscribe' });
-    }
   });
 });

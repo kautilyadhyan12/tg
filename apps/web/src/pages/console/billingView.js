@@ -452,42 +452,6 @@ function nextDecideAt(periodEnd) {
   return new Date(at.getTime() - SMALLER_SIZE_DECIDE_HOURS * 60 * 60 * 1000).toISOString();
 }
 
-/** Keeping the free trial is offered only while this much of it is left; the server refuses
- *  it with less (`TRIAL_CHECKOUT_MIN_MS`), since no free day is left to keep. */
-const KEEP_TRIAL_MIN_MS = 60 * 60 * 1000;
-
-/** WHEN A PLAN BOUGHT IN THE FREE TRIAL STARTS: the gym's choice (Kd, RULINGS 2026-09-29).
- *  `after_trial` keeps the free trial at its own limit and takes the first payment when it
- *  ends; `today` charges now at the plan's full size and ends the trial. Every date named, as
- *  `firstPaymentText` does. `after_trial` is null when the trial ends within the hour, or its
- *  end is unknown. */
-export function trialStartChoices(sub, orgType, now = Date.now()) {
-  const words = orgWords(orgType);
-  const end = new Date(sub?.trialEndsAt ?? '');
-  const endMs = end.getTime();
-  const keepable = !Number.isNaN(endMs) && endMs - now >= KEEP_TRIAL_MIN_MS;
-  const today = {
-    start: 'today',
-    title: 'Start my plan today',
-    text: 'You pay today and get the size you choose at once. Your free trial ends now.',
-    button: 'Subscribe and pay today',
-  };
-  if (!keepable) return { after_trial: null, today };
-  const lastFree = new Date(endMs);
-  lastFree.setDate(lastFree.getDate() - 1);
-  const day = (d) => trialEndDateLabel(d.toISOString());
-  const cap = Number.isFinite(sub?.seatCap) ? `, up to ${sub.seatCap.toLocaleString()} ${words.people}` : '';
-  return {
-    after_trial: {
-      start: 'after_trial',
-      title: 'Keep my free trial',
-      text: `Free until ${day(lastFree)}${cap}. Your plan and its first payment start on ${day(end)}. Nothing is charged today.`,
-      button: 'Subscribe',
-    },
-    today,
-  };
-}
-
 /** A PAID TRIAL'S NEXT STEP, every date named (Kd at 1d-i's click-through: *"wording need to be
  *  precise"*): the last free day, the day the plan starts and its first payment is taken, and
  *  the month that payment covers, first and last day. "Free trial until 8 Oct. Your plan starts

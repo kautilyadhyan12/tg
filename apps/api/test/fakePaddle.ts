@@ -44,6 +44,8 @@ export class FakePaddle implements PaddleApi {
   duringNextChange: (() => Promise<unknown>) | null = null;
   /** The trial checkouts asked for. */
   trialCheckouts: TrialCheckout[] = [];
+  /** Make the next transaction asked for at a catalogue price carry a trial anyway. */
+  sneakTrial = false;
   /** Make the next trial checkout's price carry another plan's code, or another length. */
   wrongTrial: "code" | "days" | null = null;
   /** Trials moved (and to when), and trials ended at once. */
@@ -79,7 +81,9 @@ export class FakePaddle implements PaddleApi {
             id: trial === undefined ? input.priceId : paddleId("pri"),
             unit_price: { amount: this.wrongAmount ? "1" : price.amount, currency_code: price.currency },
             ...(trial === undefined
-              ? {}
+              ? this.sneakTrial
+                ? { trial_period: { interval: "day" as const, frequency: 10 } }
+                : {}
               : {
                   trial_period: { interval: "day" as const, frequency: this.wrongTrial === "days" ? trial.trialDays + 30 : trial.trialDays },
                   custom_data: { plan_code: this.wrongTrial === "code" ? "zz_someone_elses" : trial.planCode },
@@ -91,6 +95,7 @@ export class FakePaddle implements PaddleApi {
     };
     this.wrongAmount = false;
     this.wrongTrial = null;
+    this.sneakTrial = false;
     this.txns.set(txn.id, txn);
     this.customData.set(txn.id, input.customData);
     return Promise.resolve(this.ok(txn));

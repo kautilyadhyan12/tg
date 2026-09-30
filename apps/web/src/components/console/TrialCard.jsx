@@ -64,9 +64,9 @@ import { viewerPrivileges } from '../../pages/console/consoleView';
 // the server writes it on each trial and an older trial keeps the limit it was given, so a
 // number written here could be wrong for the gym on screen.
 //
-// **A free trial offers "Choose a plan"** (1c-ii; Kd, RULINGS 2026-09-25 and 2026-09-29):
-// the gym keeps its free trial, its card saved and the first payment taken when the trial
-// ends, or starts its plan today at its full size. Once paid, the card says when that first payment falls, and a plan paid
+// **A free trial offers "Choose a plan"** (Kd, RULINGS 2026-09-30): the gym pays today and
+// gets the plan's full size at once, and its free trial ends; keeping the trial is not paying
+// yet. Once paid, the card says when that first payment falls, and a plan paid
 // through us offers "Change size" (1c-ii, 1c-iii). A smaller size waits for the end of the
 // month paid and the gym keeps its whole size until then; the card says what will change,
 // whether the members fit it and by when to remove any, offers "Cancel this change", and
@@ -274,7 +274,7 @@ export default function TrialCard({ org }) {
       ) : null}
       {payNow ? (
         <div className="text-sm mt-3" style={muted}>
-          Choose a plan now: keep your free trial to its end, or start your plan today at its full size.
+          Your free trial carries on until it ends. To have more members now, choose a plan: you pay today and get its full size at once.
         </div>
       ) : null}
       <div className="mt-4 flex flex-col sm:flex-row gap-2">

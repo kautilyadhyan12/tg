@@ -12,7 +12,6 @@ import {
   sizeChargeText,
   sizeRows,
   trialEndDateLabel,
-  trialStartChoices,
 } from '../../pages/console/billingView';
 import { PlanRow } from './PlanModal';
 import { usePaddleSubscribe } from './usePaddleSubscribe';
@@ -20,11 +19,9 @@ import { usePaddleSubscribe } from './usePaddleSubscribe';
 // CHOOSING A PLAN FROM THE PLAN CARD (ROADMAP Stage 3 items 1c-ii and 1c-iii; Kd, RULINGS
 // 2026-09-25).
 //
-// `subscribe`: a gym in its own free trial pays in its payment company's window, and first
-// chooses when the plan starts (Kd, RULINGS 2026-09-29): keep the free trial, its card saved
-// and the first payment taken when the trial ends, or start today, charged now at the size
-// chosen. Keeping the trial is picked to begin with: nothing is charged today unless the gym
-// says so. `size`: a gym on a plan paid
+// `subscribe`: a gym in its own free trial pays today in its payment company's window and
+// gets the size it chose at once; its free trial ends then (Kd, RULINGS 2026-09-30). Keeping
+// the trial is not paying yet. `size`: a gym on a plan paid
 // through us sees every size, its own marked. A bigger one shows what Paddle will charge
 // now; a smaller one starts with the next payment, nothing charged or given back, and the
 // gym keeps its whole size until then; if it has more members than the smaller size holds,
@@ -75,11 +72,6 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
   const [error, setError] = useState(null);
   const [changed, setChanged] = useState(null);
   const { paying, payNote, payError, paid, subscribe } = usePaddleSubscribe(gymId, org?.name ?? '');
-  const choices = mode === 'subscribe' ? trialStartChoices(sub, org?.orgType) : null;
-  const [startPicked, setStartPicked] = useState('after_trial');
-  // With under an hour of trial left there are no free days to keep: only today is offered.
-  const start = choices?.after_trial == null ? 'today' : startPicked;
-  const startGroup = useId();
   const dialogRef = useRef(null);
 
   useEffect(() => {
@@ -202,57 +194,13 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
           </>
         ) : (
           <>
-            {mode === 'size' ? (
-              <p className="text-sm mt-3" style={muted}>
-                {inTrial
+            <p className="text-sm mt-3" style={muted}>
+              {mode === 'size'
+                ? inTrial
                   ? `Your trial allows up to ${sub?.seatCap} ${words.people} until your first payment${firstPaymentOn === null ? '' : ` on ${firstPaymentOn}`}; the size you choose starts then. Nothing is charged now.`
-                  : `A bigger size starts at once and you pay the difference for the rest of this month. A smaller one starts with your next payment${firstPaymentOn === null ? '' : ` on ${firstPaymentOn}`}; until then you keep your whole size.`}
-              </p>
-            ) : null}
-
-            {/* ── When the plan starts ─────────────────────────────────────── */}
-            {choices !== null ? (
-              <fieldset className="mt-4" disabled={paying !== null} data-testid="start-choice">
-                <legend className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.85)' }}>
-                  When should your plan start?
-                </legend>
-                <div className="flex flex-col gap-2 mt-2">
-                  {[choices.after_trial, choices.today]
-                    .filter((c) => c !== null)
-                    .map((c) => {
-                      const on = start === c.start;
-                      return (
-                        <label
-                          key={c.start}
-                          className="rounded-xl px-4 py-3 flex items-start gap-3 cursor-pointer"
-                          style={{
-                            background: on ? 'rgba(255,138,31,0.06)' : 'rgba(255,255,255,0.03)',
-                            border: on ? '1px solid rgba(255,138,31,0.35)' : '1px solid rgba(255,255,255,0.06)',
-                          }}
-                        >
-                          <input
-                            type="radio"
-                            name={startGroup}
-                            value={c.start}
-                            checked={on}
-                            onChange={() => setStartPicked(c.start)}
-                            className="mt-1"
-                            style={{ accentColor: '#FF8A1F' }}
-                          />
-                          <span className="flex flex-col">
-                            <span className="text-sm font-semibold" style={{ color: '#fff' }}>
-                              {c.title}
-                            </span>
-                            <span className="text-xs mt-1" style={muted}>
-                              {c.text}
-                            </span>
-                          </span>
-                        </label>
-                      );
-                    })}
-                </div>
-              </fieldset>
-            ) : null}
+                  : `A bigger size starts at once and you pay the difference for the rest of this month. A smaller one starts with your next payment${firstPaymentOn === null ? '' : ` on ${firstPaymentOn}`}; until then you keep your whole size.`
+                : `You pay today and get the size you choose at once. Your free trial ends then.`}
+            </p>
 
             {plans.loading ? (
               <div className="flex items-center gap-3 py-4" style={{ color: 'rgba(255,255,255,0.45)' }}>
@@ -277,8 +225,8 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
                     canPay={plans.payOnline === 'available'}
                     busy={paying !== null}
                     working={paying?.planCode === p.code}
-                    onSubscribe={(code) => subscribe(code, start)}
-                    buttonText={(start === 'today' ? choices?.today : choices?.after_trial)?.button ?? 'Subscribe'}
+                    onSubscribe={subscribe}
+                    buttonText="Subscribe and pay today"
                   />
                 ))}
               </ul>

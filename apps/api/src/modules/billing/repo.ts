@@ -2,7 +2,7 @@
 // Stage 3 items 1a, 1c-i, 1c-ii, 1c-iii and, for an Indian gym through Razorpay, 1d-i).
 // Every checkout is read with its gym in the WHERE; a Paddle or Razorpay subscription is
 // placed on a gym only through a checkout row our server wrote.
-import { GYM_TRIAL_MEMBERS, type CheckoutStart, type PaddleSubscription } from "@app/shared";
+import { GYM_TRIAL_MEMBERS, type PaddleSubscription } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { insertAudit, lockOrgRow } from "../orgs/repo.js";
 import { decide, type Decision, type LocalStatus, type Snapshot } from "./machine.js";
@@ -14,10 +14,6 @@ export const GRACE_EXPIRED = "grace_expired";
 /** `cancel_reason` of a free trial ended because the gym paid during it (1c-ii). */
 export const TRIAL_SUBSCRIBED = "subscribed";
 
-/** A trial checkout is sold only while this much of the gym's own trial is left; with less,
- *  the checkout charges at once. */
-export const TRIAL_CHECKOUT_MIN_MS = 60 * 60 * 1000;
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type CheckoutState = "creating" | "open" | "superseded" | "failed" | "paid";
 
@@ -44,7 +40,6 @@ interface RawCheckout {
   state: string;
   provider: string;
   provider_ref: string | null;
-  trial_ends_at?: Date | null;
 }
 
 const STATES: readonly CheckoutState[] = ["creating", "open", "superseded", "failed", "paid"];
@@ -81,19 +76,9 @@ export type BeginCheckoutOutcome =
       currency: string;
       /** The checkouts this press replaced, still open at their provider: the caller closes each. */
       superseded: { provider: PayProvider; ref: string }[];
-      /** During the gym's own free trial: the whole days left, rounded up (Paddle's trial
-       *  counts days), so the first payment falls when the trial ends. */
-      trialDays: number | null;
-      /** When the gym's own free trial ends, with `trialDays`: Razorpay takes the first
-       *  payment at exactly this time. */
-      trialEndsAt: Date | null;
     }
   | { kind: "replay"; checkout: CheckoutRow }
   | { kind: "key_reused" }
-  /** The gym is in its own free trial and did not say when the plan starts. */
-  | { kind: "start_required" }
-  /** Asked to keep the free trial, with less than `TRIAL_CHECKOUT_MIN_MS` of it left. */
-  | { kind: "trial_over" }
   | { kind: "already_subscribed" }
   | { kind: "payment_overdue" }
   | { kind: "no_such_plan" }
@@ -104,22 +89,12 @@ export type BeginCheckoutOutcome =
 
 /** Start a checkout for one plan: under the gym's lock, so two presses at once cannot
  *  both pass the checks, and any checkout still open for this gym is superseded (its
- *  Paddle transaction is cancelled by the caller) so only one can be paid. During the gym's
- *  own free trial `start` says whether the first payment waits for the trial's end or is
- *  taken now (Kd, RULINGS 2026-09-29); only `after_trial` sells the days left, and only it
- *  never charges now. */
+ *  Paddle transaction is cancelled by the caller) so only one can be paid. Every checkout
+ *  charges now, in the gym's own free trial too: paying ends the trial and opens the plan's
+ *  full size (Kd, RULINGS 2026-09-30). */
 export async function beginCheckout(
   sql: Sql,
-  input: {
-    gymId: string;
-    userId: string;
-    planCode: string;
-    idempotencyKey: string;
-    currency: string;
-    provider: PayProvider;
-    start?: CheckoutStart | undefined;
-    now: Date;
-  },
+  input: { gymId: string; userId: string; planCode: string; idempotencyKey: string; currency: string; provider: PayProvider },
 ): Promise<BeginCheckoutOutcome> {
   return await sql.begin(async (tx) => {
     await lockOrgRow(tx, input.gymId); // subscription-writer lock
@@ -129,16 +104,12 @@ export async function beginCheckout(
     if (gym.status !== "active") return { kind: "org_archived" };
 
     const earlier = await tx<RawCheckout[]>`
-      SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref, c.trial_ends_at
+      SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref
       FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
       WHERE c.gym_id = ${input.gymId} AND c.idempotency_key = ${input.idempotencyKey}`;
     const replay = earlier[0];
     if (replay !== undefined) {
-      // Only an `after_trial` press sells trial days: the same key asking the other start is
-      // a different request.
-      const soldTrial = (replay.trial_ends_at ?? null) !== null;
-      const sameStart = soldTrial === (input.start === "after_trial");
-      return replay.plan_code === input.planCode && sameStart ? { kind: "replay", checkout: toCheckout(replay) } : { kind: "key_reused" };
+      return replay.plan_code === input.planCode ? { kind: "replay", checkout: toCheckout(replay) } : { kind: "key_reused" };
     }
 
     const live = await tx<{ status: string; provider: string; trial_ends_at: Date | null }[]>`
@@ -146,15 +117,9 @@ export async function beginCheckout(
       WHERE owner_type = 'gym' AND owner_id = ${input.gymId}
         AND status IN ('trialing','active','past_due')`;
     const current = live[0];
-    // The gym's own free trial may be paid for now, charged when it ends or today, as the gym
-    // chooses (Kd, RULINGS 2026-09-29); anything else live is a plan already chosen.
+    // The gym's own free trial may be paid for now, and ends when that payment lands; anything
+    // else live is a plan already chosen.
     if (current !== undefined && !isLocalTrial(current)) return { kind: "already_subscribed" };
-    if (current !== undefined && input.start === undefined) return { kind: "start_required" };
-    const trialEnd = current?.trial_ends_at ?? null;
-    const trialLeftMs = trialEnd === null ? 0 : trialEnd.getTime() - input.now.getTime();
-    const trialDays = input.start === "after_trial" && trialLeftMs >= TRIAL_CHECKOUT_MIN_MS ? Math.ceil(trialLeftMs / DAY_MS) : null;
-    // Keeping the free trial never charges now: with no trial left to keep, it is refused.
-    if (input.start === "after_trial" && trialDays === null) return { kind: "trial_over" };
     // An unpaid plan its provider still retries: paying it there opens it, a second plan would double it.
     const overdue = await tx`
       SELECT 1 FROM subscriptions
@@ -180,9 +145,8 @@ export async function beginCheckout(
       WHERE gym_id = ${input.gymId} AND state IN ('creating','open')
       RETURNING provider, provider_ref`;
     const inserted = await tx<RawCheckout[]>`
-      INSERT INTO billing_checkouts (gym_id, plan_id, created_by, idempotency_key, provider, trial_ends_at)
-      VALUES (${input.gymId}, ${plan.id}, ${input.userId}, ${input.idempotencyKey}, ${input.provider},
-              ${trialDays === null ? null : trialEnd})
+      INSERT INTO billing_checkouts (gym_id, plan_id, created_by, idempotency_key, provider)
+      VALUES (${input.gymId}, ${plan.id}, ${input.userId}, ${input.idempotencyKey}, ${input.provider})
       RETURNING id, gym_id, plan_id, ${input.planCode}::text AS plan_code, state, provider, provider_ref`;
     const row = inserted[0];
     if (row === undefined) throw new Error("checkout insert returned no row");
@@ -192,12 +156,7 @@ export async function beginCheckout(
       action: "billing.checkout_started",
       targetType: "billing_checkout",
       targetId: row.id,
-      meta: {
-        plan: input.planCode,
-        provider: input.provider,
-        start: trialDays === null ? "today" : "after_trial",
-        ...(trialDays === null ? {} : { trialDays: String(trialDays) }),
-      },
+      meta: { plan: input.planCode, provider: input.provider },
     });
     return {
       kind: "created",
@@ -209,8 +168,6 @@ export async function beginCheckout(
         const provider = PROVIDERS.find((p) => p === s.provider);
         return s.provider_ref === null || provider === undefined ? [] : [{ provider, ref: s.provider_ref }];
       }),
-      trialDays,
-      trialEndsAt: trialDays === null ? null : trialEnd,
     };
   });
 }

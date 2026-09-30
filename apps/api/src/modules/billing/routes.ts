@@ -91,7 +91,6 @@ export function registerBillingRoutes(
         userId: requireUserId(req),
         gymId: params.gymId,
         planCode: body.planCode,
-        start: body.start,
         idempotencyKey: key,
       });
       return reply.status(200).send(checkout);
