@@ -279,7 +279,9 @@ function CompareRecords({ keep, remove, fields, person }) {
 
 // `canRemove` is the viewer's `members.remove`: without it nothing that ends somebody's app is
 // offered (the server refuses it too), as the In the app sheet hides its Remove.
-export default function MemberListPerson({ gymId, gym, entryId, list, words, readOnly, canRemove = false, onClose, onChanged }) {
+// `pair` ({ otherId, why }) opens the panel on a possible duplicate (5b-iv-a): the two records
+// side by side at once, with Different people beside Merge.
+export default function MemberListPerson({ gymId, gym, entryId, list, words, readOnly, canRemove = false, pair = null, onClose, onChanged }) {
   const titleId = useId();
   const dialogRef = useRef(null);
   const fields = list?.fields ?? [];
@@ -291,7 +293,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const [entry, setEntry] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [attempt, setAttempt] = useState(0);
-  const [mode, setMode] = useState(entryId === null ? 'edit' : 'view');
+  const [mode, setMode] = useState(entryId === null ? 'edit' : pair !== null ? 'join' : 'view');
   /** The person in the app a "Not this person" box is about. */
   const [notThem, setNotThem] = useState(null);
   const [form, setForm] = useState(() => formFrom(null, fields));
@@ -306,7 +308,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const [joinPick, setJoinPick] = useState(null);
   const [keepThis, setKeepThis] = useState(false);
   /** The record being opened to compare, while its whole page is read. */
-  const [picking, setPicking] = useState(null);
+  const [picking, setPicking] = useState(pair?.otherId ?? null);
 
   const ranges = dayRanges();
 
@@ -376,6 +378,29 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       live = false;
     };
   }, [gymId, id, attempt]);
+
+  // A possible duplicate opens straight on the two records side by side: the other record is
+  // read once, and a later record opened in this panel leaves it alone.
+  const pairOtherId = pair?.otherId ?? null;
+  useEffect(() => {
+    if (pairOtherId === null) return undefined;
+    let live = true;
+    orgService.getMemberListEntry(gymId, pairOtherId).then(
+      (res) => {
+        if (!live || wanted.current !== entryId || res.data.entry.entryId !== pairOtherId) return;
+        setJoinPick(res.data.entry);
+        setPicking(null);
+      },
+      (err) => {
+        if (!live || wanted.current !== entryId) return;
+        setPicking(null);
+        setRefusal({ message: errorText(err, "We couldn't open the other record."), openId: null, ack: null });
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [gymId, entryId, pairOtherId]);
 
   // The join's search: every record, current and past, but this one.
   useEffect(() => {
@@ -575,6 +600,27 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   };
 
   const onPick = (e) => void pickRecord(e.currentTarget.dataset.entryId);
+
+  /** The pair on screen is the one the panel was opened on: only then is Different people offered. */
+  const onPair = pair !== null && shown !== null && shown.entryId === entryId && joinPick !== null && joinPick.entryId === pair.otherId;
+
+  /** Different people: this pair is never listed again, and the panel closes on the pairs. */
+  const differentPeople = async () => {
+    const asked = shown.entryId;
+    const ids = [asked, joinPick.entryId];
+    setBusy(true);
+    setRefusal(null);
+    try {
+      await orgService.markDifferentPeople(gymId, ids);
+      if (wanted.current !== asked) return;
+      onChanged();
+      onClose();
+    } catch (err) {
+      if (wanted.current === asked) refused(err, "We couldn't save that they are different people.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   /** Join: the record under "Remove" is the one the request removes, and the one under
    *  "Keep" is the one it keeps — worked out once, here, from what is on screen. */
@@ -1054,6 +1100,11 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       const { keep, remove } = joinRoles();
       return (
         <div className="flex flex-col gap-3">
+          {onPair ? (
+            <p className="c-s15 c-w6 c-t1 m-0" data-testid="pair-why">
+              {`These two may be the same ${words.person}: ${pair.why.toLowerCase()}.`}
+            </p>
+          ) : null}
           <p className="c-s14 c-t2 m-0">
             Merge duplicate: the two records become one. The one you <b>keep</b> keeps everything it has, and takes the other&apos;s details only where its own
             are empty. The other is removed.
@@ -1076,6 +1127,11 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
               <ArrowLeftRight aria-hidden="true" className="w-4 h-4" />
               Swap
             </button>
+            {onPair ? (
+              <button type="button" onClick={() => void differentPeople()} disabled={busy || readOnly} className={PLAIN} data-testid="different-people">
+                Different people
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => {
@@ -1090,6 +1146,9 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           </div>
         </div>
       );
+    }
+    if (pair !== null && picking === pair.otherId) {
+      return <p className="c-s14 c-t2 m-0">Opening the other record…</p>;
     }
     // Only the answer for what the box says now: an older search's answer is not shown.
     const found = joinResults !== null && joinResults.q === joinQuery.trim() ? joinResults : null;

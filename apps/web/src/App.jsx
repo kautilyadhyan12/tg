@@ -43,6 +43,7 @@ import NewGym          from './pages/console/NewGym';
 import ConsoleOverview from './pages/console/Overview';
 import ConsoleMembers  from './pages/console/Members';
 import ConsoleMembersReview from './pages/console/MembersReview';
+import ConsoleMembersDuplicates from './pages/console/MembersDuplicates';
 import ConsoleAttendance from './pages/console/Attendance';
 import ConsoleClasses  from './pages/console/Classes';
 import ConsoleLeads    from './pages/console/Leads';
@@ -247,6 +248,12 @@ export default function App() {
             <Route path="/console/:orgSlug/members/review" element={
               <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
                 <ConsoleLayout><ConsoleMembersReview /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
+            {/* Possible duplicates (5b-iv-a): the sign's Review opens it. */}
+            <Route path="/console/:orgSlug/members/duplicates" element={
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
+                <ConsoleLayout><ConsoleMembersDuplicates /></ConsoleLayout>
               </ProtectedRoute>
             } />
             {/* WHO CAME IN — Kd's ruling 2026-09-01 (:28107): its own section,

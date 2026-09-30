@@ -427,7 +427,7 @@ describe('a person on the list', () => {
     expect([cell('keep', 'list'), cell('remove', 'list')]).toEqual(['Past member', 'On the list']);
     expect([cell('keep', 'extra:locker'), cell('remove', 'extra:locker')]).toEqual(['—', '4']);
     const shaded = [...compare.querySelectorAll('tr[data-differs=true]')].map((r) => r.querySelector('th').textContent);
-    expect(shaded).toEqual(['Email', 'Phone', 'Member number', 'Date of birth', 'Join date', 'Status', 'On the list', 'Uses the app', 'Locker']);
+    expect(shaded).toEqual(['Email', 'Phone', 'Member number', 'Date of birth', 'Join date', 'Status', 'On the list', 'In the app', 'Locker']);
     expect(within(compare).getByText('9 of 10 details differ.')).toBeTruthy();
     // Nothing either record holds is not a row.
     expect(within(compare).queryByTestId('join-keep-endsOn')).toBeNull();

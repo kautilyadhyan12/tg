@@ -595,7 +595,7 @@ export function compareRecords(keep, remove, fields, person = 'member') {
     ['endsOn', 'End or renewal date', (r) => endsWords(r)],
     ['paymentStatus', 'Payment status', (r) => r.paymentStatus],
     ['list', 'On the list', onList],
-    ['app', 'Uses the app', (r) => (r.inApp ? 'Yes' : 'No')],
+    ['app', 'In the app', (r) => (r.inApp ? 'Yes' : 'No')],
     ...fields.map((f) => [`extra:${f.key}`, f.label, (r) => extra(r, f.key)]),
   ];
   return rows
@@ -645,4 +645,19 @@ export function outcomeWords(outcome, words = { person: 'member', personCap: 'Me
 /** The Members sign: "3 members need review", "1 member needs review". */
 export function reviewSignWords(n, words) {
   return n === 1 ? `1 ${words.person} needs review` : `${n.toLocaleString('en')} ${words.people} need review`;
+}
+
+// ── Possible duplicates (5b-iv-a; RULINGS 2026-09-25, 2026-09-30) ──────────
+
+/** The Members sign: one pair is one member who may be there twice. */
+export function duplicatesSignWords(n, words) {
+  return n === 1 ? `1 ${words.person} may be on your list twice` : `${n.toLocaleString('en')} ${words.people} may be on your list twice`;
+}
+
+/** What a pair's two records share: "Same name", "Same name and phone". */
+export function pairWhyWords(pair) {
+  const what = [pair.sameName ? 'name' : null, pair.samePhone ? 'phone' : null, pair.sameMemberNumber ? 'member number' : null].filter((w) => w !== null);
+  if (what.length === 0) return '';
+  const last = what.pop();
+  return `Same ${what.length === 0 ? last : `${what.join(', ')} and ${last}`}`;
 }

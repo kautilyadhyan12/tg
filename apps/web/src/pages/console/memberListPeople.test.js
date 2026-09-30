@@ -274,7 +274,7 @@ describe("Merge duplicate's side-by-side view", () => {
     const rows = compareRecords(a, b, FIELDS);
     const row = (key) => rows.find((r) => r.key === key);
     expect(rows.map((r) => r.label)).toEqual([
-      'Name', 'Email', 'Phone', 'Member number', 'Date of birth', 'Join date', 'Status', 'Membership', 'End or renewal date', 'On the list', 'Uses the app', 'Locker',
+      'Name', 'Email', 'Phone', 'Member number', 'Date of birth', 'Join date', 'Status', 'Membership', 'End or renewal date', 'On the list', 'In the app', 'Locker',
     ]);
     expect(row('fullName')).toMatchObject({ keep: 'Ada Lovelace', remove: 'Ada Lovelace', differs: false });
     expect(row('dateOfBirth')).toMatchObject({ keep: '12 March 1990', remove: '12 March 1990', differs: false });

@@ -58,6 +58,20 @@ const nameWords = (fullName: string): string | null => {
 };
 const nameWordsOf = (who: WhoFields): string | null => nameWords(who.fullName);
 
+/** The most characters a stored name key holds (0055's CHECK). A name is at most 120
+ *  characters, but folding can lengthen one (NFKD spells some signs out whole). */
+export const NAME_KEY_MAX_CHARS = 400;
+
+/** A name as the list stores it for finding possible duplicates (5b-iv-a): step 2's
+ *  words, folded and sorted, so two records hold equal keys exactly when `sameName`
+ *  says they are one name; '' for a name with no words, which matches nobody. */
+export function nameKey(fullName: string): string {
+  const words = nameWords(fullName) ?? "";
+  if (words.length <= NAME_KEY_MAX_CHARS) return words;
+  const last = words.charCodeAt(NAME_KEY_MAX_CHARS - 1);
+  return words.slice(0, last >= 0xd800 && last <= 0xdbff ? NAME_KEY_MAX_CHARS - 1 : NAME_KEY_MAX_CHARS);
+}
+
 /** Step 2's test of a name, for the rest of the module: the same words in any order,
  *  and an empty name is nobody's. */
 export function sameName(a: string, b: string): boolean {
