@@ -46,13 +46,13 @@ import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../servic
 import { appViewsOf } from "./appViews.js";
 import { appPeopleIn, removeRecordIn } from "./oneRemove.js";
 import { currentRecordOf, pastRecordOf } from "./whose.js";
-import { applyTyped, EMPTY_VALUES, mergeValues, type EntryValues, type TypedContext } from "./byHand.js";
+import { applyTyped, changedFields, EMPTY_VALUES, mergeValues, type EntryValues, type TypedContext } from "./byHand.js";
 import { tidyCell } from "./cells.js";
 import { cut, identityKey } from "./fields.js";
 import { withoutCardNumbers } from "./neverKeep.js";
 import { readCountry } from "./phone.js";
 import * as repo from "./repo.js";
-import { reviewAfterChecked, reviewAfterEdit, sameReview } from "./review.js";
+import { reviewAfterChecked, reviewAfterEdit, reviewAfterMerge, sameReview } from "./review.js";
 import { decodeEntryCursor, encodeEntryCursor } from "./cursor.js";
 import { appOrThrow, type MemberListDeps } from "./service.js";
 import { unlistedDigest, unlistedGroup, unlistedPage } from "./unlisted.js";
@@ -274,7 +274,9 @@ async function placeOnList(
     if (stored === null) throw new Error(`member-list entry ${holder.id} vanished under the gym's lock`);
     written = input.revive(stored);
     entryId = holder.id;
-    await repo.writeEntry(tx, gymId, entryId, { values: written, identityKey: key, handEdited: stored.handEdited, formerAt: null });
+    // Whatever the new values change, what an import found wrong there goes with it.
+    const review = reviewAfterEdit(stored.review, changedFields(stored.values, written));
+    await repo.writeEntry(tx, gymId, entryId, { values: written, identityKey: key, handEdited: stored.handEdited, review, formerAt: null });
   }
   await repo.stampListedByContact(tx, gymId, currentContacts({ values: written, current: true }), [entryId], at);
   const version = await repo.bumpListVersion(tx, gymId);
@@ -408,10 +410,9 @@ export async function changeEntry(
     const contactMoved = applied.identityFields.includes("email") || applied.identityFields.includes("phone");
     const reached = contactMoved ? await membersOf(tx, gymId, stored) : [];
     const handEdited = [...new Set([...stored.handEdited, ...applied.edited])].slice(0, MEMBER_LIST_MAX_EDITED_FIELDS);
-    await repo.writeEntry(tx, gymId, entryId, { values: applied.values, identityKey: key, handEdited, formerAt: stored.formerAt });
     // A field staff changed is theirs now: what the file had wrong there is gone (5b-v-d-iv).
     const review = reviewAfterEdit(stored.review, [...applied.identityFields, ...applied.edited]);
-    if (!sameReview(review, stored.review)) await repo.writeReview(tx, gymId, entryId, review);
+    await repo.writeEntry(tx, gymId, entryId, { values: applied.values, identityKey: key, handEdited, review, formerAt: stored.formerAt });
     const lost = await leftOff(tx, gymId, stored.values, [entryId], reached);
     if (lost > 0 && patch.acknowledgeLeavesList !== true) throw new LeavesList(lost, "change");
     const current = stored.formerAt === null;
@@ -491,6 +492,8 @@ export async function checkReview(
     await repo.lockGym(tx, gymId);
     const stored = await repo.entryFor(tx, gymId, entryId);
     if (stored === null) throw notFound();
+    // A past member's page shows no review, so there is nothing to mark correct there.
+    if (stored.formerAt !== null) return;
     const review = reviewAfterChecked(stored.review, item);
     if (sameReview(review, stored.review)) return;
     await repo.writeReview(tx, gymId, entryId, review);
@@ -764,6 +767,8 @@ export async function mergeEntries(
       values,
       identityKey: keep.identityKey,
       handEdited: keep.handEdited,
+      // A filled field brings the other record's marks with its value (5b-v-d-iv).
+      review: reviewAfterMerge(keep.review, gone.review, filled),
       formerAt: current ? null : keep.formerAt,
     });
     // What points at the record not kept moves onto the kept one before it is deleted

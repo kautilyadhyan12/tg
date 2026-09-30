@@ -10,7 +10,7 @@ import { refreshConsoleOrgsAfterChange } from './consoleOrgs';
 import MemberListPerson from './MemberListPerson';
 import { canRemoveMembers, viewerPrivileges } from './consoleView';
 import { consoleIsReadOnly } from './billingView';
-import { reviewSignWords } from './memberListPeople';
+import { contactWords, reviewSignWords } from './memberListPeople';
 
 // THE REVIEW PAGE (ROADMAP 5b-v-d-iv; Kd at its click-through: "make a separate page when
 // click on goes there"): everyone an import found a problem with, a hundred at a time, each
@@ -173,7 +173,7 @@ export default function MembersReview() {
                   >
                     <span className="flex flex-col gap-0.5 flex-1 min-w-0">
                       <span className="c-s15 c-w6 c-t1 c-ell">{person.fullName || 'No name'}</span>
-                      <span className="c-s13 c-t2 c-ell">{person.email ?? person.phone ?? ''}</span>
+                      <span className="c-s13 c-t2 c-ell">{contactWords(person)}</span>
                       <span className="c-s14 c-w6" style={{ color: 'var(--warn)' }} data-testid="review-problems">
                         {problemWords(person)}
                       </span>

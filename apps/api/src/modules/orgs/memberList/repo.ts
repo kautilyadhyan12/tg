@@ -2088,13 +2088,14 @@ export async function insertEntry(
   return id;
 }
 
-/** One record written whole: every field, its key, its hand-edit marks and whether
- *  it is former. */
+/** One record written whole: every field, its key, its hand-edit marks, what an import
+ *  found wrong on it (5b-v-d-iv) and whether it is former. The marks are required, so no
+ *  write of values can leave them saying something about a value that is gone. */
 export async function writeEntry(
   tx: TransactionSql,
   gymId: string,
   entryId: string,
-  write: { values: EntryValues; identityKey: string; handEdited: readonly string[]; formerAt: Date | null },
+  write: { values: EntryValues; identityKey: string; handEdited: readonly string[]; review: ReviewState; formerAt: Date | null },
 ): Promise<void> {
   const { values } = write;
   const rows = await tx<{ id: string }[]>`
@@ -2113,6 +2114,8 @@ export async function writeEntry(
         extra           = ${tx.json(values.extra)},
         identity_key    = ${write.identityKey},
         hand_edited     = ${[...write.handEdited]}::text[],
+        needs_review    = ${[...write.review.needsReview]}::text[],
+        review_checked  = ${[...write.review.reviewChecked]}::text[],
         former_at       = ${write.formerAt}
     WHERE gym_id = ${gymId} AND id = ${entryId}
     RETURNING id`;

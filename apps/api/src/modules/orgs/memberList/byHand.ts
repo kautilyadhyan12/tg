@@ -232,6 +232,20 @@ export function applyTyped(stored: EntryValues, typed: MemberListEntryPatch, con
 /** JOINING TWO RECORDS OF ONE PERSON: the kept record keeps every value it has and
  *  takes the other's only where its own is empty. Its four identity fields are never
  *  changed, so the next upload still finds it by them. */
+/** The fields whose value differs between two sets of values, named as a record's marks
+ *  name them: what a write by hand changed, so what an import found wrong there goes. */
+export function changedFields(before: EntryValues, after: EntryValues): string[] {
+  const changed: string[] = [];
+  for (const field of [...IDENTITY_FIELDS, ...MARKED_FIELDS]) {
+    const moved = field === "endsOn" ? before.endsOn !== after.endsOn || before.endsOnKind !== after.endsOnKind : before[field] !== after[field];
+    if (moved) changed.push(field);
+  }
+  for (const key of new Set([...Object.keys(before.extra), ...Object.keys(after.extra)])) {
+    if ((before.extra[key] ?? "") !== (after.extra[key] ?? "")) changed.push(`${MEMBER_LIST_EXTRA_FIELD_PREFIX}${key}`);
+  }
+  return changed;
+}
+
 export function mergeValues(keep: EntryValues, gone: EntryValues): { values: EntryValues; filled: string[] } {
   const values: EntryValues = { ...keep, extra: { ...keep.extra } };
   const filled: string[] = [];

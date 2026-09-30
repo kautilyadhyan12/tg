@@ -19,12 +19,14 @@ import {
   type MemberListUnderstanding,
 } from "@app/shared";
 import { openMemberFileContents } from "../src/modules/orgs/memberList/openFile.js";
+import { changedFields, EMPTY_VALUES } from "../src/modules/orgs/memberList/byHand.js";
 import type { CarriedFields, KeptField, ListEntry, ReconciledPerson } from "../src/modules/orgs/memberList/reconcile.js";
 import {
   importReviews,
   reviewAfterChecked,
   reviewAfterEdit,
   reviewAfterImport,
+  reviewAfterMerge,
   type ReviewState,
 } from "../src/modules/orgs/memberList/review.js";
 import { sniffMemberFile } from "../src/modules/orgs/memberList/sniff.js";
@@ -148,6 +150,26 @@ describe("the worst thing: a problem lands only on the person whose own cells ha
     expect(marksOf(found)["Ann Lee"]).toEqual([]);
   });
 
+  it("a row whose phone and member number the spreadsheet both cut is marked on both (round one, High-2)", () => {
+    const found = read([
+      ["Name", "Email", "Mobile", "Member No"],
+      ["Cy Shah", "cy@example.com", "9.19877E+11", "1.23457E+15"],
+      ["Di Park", "di@example.com", "9876543214", "1.23457E+15"],
+      ["Ed Moss", "ed@example.com", "9.19877E+11", "M-3"],
+      ["Flo Kerr", "flo@example.com", "9876543216", "M-4"],
+      ["Gus Tan", "gus@example.com", "9876543217", "M-5"],
+      ["Hana Tan", "hana@example.com", "9876543218", "M-6"],
+    ]);
+    expect(marksOf(found)).toEqual({
+      "Cy Shah": ["number_cut:phone", "number_cut:memberNumber"],
+      "Di Park": ["number_cut:memberNumber"],
+      "Ed Moss": ["number_cut:phone"],
+      "Flo Kerr": [],
+      "Gus Tan": [],
+      "Hana Tan": [],
+    });
+  });
+
   it("a date column other than Joined is named by its own field", () => {
     const found = read([
       ["Name", "Email", "Date of birth", "Renewal date"],
@@ -238,6 +260,22 @@ describe("after staff change a field by hand", () => {
   it("one of the gym's own columns is its own field, never another of them", () => {
     const now = state(["cell_cut:extra:notes", "cell_cut:extra:notes_2"]);
     expect(reviewAfterEdit(now, ["extra:notes"])).toEqual(state(["cell_cut:extra:notes_2"]));
+  });
+});
+
+describe("two records of one person joined (round one, High-1)", () => {
+  it("a filled field brings the other record's marks; the kept record's own on it go; other fields stay", () => {
+    const keep = state([DATE_BAD, NAME_LOST], ["phone_unusual:phone"]);
+    const gone = state(["cell_cut:extra:notes", PHONE_ODD, NAME_GARBLED], ["not_a_date:joinedOn"]);
+    expect(reviewAfterMerge(keep, gone, ["joinedOn", "extra:notes"])).toEqual(state([NAME_LOST, "cell_cut:extra:notes"], ["phone_unusual:phone", "not_a_date:joinedOn"]));
+    expect(reviewAfterMerge(keep, gone, [])).toEqual(keep);
+  });
+
+  it("the fields a write by hand changes, the gym's own columns included", () => {
+    const before = { ...EMPTY_VALUES, fullName: "Ann", joinedOn: "2024-01-01", extra: { notes: "a", locker: "3" } };
+    expect(changedFields(before, { ...before, joinedOn: "2024-02-01", extra: { notes: "a", locker: "" } })).toEqual(["joinedOn", "extra:locker"]);
+    expect(changedFields(before, { ...before, endsOnKind: "renews" })).toEqual(["endsOn"]);
+    expect(changedFields(before, before)).toEqual([]);
   });
 });
 

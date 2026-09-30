@@ -60,6 +60,19 @@ export function reviewAfterEdit(now: ReviewState, edited: readonly string[]): Re
   return { needsReview: now.needsReview.filter(keep), reviewChecked: now.reviewChecked.filter(keep) };
 }
 
+/** Two records of one person joined: the kept record's values stay and only its empty fields
+ *  are filled from the other (`filled`). A filled field's problems are the other record's,
+ *  carried with the value; the kept record's own on that field go with its empty value. */
+export function reviewAfterMerge(keep: ReviewState, gone: ReviewState, filled: readonly string[]): ReviewState {
+  const fields = new Set(filled);
+  const kept = reviewAfterEdit(keep, filled);
+  const carried = (key: string): boolean => fields.has(reviewFieldOf(key));
+  return {
+    needsReview: unique([...kept.needsReview, ...gone.needsReview.filter(carried)]),
+    reviewChecked: unique([...kept.reviewChecked, ...gone.reviewChecked.filter(carried)]),
+  };
+}
+
 /** It's correct: the item leaves the review and is remembered as checked. Pressing it on
  *  an item already gone changes nothing. */
 export function reviewAfterChecked(now: ReviewState, item: MemberListReviewItem): ReviewState {

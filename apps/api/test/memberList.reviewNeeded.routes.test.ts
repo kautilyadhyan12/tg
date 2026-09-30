@@ -98,7 +98,7 @@ d("member list: review needed (real Postgres)", () => {
     await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
   };
 
-  const send = (method: "GET" | "POST" | "PATCH", path: string, cookies: Record<string, string>, payload?: unknown) =>
+  const send = (method: "GET" | "POST" | "PATCH" | "DELETE", path: string, cookies: Record<string, string>, payload?: unknown) =>
     api().inject({
       method,
       url: path,
@@ -110,6 +110,7 @@ d("member list: review needed (real Postgres)", () => {
     send("POST", path, cookies, await everyoneLeft(api(), path, payload, cookies));
   const get = (path: string, cookies: Record<string, string>) => send("GET", path, cookies);
   const patch = (path: string, payload: unknown, cookies: Record<string, string>) => send("PATCH", path, cookies, payload);
+  const del = (path: string, cookies: Record<string, string>) => send("DELETE", path, cookies);
 
   const makeUser = async (local: string): Promise<User> => {
     const email = `mrev-t-${local}@example.com`;
@@ -323,6 +324,60 @@ d("member list: review needed (real Postgres)", () => {
       expect((await patch(entryUrl(gym, cy), { status: "Active" }, owner.cookies)).statusCode).toBe(200);
       expect((await marksIn(gym))["Cy Shah"]).toEqual(["number_cut:phone"]);
       expect(await myCount(owner, gym)).toBe(2);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "joining two records and adding a past member back keep each mark with its value (round one, High-1)",
+    async () => {
+      const owner = await makeUser("merge-owner");
+      const org = await makeOrg(owner, "Review Merge Gym");
+      const gym = org.org.id;
+      await importFile(gym, owner, FIRST_MONTH);
+      const entriesUrl = `${listUrl(gym)}/entries`;
+      const added = async (body: Record<string, unknown>): Promise<string> => {
+        const res = await post(entriesUrl, body, owner.cookies);
+        expect(res.statusCode).toBe(201);
+        return (JSON.parse(res.body) as { entry: { entryId: string } }).entry.entryId;
+      };
+      const marksOf = async (id: string) =>
+        (await sql<{ needs_review: string[]; review_checked: string[] }[]>`SELECT needs_review, review_checked FROM gym_member_list_entries WHERE id = ${id}`)[0];
+
+      // Ed's join date from the file was no date; a second record of him has the real one.
+      // Joined into the imported record, the date fills it and the mark goes.
+      const ed = await idOf(gym, "Ed Moss");
+      const edTyped = await added({ fullName: "Ed Moss", email: "ed.work@members.example", joinedOn: "2024-03-01" });
+      expect((await post(`${entryUrl(gym, edTyped)}/merge`, { keepEntryId: ed, acknowledgeLeavesList: true }, owner.cookies)).statusCode).toBe(200);
+      expect(await marksOf(ed)).toEqual({ needs_review: [], review_checked: [] });
+      // Cy's cut phone is not something a join fills, so his mark stays with his empty phone.
+      const cy = await idOf(gym, "Cy Shah");
+      const cyTyped = await added({ fullName: "Cy Shah", email: "cy.work@members.example", phone: "9876543213" });
+      expect((await post(`${entryUrl(gym, cyTyped)}/merge`, { keepEntryId: cy, acknowledgeLeavesList: true }, owner.cookies)).statusCode).toBe(200);
+      expect(await marksOf(cy)).toEqual({ needs_review: ["number_cut:phone"], review_checked: [] });
+
+      // Flo's cut note joined into a record of hers with no note: the note and its mark go together.
+      const flo = await idOf(gym, "Flo Kerr");
+      const floTyped = await added({ fullName: "Flo Kerr", email: "flo.work@members.example" });
+      expect((await post(`${entryUrl(gym, flo)}/merge`, { keepEntryId: floTyped, acknowledgeLeavesList: true }, owner.cookies)).statusCode).toBe(200);
+      expect(await marksOf(floTyped)).toEqual({ needs_review: ["cell_cut:extra:notes"], review_checked: [] });
+
+      // Di off the list, then added back by hand with a phone of the usual shape: her record
+      // comes back without the file's mark on the phone it no longer has.
+      const di = await idOf(gym, "Di Park");
+      expect((await del(entryUrl(gym, di), owner.cookies)).statusCode).toBe(200);
+      // It's correct on a past member writes nothing.
+      expect((await post(checkedUrl(gym, di), { problem: "phone_unusual", field: "phone" }, owner.cookies)).statusCode).toBe(200);
+      expect(await marksOf(di)).toEqual({ needs_review: ["phone_unusual:phone"], review_checked: [] });
+      const audits = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM audit_log WHERE gym_id = ${gym} AND action = 'org.member_list_review_checked'`;
+      expect(audits[0]?.n).toBe(0);
+      // Flo off the list, then added back by hand with a short note: the same record comes
+      // back, without the file's mark on the note it no longer has.
+      expect((await del(entryUrl(gym, floTyped), owner.cookies)).statusCode).toBe(200);
+      const back = await post(entriesUrl, { fullName: "Flo Kerr", email: "flo.work@members.example", extra: { notes: "Mornings only" } }, owner.cookies);
+      expect(back.statusCode).toBe(200);
+      expect((JSON.parse(back.body) as { outcome: string }).outcome).toBe("revived");
+      expect(await marksOf(floTyped)).toEqual({ needs_review: [], review_checked: [] });
     },
     TEST_TIMEOUT_MS,
   );

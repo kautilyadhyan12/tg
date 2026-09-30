@@ -236,6 +236,10 @@ interface Draft {
   /** The phone cell the number was read from, where it is not the usual shape. */
   unusualPhone: Spot | null;
   shortened: Spot | null;
+  /** Which of the two the spreadsheet cut, each on its own: Excel cuts every long number
+   *  column in one save, so a row often loses both (5b-v-d-iv's review, High-2). */
+  phoneCut: boolean;
+  numberCut: boolean;
   needsCountry: Spot | null;
   /** The member-number cell was a payment card and was dropped (§11.2), so it
    *  is counted with every other card cell rather than silently. */
@@ -396,6 +400,8 @@ function draftRow(row: readonly string[], at: number, mapping: MemberListMapping
     status,
     unusualPhone: phone.unusual ? phoneAt : null,
     shortened: (phone.e164 === null ? shortened : null) ?? numberShortened,
+    phoneCut: phone.e164 === null && shortened !== null,
+    numberCut: numberShortened !== null,
     needsCountry: phone.e164 === null ? needsCountry : null,
     cardCell: memberNumber.card ? mapping.memberNumber : null,
   };
@@ -779,7 +785,8 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
     const review: MemberListReviewItem[] = [];
     if (QUESTION_MARK_IN_NAME.test(draft.fullName)) review.push({ problem: "letters_lost", field: "fullName" });
     if (GARBLED_NEXT_TO_LETTER.test(draft.fullName) || GARBLED_INSIDE_A_WORD.test(draft.fullName)) review.push({ problem: "letters_garbled", field: "fullName" });
-    if (draft.shortened !== null) review.push({ problem: "number_cut", field: draft.shortened.column === mapping.memberNumber ? "memberNumber" : "phone" });
+    if (draft.phoneCut) review.push({ problem: "number_cut", field: "phone" });
+    if (draft.numberCut) review.push({ problem: "number_cut", field: "memberNumber" });
     if (draft.needsCountry !== null) review.push({ problem: "no_country", field: "phone" });
     if (phone !== null && draft.unusualPhone !== null) review.push({ problem: "phone_unusual", field: "phone" });
     if (email !== draft.email) review.push({ problem: "front_desk", field: "email" });
