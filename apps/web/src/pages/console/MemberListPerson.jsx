@@ -45,6 +45,7 @@ import {
   pastWords,
   patchFrom,
   compareRecords,
+  mergePreview,
   underAgeWhen,
   whenWords,
 } from './memberListPeople';
@@ -207,18 +208,46 @@ function MoreMenu({ items, disabled }) {
   );
 }
 
-/** Merge duplicate: the two records as a table, one row a detail, Keep and Remove as
- *  its columns, as merge dialogs lay it out. A row whose values differ is shaded, and
- *  the line above says how many differ, so staff can see at a glance whether this is
- *  one person twice or two different people. Each value cell names its side and field
- *  for the tests. */
-function CompareRecords({ keep, remove, fields, person }) {
-  const rows = compareRecords(keep, remove, fields, person);
+/** Merge duplicate: the two records as a table, one row a detail, each record a column that
+ *  never moves (Kd at 5b-iv-a's click-through: Keep and Remove swapping sides was "really
+ *  confusing"). Staff choose by pressing "Keep this one" at the top of a column; until then
+ *  nothing is kept or removed. A row whose values differ is shaded, and the line above says
+ *  how many differ, so staff can tell one person twice from two different people. Each value
+ *  cell names its column and field for the tests. */
+function CompareRecords({ first, second, fields, person, keepId, onChoose, disabled }) {
+  const rows = compareRecords(first, second, fields, person);
   const differ = rows.filter((row) => row.differs).length;
+  const head = (record, side) => {
+    const kept = keepId === record.entryId;
+    const gone = keepId !== null && !kept;
+    return (
+      <th key={side} className="text-left px-1.5 sm:px-2 py-2 align-top">
+        <button
+          type="button"
+          role="radio"
+          aria-checked={kept}
+          data-testid={`keep-${side}`}
+          onClick={() => onChoose(record.entryId)}
+          disabled={disabled}
+          className="flex items-center gap-1.5 c-s13 c-w7 text-left min-h-9"
+          style={{ color: kept ? 'var(--good)' : gone ? 'var(--bad)' : 'var(--t1)' }}
+        >
+          <span
+            aria-hidden="true"
+            className="inline-flex items-center justify-center w-4 h-4 rounded-full flex-none"
+            style={{ border: `2px solid ${kept ? 'var(--good)' : 'var(--t3)'}` }}
+          >
+            {kept ? <span className="w-2 h-2 rounded-full" style={{ background: 'var(--good)' }} /> : null}
+          </span>
+          {kept ? 'Keeping' : gone ? 'Removed' : 'Keep this one'}
+        </button>
+      </th>
+    );
+  };
   return (
     <div data-testid="merge-compare" className="flex flex-col gap-2">
       <p className="c-s14 c-t2 m-0">{differ === 0 ? 'Every detail is the same.' : `${String(differ)} of ${String(rows.length)} details differ.`}</p>
-      <div className="rounded-[14px] overflow-hidden" style={{ border: '1px solid var(--card-line)' }}>
+      <div className="rounded-[14px] overflow-hidden" style={{ border: '1px solid var(--card-line)' }} role="radiogroup" aria-label="Which one do you keep?">
         <table className="w-full" style={{ tableLayout: 'fixed' }}>
           <colgroup>
             <col style={{ width: '28%' }} />
@@ -228,12 +257,8 @@ function CompareRecords({ keep, remove, fields, person }) {
           <thead>
             <tr style={{ background: 'var(--raise)' }}>
               <th />
-              <th className="text-left px-2 py-2 c-s13 c-w7" style={{ color: 'var(--good)' }}>
-                Keep
-              </th>
-              <th className="text-left px-2 py-2 c-s13 c-w7" style={{ color: 'var(--bad)' }}>
-                Remove
-              </th>
+              {head(first, 'first')}
+              {head(second, 'second')}
             </tr>
           </thead>
           <tbody>
@@ -247,8 +272,8 @@ function CompareRecords({ keep, remove, fields, person }) {
                   {row.label}
                 </th>
                 {[
-                  ['keep', row.keep],
-                  ['remove', row.remove],
+                  ['first', row.first],
+                  ['second', row.second],
                 ].map(([side, value]) => (
                   <td
                     key={side}
@@ -277,9 +302,52 @@ function CompareRecords({ keep, remove, fields, person }) {
   );
 }
 
+/** What the merge leaves, before Merge is pressed: the one record, each detail marked when it
+ *  comes from the other record, and what the removed record holds that is not kept, with why. */
+function MergePreview({ keep, remove, fields, person }) {
+  const { rows, lost } = mergePreview(keep, remove, fields, person);
+  return (
+    <section className="c-card p-3 flex flex-col gap-3" data-testid="merge-preview">
+      <h3 className="c-s15 c-w6 c-t1 m-0">After the merge</h3>
+      <dl className="grid gap-x-3 gap-y-1.5 m-0" style={{ gridTemplateColumns: 'minmax(0, 28%) minmax(0, 1fr)' }}>
+        {rows.map((row) => (
+          <div key={row.key} className="contents">
+            <dt className="c-s13 c-t2">{row.label}</dt>
+            <dd className="c-s13 c-t1 m-0" style={{ overflowWrap: 'anywhere' }} data-testid={`after-${row.key}`}>
+              {row.value}
+              {row.fromOther ? (
+                <span className="c-tag c-tag-plain ml-2" data-testid="from-other">
+                  from the other record
+                </span>
+              ) : null}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      {lost.length > 0 ? (
+        <div className="flex flex-col gap-1.5" data-testid="merge-lost">
+          <h4 className="c-s14 c-w6 m-0" style={{ color: 'var(--bad)' }}>
+            Not kept from the record removed
+          </h4>
+          <ul className="flex flex-col gap-1 m-0 p-0 list-none">
+            {lost.map((item) => (
+              <li key={item.key} className="c-s13 c-t2" style={{ overflowWrap: 'anywhere' }} data-testid={`lost-${item.key}`}>
+                <span className="c-t1">{`${item.label}: ${item.value}`}</span>
+                {` — ${item.why}`}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 // `canRemove` is the viewer's `members.remove`: without it nothing that ends somebody's app is
 // offered (the server refuses it too), as the In the app sheet hides its Remove.
-export default function MemberListPerson({ gymId, gym, entryId, list, words, readOnly, canRemove = false, onClose, onChanged }) {
+// `pair` ({ otherId, why }) opens the panel on a possible duplicate (5b-iv-a): the two records
+// side by side at once, with Different people beside Merge.
+export default function MemberListPerson({ gymId, gym, entryId, list, words, readOnly, canRemove = false, pair = null, onClose, onChanged }) {
   const titleId = useId();
   const dialogRef = useRef(null);
   const fields = list?.fields ?? [];
@@ -291,7 +359,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const [entry, setEntry] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [attempt, setAttempt] = useState(0);
-  const [mode, setMode] = useState(entryId === null ? 'edit' : 'view');
+  const [mode, setMode] = useState(entryId === null ? 'edit' : pair !== null ? 'join' : 'view');
   /** The person in the app a "Not this person" box is about. */
   const [notThem, setNotThem] = useState(null);
   const [form, setForm] = useState(() => formFrom(null, fields));
@@ -304,9 +372,10 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const [joinQuery, setJoinQuery] = useState('');
   const [joinResults, setJoinResults] = useState(null);
   const [joinPick, setJoinPick] = useState(null);
-  const [keepThis, setKeepThis] = useState(false);
+  /** The record staff chose to keep; none until they choose. */
+  const [keepId, setKeepId] = useState(null);
   /** The record being opened to compare, while its whole page is read. */
-  const [picking, setPicking] = useState(null);
+  const [picking, setPicking] = useState(pair?.otherId ?? null);
 
   const ranges = dayRanges();
 
@@ -348,7 +417,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     setJoinPick(null);
     setJoinResults(null);
     setJoinQuery('');
-    setKeepThis(false);
+    setKeepId(null);
   };
 
   useEffect(() => {
@@ -376,6 +445,29 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       live = false;
     };
   }, [gymId, id, attempt]);
+
+  // A possible duplicate opens straight on the two records side by side: the other record is
+  // read once, and a later record opened in this panel leaves it alone.
+  const pairOtherId = pair?.otherId ?? null;
+  useEffect(() => {
+    if (pairOtherId === null) return undefined;
+    let live = true;
+    orgService.getMemberListEntry(gymId, pairOtherId).then(
+      (res) => {
+        if (!live || wanted.current !== entryId || res.data.entry.entryId !== pairOtherId) return;
+        setJoinPick(res.data.entry);
+        setPicking(null);
+      },
+      (err) => {
+        if (!live || wanted.current !== entryId) return;
+        setPicking(null);
+        setRefusal({ message: errorText(err, "We couldn't open the other record."), openId: null, ack: null });
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [gymId, entryId, pairOtherId]);
 
   // The join's search: every record, current and past, but this one.
   useEffect(() => {
@@ -565,7 +657,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     try {
       const res = await orgService.getMemberListEntry(gymId, otherId);
       if (wanted.current !== asked || res.data.entry.entryId !== otherId) return;
-      setKeepThis(false);
+      setKeepId(null);
       setJoinPick(res.data.entry);
     } catch (err) {
       if (wanted.current === asked) refused(err, "We couldn't open that record.");
@@ -576,17 +668,44 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
 
   const onPick = (e) => void pickRecord(e.currentTarget.dataset.entryId);
 
-  /** Join: the record under "Remove" is the one the request removes, and the one under
-   *  "Keep" is the one it keeps — worked out once, here, from what is on screen. */
-  const joinRoles = () => (keepThis ? { keep: shown, remove: joinPick } : { keep: joinPick, remove: shown });
+  /** The pair on screen is the one the panel was opened on: only then is Different people offered. */
+  const onPair = pair !== null && shown !== null && shown.entryId === entryId && joinPick !== null && joinPick.entryId === pair.otherId;
+
+  /** Different people: this pair is never listed again, and the panel closes on the pairs. */
+  const differentPeople = async () => {
+    const asked = shown.entryId;
+    const ids = [asked, joinPick.entryId];
+    setBusy(true);
+    setRefusal(null);
+    try {
+      await orgService.markDifferentPeople(gymId, ids);
+      if (wanted.current !== asked) return;
+      onChanged();
+      onClose();
+    } catch (err) {
+      if (wanted.current === asked) refused(err, "We couldn't save that they are different people.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Join: the record staff chose to keep, and the other one removed — worked out once,
+   *  here, from what is on screen; null until they choose. */
+  const joinRoles = () => {
+    if (joinPick === null || shown === null) return null;
+    if (keepId === shown.entryId) return { keep: shown, remove: joinPick };
+    if (keepId === joinPick.entryId) return { keep: joinPick, remove: shown };
+    return null;
+  };
 
   const join = async () => {
-    const { keep, remove } = joinRoles();
-    await sendMerge(shown.entryId, remove.entryId, keep.entryId, false);
+    const roles = joinRoles();
+    if (roles === null) return;
+    await sendMerge(shown.entryId, roles.remove.entryId, roles.keep.entryId, false);
   };
 
   /** A merge, and its confirm: "Go ahead anyway" sends exactly the merge that was refused,
-   *  the same record removed and the same kept; Swap, Back or another pick takes it away. */
+   *  the same record removed and the same kept; another choice, Back or another pick takes it away. */
   const sendMerge = (asked, removeId, keepId, acknowledge) =>
     run(
       asked,
@@ -600,7 +719,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const startJoin = () => {
     setJoinQuery(shown?.fullName ?? '');
     setJoinPick(null);
-    setKeepThis(false);
+    setKeepId(null);
     setNotice(null);
     setRefusal(null);
     setMode('join');
@@ -1051,31 +1170,48 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
 
   const renderJoin = (p) => {
     if (joinPick !== null) {
-      const { keep, remove } = joinRoles();
+      const roles = joinRoles();
       return (
         <div className="flex flex-col gap-3">
+          {onPair ? (
+            <p className="c-s15 c-w6 c-t1 m-0" data-testid="pair-why">
+              {`These two may be the same ${words.person}: ${pair.why.toLowerCase()}.`}
+            </p>
+          ) : null}
           <p className="c-s14 c-t2 m-0">
-            Merge duplicate: the two records become one. The one you <b>keep</b> keeps everything it has, and takes the other&apos;s details only where its own
-            are empty. The other is removed.
+            Merge duplicate: the two records become one. Choose the one to keep at the top of its column. It keeps everything it has, and takes the other&apos;s
+            details only where its own are empty. The other is removed.
           </p>
-          <CompareRecords keep={keep} remove={remove} fields={fields} person={words.person} />
+          <CompareRecords
+            first={shown}
+            second={joinPick}
+            fields={fields}
+            person={words.person}
+            keepId={keepId}
+            disabled={busy}
+            onChoose={(chosen) => {
+              setRefusal(null);
+              setKeepId(chosen);
+            }}
+          />
+          {roles !== null ? <MergePreview keep={roles.keep} remove={roles.remove} fields={fields} person={words.person} /> : null}
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => void join()} disabled={busy || readOnly} className={MAIN}>
+            {/* Orange when it can be pressed, plainly grey until a record is chosen (as Import's). */}
+            <button
+              type="button"
+              onClick={() => void join()}
+              disabled={busy || readOnly || roles === null}
+              className={roles === null ? 'c-btn' : MAIN}
+              style={roles === null ? { background: 'var(--raise)', color: 'var(--t3)', opacity: 1 } : undefined}
+            >
               {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
               Merge
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setRefusal(null);
-                setKeepThis((k) => !k);
-              }}
-              disabled={busy}
-              className={PLAIN}
-            >
-              <ArrowLeftRight aria-hidden="true" className="w-4 h-4" />
-              Swap
-            </button>
+            {onPair ? (
+              <button type="button" onClick={() => void differentPeople()} disabled={busy || readOnly} className={PLAIN} data-testid="different-people">
+                Different people
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => {
@@ -1088,8 +1224,12 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
               Back
             </button>
           </div>
+          {roles === null ? <p className="c-s13 c-t3 m-0">Choose the one to keep to see what the merge leaves.</p> : null}
         </div>
       );
+    }
+    if (pair !== null && picking === pair.otherId) {
+      return <p className="c-s14 c-t2 m-0">Opening the other record…</p>;
     }
     // Only the answer for what the box says now: an older search's answer is not shown.
     const found = joinResults !== null && joinResults.q === joinQuery.trim() ? joinResults : null;

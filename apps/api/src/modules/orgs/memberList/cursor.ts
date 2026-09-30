@@ -44,3 +44,26 @@ export function decodeEntryCursor(raw: string): EntryCursor | null {
   const cursor = entryCursorSchema.safeParse(parsed);
   return cursor.success ? cursor.data : null;
 }
+
+/** Where a page of possible duplicates ended (5b-iv-a): the last pair's first name and
+ *  both its records, since one record can be the first of several pairs. */
+export const pairCursorSchema = z
+  .object({ name: z.string().max(MEMBER_LIST_MAX_NAME_CHARS), id: z.string().uuid(), second: z.string().uuid() })
+  .strict();
+export type PairCursor = z.infer<typeof pairCursorSchema>;
+
+export function encodePairCursor(cursor: PairCursor): string {
+  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+}
+
+/** Null for anything that is not one of ours, as `decodeEntryCursor`. */
+export function decodePairCursor(raw: string): PairCursor | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(Buffer.from(raw, "base64url").toString("utf8"));
+  } catch {
+    return null;
+  }
+  const cursor = pairCursorSchema.safeParse(parsed);
+  return cursor.success ? cursor.data : null;
+}

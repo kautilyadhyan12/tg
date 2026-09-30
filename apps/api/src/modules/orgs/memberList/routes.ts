@@ -30,6 +30,8 @@ import {
   memberListNotThemRequestSchema,
   memberListReviewCheckedRequestSchema,
   memberListReviewQuerySchema,
+  memberListDuplicatesQuerySchema,
+  memberListNotDuplicatesRequestSchema,
   memberListRemovePreviewRequestSchema,
   memberListRemoveSelectedRequestSchema,
   memberListRemoveUnlistedRequestSchema,
@@ -49,6 +51,7 @@ import { invitePeople } from "../invites/people.js";
 import * as invites from "../invites/service.js";
 import type { InviteSettings } from "../invites/settings.js";
 import * as byHand from "./byHandService.js";
+import * as duplicates from "./duplicates.js";
 import * as exporter from "./exportCsv.js";
 import * as removal from "./removeSelected.js";
 import { SelectionChanged, selectAll } from "./selection.js";
@@ -393,6 +396,19 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     }),
   );
 
+  /** Different people (5b-iv-a): one press a pair, and a gym's first look can hold hundreds,
+   *  so its own allowance like It's correct; several staff at one desk share an address. */
+  const differentGate = gate(
+    createDualRateLimit({
+      name: "memberlist_duplicates",
+      max: 600,
+      ipMax: 2400,
+      windowMs: 60 * 60 * 1000,
+      identifier: (req) => req.authUser?.id ?? null,
+      redis: deps.redis,
+    }),
+  );
+
   /** "Remove all": 10 an hour each, 40 from one address (§9.9). */
   const removeGate = gate(
     createDualRateLimit({
@@ -487,6 +503,28 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     const answer = await byHand.checkReview(listDeps, requireUserId(req), params.gymId, params.entryId, body, reviewGate(req, reply));
     if (answer.kind === "rate_limited") return;
     return reply.status(200).send({ entry: answer.entry });
+  });
+
+  // Possible duplicates (5b-iv-a): pairs alike by name, phone or member number, a page at a time.
+  app.get("/v1/orgs/:gymId/member-list/duplicates", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(memberListDuplicatesQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const page = await duplicates.readDuplicatesPage(listDeps, requireUserId(req), params.gymId, query, readGate(req, reply));
+    if (page === null) return;
+    return reply.status(200).send({ page });
+  });
+
+  // Different people (5b-iv-a): a pair staff checked is two people, never listed again.
+  app.post("/v1/orgs/:gymId/member-list/duplicates/different", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(memberListNotDuplicatesRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const answer = await duplicates.markDifferentPeople(listDeps, requireUserId(req), params.gymId, body.entryIds, differentGate(req, reply));
+    if (answer.kind === "rate_limited") return;
+    return reply.status(200).send({ duplicates: answer.duplicates });
   });
 
   // "Not this person" (§18.4): that one account out of the app, the record kept.
