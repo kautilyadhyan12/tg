@@ -151,7 +151,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
         - 5b-v-d-i. [x] **Who has left, on the card as it was** — merged 2026-09-29 (PR #131).
         - 5b-v-d-ii. [x] **Upload and Review restyled** — merged 2026-09-29 (PR #133).
         - 5b-v-d-iii. [x] **Each warning says which rows** — merged 2026-09-29 (PR #135).
-        - 5b-v-d-iv. [ ] **Import problems stay marked on the person** (RULINGS 2026-09-29): one "Review needed" tag on the person's Members row, what is wrong on their page, and a glowing sign on Members ("3 members need review") until nobody is left; stored at import, gone once staff fix it; no filter, never messy. Next in Folder A after 5b-v-d-iii.
+        - 5b-v-d-iv. [x] **Import problems stay marked on the person** — merged 2026-09-30 (PR #137).
      - 5b-iv. [ ] **Possible duplicates** (RULINGS 2026-09-25): records alike by name, phone or member number listed as pairs ("2 people may be on your list twice · Review"), each opened side by side; Merge or "Different people" (remembered); never merged by the app.
      - 5b-vi. [ ] **Member photos** (Kd, RULINGS 2026-09-28): the photo a member adds in the app, small and round on each Members row and on their page, initials when there is none; only their own gym's staff see it, and not after they leave. Needs Stage 4 item 4 (photo storage); the check-in screen (16a) shows it once both are built.
    - 5c. [ ] **Which software are you leaving?** (spec §11.7; RULINGS 2026-09-24): each product's export steps in plain words and a preset that fills in the column matching, as data in `@app/shared`, from real exports or the vendor's own template only.
