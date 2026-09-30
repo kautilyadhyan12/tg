@@ -37,7 +37,7 @@
 // own decision (§9.2 rule 11) and it is 3b's; an upload and a confirm write rows
 // and send nothing.
 import { sql } from "drizzle-orm";
-import { bigserial, date, foreignKey, index, integer, jsonb, pgTable, primaryKey, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { bigserial, boolean, date, foreignKey, index, integer, jsonb, pgTable, primaryKey, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { check } from "drizzle-orm/pg-core";
 import { citext, createdAt } from "./common.js";
 import { gyms } from "./tenancy.js";
@@ -58,8 +58,21 @@ export const gymMemberLists = pgTable("gym_member_lists", {
   version: integer("version").notNull().default(0),
   lastConfirmedUploadId: uuid("last_confirmed_upload_id"),
   lastConfirmedAt: timestamp("last_confirmed_at", { withTimezone: true }),
+  /** What the records and Different people marks held when `gym_member_list_pairs` was
+   *  worked out (`repo.pairsStamp`); NULL until the first read (0057). */
+  pairsStamp: text("pairs_stamp"),
+  pairsCount: integer("pairs_count"),
+  pairsKept: integer("pairs_kept"),
+  /** When the pairs were last worked out, and how long it took (0057). */
+  pairsBuiltAt: timestamp("pairs_built_at", { withTimezone: true }),
+  pairsCostMs: integer("pairs_cost_ms"),
   createdAt: createdAt(),
-});
+}, (t) => [
+  check(
+    "gym_member_lists_pairs_count_check",
+    sql`${t.pairsCount} IS NULL OR (${t.pairsCount} >= 0 AND ${t.pairsKept} BETWEEN 0 AND ${t.pairsCount})`,
+  ),
+]);
 
 /** THE GYM'S PEOPLE. Every row with `former_at IS NULL` is the newest confirmed
  *  list, and that set is what "the list" means everywhere else; every row with a
@@ -397,4 +410,25 @@ export const gymMemberListNotDuplicates = pgTable(
     }).onDelete("cascade"),
     index("gym_member_list_not_duplicates_second_idx").on(t.gymId, t.secondEntryId),
   ],
+);
+
+/** POSSIBLE DUPLICATES, KEPT (0057): the gym's pairs as `repo.duplicatePairs` finds them,
+ *  worked out once per change of what they come from and read a page at a time. `first` is
+ *  the record whose (name, id) sorts first. Rows the app works out, with no keys to the
+ *  records: a record deleted or changed changes the stamp, and a page shows a pair only
+ *  while both records are the gym's. */
+export const gymMemberListPairs = pgTable(
+  "gym_member_list_pairs",
+  {
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    firstEntryId: uuid("first_entry_id").notNull(),
+    secondEntryId: uuid("second_entry_id").notNull(),
+    firstName: text("first_name").notNull(),
+    sameName: boolean("same_name").notNull(),
+    samePhone: boolean("same_phone").notNull(),
+    sameNumber: boolean("same_number").notNull(),
+  },
+  (t) => [primaryKey({ name: "gym_member_list_pairs_pk", columns: [t.gymId, t.firstName, t.firstEntryId, t.secondEntryId] })],
 );

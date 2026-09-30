@@ -23,6 +23,7 @@ import {
   type MemberListEntryPatch,
   type MemberListEntryWritten,
   type MemberListNotThemRequest,
+  type MemberListPossibleMatch,
   type MemberListReviewCheckedRequest,
   type MemberListReviewLine,
   type MemberListReviewPage,
@@ -50,6 +51,7 @@ import { applyTyped, changedFields, EMPTY_VALUES, mergeValues, type EntryValues,
 import { tidyCell } from "./cells.js";
 import { cut, identityKey } from "./fields.js";
 import { withoutCardNumbers } from "./neverKeep.js";
+import { nameKey } from "./samePerson.js";
 import { readCountry } from "./phone.js";
 import * as repo from "./repo.js";
 import { reviewAfterChecked, reviewAfterEdit, reviewAfterMerge, sameReview } from "./review.js";
@@ -218,6 +220,9 @@ export type WriteAnswer =
   /** The change would make this record the same person as another one, current or
    *  former. */
   | { kind: "already_on_list"; entryId: string; former: boolean }
+  /** Add member: records alike by name, phone or member number (5b-iv-b). Nothing was
+   *  added or sent. */
+  | { kind: "may_be_on_list"; people: MemberListPossibleMatch[] }
   /** The write would leave this many app members reached by no record. */
   | { kind: "leaves_list"; members: number; by: "change" | "merge" }
   | { kind: "rate_limited" };
@@ -305,11 +310,26 @@ export async function addEntry(
   const settings = input.invite === true ? await readyToSend(deps, gymId) : null;
   if (!(await limit())) return { kind: "rate_limited" };
   const at = deps.now();
-  const done = await deps.sql.begin(async (tx) => {
+  const done = await deps.sql.begin(async (tx): Promise<Done | { alike: MemberListPossibleMatch[] }> => {
     await repo.lockGym(tx, gymId);
     const context = await typedContext(tx, gymId, org.country);
     const applied = applyTyped(EMPTY_VALUES, input, context);
     if (!applied.ok) throw new OrgsError(400, applied.refusal.code, applied.refusal.message);
+    // May already be on your list (5b-iv-b): under the lock, so the second of two staff
+    // adding one person at once is told about the first. Only for a NEW record: somebody
+    // whose every detail matches is already on the list, or a past member coming back, as
+    // before. Add anyway covers the records staff were shown; one alike since is shown too.
+    const { values } = applied;
+    if ((await repo.entryHolding(tx, gymId, identityKey(values))) === null) {
+      const alike = await repo.possibleMatches(tx, gymId, {
+        nameKey: nameKey(values.fullName),
+        phone: values.phone,
+        memberNumber: values.memberNumber,
+        dateOfBirth: values.dateOfBirth,
+      });
+      const seen = new Set(input.acknowledgedDuplicates ?? []);
+      if (alike.some((match) => !seen.has(match.entryId))) return { alike };
+    }
     const placed = await placeOnList(tx, {
       gymId,
       userId,
@@ -329,6 +349,7 @@ export async function addEntry(
     const invited = await inviteEntryInTx(tx, settings, { gymId, entryId: placed.entryId, userId, at });
     return { ...placed, invited: invited.outcome };
   });
+  if ("alike" in done) return { kind: "may_be_on_list", people: done.alike };
   return await finish(deps, gymId, done);
 }
 

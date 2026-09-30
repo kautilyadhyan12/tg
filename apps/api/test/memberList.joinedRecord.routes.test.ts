@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { everyoneLeft } from "./memberListEveryoneLeft.js";
+import { addAnyway } from "./memberListAddAnyway.js";
 import { loadConfig } from "../src/config.js";
 import { emailHmac } from "../src/modules/orgs/invites/address.js";
 import { inviteSettings } from "../src/modules/orgs/invites/settings.js";
@@ -407,7 +408,7 @@ d("member list: an app member follows their record (real Postgres)", () => {
       await confirm(gymId, cookies, (await stage(gymId, cookies, csv(others))).uploadId);
       await stillInAppAsBefore(gymId, emmaUser.userId);
       expect(await recordOf(gymId, emma.name)).toEqual({ id: emmaRecord.id, former: true });
-      const typed = await post(`/v1/orgs/${gymId}/member-list/entries`, { fullName: emma.name, email: emma.email, phone: "07700 900999" }, cookies);
+      const typed = await addAnyway((body) => post(`/v1/orgs/${gymId}/member-list/entries`, body, cookies), { fullName: emma.name, email: emma.email, phone: "07700 900999" });
       expect(typed.statusCode, typed.body).toBe(201);
       const typedId = memberListEntryWrittenSchema.parse(JSON.parse(typed.body)).entry.entryId;
 

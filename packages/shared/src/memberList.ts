@@ -540,6 +540,10 @@ export type MemberListReviewQuery = z.infer<typeof memberListReviewQuerySchema>;
 export const memberListDuplicatesSignSchema = z.object({ count: z.number().int().min(0) }).strict();
 export type MemberListDuplicatesSign = z.infer<typeof memberListDuplicatesSignSchema>;
 export const MEMBER_LIST_DUPLICATES_PAGE = 50;
+/** The most pairs kept ready to page through (the feature's security pass, H1): the first
+ *  1,000 by name, twenty pages. A gym with more is told so, and the next ones show as staff
+ *  merge or mark these. A real list has a few per hundred records. */
+export const MEMBER_LIST_DUPLICATES_KEPT = 1_000;
 export const memberListDuplicatePersonSchema = z
   .object({
     entryId: z.string().uuid(),
@@ -565,6 +569,9 @@ export type MemberListDuplicatePair = z.infer<typeof memberListDuplicatePairSche
 export const memberListDuplicatesPageSchema = z
   .object({
     total: z.number().int().min(0),
+    /** How many of `total` are kept ready to page through; fewer than `total` only past
+     *  `MEMBER_LIST_DUPLICATES_KEPT`. */
+    kept: z.number().int().min(0).max(MEMBER_LIST_DUPLICATES_KEPT),
     pairs: z.array(memberListDuplicatePairSchema).max(MEMBER_LIST_DUPLICATES_PAGE),
     cursor: z.string().nullable(),
   })
@@ -2190,6 +2197,10 @@ const extraInputSchema = z
   .record(extraKeySchema, z.string().max(MEMBER_LIST_MAX_EXTRA_CHARS))
   .refine((extra) => Object.keys(extra).length <= MEMBER_LIST_MAX_EXTRA_FIELDS, { message: "too many fields" });
 
+/** The most records "may already be on your list" can name: at most four holders each of
+ *  the name, the phone and the member number (a fifth makes a value nobody's, 5b-iv-a). */
+export const MEMBER_LIST_POSSIBLE_MATCHES_MAX = 12;
+
 /** "Add member" (§11.6). Every field as staff typed it; the server cleans each one
  *  by the file's own rules and refuses what it cannot keep. Email or phone is
  *  required, checked by the server. `extra` is keyed by the gym's own catalogue. */
@@ -2209,6 +2220,9 @@ export const memberListEntryInputSchema = z
     extra: extraInputSchema.optional(),
     /** "Add and invite": invite the person in the same step (§9.12). */
     invite: z.boolean().optional(),
+    /** "Add anyway" (5b-iv-b): the records the warning named. The add goes ahead only if
+     *  every record alike now is one of them; the exact "already on your list" still stops it. */
+    acknowledgedDuplicates: z.array(z.string().uuid()).min(1).max(MEMBER_LIST_POSSIBLE_MATCHES_MAX).optional(),
   })
   .strict();
 export type MemberListEntryInput = z.infer<typeof memberListEntryInputSchema>;
@@ -2343,6 +2357,21 @@ export const memberListAlreadyOnListSchema = z.object({
   requestId: z.string().optional(),
 });
 
+/** A record Add member found alike (5b-iv-b), and what it shares with the person typed. */
+export const memberListPossibleMatchSchema = memberListDuplicatePersonSchema
+  .extend({ sameName: z.boolean(), samePhone: z.boolean(), sameMemberNumber: z.boolean() })
+  .strict();
+export type MemberListPossibleMatch = z.infer<typeof memberListPossibleMatchSchema>;
+
+/** Add member found records alike by name, phone or member number: 409 with them, and
+ *  nothing added or sent. `acknowledgedDuplicates` with these ids adds anyway. */
+export const memberListMayBeOnListSchema = z.object({
+  error: z.literal("may_be_on_list"),
+  message: z.string(),
+  people: z.array(memberListPossibleMatchSchema).min(1).max(MEMBER_LIST_POSSIBLE_MATCHES_MAX),
+  requestId: z.string().optional(),
+});
+
 /** A change or a join that would leave app members reached by no current record, so
  *  they would read "no longer on your list": 409 with how many, never who. */
 export const memberListLeavesListSchema = z.object({
@@ -2438,6 +2467,7 @@ export const MEMBER_LIST_BY_HAND_WORDS = {
   ends_kind_without_day: "Choose the end or renewal date first.",
   unknown_field: "That column isn't one of your list's columns.",
   already_on_list: "This person is already on your list.",
+  may_be_on_list: "This person may already be on your list. Open a record to check, or add them anyway.",
   former_record: "A former record already has these details. Put it back, or join the two records.",
   leaves_list_change:
     "This would leave people who use the app off your list, because their details would no longer match. Check the change, then confirm to go ahead.",
