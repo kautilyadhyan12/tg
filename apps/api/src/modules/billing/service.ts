@@ -9,13 +9,14 @@
 // An Indian gym pays in rupees through Razorpay the same way (1d-i; Kd, RULINGS 2026-09-24):
 // our server creates a Razorpay subscription at OUR plan, the browser opens Razorpay's
 // window for it, and only Razorpay's own record of it, fetched by our server, is written.
-// During the gym's own free trial the subscription starts when that trial ends, so the
-// mandate is taken now and the first payment then.
 //
-// During the gym's own free trial the checkout sells a Paddle trial of the days left, so
-// the card is saved now and the first payment is taken when the trial ends (1c-ii; Kd,
-// RULINGS 2026-09-25). A paying gym may move to a bigger size: Paddle charges the rest of
-// the month at once, and changes nothing if that charge fails.
+// Every checkout charges now. A gym in its own free trial that pays ends the trial when the
+// payment lands and gets the plan's full size at once; keeping the trial is not paying yet
+// (Kd, RULINGS 2026-09-30). Paid trials made before then (1c-ii, 1d-i: the card saved and the
+// first payment taken when the trial ends) are still followed to their end.
+//
+// A paying gym may move to a bigger size: Paddle charges the rest of the month at once, and
+// changes nothing if that charge fails.
 import {
   PAID_PLAN_GRACE_DAYS,
   SMALLER_SIZE_DECIDE_HOURS,
@@ -25,7 +26,6 @@ import {
   type OrgPlanChangePreview,
   type OrgPlanChangeResponse,
   type PaddleSubscription,
-  type PaddleTransaction,
   type RazorpaySubscription,
 } from "@app/shared";
 import type { Sql } from "postgres";
@@ -37,7 +37,7 @@ import { formatPriceMinor, holdsPrivilege, OrgsError, requirePrivilege, toOrgSub
 import { dayLabel, momentLabel, sizeFittedEmail, sizeKeptEmail, sizeWarningEmail } from "./emails.js";
 import type { Snapshot } from "./machine.js";
 import { onlinePaymentFor } from "./online.js";
-import type { PaddleApi, PaddleEnvironment, ProrationMode, TrialCheckout } from "./paddle.js";
+import type { PaddleApi, PaddleEnvironment, ProrationMode } from "./paddle.js";
 import type { RazorpayApi } from "./razorpay.js";
 import * as repo from "./repo.js";
 
@@ -112,7 +112,7 @@ export async function startOrgCheckout(
     }
   }
 
-  const outcome = await repo.beginCheckout(deps.sql, { ...input, currency: org.currencyDisplay, provider: "paddle", now: deps.now() });
+  const outcome = await repo.beginCheckout(deps.sql, { ...input, currency: org.currencyDisplay, provider: "paddle" });
   if (outcome.kind === "replay") {
     const { checkout } = outcome;
     if (checkout.state === "open" && checkout.providerRef !== null && checkout.provider === "paddle") {
@@ -126,29 +126,9 @@ export async function startOrgCheckout(
   await closeSuperseded(deps, outcome.superseded);
 
   const checkoutId = outcome.checkout.id;
-  const trialDays = outcome.trialDays;
-  let trial: TrialCheckout | undefined;
-  if (trialDays !== null) {
-    // The trial's own price copies the catalogue price's product and name.
-    const catalogue = await paddle.api.getPrice(outcome.providerPriceId);
-    if (catalogue.kind !== "ok") {
-      await repo.failCheckout(deps.sql, { checkoutId, gymId: input.gymId });
-      deps.log.warn({ event: "billing.price_not_read", result: catalogue.kind }, "Paddle did not return a plan's price");
-      throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
-    }
-    trial = {
-      trialDays,
-      planCode: input.planCode,
-      productId: catalogue.value.product_id,
-      name: catalogue.value.name ?? input.planCode,
-      amountMinor: outcome.priceMinor,
-      currency: outcome.currency,
-    };
-  }
   const created = await paddle.api.createTransaction({
     priceId: outcome.providerPriceId,
     customData: { gym_id: input.gymId, checkout_id: checkoutId },
-    ...(trial === undefined ? {} : { trial }),
   });
   if (created.kind !== "ok") {
     await repo.failCheckout(deps.sql, { checkoutId, gymId: input.gymId });
@@ -162,7 +142,8 @@ export async function startOrgCheckout(
     txn.items.length === 1 &&
     item !== undefined &&
     item.quantity === 1 &&
-    (trialDays === null ? item.price.id === outcome.providerPriceId : isTrialPrice(item, input.planCode, trialDays)) &&
+    item.price.id === outcome.providerPriceId &&
+    (item.price.trial_period ?? null) === null &&
     item.price.unit_price.amount === String(outcome.priceMinor) &&
     item.price.unit_price.currency_code === outcome.currency &&
     txn.subscription_id === null &&
@@ -256,7 +237,7 @@ export const RAZORPAY_APP_NOTE = "aihg";
 const RAZORPAY_TAKEN: ReadonlySet<string> = new Set(["authenticated", "active", "pending", "halted"]);
 
 /** An Indian gym subscribes through Razorpay (1d-i). Our server creates the subscription at
- *  OUR plan; during the gym's own trial it starts when that trial ends. */
+ *  OUR plan, charged when the window is paid. */
 async function startRazorpayCheckout(
   deps: BillingDeps,
   razorpay: RazorpaySettings,
@@ -276,7 +257,7 @@ async function startRazorpayCheckout(
     }
   }
 
-  const outcome = await repo.beginCheckout(deps.sql, { ...input, provider: "razorpay", now: deps.now() });
+  const outcome = await repo.beginCheckout(deps.sql, { ...input, provider: "razorpay" });
   if (outcome.kind === "replay") {
     const { checkout } = outcome;
     if (checkout.state === "open" && checkout.providerRef !== null && checkout.provider === "razorpay") {
@@ -296,10 +277,9 @@ async function startRazorpayCheckout(
   await closeSuperseded(deps, outcome.superseded);
 
   const checkoutId = outcome.checkout.id;
-  const startAt = outcome.trialEndsAt;
   const created = await razorpay.api.createSubscription({
     planId: outcome.providerPriceId,
-    startAt,
+    startAt: null,
     notes: { app: RAZORPAY_APP_NOTE, gym_id: input.gymId, checkout_id: checkoutId },
   });
   if (created.kind !== "ok") {
@@ -309,7 +289,7 @@ async function startRazorpayCheckout(
     throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
   }
   const sub = created.value;
-  // What Razorpay will charge must be exactly our price, from exactly the day we asked, or
+  // What Razorpay will charge must be exactly our price, from the moment it is paid, or
   // nothing is opened.
   const plan = sub.plan;
   const agrees =
@@ -317,7 +297,7 @@ async function startRazorpayCheckout(
     sub.status === "created" &&
     sub.quantity === 1 &&
     sub.paid_count === 0 &&
-    sub.start_at === (startAt === null ? null : Math.ceil(startAt.getTime() / 1000)) &&
+    sub.start_at === null &&
     sub.notes["checkout_id"] === checkoutId &&
     plan !== undefined &&
     plan.id === outcome.providerPriceId &&
@@ -357,18 +337,6 @@ function razorpayResponse(
     contact: payer.mobile,
     email: payer.email,
   };
-}
-
-/** A trial checkout's own price: exactly the days asked for, marked with the plan's code. */
-function isTrialPrice(item: PaddleTransaction["items"][number], planCode: string, trialDays: number): boolean {
-  const trial = item.price.trial_period;
-  return (
-    item.price.custom_data?.["plan_code"] === planCode &&
-    trial !== null &&
-    trial !== undefined &&
-    trial.interval === "day" &&
-    trial.frequency === trialDays
-  );
 }
 
 function checkoutResponse(paddle: PaddleSettings, checkoutId: string, transactionId: string): OrgCheckoutResponse {
@@ -499,7 +467,7 @@ export async function openBillingPortal(
 const SIZE_REFUSALS: Record<string, { status: number; message: string }> = {
   no_paid_plan_trial: {
     status: 409,
-    message: "Your free trial isn't paid for yet. Choose a plan with Subscribe; you're charged when the trial ends.",
+    message: "Your free trial isn't paid for yet. Choose a plan to pay today and get its full size at once.",
   },
   no_paid_plan: { status: 409, message: "This plan isn't paid through us, so its size can't be changed here." },
   paid_through_razorpay: { status: 409, message: "A plan paid through Razorpay can't change size here yet." },

@@ -1,10 +1,22 @@
 // Paddle's API as the billing tests need it (not a test file itself): transactions our
-// server makes, a `pay` that turns one into an active subscription (or, for a trial
-// checkout, a trialing one) the way a completed checkout does, the customer portal's
+// server makes, a `pay` that turns one into an active subscription (or, for an old trial
+// window, a trialing one) the way a completed checkout does, the customer portal's
 // sessions, and a subscription's price previewed and changed (1c-ii).
 import { randomBytes } from "node:crypto";
 import type { PaddlePortalSession, PaddlePrice, PaddleSubscription, PaddleSubscriptionPreview, PaddleTransaction } from "@app/shared";
-import type { PaddleApi, PaddleResult, ProrationMode, TrialCheckout } from "../src/modules/billing/paddle.js";
+import type { PaddleApi, PaddleResult, ProrationMode } from "../src/modules/billing/paddle.js";
+
+/** A trial window as our server made one before 2f-i (1c-ii): a price of its own, the plan's
+ *  amount with `trialDays` free, marked with the plan's code. Our server no longer makes one
+ *  (Kd, RULINGS 2026-09-30); the tests make it here to follow paid trials already made. */
+export interface TrialCheckout {
+  trialDays: number;
+  planCode: string;
+  productId: string;
+  name: string;
+  amountMinor: number;
+  currency: string;
+}
 
 export const paddleId = (prefix: string) => `${prefix}_${randomBytes(20).toString("hex").slice(0, 26)}`;
 
@@ -44,6 +56,8 @@ export class FakePaddle implements PaddleApi {
   duringNextChange: (() => Promise<unknown>) | null = null;
   /** The trial checkouts asked for. */
   trialCheckouts: TrialCheckout[] = [];
+  /** Make the next transaction asked for at a catalogue price carry a trial anyway. */
+  sneakTrial = false;
   /** Make the next trial checkout's price carry another plan's code, or another length. */
   wrongTrial: "code" | "days" | null = null;
   /** Trials moved (and to when), and trials ended at once. */
@@ -79,7 +93,9 @@ export class FakePaddle implements PaddleApi {
             id: trial === undefined ? input.priceId : paddleId("pri"),
             unit_price: { amount: this.wrongAmount ? "1" : price.amount, currency_code: price.currency },
             ...(trial === undefined
-              ? {}
+              ? this.sneakTrial
+                ? { trial_period: { interval: "day" as const, frequency: 10 } }
+                : {}
               : {
                   trial_period: { interval: "day" as const, frequency: this.wrongTrial === "days" ? trial.trialDays + 30 : trial.trialDays },
                   custom_data: { plan_code: this.wrongTrial === "code" ? "zz_someone_elses" : trial.planCode },
@@ -91,6 +107,7 @@ export class FakePaddle implements PaddleApi {
     };
     this.wrongAmount = false;
     this.wrongTrial = null;
+    this.sneakTrial = false;
     this.txns.set(txn.id, txn);
     this.customData.set(txn.id, input.customData);
     return Promise.resolve(this.ok(txn));

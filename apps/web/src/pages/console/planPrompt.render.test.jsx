@@ -200,13 +200,9 @@ describe('the forced trial prompt', () => {
     expect(await screen.findByTestId('plan-modal')).toBeTruthy();
     expect(screen.getByRole('dialog')).toBeTruthy();
     expect(screen.getByRole('button', { name: /start your 10-day free trial/i })).toBeTruthy();
-    // The trial length, in Kd's number (RULINGS 2026-09-23), written out here.
-    expect(screen.getByText('Your first 10 days are free. No card needed.')).toBeTruthy();
-    // It must not promise a number nobody has been told yet: the seat cap comes
-    // off the price book and the server picks the band.
-    expect(
-      within(screen.getByTestId('plan-modal')).queryByText(/\b\d[\d,]*\s*(members|places|people)\b/i),
-    ).toBeNull();
+    // The trial's length and member limit, in Kd's numbers (RULINGS 2026-09-23 and
+    // 2026-09-29), written out here; the server writes the same limit on the trial.
+    expect(screen.getByText('Your first 10 days are free, for up to 100 members. No card needed.')).toBeTruthy();
     // And it does not ask for prices — there is nothing to choose between.
     expect(orgService.getPlans).not.toHaveBeenCalled();
   });

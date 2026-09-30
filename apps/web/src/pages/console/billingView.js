@@ -204,9 +204,10 @@ export function pricesNote(currency) {
   return currency === 'INR' ? 'Prices are a month, with no GST added.' : 'Prices are a month. Tax is added at checkout where it applies.';
 }
 
-/** HAS THIS GYM CHOSEN AND PAID FOR A PLAN THROUGH US? During a free trial that means its
- *  card is saved and the first payment is taken when the trial ends (Kd, RULINGS
- *  2026-09-25); the server says so, and an api too old to say reads as no. */
+/** HAS THIS GYM CHOSEN AND PAID FOR A PLAN THROUGH US? In a trial this is only a paid trial
+ *  made before 2026-09-30, its card saved and the first payment taken when the trial ends;
+ *  paying now ends the trial (Kd, RULINGS 2026-09-30). The server says so, and an api too old
+ *  to say reads as no. */
 export function isSubscribed(org) {
   return org?.subscription?.subscribed === true;
 }
@@ -243,7 +244,7 @@ export function chosenSeatCap(sub) {
   return Number.isFinite(sub?.nextSeatCap) ? sub.nextSeatCap : (sub?.seatCap ?? null);
 }
 
-/** "Up to 500 members from 5 Oct, when your first payment is taken." for a paid trial whose
+/** "Up to 500 members from 5 Oct." for a paid trial whose
  *  chosen size is bigger than the trial's; without a date once that first charge has failed
  *  (the size still waits for it); null otherwise. */
 export function nextSizeText(sub, orgType) {
@@ -251,8 +252,8 @@ export function nextSizeText(sub, orgType) {
   const date = sub.status === 'trialing' ? trialEndDateLabel(sub.currentPeriodEnd) : null;
   const who = orgWords(orgType).people;
   return date === null
-    ? `Up to ${sub.nextSeatCap} ${who} once your first payment is taken.`
-    : `Up to ${sub.nextSeatCap} ${who} from ${date}, when your first payment is taken.`;
+    ? `Up to ${sub.nextSeatCap} ${who} once your first payment goes through.`
+    : `Up to ${sub.nextSeatCap} ${who} from ${date}.`;
 }
 
 /** The plans bigger than the gym's size, smallest first as the server lists them. None
@@ -455,7 +456,7 @@ function nextDecideAt(periodEnd) {
 /** A PAID TRIAL'S NEXT STEP, every date named (Kd at 1d-i's click-through: *"wording need to be
  *  precise"*): the last free day, the day the plan starts and its first payment is taken, and
  *  the month that payment covers, first and last day. "Free trial until 8 Oct. Your plan starts
- *  on 9 Oct: ₹7,500 is paid for 9 Oct to 8 Nov." Null for anything
+ *  on 9 Oct, when ₹7,500 is charged for 9 Oct to 8 Nov." Null for anything
  *  else, or when the server has not said the price or the date. */
 export function firstPaymentText(sub) {
   if (sub?.status !== 'trialing' || sub?.subscribed !== true) return null;
@@ -475,7 +476,7 @@ export function firstPaymentText(sub) {
   const lastPaid = new Date(nextPayment.getTime());
   lastPaid.setDate(lastPaid.getDate() - 1);
   const day = (d) => trialEndDateLabel(d.toISOString());
-  return `Free trial until ${day(lastFree)}. Your plan starts on ${date}: ${price} is paid for ${date} to ${day(lastPaid)}.`;
+  return `Free trial until ${day(lastFree)}. Your plan starts on ${date}, when ${price} is charged for ${date} to ${day(lastPaid)}.`;
 }
 
 /** WHAT A BIGGER SIZE COSTS, IN ONE SENTENCE, from the server's preview of Paddle's own
@@ -704,7 +705,7 @@ export function bannerFor(org, now = Date.now()) {
         days < 0
           ? `Your trial is past its end date. Your ${words.people} keep your ${words.it}'s features while it is still running.`
           : `Trial ends ${date ?? 'soon'}. Your ${words.people} keep your ${words.it}'s features only while a plan is active.` +
-            (canPayDuringTrial(org) ? ' Choose a plan under Plan on the Overview; you pay when the trial ends.' : '');
+            (canPayDuringTrial(org) ? ' To keep them, choose a plan under Plan on the Overview: you pay today and get its full size at once.' : '');
       return { key: 'trial_urgent', tone: 'warn', text, dismissible: false };
     }
   }

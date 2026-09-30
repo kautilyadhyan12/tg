@@ -24,6 +24,7 @@ import {
   gymClockFormatSchema,
   gymHoursModeSchema,
   gymNudgePresetSchema,
+  GYM_TRIAL_MEMBERS,
   ON_A_ROLL_LIMIT,
   ON_A_ROLL_MIN_SPAN_DAYS,
   ON_A_ROLL_MIN_WEEKS,
@@ -2026,10 +2027,12 @@ export async function startGymTrial(
     const plan = planRows[0];
     if (plan === undefined) return { kind: "no_plan" };
 
+    // The trial holds its own member limit, below the band's (Kd, RULINGS 2026-09-29).
+    const trialSeatCap = plan.seat_cap === null ? GYM_TRIAL_MEMBERS : Math.min(plan.seat_cap, GYM_TRIAL_MEMBERS);
     const inserted = await tx<{ id: string; status: string; trial_ends_at: Date | null }[]>`
-      INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, trial_ends_at, provider)
+      INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, trial_ends_at, trial_seat_cap, provider)
       VALUES ('gym', ${input.gymId}, ${plan.id}, 'trialing',
-              now() + ${plan.trial_days} * INTERVAL '1 day', 'none')
+              now() + ${plan.trial_days} * INTERVAL '1 day', ${trialSeatCap}, 'none')
       RETURNING id, status, trial_ends_at`;
     const row = inserted[0];
     if (row === undefined) throw new Error("subscription insert returned no row");
@@ -2037,8 +2040,8 @@ export async function startGymTrial(
     const subscription = toGymSubscription({
       status: row.status,
       trial_ends_at: row.trial_ends_at,
-      seat_cap: plan.seat_cap,
-      plan_seat_cap: plan.seat_cap,
+      seat_cap: trialSeatCap,
+      plan_seat_cap: trialSeatCap,
       price_minor: plan.price_minor,
       currency: plan.currency,
       current_period_end: null,
@@ -2047,7 +2050,7 @@ export async function startGymTrial(
       pending_seat_cap: null,
       pending_price_minor: null,
       pending_from: null,
-      trial_seat_cap: null,
+      trial_seat_cap: trialSeatCap,
       kept_seat_cap: null,
       kept_members: null,
       fitted_asked_seat_cap: null,

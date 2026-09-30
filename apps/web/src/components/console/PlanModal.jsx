@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { GYM_TRIAL_DAYS, orgWords } from '@app/shared';
+import { GYM_TRIAL_DAYS, GYM_TRIAL_MEMBERS, orgWords } from '@app/shared';
 import { Link } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { orgService, errorCode, errorText, isRetryable } from '../../api/orgsApi';
@@ -66,7 +66,7 @@ import { usePaddleSubscribe } from './usePaddleSubscribe';
  *  computes neither: `priceLabel` is formatted server-side and is the only money
  *  field on the wire (there is no minor-unit integer to divide — R10.4), and the
  *  cap is the only human fact a plan row carries. */
-export function PlanRow({ plan, orgType, canPay, busy, working, onSubscribe }) {
+export function PlanRow({ plan, orgType, canPay, busy, working, onSubscribe, buttonText = 'Subscribe' }) {
   const price = planPriceText(plan);
   if (price === null) return null;
   const fits = plan?.fits !== false;
@@ -97,7 +97,7 @@ export function PlanRow({ plan, orgType, canPay, busy, working, onSubscribe }) {
           style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F', minHeight: 44 }}
         >
           {working ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-          Subscribe
+          {buttonText}
         </button>
       ) : null}
     </li>
@@ -353,7 +353,7 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
               plan.
             </p>
             <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.6)' }}>
-              Your first {GYM_TRIAL_DAYS} days are free. No card needed.
+              Your first {GYM_TRIAL_DAYS} days are free, for up to {GYM_TRIAL_MEMBERS} {words.people}. No card needed.
             </p>
           </>
         ) : (
