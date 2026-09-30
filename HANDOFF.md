@@ -12,7 +12,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Cost at full size** (mains, 2,592 MHz, CPU 25 % busy, 6 runs): answering nobody ≤ 1.3 ms at 200 and 10,000 (≤ 2 ms, one 27 ms run, at the worst the rule allows: 20,000 pairs). Database: sign 6 / 38 / 185 ms, a page 8 / 54 / 371 ms. The first shape (the list joined to itself) ran for minutes at 10,000; now groups first, grouped `COLLATE "C"`.
 - **Tests:** api **4,374/4,374** (148 files); shared 273/273; web 3,295/3,295 (`poseAssets.contract` local Node 24); tsc and eslint 0 (api, shared, the job's web files); `vite build` green. Seen in headless Edge, dark and light, 1200 and 390 (`.cost/look-5b-iv-a.mjs`).
 - **Folder A's local DB:** migrated, 795 records filled. **Folder B's `aihg_b` needs 0055 and `tools/member-name-keys.ts` after this merges.** Kd Demo Gym has five second copies for the click-through (`.cost/setup-5b-iv-a.ts`).
-- **Next:** Kd's click-through, round-one review (`reviews/5b-iv-a-1-review.md`), merge on Kd's word; then 5b-iv-b.
+- **Kd's click-through: *"all passed"*** after one fix it found: Merge duplicate's Keep and Remove swapping sides was "really confusing" (700d632): fixed columns, "Keep this one", Merge grey until chosen, an "After the merge" preview from `MEMBER_LIST_MERGE_FILLS` (shared with the server's merge) and "Not kept from the record removed" with why (RULINGS 2026-09-30). Console screens 1,660/1,660, merge api 29/29.
+- **Next:** round-one review (`reviews/5b-iv-a-1-review.md`), merge on Kd's word; then 5b-iv-b.
 
 ## 2026-09-30 · 5b-v-d-iv (Folder A): import problems stay marked on the person (branch `members-review-needed`)
 
