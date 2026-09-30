@@ -1,0 +1,49 @@
+{
+  "about": "Merge duplicate's contract (ROADMAP 5b-iv-a): the api test merges `gone` into `keep` on the real server and reads the kept record back as `merged`; the web test previews the same two records and must show `merged`. Values as the list stores them.",
+  "fields": [
+    { "key": "locker", "label": "Locker" },
+    { "key": "notes", "label": "Notes" }
+  ],
+  "keep": {
+    "fullName": "Ada Lovelace",
+    "email": "ada@members.example",
+    "phone": null,
+    "memberNumber": null,
+    "status": "Frozen",
+    "membershipType": null,
+    "joinedOn": "2025-01-04",
+    "endsOn": null,
+    "endsOnKind": null,
+    "paymentStatus": null,
+    "dateOfBirth": "1990-03-12",
+    "extra": { "locker": "", "notes": "Mornings" }
+  },
+  "gone": {
+    "fullName": "Lovelace, Ada",
+    "email": "ada.old@members.example",
+    "phone": "+919876512345",
+    "memberNumber": "M-7",
+    "status": "Active",
+    "membershipType": "Gold",
+    "joinedOn": "2024-06-01",
+    "endsOn": "2026-10-03",
+    "endsOnKind": "renews",
+    "paymentStatus": "Paid",
+    "dateOfBirth": "1990-03-12",
+    "extra": { "locker": "9", "notes": "Evenings" }
+  },
+  "merged": {
+    "fullName": "Ada Lovelace",
+    "email": "ada@members.example",
+    "phone": null,
+    "memberNumber": null,
+    "status": "Frozen",
+    "membershipType": "Gold",
+    "joinedOn": "2025-01-04",
+    "endsOn": "2026-10-03",
+    "endsOnKind": "renews",
+    "paymentStatus": "Paid",
+    "dateOfBirth": "1990-03-12",
+    "extra": { "locker": "9", "notes": "Mornings" }
+  }
+}

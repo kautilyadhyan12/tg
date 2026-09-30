@@ -425,6 +425,13 @@ export function isMemberListReviewKey(key: string): boolean {
   return REVIEW_KEY.test(key);
 }
 
+/** MERGE DUPLICATE (RULINGS 2026-09-23): the kept record's name, email, phone and member
+ *  number never change, so the next upload still finds it; each of these it takes from the
+ *  other record only where its own is empty (with the gym's own columns). The server's merge
+ *  and the screen's preview of it both read this list, so they cannot disagree. */
+export const MEMBER_LIST_MERGE_KEEPS_OWN = ["fullName", "email", "phone", "memberNumber"] as const satisfies readonly MemberListField[];
+export const MEMBER_LIST_MERGE_FILLS = ["status", "membershipType", "joinedOn", "endsOn", "paymentStatus", "dateOfBirth"] as const satisfies readonly MemberListField[];
+
 /** Each field under the name the console's screens give it (the import's column list,
  *  a person's page). */
 export const MEMBER_LIST_FIELD_LABELS: Readonly<Record<MemberListField, string>> = {
@@ -526,6 +533,56 @@ export type MemberListReviewPage = z.infer<typeof memberListReviewPageSchema>;
 export const memberListReviewPageResponseSchema = z.object({ page: memberListReviewPageSchema });
 export const memberListReviewQuerySchema = z.object({ cursor: z.string().max(512).optional() }).strict();
 export type MemberListReviewQuery = z.infer<typeof memberListReviewQuerySchema>;
+
+/** POSSIBLE DUPLICATES (ROADMAP 5b-iv-a; RULINGS 2026-09-25, 2026-09-30): two records of one
+ *  gym alike by name, phone or member number, listed as pairs for staff to Merge or mark
+ *  Different people. The app never merges on its own. */
+export const memberListDuplicatesSignSchema = z.object({ count: z.number().int().min(0) }).strict();
+export type MemberListDuplicatesSign = z.infer<typeof memberListDuplicatesSignSchema>;
+export const MEMBER_LIST_DUPLICATES_PAGE = 50;
+export const memberListDuplicatePersonSchema = z
+  .object({
+    entryId: z.string().uuid(),
+    fullName: z.string(),
+    email: z.string().nullable(),
+    phone: z.string().nullable(),
+    memberNumber: z.string().nullable(),
+    /** A past member: the pair's other record is a current one. */
+    past: z.boolean(),
+  })
+  .strict();
+export type MemberListDuplicatePerson = z.infer<typeof memberListDuplicatePersonSchema>;
+export const memberListDuplicatePairSchema = z
+  .object({
+    first: memberListDuplicatePersonSchema,
+    second: memberListDuplicatePersonSchema,
+    sameName: z.boolean(),
+    samePhone: z.boolean(),
+    sameMemberNumber: z.boolean(),
+  })
+  .strict();
+export type MemberListDuplicatePair = z.infer<typeof memberListDuplicatePairSchema>;
+export const memberListDuplicatesPageSchema = z
+  .object({
+    total: z.number().int().min(0),
+    pairs: z.array(memberListDuplicatePairSchema).max(MEMBER_LIST_DUPLICATES_PAGE),
+    cursor: z.string().nullable(),
+  })
+  .strict();
+export type MemberListDuplicatesPage = z.infer<typeof memberListDuplicatesPageSchema>;
+export const memberListDuplicatesPageResponseSchema = z.object({ page: memberListDuplicatesPageSchema });
+export const memberListDuplicatesQuerySchema = z.object({ cursor: z.string().max(512).optional() }).strict();
+export type MemberListDuplicatesQuery = z.infer<typeof memberListDuplicatesQuerySchema>;
+/** Different people: the two records of a pair, remembered so the pair is never shown again. */
+export const memberListNotDuplicatesRequestSchema = z
+  .object({ entryIds: z.tuple([z.string().uuid(), z.string().uuid()]) })
+  .strict()
+  .refine((body) => body.entryIds[0].toLowerCase() !== body.entryIds[1].toLowerCase(), {
+    message: "Two different records are needed.",
+    path: ["entryIds"],
+  });
+export type MemberListNotDuplicatesRequest = z.infer<typeof memberListNotDuplicatesRequestSchema>;
+export const memberListNotDuplicatesResponseSchema = z.object({ duplicates: memberListDuplicatesSignSchema }).strict();
 
 /** Which way round a column's two-number dates are read. `dayFirst` is
  *  03/04/2026 → 3 April; `monthFirst` is 3 April → March 4. */
@@ -1620,6 +1677,8 @@ export const memberListViewSchema = z.object({
   appWords: z.array(memberAppWordCountSchema).max(MEMBER_APP_FILTER_ORDER.length).default([]),
   /** The current members an import found a problem with, until staff fix it (5b-v-d-iv). */
   review: memberListReviewSignSchema.default({ count: 0 }),
+  /** How many pairs may be one person twice (5b-iv-a), for the Members sign. */
+  duplicates: memberListDuplicatesSignSchema.default({ count: 0 }),
 });
 export type MemberListView = z.infer<typeof memberListViewSchema>;
 

@@ -25,6 +25,7 @@ import {
   pastSince,
   pageTickState,
   reviewSignWords,
+  duplicatesSignWords,
   rowWords,
   selectedCount,
   selectedWords,
@@ -244,6 +245,26 @@ function ReviewSign({ review, words }) {
           </Link>
         </div>
         <span className="c-s14 c-t2">An import found something to check on each. They&apos;re tagged Review needed in the list.</span>
+      </div>
+    </section>
+  );
+}
+
+/** THE SIGN WHILE ANY PAIR MAY BE ONE PERSON TWICE (5b-iv-a; RULINGS 2026-09-25): Review opens
+ *  the pairs. The app never merges anyone on its own. */
+function DuplicatesSign({ duplicates }) {
+  const { orgSlug } = useParams();
+  return (
+    <section className="c-callout items-start" data-testid="duplicates-sign">
+      <span className="c-glow-dot mt-[7px]" aria-hidden="true" />
+      <div className="flex flex-col gap-1 flex-1 min-w-0">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="c-s15 c-w6">{duplicatesSignWords(duplicates.count)}</span>
+          <Link to={`/console/${orgSlug}/members/duplicates`} className="c-s14 c-w6 c-lk" data-testid="duplicates-review">
+            Review
+          </Link>
+        </div>
+        <span className="c-s14 c-t2">Each is two records that share a name, a phone or a member number. Merge them, or mark them as different people.</span>
       </div>
     </section>
   );
@@ -648,6 +669,7 @@ export default function MemberListPanel({
   return (
     <div className={`flex flex-col gap-5 md:gap-6 ${picked > 0 ? 'pb-20 md:pb-0' : ''}`} data-testid="member-list-panel">
       {(list?.review?.count ?? 0) > 0 ? <ReviewSign review={list.review} words={words} /> : null}
+      {(list?.duplicates?.count ?? 0) > 0 ? <DuplicatesSign duplicates={list.duplicates} /> : null}
       {/* The toolbar stays at the top of the screen on a computer while the list scrolls, and
           with people selected the bar over them sits in it (Kd, 2026-09-28: at the bottom of
           the list he had to scroll back up to act), as Gmail and HubSpot keep theirs. */}

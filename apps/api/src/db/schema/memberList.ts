@@ -37,7 +37,7 @@
 // own decision (§9.2 rule 11) and it is 3b's; an upload and a confirm write rows
 // and send nothing.
 import { sql } from "drizzle-orm";
-import { bigserial, date, index, integer, jsonb, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { bigserial, date, foreignKey, index, integer, jsonb, pgTable, primaryKey, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { check } from "drizzle-orm/pg-core";
 import { citext, createdAt } from "./common.js";
 import { gyms } from "./tenancy.js";
@@ -163,6 +163,11 @@ export const gymMemberListEntries = pgTable(
      *  until the field's value changes, so next month's file does not mark them again. */
     needsReview: text("needs_review").array().notNull().default(sql`'{}'::text[]`),
     reviewChecked: text("review_checked").array().notNull().default(sql`'{}'::text[]`),
+    /** THE NAME'S WORDS, FOLDED AND SORTED (`samePerson.ts` `nameKey`), written with the name
+     *  by every write, so possible duplicates (5b-iv-a) are found by one indexed join; '' for
+     *  a name with no words, NULL on a record older than 0056 until
+     *  `tools/member-name-keys.ts` fills it. */
+    nameKey: text("name_key"),
     identityKey: text("identity_key").notNull(),
     source: text("source").notNull(),
     // WHERE THIS PERSON CAME IN THE LIST, and the only column that can say so.
@@ -202,6 +207,12 @@ export const gymMemberListEntries = pgTable(
     index("gym_member_list_entries_needs_review_idx")
       .on(t.gymId, t.listedSeq)
       .where(sql`${t.formerAt} IS NULL AND ${t.needsReview} <> '{}'::text[]`),
+    // Possible duplicates (5b-iv-a): the same name, the same member number.
+    index("gym_member_list_entries_gym_name_key_idx").on(t.gymId, t.nameKey).where(sql`${t.nameKey} <> ''`),
+    index("gym_member_list_entries_gym_member_number_idx")
+      .on(t.gymId, sql`lower(${t.memberNumber})`)
+      .where(sql`${t.memberNumber} IS NOT NULL`),
+    check("gym_member_list_entries_name_key_len_check", sql`${t.nameKey} IS NULL OR char_length(${t.nameKey}) <= 400`),
     check("gym_member_list_entries_full_name_check", sql`length(${t.fullName}) <= 120`),
     check("gym_member_list_entries_email_check", sql`${t.email} IS NULL OR length(${t.email}) <= 254`),
     check("gym_member_list_entries_phone_check", sql`${t.phoneE164} IS NULL OR ${t.phoneE164} ~ '^\\+[1-9][0-9]{6,14}$'`),
@@ -357,5 +368,33 @@ export const gymMemberListUploads = pgTable(
     // nothing else in the system would ever notice.
     check("gym_member_list_uploads_rows_only_staged_check", sql`${t.status} = 'staged' OR ${t.rows} IS NULL`),
     check("gym_member_list_uploads_confirmed_at_check", sql`(${t.status} = 'confirmed') = (${t.confirmedAt} IS NOT NULL)`),
+  ],
+);
+
+/** A PAIR STAFF MARKED DIFFERENT PEOPLE (5b-iv-a): never listed as a possible duplicate
+ *  again. The two records in id order, each with its gym, so a pair can name only records
+ *  of its own gym; deleting either record (a merge, Delete for good) takes the pair. */
+export const gymMemberListNotDuplicates = pgTable(
+  "gym_member_list_not_duplicates",
+  {
+    gymId: uuid("gym_id").notNull(),
+    firstEntryId: uuid("first_entry_id").notNull(),
+    secondEntryId: uuid("second_entry_id").notNull(),
+    decidedAt: timestamp("decided_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ name: "gym_member_list_not_duplicates_pk", columns: [t.gymId, t.firstEntryId, t.secondEntryId] }),
+    check("gym_member_list_not_duplicates_order_check", sql`${t.firstEntryId} < ${t.secondEntryId}`),
+    foreignKey({
+      name: "gym_member_list_not_duplicates_first_fk",
+      columns: [t.gymId, t.firstEntryId],
+      foreignColumns: [gymMemberListEntries.gymId, gymMemberListEntries.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "gym_member_list_not_duplicates_second_fk",
+      columns: [t.gymId, t.secondEntryId],
+      foreignColumns: [gymMemberListEntries.gymId, gymMemberListEntries.id],
+    }).onDelete("cascade"),
+    index("gym_member_list_not_duplicates_second_idx").on(t.gymId, t.secondEntryId),
   ],
 );

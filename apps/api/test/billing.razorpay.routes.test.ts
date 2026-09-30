@@ -7,7 +7,7 @@
 // something else on the same Razorpay account made.
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import postgres from "postgres";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { processRazorpayEvents } from "../src/modules/billing/events.js";
@@ -47,6 +47,14 @@ const BIG = "zz_rzp_big"; // up to 5,000 members, ₹200
 d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
   const razorpay = new FakeRazorpay();
+  /** Razorpay's clock as each test starts: a test that moves it (a trial's last day, a month
+   *  later) would otherwise hand the next test a clock at that test's own trial end, and two
+   *  trials begun in the same second end in the same second, so the next one was charged at
+   *  once where it should be waiting (seen on CI, PR #138). */
+  const startClock = razorpay.clock;
+  beforeEach(() => {
+    razorpay.clock = startClock;
+  });
   const SMALL_PLAN = razorpay.addPlan(10000);
   const BIG_PLAN = razorpay.addPlan(20000);
   let app: Awaited<ReturnType<typeof buildApp>> | undefined;

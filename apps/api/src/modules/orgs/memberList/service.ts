@@ -1415,10 +1415,11 @@ export async function readList(
     repo.membersAgainstList(deps.sql, gymId),
     repo.listFields(deps.sql, gymId),
   ]);
-  const [{ totals, statuses, membershipTypes, paymentStatuses }, app, review] = await Promise.all([
+  const [{ totals, statuses, membershipTypes, paymentStatuses }, app, review, duplicates] = await Promise.all([
     repo.listStatusCounts(deps.sql, gymId, inAppEntryIds(members)),
     currentAppWords(deps.sql, deps.invites ?? null, gymId, members, deps.now()),
     repo.reviewSign(deps.sql, gymId),
+    repo.duplicatesSign(deps.sql, gymId),
   ]);
   // THE WHOLE-LIST NUMBERS AND THE CHIPS COME FROM ONE STATEMENT, never two: two
   // statements counting one gym's people two ways is two answers to one question, and
@@ -1443,6 +1444,7 @@ export async function readList(
     fields: fields.map((field) => ({ key: field.key, label: field.label })),
     appWords: app.counts,
     review,
+    duplicates,
   };
 }
 

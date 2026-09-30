@@ -45,6 +45,8 @@ import {
   memberListEntryResponseSchema,
   memberListEntryWrittenSchema,
   memberListReviewPageResponseSchema,
+  memberListDuplicatesPageResponseSchema,
+  memberListNotDuplicatesResponseSchema,
   memberListViewResponseSchema,
   memberListNotMeResponseSchema,
   memberListPreviewResponseSchema,
@@ -777,6 +779,24 @@ export const orgService = {
       memberListReviewPageResponseSchema,
       'who needs review',
       authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/review${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
+    ),
+
+  /** GET …/member-list/duplicates — possible duplicates: pairs of records alike by name,
+   *  phone or member number, fifty at a time after `cursor` (5b-iv-a). */
+  getMemberListDuplicates: (gymId, cursor) =>
+    readThrough(
+      memberListDuplicatesPageResponseSchema,
+      'possible duplicates',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/duplicates${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
+    ),
+
+  /** POST …/member-list/duplicates/different — Different people: the pair is never listed
+   *  again (5b-iv-a). Answers with the sign's new count. */
+  markDifferentPeople: (gymId, entryIds) =>
+    readThrough(
+      memberListNotDuplicatesResponseSchema,
+      'possible duplicates',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/duplicates/different`, { entryIds }),
     ),
 
   /** POST …/entries/:entryId/review/checked — It's correct: staff checked one problem an

@@ -41,6 +41,8 @@ import {
   type MemberListOnList,
   type MemberListStoredPerson,
   type MemberListReviewSign,
+  type MemberListDuplicatePair,
+  type MemberListDuplicatesSign,
   type MemberListRowGroup,
   type MemberListStagedFile,
   type MemberListStagedShell,
@@ -50,7 +52,7 @@ import {
 import type { EntryValues } from "./byHand.js";
 import type { CarriedFields, ListEntry, ListMember } from "./reconcile.js";
 import type { ReviewState } from "./review.js";
-import { sameName } from "./samePerson.js";
+import { nameKey, sameName } from "./samePerson.js";
 
 export type SqlOrTx = Sql | TransactionSql;
 
@@ -1207,6 +1209,7 @@ export async function insertEntries(
   if (people.length === 0) return 0;
   const payload = people.map((person, index) => ({
     full_name: person.fullName,
+    name_key: nameKey(person.fullName),
     email: person.email,
     phone_e164: person.phone,
     member_number: person.memberNumber,
@@ -1228,14 +1231,14 @@ export async function insertEntries(
   }));
   const rows = await tx<{ id: string }[]>`
     INSERT INTO gym_member_list_entries
-      (gym_id, full_name, email, phone_e164, member_number, status, membership_type,
+      (gym_id, full_name, name_key, email, phone_e164, member_number, status, membership_type,
        joined_on, ends_on, ends_on_kind, payment_status, date_of_birth, extra,
        identity_key, source)
-    SELECT ${gymId}, r.full_name, r.email, r.phone_e164, r.member_number, r.status,
+    SELECT ${gymId}, r.full_name, r.name_key, r.email, r.phone_e164, r.member_number, r.status,
            r.membership_type, r.joined_on, r.ends_on, r.ends_on_kind, r.payment_status,
            r.date_of_birth, r.extra, r.identity_key, ${source}
     FROM jsonb_to_recordset(${tx.json(payload)})
-      AS r(full_name text, email text, phone_e164 text, member_number text,
+      AS r(full_name text, name_key text, email text, phone_e164 text, member_number text,
            status text, membership_type text, joined_on date, ends_on date,
            ends_on_kind text, payment_status text, date_of_birth date, extra jsonb,
            identity_key text, ord int)
@@ -1283,6 +1286,7 @@ export async function updateEntries(
     entry_key: change.entryKey,
     identity_key: change.identityKey,
     full_name: change.fullName,
+    name_key: nameKey(change.fullName),
     email: change.email,
     phone_e164: change.phone,
     member_number: change.memberNumber,
@@ -1299,6 +1303,7 @@ export async function updateEntries(
   const rows = await tx<{ id: string }[]>`
     UPDATE gym_member_list_entries e
     SET full_name      = CASE WHEN ${carries.fullName} THEN r.full_name ELSE e.full_name END,
+        name_key       = CASE WHEN ${carries.fullName} THEN r.name_key ELSE e.name_key END,
         email          = CASE WHEN ${carries.email} THEN r.email::citext ELSE e.email END,
         phone_e164     = CASE WHEN ${carries.phone} THEN r.phone_e164 ELSE e.phone_e164 END,
         member_number  = CASE WHEN ${carries.memberNumber} THEN r.member_number ELSE e.member_number END,
@@ -1318,7 +1323,7 @@ export async function updateEntries(
           WHERE name <> ALL(r.clear)
         )
     FROM jsonb_to_recordset(${tx.json(payload)})
-      AS r(entry_key text, identity_key text, full_name text, email text, phone_e164 text,
+      AS r(entry_key text, identity_key text, full_name text, name_key text, email text, phone_e164 text,
            member_number text, status text, membership_type text, joined_on date,
            ends_on date, ends_on_kind text, payment_status text, date_of_birth date,
            extra jsonb, clear text[])
@@ -2075,10 +2080,10 @@ export async function insertEntry(
 ): Promise<string> {
   const rows = await tx<{ id: string }[]>`
     INSERT INTO gym_member_list_entries
-      (gym_id, full_name, email, phone_e164, member_number, status, membership_type,
+      (gym_id, full_name, name_key, email, phone_e164, member_number, status, membership_type,
        joined_on, ends_on, ends_on_kind, payment_status, date_of_birth, extra,
        identity_key, source)
-    VALUES (${gymId}, ${values.fullName}, ${values.email}, ${values.phone}, ${values.memberNumber},
+    VALUES (${gymId}, ${values.fullName}, ${nameKey(values.fullName)}, ${values.email}, ${values.phone}, ${values.memberNumber},
             ${values.status}, ${values.membershipType}, ${values.joinedOn}::date, ${values.endsOn}::date,
             ${values.endsOn === null ? null : values.endsOnKind}, ${values.paymentStatus},
             ${values.dateOfBirth}::date, ${tx.json(values.extra)}, ${identityKey}, ${source})
@@ -2101,6 +2106,7 @@ export async function writeEntry(
   const rows = await tx<{ id: string }[]>`
     UPDATE gym_member_list_entries
     SET full_name       = ${values.fullName},
+        name_key        = ${nameKey(values.fullName)},
         email           = ${values.email},
         phone_e164      = ${values.phone},
         member_number   = ${values.memberNumber},
@@ -2548,4 +2554,182 @@ export async function reviewCounts(sql: SqlOrTx, gymIds: readonly string[]): Pro
     GROUP BY gym_id`;
   for (const row of rows) counts.set(row.gym_id, row.count);
   return counts;
+}
+
+// ── POSSIBLE DUPLICATES (5b-iv-a) ──
+
+/** A name, phone or member number held by more records than this is somebody's
+ *  placeholder (the front desk's phone, "Guest", "0000") and pairs nobody: six records
+ *  would already be fifteen pairs, none of them telling staff anything. */
+export const DUPLICATE_SHARED_MAX = 5;
+
+/** The gym's pairs of records alike by name, phone or member number, as `pairs`: at least
+ *  one of the two a current member, never two with different dates of birth, never a pair
+ *  staff marked Different people. `first` is the record whose (name, id) sorts first. One
+ *  set of CTEs for the count and the page, so the sign and the page cannot disagree.
+ *
+ *  **GROUPS FIRST, THEN PAIRS INSIDE EACH GROUP**, never the list joined to itself: a
+ *  group is at most `DUPLICATE_SHARED_MAX` records, so it holds at most ten pairs, and the
+ *  work grows with the list, not with its square (a self-join planned as a nested loop
+ *  ran for minutes at 10,000 records). Grouped by bytes (`COLLATE "C"`): the same groups as
+ *  the database's own collation, which is deterministic, without its slow sort. */
+function duplicatePairs(sql: SqlOrTx, gymId: string) {
+  return sql`
+    groups AS (
+      SELECT array_agg(id) AS ids FROM gym_member_list_entries
+      WHERE gym_id = ${gymId} AND name_key <> ''
+      GROUP BY name_key COLLATE "C" HAVING count(*) BETWEEN 2 AND ${DUPLICATE_SHARED_MAX}
+      UNION ALL
+      SELECT array_agg(id) FROM gym_member_list_entries
+      WHERE gym_id = ${gymId} AND phone_e164 IS NOT NULL
+      GROUP BY phone_e164 COLLATE "C" HAVING count(*) BETWEEN 2 AND ${DUPLICATE_SHARED_MAX}
+      UNION ALL
+      SELECT array_agg(id) FROM gym_member_list_entries
+      WHERE gym_id = ${gymId} AND member_number IS NOT NULL
+      GROUP BY lower(member_number) COLLATE "C" HAVING count(*) BETWEEN 2 AND ${DUPLICATE_SHARED_MAX}
+    ),
+    alike AS (
+      SELECT DISTINCT least(low.id, high.id) AS low, greatest(low.id, high.id) AS high
+      FROM groups
+      CROSS JOIN LATERAL unnest(groups.ids) WITH ORDINALITY AS low(id, pos)
+      JOIN LATERAL unnest(groups.ids) WITH ORDINALITY AS high(id, pos) ON high.pos > low.pos
+    ),
+    pairs AS (
+      SELECT CASE WHEN (a.full_name, a.id) < (b.full_name, b.id) THEN a.id ELSE b.id END AS first_id,
+             CASE WHEN (a.full_name, a.id) < (b.full_name, b.id) THEN b.id ELSE a.id END AS second_id
+      FROM alike
+      JOIN gym_member_list_entries a ON a.gym_id = ${gymId} AND a.id = alike.low
+      JOIN gym_member_list_entries b ON b.gym_id = ${gymId} AND b.id = alike.high
+      WHERE (a.former_at IS NULL OR b.former_at IS NULL)
+        AND NOT (a.date_of_birth IS NOT NULL AND b.date_of_birth IS NOT NULL AND a.date_of_birth <> b.date_of_birth)
+        AND NOT EXISTS (
+          SELECT 1 FROM gym_member_list_not_duplicates n
+          WHERE n.gym_id = ${gymId} AND n.first_entry_id = alike.low AND n.second_entry_id = alike.high
+        )
+    )`;
+}
+
+/** The Members sign: how many pairs may be one person twice. */
+export async function duplicatesSign(sql: SqlOrTx, gymId: string): Promise<MemberListDuplicatesSign> {
+  const rows = await sql<{ total: number }[]>`
+    WITH ${duplicatePairs(sql, gymId)}
+    SELECT count(*)::int AS total FROM pairs`;
+  return { count: rows[0]?.total ?? 0 };
+}
+
+interface PairSqlRow {
+  total: number;
+  f_id: string | null;
+  f_name: string | null;
+  f_email: string | null;
+  f_phone: string | null;
+  f_number: string | null;
+  f_past: boolean | null;
+  s_id: string | null;
+  s_name: string | null;
+  s_email: string | null;
+  s_phone: string | null;
+  s_number: string | null;
+  s_past: boolean | null;
+  same_name: boolean | null;
+  same_phone: boolean | null;
+  same_number: boolean | null;
+}
+
+/** The possible-duplicates page: one page of pairs after `cursor`, in the order of their
+ *  first record's name, and how many in all, in one statement. */
+export async function duplicatesPage(
+  sql: SqlOrTx,
+  input: { gymId: string; cursor: { name: string; id: string; second: string } | null; limit: number },
+): Promise<{ total: number; pairs: MemberListDuplicatePair[] }> {
+  const { gymId, cursor } = input;
+  const rows = await sql<PairSqlRow[]>`
+    WITH ${duplicatePairs(sql, gymId)},
+    shown AS (
+      SELECT f.id AS f_id, f.full_name AS f_name, f.email::text AS f_email, f.phone_e164 AS f_phone,
+             f.member_number AS f_number, (f.former_at IS NOT NULL) AS f_past,
+             s.id AS s_id, s.full_name AS s_name, s.email::text AS s_email, s.phone_e164 AS s_phone,
+             s.member_number AS s_number, (s.former_at IS NOT NULL) AS s_past,
+             (f.name_key <> '' AND f.name_key = s.name_key) AS same_name,
+             (f.phone_e164 = s.phone_e164) AS same_phone,
+             (lower(f.member_number) = lower(s.member_number)) AS same_number
+      FROM pairs p
+      JOIN gym_member_list_entries f ON f.gym_id = ${gymId} AND f.id = p.first_id
+      JOIN gym_member_list_entries s ON s.gym_id = ${gymId} AND s.id = p.second_id
+    )
+    SELECT (SELECT count(*)::int FROM pairs) AS total, page.*
+    FROM (SELECT 1) one
+    LEFT JOIN LATERAL (
+      SELECT * FROM shown
+      WHERE ${cursor === null}
+         OR (shown.f_name, shown.f_id, shown.s_id)
+            > (${cursor?.name ?? ""}::text, ${cursor?.id ?? EMPTY_UUID}::uuid, ${cursor?.second ?? EMPTY_UUID}::uuid)
+      ORDER BY shown.f_name, shown.f_id, shown.s_id
+      LIMIT ${input.limit}
+    ) page ON true`;
+  const pairs: MemberListDuplicatePair[] = [];
+  for (const row of rows) {
+    if (row.f_id === null || row.s_id === null) continue;
+    pairs.push({
+      first: {
+        entryId: row.f_id,
+        fullName: row.f_name ?? "",
+        email: row.f_email,
+        phone: row.f_phone,
+        memberNumber: row.f_number,
+        past: row.f_past ?? false,
+      },
+      second: {
+        entryId: row.s_id,
+        fullName: row.s_name ?? "",
+        email: row.s_email,
+        phone: row.s_phone,
+        memberNumber: row.s_number,
+        past: row.s_past ?? false,
+      },
+      sameName: row.same_name ?? false,
+      samePhone: row.same_phone ?? false,
+      sameMemberNumber: row.same_number ?? false,
+    });
+  }
+  return { total: rows[0]?.total ?? 0, pairs };
+}
+
+/** Different people: the pair remembered in id order, the order its CHECK asks for.
+ *  False when it already was. */
+export async function markNotDuplicates(tx: TransactionSql, gymId: string, a: string, b: string): Promise<boolean> {
+  const [first, second] = a < b ? [a, b] : [b, a];
+  const rows = await tx<{ gym_id: string }[]>`
+    INSERT INTO gym_member_list_not_duplicates (gym_id, first_entry_id, second_entry_id)
+    VALUES (${gymId}, ${first}::uuid, ${second}::uuid)
+    ON CONFLICT DO NOTHING
+    RETURNING gym_id`;
+  return rows.length === 1;
+}
+
+/** Records with no name key yet (written before 0056), a batch after `after` in id order;
+ *  `gymIds` narrows it to those gyms. */
+export async function entriesWithoutNameKey(
+  sql: SqlOrTx,
+  input: { after: string; limit: number; gymIds: readonly string[] | null },
+): Promise<{ id: string; fullName: string }[]> {
+  const rows = await sql<{ id: string; full_name: string }[]>`
+    SELECT id, full_name FROM gym_member_list_entries
+    WHERE name_key IS NULL AND id > ${input.after}::uuid
+      AND (${input.gymIds === null} OR gym_id = ANY(${input.gymIds === null ? [] : [...input.gymIds]}::uuid[]))
+    ORDER BY id
+    LIMIT ${input.limit}`;
+  return rows.map((row) => ({ id: row.id, fullName: row.full_name }));
+}
+
+/** Each record's key, written only while it still has none and still holds the name the
+ *  key was worked out from: a rename in between writes its own key. */
+export async function writeNameKeys(sql: SqlOrTx, rows: readonly { id: string; fullName: string; nameKey: string }[]): Promise<number> {
+  if (rows.length === 0) return 0;
+  const written = await sql`
+    UPDATE gym_member_list_entries e SET name_key = v.name_key
+    FROM unnest(${rows.map((r) => r.id)}::uuid[], ${rows.map((r) => r.fullName)}::text[], ${rows.map((r) => r.nameKey)}::text[])
+      AS v(id, full_name, name_key)
+    WHERE e.id = v.id AND e.name_key IS NULL AND e.full_name = v.full_name`;
+  return written.count;
 }

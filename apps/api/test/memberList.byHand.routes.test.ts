@@ -1036,7 +1036,7 @@ d("member list: keeping it by hand (real Postgres)", () => {
   // and deleting clears both. The day another table points at a record (visits,
   // bookings), this fails: that job must make the join move its rows too, decide what
   // deleting does to them, and drive both.
-  it("the tables that point at a list record are the membership and the joined lead, each with its gym", async () => {
+  it("the tables that point at a list record are the membership, the joined lead and a Different people pair, each with its gym", async () => {
     const refs = await sql<{ ref: string }[]>`
       SELECT DISTINCT tc.table_name || '.' || kcu.column_name AS ref
       FROM information_schema.table_constraints tc
@@ -1046,9 +1046,15 @@ d("member list: keeping it by hand (real Postgres)", () => {
         ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
       WHERE tc.constraint_type = 'FOREIGN KEY' AND ccu.table_name = 'gym_member_list_entries'
       ORDER BY 1`;
-    expect(refs.map((r) => r.ref)).toEqual([
+    expect(refs.map((r) => r.ref).sort()).toEqual([
       "gym_leads.entry_id",
       "gym_leads.gym_id",
+      // A pair staff marked Different people (0056): goes with either record, never moved,
+      // since the kept record was never checked against the third one
+      // (`memberList.duplicates.routes.test.ts`).
+      "gym_member_list_not_duplicates.first_entry_id",
+      "gym_member_list_not_duplicates.gym_id",
+      "gym_member_list_not_duplicates.second_entry_id",
       "gym_members.entry_id",
       "gym_members.gym_id",
       // The record a membership was removed with (0048): moved by a merge with the rest.

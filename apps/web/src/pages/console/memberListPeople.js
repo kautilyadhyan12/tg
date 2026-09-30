@@ -3,6 +3,8 @@ import {
   MEMBER_APP_FILTER_WORDS,
   MEMBER_APP_WORDS,
   MEMBER_INVITE_WORDS,
+  MEMBER_LIST_MERGE_FILLS,
+  MEMBER_LIST_MERGE_KEEPS_OWN,
   MEMBER_LIST_TICKED_MAX,
   turns18On,
   underAgeOn,
@@ -578,33 +580,83 @@ export function handEditedWords(entry, fields, labels) {
 /** Merge duplicate's side-by-side view: every field of the two records in the same
  *  order, "—" where a record has none, and whether the two differ, so staff can tell
  *  one person on the list twice from two different people. The gym's custom fields
- *  follow, under their own headings; a detail neither record holds is left out. */
-export function compareRecords(keep, remove, fields, person = 'member') {
-  const day = (d) => (d === null ? null : dayWords(d));
-  const onList = (r) => (r.formerAt === null ? 'On the list' : `Past ${person}`);
-  const extra = (r, key) => r.extra?.find((x) => x.key === key)?.value || null;
+ *  follow, under their own headings; a detail neither record holds is left out. The two
+ *  columns never change places (Kd at 5b-iv-a's click-through: Keep and Remove swapping
+ *  sides was "really confusing"): `first` is the record the page is open on. */
+export function compareRecords(first, second, fields, person = 'member') {
   const rows = [
-    ['fullName', 'Name', (r) => r.fullName || null],
-    ['email', 'Email', (r) => r.email],
-    ['phone', 'Phone', (r) => r.phone],
-    ['memberNumber', 'Member number', (r) => r.memberNumber],
-    ['dateOfBirth', 'Date of birth', (r) => day(r.dateOfBirth)],
-    ['joinedOn', 'Join date', (r) => day(r.joinedOn)],
-    ['status', 'Status', (r) => r.status],
-    ['membershipType', 'Membership', (r) => r.membershipType],
-    ['endsOn', 'End or renewal date', (r) => endsWords(r)],
-    ['paymentStatus', 'Payment status', (r) => r.paymentStatus],
-    ['list', 'On the list', onList],
-    ['app', 'Uses the app', (r) => (r.inApp ? 'Yes' : 'No')],
-    ...fields.map((f) => [`extra:${f.key}`, f.label, (r) => extra(r, f.key)]),
+    ...DETAILS(person),
+    ['app', 'In the app', (r) => (r.inApp ? 'Yes' : 'No')],
+    ...fields.map((f) => [`extra:${f.key}`, f.label, (r) => extraOf(r, f.key)]),
   ];
   return rows
     .map(([key, label, read]) => {
-      const k = read(keep) || null;
-      const r = read(remove) || null;
-      return { key, label, keep: k ?? '—', remove: r ?? '—', differs: k !== r, empty: k === null && r === null };
+      const a = read(first) || null;
+      const b = read(second) || null;
+      return { key, label, first: a ?? '—', second: b ?? '—', differs: a !== b, empty: a === null && b === null };
     })
     .filter((row) => !row.empty);
+}
+
+const extraOf = (r, key) => r.extra?.find((x) => x.key === key)?.value || null;
+const DETAILS = (person) => [
+  ['fullName', 'Name', (r) => r.fullName || null],
+  ['email', 'Email', (r) => r.email],
+  ['phone', 'Phone', (r) => r.phone],
+  ['memberNumber', 'Member number', (r) => r.memberNumber],
+  ['dateOfBirth', 'Date of birth', (r) => (r.dateOfBirth === null ? null : dayWords(r.dateOfBirth))],
+  ['joinedOn', 'Join date', (r) => (r.joinedOn === null ? null : dayWords(r.joinedOn))],
+  ['status', 'Status', (r) => r.status],
+  ['membershipType', 'Membership', (r) => r.membershipType],
+  ['endsOn', 'End or renewal date', (r) => endsWords(r)],
+  ['paymentStatus', 'Payment status', (r) => r.paymentStatus],
+  ['list', 'On the list', (r) => (r.formerAt === null ? 'On the list' : `Past ${person}`)],
+];
+
+/** THE ONE RECORD A MERGE LEAVES, before staff press Merge: the server's own rule
+ *  (RULINGS 2026-09-23, `MEMBER_LIST_MERGE_KEEPS_OWN` and `MEMBER_LIST_MERGE_FILLS`). The
+ *  kept record's name, email, phone and member number stay as they are; each other detail
+ *  and custom field is its own, or the other record's where its own is empty
+ *  (`fromOther`); it is on the list if either was. `lost` is what the removed record holds
+ *  that the merge does not keep, each with its reason in one line. Whether anybody is in the
+ *  app is left out: the server says so itself when a merge would leave someone off the list. */
+export function mergePreview(keep, remove, fields, person = 'member') {
+  const rows = [];
+  const lost = [];
+  const read = Object.fromEntries(DETAILS(person).map(([key, label, get]) => [key, { label, get }]));
+  const say = (v) => v || null;
+  for (const key of MEMBER_LIST_MERGE_KEEPS_OWN) {
+    const { label, get } = read[key];
+    const own = say(get(keep));
+    const other = say(get(remove));
+    if (own !== null) rows.push({ key, label, value: own, fromOther: false });
+    if (other !== null && other !== own) {
+      lost.push({
+        key,
+        label,
+        value: other,
+        why: own === null ? `The kept record's name, email, phone and member number are never changed by a merge.` : `The kept record keeps its own ${label.toLowerCase()}.`,
+      });
+    }
+  }
+  for (const key of MEMBER_LIST_MERGE_FILLS) {
+    const { label, get } = read[key];
+    const own = say(get(keep));
+    const other = say(get(remove));
+    if (keep[key] === null && remove[key] !== null) rows.push({ key, label, value: other, fromOther: true });
+    else if (own !== null) rows.push({ key, label, value: own, fromOther: false });
+    if (keep[key] !== null && other !== null && other !== own) lost.push({ key, label, value: other, why: `The kept record keeps its own ${label.toLowerCase()}.` });
+  }
+  for (const f of fields) {
+    const key = `extra:${f.key}`;
+    const own = extraOf(keep, f.key);
+    const other = extraOf(remove, f.key);
+    if (own === null && other !== null) rows.push({ key, label: f.label, value: other, fromOther: true });
+    else if (own !== null) rows.push({ key, label: f.label, value: own, fromOther: false });
+    if (own !== null && other !== null && other !== own) lost.push({ key, label: f.label, value: other, why: `The kept record keeps its own ${f.label}.` });
+  }
+  rows.push({ key: 'list', label: 'On the list', value: keep.formerAt === null || remove.formerAt === null ? 'On the list' : `Past ${person}`, fromOther: false });
+  return { rows, lost };
 }
 
 /** What a write did, in a line for the top of the person's page. */
@@ -645,4 +697,21 @@ export function outcomeWords(outcome, words = { person: 'member', personCap: 'Me
 /** The Members sign: "3 members need review", "1 member needs review". */
 export function reviewSignWords(n, words) {
   return n === 1 ? `1 ${words.person} needs review` : `${n.toLocaleString('en')} ${words.people} need review`;
+}
+
+// ── Possible duplicates (5b-iv-a; RULINGS 2026-09-25, 2026-09-30) ──────────
+
+/** The Members sign and the page's count: what is counted is PAIRS, so it says pairs
+ *  ("possible duplicates", as HubSpot's tool does). Three records of one name are three
+ *  pairs, and "3 members may be on your list twice" would be false. */
+export function duplicatesSignWords(n) {
+  return n === 1 ? '1 possible duplicate' : `${n.toLocaleString('en')} possible duplicates`;
+}
+
+/** What a pair's two records share: "Same name", "Same name and phone". */
+export function pairWhyWords(pair) {
+  const what = [pair.sameName ? 'name' : null, pair.samePhone ? 'phone' : null, pair.sameMemberNumber ? 'member number' : null].filter((w) => w !== null);
+  if (what.length === 0) return '';
+  const last = what.pop();
+  return `Same ${what.length === 0 ? last : `${what.join(', ')} and ${last}`}`;
 }
