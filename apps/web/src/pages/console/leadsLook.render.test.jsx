@@ -62,9 +62,9 @@ const lead = (id, fullName, over = {}) =>
 const arjun = lead(ARJUN, 'Arjun Shah', { phone: '+447700900004', source: 'friend', status: 'on_trial' });
 const tom = lead(TOM, 'Tom Reid');
 
-const COUNTS = { all: 2, new: 1, contacted: 0, on_trial: 1, joined: 0, lost: 0, followUpsDue: 0 };
+const COUNTS = { all: 2, new: 1, contacted: 0, on_trial: 1, joined: 0, lost: 0, followUpsDue: 0, emailProblems: 0 };
 const PAGE = { data: { leads: [arjun, tom], total: 2, cursor: 'next', counts: COUNTS } };
-const EMPTY = { data: { leads: [], total: 0, cursor: null, counts: { all: 0, new: 0, contacted: 0, on_trial: 0, joined: 0, lost: 0, followUpsDue: 0 } } };
+const EMPTY = { data: { leads: [], total: 0, cursor: null, counts: { all: 0, new: 0, contacted: 0, on_trial: 0, joined: 0, lost: 0, followUpsDue: 0, emailProblems: 0 } } };
 
 const useOrg = (org) => api.getMine.mockResolvedValue({ data: { orgs: [org], formerOrgs: [] } });
 function deferred() {
@@ -241,6 +241,46 @@ describe('the new look (spec Part 3 §17)', () => {
     await screen.findAllByTestId('lead-row');
     fireEvent.click(row('Tom Reid'));
     expect(panel().className).toContain('c-sheet');
+  });
+});
+
+describe('email problems on the list (20c-v-b)', () => {
+  it('a bounced lead and one who marked an email as spam are tagged on their rows, counted, and found with one chip', async () => {
+    const bounced = { ...tom, emailProblem: 'bounced' };
+    const spam = { ...arjun, status: 'new', emailProblem: 'complained' };
+    api.getLeads.mockResolvedValue({ data: { leads: [spam, bounced], total: 2, cursor: null, counts: { ...COUNTS, emailProblems: 2 } } });
+    draw();
+    await screen.findAllByTestId('lead-row');
+    expect(within(row('Tom Reid')).getByText('Email bounces')).toBeTruthy();
+    expect(within(row('Arjun Shah')).getByText('Marked as spam')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Email problems 2' }));
+    await waitFor(() => expect(api.getLeads).toHaveBeenLastCalledWith('g1', 'followUp=problem'));
+    expect(screen.getByRole('button', { name: 'Email problems 2' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'All 2' }).getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it("an address our email service refuses is never called a bounce on the list", async () => {
+    api.getLeads.mockResolvedValue({ data: { leads: [arjun, { ...tom, emailProblem: 'refused' }], total: 2, cursor: null, counts: { ...COUNTS, emailProblems: 1 } } });
+    draw();
+    await screen.findAllByTestId('lead-row');
+    expect(within(row('Tom Reid')).getByText("Can't be emailed")).toBeTruthy();
+    expect(within(row('Tom Reid')).queryByText('Email bounces')).toBeNull();
+  });
+
+  it('no chip, no tag and no stopped line when nothing is wrong', async () => {
+    api.getLeads.mockResolvedValue(PAGE);
+    draw();
+    await screen.findAllByTestId('lead-row');
+    expect(screen.queryByRole('button', { name: /^Email problems/ })).toBeNull();
+    expect(screen.queryByText('Email bounces')).toBeNull();
+    expect(screen.queryByTestId('leads-sending-stopped')).toBeNull();
+  });
+
+  it("a gym whose emails through the app are stopped is told on Leads, not only in Settings", async () => {
+    api.getLeads.mockResolvedValue({ data: { ...PAGE.data, sendingStopped: true } });
+    draw();
+    await screen.findAllByTestId('lead-row');
+    expect(screen.getByTestId('leads-sending-stopped').textContent).toContain('Emails from your gym through AI Home Gym are stopped');
   });
 });
 

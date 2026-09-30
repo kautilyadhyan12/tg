@@ -124,6 +124,11 @@ export interface MyOrgRow extends OrgRow {
   /** The console is read-only because a paid plan's payment is overdue, not because a
    *  trial ended: the fix is the card on Paddle's page (ROADMAP Stage 3 item 1c-i). */
   paymentOverdue: boolean;
+  /** Who is owed that payment: Paddle, or Razorpay for an Indian gym (1d-i). Null when none is. */
+  paymentOverdueThrough: "paddle" | "razorpay" | null;
+  /** An Indian gym's owner's mobile for its payments (1d-i); the service shows it only to
+   *  staff who manage billing. */
+  billingMobile: string | null;
   /** THE NEWEST CHEER THIS GYM HAS SENT THE CALLER, or null — Kd's :29961
    *  ruling 4 reaching the member, and the whole of its delivery.
    *
@@ -318,6 +323,8 @@ export interface CreateOrgInput {
   currencyDisplay: string;
   code: string;
   codeLabel: string;
+  /** An Indian gym's owner's mobile for its payments (`+91…`), already read by the service. */
+  billingMobile: string | null;
   /** The owner's starting ticks, computed by the service from the owner role's
    *  template — policy stays in one place, storage in this one. */
   ownerPrivileges: readonly string[];
@@ -346,10 +353,10 @@ export async function createOrgAttempt(
     return await sql.begin(async (tx) => {
       const orgRows = await tx<RawOrg[]>`
         INSERT INTO gyms (slug, name, city, country, org_type, timezone, locale,
-                          currency_display, owner_user_id)
+                          currency_display, owner_user_id, billing_mobile)
         VALUES (${input.slug}, ${input.name}, ${input.city}, ${input.country},
                 ${input.orgType}, ${input.timezone}, ${input.locale},
-                ${input.currencyDisplay}, ${input.ownerUserId})
+                ${input.currencyDisplay}, ${input.ownerUserId}, ${input.billingMobile})
         RETURNING id, slug, name, city, country, org_type, timezone, locale,
                   currency_display, clock_format, manual_attendance_enabled, status`;
       const rawOrg = orgRows[0];
@@ -456,6 +463,8 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
       sub_fitted_asked_seat_cap: number | null;
       sub_fitted_members: number | null;
       payment_overdue: boolean;
+      overdue_provider: string | null;
+      billing_mobile: string | null;
       seats_used: number;
       owner_trial_used: boolean;
       postal_address: string | null;
@@ -468,6 +477,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
     SELECT g.id, g.slug, g.name, g.city, g.country, g.org_type, g.timezone,
            g.locale, g.currency_display, g.clock_format, g.manual_attendance_enabled, g.status,
            g.postal_address,
+           g.billing_mobile,
            s.role AS staff_role,
            s.privileges,
            (m.id IS NOT NULL) AS is_member,
@@ -489,11 +499,17 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
            sub.kept_members AS sub_kept_members,
            sub.fitted_asked_seat_cap AS sub_fitted_asked_seat_cap,
            sub.fitted_members AS sub_fitted_members,
-           -- A paid plan whose grace ended while Paddle still retries (1c-i).
+           -- A paid plan whose grace ended while Paddle or Razorpay still retries (1c-i, 1d-i).
            EXISTS (
              SELECT 1 FROM subscriptions so
              WHERE so.owner_type = 'gym' AND so.owner_id = g.id AND so.cancel_reason = 'grace_expired'
            ) AS payment_overdue,
+           (
+             SELECT so.provider FROM subscriptions so
+             WHERE so.owner_type = 'gym' AND so.owner_id = g.id AND so.cancel_reason = 'grace_expired'
+             ORDER BY so.ended_at DESC NULLS LAST, so.id
+             LIMIT 1
+           ) AS overdue_provider,
            -- THE SEAT METER'S NUMERATOR, and the three conditions are
            -- claimSeat's own, written out for the third time on purpose.
            --
@@ -683,6 +699,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
     seatsUsed: r.seats_used,
     ownerTrialUsed: r.owner_trial_used,
     postalAddress: r.postal_address,
+    billingMobile: r.billing_mobile,
     // THE CONSOLE IS READ-ONLY EXACTLY WHEN THIS GYM HAS NO LIVE PLAN — Part 3
     // §4.2, and Kd's ruling of 2026-08-29 that it stops every member of staff.
     //
@@ -699,6 +716,10 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
     consoleReadOnly: r.sub_status === null,
     // Only while there is no live plan: a gym on a plan again owes nothing.
     paymentOverdue: r.sub_status === null && r.payment_overdue,
+    paymentOverdueThrough:
+      r.sub_status === null && r.payment_overdue && (r.overdue_provider === "paddle" || r.overdue_provider === "razorpay")
+        ? r.overdue_provider
+        : null,
     // BOTH HALVES OR NEITHER. The lateral either matched a row or did not, so a
     // preset without an instant is impossible — and writing it as two
     // independent `=== null` tests would let a future edit produce a cheer with
@@ -830,11 +851,14 @@ export interface OrgPatch {
   /** The postal address printed in the gym's invitations (Part 3 §9.12), already
    *  tidied by the service; null clears it. */
   postalAddress?: string | null;
+  /** An Indian gym's owner's mobile for its payments (`+91…`), already read by the service;
+   *  null clears it. */
+  billingMobile?: string | null;
 }
 
 export type UpdateOrgOutcome =
-  | { kind: "updated"; org: OrgRow; postalAddress: string | null; changed: readonly string[] }
-  | { kind: "unchanged"; org: OrgRow; postalAddress: string | null }
+  | { kind: "updated"; org: OrgRow; postalAddress: string | null; billingMobile: string | null; changed: readonly string[] }
+  | { kind: "unchanged"; org: OrgRow; postalAddress: string | null; billingMobile: string | null }
   /** RENAMED from `country_locked` in the T3 round-1 fix, because the old name
    *  described the wrong thing and the message built on it was false to a gym
    *  with no country recorded. What is locked is the CURRENCY. */
@@ -973,7 +997,7 @@ export async function updateOrg(
         SELECT count(*)::int AS n FROM subscriptions
         WHERE owner_type = 'gym'
           AND owner_id = ${input.gymId}
-          AND (status <> 'trialing' OR provider = 'paddle')`;
+          AND (status <> 'trialing' OR provider NOT IN ('none','pilot'))`;
       if ((billed[0]?.n ?? 0) > 0) return { kind: "currency_locked" };
     }
 
@@ -1003,12 +1027,17 @@ export async function updateOrg(
     ) {
       changed.push("manualAttendanceEnabled");
     }
-    const postalBefore =
-      (await tx<{ postal_address: string | null }[]>`SELECT postal_address FROM gyms WHERE id = ${input.gymId}`)[0]
-        ?.postal_address ?? null;
+    const extras = (
+      await tx<{ postal_address: string | null; billing_mobile: string | null }[]>`
+        SELECT postal_address, billing_mobile FROM gyms WHERE id = ${input.gymId}`
+    )[0];
+    const postalBefore = extras?.postal_address ?? null;
     const postalAfter = "postalAddress" in input.patch ? (input.patch.postalAddress ?? null) : postalBefore;
     if (postalAfter !== postalBefore) changed.push("postalAddress");
-    if (changed.length === 0) return { kind: "unchanged", org: before, postalAddress: postalBefore };
+    const mobileBefore = extras?.billing_mobile ?? null;
+    const mobileAfter = "billingMobile" in input.patch ? (input.patch.billingMobile ?? null) : mobileBefore;
+    if (mobileAfter !== mobileBefore) changed.push("billingMobile");
+    if (changed.length === 0) return { kind: "unchanged", org: before, postalAddress: postalBefore, billingMobile: mobileBefore };
 
     // Written out column by column rather than assembled from a loop over the
     // patch's keys: a dynamic identifier built from caller-controlled data is
@@ -1035,7 +1064,8 @@ export async function updateOrg(
             ? (input.patch.manualAttendanceEnabled ?? before.manualAttendanceEnabled)
             : before.manualAttendanceEnabled
         },
-        postal_address = ${postalAfter}
+        postal_address = ${postalAfter},
+        billing_mobile = ${mobileAfter}
       WHERE id = ${input.gymId}
       RETURNING id, slug, name, city, country, org_type, timezone, locale,
                 currency_display, clock_format, manual_attendance_enabled, status`;
@@ -1062,7 +1092,7 @@ export async function updateOrg(
       },
     });
 
-    return { kind: "updated", org: toOrgRow(raw), postalAddress: postalAfter, changed };
+    return { kind: "updated", org: toOrgRow(raw), postalAddress: postalAfter, billingMobile: mobileAfter, changed };
   });
 }
 

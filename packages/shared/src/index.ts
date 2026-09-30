@@ -30,6 +30,7 @@ export * from "./invitations.js";
 export * from "./resendWebhook.js";
 export * from "./classes.js";
 export * from "./billing.js";
+export * from "./razorpay.js";
 export * from "./leads.js";
 export * from "./leadImport.js";
 export * from "./gymPage.js";

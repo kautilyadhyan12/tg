@@ -170,13 +170,38 @@ export function consoleReadOnlyBanner(orgType) {
 
 /** The read-only banner when a paid plan's payment is overdue (its grace ended): the fix
  *  is the payment method, which pays what is owed and opens everything again. Staff who
- *  cannot manage billing are told who can, never to press a button they are not shown. */
-export function paymentOverdueBanner(orgType, canPay) {
+ *  cannot manage billing are told who can, never to press a button they are not shown.
+ *  A plan paid through Razorpay is paid from Razorpay's own email (1d-i). */
+export function paymentOverdueBanner(orgType, canPay, through = 'paddle') {
   const words = orgWords(orgType);
-  const fix = canPay
-    ? 'Update your payment method to pay now; Paddle also tries your card again by itself.'
-    : 'Whoever manages billing can update the payment method; Paddle also tries the card again by itself.';
+  const fix =
+    through === 'razorpay'
+      ? `${RAZORPAY_OVERDUE}; once it's paid, everything opens again by itself.`
+      : canPay
+        ? 'Update your payment method to pay now; Paddle also tries your card again by itself.'
+        : 'Whoever manages billing can update the payment method; Paddle also tries the card again by itself.';
   return `A payment for your ${words.it} is overdue. Nothing here can be changed and your ${words.people} get the free app only until it is paid. ${fix}`;
+}
+
+/** Who is told of an Indian gym's failed payment (1d-i): Razorpay emails its customer — the
+ *  gym's owner, whose email its window is given — and its email is for changing the card, not
+ *  for paying (its "Payment Retries" page, read 2026-09-30). Nothing here takes the payment
+ *  yet (1d-ii), so no link to pay is promised. */
+export const RAZORPAY_OVERDUE = "Razorpay has emailed the gym's owner about it";
+
+/** Paid through Razorpay (an Indian gym, 1d-i): its size and how it pays are not changed
+ *  here yet, so neither button is drawn. */
+export function isPaidThroughRazorpay(org) {
+  return org?.subscription?.paidThrough === 'razorpay';
+}
+
+/** THE LINE UNDER THE PRICES when the gym can pay online. An Indian gym pays through
+ *  Razorpay with no GST added while Kd is not registered for it (Kd, RULINGS 2026-09-29);
+ *  the ways to pay are Razorpay's own window's, which on Kd's account offered cards and bank
+ *  mandates but not yet UPI (seen 2026-09-29), so none is promised here. Every other gym
+ *  pays through Paddle, with tax added where the law asks. */
+export function pricesNote(currency) {
+  return currency === 'INR' ? 'Prices are a month, with no GST added.' : 'Prices are a month. Tax is added at checkout where it applies.';
 }
 
 /** HAS THIS GYM CHOSEN AND PAID FOR A PLAN THROUGH US? During a free trial that means its
@@ -187,17 +212,10 @@ export function isSubscribed(org) {
 }
 
 /** MAY THIS VIEWER PAY NOW, DURING THE FREE TRIAL? Only billing staff, only in the gym's
- *  own trial (not one already paid for), never on a read-only console, and not in rupees
- *  yet (Razorpay, ROADMAP Stage 3 item 1d). The server refuses anyone else; this only
- *  stops a button it would refuse. */
+ *  own trial (not one already paid for), and never on a read-only console. The server
+ *  refuses anyone else; this only stops a button it would refuse. */
 export function canPayDuringTrial(org) {
-  return (
-    canManageBilling(viewerPrivileges(org)) &&
-    isTrialing(org) &&
-    !isSubscribed(org) &&
-    !consoleIsReadOnly(org) &&
-    org?.currencyDisplay !== 'INR'
-  );
+  return canManageBilling(viewerPrivileges(org)) && isTrialing(org) && !isSubscribed(org) && !consoleIsReadOnly(org);
 }
 
 /** MAY THIS VIEWER CHANGE SIZE (bigger or smaller)? A plan paid through us, in good standing
@@ -207,6 +225,7 @@ export function canChangeSize(org) {
   return (
     canManageBilling(viewerPrivileges(org)) &&
     isSubscribed(org) &&
+    !isPaidThroughRazorpay(org) &&
     (sub?.status === 'active' || sub?.status === 'trialing') &&
     sub?.cancelAtPeriodEnd !== true &&
     !consoleIsReadOnly(org)
@@ -433,14 +452,30 @@ function nextDecideAt(periodEnd) {
   return new Date(at.getTime() - SMALLER_SIZE_DECIDE_HOURS * 60 * 60 * 1000).toISOString();
 }
 
-/** A PAID TRIAL'S NEXT STEP: "Your first payment of $79 is on 3 Oct." Null for anything
+/** A PAID TRIAL'S NEXT STEP, every date named (Kd at 1d-i's click-through: *"wording need to be
+ *  precise"*): the last free day, the day the plan starts and its first payment is taken, and
+ *  the month that payment covers, first and last day. "Free trial until 8 Oct. Your plan starts
+ *  on 9 Oct: ₹7,500 is paid for 9 Oct to 8 Nov." Null for anything
  *  else, or when the server has not said the price or the date. */
 export function firstPaymentText(sub) {
   if (sub?.status !== 'trialing' || sub?.subscribed !== true) return null;
   const date = trialEndDateLabel(sub.currentPeriodEnd);
   const price = typeof sub.priceLabel === 'string' && sub.priceLabel !== '' ? sub.priceLabel : null;
   if (date === null || price === null) return null;
-  return `Your first payment of ${price} is on ${date}.`;
+  const start = new Date(sub.currentPeriodEnd);
+  const lastFree = new Date(start.getTime());
+  lastFree.setDate(lastFree.getDate() - 1);
+  // The next payment is a month on, on the same day, or the month's last day when it has no
+  // such day (31 Jan, then 28 Feb); the month paid for ends the day before it.
+  const nextPayment = new Date(start.getTime());
+  nextPayment.setDate(1);
+  nextPayment.setMonth(nextPayment.getMonth() + 1);
+  const daysInNext = new Date(nextPayment.getFullYear(), nextPayment.getMonth() + 1, 0).getDate();
+  nextPayment.setDate(Math.min(start.getDate(), daysInNext));
+  const lastPaid = new Date(nextPayment.getTime());
+  lastPaid.setDate(lastPaid.getDate() - 1);
+  const day = (d) => trialEndDateLabel(d.toISOString());
+  return `Free trial until ${day(lastFree)}. Your plan starts on ${date}: ${price} is paid for ${date} to ${day(lastPaid)}.`;
 }
 
 /** WHAT A BIGGER SIZE COSTS, IN ONE SENTENCE, from the server's preview of Paddle's own
@@ -619,7 +654,7 @@ export function bannerFor(org, now = Date.now()) {
       tone: 'danger',
       text:
         org?.paymentOverdue === true
-          ? paymentOverdueBanner(org?.orgType, canManageBilling(viewerPrivileges(org)))
+          ? paymentOverdueBanner(org?.orgType, canManageBilling(viewerPrivileges(org)), org?.paymentOverdueThrough ?? 'paddle')
           : consoleReadOnlyBanner(org?.orgType),
       // §4.2 gives this row no dismissal and it would be wrong to invent one:
       // the only dismissible state is `trial_info`, where putting the notice
@@ -630,12 +665,15 @@ export function bannerFor(org, now = Date.now()) {
   }
 
   if (sub?.status === 'past_due') {
-    // Paddle retries the card by itself; the days are the grace the worker gives a
-    // paying gym before its members lose the plan (Part 5 §8, ROADMAP 1c-i).
+    // Paddle retries the card by itself, Razorpay for three days (its docs, "Payment
+    // Retries"); the days are the grace the worker gives a paying gym before its members
+    // lose the plan (Part 5 §8, ROADMAP 1c-i).
     return {
       key: 'past_due',
       tone: 'warn',
-      text: canManageBilling(viewerPrivileges(org))
+      text: isPaidThroughRazorpay(org)
+        ? `A payment for your ${words.it} didn't go through. Razorpay tries again by itself, and has emailed the gym's owner about it. Your ${words.people} keep everything for ${PAID_PLAN_GRACE_DAYS} days after a failed payment.`
+        : canManageBilling(viewerPrivileges(org))
         ? `A payment for your ${words.it} didn't go through. Paddle will try your card again by itself, or you can update your payment method under Plan on the Overview. Your ${words.people} keep everything for ${PAID_PLAN_GRACE_DAYS} days after a failed payment.`
         : `A payment for your ${words.it} didn't go through. Paddle will try the card again by itself, or whoever manages billing can update the payment method. Your ${words.people} keep everything for ${PAID_PLAN_GRACE_DAYS} days after a failed payment.`,
       dismissible: false,

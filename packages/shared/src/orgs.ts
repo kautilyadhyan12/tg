@@ -210,6 +210,35 @@ function isValidLocale(tag: string): boolean {
   }
 }
 
+/** AN INDIAN GYM OWNER'S MOBILE NUMBER, for the gym's payments (ROADMAP 1d-i; Kd, RULINGS
+ *  2026-09-29): given to Razorpay so its window asks nothing, as apps that sign in by mobile
+ *  do. Stored as `+91` and the ten digits. */
+export const INDIAN_MOBILE_E164 = /^\+91[6-9]\d{9}$/;
+
+/** A mobile number as people type it — "98765 43210", "+91 98765-43210", "098765 43210",
+ *  "91 9876543210", "0091…" — to `+919876543210`, or null when it is not an Indian mobile:
+ *  ten digits starting 6, 7, 8 or 9 (TRAI's mobile numbering), after at most one `+91`,
+ *  `0091`, `91` or `0` in front. Spaces, dashes, dots and brackets are ignored; any other
+ *  character is not a number. */
+export function normaliseIndianMobile(typed: string): string | null {
+  const trimmed = typed.trim();
+  if (!/^[\d\s\-.()+]+$/.test(trimmed)) return null;
+  // At most one `+`, and only before every digit ("(+91) 98765 43210").
+  const plus = trimmed.indexOf("+");
+  if (plus !== trimmed.lastIndexOf("+") || (plus >= 0 && /\d/.test(trimmed.slice(0, plus)))) return null;
+  const digits = trimmed.replace(/\D/g, "");
+  let national: string;
+  if (digits.length === 10) national = digits;
+  else if (digits.length === 11 && digits.startsWith("0")) national = digits.slice(1);
+  else if (digits.length === 12 && digits.startsWith("91")) national = digits.slice(2);
+  else if (digits.length === 14 && digits.startsWith("0091")) national = digits.slice(4);
+  else return null;
+  // A leading `+` is only ever the country's: "+98765 43210" is not an Indian number.
+  if (plus >= 0 && !(digits.length === 12 || digits.length === 14)) return null;
+  const e164 = `+91${national}`;
+  return INDIAN_MOBILE_E164.test(e164) ? e164 : null;
+}
+
 /** Part 3 §4.0 step 1's fields, plus `country`.
  *
  *  `country` is an ADDITION to the wizard the spec describes, and it is here
@@ -245,6 +274,9 @@ export const createOrgRequestSchema = z
       .max(16)
       .refine(isValidLocale, { message: "not a well-formed locale" })
       .default("en"),
+    /** An Indian gym's owner's mobile, as typed (`normaliseIndianMobile`). The create screen
+     *  asks a gym in India for it; the server reads it, stores it, and refuses it elsewhere. */
+    billingMobile: z.string().max(40).optional(),
   })
   .strict();
 export type CreateOrgRequest = z.infer<typeof createOrgRequestSchema>;
@@ -421,6 +453,9 @@ export const updateOrgRequestSchema = z
      *  null clears it. The server tidies it (lines joined, links and `@` taken out)
      *  and refuses it when that leaves more than `GYM_POSTAL_ADDRESS_MAX_CHARS`. */
     postalAddress: z.string().max(GYM_POSTAL_ADDRESS_MAX_CHARS * 2).nullable(),
+    /** An Indian gym's owner's mobile for its payments, as typed; null clears it. Only staff
+     *  who manage billing may change it, and only on a gym in India. */
+    billingMobile: z.string().max(40).nullable(),
   })
   .partial()
   .strict()
@@ -441,6 +476,8 @@ export const updateOrgResponseSchema = z.object({
   /** The gym's postal address as stored. On this response and on `/mine` for staff,
    *  never on the summary members read. */
   postalAddress: z.string().nullable().default(null),
+  /** The owner's mobile for payments (`+91…`), for staff who manage billing only. */
+  billingMobile: z.string().nullable().default(null),
 });
 export type UpdateOrgResponse = z.infer<typeof updateOrgResponseSchema>;
 
@@ -505,10 +542,13 @@ export const orgSubscriptionSchema = z.object({
    *  `cancelAtPeriodEnd`. Null during a free trial. */
   currentPeriodEnd: z.string().nullable().default(null),
   cancelAtPeriodEnd: z.boolean().default(false),
-  /** The gym has chosen a plan and paid for it through us (Paddle). During a free trial
+  /** The gym has chosen a plan and paid for it through us (Paddle or Razorpay). During a free trial
    *  this means its card is saved and the first payment is taken when the trial ends
    *  (`currentPeriodEnd`); `priceLabel` is then the plan's price (Kd, RULINGS 2026-09-25). */
   subscribed: z.boolean().default(false),
+  /** Who takes the payments of a plan the gym has paid for through us: Paddle, or Razorpay
+   *  for an Indian gym (1d-i). Null during a free trial not yet paid for. */
+  paidThrough: z.enum(["paddle", "razorpay"]).nullable().default(null),
   /** A trial the gym has paid for keeps its free trial's limit (`seatCap`) until a payment
    *  is taken, a failed first charge included; this is the chosen plan's, from then. Null
    *  otherwise. */
@@ -667,9 +707,9 @@ export type OrgPlanOffer = z.infer<typeof orgPlanOfferSchema>;
  *  already does one function over. Not decided here (R1.1). */
 export const orgPlansResponseSchema = z.object({
   plans: z.array(orgPlanOfferSchema),
-  /** Whether this gym can pay online now: `available` (Paddle), `coming_soon` (an
-   *  Indian gym, until Razorpay is connected, ROADMAP Stage 3 item 1d) or
-   *  `unavailable` (payments not set up on this server). */
+  /** Whether this gym can pay online now: `available` (Paddle, or Razorpay for an Indian
+   *  gym) or `unavailable` (not set up on this server). `coming_soon` was an Indian gym's
+   *  answer until Razorpay was connected (ROADMAP Stage 3 item 1d-i); no server sends it now. */
   payOnline: z.enum(["available", "coming_soon", "unavailable"]).default("unavailable"),
 });
 export type OrgPlansResponse = z.infer<typeof orgPlansResponseSchema>;
@@ -1132,9 +1172,15 @@ export const myOrgSchema = orgSummarySchema.extend({
    *  grace ended): the fix is the card on Paddle's page, never a new plan. Null
    *  for a caller who is not staff, or an api too old to send it. */
   paymentOverdue: z.boolean().nullable().default(null),
+  /** Who is owed that payment: Paddle, or Razorpay for an Indian gym (ROADMAP 1d-i), whose
+   *  own emails carry the link to pay. Null whenever `paymentOverdue` is not true. */
+  paymentOverdueThrough: z.enum(["paddle", "razorpay"]).nullable().default(null),
   /** The gym's postal address for its invitations (Part 3 §9.12). Staff only; null
    *  for a member, for a gym with none, and from an api too old to send it. */
   postalAddress: z.string().nullable().default(null),
+  /** An Indian gym's owner's mobile for its payments (`+91…`, ROADMAP 1d-i). Only for staff
+   *  who manage billing; null for everybody else and for a gym with none. */
+  billingMobile: z.string().nullable().default(null),
   /** THE NEWEST CHEER THIS GYM HAS SENT THE CALLER, or null — Kd's ruling of
    *  2026-09-02 (:29961 ruling 4), reaching the member.
    *

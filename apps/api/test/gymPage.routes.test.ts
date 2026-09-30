@@ -9,6 +9,8 @@ import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { RobotCheck, RobotCheckAnswer } from "../src/modules/orgs/gymPage/robotCheck.js";
+import { emailHmac } from "../src/modules/orgs/invites/address.js";
+import { inviteSettings } from "../src/modules/orgs/invites/settings.js";
 import { enquiriesFor } from "../src/modules/orgs/leads/repo.js";
 import { GYM_ENQUIRIES_KEPT_PER_LEAD, ROLE_PRIVILEGES, type GymPage, type Lead, type LeadEnquiry, type PublicGymPage } from "@app/shared";
 
@@ -219,6 +221,11 @@ d("a gym's own page and its enquiry form (real Postgres)", () => {
       const aLeads = await storedLeads(gymA.org.id);
       expect(aLeads).toHaveLength(1);
       expect(aLeads[0]).toMatchObject({ full_name: "Asha Rao", email: "asha.rao@example.com", status: "new", source: "social", added_by: null });
+      // Kept under the invitations' key too, so the Leads list finds its email problems (20c-v-b).
+      const key = inviteSettings(loadConfig(baseEnv))?.hmacKey;
+      if (key === undefined) throw new Error("invitations are off in the test config");
+      const keyed = await sql<{ email_hmac: string | null }[]>`SELECT email_hmac FROM gym_leads WHERE gym_id = ${gymA.org.id}`;
+      expect(keyed.map((row) => row.email_hmac)).toEqual([emailHmac(key, "asha.rao@example.com")]);
       const aMessages = await storedEnquiries(gymA.org.id);
       expect(aMessages).toEqual([
         { lead_id: aLeads[0]?.id, full_name: "Asha Rao", email: "asha.rao@example.com", message: "Do you have evening classes?", may_email: false },

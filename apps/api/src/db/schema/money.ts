@@ -35,6 +35,8 @@ export const plans = pgTable(
     active: boolean("active").notNull().default(true),
     /** The Paddle price this plan is sold at (`pri_…`), per environment (`tools/paddle-prices.ts`). */
     paddlePriceId: text("paddle_price_id").unique("plans_paddle_price_id_uq"),
+    /** The Razorpay plan an Indian gym plan is sold at (`plan_…`), per account (`tools/razorpay-plans.ts`). */
+    razorpayPlanId: text("razorpay_plan_id").unique("plans_razorpay_plan_id_uq"),
     createdAt: createdAt(),
   },
   (t) => [
@@ -88,7 +90,7 @@ export const subscriptions = pgTable(
     /** The provider's own `updated_at` for the record this row was last written from
      *  (migration `0041`): an older answer never overwrites a newer one. */
     providerUpdatedAt: timestamp("provider_updated_at", { withTimezone: true }),
-    /** The provider's customer id (Paddle `ctm_…`). */
+    /** The provider's customer id (Paddle `ctm_…`, Razorpay `cust_…`). */
     providerCustomerRef: text("provider_customer_ref"),
     /** When this row last became past_due (migration `0043`); the worker ends the
      *  grace `PAID_PLAN_GRACE_DAYS` after it. Kept on the row the grace expired. */

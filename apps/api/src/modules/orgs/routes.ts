@@ -9,6 +9,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
 import type { RedisLike } from "../../redis.js";
+import type { OnlinePayments } from "../billing/online.js";
 import { createDualRateLimit } from "../auth/rateLimit.js";
 import {
   addOrgStaffRequestSchema,
@@ -81,7 +82,7 @@ export interface OrgRouteOverrides {
 
 export function registerOrgRoutes(
   app: FastifyInstance,
-  deps: { sql: Sql; redis: RedisLike; invites: InviteSettings | null; onlinePayments: boolean; robotCheck: RobotCheck; photos: PhotoStore },
+  deps: { sql: Sql; redis: RedisLike; invites: InviteSettings | null; onlinePayments: OnlinePayments; robotCheck: RobotCheck; photos: PhotoStore },
   overrides: OrgRouteOverrides = {},
 ): void {
   const orgDeps: service.OrgsDeps = {
@@ -107,7 +108,13 @@ export function registerOrgRoutes(
 
   // A gym's leads (Part 3 §16.3), and its own page whose form makes them (20c-iv-a).
   registerLeadRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites });
-  registerGymPageRoutes(app, { sql: deps.sql, redis: deps.redis, robotCheck: deps.robotCheck, photos: deps.photos });
+  registerGymPageRoutes(app, {
+    sql: deps.sql,
+    redis: deps.redis,
+    robotCheck: deps.robotCheck,
+    photos: deps.photos,
+    addressKey: deps.invites?.hmacKey ?? null,
+  });
 
   // A person's own invitations: what is waiting for their address, Join, No thanks
   // (Part 3 §10.2).

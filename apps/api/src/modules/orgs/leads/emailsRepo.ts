@@ -1,7 +1,8 @@
 // "Send them for me" in the database (ROADMAP 20c-v-a): the gym's switch, and each
 // follow-up the app takes. Every statement names its gym, except the worker's claim,
-// which looks across every gym that switched it on, and the unsubscribe link's read,
-// which knows only the email it came in.
+// which looks across every gym that switched it on, and the unsubscribe link's and a
+// Resend report's reads, which know only the email they came in (20c-v-b).
+import { memberInviteEmailResultSchema, type MemberInviteEmailResult } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { emailsUsedToday } from "../invites/repo.js";
 
@@ -117,28 +118,39 @@ export type AddressStop = "unsubscribed" | "complained" | "bounced" | "refused";
 
 /** Of these address HMACs, the ones the app will not email for this gym: why (the most
  *  serious reason, as in `suppressionsFor`: this gym's unsubscribes and complaints, and
- *  every gym's bounces and refusals), and when the person asked THIS gym to stop, if
- *  they did. */
+ *  every gym's bounces and refusals), and when and how the person asked THIS gym to
+ *  stop, if they did: Stop pressed, or an email marked as spam (the more serious, when
+ *  both). */
+export interface AddressStopView {
+  reason: AddressStop;
+  optedOutAt: Date | null;
+  optedOutHow: "unsubscribed" | "complained" | null;
+}
+
 export async function addressStops(
   sql: SqlOrTx,
   gymId: string,
   hmacs: readonly string[],
-): Promise<Map<string, { reason: AddressStop; optedOutAt: Date | null }>> {
+): Promise<Map<string, AddressStopView>> {
   if (hmacs.length === 0) return new Map();
   const rows = await sql<{ email_hmac: string; reason: string; created_at: Date }[]>`
     SELECT email_hmac, reason, created_at
     FROM email_suppressions
     WHERE email_hmac = ANY(${[...hmacs]}::text[]) AND (gym_id = ${gymId} OR gym_id IS NULL)
     ORDER BY CASE reason WHEN 'bounced' THEN 0 WHEN 'refused' THEN 1 WHEN 'complained' THEN 2 ELSE 3 END, created_at`;
-  const found = new Map<string, { reason: AddressStop; optedOutAt: Date | null }>();
+  const found = new Map<string, AddressStopView>();
   for (const row of rows) {
     if (row.reason !== "unsubscribed" && row.reason !== "complained" && row.reason !== "bounced" && row.reason !== "refused") {
       throw new Error("email suppression holds a reason that no longer parses");
     }
     const kept = found.get(row.email_hmac);
-    const optedOut = row.reason === "unsubscribed" || row.reason === "complained" ? row.created_at : null;
-    if (kept === undefined) found.set(row.email_hmac, { reason: row.reason, optedOutAt: optedOut });
-    else if (kept.optedOutAt === null && optedOut !== null) kept.optedOutAt = optedOut;
+    const how = row.reason === "unsubscribed" || row.reason === "complained" ? row.reason : null;
+    const optedOut = how === null ? null : row.created_at;
+    if (kept === undefined) found.set(row.email_hmac, { reason: row.reason, optedOutAt: optedOut, optedOutHow: how });
+    else if (kept.optedOutAt === null && optedOut !== null) {
+      kept.optedOutAt = optedOut;
+      kept.optedOutHow = how;
+    }
   }
   return found;
 }
@@ -592,4 +604,67 @@ export async function untickLead(tx: TransactionSql, gymId: string, leadId: stri
   await tx`
     UPDATE gym_leads SET email_ok_at = NULL, follow_up_due_on = NULL, updated_at = ${at}
     WHERE gym_id = ${gymId} AND id = ${leadId}`;
+}
+
+// ── What comes back (a Resend report, confirmed with Resend; 20c-v-b) ─────────
+
+/** The follow-up email a report is about: the row its tag names, in any state, or else
+ *  the sent row Resend knows by this id. Null: not a lead's follow-up. */
+export interface ReportedLeadSend {
+  id: string;
+  gymId: string;
+  state: string;
+  reason: string | null;
+  providerId: string | null;
+}
+
+export async function leadSendForReport(
+  sql: SqlOrTx,
+  report: { leadSendId: string | null; providerId: string },
+): Promise<ReportedLeadSend | null> {
+  const rows =
+    report.leadSendId !== null
+      ? await sql<{ id: string; gym_id: string; state: string; reason: string | null; provider_id: string | null }[]>`
+          SELECT id, gym_id, state, reason, provider_id FROM gym_lead_sends WHERE id = ${report.leadSendId}`
+      : await sql<{ id: string; gym_id: string; state: string; reason: string | null; provider_id: string | null }[]>`
+          SELECT id, gym_id, state, reason, provider_id FROM gym_lead_sends
+          WHERE provider_id = ${report.providerId} AND state = 'sent'
+          ORDER BY finished_at, id
+          LIMIT 1`;
+  const row = rows[0];
+  return row === undefined
+    ? null
+    : { id: row.id, gymId: row.gym_id, state: row.state, reason: row.reason, providerId: row.provider_id };
+}
+
+/** A follow-up the sender could not confirm, which Resend's own record shows went: it is
+ *  sent after all, under Resend's id. It already counts on the lead and in the month. */
+export async function markLeadWentAfterAll(tx: TransactionSql, gymId: string, sendId: string, providerId: string): Promise<void> {
+  await tx`
+    UPDATE gym_lead_sends SET state = 'sent', reason = NULL, provider_id = ${providerId}
+    WHERE gym_id = ${gymId} AND id = ${sendId} AND state = 'failed' AND reason = 'send_unknown'`;
+}
+
+/** The email's result now, its address's HMAC and its lead, read under the caller's
+ *  lock on the gym. */
+export async function leadSendForResult(
+  tx: TransactionSql,
+  gymId: string,
+  sendId: string,
+): Promise<{ result: MemberInviteEmailResult | null; hmac: string; leadId: string | null } | null> {
+  const rows = await tx<{ result: string | null; email_hmac: string; lead_id: string | null }[]>`
+    SELECT result, email_hmac, lead_id FROM gym_lead_sends
+    WHERE gym_id = ${gymId} AND id = ${sendId} AND state = 'sent'
+    FOR UPDATE`;
+  const row = rows[0];
+  if (row === undefined) return null;
+  const result = row.result === null ? null : memberInviteEmailResultSchema.safeParse(row.result);
+  if (result !== null && !result.success) throw new Error(`lead send ${sendId} holds a result that no longer parses`);
+  return { result: result === null ? null : result.data, hmac: row.email_hmac, leadId: row.lead_id };
+}
+
+export async function setLeadResult(tx: TransactionSql, gymId: string, sendId: string, result: MemberInviteEmailResult, at: Date): Promise<void> {
+  await tx`
+    UPDATE gym_lead_sends SET result = ${result}, result_at = ${at}
+    WHERE gym_id = ${gymId} AND id = ${sendId} AND state = 'sent'`;
 }

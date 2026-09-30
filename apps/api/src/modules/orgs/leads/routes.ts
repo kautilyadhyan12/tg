@@ -118,7 +118,7 @@ export function registerLeadRoutes(app: FastifyInstance, deps: LeadRouteDeps): v
   });
   const readGate = gate(readLimit);
   const writeGate = gate(writeLimit);
-  const fileDeps: fileService.LeadFileDeps = { sql: deps.sql, redis: deps.redis, log: app.log };
+  const fileDeps: fileService.LeadFileDeps = { sql: deps.sql, redis: deps.redis, log: app.log, addressKey: invites?.hmacKey ?? null };
   const signedIn = { preHandler: [app.authenticate] };
 
   app.get("/v1/orgs/:gymId/leads", signedIn, async (req, reply) => {

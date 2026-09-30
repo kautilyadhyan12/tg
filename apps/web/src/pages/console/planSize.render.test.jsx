@@ -128,7 +128,7 @@ describe('paying during the free trial', () => {
     const dialog = await screen.findByRole('dialog');
     expect(
       within(dialog).getByText(
-        new RegExp(`carries on at up to 200 members\\. Your card is saved now; the plan you choose and its first payment start when the trial ends on ${trialEndDateLabel(TRIAL_END)}`),
+        new RegExp(`carries on at up to 200 members\\. You give your payment details now; the plan you choose and its first payment start when the trial ends on ${trialEndDateLabel(TRIAL_END)}`),
       ),
     ).toBeTruthy();
     const rows = await within(dialog).findAllByRole('button', { name: 'Subscribe' });
@@ -159,7 +159,7 @@ describe('paying during the free trial', () => {
   it('shows a paid trial’s first payment on the card, and offers Change size instead', async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: paidTrial }));
     renderOverview();
-    const card = (await screen.findAllByText(`Your first payment of $79 is on ${trialEndDateLabel(TRIAL_END)}.`))[0];
+    const card = (await screen.findAllByText(new RegExp(`Your plan starts on ${trialEndDateLabel(TRIAL_END)}: \\$79 is paid for `)))[0];
     expect(card).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Choose a plan' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Change size' })).toBeTruthy();

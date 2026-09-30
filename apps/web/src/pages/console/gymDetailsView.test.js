@@ -63,6 +63,7 @@ describe('the boxes the form opens with', () => {
       country: 'US',
       timezone: 'America/Chicago',
       postalAddress: '',
+      billingMobile: '',
     });
   });
 
@@ -338,5 +339,22 @@ describe('what actually gets sent', () => {
       country: 'IN',
       timezone: 'Asia/Kolkata',
     });
+  });
+});
+
+describe("an Indian gym's mobile for payments in Settings (1d-i)", () => {
+  const gym = { name: 'Pune Fitness', city: 'Pune', country: 'IN', timezone: 'Asia/Kolkata', postalAddress: null, billingMobile: '+919876543210' };
+
+  it('the same number typed another way is no change; a new one is sent as the server stores it; emptied, it is cleared', () => {
+    expect(gymDetailsPatch({ ...gymDetailsDraft(gym), billingMobile: '98765 43210' }, gym)).toBeNull();
+    expect(gymDetailsPatch({ ...gymDetailsDraft(gym), billingMobile: '(+91) 70123 45678' }, gym)).toEqual({ billingMobile: '+917012345678' });
+    expect(gymDetailsPatch({ ...gymDetailsDraft(gym), billingMobile: '' }, gym)).toEqual({ billingMobile: null });
+    // A number a billing clerk cannot see arrives as null and is never sent back.
+    expect(gymDetailsPatch(gymDetailsDraft({ ...gym, billingMobile: null }), { ...gym, billingMobile: null })).toBeNull();
+  });
+
+  it('a number that is not an Indian mobile stops Save and says why', () => {
+    expect(gymDetailsProblem({ ...gymDetailsDraft(gym), billingMobile: '020 2612 3456' }, 'gym')).toBe("This isn't a mobile number. Type your 10-digit mobile number, for example 98765 43210.");
+    expect(gymDetailsProblem({ ...gymDetailsDraft(gym), billingMobile: '' }, 'gym')).toBeNull();
   });
 });

@@ -229,8 +229,9 @@ describe('the follow-up emails (20c-ii)', () => {
       headline: 'Email 1 of 3 is due today',
       due: true,
       sentLine: null,
-      note: 'Not sent for you: emails to this address bounce.',
+      note: 'Emails to this address bounce. Check the address with them.',
     });
+    expect(followUpState(due({ by: 'you', notSent: 'refused' }), now).note).toBe("Our email service won't send to this address. Check the address with them.");
     expect(followUpState(due({ by: 'you', notSent: 'on_member_list' }), now).note).toBe(
       'Not sent for you: this email address is on your member list.',
     );
@@ -248,6 +249,27 @@ describe('the follow-up emails (20c-ii)', () => {
     });
   });
 
+  it('a lead tagged on the list for its address says so on its panel, with or without a follow-up to come (20c-v-b)', () => {
+    const now = new Date('2026-09-27T12:00:00');
+    const none = { ...lead, mayEmail: false, emailProblem: 'bounced', followUp: { sent: 0, dueOn: null, dueNow: false, overdue: false, lastSentAt: null, by: null, notSent: null, optedOutAt: null } };
+    expect(followUpState(none, now)).toEqual({ next: null, headline: 'Emails to this address bounce. Check the address with them.', due: false, sentLine: null, note: null });
+    const allSent = { ...none, emailProblem: 'refused', followUp: { ...none.followUp, sent: 3, lastSentAt: '2026-09-26T09:00:00.000Z' } };
+    expect(followUpState(allSent, now)).toMatchObject({
+      headline: 'All 3 follow-up emails sent',
+      note: "Our email service won't send to this address. Check the address with them.",
+    });
+    expect(followUpState({ ...none, emailProblem: null }, now)).toBeNull();
+  });
+
+  it('a person who marked an email as spam is said so, not that they pressed Stop', () => {
+    const now = new Date('2026-09-27T12:00:00');
+    const spam = { ...lead, mayEmail: false, followUp: { sent: 1, dueOn: null, dueNow: false, overdue: false, lastSentAt: '2026-09-26T09:00:00.000Z', by: null, notSent: null, optedOutAt: '2026-09-26T10:00:00.000Z', optedOutHow: 'complained' } };
+    expect(followUpState(spam, now).headline).toBe('Follow-up emails stopped: they marked one of your emails as spam');
+    expect(followUpState({ ...spam, followUp: { ...spam.followUp, optedOutHow: 'unsubscribed' } }, now).headline).toBe(
+      'Follow-up emails stopped: they asked not to get your emails through AI Home Gym',
+    );
+  });
+
   it('"Email due" on a row only when it is due now and staff send it', () => {
     expect(showsEmailDue(due({}))).toBe(true);
     expect(showsEmailDue(due({ by: 'you' }))).toBe(true);
@@ -263,6 +285,7 @@ describe('the follow-up emails (20c-ii)', () => {
 
   it('"Email due" asks the server for due leads only', () => {
     expect(leadsQueryString({ status: 'all', query: '', due: true })).toBe('followUp=due');
+    expect(leadsQueryString({ status: 'all', query: '', problem: true })).toBe('followUp=problem');
     expect(leadsQueryString({ status: 'new', query: 'pri', due: false })).toBe('status=new&q=pri');
   });
 });

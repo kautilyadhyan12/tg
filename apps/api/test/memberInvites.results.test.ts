@@ -261,6 +261,8 @@ d("what comes back (real Postgres)", () => {
       sql,
       log: { info: () => undefined, warn: () => undefined, error: () => undefined },
       reader,
+      hmacKey: settings.hmacKey,
+      eventIds,
       tellOperator: (stopped) => {
         toldOperator.push(stopped);
         return Promise.resolve();
@@ -435,6 +437,7 @@ d("what comes back (real Postgres)", () => {
         type: "email.delivered",
         emailId: providerId,
         sendId: sendIdOf.get(providerId),
+        leadSendId: null,
         bounceType: null,
         bounceSubType: null,
       });
@@ -784,6 +787,8 @@ d("what comes back (real Postgres)", () => {
             sql,
             log: { info: () => undefined, warn: () => undefined, error: () => undefined },
             reader: blocked,
+            hmacKey: settings.hmacKey,
+            eventIds,
             tellOperator: () => Promise.resolve(),
             now: () => clock,
             sleep: () => Promise.resolve(),

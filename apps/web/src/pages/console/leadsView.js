@@ -20,10 +20,11 @@ export function statusChips(counts) {
 
 /** The page's query: a status of 'all' is no status; `due` keeps only leads due a
  *  follow-up email. */
-export function leadsQueryString({ status, query, due = false }, cursor = null) {
+export function leadsQueryString({ status, query, due = false, problem = false }, cursor = null) {
   const params = new URLSearchParams();
   if (status !== 'all') params.set('status', status);
   if (due) params.set('followUp', 'due');
+  else if (problem) params.set('followUp', 'problem');
   const q = query.trim();
   if (q !== '') params.set('q', q);
   if (cursor !== null) params.set('cursor', cursor);
@@ -184,10 +185,27 @@ export const SENT_FOR_YOU_NOTE = 'Sent for you from 8 in the morning, by your cl
 /** Under one the app is waiting to send. */
 export const WAITING_FOR_YOU_NOTE = "We'll keep trying. If it can't go within a week, it comes back to you here.";
 
+/** An address nobody can email, said as it is whoever sends the next one: a gym whose
+ *  emails through the app are stopped or off still learns the address is dead. */
+export const ADDRESS_NOTES = {
+  bounced: 'Emails to this address bounce. Check the address with them.',
+  refused: "Our email service won't send to this address. Check the address with them.",
+};
+
 /** What the lead's follow-up box says, or null when there is nothing to say: a lead
  *  who never said yes and has had none. `next` is the step staff may send now, or null;
- *  `note` a line under it: the app sends it, or why the app did not. */
+ *  `note` a line under it: the app sends it, or why the app did not. Whenever the lead's
+ *  address cannot be emailed, that is the note, and the box shows even with nothing
+ *  else to say: the list tags such a lead, so opening it always explains the tag (20c-v-b). */
 export function followUpState(lead, now = new Date()) {
+  const story = followUpStory(lead, now);
+  const addressNote = ADDRESS_NOTES[lead.emailProblem] ?? null;
+  if (addressNote === null) return story;
+  if (story === null) return { next: null, headline: addressNote, due: false, sentLine: null, note: null };
+  return { ...story, note: addressNote };
+}
+
+function followUpStory(lead, now) {
   const f = lead.followUp;
   if (f === undefined || f === null) return null;
   const sentLine = f.sent === 0 ? null : `${f.sent} of ${LEAD_FOLLOW_UPS} sent${lastSentWords(f.lastSentAt, now)}.`;
@@ -209,7 +227,9 @@ export function followUpState(lead, now = new Date()) {
       return { next: null, headline, due: false, sentLine, note: SENT_FOR_YOU_NOTE };
     }
     const headline = f.overdue ? `${of} was due ${dueDayWords(f.dueOn)}` : f.dueNow ? `${of} is due today` : `${of} is due ${dueDayWords(f.dueOn)}`;
-    const note = f.notSent ? `Not sent for you: ${LEAD_EMAIL_NOT_SENT_WORDS[f.notSent] ?? LEAD_EMAIL_NOT_SENT_WORDS.could_not_send}.` : null;
+    const note = f.notSent
+      ? (ADDRESS_NOTES[f.notSent] ?? `Not sent for you: ${LEAD_EMAIL_NOT_SENT_WORDS[f.notSent] ?? LEAD_EMAIL_NOT_SENT_WORDS.could_not_send}.`)
+      : null;
     // Before its day it is only announced: nothing to send yet.
     return { next: f.dueNow ? step : null, headline, due: f.dueNow, sentLine, note };
   }
@@ -218,7 +238,7 @@ export function followUpState(lead, now = new Date()) {
   if (f.sent === 0 && !lead.mayEmail && !optedOut) return null;
   if (f.sent === 0 && lead.status === 'new' && lead.mayEmail) return null;
   const why = optedOut
-    ? LEAD_EMAIL_NOT_SENT_WORDS.unsubscribed
+    ? LEAD_EMAIL_NOT_SENT_WORDS[f.optedOutHow === 'complained' ? 'complained' : 'unsubscribed']
     : !lead.mayEmail
       ? 'the "Happy to hear from us" tick is off'
       : `they're marked ${statusWord(lead.status)}`;
@@ -230,6 +250,11 @@ export const showsEmailDue = (lead) => Boolean(lead.followUp?.dueNow) && lead.fo
 
 /** The toggle beside the status chips. */
 export const DUE_CHIP_LABEL = 'Email due';
+
+/** The chip for New leads whose address emails can't reach or who marked an email as
+ *  spam (20c-v-b), and each such row's tag: found on the list, not lead by lead. */
+export const PROBLEM_CHIP_LABEL = 'Email problems';
+export const EMAIL_PROBLEM_TAG = { bounced: 'Email bounces', refused: "Can't be emailed", complained: 'Marked as spam' };
 
 /** The tag on a lead who sent the form on the gym's own page (20c-iv-a). */
 export const FROM_PAGE_TAG = 'From your page';

@@ -144,6 +144,7 @@ const ev = (type: StoredResendEvent["type"], bounceType: string | null = null, b
   type,
   emailId: "e",
   sendId: null,
+  leadSendId: null,
   bounceType,
   bounceSubType,
 });
@@ -375,16 +376,16 @@ describe("operatorNote", () => {
       sent: 50,
       bounced: 2,
     });
-    expect(note.subject).toBe("Invitations stopped: Iron Bcc: someone@example.com <b>House</b>");
+    expect(note.subject).toBe("Emails stopped: Iron Bcc: someone@example.com <b>House</b>");
     expect(note.subject).not.toMatch(/[\r\n]/);
-    expect(note.text).toContain("2 of its 50 invitations bounced");
+    expect(note.text).toContain("2 of its 50 emails (invitations and lead follow-ups) bounced");
     expect(note.text).toContain("tools/invites-stopped.ts resume 7d0c5f0e-1111-4222-8333-944455556666");
     expect(note.html).toContain("&lt;b&gt;House&lt;/b&gt;");
     expect(note.html).not.toContain("<b>");
   });
   it("says so for a complaint", () => {
     const note = operatorNote({ gymId: "g", gymName: "", reason: "complaint", sent: 12, bounced: 0 });
-    expect(note.subject).toBe("Invitations stopped: A gym");
-    expect(note.text).toContain("marked one of its first 100 invitations as spam");
+    expect(note.subject).toBe("Emails stopped: A gym");
+    expect(note.text).toContain("marked one of its first 100 emails (invitations and lead follow-ups) as spam");
   });
 });

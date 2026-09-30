@@ -889,15 +889,23 @@ export async function suppressEveryGym(sql: SqlOrTx, hmac: string, reason: "boun
     WHERE email_suppressions.reason = 'refused' AND EXCLUDED.reason = 'bounced'`;
 }
 
-/** What the gym has sent since its counts start, and what came back. An email Resend
+/** What the gym has sent since its counts start, and what came back: its invitations
+ *  and the lead follow-ups the app sent for it (20c-v-b), together. An email Resend
  *  refused to deliver never reached anybody, so it is not counted at all. */
 export async function gymCounts(sql: SqlOrTx, gymId: string): Promise<GymCounts> {
   const rows = await sql<{ sent: number; bounced: number; complained_early: boolean }[]>`
-    WITH counted AS (
+    WITH since AS (
+      SELECT coalesce(invites_counted_from, '-infinity'::timestamptz) AS at FROM gyms WHERE id = ${gymId}
+    ), counted AS (
       SELECT x.result, x.finished_at, x.id
-      FROM gym_invite_sends x JOIN gyms g ON g.id = x.gym_id
+      FROM gym_invite_sends x, since
       WHERE x.gym_id = ${gymId} AND x.state = 'sent' AND x.result IS DISTINCT FROM 'refused'
-        AND x.finished_at >= coalesce(g.invites_counted_from, '-infinity'::timestamptz)
+        AND x.finished_at >= since.at
+      UNION ALL
+      SELECT y.result, y.finished_at, y.id
+      FROM gym_lead_sends y, since
+      WHERE y.gym_id = ${gymId} AND y.state = 'sent' AND y.result IS DISTINCT FROM 'refused'
+        AND y.finished_at >= since.at
     )
     SELECT (SELECT count(*)::int FROM counted) AS sent,
            (SELECT count(*)::int FROM counted WHERE result = 'bounced') AS bounced,

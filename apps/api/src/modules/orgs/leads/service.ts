@@ -71,9 +71,24 @@ export interface LeadSendingView {
   appWhen: "today" | "tomorrow" | "waiting" | null;
   notSent: LeadEmailNotSent | null;
   optedOutAt: Date | null;
+  optedOutHow: "unsubscribed" | "complained" | null;
+  emailProblem: "bounced" | "refused" | "complained" | null;
 }
 
-const NOBODY_SENDING: LeadSendingView = { by: null, appWhen: null, notSent: null, optedOutAt: null };
+const NOBODY_SENDING: LeadSendingView = { by: null, appWhen: null, notSent: null, optedOutAt: null, optedOutHow: null, emailProblem: null };
+
+/** The list's problem tag for a New lead, from its address's stop: the same rule as
+ *  `repo.emailProblemCondition`, which counts and filters them in the database. A spam
+ *  report counts only while the lead is unticked: staff who tick the person again at
+ *  their own request have dealt with it. */
+export function emailProblemOf(
+  lead: { status: string; ticked: boolean },
+  stop: Pick<emailsRepo.AddressStopView, "reason" | "optedOutHow"> | undefined,
+): LeadSendingView["emailProblem"] {
+  if (lead.status !== "new" || stop === undefined) return null;
+  if (stop.reason === "bounced" || stop.reason === "refused") return stop.reason;
+  return stop.optedOutHow === "complained" && !lead.ticked ? "complained" : null;
+}
 
 const notSentSchema = z.enum(LEAD_EMAIL_NOT_SENT);
 
@@ -167,9 +182,10 @@ async function sendingViews(
       const state = states.get(row.id);
       let { by, notSent } = whoSends(row.followUpDueOn, app, state);
       // An address the app's own check refuses (stopped, bounced, or on the member list)
-      // is staff's from now, not from the worker's next try, and the panel says why.
-      if (by === "app" && stop !== undefined) {
-        by = "you";
+      // is staff's from now, not from the worker's next try, and the panel says why —
+      // whoever sends the next one, so staff never email a dead address unwarned.
+      if (stop !== undefined && row.followUpDueOn !== null) {
+        if (by === "app") by = "you";
         notSent = stop.reason;
       } else if (by === "app" && row.email !== null && members.has(row.email.toLowerCase())) {
         by = "you";
@@ -180,6 +196,8 @@ async function sendingViews(
         appWhen: by === "app" ? appWhen(row.followUpDueOn, today, app.localHour, state) : null,
         notSent,
         optedOutAt: stop?.optedOutAt ?? null,
+        optedOutHow: stop?.optedOutHow ?? null,
+        emailProblem: emailProblemOf({ status: row.status, ticked: row.emailOkAt !== null }, stop),
       };
       return [row.id, view];
     }),
@@ -219,8 +237,10 @@ export function toLead(row: repo.LeadRow, today: string, sending: LeadSendingVie
       appWhen: sending.appWhen,
       notSent: sending.notSent,
       optedOutAt: sending.optedOutAt === null ? null : sending.optedOutAt.toISOString(),
+      optedOutHow: sending.optedOutHow,
     },
     enquiredAt: row.enquiredAt === null ? null : row.enquiredAt.toISOString(),
+    emailProblem: sending.emailProblem,
   };
 }
 
@@ -332,7 +352,8 @@ export async function listLeads(
     if (cursor === null) throw new OrgsError(400, "validation_error", "cursor: not a cursor");
   }
   const typed = (query.q ?? "").trim();
-  const app = appSending(await emailsRepo.gymSendingFacts(deps.sql, gymId, deps.now()), deps.sending);
+  const facts = await emailsRepo.gymSendingFacts(deps.sql, gymId, deps.now());
+  const app = appSending(facts, deps.sending);
   const [page, counts] = await Promise.all([
     repo.leadsPage(deps.sql, {
       gymId,
@@ -340,6 +361,7 @@ export async function listLeads(
       like: typed === "" ? null : `%${escapeLike(typed)}%`,
       digits: phoneDigits(typed),
       dueBy: query.followUp === "due" ? today : null,
+      problemOnly: query.followUp === "problem",
       app,
       cursor,
       limit: LEADS_PAGE + 1,
@@ -354,6 +376,7 @@ export async function listLeads(
     total: page.total,
     cursor: last === undefined ? null : encodeCursor({ at: last.cursorAt, id: last.id }),
     counts,
+    sendingStopped: facts?.stopped ?? false,
   };
 }
 
@@ -441,6 +464,7 @@ export async function createLead(
         ...followUpValues({ status: "new", emailOkAt: okAt, sent: 0, lastAt: null }, org.timezone),
       },
       userId,
+      deps.addressKey,
     );
     await insertAudit(tx, {
       actorUserId: userId,
@@ -501,6 +525,7 @@ export async function updateLead(
         ),
       },
       at,
+      deps.addressKey,
     );
     await insertAudit(tx, {
       actorUserId: userId,
@@ -570,6 +595,7 @@ export async function markFollowUpSent(
         ...followUpValues({ status, emailOkAt: stored.emailOkAt, sent: body.step, lastAt: at }, org.timezone),
       },
       at,
+      deps.addressKey,
     );
     await insertAudit(tx, {
       actorUserId: userId,
@@ -702,6 +728,7 @@ export async function joinLead(
         ),
       },
       at,
+      deps.addressKey,
     );
     await insertAudit(tx, {
       actorUserId: userId,

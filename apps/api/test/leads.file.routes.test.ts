@@ -10,6 +10,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
+import { emailHmac } from "../src/modules/orgs/invites/address.js";
+import { inviteSettings } from "../src/modules/orgs/invites/settings.js";
 import { addLeadFile, type LeadFileDeps } from "../src/modules/orgs/leads/fileService.js";
 import { OrgsError } from "../src/modules/orgs/service.js";
 import { createMemoryRedis } from "../src/redis.js";
@@ -246,6 +248,14 @@ d("leads from a file (real Postgres, real worker)", () => {
       expect(listed.leads.every((lead) => !lead.mayEmail && lead.followUp.dueOn === null)).toBe(true);
       expect(listed.counts.followUpsDue).toBe(0);
       expect(listed.counts.new).toBe(5);
+      // Each address is kept under the invitations' key too, so the list finds its email
+      // problems (20c-v-b).
+      const key = inviteSettings(loadConfig(baseEnv))?.hmacKey;
+      if (key === undefined) throw new Error("invitations are off in the test config");
+      const keyed = await sql<{ email: string; email_hmac: string | null }[]>`
+        SELECT email::text AS email, email_hmac FROM gym_leads WHERE gym_id = ${gym} ORDER BY email`;
+      expect(keyed).toHaveLength(5);
+      for (const row of keyed) expect(row.email_hmac).toBe(emailHmac(key, row.email));
     },
     TIMEOUT_MS,
   );
@@ -533,6 +543,7 @@ d("leads from a file (real Postgres, real worker)", () => {
         sql,
         redis: createMemoryRedis(),
         log: { warn: () => undefined },
+        addressKey: null,
         beforeAddLock,
       });
       const refusal = async (between: () => Promise<void>) => {

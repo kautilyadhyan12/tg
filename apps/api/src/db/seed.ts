@@ -119,19 +119,20 @@ const consumerRows: PlanSeed[] = [
  *  limit is the trial's 200.
  *
  *  Dollars for every country but India, with tax added on top at checkout (Kd,
- *  RULINGS 2026-09-24). An Indian gym sees FIXED rupee prices with no GST added:
- *  raised on 2026-09-24 so that GST, once Kd is registered, comes out of them —
- *  ₹1,000 more on the two smallest, 18 % more on the three biggest, rounded to ₹500.
+ *  RULINGS 2026-09-24). An Indian gym sees FIXED rupee prices, the dollar prices at
+ *  2026-09-23's rate rounded to ₹500, with no GST while Kd is not registered for it;
+ *  once he is, GST is added on top, as tax is everywhere else (Kd, RULINGS 2026-09-29,
+ *  which puts back the 2026-09-23 list in place of 2026-09-24's raised one).
  *
  *  No "more than 2,000" row is seeded: that gym is told "contact us", and a plan
  *  row with no real price is a number waiting to be read as one. */
 const GYM_BANDS: { band: number; seatCap: number; usd: number; inr: number }[] = [
   //                          members       USD minor     INR minor
-  { band: 1, seatCap: 200, usd: 7900, inr: 850000 }, //   up to 200  $79 / ₹8,500
-  { band: 2, seatCap: 500, usd: 12900, inr: 1350000 }, // up to 500  $129 / ₹13,500
-  { band: 3, seatCap: 1000, usd: 19900, inr: 2250000 }, // up to 1,000 $199 / ₹22,500
-  { band: 4, seatCap: 1500, usd: 27900, inr: 3150000 }, // up to 1,500 $279 / ₹31,500
-  { band: 5, seatCap: 2000, usd: 37900, inr: 4300000 }, // up to 2,000 $379 / ₹43,000
+  { band: 1, seatCap: 200, usd: 7900, inr: 750000 }, //   up to 200  $79 / ₹7,500
+  { band: 2, seatCap: 500, usd: 12900, inr: 1250000 }, // up to 500  $129 / ₹12,500
+  { band: 3, seatCap: 1000, usd: 19900, inr: 1900000 }, // up to 1,000 $199 / ₹19,000
+  { band: 4, seatCap: 1500, usd: 27900, inr: 2650000 }, // up to 1,500 $279 / ₹26,500
+  { band: 5, seatCap: 2000, usd: 37900, inr: 3650000 }, // up to 2,000 $379 / ₹36,500
 ];
 
 /** entitlements = the console's own features: Part 4 §3.3 leaves that shape

@@ -15,6 +15,8 @@
 import { describe, expect, it, beforeEach, vi, afterEach } from 'vitest';
 import {
   consoleReadOnlyBanner,
+  paymentOverdueBanner,
+  pricesNote,
   readOnlyNote,
   readOnlyQueueNote,
   SEAT_PRESSURE_RATIO,
@@ -745,7 +747,9 @@ describe('who is offered which choice', () => {
 
   it.each([
     ['the gym’s own free trial', trialing(6), { subscribed: false, pay: true, bigger: false }],
-    ['a free trial in rupees (Razorpay is not built)', trialing(6, { currencyDisplay: 'INR' }), { subscribed: false, pay: false, bigger: false }],
+    ['a free trial in rupees (Razorpay, 1d-i)', trialing(6, { currencyDisplay: 'INR' }), { subscribed: false, pay: true, bigger: false }],
+    ['a trial paid for through Razorpay (its size is not changed here yet)', paidTrial({ currencyDisplay: 'INR', subscription: { paidThrough: 'razorpay', priceLabel: '₹12,500' } }), { subscribed: true, pay: false, bigger: false }],
+    ['a plan paid through Razorpay', paying({ paidThrough: 'razorpay', priceLabel: '₹12,500' }, { currencyDisplay: 'INR' }), { subscribed: true, pay: false, bigger: false }],
     ['a trial the gym has paid for', paidTrial(), { subscribed: true, pay: false, bigger: true }],
     ['a paid plan in good standing', paying(), { subscribed: true, pay: false, bigger: true }],
     ['a paid plan set to end', paying({ cancelAtPeriodEnd: true }), { subscribed: true, pay: false, bigger: false }],
@@ -796,8 +800,19 @@ describe('biggerPlans', () => {
 
 describe('the words for money', () => {
   it('names the first payment of a paid trial, and nothing for a free one', () => {
-    const on = trialEndDateLabel(inDays(6));
-    expect(firstPaymentText({ status: 'trialing', subscribed: true, priceLabel: '$129', currentPeriodEnd: inDays(6) })).toBe(`Your first payment of $129 is on ${on}.`);
+    // Kd's own trial at the click-through: free until 8 Oct, then the month 9 Oct to 8 Nov.
+    const at = (iso) => trialEndDateLabel(iso);
+    expect(firstPaymentText({ status: 'trialing', subscribed: true, priceLabel: '₹7,500', currentPeriodEnd: '2026-10-09T16:54:41.000Z' })).toBe(
+      `Free trial until ${at('2026-10-08T16:54:41.000Z')}. Your plan starts on ${at('2026-10-09T16:54:41.000Z')}: ₹7,500 is paid for ${at('2026-10-09T16:54:41.000Z')} to ${at('2026-11-08T16:54:41.000Z')}.`,
+    );
+    // A plan starting on 31 Jan is next paid on 28 Feb (February has no 31st), so its first
+    // month is 31 Jan to 27 Feb; a trial ending on the 1st has its last free day the month before.
+    expect(firstPaymentText({ status: 'trialing', subscribed: true, priceLabel: '$79', currentPeriodEnd: '2027-01-31T12:00:00.000Z' })).toBe(
+      `Free trial until ${at('2027-01-30T12:00:00.000Z')}. Your plan starts on ${at('2027-01-31T12:00:00.000Z')}: $79 is paid for ${at('2027-01-31T12:00:00.000Z')} to ${at('2027-02-27T12:00:00.000Z')}.`,
+    );
+    expect(firstPaymentText({ status: 'trialing', subscribed: true, priceLabel: '$79', currentPeriodEnd: '2026-11-01T12:00:00.000Z' })).toMatch(
+      new RegExp(`^Free trial until ${at('2026-10-31T12:00:00.000Z')}\\. `),
+    );
     expect(firstPaymentText({ status: 'trialing', trialEndsAt: inDays(6) })).toBeNull();
     expect(firstPaymentText({ status: 'active', subscribed: true, priceLabel: '$129', currentPeriodEnd: inDays(6) })).toBeNull();
     expect(firstPaymentText({ status: 'trialing', subscribed: true, priceLabel: null, currentPeriodEnd: inDays(6) })).toBeNull();
@@ -830,10 +845,11 @@ describe('the banner for a trial the gym has paid for', () => {
   });
 
   it('counts down in good English and names the first payment', () => {
-    const on = (days) => trialEndDateLabel(inDays(days));
-    expect(bannerFor(paidTrial(6), NOW)?.text).toBe(`Free trial — 6 days left. Your first payment of $129 is on ${on(6)}.`);
-    expect(bannerFor(paidTrial(1), NOW)?.text).toBe(`Free trial — 1 day left. Your first payment of $129 is on ${on(1)}.`);
-    expect(bannerFor(paidTrial(0), NOW)?.text).toBe(`Free trial — last day. Your first payment of $129 is on ${on(0)}.`);
+    const first = (days) => firstPaymentText(paidTrial(days).subscription);
+    expect(first(6)).toMatch(/^Free trial until .+\. Your plan starts on .+: \$129 is paid for .+ to .+\.$/);
+    expect(bannerFor(paidTrial(6), NOW)?.text).toBe(`Free trial — 6 days left. ${first(6)}`);
+    expect(bannerFor(paidTrial(1), NOW)?.text).toBe(`Free trial — 1 day left. ${first(1)}`);
+    expect(bannerFor(paidTrial(0), NOW)?.text).toBe(`Free trial — last day. ${first(0)}`);
   });
 
   it('tells a free trial’s billing staff, near the end, that they can pay now', () => {
@@ -1014,5 +1030,21 @@ describe('re-check N2 (1c-iii): no remove-by time once it has passed', () => {
     expect(pendingFit(org, Date.parse('2026-10-31T21:05:00.000Z'))?.text).toBe(
       `You have 52 members. Remove 2 to move to 50. Otherwise you'll stay on ${(5000).toLocaleString()} members at $20 a month.`,
     );
+  });
+});
+describe('an Indian gym paying through Razorpay (1d-i)', () => {
+  it('the line under the prices says no GST in rupees, and tax at checkout elsewhere', () => {
+    expect(pricesNote('INR')).toBe('Prices are a month, with no GST added.');
+    expect(pricesNote('USD')).toBe('Prices are a month. Tax is added at checkout where it applies.');
+    expect(pricesNote(undefined)).toBe('Prices are a month. Tax is added at checkout where it applies.');
+  });
+
+  it("an overdue payment names Razorpay's email, never Paddle's page or a card to update", () => {
+    const text = paymentOverdueBanner('gym', true, 'razorpay');
+    expect(text).toBe(
+      "A payment for your gym is overdue. Nothing here can be changed and your members get the free app only until it is paid. Razorpay has emailed the gym's owner about it; once it's paid, everything opens again by itself.",
+    );
+    expect(paymentOverdueBanner('gym', false, 'razorpay')).toBe(text);
+    expect(paymentOverdueBanner('gym', true)).toMatch(/Paddle also tries your card/);
   });
 });

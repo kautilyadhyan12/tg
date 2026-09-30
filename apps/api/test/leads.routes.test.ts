@@ -282,7 +282,7 @@ d("a gym's leads (real Postgres)", () => {
       const all = pageOf(await get(leadsUrl(gym), owner.cookies));
       expect(all.total).toBe(3);
       expect(all.leads.map((l) => l.fullName)).toEqual(["Ana Silva", "Tom Reid", "Priya Shah"]);
-      expect(all.counts).toEqual({ all: 3, new: 3, contacted: 0, on_trial: 0, joined: 0, lost: 0, followUpsDue: 0 });
+      expect(all.counts).toEqual({ all: 3, new: 3, contacted: 0, on_trial: 0, joined: 0, lost: 0, followUpsDue: 0, emailProblems: 0 });
       expect(all.cursor).toBeNull();
 
       const moved = await patch(leadUrl(gym, tom.id), { status: "on_trial", notes: "Trial week from Monday" }, owner.cookies);

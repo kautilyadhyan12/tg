@@ -6,7 +6,7 @@
 // agreed to. It is a small form and it can do two large things wrong: move a
 // gym's day boundary by accident, and turn a rename into a refusal for a gym
 // that is paying us.
-import { orgWords } from '@app/shared';
+import { normaliseIndianMobile, orgWords } from '@app/shared';
 import { timezoneOptions } from './consoleView';
 
 /** MAY THIS PERSON EDIT THE GYM'S DETAILS?
@@ -51,6 +51,8 @@ export function gymDetailsDraft(org) {
     country: text(org?.country),
     timezone: text(org?.timezone),
     postalAddress: text(org?.postalAddress),
+    // An Indian gym's owner's mobile for payments (1d-i); only billing staff are sent it.
+    billingMobile: text(org?.billingMobile),
   };
 }
 
@@ -77,7 +79,8 @@ export function sameGymDetails(a, b) {
     a.city === b.city &&
     a.country === b.country &&
     a.timezone === b.timezone &&
-    (a.postalAddress ?? '') === (b.postalAddress ?? '')
+    (a.postalAddress ?? '') === (b.postalAddress ?? '') &&
+    (a.billingMobile ?? '') === (b.billingMobile ?? '')
   );
 }
 
@@ -154,6 +157,10 @@ export function gymDetailsProblem(draft, orgType) {
   if ((draft?.timezone ?? '').trim() === '') {
     return `Your ${words.it} needs a time zone — it decides when your ${words.it}'s day ends.`;
   }
+  const mobile = (draft?.billingMobile ?? '').trim();
+  if (mobile !== '' && normaliseIndianMobile(mobile) === null) {
+    return "This isn't a mobile number. Type your 10-digit mobile number, for example 98765 43210.";
+  }
   return null;
 }
 
@@ -217,6 +224,13 @@ export function gymDetailsPatch(draft, org) {
   const nextAddress = typedAddress === '' ? null : typedAddress;
   const storedAddress = typeof org?.postalAddress === 'string' ? org.postalAddress : null;
   if (nextAddress !== storedAddress) patch.postalAddress = nextAddress;
+
+  // The owner's mobile for payments, read as the server reads it, so "98765 43210" typed over
+  // a stored "+919876543210" is no change. Emptied, it is cleared.
+  const typedMobile = (draft?.billingMobile ?? '').trim();
+  const nextMobile = typedMobile === '' ? null : (normaliseIndianMobile(typedMobile) ?? typedMobile);
+  const storedMobile = typeof org?.billingMobile === 'string' ? org.billingMobile : null;
+  if (nextMobile !== storedMobile) patch.billingMobile = nextMobile;
 
   return Object.keys(patch).length === 0 ? null : patch;
 }
