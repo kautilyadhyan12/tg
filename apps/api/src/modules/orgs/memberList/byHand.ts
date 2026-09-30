@@ -229,9 +229,6 @@ export function applyTyped(stored: EntryValues, typed: MemberListEntryPatch, con
   };
 }
 
-/** JOINING TWO RECORDS OF ONE PERSON: the kept record keeps every value it has and
- *  takes the other's only where its own is empty. Its four identity fields are never
- *  changed, so the next upload still finds it by them. */
 /** The fields whose value differs between two sets of values, named as a record's marks
  *  name them: what a write by hand changed, so what an import found wrong there goes. */
 export function changedFields(before: EntryValues, after: EntryValues): string[] {
@@ -246,6 +243,9 @@ export function changedFields(before: EntryValues, after: EntryValues): string[]
   return changed;
 }
 
+/** JOINING TWO RECORDS OF ONE PERSON: the kept record keeps every value it has and
+ *  takes the other's only where its own is empty. Its four identity fields are never
+ *  changed, so the next upload still finds it by them. */
 export function mergeValues(keep: EntryValues, gone: EntryValues): { values: EntryValues; filled: string[] } {
   const values: EntryValues = { ...keep, extra: { ...keep.extra } };
   const filled: string[] = [];
