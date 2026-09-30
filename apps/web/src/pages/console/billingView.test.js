@@ -1042,7 +1042,7 @@ describe('an Indian gym paying through Razorpay (1d-i)', () => {
   it("an overdue payment names Razorpay's email, never Paddle's page or a card to update", () => {
     const text = paymentOverdueBanner('gym', true, 'razorpay');
     expect(text).toBe(
-      "A payment for your gym is overdue. Nothing here can be changed and your members get the free app only until it is paid. Razorpay has emailed a link to pay it to the address used to subscribe; once it's paid, everything opens again by itself.",
+      "A payment for your gym is overdue. Nothing here can be changed and your members get the free app only until it is paid. Razorpay has emailed the gym's owner about it; once it's paid, everything opens again by itself.",
     );
     expect(paymentOverdueBanner('gym', false, 'razorpay')).toBe(text);
     expect(paymentOverdueBanner('gym', true)).toMatch(/Paddle also tries your card/);

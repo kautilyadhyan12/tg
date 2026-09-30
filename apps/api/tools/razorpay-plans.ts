@@ -55,7 +55,7 @@ try {
         problems += 1;
       } else if (matches(plan, found.value)) console.log(`${plan.code}: matches ${found.value.id}.`);
       else {
-        console.error(`${plan.code}: Razorpay's plan ${found.value.id} does not match the plan. Clear the plan's razorpay_plan_id and run this again: a new Razorpay plan is made.`);
+        console.error(`${plan.code}: Razorpay's plan ${found.value.id} does not match the plan. Clear the plan's razorpay_plan_id and run this again: a new Razorpay plan is made, and gyms already paying stay on the old one.`);
         problems += 1;
       }
       continue;

@@ -45,6 +45,8 @@ export const orgCheckoutResponseSchema = z.discriminatedUnion("provider", [
     /** The owner's mobile for payments (`+91…`), for Razorpay's window to fill in; null when
      *  the gym has none, and Razorpay asks for it. */
     contact: z.string().regex(/^\+91[6-9]\d{9}$/).nullable(),
+    /** The gym owner's email, for Razorpay's window to fill in, whoever opens it. */
+    email: z.string().email().max(254).nullable(),
   }),
 ]);
 export type OrgCheckoutResponse = z.infer<typeof orgCheckoutResponseSchema>;

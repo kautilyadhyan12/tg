@@ -1,7 +1,9 @@
 // Razorpay's API as the billing tests need it (not a test file itself): subscriptions our
 // server creates, and the steps Razorpay takes after its window — the mandate given
 // (`authenticate`), a payment taken (`charge`), one failed (`fail`) — shaped as Razorpay
-// sends them (checked on Kd's test account, 2026-09-29).
+// sends them (checked on Kd's test account, 2026-09-29). A failed charge leaves its invoice
+// unpaid; a halted plan whose card is changed goes `active` WITHOUT charging it, and only a
+// manual charge pays it (Razorpay, "Payment Retries", read 2026-09-30).
 import { randomBytes } from "node:crypto";
 import type { RazorpayInvoice, RazorpayPayment, RazorpayPlan, RazorpaySubscription } from "@app/shared";
 import type { RazorpayApi, RazorpayResult } from "../src/modules/billing/razorpay.js";
@@ -76,10 +78,18 @@ export class FakeRazorpay implements RazorpayApi {
     return Promise.resolve({ kind: "ok", value: { ...sub, plan: shown } });
   }
 
-  getSubscription(id: string): Promise<RazorpayResult<RazorpaySubscription>> {
+  /** Run once inside the next fetch, after its answer is read and before it is returned: a
+   *  slow answer, overtaken by whatever this does. */
+  duringNextGet: (() => Promise<unknown>) | null = null;
+
+  async getSubscription(id: string): Promise<RazorpayResult<RazorpaySubscription>> {
     const sub = this.subs.get(id);
-    if (sub === undefined) return Promise.resolve({ kind: "not_found" });
-    return Promise.resolve(this.ok({ ...sub }));
+    if (sub === undefined) return { kind: "not_found" };
+    const answer = this.ok({ ...sub });
+    const during = this.duringNextGet;
+    this.duringNextGet = null;
+    if (during !== null) await during();
+    return answer;
   }
 
   cancelSubscriptionNow(id: string): Promise<RazorpayResult<RazorpaySubscription>> {
@@ -149,7 +159,7 @@ export class FakeRazorpay implements RazorpayApi {
     const paymentId = razorpayId("pay");
     this.payments.set(paymentId, { id: paymentId, entity: "payment", amount: plan.item.amount, currency: plan.item.currency, status: "captured", amount_refunded: 0 });
     const list = this.invoices.get(id) ?? [];
-    list.push({ id: razorpayId("inv"), entity: "invoice", status: "paid", subscription_id: id, payment_id: paymentId, amount_paid: plan.item.amount });
+    list.push({ id: razorpayId("inv"), entity: "invoice", status: "paid", subscription_id: id, payment_id: paymentId, amount_paid: plan.item.amount, amount_due: 0, paid_at: this.clock });
     this.invoices.set(id, list);
     this.subs.set(id, {
       ...sub,
@@ -162,9 +172,38 @@ export class FakeRazorpay implements RazorpayApi {
     return paymentId;
   }
 
-  /** A payment fails: Razorpay retries (`pending`), then gives up (`halted`). */
+  /** A payment fails: Razorpay retries (`pending`), then gives up (`halted`). The month's
+   *  invoice stays unpaid (made once, on the first failure). */
   fail(id: string, status: "pending" | "halted" = "pending"): void {
-    this.subs.set(id, { ...this.sub(id), status });
+    const sub = this.sub(id);
+    const plan = this.plans.get(sub.plan_id);
+    const list = this.invoices.get(id) ?? [];
+    if (sub.status !== "pending" && sub.status !== "halted" && plan !== undefined) {
+      list.push({ id: razorpayId("inv"), entity: "invoice", status: "issued", subscription_id: id, payment_id: null, amount_paid: 0, amount_due: plan.item.amount, paid_at: null });
+      this.invoices.set(id, list);
+    }
+    this.subs.set(id, { ...sub, status });
+  }
+
+  /** The payer changes the card on a halted plan: `active` again, and nothing charged. */
+  changeCard(id: string): void {
+    this.subs.set(id, { ...this.sub(id), status: "active" });
+  }
+
+  /** The unpaid invoices charged by hand: each is paid, with a payment of its own. */
+  chargeUnpaid(id: string): void {
+    const list = this.invoices.get(id) ?? [];
+    this.invoices.set(
+      id,
+      list.map((inv) => {
+        if (inv.status !== "issued") return inv;
+        const paymentId = razorpayId("pay");
+        const amount = inv.amount_due ?? 0;
+        this.payments.set(paymentId, { id: paymentId, entity: "payment", amount, currency: "INR", status: "captured", amount_refunded: 0 });
+        return { ...inv, status: "paid", payment_id: paymentId, amount_paid: amount, amount_due: 0, paid_at: this.clock };
+      }),
+    );
+    this.subs.set(id, { ...this.sub(id), status: "active" });
   }
 
   /** A subscription made by something other than our server on the same Razorpay account. */

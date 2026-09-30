@@ -1243,12 +1243,12 @@ describe('the gym’s own details', () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [INDIA] } });
     orgService.updateOrg.mockResolvedValue({ data: { org: INDIA, postalAddress: null, billingMobile: '+917012345678' } });
     await openSettings();
-    expect(screen.getByLabelText('Your mobile number').value).toBe('+919876543210');
-    fireEvent.change(screen.getByLabelText('Your mobile number'), { target: { value: '70123 45678' } });
+    expect(screen.getByLabelText('Mobile number for payments').value).toBe('+919876543210');
+    fireEvent.change(screen.getByLabelText('Mobile number for payments'), { target: { value: '70123 45678' } });
     fireEvent.click(screen.getByText('Save changes'));
     await waitFor(() => expect(orgService.updateOrg).toHaveBeenCalledWith(ORG.id, { billingMobile: '+917012345678' }));
     expect(await screen.findByText('Saved.')).toBeTruthy();
-    expect(screen.getByLabelText('Your mobile number').value).toBe('+917012345678');
+    expect(screen.getByLabelText('Mobile number for payments').value).toBe('+917012345678');
   });
 
   it("never draws the mobile box for staff who do not manage billing, nor for a gym outside India", async () => {
@@ -1257,12 +1257,12 @@ describe('the gym’s own details', () => {
     const { unmount } = drawSettings();
     await openSection('Gym details');
     await screen.findByLabelText('Gym name');
-    expect(screen.queryByLabelText('Your mobile number')).toBeNull();
+    expect(screen.queryByLabelText('Mobile number for payments')).toBeNull();
     unmount();
 
     orgService.getMine.mockResolvedValue({ data: { orgs: [ORG] } });
     await openSettings();
-    expect(screen.queryByLabelText('Your mobile number')).toBeNull();
+    expect(screen.queryByLabelText('Mobile number for payments')).toBeNull();
   });
 
   it('clears a city with null rather than an empty string', async () => {

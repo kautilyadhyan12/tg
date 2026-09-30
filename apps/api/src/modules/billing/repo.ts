@@ -32,11 +32,14 @@ export interface CheckoutRow {
   provider: PayProvider;
   /** Paddle: the transaction. Razorpay: the subscription our server created. */
   providerRef: string | null;
+  /** The plan it sold. */
+  planId: string;
 }
 
 interface RawCheckout {
   id: string;
   gym_id: string;
+  plan_id: string;
   plan_code: string;
   state: string;
   provider: string;
@@ -51,7 +54,7 @@ function toCheckout(raw: RawCheckout): CheckoutRow {
   if (state === undefined) throw new Error(`unknown checkout state ${raw.state}`);
   const provider = PROVIDERS.find((p) => p === raw.provider);
   if (provider === undefined) throw new Error(`unknown checkout provider ${raw.provider}`);
-  return { id: raw.id, gymId: raw.gym_id, planCode: raw.plan_code, state, provider, providerRef: raw.provider_ref };
+  return { id: raw.id, gymId: raw.gym_id, planCode: raw.plan_code, state, provider, providerRef: raw.provider_ref, planId: raw.plan_id };
 }
 
 /** The members a gym is paying for: live, not complimentary, not staff. The same
@@ -109,7 +112,7 @@ export async function beginCheckout(
     if (gym.status !== "active") return { kind: "org_archived" };
 
     const earlier = await tx<RawCheckout[]>`
-      SELECT c.id, c.gym_id, p.code AS plan_code, c.state, c.provider, c.provider_ref
+      SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref
       FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
       WHERE c.gym_id = ${input.gymId} AND c.idempotency_key = ${input.idempotencyKey}`;
     const replay = earlier[0];
@@ -156,7 +159,7 @@ export async function beginCheckout(
       INSERT INTO billing_checkouts (gym_id, plan_id, created_by, idempotency_key, provider, trial_ends_at)
       VALUES (${input.gymId}, ${plan.id}, ${input.userId}, ${input.idempotencyKey}, ${input.provider},
               ${trialDays === null ? null : trialEnd})
-      RETURNING id, gym_id, ${input.planCode}::text AS plan_code, state, provider, provider_ref`;
+      RETURNING id, gym_id, plan_id, ${input.planCode}::text AS plan_code, state, provider, provider_ref`;
     const row = inserted[0];
     if (row === undefined) throw new Error("checkout insert returned no row");
     await insertAudit(tx, {
@@ -204,7 +207,7 @@ export async function failCheckout(sql: SqlOrTx, input: { checkoutId: string; gy
 
 export async function getCheckout(sql: SqlOrTx, input: { checkoutId: string; gymId: string }): Promise<CheckoutRow | null> {
   const rows = await sql<RawCheckout[]>`
-    SELECT c.id, c.gym_id, p.code AS plan_code, c.state, c.provider, c.provider_ref
+    SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref
     FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
     WHERE c.id = ${input.checkoutId} AND c.gym_id = ${input.gymId}`;
   const row = rows[0];
@@ -215,18 +218,20 @@ export async function getCheckout(sql: SqlOrTx, input: { checkoutId: string; gym
  *  where the subscription's gym comes from. */
 export async function checkoutForRazorpaySubscription(sql: SqlOrTx, subscriptionId: string): Promise<CheckoutRow | null> {
   const rows = await sql<RawCheckout[]>`
-    SELECT c.id, c.gym_id, p.code AS plan_code, c.state, c.provider, c.provider_ref
+    SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref
     FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
     WHERE c.provider = 'razorpay' AND c.provider_ref = ${subscriptionId}`;
   const row = rows[0];
   return row === undefined ? null : toCheckout(row);
 }
 
-/** An Indian gym's owner's mobile for its payments (`+91…`), or null: Razorpay's window is
- *  given it so it asks nothing (Kd, RULINGS 2026-09-29). */
-export async function gymBillingMobile(sql: SqlOrTx, gymId: string): Promise<string | null> {
-  const rows = await sql<{ billing_mobile: string | null }[]>`SELECT billing_mobile FROM gyms WHERE id = ${gymId}`;
-  return rows[0]?.billing_mobile ?? null;
+/** Who pays for the gym, as Razorpay's window is told (Kd, RULINGS 2026-09-29): its owner's
+ *  email and the mobile given for its payments (`+91…`), each null when there is none. */
+export async function gymPayer(sql: SqlOrTx, gymId: string): Promise<{ email: string | null; mobile: string | null }> {
+  const rows = await sql<{ email: string | null; billing_mobile: string | null }[]>`
+    SELECT u.email, g.billing_mobile FROM gyms g LEFT JOIN users u ON u.id = g.owner_user_id
+    WHERE g.id = ${gymId}`;
+  return { email: rows[0]?.email ?? null, mobile: rows[0]?.billing_mobile ?? null };
 }
 
 /** Which of our rupee plans a Razorpay plan is: only by the id `tools/razorpay-plans.ts` recorded. */
@@ -240,7 +245,7 @@ export async function planForRazorpayPlan(sql: SqlOrTx, razorpayPlanId: string):
 export async function checkoutsForTransactions(sql: SqlOrTx, transactionIds: readonly string[]): Promise<CheckoutRow[]> {
   if (transactionIds.length === 0) return [];
   const rows = await sql<RawCheckout[]>`
-    SELECT c.id, c.gym_id, p.code AS plan_code, c.state, c.provider, c.provider_ref
+    SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref
     FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
     WHERE c.provider = 'paddle' AND c.provider_ref = ANY(${[...transactionIds]}::text[])
     ORDER BY c.created_at, c.id`;
@@ -308,6 +313,8 @@ export interface PaddleRow {
   gymId: string;
   status: LocalStatus;
   cancelReason: string | null;
+  /** When the plan stopped being the gym's; null while live. */
+  endedAt: Date | null;
 }
 
 export async function findPaddleSubscription(sql: SqlOrTx, subscriptionId: string): Promise<PaddleRow | null> {
@@ -316,11 +323,11 @@ export async function findPaddleSubscription(sql: SqlOrTx, subscriptionId: strin
 
 /** The gym's row for one subscription at its provider, if our server placed it. */
 export async function findProviderSubscription(sql: SqlOrTx, provider: PayProvider, subscriptionId: string): Promise<PaddleRow | null> {
-  const rows = await sql<{ id: string; owner_id: string; status: LocalStatus; cancel_reason: string | null }[]>`
-    SELECT id, owner_id, status, cancel_reason FROM subscriptions
+  const rows = await sql<{ id: string; owner_id: string; status: LocalStatus; cancel_reason: string | null; ended_at: Date | null }[]>`
+    SELECT id, owner_id, status, cancel_reason, ended_at FROM subscriptions
     WHERE provider = ${provider} AND provider_ref = ${subscriptionId} AND owner_type = 'gym'`;
   const row = rows[0];
-  return row === undefined ? null : { id: row.id, gymId: row.owner_id, status: row.status, cancelReason: row.cancel_reason };
+  return row === undefined ? null : { id: row.id, gymId: row.owner_id, status: row.status, cancelReason: row.cancel_reason, endedAt: row.ended_at };
 }
 
 export interface ApplyOutcome {
@@ -542,7 +549,7 @@ export async function closeCheckout(sql: SqlOrTx, input: { checkoutId: string; g
  *  whether it was paid meanwhile. */
 export async function openCheckoutsFor(sql: SqlOrTx, gymId: string): Promise<CheckoutRow[]> {
   const rows = await sql<RawCheckout[]>`
-    SELECT c.id, c.gym_id, p.code AS plan_code, c.state, c.provider, c.provider_ref
+    SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref
     FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
     WHERE c.gym_id = ${gymId} AND c.state = 'open' AND c.provider_ref IS NOT NULL
     ORDER BY c.created_at

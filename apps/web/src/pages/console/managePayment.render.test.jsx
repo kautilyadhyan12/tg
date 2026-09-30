@@ -238,12 +238,12 @@ describe('a plan paid through Razorpay (an Indian gym, 1d-i)', () => {
     expect(screen.queryByRole('button', { name: /manage payment|update payment method|change size/i })).toBeNull();
   });
 
-  it("a failed payment: the banner says Razorpay tries again and has emailed a link, with no Paddle button", async () => {
+  it("a failed payment: the banner says Razorpay tries again and has emailed the owner, with no Paddle button and no promised link to pay", async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: rupees({ status: 'past_due' }) }));
     renderOverview();
     expect(
       await screen.findByText(
-        "A payment for your gym didn't go through. Razorpay tries again by itself over the next 3 days, and has emailed a link to pay it to the address used to subscribe. Your members keep everything for 2 days after a failed payment.",
+        "A payment for your gym didn't go through. Razorpay tries again by itself, and has emailed the gym's owner about it. Your members keep everything for 2 days after a failed payment.",
       ),
     ).toBeTruthy();
     expect(screen.queryByRole('button', { name: /update payment method|manage payment/i })).toBeNull();
@@ -254,7 +254,7 @@ describe('a plan paid through Razorpay (an Indian gym, 1d-i)', () => {
     renderOverview();
     expect(await screen.findByRole('heading', { name: 'A payment is overdue' })).toBeTruthy();
     expect(screen.getByTestId('overdue-razorpay').textContent).toBe(
-      "Razorpay has emailed a link to pay it to the address used to subscribe. Once it's paid, everything opens again on its own.",
+      "Razorpay has emailed the gym's owner about it. Once it's paid, everything opens again on its own.",
     );
     expect(screen.queryByRole('button', { name: /update payment method|manage payment|subscribe/i })).toBeNull();
     expect(orgService.openBillingPortal).not.toHaveBeenCalled();

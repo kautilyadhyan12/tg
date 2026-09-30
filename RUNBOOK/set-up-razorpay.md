@@ -26,7 +26,10 @@ and Razorpay's webhook for renewals and failed payments.
    ```
 
    It prints one line a plan: `created`, `recorded … made earlier`, or `matches`. Run it
-   again: every line says `matches`.
+   again: every line says `matches`. After a price changes, clear that plan's
+   `razorpay_plan_id` and run it again: new gyms get the new Razorpay plan, and gyms already
+   paying stay on their old one, and its price, until they subscribe again (the api still
+   follows them through the checkout that sold it).
 3. In Razorpay's dashboard (the same mode as the key): Account & Settings → Webhooks → Add
    New Webhook. URL `https://<api host>/v1/webhooks/razorpay`; a secret of your own (12 to
    200 visible characters), kept in escrow as `RAZORPAY_WEBHOOK_SECRET` and set on the api;

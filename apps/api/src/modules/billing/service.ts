@@ -267,10 +267,11 @@ async function startRazorpayCheckout(
   // "already on a plan" rather than opening a second payment.
   for (const open of await repo.openCheckoutsFor(deps.sql, input.gymId)) {
     if (open.providerRef === null || open.provider !== "razorpay") continue;
+    const askedAt = deps.now();
     const fetched = await razorpay.api.getSubscription(open.providerRef);
     if (fetched.kind === "unavailable") throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
     if (fetched.kind !== "ok" || !RAZORPAY_TAKEN.has(fetched.value.status)) continue;
-    if ((await applyRazorpay(deps, razorpay, fetched.value)) === "retry") {
+    if ((await applyRazorpay(deps, razorpay, fetched.value, askedAt)) === "retry") {
       throw new OrgsError(409, "payment_in_progress", "Your last payment is still going through. Try again in a minute.");
     }
   }
@@ -283,8 +284,8 @@ async function startRazorpayCheckout(
       if (fetched.kind === "unavailable") throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
       if (fetched.kind === "ok" && fetched.value.status === "created") {
         const plan = await razorpay.api.getPlan(fetched.value.plan_id);
-        const contact = await repo.gymBillingMobile(deps.sql, input.gymId);
-        if (plan.kind === "ok") return razorpayResponse(razorpay, checkout.id, fetched.value.id, plan.value.item.name, contact);
+        const payer = await repo.gymPayer(deps.sql, input.gymId);
+        if (plan.kind === "ok") return razorpayResponse(razorpay, checkout.id, fetched.value.id, plan.value.item.name, payer);
       }
     }
     throw replayRefusal(checkout);
@@ -334,19 +335,28 @@ async function startRazorpayCheckout(
     await razorpay.api.cancelSubscriptionNow(sub.id);
     throw new OrgsError(409, "checkout_replaced", "That payment window has closed. Press Subscribe again.");
   }
-  return razorpayResponse(razorpay, checkoutId, sub.id, plan.item.name, await repo.gymBillingMobile(deps.sql, input.gymId));
+  return razorpayResponse(razorpay, checkoutId, sub.id, plan.item.name, await repo.gymPayer(deps.sql, input.gymId));
 }
 
-/** The window's details. `contact` is the owner's mobile for payments, for Razorpay's window to
- *  fill in (Kd, RULINGS 2026-09-29); only billing staff, who alone may open a checkout, get it. */
+/** The window's details. `payer` is the owner's email and the mobile for payments, for
+ *  Razorpay's window to fill in (Kd, RULINGS 2026-09-29), whoever of the billing staff opens it;
+ *  only billing staff, who alone may open a checkout, get them. */
 function razorpayResponse(
   razorpay: RazorpaySettings,
   checkoutId: string,
   subscriptionId: string,
   description: string,
-  contact: string | null,
+  payer: { email: string | null; mobile: string | null },
 ): OrgCheckoutResponse {
-  return { checkoutId, provider: "razorpay", keyId: razorpay.keyId, subscriptionId, description: description.slice(0, 200) || "Monthly plan", contact };
+  return {
+    checkoutId,
+    provider: "razorpay",
+    keyId: razorpay.keyId,
+    subscriptionId,
+    description: description.slice(0, 200) || "Monthly plan",
+    contact: payer.mobile,
+    email: payer.email,
+  };
 }
 
 /** A trial checkout's own price: exactly the days asked for, marked with the plan's code. */
@@ -419,10 +429,11 @@ async function syncRazorpayCheckout(
   if (razorpay === null) throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
   let status: string | null = null;
   if (checkout.providerRef !== null && checkout.state !== "failed") {
+    const askedAt = deps.now();
     const fetched = await razorpay.api.getSubscription(checkout.providerRef);
     if (fetched.kind === "ok") {
       status = fetched.value.status;
-      await applyRazorpay(deps, razorpay, fetched.value);
+      await applyRazorpay(deps, razorpay, fetched.value, askedAt);
       await bustEntitlements(deps.redis, input.userId);
     }
   }
@@ -1173,30 +1184,31 @@ async function setAside(
 export async function applyRazorpaySubscription(deps: BillingDeps, subscriptionId: string): Promise<ApplyResult> {
   const razorpay = deps.razorpay ?? null;
   if (razorpay === null) return "retry";
+  const askedAt = deps.now();
   const fetched = await razorpay.api.getSubscription(subscriptionId);
   if (fetched.kind === "not_found") return "unknown";
   if (fetched.kind !== "ok") return "retry";
-  return await applyRazorpay(deps, razorpay, fetched.value);
+  return await applyRazorpay(deps, razorpay, fetched.value, askedAt);
 }
 
 /** Razorpay's statuses in which a subscription never took a mandate or a payment. */
 const RAZORPAY_NEVER_TAKEN: ReadonlySet<string> = new Set(["created", "cancelled", "expired", "completed"]);
 
+/** Razorpay invoices still owed: issued and not (fully) paid. */
+const RAZORPAY_OWED: ReadonlySet<string> = new Set(["issued", "partially_paid"]);
+
 /** Write a subscription just fetched from Razorpay onto its gym through the one rule. The
- *  gym is the one on OUR checkout row for this subscription, never the subscription's notes. */
-async function applyRazorpay(deps: BillingDeps, razorpay: RazorpaySettings, sub: RazorpaySubscription): Promise<ApplyResult> {
-  // When this answer was had: Razorpay's record carries no time of its own, and an answer had
-  // earlier never overwrites one had later.
-  const fetchedAt = deps.now();
+ *  gym is the one on OUR checkout row for this subscription, never the subscription's notes.
+ *  `askedAt` is when Razorpay was asked: its record carries no time of its own, and an answer
+ *  asked for earlier never overwrites one asked for later, however slowly it arrived. */
+async function applyRazorpay(deps: BillingDeps, razorpay: RazorpaySettings, sub: RazorpaySubscription, askedAt: Date): Promise<ApplyResult> {
   const placed = await repo.findProviderSubscription(deps.sql, "razorpay", sub.id);
+  const checkout = await repo.checkoutForRazorpaySubscription(deps.sql, sub.id);
   let gymId = placed?.gymId ?? null;
   let checkoutId: string | null = null;
-  if (gymId === null) {
-    const checkout = await repo.checkoutForRazorpaySubscription(deps.sql, sub.id);
-    if (checkout !== null && checkout.providerRef === sub.id) {
-      gymId = checkout.gymId;
-      checkoutId = checkout.id;
-    }
+  if (gymId === null && checkout !== null && checkout.providerRef === sub.id) {
+    gymId = checkout.gymId;
+    checkoutId = checkout.id;
   }
   if (gymId === null) {
     // Something else on the same Razorpay account made it: not ours to cancel or refund.
@@ -1208,13 +1220,26 @@ async function applyRazorpay(deps: BillingDeps, razorpay: RazorpaySettings, sub:
   // A window never paid, or closed unpaid, puts nothing on the gym.
   if (placed === null && RAZORPAY_NEVER_TAKEN.has(sub.status) && sub.paid_count === 0) return "unchanged";
 
-  const plan = sub.quantity === 1 ? await repo.planForRazorpayPlan(deps.sql, sub.plan_id) : null;
-  if (plan === null) {
+  // Our plan: the one recorded for Razorpay's plan now, else the one our checkout sold — a
+  // price's Razorpay plan replaced later leaves the gyms already paying on the old one.
+  const recorded = sub.quantity === 1 ? await repo.planForRazorpayPlan(deps.sql, sub.plan_id) : null;
+  const planId = recorded?.id ?? (sub.quantity === 1 && checkout !== null && checkout.gymId === gymId ? checkout.planId : null);
+  if (planId === null) {
     deps.log.error({ event: "billing.unknown_price", provider: "razorpay" }, "a Razorpay subscription is not at one of our plans");
     return "unknown";
   }
-  const snapshot = toRazorpaySnapshot(sub, plan.id, fetchedAt);
+  let snapshot = toRazorpaySnapshot(sub, planId, askedAt);
   if (snapshot === null) return "unchanged";
+  // A halted plan whose card is changed goes `active` with its missed invoices still unpaid —
+  // Razorpay does not charge them (its "Payment Retries" page) — so over a plan past due, or
+  // one whose grace ran out, `active` counts as paid only once nothing is owed.
+  if (snapshot.status === "active" && placed !== null && (placed.status === "past_due" || placed.cancelReason === repo.GRACE_EXPIRED)) {
+    const invoices = await razorpay.api.listSubscriptionInvoices(sub.id);
+    if (invoices.kind !== "ok") return "retry";
+    if (invoices.value.some((i) => i.subscription_id === sub.id && RAZORPAY_OWED.has(i.status))) {
+      snapshot = { ...snapshot, status: "past_due" };
+    }
+  }
   const outcome = await repo.applySnapshot(deps.sql, {
     gymId,
     provider: "razorpay",
@@ -1233,6 +1258,11 @@ async function applyRazorpay(deps: BillingDeps, razorpay: RazorpaySettings, sub:
   if (outcome.decision.kind === "ignore") {
     if (outcome.decision.reason === "conflict" || outcome.decision.reason === "not_ours") {
       deps.log.error({ event: "billing.illegal_transition", provider: "razorpay", reason: outcome.decision.reason, gymId }, "a Razorpay subscription change was not applied");
+    }
+    // An ended plan Razorpay still charges while the gym pays for another: cancelled, and every
+    // payment taken after it ended refunded. The months it was the gym's plan stay paid.
+    if (outcome.decision.reason === "conflict" && placed !== null && RAZORPAY_TAKEN.has(sub.status)) {
+      return await setAsideRazorpay(deps, razorpay, sub, gymId, "duplicate", placed.endedAt);
     }
     return "unchanged";
   }
@@ -1270,15 +1300,17 @@ export function toRazorpaySnapshot(sub: RazorpaySubscription, planId: string, fe
 }
 
 /** Cancel a set-aside subscription at Razorpay and write down a refund for every payment it
- *  took. Runs on every event about that subscription, so a cancel that failed is tried again
- *  and a later payment is added; `settleOwedRefunds` makes the refunds. The mandate's ₹5
- *  check is refunded by Razorpay itself and is no invoice. */
+ *  took — or, with `paidAfter`, every payment taken after that moment. Runs on every event
+ *  about that subscription, so a cancel that failed is tried again and a later payment is
+ *  added; `settleOwedRefunds` makes the refunds. The mandate's ₹5 check is refunded by
+ *  Razorpay itself and is no invoice. */
 async function setAsideRazorpay(
   deps: BillingDeps,
   razorpay: RazorpaySettings,
   sub: RazorpaySubscription,
   gymId: string | null,
   reason: repo.RefundReason,
+  paidAfter: Date | null = null,
 ): Promise<ApplyResult> {
   if (sub.status !== "cancelled" && sub.status !== "completed" && sub.status !== "expired") {
     const cancelled = await razorpay.api.cancelSubscriptionNow(sub.id);
@@ -1292,7 +1324,13 @@ async function setAsideRazorpay(
     subscriptionRef: sub.id,
     reason,
     transactionRefs: invoices.value.flatMap((i) =>
-      i.status === "paid" && i.payment_id !== null && i.payment_id !== undefined && i.subscription_id === sub.id ? [i.payment_id] : [],
+      i.status === "paid" &&
+      i.payment_id !== null &&
+      i.payment_id !== undefined &&
+      i.subscription_id === sub.id &&
+      (paidAfter === null || (i.paid_at ?? 0) * 1000 >= paidAfter.getTime())
+        ? [i.payment_id]
+        : [],
     ),
   });
   return "set_aside";

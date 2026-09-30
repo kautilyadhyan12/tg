@@ -176,17 +176,18 @@ export function paymentOverdueBanner(orgType, canPay, through = 'paddle') {
   const words = orgWords(orgType);
   const fix =
     through === 'razorpay'
-      ? `${RAZORPAY_PAY_LINK}; once it's paid, everything opens again by itself.`
+      ? `${RAZORPAY_OVERDUE}; once it's paid, everything opens again by itself.`
       : canPay
         ? 'Update your payment method to pay now; Paddle also tries your card again by itself.'
         : 'Whoever manages billing can update the payment method; Paddle also tries the card again by itself.';
   return `A payment for your ${words.it} is overdue. Nothing here can be changed and your ${words.people} get the free app only until it is paid. ${fix}`;
 }
 
-/** Where an Indian gym's overdue payment is paid (1d-i): Razorpay emails the payer a link
- *  when a payment fails (its docs, "Subscription States": pending), and nothing here can
- *  take the payment yet. */
-export const RAZORPAY_PAY_LINK = 'Razorpay has emailed a link to pay it to the address used to subscribe';
+/** Who is told of an Indian gym's failed payment (1d-i): Razorpay emails its customer — the
+ *  gym's owner, whose email its window is given — and its email is for changing the card, not
+ *  for paying (its "Payment Retries" page, read 2026-09-30). Nothing here takes the payment
+ *  yet (1d-ii), so no link to pay is promised. */
+export const RAZORPAY_OVERDUE = "Razorpay has emailed the gym's owner about it";
 
 /** Paid through Razorpay (an Indian gym, 1d-i): its size and how it pays are not changed
  *  here yet, so neither button is drawn. */
@@ -671,7 +672,7 @@ export function bannerFor(org, now = Date.now()) {
       key: 'past_due',
       tone: 'warn',
       text: isPaidThroughRazorpay(org)
-        ? `A payment for your ${words.it} didn't go through. Razorpay tries again by itself over the next 3 days, and has emailed a link to pay it to the address used to subscribe. Your ${words.people} keep everything for ${PAID_PLAN_GRACE_DAYS} days after a failed payment.`
+        ? `A payment for your ${words.it} didn't go through. Razorpay tries again by itself, and has emailed the gym's owner about it. Your ${words.people} keep everything for ${PAID_PLAN_GRACE_DAYS} days after a failed payment.`
         : canManageBilling(viewerPrivileges(org))
         ? `A payment for your ${words.it} didn't go through. Paddle will try your card again by itself, or you can update your payment method under Plan on the Overview. Your ${words.people} keep everything for ${PAID_PLAN_GRACE_DAYS} days after a failed payment.`
         : `A payment for your ${words.it} didn't go through. Paddle will try the card again by itself, or whoever manages billing can update the payment method. Your ${words.people} keep everything for ${PAID_PLAN_GRACE_DAYS} days after a failed payment.`,

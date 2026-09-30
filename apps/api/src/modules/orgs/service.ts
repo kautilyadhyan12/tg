@@ -406,6 +406,9 @@ export async function updateOrg(
     if (!seesMobile) throw new OrgsError(403, "forbidden", "Only staff who manage billing can change the mobile number for payments.");
     if (req.billingMobile === null || req.billingMobile.trim() === "") patch.billingMobile = null;
     else patch.billingMobile = billingMobileAt(patch.country ?? org.country ?? "", req.billingMobile);
+  } else if (patch.country !== undefined && patch.country !== "IN") {
+    // Nothing uses it outside India (the ruling's purpose is an Indian gym's payments).
+    patch.billingMobile = null;
   }
 
   const outcome = await repo.updateOrg(deps.sql, { gymId, patch, actorUserId: userId });

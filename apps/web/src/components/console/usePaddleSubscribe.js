@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { orgService, errorText } from '../../api/orgsApi';
-import { useAuth } from '../../context/AuthContext';
 import { applyPaidPlan, refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
 import { closePaddleCheckout, openPaddleCheckout } from '../../utils/paddleCheckout';
 import { closeRazorpayCheckout, openRazorpayCheckout } from '../../utils/razorpayCheckout';
@@ -25,7 +24,6 @@ const SYNC_GAP_MS = 2000;
  *  is being confirmed. `paid` is the gym's plan once the payment is on it. `gymName` heads
  *  Razorpay's window. */
 export function usePaddleSubscribe(gymId, gymName = '') {
-  const { user } = useAuth();
   const [paying, setPaying] = useState(null);
   const [payNote, setPayNote] = useState(null);
   const [payError, setPayError] = useState(null);
@@ -99,7 +97,8 @@ export function usePaddleSubscribe(gymId, gymName = '') {
           subscriptionId: res.data.subscriptionId,
           name: gymName || 'AI Home Gym',
           description: res.data.description,
-          email: user?.email ?? '',
+          // The gym owner's, from the server, whoever of the billing staff opens it.
+          email: res.data.email ?? '',
           contact: res.data.contact ?? '',
           onEvent,
         });

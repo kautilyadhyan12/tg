@@ -997,7 +997,7 @@ export async function updateOrg(
         SELECT count(*)::int AS n FROM subscriptions
         WHERE owner_type = 'gym'
           AND owner_id = ${input.gymId}
-          AND (status <> 'trialing' OR provider = 'paddle')`;
+          AND (status <> 'trialing' OR provider NOT IN ('none','pilot'))`;
       if ((billed[0]?.n ?? 0) > 0) return { kind: "currency_locked" };
     }
 

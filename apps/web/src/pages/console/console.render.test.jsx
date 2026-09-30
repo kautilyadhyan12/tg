@@ -361,7 +361,7 @@ describe('Create a gym', () => {
     expect(screen.queryByLabelText('Gym name')).toBeNull();
     fireEvent.change(screen.getByLabelText('Your business name'), { target: { value: 'Coach Priya' } });
     await chooseCountry('India');
-    fireEvent.change(screen.getByLabelText('Your mobile number'), { target: { value: '98765 43210' } });
+    fireEvent.change(screen.getByLabelText('Mobile number for payments'), { target: { value: '98765 43210' } });
     orgService.createOrg.mockResolvedValue({
       data: {
         org: { ...ORG, name: 'Coach Priya', orgType: 'personal_trainer', currencyDisplay: 'INR' },
@@ -404,7 +404,7 @@ describe('Create a gym', () => {
     // form would pass everything above.
     fireEvent.click(screen.getByLabelText('Country'));
     fireEvent.click(await screen.findByText('India'));
-    fireEvent.change(screen.getByLabelText('Your mobile number'), { target: { value: '98765 43210' } });
+    fireEvent.change(screen.getByLabelText('Mobile number for payments'), { target: { value: '98765 43210' } });
     orgService.createOrg.mockResolvedValue({
       data: { org: { ...ORG }, joinCode: { code: 'K7QM2X', label: 'Front Desk' } },
     });
@@ -417,17 +417,17 @@ describe('Create a gym', () => {
     drawNew();
     fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Pune Fitness' } });
     await chooseCountry('United States');
-    expect(screen.queryByLabelText('Your mobile number')).toBeNull();
+    expect(screen.queryByLabelText('Mobile number for payments')).toBeNull();
 
     await chooseCountry('India');
-    expect(screen.getByText('For your payments only: Razorpay uses it to message you about them. Your staff and members never see it.')).toBeTruthy();
+    expect(screen.getByText('Yours, as the owner: Razorpay uses it for messages about your payments. Only people who manage billing here can see it.')).toBeTruthy();
     // Create waits for a real Indian mobile, and says what is wrong with one that is not.
-    fireEvent.change(screen.getByLabelText('Your mobile number'), { target: { value: '020 2612 3456' } });
+    fireEvent.change(screen.getByLabelText('Mobile number for payments'), { target: { value: '020 2612 3456' } });
     expect(screen.getByTestId('mobile-check').textContent).toBe("This isn't a mobile number. Type your 10-digit mobile number, for example 98765 43210.");
     fireEvent.click(screen.getByText('Create'));
     await waitFor(() => expect(orgService.createOrg).not.toHaveBeenCalled());
 
-    fireEvent.change(screen.getByLabelText('Your mobile number'), { target: { value: '+91 98765-43210' } });
+    fireEvent.change(screen.getByLabelText('Mobile number for payments'), { target: { value: '+91 98765-43210' } });
     expect(screen.queryByTestId('mobile-check')).toBeNull();
     orgService.createOrg.mockResolvedValue({ data: { org: { ...ORG }, joinCode: { code: 'K7QM2X', label: 'Front Desk' } } });
     fireEvent.click(screen.getByText('Create'));
@@ -460,7 +460,7 @@ describe('Create a gym', () => {
     drawNew();
     fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Sydney Iron' } });
     await chooseCountry('India');
-    fireEvent.change(screen.getByLabelText('Your mobile number'), { target: { value: '98765 43210' } });
+    fireEvent.change(screen.getByLabelText('Mobile number for payments'), { target: { value: '98765 43210' } });
     fireEvent.click(screen.getByText('Create'));
     expect(await screen.findByText(/not open in that country yet/i)).toBeTruthy();
   });

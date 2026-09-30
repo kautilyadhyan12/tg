@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { orgService, errorCode, errorText, isRetryable } from '../../api/orgsApi';
 import { applyStartedTrial, refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
-import { RAZORPAY_PAY_LINK, planPriceText, planPromptFor, planSeatLabel, pricesNote } from '../../pages/console/billingView';
+import { RAZORPAY_OVERDUE, planPriceText, planPromptFor, planSeatLabel, pricesNote } from '../../pages/console/billingView';
 import ManagePaymentButton from './ManagePaymentButton';
 import { usePaddleSubscribe } from './usePaddleSubscribe';
 
@@ -327,7 +327,7 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
               // Paid through Razorpay (1d-i): its own email carries the link, and nothing here
               // can take the payment yet.
               <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.6)' }} data-testid="overdue-razorpay">
-                {RAZORPAY_PAY_LINK}. Once it&apos;s paid, everything opens again on its own.
+                {RAZORPAY_OVERDUE}. Once it&apos;s paid, everything opens again on its own.
               </p>
             ) : (
               <>

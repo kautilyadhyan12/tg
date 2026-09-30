@@ -365,7 +365,7 @@ export default function NewGym() {
           </Field>
 
           {inIndia ? (
-            <Field label="Your mobile number" hint="For your payments only: Razorpay uses it to message you about them. Your staff and members never see it.">
+            <Field label="Mobile number for payments" hint="Yours, as the owner: Razorpay uses it for messages about your payments. Only people who manage billing here can see it.">
               <input
                 type="tel"
                 inputMode="tel"
@@ -374,7 +374,7 @@ export default function NewGym() {
                 onChange={(e) => setMobile(e.target.value)}
                 maxLength={40}
                 placeholder="98765 43210"
-                aria-label="Your mobile number"
+                aria-label="Mobile number for payments"
                 className="w-full rounded-xl px-4 py-3 text-sm"
                 style={inputStyle}
               />

@@ -86,6 +86,10 @@ export const razorpayInvoiceSchema = z.object({
   subscription_id: razorpaySubscriptionIdSchema.nullable().optional(),
   payment_id: razorpayPaymentIdSchema.nullable().optional(),
   amount_paid: z.number().int().nonnegative().nullable().optional(),
+  /** What is still owed on it: above 0 on an invoice Razorpay could not charge. */
+  amount_due: z.number().int().nonnegative().nullable().optional(),
+  /** When it was paid (Unix seconds); null while unpaid. */
+  paid_at: z.number().int().nonnegative().nullable().optional(),
 });
 export type RazorpayInvoice = z.infer<typeof razorpayInvoiceSchema>;
 

@@ -698,7 +698,15 @@ describe('subscribing from the prompt', () => {
       data: { plans: [{ code: 'org_b1_in_m', priceLabel: '₹7,500', currency: 'INR', interval: 'month', seatCap: 200, fits: true }], payOnline: 'available' },
     });
     orgService.startCheckout.mockResolvedValue({
-      data: { checkoutId: 'c9', provider: 'razorpay', keyId: 'rzp_test_AAAAAAAAAAAAAA', subscriptionId: 'sub_AAAAAAAAAAAAAA', description: 'Monthly, up to 200 members' },
+      data: {
+        checkoutId: 'c9',
+        provider: 'razorpay',
+        keyId: 'rzp_test_AAAAAAAAAAAAAA',
+        subscriptionId: 'sub_AAAAAAAAAAAAAA',
+        description: 'Monthly, up to 200 members',
+        contact: '+917012345678',
+        email: 'the-owner@example.com',
+      },
     });
     orgService.syncCheckout.mockResolvedValue({ data: { state: 'paid', subscription: RUPEES } });
     renderConsole(Overview);
@@ -710,7 +718,15 @@ describe('subscribing from the prompt', () => {
     await waitFor(() => expect(openRazorpayCheckout).toHaveBeenCalledTimes(1));
     expect(openPaddleCheckout).not.toHaveBeenCalled();
     const opened = openRazorpayCheckout.mock.calls[0][0];
-    expect(opened).toMatchObject({ keyId: 'rzp_test_AAAAAAAAAAAAAA', subscriptionId: 'sub_AAAAAAAAAAAAAA', name: spent.name, description: 'Monthly, up to 200 members', email: 'owner@example.com' });
+    // The owner's email and mobile, from the server — not the signed-in viewer's (owner@example.com here).
+    expect(opened).toMatchObject({
+      keyId: 'rzp_test_AAAAAAAAAAAAAA',
+      subscriptionId: 'sub_AAAAAAAAAAAAAA',
+      name: spent.name,
+      description: 'Monthly, up to 200 members',
+      email: 'the-owner@example.com',
+      contact: '+917012345678',
+    });
 
     opened.onEvent({ type: 'completed' });
     await waitFor(() => expect(screen.queryByTestId('plan-modal')).toBeNull(), { timeout: 5000 });

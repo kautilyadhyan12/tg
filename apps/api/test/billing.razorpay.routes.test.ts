@@ -5,13 +5,15 @@
 // message from the browser or a webhook, believed — or put one gym's payment on another. The
 // first test is that. Then: charged exactly our price, never twice, never touching what
 // something else on the same Razorpay account made.
-import { createHmac, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { processRazorpayEvents } from "../src/modules/billing/events.js";
+import { applyRazorpaySubscription } from "../src/modules/billing/service.js";
 import { gymSeatCap } from "../src/modules/orgs/repo.js";
+import { expireLapsedGymTrials } from "../src/modules/orgs/trialSweep.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { FakeRazorpay } from "./fakeRazorpay.js";
 
@@ -143,7 +145,7 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
     post(`/v1/orgs/${gymId}/billing/checkout`, { planCode }, cookies, { "idempotency-key": key });
   const opened = (res: { statusCode: number; body: string }) => {
     expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body) as { checkoutId: string; provider: string; keyId: string; subscriptionId: string; description: string; contact: string | null };
+    const body = JSON.parse(res.body) as { checkoutId: string; provider: string; keyId: string; subscriptionId: string; description: string; contact: string | null; email: string | null };
     expect(body.provider).toBe("razorpay");
     return body;
   };
@@ -433,9 +435,18 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
       // A second plan would charge twice: the overdue one is paid instead.
       expect(JSON.parse((await checkout(a.gymId, a.cookies, BIG)).body)).toMatchObject({ error: "payment_overdue" });
 
-      razorpay.charge(win.subscriptionId);
-      await signedWebhook(win.subscriptionId);
+      // The card is changed on the halted plan: Razorpay says `active` but charges nothing
+      // (its "Payment Retries" page), so the month is still owed and nothing opens.
+      razorpay.changeCard(win.subscriptionId);
+      await signedWebhook(win.subscriptionId, "subscription.activated");
       await runWorker(2 * DAY_MS + 10_000);
+      expect(await paidRows(a.gymId)).toEqual([{ status: "expired", provider_ref: win.subscriptionId, cancel_reason: "grace_expired" }]);
+      expect(await myGym(a.gymId, a.cookies)).toMatchObject({ consoleReadOnly: true, paymentOverdue: true });
+
+      // The owed month is charged: everything opens again.
+      razorpay.chargeUnpaid(win.subscriptionId);
+      await signedWebhook(win.subscriptionId, "subscription.charged");
+      await runWorker(2 * DAY_MS + 20_000);
       expect(await myGym(a.gymId, a.cookies)).toMatchObject({ consoleReadOnly: false, paymentOverdue: false, paymentOverdueThrough: null, subscription: { status: "active" } });
     },
     TEST_TIMEOUT_MS,
@@ -456,6 +467,147 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
       expect(JSON.parse((await post(`/v1/orgs/${a.gymId}/billing/portal`, {}, a.cookies)).body)).toMatchObject({ error: "paid_through_razorpay" });
       const size = await post(`/v1/orgs/${a.gymId}/billing/size`, { planCode: SMALL }, a.cookies, { "idempotency-key": "k-size" });
       expect(JSON.parse(size.body)).toMatchObject({ error: "paid_through_razorpay" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "WORST THING: a trial paid for through Razorpay is never ended by the nightly trial check, however late its first charge arrives, nor can its country move its money",
+    async () => {
+      const a = await owner();
+      expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
+      const win = opened(await checkout(a.gymId, a.cookies, BIG));
+      razorpay.authenticate(win.subscriptionId);
+      await sync(a.gymId, win.checkoutId, a.cookies);
+      const firstCharge = (razorpay.subs.get(win.subscriptionId)?.start_at ?? 0) * 1000;
+      // A bank mandate's first debit is confirmed a day or more after the trial's end.
+      const swept = await expireLapsedGymTrials({ sql, log: silent }, { now: new Date(firstCharge + DAY_MS), gymIds: [a.gymId] });
+      expect(swept.expired).toBe(0);
+      expect((await paidRows(a.gymId)).map((r) => r.status)).toEqual(["trialing"]);
+      expect(await myGym(a.gymId, a.cookies)).toMatchObject({ consoleReadOnly: false });
+      expect(JSON.parse((await patch(`/v1/orgs/${a.gymId}`, { country: "US" }, a.cookies)).body)).toMatchObject({ error: "currency_locked" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "WORST THING: a Razorpay plan charged while the gym already pays for another is cancelled, and that charge refunded, never an earlier month",
+    async () => {
+      const a = await owner();
+      const first = opened(await checkout(a.gymId, a.cookies, BIG));
+      razorpay.authenticate(first.subscriptionId);
+      await sync(a.gymId, first.checkoutId, a.cookies);
+      const honestMonth = razorpay.invoices.get(first.subscriptionId)?.[0]?.payment_id;
+      // The first plan's row ends (as the old trial check could end one) after its month was paid.
+      await sql`
+        UPDATE subscriptions SET status = 'expired', ended_at = to_timestamp(${razorpay.clock + 3600})
+        WHERE provider_ref = ${first.subscriptionId}`;
+      const second = opened(await checkout(a.gymId, a.cookies, BIG));
+      razorpay.authenticate(second.subscriptionId);
+      expect(JSON.parse((await sync(a.gymId, second.checkoutId, a.cookies)).body)).toMatchObject({ state: "paid" });
+
+      // Razorpay charges the first plan's next month anyway.
+      razorpay.clock += 31 * 24 * 3600;
+      const late = razorpay.charge(first.subscriptionId);
+      await signedWebhook(first.subscriptionId);
+      await runWorker();
+      expect(razorpay.cancelled).toContain(first.subscriptionId);
+      expect(razorpay.refunds).toContain(late);
+      expect(razorpay.refunds).not.toContain(honestMonth);
+      expect((await paidRows(a.gymId)).map((r) => [r.provider_ref, r.status])).toEqual([
+        [first.subscriptionId, "expired"],
+        [second.subscriptionId, "active"],
+      ]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "an answer asked for earlier never overwrites one asked for later, however slowly it arrives",
+    async () => {
+      const a = await owner();
+      const win = opened(await checkout(a.gymId, a.cookies, BIG));
+      razorpay.authenticate(win.subscriptionId);
+      await sync(a.gymId, win.checkoutId, a.cookies);
+      let tick = Date.now() + 5000;
+      const deps = { sql, redis: createMemoryRedis(), paddle: null, razorpay: { api: razorpay, keyId: KEY_ID }, log: silent, now: () => new Date((tick += 1000)) };
+      razorpay.fail(win.subscriptionId);
+      await applyRazorpaySubscription(deps, win.subscriptionId);
+      expect((await paidRows(a.gymId)).map((r) => r.status)).toEqual(["past_due"]);
+      // A worker asks and its answer ("pending") is slow; meanwhile the retry is paid and a
+      // second ask writes that. The slow answer lands last and must not undo it.
+      razorpay.duringNextGet = async () => {
+        razorpay.chargeUnpaid(win.subscriptionId);
+        await applyRazorpaySubscription(deps, win.subscriptionId);
+      };
+      await applyRazorpaySubscription(deps, win.subscriptionId);
+      expect((await paidRows(a.gymId)).map((r) => r.status)).toEqual(["active"]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a Razorpay event is kept once, however often it is delivered: by Razorpay's id, else by the body itself",
+    async () => {
+      const a = await owner();
+      const win = opened(await checkout(a.gymId, a.cookies, BIG));
+      const eventId = `evt_${randomBytes(7).toString("hex")}`;
+      for (let i = 0; i < 3; i++) expect((await signedWebhook(win.subscriptionId, "subscription.charged", WEBHOOK_SECRET, eventId)).statusCode).toBe(200);
+      expect(await sql`SELECT 1 FROM webhook_events WHERE provider = 'razorpay' AND event_id = ${eventId}`).toHaveLength(1);
+
+      const raw = JSON.stringify({ entity: "event", event: "subscription.pending", payload: { subscription: { entity: { id: win.subscriptionId } } } });
+      const unnamed = () =>
+        api().inject({
+          method: "POST",
+          url: "/v1/webhooks/razorpay",
+          remoteAddress: nextIp(),
+          headers: { "content-type": "application/json", "x-razorpay-signature": createHmac("sha256", WEBHOOK_SECRET).update(raw).digest("hex") },
+          payload: raw,
+        });
+      expect((await unnamed()).statusCode).toBe(200);
+      expect((await unnamed()).statusCode).toBe(200);
+      const byBody = `body:${createHash("sha256").update(raw).digest("hex")}`;
+      expect(await sql`SELECT 1 FROM webhook_events WHERE provider = 'razorpay' AND event_id = ${byBody}`).toHaveLength(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a gym paying on a Razorpay plan is still followed after its price's Razorpay plan is replaced",
+    async () => {
+      const a = await owner();
+      const win = opened(await checkout(a.gymId, a.cookies, BIG));
+      razorpay.authenticate(win.subscriptionId);
+      await sync(a.gymId, win.checkoutId, a.cookies);
+      const replacement = razorpay.addPlan(25000);
+      await sql`UPDATE plans SET razorpay_plan_id = ${replacement} WHERE code = ${BIG}`;
+      try {
+        razorpay.fail(win.subscriptionId);
+        await signedWebhook(win.subscriptionId, "subscription.pending");
+        await runWorker();
+        expect((await paidRows(a.gymId)).map((r) => r.status)).toEqual(["past_due"]);
+      } finally {
+        await sql`UPDATE plans SET razorpay_plan_id = ${BIG_PLAN} WHERE code = ${BIG}`;
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "Razorpay's window gets the OWNER's email, whoever of the billing staff opens it; and a gym leaving India drops the mobile",
+    async () => {
+      const owner1 = await makeUser();
+      const created = await createGym(owner1.cookies, { billingMobile: "70123 45678" });
+      const gymId = (JSON.parse(created.body) as { org: { id: string } }).org.id;
+      expect((await post(`/v1/orgs/${gymId}/trial`, {}, owner1.cookies)).statusCode).toBe(200);
+      const ownerEmail = (await sql<{ email: string }[]>`SELECT email FROM users WHERE id = ${owner1.userId}`)[0]?.email;
+      const clerk = await makeUser();
+      await addStaff(gymId, clerk.userId, "manager", ["members.read", "billing.manage"]);
+      expect(opened(await checkout(gymId, clerk.cookies, BIG))).toMatchObject({ email: ownerEmail, contact: "+917012345678" });
+
+      const leaving = await patch(`/v1/orgs/${gymId}`, { country: "US" }, owner1.cookies);
+      expect(leaving.statusCode).toBe(200);
+      expect((await sql`SELECT billing_mobile FROM gyms WHERE id = ${gymId}`)[0]).toEqual({ billing_mobile: null });
     },
     TEST_TIMEOUT_MS,
   );
