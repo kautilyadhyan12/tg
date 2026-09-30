@@ -315,18 +315,20 @@ export async function addEntry(
     const context = await typedContext(tx, gymId, org.country);
     const applied = applyTyped(EMPTY_VALUES, input, context);
     if (!applied.ok) throw new OrgsError(400, applied.refusal.code, applied.refusal.message);
-    // May already be on your list (5b-iv-b): under the lock, so two staff adding the same
-    // person at once are both told. Only for a NEW record: somebody whose every detail
-    // matches is already on the list, or a past member coming back, as before.
+    // May already be on your list (5b-iv-b): under the lock, so the second of two staff
+    // adding one person at once is told about the first. Only for a NEW record: somebody
+    // whose every detail matches is already on the list, or a past member coming back, as
+    // before. Add anyway covers the records staff were shown; one alike since is shown too.
     const { values } = applied;
-    if (input.acknowledgePossibleDuplicates !== true && (await repo.entryHolding(tx, gymId, identityKey(values))) === null) {
+    if ((await repo.entryHolding(tx, gymId, identityKey(values))) === null) {
       const alike = await repo.possibleMatches(tx, gymId, {
         nameKey: nameKey(values.fullName),
         phone: values.phone,
         memberNumber: values.memberNumber,
         dateOfBirth: values.dateOfBirth,
       });
-      if (alike.length > 0) return { alike };
+      const seen = new Set(input.acknowledgedDuplicates ?? []);
+      if (alike.some((match) => !seen.has(match.entryId))) return { alike };
     }
     const placed = await placeOnList(tx, {
       gymId,

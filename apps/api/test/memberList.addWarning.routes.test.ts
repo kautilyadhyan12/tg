@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { everyoneLeft } from "./memberListEveryoneLeft.js";
+import { addAnyway } from "./memberListAddAnyway.js";
 import { loadConfig } from "../src/config.js";
 import {
   memberListDuplicatesPageResponseSchema,
@@ -146,7 +147,7 @@ d("member list: may already be on your list (real Postgres)", () => {
   const tryAdd = async (
     gymId: string,
     who: User,
-    person: Record<string, string | boolean>,
+    person: Record<string, string | string[]>,
   ): Promise<{ added: string } | { warned: MemberListPossibleMatch[] }> => {
     const res = await post(entriesUrl(gymId), person, who.cookies);
     if (res.statusCode === 201) return { added: memberListEntryWrittenSchema.parse(JSON.parse(res.body)).entry.entryId };
@@ -157,11 +158,11 @@ d("member list: may already be on your list (real Postgres)", () => {
   };
   /** A record set up on purpose, alike or not: Add anyway. */
   const add = async (gymId: string, who: User, person: Record<string, string>): Promise<string> => {
-    const res = await post(entriesUrl(gymId), { ...person, acknowledgePossibleDuplicates: true }, who.cookies);
+    const res = await addAnyway((body) => post(entriesUrl(gymId), body, who.cookies), person);
     expect(res.statusCode, res.body).toBe(201);
     return memberListEntryWrittenSchema.parse(JSON.parse(res.body)).entry.entryId;
   };
-  const warned = async (gymId: string, who: User, person: Record<string, string>): Promise<MemberListPossibleMatch[]> => {
+  const warned = async (gymId: string, who: User, person: Record<string, string | string[]>): Promise<MemberListPossibleMatch[]> => {
     const answer = await tryAdd(gymId, who, person);
     if (!("warned" in answer)) throw new Error(`added with no warning: ${JSON.stringify(person)}`);
     return answer.warned;
@@ -283,14 +284,14 @@ d("member list: may already be on your list (real Postgres)", () => {
 
       const desk = { fullName: "Liam Hughes", phone: "9876543210" };
       expect((await warned(gym, owner, desk)).map((m) => m.entryId)).toEqual([liam]);
-      const deskLiam = await tryAdd(gym, owner, { ...desk, acknowledgePossibleDuplicates: true });
+      const deskLiam = await tryAdd(gym, owner, { ...desk, acknowledgedDuplicates: [liam] });
       if (!("added" in deskLiam)) throw new Error("Add anyway did not add");
       expect(await pairedWith(gym, owner, deskLiam.added)).toEqual(["Liam Hughes | name"]);
       expect((await pairsOf(gym, owner)).map((p) => [p.first.entryId, p.second.entryId].sort())).toEqual([[liam, deskLiam.added].sort()]);
 
       // Every detail the same as a record on the list: "already on your list", Add anyway or not.
-      for (const acknowledgePossibleDuplicates of [false, true]) {
-        const again = await post(entriesUrl(gym), { fullName: "Liam Hughes", email: "liam@members.example", acknowledgePossibleDuplicates }, owner.cookies);
+      for (const acknowledgedDuplicates of [undefined, [liam, deskLiam.added]]) {
+        const again = await post(entriesUrl(gym), { fullName: "Liam Hughes", email: "liam@members.example", acknowledgedDuplicates }, owner.cookies);
         expect(again.statusCode, again.body).toBe(200);
         const written = memberListEntryWrittenSchema.parse(JSON.parse(again.body));
         expect(written.outcome).toBe("already_on_list");
@@ -372,10 +373,51 @@ d("member list: may already be on your list (real Postgres)", () => {
       if (!("added" in sixth)) throw new Error(`the sixth on one phone was warned about: ${JSON.stringify(sixth)}`);
       expect(await pairedWith(gym, owner, sixth.added)).toEqual([]);
 
+      // The same for a name ("Guest", typed for every walk-in) and a member number printed on
+      // five cards in two cases: four warn, the fifth makes the value nobody's.
+      for (const i of [1, 2, 3, 4]) await add(gym, owner, { fullName: "Guest", phone: `98765001${String(i).padStart(2, "0")}` });
+      expect(await warned(gym, owner, { fullName: "guest", phone: "9876500105" })).toHaveLength(4);
+      await add(gym, owner, { fullName: "Guest", phone: "9876500105" });
+      const sixthGuest = await tryAdd(gym, owner, { fullName: "GUEST", phone: "9876500106" });
+      if (!("added" in sixthGuest)) throw new Error(`a sixth Guest was warned about: ${JSON.stringify(sixthGuest)}`);
+      for (const [i, number] of ["GG-0000", "gg-0000", "GG-0000", "gg-0000"].entries()) {
+        await add(gym, owner, { fullName: `Card ${String(i)}`, email: `card${String(i)}@members.example`, memberNumber: number });
+      }
+      expect((await warned(gym, owner, { fullName: "Card Four", email: "card4@members.example", memberNumber: "Gg-0000" })).map(said)).toHaveLength(4);
+      await add(gym, owner, { fullName: "Card Four", email: "card4@members.example", memberNumber: "Gg-0000" });
+      const sixthCard = await tryAdd(gym, owner, { fullName: "Card Five", email: "card5@members.example", memberNumber: "GG-0000" });
+      if (!("added" in sixthCard)) throw new Error(`a sixth card was warned about: ${JSON.stringify(sixthCard)}`);
+
       // A past member of the same name is named, marked past.
       const gone = await add(gym, owner, { fullName: "Gus Tan", email: "gus@members.example" });
       expect((await del(`${entriesUrl(gym)}/${gone}`, owner.cookies)).statusCode).toBe(200);
       expect((await warned(gym, owner, { fullName: "Gus Tan", phone: "9876500030" })).map(said)).toEqual(["Gus Tan (past) | name"]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "Add anyway covers only the records staff were shown: one added alike since warns again, naming both",
+    async () => {
+      const owner = await makeUser("since-owner");
+      const gym = (await makeOrg(owner, "Warning Since Gym")).org.id;
+      const first = await add(gym, owner, { fullName: "Omar Aziz", email: "omar@members.example" });
+      const typed = { fullName: "Omar Aziz", phone: "9876500301" };
+      expect((await warned(gym, owner, typed)).map((m) => m.entryId)).toEqual([first]);
+
+      // Before staff A presses Add anyway, staff B adds another Omar.
+      const second = await add(gym, owner, { fullName: "Aziz, Omar", phone: "9876500302" });
+      const again = await warned(gym, owner, { ...typed, acknowledgedDuplicates: [first] });
+      expect(new Set(again.map((m) => m.entryId))).toEqual(new Set([first, second]));
+      expect(await recordsIn(gym)).toHaveLength(2);
+
+      // Ids that are not this gym's alike records cover nothing, and add nobody.
+      const stranger = "00000000-0000-4000-8000-000000000001";
+      expect((await warned(gym, owner, { ...typed, acknowledgedDuplicates: [stranger] })).length).toBe(2);
+
+      const added = await tryAdd(gym, owner, { ...typed, acknowledgedDuplicates: [first, second] });
+      expect("added" in added).toBe(true);
+      expect(await recordsIn(gym)).toHaveLength(3);
     },
     TEST_TIMEOUT_MS,
   );

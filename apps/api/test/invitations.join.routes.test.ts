@@ -8,6 +8,7 @@
 // differing by dots (not the same address here), Apple's relay address, a second
 // account, another gym's invitation, and an account somebody set up under the person's
 // address with a password before the person ever signed in.
+import { addAnyway } from "./memberListAddAnyway.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
@@ -821,7 +822,7 @@ d("join by invitation (real Postgres)", () => {
       expect((await accept(xena, await inviteIdOf(gym, addr("xena")))).statusCode).toBe(200);
       expect((await membershipsOf(gym, xena))[0]?.entry_id).toBe(old.entry.entryId);
 
-      const kept = await post(entriesUrl(gym), { fullName: "Xena Kay", phone: "+44 7911 123456", acknowledgePossibleDuplicates: true }, gym.owner.cookies);
+      const kept = await addAnyway((body) => post(entriesUrl(gym), body, gym.owner.cookies), { fullName: "Xena Kay", phone: "+44 7911 123456" });
       expect([200, 201], kept.body).toContain(kept.statusCode);
       const keptId = memberListEntryWrittenSchema.parse(JSON.parse(kept.body)).entry.entryId;
       const merged = await post(`${entryUrl(gym, old.entry.entryId)}/merge`, { keepEntryId: keptId, acknowledgeLeavesList: true }, gym.owner.cookies);

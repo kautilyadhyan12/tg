@@ -118,6 +118,11 @@ function MaybeBox({ maybe, words, busy, readOnly, onOpen, onAnyway, onBack }) {
         <AlertTriangle aria-hidden="true" className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--warn)' }} />
         <h3 className="c-s15 c-w6 c-t1 m-0">{mayBeOnListWords(maybe.input.fullName)}</h3>
       </div>
+      {maybe.again ? (
+        <p className="c-s14 c-w6 c-t1 m-0" data-testid="maybe-again">
+          Another record like this was added since you looked. Check it before adding.
+        </p>
+      ) : null}
       <p className="c-s14 c-t2 m-0">Open a record to check it isn&apos;t the same person. Nobody is added until you choose.</p>
       <ul className="flex flex-col gap-3 m-0 p-0 list-none">
         {maybe.people.map((m) => (
@@ -580,6 +585,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   /** A write's answer, applied only if the panel still has that record open. */
   const written = (asked, res) => {
     if (wanted.current !== asked) return;
+    // Staff finished on a record the warning named: the new person's details go with it.
+    if (asked !== null) setDraft(null);
     const next = res.data.entry;
     wanted.current = next.entryId;
     setId(next.entryId);
@@ -616,7 +623,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   };
 
   /** Add member, and its warning: records alike stop the add until staff Open one or add
-   *  anyway, which sends exactly the details warned about, never the form as it is by then. */
+   *  anyway, which sends exactly the details warned about, never the form as it is by then,
+   *  with the records shown; one alike since is shown again. */
   const addPerson = async (input) => {
     setBusy(true);
     setNotice(null);
@@ -627,8 +635,12 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     } catch (err) {
       if (wanted.current !== null) return;
       const people = err?.response?.data?.people;
-      if (errorCode(err) === 'may_be_on_list' && Array.isArray(people) && people.length > 0) setMaybe({ people, input });
-      else refused(err, "We couldn't add this person.");
+      if (errorCode(err) === 'may_be_on_list' && Array.isArray(people) && people.length > 0) {
+        const { acknowledgedDuplicates, ...typed } = input;
+        setMaybe({ people, input: typed, again: acknowledgedDuplicates !== undefined });
+      } else {
+        refused(err, "We couldn't add this person.");
+      }
     } finally {
       setBusy(false);
     }
@@ -1504,7 +1516,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
                   busy={busy}
                   readOnly={readOnly}
                   onOpen={openMatch}
-                  onAnyway={() => addPerson({ ...maybe.input, acknowledgePossibleDuplicates: true })}
+                  onAnyway={() => addPerson({ ...maybe.input, acknowledgedDuplicates: maybe.people.map((m) => m.entryId) })}
                   onBack={() => setMaybe(null)}
                 />
               ) : null}

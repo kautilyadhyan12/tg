@@ -2190,6 +2190,10 @@ const extraInputSchema = z
   .record(extraKeySchema, z.string().max(MEMBER_LIST_MAX_EXTRA_CHARS))
   .refine((extra) => Object.keys(extra).length <= MEMBER_LIST_MAX_EXTRA_FIELDS, { message: "too many fields" });
 
+/** The most records "may already be on your list" can name: at most four holders each of
+ *  the name, the phone and the member number (a fifth makes a value nobody's, 5b-iv-a). */
+export const MEMBER_LIST_POSSIBLE_MATCHES_MAX = 12;
+
 /** "Add member" (§11.6). Every field as staff typed it; the server cleans each one
  *  by the file's own rules and refuses what it cannot keep. Email or phone is
  *  required, checked by the server. `extra` is keyed by the gym's own catalogue. */
@@ -2209,9 +2213,9 @@ export const memberListEntryInputSchema = z
     extra: extraInputSchema.optional(),
     /** "Add and invite": invite the person in the same step (§9.12). */
     invite: z.boolean().optional(),
-    /** "Add anyway" (5b-iv-b): staff saw the possible duplicates and add regardless. The
-     *  exact "already on your list" still stops the add. */
-    acknowledgePossibleDuplicates: z.boolean().optional(),
+    /** "Add anyway" (5b-iv-b): the records the warning named. The add goes ahead only if
+     *  every record alike now is one of them; the exact "already on your list" still stops it. */
+    acknowledgedDuplicates: z.array(z.string().uuid()).min(1).max(MEMBER_LIST_POSSIBLE_MATCHES_MAX).optional(),
   })
   .strict();
 export type MemberListEntryInput = z.infer<typeof memberListEntryInputSchema>;
@@ -2346,10 +2350,6 @@ export const memberListAlreadyOnListSchema = z.object({
   requestId: z.string().optional(),
 });
 
-/** The most records "may already be on your list" can name: at most four holders each of
- *  the name, the phone and the member number (a fifth makes a value nobody's, 5b-iv-a). */
-export const MEMBER_LIST_POSSIBLE_MATCHES_MAX = 12;
-
 /** A record Add member found alike (5b-iv-b), and what it shares with the person typed. */
 export const memberListPossibleMatchSchema = memberListDuplicatePersonSchema
   .extend({ sameName: z.boolean(), samePhone: z.boolean(), sameMemberNumber: z.boolean() })
@@ -2357,7 +2357,7 @@ export const memberListPossibleMatchSchema = memberListDuplicatePersonSchema
 export type MemberListPossibleMatch = z.infer<typeof memberListPossibleMatchSchema>;
 
 /** Add member found records alike by name, phone or member number: 409 with them, and
- *  nothing added or sent. `acknowledgePossibleDuplicates` adds anyway. */
+ *  nothing added or sent. `acknowledgedDuplicates` with these ids adds anyway. */
 export const memberListMayBeOnListSchema = z.object({
   error: z.literal("may_be_on_list"),
   message: z.string(),

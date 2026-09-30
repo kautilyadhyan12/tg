@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { everyoneLeft } from "./memberListEveryoneLeft.js";
+import { addAnyway } from "./memberListAddAnyway.js";
 import { loadConfig } from "../src/config.js";
 import {
   memberListEntriesResponseSchema,
@@ -338,7 +339,7 @@ d("member list: review needed (real Postgres)", () => {
       const entriesUrl = `${listUrl(gym)}/entries`;
       // A second record of somebody already on the list, on purpose: added anyway (5b-iv-b).
       const added = async (body: Record<string, unknown>): Promise<string> => {
-        const res = await post(entriesUrl, { ...body, acknowledgePossibleDuplicates: true }, owner.cookies);
+        const res = await addAnyway((sent) => post(entriesUrl, sent, owner.cookies), body);
         expect(res.statusCode).toBe(201);
         return (JSON.parse(res.body) as { entry: { entryId: string } }).entry.entryId;
       };

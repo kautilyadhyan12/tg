@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { everyoneLeft } from "./memberListEveryoneLeft.js";
+import { addAnyway } from "./memberListAddAnyway.js";
 import { loadConfig } from "../src/config.js";
 import { readFileSync } from "node:fs";
 import { fillNameKeys } from "../src/modules/orgs/memberList/nameKeys.js";
@@ -182,7 +183,7 @@ d("member list: possible duplicates (real Postgres)", () => {
 
   /** Add one person by hand, alike or not (Add anyway, 5b-iv-b); answers their record's id. */
   const add = async (gymId: string, owner: User, person: Record<string, string>): Promise<string> => {
-    const res = await post(`${listUrl(gymId)}/entries`, { ...person, acknowledgePossibleDuplicates: true }, owner.cookies);
+    const res = await addAnyway((body) => post(`${listUrl(gymId)}/entries`, body, owner.cookies), person);
     expect(res.statusCode, res.body).toBe(201);
     return memberListEntryWrittenSchema.parse(JSON.parse(res.body)).entry.entryId;
   };

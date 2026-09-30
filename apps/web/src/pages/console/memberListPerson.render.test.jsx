@@ -884,7 +884,7 @@ describe('Add member: may already be on your list', () => {
     orgService.addMemberListEntry.mockResolvedValueOnce(written('added', person(ADA, 'Liam Hughes', { phone: '+919876543210' })));
     fireEvent.click(box.getByRole('button', { name: 'Add anyway' }));
     await waitFor(() =>
-      expect(orgService.addMemberListEntry).toHaveBeenLastCalledWith(GYM, { fullName: 'Liam Hughes', phone: '9876543210', acknowledgePossibleDuplicates: true }),
+      expect(orgService.addMemberListEntry).toHaveBeenLastCalledWith(GYM, { fullName: 'Liam Hughes', phone: '9876543210', acknowledgedDuplicates: [LIAM, LIAM_PAST] }),
     );
     expect(await dialog().findByText('Member added.')).toBeTruthy();
     expect(dialog().queryByTestId('maybe-box')).toBeNull();
@@ -942,7 +942,7 @@ describe('Add member: may already be on your list', () => {
         fullName: 'Liam Hughes',
         phone: '9876543210',
         invite: true,
-        acknowledgePossibleDuplicates: true,
+        acknowledgedDuplicates: [LIAM, LIAM_PAST],
       }),
     );
   });
@@ -956,8 +956,52 @@ describe('Add member: may already be on your list', () => {
     fireEvent.change(dialog().getByLabelText('Phone'), { target: { value: '9876500000' } });
     expect(dialog().queryByTestId('maybe-box')).toBeNull();
     expect(dialog().queryByRole('button', { name: 'Add anyway' })).toBeNull();
+    orgService.addMemberListEntry.mockRejectedValueOnce(maybeRefusal());
     fireEvent.click(dialog().getByRole('button', { name: 'Add member' }));
     await waitFor(() => expect(orgService.addMemberListEntry).toHaveBeenLastCalledWith(GYM, { fullName: 'Liam Hughes', phone: '9876500000' }));
+    await dialog().findByTestId('maybe-box');
+    // One of the gym's own columns counts the same as a standard one.
+    fireEvent.change(dialog().getByLabelText('Locker'), { target: { value: '12' } });
+    expect(dialog().queryByTestId('maybe-box')).toBeNull();
+  });
+
+  it('a record alike added since the warning brings it back, saying so, and Add anyway then names every record shown', async () => {
+    const OMAR = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+    orgService.addMemberListEntry.mockRejectedValueOnce(maybeRefusal());
+    openBox(null);
+    typeLiam();
+    fireEvent.click(dialog().getByRole('button', { name: 'Add member' }));
+    await dialog().findByTestId('maybe-box');
+    expect(dialog().queryByTestId('maybe-again')).toBeNull();
+    const again = maybeRefusal();
+    again.response.data.people.push({ ...again.response.data.people[0], entryId: OMAR, fullName: 'Liam Hughes Jr', email: 'jr@members.example' });
+    orgService.addMemberListEntry.mockRejectedValueOnce(again);
+    fireEvent.click(dialog().getByRole('button', { name: 'Add anyway' }));
+    expect(await dialog().findByTestId('maybe-again')).toBeTruthy();
+    expect(dialog().getAllByTestId('maybe-match')).toHaveLength(3);
+    orgService.addMemberListEntry.mockResolvedValueOnce(written('added', person(ADA, 'Liam Hughes')));
+    fireEvent.click(dialog().getByRole('button', { name: 'Add anyway' }));
+    await waitFor(() =>
+      expect(orgService.addMemberListEntry).toHaveBeenLastCalledWith(GYM, { fullName: 'Liam Hughes', phone: '9876543210', acknowledgedDuplicates: [LIAM, LIAM_PAST, OMAR] }),
+    );
+    expect(await dialog().findByText('Member added.')).toBeTruthy();
+  });
+
+  it('Back to adding goes once staff save a change on the record they opened', async () => {
+    const liam = person(LIAM, 'Liam Hughes', { memberNumber: 'GG-0042' });
+    orgService.addMemberListEntry.mockRejectedValueOnce(maybeRefusal());
+    orgService.getMemberListEntry.mockResolvedValue(entryAnswer(liam));
+    orgService.changeMemberListEntry.mockResolvedValueOnce(written('changed', { ...liam, phone: '+919876543210' }));
+    openBox(null);
+    typeLiam();
+    fireEvent.click(dialog().getByRole('button', { name: 'Add member' }));
+    fireEvent.click(within(await dialog().findByTestId('maybe-box')).getAllByRole('button', { name: 'Open' })[0]);
+    expect(await dialog().findByTestId('back-to-adding')).toBeTruthy();
+    fireEvent.click(await dialog().findByRole('button', { name: 'Edit' }));
+    fireEvent.change(dialog().getByLabelText('Phone'), { target: { value: '9876543210' } });
+    fireEvent.click(dialog().getByRole('button', { name: 'Save' }));
+    expect(await dialog().findByText('Changes saved.')).toBeTruthy();
+    expect(dialog().queryByTestId('back-to-adding')).toBeNull();
   });
 
   it('Open shows that record, and Back to adding brings back every detail typed, sending nothing', async () => {

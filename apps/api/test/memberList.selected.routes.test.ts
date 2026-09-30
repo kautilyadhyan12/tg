@@ -6,6 +6,7 @@
 // the Invite of three ticked people emailing the whole list, or a "Select all 40 Active"
 // emailing the two an import added before Send. Every email is counted where it would
 // leave: the transport the sender hands it to.
+import { addAnyway } from "./memberListAddAnyway.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
@@ -455,7 +456,8 @@ d("the people selected (real Postgres)", () => {
       const hostile = ["=HYPERLINK(\"http://example.com\",\"x\")", "+SUM(1+1)", "-2+3+cmd|' /C calc'!A0", "@SUM(1+1)"];
       for (const [i, name] of hostile.entries()) {
         // Two of the payloads are one name to the duplicates rule: added anyway (5b-iv-b).
-        await typeIn(gym, owner, { fullName: name, email: addr(`hostile${String(i)}`), status: "Active", acknowledgePossibleDuplicates: true });
+        const res = await addAnyway((body) => post(`${listUrl(gym)}/entries`, body, owner.cookies), { fullName: name, email: addr(`hostile${String(i)}`), status: "Active" });
+        expect(res.statusCode, res.body).toBe(201);
       }
       await typeIn(gym, owner, { fullName: "Quinn Phone", phone: "+44 7700 900123", status: "Active" });
       const rae = await typeIn(gym, owner, { fullName: "Rae Past", email: addr("rae"), status: "Cancelled" });

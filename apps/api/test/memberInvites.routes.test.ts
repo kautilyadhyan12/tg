@@ -1024,10 +1024,11 @@ d("press Invite (real Postgres)", () => {
       const typed = { fullName: "Lou Park", email: addr("lou-park-2"), invite: true };
       const warned = await post(entriesUrl(gym), typed, owner.cookies);
       expect(warned.statusCode, warned.body).toBe(409);
-      expect(memberListMayBeOnListSchema.parse(JSON.parse(warned.body)).people.map((m) => m.fullName)).toEqual(["Lou Park"]);
+      const shown = memberListMayBeOnListSchema.parse(JSON.parse(warned.body)).people;
+      expect(shown.map((m) => m.fullName)).toEqual(["Lou Park"]);
       expect([await count("gym_member_list_entries"), await count("gym_invites"), await count("gym_invite_sends")]).toEqual([1, 0, 0]);
 
-      const anyway = await post(entriesUrl(gym), { ...typed, acknowledgePossibleDuplicates: true }, owner.cookies);
+      const anyway = await post(entriesUrl(gym), { ...typed, acknowledgedDuplicates: shown.map((m) => m.entryId) }, owner.cookies);
       expect(anyway.statusCode, anyway.body).toBe(201);
       expect(memberListEntryWrittenSchema.parse(JSON.parse(anyway.body)).invite?.outcome).toBe("queued");
       expect([await count("gym_member_list_entries"), await count("gym_invites"), await count("gym_invite_sends")]).toEqual([2, 1, 1]);

@@ -13,7 +13,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Cost at full size** (mains, 2,592 MHz): answering nobody median 1.2–1.6 ms at 200, 10,000 and 20,000 records (one 18 ms and one 55 ms run); the query 0.28 ms, three index scans.
 - **Tests:** api 150/150 files (83 files 1,732 tests in one run, 67 in a run the memory guard stopped; the first full run's 8 reds were setups typing a second copy on purpose, now Add anyway); shared 274/274; web 3,309/3,309 (`poseAssets.contract` local Node 24); tsc and eslint 0; `vite build` green. Seen in headless Edge, dark and light, 1200 and 390 (`.cost/look-5b-iv-b.mjs`).
 - **Kd's click-through: *"all test passed"*** after one fix it found: the box showed at the top while Add member sits at the foot of the form, unseen. Now a refusal or the warning scrolls into view and takes the focus (red test first; in Edge the box lands 16 px from the top at 1200 and 390).
-- **Open:** round one, then the feature's two extra passes (security, data integrity) over 5b-iv-a and 5b-iv-b before anybody uses Possible duplicates.
+- **Round one: no Critical or High; 3 Low and 2 weak tests, all fixed.** Add anyway now names the records shown (`acknowledgedDuplicates`); one alike since warns again, saying so. "Back to adding" goes once staff save on the record opened. The lock's comment says the second of two staff is told. Five holders of a name or member number now tested. Each fix's test RED without it, restored identical.
+- **Open:** the re-check, then the feature's two extra passes (security, data integrity) over 5b-iv-a and 5b-iv-b before anybody uses Possible duplicates.
 
 ## 2026-09-30 · 5b-iv-a (Folder A): possible duplicates, a Review page of pairs (branch `members-possible-duplicates`)
 
