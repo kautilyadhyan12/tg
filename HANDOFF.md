@@ -16,6 +16,7 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Round one: 2 High, 1 Low, 1 weak test, all fixed.** H1 an owner's gyms now share one Paddle account (Paddle keeps one per email), so a branch's billing staff are refused Paddle's page when it also pays for a gym they don't manage: kept, as the owner pays (standard), and the refusal now says "Ask {owner}, the owner, to open it." when the owner can; the fake Paddle reuses a customer by email to prove it. H2 an owner's stored email the console can't read back (a Google or migrated account) broke Subscribe: the server sends it only when `payerEmailSchema` passes, Paddle and Razorpay alike. L1 a comment's count. The country test now reads Paddle's own saved reply (`test/fixtures/paddle-countries.json`, 252 countries). Each new test red on the old code first; the list with the US taken off, red.
 - **Kd's click-through: *"passed"*** (Dublin Barbell straight to the card, $97.17 with Irish VAT, paid; Austin Barbell Club the email filled in, the country guessed, the ZIP to type).
 - **Open:** the re-check; merge on Kd's word, then tick 1e.
+
 ## 2026-09-30 · 5b-iv-b (Folder A): Add member warns "may already be on your list" (branch `members-add-warning`)
 
 - **Why this job:** next in Folder A, the last of Possible duplicates (RULINGS 2026-09-30). **Risky** (other people's records shown to staff), Opus xhigh; Kd: *"go"*. No migration, no new package, no new cost.
