@@ -326,7 +326,9 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
   const save = (body, said, saved) =>
     run(async () => {
       if (Object.keys(body).length === 0) return;
-      const res = await orgService.updateLead(gymId, lead.id, body);
+      // The status this panel shows goes with every save: if somebody has moved the lead on
+      // since (marked it Joined, say), the server refuses the save and says to look again.
+      const res = await orgService.updateLead(gymId, lead.id, { ...body, fromStatus: lead.status });
       if (!take(res.data.lead, saved)) return;
       onChanged();
       if (said !== null) setDone(said);

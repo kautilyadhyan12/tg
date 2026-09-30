@@ -452,22 +452,28 @@ d("a gym's own page and its enquiry form (real Postgres)", () => {
   );
 
   it(
-    "the form takes 60 an hour from one address, for any number of people there, and the 61st is refused",
+    "from one address, a page takes 10 messages an hour, and after 60 tries the address is refused before the robot check",
     async () => {
       const owner = await makeUser("limit-owner");
       const gym = await makeOrg(owner.cookies, "Busy Gym");
       await switchOn(gym, owner.cookies);
       const address = "10.64.0.9";
-      for (let i = 0; i < 60; i += 1) {
+      for (let i = 0; i < 10; i += 1) {
         const res = await send("POST", formUrl(gym.org.slug), enquiry({ fullName: `Person ${String(i)}`, email: `p${String(i)}@example.com` }), {}, address);
         expect(res.statusCode, `message ${String(i + 1)}`).toBe(202);
       }
-      const over = await send("POST", formUrl(gym.org.slug), enquiry({ email: "late@example.com" }), {}, address);
-      expect(over.statusCode).toBe(429);
+      // The 11th real one: that address's share of the page is spent.
+      expect((await send("POST", formUrl(gym.org.slug), enquiry({ email: "eleventh@example.com" }), {}, address)).statusCode).toBe(429);
+      // Robots from the same address spend the address's tries, never the page's.
+      robotAnswers.set("limit-robot-token", "failed");
+      for (let i = 11; i < 60; i += 1) {
+        const res = await send("POST", formUrl(gym.org.slug), enquiry({ email: `r${String(i)}@example.com`, robotToken: "limit-robot-token" }), {}, address);
+        expect(res.statusCode, `try ${String(i + 1)}`).toBe(400);
+      }
       // Another address still gets through.
       expect((await post(formUrl(gym.org.slug), enquiry({ email: "elsewhere@example.com" }))).statusCode).toBe(202);
-      expect(await storedLeads(gym.org.id)).toHaveLength(61);
-      // The refused 61st never reached the robot check.
+      expect(await storedLeads(gym.org.id)).toHaveLength(11);
+      // The 61st try never reaches the robot check.
       const calls = robotCalls.length;
       robotAnswers.set("after-limit-token", "passed");
       expect((await send("POST", formUrl(gym.org.slug), enquiry({ email: "later@example.com", robotToken: "after-limit-token" }), {}, address)).statusCode).toBe(429);
@@ -527,7 +533,7 @@ d("a gym's own page and its enquiry form (real Postgres)", () => {
   );
 
   it(
-    "the same new person sent twice at the same instant, through two apis, is one lead with two messages, never an error",
+    "the same new person sent twice at the same instant, through two apis, is one lead with one message, never an error",
     async () => {
       const owner = await makeUser("race-owner");
       const gym = await makeOrg(owner.cookies, "Race Gym");
@@ -548,7 +554,8 @@ d("a gym's own page and its enquiry form (real Postgres)", () => {
         expect([a.statusCode, b.statusCode], `round ${String(round + 1)}`).toEqual([202, 202]);
       }
       expect(await storedLeads(gym.org.id)).toHaveLength(10);
-      expect(await storedEnquiries(gym.org.id)).toHaveLength(20);
+      // The same message twice at once is the same message (the integrity pass, 2026-09-30).
+      expect(await storedEnquiries(gym.org.id)).toHaveLength(10);
     },
     TIMEOUT_MS,
   );
@@ -662,6 +669,80 @@ d("a gym's own page and its enquiry form (real Postgres)", () => {
       await sql`UPDATE subscriptions SET status = 'expired' WHERE owner_type = 'gym' AND owner_id = ${gym.org.id}`;
       expect((await get(pageUrl(gym.org.id), owner.cookies)).statusCode).toBe(200);
       expect((await put(pageUrl(gym.org.id), PAGE_ON, owner.cookies)).statusCode).toBe(409);
+    },
+    TIMEOUT_MS,
+  );
+
+  // ── The two passes over 20c (reviews 2026-09-30) ──
+
+  it(
+    "WORST THING: the form can never lock staff out: it stops taking new people at 1,000 untouched page leads, and staff still add a walk-in",
+    async () => {
+      const owner = await makeUser("flood-owner");
+      const org = await makeOrg(owner.cookies, "Flood Page Gym");
+      await switchOn(org, owner.cookies);
+      // 999 people the page made, still New, as a flood would leave them.
+      await sql`
+        INSERT INTO gym_leads (gym_id, full_name, email, source, status, from_page)
+        SELECT ${org.org.id}, 'Flood ' || n, 'flood' || n || '@example.com', 'other', 'new', true
+        FROM generate_series(1, 999) AS n`;
+      expect((await post(formUrl(org.org.slug), enquiry({ fullName: "Flood Last", email: "flood.last@example.com" }))).statusCode).toBe(202);
+      const full = await post(formUrl(org.org.slug), enquiry({ fullName: "Real Visitor", email: "real.visitor@example.com" }));
+      expect([full.statusCode, (JSON.parse(full.body) as { error: string }).error]).toEqual([409, "enquiries_full"]);
+      const walkIn = await post(`/v1/orgs/${org.org.id}/leads`, { fullName: "Walk In", email: "walk.in@example.com", source: "walk_in" }, owner.cookies);
+      expect(walkIn.statusCode).toBe(201);
+      // Staff dealing with them makes room: a page lead moved on from New no longer counts.
+      await sql`UPDATE gym_leads SET status = 'lost' WHERE gym_id = ${org.org.id} AND full_name = 'Flood 1'`;
+      expect((await post(formUrl(org.org.slug), enquiry({ fullName: "Real Visitor", email: "real.visitor@example.com" }))).statusCode).toBe(202);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "one address spends at most 10 of a page's messages an hour, and many people behind one address reach many gyms",
+    async () => {
+      const owner = await makeUser("share-owner");
+      const a = await makeOrg(owner.cookies, "Share Page Gym A");
+      const b = await makeOrg(owner.cookies, "Share Page Gym B");
+      await switchOn(a, owner.cookies);
+      await switchOn(b, owner.cookies);
+      const shared = "10.91.0.7";
+      const answers: number[] = [];
+      for (let i = 0; i < 11; i++) {
+        answers.push((await send("POST", formUrl(a.org.slug), enquiry({ fullName: `Share ${String(i)}`, email: `share${String(i)}@example.com` }), {}, shared)).statusCode);
+      }
+      expect(answers).toEqual([...Array<number>(10).fill(202), 429]);
+      // Another address still reaches that page.
+      expect((await send("POST", formUrl(a.org.slug), enquiry({ fullName: "Other Door", email: "other.door@example.com" }), {}, "10.91.0.8")).statusCode).toBe(202);
+      // A carrier's one address, many phones, many gyms: never one limit for the whole app.
+      const carrier = "10.92.0.1";
+      const gyms = [a, b];
+      for (let g = 0; g < 5; g++) {
+        const more = await makeOrg(owner.cookies, `Share Page Gym ${String(g + 3)}`);
+        await switchOn(more, owner.cookies);
+        gyms.push(more);
+      }
+      const spread: number[] = [];
+      for (const gym of gyms) {
+        for (let i = 0; i < 10; i++) {
+          spread.push((await send("POST", formUrl(gym.org.slug), enquiry({ fullName: `Phone ${String(i)}`, email: `phone${String(i)}.${gym.org.slug}@example.com` }), {}, carrier)).statusCode);
+        }
+      }
+      expect(spread).toEqual(Array<number>(70).fill(202));
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "the same message sent twice in a moment is kept once",
+    async () => {
+      const owner = await makeUser("twice-owner");
+      const org = await makeOrg(owner.cookies, "Twice Page Gym");
+      await switchOn(org, owner.cookies);
+      const body = enquiry({ fullName: "Tap Twice", email: "tap.twice@example.com", message: "Do you have a trial week?" });
+      expect((await post(formUrl(org.org.slug), body)).statusCode).toBe(202);
+      expect((await post(formUrl(org.org.slug), body)).statusCode).toBe(202);
+      expect((await storedEnquiries(org.org.id)).map((e) => e.message)).toEqual(["Do you have a trial week?"]);
     },
     TIMEOUT_MS,
   );

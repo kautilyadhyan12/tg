@@ -104,10 +104,22 @@ describe('the worst thing: the wrong person', () => {
     await screen.findByRole('heading', { name: 'Tom Reid' });
     fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Contacted' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(orgService.updateLead).toHaveBeenCalledWith(GYM, TOM, { status: 'contacted' }));
+    await waitFor(() => expect(orgService.updateLead).toHaveBeenCalledWith(GYM, TOM, { status: 'contacted', fromStatus: 'new' }));
     await waitFor(() =>
       expect(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Contacted' }).getAttribute('aria-pressed')).toBe('true'),
     );
+  });
+
+  it('a save refused because somebody moved the lead on meanwhile says so, in plain words', async () => {
+    orgService.getLead.mockResolvedValue({ data: { lead: tom } });
+    orgService.updateLead.mockRejectedValue({
+      response: { status: 409, data: { error: 'lead_changed', message: 'Somebody changed this lead while you had it open. Look at it again, then make your change.' } },
+    });
+    render(sheet(TOM));
+    await screen.findByRole('heading', { name: 'Tom Reid' });
+    fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'Contacted' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Somebody changed this lead while you had it open. Look at it again, then make your change.')).toBeTruthy();
   });
 
   it('Joined asks which record is this person, and "This is them" sends the record it sits beside', async () => {
@@ -208,7 +220,7 @@ describe('adding and keeping a lead', () => {
     await new Promise((r) => setTimeout(r, 20));
     expect(orgService.updateLead).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(orgService.updateLead).toHaveBeenCalledWith(GYM, TOM, { mayEmail: true }));
+    await waitFor(() => expect(orgService.updateLead).toHaveBeenCalledWith(GYM, TOM, { mayEmail: true, fromStatus: 'new' }));
     await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Happy to hear from us by email' }).getAttribute('aria-checked')).toBe('true'));
   });
 
@@ -307,7 +319,7 @@ describe('the details open beside the status (R3)', () => {
     await new Promise((r) => setTimeout(r, 20));
     expect(orgService.updateLead).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(orgService.updateLead).toHaveBeenCalledWith(GYM, TOM, { phone: '07700 900456', status: 'contacted' }));
+    await waitFor(() => expect(orgService.updateLead).toHaveBeenCalledWith(GYM, TOM, { phone: '07700 900456', status: 'contacted', fromStatus: 'new' }));
     await screen.findByText('Saved.');
     expect(status('Contacted').getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByLabelText('Notes').value).toBe('Call on Friday');
@@ -327,7 +339,7 @@ describe('the details open beside the status (R3)', () => {
     expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
     fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '07700 900456' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(orgService.updateLead).toHaveBeenLastCalledWith(GYM, TOM, { phone: '07700 900456' }));
+    await waitFor(() => expect(orgService.updateLead).toHaveBeenLastCalledWith(GYM, TOM, { phone: '07700 900456', fromStatus: 'new' }));
     await screen.findByText('Saved.');
     expect(screen.getByLabelText('Notes').value).toBe('Call on Friday');
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Tommy Reid' } });
@@ -346,7 +358,7 @@ describe('the details open beside the status (R3)', () => {
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'tom.reid@example.com' } });
     expect(tick.getAttribute('aria-checked')).toBe('false');
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(orgService.updateLead).toHaveBeenCalledWith(GYM, TOM, { email: 'tom.reid@example.com', mayEmail: false }));
+    await waitFor(() => expect(orgService.updateLead).toHaveBeenCalledWith(GYM, TOM, { email: 'tom.reid@example.com', mayEmail: false, fromStatus: 'new' }));
   });
 });
 

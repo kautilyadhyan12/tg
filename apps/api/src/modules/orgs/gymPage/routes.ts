@@ -59,6 +59,8 @@ const slugOf = (req: FastifyRequest): string | null => {
 };
 
 const ENQUIRY_PAGE_MAX = 120;
+/** Of a page's 120 an hour, what one address may spend. */
+const ENQUIRY_PAGE_ADDRESS_SHARE = 10;
 const ENQUIRY_PAGE_WINDOW_S = 60 * 60;
 
 const notFound = (req: FastifyRequest, reply: FastifyReply): FastifyReply =>
@@ -128,20 +130,25 @@ export function registerGymPageRoutes(app: FastifyInstance, deps: GymPageRouteDe
     identifier: () => null,
     redis: deps.redis,
   });
-  /** The form: 60 sends an hour from one address, whatever they carry. */
+  /** The form: 60 sends an hour from one address to one page, and 600 from one address to
+   *  every page together. Per page, never one allowance for the whole app: a mobile carrier
+   *  puts thousands of phones behind one address (the security pass over 20c, 2026-09-30). */
   const enquiryAddressLimit = createDualRateLimit({
     name: "gym_enquiry",
     max: 60,
-    ipMax: 60,
+    ipMax: 600,
     windowMs: 60 * 60 * 1000,
-    identifier: () => null,
+    identifier: (req) => `${slugOf(req) ?? ""}:${req.ip}`,
     redis: deps.redis,
   });
-  /** …and 120 messages an hour to one page, counted only once the robot check passed.
-   *  Redis down: let it through with a log, as the address limit does. */
+  /** …and 120 messages an hour to one page, of which one address may spend 10, counted only
+   *  once the robot check passed: nobody can keep a gym's page "busy" alone. Redis down: let
+   *  it through with a log, as the address limit does. */
   const pageRoom = (req: FastifyRequest, slug: string) => async (): Promise<boolean> => {
+    const share = await deps.redis.incrWithTtl(`rl:gym_enquiry_page_addr:${slug}:${req.ip}`, ENQUIRY_PAGE_WINDOW_S);
+    if (share !== null && share > ENQUIRY_PAGE_ADDRESS_SHARE) return false;
     const count = await deps.redis.incrWithTtl(`rl:gym_enquiry_page:${slug}`, ENQUIRY_PAGE_WINDOW_S);
-    if (count === null) {
+    if (count === null || share === null) {
       req.log.warn({ event: "ratelimit.open_redis_down", limiter: "gym_enquiry_page" }, "rate limiter failing open (Redis unavailable)");
       return true;
     }

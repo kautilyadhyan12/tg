@@ -54,6 +54,9 @@ export const LEAD_EMAIL_NOT_SENT = [
   "shared_address",
   "no_mail_domain",
   "could_not_send",
+  /** The gym's emails to people who asked on its page are paused: some bounced or were
+   *  marked as spam (RULINGS 2026-09-30). The gym's own emails go on. */
+  "page_emails_stopped",
 ] as const;
 export type LeadEmailNotSent = (typeof LEAD_EMAIL_NOT_SENT)[number];
 
@@ -68,6 +71,7 @@ export const LEAD_EMAIL_NOT_SENT_WORDS: Record<LeadEmailNotSent, string> = {
   shared_address: "it's a shared address, like info@, which we don't email for you",
   no_mail_domain: "this address can't receive email",
   could_not_send: "our email service didn't take it",
+  page_emails_stopped: "emails to people who asked on your page are paused, because some bounced or were marked as spam",
 };
 
 /** The three follow-up emails' words, the same whoever sends them: the lead's panel
@@ -300,9 +304,13 @@ export const updateLeadRequestSchema = z
     notes: z.string().max(LEAD_MAX_NOTES_CHARS).optional(),
     status: leadSettableStatusSchema.optional(),
     mayEmail: z.boolean().optional(),
+    /** The status the panel was showing when it was saved: if somebody has moved the lead on
+     *  since (marked it Joined, say), the save is refused and the panel looks again, so an
+     *  old panel never undoes what another person did. Not a change on its own. */
+    fromStatus: leadStatusSchema.optional(),
   })
   .strict()
-  .refine((body) => Object.keys(body).length > 0, { message: "nothing to change" });
+  .refine((body) => Object.keys(body).some((key) => key !== "fromStatus"), { message: "nothing to change" });
 export type UpdateLeadRequest = z.infer<typeof updateLeadRequestSchema>;
 
 /** Joined. Empty: the server decides. `entryId`: staff chose that record as this
@@ -381,6 +389,7 @@ export const LEAD_WORDS = {
   join_stale: "Your list changed while you were choosing. Choose again.",
   follow_up_not_due: "This lead isn't waiting for that follow-up email. It may have been marked already, or the lead changed.",
   follow_up_sent_for_you: "This email is being sent for you, so there's nothing to mark.",
+  lead_changed: "Somebody changed this lead while you had it open. Look at it again, then make your change.",
   join_exact:
     "Your list already has a record with exactly this name and contact. If it is this person, choose it. If not, change the lead's name, email or phone first.",
 } as const;

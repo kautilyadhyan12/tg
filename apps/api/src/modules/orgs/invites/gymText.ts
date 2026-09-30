@@ -6,8 +6,9 @@
 
 /** Anything a mail program shows as a link: a scheme, or a `www.` start. */
 const LINK = /\b(?:[a-z][a-z0-9+.-]*:\/\/|www\.)[^\s,;]*/gi;
-/** A dot between a word and two or more letters, as in a domain name. */
-const DOMAIN_DOT = /([\p{L}\p{N}-])\.(?=\p{L}{2,})/gu;
+/** A dot between a word and two or more letters, as in a domain name — the full stop or a
+ *  look-alike a browser reads as one (。．｡), which a stranger could type instead. */
+const DOMAIN_DOT = /([\p{L}\p{N}-])[.。．｡](?=\p{L}{2,})/gu;
 const CONTROL = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]/g;
 
 /** One line of a gym's words with every link, address and control character out. */

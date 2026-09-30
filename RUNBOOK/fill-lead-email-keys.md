@@ -13,7 +13,8 @@ leads written before 0052 have none until this is run.
 
 ## Steps
 
-1. Run after the migrations, with the SAME `INVITE_HMAC_SECRET` the api runs with (escrow
+1. Run after the migrations **and once the new api is serving** (an older api changes
+   addresses without their key), with the SAME `INVITE_HMAC_SECRET` the api runs with (escrow
    name `INVITE_HMAC_SECRET`). On any database that is not local the tool refuses to run
    without it: the development key would write keys the live api never matches, and a
    second run fills only empty keys, so it could not repair them.

@@ -56,6 +56,10 @@ type Limit = () => Promise<boolean>;
 
 const notFound = (): OrgsError => new OrgsError(404, "page_not_found", ENQUIRY_WORDS.not_found);
 
+/** The form stops taking new people once the gym holds this many leads its page made that
+ *  are still New: a tenth of the gym's 10,000, so staff always have room. */
+export const PAGE_NEW_LEADS_MAX = 1000;
+
 /** The facilities the app knows, in the page's order: a word dropped from the list
  *  later is never shown. */
 const known = (stored: readonly string[]): GymFacility[] => GYM_FACILITIES.filter((facility) => stored.includes(facility));
@@ -354,8 +358,13 @@ export async function sendEnquiry(
 
   await deps.sql.begin(async (tx) => {
     await lockGym(tx, page.gymId);
-    // Before anybody is looked up: a full gym answers everybody the same.
-    if ((await leadsRepo.countLeads(tx, page.gymId)) >= LEADS_MAX_PER_GYM) {
+    // Before anybody is looked up: a full gym answers everybody the same. The form has a
+    // ceiling of its own, far under the gym's, so a flood of it can never leave staff
+    // unable to add a walk-in (the security pass over 20c, 2026-09-30).
+    if (
+      (await leadsRepo.countLeads(tx, page.gymId)) >= LEADS_MAX_PER_GYM ||
+      (await leadsRepo.countPageNewLeads(tx, page.gymId)) >= PAGE_NEW_LEADS_MAX
+    ) {
       throw new OrgsError(409, "enquiries_full", ENQUIRY_WORDS.full);
     }
     const lead = await leadsRepo.lockLeadForContact(tx, page.gymId, contact);
@@ -377,6 +386,7 @@ export async function sendEnquiry(
         null,
         deps.addressKey,
         at,
+        true,
       );
       leadId = inserted.id;
     }

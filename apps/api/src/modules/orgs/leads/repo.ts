@@ -17,6 +17,8 @@ export interface LeadRow {
   status: string;
   notes: string;
   emailOkAt: Date | null;
+  /** "Happy to hear from us" was ticked by the person on the gym's page form, not by staff. */
+  emailOkByPage: boolean;
   entryId: string | null;
   /** The linked record is on the list now (not taken off, not deleted). */
   onList: boolean;
@@ -39,6 +41,7 @@ interface DbLead {
   status: string;
   notes: string;
   email_ok_at: Date | null;
+  email_ok_by_page: boolean;
   entry_id: string | null;
   on_list: boolean;
   created_at: Date;
@@ -58,6 +61,7 @@ const toRow = (row: DbLead): LeadRow => ({
   status: row.status,
   notes: row.notes,
   emailOkAt: row.email_ok_at,
+  emailOkByPage: row.email_ok_by_page,
   entryId: row.entry_id,
   onList: row.on_list,
   createdAt: row.created_at,
@@ -97,6 +101,14 @@ export async function countLeads(tx: TransactionSql, gymId: string): Promise<num
   return rows[0]?.n ?? 0;
 }
 
+/** The leads the gym's page made that staff have not moved on from New
+ *  (`gym_leads_page_new_idx`): the form's own ceiling counts these. */
+export async function countPageNewLeads(tx: TransactionSql, gymId: string): Promise<number> {
+  const rows = await tx<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM gym_leads WHERE gym_id = ${gymId} AND from_page AND status = 'new'`;
+  return rows[0]?.n ?? 0;
+}
+
 /** Another lead of this gym with this email or phone. */
 export async function leadHolding(
   sql: SqlOrTx,
@@ -122,14 +134,17 @@ export async function insertLead(
   addedBy: string | null,
   addressKey: Buffer | null,
   enquiredAt: Date | null = null,
+  /** Made by the gym's page form: its tick, if any, is the person's own on the form. */
+  fromPage = false,
 ): Promise<LeadRow> {
   const rows = await tx<DbLead[]>`
     INSERT INTO gym_leads (gym_id, full_name, email, email_hmac, phone_e164, source, notes, email_ok_at, added_by,
-                           follow_ups_sent, follow_up_last_at, follow_up_due_on, enquired_at)
+                           follow_ups_sent, follow_up_last_at, follow_up_due_on, enquired_at, from_page, email_ok_by_page)
     VALUES (${gymId}, ${values.fullName}, ${values.email}, ${leadEmailHmac(addressKey, values.email)}, ${values.phone}, ${values.source},
             ${values.notes}, ${values.emailOkAt}, ${addedBy},
-            ${values.followUpsSent}, ${values.followUpLastAt}, ${values.followUpDueOn}::date, ${enquiredAt})
-    RETURNING id, full_name, email, phone_e164, source, status, notes, email_ok_at, entry_id, false AS on_list,
+            ${values.followUpsSent}, ${values.followUpLastAt}, ${values.followUpDueOn}::date, ${enquiredAt},
+            ${fromPage}, ${fromPage && values.emailOkAt !== null})
+    RETURNING id, full_name, email, phone_e164, source, status, notes, email_ok_at, email_ok_by_page, entry_id, false AS on_list,
               created_at, status_changed_at, follow_ups_sent, follow_up_last_at, follow_up_due_on::text AS follow_up_due_on,
               enquired_at`;
   const row = rows[0];
@@ -139,7 +154,7 @@ export async function insertLead(
 
 export async function leadFor(sql: SqlOrTx, gymId: string, leadId: string): Promise<LeadRow | null> {
   const rows = await sql<DbLead[]>`
-    SELECT l.id, l.full_name, l.email, l.phone_e164, l.source, l.status, l.notes, l.email_ok_at, l.entry_id,
+    SELECT l.id, l.full_name, l.email, l.phone_e164, l.source, l.status, l.notes, l.email_ok_at, l.email_ok_by_page, l.entry_id,
            (e.id IS NOT NULL AND e.former_at IS NULL) AS on_list, l.created_at, l.status_changed_at,
            l.follow_ups_sent, l.follow_up_last_at, l.follow_up_due_on::text AS follow_up_due_on, l.enquired_at
     FROM gym_leads l
@@ -152,7 +167,7 @@ export async function leadFor(sql: SqlOrTx, gymId: string, leadId: string): Prom
 /** The lead, locked for the rest of the caller's transaction. */
 export async function lockLead(tx: TransactionSql, gymId: string, leadId: string): Promise<LeadRow | null> {
   const rows = await tx<DbLead[]>`
-    SELECT l.id, l.full_name, l.email, l.phone_e164, l.source, l.status, l.notes, l.email_ok_at, l.entry_id,
+    SELECT l.id, l.full_name, l.email, l.phone_e164, l.source, l.status, l.notes, l.email_ok_at, l.email_ok_by_page, l.entry_id,
            (e.id IS NOT NULL AND e.former_at IS NULL) AS on_list, l.created_at, l.status_changed_at,
            l.follow_ups_sent, l.follow_up_last_at, l.follow_up_due_on::text AS follow_up_due_on, l.enquired_at
     FROM gym_leads l
@@ -182,6 +197,8 @@ export async function writeLead(
           source = ${values.source},
           notes = ${values.notes},
           email_ok_at = ${values.emailOkAt},
+          -- Staff ticking or unticking makes the tick theirs; a tick left alone keeps whose it was.
+          email_ok_by_page = CASE WHEN email_ok_at IS NOT DISTINCT FROM ${values.emailOkAt}::timestamptz THEN email_ok_by_page ELSE false END,
           status_changed_at = CASE WHEN status = ${values.status} THEN status_changed_at ELSE ${at} END,
           status = ${values.status},
           entry_id = ${values.entryId},
@@ -192,7 +209,7 @@ export async function writeLead(
       WHERE gym_id = ${gymId} AND id = ${leadId}
       RETURNING *
     )
-    SELECT w.id, w.full_name, w.email, w.phone_e164, w.source, w.status, w.notes, w.email_ok_at, w.entry_id,
+    SELECT w.id, w.full_name, w.email, w.phone_e164, w.source, w.status, w.notes, w.email_ok_at, w.email_ok_by_page, w.entry_id,
            (e.id IS NOT NULL AND e.former_at IS NULL) AS on_list, w.created_at, w.status_changed_at,
            w.follow_ups_sent, w.follow_up_last_at, w.follow_up_due_on::text AS follow_up_due_on, w.enquired_at
     FROM written w
@@ -237,7 +254,7 @@ export async function leadsPage(
     dueBy: string | null;
     /** Only New leads with an email problem (`emailProblemCondition`). */
     problemOnly: boolean;
-    app: { on: boolean; roomLeft: boolean };
+    app: { on: boolean; roomLeft: boolean; pageStopped: boolean };
     cursor: LeadCursor | null;
     limit: number;
   },
@@ -246,7 +263,7 @@ export async function leadsPage(
   const due = dueBy === null ? sql`true` : staffDueCondition(sql, dueBy, input.app);
   const problem = input.problemOnly ? emailProblemCondition(sql, gymId) : sql`true`;
   const rows = await sql<(DbLead & { cursor_at: string })[]>`
-    SELECT l.id, l.full_name, l.email, l.phone_e164, l.source, l.status, l.notes, l.email_ok_at, l.entry_id,
+    SELECT l.id, l.full_name, l.email, l.phone_e164, l.source, l.status, l.notes, l.email_ok_at, l.email_ok_by_page, l.entry_id,
            (e.id IS NOT NULL AND e.former_at IS NULL) AS on_list, l.created_at, l.status_changed_at,
            l.follow_ups_sent, l.follow_up_last_at, l.follow_up_due_on::text AS follow_up_due_on, l.enquired_at,
            to_char(l.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_at
@@ -294,6 +311,33 @@ export const emailProblemCondition = (sql: SqlOrTx, gymId: string) => sql`
         AND l.email_hmac IN (SELECT x.email_hmac FROM email_suppressions x WHERE x.gym_id = ${gymId} AND x.reason = 'complained'))))`;
 
 /** The address as `email_suppressions` keeps it, or null with no address or no key. */
+/** One batch of `tools/lead-email-hmacs.ts`: up to 1,000 leads with an address and no key
+ *  are given their address's key — only while the address is still the one read, so an
+ *  address changed in between (by an api from before 0052, say) keeps no key for the old
+ *  one, and is found again by the next batch (the integrity pass over 20c, 2026-09-30).
+ *  `afterRead` runs between the read and the write, for a test. Returns how many were read
+ *  and how many given their key. */
+export async function fillLeadEmailHmacs(
+  sql: Sql,
+  key: Buffer,
+  afterRead: (() => Promise<void>) | null = null,
+): Promise<{ read: number; filled: number }> {
+  const rows = await sql<{ id: string; email: string }[]>`
+    SELECT id, email::text AS email FROM gym_leads
+    WHERE email IS NOT NULL AND email_hmac IS NULL
+    ORDER BY id
+    LIMIT 1000`;
+  if (rows.length === 0) return { read: 0, filled: 0 };
+  if (afterRead !== null) await afterRead();
+  const filled = await sql<{ id: string }[]>`
+    UPDATE gym_leads l SET email_hmac = v.hmac
+    FROM unnest(${rows.map((r) => r.id)}::uuid[], ${rows.map((r) => r.email)}::text[], ${rows.map((r) => emailHmac(key, r.email))}::text[])
+      AS v(id, email, hmac)
+    WHERE l.id = v.id AND l.email_hmac IS NULL AND l.email = v.email::citext
+    RETURNING l.id`;
+  return { read: rows.length, filled: filled.length };
+}
+
 export const leadEmailHmac = (key: Buffer | null, email: string | null): string | null =>
   key === null || email === null ? null : emailHmac(key, email);
 
@@ -303,7 +347,7 @@ export async function leadCounts(
   sql: SqlOrTx,
   gymId: string,
   today: string,
-  app: { on: boolean; roomLeft: boolean },
+  app: { on: boolean; roomLeft: boolean; pageStopped: boolean },
 ): Promise<LeadCounts> {
   const rows = await sql<{ status: string; n: number; due: number; problems: number }[]>`
     SELECT l.status, count(*)::int AS n, (count(*) FILTER (WHERE ${staffDueCondition(sql, today, app)}))::int AS due,
@@ -412,7 +456,7 @@ export async function lockLeadForContact(
   contact: { email: string | null; phone: string | null },
 ): Promise<LeadRow | null> {
   const rows = await tx<DbLead[]>`
-    SELECT l.id, l.full_name, l.email, l.phone_e164, l.source, l.status, l.notes, l.email_ok_at, l.entry_id,
+    SELECT l.id, l.full_name, l.email, l.phone_e164, l.source, l.status, l.notes, l.email_ok_at, l.email_ok_by_page, l.entry_id,
            (e.id IS NOT NULL AND e.former_at IS NULL) AS on_list, l.created_at, l.status_changed_at,
            l.follow_ups_sent, l.follow_up_last_at, l.follow_up_due_on::text AS follow_up_due_on, l.enquired_at
     FROM gym_leads l
@@ -438,6 +482,9 @@ export interface EnquiryValues {
 
 /** Keeps a message on its lead, stamps the lead, and lets go of all but the newest
  *  `kept` messages of that lead. */
+/** A message the same as one kept this recently is the same message sent twice. */
+const ENQUIRY_REPEAT_MS = 10 * 60 * 1000;
+
 export async function addEnquiry(
   tx: TransactionSql,
   gymId: string,
@@ -446,6 +493,16 @@ export async function addEnquiry(
   at: Date,
   kept: number,
 ): Promise<void> {
+  // The same message again within ten minutes (a double tap, a phone's retry) is kept once.
+  const again = await tx<{ id: string }[]>`
+    SELECT id FROM gym_lead_enquiries
+    WHERE gym_id = ${gymId} AND lead_id = ${leadId}
+      AND created_at > ${new Date(at.getTime() - ENQUIRY_REPEAT_MS)}
+      AND message = ${values.message} AND full_name = ${values.fullName}
+      AND email IS NOT DISTINCT FROM ${values.email}::citext AND phone_e164 IS NOT DISTINCT FROM ${values.phone}
+      AND may_email = ${values.mayEmail}
+    LIMIT 1`;
+  if (again.length > 0) return;
   await tx`
     INSERT INTO gym_lead_enquiries (gym_id, lead_id, full_name, email, phone_e164, source, message, may_email, created_at)
     VALUES (${gymId}, ${leadId}, ${values.fullName}, ${values.email}, ${values.phone}, ${values.source}, ${values.message},
