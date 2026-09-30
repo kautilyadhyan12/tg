@@ -2630,14 +2630,46 @@ export async function pairsStamp(sql: SqlOrTx, gymId: string): Promise<string> {
     SELECT concat_ws(':', ${String(DUPLICATE_SHARED_MAX)}::text,
       (SELECT count(*) FROM gym_member_list_entries WHERE gym_id = ${gymId}),
       (SELECT coalesce(sum(hashtextextended(ROW(id, full_name, name_key, phone_e164, lower(member_number), date_of_birth, former_at IS NULL)::text, 0)), 0)
-         FROM gym_member_list_entries WHERE gym_id = ${gymId}),
+         FROM gym_member_list_entries WHERE gym_id = ${gymId})
+    ) || '|' || ${await marksStamp(sql, gymId)} AS stamp`;
+  const stamp = rows[0]?.stamp;
+  if (stamp === undefined) throw new Error("the pairs' stamp returned no row");
+  return stamp;
+}
+
+/** The Different people part of `pairsStamp`, after its "|". */
+async function marksStamp(sql: SqlOrTx, gymId: string): Promise<string> {
+  const rows = await sql<{ stamp: string }[]>`
+    SELECT concat_ws(':',
       (SELECT count(*) FROM gym_member_list_not_duplicates WHERE gym_id = ${gymId}),
       (SELECT coalesce(sum(hashtextextended(ROW(first_entry_id, second_entry_id)::text, 0)), 0)
          FROM gym_member_list_not_duplicates WHERE gym_id = ${gymId})
     ) AS stamp`;
   const stamp = rows[0]?.stamp;
-  if (stamp === undefined) throw new Error("the pairs' stamp returned no row");
+  if (stamp === undefined) throw new Error("the marks' stamp returned no row");
   return stamp;
+}
+
+/** Whether two of the gym's records are a pair by `duplicatePairs`' rule, leaving Different
+ *  people aside: a value they share held by at most `DUPLICATE_SHARED_MAX` records, at least
+ *  one of the two current, no two dates of birth that differ. */
+async function arePair(sql: SqlOrTx, gymId: string, low: string, high: string): Promise<boolean> {
+  const rows = await sql<{ alike: boolean }[]>`
+    SELECT (
+      (a.former_at IS NULL OR b.former_at IS NULL)
+      AND NOT (a.date_of_birth IS NOT NULL AND b.date_of_birth IS NOT NULL AND a.date_of_birth <> b.date_of_birth)
+      AND (
+        (a.name_key <> '' AND a.name_key = b.name_key
+          AND (SELECT count(*) FROM gym_member_list_entries WHERE gym_id = ${gymId} AND name_key = a.name_key) <= ${DUPLICATE_SHARED_MAX})
+        OR (a.phone_e164 = b.phone_e164
+          AND (SELECT count(*) FROM gym_member_list_entries WHERE gym_id = ${gymId} AND phone_e164 = a.phone_e164) <= ${DUPLICATE_SHARED_MAX})
+        OR (lower(a.member_number) = lower(b.member_number)
+          AND (SELECT count(*) FROM gym_member_list_entries WHERE gym_id = ${gymId} AND lower(member_number) = lower(a.member_number)) <= ${DUPLICATE_SHARED_MAX})
+      )
+    ) AS alike
+    FROM gym_member_list_entries a, gym_member_list_entries b
+    WHERE a.gym_id = ${gymId} AND a.id = ${low}::uuid AND b.gym_id = ${gymId} AND b.id = ${high}::uuid`;
+  return rows[0]?.alike === true;
 }
 
 /** How many pairs the gym has, and how many of them are kept ready to page through. */
@@ -2720,11 +2752,12 @@ export async function freshPairs(sql: Sql, gymId: string): Promise<PairsCount> {
   });
 }
 
-/** Different people on stored pairs: that pair's row goes and the count drops by one, so the
- *  next read shows it gone without working every pair out again. The stamp moves on only
- *  when the pairs were current before the mark (`before`); pairs resting after slow work keep
- *  their old stamp and are still worked out again. Inside the caller's transaction, under
- *  the gym's lock. */
+/** Different people on stored pairs: the pair comes off them and the count drops by one when
+ *  the two were a pair, so the next read shows it gone without working every pair out again.
+ *  The stamp takes the new marks and keeps the records part from `before`, so nothing another
+ *  writer changed meanwhile is taken as worked out; pairs resting after slow work keep their
+ *  old stamp and are still worked out again. Inside the caller's transaction, under the
+ *  gym's lock, with the mark already written. */
 export async function dropMarkedPair(tx: TransactionSql, gymId: string, low: string, high: string, before: string): Promise<void> {
   const stored = await storedPairs(tx, gymId);
   if (stored === null) return;
@@ -2735,15 +2768,13 @@ export async function dropMarkedPair(tx: TransactionSql, gymId: string, low: str
     WHERE gym_id = ${gymId}
       AND ((first_entry_id = ${low}::uuid AND second_entry_id = ${high}::uuid)
         OR (first_entry_id = ${high}::uuid AND second_entry_id = ${low}::uuid))`;
-  if (gone.count === 0) {
-    // Not among the kept ones: whether it was a pair at all is not known here, so the next
-    // read works them out again (only a gym past the kept ones can get here with a pair).
-    if (ready.count > ready.kept) await tx`UPDATE gym_member_lists SET pairs_stamp = NULL WHERE gym_id = ${gymId}`;
-    return;
-  }
-  const stamp = stored.stamp === before ? await pairsStamp(tx, gymId) : stored.stamp;
+  // Past the kept ones the pair is not in the table: asked of the two records themselves.
+  const wasPair = gone.count > 0 || (ready.count > ready.kept && (await arePair(tx, gymId, low, high)));
+  const recordsPart = before.slice(0, before.indexOf("|"));
+  const stamp = stored.stamp === before ? `${recordsPart}|${await marksStamp(tx, gymId)}` : stored.stamp;
   await tx`
-    UPDATE gym_member_lists SET pairs_stamp = ${stamp}, pairs_count = ${ready.count - 1}, pairs_kept = ${ready.kept - 1}
+    UPDATE gym_member_lists
+    SET pairs_stamp = ${stamp}, pairs_count = ${ready.count - (wasPair ? 1 : 0)}, pairs_kept = ${ready.kept - gone.count}
     WHERE gym_id = ${gymId}`;
 }
 

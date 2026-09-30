@@ -13,7 +13,7 @@ import { addAnyway } from "./memberListAddAnyway.js";
 import { loadConfig } from "../src/config.js";
 import { readFileSync } from "node:fs";
 import { fillNameKeys } from "../src/modules/orgs/memberList/nameKeys.js";
-import { writeNameKeys } from "../src/modules/orgs/memberList/repo.js";
+import { dropMarkedPair, pairsStamp, writeNameKeys } from "../src/modules/orgs/memberList/repo.js";
 import { nameKey } from "../src/modules/orgs/memberList/samePerson.js";
 import { identityKey } from "../src/modules/orgs/memberList/fields.js";
 import {
@@ -734,16 +734,23 @@ d("member list: possible duplicates (real Postgres)", () => {
       const lone = await add(gym, owner, { fullName: "Zed Lone", phone: "9876512100" });
       const aaron = (await sql<{ id: string }[]>`SELECT id FROM gym_member_list_entries WHERE gym_id = ${gym} AND full_name = 'Aaron Ames'`)[0]?.id ?? "";
       expect(await signOf(gym, owner)).toBe(2010);
+      const kept = await storedRows(gym);
       const marked = await post(differentUrl(gym), { entryIds: [lone, aaron] }, owner.cookies);
       expect(marked.statusCode).toBe(200);
       expect(memberListNotDuplicatesResponseSchema.parse(JSON.parse(marked.body)).duplicates).toEqual({ count: 2010 });
       expect(await signOf(gym, owner)).toBe(2010);
+      // A real pair past the kept ones: counted off by one. Neither press works the pairs out.
+      const late = (await sql<{ id: string }[]>`SELECT id FROM gym_member_list_entries WHERE gym_id = ${gym} AND full_name = 'Cap Name 150' ORDER BY id LIMIT 2`).map((r) => r.id);
+      const lateMarked = await post(differentUrl(gym), { entryIds: late }, owner.cookies);
+      expect(memberListNotDuplicatesResponseSchema.parse(JSON.parse(lateMarked.body)).duplicates).toEqual({ count: 2009 });
+      expect(await signOf(gym, owner)).toBe(2009);
+      expect(await storedRows(gym)).toEqual(kept);
 
       // Every kept pair dealt with (as if merged or marked): the next read brings the next ones.
       await sql`DELETE FROM gym_member_list_pairs WHERE gym_id = ${gym}`;
       await sql`UPDATE gym_member_lists SET pairs_kept = 0 WHERE gym_id = ${gym}`;
       const next = memberListDuplicatesPageResponseSchema.parse(JSON.parse((await get(dupUrl(gym), owner.cookies)).body)).page;
-      expect(next).toMatchObject({ total: 2010, kept: MEMBER_LIST_DUPLICATES_KEPT });
+      expect(next).toMatchObject({ total: 2009, kept: MEMBER_LIST_DUPLICATES_KEPT });
     },
     TEST_TIMEOUT_MS,
   );
@@ -772,6 +779,31 @@ d("member list: possible duplicates (real Postgres)", () => {
       // Quick work never rests: another pair shows on the very next read.
       await add(gym, owner, { fullName: "Nia Cole", phone: "9876512203", memberNumber: "N-9" });
       expect(await signOf(gym, owner)).toBe(3);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a change another writer makes while Different people is pressed is never taken as worked out (integrity re-check, N1)",
+    async () => {
+      const owner = await makeUser("absorb-owner");
+      const gym = (await makeOrg(owner, "Absorb Gym")).org.id;
+      const a = await add(gym, owner, { fullName: "Tia Fox", email: "tia@members.example" });
+      const b = await add(gym, owner, { fullName: "Tia Fox", phone: "9876512401" });
+      const p1 = await add(gym, owner, { fullName: "Priya Shah", email: "priya.s@members.example" });
+      const p2 = await add(gym, owner, { fullName: "Shah Priya", phone: "9876512402" });
+      // Priya's two records as the name-key fill finds them: written before 0056, no key yet.
+      await sql`UPDATE gym_member_list_entries SET name_key = NULL WHERE id IN (${p1}, ${p2})`;
+      expect((await pairsOf(gym, owner)).map(said)).toEqual(["Tia Fox | Tia Fox | name"]);
+      // The press, with the fill writing the keys (it takes no lock) between its two stamps.
+      await sql.begin(async (tx) => {
+        const before = await pairsStamp(tx, gym);
+        await tx`UPDATE gym_member_list_entries SET name_key = 'priya shah' WHERE id IN (${p1}, ${p2})`;
+        const [low, high] = a < b ? [a, b] : [b, a];
+        await tx`INSERT INTO gym_member_list_not_duplicates (gym_id, first_entry_id, second_entry_id) VALUES (${gym}, ${low}, ${high})`;
+        await dropMarkedPair(tx, gym, low, high, before);
+      });
+      expect((await pairsOf(gym, owner)).map(said)).toEqual(["Priya Shah | Shah Priya | name"]);
     },
     TEST_TIMEOUT_MS,
   );
