@@ -282,6 +282,22 @@ describe('email problems on the list (20c-v-b)', () => {
     await screen.findAllByTestId('lead-row');
     expect(screen.getByTestId('leads-sending-stopped').textContent).toContain('Emails from your gym through AI Home Gym are stopped');
   });
+
+  it('paused emails to people who asked on the page, and messages the page turned away, are said on Leads', async () => {
+    api.getLeads.mockResolvedValue({ data: { ...PAGE.data, pageEmailsStopped: true, pageTurnedAway: 3 } });
+    draw();
+    await screen.findAllByTestId('lead-row');
+    expect(screen.getByTestId('leads-page-emails-stopped').textContent).toContain('people who asked on your page are paused');
+    expect(screen.getByTestId('leads-page-turned-away').textContent).toContain('turned away 3 messages in the last hour');
+  });
+
+  it('neither line shows when the page is fine', async () => {
+    api.getLeads.mockResolvedValue({ data: { ...PAGE.data, pageEmailsStopped: false, pageTurnedAway: 0 } });
+    draw();
+    await screen.findAllByTestId('lead-row');
+    expect(screen.queryByTestId('leads-page-emails-stopped')).toBeNull();
+    expect(screen.queryByTestId('leads-page-turned-away')).toBeNull();
+  });
 });
 
 describe('"Email due" (20c-ii)', () => {

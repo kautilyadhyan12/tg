@@ -275,6 +275,11 @@ export const leadsResponseSchema = z
     /** The gym's emails through the app are stopped for bounces or a complaint (§9.12):
      *  the Leads page says so, not only Settings. */
     sendingStopped: z.boolean().default(false),
+    /** The app's emails to people who asked on the gym's page are paused for bounces or spam
+     *  reports; its other emails go on (RULINGS 2026-09-30). */
+    pageEmailsStopped: z.boolean().default(false),
+    /** Messages the gym's page turned away in the last hour because it was busy. */
+    pageTurnedAway: z.number().int().nonnegative().default(0),
   })
   .strict();
 export type LeadsResponse = z.infer<typeof leadsResponseSchema>;
@@ -376,6 +381,14 @@ export type LeadJoinChoose = z.infer<typeof leadJoinChooseSchema>;
 
 /** The most candidates a choice lists. */
 export const LEAD_JOIN_MAX_CANDIDATES = 10;
+
+/** Lines the Leads list says about the gym's page (the passes over 20c, 2026-09-30). */
+export const LEAD_LIST_WORDS = {
+  pageEmailsStopped:
+    "Emails we send for you to people who asked on your page are paused, because some bounced or were marked as spam. Your other emails go on. Their follow-ups are in Email due, for you to send.",
+  pageTurnedAway: (n: number): string =>
+    `Your page turned away ${n === 1 ? "1 message" : `${n.toLocaleString("en")} messages`} in the last hour because it was getting a lot of them. They were asked to try again later.`,
+} as const;
 
 export const LEAD_WORDS = {
   lead_not_found: "That lead could not be found.",

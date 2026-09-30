@@ -452,32 +452,35 @@ d("a gym's own page and its enquiry form (real Postgres)", () => {
   );
 
   it(
-    "from one address, a page takes 10 messages an hour, and after 60 tries the address is refused before the robot check",
+    "a quiet page takes 60 an hour from one address; failed robot checks never spend it, and after 30 of them that address is refused before the check",
     async () => {
       const owner = await makeUser("limit-owner");
       const gym = await makeOrg(owner.cookies, "Busy Gym");
+      const other = await makeOrg(owner.cookies, "Busy Gym Two");
       await switchOn(gym, owner.cookies);
+      await switchOn(other, owner.cookies);
       const address = "10.64.0.9";
-      for (let i = 0; i < 10; i += 1) {
-        const res = await send("POST", formUrl(gym.org.slug), enquiry({ fullName: `Person ${String(i)}`, email: `p${String(i)}@example.com` }), {}, address);
+      // Robots at that address first: 30 failed checks spend nobody's allowance...
+      robotAnswers.set("limit-robot-token", "failed");
+      for (let i = 0; i < 30; i += 1) {
+        const res = await send("POST", formUrl(gym.org.slug), enquiry({ email: `r${String(i)}@example.com`, robotToken: "limit-robot-token" }), {}, address);
+        expect(res.statusCode, `robot ${String(i + 1)}`).toBe(400);
+      }
+      // ...but past them, that address is refused at that page before the check is asked.
+      const calls = robotCalls.length;
+      robotAnswers.set("after-robots-token", "passed");
+      expect((await send("POST", formUrl(gym.org.slug), enquiry({ email: "blocked@example.com", robotToken: "after-robots-token" }), {}, address)).statusCode).toBe(429);
+      expect(robotCalls.slice(calls)).not.toContain("after-robots-token");
+      // The same address at another gym's page is untouched, and so is anybody else at this one.
+      expect((await send("POST", formUrl(other.org.slug), enquiry({ email: "elsewhere.gym@example.com" }), {}, address)).statusCode).toBe(202);
+      const people = "10.64.0.10";
+      for (let i = 0; i < 60; i += 1) {
+        const res = await send("POST", formUrl(gym.org.slug), enquiry({ fullName: `Person ${String(i)}`, email: `p${String(i)}@example.com` }), {}, people);
         expect(res.statusCode, `message ${String(i + 1)}`).toBe(202);
       }
-      // The 11th real one: that address's share of the page is spent.
-      expect((await send("POST", formUrl(gym.org.slug), enquiry({ email: "eleventh@example.com" }), {}, address)).statusCode).toBe(429);
-      // Robots from the same address spend the address's tries, never the page's.
-      robotAnswers.set("limit-robot-token", "failed");
-      for (let i = 11; i < 60; i += 1) {
-        const res = await send("POST", formUrl(gym.org.slug), enquiry({ email: `r${String(i)}@example.com`, robotToken: "limit-robot-token" }), {}, address);
-        expect(res.statusCode, `try ${String(i + 1)}`).toBe(400);
-      }
-      // Another address still gets through.
-      expect((await post(formUrl(gym.org.slug), enquiry({ email: "elsewhere@example.com" }))).statusCode).toBe(202);
-      expect(await storedLeads(gym.org.id)).toHaveLength(11);
-      // The 61st try never reaches the robot check.
-      const calls = robotCalls.length;
-      robotAnswers.set("after-limit-token", "passed");
-      expect((await send("POST", formUrl(gym.org.slug), enquiry({ email: "later@example.com", robotToken: "after-limit-token" }), {}, address)).statusCode).toBe(429);
-      expect(robotCalls.slice(calls)).not.toContain("after-limit-token");
+      // A quiet page took all 60 from one address; the 61st is that address's hour spent.
+      expect((await send("POST", formUrl(gym.org.slug), enquiry({ email: "late@example.com" }), {}, people)).statusCode).toBe(429);
+      expect(await storedLeads(gym.org.id)).toHaveLength(60);
     },
     TIMEOUT_MS,
   );
@@ -699,13 +702,17 @@ d("a gym's own page and its enquiry form (real Postgres)", () => {
   );
 
   it(
-    "one address spends at most 10 of a page's messages an hour, and many people behind one address reach many gyms",
+    "once a page is busy, one address spends at most 10 of its messages an hour; a quiet page never refuses people sharing an address; the gym is told what was turned away",
     async () => {
       const owner = await makeUser("share-owner");
       const a = await makeOrg(owner.cookies, "Share Page Gym A");
       const b = await makeOrg(owner.cookies, "Share Page Gym B");
       await switchOn(a, owner.cookies);
       await switchOn(b, owner.cookies);
+      // 60 people from 60 addresses: the page is busy now.
+      for (let i = 0; i < 60; i++) {
+        expect((await send("POST", formUrl(a.org.slug), enquiry({ fullName: `Busy ${String(i)}`, email: `busy${String(i)}@example.com` }), {}, `10.93.0.${String(i + 1)}`)).statusCode).toBe(202);
+      }
       const shared = "10.91.0.7";
       const answers: number[] = [];
       for (let i = 0; i < 11; i++) {
@@ -714,9 +721,18 @@ d("a gym's own page and its enquiry form (real Postgres)", () => {
       expect(answers).toEqual([...Array<number>(10).fill(202), 429]);
       // Another address still reaches that page.
       expect((await send("POST", formUrl(a.org.slug), enquiry({ fullName: "Other Door", email: "other.door@example.com" }), {}, "10.91.0.8")).statusCode).toBe(202);
+      // The gym's Leads page says what was turned away.
+      expect((JSON.parse((await send("GET", `/v1/orgs/${a.org.id}/leads`, undefined, owner.cookies)).body) as { pageTurnedAway: number }).pageTurnedAway).toBe(1);
+      // A quiet page: 11 from one shared address all get in.
+      const quiet: number[] = [];
+      for (let i = 0; i < 11; i++) {
+        quiet.push((await send("POST", formUrl(b.org.slug), enquiry({ fullName: `Quiet ${String(i)}`, email: `quiet${String(i)}@example.com` }), {}, shared)).statusCode);
+      }
+      expect(quiet).toEqual(Array<number>(11).fill(202));
       // A carrier's one address, many phones, many gyms: never one limit for the whole app.
       const carrier = "10.92.0.1";
       const gyms = [a, b];
+      // (a and b already heard from other addresses; the carrier's 10 each still get in.)
       for (let g = 0; g < 5; g++) {
         const more = await makeOrg(owner.cookies, `Share Page Gym ${String(g + 3)}`);
         await switchOn(more, owner.cookies);

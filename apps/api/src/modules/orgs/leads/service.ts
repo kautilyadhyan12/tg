@@ -58,6 +58,8 @@ export interface LeadsDeps {
    *  by the operator's kill switch, "off" when sending is not set up. The worker sends
    *  leads' follow-ups only when it is "on", so only then are they the app's. */
   sending: "on" | "paused" | "off";
+  /** Messages this gym's page turned away in the last hour; 0 where nobody counts them. */
+  turnedAway?: (slug: string) => Promise<number>;
 }
 
 type Limit = () => Promise<boolean>;
@@ -192,11 +194,14 @@ async function sendingViews(
       // An address the app's own check refuses (stopped, bounced, or on the member list)
       // is staff's from now, not from the worker's next try, and the panel says why —
       // whoever sends the next one, so staff never email a dead address unwarned.
+      // A try of the app's still in flight stays the app's until it settles: staff are told
+      // why the next one will not go, never to send one the app may already have sent.
+      const inFlight = state?.open === true;
       if (stop !== undefined && row.followUpDueOn !== null) {
-        if (by === "app") by = "you";
+        if (by === "app" && !inFlight) by = "you";
         notSent = stop.reason;
       } else if (by === "app" && row.email !== null && members.has(row.email.toLowerCase())) {
-        by = "you";
+        if (!inFlight) by = "you";
         notSent = "on_member_list";
       }
       const view: LeadSendingView = {
@@ -385,6 +390,8 @@ export async function listLeads(
     cursor: last === undefined ? null : encodeCursor({ at: last.cursorAt, id: last.id }),
     counts,
     sendingStopped: facts?.stopped ?? false,
+    pageEmailsStopped: facts?.pageStopped ?? false,
+    pageTurnedAway: deps.turnedAway === undefined ? 0 : await deps.turnedAway(org.slug),
   };
 }
 

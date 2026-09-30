@@ -579,6 +579,33 @@ d("the app sends a lead's follow-ups (real Postgres)", () => {
   );
 
   it(
+    "an email the app is already sending stays the app's while it is out, even when the address turns up on the member list; staff get it once the try settles",
+    async () => {
+      const owner = await makeUser("flight-owner");
+      const org = await makeGym(owner.cookies, "Flight Sent Gym");
+      const gym = org.org.id;
+      await switchOn(gym, owner.cookies);
+      const lead = await addLead(gym, owner.cookies, { fullName: "Flo Air", email: "flo.flight@example.com" });
+      expect(lead.followUp.by).toBe("app");
+      // The worker has taken its first email and may be sending it right now.
+      await sql`
+        INSERT INTO gym_lead_sends (gym_id, lead_id, ok_at, step, month, counted, email, email_hmac, state, attempts, not_before, created_at, lease_until)
+        SELECT gym_id, id, email_ok_at, 1, '2026-09', true, email, lpad('f1', 64, '0'), 'sending', 1, now(), now(), now() + interval '5 minutes'
+        FROM gym_leads WHERE id = ${lead.id}`;
+      expect(
+        (await post(`/v1/orgs/${gym}/member-list/entries`, { fullName: "Flo Air", email: "flo.flight@example.com" }, owner.cookies)).statusCode,
+      ).toBeLessThan(300);
+      // Staff are told why the next one will not go, never offered to send this one again.
+      expect((await readLead(gym, lead.id, owner.cookies)).followUp).toMatchObject({ by: "app", notSent: "on_member_list" });
+      expect(pageOf(await get(`${leadsUrl(gym)}?followUp=due`, owner.cookies)).leads.map((l) => l.id)).not.toContain(lead.id);
+      // The try settles without sending: now it is staff's.
+      await sql`UPDATE gym_lead_sends SET state = 'skipped', reason = 'on_member_list', email = NULL, counted = false, lease_until = NULL, finished_at = now() WHERE lead_id = ${lead.id}`;
+      expect((await readLead(gym, lead.id, owner.cookies)).followUp).toMatchObject({ by: "you", notSent: "on_member_list" });
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
     "the 101st new lead in a month goes back to staff; a lead the app already emails goes on outside the count; the Settings box says how many",
     async () => {
       const owner = await makeUser("month-owner");
