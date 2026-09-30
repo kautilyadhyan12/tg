@@ -70,7 +70,7 @@ const OWNER = {
 };
 const TRAINER = { ...OWNER, staffRole: 'trainer', privileges: ['members.read', 'codes.invite'] };
 
-const freeTrial = { status: 'trialing', trialEndsAt: TRIAL_END, seatCap: 200, priceLabel: null, currentPeriodEnd: null, cancelAtPeriodEnd: false, subscribed: false };
+const freeTrial = { status: 'trialing', trialEndsAt: TRIAL_END, seatCap: 100, planSeatCap: 100, priceLabel: null, currentPeriodEnd: null, cancelAtPeriodEnd: false, subscribed: false };
 const paidTrial = { status: 'trialing', trialEndsAt: TRIAL_END, seatCap: 200, priceLabel: '$79', currentPeriodEnd: TRIAL_END, cancelAtPeriodEnd: false, subscribed: true };
 const paying = { status: 'active', trialEndsAt: null, seatCap: 200, priceLabel: '$79', currentPeriodEnd: '2026-11-01T00:00:00.000Z', cancelAtPeriodEnd: false, subscribed: true };
 const PLANS = [
@@ -117,26 +117,70 @@ afterEach(() => {
 });
 
 describe('paying during the free trial', () => {
-  it('opens Paddle for the plan chosen, and says the first payment waits for the trial’s end', async () => {
+  it('WORST THING: keeping the free trial is picked to begin with, and only a press after ticking Today asks to be charged today', async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: freeTrial }));
     orgService.startCheckout.mockResolvedValue({
       data: { checkoutId: '22222222-2222-2222-2222-222222222222', provider: 'paddle', environment: 'sandbox', clientToken: 'test_x', transactionId: 'txn_01j7zbyqs3vah3aafp4jf62qaw' },
     });
     renderOverview();
-    expect(await screen.findByText(/keep your free days: the plan and its first payment start when the trial ends/)).toBeTruthy();
+    expect(await screen.findByText('Choose a plan now: keep your free trial to its end, or start your plan today at its full size.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Choose a plan' }));
     const dialog = await screen.findByRole('dialog');
+    const choice = within(dialog).getByRole('group', { name: 'When should your plan start?' });
+    const keep = within(choice).getByRole('radio', { name: /Keep my free trial/ });
+    const today = within(choice).getByRole('radio', { name: /Start my plan today/ });
+    expect(keep.checked).toBe(true);
+    expect(today.checked).toBe(false);
+    const lastFree = new Date(TRIAL_END);
+    lastFree.setDate(lastFree.getDate() - 1);
     expect(
-      within(dialog).getByText(
-        new RegExp(`carries on at up to 200 members\\. You give your payment details now; the plan you choose and its first payment start when the trial ends on ${trialEndDateLabel(TRIAL_END)}`),
+      within(choice).getByText(
+        `Free until ${trialEndDateLabel(lastFree.toISOString())}, up to 100 members. Your plan and its first payment start on ${trialEndDateLabel(TRIAL_END)}. Nothing is charged today.`,
       ),
     ).toBeTruthy();
+    expect(within(choice).getByText('You pay today and get the size you choose at once. Your free trial ends now.')).toBeTruthy();
+
+    // Kept: the press asks for the plan after the trial.
     const rows = await within(dialog).findAllByRole('button', { name: 'Subscribe' });
     expect(rows).toHaveLength(3);
     fireEvent.click(rows[1]);
     await waitFor(() => expect(orgService.startCheckout).toHaveBeenCalledTimes(1));
-    expect(orgService.startCheckout.mock.calls[0].slice(0, 2)).toEqual([GYM_ID, 'org_b2_us_m']);
+    expect(orgService.startCheckout.mock.calls[0]).toEqual([GYM_ID, 'org_b2_us_m', expect.any(String), 'after_trial']);
     expect(openPaddleCheckout).toHaveBeenCalledTimes(1);
+  });
+
+  it('Start my plan today changes every button to say it pays today, and asks for today', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: freeTrial }));
+    orgService.startCheckout.mockResolvedValue({
+      data: { checkoutId: '22222222-2222-2222-2222-222222222222', provider: 'paddle', environment: 'sandbox', clientToken: 'test_x', transactionId: 'txn_01j7zbyqs3vah3aafp4jf62qaw' },
+    });
+    orgService.syncCheckout.mockResolvedValue({ data: { state: 'paid', subscription: { ...paying, seatCap: 500, planSeatCap: 500, priceLabel: '$129' } } });
+    openPaddleCheckout.mockImplementation(async ({ onEvent }) => {
+      onEvent({ type: 'completed' });
+    });
+    renderOverview();
+    fireEvent.click(await screen.findByRole('button', { name: 'Choose a plan' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('radio', { name: /Start my plan today/ }));
+    expect(within(dialog).queryAllByRole('button', { name: 'Subscribe' })).toHaveLength(0);
+    const rows = await within(dialog).findAllByRole('button', { name: 'Subscribe and pay today' });
+    expect(rows).toHaveLength(3);
+    fireEvent.click(rows[1]);
+    await waitFor(() => expect(orgService.startCheckout).toHaveBeenCalledTimes(1));
+    expect(orgService.startCheckout.mock.calls[0]).toEqual([GYM_ID, 'org_b2_us_m', expect.any(String), 'today']);
+    expect(await within(dialog).findByText("You're subscribed. Up to 500 members can now join.")).toBeTruthy();
+  });
+
+  it('with under an hour of trial left, only Start my plan today is offered', async () => {
+    const soon = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: { ...freeTrial, trialEndsAt: soon } }));
+    renderOverview();
+    fireEvent.click(await screen.findByRole('button', { name: 'Choose a plan' }));
+    const dialog = await screen.findByRole('dialog');
+    const choice = within(dialog).getByRole('group', { name: 'When should your plan start?' });
+    expect(within(choice).queryByRole('radio', { name: /Keep my free trial/ })).toBeNull();
+    expect(within(choice).getByRole('radio', { name: /Start my plan today/ }).checked).toBe(true);
+    expect(await within(dialog).findAllByRole('button', { name: 'Subscribe and pay today' })).toHaveLength(3);
   });
 
   it('says nothing was charged when the server cancelled a trial saved too late', async () => {

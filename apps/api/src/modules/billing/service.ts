@@ -9,16 +9,18 @@
 // An Indian gym pays in rupees through Razorpay the same way (1d-i; Kd, RULINGS 2026-09-24):
 // our server creates a Razorpay subscription at OUR plan, the browser opens Razorpay's
 // window for it, and only Razorpay's own record of it, fetched by our server, is written.
-// During the gym's own free trial the subscription starts when that trial ends, so the
+// A gym keeping its free trial gets a subscription that starts when that trial ends, so the
 // mandate is taken now and the first payment then.
 //
-// During the gym's own free trial the checkout sells a Paddle trial of the days left, so
-// the card is saved now and the first payment is taken when the trial ends (1c-ii; Kd,
-// RULINGS 2026-09-25). A paying gym may move to a bigger size: Paddle charges the rest of
+// During the gym's own free trial the gym chooses (Kd, RULINGS 2026-09-29): keep the trial,
+// and the checkout sells a Paddle trial of the days left, so the card is saved now and the
+// first payment is taken when the trial ends (1c-ii); or start today, charged now at the
+// plan's full size, and the free trial ends when that payment lands. A paying gym may move to a bigger size: Paddle charges the rest of
 // the month at once, and changes nothing if that charge fails.
 import {
   PAID_PLAN_GRACE_DAYS,
   SMALLER_SIZE_DECIDE_HOURS,
+  type CheckoutStart,
   type OrgBillingPortalResponse,
   type OrgCheckoutResponse,
   type OrgCheckoutSyncResponse,
@@ -84,7 +86,7 @@ const UNAVAILABLE = "Paying online isn't available right now. Please try again l
 
 export async function startOrgCheckout(
   deps: BillingDeps,
-  input: { userId: string; gymId: string; planCode: string; idempotencyKey: string },
+  input: { userId: string; gymId: string; planCode: string; idempotencyKey: string; start?: CheckoutStart | undefined },
 ): Promise<OrgCheckoutResponse> {
   const { org } = await requirePrivilege(deps, input.gymId, input.userId, "billing.manage");
   const razorpay = deps.razorpay ?? null;
@@ -197,6 +199,10 @@ function beginRefusal(
   switch (outcome.kind) {
     case "key_reused":
       return new OrgsError(422, "idempotency_key_reused", "This Idempotency-Key was already used for a different plan.");
+    case "start_required":
+      return new OrgsError(422, "start_required", "Choose whether to keep your free trial or start your plan today.");
+    case "trial_over":
+      return new OrgsError(409, "trial_over", "Your free trial has ended, or ends within the hour. Choose Start my plan today.");
     case "already_subscribed":
       return new OrgsError(409, "already_subscribed", "You're already on a paid plan.");
     case "payment_overdue":
@@ -260,7 +266,7 @@ const RAZORPAY_TAKEN: ReadonlySet<string> = new Set(["authenticated", "active", 
 async function startRazorpayCheckout(
   deps: BillingDeps,
   razorpay: RazorpaySettings,
-  input: { userId: string; gymId: string; planCode: string; idempotencyKey: string; currency: string },
+  input: { userId: string; gymId: string; planCode: string; idempotencyKey: string; start?: CheckoutStart | undefined; currency: string },
 ): Promise<OrgCheckoutResponse> {
   // A window this gym opened before may have been paid and not yet reached the gym (the tab
   // closed before it was confirmed): put it on the gym first, so the press below meets

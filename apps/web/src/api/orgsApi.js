@@ -214,12 +214,17 @@ export const orgService = {
 
   /** POST /v1/orgs/:gymId/billing/checkout — our server makes a Paddle payment for one
    *  plan at its own price, and answers what Paddle's window needs. `key` is the press's
-   *  Idempotency-Key: the same key again reopens the same payment, never a second one. */
-  startCheckout: (gymId, planCode, key) =>
+   *  Idempotency-Key: the same key again reopens the same payment, never a second one.
+   *  `start`, in the free trial: 'after_trial' or 'today' (the server requires one then). */
+  startCheckout: (gymId, planCode, key, start) =>
     readThrough(
       orgCheckoutResponseSchema,
       'that payment',
-      authApi.post(`/v1/orgs/${gymId}/billing/checkout`, { planCode }, { headers: { 'Idempotency-Key': key } }),
+      authApi.post(
+        `/v1/orgs/${gymId}/billing/checkout`,
+        start === undefined ? { planCode } : { planCode, start },
+        { headers: { 'Idempotency-Key': key } },
+      ),
     ),
 
   /** POST …/billing/checkouts/:checkoutId/sync — after Paddle's window says it is paid:

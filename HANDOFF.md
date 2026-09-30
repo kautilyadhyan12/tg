@@ -4,6 +4,16 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-09-30 · 2f-i (Folder B): paying during the trial, the gym's choice (branch `trial-pay-choice`)
+
+- **Why this job:** next on Folder B's list (RULINGS 2026-09-29, straight after 1d-i). **Risky (money), Opus xhigh; Kd: *"go"*.** 2f split in two (RULINGS 2026-09-30): 2f-i the choice, 2f-ii "Start my plan now". No migration, no new package, no new cost.
+- **Built:** Choose a plan asks "When should your plan start?": **Keep my free trial** (picked to begin with; "Free until 9 Oct, up to 100 members … Nothing is charged today") or **Start my plan today** (buttons read "Subscribe and pay today"). The checkout takes `start` (`after_trial` | `today`), required while the gym is in its own trial (422 `start_required`); `after_trial` with under an hour left is refused (409 `trial_over`), so keeping the trial never charges now. `today` sells the plan's own price (Paddle) or no `start_at` (Razorpay); the free trial ends when the payment lands. A key reused for the other start is refused.
+- **100 members:** a new trial writes `trial_seat_cap` = 100 (`GYM_TRIAL_MEMBERS`); a trial started before keeps its 200; a plan paid for in the trial keeps the trial's limit until the first payment, as before. The trial prompt says "for up to 100 members".
+- **Worst thing, first test:** a gym that keeps its trial is charged nothing now (Paddle: trial price, Razorpay: `start_at` = trial end); one that starts today is charged now at its full size. Screen: Keep is picked first and only a press after ticking Today asks for today. **Breaks, each RED, restored sha256-identical:** keep sold as today (guard caught it, 409), keep sold as today with the guard gone (Paddle 2 red, Razorpay 1), the screen picking Today first (1), the button always asking for today (1).
+- **Real test accounts through the real api (:3001):** US keep → Paddle 10-day trial price, $0 due; US today → the $79 price, $79 due; India keep → Razorpay `start_at` the trial end to the second; India today → no `start_at`; no start → 422, nothing made. Seen in headless Edge at 1200 and 390 wide.
+- **Verified:** api full suite 4,403 of 4,408 on `aihg_b`; the 5 were 3 trial-200 expectations (fixed) and 2 worker timing checks run beside web lint; those 4 files 199/199 alone. Web 3,298 of 3,300, then the prompt test fixed and `settingsHealth` alone 38/38; `poseAssets.contract` is local Node 24. Shared 273/273. tsc 0; eslint 0 on api, shared and every changed web file.
+- **Open:** Kd's click-through; review round one (`reviews/2f-i-1-review.md`); 2f-ii next in Folder B.
+
 ## 2026-09-30 · 20c-vi (Folder B): the two extra passes over Leads, fixed (branch `leads-safety-fixes`)
 
 - **Why this job:** Leads (20c) was finished, so its two extra passes (security, data integrity) ran in fresh terminals before anybody uses it. **Risky** (a public form, other people's emails), Opus xhigh. Migration `0055_leads_safety`; no new package, no new cost.

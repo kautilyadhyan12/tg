@@ -60,16 +60,13 @@ import { viewerPrivileges } from '../../pages/console/consoleView';
 // ── THREE THINGS THIS CARD STILL DELIBERATELY DOES NOT SAY ─────────────────
 //
 // **It does not print how many places the plan gives until the server has said
-// so.** Every gym trials at the same limit (:19129; 200 members since 2026-09-22), but that
-// number lives in the price book and the server picks the band off it — the
-// lowest-capped active monthly plan in the gym's own currency, so the ruling
-// survives a re-priced book. A "300 places" written here would be a number
-// recalled rather than quoted (Part 0 rule 4) and would go quietly wrong the day
-// the book moves.
+// so.** Every new trial holds the same limit (100 members since RULINGS 2026-09-29), but
+// the server writes it on each trial and an older trial keeps the limit it was given, so a
+// number written here could be wrong for the gym on screen.
 //
-// **A free trial offers "Choose a plan"** (1c-ii; Kd, RULINGS 2026-09-25): paying now
-// saves the card and takes the first payment when the trial ends, so the trial's days
-// are kept. Once paid, the card says when that first payment falls, and a plan paid
+// **A free trial offers "Choose a plan"** (1c-ii; Kd, RULINGS 2026-09-25 and 2026-09-29):
+// the gym keeps its free trial, its card saved and the first payment taken when the trial
+// ends, or starts its plan today at its full size. Once paid, the card says when that first payment falls, and a plan paid
 // through us offers "Change size" (1c-ii, 1c-iii). A smaller size waits for the end of the
 // month paid and the gym keeps its whole size until then; the card says what will change,
 // whether the members fit it and by when to remove any, offers "Cancel this change", and
@@ -277,7 +274,7 @@ export default function TrialCard({ org }) {
       ) : null}
       {payNow ? (
         <div className="text-sm mt-3" style={muted}>
-          Choose a plan now and keep your free days: the plan and its first payment start when the trial ends.
+          Choose a plan now: keep your free trial to its end, or start your plan today at its full size.
         </div>
       ) : null}
       <div className="mt-4 flex flex-col sm:flex-row gap-2">

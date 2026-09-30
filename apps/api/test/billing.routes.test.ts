@@ -165,8 +165,9 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
     const user = await makeUser();
     return { ...user, gymId: await makeGym(user.cookies, country) };
   };
-  const checkout = (gymId: string, cookies: Cookies, planCode: string, key: string = randomBytes(8).toString("hex")) =>
-    post(`/v1/orgs/${gymId}/billing/checkout`, { planCode }, cookies, { "idempotency-key": key });
+  /** `start`: whether a plan bought in the free trial waits for its end or starts today. */
+  const checkout = (gymId: string, cookies: Cookies, planCode: string, key: string = randomBytes(8).toString("hex"), start?: "after_trial" | "today") =>
+    post(`/v1/orgs/${gymId}/billing/checkout`, { planCode, ...(start === undefined ? {} : { start }) }, cookies, { "idempotency-key": key });
   const opened = (res: { statusCode: number; body: string }) => {
     expect(res.statusCode).toBe(200);
     return JSON.parse(res.body) as { checkoutId: string; transactionId: string; clientToken: string; environment: string };
@@ -807,7 +808,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
   const payingInTrial = async (planCode: string) => {
     const a = await owner();
     expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
-    const txn = opened(await checkout(a.gymId, a.cookies, planCode));
+    const txn = opened(await checkout(a.gymId, a.cookies, planCode, undefined, "after_trial"));
     const subId = paddle.pay(txn.transactionId);
     const synced = await post(`/v1/orgs/${a.gymId}/billing/checkouts/${txn.checkoutId}/sync`, {}, a.cookies);
     expect(synced.statusCode).toBe(200);
@@ -900,7 +901,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
   );
 
   it(
-    "WORST THING: a gym pays during its free trial: a trial of the days left, nothing charged, the trial's 200 members until the first payment, and the chosen size from then",
+    "WORST THING: a gym pays during its free trial: a trial of the days left, nothing charged, the trial's 100 members until the first payment, and the chosen size from then",
     async () => {
       const a = await payingInTrial(BIG);
       // The trial checkout asked for exactly the days left of the gym's own 10.
@@ -912,13 +913,13 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
         SELECT trial_ends_at FROM subscriptions WHERE owner_id = ${a.gymId} AND provider = 'none'`)[0];
       expect(trialEnd).toBe(own?.trial_ends_at.toISOString());
       expect(paddle.trialMoves.filter((m) => m.subscriptionId === a.subId)).toHaveLength(1);
-      // Choosing 5,000 does not open 5,000 places for free: the trial's 200 hold until Paddle is paid
+      // Choosing 5,000 does not open 5,000 places for free: the trial's 100 hold until Paddle is paid
       // (Kd, RULINGS 2026-09-25), on the screen and where a join is refused.
       expect(a.synced).toMatchObject({
         state: "paid",
-        subscription: { status: "trialing", subscribed: true, priceLabel: "$20", seatCap: 200, nextSeatCap: 5000, currentPeriodEnd: trialEnd, trialEndsAt: trialEnd },
+        subscription: { status: "trialing", subscribed: true, priceLabel: "$20", seatCap: 100, nextSeatCap: 5000, currentPeriodEnd: trialEnd, trialEndsAt: trialEnd },
       });
-      expect(await gymSeatCap(sql, a.gymId)).toBe(200);
+      expect(await gymSeatCap(sql, a.gymId)).toBe(100);
       // Its own free trial gave way to the paid one; the owner's one free trial stays spent.
       const rows = await sql<{ provider: string; status: string; cancel_reason: string | null }[]>`
         SELECT provider, status, cancel_reason FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${a.gymId} ORDER BY created_at`;
@@ -955,13 +956,126 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
     TEST_TIMEOUT_MS,
   );
 
+  // ── Paying during the trial: the gym's choice (ROADMAP Stage 3 item 2f) ──────
+  //
+  // THE WORST THING THIS JOB COULD DO: charge a gym today when it chose to keep its free days.
+
+  /** A gym in its own free trial, nothing chosen yet. */
+  const inTrial = async () => {
+    const a = await owner();
+    const started = await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies);
+    expect(started.statusCode).toBe(200);
+    return { ...a, started: JSON.parse(started.body) as { subscription: Record<string, unknown> } };
+  };
+  const ownTrialRow = async (gymId: string) =>
+    (await sql<{ status: string; cancel_reason: string | null; trial_ends_at: Date }[]>`
+      SELECT status, cancel_reason, trial_ends_at FROM subscriptions WHERE owner_id = ${gymId} AND provider = 'none'`)[0];
+
+  it(
+    "WORST THING: a gym that keeps its free trial is charged nothing now; one that starts today is charged now at its full size",
+    async () => {
+      // Keep the free trial: Paddle is asked for a trial of the days left, so its window
+      // saves the card and charges nothing; the first payment falls on the trial's last day.
+      const keep = await inTrial();
+      const trialsAsked = paddle.trialCheckouts.length;
+      const kept = opened(await checkout(keep.gymId, keep.cookies, BIG, undefined, "after_trial"));
+      expect(paddle.trialCheckouts.length).toBe(trialsAsked + 1);
+      const keptItem = paddle.txns.get(kept.transactionId)?.items[0];
+      expect(keptItem?.price.id).not.toBe(BIG_PRICE);
+      expect(keptItem?.price.trial_period).toEqual({ interval: "day", frequency: 10 });
+      const keptSub = paddle.pay(kept.transactionId);
+      await post(`/v1/orgs/${keep.gymId}/billing/checkouts/${kept.checkoutId}/sync`, {}, keep.cookies);
+      const ownEnd = (await ownTrialRow(keep.gymId))?.trial_ends_at.toISOString();
+      expect(paddle.subs.get(keptSub)).toMatchObject({ status: "trialing", next_billed_at: ownEnd });
+      expect((await myGym(keep.gymId, keep.cookies))?.subscription).toMatchObject({ status: "trialing", seatCap: 100, nextSeatCap: 5000, subscribed: true });
+      expect(await gymSeatCap(sql, keep.gymId)).toBe(100);
+
+      // Start today: Paddle is asked for the plan's own price, charged when the window is
+      // paid; the free trial ends then and the full size opens at once.
+      const today = await inTrial();
+      const started = opened(await checkout(today.gymId, today.cookies, BIG, undefined, "today"));
+      expect(paddle.trialCheckouts.length).toBe(trialsAsked + 1);
+      const startedItem = paddle.txns.get(started.transactionId)?.items[0];
+      expect(startedItem?.price.id).toBe(BIG_PRICE);
+      expect(startedItem?.price.trial_period ?? null).toBeNull();
+      const startedSub = paddle.pay(started.transactionId);
+      const synced = await post(`/v1/orgs/${today.gymId}/billing/checkouts/${started.checkoutId}/sync`, {}, today.cookies);
+      expect(JSON.parse(synced.body)).toMatchObject({ state: "paid", subscription: { status: "active", seatCap: 5000, nextSeatCap: null, subscribed: true } });
+      expect(await planOf(startedSub)).toEqual({ code: BIG, status: "active" });
+      expect(await ownTrialRow(today.gymId)).toMatchObject({ status: "expired", cancel_reason: "subscribed" });
+      expect(await gymSeatCap(sql, today.gymId)).toBe(5000);
+
+      // Neither gym touched the other.
+      expect(await planOf(keptSub)).toEqual({ code: BIG, status: "trialing" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "in the free trial the gym must say when its plan starts, a key reused for the other start is refused, and nobody else can press it",
+    async () => {
+      const a = await inTrial();
+      const b = await inTrial();
+      const trainer = await makeUser();
+      await addStaff(a.gymId, trainer.userId, "trainer", ["members.read"]);
+      const txnsBefore = paddle.txns.size;
+      const none = await checkout(a.gymId, a.cookies, BIG);
+      expect(none.statusCode).toBe(422);
+      expect(JSON.parse(none.body)).toMatchObject({ error: "start_required" });
+      expect((await post(`/v1/orgs/${a.gymId}/billing/checkout`, { planCode: BIG, start: "tomorrow" }, a.cookies, { "idempotency-key": "k-bad-start" })).statusCode).toBe(400);
+      expect((await checkout(a.gymId, b.cookies, BIG, undefined, "today")).statusCode).toBe(404);
+      expect((await checkout(a.gymId, trainer.cookies, BIG, undefined, "today")).statusCode).toBe(403);
+      expect(paddle.txns.size).toBe(txnsBefore);
+
+      for (const [first, second] of [
+        ["after_trial", "today"],
+        ["today", "after_trial"],
+      ] as const) {
+        const key = `start-${first}`;
+        opened(await checkout(a.gymId, a.cookies, BIG, key, first));
+        const again = opened(await checkout(a.gymId, a.cookies, BIG, key, first));
+        const other = await checkout(a.gymId, a.cookies, BIG, key, second);
+        expect(other.statusCode).toBe(422);
+        expect(JSON.parse(other.body)).toMatchObject({ error: "idempotency_key_reused" });
+        expect(again.transactionId).toBeTruthy();
+      }
+      // With no trial left, a gym says nothing and starts today, as before.
+      await sql`UPDATE subscriptions SET status = 'expired', ended_at = now() WHERE owner_id = ${b.gymId} AND provider = 'none'`;
+      const after = opened(await checkout(b.gymId, b.cookies, BIG));
+      expect(paddle.txns.get(after.transactionId)?.items[0]?.price.id).toBe(BIG_PRICE);
+      const keepAfter = await checkout(b.gymId, b.cookies, BIG, undefined, "after_trial");
+      expect(JSON.parse(keepAfter.body)).toMatchObject({ error: "trial_over" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a free trial holds 100 members from its first day; a trial started before holds what it was given",
+    async () => {
+      const a = await inTrial();
+      expect(a.started.subscription).toMatchObject({ status: "trialing", seatCap: 100, planSeatCap: 100, subscribed: false });
+      expect(await gymSeatCap(sql, a.gymId)).toBe(100);
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ seatCap: 100, planSeatCap: 100 });
+      // A trial written before the limit had its own column keeps its band's 200.
+      await sql`UPDATE subscriptions SET trial_seat_cap = NULL WHERE owner_id = ${a.gymId} AND provider = 'none'`;
+      expect(await gymSeatCap(sql, a.gymId)).toBe(200);
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ seatCap: 200, planSeatCap: 200 });
+      // ... and a plan paid for during it keeps that 200 until the first payment.
+      const txn = opened(await checkout(a.gymId, a.cookies, BIG, undefined, "after_trial"));
+      paddle.pay(txn.transactionId);
+      await post(`/v1/orgs/${a.gymId}/billing/checkouts/${txn.checkoutId}/sync`, {}, a.cookies);
+      expect(await gymSeatCap(sql, a.gymId)).toBe(200);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   it(
     "a second paid trial for one gym is cancelled, and owes no refund for a checkout that charged nothing",
     async () => {
       const a = await owner();
       expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
-      const first = opened(await checkout(a.gymId, a.cookies, BIG));
-      const second = opened(await checkout(a.gymId, a.cookies, BIG));
+      const first = opened(await checkout(a.gymId, a.cookies, BIG, undefined, "after_trial"));
+      const second = opened(await checkout(a.gymId, a.cookies, BIG, undefined, "after_trial"));
       const liveSub = paddle.pay(second.transactionId);
       await post(`/v1/orgs/${a.gymId}/billing/checkouts/${second.checkoutId}/sync`, {}, a.cookies);
       // The first window was saved too, in the instant before Paddle cancelled it.
@@ -979,24 +1093,29 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
   );
 
   it(
-    "a trial with under an hour left is charged at once, and a card that fails when the trial ends keeps the trial's 200 until Paddle collects",
+    "a trial with under an hour left has no days to keep: keeping it is refused and starting today is charged at once; a card that fails when the trial ends keeps the trial's 100 until Paddle collects",
     async () => {
       const a = await owner();
       expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
       await sql`UPDATE subscriptions SET trial_ends_at = now() + interval '30 minutes' WHERE owner_id = ${a.gymId} AND status = 'trialing'`;
       const asked = paddle.trialCheckouts.length;
-      const txn = opened(await checkout(a.gymId, a.cookies, BIG));
+      const txnsBefore = paddle.txns.size;
+      const keep = await checkout(a.gymId, a.cookies, BIG, undefined, "after_trial");
+      expect(keep.statusCode).toBe(409);
+      expect(JSON.parse(keep.body)).toMatchObject({ error: "trial_over" });
+      expect(paddle.txns.size).toBe(txnsBefore);
+      const txn = opened(await checkout(a.gymId, a.cookies, BIG, undefined, "today"));
       expect(paddle.trialCheckouts.length).toBe(asked);
       const subId = paddle.pay(txn.transactionId);
       await post(`/v1/orgs/${a.gymId}/billing/checkouts/${txn.checkoutId}/sync`, {}, a.cookies);
       expect(await planOf(subId)).toEqual({ code: BIG, status: "active" });
 
-      // The first charge fails: the 5,000 chosen were never paid for, so the trial's 200 hold.
+      // The first charge fails: the 5,000 chosen were never paid for, so the trial's 100 hold.
       const b = await payingInTrial(BIG);
       await paddleSays(b.subId, { status: "past_due" });
       expect(await graceRow(b.subId)).toMatchObject({ status: "past_due" });
-      expect((await myGym(b.gymId, b.cookies))?.subscription).toMatchObject({ status: "past_due", seatCap: 200, nextSeatCap: 5000 });
-      expect(await gymSeatCap(sql, b.gymId)).toBe(200);
+      expect((await myGym(b.gymId, b.cookies))?.subscription).toMatchObject({ status: "past_due", seatCap: 100, nextSeatCap: 5000 });
+      expect(await gymSeatCap(sql, b.gymId)).toBe(100);
       // Paddle collects: the chosen size starts.
       await paddleSays(b.subId, { status: "active" });
       expect((await myGym(b.gymId, b.cookies))?.subscription).toMatchObject({ status: "active", seatCap: 5000, nextSeatCap: null });
@@ -1010,7 +1129,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
     async () => {
       const a = await owner();
       expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
-      const txn = opened(await checkout(a.gymId, a.cookies, BIG));
+      const txn = opened(await checkout(a.gymId, a.cookies, BIG, undefined, "after_trial"));
       expect(paddle.trialCheckouts.at(-1)?.trialDays).toBe(10);
       // The gym's own trial runs out and is swept; the old window, still showing
       // "Due today $0.00", is paid before the worker closes it.
@@ -1053,7 +1172,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
     async () => {
       const a = await owner();
       expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
-      const txn = opened(await checkout(a.gymId, a.cookies, BIG));
+      const txn = opened(await checkout(a.gymId, a.cookies, BIG, undefined, "after_trial"));
       await runWorker();
       expect(paddle.cancelledTxns).not.toContain(txn.transactionId);
       await sql`UPDATE subscriptions SET trial_ends_at = now() - interval '1 minute' WHERE owner_id = ${a.gymId} AND provider = 'none'`;
@@ -1073,7 +1192,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       for (const refused of [false, true]) {
         const a = await owner();
         expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
-        const txn = opened(await checkout(a.gymId, a.cookies, BIG));
+        const txn = opened(await checkout(a.gymId, a.cookies, BIG, undefined, "after_trial"));
         await sql`UPDATE subscriptions SET trial_ends_at = now() + interval '30 minutes' WHERE owner_id = ${a.gymId} AND provider = 'none'`;
         paddle.refuseNextActivation = refused;
         const subId = paddle.pay(txn.transactionId);
@@ -1098,7 +1217,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
       for (const wrong of ["code", "days"] as const) {
         paddle.wrongTrial = wrong;
-        const res = await checkout(a.gymId, a.cookies, BIG);
+        const res = await checkout(a.gymId, a.cookies, BIG, undefined, "after_trial");
         expect(res.statusCode).toBe(503);
         expect(paddle.cancelledTxns).toContain([...paddle.txns.keys()].at(-1));
       }
@@ -1117,7 +1236,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       for (const patch of variants) {
         const a = await owner();
         expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
-        const txn = opened(await checkout(a.gymId, a.cookies, BIG));
+        const txn = opened(await checkout(a.gymId, a.cookies, BIG, undefined, "after_trial"));
         const subId = paddle.pay(txn.transactionId);
         const item = paddle.subs.get(subId)?.items[0];
         if (item === undefined) throw new Error("fake Paddle made no item");
@@ -1158,9 +1277,9 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       expect(preview.nextPaymentAt).toBe(paddle.subs.get(a.subId)?.next_billed_at);
       const res = await sizeChange(a.gymId, a.cookies, BIG);
       expect(res.statusCode).toBe(200);
-      // SMALL's 1 place was under the trial's 200; BIG's 5,000 wait for the first payment.
-      expect(JSON.parse(res.body)).toMatchObject({ subscription: { status: "trialing", seatCap: 200, nextSeatCap: 5000, priceLabel: "$20", subscribed: true } });
-      expect(await gymSeatCap(sql, a.gymId)).toBe(200);
+      // SMALL's 1 place was under the trial's 100; BIG's 5,000 wait for the first payment.
+      expect(JSON.parse(res.body)).toMatchObject({ subscription: { status: "trialing", seatCap: 100, nextSeatCap: 5000, priceLabel: "$20", subscribed: true } });
+      expect(await gymSeatCap(sql, a.gymId)).toBe(100);
       expect(paddle.changeCalls.filter((c) => c.subscriptionId === a.subId)).toEqual([{ subscriptionId: a.subId, priceId: BIG_PRICE, mode: "do_not_bill" }]);
       expect(chargesFor(a.subId)).toEqual([]);
     },
@@ -1610,7 +1729,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       paddle.declineNextChange = true;
       expect(JSON.parse((await sizeChange(b.gymId, b.cookies, MID)).body)).toMatchObject({ error: "change_declined" });
       expect(await pendingOf(b.subId)).toEqual({ code: null, pending_from: null });
-      expect(await gymSeatCap(sql, b.gymId)).toBe(200);
+      expect(await gymSeatCap(sql, b.gymId)).toBe(100);
       expect(await planOf(b.subId)).toEqual({ code: BIG, status: "trialing" });
     },
     TEST_TIMEOUT_MS,
@@ -1758,14 +1877,14 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
         INSERT INTO billing_plan_changes (gym_id, subscription_id, from_plan_id, to_plan_id, idempotency_key, provider, created_at)
         VALUES (${a.gymId}, ${row.id}, ${row.plan_id}, (SELECT id FROM plans WHERE code = ${MID}), 'cut-off-n1', 'paddle', now() - interval '5 minutes')`;
       expect(await gymSeatCap(sql, a.gymId)).toBe(50);
-      // The worker's attempt fails at Paddle: the trial's 200 hold again.
+      // The worker's attempt fails at Paddle: the trial's 100 hold again.
       paddle.down = true;
       try {
         await runWorker();
       } finally {
         paddle.down = false;
       }
-      expect(await gymSeatCap(sql, a.gymId)).toBe(200);
+      expect(await gymSeatCap(sql, a.gymId)).toBe(100);
       // 51 people join meanwhile.
       await sql`
         WITH u AS (INSERT INTO users (display_name) SELECT 'billing-n1-' || n FROM generate_series(1, 51) n RETURNING id)

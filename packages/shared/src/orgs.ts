@@ -608,6 +608,10 @@ export type OrgSubscription = z.infer<typeof orgSubscriptionSchema>;
  *  grants whatever its `plans.trial_days` holds. */
 export const GYM_TRIAL_DAYS = 10;
 
+/** How many members a gym's free trial holds (Kd, RULINGS 2026-09-29; 200 before). A trial
+ *  started before then keeps the limit it was given. */
+export const GYM_TRIAL_MEMBERS = 100;
+
 /** Starting the gym's own free trial.
  *
  *  **`already_subscribed` is a SUCCESS arm, not an error**, and it is the same

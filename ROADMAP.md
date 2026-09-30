@@ -246,7 +246,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 2c. [ ] One device, one trial, whatever the email: a browser mark on the web, the stores on the phone.
    - 2d. [ ] The trial belongs to the gym: a new organisation whose first members were members of an already-trialled organisation gets no second trial and sees the subscribe prompt; the owner's own device counts as member one.
    - 2e. [ ] Allow now, look later: the "have a look" list for weaker clues (an email to Kd until the admin panel; pause and remove already exist) and the second-trial code for a real owner of two gyms.
-   - 2f. [ ] **Paying during the trial: the gym's choice** (Kd, RULINGS 2026-09-29): keep the free trial to its last day at **100 members**, or start the paid plan today at its full size. Both Paddle and Razorpay; a free trial becomes 100 members (was 200).
+   - 2f. **Paying during the trial: the gym's choice** (Kd, RULINGS 2026-09-29). Split 2026-09-30 in two (RULINGS that day):
+     - 2f-i. [ ] **The choice when paying**: keep the free trial at 100 members, charged nothing until it ends, or start today at the full size; a new trial holds 100 (was 200). Paddle and Razorpay.
+     - 2f-ii. [ ] **"Start my plan now"** for a gym that kept its trial: Paddle ends its trial and charges; Razorpay needs a new mandate.
 3. ~~Gym-collects-from-members~~ **Re-planned 2026-09-22 as Stage 2 item 18** (18c is this line; 18a, 18b and the Connect buttons are new).
 
 ## Stage 4 — Launch readiness

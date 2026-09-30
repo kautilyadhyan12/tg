@@ -322,7 +322,7 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
     { country: "IN", currency: "INR" as const },
     { country: "DE", currency: "USD" as const },
   ])(
-    "a gym in $country trials for 10 days on 200 members and is quoted the ruled $currency list",
+    "a gym in $country trials for 10 days on 100 members and is quoted the ruled $currency list",
     async ({ country, currency }) => {
       const owner = await makeUser(`worst-${country.toLowerCase()}`);
       const org = await makeOrg(owner.cookies, country);
@@ -338,7 +338,7 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
       };
       expect(body.outcome).toBe("started");
       expect(body.subscription.status).toBe("trialing");
-      expect(body.subscription.seatCap).toBe(200);
+      expect(body.subscription.seatCap).toBe(100);
       const ends = Date.parse(body.subscription.trialEndsAt ?? "");
       // The database's clock stamps it; a minute either side of the request.
       expect(ends).toBeGreaterThanOrEqual(before + RULED_TRIAL_DAYS * DAY_MS - 60_000);
@@ -644,9 +644,9 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
    *  (:22215 §3.5). A Canadian gym could be created and then refused its own
    *  trial with "We're not open for business in your country yet" — the brick
    *  wall an unskippable prompt turns into a dead end. It now trials on the USD
-   *  band like any American gym, and gets the same 200 seats. */
+   *  band like any American gym, and gets the same 100 members. */
   it(
-    "a Canadian gym starts its trial on the dollar book, at the same 200 seats",
+    "a Canadian gym starts its trial on the dollar book, at the same 100 members",
     async () => {
       const owner = await makeUser("ca-trial");
       const org = await makeOrg(owner.cookies, "CA");
@@ -659,7 +659,7 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
         subscription: { status: string; seatCap: number | null };
       };
       expect(body.outcome).toBe("started");
-      expect(body.subscription.seatCap).toBe(200);
+      expect(body.subscription.seatCap).toBe(100);
 
       expect(seededBook(await readPlans(org.org.id, owner.cookies)).map((p) => p.priceLabel)).toEqual([
         "$79",

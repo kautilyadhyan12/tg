@@ -291,7 +291,10 @@ and it's tested in §14.
 `trialing`, `provider='none'`, `trial_ends_at=+7d`. Add payment any time
 during trial → provider sub created with first charge at `trial_ends_at` →
 `PAYMENT_METHOD_ATTACHED`. Lapse without payment → `TRIAL_LAPSED` → Part
-3's read-only grace. Reactivation within 90 days of archive → new checkout
+3's read-only grace. Paying during the trial is the gym's choice (RULINGS
+2026-09-29): keep the trial, at its own 100 members, with the first charge at
+`trial_ends_at`, or start today, charged now at the plan's full size.
+Reactivation within 90 days of archive → new checkout
 on the *same* subscription row (`expired → active` via `ACTIVATED`),
 history intact.
 **6.2 Pilot codes (the hand-sold Jorhat play, v1 §9.2):** admin issues

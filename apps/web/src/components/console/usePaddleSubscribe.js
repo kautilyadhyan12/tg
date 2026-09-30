@@ -73,14 +73,16 @@ export function usePaddleSubscribe(gymId, gymName = '') {
     refreshConsoleOrgsAfterChange();
   };
 
-  const subscribe = async (planCode) => {
+  /** `start`, in the free trial: whether the plan waits for the trial's end or starts today. */
+  const subscribe = async (planCode, start) => {
     if (gymId === null || paying !== null) return;
     setPaying({ planCode, phase: 'opening' });
     setPayNote(null);
     setPayError(null);
     try {
       const key = crypto.randomUUID();
-      const res = await orgService.startCheckout(gymId, planCode, key);
+      // A gym past its trial says no start: its plan starts today.
+      const res = start === undefined ? await orgService.startCheckout(gymId, planCode, key) : await orgService.startCheckout(gymId, planCode, key, start);
       const { checkoutId } = res.data;
       const onEvent = (event) => {
         if (!mounted.current) return;
