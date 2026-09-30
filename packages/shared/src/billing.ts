@@ -28,6 +28,12 @@ export type OrgCheckoutRequest = z.infer<typeof orgCheckoutRequestSchema>;
 
 /** What the browser needs to open the payment window for the checkout our server made:
  *  Paddle's for the transaction, or Razorpay's for the subscription (an Indian gym, 1d-i). */
+/** An email a payment window can be filled in with. The server sends an owner's email only
+ *  when it passes this, and none otherwise (the window then asks), since a stored email may
+ *  be in a shape this refuses (a Google or migrated account) and the console reads the reply
+ *  through this schema. */
+export const payerEmailSchema = z.string().email().max(254);
+
 export const orgCheckoutResponseSchema = z.discriminatedUnion("provider", [
   z.object({
     checkoutId: z.string().uuid(),
@@ -36,7 +42,7 @@ export const orgCheckoutResponseSchema = z.discriminatedUnion("provider", [
     clientToken: z.string().min(1).max(200),
     transactionId: paddleTransactionIdSchema,
     /** The gym owner's email, for Paddle's window to fill in, whoever opens it (1e). */
-    email: z.string().email().max(254).nullable(),
+    email: payerEmailSchema.nullable(),
     /** The gym's country for Paddle's window to fill in; null when the gym has none, or when
      *  Paddle takes that country only with a postcode, which the payer types. */
     country: z.string().regex(/^[A-Z]{2}$/).nullable(),
@@ -52,7 +58,7 @@ export const orgCheckoutResponseSchema = z.discriminatedUnion("provider", [
      *  the gym has none, and Razorpay asks for it. */
     contact: z.string().regex(/^\+91[6-9]\d{9}$/).nullable(),
     /** The gym owner's email, for Razorpay's window to fill in, whoever opens it. */
-    email: z.string().email().max(254).nullable(),
+    email: payerEmailSchema.nullable(),
   }),
 ]);
 export type OrgCheckoutResponse = z.infer<typeof orgCheckoutResponseSchema>;

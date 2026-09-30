@@ -27,6 +27,8 @@ export class FakePaddle implements PaddleApi {
   cancelledTxns: string[] = [];
   cancelledSubs: string[] = [];
   refunds: string[] = [];
+  /** Paddle keeps one customer per email and reuses it when a window is filled in with it. */
+  customersByEmail = new Map<string, string>();
   adjustments = new Map<string, { action: string; status: "pending_approval" | "approved" | "rejected" | "reversed" }[]>();
   /** Every portal session asked for: the customer and the subscriptions named. */
   portalCalls: { customerId: string; subscriptionIds: string[] }[] = [];
@@ -280,10 +282,15 @@ export class FakePaddle implements PaddleApi {
   /** The customer pays a transaction: Paddle makes the subscription and, unless told
    *  otherwise, completes the transaction at once (in Paddle it stays "paid" for about a
    *  second first, measured on Kd's sandbox payment by the round-one review). */
-  pay(txnId: string, origin = "api", complete = true): string {
+  pay(txnId: string, origin = "api", complete = true, email: string | null = null): string {
     const txn = this.txns.get(txnId);
     if (txn === undefined) throw new Error("no such transaction");
     const subId = paddleId("sub");
+    let customerId = paddleId("ctm");
+    if (email !== null) {
+      customerId = this.customersByEmail.get(email.toLowerCase()) ?? customerId;
+      this.customersByEmail.set(email.toLowerCase(), customerId);
+    }
     this.txns.set(txnId, { ...txn, status: complete ? "completed" : "paid", subscription_id: subId, origin });
     const trialDays = txn.items[0]?.price.trial_period?.frequency ?? null;
     // A trial starts when the card is saved and bills its first month when it ends.
@@ -291,7 +298,7 @@ export class FakePaddle implements PaddleApi {
     this.subs.set(subId, {
       id: subId,
       status: trialEnd === null ? "active" : "trialing",
-      customer_id: paddleId("ctm"),
+      customer_id: customerId,
       currency_code: txn.currency_code,
       updated_at: this.tick(),
       canceled_at: null,
