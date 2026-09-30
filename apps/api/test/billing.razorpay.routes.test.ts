@@ -523,6 +523,48 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
   );
 
   it(
+    "WORST THING: an out-of-date answer about a gym's only plan never cancels or refunds it",
+    async () => {
+      const a = await owner();
+      const win = opened(await checkout(a.gymId, a.cookies, BIG));
+      razorpay.authenticate(win.subscriptionId);
+      await sync(a.gymId, win.checkoutId, a.cookies);
+      const live = razorpay.subs.get(win.subscriptionId);
+      if (live === undefined) throw new Error("no subscription");
+      // Razorpay hands a later ask an older state ("authenticated") than the one written.
+      razorpay.subs.set(win.subscriptionId, { ...live, status: "authenticated" });
+      await signedWebhook(win.subscriptionId, "subscription.authenticated");
+      await runWorker();
+      razorpay.subs.set(win.subscriptionId, live);
+      expect(razorpay.cancelled).not.toContain(win.subscriptionId);
+      expect(await sql`SELECT 1 FROM billing_refunds WHERE subscription_ref = ${win.subscriptionId}`).toHaveLength(0);
+      expect((await paidRows(a.gymId)).map((r) => r.status)).toEqual(["active"]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a failed payment that Razorpay's own retry takes within the grace keeps the gym open",
+    async () => {
+      const a = await owner();
+      const win = opened(await checkout(a.gymId, a.cookies, BIG));
+      razorpay.authenticate(win.subscriptionId);
+      await sync(a.gymId, win.checkoutId, a.cookies);
+      razorpay.fail(win.subscriptionId);
+      await signedWebhook(win.subscriptionId, "subscription.pending");
+      await runWorker();
+      expect((await paidRows(a.gymId)).map((r) => r.status)).toEqual(["past_due"]);
+      // The retry takes the same month's charge: its invoice is paid, no new one made.
+      razorpay.retrySucceeds(win.subscriptionId);
+      await signedWebhook(win.subscriptionId, "subscription.charged");
+      await runWorker(60_000);
+      expect((await paidRows(a.gymId)).map((r) => r.status)).toEqual(["active"]);
+      expect(await myGym(a.gymId, a.cookies)).toMatchObject({ consoleReadOnly: false, paymentOverdue: false });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "an answer asked for earlier never overwrites one asked for later, however slowly it arrives",
     async () => {
       const a = await owner();

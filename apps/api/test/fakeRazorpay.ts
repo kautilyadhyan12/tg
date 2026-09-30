@@ -185,6 +185,12 @@ export class FakeRazorpay implements RazorpayApi {
     this.subs.set(id, { ...sub, status });
   }
 
+  /** Razorpay's own retry of a failed month succeeds: the SAME invoice is paid (its "Payment
+   *  Retries" page: the charge is reattempted), and the month runs on. */
+  retrySucceeds(id: string): void {
+    this.chargeUnpaid(id);
+  }
+
   /** The payer changes the card on a halted plan: `active` again, and nothing charged. */
   changeCard(id: string): void {
     this.subs.set(id, { ...this.sub(id), status: "active" });

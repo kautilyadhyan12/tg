@@ -1261,7 +1261,9 @@ async function applyRazorpay(deps: BillingDeps, razorpay: RazorpaySettings, sub:
     }
     // An ended plan Razorpay still charges while the gym pays for another: cancelled, and every
     // payment taken after it ended refunded. The months it was the gym's plan stay paid.
-    if (outcome.decision.reason === "conflict" && placed !== null && RAZORPAY_TAKEN.has(sub.status)) {
+    // A row still live is never set aside: its conflict is an out-of-date answer (Razorpay
+    // handing a later ask an older state), which changes nothing.
+    if (outcome.decision.reason === "conflict" && placed !== null && placed.endedAt !== null && RAZORPAY_TAKEN.has(sub.status)) {
       return await setAsideRazorpay(deps, razorpay, sub, gymId, "duplicate", placed.endedAt);
     }
     return "unchanged";
