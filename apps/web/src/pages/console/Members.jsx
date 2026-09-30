@@ -5,6 +5,7 @@ import { ConfirmInline, ConsoleFailed, ConsoleLoading } from '../../components/c
 import ScrollJump from '../../components/console/ScrollJump';
 import { orgService, errorText, errorCode } from '../../api/orgsApi';
 import { useConsoleOrg } from './useConsoleOrg';
+import { refreshConsoleOrgsAfterChange } from './consoleOrgs';
 import ApplicationsQueue from './ApplicationsQueue';
 import MemberListPanel, { Tick } from './MemberListPanel';
 import MemberListPerson from './MemberListPerson';
@@ -325,6 +326,8 @@ export default function Members() {
   const reloadRoster = () => {
     setRemoveError(null);
     retry();
+    // The menu's Review needed dot counts the list, so it is read again too (5b-v-d-iv).
+    refreshConsoleOrgsAfterChange();
   };
 
   const putOnList = async (member) => {

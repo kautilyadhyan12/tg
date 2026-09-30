@@ -42,6 +42,7 @@ import ConsoleHome     from './pages/console/ConsoleHome';
 import NewGym          from './pages/console/NewGym';
 import ConsoleOverview from './pages/console/Overview';
 import ConsoleMembers  from './pages/console/Members';
+import ConsoleMembersReview from './pages/console/MembersReview';
 import ConsoleAttendance from './pages/console/Attendance';
 import ConsoleClasses  from './pages/console/Classes';
 import ConsoleLeads    from './pages/console/Leads';
@@ -240,6 +241,12 @@ export default function App() {
             <Route path="/console/:orgSlug/members" element={
               <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
                 <ConsoleLayout><ConsoleMembers /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
+            {/* Who an import found a problem with (5b-v-d-iv): the sign's See who opens it. */}
+            <Route path="/console/:orgSlug/members/review" element={
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
+                <ConsoleLayout><ConsoleMembersReview /></ConsoleLayout>
               </ProtectedRoute>
             } />
             {/* WHO CAME IN — Kd's ruling 2026-09-01 (:28107): its own section,

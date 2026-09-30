@@ -481,6 +481,10 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
     if (r.staffRole === null || pending === null || r.seatsUsed <= pending.seatCap) continue;
     fallbacks.set(r.id, await billingRepo.smallestFittingPlan(deps.sql, { gymId: r.id, members: r.seatsUsed }));
   }
+  // The menu's amber dot (5b-v-d-iv), asked only for gyms where the caller may see the
+  // list's details: a plain member's gym card asks nothing.
+  const listReaders = rows.filter((r) => r.staffRole !== null && privilegesFor(r.staffRole, r.privileges).includes("members.confirm"));
+  const needReview = await listRepo.reviewCounts(deps.sql, listReaders.map((r) => r.id));
   return myOrgsResponseSchema.parse({
     orgs: rows.map((r) => {
       // COMPUTED ONCE PER ROW because two fields below now need it, and calling
@@ -560,6 +564,7 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
       consoleReadOnly: r.staffRole === null ? null : r.consoleReadOnly,
       // Why it is read-only, for staff alike: an overdue payment, paid on Paddle's page.
       paymentOverdue: r.staffRole === null ? null : r.paymentOverdue,
+      membersNeedReview: privileges.includes("members.confirm") ? (needReview.get(r.id) ?? 0) : 0,
       paymentOverdueThrough: r.staffRole === null ? null : r.paymentOverdueThrough,
       // A fact about the gym for its staff (the Settings box and the Invite screen).
       postalAddress: r.staffRole === null ? null : r.postalAddress,

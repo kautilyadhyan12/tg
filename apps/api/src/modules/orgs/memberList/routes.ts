@@ -28,6 +28,8 @@ import {
   memberListExportRequestSchema,
   memberListMergeRequestSchema,
   memberListNotThemRequestSchema,
+  memberListReviewCheckedRequestSchema,
+  memberListReviewQuerySchema,
   memberListRemovePreviewRequestSchema,
   memberListRemoveSelectedRequestSchema,
   memberListRemoveUnlistedRequestSchema,
@@ -378,6 +380,19 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     }),
   );
 
+  /** It's correct (5b-v-d-iv): one press a problem, and an import can mark hundreds, so
+   *  its own allowance rather than the edits'; several staff at one desk share an address. */
+  const reviewGate = gate(
+    createDualRateLimit({
+      name: "memberlist_review",
+      max: 600,
+      ipMax: 2400,
+      windowMs: 60 * 60 * 1000,
+      identifier: (req) => req.authUser?.id ?? null,
+      redis: deps.redis,
+    }),
+  );
+
   /** "Remove all": 10 an hour each, 40 from one address (§9.9). */
   const removeGate = gate(
     createDualRateLimit({
@@ -450,6 +465,28 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
     const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
     if (params === null) return;
     return sendWrite(req, reply, await byHand.restore(listDeps, requireUserId(req), params.gymId, params.entryId, editGate(req, reply)));
+  });
+
+  // The review page (5b-v-d-iv): who an import found a problem with, a page at a time.
+  app.get("/v1/orgs/:gymId/member-list/review", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(memberListReviewQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const page = await byHand.readReviewPage(listDeps, requireUserId(req), params.gymId, query, readGate(req, reply));
+    if (page === null) return;
+    return reply.status(200).send({ page });
+  });
+
+  // It's correct (5b-v-d-iv): one problem an import found, checked by staff and kept as it is.
+  app.post("/v1/orgs/:gymId/member-list/entries/:entryId/review/checked", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(memberListReviewCheckedRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const answer = await byHand.checkReview(listDeps, requireUserId(req), params.gymId, params.entryId, body, reviewGate(req, reply));
+    if (answer.kind === "rate_limited") return;
+    return reply.status(200).send({ entry: answer.entry });
   });
 
   // "Not this person" (§18.4): that one account out of the app, the record kept.

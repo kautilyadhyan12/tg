@@ -177,3 +177,5 @@ stage. History, never a rule: RULINGS wins where they differ.
 5b-v-d-iii. [x] **Each warning says which rows** (Kd at 5b-v-d-ii's click-through: *"asking to check but no option to check or correct or see what is even wrong"*): every counted Review warning lists its first 100 rows (row, name, column, the cell as written) behind See which, with how to fix it in the file or in the app after importing; a card number is never quoted, however it is typed. Merged 2026-09-29 (PR #135).
 
 - 1d-i, as it stood when it finished (2026-09-30): **Subscribe in rupees**: Razorpay's window, the first payment when the gym's own trial ends, renewals and failed payments by webhook, the 2-day grace, a second plan cancelled and refunded.
+
+5b-v-d-iv. [x] **Import problems stay marked on the person** (RULINGS 2026-09-29, 2026-09-30): one "Review needed" tag on the person's Members row, what is wrong on their page with It's correct, a glowing sign on Members ("5 members need review · See who") and a dot on Members in the menu until nobody is left; See who opens "Members who need review" (Kd at the click-through). Stored at import, gone once staff fix it. Merged 2026-09-30 (PR #137).

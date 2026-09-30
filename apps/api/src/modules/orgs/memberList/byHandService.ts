@@ -12,6 +12,8 @@ import {
   isLargeMemberListChange,
   MEMBER_LIST_BY_HAND_WORDS,
   MEMBER_LIST_ENTRIES_PAGE,
+  MEMBER_LIST_EXTRA_FIELD_PREFIX,
+  MEMBER_LIST_FIELD_LABELS,
   MEMBER_LIST_MAX_EDITED_FIELDS,
   MEMBER_LIST_MAX_NAME_CHARS,
   type MemberListEntryDeleted,
@@ -21,6 +23,13 @@ import {
   type MemberListEntryPatch,
   type MemberListEntryWritten,
   type MemberListNotThemRequest,
+  type MemberListReviewCheckedRequest,
+  type MemberListReviewLine,
+  type MemberListReviewPage,
+  type MemberListReviewQuery,
+  MEMBER_LIST_REVIEW_PAGE,
+  memberListFieldSchema,
+  parseMemberListReviewKey,
   type MemberListRemoveUnlistedRequest,
   type MemberListUnlistedGroup,
   type MemberListUnlistedPage,
@@ -37,12 +46,14 @@ import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../servic
 import { appViewsOf } from "./appViews.js";
 import { appPeopleIn, removeRecordIn } from "./oneRemove.js";
 import { currentRecordOf, pastRecordOf } from "./whose.js";
-import { applyTyped, EMPTY_VALUES, mergeValues, type EntryValues, type TypedContext } from "./byHand.js";
+import { applyTyped, changedFields, EMPTY_VALUES, mergeValues, type EntryValues, type TypedContext } from "./byHand.js";
 import { tidyCell } from "./cells.js";
 import { cut, identityKey } from "./fields.js";
 import { withoutCardNumbers } from "./neverKeep.js";
 import { readCountry } from "./phone.js";
 import * as repo from "./repo.js";
+import { reviewAfterChecked, reviewAfterEdit, reviewAfterMerge, sameReview } from "./review.js";
+import { decodeEntryCursor, encodeEntryCursor } from "./cursor.js";
 import { appOrThrow, type MemberListDeps } from "./service.js";
 import { unlistedDigest, unlistedGroup, unlistedPage } from "./unlisted.js";
 
@@ -104,8 +115,11 @@ async function detailOf(
     inApp: mine.length > 0 || shared.size > 0,
     invitation: invitation[0] ?? null,
     app: appOrThrow(app[0]),
+    needsReview: entry.formerAt === null && entry.review.needsReview.length > 0,
     extra: fields.map((field) => ({ key: field.key, label: field.label, value: values.extra[field.key] ?? "" })),
     handEdited: entry.handEdited,
+    // A past member is not on the list, so nothing of theirs is waiting to be reviewed.
+    review: entry.formerAt === null ? reviewLines(entry.review.needsReview, fields) : [],
     removeEndsApp: ends.length > 0,
     removeEndsAppFor: ends,
     members: visits.map((row) => ({
@@ -117,6 +131,23 @@ async function detailOf(
       sharedEmail: shared.has(row.userId),
     })),
   };
+}
+
+/** Each review item under the name staff know its field by: the screens' own label, or
+ *  the gym's heading for one of its columns. */
+function reviewLines(keys: readonly string[], fields: readonly { key: string; label: string }[]): MemberListReviewLine[] {
+  const lines: MemberListReviewLine[] = [];
+  for (const key of keys) {
+    const item = parseMemberListReviewKey(key);
+    if (item === null) continue;
+    const standard = memberListFieldSchema.safeParse(item.field);
+    const extraKey = item.field.slice(MEMBER_LIST_EXTRA_FIELD_PREFIX.length);
+    const label = standard.success
+      ? MEMBER_LIST_FIELD_LABELS[standard.data]
+      : (fields.find((field) => field.key === extraKey)?.label ?? "One of your columns");
+    lines.push({ ...item, label });
+  }
+  return lines;
 }
 
 async function detailAfter(deps: MemberListDeps, gymId: string, entryId: string): Promise<MemberListEntryDetail> {
@@ -243,7 +274,9 @@ async function placeOnList(
     if (stored === null) throw new Error(`member-list entry ${holder.id} vanished under the gym's lock`);
     written = input.revive(stored);
     entryId = holder.id;
-    await repo.writeEntry(tx, gymId, entryId, { values: written, identityKey: key, handEdited: stored.handEdited, formerAt: null });
+    // Whatever the new values change, what an import found wrong there goes with it.
+    const review = reviewAfterEdit(stored.review, changedFields(stored.values, written));
+    await repo.writeEntry(tx, gymId, entryId, { values: written, identityKey: key, handEdited: stored.handEdited, review, formerAt: null });
   }
   await repo.stampListedByContact(tx, gymId, currentContacts({ values: written, current: true }), [entryId], at);
   const version = await repo.bumpListVersion(tx, gymId);
@@ -377,7 +410,9 @@ export async function changeEntry(
     const contactMoved = applied.identityFields.includes("email") || applied.identityFields.includes("phone");
     const reached = contactMoved ? await membersOf(tx, gymId, stored) : [];
     const handEdited = [...new Set([...stored.handEdited, ...applied.edited])].slice(0, MEMBER_LIST_MAX_EDITED_FIELDS);
-    await repo.writeEntry(tx, gymId, entryId, { values: applied.values, identityKey: key, handEdited, formerAt: stored.formerAt });
+    // A field staff changed is theirs now: what the file had wrong there is gone (5b-v-d-iv).
+    const review = reviewAfterEdit(stored.review, [...applied.identityFields, ...applied.edited]);
+    await repo.writeEntry(tx, gymId, entryId, { values: applied.values, identityKey: key, handEdited, review, formerAt: stored.formerAt });
     const lost = await leftOff(tx, gymId, stored.values, [entryId], reached);
     if (lost > 0 && patch.acknowledgeLeavesList !== true) throw new LeavesList(lost, "change");
     const current = stored.formerAt === null;
@@ -402,6 +437,77 @@ export async function changeEntry(
   if ("kind" in done) return done;
   if ("clash" in done) return { kind: "already_on_list", entryId: done.clash, former: done.former };
   return await finish(deps, gymId, done);
+}
+
+/** THE REVIEW PAGE (5b-v-d-iv; Kd at its click-through: "make a separate page"): the current
+ *  members an import found a problem with, by name, a page at a time, each with what is
+ *  wrong. Fetched one longer than shown, so a cursor never leads to an empty page. */
+export async function readReviewPage(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  query: MemberListReviewQuery,
+  limit: () => Promise<boolean>,
+): Promise<MemberListReviewPage | null> {
+  await requirePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return null;
+  const cursor = query.cursor === undefined ? null : decodeEntryCursor(query.cursor);
+  if (query.cursor !== undefined && cursor === null) {
+    throw new OrgsError(400, "bad_cursor", "That page of the list could not be read. Open the list again.");
+  }
+  const [page, fields] = await Promise.all([
+    repo.reviewPage(deps.sql, { gymId, cursor, limit: MEMBER_LIST_REVIEW_PAGE + 1 }),
+    repo.listFields(deps.sql, gymId),
+  ]);
+  const shown = page.people.slice(0, MEMBER_LIST_REVIEW_PAGE);
+  const last = page.people.length > MEMBER_LIST_REVIEW_PAGE ? shown[shown.length - 1] : undefined;
+  return {
+    total: page.total,
+    people: shown.map((person) => ({
+      entryId: person.entryId,
+      fullName: person.fullName,
+      email: person.email,
+      phone: person.phone,
+      review: reviewLines(person.needsReview, fields),
+    })),
+    cursor: last === undefined ? null : encodeEntryCursor({ name: last.fullName, id: last.entryId }),
+  };
+}
+
+/** It's correct (5b-v-d-iv): staff checked what the import found on one field and the
+ *  value stays. The item leaves the review, and the next file with the same value does
+ *  not mark it again. Pressing it twice, or on an item already fixed, changes nothing. */
+export async function checkReview(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  entryId: string,
+  item: MemberListReviewCheckedRequest,
+  limit: () => Promise<boolean>,
+): Promise<{ kind: "checked"; entry: MemberListEntryDetail } | { kind: "rate_limited" }> {
+  await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return { kind: "rate_limited" };
+  await deps.sql.begin(async (tx) => {
+    // The import writes every record's review under this lock, so a press is never lost.
+    await repo.lockGym(tx, gymId);
+    const stored = await repo.entryFor(tx, gymId, entryId);
+    if (stored === null) throw notFound();
+    // A past member's page shows no review, so there is nothing to mark correct there.
+    if (stored.formerAt !== null) return;
+    const review = reviewAfterChecked(stored.review, item);
+    if (sameReview(review, stored.review)) return;
+    await repo.writeReview(tx, gymId, entryId, review);
+    // The field and the problem, never the value.
+    await insertAudit(tx, {
+      actorUserId: userId,
+      gymId,
+      action: "org.member_list_review_checked",
+      targetType: "member_list_entry",
+      targetId: entryId,
+      meta: { field: item.field, problem: item.problem },
+    });
+  });
+  return { kind: "checked", entry: await detailAfter(deps, gymId, entryId) };
 }
 
 /** Take a person off the list: their record becomes FORMER, never deleted (§11.1). */
@@ -661,6 +767,8 @@ export async function mergeEntries(
       values,
       identityKey: keep.identityKey,
       handEdited: keep.handEdited,
+      // A filled field brings the other record's marks with its value (5b-v-d-iv).
+      review: reviewAfterMerge(keep.review, gone.review, filled),
       formerAt: current ? null : keep.formerAt,
     });
     // What points at the record not kept moves onto the kept one before it is deleted

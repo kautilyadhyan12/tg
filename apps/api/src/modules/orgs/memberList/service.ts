@@ -87,9 +87,11 @@ import {
   reconcile,
   type CarriedFields,
   type KeptField,
+  type ListEntry,
   type Reconciled,
   type ReconciledPerson,
 } from "./reconcile.js";
+import { importReviews } from "./review.js";
 import * as repo from "./repo.js";
 import { inAppRecordIds, pastRecordOf } from "./whose.js";
 import { withdrawForAccounts, withdrawForAddresses } from "../invites/join.js";
@@ -196,7 +198,7 @@ async function measure(
   catalogue: readonly FieldSlot[],
   /** The missing records staff marked "Still a member" (§18.8). */
   stay: ReadonlySet<string> = new Set(),
-): Promise<{ measured: Measured; reconciled: Reconciled; kept: KeptField[]; over: number }> {
+): Promise<{ measured: Measured; reconciled: Reconciled; kept: KeptField[]; over: number; entries: ListEntry[] }> {
   const [entries, members, seatCap] = await Promise.all([
     repo.listEntries(sql, gymId),
     repo.listMembers(sql, gymId),
@@ -243,6 +245,7 @@ async function measure(
     reconciled,
     kept,
     over,
+    entries,
   };
 }
 
@@ -1141,7 +1144,7 @@ export async function confirmUpload(
     // an address or left while the preview was on the screen, and who is "already in
     // the app" moved with them (review of PR #87, High-1).
     const stay = new Set(input.marks?.stay ?? []);
-    const { measured, reconciled, kept } = await measure(tx, gymId, file.understanding, upload.mode, before, grown.catalogue, stay);
+    const { measured, reconciled, kept, entries } = await measure(tx, gymId, file.understanding, upload.mode, before, grown.catalogue, stay);
 
     // WHO THE FILE LEAVES OUT, EACH MARKED BY STAFF (§18.8; RULINGS 2026-09-28). Nothing is
     // marked for them: every missing person is Left or Still a member, the set is the one
@@ -1201,6 +1204,18 @@ export async function confirmUpload(
     expectApplied(updated, writing.change.length, "changed", uploadId);
     // Everybody this file holds is the file's now, whoever first added them.
     await repo.markFromFile(tx, gymId, [...reconciled.changed, ...reconciled.unchanged, ...reconciled.returning].map((person) => person.identityKey));
+    // WHAT THE FILE HAD WRONG, KEPT ON EACH PERSON IT HOLDS until staff fix it (5b-v-d-iv),
+    // by the key each record has now that the file is written.
+    const reviews = importReviews({
+      rows: reconciled.rows,
+      added: reconciled.added,
+      held: [...reconciled.changed, ...reconciled.unchanged, ...reconciled.returning],
+      entries,
+      fileFields: file.understanding.extraFields,
+      kept,
+      carries,
+    });
+    expectApplied(await repo.writeReviews(tx, gymId, reviews), reviews.length, "reviewed", uploadId);
     // MARKED FORMER WITH THE INSTANT THEY CAME OFF, never deleted (§11.1).
     const removed = await repo.markEntriesFormer(tx, gymId, reconciled.gone.map((person) => person.identityKey), at);
     expectApplied(removed, reconciled.gone.length, "removed", uploadId);
@@ -1400,9 +1415,10 @@ export async function readList(
     repo.membersAgainstList(deps.sql, gymId),
     repo.listFields(deps.sql, gymId),
   ]);
-  const [{ totals, statuses, membershipTypes, paymentStatuses }, app] = await Promise.all([
+  const [{ totals, statuses, membershipTypes, paymentStatuses }, app, review] = await Promise.all([
     repo.listStatusCounts(deps.sql, gymId, inAppEntryIds(members)),
     currentAppWords(deps.sql, deps.invites ?? null, gymId, members, deps.now()),
+    repo.reviewSign(deps.sql, gymId),
   ]);
   // THE WHOLE-LIST NUMBERS AND THE CHIPS COME FROM ONE STATEMENT, never two: two
   // statements counting one gym's people two ways is two answers to one question, and
@@ -1426,6 +1442,7 @@ export async function readList(
     paymentStatuses: chipsOf(paymentStatuses),
     fields: fields.map((field) => ({ key: field.key, label: field.label })),
     appWords: app.counts,
+    review,
   };
 }
 
@@ -1577,6 +1594,7 @@ export async function readEntries(
       inApp: entry.inApp,
       invitation: invitations[at] ?? null,
       app: appOrThrow(app[at]),
+      needsReview: entry.needsReview,
     })),
     cursor: last === undefined ? null : encodeEntryCursor({ name: last.fullName, id: last.entryId }),
   };

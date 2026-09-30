@@ -365,6 +365,168 @@ export type MemberListEditedField = z.infer<typeof memberListEditedFieldSchema>;
  *  the gym's own columns, so nothing unbounded reaches a reply or a row. */
 export const MEMBER_LIST_MAX_EDITED_FIELDS = memberListFieldSchema.options.length + MEMBER_LIST_MAX_EXTRA_FIELDS;
 
+// ── REVIEW NEEDED (ROADMAP 5b-v-d-iv; RULINGS 2026-09-29) ──
+
+/** What an import found wrong with one of a person's fields, kept on their record until
+ *  staff fix the field or say it is correct (Kd: "if gym dont see them they will forget").
+ *  Only what staff can put right on the person: a family sharing one email is normal, and
+ *  a card number was removed from the file, so neither marks anybody. */
+export const memberListReviewProblemSchema = z.enum([
+  /** A "?" where a letter of the name was. */
+  "letters_lost",
+  /** Letters of the name read in the wrong alphabet ("H‚lŠne"). */
+  "letters_garbled",
+  /** A phone or member number the spreadsheet shortened (9.19877E+11), left empty. */
+  "number_cut",
+  /** A phone left out because the gym has no country set. */
+  "no_country",
+  "phone_unusual",
+  /** The gym's own email or phone on many rows, left out of this person's. */
+  "front_desk",
+  /** One of the gym's own columns longer than we keep, cut. */
+  "cell_cut",
+  /** A date column's cell that was no date, left empty. */
+  "not_a_date",
+]);
+export type MemberListReviewProblem = z.infer<typeof memberListReviewProblemSchema>;
+
+/** One problem on one field. The field is named as a hand edit names it: a standard field
+ *  by its own name, one of the gym's own columns as `extra:<key>`. */
+export const memberListReviewItemSchema = z
+  .object({ problem: memberListReviewProblemSchema, field: memberListEditedFieldSchema })
+  .strict();
+export type MemberListReviewItem = z.infer<typeof memberListReviewItemSchema>;
+
+/** A field holds at most two problems (a name with both kinds of broken letter; a phone
+ *  shortened in one column and missing its country in another). */
+export const MEMBER_LIST_MAX_REVIEW_ITEMS = 2 * MEMBER_LIST_MAX_EDITED_FIELDS;
+
+/** How a record stores one item: `phone_unusual:phone`, `cell_cut:extra:notes`. */
+export function memberListReviewKey(item: MemberListReviewItem): string {
+  return `${item.problem}:${item.field}`;
+}
+
+/** The stored form read back, or null for one this build does not know. */
+export function parseMemberListReviewKey(key: string): MemberListReviewItem | null {
+  const at = key.indexOf(":");
+  if (at < 1) return null;
+  const parsed = memberListReviewItemSchema.safeParse({ problem: key.slice(0, at), field: key.slice(at + 1) });
+  return parsed.success ? parsed.data : null;
+}
+
+const REVIEW_KEY = new RegExp(
+  `^(?:${memberListReviewProblemSchema.options.join("|")}):(?:${memberListFieldSchema.options.join("|")}|${MEMBER_LIST_EXTRA_FIELD_PREFIX}[a-z0-9_]{1,${String(MEMBER_LIST_MAX_FIELD_KEY_CHARS)}})$`,
+);
+
+/** Whether a stored item is one this build knows: `parseMemberListReviewKey`'s answer
+ *  without an object per item, for reading back a whole list's (up to 30,000 items at
+ *  ten thousand people, measured 37–82 ms through the schema). */
+export function isMemberListReviewKey(key: string): boolean {
+  return REVIEW_KEY.test(key);
+}
+
+/** Each field under the name the console's screens give it (the import's column list,
+ *  a person's page). */
+export const MEMBER_LIST_FIELD_LABELS: Readonly<Record<MemberListField, string>> = {
+  fullName: "Name",
+  firstName: "First name",
+  lastName: "Last name",
+  email: "Email",
+  phone: "Phone",
+  memberNumber: "Member number",
+  status: "Status",
+  membershipType: "Membership",
+  joinedOn: "Join date",
+  endsOn: "End or renewal date",
+  paymentStatus: "Payment status",
+  dateOfBirth: "Date of birth",
+};
+
+/** One problem as a person's page shows it, with the field's name as staff know it (the
+ *  gym's own heading for one of its columns). */
+export const memberListReviewLineSchema = memberListReviewItemSchema.extend({ label: z.string().max(200) }).strict();
+export type MemberListReviewLine = z.infer<typeof memberListReviewLineSchema>;
+
+/** What the page says about one problem: what the file had, then what to do. */
+export function memberListReviewWords(problem: MemberListReviewProblem, field: string): string {
+  switch (problem) {
+    case "letters_lost":
+      return "Some letters came out as “?” in the file. Correct the name.";
+    case "letters_garbled":
+      return "Some letters came out wrong in the file, because it was saved in an older alphabet. Correct the name.";
+    case "number_cut":
+      return "The spreadsheet shortened this number and its last digits were lost, so it was left empty. Add the whole number.";
+    case "no_country":
+      return "Left out because the gym had no country set. Add the number with its country code.";
+    case "phone_unusual":
+      return "This doesn't look like a normal number for its country. Check it before you invite them.";
+    case "front_desk":
+      return field === "email"
+        ? "The file had the gym's own email here, so it was left out. Add their own email."
+        : "The file had the gym's own phone number here, so it was left out. Add their own number.";
+    case "cell_cut":
+      return `The file's cell was longer than ${String(MEMBER_LIST_MAX_EXTRA_CHARS)} characters, so the end was cut. Check what is kept.`;
+    case "not_a_date":
+      return "The file's cell wasn't a date, so it was left empty. Add the date.";
+  }
+}
+
+/** "It's correct": staff checked this problem and the value stays as it is. */
+export const memberListReviewCheckedRequestSchema = memberListReviewItemSchema;
+export type MemberListReviewCheckedRequest = z.infer<typeof memberListReviewCheckedRequestSchema>;
+
+/** The Members page's sign: how many current members need review. Who they are is the
+ *  review page's (Kd at the click-through: names in the sign would pile up). */
+export const memberListReviewSignSchema = z.object({ count: z.number().int().min(0) }).strict();
+export type MemberListReviewSign = z.infer<typeof memberListReviewSignSchema>;
+
+/** The same problem in a few words, for a row of the review page ("Phone: looks unusual"). */
+export function memberListReviewShortWords(problem: MemberListReviewProblem): string {
+  switch (problem) {
+    case "letters_lost":
+      return "letters lost";
+    case "letters_garbled":
+      return "letters came out wrong";
+    case "number_cut":
+      return "cut short by the spreadsheet";
+    case "no_country":
+      return "left out, no country set";
+    case "phone_unusual":
+      return "looks unusual";
+    case "front_desk":
+      return "the gym's own, left out";
+    case "cell_cut":
+      return "too long, cut";
+    case "not_a_date":
+      return "not a date";
+  }
+}
+
+/** THE REVIEW PAGE (Kd at 5b-v-d-iv's click-through: "make a separate page"): the current
+ *  members an import found a problem with, by name, a page at a time, each with its lines. */
+export const MEMBER_LIST_REVIEW_PAGE = 100;
+export const memberListReviewPersonSchema = z
+  .object({
+    entryId: z.string().uuid(),
+    fullName: z.string(),
+    email: z.string().nullable(),
+    phone: z.string().nullable(),
+    review: z.array(memberListReviewLineSchema).max(MEMBER_LIST_MAX_REVIEW_ITEMS),
+  })
+  .strict();
+export type MemberListReviewPerson = z.infer<typeof memberListReviewPersonSchema>;
+export const memberListReviewPageSchema = z
+  .object({
+    total: z.number().int().min(0),
+    people: z.array(memberListReviewPersonSchema).max(MEMBER_LIST_REVIEW_PAGE),
+    cursor: z.string().nullable(),
+  })
+  .strict();
+export type MemberListReviewPage = z.infer<typeof memberListReviewPageSchema>;
+export const memberListReviewPageResponseSchema = z.object({ page: memberListReviewPageSchema });
+export const memberListReviewQuerySchema = z.object({ cursor: z.string().max(512).optional() }).strict();
+export type MemberListReviewQuery = z.infer<typeof memberListReviewQuerySchema>;
+
 /** Which way round a column's two-number dates are read. `dayFirst` is
  *  03/04/2026 → 3 April; `monthFirst` is 3 April → March 4. */
 export const memberListDateOrderSchema = z.enum(["dayFirst", "monthFirst"]);
@@ -478,6 +640,11 @@ export const memberListRowSchema = z.object({
    *  empty string is a cell the person left blank. */
   extra: z.array(z.string().max(MEMBER_LIST_MAX_EXTRA_CHARS)).max(MEMBER_LIST_MAX_EXTRA_FIELDS),
   identityKey: sha256Schema,
+  /** What the file had wrong in this person's own cells, which the import keeps on their
+   *  record (5b-v-d-iv). One of the gym's own columns is named by the FILE's key in
+   *  `extraFields`; the import turns it into the gym's. An upload staged before this
+   *  existed has none. */
+  review: z.array(memberListReviewItemSchema).max(MEMBER_LIST_MAX_REVIEW_ITEMS).default([]),
 });
 export type MemberListRow = z.infer<typeof memberListRowSchema>;
 
@@ -1451,6 +1618,8 @@ export const memberListViewSchema = z.object({
   /** Each App choice with how many current members it holds (§18.4), in the Filter's
    *  order, choices holding nobody left out. */
   appWords: z.array(memberAppWordCountSchema).max(MEMBER_APP_FILTER_ORDER.length).default([]),
+  /** The current members an import found a problem with, until staff fix it (5b-v-d-iv). */
+  review: memberListReviewSignSchema.default({ count: 0 }),
 });
 export type MemberListView = z.infer<typeof memberListViewSchema>;
 
@@ -1487,6 +1656,9 @@ export const memberListEntrySchema = z.object({
   invitation: memberListInvitationSchema.nullable().default(null),
   /** Where they stand with the app, in one word (§18.4). */
   app: memberAppViewSchema,
+  /** An import found a problem with this current member that staff have not fixed yet:
+   *  the row's one "Review needed" tag, however many problems (5b-v-d-iv). */
+  needsReview: z.boolean().default(false),
   /** **THE GYM'S OWN COLUMNS ARE NOT HERE, AND THAT IS DELIBERATE.** A page holds a
    *  hundred people and a gym may keep forty of its own columns of up to five hundred
    *  characters each, so carrying them would be two megabytes of a screen that shows
@@ -2054,6 +2226,9 @@ export const memberListEntryDetailSchema = memberListEntrySchema.extend({
   removeEndsApp: z.boolean().default(false),
   /** Whose app it would end, of `members`, so the box can name them. */
   removeEndsAppFor: z.array(z.string().uuid()).max(MEMBER_LIST_MAX_ENTRY_MEMBERS).default([]),
+  /** What an import found wrong on this record, each until staff fix that field or press
+   *  It's correct (5b-v-d-iv). */
+  review: z.array(memberListReviewLineSchema).max(MEMBER_LIST_MAX_REVIEW_ITEMS).default([]),
 });
 export type MemberListEntryDetail = z.infer<typeof memberListEntryDetailSchema>;
 

@@ -44,6 +44,7 @@ const fieldsOf = (who: Who) => ({ fullName: who.fullName, email: who.email ?? nu
 
 const row = (at: number, who: Who): MemberListRow => ({
   row: at,
+  review: [],
   ...fieldsOf(who),
   status: "Active",
   membershipType: null,
@@ -57,6 +58,7 @@ const row = (at: number, who: Who): MemberListRow => ({
 
 const entry = (id: string, who: Who, over: Partial<ListEntry> = {}): ListEntry => ({
   id,
+  review: { needsReview: [], reviewChecked: [] },
   identityKey: identityKey(fieldsOf(who)),
   ...fieldsOf(who),
   status: "Active",

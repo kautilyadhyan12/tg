@@ -639,3 +639,10 @@ export function outcomeWords(outcome, words = { person: 'member', personCap: 'Me
       return null;
   }
 }
+
+// ── Review needed (5b-v-d-iv; RULINGS 2026-09-29) ──────────────────────────
+
+/** The Members sign: "3 members need review", "1 member needs review". */
+export function reviewSignWords(n, words) {
+  return n === 1 ? `1 ${words.person} needs review` : `${n.toLocaleString('en')} ${words.people} need review`;
+}

@@ -1234,6 +1234,10 @@ export const myOrgSchema = orgSummarySchema.extend({
   latestNudge: gymNudgeSchema.nullable().default(null),
   isMember: z.boolean(),
   joinedAt: z.string().nullable(),
+  /** HOW MANY CURRENT MEMBERS AN IMPORT FOUND A PROBLEM WITH, for the amber dot beside
+   *  Members in the console's menu (5b-v-d-iv). Counted only for staff who may see the
+   *  list's details (`members.confirm`); 0 for everyone else. */
+  membersNeedReview: z.number().int().min(0).default(0),
 });
 export type MyOrg = z.infer<typeof myOrgSchema>;
 
