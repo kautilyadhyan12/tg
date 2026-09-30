@@ -890,6 +890,44 @@ describe('Add member: may already be on your list', () => {
     expect(dialog().queryByTestId('maybe-box')).toBeNull();
   });
 
+  it('brings the warning into view and puts the focus on it, since Add member sits at the bottom of a long form', async () => {
+    const scrolled = [];
+    const before = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function scrollIntoView() {
+      scrolled.push(this);
+    };
+    try {
+      orgService.addMemberListEntry.mockRejectedValueOnce(maybeRefusal());
+      openBox(null);
+      typeLiam();
+      fireEvent.click(dialog().getByRole('button', { name: 'Add member' }));
+      const box = await dialog().findByTestId('maybe-box');
+      await waitFor(() => expect(scrolled.some((el) => el.contains(box))).toBe(true));
+      expect(document.activeElement?.contains(box)).toBe(true);
+    } finally {
+      Element.prototype.scrollIntoView = before;
+    }
+  });
+
+  it('brings a refusal into view the same way', async () => {
+    const scrolled = [];
+    const before = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function scrollIntoView() {
+      scrolled.push(this);
+    };
+    try {
+      orgService.addMemberListEntry.mockRejectedValueOnce(refusal(400, { error: 'bad_phone', message: "That phone number doesn't look right." }));
+      openBox(null);
+      typeLiam();
+      fireEvent.click(dialog().getByRole('button', { name: 'Add member' }));
+      const alert = await dialog().findByText("That phone number doesn't look right.");
+      await waitFor(() => expect(scrolled.some((el) => el.contains(alert))).toBe(true));
+      expect(document.activeElement?.contains(alert)).toBe(true);
+    } finally {
+      Element.prototype.scrollIntoView = before;
+    }
+  });
+
   it('Add and invite warns first, and only Add and invite anyway invites', async () => {
     orgService.addMemberListEntry.mockRejectedValueOnce(maybeRefusal());
     openBox(null);

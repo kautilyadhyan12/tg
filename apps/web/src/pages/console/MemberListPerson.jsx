@@ -420,6 +420,18 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const [maybe, setMaybe] = useState(null);
   /** The details typed for somebody new, kept while staff Open a record the warning named. */
   const [draft, setDraft] = useState(null);
+  /** Where a refusal or the warning shows: at the top, above a form whose buttons are at its foot. */
+  const alertRef = useRef(null);
+
+  // A refusal or the warning is brought into view and given the focus, so staff who pressed a
+  // button at the foot of a long form see it, and a screen reader starts there.
+  useEffect(() => {
+    const el = alertRef.current;
+    if (el === null) return;
+    const still = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true;
+    el.scrollIntoView?.({ block: 'start', behavior: still ? 'auto' : 'smooth' });
+    el.focus({ preventScroll: true });
+  }, [refusal, maybe]);
   const [deleted, setDeleted] = useState(null);
   // Join: the search, the record picked, and which of the two is kept.
   const [joinQuery, setJoinQuery] = useState('');
@@ -1466,33 +1478,37 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
               {notice}
             </p>
           ) : null}
-          {refusal !== null ? (
-            <div className="rounded-[14px] p-3 flex flex-col gap-2" style={{ background: 'var(--bad-bg)' }} role="alert">
-              <p className="c-s14 c-t1 m-0">{refusal.message}</p>
-              <div className="flex flex-wrap gap-2">
-                {refusal.openId !== null ? (
-                  <button type="button" onClick={() => openRecord(refusal.openId)} className={PLAIN}>
-                    Open that record
-                  </button>
-                ) : null}
-                {refusal.ack !== null ? (
-                  <button type="button" onClick={() => void refusal.ack()} disabled={busy} className={PLAIN}>
-                    Go ahead anyway
-                  </button>
-                ) : null}
-              </div>
+          {refusal !== null || (maybe !== null && id === null) ? (
+            <div ref={alertRef} tabIndex={-1} className="flex flex-col gap-4 outline-none scroll-mt-4" data-testid="panel-alert">
+              {refusal !== null ? (
+                <div className="rounded-[14px] p-3 flex flex-col gap-2" style={{ background: 'var(--bad-bg)' }} role="alert">
+                  <p className="c-s14 c-t1 m-0">{refusal.message}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {refusal.openId !== null ? (
+                      <button type="button" onClick={() => openRecord(refusal.openId)} className={PLAIN}>
+                        Open that record
+                      </button>
+                    ) : null}
+                    {refusal.ack !== null ? (
+                      <button type="button" onClick={() => void refusal.ack()} disabled={busy} className={PLAIN}>
+                        Go ahead anyway
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+              {maybe !== null && id === null ? (
+                <MaybeBox
+                  maybe={maybe}
+                  words={words}
+                  busy={busy}
+                  readOnly={readOnly}
+                  onOpen={openMatch}
+                  onAnyway={() => addPerson({ ...maybe.input, acknowledgePossibleDuplicates: true })}
+                  onBack={() => setMaybe(null)}
+                />
+              ) : null}
             </div>
-          ) : null}
-          {maybe !== null && id === null ? (
-            <MaybeBox
-              maybe={maybe}
-              words={words}
-              busy={busy}
-              readOnly={readOnly}
-              onOpen={openMatch}
-              onAnyway={() => addPerson({ ...maybe.input, acknowledgePossibleDuplicates: true })}
-              onBack={() => setMaybe(null)}
-            />
           ) : null}
           {body}
         </div>
