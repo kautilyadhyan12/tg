@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { everyoneLeft } from "./memberListEveryoneLeft.js";
+import { addAnyway } from "./memberListAddAnyway.js";
 import { loadConfig } from "../src/config.js";
 import { closeMemberships } from "../src/modules/orgs/memberList/repo.js";
 import {
@@ -669,7 +670,7 @@ d("member list: keeping it by hand (real Postgres)", () => {
       const org = await makeOrg(owner, "Clash Gym");
       const gym = org.org.id;
       const a = await typeIn(gym, owner, { fullName: "Pat Doe", email: "mhand-t-pat@example.com" });
-      const b = await typeIn(gym, owner, { fullName: "Pat Doe", email: "mhand-t-pat2@example.com" });
+      const b = written(await addAnyway((body) => post(entriesUrl(gym), body, owner.cookies), { fullName: "Pat Doe", email: "mhand-t-pat2@example.com" }));
       const before = await listState(gym);
 
       const clash = await patch(entryUrl(gym, b.entry.entryId), { email: "mhand-t-pat@example.com" }, owner.cookies);

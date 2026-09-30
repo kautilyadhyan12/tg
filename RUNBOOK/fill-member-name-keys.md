@@ -7,12 +7,14 @@ on; records written before 0056 have none until this is run.
 
 ## Symptoms
 
-- Members shows no "may be on your list twice" sign although two records have the same name.
+- Members shows no "possible duplicates" sign although two records have the same name.
 - `SELECT count(*) FROM gym_member_list_entries WHERE name_key IS NULL;` is above 0.
 
 ## Steps
 
-1. Run after the migrations. It needs no secret.
+1. Run once the new api is serving: after the migrations AND the deploy. An old api still
+   serving after 0056 writes records with no key, which a fill run before the cutover never
+   sees. It needs no secret.
 
    ```
    DATABASE_URL=<the environment's database> corepack pnpm --filter api exec tsx tools/member-name-keys.ts
@@ -22,5 +24,8 @@ on; records written before 0056 have none until this is run.
 
 ## Verify recovered
 
+Also after the cutover:
+
 - `SELECT count(*) FROM gym_member_list_entries WHERE name_key IS NULL;` is 0.
-- Two records known to share a name show on Members as "may be on your list twice".
+- Two records known to share a name show on Members in the "possible duplicates" sign. The
+  pairs are worked out again by themselves once the keys change (0057).

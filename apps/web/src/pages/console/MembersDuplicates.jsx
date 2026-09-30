@@ -9,7 +9,7 @@ import { useConsoleOrg } from './useConsoleOrg';
 import MemberListPerson from './MemberListPerson';
 import { canRemoveMembers, viewerPrivileges } from './consoleView';
 import { consoleIsReadOnly } from './billingView';
-import { contactWords, duplicatesSignWords, pairWhyWords } from './memberListPeople';
+import { contactWords, duplicatesKeptWords, duplicatesSignWords, pairWhyWords } from './memberListPeople';
 
 // POSSIBLE DUPLICATES (ROADMAP 5b-iv-a; RULINGS 2026-09-25, 2026-09-30): pairs of records that
 // share a name, a phone or a member number, fifty at a time. A pair opens the two side by
@@ -40,7 +40,7 @@ export default function MembersDuplicates() {
   const readOnly = consoleIsReadOnly(org);
   const canRemove = canRemoveMembers(viewerPrivileges(org));
 
-  const [page, setPage] = useState({ loading: true, error: null, pairs: [], total: 0, cursor: null });
+  const [page, setPage] = useState({ loading: true, error: null, pairs: [], total: 0, kept: 0, cursor: null });
   const [list, setList] = useState(null);
   /** The gym's columns could not be read: a pair would compare and preview without them. */
   const [listError, setListError] = useState(null);
@@ -65,7 +65,7 @@ export default function MembersDuplicates() {
         p = (await orgService.getMemberListDuplicates(gymId, p.cursor)).data.page;
         pairs = [...pairs, ...p.pairs];
       }
-      return { pairs, total: p.total, cursor: p.cursor };
+      return { pairs, total: p.total, kept: p.kept, cursor: p.cursor };
     };
     read().then(
       (got) => {
@@ -103,7 +103,7 @@ export default function MembersDuplicates() {
     setLoadingMore(true);
     try {
       const next = (await orgService.getMemberListDuplicates(gymId, page.cursor)).data.page;
-      setPage((was) => ({ ...was, pairs: [...was.pairs, ...next.pairs], total: next.total, cursor: next.cursor }));
+      setPage((was) => ({ ...was, pairs: [...was.pairs, ...next.pairs], total: next.total, kept: next.kept, cursor: next.cursor }));
     } catch (err) {
       setPage((was) => ({ ...was, error: errorText(err, `We couldn't load more.`) }));
     } finally {
@@ -176,6 +176,11 @@ export default function MembersDuplicates() {
           <p className="c-s14 c-t2 c-num" data-testid="duplicates-total">
             {duplicatesSignWords(page.total)}
           </p>
+          {page.kept < page.total ? (
+            <p className="c-s14 c-t2 m-0" data-testid="duplicates-kept">
+              {duplicatesKeptWords(page.kept, page.total)}
+            </p>
+          ) : null}
           <section className="c-card overflow-hidden">
             <ul>
               {page.pairs.map((pair, i) => (

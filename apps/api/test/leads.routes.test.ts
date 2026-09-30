@@ -5,6 +5,7 @@
 // leads (names, emails, phone numbers) seen or changed by somebody outside that gym's
 // ticked staff. Every refusal is checked against the database, and every door is
 // first opened by the owner, so a missing route cannot pass for a refusal.
+import { addAnyway } from "./memberListAddAnyway.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
@@ -145,6 +146,12 @@ d("a gym's leads (real Postgres)", () => {
 
   const addEntry = async (gymId: string, cookies: Record<string, string>, body: Record<string, unknown>) => {
     const res = await post(`/v1/orgs/${gymId}/member-list/entries`, body, cookies);
+    expect(res.statusCode).toBe(201);
+    return (JSON.parse(res.body) as { entry: { entryId: string } }).entry.entryId;
+  };
+  /** A second record of somebody on the list, on purpose: Add anyway (5b-iv-b). */
+  const addEntryAnyway = async (gymId: string, cookies: Record<string, string>, body: Record<string, unknown>) => {
+    const res = await addAnyway((sent) => post(`/v1/orgs/${gymId}/member-list/entries`, sent, cookies), body);
     expect(res.statusCode).toBe(201);
     return (JSON.parse(res.body) as { entry: { entryId: string } }).entry.entryId;
   };
@@ -685,7 +692,7 @@ d("a gym's leads (real Postgres)", () => {
       // Two current records with the lead's name and email (one with a member number): the one
       // with exactly the lead's details is not linked either.
       const exact = await addEntry(gym, owner.cookies, { fullName: "Tom Reid", email: "tom@example.com" });
-      await addEntry(gym, owner.cookies, { fullName: "Tom Reid", email: "tom@example.com", memberNumber: "M7" });
+      await addEntryAnyway(gym, owner.cookies, { fullName: "Tom Reid", email: "tom@example.com", memberNumber: "M7" });
       const tom = await addLead(gym, owner.cookies, { fullName: "Tom Reid", email: "tom@example.com" });
       expect((await post(joinUrl(gym, tom.id), {}, owner.cookies)).statusCode).toBe(409);
       const again = await post(joinUrl(gym, tom.id), { asNew: true }, owner.cookies);
@@ -749,7 +756,7 @@ d("a gym's leads (real Postgres)", () => {
       expect((await post(joinUrl(gym, lead.id), {}, owner.cookies)).statusCode).toBe(200);
       const made = (await storedLeads(gym))[0]?.entry_id;
       if (made === null || made === undefined) throw new Error("the join linked no record");
-      const keep = await addEntry(gym, owner.cookies, { fullName: "Priya Shah", phone: "+447700900555" });
+      const keep = await addEntryAnyway(gym, owner.cookies, { fullName: "Priya Shah", phone: "+447700900555" });
 
       // Staff open the record they do not want (the lead's) and keep the other.
       const merged = await post(`/v1/orgs/${gym}/member-list/entries/${made}/merge`, { keepEntryId: keep }, owner.cookies);

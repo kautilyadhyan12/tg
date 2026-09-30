@@ -183,3 +183,5 @@ stage. History, never a rule: RULINGS wins where they differ.
 20c-vi. [x] **The two extra passes' fixes** (reviews 2026-09-30): a stranger on a gym's page can no longer stop its invitations (RULINGS 2026-09-30), the form cannot fill the gym, the same email never twice, and seven smaller mix-ups; the re-checks' Lows too (robot failures counted apart, the busy-page share, Leads says what the page turned away). Merged 2026-09-30 (PR #139).
 
 - 5b-iv-a. [x] **The Review page of pairs**: "5 possible duplicates · Review", each pair side by side, Merge or Different people (remembered); never merged by the app. Merged 2026-09-30 (PR #138).
+
+- 5b-iv-b (ticked 2026-09-30, PR #141), the line as it stood: - 5b-iv-b. [ ] **The warning when adding**: "Liam Hughes may already be on your list · Open · Add anyway" on a shared name, phone or member number; the exact "already on your list" stays.

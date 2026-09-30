@@ -83,10 +83,10 @@ function parseOr400<S extends z.ZodTypeAny>(
   const parsed: z.SafeParseReturnType<unknown, z.output<S>> = schema.safeParse(value);
   if (!parsed.success) {
     // Issue paths and codes only, never the offending value (R3.10): the value
-    // here is a member list.
+    // here is a member list. A check of our own says its own sentence, which holds none.
     void reply.status(400).send({
       error: "validation_error",
-      message: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.code}`).join("; "),
+      message: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.code === "custom" ? i.message : i.code}`).join("; "),
       requestId: req.id,
     });
     return null;
@@ -436,6 +436,13 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
           requestId: req.id,
         });
       }
+      case "may_be_on_list":
+        return reply.status(409).send({
+          error: "may_be_on_list",
+          message: MEMBER_LIST_BY_HAND_WORDS.may_be_on_list,
+          people: answer.people,
+          requestId: req.id,
+        });
       case "leaves_list":
         return reply.status(409).send({
           error: "leaves_list",

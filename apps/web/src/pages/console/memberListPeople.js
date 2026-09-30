@@ -199,6 +199,20 @@ export function contactWords(entry) {
   return entry.email ?? entry.phone ?? 'No email or phone';
 }
 
+/** Add member's warning (5b-iv-b): its heading, with the name as staff typed it. */
+export function mayBeOnListWords(typedName) {
+  const name = (typedName ?? '').trim();
+  return `${name === '' ? 'This person' : name} may already be on your list`;
+}
+
+/** A record the warning names: every detail that tells two people apart, in one line. */
+export function matchDetailWords(match) {
+  const parts = [match.email, match.phone, match.memberNumber === null ? null : `Member number ${match.memberNumber}`].filter(
+    (part) => part !== null && part !== '',
+  );
+  return parts.length === 0 ? 'No email or phone' : parts.join(' · ');
+}
+
 /** Tick or untick one App word. */
 export function toggleApp(filters, word) {
   return { ...filters, app: filters.app.includes(word) ? filters.app.filter((w) => w !== word) : [...filters.app, word] };
@@ -706,6 +720,12 @@ export function reviewSignWords(n, words) {
  *  pairs, and "3 members may be on your list twice" would be false. */
 export function duplicatesSignWords(n) {
   return n === 1 ? '1 possible duplicate' : `${n.toLocaleString('en')} possible duplicates`;
+}
+
+/** Past the pairs kept ready (MEMBER_LIST_DUPLICATES_KEPT): which ones this page lists, and
+ *  that the rest follow. */
+export function duplicatesKeptWords(kept, total) {
+  return `Showing the first ${kept.toLocaleString('en')} of ${total.toLocaleString('en')}. Merge them or choose Different people, and the next ones will show here.`;
 }
 
 /** What a pair's two records share: "Same name", "Same name and phone". */

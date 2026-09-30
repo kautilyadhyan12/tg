@@ -8,6 +8,7 @@
 // removing one person ends the app for somebody else — the mother loses the app when her
 // son's record is removed, or removing the mother from the app takes her son's record off
 // the list. Every check reads the database, not the reply.
+import { addAnyway } from "./memberListAddAnyway.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
@@ -147,8 +148,8 @@ d("One Remove (real Postgres)", () => {
 
   /** Staff type a person in; the gym's invitation to their address is written here, as
    *  the join suite does, so no other suite's sender emails it. */
-  const add = async (gym: Gym, body: { fullName: string; email?: string; phone?: string; dateOfBirth?: string; memberNumber?: string }, invited = true): Promise<string> => {
-    const res = await post(entriesUrl(gym), body, gym.owner.cookies);
+  const add = async (gym: Gym, body: { fullName: string; email?: string; phone?: string; dateOfBirth?: string; memberNumber?: string }, invited = true, anyway = false): Promise<string> => {
+    const res = anyway ? await addAnyway((sent) => post(entriesUrl(gym), sent, gym.owner.cookies), body) : await post(entriesUrl(gym), body, gym.owner.cookies);
     expect([200, 201], res.body).toContain(res.statusCode);
     const { entry } = memberListEntryWrittenSchema.parse(JSON.parse(res.body));
     if (invited && body.email !== undefined) {
@@ -779,7 +780,7 @@ d("One Remove (real Postgres)", () => {
       await accept(oliviaUser);
       expect((await removeRecord(gym, first)).statusCode).toBe(200);
       // The same person typed in again under another address, and taken off too.
-      const second = await add(gym, { fullName: "Olivia Bennett", email: addr("mg-olivia2") }, false);
+      const second = await add(gym, { fullName: "Olivia Bennett", email: addr("mg-olivia2") }, false, true);
       expect((await removeRecord(gym, second)).statusCode).toBe(200);
       const merged = await post(`${entriesUrl(gym)}/${first}/merge`, { keepEntryId: second }, gym.owner.cookies);
       expect(merged.statusCode, merged.body).toBe(200);

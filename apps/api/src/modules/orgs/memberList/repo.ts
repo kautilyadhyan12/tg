@@ -16,6 +16,7 @@
 import { z } from "zod";
 import type { Sql, TransactionSql } from "postgres";
 import {
+  MEMBER_LIST_DUPLICATES_KEPT,
   MEMBER_LIST_MAX_EDITED_FIELDS,
   MEMBER_LIST_MAX_ENTRY_MEMBERS,
   MEMBER_LIST_MAX_REVIEW_ITEMS,
@@ -42,6 +43,7 @@ import {
   type MemberListStoredPerson,
   type MemberListReviewSign,
   type MemberListDuplicatePair,
+  type MemberListPossibleMatch,
   type MemberListDuplicatesSign,
   type MemberListRowGroup,
   type MemberListStagedFile,
@@ -2565,28 +2567,32 @@ export const DUPLICATE_SHARED_MAX = 5;
 
 /** The gym's pairs of records alike by name, phone or member number, as `pairs`: at least
  *  one of the two a current member, never two with different dates of birth, never a pair
- *  staff marked Different people. `first` is the record whose (name, id) sorts first. One
- *  set of CTEs for the count and the page, so the sign and the page cannot disagree.
+ *  staff marked Different people. `first` is the record whose (name, id) sorts first.
  *
  *  **GROUPS FIRST, THEN PAIRS INSIDE EACH GROUP**, never the list joined to itself: a
  *  group is at most `DUPLICATE_SHARED_MAX` records, so it holds at most ten pairs, and the
  *  work grows with the list, not with its square (a self-join planned as a nested loop
  *  ran for minutes at 10,000 records). Grouped by bytes (`COLLATE "C"`): the same groups as
- *  the database's own collation, which is deterministic, without its slow sort. */
+ *  the database's own collation, which is deterministic, without its slow sort. The gym's
+ *  records are read once (`e`) and each pair joined to them by hash, not looked up twice.
+ *  The worst the rule allows is six pairs a record (a name, a phone and a number each held
+ *  by five), 120,000 at 20,000 records: worked out once per change (`freshPairs`), never
+ *  per read. */
 function duplicatePairs(sql: SqlOrTx, gymId: string) {
   return sql`
+    e AS MATERIALIZED (
+      SELECT id, full_name, name_key, phone_e164, lower(member_number) AS num, date_of_birth, (former_at IS NOT NULL) AS past
+      FROM gym_member_list_entries WHERE gym_id = ${gymId}
+    ),
     groups AS (
-      SELECT array_agg(id) AS ids FROM gym_member_list_entries
-      WHERE gym_id = ${gymId} AND name_key <> ''
+      SELECT array_agg(id) AS ids FROM e WHERE name_key <> ''
       GROUP BY name_key COLLATE "C" HAVING count(*) BETWEEN 2 AND ${DUPLICATE_SHARED_MAX}
       UNION ALL
-      SELECT array_agg(id) FROM gym_member_list_entries
-      WHERE gym_id = ${gymId} AND phone_e164 IS NOT NULL
+      SELECT array_agg(id) FROM e WHERE phone_e164 IS NOT NULL
       GROUP BY phone_e164 COLLATE "C" HAVING count(*) BETWEEN 2 AND ${DUPLICATE_SHARED_MAX}
       UNION ALL
-      SELECT array_agg(id) FROM gym_member_list_entries
-      WHERE gym_id = ${gymId} AND member_number IS NOT NULL
-      GROUP BY lower(member_number) COLLATE "C" HAVING count(*) BETWEEN 2 AND ${DUPLICATE_SHARED_MAX}
+      SELECT array_agg(id) FROM e WHERE num IS NOT NULL
+      GROUP BY num COLLATE "C" HAVING count(*) BETWEEN 2 AND ${DUPLICATE_SHARED_MAX}
     ),
     alike AS (
       SELECT DISTINCT least(low.id, high.id) AS low, greatest(low.id, high.id) AS high
@@ -2595,12 +2601,17 @@ function duplicatePairs(sql: SqlOrTx, gymId: string) {
       JOIN LATERAL unnest(groups.ids) WITH ORDINALITY AS high(id, pos) ON high.pos > low.pos
     ),
     pairs AS (
-      SELECT CASE WHEN (a.full_name, a.id) < (b.full_name, b.id) THEN a.id ELSE b.id END AS first_id,
-             CASE WHEN (a.full_name, a.id) < (b.full_name, b.id) THEN b.id ELSE a.id END AS second_id
+      SELECT CASE WHEN o.a_first THEN a.id ELSE b.id END AS first_id,
+             CASE WHEN o.a_first THEN b.id ELSE a.id END AS second_id,
+             CASE WHEN o.a_first THEN a.full_name ELSE b.full_name END AS first_name,
+             (a.name_key <> '' AND a.name_key = b.name_key) AS same_name,
+             coalesce(a.phone_e164 = b.phone_e164, false) AS same_phone,
+             coalesce(a.num = b.num, false) AS same_number
       FROM alike
-      JOIN gym_member_list_entries a ON a.gym_id = ${gymId} AND a.id = alike.low
-      JOIN gym_member_list_entries b ON b.gym_id = ${gymId} AND b.id = alike.high
-      WHERE (a.former_at IS NULL OR b.former_at IS NULL)
+      JOIN e a ON a.id = alike.low
+      JOIN e b ON b.id = alike.high
+      CROSS JOIN LATERAL (SELECT (a.full_name, a.id) < (b.full_name, b.id) AS a_first) o
+      WHERE (NOT a.past OR NOT b.past)
         AND NOT (a.date_of_birth IS NOT NULL AND b.date_of_birth IS NOT NULL AND a.date_of_birth <> b.date_of_birth)
         AND NOT EXISTS (
           SELECT 1 FROM gym_member_list_not_duplicates n
@@ -2609,90 +2620,289 @@ function duplicatePairs(sql: SqlOrTx, gymId: string) {
     )`;
 }
 
+/** What the gym's pairs are worked out from, in one line: the rule's own number, then every
+ *  record's id, name, name key, phone, member number, date of birth and whether it is past,
+ *  and every Different people mark, each hashed and summed. One pass over the gym's records,
+ *  as the Members page's counts are; the pairs are worked out again only when it differs
+ *  from the stamp they were stored with. */
+export async function pairsStamp(sql: SqlOrTx, gymId: string): Promise<string> {
+  const rows = await sql<{ stamp: string }[]>`
+    SELECT concat_ws(':', ${String(DUPLICATE_SHARED_MAX)}::text,
+      (SELECT count(*) FROM gym_member_list_entries WHERE gym_id = ${gymId}),
+      (SELECT coalesce(sum(hashtextextended(ROW(id, full_name, name_key, phone_e164, lower(member_number), date_of_birth, former_at IS NULL)::text, 0)), 0)
+         FROM gym_member_list_entries WHERE gym_id = ${gymId})
+    ) || '|' || ${await marksStamp(sql, gymId)} AS stamp`;
+  const stamp = rows[0]?.stamp;
+  if (stamp === undefined) throw new Error("the pairs' stamp returned no row");
+  return stamp;
+}
+
+/** The Different people part of `pairsStamp`, after its "|". */
+async function marksStamp(sql: SqlOrTx, gymId: string): Promise<string> {
+  const rows = await sql<{ stamp: string }[]>`
+    SELECT concat_ws(':',
+      (SELECT count(*) FROM gym_member_list_not_duplicates WHERE gym_id = ${gymId}),
+      (SELECT coalesce(sum(hashtextextended(ROW(first_entry_id, second_entry_id)::text, 0)), 0)
+         FROM gym_member_list_not_duplicates WHERE gym_id = ${gymId})
+    ) AS stamp`;
+  const stamp = rows[0]?.stamp;
+  if (stamp === undefined) throw new Error("the marks' stamp returned no row");
+  return stamp;
+}
+
+/** Whether two of the gym's records are a pair by `duplicatePairs`' rule, leaving Different
+ *  people aside: a value they share held by at most `DUPLICATE_SHARED_MAX` records, at least
+ *  one of the two current, no two dates of birth that differ. */
+async function arePair(sql: SqlOrTx, gymId: string, low: string, high: string): Promise<boolean> {
+  const rows = await sql<{ alike: boolean }[]>`
+    SELECT (
+      (a.former_at IS NULL OR b.former_at IS NULL)
+      AND NOT (a.date_of_birth IS NOT NULL AND b.date_of_birth IS NOT NULL AND a.date_of_birth <> b.date_of_birth)
+      AND (
+        (a.name_key <> '' AND a.name_key = b.name_key
+          AND (SELECT count(*) FROM gym_member_list_entries WHERE gym_id = ${gymId} AND name_key = a.name_key) <= ${DUPLICATE_SHARED_MAX})
+        OR (a.phone_e164 = b.phone_e164
+          AND (SELECT count(*) FROM gym_member_list_entries WHERE gym_id = ${gymId} AND phone_e164 = a.phone_e164) <= ${DUPLICATE_SHARED_MAX})
+        OR (lower(a.member_number) = lower(b.member_number)
+          AND (SELECT count(*) FROM gym_member_list_entries WHERE gym_id = ${gymId} AND lower(member_number) = lower(a.member_number)) <= ${DUPLICATE_SHARED_MAX})
+      )
+    ) AS alike
+    FROM gym_member_list_entries a, gym_member_list_entries b
+    WHERE a.gym_id = ${gymId} AND a.id = ${low}::uuid AND b.gym_id = ${gymId} AND b.id = ${high}::uuid`;
+  return rows[0]?.alike === true;
+}
+
+/** How many pairs the gym has, and how many of them are kept ready to page through. */
+export interface PairsCount {
+  count: number;
+  kept: number;
+}
+
+/** Working the pairs out that took longer than this is done at most once a `PAIRS_REST`. A
+ *  real list takes a few milliseconds and is never kept waiting; only a list built to the
+ *  rule's worst shape (thousands of pairs) is, so one gym cannot keep the database busy. */
+export const PAIRS_SLOW_MS = 250;
+export const PAIRS_REST = "60 seconds";
+
+interface StoredPairs {
+  stamp: string | null;
+  counted: PairsCount | null;
+  /** Worked out slowly less than `PAIRS_REST` ago: read as they are until then. */
+  resting: boolean;
+}
+
+/** The stamp and counts the gym's pairs were stored with; null for a gym with no list row. */
+async function storedPairs(sql: SqlOrTx, gymId: string): Promise<StoredPairs | null> {
+  const rows = await sql<{ pairs_stamp: string | null; pairs_count: number | null; pairs_kept: number | null; resting: boolean }[]>`
+    SELECT pairs_stamp, pairs_count, pairs_kept,
+           coalesce(pairs_cost_ms > ${PAIRS_SLOW_MS} AND pairs_built_at > now() - ${PAIRS_REST}::interval, false) AS resting
+    FROM gym_member_lists WHERE gym_id = ${gymId}`;
+  const row = rows[0];
+  if (row === undefined) return null;
+  const counted = row.pairs_count === null || row.pairs_kept === null ? null : { count: row.pairs_count, kept: row.pairs_kept };
+  return { stamp: row.pairs_stamp, counted, resting: row.resting };
+}
+
+/** Stored pairs still good to read: worked out from what the records hold now (or slowly,
+ *  moments ago), and not all dealt with while more wait past the kept ones. */
+const current = (stored: StoredPairs, stamp: string): PairsCount | null =>
+  (stored.stamp === stamp || stored.resting) && stored.counted !== null && !(stored.counted.kept === 0 && stored.counted.count > 0)
+    ? stored.counted
+    : null;
+
+/** The gym's pairs, stored and current: how many, and how many kept. Worked out again, once,
+ *  under the gym's lock, only when what they come from has changed since they were stored
+ *  (or every kept one was dealt with and more wait); otherwise one pass for the stamp and
+ *  one row read. Only the first `MEMBER_LIST_DUPLICATES_KEPT` by name are written: at the
+ *  worst the rule allows, working 120,000 pairs out is a fraction of writing them. A gym with no list row has no records: every write
+ *  of a record makes the row first (a confirm's `writeListState`, `bumpListVersion` by hand). */
+export async function freshPairs(sql: Sql, gymId: string): Promise<PairsCount> {
+  const stamp = await pairsStamp(sql, gymId);
+  const stored = await storedPairs(sql, gymId);
+  if (stored === null) return { count: 0, kept: 0 };
+  const ready = current(stored, stamp);
+  if (ready !== null) return ready;
+  return await sql.begin(async (tx) => {
+    // Two reads at once: the second waits here, then finds the first one's work stored.
+    await lockGym(tx, gymId);
+    const now = await pairsStamp(tx, gymId);
+    const again = await storedPairs(tx, gymId);
+    if (again === null) return { count: 0, kept: 0 };
+    const done = current(again, now);
+    if (done !== null) return done;
+    const started = await tx<{ at: string }[]>`SELECT clock_timestamp()::text AS at`;
+    await tx`DELETE FROM gym_member_list_pairs WHERE gym_id = ${gymId}`;
+    const rows = await tx<{ count: number; kept: number }[]>`
+      WITH ${duplicatePairs(tx, gymId)},
+      written AS (
+        INSERT INTO gym_member_list_pairs (gym_id, first_entry_id, second_entry_id, first_name, same_name, same_phone, same_number)
+        SELECT ${gymId}, first_id, second_id, first_name, same_name, same_phone, same_number FROM pairs
+        ORDER BY first_name, first_id, second_id
+        LIMIT ${MEMBER_LIST_DUPLICATES_KEPT}
+        RETURNING 1
+      )
+      SELECT (SELECT count(*) FROM pairs)::int AS count, (SELECT count(*) FROM written)::int AS kept`;
+    const counted = rows[0] ?? { count: 0, kept: 0 };
+    await tx`
+      UPDATE gym_member_lists
+      SET pairs_stamp = ${now}, pairs_count = ${counted.count}, pairs_kept = ${counted.kept}, pairs_built_at = now(),
+          pairs_cost_ms = (extract(epoch FROM clock_timestamp() - ${started[0]?.at ?? null}::timestamptz) * 1000)::int
+      WHERE gym_id = ${gymId}`;
+    return { count: counted.count, kept: counted.kept };
+  });
+}
+
+/** Different people on stored pairs: the pair comes off them and the count drops by one when
+ *  the two were a pair, so the next read shows it gone without working every pair out again.
+ *  The stamp takes the new marks and keeps the records part from `before`, so nothing another
+ *  writer changed meanwhile is taken as worked out; pairs resting after slow work keep their
+ *  old stamp and are still worked out again. Inside the caller's transaction, under the
+ *  gym's lock, with the mark already written. */
+export async function dropMarkedPair(tx: TransactionSql, gymId: string, low: string, high: string, before: string): Promise<void> {
+  const stored = await storedPairs(tx, gymId);
+  if (stored === null) return;
+  const ready = current(stored, before);
+  if (ready === null) return;
+  const gone = await tx`
+    DELETE FROM gym_member_list_pairs
+    WHERE gym_id = ${gymId}
+      AND ((first_entry_id = ${low}::uuid AND second_entry_id = ${high}::uuid)
+        OR (first_entry_id = ${high}::uuid AND second_entry_id = ${low}::uuid))`;
+  // Past the kept ones the pair is not in the table: asked of the two records themselves.
+  const wasPair = gone.count > 0 || (ready.count > ready.kept && (await arePair(tx, gymId, low, high)));
+  const recordsPart = before.slice(0, before.indexOf("|"));
+  const stamp = stored.stamp === before ? `${recordsPart}|${await marksStamp(tx, gymId)}` : stored.stamp;
+  await tx`
+    UPDATE gym_member_lists
+    SET pairs_stamp = ${stamp}, pairs_count = ${ready.count - (wasPair ? 1 : 0)}, pairs_kept = ${ready.kept - gone.count}
+    WHERE gym_id = ${gymId}`;
+}
+
+interface MatchSqlRow {
+  id: string;
+  full_name: string;
+  email: string | null;
+  phone_e164: string | null;
+  member_number: string | null;
+  past: boolean;
+  same_name: boolean;
+  same_phone: boolean;
+  same_number: boolean;
+}
+
+/** "May already be on your list" (5b-iv-b): the records a NEW record with these details
+ *  would be paired with on the possible-duplicates page, by `duplicatePairs`' own rule.
+ *  A value counts only while fewer than `DUPLICATE_SHARED_MAX` records hold it, so that
+ *  with the new record its group is still one that pairs; a record whose date of birth
+ *  differs from the one typed is somebody else. The new record is a current one, so past
+ *  members count. Each value is one lookup on its own index. */
+export async function possibleMatches(
+  sql: SqlOrTx,
+  gymId: string,
+  typed: { nameKey: string; phone: string | null; memberNumber: string | null; dateOfBirth: string | null },
+): Promise<MemberListPossibleMatch[]> {
+  const rows = await sql<MatchSqlRow[]>`
+    WITH named AS (
+      SELECT id FROM gym_member_list_entries
+      WHERE gym_id = ${gymId} AND ${typed.nameKey} <> '' AND name_key = ${typed.nameKey}
+      LIMIT ${DUPLICATE_SHARED_MAX}
+    ),
+    phoned AS (
+      SELECT id FROM gym_member_list_entries
+      WHERE gym_id = ${gymId} AND phone_e164 = ${typed.phone}::text
+      LIMIT ${DUPLICATE_SHARED_MAX}
+    ),
+    numbered AS (
+      SELECT id FROM gym_member_list_entries
+      WHERE gym_id = ${gymId} AND lower(member_number) = lower(${typed.memberNumber}::text)
+      LIMIT ${DUPLICATE_SHARED_MAX}
+    ),
+    alike AS (
+      SELECT id FROM named WHERE (SELECT count(*) FROM named) < ${DUPLICATE_SHARED_MAX}
+      UNION
+      SELECT id FROM phoned WHERE (SELECT count(*) FROM phoned) < ${DUPLICATE_SHARED_MAX}
+      UNION
+      SELECT id FROM numbered WHERE (SELECT count(*) FROM numbered) < ${DUPLICATE_SHARED_MAX}
+    )
+    SELECT e.id, e.full_name, e.email::text AS email, e.phone_e164, e.member_number,
+           (e.former_at IS NOT NULL) AS past,
+           (${typed.nameKey} <> '' AND e.name_key = ${typed.nameKey}) AS same_name,
+           coalesce(e.phone_e164 = ${typed.phone}::text, false) AS same_phone,
+           coalesce(lower(e.member_number) = lower(${typed.memberNumber}::text), false) AS same_number
+    FROM alike
+    JOIN gym_member_list_entries e ON e.gym_id = ${gymId} AND e.id = alike.id
+    WHERE NOT (${typed.dateOfBirth}::date IS NOT NULL AND e.date_of_birth IS NOT NULL AND e.date_of_birth <> ${typed.dateOfBirth}::date)
+    ORDER BY e.full_name, e.id`;
+  return rows.map((row) => ({
+    entryId: row.id,
+    fullName: row.full_name,
+    email: row.email,
+    phone: row.phone_e164,
+    memberNumber: row.member_number,
+    past: row.past,
+    sameName: row.same_name,
+    samePhone: row.same_phone,
+    sameMemberNumber: row.same_number,
+  }));
+}
+
 /** The Members sign: how many pairs may be one person twice. */
-export async function duplicatesSign(sql: SqlOrTx, gymId: string): Promise<MemberListDuplicatesSign> {
-  const rows = await sql<{ total: number }[]>`
-    WITH ${duplicatePairs(sql, gymId)}
-    SELECT count(*)::int AS total FROM pairs`;
-  return { count: rows[0]?.total ?? 0 };
+export async function duplicatesSign(sql: Sql, gymId: string): Promise<MemberListDuplicatesSign> {
+  return { count: (await freshPairs(sql, gymId)).count };
 }
 
 interface PairSqlRow {
-  total: number;
-  f_id: string | null;
-  f_name: string | null;
+  f_id: string;
+  f_name: string;
   f_email: string | null;
   f_phone: string | null;
   f_number: string | null;
-  f_past: boolean | null;
-  s_id: string | null;
-  s_name: string | null;
+  f_past: boolean;
+  s_id: string;
+  s_name: string;
   s_email: string | null;
   s_phone: string | null;
   s_number: string | null;
-  s_past: boolean | null;
-  same_name: boolean | null;
-  same_phone: boolean | null;
-  same_number: boolean | null;
+  s_past: boolean;
+  same_name: boolean;
+  same_phone: boolean;
+  same_number: boolean;
 }
 
-/** The possible-duplicates page: one page of pairs after `cursor`, in the order of their
- *  first record's name, and how many in all, in one statement. */
+/** The possible-duplicates page: one page of the stored pairs after `cursor`, in the order
+ *  of their first record's name, read on the pairs' own index, and how many in all. */
 export async function duplicatesPage(
-  sql: SqlOrTx,
+  sql: Sql,
   input: { gymId: string; cursor: { name: string; id: string; second: string } | null; limit: number },
-): Promise<{ total: number; pairs: MemberListDuplicatePair[] }> {
+): Promise<{ total: number; kept: number; pairs: MemberListDuplicatePair[] }> {
   const { gymId, cursor } = input;
+  const { count: total, kept } = await freshPairs(sql, gymId);
   const rows = await sql<PairSqlRow[]>`
-    WITH ${duplicatePairs(sql, gymId)},
-    shown AS (
-      SELECT f.id AS f_id, f.full_name AS f_name, f.email::text AS f_email, f.phone_e164 AS f_phone,
-             f.member_number AS f_number, (f.former_at IS NOT NULL) AS f_past,
-             s.id AS s_id, s.full_name AS s_name, s.email::text AS s_email, s.phone_e164 AS s_phone,
-             s.member_number AS s_number, (s.former_at IS NOT NULL) AS s_past,
-             (f.name_key <> '' AND f.name_key = s.name_key) AS same_name,
-             (f.phone_e164 = s.phone_e164) AS same_phone,
-             (lower(f.member_number) = lower(s.member_number)) AS same_number
-      FROM pairs p
-      JOIN gym_member_list_entries f ON f.gym_id = ${gymId} AND f.id = p.first_id
-      JOIN gym_member_list_entries s ON s.gym_id = ${gymId} AND s.id = p.second_id
-    )
-    SELECT (SELECT count(*)::int FROM pairs) AS total, page.*
-    FROM (SELECT 1) one
-    LEFT JOIN LATERAL (
-      SELECT * FROM shown
-      WHERE ${cursor === null}
-         OR (shown.f_name, shown.f_id, shown.s_id)
-            > (${cursor?.name ?? ""}::text, ${cursor?.id ?? EMPTY_UUID}::uuid, ${cursor?.second ?? EMPTY_UUID}::uuid)
-      ORDER BY shown.f_name, shown.f_id, shown.s_id
-      LIMIT ${input.limit}
-    ) page ON true`;
-  const pairs: MemberListDuplicatePair[] = [];
-  for (const row of rows) {
-    if (row.f_id === null || row.s_id === null) continue;
-    pairs.push({
-      first: {
-        entryId: row.f_id,
-        fullName: row.f_name ?? "",
-        email: row.f_email,
-        phone: row.f_phone,
-        memberNumber: row.f_number,
-        past: row.f_past ?? false,
-      },
-      second: {
-        entryId: row.s_id,
-        fullName: row.s_name ?? "",
-        email: row.s_email,
-        phone: row.s_phone,
-        memberNumber: row.s_number,
-        past: row.s_past ?? false,
-      },
-      sameName: row.same_name ?? false,
-      samePhone: row.same_phone ?? false,
-      sameMemberNumber: row.same_number ?? false,
-    });
-  }
-  return { total: rows[0]?.total ?? 0, pairs };
+    SELECT f.id AS f_id, f.full_name AS f_name, f.email::text AS f_email, f.phone_e164 AS f_phone,
+           f.member_number AS f_number, (f.former_at IS NOT NULL) AS f_past,
+           s.id AS s_id, s.full_name AS s_name, s.email::text AS s_email, s.phone_e164 AS s_phone,
+           s.member_number AS s_number, (s.former_at IS NOT NULL) AS s_past,
+           p.same_name, p.same_phone, p.same_number
+    FROM gym_member_list_pairs p
+    JOIN gym_member_list_entries f ON f.gym_id = ${gymId} AND f.id = p.first_entry_id
+    JOIN gym_member_list_entries s ON s.gym_id = ${gymId} AND s.id = p.second_entry_id
+    WHERE p.gym_id = ${gymId}
+      AND (${cursor === null}
+        OR (p.first_name, p.first_entry_id, p.second_entry_id)
+           > (${cursor?.name ?? ""}::text, ${cursor?.id ?? EMPTY_UUID}::uuid, ${cursor?.second ?? EMPTY_UUID}::uuid))
+    ORDER BY p.first_name, p.first_entry_id, p.second_entry_id
+    LIMIT ${input.limit}`;
+  return {
+    total,
+    kept,
+    pairs: rows.map((row) => ({
+      first: { entryId: row.f_id, fullName: row.f_name, email: row.f_email, phone: row.f_phone, memberNumber: row.f_number, past: row.f_past },
+      second: { entryId: row.s_id, fullName: row.s_name, email: row.s_email, phone: row.s_phone, memberNumber: row.s_number, past: row.s_past },
+      sameName: row.same_name,
+      samePhone: row.same_phone,
+      sameMemberNumber: row.same_number,
+    })),
+  };
 }
 
 /** Different people: the pair remembered in id order, the order its CHECK asks for.
