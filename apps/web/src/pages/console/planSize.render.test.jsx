@@ -203,7 +203,7 @@ describe('paying during the free trial', () => {
   it('shows a paid trial’s first payment on the card, and offers Change size instead', async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: paidTrial }));
     renderOverview();
-    const card = (await screen.findAllByText(new RegExp(`Your plan starts on ${trialEndDateLabel(TRIAL_END)}: \\$79 is paid for `)))[0];
+    const card = (await screen.findAllByText(new RegExp(`Your plan starts on ${trialEndDateLabel(TRIAL_END)}, when \\$79 is charged for `)))[0];
     expect(card).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Choose a plan' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Change size' })).toBeTruthy();
@@ -213,7 +213,7 @@ describe('paying during the free trial', () => {
   it('keeps the trial’s 200 on the card and says when the chosen size starts', async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: { ...paidTrial, priceLabel: '$129', nextSeatCap: 500 } }));
     renderOverview();
-    expect(await screen.findByText(`Up to 500 members from ${trialEndDateLabel(TRIAL_END)}, when your first payment is taken.`)).toBeTruthy();
+    expect(await screen.findByText(`Up to 500 members from ${trialEndDateLabel(TRIAL_END)}.`)).toBeTruthy();
     expect(screen.getAllByText(/190 of 200 members/).length).toBeGreaterThan(0);
   });
 
@@ -231,7 +231,7 @@ describe('paying during the free trial', () => {
     await within(dialog).findByText(/Nothing to pay now/);
     fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
     expect(
-      await within(dialog).findByText(`Done. Up to 500 members from ${trialEndDateLabel(TRIAL_END)}, when your first payment is taken.`),
+      await within(dialog).findByText(`Done. Up to 500 members from ${trialEndDateLabel(TRIAL_END)}.`),
     ).toBeTruthy();
   });
 });

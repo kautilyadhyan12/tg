@@ -54,7 +54,9 @@ function doneText(changed, words, firstPaymentOn) {
     return `Done. You'll move to ${pending.seatCap.toLocaleString()} ${words.people} (${pending.priceLabel} a month)${on === null ? ' at your next payment' : ` on ${on}`}.${keep}`;
   }
   if (changed.status === 'trialing') {
-    return `Done. Up to ${chosenSeatCap(changed)} ${words.people} from ${firstPaymentOn ?? 'your first payment'}, when your first payment is taken.`;
+    return firstPaymentOn === null
+      ? `Done. Up to ${chosenSeatCap(changed)} ${words.people} once your first payment goes through.`
+      : `Done. Up to ${chosenSeatCap(changed)} ${words.people} from ${firstPaymentOn}.`;
   }
   return Number.isFinite(changed.seatCap)
     ? `Done. Up to ${changed.seatCap.toLocaleString()} ${words.people} can now join.`

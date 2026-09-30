@@ -243,7 +243,7 @@ export function chosenSeatCap(sub) {
   return Number.isFinite(sub?.nextSeatCap) ? sub.nextSeatCap : (sub?.seatCap ?? null);
 }
 
-/** "Up to 500 members from 5 Oct, when your first payment is taken." for a paid trial whose
+/** "Up to 500 members from 5 Oct." for a paid trial whose
  *  chosen size is bigger than the trial's; without a date once that first charge has failed
  *  (the size still waits for it); null otherwise. */
 export function nextSizeText(sub, orgType) {
@@ -251,8 +251,8 @@ export function nextSizeText(sub, orgType) {
   const date = sub.status === 'trialing' ? trialEndDateLabel(sub.currentPeriodEnd) : null;
   const who = orgWords(orgType).people;
   return date === null
-    ? `Up to ${sub.nextSeatCap} ${who} once your first payment is taken.`
-    : `Up to ${sub.nextSeatCap} ${who} from ${date}, when your first payment is taken.`;
+    ? `Up to ${sub.nextSeatCap} ${who} once your first payment goes through.`
+    : `Up to ${sub.nextSeatCap} ${who} from ${date}.`;
 }
 
 /** The plans bigger than the gym's size, smallest first as the server lists them. None
@@ -491,7 +491,7 @@ export function trialStartChoices(sub, orgType, now = Date.now()) {
 /** A PAID TRIAL'S NEXT STEP, every date named (Kd at 1d-i's click-through: *"wording need to be
  *  precise"*): the last free day, the day the plan starts and its first payment is taken, and
  *  the month that payment covers, first and last day. "Free trial until 8 Oct. Your plan starts
- *  on 9 Oct: ₹7,500 is paid for 9 Oct to 8 Nov." Null for anything
+ *  on 9 Oct, when ₹7,500 is charged for 9 Oct to 8 Nov." Null for anything
  *  else, or when the server has not said the price or the date. */
 export function firstPaymentText(sub) {
   if (sub?.status !== 'trialing' || sub?.subscribed !== true) return null;
@@ -511,7 +511,7 @@ export function firstPaymentText(sub) {
   const lastPaid = new Date(nextPayment.getTime());
   lastPaid.setDate(lastPaid.getDate() - 1);
   const day = (d) => trialEndDateLabel(d.toISOString());
-  return `Free trial until ${day(lastFree)}. Your plan starts on ${date}: ${price} is paid for ${date} to ${day(lastPaid)}.`;
+  return `Free trial until ${day(lastFree)}. Your plan starts on ${date}, when ${price} is charged for ${date} to ${day(lastPaid)}.`;
 }
 
 /** WHAT A BIGGER SIZE COSTS, IN ONE SENTENCE, from the server's preview of Paddle's own
