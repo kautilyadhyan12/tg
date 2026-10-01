@@ -245,7 +245,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 1d-ii. [x] **A failed payment paid, a card changed, a plan cancelled** — merged 2026-10-01 (PR #144).
      - 1d-iii. **A bigger or smaller size.** Razorpay refuses to change what an Indian card, UPI or bank mandate charges (tried 2026-10-01), so a new size is a new plan the gym approves in Razorpay's window. Split that day in two:
        - 1d-iii-a. [x] **A bigger size** — merged 2026-10-01 (PR #146).
-       - 1d-iii-b. [ ] **A smaller size**: from the paid month's end, as 1c-iii; its plan approved when chosen. One question for Kd at its plan: who moves when the members do not fit.
+       - 1d-iii-b. [x] **A smaller size** — merged 2026-10-01 (PR #148).
    - 1e. [x] **Paddle's window filled in** — merged 2026-10-01 (PR #142).
 2. **Trials enforced** (split 2026-09-08 after Kd's trial-abuse ruling; no approval queue, ever).
    - 2a. [x] **The price list, the 10-day gym trial at 200 members, no individual trial, one free scan a day** — merged 2026-09-24 (PR #101).

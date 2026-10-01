@@ -14,6 +14,7 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Cost at full size:** reads no list of people; one member count per gym per month, the count Paddle's smaller size already runs.
 - **Kd's click-through on frfgrgrg: all passed** (after its 1d-iii-a checkout row, wiped when that job re-added 0060's columns by hand on `aihg_b`, was restored from Razorpay's record). His two asks, built: Cancel this change asks first; the plan screens' words cut short (RULINGS 2026-10-01).
 - **Round one: 3 High, 3 Low, all fixed (85142af), each with a test run red first.** H1 the browser's sync and Razorpay's webhook for one approval cancelled it: approval answers "already". H2 a plan that renewed before its day kept the big price: now decided as any day, the renewal refunded when the members fit. H3 "₹5" is a card's only: "a small charge". **Re-check closed the round**; its two Lows (an indent, "may check") fixed. Kd's re-click: *"all passed"*.
+- **Merged on Kd's word (PR #148, 2026-10-01)**; ROADMAP ticked. **Next in Folder B:** the 1d-iii feature's two extra passes (security, integrity) before any real gym pays, then Stage 4 item 1. `aihg_b` has 0061; Folder A's database needs it migrated.
 
 ## 2026-10-01 · 1d-iii-a (Folder B): a bigger size through Razorpay (branch `razorpay-bigger-size`, PR #146)
 
