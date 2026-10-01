@@ -614,6 +614,14 @@
   justify-content: space-between;
   gap: 8px;
 }
+/* One choice in a list the console draws itself, such as a dropdown's open list: the
+   browser's own list would show the system's colours. */
+.c-opt { color: var(--t1); }
+.c-opt:hover { background: var(--raise); }
+/* The app's own focus ring stays, drawn inside the option so the list's scroll box keeps it:
+   a background alone is too faint to show which choice Enter picks. */
+.c-opt:focus-visible { background: var(--raise); outline-offset: -2px; }
+.c-opt[aria-selected="true"] { background: var(--soft); color: var(--soft-t); font-weight: 600; }
 .c-area {
   width: 100%;
   padding: 10px 14px;

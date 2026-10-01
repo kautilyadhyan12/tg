@@ -5,6 +5,9 @@
 // people off the gym's list without ever seeing whose names. So the first test: the
 // people missing from the file are named before anything can be imported, nothing is
 // picked for staff, and a large change waits for the typed number.
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { cwd } from 'node:process';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 import { memberListConfirmedSchema, memberListLeaversSchema, memberListMissingSchema, memberListPreviewSchema, memberListRowsPageSchema } from '@app/shared';
@@ -558,6 +561,167 @@ describe('the worst thing: nobody leaves who was not answered for', () => {
 
 // THE NEW LOOK (5b-v-d-ii) CHANGES HOW THE BOX LOOKS, NEVER WHAT IT SHOWS: every step,
 // line and tick below was on the screen before the restyle, in this order.
+describe('Which software is your list in? (5c)', () => {
+  const trigger = () => screen.getByRole('button', { name: /^Which software is your list in\?/ });
+  /** Opens the dropdown and picks `name`, as staff do. */
+  const choose = (name) => {
+    fireEvent.click(trigger());
+    fireEvent.click(screen.getByRole('option', { name }));
+  };
+  const shown = () => trigger().textContent;
+
+  // The worst thing this box could do is change what an upload does: the steps are help,
+  // and the file is read the same whether anything is chosen or not.
+  it('choosing a product changes nothing the upload sends, and nothing has to be chosen', async () => {
+    orgService.uploadMemberList.mockResolvedValue({ data: { preview: preview() } });
+    renderBox();
+    choose('Glofox');
+    fireEvent.click(screen.getByRole('tab', { name: 'Paste rows' }));
+    fireEvent.change(screen.getByLabelText('Paste your rows'), { target: { value: 'Name\tEmail\nAda\tada@members.example' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    await screen.findByRole('heading', { name: 'Review' });
+    const chosen = orgService.uploadMemberList.mock.calls[0];
+    expect(Object.keys(chosen[1]).sort()).toEqual(['contentBase64', 'mode']);
+
+    cleanup();
+    await reviewWith(preview());
+    expect(orgService.uploadMemberList.mock.calls[1][1]).toEqual(chosen[1]);
+  });
+
+  it('opens on nothing chosen; its list is drawn by the console, with every product, your own spreadsheet and other software', () => {
+    renderBox();
+    expect(shown()).toBe('Choose your software');
+    expect(trigger().getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('listbox')).toBeNull();
+    fireEvent.click(trigger());
+    const list = screen.getByRole('listbox', { name: 'Which software is your list in?' });
+    expect(within(list).getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'Glofox',
+      'Gym Insight',
+      'Gymdesk',
+      'GymMaster',
+      'Mindbody',
+      'TeamUp',
+      'WellnessLiving',
+      'Wodify',
+      'My own spreadsheet',
+      'Other software',
+    ]);
+    expect(within(list).getAllByRole('option').every((o) => o.className.includes('c-opt'))).toBe(true);
+    expect(document.querySelector('select')).toBeNull();
+    expect(screen.queryByTestId('software-steps')).toBeNull();
+    expect(screen.queryByText(/don't come across/)).toBeNull();
+  });
+
+  it("the keys work as a dropdown's do: down opens it, arrows move, Escape closes it and nothing is chosen", () => {
+    renderBox();
+    fireEvent.keyDown(trigger(), { key: 'ArrowDown' });
+    const options = screen.getAllByRole('option');
+    expect(document.activeElement).toBe(options[0]);
+    fireEvent.keyDown(options[0], { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(options[1]);
+    fireEvent.keyDown(options[1], { key: 'Escape' });
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(document.activeElement).toBe(trigger());
+    expect(shown()).toBe('Choose your software');
+  });
+
+  it("Home, End and a letter move as a browser's list does, and Tab closes it: one Tab stop (review of 5c, L1, L2)", () => {
+    renderBox();
+    fireEvent.keyDown(trigger(), { key: 'ArrowDown' });
+    const options = screen.getAllByRole('option');
+    expect(options.every((o) => o.getAttribute('tabindex') === '-1')).toBe(true);
+    fireEvent.keyDown(options[0], { key: 'End' });
+    expect(document.activeElement.textContent).toBe('Other software');
+    fireEvent.keyDown(document.activeElement, { key: 'Home' });
+    expect(document.activeElement.textContent).toBe('Glofox');
+    fireEvent.keyDown(document.activeElement, { key: 'g' });
+    expect(document.activeElement.textContent).toBe('Gym Insight');
+    fireEvent.keyDown(document.activeElement, { key: 'g' });
+    expect(document.activeElement.textContent).toBe('Gymdesk');
+    fireEvent.keyDown(document.activeElement, { key: 'w' });
+    expect(document.activeElement.textContent).toBe('WellnessLiving');
+    fireEvent.keyDown(document.activeElement, { key: 'Tab' });
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(document.activeElement).toBe(trigger());
+    expect(shown()).toBe('Choose your software');
+  });
+
+  // jsdom draws nothing, so the focus ring is checked where it is written: the option's
+  // focus rule keeps the app's ring (review of 5c, High 3). The browser check is the proof.
+  it('a focused choice keeps the focus ring: its rule never turns the outline off', () => {
+    // jsdom gives no file address for this file, so the stylesheet is found from the web app's root.
+    const css = readFileSync(resolve(cwd(), 'src/components/console/console.css'), 'utf8');
+    const rule = css.match(/\.c-opt:focus-visible\s*\{([^}]*)\}/);
+    expect(rule).not.toBeNull();
+    expect(rule[1]).not.toMatch(/outline\s*:\s*(none|0)/);
+    expect(rule[1]).toMatch(/outline-offset\s*:\s*-2px/);
+    expect(css).not.toMatch(/\.c-opt[^{]*\{[^}]*outline\s*:\s*(none|0)/);
+  });
+
+  it("a product shows its own steps, its tip, its help page, that menus change, and what no file brings", () => {
+    renderBox();
+    choose('Mindbody');
+    expect(shown()).toBe('Mindbody');
+    expect(screen.queryByRole('listbox')).toBeNull();
+    const steps = within(screen.getByTestId('software-steps')).getAllByRole('listitem').map((li) => li.textContent);
+    expect(steps).toEqual([
+      '1Click Insights, then Reports, and open Mailing Lists (under Clients).',
+      "2At the top left, choose Email List. In List Clients, choose all your clients; in Client's Opt-in Status, choose all clients; and choose Clients Only.",
+      '3Click Generate, then Export to Excel.',
+    ]);
+    expect(
+      screen.getByText(
+        'Use Export to Excel, not the box of addresses at the top: that box stops at 10,000.',
+      ),
+    ).toBeTruthy();
+    const link = screen.getByRole('link', { name: 'Export client email or mailing addresses' });
+    expect(link.getAttribute('href')).toBe('https://support.mindbodyonline.com/s/article/205027717-Export-client-email-or-mailing-addresses?language=en_US');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(screen.getByText('Software changes its menus from time to time. If a step looks different, its help page has the latest steps.')).toBeTruthy();
+    expect(screen.getByText("Saved cards, visit history, documents and photos don't come across in this file.")).toBeTruthy();
+
+    choose('GymMaster');
+    expect(shown()).toBe('GymMaster');
+    expect(screen.getAllByRole('link').map((a) => a.textContent)).toEqual(['Run Standard Report', 'Standard Report Options']);
+    expect(screen.queryByText(/that box stops at 10,000/)).toBeNull();
+  });
+
+  // An .xls is refused and a file of some people asks about the rest (review of 5c, High 1
+  // and High 2), so both are said under EVERY product's steps, and under Other software's.
+  it('every product, and other software, says download everybody and save an .xls first', () => {
+    renderBox();
+    for (const name of ['Glofox', 'Gym Insight', 'Gymdesk', 'GymMaster', 'Mindbody', 'TeamUp', 'WellnessLiving', 'Wodify', 'Other software']) {
+      choose(name);
+      expect(within(screen.getByTestId('software-notes')).getAllByRole('listitem').map((li) => li.textContent), name).toEqual([
+        'Download everybody, whatever their status: Import reads each file as your whole list.',
+        'If the file you get ends in .xls, open it in Excel and save it as .xlsx or CSV first.',
+      ]);
+      expect(screen.getByTestId('software-steps').textContent, name).not.toMatch(/CSV or Excel\./);
+    }
+    choose('My own spreadsheet');
+    expect(screen.queryByTestId('software-notes')).toBeNull();
+  });
+
+  it('your own spreadsheet says upload or paste; other software says where to look', () => {
+    renderBox();
+    choose('My own spreadsheet');
+    expect(screen.getByTestId('software-steps').textContent).toBe(
+      '1Upload the file as it is, Excel or CSV.2Or copy the rows with their headings and use Paste rows.',
+    );
+    expect(screen.queryByText(/don't come across/)).toBeNull();
+    expect(screen.queryByText(/changes its menus/)).toBeNull();
+    expect(screen.queryByRole('link')).toBeNull();
+    choose('Other software');
+    expect(screen.getByTestId('software-steps').textContent).toContain("Look for Export or Download. It's often under Actions, Reports or a ⋯ menu.");
+    expect(screen.getByText(/don't come across/)).toBeTruthy();
+    expect(screen.queryByText(/changes its menus/)).toBeNull();
+    fireEvent.click(trigger());
+    expect(screen.getByRole('option', { name: 'Other software' }).getAttribute('aria-selected')).toBe('true');
+  });
+});
+
 describe('every part of the box, in its order', () => {
   /** True when every text is on the page once or more, each after the one before it. */
   const inOrder = (nodes) => {
@@ -569,6 +733,7 @@ describe('every part of the box, in its order', () => {
   it('Upload: both ways in, the drop box and its words, and pasted rows with Continue', async () => {
     renderBox();
     expect(screen.getByRole('heading', { name: 'Import members' })).toBeTruthy();
+    expect(screen.getByTestId('file-kinds').textContent).toBe('Works with CSV and Excel (.xlsx) files, or rows pasted from a spreadsheet.');
     expect(screen.getByRole('tab', { name: 'Upload a file' }).getAttribute('aria-selected')).toBe('true');
     const drop = within(screen.getByTestId('drop-zone'));
     expect(drop.getByText('Drop your file here')).toBeTruthy();
@@ -578,6 +743,14 @@ describe('every part of the box, in its order', () => {
       'Copy the rows in your spreadsheet, with the headings, and paste them here.',
     );
     expect(screen.getByRole('button', { name: 'Continue' }).disabled).toBe(true);
+    // An example of what to paste, as a spreadsheet shows it (Kd, 2026-10-01).
+    const example = within(screen.getByTestId('paste-example'));
+    expect(example.getByText(/select the rows with their headings, copy them, and paste them below/)).toBeTruthy();
+    expect(example.getAllByRole('columnheader').map((th) => th.textContent)).toEqual(['Name', 'Email', 'Phone', 'Status']);
+    expect(example.getAllByRole('row').slice(1).map((tr) => tr.textContent)).toEqual([
+      'Ada Lovelaceada@example.com07700 900123Active',
+      'Ben Carterben@example.com07700 900456Frozen',
+    ]);
     expect(screen.getByRole('button', { name: 'Close' })).toBeTruthy();
   });
 
