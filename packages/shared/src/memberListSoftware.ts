@@ -88,7 +88,7 @@ export const MEMBER_LIST_SOFTWARE: readonly MemberListSoftware[] = [
       "At the top left, choose Email List. In List Clients, choose who to include, and choose Clients Only.",
       "Click Generate, then Export to Excel.",
     ],
-    tip: "Use Export to Excel, not the box of addresses at the top: that box stops at 10,000.",
+    tip: "Use Export to Excel, not the box of addresses at the top: that box stops at 10,000. If the file you get ends in .xls, open it in Excel and save it as .xlsx or CSV first.",
     sources: [
       {
         title: "Export client email or mailing addresses",
@@ -142,6 +142,9 @@ export const MEMBER_LIST_OTHER_SOFTWARE_STEPS: readonly string[] = [
   "Look for Export or Download. It's often under Actions, Reports or a ⋯ menu.",
   "Choose CSV or Excel, and upload that file here.",
 ];
+
+/** Under every product's steps: the steps are as its page said on the day it was read. */
+export const MEMBER_LIST_STEPS_MAY_CHANGE_WORDS = "Software changes its menus from time to time. If a step looks different, its help page has the latest steps.";
 
 /** What no file brings, whichever software it came from (§11.7). */
 export const MEMBER_LIST_NOT_IN_A_FILE_WORDS = "Saved cards, visit history, documents and photos don't come across in this file.";

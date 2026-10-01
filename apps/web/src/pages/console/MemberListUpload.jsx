@@ -24,6 +24,7 @@ import {
   MEMBER_LIST_PERMISSION_WORDS,
   MEMBER_LIST_SOFTWARE,
   MEMBER_LIST_SPREADSHEET_STEPS,
+  MEMBER_LIST_STEPS_MAY_CHANGE_WORDS,
   memberListWarningWords,
 } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
@@ -322,19 +323,24 @@ function SoftwareSteps() {
   const steps = product !== null ? product.steps : choice === 'spreadsheet' ? MEMBER_LIST_SPREADSHEET_STEPS : choice === 'other' ? MEMBER_LIST_OTHER_SOFTWARE_STEPS : null;
   return (
     <section className="c-card p-4 flex flex-col gap-3" data-testid="software">
-      <label htmlFor={id} className="c-s15 c-w6 c-t1">
+      {/* Chips, not a dropdown: a dropdown's open list is drawn by the browser in its own
+          colours, outside the console's look (Kd's click-through, 2026-10-01). */}
+      <span id={id} className="c-s15 c-w6 c-t1">
         Which software is your list in?
-      </label>
-      <select id={id} value={choice} onChange={(e) => setChoice(e.target.value)} className="c-input">
-        <option value="">Choose your software</option>
-        {MEMBER_LIST_SOFTWARE.map((s) => (
-          <option key={s.id} value={s.id}>
-            {s.name}
-          </option>
+      </span>
+      <div role="group" aria-labelledby={id} className="flex flex-wrap gap-2">
+        {[...MEMBER_LIST_SOFTWARE.map((s) => [s.id, s.name]), ['spreadsheet', 'My own spreadsheet'], ['other', 'Other software']].map(([value, name]) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={choice === value}
+            onClick={() => setChoice((c) => (c === value ? '' : value))}
+            className={`c-chip ${choice === value ? 'c-chip-on' : ''}`}
+          >
+            {name}
+          </button>
         ))}
-        <option value="spreadsheet">My own spreadsheet</option>
-        <option value="other">Other software</option>
-      </select>
+      </div>
       {steps !== null ? (
         <ol className="flex flex-col gap-2 c-s14 c-t1" data-testid="software-steps">
           {steps.map((step, i) => (
@@ -363,6 +369,7 @@ function SoftwareSteps() {
           ))}
         </p>
       ) : null}
+      {product !== null ? <p className="c-s13 c-t2">{MEMBER_LIST_STEPS_MAY_CHANGE_WORDS}</p> : null}
       {product !== null || choice === 'other' ? <p className="c-s14 c-t2">{MEMBER_LIST_NOT_IN_A_FILE_WORDS}</p> : null}
     </section>
   );

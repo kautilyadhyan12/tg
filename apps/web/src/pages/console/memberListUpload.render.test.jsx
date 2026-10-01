@@ -559,14 +559,19 @@ describe('the worst thing: nobody leaves who was not answered for', () => {
 // THE NEW LOOK (5b-v-d-ii) CHANGES HOW THE BOX LOOKS, NEVER WHAT IT SHOWS: every step,
 // line and tick below was on the screen before the restyle, in this order.
 describe('Which software is your list in? (5c)', () => {
-  const choose = (value) => fireEvent.change(screen.getByLabelText('Which software is your list in?'), { target: { value } });
+  const chip = (name) => within(screen.getByRole('group', { name: 'Which software is your list in?' })).getByRole('button', { name });
+  const pressed = () =>
+    within(screen.getByRole('group', { name: 'Which software is your list in?' }))
+      .getAllByRole('button')
+      .filter((b) => b.getAttribute('aria-pressed') === 'true')
+      .map((b) => b.textContent);
 
   // The worst thing this box could do is change what an upload does: the steps are help,
   // and the file is read the same whether anything is chosen or not.
   it('choosing a product changes nothing the upload sends, and nothing has to be chosen', async () => {
     orgService.uploadMemberList.mockResolvedValue({ data: { preview: preview() } });
     renderBox();
-    choose('glofox');
+    fireEvent.click(chip('Glofox'));
     fireEvent.click(screen.getByRole('tab', { name: 'Paste rows' }));
     fireEvent.change(screen.getByLabelText('Paste your rows'), { target: { value: 'Name\tEmail\nAda\tada@members.example' } });
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
@@ -579,12 +584,10 @@ describe('Which software is your list in? (5c)', () => {
     expect(orgService.uploadMemberList.mock.calls[1][1]).toEqual(chosen[1]);
   });
 
-  it("opens on nothing chosen, with every product, your own spreadsheet and other software", () => {
+  it('opens on nothing chosen, with a chip for every product, your own spreadsheet and other software', () => {
     renderBox();
-    const select = screen.getByLabelText('Which software is your list in?');
-    expect(select.value).toBe('');
-    expect([...select.options].map((o) => o.textContent)).toEqual([
-      'Choose your software',
+    const group = screen.getByRole('group', { name: 'Which software is your list in?' });
+    expect(within(group).getAllByRole('button').map((b) => b.textContent)).toEqual([
       'Glofox',
       'Gym Insight',
       'Gymdesk',
@@ -596,43 +599,54 @@ describe('Which software is your list in? (5c)', () => {
       'My own spreadsheet',
       'Other software',
     ]);
+    expect(pressed()).toEqual([]);
     expect(screen.queryByTestId('software-steps')).toBeNull();
     expect(screen.queryByText(/don't come across/)).toBeNull();
   });
 
-  it("a product shows its own steps, its tip, its help page and what no file brings", () => {
+  it("a product shows its own steps, its tip, its help page, that menus change, and what no file brings", () => {
     renderBox();
-    choose('mindbody');
+    fireEvent.click(chip('Mindbody'));
+    expect(pressed()).toEqual(['Mindbody']);
     const steps = within(screen.getByTestId('software-steps')).getAllByRole('listitem').map((li) => li.textContent);
     expect(steps).toEqual([
       '1Click Insights, then Reports, and open Mailing Lists (under Clients).',
       '2At the top left, choose Email List. In List Clients, choose who to include, and choose Clients Only.',
       '3Click Generate, then Export to Excel.',
     ]);
-    expect(screen.getByText('Use Export to Excel, not the box of addresses at the top: that box stops at 10,000.')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Use Export to Excel, not the box of addresses at the top: that box stops at 10,000. If the file you get ends in .xls, open it in Excel and save it as .xlsx or CSV first.',
+      ),
+    ).toBeTruthy();
     const link = screen.getByRole('link', { name: 'Export client email or mailing addresses' });
     expect(link.getAttribute('href')).toBe('https://support.mindbodyonline.com/s/article/205027717-Export-client-email-or-mailing-addresses?language=en_US');
     expect(link.getAttribute('target')).toBe('_blank');
     expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(screen.getByText('Software changes its menus from time to time. If a step looks different, its help page has the latest steps.')).toBeTruthy();
     expect(screen.getByText("Saved cards, visit history, documents and photos don't come across in this file.")).toBeTruthy();
 
-    choose('gymmaster');
+    fireEvent.click(chip('GymMaster'));
+    expect(pressed()).toEqual(['GymMaster']);
     expect(screen.getAllByRole('link').map((a) => a.textContent)).toEqual(['Run Standard Report', 'Standard Report Options']);
     expect(screen.queryByText(/that box stops at 10,000/)).toBeNull();
   });
 
-  it('your own spreadsheet says upload or paste; other software says where to look; back to nothing hides the steps', () => {
+  it('your own spreadsheet says upload or paste; other software says where to look; the chosen chip again hides the steps', () => {
     renderBox();
-    choose('spreadsheet');
+    fireEvent.click(chip('My own spreadsheet'));
     expect(screen.getByTestId('software-steps').textContent).toBe(
       '1Upload the file as it is, Excel or CSV.2Or copy the rows with their headings and use Paste rows.',
     );
     expect(screen.queryByText(/don't come across/)).toBeNull();
+    expect(screen.queryByText(/changes its menus/)).toBeNull();
     expect(screen.queryByRole('link')).toBeNull();
-    choose('other');
+    fireEvent.click(chip('Other software'));
     expect(screen.getByTestId('software-steps').textContent).toContain("Look for Export or Download. It's often under Actions, Reports or a ⋯ menu.");
     expect(screen.getByText(/don't come across/)).toBeTruthy();
-    choose('');
+    expect(screen.queryByText(/changes its menus/)).toBeNull();
+    fireEvent.click(chip('Other software'));
+    expect(pressed()).toEqual([]);
     expect(screen.queryByTestId('software-steps')).toBeNull();
   });
 });
