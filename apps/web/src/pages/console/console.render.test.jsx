@@ -2040,7 +2040,7 @@ describe('Removing a member', () => {
     data: {
       staff: [
         { userId: 'u1', displayName: 'Kd Owner', email: 'kd@example.com', role: 'owner', since: '2026-08-01T00:00:00.000Z', isYou: true, isMember: true, roleName: null },
-        { userId: 'u4', displayName: 'Bhaskar Das', email: 'b@example.com', role: 'trainer', since: '2026-08-01T00:00:00.000Z', isYou: false, isMember: true, roleName: 'Front desk' },
+        { userId: 'u4', displayName: 'Bhaskar Das', email: 'b@example.com', role: 'trainer', since: '2026-08-01T00:00:00.000Z', isYou: false, isMember: true, roleName: 'Front desk', movesRecord: true },
         { userId: 'u9', displayName: 'Ana Ruiz', email: 'ana@example.com', role: 'manager', since: '2026-08-01T00:00:00.000Z', isYou: false, isMember: false, roleName: null },
       ],
     },
@@ -2071,7 +2071,8 @@ describe('Removing a member', () => {
     const panel = await openStaff('u4', 'Bhaskar Das');
     fireEvent.click(panel.getByRole('button', { name: 'Remove from staff' }));
     fireEvent.click(panel.getByText('Also remove Bhaskar Das from the app'));
-    expect(panel.getByText(/They lose access to your gym in the app too\./)).toBeTruthy();
+    // Their list record moves too, and the box says so (round one, L5).
+    expect(panel.getByText(/They'll be moved to past members and lose access to your gym in the app too\./)).toBeTruthy();
     fireEvent.click(panel.getByRole('button', { name: 'Remove from staff and app' }));
     await waitFor(() => expect(orgService.removeMember).toHaveBeenCalledWith(ORG.id, 'u4', { alsoStaff: true }));
     expect(orgService.removeStaff).not.toHaveBeenCalled();

@@ -372,7 +372,7 @@ const BLOCKED_REASONS = ['bounced', 'refused', 'complained', 'unsubscribed'];
 
 /** One invitation's line on Settings → Staff: who, as what, and where it stands, and
  *  whether Send again is offered (4a-ii) or, when it is not, why. */
-export function staffInviteView(invite, orgType) {
+export function staffInviteView(invite, orgType, now = Date.now()) {
   const role = invite.roleName || roleLabel(invite.role, orgType);
   const status =
     invite.state === 'declined'
@@ -393,18 +393,22 @@ export function staffInviteView(invite, orgType) {
           : (STAFF_INVITE_EMAIL_REASON_WORDS[invite.emailReason] ?? 'Email not sent.');
   const blocked = invite.emailStatus === 'not_sent' && BLOCKED_REASONS.includes(invite.emailReason);
   const left = invite.resendsLeft ?? 0;
+  // The week's 3 emails to this address have gone: the day another may (round one, L1).
+  const waitWeek = typeof invite.sendAgainFrom === 'string' && Date.parse(invite.sendAgainFrom) > now;
   return {
     title: invite.email,
     meta: `${role} · ${status}`,
     email,
     emailProblem: invite.state === 'waiting' && invite.emailStatus === 'not_sent',
     action: invite.state === 'waiting' ? 'Cancel invitation' : 'Remove',
-    canSendAgain: left > 0 && invite.emailStatus !== 'sending' && !blocked,
-    // Said, never hidden, once the button is gone for having been used up.
+    canSendAgain: left > 0 && invite.emailStatus !== 'sending' && !blocked && !waitWeek,
+    // Said, never hidden, once the button is gone for having been used up or for the week.
     sendAgainNote:
       left === 0 && !blocked
         ? `Sent ${STAFF_INVITE_RESENDS_MAX + 1} times, so it can't be sent again. Remove it and invite them again if they still need it.`
-        : null,
+        : waitWeek && !blocked
+          ? `3 emails went to this address this week. You can send it again on ${formatJoinedAt(invite.sendAgainFrom)}.`
+          : null,
   };
 }
 

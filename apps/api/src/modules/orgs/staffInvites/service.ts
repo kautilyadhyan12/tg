@@ -73,7 +73,6 @@ export async function createStaffInvite(
   input: CreateStaffInviteRequest,
 ): Promise<CreateStaffInviteResponse> {
   const { org } = await requireWritablePrivilege(deps, gymId, userId, "staff.manage");
-  const words = orgWords(org.orgType);
   // One of the gym's own roles: its name is shown in place of the role, which is a
   // trainer's underneath; the ticks are what the console obeys (RULINGS 2026-10-01).
   const ownRole = input.roleId === undefined ? null : await repo.roleById(deps.sql, gymId, input.roleId);
@@ -172,19 +171,24 @@ export async function createStaffInvite(
       emailReason: null,
       lastSentAt: invite.createdAt.toISOString(),
       resendsLeft: STAFF_INVITE_RESENDS_MAX,
+      // The week's 3 to this address are counted again on the next read of the list.
+      sendAgainFrom: null,
     }),
   };
 
-  function alreadyStaff(displayName: string, role: string, roleName: string | null, orgType: unknown): OrgsError {
-    const word = roleName ?? (role === "manager" ? "manager" : orgWords(orgType).coach);
-    return new OrgsError(
-      409,
-      "already_staff",
-      role === "owner"
-        ? `That person owns this ${words.it}.`
-        : `${displayName} is already ${withArticle(word)} here. Change what they can do instead of inviting them again.`,
-    );
-  }
+}
+
+/** "Mia Lopez is already a trainer here." The refusal of an invitation to somebody who runs
+ *  the gym, new or sent again. */
+function alreadyStaff(displayName: string, role: string, roleName: string | null, orgType: unknown): OrgsError {
+  const word = roleName ?? (role === "manager" ? "manager" : orgWords(orgType).coach);
+  return new OrgsError(
+    409,
+    "already_staff",
+    role === "owner"
+      ? `That person owns this ${orgWords(orgType).it}.`
+      : `${displayName} is already ${withArticle(word)} here. Change what they can do instead of inviting them again.`,
+  );
 }
 
 export async function listStaffInvites(deps: StaffInviteDeps, userId: string, gymId: string): Promise<StaffInvitesResponse> {
@@ -233,14 +237,21 @@ export async function resendStaffInvite(
   gymId: string,
   inviteId: string,
 ): Promise<ResendStaffInviteResponse> {
-  await requireWritablePrivilege(deps, gymId, userId, "staff.manage");
+  const { org } = await requireWritablePrivilege(deps, gymId, userId, "staff.manage");
   const settings = deps.invites;
   if (settings?.sender == null) throw new OrgsError(409, "sending_off", STAFF_INVITE_WORDS.sending_off);
   const at = deps.now();
-  await deps.sql.begin(async (tx) => {
+  const staffNow = await deps.sql.begin(async (tx) => {
     await orgRepo.lockOrgRow(tx, gymId);
     const invite = await repo.lockOpenInvite(tx, gymId, inviteId);
     if (invite === null) throw new OrgsError(404, "invite_not_found", STAFF_INVITE_WORDS.invite_not_found);
+    // Made staff another way since (appointed from the member list): the invitation would
+    // promise a role Accept does not give. It leaves the owner's list, and is refused.
+    const staff = await repo.staffNameAt(tx, gymId, invite.email);
+    if (staff !== null) {
+      await repo.clearInvite(tx, gymId, inviteId, at);
+      return staff;
+    }
     const sends = await repo.sendsOf(tx, gymId, inviteId);
     if (sends.waiting) throw new OrgsError(409, "still_sending", STAFF_INVITE_WORDS.still_sending);
     if (repo.resendsLeft(sends.count) === 0) throw new OrgsError(409, "resends_used", STAFF_INVITE_WORDS.resends_used(invite.email));
@@ -276,7 +287,9 @@ export async function resendStaffInvite(
       targetId: inviteId,
       meta: { was: waitingNow ? "waiting" : invite.state === "declined" ? "declined" : "ended" },
     });
+    return null;
   });
+  if (staffNow !== null) throw alreadyStaff(staffNow.displayName, staffNow.role, staffNow.roleName, org.orgType);
   const [view] = await repo.listOpenInvites(deps.sql, gymId, at, inviteId);
   if (view === undefined) throw new OrgsError(404, "invite_not_found", STAFF_INVITE_WORDS.invite_not_found);
   return { invite: view };
@@ -410,6 +423,8 @@ export async function acceptStaffInvitation(
     if (org === null || org.status !== "active") return { kind: "none" };
     const invite = await repo.lockInviteFor(tx, { gymId, inviteId, email, userId: caller.id });
     if (invite === null) return { kind: "none" };
+    // A deletion of this account cannot cross the staff row written below.
+    if (!(await repo.lockLiveAccount(tx, caller.id))) return { kind: "none" };
     const existing = await repo.staffRowOf(tx, gymId, caller.id);
     // A second Accept: still staff by it, or it opens nothing.
     if (invite.state === "accepted") {

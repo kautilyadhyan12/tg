@@ -21,6 +21,7 @@ import { forgetOldStaffInvites } from "../src/modules/orgs/staffInvites/repo.js"
 import { emailHmac } from "../src/modules/orgs/invites/address.js";
 import { emailsUsedToday } from "../src/modules/orgs/invites/repo.js";
 import { restoreUser, softDeleteUser } from "../src/modules/users/repo.js";
+import * as orgRepo from "../src/modules/orgs/repo.js";
 import {
   ROLE_PRIVILEGES,
   STAFF_INVITE_EMAILS_PER_ADDRESS_WEEK,
@@ -917,6 +918,10 @@ d("staff invited by email (real Postgres)", () => {
         { role: "owner", roleName: null },
         null,
       ]);
+      // A manager reads the member list without anybody's staff role (round one, L4).
+      const asManager = orgMemberPageSchema.parse(JSON.parse((await get(`/v1/orgs/${gym.id}/members`, manager.cookies)).body));
+      expect(asManager.items.length).toBeGreaterThan(0);
+      expect(asManager.items.every((m) => m.staff === undefined)).toBe(true);
       // Nor the owner's own place.
       expect((await removeFromApp(gym, gym.owner, manager)).statusCode).toBe(403);
 
@@ -943,8 +948,19 @@ d("staff invited by email (real Postgres)", () => {
       const anaInvite = await invited(gym, addr("rm-ana"));
       expect((await accept(ana, anaInvite.id)).statusCode).toBe(200);
       expect(await readsMembers(gym, ana)).toBe(200);
+      // Zoe also works at the rival gym: that row goes with her account too.
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role) VALUES (${rival.id}, ${zoe.userId}, 'trainer')`;
       for (const who of [zoe, ana]) {
         expect(await softDeleteUser(sql, who.userId)).not.toBeNull();
+        // Only this person's staff access ends: everyone else's stays (round one, gap 1).
+        expect((await staffRowOf(gym, tom))?.role).toBe("trainer");
+        expect((await staffRowOf(gym, manager))?.role).toBe("manager");
+        expect((await staffRowOf(gym, gym.owner))?.role).toBe("owner");
+        expect((await staffRowOf(rival, rival.owner))?.role).toBe("owner");
+        // And it is written down, as every other end of staff access is (round one, L3).
+        const audit = await sql<{ meta: { removedWith?: string } }[]>`
+          SELECT meta FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.staff_removed' AND target_id = ${who.userId}`;
+        expect(audit.map((a) => a.meta.removedWith)).toEqual(["account_deleted"]);
         // Deleted: not even signed in.
         expect(await readsMembers(gym, who)).toBe(401);
         // Restored: signed in again, and staff of nothing.
@@ -953,6 +969,7 @@ d("staff invited by email (real Postgres)", () => {
         expect(await staffRowOf(gym, who)).toBeNull();
         expect(await onStaffList(gym, who)).toBe(false);
       }
+      expect(await staffRowOf(rival, zoe)).toBeNull();
       // The owner's own deletion and restore leaves them owning their gym.
       expect(await softDeleteUser(sql, gym.owner.userId)).not.toBeNull();
       expect(await restoreUser(sql, gym.owner.userId)).toBe(true);
@@ -1127,12 +1144,108 @@ d("staff invited by email (real Postgres)", () => {
       expect((await staffRowOf(gym, gym.owner))?.role).toBe("owner");
       expect(await readsMembers(gym, rita)).toBe(404);
 
+      // A manager's press of their own box: Mia's replacement colleague stays (round one, gap 3).
+      const tess = await memberAndStaff(gym, "bulk-tess");
+      const sam = await signIn(addr("bulk-sam"));
+      await makeMember(gym, sam);
+      const managersBox = await preview(manager, [tess.userId, sam.userId]);
+      const managersPress = await post(`/v1/orgs/${gym.id}/members/selected/remove`, { userIds: [tess.userId, sam.userId], digest: managersBox.digest }, manager.cookies);
+      expect(managersPress.statusCode, managersPress.body).toBe(200);
+      expect(await liveMembership(gym, tess)).toBe(1);
+      expect(await liveMembership(gym, sam)).toBe(0);
+
       // A manager's press with the owner's box is refused as changed: nothing more happens.
       const ravi = await memberAndStaff(gym, "bulk-ravi");
       const owners = await preview(gym.owner, [ravi.userId]);
       const managerPress = await post(`/v1/orgs/${gym.id}/members/selected/remove`, { userIds: [ravi.userId], digest: owners.digest }, manager.cookies);
       expect(managerPress.statusCode).toBe(409);
       expect(await liveMembership(gym, ravi)).toBe(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // =========================================================================
+  // ROUND ONE
+  // =========================================================================
+
+  it(
+    "H1: Send again to somebody made staff another way since is refused, sends nothing, and takes the invitation off the list",
+    async () => {
+      const gym = await makeGym("Resend Staff Gym");
+      const sent = await invited(gym, addr("resend-bob"), "manager");
+      await runSender();
+      await sql`UPDATE gym_staff_invites SET expires_at = now() - interval '1 hour', created_at = created_at - interval '8 days' WHERE id = ${sent.id}`;
+      // Bob joins and is appointed a trainer from the member list.
+      const bob = await signIn(addr("resend-bob"));
+      await makeMember(gym, bob);
+      const appointed = await invite(gym, addr("resend-bob"), "trainer");
+      expect(createStaffInviteResponseSchema.parse(JSON.parse(appointed.body)).outcome).toBe("added");
+      const before = emailsTo(addr("resend-bob")).length;
+      const res = await resend(gym, sent.id);
+      expect(res.statusCode).toBe(409);
+      expect(errorOf(res).error).toBe("already_staff");
+      await runSender();
+      expect(emailsTo(addr("resend-bob")).length).toBe(before);
+      expect((await invitesOf(gym)).map((i) => i.id)).not.toContain(sent.id);
+      expect((await myInvitations(bob)).invitations).toEqual([]);
+      expect((await staffRowOf(gym, bob))?.role).toBe("trainer");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "L1: once the week's 3 emails to an address have gone, the list says when Send again opens",
+    async () => {
+      const gym = await makeGym("Resend Week Gym");
+      const sent = await invited(gym, addr("week"));
+      expect(sent.sendAgainFrom).toBeNull();
+      await runSender();
+      await resent(gym, sent.id);
+      await runSender();
+      expect((await invitesOf(gym)).find((i) => i.id === sent.id)?.sendAgainFrom).toBeNull();
+      await resent(gym, sent.id);
+      await runSender();
+      const third = (await sql<{ at: Date }[]>`
+        SELECT created_at AS at FROM gym_staff_invite_sends WHERE invite_id = ${sent.id} ORDER BY created_at ASC LIMIT 1`)[0]?.at;
+      const listed = (await invitesOf(gym)).find((i) => i.id === sent.id);
+      expect(listed?.resendsLeft).toBe(STAFF_INVITE_RESENDS_MAX - 2);
+      expect(listed?.sendAgainFrom).toBe(new Date((third?.getTime() ?? 0) + 7 * DAY).toISOString());
+      expect((await resend(gym, sent.id)).statusCode).toBe(429);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "L2: an appointment cannot cross the deletion of that account: it waits, then finds nobody to appoint",
+    async () => {
+      const gym = await makeGym("Delete Race Gym");
+      const pat = await signIn(addr("race-pat"));
+      await makeMember(gym, pat);
+      const deleting = postgres(url ?? "", { prepare: false, max: 1 });
+      const appointing = postgres(url ?? "", { prepare: false, max: 1 });
+      try {
+        const pending: { appoint: Promise<{ kind: string }> | null } = { appoint: null };
+        await deleting.begin(async (tx) => {
+          // The deletion's own first and staff statements, uncommitted.
+          await tx`UPDATE users SET status = 'deleted', deleted_at = now() WHERE id = ${pat.userId}`;
+          await tx`DELETE FROM gym_staff WHERE user_id = ${pat.userId}`;
+          pending.appoint = orgRepo.addStaff(appointing, {
+            gymId: gym.id,
+            email: addr("race-pat"),
+            role: "trainer",
+            privileges: [...ROLE_PRIVILEGES.trainer],
+            actorUserId: gym.owner.userId,
+          });
+          await new Promise((resolve) => setTimeout(resolve, 400));
+        });
+        const outcome = await (pending.appoint ?? Promise.reject(new Error("never appointed")));
+        expect(outcome.kind).toBe("not_a_member");
+        expect(await staffRowOf(gym, pat)).toBeNull();
+      } finally {
+        await sql`UPDATE users SET status = 'active', deleted_at = NULL WHERE id = ${pat.userId}`;
+        await deleting.end({ timeout: 5 });
+        await appointing.end({ timeout: 5 });
+      }
     },
     TEST_TIMEOUT_MS,
   );

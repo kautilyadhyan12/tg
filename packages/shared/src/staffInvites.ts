@@ -100,6 +100,8 @@ export const staffInviteSchema = z
     lastSentAt: z.string(),
     /** How many more times Send again may be pressed for it (`STAFF_INVITE_RESENDS_MAX` at first). */
     resendsLeft: z.number().int().nonnegative(),
+    /** While the week's 3 emails to this address have gone: when another may (else null). */
+    sendAgainFrom: z.string().nullable(),
   })
   .strict();
 export type StaffInvite = z.infer<typeof staffInviteSchema>;

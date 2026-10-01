@@ -1440,7 +1440,9 @@ export async function listOrgMembers(
         groupLabel: m.groupLabel,
         complimentary: m.complimentary,
         takesSeat: m.takesSeat,
-        staff: m.staff,
+        // Who runs the gym, by role, is the owner's to read (the staff list is): the tag
+        // and the Remove box that use it are the owner's alone (round one, L4).
+        ...(privileges.includes("staff.manage") ? { staff: m.staff } : {}),
         ...(seesList && listName !== null
           ? { onList: { name: listName } }
           : {}),
@@ -1978,10 +1980,22 @@ export async function listOrgStaff(
 ): Promise<OrgStaffResponse> {
   await requirePrivilege(deps, gymId, userId, "staff.manage");
   const rows = await repo.listStaff(deps.sql, gymId);
+  // Whose current list record is certainly theirs: removing them from the app moves it
+  // to past members, and the Staff tab's box says so (4a-ii round one, L5).
+  const members = rows.filter((r) => r.isMember).map((r) => r.userId);
+  const onList = new Set(
+    members.length === 0
+      ? []
+      : (await listRepo.membersAgainstList(deps.sql, gymId, { email: null, phone: null, userIds: members }))
+          .filter((m) => currentRecordOf(m) !== null)
+          .map((m) => m.userId),
+  );
   // Parsed on the way out like every other list in this module: this response
   // carries an email, so a field that reached the row without reaching the
   // schema is dropped here rather than served.
-  return orgStaffResponseSchema.parse({ staff: rows.map((r) => toOrgStaff(r, userId)) });
+  return orgStaffResponseSchema.parse({
+    staff: rows.map((r) => ({ ...toOrgStaff(r, userId), movesRecord: onList.has(r.userId) })),
+  });
 }
 
 /** APPOINT SOMEBODY. See `addOrgStaffRequestSchema` for why the email must

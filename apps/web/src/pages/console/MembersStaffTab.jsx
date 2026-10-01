@@ -59,9 +59,11 @@ function StaffSheet({ person, words, readOnly, busy, error, onClose, onRemove })
                   <span className="flex flex-col gap-0.5 cursor-pointer" onClick={() => setAlsoApp((on) => !on)}>
                     <span className="c-s14 c-w6 c-t1">Also remove {name} from the app</span>
                     <span className="c-s13 c-t2">
-                      {alsoApp
-                        ? `They lose access to your ${words.it} in the app too. Their own workout history isn't affected.`
-                        : `They keep using the app as a ${words.person}.`}
+                      {!alsoApp
+                        ? `They keep using the app as a ${words.person}.`
+                        : person.movesRecord
+                          ? `They'll be moved to past ${words.people} and lose access to your ${words.it} in the app too. Their own workout history isn't affected, and you can put them back at any time.`
+                          : `They lose access to your ${words.it} in the app too. Their own workout history isn't affected.`}
                     </span>
                   </span>
                 </div>

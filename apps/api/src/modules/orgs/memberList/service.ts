@@ -1538,8 +1538,9 @@ export async function readEntries(
   query: MemberListEntriesQuery,
   limit: () => Promise<boolean>,
 ): Promise<MemberListEntriesPage | null> {
-  await requirePrivilege(deps, gymId, userId, "members.confirm");
+  const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
+  const seesStaff = privileges.includes("staff.manage");
 
   // Parsed, not trusted, and not quietly ignored either: a cursor that does not
   // decode is a 400, never "start again from the top", which would silently restart
@@ -1606,7 +1607,7 @@ export async function readEntries(
       invitation: invitations[at] ?? null,
       app: appOrThrow(app[at]),
       needsReview: entry.needsReview,
-      staff: staffByRecord.get(entry.entryId) ?? null,
+      staff: seesStaff ? (staffByRecord.get(entry.entryId) ?? null) : null,
     })),
     cursor: last === undefined ? null : encodeEntryCursor({ name: last.fullName, id: last.entryId }),
   };

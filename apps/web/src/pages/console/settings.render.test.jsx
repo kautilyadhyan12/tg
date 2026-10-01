@@ -149,6 +149,7 @@ const INVITE = {
   emailReason: null,
   lastSentAt: '2026-10-01T09:00:00.000Z',
   resendsLeft: 3,
+  sendAgainFrom: null,
 };
 
 const apiError = (status, error, message) => ({
@@ -940,6 +941,25 @@ describe('the invitations waiting', () => {
     for (const n of [4, 5, 6]) expect((await row(n)).queryByText('Send again')).toBeNull();
     expect((await row(4)).getByText(/emails to this address bounce/i)).toBeTruthy();
     expect((await row(6)).getByText("Sent 4 times, so it can't be sent again. Remove it and invite them again if they still need it.")).toBeTruthy();
+  });
+
+  it("once the week's 3 emails have gone, it says the day Send again opens instead of offering it (round one, L1)", async () => {
+    orgService.getStaffInvites.mockResolvedValue({
+      data: { invites: [{ ...INVITE, resendsLeft: 1, sendAgainFrom: '2099-10-08T09:00:00.000Z' }] },
+    });
+    await drawStaff();
+    const row = within(await screen.findByTestId(`staff-invite-${INVITE.id}`));
+    expect(row.queryByText('Send again')).toBeNull();
+    expect(row.getByText(/^3 emails went to this address this week\. You can send it again on /)).toBeTruthy();
+  });
+
+  it('a day already passed offers Send again again', async () => {
+    orgService.getStaffInvites.mockResolvedValue({
+      data: { invites: [{ ...INVITE, resendsLeft: 1, sendAgainFrom: '2020-10-08T09:00:00.000Z' }] },
+    });
+    await drawStaff();
+    const row = within(await screen.findByTestId(`staff-invite-${INVITE.id}`));
+    expect(row.getByText('Send again')).toBeTruthy();
   });
 
   it("Send again's refusal is the server's own sentence", async () => {

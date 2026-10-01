@@ -412,6 +412,20 @@ d("Remove on the people selected (real Postgres)", () => {
       expect(staffOf(coach.entryId)).toEqual({ role: "trainer", roleName: "Front desk" });
       expect(staffOf(member.entryId)).toBeNull();
       expect((await get(`/v1/orgs/${gym.id}/member-list/entries`, other.owner.cookies)).statusCode).toBe(404);
+
+      // A manager who sees the list sees nobody's staff role on it (round one, L4).
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${member.user.userId}, 'manager', ${["members.read", "members.confirm"]})`;
+      const asManager = await get(`/v1/orgs/${gym.id}/member-list/entries`, member.user.cookies);
+      expect(asManager.statusCode, asManager.body).toBe(200);
+      const managerSees = (JSON.parse(asManager.body) as { page: { entries: { staff: unknown }[] } }).page.entries;
+      expect(managerSees.every((e) => e.staff === null)).toBe(true);
+
+      // The owner's staff list says whose list record removing them from the app moves
+      // (round one, L5): the coach, joined through their record.
+      const staffRes = await get(`/v1/orgs/${gym.id}/staff`, gym.owner.cookies);
+      const staffList = (JSON.parse(staffRes.body) as { staff: { userId: string; movesRecord?: boolean }[] }).staff;
+      expect(staffList.find((p) => p.userId === coach.user.userId)?.movesRecord).toBe(true);
+      expect(staffList.find((p) => p.userId === gym.owner.userId)?.movesRecord).toBe(false);
     },
     TEST_TIMEOUT_MS,
   );

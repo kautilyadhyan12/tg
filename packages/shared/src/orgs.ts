@@ -2006,6 +2006,9 @@ export const orgStaffSchema = z.object({
   isMember: z.boolean().optional(),
   /** The gym's own role they hold ("Front desk"), shown in place of `role`. */
   roleName: z.string().nullable().optional(),
+  /** Removing them from the app moves the list record that is certainly theirs to past
+   *  members (the Staff tab says so before it happens, 4a-ii). Only on the owner's list. */
+  movesRecord: z.boolean().optional(),
 });
 export type OrgStaff = z.infer<typeof orgStaffSchema>;
 

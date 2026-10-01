@@ -3513,7 +3513,11 @@ export async function addStaff(
       WHERE m.gym_id = ${input.gymId}
         AND m.removed_at IS NULL
         AND u.email = ${input.email}
-      LIMIT 1`;
+        AND u.status = 'active'
+      LIMIT 1
+      -- Held until commit: an account deletion (softDeleteUser, which deletes staff rows)
+      -- waits for this appointment, or this one sees the account gone (4a-ii round one).
+      FOR SHARE OF u`;
     const candidate = candidates[0];
     if (candidate === undefined) return { kind: "not_a_member" };
 

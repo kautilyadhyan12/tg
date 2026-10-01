@@ -1,7 +1,7 @@
 // Staff invitations' rows (Part 3 §10.3; ROADMAP 4a-i). Every query names the gym, or
 // the caller's own proved address for the invited person's side.
 import type { Sql, TransactionSql } from "postgres";
-import { STAFF_INVITE_RESENDS_MAX, staffInviteEmailReasonSchema, type StaffInvite, type StaffInviteEmailReason } from "@app/shared";
+import { STAFF_INVITE_EMAILS_PER_ADDRESS_WEEK, STAFF_INVITE_RESENDS_MAX, staffInviteEmailReasonSchema, type StaffInvite, type StaffInviteEmailReason } from "@app/shared";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -147,6 +147,7 @@ export async function insertInvite(
  *  their latest email. At most 20 wait at once; the rest are ended or declined ones
  *  the owner has not taken off. With `inviteId`, that one only. */
 export async function listOpenInvites(sql: SqlOrTx, gymId: string, now: Date, inviteId: string | null = null): Promise<StaffInvite[]> {
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const rows = await sql<
     (RawInvite & {
       answered_at: Date | null;
@@ -155,11 +156,20 @@ export async function listOpenInvites(sql: SqlOrTx, gymId: string, now: Date, in
       send_result: string | null;
       sent_at: Date | null;
       sends: number;
+      week_frees_at: Date | null;
     })[]
   >`
     SELECT i.id, i.gym_id, i.email::text AS email, i.role, i.privileges, i.role_name, i.created_at, i.expires_at, i.state, i.answered_at,
            s.state AS send_state, s.reason AS send_reason, s.result AS send_result, s.created_at AS sent_at,
-           (SELECT count(*)::int FROM gym_staff_invite_sends c WHERE c.gym_id = i.gym_id AND c.invite_id = i.id) AS sends
+           (SELECT count(*)::int FROM gym_staff_invite_sends c WHERE c.gym_id = i.gym_id AND c.invite_id = i.id) AS sends,
+           -- The week's 3 emails to this address (as inviteCounts counts them): when the third newest
+           -- turns 7 days old, another may go. Null while fewer than 3 went this week.
+           (SELECT w.created_at + interval '7 days'
+            FROM gym_staff_invite_sends w
+            JOIN gym_staff_invites wi ON wi.id = w.invite_id AND wi.gym_id = w.gym_id
+            WHERE w.gym_id = i.gym_id AND wi.email = i.email AND w.created_at > ${weekAgo}
+            ORDER BY w.created_at DESC, w.id DESC
+            OFFSET ${STAFF_INVITE_EMAILS_PER_ADDRESS_WEEK - 1} LIMIT 1) AS week_frees_at
     FROM gym_staff_invites i
     LEFT JOIN LATERAL (
       SELECT x.state, x.reason, x.result, x.created_at FROM gym_staff_invite_sends x
@@ -194,6 +204,7 @@ export async function listOpenInvites(sql: SqlOrTx, gymId: string, now: Date, in
       emailReason: notSent ? reason : null,
       lastSentAt: (row.sent_at ?? invite.createdAt).toISOString(),
       resendsLeft: resendsLeft(row.sends),
+      sendAgainFrom: row.week_frees_at === null ? null : row.week_frees_at.toISOString(),
     };
   });
 }
@@ -331,6 +342,13 @@ export async function staffRowOf(tx: SqlOrTx, gymId: string, userId: string): Pr
   const rows = await tx<{ role: string }[]>`
     SELECT role FROM gym_staff WHERE gym_id = ${gymId} AND user_id = ${userId}`;
   return rows[0] ?? null;
+}
+
+/** The account is live, held until commit: an account deletion waits for the caller's
+ *  transaction, or the caller sees the account gone. */
+export async function lockLiveAccount(tx: TransactionSql, userId: string): Promise<boolean> {
+  const rows = await tx<{ id: string }[]>`SELECT id FROM users WHERE id = ${userId} AND status = 'active' FOR SHARE`;
+  return rows.length === 1;
 }
 
 /** Make this person staff with the invitation's role and that role's starting ticks. */

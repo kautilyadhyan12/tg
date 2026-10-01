@@ -695,10 +695,17 @@ export async function softDeleteUser(
     // gives back the account and not the console. A gym the person OWNS keeps its owner
     // (the gym would otherwise be left with nobody able to run it). Inline for the reason
     // the membership close is.
-    await tx`
+    const endedStaff = await tx<{ gym_id: string; role: string }[]>`
       DELETE FROM gym_staff s
       WHERE s.user_id = ${userId}
-        AND NOT EXISTS (SELECT 1 FROM gyms g WHERE g.id = s.gym_id AND g.owner_user_id = s.user_id)`;
+        AND NOT EXISTS (SELECT 1 FROM gyms g WHERE g.id = s.gym_id AND g.owner_user_id = s.user_id)
+      RETURNING s.gym_id, s.role`;
+    for (const ended of endedStaff) {
+      await tx`
+        INSERT INTO audit_log (actor_user_id, gym_id, action, target_type, target_id, meta)
+        VALUES (${userId}, ${ended.gym_id}, 'org.staff_removed', 'gym_staff', ${userId},
+                ${tx.json({ role: ended.role, removedWith: "account_deleted" })})`;
+    }
     await tx`DELETE FROM push_tokens WHERE user_id = ${userId}`;
     return { email: row.email, displayName: row.display_name };
   });
