@@ -1176,6 +1176,9 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
       const owed = razorpay.invoices.get(a.sub)?.find((i) => i.status === "issued");
       const paidTo = new Date((owed?.billing_end ?? 0) * 1000);
       razorpay.payInvoice(owed?.id ?? "");
+      // Re-check 2 Low: paid a moment ago, before the plan is read again — a payment on its
+      // way, never "Razorpay has stopped taking payments".
+      expect(JSON.parse((await payLink(a.gymId, a.cookies)).body)).toMatchObject({ error: "nothing_owed" });
       await refresh(a.gymId, a.cookies);
       const row = await planRow(a.gymId);
       expect(row).toMatchObject({ status: "active" });
@@ -1189,6 +1192,9 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
       expect(run.reread).toBeGreaterThanOrEqual(1);
       expect(await planRow(a.gymId)).toMatchObject({ status: "past_due" });
       // Re-check N1: with no bill issued, Pay now says what is true and what to press instead.
+      // The request runs on the real clock, so the paid month is made to have ended by now.
+      const list = razorpay.invoices.get(a.sub) ?? [];
+      razorpay.invoices.set(a.sub, list.map((i) => (i.id === owed?.id ? { ...i, billing_end: Math.floor(Date.now() / 1000) - 60 } : i)));
       const pay = await payLink(a.gymId, a.cookies);
       expect(pay.statusCode).toBe(409);
       expect(JSON.parse(pay.body)).toMatchObject({

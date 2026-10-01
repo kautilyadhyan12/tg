@@ -1595,6 +1595,10 @@ export async function payRazorpayBill(deps: BillingDeps, input: { userId: string
       const fetched = await razorpay.api.getSubscription(plan.subscriptionRef);
       if (fetched.kind === "ok" && (fetched.value.status === "halted" || fetched.value.status === "pending")) {
         const through = razorpayPaidThrough(fetched.value, invoices.value);
+        // A bill just paid still covers days ahead: that is a payment on its way, not a stop.
+        if (through !== null && through.getTime() > deps.now().getTime()) {
+          throw new OrgsError(409, "nothing_owed", "Nothing is owed right now. A payment just made can take a minute to show here.");
+        }
         const covered = through === null ? "" : `, your last payment covered up to ${dayLabel(through, timezone)}`;
         throw new OrgsError(
           409,
