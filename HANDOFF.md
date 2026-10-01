@@ -4,6 +4,18 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-10-01 · 1d-iii-a (Folder B): a bigger size through Razorpay (branch `razorpay-bigger-size`, PR #146)
+
+- **Why this job:** next on Folder B's list. 1d-iii split in two (ROADMAP): this is the bigger size; 1d-iii-b, the smaller, is next. **Risky (money), Opus xhigh; Kd: *"go"*.** Migration `0059_razorpay_bigger_size`; no new package, no new cost.
+- **Measured on the Razorpay test account first:** `PATCH /subscriptions/:id` on a card mandate is refused (*"Can't update subscription immediately when card mandate is applicable"*), so a new size is a new subscription; one made with `start_at` + an add-on shows "₹X will be charged now", and once paid is `authenticated`, `paid_count` 0, its add-on invoice `paid`.
+- **Built:** Change size for a paying Razorpay plan. Bigger: the rest of this month's difference priced by our server (`upgradeCharge`, table-tested), a new subscription from the paid month's end with that add-on and a 30-minute window; once Razorpay's invoice says paid it replaces the old plan under the gym's lock, the old one is cancelled at Razorpay (worker retries) and any later charge of it refunded. Smaller rows say "Not available yet".
+- **Worst thing, first test:** the bigger size opens only once Razorpay says it was paid, and the old plan never charges again (refunded if it does). **Breaks, each RED, restored identical:** the add-on not checked as paid, the old plan not cancelled, a replaced plan's later events ignored.
+- **Real run (api on :3001 with the test keys):** ₹7,500 plan paid, then 500 members: ₹4,999.92 taken now, ₹12,500 from 1 Nov, old plan `cancelled` at Razorpay, no warnings in the log.
+- **Kd's click-through on frfgrgrg: all pass.** He found the card's buttons badly laid out; they wait for R4 (RULINGS 2026-10-01, *"wait for R4"*).
+- **Round one: 1 Critical, 1 High, 1 Low, 3 untested guards, all fixed (332a1ac).** C1 a paid window closed by a newer press kept the money: now refunded, its page says so. H1 a second bigger size in one month was refused: priced from that checkout's own month (`period_start`, added to 0059; on `aihg_b` by hand). L1 a code's name. The same-month and `active` guards each turn the new test red when broken. **Re-check closed the round.**
+- **Verified:** api **4,550 of 4,550** on `aihg_b`; web 3,355/3,355 (`poseAssets.contract` local Node 24); shared 278/278; tsc and eslint 0.
+- **Open:** merge on Kd's word; the feature's two extra passes (security, integrity) run once after 1d-iii-b, before any real gym pays. Folder A's database needs 0059 migrated.
+
 ## 2026-10-01 · 1d-ii (Folder B): a Razorpay plan paid, its card changed, cancelled, from the console (branch `razorpay-manage-plan`)
 
 - **Why this job:** next on Folder B's list after 1e. **Risky (money), Opus xhigh; Kd: *"go"*.** Migration `0058_razorpay_cancel` (`subscriptions.cancel_sent_at`, refund reason `cancelled`); no new package, no new cost.
