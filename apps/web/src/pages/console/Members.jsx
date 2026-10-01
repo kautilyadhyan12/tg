@@ -171,7 +171,7 @@ function RosterSheet({ member, words, seesList, canRemove, managesStaff, readOnl
               {staff.tickLabel !== null ? (
                 <div className="flex items-start gap-2">
                   <Tick state={alsoStaff ? 'on' : 'off'} label={staff.tickLabel} onClick={() => setAlsoStaff((on) => !on)} />
-                  <span className="flex flex-col gap-0.5">
+                  <span className="flex flex-col gap-0.5 cursor-pointer" onClick={() => setAlsoStaff((on) => !on)}>
                     <span className="c-s14 c-w6 c-t1">{staff.tickLabel}</span>
                     <span className="c-s13 c-t2">{alsoStaff ? staff.goLine : staff.keepLine}</span>
                   </span>
@@ -218,8 +218,9 @@ const NOBODY_TICKED = new Set();
 /** "In the app" has no "Select all": nothing there can move under a selection. */
 const NOTHING = () => undefined;
 
-/** "Already in the app · 3" under an empty list (`MembersEmpty`). */
-function AlreadyInApp({ items }) {
+/** "Already in the app · 3" under an empty list (`MembersEmpty`). Each name opens that
+ *  person's panel on "In the app", as a row there does (4a-ii click-through). */
+function AlreadyInApp({ items, onOpen }) {
   if (items.length === 0) return null;
   return (
     <section className="c-card overflow-hidden" aria-labelledby="already-title">
@@ -228,14 +229,17 @@ function AlreadyInApp({ items }) {
       </h2>
       <ul>
         {items.map((m) => (
-          <li
-            key={m.userId}
-            className="flex flex-col md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_minmax(0,1fr)] gap-1 md:gap-4 md:items-center px-5 py-3.5 border-t"
-            style={{ borderColor: 'var(--line)' }}
-          >
-            <span className="c-s15 c-w6 c-t1 c-ell">{m.displayName}</span>
-            <span className="c-s14 c-t2">In the app since {shortWhen(m.joinedAt)}</span>
-            <span>{seatIsFree(m) ? <span className="c-tag c-tag-soft">Complimentary</span> : null}</span>
+          <li key={m.userId} className="border-t" style={{ borderColor: 'var(--line)' }}>
+            <button
+              type="button"
+              onClick={() => onOpen(m)}
+              className="w-full text-left flex flex-col md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto] gap-1 md:gap-4 md:items-center min-h-11 px-5 py-3.5"
+            >
+              <span className="c-s15 c-w6 c-t1 c-ell">{m.displayName}</span>
+              <span className="c-s14 c-t2">In the app since {shortWhen(m.joinedAt)}</span>
+              <span>{seatIsFree(m) ? <span className="c-tag c-tag-soft">Complimentary</span> : null}</span>
+              <ChevronRight aria-hidden="true" className="hidden md:block w-[18px] h-[18px] c-t3" />
+            </button>
           </li>
         ))}
       </ul>
@@ -595,7 +599,15 @@ export default function Members() {
           refreshKey={listKey}
           action={action}
           onActionTaken={clearAction}
-          emptyExtra={<AlreadyInApp items={state.items} />}
+          emptyExtra={
+            <AlreadyInApp
+              items={state.items}
+              onOpen={(m) => {
+                showTab('app');
+                openFromRoster(m);
+              }}
+            />
+          }
           onRosterChanged={reloadRoster}
           canRemove={canRemove}
         />

@@ -1991,6 +1991,21 @@ describe('Removing a member', () => {
     await waitFor(() => expect(orgService.removeMember).toHaveBeenCalledWith(ORG.id, 'u4', { alsoStaff: true }));
   });
 
+  /** Kd's 4a-ii click-through: with no list imported, "Your list" shows the people in the
+   *  app under "Already in the app", and their names did nothing when pressed. */
+  it('a name under "Already in the app" opens that person, with Remove, on "In the app"', async () => {
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, staffMemberSeat]));
+    drawListTab();
+    fireEvent.click(await screen.findByRole('button', { name: /Bhaskar Das/ }));
+    const panel = within(await screen.findByRole('dialog', { name: 'Bhaskar Das' }));
+    expect(screen.getByRole('tab', { name: 'In the app' }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
+    // The words beside the tick tick it too.
+    fireEvent.click(panel.getByText('Also remove Bhaskar Das from staff'));
+    expect(panel.getByRole('checkbox', { name: 'Also remove Bhaskar Das from staff' }).getAttribute('aria-checked')).toBe('true');
+    expect(panel.getByRole('button', { name: 'Remove from app and staff' })).toBeTruthy();
+  });
+
   it('a staff member left unticked is removed from the app only', async () => {
     orgService.getMembers.mockResolvedValue(page([staffMemberSeat]));
     drawMembers();
