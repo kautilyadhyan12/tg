@@ -559,19 +559,20 @@ describe('the worst thing: nobody leaves who was not answered for', () => {
 // THE NEW LOOK (5b-v-d-ii) CHANGES HOW THE BOX LOOKS, NEVER WHAT IT SHOWS: every step,
 // line and tick below was on the screen before the restyle, in this order.
 describe('Which software is your list in? (5c)', () => {
-  const chip = (name) => within(screen.getByRole('group', { name: 'Which software is your list in?' })).getByRole('button', { name });
-  const pressed = () =>
-    within(screen.getByRole('group', { name: 'Which software is your list in?' }))
-      .getAllByRole('button')
-      .filter((b) => b.getAttribute('aria-pressed') === 'true')
-      .map((b) => b.textContent);
+  const trigger = () => screen.getByRole('button', { name: /^Which software is your list in\?/ });
+  /** Opens the dropdown and picks `name`, as staff do. */
+  const choose = (name) => {
+    fireEvent.click(trigger());
+    fireEvent.click(screen.getByRole('option', { name }));
+  };
+  const shown = () => trigger().textContent;
 
   // The worst thing this box could do is change what an upload does: the steps are help,
   // and the file is read the same whether anything is chosen or not.
   it('choosing a product changes nothing the upload sends, and nothing has to be chosen', async () => {
     orgService.uploadMemberList.mockResolvedValue({ data: { preview: preview() } });
     renderBox();
-    fireEvent.click(chip('Glofox'));
+    choose('Glofox');
     fireEvent.click(screen.getByRole('tab', { name: 'Paste rows' }));
     fireEvent.change(screen.getByLabelText('Paste your rows'), { target: { value: 'Name\tEmail\nAda\tada@members.example' } });
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
@@ -584,10 +585,14 @@ describe('Which software is your list in? (5c)', () => {
     expect(orgService.uploadMemberList.mock.calls[1][1]).toEqual(chosen[1]);
   });
 
-  it('opens on nothing chosen, with a chip for every product, your own spreadsheet and other software', () => {
+  it('opens on nothing chosen; its list is drawn by the console, with every product, your own spreadsheet and other software', () => {
     renderBox();
-    const group = screen.getByRole('group', { name: 'Which software is your list in?' });
-    expect(within(group).getAllByRole('button').map((b) => b.textContent)).toEqual([
+    expect(shown()).toBe('Choose your software');
+    expect(trigger().getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('listbox')).toBeNull();
+    fireEvent.click(trigger());
+    const list = screen.getByRole('listbox', { name: 'Which software is your list in?' });
+    expect(within(list).getAllByRole('option').map((o) => o.textContent)).toEqual([
       'Glofox',
       'Gym Insight',
       'Gymdesk',
@@ -599,15 +604,30 @@ describe('Which software is your list in? (5c)', () => {
       'My own spreadsheet',
       'Other software',
     ]);
-    expect(pressed()).toEqual([]);
+    expect(within(list).getAllByRole('option').every((o) => o.className.includes('c-opt'))).toBe(true);
+    expect(document.querySelector('select')).toBeNull();
     expect(screen.queryByTestId('software-steps')).toBeNull();
     expect(screen.queryByText(/don't come across/)).toBeNull();
   });
 
+  it("the keys work as a dropdown's do: down opens it, arrows move, Escape closes it and nothing is chosen", () => {
+    renderBox();
+    fireEvent.keyDown(trigger(), { key: 'ArrowDown' });
+    const options = screen.getAllByRole('option');
+    expect(document.activeElement).toBe(options[0]);
+    fireEvent.keyDown(options[0], { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(options[1]);
+    fireEvent.keyDown(options[1], { key: 'Escape' });
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(document.activeElement).toBe(trigger());
+    expect(shown()).toBe('Choose your software');
+  });
+
   it("a product shows its own steps, its tip, its help page, that menus change, and what no file brings", () => {
     renderBox();
-    fireEvent.click(chip('Mindbody'));
-    expect(pressed()).toEqual(['Mindbody']);
+    choose('Mindbody');
+    expect(shown()).toBe('Mindbody');
+    expect(screen.queryByRole('listbox')).toBeNull();
     const steps = within(screen.getByTestId('software-steps')).getAllByRole('listitem').map((li) => li.textContent);
     expect(steps).toEqual([
       '1Click Insights, then Reports, and open Mailing Lists (under Clients).',
@@ -626,28 +646,27 @@ describe('Which software is your list in? (5c)', () => {
     expect(screen.getByText('Software changes its menus from time to time. If a step looks different, its help page has the latest steps.')).toBeTruthy();
     expect(screen.getByText("Saved cards, visit history, documents and photos don't come across in this file.")).toBeTruthy();
 
-    fireEvent.click(chip('GymMaster'));
-    expect(pressed()).toEqual(['GymMaster']);
+    choose('GymMaster');
+    expect(shown()).toBe('GymMaster');
     expect(screen.getAllByRole('link').map((a) => a.textContent)).toEqual(['Run Standard Report', 'Standard Report Options']);
     expect(screen.queryByText(/that box stops at 10,000/)).toBeNull();
   });
 
-  it('your own spreadsheet says upload or paste; other software says where to look; the chosen chip again hides the steps', () => {
+  it('your own spreadsheet says upload or paste; other software says where to look', () => {
     renderBox();
-    fireEvent.click(chip('My own spreadsheet'));
+    choose('My own spreadsheet');
     expect(screen.getByTestId('software-steps').textContent).toBe(
       '1Upload the file as it is, Excel or CSV.2Or copy the rows with their headings and use Paste rows.',
     );
     expect(screen.queryByText(/don't come across/)).toBeNull();
     expect(screen.queryByText(/changes its menus/)).toBeNull();
     expect(screen.queryByRole('link')).toBeNull();
-    fireEvent.click(chip('Other software'));
+    choose('Other software');
     expect(screen.getByTestId('software-steps').textContent).toContain("Look for Export or Download. It's often under Actions, Reports or a ⋯ menu.");
     expect(screen.getByText(/don't come across/)).toBeTruthy();
     expect(screen.queryByText(/changes its menus/)).toBeNull();
-    fireEvent.click(chip('Other software'));
-    expect(pressed()).toEqual([]);
-    expect(screen.queryByTestId('software-steps')).toBeNull();
+    fireEvent.click(trigger());
+    expect(screen.getByRole('option', { name: 'Other software' }).getAttribute('aria-selected')).toBe('true');
   });
 });
 

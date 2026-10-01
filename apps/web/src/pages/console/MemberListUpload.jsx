@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   CalendarDays,
   Check,
+  ChevronDown,
   ChevronLeft,
   ClipboardPaste,
   Columns3,
@@ -313,6 +314,99 @@ function HandEdits({ handEdits, words, checked, onChange }) {
 }
 
 /** The import box. Opened from the Members screen's "Import" card. */
+/** Every choice of the software box, in its order. */
+const SOFTWARE_CHOICES = [...MEMBER_LIST_SOFTWARE.map((s) => [s.id, s.name]), ['spreadsheet', 'My own spreadsheet'], ['other', 'Other software']];
+
+/** The software box's dropdown, drawn by the console rather than the browser, so its open
+ *  list is in the console's own colours and not the system's blue (Kd's click-through,
+ *  2026-10-01). Arrow keys move through it and Escape closes it, as a browser's does. */
+function SoftwarePick({ labelId, choice, onChoose }) {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef(null);
+  const button = useRef(null);
+  const listId = useId();
+  const name = SOFTWARE_CHOICES.find(([value]) => value === choice)?.[1] ?? null;
+  useEffect(() => {
+    if (!open) return undefined;
+    const away = (e) => {
+      if (wrap.current !== null && !wrap.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', away);
+    // The chosen one, or the first, takes the focus, so the arrow keys start there.
+    const options = [...(wrap.current?.querySelectorAll('[role=option]') ?? [])];
+    (options.find((o) => o.getAttribute('aria-selected') === 'true') ?? options[0])?.focus();
+    return () => document.removeEventListener('mousedown', away);
+  }, [open]);
+  const close = () => {
+    setOpen(false);
+    button.current?.focus();
+  };
+  const onKey = (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      close();
+      return;
+    }
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    const options = [...(wrap.current?.querySelectorAll('[role=option]') ?? [])];
+    const at = options.indexOf(document.activeElement);
+    const next = e.key === 'ArrowDown' ? Math.min(at + 1, options.length - 1) : Math.max(at - 1, 0);
+    options[next]?.focus();
+  };
+  return (
+    <div ref={wrap} className="relative">
+      <button
+        ref={button}
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-labelledby={`${labelId} ${listId}-value`}
+        onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown' && !open) {
+            e.preventDefault();
+            setOpen(true);
+          }
+        }}
+        className="c-sel text-left"
+      >
+        <span id={`${listId}-value`} className={name === null ? 'c-t3' : 'c-t1'}>
+          {name ?? 'Choose your software'}
+        </span>
+        <ChevronDown aria-hidden="true" className="w-4 h-4 flex-shrink-0 c-t2" />
+      </button>
+      {open ? (
+        <div
+          id={listId}
+          role="listbox"
+          aria-labelledby={labelId}
+          onKeyDown={onKey}
+          className="absolute left-0 right-0 top-full mt-1.5 rounded-[14px] p-1.5 z-10 flex flex-col max-h-[320px] overflow-y-auto"
+          style={{ background: 'var(--sheet)', border: '1px solid var(--card-line)', boxShadow: 'var(--pop)' }}
+        >
+          {SOFTWARE_CHOICES.map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="option"
+              aria-selected={choice === value}
+              onClick={() => {
+                onChoose(value);
+                close();
+              }}
+              className="c-opt w-full text-left rounded-[10px] px-3 min-h-[44px] flex items-center justify-between gap-3 c-s15"
+            >
+              {label}
+              {choice === value ? <Check aria-hidden="true" className="w-4 h-4 flex-shrink-0" /> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /** "Which software is your list in?" (§11.7; ROADMAP 5c): that product's own steps for
  *  downloading its list, and the help page they come from. Nothing here changes how the
  *  file is read: it is help, and the upload works the same whether anything is chosen. */
@@ -323,24 +417,10 @@ function SoftwareSteps() {
   const steps = product !== null ? product.steps : choice === 'spreadsheet' ? MEMBER_LIST_SPREADSHEET_STEPS : choice === 'other' ? MEMBER_LIST_OTHER_SOFTWARE_STEPS : null;
   return (
     <section className="c-card p-4 flex flex-col gap-3" data-testid="software">
-      {/* Chips, not a dropdown: a dropdown's open list is drawn by the browser in its own
-          colours, outside the console's look (Kd's click-through, 2026-10-01). */}
       <span id={id} className="c-s15 c-w6 c-t1">
         Which software is your list in?
       </span>
-      <div role="group" aria-labelledby={id} className="flex flex-wrap gap-2">
-        {[...MEMBER_LIST_SOFTWARE.map((s) => [s.id, s.name]), ['spreadsheet', 'My own spreadsheet'], ['other', 'Other software']].map(([value, name]) => (
-          <button
-            key={value}
-            type="button"
-            aria-pressed={choice === value}
-            onClick={() => setChoice((c) => (c === value ? '' : value))}
-            className={`c-chip ${choice === value ? 'c-chip-on' : ''}`}
-          >
-            {name}
-          </button>
-        ))}
-      </div>
+      <SoftwarePick labelId={id} choice={choice} onChoose={setChoice} />
       {steps !== null ? (
         <ol className="flex flex-col gap-2 c-s14 c-t1" data-testid="software-steps">
           {steps.map((step, i) => (

@@ -614,6 +614,12 @@
   justify-content: space-between;
   gap: 8px;
 }
+/* One choice in a list the console draws itself, such as a dropdown's open list: the
+   browser's own list would show the system's colours. */
+.c-opt { color: var(--t1); }
+.c-opt:hover,
+.c-opt:focus-visible { background: var(--raise); outline: none; }
+.c-opt[aria-selected="true"] { background: var(--soft); color: var(--soft-t); font-weight: 600; }
 .c-area {
   width: 100%;
   padding: 10px 14px;
