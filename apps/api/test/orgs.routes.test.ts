@@ -294,12 +294,12 @@ d("orgs routes (real Postgres)", () => {
   const makeOrg = async (
     cookies: Record<string, string>,
     name: string,
-    extra: { orgType?: string; country?: string; plan?: string | null } = {},
+    extra: { orgType?: string; country?: string; plan?: string | null; trainsHere?: boolean } = {},
   ): Promise<CreatedOrg> => {
     const { plan, ...body } = extra;
     const res = await post(
       "/v1/orgs",
-      { name, city: "Austin", country: "IN", timezone: "Asia/Kolkata", ...body },
+      { trainsHere: true, name, city: "Austin", country: "IN", timezone: "Asia/Kolkata", ...body },
       { cookies },
     );
     expect(res.statusCode).toBe(201);
@@ -446,7 +446,7 @@ d("orgs routes (real Postgres)", () => {
   });
 
   it("every route requires authentication", { timeout: 30_000 }, async () => {
-    expect((await post("/v1/orgs", { name: "X", country: "US", timezone: "UTC" })).statusCode).toBe(401);
+    expect((await post("/v1/orgs", { trainsHere: true, name: "X", country: "US", timezone: "UTC" })).statusCode).toBe(401);
     expect((await get("/v1/orgs/mine")).statusCode).toBe(401);
     expect((await post("/v1/orgs/join", { code: "AAAAAA" })).statusCode).toBe(401);
     expect(
@@ -532,15 +532,15 @@ d("orgs routes (real Postgres)", () => {
       SELECT role FROM gym_staff WHERE gym_id = ${created.org.id} AND user_id = ${owner.userId}`;
     expect(staff[0]?.role).toBe("owner");
 
-    // Part 3 §4.0 step 6 — member #1, complimentary (not seat-counted).
-    const seat = await sql<{ complimentary: boolean; consent_at: Date | null }[]>`
-      SELECT complimentary, consent_at FROM gym_members
+    // §10.4: the owner said yes to "Do you train here too?" (this helper's answer), so
+    // they hold an ordinary seat — not complimentary, counted, through no code, and
+    // with the answer's time as its consent, since this time they were asked.
+    const seat = await sql<{ complimentary: boolean; consent_at: Date | null; code_id: string | null }[]>`
+      SELECT complimentary, consent_at, code_id FROM gym_members
       WHERE gym_id = ${created.org.id} AND user_id = ${owner.userId} AND removed_at IS NULL`;
-    expect(seat[0]?.complimentary).toBe(true);
-    // T3 round 1 C/H-2: NULL, because nobody asked. The previous assertion here
-    // was `.not.toBeNull()`, which pinned a fabricated consent record as
-    // correct behaviour — :5906's "a test asserting the defect".
-    expect(seat[0]?.consent_at).toBeNull();
+    expect(seat[0]?.complimentary).toBe(false);
+    expect(seat[0]?.consent_at).not.toBeNull();
+    expect(seat[0]?.code_id).toBeNull();
 
     // Part 3 §3.3 — every mutating call writes audit_log.
     const audit = await sql<{ action: string }[]>`
@@ -552,10 +552,10 @@ d("orgs routes (real Postgres)", () => {
     const { cookies } = await makeUser("badbody");
     expect((await post("/v1/orgs", {}, { cookies })).statusCode).toBe(400);
     expect(
-      (await post("/v1/orgs", { name: "", country: "US", timezone: "UTC" }, { cookies })).statusCode,
+      (await post("/v1/orgs", { trainsHere: true, name: "", country: "US", timezone: "UTC" }, { cookies })).statusCode,
     ).toBe(400);
     expect(
-      (await post("/v1/orgs", { name: "Orgs Test Bad", country: "US", timezone: "UTC", seatCap: 9999 }, { cookies }))
+      (await post("/v1/orgs", { trainsHere: true, name: "Orgs Test Bad", country: "US", timezone: "UTC", seatCap: 9999 }, { cookies }))
         .statusCode,
     ).toBe(400);
     // A gym must not be able to declare its own currency (Kd ruling
@@ -563,28 +563,28 @@ d("orgs routes (real Postgres)", () => {
     expect(
       (await post(
         "/v1/orgs",
-        { name: "Orgs Test Bad", country: "IN", timezone: "UTC", currencyDisplay: "USD" },
+        { trainsHere: true, name: "Orgs Test Bad", country: "IN", timezone: "UTC", currencyDisplay: "USD" },
         { cookies },
       )).statusCode,
     ).toBe(400);
     // Country is required — without it there is nothing for the currency to
     // follow, and a default is exactly what Kd ruled out.
     expect(
-      (await post("/v1/orgs", { name: "Orgs Test Bad", timezone: "UTC" }, { cookies })).statusCode,
+      (await post("/v1/orgs", { trainsHere: true, name: "Orgs Test Bad", timezone: "UTC" }, { cookies })).statusCode,
     ).toBe(400);
     // T3 round 1 L-3: the timezone is the ONLY source of an org's day
     // boundaries, so a string that names no real zone is refused at the door
     // rather than written permanently into a row nothing can later interpret.
     for (const timezone of ["Mars/Olympus", "Asia/Kolkatta", "not a zone", "UTC+5"]) {
       expect(
-        (await post("/v1/orgs", { name: "Orgs Test Bad", country: "IN", timezone }, { cookies }))
+        (await post("/v1/orgs", { trainsHere: true, name: "Orgs Test Bad", country: "IN", timezone }, { cookies }))
           .statusCode,
       ).toBe(400);
     }
     expect(
       (await post(
         "/v1/orgs",
-        { name: "Orgs Test Bad", country: "IN", timezone: "Asia/Kolkata", locale: "en_US!!" },
+        { trainsHere: true, name: "Orgs Test Bad", country: "IN", timezone: "Asia/Kolkata", locale: "en_US!!" },
         { cookies },
       )).statusCode,
     ).toBe(400);
@@ -634,7 +634,7 @@ d("orgs routes (real Postgres)", () => {
     for (const country of ["AU", "PL", "CH", "ZZ"]) {
       const res = await post(
         "/v1/orgs",
-        { name: "Orgs Test Money No", country, timezone: "UTC" },
+        { trainsHere: true, name: "Orgs Test Money No", country, timezone: "UTC" },
         { cookies },
       );
       expect(res.statusCode).toBe(400);
@@ -1366,8 +1366,9 @@ d("orgs routes (real Postgres)", () => {
   it("removes a member: the roster drops them, the row is CLOSED not deleted, and the seat is freed", { timeout: 60_000 }, async () => {
     const owner = await makeUser("rm-owner");
     const member = await makeUser("rm-member");
-    const org = await makeOrg(owner.cookies, "Orgs Test Remove");
-    await subscribeGym(org.org.id, CAP1_PLAN); // exactly one non-complimentary seat
+    // The owner doesn't train here, so the one place is the member's (§10.4).
+    const org = await makeOrg(owner.cookies, "Orgs Test Remove", { trainsHere: false });
+    await subscribeGym(org.org.id, CAP1_PLAN); // exactly one place
     await joinAsMember(member.cookies, org, owner.cookies);
 
     const rosterBefore = await get(`/v1/orgs/${org.org.id}/members`, { cookies: owner.cookies });
@@ -1702,7 +1703,7 @@ d("orgs routes (real Postgres)", () => {
     const owner = await makeUser("cap-words-owner");
     const first = await makeUser("cap-words-first");
     const second = await makeUser("cap-words-second");
-    const studio = await makeOrg(owner.cookies, "Orgs Test Cap Studio", { orgType: "studio" });
+    const studio = await makeOrg(owner.cookies, "Orgs Test Cap Studio", { orgType: "studio", trainsHere: false });
     await subscribeGym(studio.org.id, CAP1_PLAN);
     await joinAsMember(first.cookies, studio, owner.cookies);
     const waiting = await applyWithCode(second.cookies, studio.joinCode.code);
@@ -1750,7 +1751,7 @@ d("orgs routes (real Postgres)", () => {
     const { cookies } = await makeUser("no-clinic");
     const res = await post(
       "/v1/orgs",
-      { name: "Orgs Test No Clinic", country: "US", timezone: "America/New_York", orgType: "clinic" },
+      { trainsHere: true, name: "Orgs Test No Clinic", country: "US", timezone: "America/New_York", orgType: "clinic" },
       { cookies },
     );
     expect(res.statusCode).toBe(400);
@@ -1851,15 +1852,15 @@ d("orgs routes (real Postgres)", () => {
     expect(row[0]?.consent_at?.getTime()).toBe(consentedAt?.getTime());
   });
 
-  it("enforces the plan's seat cap, and the owner's complimentary seat does not consume one", { timeout: 90_000 }, async () => {
+  it("enforces the plan's seat cap", { timeout: 90_000 }, async () => {
     const owner = await makeUser("cap-owner");
     const first = await makeUser("cap-first");
     const second = await makeUser("cap-second");
-    const org = await makeOrg(owner.cookies, "Orgs Test Cap");
+    // The owner doesn't train here; an owner who does takes a place like anyone
+    // (§10.4), which `orgs.seats.test.ts` drives.
+    const org = await makeOrg(owner.cookies, "Orgs Test Cap", { trainsHere: false });
     await subscribeGym(org.org.id, CAP1_PLAN); // seat_cap = 1
 
-    // The owner is already a member. If complimentary seats counted, this
-    // first confirm would be the one refused.
     await joinAsMember(first.cookies, org, owner.cookies);
 
     // THE CAP NOW BITES AT CONFIRM, and applying is free: a full gym must
@@ -1974,7 +1975,7 @@ d("orgs routes (real Postgres)", () => {
     // rather than a property of the design being remembered.
     const owner = await makeUser("guard-owner");
     const waiting = await makeUser("guard-waiting");
-    const org = await makeOrg(owner.cookies, "Orgs Test Guard");
+    const org = await makeOrg(owner.cookies, "Orgs Test Guard", { trainsHere: false });
     await subscribeGym(org.org.id, "org_b1_in_m"); // a gym whose plan grants the member block
     await applyWithCode(waiting.cookies, org.joinCode.code);
 
@@ -1994,10 +1995,10 @@ d("orgs routes (real Postgres)", () => {
       (JSON.parse(mine.body) as { orgs: { id: string }[] }).orgs.map((o) => o.id),
     ).not.toContain(org.org.id);
 
-    // 4. The §4.2 seat count: a pending person occupies nothing.
+    // 4. The §4.2 seat count (every live membership, §10.4): a pending person occupies nothing.
     const seats = await sql<{ n: number }[]>`
       SELECT count(*)::int AS n FROM gym_members
-      WHERE gym_id = ${org.org.id} AND removed_at IS NULL AND complimentary = false`;
+      WHERE gym_id = ${org.org.id} AND removed_at IS NULL`;
     expect(seats[0]?.n).toBe(0);
 
     // 5. The three per-module spend-attribution lookups — a pending applicant
@@ -2250,7 +2251,8 @@ d("orgs routes (real Postgres)", () => {
     expect(rosterIds).not.toContain(otherMember.userId);
 
     expect(rosterIds.slice().sort()).toEqual([owner.userId, member.userId].sort());
-    expect(page.items.find((i) => i.userId === owner.userId)?.complimentary).toBe(true);
+    // The owner trains here (this helper's answer): an ordinary seat since §10.4.
+    expect(page.items.find((i) => i.userId === owner.userId)?.complimentary).toBe(false);
     expect(page.items.find((i) => i.userId === member.userId)?.groupLabel).toBe("Front Desk");
     // Part 3 §2.4: nothing outside the boundary is even in the shape.
     //
@@ -3205,8 +3207,8 @@ d("orgs routes (real Postgres)", () => {
     const owner = await makeUser("race-owner");
     const a = await makeUser("race-a");
     const b = await makeUser("race-b");
-    const org = await makeOrg(owner.cookies, "Orgs Test Race");
-    await subscribeGym(org.org.id, CAP1_PLAN); // seat_cap = 1
+    const org = await makeOrg(owner.cookies, "Orgs Test Race", { trainsHere: false });
+    await subscribeGym(org.org.id, CAP1_PLAN); // seat_cap = 1, nobody in it yet
 
     // Two SEPARATE clients: the app's own pool is max:1 and would serialise
     // these for us, which would make the assertion true with the lock removed.
@@ -3503,36 +3505,22 @@ d("orgs routes (real Postgres)", () => {
   // the flake on the slower reading. Nothing about the assertions changes — the
   // only edit to each of the four is this options object, and a timeout cannot
   // weaken an assertion.
-  it("SEAT CAP: appointing a member frees their seat, and removing them takes it back", { timeout: 30_000 }, async () => {
+  it("SEAT CAP: appointing a member frees NO seat (§10.4); only leaving the app does", { timeout: 30_000 }, async () => {
     const owner = await makeUser("staff-seat-owner");
     const hire = await makeUser("staff-seat-hire");
     const walkIn = await makeUser("staff-seat-walkin");
-    const org = await makeOrg(owner.cookies, "Orgs Test Staff Seat Cap");
-    await subscribeGym(org.org.id, CAP1_PLAN); // one paid seat
+    const org = await makeOrg(owner.cookies, "Orgs Test Staff Seat Cap", { trainsHere: false });
+    await subscribeGym(org.org.id, CAP1_PLAN); // one place
     await joinAsMember(hire.cookies, org, owner.cookies);
 
-    // The gym is FULL: one paid seat, one paying member (the owner's own seat is
-    // complimentary and has never counted).
-    const full = await post("/v1/orgs/join", { code: org.joinCode.code }, {
-      cookies: walkIn.cookies,
-    });
-    expect(full.statusCode).toBe(200);
-    expect((JSON.parse(full.body) as { outcome: string }).outcome).toBe("pending");
-    const blocked = await post(
-      `/v1/orgs/${org.org.id}/applications/${
-        (
-          JSON.parse(
-            (await get(`/v1/orgs/${org.org.id}/applications`, { cookies: owner.cookies })).body,
-          ) as { items: { id: string; userId: string }[] }
-        ).items.find((a) => a.userId === walkIn.userId)?.id ?? "none"
-      }/confirm`,
-      {},
-      { cookies: owner.cookies },
-    );
-    expect(blocked.statusCode).toBe(409);
+    // The gym is FULL: one place, one member in the app.
+    const waiting = await applyWithCode(walkIn.cookies, org.joinCode.code);
+    const confirm = () => post(`/v1/orgs/${org.org.id}/applications/${waiting}/confirm`, {}, { cookies: owner.cookies });
+    expect((await confirm()).statusCode).toBe(409);
 
-    // Appoint the paying member. Their seat stops being billed, so the gym has
-    // room again — WITHOUT `complimentary` moving.
+    // Appoint the member: they now run the gym AND use the app, so their place is
+    // still taken and the gym is still full (RULINGS 2026-09-21: the fraud of making
+    // members "staff" to pay for fewer places).
     const appointed = await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "orgs-t-staff-seat-hire@example.com", role: "trainer" },
@@ -3540,62 +3528,22 @@ d("orgs routes (real Postgres)", () => {
     );
     expect(appointed.statusCode).toBe(201);
     expect(await complimentaryFlag(org.org.id, hire.userId)).toBe(false);
+    expect((await confirm()).statusCode).toBe(409);
 
-    const queue = JSON.parse(
-      (await get(`/v1/orgs/${org.org.id}/applications`, { cookies: owner.cookies })).body,
-    ) as { items: { id: string; userId: string }[] };
-    const pending = queue.items.find((a) => a.userId === walkIn.userId)?.id ?? "none";
-    const admitted = await post(
-      `/v1/orgs/${org.org.id}/applications/${pending}/confirm`,
-      {},
-      { cookies: owner.cookies },
-    );
-    expect(admitted.statusCode).toBe(200);
-
-    // AND THE SEAT COMES BACK. T3 round 2's Low-1: this test's title promised
-    // the return half and only ever checked the outward half — and the round-1
-    // fix had deleted the two flag assertions that used to stand in for it.
-    // The gym is now at 2 of 1 paid seats, so taking the trainer's keys back
-    // means the next person is refused.
-    const another = await makeUser("staff-seat-another");
-    await del(`/v1/orgs/${org.org.id}/staff/${hire.userId}`, { cookies: owner.cookies });
-    await applyWithCode(another.cookies, org.joinCode.code);
-    const queue2 = JSON.parse(
-      (await get(`/v1/orgs/${org.org.id}/applications`, { cookies: owner.cookies })).body,
-    ) as { items: { id: string; userId: string }[] };
-    const pending2 = queue2.items.find((a) => a.userId === another.userId)?.id ?? "none";
-    const refused = await post(
-      `/v1/orgs/${org.org.id}/applications/${pending2}/confirm`,
-      {},
-      { cookies: owner.cookies },
-    );
-    expect(refused.statusCode).toBe(409);
+    // Taken out of the app (they keep the console), the place is free.
+    expect((await del(`/v1/orgs/${org.org.id}/members/${hire.userId}`, { cookies: owner.cookies })).statusCode).toBe(200);
+    expect((await confirm()).statusCode).toBe(200);
   });
 
-  /** THE BADGE AND THE CAP ARE ONE QUESTION, AND THIS TEST DRIVES BOTH ENDS OF
-   *  IT ON ONE FIXTURE — the anchor :14953 and `OWED.md` require, following
-   *  :14013's six-site precedent.
-   *
-   *  **What Kd found:** the roster drew its "Complimentary" badge off
-   *  `gym_members.complimentary`, which is deliberately never written for staff,
-   *  so a trainer sat there looking exactly like somebody occupying a paid
-   *  place. The door and the screen disagreed about who costs money.
-   *
-   *  **Why the rule is written out TWICE** (`claimSeat`'s count and
-   *  `listMembers`' `takes_seat`): a shared `sql` fragment is R3.8's forbidden
-   *  shape, so the duplication is deliberate and THIS is what stops it drifting.
-   *  The roster's own answer is what the cap assertions are derived from — not a
-   *  number typed in here — so the two cannot pass while disagreeing.
-   *
-   *  It fails on EITHER half losing EITHER condition: drop `complimentary =
-   *  false` from the roster and the owner reads as taking a seat; drop the
-   *  `NOT EXISTS` and the appointed trainer does; drop either from the count and
-   *  the gym stays full where this expects room. */
+  /** THE BADGE AND THE CAP ARE ONE QUESTION, driven at both ends on one fixture: the
+   *  roster's `takesSeat` and the door's refusal. Since §10.4 the answer is "every live
+   *  membership", the owner's, staff's and an old complimentary row's included, so
+   *  appointing somebody frees nothing and only leaving the app does. */
   it("ROSTER + CAP: the badge and the seat count answer the same question", { timeout: 30_000 }, async () => {
     const owner = await makeUser("seat-both-owner");
     const payer = await makeUser("seat-both-payer");
     const walkIn = await makeUser("seat-both-walkin");
-    const org = await makeOrg(owner.cookies, "Orgs Test Seat Both Ends");
+    const org = await makeOrg(owner.cookies, "Orgs Test Seat Both Ends", { trainsHere: false });
     await subscribeGym(org.org.id, CAP1_PLAN); // one paid seat
 
     interface RosterRow {
@@ -3633,46 +3581,18 @@ d("orgs routes (real Postgres)", () => {
       );
     };
 
-    // (1) OWNER ONLY. Their §4.0-step-6 seat is complimentary, so the screen
-    // says it costs nothing and the cap agrees the gym is empty.
-    const justOwner = await roster();
-    expect(rowFor(justOwner, owner.userId)?.takesSeat).toBe(false);
-    expect(seatsTaken(justOwner)).toBe(0);
+    // (1) THE OWNER ONLY, who doesn't train here: nobody in the app, nothing taken.
+    expect(seatsTaken(await roster())).toBe(0);
 
-    // (1b) A COMPED MEMBER WHO IS NOT STAFF, and the mutation audit is what
-    // demanded them: O92 — deleting `complimentary = false` from the roster's
-    // rule — SURVIVED the first run of this test. **THE OWNER IS EXCLUDED
-    // TWICE**, being complimentary AND holding a staff row, so with that
-    // condition gone their place still read as free and the assertion above
-    // could not fail. :14401's O3 exactly, repeating on the roster's copy of
-    // the rule a card later, and :5104 F5's shape: a guarantee whose protection
-    // cannot fail is the same gap with a comment on it.
-    //
-    // This person is the only subject in the product that isolates the
-    // complimentary half. Comped by hand for the reason the door's own test
-    // gives: nothing writes this flag today except the wizard's owner seat.
-    const comped = await makeUser("seat-both-comped");
-    await joinAsMember(comped.cookies, org, owner.cookies);
-    await sql`UPDATE gym_members SET complimentary = true
-              WHERE gym_id = ${org.org.id} AND user_id = ${comped.userId} AND removed_at IS NULL`;
-    expect(await staffRoleOf(org.org.id, comped.userId)).toBeNull();
-
-    const withComped = await roster();
-    expect(rowFor(withComped, comped.userId)?.complimentary).toBe(true);
-    expect(rowFor(withComped, comped.userId)?.takesSeat).toBe(false);
-    expect(seatsTaken(withComped)).toBe(0);
-
-    // (2) ONE PAYING MEMBER. The badge is absent and the gym is full — both
-    // read off the same fact, and the cap assertion follows the ROSTER's count.
+    // (2) ONE MEMBER. The gym is full — the roster's count and the door agree.
     await joinAsMember(payer.cookies, org, owner.cookies);
     const withPayer = await roster();
     expect(rowFor(withPayer, payer.userId)?.takesSeat).toBe(true);
     expect(seatsTaken(withPayer)).toBe(1); // === the plan's seat_cap
     expect((await confirmWalkIn(walkIn)).statusCode).toBe(409);
 
-    // (3) APPOINT THEM. The screen now says their place is free, `complimentary`
-    // has NOT moved (that is :14401 C/H-1, and this is the assertion that keeps
-    // the obvious wrong fix out), and the door lets the next person in.
+    // (3) APPOINT THEM (§10.4). They use the app, so their place is still taken —
+    // on the screen and at the door — and `complimentary` has not moved.
     expect(
       (
         await post(
@@ -3683,21 +3603,29 @@ d("orgs routes (real Postgres)", () => {
       ).statusCode,
     ).toBe(201);
     const withTrainer = await roster();
-    expect(rowFor(withTrainer, payer.userId)?.takesSeat).toBe(false);
+    expect(rowFor(withTrainer, payer.userId)?.takesSeat).toBe(true);
     expect(rowFor(withTrainer, payer.userId)?.complimentary).toBe(false);
-    expect(seatsTaken(withTrainer)).toBe(0);
-    expect((await confirmWalkIn(walkIn)).statusCode).toBe(200);
+    expect(seatsTaken(withTrainer)).toBe(1);
+    expect((await confirmWalkIn(walkIn)).statusCode).toBe(409);
 
-    // (4) AND BACK AGAIN. Taking the keys away puts the place back on the bill,
-    // on the screen and at the door together.
+    // (4) Taking the keys back changes nothing either; taking them out of the app
+    // frees the place, and the next person is in.
+    await del(`/v1/orgs/${org.org.id}/staff/${payer.userId}`, { cookies: owner.cookies });
+    expect(seatsTaken(await roster())).toBe(1);
+    expect((await confirmWalkIn(walkIn)).statusCode).toBe(409);
+    expect((await del(`/v1/orgs/${org.org.id}/members/${payer.userId}`, { cookies: owner.cookies })).statusCode).toBe(200);
+    expect((await confirmWalkIn(walkIn)).statusCode).toBe(200);
     const withWalkIn = await roster();
     expect(rowFor(withWalkIn, walkIn.userId)?.takesSeat).toBe(true);
     expect(seatsTaken(withWalkIn)).toBe(1);
 
-    await del(`/v1/orgs/${org.org.id}/staff/${payer.userId}`, { cookies: owner.cookies });
-    const afterRemoval = await roster();
-    expect(rowFor(afterRemoval, payer.userId)?.takesSeat).toBe(true);
-    expect(seatsTaken(afterRemoval)).toBe(2); // over the cap, as the door will now say
+    // (5) AN OLD COMPLIMENTARY ROW (the owner's automatic seat before §10.4, which
+    // test data still holds) is a live membership, so it counts too.
+    const comped = await makeUser("seat-both-comped");
+    await sql`INSERT INTO gym_members (gym_id, user_id, complimentary) VALUES (${org.org.id}, ${comped.userId}, true)`;
+    const withComped = await roster();
+    expect(rowFor(withComped, comped.userId)?.takesSeat).toBe(true);
+    expect(seatsTaken(withComped)).toBe(2); // over the cap, as the door will now say
     const last = await makeUser("seat-both-last");
     expect((await confirmWalkIn(last)).statusCode).toBe(409);
   });
@@ -3708,7 +3636,7 @@ d("orgs routes (real Postgres)", () => {
     const owner = await makeUser("staff-numbers-owner");
     const hire = await makeUser("staff-numbers-hire");
     const later = await makeUser("staff-numbers-later");
-    const org = await makeOrg(owner.cookies, "Orgs Test Staff Numbers");
+    const org = await makeOrg(owner.cookies, "Orgs Test Staff Numbers", { trainsHere: false });
     await joinAsMember(hire.cookies, org, owner.cookies);
 
     // Limit the code to the one person who has used it, so the gate is armed.
@@ -4100,7 +4028,7 @@ d("orgs routes (real Postgres)", () => {
     const dual = await makeUser("xg-seat-dual");
     const walkIn = await makeUser("xg-seat-walkin");
     const gymA = await makeOrg(ownerA.cookies, "Orgs Test Cross Seat A");
-    const gymB = await makeOrg(ownerB.cookies, "Orgs Test Cross Seat B");
+    const gymB = await makeOrg(ownerB.cookies, "Orgs Test Cross Seat B", { trainsHere: false });
     await subscribeGym(gymB.org.id, CAP1_PLAN); // gym B has ONE paid seat
 
     // The same person trains at B and works the desk at A.
@@ -4144,12 +4072,12 @@ d("orgs routes (real Postgres)", () => {
       (await get(`/v1/orgs/${gymB.org.id}/members`, { cookies: ownerB.cookies })).body,
     ) as { items: { userId: string; takesSeat: boolean }[] };
     expect(rosterB.items.find((m) => m.userId === dual.userId)?.takesSeat).toBe(true);
-    // The control, so this cannot pass by reporting everybody as paying: gym A,
-    // where the keys actually are, says the same person's place is free.
+    // And at gym A, where the keys are, their place in the app is taken too (§10.4):
+    // being staff frees a place nowhere.
     const rosterA = JSON.parse(
       (await get(`/v1/orgs/${gymA.org.id}/members`, { cookies: ownerA.cookies })).body,
     ) as { items: { userId: string; takesSeat: boolean }[] };
-    expect(rosterA.items.find((m) => m.userId === dual.userId)?.takesSeat).toBe(false);
+    expect(rosterA.items.find((m) => m.userId === dual.userId)?.takesSeat).toBe(true);
   });
 
   it("CROSS-GYM: authority at one gym is never decided by membership at another", { timeout: 30_000 }, async () => {
@@ -4228,39 +4156,32 @@ d("orgs routes (real Postgres)", () => {
     expect(listed.map((s) => s.userId)).toContain(live.userId);
   });
 
-  /** O3's subject, restored. That mutant deletes `complimentary = false` from
-   *  the seat count, and it SURVIVED once the staff exclusion landed — because
-   *  the only complimentary member in the product is the owner, who is also
-   *  staff and is therefore excluded twice over. The clause is still the spec's
-   *  own wording (§4.2, "count live, non-complimentary members") and still the
-   *  column's meaning, so it stays; what it needed was a case where the two
-   *  exclusions do not overlap. */
-  it("a COMPLIMENTARY member who is not staff still does not consume a paid seat", async () => {
+  /** §10.4: a seat is a LIVE membership, whatever it says about itself. An old
+   *  complimentary row (the owner's automatic seat before §10.4) takes a place like
+   *  any other, so a gym full of them is full. */
+  it("a COMPLIMENTARY row takes a place like any live membership (§10.4)", async () => {
     const owner = await makeUser("staff-comp-owner");
     const comped = await makeUser("staff-comp-comped");
     const walkIn = await makeUser("staff-comp-walkin");
-    const org = await makeOrg(owner.cookies, "Orgs Test Comped Seat");
-    await subscribeGym(org.org.id, CAP1_PLAN); // one paid seat
+    const org = await makeOrg(owner.cookies, "Orgs Test Comped Seat", { trainsHere: false });
+    await subscribeGym(org.org.id, CAP1_PLAN); // one place
     await joinAsMember(comped.cookies, org, owner.cookies);
-
-    // Comped by hand: nothing in the product writes this today except the
-    // owner's own seat, and the column exists precisely to say "unpaid".
     await sql`UPDATE gym_members SET complimentary = true
               WHERE gym_id = ${org.org.id} AND user_id = ${comped.userId} AND removed_at IS NULL`;
     expect(await staffRoleOf(org.org.id, comped.userId)).toBeNull();
 
-    // The one paid seat is therefore still free.
+    // The one place is therefore taken.
     await applyWithCode(walkIn.cookies, org.joinCode.code);
     const queue = JSON.parse(
       (await get(`/v1/orgs/${org.org.id}/applications`, { cookies: owner.cookies })).body,
     ) as { items: { id: string; userId: string }[] };
     const pending = queue.items.find((a) => a.userId === walkIn.userId)?.id ?? "none";
-    const admitted = await post(
+    const refused = await post(
       `/v1/orgs/${org.org.id}/applications/${pending}/confirm`,
       {},
       { cookies: owner.cookies },
     );
-    expect(admitted.statusCode).toBe(200);
+    expect(refused.statusCode).toBe(409);
   });
 
   it("a MANAGER and a TRAINER are refused all five staff routes with 403", async () => {
@@ -5822,7 +5743,7 @@ d("orgs routes (real Postgres)", () => {
    *  through the front desk's Confirm. */
   it("a trial confirms the 100th member and refuses the 101st", { timeout: 60_000 }, async () => {
     const owner = await makeUser("trial-fill");
-    const org = await makeOrg(owner.cookies, "Orgs Test Trial Fill", { country: "US", plan: null });
+    const org = await makeOrg(owner.cookies, "Orgs Test Trial Fill", { country: "US", plan: null, trainsHere: false });
     const started = await post(`/v1/orgs/${org.org.id}/trial`, {}, { cookies: owner.cookies });
     expect(started.statusCode).toBe(200);
 
@@ -5938,7 +5859,7 @@ d("orgs routes (real Postgres)", () => {
    *  applicant is refused BY THE CAP. */
   it("starting the trial makes the seat cap bite", { timeout: 60_000 }, async () => {
     const owner = await makeUser("trial-cap");
-    const org = await makeOrg(owner.cookies, "Orgs Test Trial Cap", { country: "CA", plan: null });
+    const org = await makeOrg(owner.cookies, "Orgs Test Trial Cap", { country: "CA", plan: null, trainsHere: false });
 
     // THE CURRENCY IS SET DIRECTLY, AND IT HAS TO BE SINCE 2026-08-28. Creating
     // the gym in Canada used to leave it on CAD, which is the currency the
@@ -5957,9 +5878,8 @@ d("orgs routes (real Postgres)", () => {
     expect(started.statusCode).toBe(200);
     expect((JSON.parse(started.body) as TrialBody).subscription.seatCap).toBe(1);
 
-    // The owner holds the gym's own complimentary seat (§4.0 step 6) and
-    // complimentary members are excluded from the count, so seat 1 is genuinely
-    // free. The FIRST joiner takes it; the second meets the cap.
+    // The owner doesn't train here, so seat 1 is free. The FIRST joiner takes it;
+    // the second meets the cap.
     const one = await makeUser("trial-cap-1");
     await joinAsMember(one.cookies, org, owner.cookies);
 
@@ -6153,42 +6073,30 @@ d("orgs routes (real Postgres)", () => {
     // gym: since Kd's read-only ruling (2026-08-29) the roster below can only be
     // built while a plan is live, so the two halves of this test now want two
     // different gyms rather than one gym at two moments.
-    const bare = await makeOrg(owner.cookies, "Orgs Test Mine Bare", { country: "US", plan: null });
+    const bare = await makeOrg(owner.cookies, "Orgs Test Mine Bare", { country: "US", plan: null, trainsHere: false });
     const empty = await mineRow(owner.cookies, bare.org.id);
     // Null and not an invented shape: a gym on nothing has no status, no end
     // date and no cap, and the console draws no banner and no meter for it.
     expect(empty.subscription).toBeNull();
     // The count is still a real answer — it is the gym's own roster, not a fact
-    // about a plan. The owner's §4.0-step-6 seat is complimentary and excluded,
-    // so a gym with only its owner in it has ZERO places taken.
+    // about a plan. The owner doesn't train here, so ZERO places are taken.
     expect(empty.seatsUsed).toBe(0);
 
     // POSITIVE CONTROL, so "0" is not simply what this reader always says — and
     // it is measured on a gym that has LAPSED, which is the state this test is
     // named for: the count survives the plan going away.
-    const org = await makeOrg(owner.cookies, "Orgs Test Mine NoPlan", { country: "US" });
+    const org = await makeOrg(owner.cookies, "Orgs Test Mine NoPlan", { country: "US", trainsHere: false });
     await joinAsMember(guest.cookies, org, owner.cookies);
     await lapseGym(org.org.id);
     const lapsed = await mineRow(owner.cookies, org.org.id);
     expect(lapsed.subscription).toBeNull();
     expect(lapsed.seatsUsed).toBe(1);
 
-    /** THE COMPED MEMBER WHO IS NOT STAFF, and this fixture exists because
-     *  MUTANT O138 SURVIVED WITHOUT IT.
-     *
-     *  The count excludes complimentary places AND staff, and the only
-     *  complimentary row this suite could otherwise produce is the OWNER's —
-     *  who is also staff, so they are excluded TWICE and deleting either clause
-     *  changes nothing observable. Two guards, either sufficient, neither
-     *  falsifiable: :12343's J11 and :15093's O92, the second of which closed
-     *  it on this very rule at the roster's copy.
-     *
-     *  Written straight into the row because nothing in the product comps a
-     *  member yet — the flag means "did not JOIN" and only `createOrgAttempt`
-     *  sets it. The subject is the READER, not how the row got there. */
+    // An old complimentary row (the owner's automatic seat before §10.4) is a live
+    // membership, so the meter still counts it.
     await sql`UPDATE gym_members SET complimentary = true
               WHERE gym_id = ${org.org.id} AND user_id = ${guest.userId}`;
-    expect((await mineRow(owner.cookies, org.org.id)).seatsUsed).toBe(0);
+    expect((await mineRow(owner.cookies, org.org.id)).seatsUsed).toBe(1);
   });
 
   it("carries the trial the moment it starts", { timeout: 30_000 }, async () => {
@@ -6232,30 +6140,19 @@ d("orgs routes (real Postgres)", () => {
     const ours = await mineRow(owner.cookies, org.org.id);
     expect(ours.staffRole).toBe("owner");
     expect(ours.subscription?.status).toBe("trialing");
-    expect(ours.seatsUsed).toBe(1);
+    // The owner trains here (this helper's answer) and the member: two places (§10.4).
+    expect(ours.seatsUsed).toBe(2);
   });
 
-  /** THE ANCHOR BETWEEN THE METER AND THE DOOR, and the reason it is one test
-   *  rather than two.
-   *
-   *  The count "live, not complimentary, not staff" is now written out in THREE
-   *  places — `claimSeat`, `listMembers` and `listOrgsForUser`. A shared `sql`
-   *  fragment is R3.8's forbidden shape, so the copies are deliberate; what stops
-   *  them drifting is a test that drives BOTH ENDS on ONE fixture (:14013's
-   *  six-site precedent, :14493's Low-2 for what drift costs).
-   *
-   *  **It is driven across a TRANSITION rather than asserted once**, which is
-   *  what makes it able to fail: appointing the gym's only paying member as staff
-   *  frees their place, so the meter must fall from 1 to 0 in the same breath as
-   *  the door goes from refusing to admitting. A meter whose copy of the rule
-   *  forgot the staff clause would sit at 1 while the door let somebody in — the
-   *  screen and the door disagreeing about who costs money, which is exactly the
-   *  defect Kd found on the roster badge (:14953). */
+  /** THE ANCHOR BETWEEN THE METER AND THE DOOR, driven across a TRANSITION on one
+   *  fixture so it can fail: the meter (`listOrgsForUser`) and the door (`claimSeat`)
+   *  must agree when a member is made staff (nothing moves, §10.4) and when they leave
+   *  the app (both move). */
   it("the seat meter counts the same people the seat cap refuses by", { timeout: 60_000 }, async () => {
     const owner = await makeUser("mine-anchor-o");
     const first = await makeUser("mine-anchor-1");
     const second = await makeUser("mine-anchor-2");
-    const org = await makeOrg(owner.cookies, "Orgs Test Mine Anchor", { country: "US" });
+    const org = await makeOrg(owner.cookies, "Orgs Test Mine Anchor", { country: "US", trainsHere: false });
     await subscribeGym(org.org.id, CAP1_PLAN); // seat_cap = 1
 
     /** ANOTHER GYM ENTIRELY, WITH A MEMBER THIS COUNT MUST NOT SEE — and it is
@@ -6282,7 +6179,7 @@ d("orgs routes (real Postgres)", () => {
      *  the row this count is looking for. */
     const otherOwner = await makeUser("mine-anchor-xo");
     const otherMember = await makeUser("mine-anchor-xm");
-    const otherOrg = await makeOrg(otherOwner.cookies, "Orgs Test Mine Anchor Other", { country: "US" });
+    const otherOrg = await makeOrg(otherOwner.cookies, "Orgs Test Mine Anchor Other", { country: "US", trainsHere: false });
     await joinAsMember(otherMember.cookies, otherOrg, otherOwner.cookies);
     // The control on the control: that gym really does have somebody in it, so a
     // count that reached across would have something to reach for.
@@ -6304,8 +6201,7 @@ d("orgs routes (real Postgres)", () => {
     expect(blocked.statusCode).toBe(409);
     expect((JSON.parse(blocked.body) as { error: string }).error).toBe("seat_cap_reached");
 
-    // Kd's "yes staff seats free" (:14262): handing that member the keys frees
-    // the place they were occupying.
+    // §10.4: handing that member the keys frees NOTHING — they still use the app.
     expect(
       (
         await post(
@@ -6316,9 +6212,19 @@ d("orgs routes (real Postgres)", () => {
       ).statusCode,
     ).toBe(201);
 
-    // BOTH ENDS MOVE TOGETHER. The meter falls…
+    expect((await mineRow(owner.cookies, org.org.id)).seatsUsed).toBe(1);
+    const stillBlocked = await post(
+      `/v1/orgs/${org.org.id}/applications/${blockedId}/confirm`,
+      {},
+      { cookies: owner.cookies },
+    );
+    expect(stillBlocked.statusCode).toBe(409);
+
+    // BOTH ENDS MOVE TOGETHER when they leave the app (keeping the console). The
+    // meter falls…
+    expect((await del(`/v1/orgs/${org.org.id}/members/${first.userId}`, { cookies: owner.cookies })).statusCode).toBe(200);
     expect((await mineRow(owner.cookies, org.org.id)).seatsUsed).toBe(0);
-    // …and the door opens for the applicant it just refused.
+    // …and the door opens for the applicant it refused.
     const admitted = await post(
       `/v1/orgs/${org.org.id}/applications/${blockedId}/confirm`,
       {},

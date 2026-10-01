@@ -27,7 +27,7 @@ export const plans = pgTable(
     priceMinor: integer("price_minor").notNull(),
     currency: text("currency").notNull(),
     interval: text("interval").notNull(),
-    seatCap: integer("seat_cap"), // org plans; complimentary members excluded from the count
+    seatCap: integer("seat_cap"), // org plans; every live membership counts, the owner's and staff's included (§10.4)
     trialDays: smallint("trial_days").notNull().default(0), // a gym plan: GYM_TRIAL_DAYS (10); 0 for an individual
     rank: smallint("rank").notNull(), // resolver precedence: free=0, pro=10, org member_entitlements=10
     entitlements: jsonb("entitlements").notNull(), // what the SUBSCRIBER gets

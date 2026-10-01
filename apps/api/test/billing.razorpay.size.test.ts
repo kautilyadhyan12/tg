@@ -190,7 +190,7 @@ d("a gym paying through Razorpay moves to a bigger size (real Postgres, fake Raz
   /** A gym on the smallest size, paid through Razorpay half a month ago. */
   const payingGym = async (planCode = SMALL) => {
     const user = await makeUser();
-    const res = await post("/v1/orgs", { name: `Rupee Size Gym ${String(seq++)}`, city: "Pune", country: "IN", timezone: "Asia/Kolkata" }, user.cookies);
+    const res = await post("/v1/orgs", { trainsHere: true, name: `Rupee Size Gym ${String(seq++)}`, city: "Pune", country: "IN", timezone: "Asia/Kolkata" }, user.cookies);
     expect(res.statusCode).toBe(201);
     const gymId = (JSON.parse(res.body) as { org: { id: string } }).org.id;
     const win = opened(await post(`/v1/orgs/${gymId}/billing/checkout`, { planCode }, user.cookies, { "idempotency-key": key() }));

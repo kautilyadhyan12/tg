@@ -80,15 +80,17 @@ export interface ListEntry {
 }
 
 /** One of the gym's own app members: LIVE, and that is the only condition the
- *  caller's SQL applies. `seatCounted` carries the rest of the seat rule.
+ *  caller's SQL applies, and every one of them takes a place (§10.4). `inMarks` says
+ *  whether the list's marks may touch them.
  *
  *  **TWO QUESTIONS ARE ASKED OF THIS LIST AND THEY ARE NOT THE SAME QUESTION**, which
  *  is the whole reason the flag exists (review of PR #88, High-1). "Does one of this
  *  gym's people already have the app" is true of the owner, of a trainer who trains
- *  here too, and of somebody on a free place. "Does this person occupy a PAID SEAT"
- *  is not — the seat rule excludes complimentary members and staff, and §9.7 excludes
- *  them from the marks for a good reason: the owner is member one and may be on no
- *  export, so without that every gym's owner would read "no longer listed".
+ *  here too, and of somebody on a free place. "May the list's marks touch this person"
+ *  is not — §9.7 keeps the owner, staff and an old complimentary place out of the marks,
+ *  the leavers and remove-all for a good reason: the owner is member one and may be on
+ *  no export, so without that every gym's owner would read "no longer listed". Since
+ *  §10.4 all of them take a place; the marks are a separate question.
  *
  *  Answering the FIRST question with the second is what this fixes. It printed "not
  *  in the app" beside three people who were holding it, and counted them in
@@ -108,10 +110,10 @@ export interface ListMember {
   email: string | null;
   statedPhone: string | null;
   everListed: boolean;
-  /** Whether this member occupies a paid seat: live, not complimentary, not staff.
-   *  The marks, `leaving`, the guard and the seat count use only these; "already in
-   *  the app" uses every live member. */
-  seatCounted: boolean;
+  /** Whether the list's marks may touch this member: not staff (the owner is staff)
+   *  and not an old complimentary place. The marks, `leaving` and the guard use only
+   *  these; "already in the app" and the place count use every live member (§10.4). */
+  inMarks: boolean;
   /** The record the invitation they joined with was for (`gym_members.entry_id`), or
    *  null: joined by a code, or a family address at the time. When set, THAT record
    *  alone decides whether they are on the list (`onListOf`). */
@@ -900,7 +902,7 @@ export function reconcile(input: ReconcileInput): Reconciled {
   if (mode === "add") for (const entry of current) listedAfter.add(entry.id);
   for (const person of missing) if (person.entryId !== null && stay.has(person.entryId)) listedAfter.add(person.entryId);
   const onTheList = members
-    .filter((member) => member.seatCounted)
+    .filter((member) => member.inMarks)
     .map((member) => {
       // `onListOf` over today's list, keeping the record it lands on.
       const contact = { email: member.email, phone: member.statedPhone };

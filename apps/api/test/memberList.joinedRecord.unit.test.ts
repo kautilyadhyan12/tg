@@ -80,7 +80,7 @@ const member = (userId: string, over: Partial<ListMember> = {}): ListMember => (
   email: null,
   statedPhone: null,
   everListed: true,
-  seatCounted: true,
+  inMarks: true,
   joinedEntryId: null,
   ...over,
 });
@@ -325,7 +325,7 @@ describe("an app member follows the record they joined with", () => {
     const out = run({
       rows: [row(2, emmaNewEmail)],
       entries: [entry("r1", emma)],
-      members: [member("u-owner", { email: "owner@example.com", joinedEntryId: "r1", seatCounted: false })],
+      members: [member("u-owner", { email: "owner@example.com", joinedEntryId: "r1", inMarks: false })],
     });
     expect(out.marks).toEqual([]);
     expect(out.changed[0]?.inApp).toBe(true);

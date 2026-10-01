@@ -149,7 +149,7 @@ d("a member file reaches no log (real Postgres, the loudest logger)", () => {
         expect((await json("/v1/auth/register", { email, password: PASSWORD, displayName: "Leak Owner" })).statusCode).toBe(201);
         const login = await json("/v1/auth/login", { email, password: PASSWORD });
         const cookies = Object.fromEntries(login.cookies.map((c) => [c.name, c.value]));
-        const made = await json("/v1/orgs", { name: "Leak Gym", city: "Leeds", country: "GB", timezone: "Europe/London" }, cookies);
+        const made = await json("/v1/orgs", { trainsHere: true, name: "Leak Gym", city: "Leeds", country: "GB", timezone: "Europe/London" }, cookies);
         expect(made.statusCode).toBe(201);
         const gymId = (JSON.parse(made.body) as { org: { id: string } }).org.id;
         await sql`

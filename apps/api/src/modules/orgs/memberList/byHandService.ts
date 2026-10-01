@@ -183,7 +183,7 @@ class LeavesList extends Error {
 async function membersOf(tx: TransactionSql, gymId: string, entry: repo.StoredEntry): Promise<string[]> {
   if (entry.formerAt !== null) return [];
   const reached = await repo.membersAgainstList(tx, gymId, { email: entry.values.email, phone: entry.values.phone, entryIds: [entry.id] });
-  return reached.filter((member) => member.seatCounted && member.entryId === entry.id).map((member) => member.userId);
+  return reached.filter((member) => member.inMarks && member.entryId === entry.id).map((member) => member.userId);
 }
 
 /** How many of `userIds` no current record reaches any more, asked after the write and
@@ -953,7 +953,7 @@ export async function removeUnlisted(
       }
       return { kind: "list_changed", version, total: ids.length, digest };
     }
-    const seats = members.filter((member) => member.seatCounted).length;
+    const seats = members.filter((member) => member.inMarks).length;
     if (isLargeMemberListChange(ids.length, seats) && input.acknowledgeLargeChange !== true) {
       return { kind: "large_change", removing: ids.length, of: seats };
     }

@@ -114,7 +114,7 @@ export function whyNotUsable(code, now = Date.now()) {
  *  **The count comes from the SERVER's `joined` and is never derived here.** It
  *  is PEOPLE WHO ARE IN THE GYM NOW through this code — not applications (a
  *  person waiting at the front desk has not taken a place), not times the code
- *  was used, and not the owner (their own seat is complimentary). A screen that
+ *  was used, and not the owner (their seat comes through no code). A screen that
  *  counted anything of its own would disagree with the number the server enforces
  *  the limit against.
  *

@@ -114,7 +114,7 @@ d("what comes back from a lead's follow-up (real Postgres)", () => {
 
   /** A gym on a plan, with its postal address, and "Send them for me" switched on. */
   const makeGym = async (cookies: Record<string, string>, name: string): Promise<string> => {
-    const res = await send("POST", "/v1/orgs", { name, city: "Leeds", country: "GB", timezone: ZONE }, cookies);
+    const res = await send("POST", "/v1/orgs", { trainsHere: true, name, city: "Leeds", country: "GB", timezone: ZONE }, cookies);
     expect(res.statusCode).toBe(201);
     const gymId = (JSON.parse(res.body) as { org: { id: string } }).org.id;
     await sql`

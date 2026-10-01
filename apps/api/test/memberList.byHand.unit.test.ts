@@ -23,7 +23,7 @@ const member = (userId: string, fullName: string, over: Partial<MemberOnList> = 
   email: null,
   statedPhone: null,
   everListed: false,
-  seatCounted: true,
+  inMarks: true,
   joinedEntryId: null,
   onList: false,
   entryStatus: null,
@@ -43,10 +43,10 @@ const GYM: MemberOnList[] = [
   // Their unproved address is on the list; an unproved address proves nothing.
   member("u06", "Unverified address", { email: null }),
   // The owner holds a free seat and is on no export.
-  member("u07", "The owner", { seatCounted: false }),
-  member("u08", "A trainer", { seatCounted: false }),
-  member("u09", "A trainer who was listed once", { seatCounted: false, everListed: true }),
-  member("u10", "A free place", { seatCounted: false }),
+  member("u07", "The owner", { inMarks: false }),
+  member("u08", "A trainer", { inMarks: false }),
+  member("u09", "A trainer who was listed once", { inMarks: false, everListed: true }),
+  member("u10", "A free place", { inMarks: false }),
   // Only a FORMER record reaches them, which is off the list.
   member("u11", "Matched only to a former record", { everListed: true }),
   // Two members of one household reached by one current record.

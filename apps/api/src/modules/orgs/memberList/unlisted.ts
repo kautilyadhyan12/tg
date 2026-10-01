@@ -19,7 +19,7 @@ const byNameThenId = (a: MemberOnList, b: MemberOnList): number =>
 /** The gym's members in `group`, by name. `members` is every live member of the
  *  gym with whether a current record of the list reaches them. */
 export function unlistedGroup<M extends MemberOnList>(members: readonly M[], hasList: boolean, group: MemberListUnlistedGroup): M[] {
-  const seats = members.filter((member) => member.seatCounted);
+  const seats = members.filter((member) => member.inMarks);
   // The list after a removal is the list as it stands, so a member is on it exactly
   // when a current record reaches them now.
   const { marks } = membersAgainstNewList(seats, (member) => member.onList, hasList);

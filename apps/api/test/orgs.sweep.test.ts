@@ -235,7 +235,7 @@ d("join-application sweep + nudge (real Postgres)", () => {
     const res = await post(
       "/v1/orgs",
       {
-        name: `Sweep Test ${String(orgSeq++)} ${String(Date.now() % 100000)}`,
+        trainsHere: true, name: `Sweep Test ${String(orgSeq++)} ${String(Date.now() % 100000)}`,
         city: "Austin",
         country: "IN",
         timezone: "Asia/Kolkata",

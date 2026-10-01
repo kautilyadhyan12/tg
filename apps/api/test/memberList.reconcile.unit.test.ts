@@ -115,7 +115,7 @@ const member = (over: Partial<ListMember> & { userId: string }): ListMember => (
   everListed: false,
   // A paid seat unless a case says otherwise, which is what every case here was
   // written against; the owner-and-staff case sets it false explicitly.
-  seatCounted: true,
+  inMarks: true,
   joinedEntryId: null,
   ...over,
 });

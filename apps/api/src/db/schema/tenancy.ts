@@ -528,7 +528,7 @@ export const gymMembers = pgTable(
     // was asked: the owner's silent seat (§4.0 step 6) carries it.
     consentAt: timestamp("consent_at", { withTimezone: true }),
     hiddenFromBoards: boolean("hidden_from_boards").notNull().default(false),
-    complimentary: boolean("complimentary").notNull().default(false), // owner seat (Part 3 §4.0); excluded from seat counts
+    complimentary: boolean("complimentary").notNull().default(false), // the owner's old automatic seat (Part 3 §4.0); written false since §10.4 and counted like any live seat
     /** THE PHONE NUMBER THIS PERSON GAVE THE GYM — the second way a member is
      *  matched to the gym's uploaded list (Part 3 §9.7), after their verified
      *  email. A gym's export often holds a phone number and no address, and the

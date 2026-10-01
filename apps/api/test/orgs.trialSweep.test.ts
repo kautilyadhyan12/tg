@@ -179,7 +179,7 @@ d("gym trial expiry sweep (real Postgres)", () => {
     const res = await post(
       "/v1/orgs",
       {
-        name: `Trial Sweep ${String(orgSeq++)} ${String(Date.now() % 100000)}`,
+        trainsHere: true, name: `Trial Sweep ${String(orgSeq++)} ${String(Date.now() % 100000)}`,
         city: "Austin",
         country: "IN",
         timezone: "Asia/Kolkata",

@@ -209,7 +209,7 @@ d("gym opening hours (real Postgres)", () => {
   ): Promise<CreatedOrg> => {
     const res = await post(
       "/v1/orgs",
-      { name, city: "Jorhat", country: "IN", timezone },
+      { trainsHere: true, name, city: "Jorhat", country: "IN", timezone },
       cookies,
     );
     expect(res.statusCode).toBe(201);

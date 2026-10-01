@@ -133,7 +133,7 @@ d("Remove on the people selected (real Postgres)", () => {
   let gymCount = 0;
   const makeGym = async (): Promise<Gym> => {
     const owner = await register(addr(`owner-${String(++gymCount)}`));
-    const res = await post("/v1/orgs", { name: `Remove Selected Gym ${String(gymCount)}`, city: "Leeds", country: "GB", timezone: "Europe/London" }, owner.cookies);
+    const res = await post("/v1/orgs", { trainsHere: true, name: `Remove Selected Gym ${String(gymCount)}`, city: "Leeds", country: "GB", timezone: "Europe/London" }, owner.cookies);
     expect(res.statusCode, res.body).toBe(201);
     const { org } = JSON.parse(res.body) as { org: { id: string } };
     await sql`

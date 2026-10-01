@@ -1240,7 +1240,7 @@ export default function StaffPanel({ gymId, privileges, orgType, readOnly = fals
        empty case and now carries the mutant for it too. */
     <ConsoleSection
       title="Staff"
-      summary={`Who can help you run this ${words.it}. ${staffSeatsNote(orgType)}`}
+      summary={`Who can help you run this ${words.it}. ${staffSeatsNote()}`}
       aside={countLabel}
       forceOpen={!state.loading && state.error !== null}
     >

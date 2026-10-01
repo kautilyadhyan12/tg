@@ -204,6 +204,14 @@ describe('counts are bounded rather than guessed', () => {
     expect(joinedCount({ items: [member('owner', true), member('b')], nextCursor: null })).toBe(1);
   });
 
+  it('does not count an owner who trains here (an ordinary seat since §10.4) as somebody who joined', () => {
+    const owner = { ...member('owner'), staff: { role: 'owner', roleName: null } };
+    const trainer = { ...member('t'), staff: { role: 'trainer', roleName: null } };
+    expect(joinedCount({ items: [owner], nextCursor: null })).toBe(0);
+    // A trainer who joined did join; only the owner is left out.
+    expect(joinedCount({ items: [owner, trainer, member('b')], nextCursor: null })).toBe(2);
+  });
+
   it('refuses to answer when the page is truncated', () => {
     expect(joinedCount({ items: [member('owner', true)], nextCursor: 'x|y' })).toBeNull();
   });
@@ -289,7 +297,10 @@ describe('the member-count line stops contradicting itself (T3 L-5)', () => {
   });
 
   it('leaves every other case exactly as it was', () => {
-    expect(memberCountLine({ items: [member('a')], nextCursor: null }, 'a')).toBe('1 member');
+    // The viewer's own seat is theirs whether or not it is complimentary: an owner who
+    // trains here holds an ordinary seat since §10.4.
+    expect(memberCountLine({ items: [member('a')], nextCursor: null }, 'a')).toBe('1 member (you)');
+    expect(memberCountLine({ items: [member('a')], nextCursor: null }, 'b')).toBe('1 member');
     expect(
       memberCountLine({ items: [member('owner', true), member('b')], nextCursor: null }, 'owner'),
     ).toBe('2 members');

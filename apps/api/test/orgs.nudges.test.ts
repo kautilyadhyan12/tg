@@ -298,7 +298,7 @@ d("the slipping-away list and the nudge (real Postgres)", () => {
     name: string,
     timezone = "Asia/Kolkata",
   ): Promise<CreatedOrg> => {
-    const res = await post("/v1/orgs", { name, city: "Jorhat", country: "IN", timezone }, cookies);
+    const res = await post("/v1/orgs", { trainsHere: true, name, city: "Jorhat", country: "IN", timezone }, cookies);
     expect(res.statusCode).toBe(201);
     const created = JSON.parse(res.body) as CreatedOrg;
     await subscribeGym(created.org.id);

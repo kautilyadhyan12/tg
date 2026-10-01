@@ -155,7 +155,7 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
   };
   const owner = async () => {
     const user = await makeUser();
-    const res = await post("/v1/orgs", { name: `Rupee Gym ${String(seq++)}`, city: "Pune", country: "IN", timezone: "Asia/Kolkata" }, user.cookies);
+    const res = await post("/v1/orgs", { trainsHere: true, name: `Rupee Gym ${String(seq++)}`, city: "Pune", country: "IN", timezone: "Asia/Kolkata" }, user.cookies);
     expect(res.statusCode).toBe(201);
     return { ...user, gymId: (JSON.parse(res.body) as { org: { id: string } }).org.id };
   };
@@ -216,7 +216,7 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
   const patch = (path: string, payload: unknown, cookies: Cookies) =>
     api().inject({ method: "PATCH", url: path, remoteAddress: nextIp(), headers: { "content-type": "application/json" }, cookies, payload: JSON.stringify(payload) });
   const createGym = (cookies: Cookies, extra: Record<string, unknown>) =>
-    post("/v1/orgs", { name: `Mobile Gym ${String(seq++)}`, city: "Pune", country: "IN", timezone: "Asia/Kolkata", ...extra }, cookies);
+    post("/v1/orgs", { trainsHere: true, name: `Mobile Gym ${String(seq++)}`, city: "Pune", country: "IN", timezone: "Asia/Kolkata", ...extra }, cookies);
   const addStaff = async (gymId: string, userId: string, role: "manager" | "trainer", privileges: string[]) => {
     await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${userId}, ${role}, ${privileges})`;
   };
@@ -267,7 +267,7 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
     "the mobile for payments: an Indian mobile or none, only in India, changed or cleared by billing staff in Settings",
     async () => {
       const user = await makeUser();
-      expect(JSON.parse((await post("/v1/orgs", { name: `Austin Gym ${String(seq++)}`, country: "US", timezone: "America/Chicago", billingMobile: "9876543210" }, user.cookies)).body)).toMatchObject({ error: "mobile_india_only" });
+      expect(JSON.parse((await post("/v1/orgs", { trainsHere: true, name: `Austin Gym ${String(seq++)}`, country: "US", timezone: "America/Chicago", billingMobile: "9876543210" }, user.cookies)).body)).toMatchObject({ error: "mobile_india_only" });
       for (const bad of ["020 2612 3456", "12345", "+44 7911 123456"]) {
         const res = await createGym(user.cookies, { billingMobile: bad });
         expect([res.statusCode, JSON.parse(res.body)]).toMatchObject([400, { error: "mobile_invalid" }]);

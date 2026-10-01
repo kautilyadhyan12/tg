@@ -164,7 +164,7 @@ d("staff invited by email (real Postgres)", () => {
   const makeGym = async (name: string): Promise<Gym> => {
     const owner = await signIn(addr(`owner-${String(++gymCount)}`));
     await sql`UPDATE users SET display_name = ${`Owner of ${name}`} WHERE id = ${owner.userId}`;
-    const res = await post("/v1/orgs", { name, city: "Leeds", country: "GB", timezone: "Europe/London" }, owner.cookies);
+    const res = await post("/v1/orgs", { trainsHere: true, name, city: "Leeds", country: "GB", timezone: "Europe/London" }, owner.cookies);
     expect(res.statusCode, res.body).toBe(201);
     const { org } = JSON.parse(res.body) as { org: { id: string; slug: string; name: string } };
     await subscribe(org.id);

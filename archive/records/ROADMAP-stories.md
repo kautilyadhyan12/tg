@@ -195,3 +195,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 - 1d-iii-b (ticked 2026-10-01, PR #148), the line as it stood: - 1d-iii-b. [ ] **A smaller size**: from the paid month's end, as 1c-iii; its plan approved when chosen. One question for Kd at its plan: who moves when the members do not fit.
 
 - 4a-ii. [ ] **Send again (3 times, the 7 days restart), and `removeMember` stops refusing staff** — which needs the ghost rule (`getStaffAuthority`: a membership closed after the staff row) to stop shutting out an invited trainer whose later membership ends (round one of 4a-i). *Built 2026-10-01 on branch `staff-send-again` (PR #147): Send again; removeMember for staff with "also remove from staff"; the ghost rule replaced by deleting staff rows on account deletion (migration 0062); Kd's click-through added the Staff tab and staff tags. Round one 1 High, 6 Low, fixed; the re-check closed the round.*
+
+## 4c (merged 2026-10-01, PR #150)
+
+- 4c. [ ] **A seat is a person using the member app — the owner and staff too** (spec §10.4). The seat count becomes every LIVE membership; a staff login alone is free, unlimited and opens the console only; creating an organisation asks "Do you train here too?" and a yes is an ordinary seat. The member list's marks still leave staff and the owner out (§9.7), so what 3a-iii answered with one flag becomes two questions with one table test. **The fraud is a route test: appointing five members as staff frees no seat.**

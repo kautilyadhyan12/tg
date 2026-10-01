@@ -130,7 +130,7 @@ d("member list: keeping it by hand (real Postgres)", () => {
   };
 
   const makeOrg = async (owner: User, name: string): Promise<CreatedOrg> => {
-    const res = await post("/v1/orgs", { name, city: "Leeds", country: "GB", timezone: "Europe/London" }, owner.cookies);
+    const res = await post("/v1/orgs", { trainsHere: true, name, city: "Leeds", country: "GB", timezone: "Europe/London" }, owner.cookies);
     expect(res.statusCode).toBe(201);
     const created = JSON.parse(res.body) as CreatedOrg;
     await subscribeGym(created.org.id);

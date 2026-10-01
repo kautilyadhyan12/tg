@@ -188,7 +188,7 @@ d("join by invitation (real Postgres)", () => {
   let gymCount = 0;
   const makeGym = async (name: string, plan: string = LIVE_PLAN): Promise<Gym> => {
     const owner = await registerWithPassword(addr(`owner-${String(++gymCount)}`));
-    const res = await post("/v1/orgs", { name, city: "Leeds", country: "GB", timezone: "Europe/London" }, owner.cookies);
+    const res = await post("/v1/orgs", { trainsHere: false, name, city: "Leeds", country: "GB", timezone: "Europe/London" }, owner.cookies);
     expect(res.statusCode, res.body).toBe(201);
     const { org } = JSON.parse(res.body) as { org: { id: string; name: string } };
     await subscribe(org.id, plan);

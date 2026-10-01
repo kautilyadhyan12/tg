@@ -177,7 +177,7 @@ export function recordRemovalPlan(input: {
     const person: MemberRemovePerson = { name: member.fullName, entryId: removedWith, userId: member.userId };
     if (removedWith !== null) {
       if (past.has(removedWith)) pastReached.add(removedWith);
-      if (member.seatCounted) ends.push({ person, removedWith });
+      if (member.inMarks) ends.push({ person, removedWith });
       else keep(kept, "staff", person);
       continue;
     }
@@ -238,7 +238,7 @@ export function rosterRemovalPlan(input: {
       continue;
     }
     const own = currentRecordOf(member);
-    if (!member.seatCounted) {
+    if (!member.inMarks) {
       if (member.isStaff !== true || input.managesStaff !== true) {
         keep(kept, "staff", { name: member.fullName, entryId: null, userId });
         continue;

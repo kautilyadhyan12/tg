@@ -120,7 +120,7 @@ d("the reader gate and the front desk's allowance, on a real Redis", () => {
     "one gym's two files at once: one is read, the other waits — and the gate is released afterwards",
     async () => {
       const owner = await makeUser("gate-owner");
-      const made = await post("/v1/orgs", { name: "Redis Gate Gym", city: "Leeds", country: "GB", timezone: "Europe/London" }, owner.cookies);
+      const made = await post("/v1/orgs", { trainsHere: true, name: "Redis Gate Gym", city: "Leeds", country: "GB", timezone: "Europe/London" }, owner.cookies);
       expect(made.statusCode).toBe(201);
       const gymId = (JSON.parse(made.body) as { org: { id: string } }).org.id;
       await sql`
@@ -145,7 +145,7 @@ d("the reader gate and the front desk's allowance, on a real Redis", () => {
     "the front desk's allowance is per person, counted by the real Lua",
     async () => {
       const owner = await makeUser("desk-owner");
-      const made = await post("/v1/orgs", { name: "Redis Desk Gym", city: "Leeds", country: "GB", timezone: "Europe/London" }, owner.cookies);
+      const made = await post("/v1/orgs", { trainsHere: true, name: "Redis Desk Gym", city: "Leeds", country: "GB", timezone: "Europe/London" }, owner.cookies);
       expect(made.statusCode).toBe(201);
       const gymId = (JSON.parse(made.body) as { org: { id: string } }).org.id;
       await sql`

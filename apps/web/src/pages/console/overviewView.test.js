@@ -365,12 +365,12 @@ describe('the two numbers that can disagree without either being wrong', () => {
   const owner = { tiles: { today: { visits: 1, visitors: 1 }, month: { visitors: 0, members: 2, adoptionPct: 0 } } };
 
   it('explains the gap when somebody came and the share did not move', () => {
-    expect(crowdNote(quiet(owner).tiles)).toMatch(/Free seats/);
+    expect(crowdNote(quiet(owner).tiles)).toMatch(/^People who came but have since left the gym, or hold a free place, are counted above but not in this share\.$/);
   });
 
   it('names the place in its own word in that explanation', () => {
-    expect(crowdNote(quiet(owner).tiles, 'studio')).toMatch(/anyone the studio isn’t charged for/);
-    expect(crowdNote(quiet(owner).tiles, 'gym')).toMatch(/anyone the gym isn’t charged for/);
+    expect(crowdNote(quiet(owner).tiles, 'studio')).toMatch(/have since left the studio/);
+    expect(crowdNote(quiet(owner).tiles, 'gym')).toMatch(/have since left the gym/);
     expect(crowdNote(quiet(owner).tiles, 'studio')).not.toMatch(/gym/);
   });
 
@@ -399,7 +399,7 @@ describe('the two numbers that can disagree without either being wrong', () => {
         month: { visitors: 0, members: 2, adoptionPct: 0 },
       },
     }).tiles;
-    expect(crowdNote(tiles)).toMatch(/Free seats/);
+    expect(crowdNote(tiles)).toMatch(/^People who came but have since left the gym, or hold a free place, are counted above but not in this share\.$/);
   });
 });
 

@@ -102,22 +102,21 @@ const ownerSeat = {
   displayName: 'Kd Owner',
   joinedAt: '2026-08-18T09:00:00.000Z',
   groupLabel: 'Front Desk',
-  complimentary: true,
-  takesSeat: false,
+  complimentary: false,
+  takesSeat: true,
   staff: { role: 'owner', roleName: null },
 };
 
 /** A TRAINER who joined the gym like anybody else and was later handed the
- *  keys. `complimentary` is FALSE — they did join, and :14401 C/H-1 is why that
- *  flag must not be touched — while the gym is charged nothing for their place.
- *  Before :14953 this row was indistinguishable from a paying member. */
+ *  keys. Their place in the app takes one of the gym's places, as everyone's does
+ *  since §10.4; the row says who they are. */
 const staffMemberSeat = {
   userId: 'u4',
   displayName: 'Bhaskar Das',
   joinedAt: '2026-08-16T09:00:00.000Z',
   groupLabel: 'Front Desk',
   complimentary: false,
-  takesSeat: false,
+  takesSeat: true,
   staff: { role: 'trainer', roleName: null },
 };
 
@@ -492,6 +491,7 @@ describe('Create a gym', () => {
         joinCode: { code: 'K7QM2X', label: 'Front Desk' },
       },
     });
+    fireEvent.click(screen.getByRole('radio', { name: /^Yes/ }));
     fireEvent.click(screen.getByText('Create'));
     await waitFor(() => expect(orgService.createOrg).toHaveBeenCalledTimes(1));
     expect(orgService.createOrg.mock.calls[0][0].orgType).toBe('personal_trainer');
@@ -521,6 +521,7 @@ describe('Create a gym', () => {
     expect(screen.queryByText('United States')).toBeNull();
 
     fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House' } });
+    fireEvent.click(screen.getByRole('radio', { name: /^Yes/ }));
     fireEvent.click(screen.getByText('Create'));
     await waitFor(() => expect(orgService.createOrg).not.toHaveBeenCalled());
 
@@ -532,6 +533,7 @@ describe('Create a gym', () => {
     orgService.createOrg.mockResolvedValue({
       data: { org: { ...ORG }, joinCode: { code: 'K7QM2X', label: 'Front Desk' } },
     });
+    fireEvent.click(screen.getByRole('radio', { name: /^Yes/ }));
     fireEvent.click(screen.getByText('Create'));
     await waitFor(() => expect(orgService.createOrg).toHaveBeenCalledTimes(1));
     expect(orgService.createOrg.mock.calls[0][0].country).toBe('IN');
@@ -548,12 +550,14 @@ describe('Create a gym', () => {
     // Create waits for a real Indian mobile, and says what is wrong with one that is not.
     fireEvent.change(screen.getByLabelText('Mobile number for payments'), { target: { value: '020 2612 3456' } });
     expect(screen.getByTestId('mobile-check').textContent).toBe("This isn't a mobile number. Type your 10-digit mobile number, for example 98765 43210.");
+    fireEvent.click(screen.getByRole('radio', { name: /^Yes/ }));
     fireEvent.click(screen.getByText('Create'));
     await waitFor(() => expect(orgService.createOrg).not.toHaveBeenCalled());
 
     fireEvent.change(screen.getByLabelText('Mobile number for payments'), { target: { value: '+91 98765-43210' } });
     expect(screen.queryByTestId('mobile-check')).toBeNull();
     orgService.createOrg.mockResolvedValue({ data: { org: { ...ORG }, joinCode: { code: 'K7QM2X', label: 'Front Desk' } } });
+    fireEvent.click(screen.getByRole('radio', { name: /^Yes/ }));
     fireEvent.click(screen.getByText('Create'));
     await waitFor(() => expect(orgService.createOrg).toHaveBeenCalledTimes(1));
     expect(orgService.createOrg.mock.calls[0][0]).toMatchObject({ country: 'IN', billingMobile: '+91 98765-43210' });
@@ -566,6 +570,7 @@ describe('Create a gym', () => {
     drawNew();
     fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House' } });
     await chooseCountry('United States');
+    fireEvent.click(screen.getByRole('radio', { name: /^Yes/ }));
     fireEvent.click(screen.getByText('Create'));
 
     expect(await screen.findByText('K7QM2X')).toBeTruthy();
@@ -585,6 +590,7 @@ describe('Create a gym', () => {
     fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Sydney Iron' } });
     await chooseCountry('India');
     fireEvent.change(screen.getByLabelText('Mobile number for payments'), { target: { value: '98765 43210' } });
+    fireEvent.click(screen.getByRole('radio', { name: /^Yes/ }));
     fireEvent.click(screen.getByText('Create'));
     expect(await screen.findByText(/not open in that country yet/i)).toBeTruthy();
   });
@@ -596,12 +602,53 @@ describe('Create a gym', () => {
     // that is not a click on that button (Enter in a text field), so it is
     // submitted DIRECTLY here as well as clicked.
     drawNew();
+    fireEvent.click(screen.getByRole('radio', { name: /^Yes/ }));
     fireEvent.click(screen.getByText('Create'));
     expect(orgService.createOrg).not.toHaveBeenCalled();
 
     const form = screen.getByText('Create').closest('form');
     fireEvent.submit(form);
     await waitFor(() => expect(orgService.createOrg).not.toHaveBeenCalled());
+  });
+
+  it('asks "Do you train here too?", picks nothing, and sends the answer (§10.4)', async () => {
+    orgService.createOrg.mockResolvedValue({ data: { org: { ...ORG }, joinCode: { code: 'K7QM2X', label: 'Front Desk' } } });
+    drawNew();
+    fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House' } });
+    await chooseCountry('United States');
+    const group = screen.getByRole('radiogroup', { name: 'Do you train here too?' });
+    const yes = within(group).getByRole('radio', { name: /^Yes, I train here too/ });
+    const no = within(group).getByRole('radio', { name: /^No, I only run it/ });
+    expect(yes.getAttribute('aria-checked')).toBe('false');
+    expect(no.getAttribute('aria-checked')).toBe('false');
+    expect(yes.textContent).toContain("You get the member app on your phone. It takes one of your members' places, like any member.");
+    expect(no.textContent).toContain('You get the console only. You can add yourself later from Members.');
+
+    // Unanswered, Create sends nothing, by the button or by Enter.
+    fireEvent.click(screen.getByText('Create'));
+    fireEvent.submit(screen.getByText('Create').closest('form'));
+    await waitFor(() => expect(orgService.createOrg).not.toHaveBeenCalled());
+
+    fireEvent.click(no);
+    expect(no.getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(screen.getByText('Create'));
+    await waitFor(() => expect(orgService.createOrg).toHaveBeenCalledTimes(1));
+    expect(orgService.createOrg.mock.calls[0][0].trainsHere).toBe(false);
+  });
+
+  it('sends a yes, and asks a personal trainer in their own words', async () => {
+    orgService.createOrg.mockResolvedValue({ data: { org: { ...ORG }, joinCode: { code: 'K7QM2X', label: 'Front Desk' } } });
+    drawNew();
+    fireEvent.click(screen.getByText('Personal trainer'));
+    const group = screen.getByRole('radiogroup', { name: 'Do you train with the app yourself too?' });
+    expect(within(group).getByRole('radio', { name: /^Yes, I train too/ }).textContent).toContain("one of your clients' places, like any client");
+    fireEvent.click(screen.getByText('Gym'));
+    fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House' } });
+    await chooseCountry('United States');
+    fireEvent.click(screen.getByRole('radio', { name: /^Yes, I train here too/ }));
+    fireEvent.click(screen.getByText('Create'));
+    await waitFor(() => expect(orgService.createOrg).toHaveBeenCalledTimes(1));
+    expect(orgService.createOrg.mock.calls[0][0].trainsHere).toBe(true);
   });
 });
 
@@ -1960,7 +2007,7 @@ describe('Removing a member', () => {
    *
    *  BOTH HALVES ARE ASSERTED. The badge alone would pass on a screen that
    *  badges everybody; the paying member in the same roster is the control. */
-  it('badges a staff member’s place as free, and still bills the paying member (:14953)', async () => {
+  it('tags the owner and staff by who they are, and says their place counts in the plan (§10.4)', async () => {
     orgService.getMembers.mockResolvedValue(
       page([ownerSeat, staffMemberSeat, joinedMemberWithForbiddenExtras]),
     );
@@ -1972,6 +2019,11 @@ describe('Removing a member', () => {
     expect(screen.getByText('Owner')).toBeTruthy();
     expect(screen.getByText('Staff · Trainer')).toBeTruthy();
     expect(screen.queryByText('Complimentary')).toBeNull();
+    // Their place counts like anyone's, and the panel says so (no "free" any more).
+    await openInApp('Bhaskar Das');
+    expect(screen.getByText(/Also works here\. Their place in the app counts in your plan, like any member's\. Manage staff in Settings\./)).toBeTruthy();
+    expect(screen.queryByText(/isn't counted in your plan/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     // The control: Rita pays, so her panel offers Remove and her row no badge.
     await openInApp('Rita Sen');
     expect(removeButton()).toBeTruthy();
@@ -2050,6 +2102,16 @@ describe('Removing a member', () => {
     fireEvent.click(await screen.findByTestId(`staff-tab-${id}`));
     return within(await screen.findByRole('dialog', { name }));
   };
+
+  it('Staff tab: a person says whether they take a place — the app does, the console alone does not (§10.4)', async () => {
+    orgService.getStaff.mockResolvedValue(STAFF_LIST);
+    drawMembers();
+    let panel = await openStaff('u4', 'Bhaskar Das');
+    expect(panel.getByTestId('staff-place-line').textContent).toBe('Uses the member app here, which takes one of your places, like any member.');
+    fireEvent.click(panel.getByRole('button', { name: 'Close' }));
+    panel = await openStaff('u9', 'Ana Ruiz');
+    expect(panel.getByTestId('staff-place-line').textContent).toBe('Uses the console only, which is free. Not in the member app here.');
+  });
 
   it('Staff tab: Remove from staff, unticked, takes only their staff access', async () => {
     orgService.getStaff.mockResolvedValue(STAFF_LIST);
@@ -2130,7 +2192,7 @@ describe('Removing a member', () => {
 
   it('offers NO Remove beside a staff member when the server does not say who is staff', async () => {
     // An API older than this web build: no `staff` on the row, and it refuses staff.
-    const legacyStaff = { ...staffMemberSeat };
+    const legacyStaff = { ...staffMemberSeat, takesSeat: false };
     delete legacyStaff.staff;
     orgService.getMembers.mockResolvedValue(page([legacyStaff]));
     drawMembers();
@@ -2145,7 +2207,7 @@ describe('Removing a member', () => {
    *  seat" would strip the OWNER's badge and offer a Remove the server refuses.
    *  The fallback is the behaviour that shipped before this card, exactly. */
   it('falls back to the old flag when the server is too old to send the new one', async () => {
-    const legacyOwner = { ...ownerSeat };
+    const legacyOwner = { ...ownerSeat, complimentary: true };
     delete legacyOwner.takesSeat;
     delete legacyOwner.staff;
     const legacyMember = { ...joinedMemberWithForbiddenExtras };
@@ -2396,6 +2458,7 @@ describe('a gym you have just made', () => {
     // door sends them there).
     fireEvent.change(await screen.findByLabelText('Gym name'), { target: { value: 'Iron House' } });
     await chooseCountry('United States');
+    fireEvent.click(screen.getByRole('radio', { name: /^Yes/ }));
     fireEvent.click(screen.getByText('Create'));
     expect(await screen.findByText('K7QM2X')).toBeTruthy();
   };
@@ -2518,7 +2581,7 @@ describe("the gym's numbers", () => {
     // The visitor is still on screen — one person, singular — which is what
     // makes the pair read as a contradiction without the sentence below it.
     expect(screen.getAllByText('person').length).toBeGreaterThan(0);
-    expect(screen.getByText(/Free seats/)).toBeTruthy();
+    expect(screen.getByText(/have since left the gym, or hold a free place/)).toBeTruthy();
   });
 
   it('does not explain a gap that is not there', async () => {
@@ -2534,7 +2597,7 @@ describe("the gym's numbers", () => {
     drawOverview();
 
     expect(await screen.findByText('50%')).toBeTruthy();
-    expect(screen.queryByText(/Free seats/)).toBeNull();
+    expect(screen.queryByText(/have since left the gym, or hold a free place/)).toBeNull();
   });
 
   it('says what the up arrow is comparing, because the two weeks are not the same length', async () => {
