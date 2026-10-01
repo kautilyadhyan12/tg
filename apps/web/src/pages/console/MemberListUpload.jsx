@@ -3,9 +3,11 @@ import {
   AlertTriangle,
   CalendarDays,
   Check,
+  ChevronDown,
   ChevronLeft,
   ClipboardPaste,
   Columns3,
+  ExternalLink,
   FileSpreadsheet,
   Loader2,
   Lock,
@@ -16,7 +18,18 @@ import {
   UserPlus,
   X,
 } from 'lucide-react';
-import { MEMBER_FILE_MAX_BYTES, MEMBER_LIST_PERMISSION_WORDS, memberListWarningWords } from '@app/shared';
+import {
+  MEMBER_FILE_MAX_BYTES,
+  MEMBER_LIST_EVERYBODY_WORDS,
+  MEMBER_LIST_NOT_IN_A_FILE_WORDS,
+  MEMBER_LIST_OTHER_SOFTWARE_STEPS,
+  MEMBER_LIST_PERMISSION_WORDS,
+  MEMBER_LIST_SAVE_XLS_WORDS,
+  MEMBER_LIST_SOFTWARE,
+  MEMBER_LIST_SPREADSHEET_STEPS,
+  MEMBER_LIST_STEPS_MAY_CHANGE_WORDS,
+  memberListWarningWords,
+} from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import {
   addedHere,
@@ -299,6 +312,212 @@ function HandEdits({ handEdits, words, checked, onChange }) {
       </Tick>
       <p className="c-s13 c-t2">Or correct your file and import it again.</p>
     </div>
+  );
+}
+
+/** What Paste rows wants, shown as a spreadsheet shows it: the headings row first, then
+ *  one row a person (Kd's click-through, 2026-10-01: a gym needs to see an example). */
+const PASTE_EXAMPLE = [
+  ['Name', 'Email', 'Phone', 'Status'],
+  ['Ada Lovelace', 'ada@example.com', '07700 900123', 'Active'],
+  ['Ben Carter', 'ben@example.com', '07700 900456', 'Frozen'],
+];
+
+function PasteExample() {
+  const [head, ...rows] = PASTE_EXAMPLE;
+  return (
+    <div className="flex flex-col gap-2" data-testid="paste-example">
+      <p className="c-s14 c-t2">In your spreadsheet, select the rows with their headings, copy them, and paste them below. For example:</p>
+      <div className="rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--line)' }}>
+        <table className="w-full c-s13 text-left" style={{ borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ background: 'var(--raise)' }}>
+              {head.map((cell) => (
+                <th key={cell} scope="col" className="px-2.5 sm:px-3 py-2 c-w6 c-t1">
+                  {cell}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row[0]} className="border-t" style={{ borderColor: 'var(--line)' }}>
+                {row.map((cell) => (
+                  <td key={cell} className="px-2.5 sm:px-3 py-2 c-t2 align-top">
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/** Every choice of the software box, in its order. */
+const SOFTWARE_CHOICES = [...MEMBER_LIST_SOFTWARE.map((s) => [s.id, s.name]), ['spreadsheet', 'My own spreadsheet'], ['other', 'Other software']];
+
+/** The software box's dropdown, drawn by the console rather than the browser, so its open
+ *  list is in the console's own colours and not the system's blue (Kd's click-through,
+ *  2026-10-01). Arrow keys move through it and Escape closes it, as a browser's does. */
+function SoftwarePick({ labelId, choice, onChoose }) {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef(null);
+  const button = useRef(null);
+  const listId = useId();
+  const name = SOFTWARE_CHOICES.find(([value]) => value === choice)?.[1] ?? null;
+  useEffect(() => {
+    if (!open) return undefined;
+    const away = (e) => {
+      if (wrap.current !== null && !wrap.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', away);
+    // The chosen one, or the first, takes the focus, so the arrow keys start there.
+    const options = [...(wrap.current?.querySelectorAll('[role=option]') ?? [])];
+    (options.find((o) => o.getAttribute('aria-selected') === 'true') ?? options[0])?.focus();
+    return () => document.removeEventListener('mousedown', away);
+  }, [open]);
+  const close = () => {
+    setOpen(false);
+    button.current?.focus();
+  };
+  const onKey = (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      close();
+      return;
+    }
+    // One Tab stop, as a browser's dropdown: Tab closes the list and moves on from it.
+    if (e.key === 'Tab') {
+      setOpen(false);
+      button.current?.focus();
+      return;
+    }
+    const options = [...(wrap.current?.querySelectorAll('[role=option]') ?? [])];
+    const at = options.indexOf(document.activeElement);
+    let next = null;
+    if (e.key === 'ArrowDown') next = Math.min(at + 1, options.length - 1);
+    else if (e.key === 'ArrowUp') next = Math.max(at - 1, 0);
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = options.length - 1;
+    else if (e.key.length === 1 && /\S/.test(e.key)) {
+      // A letter jumps to the next choice starting with it, after the one in focus.
+      const letter = e.key.toLowerCase();
+      const order = [...options.slice(at + 1), ...options.slice(0, at + 1)];
+      const found = order.find((o) => o.textContent.trim().toLowerCase().startsWith(letter));
+      if (found !== undefined) next = options.indexOf(found);
+    }
+    if (next === null) return;
+    e.preventDefault();
+    options[next]?.focus();
+  };
+  return (
+    <div ref={wrap} className="relative">
+      <button
+        ref={button}
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-labelledby={`${labelId} ${listId}-value`}
+        onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown' && !open) {
+            e.preventDefault();
+            setOpen(true);
+          }
+        }}
+        className="c-sel text-left"
+      >
+        <span id={`${listId}-value`} className={name === null ? 'c-t3' : 'c-t1'}>
+          {name ?? 'Choose your software'}
+        </span>
+        <ChevronDown aria-hidden="true" className="w-4 h-4 flex-shrink-0 c-t2" />
+      </button>
+      {open ? (
+        <div
+          id={listId}
+          role="listbox"
+          aria-labelledby={labelId}
+          onKeyDown={onKey}
+          className="absolute left-0 right-0 top-full mt-1.5 rounded-[14px] p-1.5 z-10 flex flex-col max-h-[320px] overflow-y-auto"
+          style={{ background: 'var(--sheet)', border: '1px solid var(--card-line)', boxShadow: 'var(--pop)' }}
+        >
+          {SOFTWARE_CHOICES.map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="option"
+              tabIndex={-1}
+              aria-selected={choice === value}
+              onClick={() => {
+                onChoose(value);
+                close();
+              }}
+              className="c-opt w-full text-left rounded-[10px] px-3 min-h-[44px] flex items-center justify-between gap-3 c-s15"
+            >
+              {label}
+              {choice === value ? <Check aria-hidden="true" className="w-4 h-4 flex-shrink-0" /> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** "Which software is your list in?" (§11.7; ROADMAP 5c): that product's own steps for
+ *  downloading its list, and the help page they come from. Nothing here changes how the
+ *  file is read: it is help, and the upload works the same whether anything is chosen. */
+function SoftwareSteps() {
+  const id = useId();
+  const [choice, setChoice] = useState('');
+  const product = MEMBER_LIST_SOFTWARE.find((s) => s.id === choice) ?? null;
+  const steps = product !== null ? product.steps : choice === 'spreadsheet' ? MEMBER_LIST_SPREADSHEET_STEPS : choice === 'other' ? MEMBER_LIST_OTHER_SOFTWARE_STEPS : null;
+  return (
+    <section className="c-card p-4 flex flex-col gap-3" data-testid="software">
+      <span id={id} className="c-s15 c-w6 c-t1">
+        Which software is your list in?
+      </span>
+      <SoftwarePick labelId={id} choice={choice} onChoose={setChoice} />
+      {steps !== null ? (
+        <ol className="flex flex-col gap-2 c-s14 c-t1" data-testid="software-steps">
+          {steps.map((step, i) => (
+            <li key={step} className="flex gap-2.5">
+              <span
+                aria-hidden="true"
+                className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center c-s13 c-w6"
+                style={{ background: 'var(--soft)', color: 'var(--soft-t)' }}
+              >
+                {i + 1}
+              </span>
+              <span className="pt-0.5">{step}</span>
+            </li>
+          ))}
+        </ol>
+      ) : null}
+      {product?.tip ? <p className="c-s14 c-t2">{product.tip}</p> : null}
+      {product !== null || choice === 'other' ? (
+        <ul className="flex flex-col gap-1 c-s14 c-t2 list-disc pl-5" data-testid="software-notes">
+          <li>{MEMBER_LIST_EVERYBODY_WORDS}</li>
+          <li>{MEMBER_LIST_SAVE_XLS_WORDS}</li>
+        </ul>
+      ) : null}
+      {product !== null ? (
+        <p className="c-s13 c-t2 flex flex-wrap gap-x-3 gap-y-1">
+          <span>From {product.name}&apos;s help:</span>
+          {product.sources.map((source) => (
+            <a key={source.url} href={source.url} target="_blank" rel="noopener noreferrer" className="c-lk c-w6 inline-flex items-center gap-1">
+              {source.title}
+              <ExternalLink aria-hidden="true" className="w-3.5 h-3.5" />
+            </a>
+          ))}
+        </p>
+      ) : null}
+      {product !== null ? <p className="c-s13 c-t2">{MEMBER_LIST_STEPS_MAY_CHANGE_WORDS}</p> : null}
+      {product !== null || choice === 'other' ? <p className="c-s14 c-t2">{MEMBER_LIST_NOT_IN_A_FILE_WORDS}</p> : null}
+    </section>
   );
 }
 
@@ -624,6 +843,10 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
   if (stage === 'upload') {
     body = (
       <>
+        <p className="c-s14 c-t2 -mt-1" data-testid="file-kinds">
+          Works with CSV and Excel (.xlsx) files, or rows pasted from a spreadsheet.
+        </p>
+        <SoftwareSteps />
         {/* Two ways in, both in plain sight: a quiet second tab went unseen at Kd's
             click-through, so each carries its icon and full-strength words. */}
         <div role="tablist" className="grid grid-cols-2 gap-0.5 rounded-xl p-[3px] border" style={{ borderColor: 'var(--ctl-line)', background: 'var(--card)' }}>
@@ -690,6 +913,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
           </>
         ) : (
           <>
+            <PasteExample />
             <textarea
               aria-label="Paste your rows"
               placeholder="Copy the rows in your spreadsheet, with the headings, and paste them here."

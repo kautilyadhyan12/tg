@@ -2024,6 +2024,16 @@ move is self-serve, as Gymdesk's is. What a file does not bring, and the screen 
 so: saved cards (they move between payment companies — Part 5), attendance history (a
 later import), documents and photos.
 
+*(5c, 2026-10-01; RULINGS that day.)* Built as "Which software is your list in?" above the
+upload, since the same Import serves a gym keeping its software: Glofox, Gym Insight,
+Gymdesk, GymMaster, Mindbody, TeamUp, WellnessLiving and Wodify, each with its own help
+page's steps and a link to it, plus "My own spreadsheet" and "Other software". No
+vendor publishes its export's headings, so no product has a preset yet: a product's
+preset is added with the first real file from it. Zen Planner, PushPress, Virtuagym,
+ClubRight, Clubworx, Arketa, Exercise.com, Magicline, Momence, FitnessForce and Wellyx
+are left off until their own page gives the steps (theirs were unreachable, showed no
+whole-list export, or the steps were only on another company's page). The choice changes nothing the upload sends.
+
 ### 11.8 Cost at full size, and cards
 
 Measured again at 10,000 people × 30 kept columns: the staged document's size, the
