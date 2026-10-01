@@ -14,6 +14,12 @@
 //      and every one of them must produce no meter rather than "0 of 0".
 import { describe, expect, it, beforeEach, vi, afterEach } from 'vitest';
 import {
+  cancelBox,
+  canCancelRazorpayPlan,
+  canKeepRazorpayPlan,
+  canManageRazorpayPlan,
+  planEndingText,
+  razorpayBillOwed,
   consoleReadOnlyBanner,
   paymentOverdueBanner,
   pricesNote,
@@ -1041,12 +1047,100 @@ describe('an Indian gym paying through Razorpay (1d-i)', () => {
     expect(pricesNote(undefined)).toBe('Prices are a month. Tax is added at checkout where it applies.');
   });
 
-  it("an overdue payment names Razorpay's email, never Paddle's page or a card to update", () => {
-    const text = paymentOverdueBanner('gym', true, 'razorpay');
-    expect(text).toBe(
-      "A payment for your gym is overdue. Nothing here can be changed and your members get the free app only until it is paid. Razorpay has emailed the gym's owner about it; once it's paid, everything opens again by itself.",
+  it('an overdue payment is paid with Pay now (1d-ii), never on Paddle\'s page; staff who can\'t pay are told who can', () => {
+    expect(paymentOverdueBanner('gym', true, 'razorpay')).toBe(
+      "A payment for your gym is overdue. Nothing here can be changed and your members get the free app only until it is paid. Press Pay now to pay it; once it's paid, everything opens again by itself.",
     );
-    expect(paymentOverdueBanner('gym', false, 'razorpay')).toBe(text);
+    expect(paymentOverdueBanner('gym', false, 'razorpay')).toBe(
+      "A payment for your gym is overdue. Nothing here can be changed and your members get the free app only until it is paid. Whoever manages billing can pay it; once it's paid, everything opens again by itself.",
+    );
     expect(paymentOverdueBanner('gym', true)).toMatch(/Paddle also tries your card/);
+  });
+});
+
+describe('a plan paid through Razorpay, managed from the console (1d-ii)', () => {
+  const NOW = Date.parse('2026-10-20T10:00:00.000Z');
+  const END = '2026-11-01T00:00:00.000Z';
+  const BILLING = ['members.read', 'billing.manage'];
+  const gym = (sub, patch = {}) => ({
+    orgType: 'gym',
+    staffRole: 'manager',
+    privileges: BILLING,
+    seatsUsed: 143,
+    consoleReadOnly: false,
+    paymentOverdue: false,
+    subscription:
+      sub === null
+        ? null
+        : { status: 'active', currentPeriodEnd: END, cancelAtPeriodEnd: false, keepUntil: null, paidThrough: 'razorpay', subscribed: true, ...sub },
+    ...patch,
+  });
+
+  // Who sees the buttons, for every class of plan and viewer.
+  const table = [
+    ['paying, billing staff', gym({}), { manage: true, owed: false, cancel: true, keep: false }],
+    ['paying, a trainer', gym({}, { staffRole: 'trainer', privileges: ['members.read'] }), { manage: false, owed: false, cancel: false, keep: false }],
+    ['paid through Paddle', gym({ paidThrough: 'paddle' }), { manage: false, owed: false, cancel: false, keep: false }],
+    ['a free trial', gym({ status: 'trialing', paidThrough: null, subscribed: false }), { manage: false, owed: false, cancel: false, keep: false }],
+    ['a payment failed, in the grace', gym({ status: 'past_due' }), { manage: true, owed: true, cancel: true, keep: false }],
+    ['the grace ran out', gym(null, { consoleReadOnly: true, paymentOverdue: true, paymentOverdueThrough: 'razorpay' }), { manage: true, owed: true, cancel: false, keep: false }],
+    ['the grace ran out, a trainer', gym(null, { staffRole: 'trainer', privileges: ['members.read'], consoleReadOnly: true, paymentOverdue: true, paymentOverdueThrough: 'razorpay' }), { manage: false, owed: true, cancel: false, keep: false }],
+    ['a Paddle plan overdue', gym(null, { consoleReadOnly: true, paymentOverdue: true, paymentOverdueThrough: 'paddle' }), { manage: false, owed: false, cancel: false, keep: false }],
+    ['set to end, before the deadline', gym({ cancelAtPeriodEnd: true, keepUntil: '2026-10-31T21:00:00.000Z' }), { manage: true, owed: false, cancel: false, keep: true }],
+    ['set to end, past the deadline', gym({ cancelAtPeriodEnd: true, keepUntil: '2026-10-20T09:59:59.000Z' }), { manage: true, owed: false, cancel: false, keep: false }],
+    ['set to end, already sent', gym({ cancelAtPeriodEnd: true, keepUntil: null }), { manage: true, owed: false, cancel: false, keep: false }],
+    ['a paid trial', gym({ status: 'trialing', currentPeriodEnd: END }), { manage: true, owed: false, cancel: true, keep: false }],
+  ];
+  it.each(table)('%s', (_name, org, expected) => {
+    expect({
+      manage: canManageRazorpayPlan(org),
+      owed: razorpayBillOwed(org),
+      cancel: canCancelRazorpayPlan(org),
+      keep: canKeepRazorpayPlan(org, NOW),
+    }).toEqual(expected);
+  });
+
+  it('the box before Cancel plan says when the plan ends, that nothing more is charged, and what the members keep', () => {
+    const box = cancelBox(gym({}), NOW);
+    expect(box.title).toBe('Cancel your plan?');
+    expect(box.confirm).toBe('Cancel plan');
+    expect(box.lines[0]).toMatch(/^Your plan ends on .+, the end of the month you paid for\. Nothing more is charged\.$/);
+    expect(box.lines[1]).toBe('Your 143 members keep everything until then, and get the free app only after.');
+    expect(box.lines[2]).toMatch(/^You can change your mind until .+\.$/);
+    // Inside the last three hours it says the cancel can't be taken back.
+    expect(cancelBox(gym({ currentPeriodEnd: '2026-10-20T12:00:00.000Z' }), NOW).lines[2]).toBe("It's too close to the end to change your mind after this.");
+    // An overdue plan ends now, and its unpaid payment is not collected.
+    expect(cancelBox(gym({ status: 'past_due' }), NOW)).toEqual({
+      title: 'Cancel your plan now?',
+      lines: [
+        "A payment didn't go through, so your plan ends now. The unpaid payment isn't collected, and nothing more is charged.",
+        'Your 143 members get the free app only from now.',
+      ],
+      confirm: 'Cancel plan now',
+    });
+    expect(cancelBox(gym({ status: 'trialing' }), NOW).lines[0]).toMatch(/^Your plan ends with your free trial, on .+\. Nothing is charged\.$/);
+    expect(cancelBox(gym({}, { seatsUsed: 1, orgType: 'studio' }), NOW).lines[1]).toBe('Your 1 client keeps everything until then, and gets the free app only after.');
+    expect(cancelBox(gym({ status: 'past_due' }, { seatsUsed: 1 }), NOW).lines[1]).toBe('Your 1 member gets the free app only from now.');
+    expect(cancelBox(gym({}, { seatsUsed: 0 }), NOW).lines[1]).toBe('Your members keep everything until then, and get the free app only after.');
+    expect(cancelBox(gym({}, { staffRole: 'trainer', privileges: ['members.read'] }), NOW)).toBeNull();
+    expect(cancelBox(gym({ cancelAtPeriodEnd: true }), NOW)).toBeNull();
+  });
+
+  it('a plan set to end says until when it can be kept, or that it is too late', () => {
+    expect(planEndingText(gym({ cancelAtPeriodEnd: true, keepUntil: '2026-10-31T21:00:00.000Z' }), NOW)).toMatch(/^You cancelled this plan\. You can keep it until .+\.$/);
+    expect(planEndingText(gym({ cancelAtPeriodEnd: true, keepUntil: null }), NOW)).toBe(
+      "You cancelled this plan. It's too close to its end to keep it now; you can choose a plan again once it ends.",
+    );
+    expect(planEndingText(gym({}), NOW)).toBeNull();
+    expect(planEndingText(gym({ cancelAtPeriodEnd: true, paidThrough: 'paddle' }), NOW)).toBeNull();
+  });
+
+  it('a failed payment on a Razorpay plan says Pay now, to billing staff only', () => {
+    expect(bannerFor(gym({ status: 'past_due' }), NOW)?.text).toBe(
+      "A payment for your gym didn't go through. Razorpay tries again by itself, or you can pay now under Plan on the Overview. Your members keep everything for 2 days after a failed payment.",
+    );
+    expect(bannerFor(gym({ status: 'past_due' }, { staffRole: 'trainer', privileges: ['members.read'] }), NOW)?.text).toBe(
+      "A payment for your gym didn't go through. Razorpay tries again by itself, or whoever manages billing can pay it now. Your members keep everything for 2 days after a failed payment.",
+    );
   });
 });

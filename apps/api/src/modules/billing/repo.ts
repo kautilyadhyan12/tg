@@ -306,6 +306,9 @@ export interface PaddleRow {
   cancelReason: string | null;
   /** When the plan stopped being the gym's; null while live. */
   endedAt: Date | null;
+  /** Set to end when the month paid for ends (`currentPeriodEnd`). */
+  cancelAtPeriodEnd: boolean;
+  currentPeriodEnd: Date | null;
 }
 
 export async function findPaddleSubscription(sql: SqlOrTx, subscriptionId: string): Promise<PaddleRow | null> {
@@ -314,11 +317,31 @@ export async function findPaddleSubscription(sql: SqlOrTx, subscriptionId: strin
 
 /** The gym's row for one subscription at its provider, if our server placed it. */
 export async function findProviderSubscription(sql: SqlOrTx, provider: PayProvider, subscriptionId: string): Promise<PaddleRow | null> {
-  const rows = await sql<{ id: string; owner_id: string; status: LocalStatus; cancel_reason: string | null; ended_at: Date | null }[]>`
-    SELECT id, owner_id, status, cancel_reason, ended_at FROM subscriptions
+  const rows = await sql<
+    {
+      id: string;
+      owner_id: string;
+      status: LocalStatus;
+      cancel_reason: string | null;
+      ended_at: Date | null;
+      cancel_at_period_end: boolean;
+      current_period_end: Date | null;
+    }[]
+  >`
+    SELECT id, owner_id, status, cancel_reason, ended_at, cancel_at_period_end, current_period_end FROM subscriptions
     WHERE provider = ${provider} AND provider_ref = ${subscriptionId} AND owner_type = 'gym'`;
   const row = rows[0];
-  return row === undefined ? null : { id: row.id, gymId: row.owner_id, status: row.status, cancelReason: row.cancel_reason, endedAt: row.ended_at };
+  return row === undefined
+    ? null
+    : {
+        id: row.id,
+        gymId: row.owner_id,
+        status: row.status,
+        cancelReason: row.cancel_reason,
+        endedAt: row.ended_at,
+        cancelAtPeriodEnd: row.cancel_at_period_end,
+        currentPeriodEnd: row.current_period_end,
+      };
 }
 
 export interface ApplyOutcome {
@@ -375,6 +398,13 @@ export async function applySnapshot(
         AND (${existing?.id ?? null}::uuid IS NULL OR id <> ${existing?.id ?? null}::uuid)`;
     // The gym's own free trial gives way to the plan it paid for during it.
     const localTrial = others.find(isLocalTrial) ?? null;
+    // Razorpay's record never shows a cancel (1d-ii): whether a plan is set to end is our own
+    // row's, read here under the lock, so an answer fetched before Cancel or Keep my plan was
+    // pressed never undoes it.
+    const snapshot: Snapshot =
+      input.provider === "razorpay" && existing !== null
+        ? { ...input.snapshot, cancelAtPeriodEnd: existing.cancel_at_period_end }
+        : input.snapshot;
     const decision = decide({
       row:
         existing === null
@@ -388,9 +418,9 @@ export async function applySnapshot(
               graceEnded: existing.cancel_reason === GRACE_EXPIRED,
             },
       otherLive: others.some((o) => !isLocalTrial(o)),
-      snapshot: input.snapshot,
+      snapshot,
     });
-    const s = input.snapshot;
+    const s = snapshot;
     const audit = async (rowId: string, action: string) => {
       await insertAudit(tx, {
         actorUserId: null,
@@ -630,7 +660,8 @@ export async function endGraces(sql: Sql, input: { cutoff: Date; now: Date; limi
   return ended;
 }
 
-export type RefundReason = "duplicate" | "unmatched";
+/** `cancelled`: a payment Razorpay took for a month after the plan was set to end (1d-ii). */
+export type RefundReason = "duplicate" | "unmatched" | "cancelled";
 
 /** Write down the refunds owed for a subscription set aside, one per paid transaction.
  *  Kept once per transaction, so recording them again changes nothing. */
@@ -1254,4 +1285,198 @@ export async function staffWithEmail(sql: SqlOrTx, gymId: string): Promise<{ use
     WHERE s.gym_id = ${gymId} AND u.status = 'active' AND u.email IS NOT NULL
     ORDER BY u.email`;
   return rows.map((r) => ({ userId: r.user_id, email: r.email }));
+}
+// ── A plan paid through Razorpay, managed from the console (1d-ii) ───────────
+
+/** The gym's plan paid through Razorpay that the console acts on: its live plan, or the one
+ *  whose grace ran out while a payment is still owed (the console is read-only until it is
+ *  paid). Null when the gym has neither. */
+export interface RazorpayPlanRow {
+  id: string;
+  status: LocalStatus;
+  subscriptionRef: string;
+  /** Its grace ran out: the gym pays to open the console again. */
+  overdue: boolean;
+}
+
+export async function razorpayPlanFor(sql: SqlOrTx, gymId: string): Promise<RazorpayPlanRow | null> {
+  const rows = await sql<{ id: string; status: LocalStatus; provider_ref: string; cancel_reason: string | null }[]>`
+    SELECT id, status, provider_ref, cancel_reason FROM subscriptions
+    WHERE owner_type = 'gym' AND owner_id = ${gymId} AND provider = 'razorpay' AND provider_ref IS NOT NULL
+      AND (status IN ('trialing','active','past_due') OR cancel_reason = ${GRACE_EXPIRED})
+    ORDER BY (status IN ('trialing','active','past_due')) DESC, ended_at DESC NULLS LAST, id
+    LIMIT 1`;
+  const row = rows[0];
+  return row === undefined
+    ? null
+    : { id: row.id, status: row.status, subscriptionRef: row.provider_ref, overdue: row.cancel_reason === GRACE_EXPIRED };
+}
+
+export type CancelRequestOutcome =
+  /** Set to end when the paid month ends. `sendNow`: the end is already within the hours in
+   *  which the cancel goes to Razorpay. */
+  | { kind: "scheduled"; sendNow: boolean }
+  /** Already set to end: nothing changed. */
+  | { kind: "already" }
+  /** A payment is overdue: the plan ends at once, nothing more charged (the caller cancels at
+   *  Razorpay first, then marks it). */
+  | { kind: "overdue"; rowId: string; subscriptionRef: string }
+  | { kind: "not_razorpay" }
+  | { kind: "no_paid_plan" }
+  | { kind: "org_archived" }
+  | { kind: "not_found" };
+
+/** "Cancel plan" on a plan paid through Razorpay: set to end when the month paid for ends,
+ *  under the gym's lock. Nothing is sent to Razorpay here. */
+export async function requestCancel(sql: Sql, input: { gymId: string; userId: string; now: Date; leadMs: number }): Promise<CancelRequestOutcome> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId); // subscription-writer lock
+    const gyms = await tx<{ status: string }[]>`SELECT status FROM gyms WHERE id = ${input.gymId}`;
+    const gym = gyms[0];
+    if (gym === undefined) return { kind: "not_found" };
+    if (gym.status !== "active") return { kind: "org_archived" };
+    const rows = await tx<
+      { id: string; status: LocalStatus; provider: string; provider_ref: string | null; cancel_at_period_end: boolean; current_period_end: Date | null }[]
+    >`
+      SELECT id, status, provider, provider_ref, cancel_at_period_end, current_period_end FROM subscriptions
+      WHERE owner_type = 'gym' AND owner_id = ${input.gymId} AND status IN ('trialing','active','past_due')
+      LIMIT 1
+      FOR UPDATE`;
+    const row = rows[0];
+    if (row === undefined) return { kind: "no_paid_plan" };
+    if (row.provider === "paddle") return { kind: "not_razorpay" };
+    if (row.provider !== "razorpay" || row.provider_ref === null) return { kind: "no_paid_plan" };
+    if (row.cancel_at_period_end) return { kind: "already" };
+    if (row.status === "past_due") return { kind: "overdue", rowId: row.id, subscriptionRef: row.provider_ref };
+    await tx`UPDATE subscriptions SET cancel_at_period_end = true WHERE id = ${row.id} AND owner_id = ${input.gymId}`;
+    await insertAudit(tx, {
+      actorUserId: input.userId,
+      gymId: input.gymId,
+      action: "billing.cancel_requested",
+      targetType: "subscription",
+      targetId: row.id,
+      meta: { provider: "razorpay", endsAt: row.current_period_end?.toISOString() ?? null },
+    });
+    const sendNow = row.current_period_end === null || row.current_period_end.getTime() - input.now.getTime() <= input.leadMs;
+    return { kind: "scheduled", sendNow };
+  });
+}
+
+/** An overdue plan cancelled at Razorpay: marked as ended by the gym, so a payment Razorpay
+ *  takes after it is refunded. Its end is written from Razorpay's record by the one rule. */
+export async function markCancelSent(sql: Sql, input: { gymId: string; userId: string; rowId: string; now: Date }): Promise<void> {
+  await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId); // subscription-writer lock
+    const moved = await tx<{ id: string }[]>`
+      UPDATE subscriptions SET cancel_at_period_end = true, cancel_sent_at = COALESCE(cancel_sent_at, ${input.now})
+      WHERE id = ${input.rowId} AND owner_type = 'gym' AND owner_id = ${input.gymId} AND provider = 'razorpay'
+      RETURNING id`;
+    if (moved.length === 0) return;
+    await insertAudit(tx, {
+      actorUserId: input.userId,
+      gymId: input.gymId,
+      action: "billing.cancel_requested",
+      targetType: "subscription",
+      targetId: input.rowId,
+      meta: { provider: "razorpay", endsAt: input.now.toISOString() },
+    });
+  });
+}
+
+export type KeepPlanOutcome =
+  | { kind: "kept" }
+  /** Not set to end: nothing changed. */
+  | { kind: "not_ending" }
+  /** Too close to the end: the cancel is with Razorpay, or about to be. */
+  | { kind: "too_late"; endsAt: Date | null }
+  | { kind: "no_paid_plan" }
+  | { kind: "org_archived" }
+  | { kind: "not_found" };
+
+/** "Keep my plan": a plan set to end goes on, while the cancel is still ours alone — not yet
+ *  sent, and not within `leadMs` of the end, when the worker sends it. Under the gym's lock and
+ *  the row's, so it cannot cross the worker claiming the same row. */
+export async function keepPlan(sql: Sql, input: { gymId: string; userId: string; now: Date; leadMs: number }): Promise<KeepPlanOutcome> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId); // subscription-writer lock
+    const gyms = await tx<{ status: string }[]>`SELECT status FROM gyms WHERE id = ${input.gymId}`;
+    const gym = gyms[0];
+    if (gym === undefined) return { kind: "not_found" };
+    if (gym.status !== "active") return { kind: "org_archived" };
+    const rows = await tx<{ id: string; cancel_at_period_end: boolean; cancel_sent_at: Date | null; current_period_end: Date | null }[]>`
+      SELECT id, cancel_at_period_end, cancel_sent_at, current_period_end FROM subscriptions
+      WHERE owner_type = 'gym' AND owner_id = ${input.gymId} AND provider = 'razorpay'
+        AND status IN ('trialing','active','past_due')
+      LIMIT 1
+      FOR UPDATE`;
+    const row = rows[0];
+    if (row === undefined) return { kind: "no_paid_plan" };
+    if (!row.cancel_at_period_end) return { kind: "not_ending" };
+    const end = row.current_period_end;
+    if (row.cancel_sent_at !== null || end === null || end.getTime() - input.now.getTime() <= input.leadMs) {
+      return { kind: "too_late", endsAt: end };
+    }
+    await tx`UPDATE subscriptions SET cancel_at_period_end = false WHERE id = ${row.id} AND owner_id = ${input.gymId}`;
+    await insertAudit(tx, {
+      actorUserId: input.userId,
+      gymId: input.gymId,
+      action: "billing.cancel_withdrawn",
+      targetType: "subscription",
+      targetId: row.id,
+      meta: { provider: "razorpay" },
+    });
+    return { kind: "kept" };
+  });
+}
+
+export interface CancelToSend {
+  id: string;
+  gymId: string;
+  subscriptionRef: string;
+  status: LocalStatus;
+}
+
+/** Plans set to end whose end is within `leadMs` (or past), claimed for sending to Razorpay:
+ *  each is marked sent in the same statement, so two runs never both claim one and Keep my plan
+ *  sees it gone. `gymId` narrows it to one gym (Cancel pressed close to the end). */
+export async function claimCancelsToSend(sql: SqlOrTx, input: { now: Date; leadMs: number; limit: number; gymId?: string }): Promise<CancelToSend[]> {
+  const until = new Date(input.now.getTime() + input.leadMs);
+  const gymId = input.gymId ?? null;
+  const rows = await sql<{ id: string; owner_id: string; provider_ref: string; status: LocalStatus }[]>`
+    UPDATE subscriptions SET cancel_sent_at = ${input.now}
+    WHERE id IN (
+      SELECT id FROM subscriptions
+      WHERE owner_type = 'gym' AND provider = 'razorpay' AND provider_ref IS NOT NULL
+        AND cancel_at_period_end AND cancel_sent_at IS NULL
+        AND status IN ('trialing','active')
+        AND (current_period_end IS NULL OR current_period_end <= ${until})
+        AND (${gymId}::uuid IS NULL OR owner_id = ${gymId}::uuid)
+      ORDER BY current_period_end NULLS FIRST, id
+      LIMIT ${input.limit}
+      FOR UPDATE SKIP LOCKED
+    )
+      AND cancel_at_period_end AND cancel_sent_at IS NULL
+    RETURNING id, owner_id, provider_ref, status`;
+  return rows.map((r) => ({ id: r.id, gymId: r.owner_id, subscriptionRef: r.provider_ref, status: r.status }));
+}
+
+/** Razorpay did not take a cancel: it is claimed again on the next run. Keep my plan stays
+ *  refused, as the end is within the hours it is sent in. */
+export async function unclaimCancel(sql: SqlOrTx, input: { id: string; gymId: string; claimedAt: Date }): Promise<void> {
+  await sql`
+    UPDATE subscriptions SET cancel_sent_at = NULL
+    WHERE id = ${input.id} AND owner_type = 'gym' AND owner_id = ${input.gymId} AND cancel_sent_at = ${input.claimedAt}`;
+}
+
+/** Plans set to end whose paid month is over and which are still live: read from Razorpay
+ *  again, so they end even if its webhook never comes. */
+export async function dueCancelEnds(sql: SqlOrTx, input: { now: Date; limit: number }): Promise<string[]> {
+  const rows = await sql<{ provider_ref: string }[]>`
+    SELECT provider_ref FROM subscriptions
+    WHERE owner_type = 'gym' AND provider = 'razorpay' AND provider_ref IS NOT NULL
+      AND cancel_at_period_end AND status IN ('trialing','active')
+      AND current_period_end <= ${input.now}
+    ORDER BY current_period_end, id
+    LIMIT ${input.limit}`;
+  return rows.map((r) => r.provider_ref);
 }

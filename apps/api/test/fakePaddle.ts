@@ -42,7 +42,10 @@ export class FakePaddle implements PaddleApi {
   down = false;
   /** Make the next transaction carry a different amount than the one asked for. */
   wrongAmount = false;
-  clock = Date.parse("2026-10-01T00:00:00Z");
+  /** Paddle's clock: a day ahead of the test's own at least, as the paid-trial tests need (a
+   *  trial Paddle counts from it ends after the gym's own). Fixed at 2026-10-01 until real time
+   *  passed it that day, when those two tests went red on every branch. */
+  clock = Math.max(Date.parse("2026-10-01T00:00:00Z"), Math.floor(Date.now() / 1000) * 1000 + 24 * 60 * 60 * 1000);
   /** Every price change asked for, and every amount charged for one. */
   changeCalls: { subscriptionId: string; priceId: string; mode: ProrationMode }[] = [];
   charges: { subscriptionId: string; amount: number }[] = [];

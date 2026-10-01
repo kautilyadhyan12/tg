@@ -9,9 +9,11 @@ import {
   applyRazorpaySubscription,
   closeStaleTrialCheckouts,
   endExpiredGraces,
+  sendDueRazorpayCancels,
   settleOwedRefunds,
   type BillingDeps,
   type PendingSizesRun,
+  type RazorpayCancelsRun,
   type RefundsRun,
 } from "./service.js";
 
@@ -97,10 +99,12 @@ export interface RazorpayEventsRun {
   forgotten: number;
   refunds: RefundsRun;
   gracesEnded: number;
+  /** Plans set to end, sent to Razorpay or ended this run (1d-ii). */
+  cancels: RazorpayCancelsRun;
 }
 
-/** Razorpay's kept events (1d-i), then the refunds owed and the graces due: the same rule,
- *  lease and retries as Paddle's. */
+/** Razorpay's kept events (1d-i), then the refunds owed, the graces due and the cancels due:
+ *  the same rule, lease and retries as Paddle's. */
 export async function processRazorpayEvents(deps: BillingDeps): Promise<RazorpayEventsRun> {
   const run: RazorpayEventsRun = {
     applied: 0,
@@ -110,6 +114,7 @@ export async function processRazorpayEvents(deps: BillingDeps): Promise<Razorpay
     forgotten: 0,
     refunds: { requested: 0, notNeeded: 0, deferred: 0, failed: 0 },
     gracesEnded: 0,
+    cancels: { sent: 0, failed: 0, ended: 0 },
   };
   for (let taken = 0; taken < PADDLE_EVENTS.perRun; taken++) {
     const event = await webhooks.claimDueRazorpayEvent(deps.sql, deps.now(), PADDLE_EVENTS.leaseMs);
@@ -140,6 +145,18 @@ export async function processRazorpayEvents(deps: BillingDeps): Promise<Razorpay
   run.refunds = await settleOwedRefunds(deps);
   // After the events, so a payment Razorpay took in time is written before the grace ends.
   run.gracesEnded = await endExpiredGraces(deps);
+  // After the events, so Razorpay's latest record of each plan is written first.
+  run.cancels = await sendDueRazorpayCancels(deps);
+  // A refund owed for a month charged after a cancel, found just now, is made this run.
+  if (run.cancels.ended > 0) {
+    const more = await settleOwedRefunds(deps);
+    run.refunds = {
+      requested: run.refunds.requested + more.requested,
+      notNeeded: run.refunds.notNeeded + more.notNeeded,
+      deferred: run.refunds.deferred + more.deferred,
+      failed: run.refunds.failed + more.failed,
+    };
+  }
   const keepSince = new Date(deps.now().getTime() - PADDLE_EVENTS.keepDays * 24 * 60 * 60 * 1000);
   run.forgotten = await webhooks.forgetOldRazorpayEvents(deps.sql, keepSince, 1000);
   return run;

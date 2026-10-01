@@ -4,6 +4,16 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-10-01 · 1d-ii (Folder B): a Razorpay plan paid, its card changed, cancelled, from the console (branch `razorpay-manage-plan`)
+
+- **Why this job:** next on Folder B's list after 1e. **Risky (money), Opus xhigh; Kd: *"go"*.** Migration `0058_razorpay_cancel` (`subscriptions.cancel_sent_at`, refund reason `cancelled`); no new package, no new cost.
+- **Measured on Razorpay's test account first (a throwaway subscription paid with its recurring test card):** a month-end cancel leaves Razorpay's record exactly as before (`active`, next charge set, nothing scheduled), cannot be taken back (*"No Pending update for this subscription"*), answers 200 when asked again, and is refused before a first charge; the change-card window (₹5 check) leaves the plan as it was and offers card or bank account.
+- **Built:** Pay now (Razorpay's own page for the oldest bill owed; also in the overdue prompt), Update payment method (Razorpay's window in change mode), Cancel plan with a box (the end date, nothing more charged, "Your N members keep everything until then"), Keep my plan. The cancel is kept by us and sent 3 h before the paid month ends (`PLAN_CANCEL_DECIDE_HOURS`); a paid trial's is cancelled at once then and kept live to its end; an overdue plan's ends now. A month Razorpay charges after a cancel ends the plan at its paid end and is refunded (`razorpayCancelOutcome`); a plan with a failed payment counts as paid only when its newest invoice is paid (`razorpayOwes`). `invoice.paid` webhooks kept; the runbook asks for them.
+- **Worst thing, first test:** a cancel never ends a plan before the month paid for ends, and only this gym's billing staff can cancel, pay or change it. **Breaks, each RED, restored sha256-identical:** a Razorpay-ended plan ended at once (4 table rows + the trial test), the cancel sent the moment it is pressed, the worker cancelling now instead of at the month's end.
+- **Also fixed:** `fakePaddle`'s fixed clock (2026-10-01T00:00Z) was overtaken by real time today, turning two Paddle paid-trial tests red on every branch; it now stays a day ahead of now.
+- **Verified:** api **4,511 of 4,511** on `aihg_b` (rule table 59/59, Razorpay suite 35/35, Paddle 57/57); shared 274/274; web 3,338/3,338 (`poseAssets.contract` local Node 24); tsc and eslint 0. The real adapter run against the test account matched the fake. Seen in headless Edge on frfgrgrg: the box, the set-to-end card, Keep my plan (left as it was).
+- **Not reachable on the test account:** a real failed payment (Razorpay retries over 3 days), so Pay now's happy path is proven on the fake only. **Open:** Kd's click-through, round one, merge; 1d-iii next.
+
 ## 2026-09-30 · 1e (Folder B): Paddle's window filled in (branch `paddle-window-filled`)
 
 - **Why this job:** next on Folder B's list after 2f-i (RULINGS 2026-09-30). **Risky** (money; a person's email sent to Paddle), Opus xhigh; Kd: *"go"*. No migration, no new package, no new cost.

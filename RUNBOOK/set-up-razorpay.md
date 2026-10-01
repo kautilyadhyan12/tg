@@ -33,7 +33,8 @@ and Razorpay's webhook for renewals and failed payments.
 3. In Razorpay's dashboard (the same mode as the key): Account & Settings → Webhooks → Add
    New Webhook. URL `https://<api host>/v1/webhooks/razorpay`; a secret of your own (12 to
    200 visible characters), kept in escrow as `RAZORPAY_WEBHOOK_SECRET` and set on the api;
-   events: every `subscription.*` event.
+   events: every `subscription.*` event, and `invoice.paid` (a bill paid from its own page,
+   which a gym's Pay now opens, does not always change the subscription).
 
 ## Verify recovered
 

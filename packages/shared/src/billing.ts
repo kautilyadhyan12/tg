@@ -4,7 +4,7 @@
 // fields freely, so its objects are not strict.
 import { z } from "zod";
 import { orgSubscriptionSchema } from "./orgs.js";
-import { razorpayKeyIdSchema, razorpaySubscriptionIdSchema } from "./razorpay.js";
+import { razorpayKeyIdSchema, razorpayPayLinkSchema, razorpaySubscriptionIdSchema } from "./razorpay.js";
 
 const paddleId = (prefix: string) => z.string().regex(new RegExp(`^${prefix}_[a-z\\d]{26}$`));
 
@@ -106,6 +106,29 @@ export type OrgPlanChangePreview = z.infer<typeof orgPlanChangePreviewSchema>;
 /** The size changed: the gym's plan as it now stands. */
 export const orgPlanChangeResponseSchema = z.object({ subscription: orgSubscriptionSchema }).strict();
 export type OrgPlanChangeResponse = z.infer<typeof orgPlanChangeResponseSchema>;
+
+// ── A plan paid through Razorpay, managed from the console (1d-ii) ───────────
+
+/** Razorpay's own page for the oldest bill still owed: the gym pays it there. */
+export const orgRazorpayPayResponseSchema = z.object({ url: razorpayPayLinkSchema }).strict();
+export type OrgRazorpayPayResponse = z.infer<typeof orgRazorpayPayResponseSchema>;
+
+/** What the browser needs to open Razorpay's window for the gym's plan, to change the card
+ *  or bank account it is paid from. Filled in as the Subscribe window is (1d-i). */
+export const orgRazorpayMethodResponseSchema = z
+  .object({
+    keyId: razorpayKeyIdSchema,
+    subscriptionId: razorpaySubscriptionIdSchema,
+    contact: z.string().regex(/^\+91[6-9]\d{9}$/).nullable(),
+    email: payerEmailSchema.nullable(),
+  })
+  .strict();
+export type OrgRazorpayMethodResponse = z.infer<typeof orgRazorpayMethodResponseSchema>;
+
+/** Cancel plan or Keep my plan: the gym's plan as it now stands, or null when it has ended
+ *  (an overdue plan cancelled ends at once). */
+export const orgPlanCancelResponseSchema = z.object({ subscription: orgSubscriptionSchema.nullable() }).strict();
+export type OrgPlanCancelResponse = z.infer<typeof orgPlanCancelResponseSchema>;
 
 // ── Paddle ───────────────────────────────────────────────────────────────────
 

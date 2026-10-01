@@ -4,8 +4,9 @@ import { Link } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { orgService, errorCode, errorText, isRetryable } from '../../api/orgsApi';
 import { applyStartedTrial, refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
-import { RAZORPAY_OVERDUE, planPriceText, planPromptFor, planSeatLabel, pricesNote } from '../../pages/console/billingView';
+import { planPriceText, planPromptFor, planSeatLabel, pricesNote } from '../../pages/console/billingView';
 import ManagePaymentButton from './ManagePaymentButton';
+import RazorpayPlanActions from './RazorpayPlanActions';
 import { usePaddleSubscribe } from './usePaddleSubscribe';
 
 // THE PROMPT A GYM OWNER CANNOT SKIP — Kd's ruling of 2026-08-28 (:22215), and
@@ -324,11 +325,16 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
               app only and nothing here can be changed.
             </p>
             {org?.paymentOverdueThrough === 'razorpay' ? (
-              // Paid through Razorpay (1d-i): its own email carries the link, and nothing here
-              // can take the payment yet.
-              <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.6)' }} data-testid="overdue-razorpay">
-                {RAZORPAY_OVERDUE}. Once it&apos;s paid, everything opens again on its own.
-              </p>
+              // Paid through Razorpay (1d-ii): Pay now opens Razorpay's page for the bill owed.
+              <>
+                <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.6)' }} data-testid="overdue-razorpay">
+                  Pay the bill that&apos;s owed and everything opens again by itself. To have your next
+                  payments go through, update your payment method too.
+                </p>
+                <div className="mt-5">
+                  <RazorpayPlanActions org={org} />
+                </div>
+              </>
             ) : (
               <>
                 <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.6)' }}>

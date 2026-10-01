@@ -7,6 +7,7 @@ import { applyPaidPlan, refreshConsoleOrgsAfterChange } from '../../pages/consol
 import { ConsoleCard } from './ConsoleStates';
 import ManagePaymentButton from './ManagePaymentButton';
 import PlanChoiceDialog from './PlanChoiceDialog';
+import RazorpayPlanActions from './RazorpayPlanActions';
 import {
   canChangeSize,
   canManageBilling,
@@ -19,6 +20,7 @@ import {
   isTrialing,
   pendingChangeText,
   pendingFit,
+  planEndingText,
   planHeadline,
   seatLineText,
   seatMeter,
@@ -168,6 +170,7 @@ export default function TrialCard({ org }) {
   const payNow = canPayDuringTrial(org);
   const resize = canChangeSize(org);
   const razorpay = isPaidThroughRazorpay(org);
+  const ending = planEndingText(org);
   const change = pendingChangeText(sub, org?.orgType);
   const fit = pendingFit(org);
   const kept = sizeKeptText(sub, org?.orgType) ?? sizeFittedText(sub, org?.orgType);
@@ -214,6 +217,11 @@ export default function TrialCard({ org }) {
       {firstPayment !== null ? (
         <div className="text-sm mt-1" style={muted}>
           {sub.cancelAtPeriodEnd ? `Your plan ends with the trial, on ${endsOn ?? 'its last day'}.` : firstPayment}
+        </div>
+      ) : null}
+      {ending !== null ? (
+        <div className="text-sm mt-1" style={muted} data-testid="plan-ending">
+          {ending}
         </div>
       ) : null}
       {nextSize !== null && !sub.cancelAtPeriodEnd ? (
@@ -268,8 +276,8 @@ export default function TrialCard({ org }) {
       <SeatLine org={org} />
       {razorpay ? (
         <div className="text-sm mt-3" style={muted} data-testid="paid-through-razorpay">
-          Paid through Razorpay, which emails you about each payment. Changing your size or how you pay isn&apos;t
-          available here yet.
+          Paid through Razorpay, which emails you about each payment. Changing your size isn&apos;t available here
+          yet.
         </div>
       ) : null}
       {payNow ? (
@@ -281,11 +289,12 @@ export default function TrialCard({ org }) {
         {payNow ? <CardButton onClick={() => setChoosing('subscribe')}>Choose a plan</CardButton> : null}
         {resize ? <CardButton onClick={() => setChoosing('size')}>Change size</CardButton> : null}
         {/* A plan paid through Paddle is managed on Paddle's own page: the card, cancelling,
-            invoices. One paid through Razorpay is not managed here yet (1d-ii). */}
+            invoices. One paid through Razorpay is managed here (1d-ii), below. */}
         {!razorpay && (subscribed || sub.status === 'active' || sub.status === 'past_due') ? (
           <ManagePaymentButton gymId={org.id} label={sub.status === 'past_due' ? 'Update payment method' : 'Manage payment'} />
         ) : null}
       </div>
+      {razorpay ? <RazorpayPlanActions org={org} cancel /> : null}
       {cancelError !== null ? (
         <p className="text-sm mt-3" style={{ color: '#ef4444' }}>
           {cancelError}

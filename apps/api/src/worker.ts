@@ -478,7 +478,8 @@ if (paddle !== null || razorpay !== null) {
         const startedAt = Date.now();
         const run = await processRazorpayEvents(deps);
         const refunds = run.refunds.requested + run.refunds.notNeeded + run.refunds.deferred + run.refunds.failed;
-        if (run.applied + run.unchanged + run.deferred + run.givenUp + run.forgotten + refunds + run.gracesEnded > 0) {
+        const cancels = run.cancels.sent + run.cancels.failed + run.cancels.ended;
+        if (run.applied + run.unchanged + run.deferred + run.givenUp + run.forgotten + refunds + run.gracesEnded + cancels > 0) {
           log.info({ ...run, provider: "razorpay", durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
         }
       }
