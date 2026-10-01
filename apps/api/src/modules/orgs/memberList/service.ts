@@ -93,7 +93,7 @@ import {
 } from "./reconcile.js";
 import { importReviews } from "./review.js";
 import * as repo from "./repo.js";
-import { inAppRecordIds, pastRecordOf } from "./whose.js";
+import { currentRecordOf, inAppRecordIds, pastRecordOf } from "./whose.js";
 import { withdrawForAccounts, withdrawForAddresses } from "../invites/join.js";
 import { bustAfterRemoval } from "./byHandService.js";
 import { importLeaversPlanOn, importNeedsLargeTick, requireForPlan, type RemovalPlan } from "./removeSelected.js";
@@ -1538,8 +1538,9 @@ export async function readEntries(
   query: MemberListEntriesQuery,
   limit: () => Promise<boolean>,
 ): Promise<MemberListEntriesPage | null> {
-  await requirePrivilege(deps, gymId, userId, "members.confirm");
+  const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
+  const seesStaff = privileges.includes("staff.manage");
 
   // Parsed, not trusted, and not quietly ignored either: a cursor that does not
   // decode is a 400, never "start again from the top", which would silently restart
@@ -1576,6 +1577,15 @@ export async function readEntries(
       deps.now(),
     ),
   ]);
+  // Whose each record is, among the people in the app who also run the gym: the list's
+  // Staff tag (Kd's 4a-ii click-through).
+  const staffByRecord = new Map<string, { role: "owner" | "manager" | "trainer"; roleName: string | null }>();
+  for (const member of members) {
+    if (member.staff == null) continue;
+    for (const id of [currentRecordOf(member), pastRecordOf(member)]) {
+      if (id !== null && !staffByRecord.has(id)) staffByRecord.set(id, member.staff);
+    }
+  }
   return {
     total: page.total,
     entries: shown.map((entry, at) => ({
@@ -1597,6 +1607,7 @@ export async function readEntries(
       invitation: invitations[at] ?? null,
       app: appOrThrow(app[at]),
       needsReview: entry.needsReview,
+      staff: seesStaff ? (staffByRecord.get(entry.entryId) ?? null) : null,
     })),
     cursor: last === undefined ? null : encodeEntryCursor({ name: last.fullName, id: last.entryId }),
   };

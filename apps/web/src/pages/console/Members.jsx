@@ -10,9 +10,12 @@ import ApplicationsQueue from './ApplicationsQueue';
 import MemberListPanel, { Tick } from './MemberListPanel';
 import MemberListPerson from './MemberListPerson';
 import MemberListRemove from './MemberListRemove';
+import MembersStaffTab from './MembersStaffTab';
 import { MEMBER_REMOVE_TICKED_MAX, orgWords } from '@app/shared';
 import {
   canRemoveMembers,
+  staffRemoveView,
+  staffTag,
   viewerPrivileges,
   groupLabelText,
   memberCountLabel,
@@ -21,6 +24,7 @@ import {
 } from './consoleView';
 import { canMakeRoomNow, consoleIsReadOnly, memberMeterText, readOnlyNote, seatMeter } from './billingView';
 import { shortWhen } from './memberListPeople';
+import { canManageStaff } from './staffView';
 import PlanChoiceDialog from '../../components/console/PlanChoiceDialog';
 
 // The Members screen (spec Part 3 §4.3, §18.2), drawn from `console.css` (spec §17):
@@ -40,7 +44,7 @@ import PlanChoiceDialog from '../../components/console/PlanChoiceDialog';
 /** One person in the app, as Leads shows a lead: their name, since when, and one tag.
  *  Everything to do with them is on their panel (`RosterSheet`). `picked` is null where
  *  staff can't tick people (a trainer, a read-only gym). */
-function RosterRow({ member, onOpen, picked = null, onTick }) {
+function RosterRow({ member, words, onOpen, picked = null, onTick }) {
   // An app member the gym's list does not hold (3a-vi-b). Only staff who may see the
   // list are sent it.
   const off = offListView(member.offList);
@@ -63,7 +67,9 @@ function RosterRow({ member, onOpen, picked = null, onTick }) {
           <span className="c-s13 c-t2 c-ell">In the app since {shortWhen(member.joinedAt)}</span>
         </span>
         <span>
-          {seatIsFree(member) ? (
+          {staffTag(member, words) !== null ? (
+            <span className="c-tag c-tag-soft">{staffTag(member, words)}</span>
+          ) : seatIsFree(member) ? (
             <span className="c-tag c-tag-soft">Complimentary</span>
           ) : off ? (
             <span className="c-tag c-tag-warn">
@@ -82,15 +88,19 @@ function RosterRow({ member, onOpen, picked = null, onTick }) {
  *  them on the list, or Remove (One Remove, RULINGS 2026-09-27: someone on the list moves
  *  to past members AND leaves the app in the same step). A side panel on a computer, the
  *  whole screen on a phone, as a lead's panel is. */
-function RosterSheet({ member, words, seesList, canRemove, readOnly, busy, onClose, onRemove, onPutOnList, onOpenRecord }) {
+function RosterSheet({ member, words, seesList, canRemove, managesStaff, readOnly, busy, onClose, onRemove, onPutOnList, onOpenRecord }) {
   const [asking, setAsking] = useState(false);
+  const [alsoStaff, setAlsoStaff] = useState(false);
   const off = offListView(member.offList);
   const free = seatIsFree(member);
+  // Staff and the owner are removed here too since 4a-ii, by the owner alone.
+  const staff = staffRemoveView(member, words);
+  const mayRemove = canRemove && (staff === null ? !free : managesStaff);
   // Remove moves a record to past members only when the server named the record that is
   // certainly theirs (`recordId`); a gym with no list, someone on no list, and a family's
   // shared email the list can't place lose their app access and nothing else (round one
   // of 5b-v-a-i, High-6).
-  const movesRecord = seesList && !free && member.recordId !== undefined;
+  const movesRecord = seesList && (!free || staff !== null) && member.recordId !== undefined;
   const question = movesRecord
     ? `Remove ${member.displayName}? They'll be moved to past ${words.people} and lose access to your ${words.it} in the app. Their own workout history isn't affected, and you can put them back at any time.`
     : `Remove ${member.displayName}'s app access? They'll lose access to your ${words.it} in the app. Their own workout history isn't affected.`;
@@ -118,10 +128,16 @@ function RosterSheet({ member, words, seesList, canRemove, readOnly, busy, onClo
           </button>
         </div>
         <div className="flex flex-col gap-4 px-4 py-5 md:px-7">
-          {free ? (
+          {staffTag(member, words) !== null ? (
+            <p className="c-s14 c-t2">
+              <span className="c-tag c-tag-soft mr-2">{staffTag(member, words)}</span>
+              {member.staff.role === 'owner' ? `Runs this ${words.it}.` : 'Also works here.'} Their place in the app is free and isn&apos;t
+              counted in your plan. Manage staff in Settings.
+            </p>
+          ) : free ? (
             <p className="c-s14 c-t2">
               <span className="c-tag c-tag-soft mr-2">Complimentary</span>
-              The owner and staff use the app for free. Manage staff in Settings.
+              This place in the app is free and isn&apos;t counted in your plan.
             </p>
           ) : null}
           {/* The name on the gym's own list, beside the name they gave the app. The email on
@@ -150,15 +166,45 @@ function RosterSheet({ member, words, seesList, canRemove, readOnly, busy, onClo
               </button>
             ) : null}
             {/* A trainer is refused the removal, so it is not drawn for them; a lapsed gym
-                greys it rather than hiding it (the server's 403 enforces both). The owner
-                and staff are removed with staff. */}
-            {!free && canRemove && !asking ? (
+                greys it rather than hiding it (the server's 403 enforces both). Staff and
+                the owner only for someone who manages staff. */}
+            {mayRemove && !asking ? (
               <button type="button" onClick={() => setAsking(true)} disabled={busy || readOnly} className="c-btn c-btn-s">
                 Remove
               </button>
             ) : null}
           </div>
-          {asking ? (
+          {asking && staff !== null ? (
+            <div className="flex flex-col gap-3">
+              <p className="c-s14 c-t1">{question}</p>
+              <p className="c-s14 c-t1">{staff.staffLine}</p>
+              {staff.tickLabel !== null ? (
+                <div className="flex items-start gap-2">
+                  <Tick state={alsoStaff ? 'on' : 'off'} label={staff.tickLabel} onClick={() => setAlsoStaff((on) => !on)} />
+                  <span className="flex flex-col gap-0.5 cursor-pointer" onClick={() => setAlsoStaff((on) => !on)}>
+                    <span className="c-s14 c-w6 c-t1">{staff.tickLabel}</span>
+                    <span className="c-s13 c-t2">{alsoStaff ? staff.goLine : staff.keepLine}</span>
+                  </span>
+                </div>
+              ) : null}
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAsking(false);
+                    onRemove({ alsoStaff: staff.tickLabel !== null && alsoStaff });
+                  }}
+                  disabled={busy || readOnly}
+                  className="c-btn c-btn-sm c-btn-danger"
+                >
+                  {alsoStaff ? 'Remove from app and staff' : 'Remove from app'}
+                </button>
+                <button type="button" onClick={() => setAsking(false)} disabled={busy || readOnly} className="c-btn c-btn-sm c-btn-s">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : asking ? (
             <ConfirmInline
               newLook
               question={question}
@@ -182,8 +228,9 @@ const NOBODY_TICKED = new Set();
 /** "In the app" has no "Select all": nothing there can move under a selection. */
 const NOTHING = () => undefined;
 
-/** "Already in the app · 3" under an empty list (`MembersEmpty`). */
-function AlreadyInApp({ items }) {
+/** "Already in the app · 3" under an empty list (`MembersEmpty`). Each name opens that
+ *  person's panel on "In the app", as a row there does (4a-ii click-through). */
+function AlreadyInApp({ items, words, onOpen }) {
   if (items.length === 0) return null;
   return (
     <section className="c-card overflow-hidden" aria-labelledby="already-title">
@@ -192,14 +239,23 @@ function AlreadyInApp({ items }) {
       </h2>
       <ul>
         {items.map((m) => (
-          <li
-            key={m.userId}
-            className="flex flex-col md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_minmax(0,1fr)] gap-1 md:gap-4 md:items-center px-5 py-3.5 border-t"
-            style={{ borderColor: 'var(--line)' }}
-          >
-            <span className="c-s15 c-w6 c-t1 c-ell">{m.displayName}</span>
-            <span className="c-s14 c-t2">In the app since {shortWhen(m.joinedAt)}</span>
-            <span>{seatIsFree(m) ? <span className="c-tag c-tag-soft">Complimentary</span> : null}</span>
+          <li key={m.userId} className="border-t" style={{ borderColor: 'var(--line)' }}>
+            <button
+              type="button"
+              onClick={() => onOpen(m)}
+              className="w-full text-left flex flex-col md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto] gap-1 md:gap-4 md:items-center min-h-11 px-5 py-3.5"
+            >
+              <span className="c-s15 c-w6 c-t1 c-ell">{m.displayName}</span>
+              <span className="c-s14 c-t2">In the app since {shortWhen(m.joinedAt)}</span>
+              <span>
+                {staffTag(m, words) !== null ? (
+                  <span className="c-tag c-tag-soft">{staffTag(m, words)}</span>
+                ) : seatIsFree(m) ? (
+                  <span className="c-tag c-tag-soft">Complimentary</span>
+                ) : null}
+              </span>
+              <ChevronRight aria-hidden="true" className="hidden md:block w-[18px] h-[18px] c-t3" />
+            </button>
           </li>
         ))}
       </ul>
@@ -246,13 +302,16 @@ export default function Members() {
   const canSeeList = viewerPrivileges(org).includes('members.confirm');
   // Which tab, kept in the address so a reload stays on it.
   const [searchParams, setSearchParams] = useSearchParams();
-  const tab = canSeeList && searchParams.get('view') !== 'app' ? 'list' : 'app';
+  // Removing staff or the owner from the app, and the Staff tab, are the owner's (4a-ii).
+  const managesStaff = canManageStaff(viewerPrivileges(org));
+  const view = searchParams.get('view');
+  const tab = view === 'staff' && managesStaff ? 'staff' : canSeeList && view !== 'app' ? 'list' : 'app';
   // Only the tab changes: the rest of the address (the development build's `?look=light`) stays.
   const showTab = (next) =>
     setSearchParams(
       (was) => {
         const params = new URLSearchParams(was);
-        if (next === 'app') params.set('view', 'app');
+        if (next === 'app' || next === 'staff') params.set('view', next);
         else params.delete('view');
         return params;
       },
@@ -346,12 +405,12 @@ export default function Members() {
     }
   };
 
-  const removeMember = async (member) => {
+  const removeMember = async (member, { alsoStaff = false } = {}) => {
     if (gymId === null) return;
     setRemovingId(member.userId);
     setRemoveError(null);
     try {
-      await orgService.removeMember(gymId, member.userId);
+      await orgService.removeMember(gymId, member.userId, { alsoStaff });
       setOpenUserId(null);
       setListKey((n) => n + 1);
       reloadRoster();
@@ -533,6 +592,7 @@ export default function Members() {
           {[
             ['list', 'Your list'],
             ['app', 'In the app'],
+            ...(managesStaff ? [['staff', 'Staff']] : []),
           ].map(([key, label]) => (
             <button
               key={key}
@@ -557,11 +617,22 @@ export default function Members() {
           refreshKey={listKey}
           action={action}
           onActionTaken={clearAction}
-          emptyExtra={<AlreadyInApp items={state.items} />}
+          emptyExtra={
+            <AlreadyInApp
+              items={state.items}
+              words={words}
+              onOpen={(m) => {
+                showTab('app');
+                openFromRoster(m);
+              }}
+            />
+          }
           onRosterChanged={reloadRoster}
           canRemove={canRemove}
         />
       ) : null}
+
+      {tab === 'staff' && gymId !== null ? <MembersStaffTab gymId={gymId} orgSlug={orgSlug} words={words} readOnly={readOnly} onChanged={reloadRoster} /> : null}
 
       {/* Search and, with people ticked, the bar stay at the top on a computer (as on the list). */}
       {tab === 'app' ? (
@@ -631,6 +702,7 @@ export default function Members() {
               <RosterRow
                 key={m.userId}
                 member={m}
+                words={words}
                 onOpen={() => openFromRoster(m)}
                 picked={canTick ? rosterTicked.has(m.userId) : null}
                 onTick={() => tickRosterRow(m.userId)}
@@ -671,10 +743,11 @@ export default function Members() {
           words={words}
           seesList={canSeeList}
           canRemove={canRemove}
+          managesStaff={managesStaff}
           readOnly={readOnly}
           busy={removingId === openMember.userId}
           onClose={() => setOpenUserId(null)}
-          onRemove={() => removeMember(openMember)}
+          onRemove={(options) => removeMember(openMember, options)}
           onPutOnList={() => putOnList(openMember)}
           onOpenRecord={(recordId) => {
             setOpenUserId(null);

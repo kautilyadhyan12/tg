@@ -1725,6 +1725,13 @@ export const memberListEntrySchema = z.object({
   /** An import found a problem with this current member that staff have not fixed yet:
    *  the row's one "Review needed" tag, however many problems (5b-v-d-iv). */
   needsReview: z.boolean().default(false),
+  /** The person in the app this record is theirs also runs the gym: their role and the
+   *  gym's own name for it, for the row's Staff tag (4a-ii); null for a member. */
+  staff: z
+    .object({ role: z.enum(["owner", "manager", "trainer"]), roleName: z.string().nullable() })
+    .strict()
+    .nullable()
+    .default(null),
   /** **THE GYM'S OWN COLUMNS ARE NOT HERE, AND THAT IS DELIBERATE.** A page holds a
    *  hundred people and a gym may keep forty of its own columns of up to five hundred
    *  characters each, so carrying them would be two megabytes of a screen that shows
@@ -1927,6 +1934,9 @@ export const memberRemovePreviewSchema = z
     selected: z.number().int().min(0),
     move: z.array(memberRemovePersonSchema),
     endApp: z.array(memberRemovePersonSchema),
+    /** Of `endApp`, staff (and the owner) the owner ticked: they leave the app and keep
+     *  their staff access (4a-ii). Optional while an older server leaves it out. */
+    keepConsole: z.array(memberRemovePersonSchema).optional(),
     kept: z.array(z.object({ reason: memberRemoveKeptReasonSchema, people: z.array(memberRemovePersonSchema) }).strict()),
     /** Of the records moving, how many nobody in the app uses: no person in the app is
      *  theirs, and no family's shared email in the app is on them. */

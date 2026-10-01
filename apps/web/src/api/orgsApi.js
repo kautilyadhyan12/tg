@@ -18,6 +18,7 @@ import {
   staffRolesResponseSchema,
   declineStaffInvitationResponseSchema,
   myStaffInvitationsResponseSchema,
+  resendStaffInviteResponseSchema,
   staffInvitesResponseSchema,
   gymEnquiryResponseSchema,
   gymPagePhotoResponseSchema,
@@ -1163,11 +1164,13 @@ export const orgService = {
    *  Built because Kd asked what happens when a gym confirms the wrong person:
    *  before this, nothing could end a membership. The member keeps every
    *  workout; what ends is the gym's access and the gym's perks. */
-  removeMember: (gymId, userId) =>
+  removeMember: (gymId, userId, { alsoStaff = false } = {}) =>
     readThrough(
       removeMemberResponseSchema,
       'that removal',
-      authApi.delete(`/v1/orgs/${gymId}/members/${userId}`),
+      // 4a-ii: somebody who is also staff keeps the console unless `alsoStaff` takes it in
+      // the same step (owner only).
+      authApi.delete(`/v1/orgs/${gymId}/members/${userId}${alsoStaff ? '?alsoStaff=true' : ''}`),
     ),
 
   /** GET /v1/orgs/:gymId/staff — Part 3 §4.7's list, owner-only.
@@ -1231,6 +1234,15 @@ export const orgService = {
       cancelStaffInviteResponseSchema,
       'that invitation',
       authApi.delete(`/v1/orgs/${gymId}/staff/invites/${encodeURIComponent(inviteId)}`),
+    ),
+
+  /** POST /v1/orgs/:gymId/staff/invites/:inviteId/resend — Send again: the email once more
+   *  and 7 more days (4a-ii). */
+  resendStaffInvite: (gymId, inviteId) =>
+    readThrough(
+      resendStaffInviteResponseSchema,
+      'that invitation',
+      authApi.post(`/v1/orgs/${gymId}/staff/invites/${encodeURIComponent(inviteId)}/resend`, {}),
     ),
 
   /** GET /v1/orgs/staff-invitations — staff invitations waiting for the signed-in address. */
@@ -1300,9 +1312,8 @@ export const orgService = {
    *  the Staff panel offers both in one question because Kd ruled that an owner
    *  should not have to remember the second step (2026-08-22).
    *
-   *  **The ORDER is forced by the server**: `removeMember` refuses anybody who
-   *  is still staff (409 `member_is_staff`), so it is always keys first, then
-   *  membership. Doing it the other way round cannot work. */
+   *  Keys first, then membership: a failure between the two leaves somebody who is
+   *  a member and no longer staff, which the panel names. */
   removeStaff: (gymId, userId) =>
     readThrough(
       removeOrgStaffResponseSchema,

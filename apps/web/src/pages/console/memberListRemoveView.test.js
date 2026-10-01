@@ -44,6 +44,17 @@ describe('who changes, and the button', () => {
   const MOVE = 'Their details are kept, and you can put them back at any time.';
   const ENDS = "They keep their own workouts and the free app, and the app tells them they're no longer a member of Iron House Gym.";
 
+  it('staff the owner ticked: they lose the app, and a line names who keeps their staff access (4a-ii)', () => {
+    expect(lines({ endApp: [oliviaApp], keepConsole: [oliviaApp] })).toEqual([
+      ['endApp', '1 will lose access to the app', `Only people who use the app lose access. ${ENDS}`],
+      [
+        'keepConsole',
+        '1 of them keeps their staff access',
+        'They can still open the console. To remove someone from staff too, use Settings, Staff, or Remove on their own panel.',
+      ],
+    ]);
+  });
+
   it('one in the app and one not: says why only one loses access', () => {
     expect(lines({ move: [olivia, ava], endApp: [oliviaApp], movingNotInApp: 1 })).toEqual([
       ['move', '2 will move to past members', MOVE],
@@ -120,7 +131,7 @@ describe("who doesn't change", () => {
     );
     expect(kept.heading).toBe("5 won't change");
     expect(kept.groups.map((g) => [g.key, g.line, g.people.length, g.count])).toEqual([
-      ['staff', 'Owner and staff keep the app. Manage staff in Settings.', 1, 1],
+      ['staff', 'Staff and the owner keep the app here. The owner can remove them from it on In the app.', 1, 1],
       ['shared_email', "Keep the app: they share an email address with someone still on your list, so we can't tell whose it is.", 1, 1],
       ['same_record', 'Keep the app: their record is the same as someone you selected, so it moves to past members with them.', 1, 1],
       ['gone', 'No longer on your list.', 0, 2],

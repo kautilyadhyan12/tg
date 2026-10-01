@@ -16,6 +16,7 @@ import {
   STAFF_INVITE_DAYS,
   STAFF_INVITE_EMAILS_PER_ADDRESS_WEEK,
   STAFF_INVITE_EMAILS_PER_DAY,
+  STAFF_INVITE_RESENDS_MAX,
   STAFF_INVITE_WORDS,
   withArticle,
   STAFF_INVITES_OPEN_MAX,
@@ -36,6 +37,7 @@ import {
   type CreateStaffInviteResponse,
   type DeclineStaffInvitationResponse,
   type MyStaffInvitationsResponse,
+  type ResendStaffInviteResponse,
   type StaffInvitesResponse,
 } from "@app/shared";
 import type { Sql } from "postgres";
@@ -43,6 +45,7 @@ import { accountAddress } from "../../auth/service.js";
 import * as orgRepo from "../repo.js";
 import { canonicalPrivileges, defaultPrivilegesFor, OrgsError, requirePrivilege, requireWritablePrivilege, toOrgStaff } from "../service.js";
 import { emailHmac } from "../invites/address.js";
+import { suppressionsFor } from "../invites/repo.js";
 import type { InviteSettings } from "../invites/settings.js";
 import * as repo from "./repo.js";
 
@@ -70,7 +73,6 @@ export async function createStaffInvite(
   input: CreateStaffInviteRequest,
 ): Promise<CreateStaffInviteResponse> {
   const { org } = await requireWritablePrivilege(deps, gymId, userId, "staff.manage");
-  const words = orgWords(org.orgType);
   // One of the gym's own roles: its name is shown in place of the role, which is a
   // trainer's underneath; the ticks are what the console obeys (RULINGS 2026-10-01).
   const ownRole = input.roleId === undefined ? null : await repo.roleById(deps.sql, gymId, input.roleId);
@@ -167,19 +169,26 @@ export async function createStaffInvite(
       declinedAt: null,
       emailStatus: "sending",
       emailReason: null,
+      lastSentAt: invite.createdAt.toISOString(),
+      resendsLeft: STAFF_INVITE_RESENDS_MAX,
+      // The week's 3 to this address are counted again on the next read of the list.
+      sendAgainFrom: null,
     }),
   };
 
-  function alreadyStaff(displayName: string, role: string, roleName: string | null, orgType: unknown): OrgsError {
-    const word = roleName ?? (role === "manager" ? "manager" : orgWords(orgType).coach);
-    return new OrgsError(
-      409,
-      "already_staff",
-      role === "owner"
-        ? `That person owns this ${words.it}.`
-        : `${displayName} is already ${withArticle(word)} here. Change what they can do instead of inviting them again.`,
-    );
-  }
+}
+
+/** "Mia Lopez is already a trainer here." The refusal of an invitation to somebody who runs
+ *  the gym, new or sent again. */
+function alreadyStaff(displayName: string, role: string, roleName: string | null, orgType: unknown): OrgsError {
+  const word = roleName ?? (role === "manager" ? "manager" : orgWords(orgType).coach);
+  return new OrgsError(
+    409,
+    "already_staff",
+    role === "owner"
+      ? `That person owns this ${orgWords(orgType).it}.`
+      : `${displayName} is already ${withArticle(word)} here. Change what they can do instead of inviting them again.`,
+  );
 }
 
 export async function listStaffInvites(deps: StaffInviteDeps, userId: string, gymId: string): Promise<StaffInvitesResponse> {
@@ -215,6 +224,75 @@ export async function cancelStaffInvite(
   });
   if (!found) throw new OrgsError(404, "invite_not_found", STAFF_INVITE_WORDS.invite_not_found);
   return { status: "cancelled" };
+}
+
+/** Send again (ROADMAP 4a-ii): the same invitation's email once more, and 7 more days
+ *  from now, at most `STAFF_INVITE_RESENDS_MAX` times. Waiting, ended or declined alike.
+ *  Under the gym's lock: the gym's caps as for a new invitation, an address that bounced
+ *  or complained is refused here rather than skipped by the worker, and a second press
+ *  while the last email is still to go sends nothing. */
+export async function resendStaffInvite(
+  deps: StaffInviteDeps,
+  userId: string,
+  gymId: string,
+  inviteId: string,
+): Promise<ResendStaffInviteResponse> {
+  const { org } = await requireWritablePrivilege(deps, gymId, userId, "staff.manage");
+  const settings = deps.invites;
+  if (settings?.sender == null) throw new OrgsError(409, "sending_off", STAFF_INVITE_WORDS.sending_off);
+  const at = deps.now();
+  const staffNow = await deps.sql.begin(async (tx) => {
+    await orgRepo.lockOrgRow(tx, gymId);
+    const invite = await repo.lockOpenInvite(tx, gymId, inviteId);
+    if (invite === null) throw new OrgsError(404, "invite_not_found", STAFF_INVITE_WORDS.invite_not_found);
+    // Made staff another way since (appointed from the member list): the invitation would
+    // promise a role Accept does not give. It leaves the owner's list, and is refused.
+    const staff = await repo.staffNameAt(tx, gymId, invite.email);
+    if (staff !== null) {
+      await repo.clearInvite(tx, gymId, inviteId, at);
+      return staff;
+    }
+    const sends = await repo.sendsOf(tx, gymId, inviteId);
+    if (sends.waiting) throw new OrgsError(409, "still_sending", STAFF_INVITE_WORDS.still_sending);
+    if (repo.resendsLeft(sends.count) === 0) throw new OrgsError(409, "resends_used", STAFF_INVITE_WORDS.resends_used(invite.email));
+    const hmac = emailHmac(settings.hmacKey, invite.email);
+    const blocked = (await suppressionsFor(tx, gymId, [hmac])).get(hmac);
+    if (blocked !== undefined) throw new OrgsError(409, "address_blocked", STAFF_INVITE_WORDS.address_blocked(invite.email, blocked));
+    const counts = await repo.inviteCounts(tx, {
+      gymId,
+      email: invite.email,
+      now: at,
+      dayAgo: new Date(at.getTime() - DAY_MS),
+      weekAgo: new Date(at.getTime() - 7 * DAY_MS),
+    });
+    const waitingNow = invite.state === "pending" && invite.expiresAt.getTime() > at.getTime();
+    if (!waitingNow && counts.waiting >= STAFF_INVITES_OPEN_MAX) throw new OrgsError(409, "too_many_open", STAFF_INVITE_WORDS.too_many_open);
+    if (counts.sentToday >= STAFF_INVITE_EMAILS_PER_DAY) throw new OrgsError(429, "too_many_today", STAFF_INVITE_WORDS.too_many_today);
+    if (counts.sentToAddress >= STAFF_INVITE_EMAILS_PER_ADDRESS_WEEK) {
+      throw new OrgsError(429, "too_many_to_address", STAFF_INVITE_WORDS.too_many_to_address(invite.email));
+    }
+    await repo.resendInvite(tx, {
+      gymId,
+      inviteId,
+      email: invite.email,
+      emailHmac: hmac,
+      at,
+      expiresAt: new Date(at.getTime() + STAFF_INVITE_DAYS * DAY_MS),
+    });
+    await orgRepo.insertAudit(tx, {
+      actorUserId: userId,
+      gymId,
+      action: "org.staff_invite_resent",
+      targetType: "staff_invite",
+      targetId: inviteId,
+      meta: { was: waitingNow ? "waiting" : invite.state === "declined" ? "declined" : "ended" },
+    });
+    return null;
+  });
+  if (staffNow !== null) throw alreadyStaff(staffNow.displayName, staffNow.role, staffNow.roleName, org.orgType);
+  const [view] = await repo.listOpenInvites(deps.sql, gymId, at, inviteId);
+  if (view === undefined) throw new OrgsError(404, "invite_not_found", STAFF_INVITE_WORDS.invite_not_found);
+  return { invite: view };
 }
 
 // ── The gym's own roles (Kd, RULINGS 2026-10-01) ─────────────────────────────
@@ -345,14 +423,16 @@ export async function acceptStaffInvitation(
     if (org === null || org.status !== "active") return { kind: "none" };
     const invite = await repo.lockInviteFor(tx, { gymId, inviteId, email, userId: caller.id });
     if (invite === null) return { kind: "none" };
+    // A deletion of this account cannot cross the staff row written below.
+    if (!(await repo.lockLiveAccount(tx, caller.id))) return { kind: "none" };
     const existing = await repo.staffRowOf(tx, gymId, caller.id);
     // A second Accept: still staff by it, or it opens nothing.
     if (invite.state === "accepted") {
-      if (existing === null || !existing.counts) return { kind: "none" };
+      if (existing === null) return { kind: "none" };
       return { kind: "already_staff", org, role: toRole(existing.role) };
     }
     if (invite.expiresAt.getTime() <= at.getTime()) return { kind: "ended", org };
-    if (existing !== null && existing.counts) {
+    if (existing !== null) {
       await repo.answerInvite(tx, { gymId, inviteId, state: "accepted", by: caller.id, at });
       return { kind: "already_staff", org, role: toRole(existing.role) };
     }

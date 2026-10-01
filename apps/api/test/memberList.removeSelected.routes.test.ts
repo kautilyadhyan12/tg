@@ -378,7 +378,7 @@ d("Remove on the people selected (real Postgres)", () => {
   );
 
   it(
-    "staff keep their app: a ticked coach's record moves, the owner ticked on In the app is kept",
+    "staff keep their app from Your list: a ticked coach's record moves; on In the app the owner may tick themselves out of the app and stays the owner (4a-ii)",
     async () => {
       const gym = await makeGym();
       const coach = await joined(gym, "Coach Dee", "dee");
@@ -390,8 +390,47 @@ d("Remove on the people selected (real Postgres)", () => {
       expect(await inApp(gym, coach.user)).toBe(true);
 
       const owner = await rosterPreview(gym, [gym.owner.userId]);
-      expect(owner.endApp).toEqual([]);
-      expect(owner.kept.map((k) => k.reason)).toEqual(["staff"]);
+      expect(owner.endApp.map((p) => p.userId)).toEqual([gym.owner.userId]);
+      expect((owner.keepConsole ?? []).map((p) => p.userId)).toEqual([gym.owner.userId]);
+      expect(owner.kept).toEqual([]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "Your list tags a record whose person also runs the gym, with their role, and nobody else's; another gym reads nothing (4a-ii)",
+    async () => {
+      const gym = await makeGym();
+      const other = await makeGym();
+      const coach = await joined(gym, "Coach Dee", "tag-dee");
+      const member = await joined(gym, "Rae Lin", "tag-rae");
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, role_name) VALUES (${gym.id}, ${coach.user.userId}, 'trainer', 'Front desk')`;
+      const res = await get(`/v1/orgs/${gym.id}/member-list/entries`, gym.owner.cookies);
+      expect(res.statusCode, res.body).toBe(200);
+      const entries = (JSON.parse(res.body) as { page: { entries: { entryId: string; staff: unknown }[] } }).page.entries;
+      const staffOf = (id: string) => entries.find((e) => e.entryId === id)?.staff;
+      expect(staffOf(coach.entryId)).toEqual({ role: "trainer", roleName: "Front desk" });
+      expect(staffOf(member.entryId)).toBeNull();
+      expect((await get(`/v1/orgs/${gym.id}/member-list/entries`, other.owner.cookies)).statusCode).toBe(404);
+
+      // A manager who sees the list sees nobody's staff role on it (round one, L4).
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${member.user.userId}, 'manager', ${["members.read", "members.confirm"]})`;
+      const asManager = await get(`/v1/orgs/${gym.id}/member-list/entries`, member.user.cookies);
+      expect(asManager.statusCode, asManager.body).toBe(200);
+      const managerSees = (JSON.parse(asManager.body) as { page: { entries: { staff: unknown }[] } }).page.entries;
+      expect(managerSees.every((e) => e.staff === null)).toBe(true);
+      // And on the one record's own panel (the re-check's L4).
+      const panelAs = async (who: User) =>
+        (JSON.parse((await get(`/v1/orgs/${gym.id}/member-list/entries/${coach.entryId}`, who.cookies)).body) as { entry: { staff: unknown } }).entry.staff;
+      expect(await panelAs(member.user)).toBeNull();
+      expect(await panelAs(gym.owner)).toEqual({ role: "trainer", roleName: "Front desk" });
+
+      // The owner's staff list says whose list record removing them from the app moves
+      // (round one, L5): the coach, joined through their record.
+      const staffRes = await get(`/v1/orgs/${gym.id}/staff`, gym.owner.cookies);
+      const staffList = (JSON.parse(staffRes.body) as { staff: { userId: string; movesRecord?: boolean }[] }).staff;
+      expect(staffList.find((p) => p.userId === coach.user.userId)?.movesRecord).toBe(true);
+      expect(staffList.find((p) => p.userId === gym.owner.userId)?.movesRecord).toBe(false);
     },
     TEST_TIMEOUT_MS,
   );

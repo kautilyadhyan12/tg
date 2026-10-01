@@ -25,6 +25,7 @@ import {
   markGymAttendanceRequestSchema,
   setGymHoursRequestSchema,
   memberParamsSchema,
+  removeMemberQuerySchema,
   sendGymCheerRequestSchema,
   sendGymNudgeRequestSchema,
   myApplicationParamsSchema,
@@ -850,11 +851,14 @@ export function registerOrgRoutes(
     async (req, reply) => {
       const params = parseOr400(memberParamsSchema, req.params, req, reply);
       if (params === null) return;
+      const query = parseOr400(removeMemberQuerySchema, req.query ?? {}, req, reply);
+      if (query === null) return;
       const result = await service.removeOrgMember(
         orgDeps,
         requireUserId(req),
         params.gymId,
         params.userId,
+        query,
       );
       return reply.status(200).send(result);
     },

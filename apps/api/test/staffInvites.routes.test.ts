@@ -20,16 +20,21 @@ import { sendDueStaffInvites, type StaffSendRun } from "../src/modules/orgs/staf
 import { forgetOldStaffInvites } from "../src/modules/orgs/staffInvites/repo.js";
 import { emailHmac } from "../src/modules/orgs/invites/address.js";
 import { emailsUsedToday } from "../src/modules/orgs/invites/repo.js";
+import { restoreUser, softDeleteUser } from "../src/modules/users/repo.js";
+import * as orgRepo from "../src/modules/orgs/repo.js";
 import {
   ROLE_PRIVILEGES,
   STAFF_INVITE_EMAILS_PER_ADDRESS_WEEK,
   STAFF_INVITES_OPEN_MAX,
   STAFF_INVITE_EMAILS_PER_DAY,
+  STAFF_INVITE_RESENDS_MAX,
   STAFF_ROLES_MAX,
   STAFF_INVITE_WORDS,
   acceptStaffInvitationResponseSchema,
   createStaffInviteResponseSchema,
   myStaffInvitationsResponseSchema,
+  orgMemberPageSchema,
+  resendStaffInviteResponseSchema,
   staffInvitesResponseSchema,
   type MyStaffInvitationsResponse,
   type StaffInvite,
@@ -100,6 +105,7 @@ d("staff invited by email (real Postgres)", () => {
     await sql`DELETE FROM gym_staff_roles WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM email_suppressions WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM email_suppressions WHERE gym_id IS NULL AND email_hmac = ${emailHmac(settings.hmacKey, addr("supp-bounced"))}`;
+    await sql`DELETE FROM email_suppressions WHERE gym_id IS NULL AND email_hmac = ${emailHmac(settings.hmacKey, addr("again-bounced"))}`;
     await sql`DELETE FROM gym_members WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine()})`;
     await sql`DELETE FROM gym_staff WHERE gym_id IN (${mine()})`;
@@ -620,11 +626,11 @@ d("staff invited by email (real Postgres)", () => {
   );
 
   // =========================================================================
-  // A PAST MEMBER INVITED AS STAFF, AND THE GHOST THAT STAYS SHUT
+  // A PAST MEMBER INVITED AS STAFF; STAFF WHOSE MEMBERSHIP ENDS (4a-ii)
   // =========================================================================
 
   it(
-    "a past member invited as staff runs the gym; a member who left AFTER being made staff still cannot",
+    "a past member invited as staff runs the gym; a member made staff whose membership then ends keeps the console, shown as staff and not a member",
     async () => {
       const gym = await makeGym("Past Member Gym");
       const past = await signIn(addr("past-member"));
@@ -635,22 +641,20 @@ d("staff invited by email (real Postgres)", () => {
       const listed = await get(`/v1/orgs/${gym.id}/staff`, gym.owner.cookies);
       expect((JSON.parse(listed.body) as { staff: { userId: string }[] }).staff.map((s) => s.userId)).toContain(past.userId);
 
-      // The ghost: made staff while a member, then the membership closed.
-      const ghost = await signIn(addr("ghost"));
-      await makeMember(gym, ghost);
+      // Made staff while a member; then the membership ends. Staff and member are
+      // separate (spec §10.3): they still run the gym, and Staff says they are not a member.
+      const later = await signIn(addr("ghost"));
+      await makeMember(gym, later);
       expect(createStaffInviteResponseSchema.parse(JSON.parse((await invite(gym, addr("ghost"))).body)).outcome).toBe("added");
-      expect(await readsMembers(gym, ghost)).toBe(200);
-      await sql`UPDATE gym_members SET removed_at = now() WHERE gym_id = ${gym.id} AND user_id = ${ghost.userId}`;
-      expect(await readsMembers(gym, ghost)).toBe(404);
+      await sql`UPDATE gym_members SET removed_at = now() WHERE gym_id = ${gym.id} AND user_id = ${later.userId}`;
+      expect(await readsMembers(gym, later)).toBe(200);
       const listedAfter = await get(`/v1/orgs/${gym.id}/staff`, gym.owner.cookies);
-      expect((JSON.parse(listedAfter.body) as { staff: { userId: string }[] }).staff.map((s) => s.userId)).not.toContain(ghost.userId);
-
-      // The owner invites the ghost again: their Accept is the owner's yes from now.
-      const again = await invited(gym, addr("ghost"), "manager");
-      const res = await accept(ghost, again.id);
-      expect(acceptStaffInvitationResponseSchema.parse(JSON.parse(res.body)).outcome).toBe("accepted");
-      expect(await readsMembers(gym, ghost)).toBe(200);
-      expect((await staffRowOf(gym, ghost))?.role).toBe("manager");
+      const row = (JSON.parse(listedAfter.body) as { staff: { userId: string; isMember: boolean }[] }).staff.find((s) => s.userId === later.userId);
+      expect(row?.isMember).toBe(false);
+      // Already staff: inviting them again is refused, as for any staff.
+      const again = await invite(gym, addr("ghost"), "manager");
+      expect(again.statusCode).toBe(409);
+      expect(errorOf(again).error).toBe("already_staff");
     },
     TEST_TIMEOUT_MS,
   );
@@ -838,6 +842,410 @@ d("staff invited by email (real Postgres)", () => {
       const cancelledSend = await sql<{ state: string; reason: string | null; email: string | null }[]>`
         SELECT state, reason, email::text AS email FROM gym_staff_invite_sends WHERE invite_id = ${cancelled.id}`;
       expect(cancelledSend).toEqual([{ state: "skipped", reason: "invitation_closed", email: null }]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // =========================================================================
+  // 4a-ii. THE WORST THING: SOMEBODY THE GYM MEANT TO REMOVE STILL READS ITS MEMBERS
+  // =========================================================================
+  // Removing a member stops refusing staff (spec §10.3). The owner chooses, in one step,
+  // whether they lose the console too; whoever is removed with it, or deletes their own
+  // account, reads nothing, before or after a restore. A manager may remove members but
+  // not staff: a half-removal is the owner's call alone.
+
+  const removeFromApp = (gym: Gym, who: User, by: User, alsoStaff?: boolean) =>
+    send("DELETE", `/v1/orgs/${gym.id}/members/${who.userId}${alsoStaff === undefined ? "" : `?alsoStaff=${String(alsoStaff)}`}`, by.cookies);
+  const liveMembership = async (gym: Gym, who: User) =>
+    (await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM gym_members WHERE gym_id = ${gym.id} AND user_id = ${who.userId} AND removed_at IS NULL`)[0]?.n ?? 0;
+  const onStaffList = async (gym: Gym, who: User) => {
+    const res = await get(`/v1/orgs/${gym.id}/staff`, gym.owner.cookies);
+    expect(res.statusCode, res.body).toBe(200);
+    return (JSON.parse(res.body) as { staff: { userId: string }[] }).staff.some((s) => s.userId === who.userId);
+  };
+  /** A member made staff by the owner (appointed at once: already in the gym). */
+  const memberAndStaff = async (gym: Gym, local: string, role: "manager" | "trainer" = "trainer"): Promise<User> => {
+    const who = await signIn(addr(local));
+    await makeMember(gym, who);
+    const res = await invite(gym, addr(local), role);
+    expect(createStaffInviteResponseSchema.parse(JSON.parse(res.body)).outcome).toBe("added");
+    expect(await readsMembers(gym, who)).toBe(200);
+    return who;
+  };
+
+  it(
+    "THE WORST THING (4a-ii): removed from the app AND staff reads nothing; a deleted account reads nothing before or after a restore; a manager cannot remove staff; another gym removes nobody",
+    async () => {
+      const gym = await makeGym("Remove Gym");
+      const rival = await makeGym("Rival Remove Gym");
+
+      // Ravi: the owner ticks "Also remove from staff". Gone from both, in one step.
+      const ravi = await memberAndStaff(gym, "rm-ravi");
+      const gone = await removeFromApp(gym, ravi, gym.owner, true);
+      expect(gone.statusCode, gone.body).toBe(200);
+      expect(await readsMembers(gym, ravi)).toBe(404);
+      expect(await staffRowOf(gym, ravi)).toBeNull();
+      expect(await liveMembership(gym, ravi)).toBe(0);
+      expect(await onStaffList(gym, ravi)).toBe(false);
+
+      // Mia: no tick. She leaves the app and keeps the console, as the box says.
+      const mia = await memberAndStaff(gym, "rm-mia");
+      const kept = await removeFromApp(gym, mia, gym.owner);
+      expect(kept.statusCode, kept.body).toBe(200);
+      expect(await liveMembership(gym, mia)).toBe(0);
+      expect(await readsMembers(gym, mia)).toBe(200);
+      expect(await onStaffList(gym, mia)).toBe(true);
+
+      // A manager may remove members, never staff, with the tick or without.
+      const manager = await memberAndStaff(gym, "rm-manager", "manager");
+      const tom = await memberAndStaff(gym, "rm-tom");
+      for (const tick of [undefined, true, false]) {
+        const refused = await removeFromApp(gym, tom, manager, tick);
+        expect(refused.statusCode, refused.body).toBe(403);
+        expect(errorOf(refused).error).toBe("staff_owner_only");
+      }
+      expect(await liveMembership(gym, tom)).toBe(1);
+      expect((await staffRowOf(gym, tom))?.role).toBe("trainer");
+      // The member list says who also runs the gym, so Remove's box can name it.
+      const plain = await signIn(addr("rm-plain"));
+      await makeMember(gym, plain);
+      const roster = await get(`/v1/orgs/${gym.id}/members`, gym.owner.cookies);
+      const rows = new Map(orgMemberPageSchema.parse(JSON.parse(roster.body)).items.map((m) => [m.userId, m.staff]));
+      expect([rows.get(tom.userId), rows.get(manager.userId), rows.get(gym.owner.userId), rows.get(plain.userId)]).toEqual([
+        { role: "trainer", roleName: null },
+        { role: "manager", roleName: null },
+        { role: "owner", roleName: null },
+        null,
+      ]);
+      // A manager reads the member list without anybody's staff role (round one, L4).
+      const asManager = orgMemberPageSchema.parse(JSON.parse((await get(`/v1/orgs/${gym.id}/members`, manager.cookies)).body));
+      expect(asManager.items.length).toBeGreaterThan(0);
+      expect(asManager.items.every((m) => m.staff === undefined)).toBe(true);
+      // Nor the owner's own place.
+      expect((await removeFromApp(gym, gym.owner, manager)).statusCode).toBe(403);
+
+      // The owner stays the owner: the tick is refused for them, their place may go.
+      const ownTick = await removeFromApp(gym, gym.owner, gym.owner, true);
+      expect(ownTick.statusCode, ownTick.body).toBe(409);
+      expect(errorOf(ownTick).error).toBe("owner_stays_owner");
+      expect((await removeFromApp(gym, gym.owner, gym.owner)).statusCode).toBe(200);
+      expect((await staffRowOf(gym, gym.owner))?.role).toBe("owner");
+      expect(await readsMembers(gym, gym.owner)).toBe(200);
+
+      // Another gym's owner removes nobody here, with the tick or without.
+      for (const tick of [undefined, true]) {
+        const stranger = await removeFromApp(gym, tom, rival.owner, tick);
+        expect(stranger.statusCode).toBe(404);
+      }
+      expect(await liveMembership(gym, tom)).toBe(1);
+      expect((await staffRowOf(gym, tom))?.role).toBe("trainer");
+
+      // Zoe deletes her own account: her staff access ends with it, and a restore gives
+      // back the account, not the console. Ana, staff and never a member, the same.
+      const zoe = await memberAndStaff(gym, "rm-zoe");
+      const ana = await signIn(addr("rm-ana"));
+      const anaInvite = await invited(gym, addr("rm-ana"));
+      expect((await accept(ana, anaInvite.id)).statusCode).toBe(200);
+      expect(await readsMembers(gym, ana)).toBe(200);
+      // Zoe also works at the rival gym: that row goes with her account too.
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role) VALUES (${rival.id}, ${zoe.userId}, 'trainer')`;
+      for (const who of [zoe, ana]) {
+        expect(await softDeleteUser(sql, who.userId)).not.toBeNull();
+        // Only this person's staff access ends: everyone else's stays (round one, gap 1).
+        expect((await staffRowOf(gym, tom))?.role).toBe("trainer");
+        expect((await staffRowOf(gym, manager))?.role).toBe("manager");
+        expect((await staffRowOf(gym, gym.owner))?.role).toBe("owner");
+        expect((await staffRowOf(rival, rival.owner))?.role).toBe("owner");
+        // And it is written down, as every other end of staff access is (round one, L3).
+        const audit = await sql<{ meta: { removedWith?: string } }[]>`
+          SELECT meta FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.staff_removed' AND target_id = ${who.userId}`;
+        expect(audit.map((a) => a.meta.removedWith)).toEqual(["account_deleted"]);
+        // Deleted: not even signed in.
+        expect(await readsMembers(gym, who)).toBe(401);
+        // Restored: signed in again, and staff of nothing.
+        expect(await restoreUser(sql, who.userId)).toBe(true);
+        expect(await readsMembers(gym, who)).toBe(404);
+        expect(await staffRowOf(gym, who)).toBeNull();
+        expect(await onStaffList(gym, who)).toBe(false);
+      }
+      expect(await staffRowOf(rival, zoe)).toBeNull();
+      // The owner's own deletion and restore leaves them owning their gym.
+      expect(await softDeleteUser(sql, gym.owner.userId)).not.toBeNull();
+      expect(await restoreUser(sql, gym.owner.userId)).toBe(true);
+      expect((await staffRowOf(gym, gym.owner))?.role).toBe("owner");
+      expect(await readsMembers(gym, gym.owner)).toBe(200);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // =========================================================================
+  // 4a-ii. SEND AGAIN
+  // =========================================================================
+
+  const resend = (gym: Gym, inviteId: string, who: User = gym.owner) => post(`${invitesUrl(gym)}/${inviteId}/resend`, {}, who.cookies);
+  const resent = async (gym: Gym, inviteId: string): Promise<StaffInvite> => {
+    const res = await resend(gym, inviteId);
+    expect(res.statusCode, res.body).toBe(200);
+    return resendStaffInviteResponseSchema.parse(JSON.parse(res.body)).invite;
+  };
+  const sendRowsOf = async (inviteId: string) =>
+    (await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_staff_invite_sends WHERE invite_id = ${inviteId}`)[0]?.n ?? 0;
+  /** As if this invitation's emails went over a week ago, so the 3-a-week cap is not what answers. */
+  const ageSends = (inviteId: string) =>
+    sql`UPDATE gym_staff_invite_sends SET created_at = created_at - interval '8 days' WHERE invite_id = ${inviteId}`;
+  const DAY = 24 * 60 * 60 * 1000;
+
+  it(
+    `Send again: ${String(STAFF_INVITE_RESENDS_MAX)} times, each one more email and 7 more days from now; then refused; a declined or ended one waits again and can be accepted`,
+    async () => {
+      const gym = await makeGym("Resend Gym");
+      const first = await invited(gym, addr("again"));
+      expect([first.resendsLeft, first.lastSentAt]).toEqual([STAFF_INVITE_RESENDS_MAX, first.invitedAt]);
+      await runSender();
+      expect(emailsTo(addr("again")).length).toBe(1);
+
+      // Ended: the 7 days ran out. Send again opens it for 7 days from now.
+      await sql`UPDATE gym_staff_invites SET expires_at = now() - interval '1 hour', created_at = created_at - interval '8 days' WHERE id = ${first.id}`;
+      await ageSends(first.id);
+      expect((await invitesOf(gym)).find((i) => i.id === first.id)?.state).toBe("ended");
+      const before = Date.now();
+      const one = await resent(gym, first.id);
+      expect(one.state).toBe("waiting");
+      expect(one.resendsLeft).toBe(STAFF_INVITE_RESENDS_MAX - 1);
+      expect(Date.parse(one.expiresAt)).toBeGreaterThanOrEqual(before + 7 * DAY - 1000);
+      expect(Date.parse(one.expiresAt)).toBeLessThanOrEqual(Date.now() + 7 * DAY + 1000);
+      expect(Date.parse(one.lastSentAt)).toBeGreaterThanOrEqual(before - 1000);
+      expect(one.emailStatus).toBe("sending");
+      await runSender();
+      expect(emailsTo(addr("again")).length).toBe(2);
+
+      // Declined: No thanks, then the owner asks once more.
+      const person = await signIn(addr("again"));
+      expect((await decline(person, first.id)).statusCode).toBe(200);
+      expect((await invitesOf(gym)).find((i) => i.id === first.id)?.state).toBe("declined");
+      await ageSends(first.id);
+      const two = await resent(gym, first.id);
+      expect([two.state, two.declinedAt, two.resendsLeft]).toEqual(["waiting", null, STAFF_INVITE_RESENDS_MAX - 2]);
+      await runSender();
+      expect(emailsTo(addr("again")).length).toBe(3);
+
+      await ageSends(first.id);
+      const three = await resent(gym, first.id);
+      expect(three.resendsLeft).toBe(0);
+      await runSender();
+      expect(emailsTo(addr("again")).length).toBe(4);
+
+      // The fourth Send again is refused, whatever the week.
+      await ageSends(first.id);
+      const over = await resend(gym, first.id);
+      expect(over.statusCode).toBe(409);
+      expect(errorOf(over)).toMatchObject({ error: "resends_used", message: STAFF_INVITE_WORDS.resends_used(addr("again")) });
+      expect(await sendRowsOf(first.id)).toBe(1 + STAFF_INVITE_RESENDS_MAX);
+
+      // Still the same invitation: Accept opens it.
+      const res = await accept(person, first.id);
+      expect(acceptStaffInvitationResponseSchema.parse(JSON.parse(res.body)).outcome).toBe("accepted");
+      expect(await readsMembers(gym, person)).toBe(200);
+      // Accepted: nothing to send again.
+      expect((await resend(gym, first.id)).statusCode).toBe(404);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "Send again: refused while the last email is still to go (two presses at once send one), to an address that bounced or complained, past the week's 3 to one address; another gym 404, a manager 403",
+    async () => {
+      const gym = await makeGym("Resend Rules Gym");
+      const rival = await makeGym("Resend Rival Gym");
+
+      // Not yet sent: a second press sends nothing.
+      const fresh = await invited(gym, addr("again-fresh"));
+      const early = await resend(gym, fresh.id);
+      expect(early.statusCode).toBe(409);
+      expect(errorOf(early)).toMatchObject({ error: "still_sending", message: STAFF_INVITE_WORDS.still_sending });
+      await runSender();
+      // Two presses at once: one email.
+      const both = await Promise.all([resend(gym, fresh.id), resend(gym, fresh.id)]);
+      expect(both.map((r) => r.statusCode).sort()).toEqual([200, 409]);
+      expect(await sendRowsOf(fresh.id)).toBe(2);
+      await runSender();
+      // The week's 3 to one address: this is the third, so the next waits a week.
+      const third = await resent(gym, fresh.id);
+      expect(third.resendsLeft).toBe(STAFF_INVITE_RESENDS_MAX - 2);
+      await runSender();
+      const fourth = await resend(gym, fresh.id);
+      expect(fourth.statusCode).toBe(429);
+      expect(errorOf(fourth).error).toBe("too_many_to_address");
+
+      // Bounced (any gym) and complained (this gym): refused here, with what to do.
+      const bounced = await invited(gym, addr("again-bounced"));
+      const complained = await invited(gym, addr("again-complained"));
+      await runSender();
+      await sql`INSERT INTO email_suppressions (email_hmac, gym_id, reason) VALUES (${emailHmac(settings.hmacKey, addr("again-bounced"))}, NULL, 'bounced')`;
+      await sql`INSERT INTO email_suppressions (email_hmac, gym_id, reason) VALUES (${emailHmac(settings.hmacKey, addr("again-complained"))}, ${gym.id}, 'complained')`;
+      const noBounce = await resend(gym, bounced.id);
+      expect(noBounce.statusCode).toBe(409);
+      expect(errorOf(noBounce)).toMatchObject({ error: "address_blocked", message: STAFF_INVITE_WORDS.address_blocked(addr("again-bounced"), "bounced") });
+      const noComplaint = await resend(gym, complained.id);
+      expect(errorOf(noComplaint)).toMatchObject({ error: "address_blocked", message: STAFF_INVITE_WORDS.address_blocked(addr("again-complained"), "complained") });
+      expect(await sendRowsOf(bounced.id)).toBe(1);
+      expect(await sendRowsOf(complained.id)).toBe(1);
+
+      // Another gym's owner finds nothing; this gym's manager may not.
+      const theirs = await invited(gym, addr("again-theirs"));
+      await runSender();
+      const stranger = await resend(gym, theirs.id, rival.owner);
+      expect(stranger.statusCode).toBe(404);
+      const viaRival = await post(`${invitesUrl(rival)}/${theirs.id}/resend`, {}, rival.owner.cookies);
+      expect(viaRival.statusCode).toBe(404);
+      const manager = await memberAndStaff(gym, "again-manager", "manager");
+      expect((await resend(gym, theirs.id, manager)).statusCode).toBe(403);
+      expect(await sendRowsOf(theirs.id)).toBe(1);
+      // A bad id is a 400.
+      expect((await post(`${invitesUrl(gym)}/not-a-uuid/resend`, {}, gym.owner.cookies)).statusCode).toBe(400);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "Remove for people ticked on In the app follows the same rule: the owner's ticked staff leave the app and keep the console; a manager's ticked staff don't change",
+    async () => {
+      const gym = await makeGym("Bulk Remove Gym");
+      const mia = await memberAndStaff(gym, "bulk-mia");
+      const manager = await memberAndStaff(gym, "bulk-manager", "manager");
+      const rita = await signIn(addr("bulk-rita"));
+      await makeMember(gym, rita);
+      const previewUrl = `/v1/orgs/${gym.id}/members/selected/remove-preview`;
+      type Preview = { endApp: { userId: string | null }[]; keepConsole?: { userId: string | null }[]; kept: { reason: string; people: { userId: string | null }[] }[]; digest: string };
+      const preview = async (who: User, userIds: string[]): Promise<Preview> => {
+        const res = await post(previewUrl, { userIds }, who.cookies);
+        expect(res.statusCode, res.body).toBe(200);
+        return (JSON.parse(res.body) as { preview: Preview }).preview;
+      };
+      const ids = (people: { userId: string | null }[] | undefined) => (people ?? []).map((p) => p.userId).sort();
+
+      // A manager ticks Mia and Rita: Rita goes, Mia (staff) doesn't change.
+      const byManager = await preview(manager, [mia.userId, rita.userId]);
+      expect(ids(byManager.endApp)).toEqual([rita.userId]);
+      expect(ids(byManager.keepConsole)).toEqual([]);
+      expect(ids(byManager.kept.find((group) => group.reason === "staff")?.people)).toEqual([mia.userId]);
+
+      // The owner ticks Mia, Rita and themselves: all three leave the app; Mia and the
+      // owner keep the console, and the box says so by name.
+      const byOwner = await preview(gym.owner, [mia.userId, rita.userId, gym.owner.userId]);
+      expect(ids(byOwner.endApp)).toEqual([mia.userId, rita.userId, gym.owner.userId].sort());
+      expect(ids(byOwner.keepConsole)).toEqual([mia.userId, gym.owner.userId].sort());
+      const pressed = await post(`/v1/orgs/${gym.id}/members/selected/remove`, { userIds: [mia.userId, rita.userId, gym.owner.userId], digest: byOwner.digest }, gym.owner.cookies);
+      expect(pressed.statusCode, pressed.body).toBe(200);
+      for (const who of [mia, rita, gym.owner]) expect(await liveMembership(gym, who)).toBe(0);
+      expect((await staffRowOf(gym, mia))?.role).toBe("trainer");
+      expect(await readsMembers(gym, mia)).toBe(200);
+      expect((await staffRowOf(gym, gym.owner))?.role).toBe("owner");
+      expect(await readsMembers(gym, rita)).toBe(404);
+
+      // A manager's press of their own box: Mia's replacement colleague stays (round one, gap 3).
+      const tess = await memberAndStaff(gym, "bulk-tess");
+      const sam = await signIn(addr("bulk-sam"));
+      await makeMember(gym, sam);
+      const managersBox = await preview(manager, [tess.userId, sam.userId]);
+      const managersPress = await post(`/v1/orgs/${gym.id}/members/selected/remove`, { userIds: [tess.userId, sam.userId], digest: managersBox.digest }, manager.cookies);
+      expect(managersPress.statusCode, managersPress.body).toBe(200);
+      expect(await liveMembership(gym, tess)).toBe(1);
+      expect(await liveMembership(gym, sam)).toBe(0);
+
+      // A manager's press with the owner's box is refused as changed: nothing more happens.
+      const ravi = await memberAndStaff(gym, "bulk-ravi");
+      const owners = await preview(gym.owner, [ravi.userId]);
+      const managerPress = await post(`/v1/orgs/${gym.id}/members/selected/remove`, { userIds: [ravi.userId], digest: owners.digest }, manager.cookies);
+      expect(managerPress.statusCode).toBe(409);
+      expect(await liveMembership(gym, ravi)).toBe(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // =========================================================================
+  // ROUND ONE
+  // =========================================================================
+
+  it(
+    "H1: Send again to somebody made staff another way since is refused, sends nothing, and takes the invitation off the list",
+    async () => {
+      const gym = await makeGym("Resend Staff Gym");
+      const sent = await invited(gym, addr("resend-bob"), "manager");
+      await runSender();
+      await sql`UPDATE gym_staff_invites SET expires_at = now() - interval '1 hour', created_at = created_at - interval '8 days' WHERE id = ${sent.id}`;
+      // Bob joins and is appointed a trainer from the member list.
+      const bob = await signIn(addr("resend-bob"));
+      await makeMember(gym, bob);
+      const appointed = await invite(gym, addr("resend-bob"), "trainer");
+      expect(createStaffInviteResponseSchema.parse(JSON.parse(appointed.body)).outcome).toBe("added");
+      const before = emailsTo(addr("resend-bob")).length;
+      const res = await resend(gym, sent.id);
+      expect(res.statusCode).toBe(409);
+      expect(errorOf(res).error).toBe("already_staff");
+      await runSender();
+      expect(emailsTo(addr("resend-bob")).length).toBe(before);
+      expect((await invitesOf(gym)).map((i) => i.id)).not.toContain(sent.id);
+      expect((await myInvitations(bob)).invitations).toEqual([]);
+      expect((await staffRowOf(gym, bob))?.role).toBe("trainer");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "L1: once the week's 3 emails to an address have gone, the list says when Send again opens",
+    async () => {
+      const gym = await makeGym("Resend Week Gym");
+      const sent = await invited(gym, addr("week"));
+      expect(sent.sendAgainFrom).toBeNull();
+      await runSender();
+      await resent(gym, sent.id);
+      await runSender();
+      expect((await invitesOf(gym)).find((i) => i.id === sent.id)?.sendAgainFrom).toBeNull();
+      await resent(gym, sent.id);
+      await runSender();
+      const third = (await sql<{ at: Date }[]>`
+        SELECT created_at AS at FROM gym_staff_invite_sends WHERE invite_id = ${sent.id} ORDER BY created_at ASC LIMIT 1`)[0]?.at;
+      const listed = (await invitesOf(gym)).find((i) => i.id === sent.id);
+      expect(listed?.resendsLeft).toBe(STAFF_INVITE_RESENDS_MAX - 2);
+      expect(listed?.sendAgainFrom).toBe(new Date((third?.getTime() ?? 0) + 7 * DAY).toISOString());
+      expect((await resend(gym, sent.id)).statusCode).toBe(429);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "L2: an appointment cannot cross the deletion of that account: it waits, then finds nobody to appoint",
+    async () => {
+      const gym = await makeGym("Delete Race Gym");
+      const pat = await signIn(addr("race-pat"));
+      await makeMember(gym, pat);
+      const deleting = postgres(url ?? "", { prepare: false, max: 1 });
+      const appointing = postgres(url ?? "", { prepare: false, max: 1 });
+      try {
+        const pending: { appoint: Promise<{ kind: string }> | null } = { appoint: null };
+        await deleting.begin(async (tx) => {
+          // The deletion's own first and staff statements, uncommitted.
+          await tx`UPDATE users SET status = 'deleted', deleted_at = now() WHERE id = ${pat.userId}`;
+          await tx`DELETE FROM gym_staff WHERE user_id = ${pat.userId}`;
+          pending.appoint = orgRepo.addStaff(appointing, {
+            gymId: gym.id,
+            email: addr("race-pat"),
+            role: "trainer",
+            privileges: [...ROLE_PRIVILEGES.trainer],
+            actorUserId: gym.owner.userId,
+          });
+          await new Promise((resolve) => setTimeout(resolve, 400));
+        });
+        const outcome = await (pending.appoint ?? Promise.reject(new Error("never appointed")));
+        expect(outcome.kind).toBe("not_a_member");
+        expect(await staffRowOf(gym, pat)).toBeNull();
+      } finally {
+        await sql`UPDATE users SET status = 'active', deleted_at = NULL WHERE id = ${pat.userId}`;
+        await deleting.end({ timeout: 5 });
+        await appointing.end({ timeout: 5 });
+      }
     },
     TEST_TIMEOUT_MS,
   );

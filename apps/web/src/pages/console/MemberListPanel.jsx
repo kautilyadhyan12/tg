@@ -9,6 +9,7 @@ import MemberListInvite from './MemberListInvite';
 import MemberListPerson from './MemberListPerson';
 import MemberListRemove from './MemberListRemove';
 import MemberListUpload from './MemberListUpload';
+import { staffTag } from './consoleView';
 import {
   CHIP_KINDS,
   EMPTY_FILTERS,
@@ -908,6 +909,12 @@ export default function MemberListPanel({
                       {e.needsReview ? (
                         <span className="c-tag c-tag-warn self-start mt-1" data-testid="review-tag">
                           Review needed
+                        </span>
+                      ) : null}
+                      {/* Somebody who also runs the gym (Kd's 4a-ii click-through). */}
+                      {staffTag(e, words) !== null ? (
+                        <span className="c-tag c-tag-soft self-start mt-1" data-testid="staff-tag">
+                          {staffTag(e, words)}
                         </span>
                       ) : null}
                     </span>

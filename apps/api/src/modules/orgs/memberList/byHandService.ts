@@ -70,6 +70,9 @@ async function detailOf(
   entry: repo.StoredEntry,
   settings: InviteSettings | null,
   now: Date,
+  /** The caller holds `staff.manage`: who runs the gym, by role, is the owner's to read
+   *  (4a-ii round one, L4). */
+  seesStaff = false,
 ): Promise<MemberListEntryDetail> {
   const [fields, reached, invitation] = await Promise.all([
     repo.listFields(sql, gymId),
@@ -118,6 +121,7 @@ async function detailOf(
     invitation: invitation[0] ?? null,
     app: appOrThrow(app[0]),
     needsReview: entry.formerAt === null && entry.review.needsReview.length > 0,
+    staff: seesStaff ? (mine.find((member) => member.staff != null)?.staff ?? null) : null,
     extra: fields.map((field) => ({ key: field.key, label: field.label, value: values.extra[field.key] ?? "" })),
     handEdited: entry.handEdited,
     // A past member is not on the list, so nothing of theirs is waiting to be reviewed.
@@ -152,10 +156,10 @@ function reviewLines(keys: readonly string[], fields: readonly { key: string; la
   return lines;
 }
 
-async function detailAfter(deps: MemberListDeps, gymId: string, entryId: string): Promise<MemberListEntryDetail> {
+async function detailAfter(deps: MemberListDeps, gymId: string, entryId: string, seesStaff = false): Promise<MemberListEntryDetail> {
   const entry = await repo.entryFor(deps.sql, gymId, entryId);
   if (entry === null) throw notFound();
-  return await detailOf(deps.sql, gymId, entry, deps.invites ?? null, deps.now());
+  return await detailOf(deps.sql, gymId, entry, deps.invites ?? null, deps.now(), seesStaff);
 }
 
 async function typedContext(tx: TransactionSql, gymId: string, country: string | null): Promise<TypedContext> {
@@ -210,9 +214,9 @@ export async function readEntry(
   entryId: string,
   limit: () => Promise<boolean>,
 ): Promise<MemberListEntryDetail | null> {
-  await requirePrivilege(deps, gymId, userId, "members.confirm");
+  const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
-  return await detailAfter(deps, gymId, entryId);
+  return await detailAfter(deps, gymId, entryId, privileges.includes("staff.manage"));
 }
 
 export type WriteAnswer =

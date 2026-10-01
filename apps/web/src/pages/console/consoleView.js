@@ -170,6 +170,49 @@ export function seatIsFree(member) {
   return member.complimentary === true;
 }
 
+/** The tag on a person in the app who also runs the gym: "Owner", "Staff · Trainer",
+ *  "Staff · Front desk" (Kd's 4a-ii click-through: staff looked like members). Null for a
+ *  member, and for a row from a server that does not say. */
+export function staffTag(member, words) {
+  const staff = member?.staff;
+  if (!staff || typeof staff !== 'object') return null;
+  if (staff.role === 'owner') return 'Owner';
+  return `Staff · ${staffRoleText(staff.role, staff.roleName, words)}`;
+}
+
+/** A role in words: "Owner", "Manager", "Trainer" ("Coach" at a studio), or the gym's own. */
+export function staffRoleText(role, roleName, words) {
+  if (role === 'owner') return 'Owner';
+  return roleName || (role === 'manager' ? 'Manager' : words.coachCap);
+}
+
+/** REMOVING SOMEBODY WHO ALSO RUNS THE GYM (ROADMAP 4a-ii), or null for a member only
+ *  (and for a row from a server that does not say: then Remove stays as it was). Staff
+ *  and member are separate: the owner chooses whether they lose the console too; an
+ *  owner always stays the owner. Only someone who manages staff is offered it. */
+export function staffRemoveView(member, words) {
+  const staff = member?.staff;
+  if (!staff || typeof staff !== 'object') return null;
+  const name = member.displayName;
+  if (staff.role === 'owner') {
+    return {
+      isOwner: true,
+      staffLine: `${name} owns this ${words.it}. They stay the owner and keep the console.`,
+      tickLabel: null,
+      keepLine: null,
+      goLine: null,
+    };
+  }
+  const role = staff.roleName || (staff.role === 'manager' ? 'manager' : words.coach);
+  return {
+    isOwner: false,
+    staffLine: `${name} is also staff here (${role}).`,
+    tickLabel: `Also remove ${name} from staff`,
+    keepLine: `They keep their staff access and can still open the console. You can change this in Settings, Staff.`,
+    goLine: `They lose their staff access too and can't open the console any more.`,
+  };
+}
+
 /** The org with this slug, or null. The console's URLs are `/console/:orgSlug`
  *  (Part 3 §3.1) while the API is keyed by uuid, so the slug is resolved
  *  against the caller's own org list — which means an unknown slug and a gym

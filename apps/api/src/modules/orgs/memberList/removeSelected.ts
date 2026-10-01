@@ -49,6 +49,8 @@ export interface RemovalPlan {
   preview: MemberRemovePreview;
   moveIds: string[];
   endApp: { userId: string; removedWith: string | null }[];
+  /** Of `endApp`, the staff (the owner too) who leave the app and keep their staff access. */
+  staffIds: string[];
 }
 
 const byNameThenId = (a: MemberRemovePerson, b: MemberRemovePerson): number => {
@@ -89,18 +91,22 @@ function finish(
   kept: Map<MemberRemoveKeptReason, MemberRemovePerson[]>,
   scale: { listCurrent: number; seats: number },
   movingNotInApp: number,
+  keepConsole: MemberRemovePerson[] = [],
 ): RemovalPlan {
   move.sort(byNameThenId);
   ends.sort((a, b) => byNameThenId(a.person, b.person));
   const moveIds = move.flatMap((person) => (person.entryId === null ? [] : [person.entryId]));
   const endApp = ends.flatMap(({ person, removedWith }) => (person.userId === null ? [] : [{ userId: person.userId, removedWith }]));
+  keepConsole.sort(byNameThenId);
   return {
     moveIds,
     endApp,
+    staffIds: keepConsole.flatMap((person) => (person.userId === null ? [] : [person.userId])),
     preview: {
       selected,
       move,
       endApp: ends.map(({ person }) => person),
+      keepConsole,
       kept: KEPT_ORDER.flatMap((reason) => {
         const people = kept.get(reason);
         return people === undefined || people.length === 0 ? [] : [{ reason, people: [...people].sort(byNameThenId) }];
@@ -215,11 +221,15 @@ export function rosterRemovalPlan(input: {
   members: readonly repo.MemberAgainstList[];
   reached?: readonly repo.MemberAgainstList[];
   scale: { listCurrent: number; seats: number };
+  /** The caller may manage staff (the owner): staff they tick leave the app as anybody
+   *  does, and keep their staff access, as Remove on one person's panel (4a-ii). */
+  managesStaff?: boolean;
 }): RemovalPlan {
   const live = new Map(input.members.map((member) => [member.userId, member]));
   const kept = new Map<MemberRemoveKeptReason, MemberRemovePerson[]>();
   const move: MemberRemovePerson[] = [];
   const ends: { person: MemberRemovePerson; removedWith: string | null }[] = [];
+  const keepConsole: MemberRemovePerson[] = [];
   const asked = [...new Set(input.userIds)];
   for (const userId of asked) {
     const member = live.get(userId);
@@ -229,8 +239,11 @@ export function rosterRemovalPlan(input: {
     }
     const own = currentRecordOf(member);
     if (!member.seatCounted) {
-      keep(kept, "staff", { name: member.fullName, entryId: null, userId });
-      continue;
+      if (member.isStaff !== true || input.managesStaff !== true) {
+        keep(kept, "staff", { name: member.fullName, entryId: null, userId });
+        continue;
+      }
+      keepConsole.push({ name: member.fullName, entryId: null, userId });
     }
     // Two accounts can be one record's (joined with it, and signed up under its name).
     if (own !== null && !move.some((person) => person.entryId === own)) {
@@ -247,7 +260,7 @@ export function rosterRemovalPlan(input: {
       keep(kept, "same_record", { name: other.fullName, entryId: own, userId: other.userId });
     }
   }
-  return finish(input.gymId, asked.length, move, ends, kept, input.scale, 0);
+  return finish(input.gymId, asked.length, move, ends, kept, input.scale, 0, keepConsole);
 }
 
 /** What an import's file writes (`Reconciled.written`): folded emails and phones, old and
@@ -300,6 +313,7 @@ export function importLeaversPlan(input: {
   return {
     moveIds: plan.moveIds,
     endApp,
+    staffIds: plan.staffIds,
     preview: {
       ...plan.preview,
       endApp: plan.preview.endApp.filter((person) => person.userId === null || !reached.has(person.userId)),
@@ -355,7 +369,7 @@ export async function importLeaversPlanOn(sql: repo.SqlOrTx, gymId: string, left
   return importLeaversPlan({ gymId, leftIds, records, members, written, scale });
 }
 
-async function rosterPlanOn(sql: repo.SqlOrTx, gymId: string, userIds: readonly string[]): Promise<RemovalPlan> {
+async function rosterPlanOn(sql: repo.SqlOrTx, gymId: string, userIds: readonly string[], managesStaff: boolean): Promise<RemovalPlan> {
   const [members, scale] = await Promise.all([
     repo.membersAgainstList(sql, gymId, { email: null, phone: null, userIds }),
     repo.removalScale(sql, gymId),
@@ -373,7 +387,7 @@ async function rosterPlanOn(sql: repo.SqlOrTx, gymId: string, userIds: readonly 
           phones: records.flatMap((record) => (record.phone === null ? [] : [record.phone])),
           entryIds: owns,
         });
-  return rosterRemovalPlan({ gymId, userIds, members, reached, scale });
+  return rosterRemovalPlan({ gymId, userIds, members, reached, scale, managesStaff });
 }
 
 /** A record door that would end somebody's app needs `members.remove` as well; the
@@ -440,7 +454,7 @@ async function press(
       await repo.stampListedByContact(tx, gymId, records.map((record) => ({ email: record.email, phone: record.phone })), moved, at);
       await withdrawForAddresses(tx, settings, { gymId, emails: records.flatMap((record) => (record.email === null ? [] : [record.email])), at });
     }
-    const closed = await repo.closeMemberships(tx, gymId, plan.endApp, at);
+    const closed = await repo.closeMemberships(tx, gymId, plan.endApp, at, plan.staffIds);
     if (closed.length !== plan.endApp.length) {
       throw new Error(`remove-selected closed ${String(closed.length)} memberships where the rule chose ${String(plan.endApp.length)}`);
     }
@@ -528,7 +542,7 @@ export async function previewRemoveRoster(
 ): Promise<MemberRemovePreview | null> {
   const { privileges } = await requirePrivilege(deps, gymId, userId, "members.remove");
   if (!(await limit())) return null;
-  const plan = await rosterPlanOn(deps.sql, gymId, request.userIds);
+  const plan = await rosterPlanOn(deps.sql, gymId, request.userIds, privileges.includes("staff.manage"));
   requireForPlan(plan, privileges);
   return plan.preview;
 }
@@ -544,5 +558,5 @@ export async function removeRoster(
   await requireWritablePrivilege(deps, gymId, userId, "members.remove");
   const { privileges } = await requirePrivilege(deps, gymId, userId, "members.remove");
   if (!(await limit())) return { kind: "rate_limited" };
-  return await press(deps, userId, gymId, input, (tx) => rosterPlanOn(tx, gymId, input.userIds), privileges);
+  return await press(deps, userId, gymId, input, (tx) => rosterPlanOn(tx, gymId, input.userIds, privileges.includes("staff.manage")), privileges);
 }

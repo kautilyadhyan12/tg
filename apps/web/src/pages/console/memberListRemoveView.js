@@ -61,11 +61,21 @@ export function removeChangeGroups(preview, words, gymName) {
   } else if (preview.move.length > 0 && others === preview.move.length) {
     groups[0] = { ...groups[0], line: `${groups[0].line} None of them use the app, so nobody loses access to it.` };
   }
+  // Staff the owner ticked (4a-ii): out of the app, still in the console, said by name.
+  const staffKeep = preview.keepConsole ?? [];
+  if (staffKeep.length > 0) {
+    groups.push({
+      key: 'keepConsole',
+      heading: `${count(staffKeep.length)} of them ${staffKeep.length === 1 ? 'keeps' : 'keep'} their staff access`,
+      line: 'They can still open the console. To remove someone from staff too, use Settings, Staff, or Remove on their own panel.',
+      people: staffKeep,
+    });
+  }
   return groups;
 }
 
 const KEPT_LINES = {
-  staff: () => 'Owner and staff keep the app. Manage staff in Settings.',
+  staff: () => 'Staff and the owner keep the app here. The owner can remove them from it on In the app.',
   own_record: () => "Keep the app: they're on your list with their own details.",
   shared_email: () => "Keep the app: they share an email address with someone still on your list, so we can't tell whose it is.",
   same_record: () => 'Keep the app: their record is the same as someone you selected, so it moves to past members with them.',

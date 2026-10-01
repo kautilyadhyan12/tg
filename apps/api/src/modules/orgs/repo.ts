@@ -182,6 +182,8 @@ export interface MemberRow {
   /** The name on the gym's list of the record this membership was joined through
    *  (§10.2), or null when it names none. */
   listName: string | null;
+  /** They also run this gym: their staff role and the gym's own name for it. */
+  staff: { role: OrgRole; roleName: string | null } | null;
 }
 
 export interface CodeRow {
@@ -1124,42 +1126,16 @@ export interface StaffAuthority {
  *  says role invites a caller to compare it to one (the exact thing :11429's
  *  seam exists to stop).
  *
- *  **A STAFF ROW ALONE IS NOT AUTHORITY — it must belong to a live account that
- *  is still IN the gym.** T3 round 1 (2026-08-22) found two ways to hold a
- *  `gym_staff` row without being a member, and both hand somebody the whole
- *  roster of a gym they left:
- *    · appointing raced against removing them from the member list (fixed with
- *      a lock, below — this is the second line of defence, not the first);
- *    · **delete your account and restore it** — the DPDP Day-0 cascade closes
- *      `gym_members` and leaves `gym_staff` standing, and restore deliberately
- *      does NOT reopen memberships (2026-07-11 P2.2 T3 finding 4).
+ *  **SINCE 4a-ii THE RULE IS THE STAFF ROW AND A LIVE ACCOUNT, and nothing about
+ *  membership.** Staff and member are separate (spec §10.3): an owner may end a
+ *  trainer's membership and keep them as staff, or take both in one step. The ghost
+ *  this guard once denied (a membership closed after the staff row) had two sources,
+ *  and both now end the staff row itself: appointing is serialised against removing
+ *  by the org lock, and deleting an account deletes its staff rows (`softDeleteUser`;
+ *  rows left from before, by migration 0062). The owner of a gym keeps theirs, so a
+ *  restore gives them their gym back.
  *
- *  **THE RULE IS "NOT AN EX-MEMBER", NOT "MUST BE A MEMBER", AND THE DIFFERENCE
- *  IS THE WHOLE FINDING.** The reviewer's proposed one-liner was "require a live
- *  membership here", and it is WRONG — measured, not argued: it turned FIVE
- *  existing tests red, and reading them is what showed why. **Staff who are not
- *  members is the SPEC'S OWN MODEL** — §4.7 invites staff BY EMAIL, so an
- *  invited manager need never join — and this card only appoints from the roster
- *  because `EmailSender` cannot yet deliver an invite. Baking "staff ⇒ member"
- *  into AUTHORITY would have shipped a rule that breaks the day that deferral
- *  closes. :13552's standing lesson, earned again: a reviewer's fix is a claim
- *  and takes the same evidence as the code it replaces.
- *
- *  So the denial is precisely the ghost: **they HELD a membership here and it was
- *  closed after they became staff.** Never-a-member is allowed (the invite flow, and
- *  today's fixtures); currently-a-member is allowed; left-the-gym is not. A membership
- *  that ended BEFORE the staff row was written is not a ghost: a past member the owner
- *  later invites as staff (4a) runs the gym like anybody invited. `listStaff` keeps the
- *  same rule.
- *
- *  **The owner is exempt on top of that, and it is not a convenience.**
- *  `gyms.owner_included_as_member` is READ by `createOrgAttempt` and the column
- *  is the authority, so a gym whose owner opted out of membership is a designed
- *  state with no route to reach it yet — and their §4.0-step-6 seat, once
- *  closed, would otherwise read as exactly the ghost this guard denies.
- *
- *  `users.status` is checked as well, so the window BEFORE a restore is shut
- *  too, not only the state after it. */
+ *  `users.status` is checked, so an account inside its deletion window holds nothing. */
 export async function getStaffAuthority(
   sql: Sql,
   gymId: string,
@@ -1169,21 +1145,9 @@ export async function getStaffAuthority(
     SELECT s.role, s.privileges
     FROM gym_staff s
     JOIN users u ON u.id = s.user_id
-    JOIN gyms g ON g.id = s.gym_id
     WHERE s.gym_id = ${gymId}
       AND s.user_id = ${userId}
-      AND u.status = 'active'
-      AND (
-        g.owner_user_id = s.user_id
-        OR EXISTS (
-          SELECT 1 FROM gym_members m
-          WHERE m.gym_id = s.gym_id AND m.user_id = s.user_id AND m.removed_at IS NULL
-        )
-        OR NOT EXISTS (
-          SELECT 1 FROM gym_members m
-          WHERE m.gym_id = s.gym_id AND m.user_id = s.user_id AND m.removed_at >= s.created_at
-        )
-      )`;
+      AND u.status = 'active'`;
   const row = rows[0];
   return row === undefined ? null : { role: toOrgRole(row.role), privileges: row.privileges };
 }
@@ -2672,7 +2636,10 @@ export type RemoveMemberOutcome =
   | { kind: "removed" }
   | { kind: "already_removed" }
   | { kind: "never_member" }
-  | { kind: "is_staff"; role: OrgRole };
+  /** They are staff, and the caller may not manage staff: the owner's call alone. */
+  | { kind: "staff_owner_only" }
+  /** "Also remove from staff" for an owner: an owner leaves through a hand-over (4b). */
+  | { kind: "owner_stays_owner" };
 
 /** PART 3 §4.3's REMOVE — "sets `removed_at` (seat freed instantly; history
  *  retained)".
@@ -2695,13 +2662,11 @@ export type RemoveMemberOutcome =
  *  non-complimentary rows, so there is no counter to decrement and no second
  *  place to get wrong.
  *
- *  **STAFF ARE REFUSED HERE, DELIBERATELY.** An owner is member #1 of their own
- *  gym (§4.0 step 6) and a manager may be too, so this route is one tap away
- *  from an owner closing their own seat — with no restore built and no staff
- *  screen to undo it from. §4.7 blocks last-owner removal for the same family
- *  of reason; this is the narrower, safer version of it while the staff card is
- *  unbuilt. A gym that genuinely needs to remove a staff member's membership
- *  waits for that card rather than losing one irreversibly here.
+ *  **STAFF (ROADMAP 4a-ii, spec §10.3).** Staff and member are separate, so ending a
+ *  staff person's membership leaves their staff access unless `alsoStaff` takes it in
+ *  the same step. Only somebody who may manage staff (the owner) removes a staff
+ *  person's membership, so a manager can never leave a colleague half-removed. An
+ *  owner's place may go; their ownership does not (`owner_stays_owner`).
  *
  *  Tenancy is the WHERE (R3.2): gym id AND user id, so holding a uuid from
  *  another gym removes nobody. */
@@ -2711,6 +2676,10 @@ export async function removeMember(
     gymId: string;
     userId: string;
     actorUserId: string;
+    /** The caller holds `staff.manage`: they may remove a staff person's membership. */
+    actorManagesStaff: boolean;
+    /** Take their staff access in the same step (the box's tick). */
+    alsoStaff: boolean;
     /** Run in the same transaction just before a live membership is closed, while the
      *  person still counts as a member: moving their list record to past members. It
      *  answers the record the membership is removed with, which Put back gives back. */
@@ -2728,10 +2697,29 @@ export async function removeMember(
     // lock, same order, as `addStaff`, `removeStaff` and `claimSeat`.
     await lockOrgRow(tx, input.gymId);
 
-    const staffRows = await tx<{ role: string }[]>`
-      SELECT role FROM gym_staff WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;
+    const staffRows = await tx<{ role: string; owns: boolean }[]>`
+      SELECT s.role, g.owner_user_id = s.user_id AS owns
+      FROM gym_staff s JOIN gyms g ON g.id = s.gym_id
+      WHERE s.gym_id = ${input.gymId} AND s.user_id = ${input.userId}`;
     const staff = staffRows[0];
-    if (staff !== undefined) return { kind: "is_staff", role: toOrgRole(staff.role) };
+    if (staff !== undefined) {
+      if (!input.actorManagesStaff) return { kind: "staff_owner_only" };
+      if (input.alsoStaff && (staff.owns || staff.role === "owner")) return { kind: "owner_stays_owner" };
+    }
+    // Their staff row goes in the same transaction as the membership, once it is certain
+    // they were a member here: this route never touches somebody who is staff only.
+    const endStaff = async (): Promise<void> => {
+      if (staff === undefined || !input.alsoStaff) return;
+      await tx`DELETE FROM gym_staff WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;
+      await insertAudit(tx, {
+        actorUserId: input.actorUserId,
+        gymId: input.gymId,
+        action: "org.staff_removed",
+        targetType: "gym_staff",
+        targetId: input.userId,
+        meta: { role: toOrgRole(staff.role), removedWith: "membership" },
+      });
+    };
 
     const removedWith = (await input.beforeClose?.(tx)) ?? null;
     const closed = await tx<{ id: string }[]>`
@@ -2753,10 +2741,12 @@ export async function removeMember(
         LIMIT 1`;
       if (everRows[0] === undefined) return { kind: "never_member" };
       await input.afterClose?.(tx);
+      await endStaff();
       return { kind: "already_removed" };
     }
 
     await input.afterClose?.(tx);
+    await endStaff();
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
       gymId: input.gymId,
@@ -2823,6 +2813,8 @@ export async function listMembers(
       complimentary: boolean;
       takes_seat: boolean;
       list_name: string | null;
+      staff_role: string | null;
+      staff_role_name: string | null;
     }[]
   >`
     SELECT m.id, m.user_id, u.display_name, m.joined_at,
@@ -2831,9 +2823,11 @@ export async function listMembers(
             AND NOT EXISTS (
               SELECT 1 FROM gym_staff s
               WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)) AS takes_seat,
-           e.full_name AS list_name
+           e.full_name AS list_name,
+           st.role AS staff_role, st.role_name AS staff_role_name
     FROM gym_members m
     JOIN users u ON u.id = m.user_id
+    LEFT JOIN gym_staff st ON st.gym_id = m.gym_id AND st.user_id = m.user_id
     LEFT JOIN gym_codes c ON c.id = m.code_id
     -- "On your list as ..." only while the record they joined with is on it (3a-vi-b).
     LEFT JOIN gym_member_list_entries e ON e.gym_id = m.gym_id AND e.id = m.entry_id AND e.former_at IS NULL
@@ -2877,6 +2871,7 @@ export async function listMembers(
       complimentary: r.complimentary,
       takesSeat: r.takes_seat,
       listName: r.list_name,
+      staff: r.staff_role === null ? null : { role: toOrgRole(r.staff_role), roleName: r.staff_role_name },
     })),
     nextCursor,
   };
@@ -3409,20 +3404,8 @@ export async function listStaff(sql: Sql, gymId: string): Promise<StaffRow[]> {
                    WHERE lm.gym_id = s.gym_id AND lm.user_id = s.user_id AND lm.removed_at IS NULL) AS is_member
     FROM gym_staff s
     JOIN users u ON u.id = s.user_id
-    JOIN gyms g ON g.id = s.gym_id
     WHERE s.gym_id = ${gymId}
       AND u.status = 'active'
-      AND (
-        g.owner_user_id = s.user_id
-        OR EXISTS (
-          SELECT 1 FROM gym_members m
-          WHERE m.gym_id = s.gym_id AND m.user_id = s.user_id AND m.removed_at IS NULL
-        )
-        OR NOT EXISTS (
-          SELECT 1 FROM gym_members m
-          WHERE m.gym_id = s.gym_id AND m.user_id = s.user_id AND m.removed_at >= s.created_at
-        )
-      )
     ORDER BY (s.role = 'owner') DESC, s.created_at ASC, s.user_id ASC`;
   return rows.map((r) => ({
     userId: r.user_id,
@@ -3530,7 +3513,11 @@ export async function addStaff(
       WHERE m.gym_id = ${input.gymId}
         AND m.removed_at IS NULL
         AND u.email = ${input.email}
-      LIMIT 1`;
+        AND u.status = 'active'
+      LIMIT 1
+      -- Held until commit: an account deletion (softDeleteUser, which deletes staff rows)
+      -- waits for this appointment, or this one sees the account gone (4a-ii round one).
+      FOR SHARE OF u`;
     const candidate = candidates[0];
     if (candidate === undefined) return { kind: "not_a_member" };
 
@@ -4259,9 +4246,8 @@ export async function removeGymClosure(
 /** IS THIS PERSON A LIVE MEMBER OF THIS GYM — the read side of the hours route.
  *
  *  **Deliberately NOT `getStaffAuthority`'s question.** That answers "what may
- *  this person DO here", and its ghost rule (:14401) is about authority
- *  surviving a membership that ended. This asks the simpler thing a member's gym
- *  card needs: is this person, right now, in this gym. The service ORs the two,
+ *  this person DO here", and staff need not be members. This asks the simpler
+ *  thing a member's gym card needs: is this person, right now, in this gym. The service ORs the two,
  *  so an invited manager who never joined still reads the hours.
  *
  *  `removed_at IS NULL` is the same live-membership predicate every other reader

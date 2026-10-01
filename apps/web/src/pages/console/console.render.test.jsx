@@ -35,6 +35,8 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       confirmApplication: vi.fn(),
       rejectApplication: vi.fn(),
       removeMember: vi.fn(),
+      getStaff: vi.fn(),
+      removeStaff: vi.fn(),
       getNotMe: vi.fn(),
       putMemberOnList: vi.fn(),
       getMemberList: vi.fn(),
@@ -102,6 +104,7 @@ const ownerSeat = {
   groupLabel: 'Front Desk',
   complimentary: true,
   takesSeat: false,
+  staff: { role: 'owner', roleName: null },
 };
 
 /** A TRAINER who joined the gym like anybody else and was later handed the
@@ -115,6 +118,7 @@ const staffMemberSeat = {
   groupLabel: 'Front Desk',
   complimentary: false,
   takesSeat: false,
+  staff: { role: 'trainer', roleName: null },
 };
 
 /** A joined member carrying FOUR fields the server does not send and Part 3
@@ -1214,7 +1218,7 @@ describe('Members', () => {
     drawMembers();
 
     expect(await screen.findByText('Rita Sen')).toBeTruthy();
-    expect(screen.getByText('Complimentary')).toBeTruthy(); // the owner's seat
+    expect(screen.getByText('Owner')).toBeTruthy(); // the owner's seat, tagged as the owner (4a-ii)
     // Opened, her panel says how she came in, and nothing more about her.
     const panel = await openInApp('Rita Sen');
     expect(panel.getByText(/Morning Batch/)).toBeTruthy();
@@ -1305,7 +1309,7 @@ describe('Members', () => {
     // anything (:28976): the roster IS drawn, and the row that would produce
     // the false refusal — the complimentary seat with its badge — is on screen.
     expect(await screen.findByText('Kd Owner')).toBeTruthy();
-    expect(screen.getByText('Complimentary')).toBeTruthy();
+    expect(screen.getByText('Owner')).toBeTruthy();
 
     expect(screen.queryByText(/cheer/i)).toBeNull();
     expect(screen.queryByLabelText(/cheer/i)).toBeNull();
@@ -1929,7 +1933,7 @@ describe('Removing a member', () => {
     // Asked, the only Remove left is the one inside the question.
     fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
     await waitFor(() =>
-      expect(orgService.removeMember).toHaveBeenCalledWith('11111111-1111-1111-1111-111111111111', 'u2'),
+      expect(orgService.removeMember).toHaveBeenCalledWith('11111111-1111-1111-1111-111111111111', 'u2', { alsoStaff: false }),
     );
     await waitFor(() => expect(screen.queryByText('Rita Sen')).toBeNull());
     // `find`, not `get`: the roster re-read passes through its loading state,
@@ -1937,14 +1941,15 @@ describe('Removing a member', () => {
     expect(await screen.findByText('Kd Owner')).toBeTruthy();
   });
 
-  it('offers NO remove control beside the owner’s own complimentary seat', async () => {
-    // The server refuses to remove staff, and the owner is member #1 of their
-    // own gym — so the button would be a live refusal wearing a working button's
-    // clothes.
+  it('the owner’s own place: Remove says they stay the owner, offers no staff tick, and sends no tick (4a-ii)', async () => {
     orgService.getMembers.mockResolvedValue(page([ownerSeat]));
     drawMembers();
-    await openInApp('Kd Owner');
-    expect(removeButton()).toBeNull();
+    const panel = await openInApp('Kd Owner');
+    fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
+    expect(panel.getByText('Kd Owner owns this gym. They stay the owner and keep the console.')).toBeTruthy();
+    expect(panel.queryByRole('checkbox')).toBeNull();
+    fireEvent.click(panel.getByRole('button', { name: 'Remove from app' }));
+    await waitFor(() => expect(orgService.removeMember).toHaveBeenCalledWith(ORG.id, 'u1', { alsoStaff: false }));
   });
 
   /** KD'S FINDING AT THE STAFF RE-SMOKE (:14953): *"when a member is added as a
@@ -1962,18 +1967,172 @@ describe('Removing a member', () => {
     drawMembers();
 
     expect(await screen.findByText('Bhaskar Das')).toBeTruthy();
-    // Two free places — the owner's and the trainer's — and NOT the third row.
-    expect(screen.getAllByText('Complimentary')).toHaveLength(2);
+    // Two free places — the owner's and the trainer's — each tagged with who they are
+    // (Kd's 4a-ii click-through: staff looked like members), and NOT the third row.
+    expect(screen.getByText('Owner')).toBeTruthy();
+    expect(screen.getByText('Staff · Trainer')).toBeTruthy();
+    expect(screen.queryByText('Complimentary')).toBeNull();
     // The control: Rita pays, so her panel offers Remove and her row no badge.
     await openInApp('Rita Sen');
     expect(removeButton()).toBeTruthy();
   });
 
-  it('offers NO Remove beside a staff member, because the server refuses it', async () => {
-    // `removeMember` refuses anybody who is still staff, so drawing the button
-    // is drawing a live refusal. Ending their membership is the Staff screen's
-    // own flow — keys first, then the membership.
+  /** 4a-ii, THE WORST THING on this screen: the owner removes somebody who is also staff
+   *  and thinks they are gone. The box names that they are staff and says, under the tick,
+   *  whether they keep the console; the tick is what is sent. */
+  it('a staff member: the box says they are staff, and the tick decides whether they keep the console (4a-ii)', async () => {
     orgService.getMembers.mockResolvedValue(page([staffMemberSeat]));
+    drawMembers();
+    const panel = await openInApp('Bhaskar Das');
+    fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
+    expect(panel.getByText('Bhaskar Das is also staff here (trainer).')).toBeTruthy();
+    const tick = panel.getByRole('checkbox', { name: 'Also remove Bhaskar Das from staff' });
+    expect(tick.getAttribute('aria-checked')).toBe('false');
+    expect(panel.getByText(/They keep their staff access and can still open the console\./)).toBeTruthy();
+    fireEvent.click(tick);
+    expect(tick.getAttribute('aria-checked')).toBe('true');
+    expect(panel.getByText("They lose their staff access too and can't open the console any more.")).toBeTruthy();
+    fireEvent.click(panel.getByRole('button', { name: 'Remove from app and staff' }));
+    await waitFor(() => expect(orgService.removeMember).toHaveBeenCalledWith(ORG.id, 'u4', { alsoStaff: true }));
+  });
+
+  /** Kd's 4a-ii click-through: with no list imported, "Your list" shows the people in the
+   *  app under "Already in the app", and their names did nothing when pressed. */
+  it('a name under "Already in the app" opens that person, with Remove, on "In the app"', async () => {
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, staffMemberSeat]));
+    drawListTab();
+    fireEvent.click(await screen.findByRole('button', { name: /Bhaskar Das/ }));
+    const panel = within(await screen.findByRole('dialog', { name: 'Bhaskar Das' }));
+    expect(screen.getByRole('tab', { name: 'In the app' }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
+    // The words beside the tick tick it too.
+    fireEvent.click(panel.getByText('Also remove Bhaskar Das from staff'));
+    expect(panel.getByRole('checkbox', { name: 'Also remove Bhaskar Das from staff' }).getAttribute('aria-checked')).toBe('true');
+    expect(panel.getByRole('button', { name: 'Remove from app and staff' })).toBeTruthy();
+  });
+
+  /** Kd's 4a-ii click-through: "make another staff [tab] beside Your list and In the app
+   *  and put the staffs there", with "uses the app" for staff who also train here. */
+  it('the owner has a Staff tab: everyone who runs the gym, each with their role, and Uses the app for those who do', async () => {
+    orgService.getStaff.mockResolvedValue({
+      data: {
+        staff: [
+          { userId: 'u1', displayName: 'Kd Owner', email: 'kd@example.com', role: 'owner', since: '2026-08-01T00:00:00.000Z', isYou: true, isMember: true, roleName: null },
+          { userId: 'u4', displayName: 'Bhaskar Das', email: 'b@example.com', role: 'trainer', since: '2026-08-01T00:00:00.000Z', isYou: false, isMember: true, roleName: 'Front desk' },
+          { userId: 'u9', displayName: 'Ana Ruiz', email: 'ana@example.com', role: 'manager', since: '2026-08-01T00:00:00.000Z', isYou: false, isMember: false, roleName: null },
+        ],
+      },
+    });
+    drawMembers();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Staff' }));
+    const tab = within(await screen.findByTestId('staff-tab'));
+    expect(tab.getByText('3 people run your gym')).toBeTruthy();
+    const row = (id) => within(screen.getByTestId(`staff-tab-${id}`));
+    expect([row('u1').getByText('Owner'), row('u1').getByText('Uses the app'), row('u1').getByText('(you)')].length).toBe(3);
+    expect(row('u4').getByText('Front desk')).toBeTruthy();
+    expect(row('u4').getByText('Uses the app')).toBeTruthy();
+    expect(row('u9').getByText('Manager')).toBeTruthy();
+    expect(row('u9').queryByText('Uses the app')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Invite or manage staff in Settings' }).getAttribute('href')).toBe('/console/iron-house/settings');
+  });
+
+  const STAFF_LIST = {
+    data: {
+      staff: [
+        { userId: 'u1', displayName: 'Kd Owner', email: 'kd@example.com', role: 'owner', since: '2026-08-01T00:00:00.000Z', isYou: true, isMember: true, roleName: null },
+        { userId: 'u4', displayName: 'Bhaskar Das', email: 'b@example.com', role: 'trainer', since: '2026-08-01T00:00:00.000Z', isYou: false, isMember: true, roleName: 'Front desk', movesRecord: true },
+        { userId: 'u9', displayName: 'Ana Ruiz', email: 'ana@example.com', role: 'manager', since: '2026-08-01T00:00:00.000Z', isYou: false, isMember: false, roleName: null },
+      ],
+    },
+  };
+  const openStaff = async (id, name) => {
+    fireEvent.click(await screen.findByRole('tab', { name: 'Staff' }));
+    fireEvent.click(await screen.findByTestId(`staff-tab-${id}`));
+    return within(await screen.findByRole('dialog', { name }));
+  };
+
+  it('Staff tab: Remove from staff, unticked, takes only their staff access', async () => {
+    orgService.getStaff.mockResolvedValue(STAFF_LIST);
+    orgService.removeStaff.mockResolvedValue({ data: { status: 'removed' } });
+    drawMembers();
+    const panel = await openStaff('u4', 'Bhaskar Das');
+    fireEvent.click(panel.getByRole('button', { name: 'Remove from staff' }));
+    expect(panel.getByText("Remove Bhaskar Das from staff? They can't open the console any more.")).toBeTruthy();
+    expect(panel.getByText('They keep using the app as a member.')).toBeTruthy();
+    fireEvent.click(panel.getByRole('button', { name: 'Remove from staff' }));
+    await waitFor(() => expect(orgService.removeStaff).toHaveBeenCalledWith(ORG.id, 'u4'));
+    expect(orgService.removeMember).not.toHaveBeenCalled();
+  });
+
+  it('Staff tab: ticked, one step takes them off staff and out of the app', async () => {
+    orgService.getStaff.mockResolvedValue(STAFF_LIST);
+    orgService.removeMember.mockResolvedValue({ data: { status: 'removed' } });
+    drawMembers();
+    const panel = await openStaff('u4', 'Bhaskar Das');
+    fireEvent.click(panel.getByRole('button', { name: 'Remove from staff' }));
+    fireEvent.click(panel.getByText('Also remove Bhaskar Das from the app'));
+    // Their list record moves too, and the box says so (round one, L5).
+    expect(panel.getByText(/They'll be moved to past members and lose access to your gym in the app too\./)).toBeTruthy();
+    fireEvent.click(panel.getByRole('button', { name: 'Remove from staff and app' }));
+    await waitFor(() => expect(orgService.removeMember).toHaveBeenCalledWith(ORG.id, 'u4', { alsoStaff: true }));
+    expect(orgService.removeStaff).not.toHaveBeenCalled();
+  });
+
+  it('Staff tab: the owner cannot be removed from staff, and staff who do not use the app get no app tick', async () => {
+    orgService.getStaff.mockResolvedValue(STAFF_LIST);
+    drawMembers();
+    const owner = await openStaff('u1', 'Kd Owner');
+    expect(owner.queryByRole('button', { name: 'Remove from staff' })).toBeNull();
+    expect(owner.getByText("The owner runs the gym and can't be removed from staff.")).toBeTruthy();
+    fireEvent.click(owner.getByRole('button', { name: 'Close' }));
+    const ana = within(await (async () => {
+      fireEvent.click(await screen.findByTestId('staff-tab-u9'));
+      return screen.findByRole('dialog', { name: 'Ana Ruiz' });
+    })());
+    fireEvent.click(ana.getByRole('button', { name: 'Remove from staff' }));
+    expect(ana.queryByRole('checkbox')).toBeNull();
+  });
+
+  it('a manager has no Staff tab: the staff list is the owner\'s', async () => {
+    orgService.getMine.mockResolvedValue({
+      data: { orgs: [{ ...ORG, staffRole: 'manager', privileges: ['members.read', 'members.confirm', 'members.remove'] }] },
+    });
+    drawMembers();
+    expect(await screen.findByRole('tab', { name: 'In the app' })).toBeTruthy();
+    expect(screen.queryByRole('tab', { name: 'Staff' })).toBeNull();
+    expect(orgService.getStaff).not.toHaveBeenCalled();
+  });
+
+  it('a staff member left unticked is removed from the app only', async () => {
+    orgService.getMembers.mockResolvedValue(page([staffMemberSeat]));
+    drawMembers();
+    const panel = await openInApp('Bhaskar Das');
+    fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
+    fireEvent.click(panel.getByRole('button', { name: 'Remove from app' }));
+    await waitFor(() => expect(orgService.removeMember).toHaveBeenCalledWith(ORG.id, 'u4', { alsoStaff: false }));
+  });
+
+  it('a manager who may remove members is offered no Remove beside staff or the owner, only beside members', async () => {
+    orgService.getMine.mockResolvedValue({
+      data: { orgs: [{ ...ORG, staffRole: 'manager', privileges: ['members.read', 'members.confirm', 'members.remove'] }] },
+    });
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, staffMemberSeat, joinedMemberWithForbiddenExtras]));
+    drawMembers();
+    await openInApp('Bhaskar Das');
+    expect(removeButton()).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await openInApp('Kd Owner');
+    expect(removeButton()).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await openInApp('Rita Sen');
+    expect(removeButton()).toBeTruthy();
+  });
+
+  it('offers NO Remove beside a staff member when the server does not say who is staff', async () => {
+    // An API older than this web build: no `staff` on the row, and it refuses staff.
+    const legacyStaff = { ...staffMemberSeat };
+    delete legacyStaff.staff;
+    orgService.getMembers.mockResolvedValue(page([legacyStaff]));
     drawMembers();
     await openInApp('Bhaskar Das');
     expect(removeButton()).toBeNull();
@@ -1988,6 +2147,7 @@ describe('Removing a member', () => {
   it('falls back to the old flag when the server is too old to send the new one', async () => {
     const legacyOwner = { ...ownerSeat };
     delete legacyOwner.takesSeat;
+    delete legacyOwner.staff;
     const legacyMember = { ...joinedMemberWithForbiddenExtras };
     delete legacyMember.takesSeat;
     orgService.getMembers.mockResolvedValue(page([legacyOwner, legacyMember]));

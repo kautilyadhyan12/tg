@@ -51,6 +51,7 @@ export {
   orgCodeSchema,
   orgCodesResponseSchema,
   orgMemberListQuerySchema,
+  removeMemberQuerySchema,
   orgMemberPageSchema,
   orgOverviewResponseSchema,
   orgPrivilegeSchema,

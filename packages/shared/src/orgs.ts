@@ -1587,6 +1587,14 @@ export type NudgeApplicationResponse = z.infer<typeof nudgeApplicationResponseSc
 export const removeMemberResponseSchema = z.object({ status: z.literal("removed") });
 export type RemoveMemberResponse = z.infer<typeof removeMemberResponseSchema>;
 
+/** Removing somebody who is also staff (ROADMAP 4a-ii): `alsoStaff=true` takes their staff
+ *  access in the same step; left out, they keep it and stop being a member only. A query
+ *  rather than a body: a body on a DELETE is dropped by some browsers and proxies. */
+export const removeMemberQuerySchema = z
+  .object({ alsoStaff: z.enum(["true", "false"]).optional() })
+  .strict()
+  .transform((query) => ({ alsoStaff: query.alsoStaff === "true" }));
+
 /** Cursor pagination per R7.3. Cursor = `<joinedAt ISO>|<membership uuid>`
  *  from the previous page (keyset on the same pair the ordering uses). */
 export const orgMemberListQuerySchema = z
@@ -1678,6 +1686,10 @@ export const orgMemberSchema = z.object({
    *  past record they joined with. Never a past record found only by a shared email,
    *  which can be a relative's. Only for staff who see the list; absent otherwise. */
   recordId: z.string().uuid().optional(),
+  /** They also run this gym: their role and the gym's own name for it ("Front desk"), so
+   *  Remove can say they keep the console (ROADMAP 4a-ii); null for a member only. Already
+   *  readable from `takesSeat` (see above). Optional while an older server leaves it out. */
+  staff: z.object({ role: orgRoleSchema, roleName: z.string().nullable() }).strict().nullable().optional(),
 });
 export type OrgMember = z.infer<typeof orgMemberSchema>;
 
@@ -1994,6 +2006,9 @@ export const orgStaffSchema = z.object({
   isMember: z.boolean().optional(),
   /** The gym's own role they hold ("Front desk"), shown in place of `role`. */
   roleName: z.string().nullable().optional(),
+  /** Removing them from the app moves the list record that is certainly theirs to past
+   *  members (the Staff tab says so before it happens, 4a-ii). Only on the owner's list. */
+  movesRecord: z.boolean().optional(),
 });
 export type OrgStaff = z.infer<typeof orgStaffSchema>;
 

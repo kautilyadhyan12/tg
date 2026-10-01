@@ -31,6 +31,7 @@ import { loadConfig } from "../src/config.js";
 import { JOIN_CODE_ALPHABET } from "@app/shared";
 import * as orgRepo from "../src/modules/orgs/repo.js";
 import * as orgService from "../src/modules/orgs/service.js";
+import { restoreUser, softDeleteUser } from "../src/modules/users/repo.js";
 // The REAL spend-attribution readers, called by the permanent guard rather
 // than re-typed into it (T3 security-pass note). Three imports because R7.1
 // keeps them module-local — that duplication is the reason to name all three.
@@ -1512,32 +1513,38 @@ d("orgs routes (real Postgres)", () => {
     expect((JSON.parse(never.body) as { error: string }).error).toBe("member_not_found");
   });
 
-  it("refuses to remove STAFF, including the owner's own §4.0-step-6 seat", { timeout: 60_000 }, async () => {
+  it("the owner's own place can be removed and they stay the owner; staff who are not members are not this door's", { timeout: 60_000 }, async () => {
     const owner = await makeUser("rmstaff-owner");
     const manager = await makeUser("rmstaff-manager");
     const org = await makeOrg(owner.cookies, "Orgs Test Remove Staff");
     await sql`
       INSERT INTO gym_staff (gym_id, user_id, role) VALUES (${org.org.id}, ${manager.userId}, 'manager')`;
 
-    // The owner IS a member of their own gym, so without this guard the button
-    // beside their own name would close their own seat — with no restore built
-    // and no staff screen to undo it from.
+    // 4a-ii: the owner may end their own place in the app; "also staff" is refused for
+    // them, so the gym never loses its owner here.
+    const ownTick = await del(`/v1/orgs/${org.org.id}/members/${owner.userId}?alsoStaff=true`, {
+      cookies: owner.cookies,
+    });
+    expect(ownTick.statusCode).toBe(409);
+    expect((JSON.parse(ownTick.body) as { error: string }).error).toBe("owner_stays_owner");
     const own = await del(`/v1/orgs/${org.org.id}/members/${owner.userId}`, {
       cookies: owner.cookies,
     });
-    expect(own.statusCode).toBe(409);
-    expect((JSON.parse(own.body) as { error: string }).error).toBe("member_is_staff");
-    const stillThere = await sql<{ n: number }[]>`
+    expect(own.statusCode).toBe(200);
+    const live = await sql<{ n: number }[]>`
       SELECT count(*)::int AS n FROM gym_members
       WHERE gym_id = ${org.org.id} AND user_id = ${owner.userId} AND removed_at IS NULL`;
-    expect(stillThere[0]?.n).toBe(1);
+    expect(live[0]?.n).toBe(0);
+    expect(await staffRoleOf(org.org.id, owner.userId)).toBe("owner");
 
-    // And a manager cannot be removed by an owner through this door either —
-    // the refusal is about STAFF, not about the caller.
-    expect(
-      (await del(`/v1/orgs/${org.org.id}/members/${manager.userId}`, { cookies: owner.cookies }))
-        .statusCode,
-    ).toBe(409);
+    // A manager who was never a member: 404 with the tick or without, keys untouched.
+    for (const query of ["", "?alsoStaff=true"]) {
+      const res = await del(`/v1/orgs/${org.org.id}/members/${manager.userId}${query}`, { cookies: owner.cookies });
+      expect(res.statusCode).toBe(404);
+    }
+    expect(await staffRoleOf(org.org.id, manager.userId)).toBe("manager");
+    // A tick that is not "true" or "false" is a 400.
+    expect((await del(`/v1/orgs/${org.org.id}/members/${manager.userId}?alsoStaff=yes`, { cookies: owner.cookies })).statusCode).toBe(400);
   });
 
   it("only owner and manager may remove — a trainer gets 403, another gym's owner gets 404", { timeout: 60_000 }, async () => {
@@ -2249,10 +2256,11 @@ d("orgs routes (real Postgres)", () => {
     //
     // `takesSeat` was argued INTO this list on 2026-08-22 (:14953), not waved
     // through: it is a fact about the gym's own bill, the same kind as
-    // `complimentary` beside it, and it deliberately does not say "staff".
+    // `complimentary` beside it. `staff` (4a-ii) names the role `takesSeat` already
+    // gave away, so Remove can say who keeps the console.
     for (const item of page.items) {
       expect(Object.keys(item).sort()).toEqual(
-        ["complimentary", "displayName", "groupLabel", "joinedAt", "takesSeat", "userId"].sort(),
+        ["complimentary", "displayName", "groupLabel", "joinedAt", "staff", "takesSeat", "userId"].sort(),
       );
     }
 
@@ -4007,10 +4015,14 @@ d("orgs routes (real Postgres)", () => {
           privileges: orgService.defaultPrivilegesFor("manager"),
           actorUserId: owner.userId,
         }),
+        // The owner removing them from the app AND staff (4a-ii): in either order the
+        // two leave nobody running a gym they are not in.
         orgRepo.removeMember(c2, {
           gymId: org.org.id,
           userId: target.userId,
           actorUserId: owner.userId,
+          actorManagesStaff: true,
+          alsoStaff: true,
         }),
       ]);
     } finally {
@@ -4050,14 +4062,12 @@ d("orgs routes (real Postgres)", () => {
     );
     expect(await staffRoleOf(org.org.id, ghost.userId)).toBe("manager");
 
-    // The DPDP Day-0 cascade: memberships close, `gym_staff` is untouched.
-    await sql`UPDATE gym_members SET removed_at = now()
-              WHERE gym_id = ${org.org.id} AND user_id = ${ghost.userId} AND removed_at IS NULL`;
-    await sql`UPDATE users SET status = 'deleted', deleted_at = now() WHERE id = ${ghost.userId}`;
+    // The DPDP Day-0 cascade itself: memberships close and, since 4a-ii, staff rows go.
+    expect(await softDeleteUser(sql, ghost.userId)).not.toBeNull();
     expect(await staffRoleOf(org.org.id, ghost.userId)).toBeNull();
 
-    // Restore. The account is live again; the membership deliberately is not.
-    await sql`UPDATE users SET status = 'active', deleted_at = NULL WHERE id = ${ghost.userId}`;
+    // Restore. The account is live again; the membership and the keys deliberately are not.
+    expect(await restoreUser(sql, ghost.userId)).toBe(true);
     expect(await staffRoleOf(org.org.id, ghost.userId)).toBeNull();
 
     // The OWNER is exempt and must stay exempt — a gym whose owner opted out of
@@ -4162,10 +4172,8 @@ d("orgs routes (real Postgres)", () => {
     );
     await del(`/v1/orgs/${gymA.org.id}/staff/${exMember.userId}`, { cookies: ownerA.cookies });
     await del(`/v1/orgs/${gymA.org.id}/members/${exMember.userId}`, { cookies: ownerA.cookies });
-    // The ghost: a staff row written BEFORE the membership closed (since 4a-i, one
-    // written after it is a past member re-appointed, and is let in).
-    await sql`INSERT INTO gym_staff (gym_id, user_id, role, created_at)
-              VALUES (${gymA.org.id}, ${exMember.userId}, 'manager', now() - interval '1 day')`;
+    // Removed from gym A's app and staff: holding gym B's live membership gives no
+    // authority at A.
     expect(await staffRoleOf(gymA.org.id, exMember.userId)).toBeNull();
 
     // (b) NEVER a member of gym A — §4.7's invited manager — who happens to
@@ -4200,10 +4208,10 @@ d("orgs routes (real Postgres)", () => {
       "trainer",
     ]);
 
-    // Delete one account, the way the DPDP Day-0 cascade does.
-    await sql`UPDATE gym_members SET removed_at = now()
-              WHERE gym_id = ${org.org.id} AND user_id = ${ghost.userId} AND removed_at IS NULL`;
-    await sql`UPDATE users SET status = 'deleted', deleted_at = now() WHERE id = ${ghost.userId}`;
+    // Delete one account through the DPDP Day-0 cascade itself, and remove the other
+    // from the app only (4a-ii): they keep their keys, and both readers must say so.
+    expect(await softDeleteUser(sql, ghost.userId)).not.toBeNull();
+    expect((await del(`/v1/orgs/${org.org.id}/members/${live.userId}`, { cookies: owner.cookies })).statusCode).toBe(200);
 
     const listed = await readStaff(org.org.id, owner.cookies);
     for (const person of [owner, ghost, live]) {
@@ -4217,6 +4225,7 @@ d("orgs routes (real Postgres)", () => {
     // And concretely: the deleted manager is gone from the screen, not shown
     // holding a role they no longer hold.
     expect(listed.map((s) => s.userId)).not.toContain(ghost.userId);
+    expect(listed.map((s) => s.userId)).toContain(live.userId);
   });
 
   /** O3's subject, restored. That mutant deletes `complimentary = false` from
@@ -5135,12 +5144,10 @@ d("orgs routes (real Postgres)", () => {
     expect((JSON.parse(missing.body) as { error: string }).error).toBe("not_staff");
   });
 
-  /** The other half of the two-tap flow Kd was shown: while somebody is staff,
-   *  the MEMBER remove button refuses them. This is pre-existing behaviour
-   *  (`repo.removeMember`'s `is_staff` arm) and it is asserted HERE because this
-   *  card is what finally makes a non-owner staff member reachable — before it,
-   *  that arm could only ever fire on the owner. */
-  it("a staff member cannot be removed from the member list until their keys are taken", async () => {
+  /** 4a-ii: staff and member are separate. Removing a staff person from the app keeps
+   *  their keys unless the owner ticks "also staff"; the Staff screen's two taps (keys,
+   *  then the place) still work. */
+  it("a staff member removed from the app keeps their keys; the two-tap Staff flow still works", async () => {
     const owner = await makeUser("staff-order-owner");
     const hire = await makeUser("staff-order-hire");
     const org = await makeOrg(owner.cookies, "Orgs Test Staff Order");
@@ -5151,16 +5158,19 @@ d("orgs routes (real Postgres)", () => {
       { cookies: owner.cookies },
     );
 
-    const blocked = await del(`/v1/orgs/${org.org.id}/members/${hire.userId}`, {
+    const placeOnly = await del(`/v1/orgs/${org.org.id}/members/${hire.userId}`, {
       cookies: owner.cookies,
     });
-    expect(blocked.statusCode).toBe(409);
+    expect(placeOnly.statusCode).toBe(200);
+    expect(await staffRoleOf(org.org.id, hire.userId)).toBe("trainer");
 
-    await del(`/v1/orgs/${org.org.id}/staff/${hire.userId}`, { cookies: owner.cookies });
-    const allowed = await del(`/v1/orgs/${org.org.id}/members/${hire.userId}`, {
+    // The Staff screen's order: keys, then the place (already gone: the same answer).
+    expect((await del(`/v1/orgs/${org.org.id}/staff/${hire.userId}`, { cookies: owner.cookies })).statusCode).toBe(200);
+    const again = await del(`/v1/orgs/${org.org.id}/members/${hire.userId}`, {
       cookies: owner.cookies,
     });
-    expect(allowed.statusCode).toBe(200);
+    expect(again.statusCode).toBe(200);
+    expect(await staffRoleOf(org.org.id, hire.userId)).toBeNull();
   });
 
   // ---------------------------------------------------------------------------

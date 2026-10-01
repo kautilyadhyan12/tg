@@ -14,6 +14,8 @@ export const STAFF_INVITES_OPEN_MAX = 20;
 export const STAFF_INVITE_EMAILS_PER_DAY = 20;
 /** Staff invitation emails one gym may send one address in any 7 days. */
 export const STAFF_INVITE_EMAILS_PER_ADDRESS_WEEK = 3;
+/** Times one invitation may be sent again; each gives it 7 more days. */
+export const STAFF_INVITE_RESENDS_MAX = 3;
 
 /** The most roles of its own a gym may make. */
 export const STAFF_ROLES_MAX = 20;
@@ -70,9 +72,9 @@ export const STAFF_INVITE_EMAIL_REASON_WORDS: Readonly<Record<StaffInviteEmailRe
   bad_address: "Email not sent: this email address isn't valid.",
   no_mail_domain: "Email not sent: this email address can't receive email. Check it with them.",
   send_unknown: "We couldn't confirm the email was delivered. Ask them to check their inbox and spam folder.",
-  provider_refused: "Email not sent: our email provider declined it for a week. Cancel it and invite them again.",
-  provider_unavailable: "Email not sent: our email provider was unavailable for a week. Cancel it and invite them again.",
-  dns_unavailable: "Email not sent: we couldn't check this address's email service for a week. Cancel it and invite them again.",
+  provider_refused: "Email not sent: our email provider declined it for a week. Press Send again to try once more.",
+  provider_unavailable: "Email not sent: our email provider was unavailable for a week. Press Send again to try once more.",
+  dns_unavailable: "Email not sent: we couldn't check this address's email service for a week. Press Send again to try once more.",
 };
 
 /** One invitation as the owner sees it on Settings → Staff. `waiting`: open and not yet
@@ -94,6 +96,12 @@ export const staffInviteSchema = z
     /** The email: being sent, sent, or not sent (with `emailReason`). */
     emailStatus: z.enum(["sending", "sent", "not_sent"]),
     emailReason: staffInviteEmailReasonSchema.nullable(),
+    /** When the newest email was asked for: the invitation's own day, or its last Send again. */
+    lastSentAt: z.string(),
+    /** How many more times Send again may be pressed for it (`STAFF_INVITE_RESENDS_MAX` at first). */
+    resendsLeft: z.number().int().nonnegative(),
+    /** While the week's 3 emails to this address have gone: when another may (else null). */
+    sendAgainFrom: z.string().nullable(),
   })
   .strict();
 export type StaffInvite = z.infer<typeof staffInviteSchema>;
@@ -111,6 +119,10 @@ export type CreateStaffInviteResponse = z.infer<typeof createStaffInviteResponse
 
 export const cancelStaffInviteResponseSchema = z.object({ status: z.literal("cancelled") }).strict();
 export type CancelStaffInviteResponse = z.infer<typeof cancelStaffInviteResponseSchema>;
+
+/** Send again: the same invitation, its email queued again and 7 more days. */
+export const resendStaffInviteResponseSchema = z.object({ invite: staffInviteSchema }).strict();
+export type ResendStaffInviteResponse = z.infer<typeof resendStaffInviteResponseSchema>;
 
 // ── The gym's own roles (Kd, RULINGS 2026-10-01) ─────────────────────────────
 
@@ -226,6 +238,15 @@ export const STAFF_INVITE_WORDS = {
   too_many_to_address: (email: string): string =>
     `You've sent ${email} ${String(STAFF_INVITE_EMAILS_PER_ADDRESS_WEEK)} invitations this week. Try again next week.`,
   sending_off: "Invitation emails aren't switched on yet, so nobody can be invited right now.",
+  resends_used: (email: string): string =>
+    `You've sent ${email} this invitation ${String(STAFF_INVITE_RESENDS_MAX + 1)} times. Check the address with them, or remove it and invite them again.`,
+  still_sending: "We're still sending the last email for this invitation. Wait a minute, then try again.",
+  address_blocked: (email: string, reason: "bounced" | "refused" | "complained" | "unsubscribed"): string =>
+    reason === "complained"
+      ? `${email} marked an earlier email from you as spam, so we can't email them again. Ask them to sign in with this address instead.`
+      : reason === "unsubscribed"
+        ? `${email} unsubscribed from your emails, so we can't email them again. Ask them to sign in with this address instead.`
+        : `Emails to ${email} don't arrive. Check the address with them, then remove this invitation and invite the right one.`,
   invite_not_found: "That invitation isn't here any more.",
   no_invitation: (address: string): string =>
     `No staff invitation for ${address}. Sign in with the email address the invitation was sent to.`,

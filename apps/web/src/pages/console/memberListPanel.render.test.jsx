@@ -109,6 +109,17 @@ describe("the worst thing on a person's page: two people opened one after the ot
   const person = () => within(screen.getByTestId('member-person'));
   const rowOf = async (name) => (await screen.findAllByTestId('list-row')).find((r) => r.textContent.includes(name));
 
+  it('a record whose person also runs the gym is tagged Staff; a member is not (4a-ii)', async () => {
+    const mia = entry('Mia Lopez', { inApp: true, staff: { role: 'trainer', roleName: 'Front desk' } });
+    const max = entry('Max Hart', { inApp: true, staff: { role: 'manager', roleName: null } });
+    const rita = entry('Rita Sen', { inApp: true, staff: null });
+    orgService.getMemberListEntries.mockResolvedValue(pageOf([mia, max, rita]));
+    draw();
+    expect(within(await rowOf('Mia Lopez')).getByTestId('staff-tag').textContent).toBe('Staff · Front desk');
+    expect(within(await rowOf('Max Hart')).getByTestId('staff-tag').textContent).toBe('Staff · Manager');
+    expect(within(await rowOf('Rita Sen')).queryByTestId('staff-tag')).toBeNull();
+  });
+
   it("Ada's page answering late never shows under Bea's name, and Bea's Invite asks for Bea and invites Bea", async () => {
     const ada = entry('Ada Lovelace');
     const bea = entry('Bea Hart');
