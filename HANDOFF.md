@@ -13,7 +13,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Verified:** api **4,618 of 4,622** in one full run on `aihg_b` (the 4 reds — migrations, attendance, leads, invites — timeouts under load, 120/120 alone); every billing suite green in it; shared 278/278; web 3,398/3,399 (`settingsHealth` 9/9 alone; `poseAssets.contract` local Node 24); tsc and eslint 0; gitleaks clean. The real Paddle adapter's `getCustomer` read the sandbox (customer, no discount, `not_found`).
 - **Cost at full size:** reads no list of people; one row read under the gym's lock per plan written, one privilege read per billing request, one Paddle customer read per new plan.
 - **Not run:** a real payment through Paddle's window (its card form cannot be driven headless): Kd's click-through is that proof.
-- **Next:** Kd's click-through; the two re-checks in the SAME reviewer terminals (`reviews/money-security-recheck.md`, `money-integrity-recheck.md`); merge on Kd's word; then Stage 4 item 1.
+- **Re-checks:** security closed the round; integrity closed its four and found **H3, from the fix** (a replaced bigger window, mandate given and add-on not landed, no longer cancelled at once): fixed in 4864cac, test RED first, and its second re-check closed the round. The security re-check's Lows fixed without a re-check: a first payment's discount refunded too (RED when broken), `tools/paddle-prices.ts` checks `customer.read` (sandbox key: yes), the refusal names no contact. Billing suites 175/175. `aihg_b` took Folder A's 0062.
+- **Merged on Kd's word (PR #149, 2026-10-01)**, all six checks green; his click-through (a real Paddle and Razorpay payment on new gyms) not yet reported. **Next in Folder B: Stage 4 item 1.**
 
 ## 2026-10-01 · 1d-iii-b (Folder B): a smaller size through Razorpay (branch `razorpay-smaller-size`)
 

@@ -247,7 +247,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 1d-iii-a. [x] **A bigger size** — merged 2026-10-01 (PR #146).
        - 1d-iii-b. [x] **A smaller size** — merged 2026-10-01 (PR #148).
    - 1e. [x] **Paddle's window filled in** — merged 2026-10-01 (PR #142).
-   - 1f. [ ] **The two extra passes' fixes** (security and integrity over 1a–1e and 2f-i): a replaced window paid in the same instant refunded, cancels retried until taken, a plan paid as somebody other than the owner refunded, the billing check before the limits.
+   - 1f. [x] **The two extra passes' fixes** — merged 2026-10-01 (PR #149).
 2. **Trials enforced** (split 2026-09-08 after Kd's trial-abuse ruling; no approval queue, ever).
    - 2a. [x] **The price list, the 10-day gym trial at 200 members, no individual trial, one free scan a day** — merged 2026-09-24 (PR #101).
    - 2b. [ ] Same person, new spelling: Gmail dots and `+tags` collapse for trial counting; throwaway email domains refused at the Manage door.
