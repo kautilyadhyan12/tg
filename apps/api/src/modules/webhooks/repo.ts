@@ -9,13 +9,15 @@ type SqlOrTx = Sql | TransactionSql;
 /** What is kept of a Resend event: never the address or the subject. `sendId` is the
  *  invitation tag's value, the row in `gym_invite_sends` the email was sent for;
  *  `leadSendId` the lead follow-up tag's, a row in `gym_lead_sends` (20c-v-b; events
- *  kept before it have none). */
+ *  kept before it have none); `staffSendId` a staff invitation's, a row in
+ *  `gym_staff_invite_sends` (4a-i). */
 export const storedResendEventSchema = z
   .object({
     type: resendEmailEventTypeSchema,
     emailId: z.string().min(1).max(100),
     sendId: z.string().uuid().nullable(),
     leadSendId: z.string().uuid().nullable().default(null),
+    staffSendId: z.string().uuid().nullable().default(null),
     bounceType: z.string().max(40).nullable(),
     bounceSubType: z.string().max(40).nullable(),
   })

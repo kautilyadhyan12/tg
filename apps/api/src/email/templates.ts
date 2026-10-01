@@ -2,7 +2,7 @@
 // HTML twin for the ones that render it. The two CODE emails carry no link at
 // all: a code is typed, never clicked, so there is nothing there to phish
 // with. The deletion-undo email carries exactly one link, to our own origin.
-import { leadFollowUpLetter, leadGreeting } from "@app/shared";
+import { leadFollowUpLetter, leadGreeting, withArticle } from "@app/shared";
 import type { EmailMessage } from "./resend.js";
 
 const APP_NAME = "AI Home Gym";
@@ -102,7 +102,7 @@ export function staffInviteEmail(words: {
   const gym = words.gymName;
   const who = words.inviterName === "" ? gym : words.inviterName;
   const lines = {
-    lead: `${who} invited you to help run ${gym} as ${/^[aeiou]/i.test(words.role) ? "an" : "a"} ${words.role}.`,
+    lead: `${who} invited you to help run ${gym} as ${withArticle(words.role)}.`,
     how: `Sign in with this email address, ${words.to}, and press Accept:`,
     only: `The invitation works for ${String(words.days)} days, and only for someone who signs in with this address.`,
     ignore: "If you weren't expecting it, you can ignore this email.",

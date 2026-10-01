@@ -207,6 +207,11 @@ export function staffRoleWord(role: "manager" | "trainer", orgType: unknown): st
   return role === "manager" ? "manager" : orgWords(orgType).coach;
 }
 
+/** "a trainer", "an Office manager": a role's name with its article. */
+export function withArticle(word: string): string {
+  return `${/^[aeiou]/i.test(word) ? "an" : "a"} ${word}`;
+}
+
 /** The sentences a refusal is answered with. None says whether an address has an account. */
 export const STAFF_INVITE_WORDS = {
   owner_only_privilege: "Managing staff stays with the owner. You can give them any of the other permissions.",

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { STAFF_ROLE_NAME_MAX, orgWords } from '@app/shared';
+import { STAFF_ROLE_NAME_MAX, orgWords, withArticle } from '@app/shared';
 import { Loader2, Plus, UserMinus, X } from 'lucide-react';
 import { ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
 import { formatJoinedAt, roleLabel } from '../../pages/console/consoleView';
@@ -1090,8 +1090,8 @@ export default function StaffPanel({ gymId, privileges, orgType, readOnly = fals
       const done = res.data;
       setNotice(
         done.outcome === 'added'
-          ? `${done.staff.displayName} is now ${done.staff.roleName ? `a ${done.staff.roleName}` : done.staff.role === 'manager' ? 'a manager' : `a ${words.coach}`} here.`
-          : `Invitation sent to ${done.invite.email}. It works for 7 days.`,
+          ? `${done.staff.displayName} is now ${withArticle(done.staff.roleName || (done.staff.role === 'manager' ? 'manager' : words.coach))} here.`
+          : `Invited ${done.invite.email}. We're sending the email now; the invitation works for 7 days.`,
       );
       setEmail('');
       setRole('trainer');

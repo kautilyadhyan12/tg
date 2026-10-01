@@ -417,6 +417,16 @@ describe('a person invited to help run a gym', () => {
     expect(await screen.findByText('Create your organisation')).toBeTruthy();
   });
 
+  it('for somebody who runs a gym, a failed check for invitations does not sit over their list', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [ORG] } });
+    orgService.getMyStaffInvitations.mockRejectedValue(apiError(429, 'rate_limited', 'Too many requests.'));
+    drawHome();
+    expect(await screen.findByText('Iron House')).toBeTruthy();
+    await waitFor(() => expect(orgService.getMyStaffInvitations).toHaveBeenCalled());
+    expect(screen.queryByText('Too many requests.')).toBeNull();
+    expect(screen.queryByText('Try again')).toBeNull();
+  });
+
   it('a refusal to Accept is shown on the card', async () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [] } });
     invitationsAre([STAFF_INVITATION]);

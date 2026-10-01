@@ -17,6 +17,7 @@ import {
   STAFF_INVITE_EMAILS_PER_ADDRESS_WEEK,
   STAFF_INVITE_EMAILS_PER_DAY,
   STAFF_INVITE_WORDS,
+  withArticle,
   STAFF_INVITES_OPEN_MAX,
   STAFF_ROLES_MAX,
   OWNER_ONLY_PRIVILEGES,
@@ -41,6 +42,7 @@ import type { Sql } from "postgres";
 import { accountAddress } from "../../auth/service.js";
 import * as orgRepo from "../repo.js";
 import { canonicalPrivileges, defaultPrivilegesFor, OrgsError, requirePrivilege, requireWritablePrivilege, toOrgStaff } from "../service.js";
+import { emailHmac } from "../invites/address.js";
 import type { InviteSettings } from "../invites/settings.js";
 import * as repo from "./repo.js";
 
@@ -99,17 +101,18 @@ export async function createStaffInvite(
     case "added":
       return { outcome: "added", staff: toOrgStaff(appointed.staff, userId) };
     case "already_staff":
-      throw alreadyStaff(appointed.staff.displayName, appointed.staff.role, org.orgType);
+      throw alreadyStaff(appointed.staff.displayName, appointed.staff.role, appointed.staff.roleName, org.orgType);
     case "not_a_member":
       break;
   }
 
-  if (deps.invites?.sender == null) throw new OrgsError(409, "sending_off", STAFF_INVITE_WORDS.sending_off);
+  const settings = deps.invites;
+  if (settings?.sender == null) throw new OrgsError(409, "sending_off", STAFF_INVITE_WORDS.sending_off);
   const at = deps.now();
   const invite = await deps.sql.begin(async (tx) => {
     await orgRepo.lockOrgRow(tx, gymId);
     const staff = await repo.staffNameAt(tx, gymId, input.email);
-    if (staff !== null) throw alreadyStaff(staff.displayName, staff.role, org.orgType);
+    if (staff !== null) throw alreadyStaff(staff.displayName, staff.role, staff.roleName, org.orgType);
     const open = await repo.lockOpenInviteFor(tx, gymId, input.email);
     if (open !== null && open.state === "pending" && open.expiresAt.getTime() > at.getTime()) {
       throw new OrgsError(409, "already_invited", STAFF_INVITE_WORDS.already_invited(open.email));
@@ -137,6 +140,7 @@ export async function createStaffInvite(
       invitedBy: userId,
       at,
       expiresAt: new Date(at.getTime() + STAFF_INVITE_DAYS * DAY_MS),
+      emailHmac: emailHmac(settings.hmacKey, input.email),
     });
     await orgRepo.insertAudit(tx, {
       actorUserId: userId,
@@ -166,13 +170,14 @@ export async function createStaffInvite(
     }),
   };
 
-  function alreadyStaff(displayName: string, role: string, orgType: unknown): OrgsError {
+  function alreadyStaff(displayName: string, role: string, roleName: string | null, orgType: unknown): OrgsError {
+    const word = roleName ?? (role === "manager" ? "manager" : orgWords(orgType).coach);
     return new OrgsError(
       409,
       "already_staff",
       role === "owner"
         ? `That person owns this ${words.it}.`
-        : `${displayName} is already ${role === "manager" ? "a manager" : `a ${orgWords(orgType).coach}`} here. Change their role instead of inviting them again.`,
+        : `${displayName} is already ${withArticle(word)} here. Change what they can do instead of inviting them again.`,
     );
   }
 }

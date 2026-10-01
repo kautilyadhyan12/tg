@@ -915,6 +915,11 @@ export async function gymCounts(sql: SqlOrTx, gymId: string): Promise<GymCounts>
       FROM gym_lead_sends y, since
       WHERE y.gym_id = ${gymId} AND y.state = 'sent' AND y.result IS DISTINCT FROM 'refused'
         AND y.finished_at >= since.at AND NOT y.from_page
+      UNION ALL
+      SELECT z.result, z.finished_at, z.id
+      FROM gym_staff_invite_sends z, since
+      WHERE z.gym_id = ${gymId} AND z.state = 'sent' AND z.result IS DISTINCT FROM 'refused'
+        AND z.finished_at >= since.at
     )
     SELECT (SELECT count(*)::int FROM counted) AS sent,
            (SELECT count(*)::int FROM counted WHERE result = 'bounced') AS bounced,

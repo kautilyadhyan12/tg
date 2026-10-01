@@ -2,7 +2,7 @@
 // under the app's daily cap, and names its lease in every write that finishes it, as the
 // member invitations' queue does (`invites/repo.ts`).
 import type { Sql, TransactionSql } from "postgres";
-import type { StaffInviteEmailReason } from "@app/shared";
+import { memberInviteEmailResultSchema, type MemberInviteEmailResult, type StaffInviteEmailReason } from "@app/shared";
 import { emailsUsedToday } from "../invites/repo.js";
 
 type SqlOrTx = Sql | TransactionSql;
@@ -172,4 +172,60 @@ export async function retrySend(
     WHERE id = ${send.id} AND gym_id = ${send.gymId} AND state = 'sending' AND attempts = ${send.attempts}
     RETURNING id`;
   return rows.length === 1;
+}
+
+// ── What comes back (a Resend report, confirmed with Resend; `invites/results.ts`) ──
+
+export interface ReportedStaffSend {
+  id: string;
+  gymId: string;
+  state: string;
+  reason: string | null;
+  providerId: string | null;
+}
+
+/** The staff invitation email a report is about: the row its tag names, or else the sent
+ *  row Resend knows by this id. */
+export async function staffSendForReport(sql: SqlOrTx, report: { staffSendId: string | null; providerId: string }): Promise<ReportedStaffSend | null> {
+  type Row = { id: string; gym_id: string; state: string; reason: string | null; provider_id: string | null };
+  const rows =
+    report.staffSendId !== null
+      ? await sql<Row[]>`SELECT id, gym_id, state, reason, provider_id FROM gym_staff_invite_sends WHERE id = ${report.staffSendId}`
+      : await sql<Row[]>`
+          SELECT id, gym_id, state, reason, provider_id FROM gym_staff_invite_sends
+          WHERE provider_id = ${report.providerId} AND state = 'sent'
+          ORDER BY finished_at, id
+          LIMIT 1`;
+  const row = rows[0];
+  return row === undefined ? null : { id: row.id, gymId: row.gym_id, state: row.state, reason: row.reason, providerId: row.provider_id };
+}
+
+/** An email the sender could not confirm, which Resend's record shows went. */
+export async function markStaffWentAfterAll(tx: TransactionSql, gymId: string, sendId: string, providerId: string): Promise<void> {
+  await tx`
+    UPDATE gym_staff_invite_sends SET state = 'sent', reason = NULL, provider_id = ${providerId}
+    WHERE gym_id = ${gymId} AND id = ${sendId} AND state = 'failed' AND reason = 'send_unknown'`;
+}
+
+/** The email's result now and its address's HMAC, read under the caller's lock. */
+export async function staffSendForResult(
+  tx: TransactionSql,
+  gymId: string,
+  sendId: string,
+): Promise<{ result: MemberInviteEmailResult | null; hmac: string } | null> {
+  const rows = await tx<{ result: string | null; email_hmac: string }[]>`
+    SELECT result, email_hmac FROM gym_staff_invite_sends
+    WHERE gym_id = ${gymId} AND id = ${sendId} AND state = 'sent'
+    FOR UPDATE`;
+  const row = rows[0];
+  if (row === undefined) return null;
+  const result = row.result === null ? null : memberInviteEmailResultSchema.safeParse(row.result);
+  if (result !== null && !result.success) throw new Error(`staff invite send ${sendId} holds a result that no longer parses`);
+  return { result: result === null ? null : result.data, hmac: row.email_hmac };
+}
+
+export async function setStaffResult(tx: TransactionSql, gymId: string, sendId: string, result: MemberInviteEmailResult, at: Date): Promise<void> {
+  await tx`
+    UPDATE gym_staff_invite_sends SET result = ${result}, result_at = ${at}
+    WHERE gym_id = ${gymId} AND id = ${sendId} AND state = 'sent'`;
 }

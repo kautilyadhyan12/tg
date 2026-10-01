@@ -13,7 +13,9 @@
 --                          `role` underneath stays manager or trainer, and the ticks are
 --                          what the console obeys.
 -- gym_staff_invite_sends   each email, queued in the same transaction as its invitation
---                          and sent by the worker; the address is cleared when it is done.
+--                          and sent by the worker; the address is cleared when it is done,
+--                          its HMAC kept for what Resend reports back (a bounce or a spam
+--                          report: suppressed and counted as a member invitation's is).
 
 CREATE TABLE gym_staff_invites (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -43,6 +45,7 @@ CREATE UNIQUE INDEX gym_staff_invites_open_uq ON gym_staff_invites (gym_id, emai
 CREATE INDEX gym_staff_invites_email_idx ON gym_staff_invites (email)
   WHERE state IN ('pending','declined') AND cleared_at IS NULL;--> statement-breakpoint
 CREATE INDEX gym_staff_invites_gym_idx ON gym_staff_invites (gym_id, created_at);--> statement-breakpoint
+CREATE INDEX gym_staff_invites_created_idx ON gym_staff_invites (created_at);--> statement-breakpoint
 CREATE TABLE gym_staff_roles (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   gym_id uuid NOT NULL REFERENCES gyms(id) ON DELETE CASCADE,
@@ -62,6 +65,7 @@ CREATE TABLE gym_staff_invite_sends (
   gym_id uuid NOT NULL REFERENCES gyms(id) ON DELETE CASCADE,
   invite_id uuid NOT NULL REFERENCES gym_staff_invites(id) ON DELETE CASCADE,
   email citext,
+  email_hmac text NOT NULL,
   state text NOT NULL DEFAULT 'queued',
   reason text,
   attempts integer NOT NULL DEFAULT 0,
@@ -71,6 +75,12 @@ CREATE TABLE gym_staff_invite_sends (
   provider_id text,
   created_at timestamptz NOT NULL,
   finished_at timestamptz,
+  result text,
+  result_at timestamptz,
+  CONSTRAINT gym_staff_invite_sends_email_hmac_check CHECK (email_hmac ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT gym_staff_invite_sends_result_check CHECK (result IS NULL OR result IN ('delivered','bounced','complained','failed','refused')),
+  CONSTRAINT gym_staff_invite_sends_result_state_check CHECK (result IS NULL OR state = 'sent'),
+  CONSTRAINT gym_staff_invite_sends_result_at_check CHECK ((result IS NULL) = (result_at IS NULL)),
   CONSTRAINT gym_staff_invite_sends_state_check CHECK (state IN ('queued','sending','sent','skipped','failed')),
   CONSTRAINT gym_staff_invite_sends_email_check CHECK (state IN ('queued','sending') OR email IS NULL),
   CONSTRAINT gym_staff_invite_sends_email_length_check CHECK (email IS NULL OR length(email) <= 254),
@@ -85,4 +95,6 @@ CREATE INDEX gym_staff_invite_sends_due_idx ON gym_staff_invite_sends (not_befor
   WHERE state IN ('queued','sending');--> statement-breakpoint
 CREATE INDEX gym_staff_invite_sends_gym_idx ON gym_staff_invite_sends (gym_id, created_at);--> statement-breakpoint
 CREATE INDEX gym_staff_invite_sends_invite_idx ON gym_staff_invite_sends (invite_id, created_at DESC);--> statement-breakpoint
-CREATE INDEX gym_staff_invite_sends_sent_idx ON gym_staff_invite_sends (finished_at) WHERE state = 'sent';
+CREATE INDEX gym_staff_invite_sends_sent_idx ON gym_staff_invite_sends (finished_at) WHERE state = 'sent';--> statement-breakpoint
+CREATE INDEX gym_staff_invite_sends_gym_sent_idx ON gym_staff_invite_sends (gym_id, finished_at) WHERE state = 'sent';--> statement-breakpoint
+CREATE INDEX gym_staff_invite_sends_provider_idx ON gym_staff_invite_sends (provider_id) WHERE provider_id IS NOT NULL;

@@ -748,13 +748,20 @@ describe('adding somebody', () => {
     await openForm();
     fireEvent.change(screen.getByLabelText(/Their email address/i), { target: { value: 'anil@example.com' } });
     fireEvent.click(screen.getByText('Send invitation'));
-    expect(await screen.findByText('Invitation sent to anil@example.com. It works for 7 days.')).toBeTruthy();
+    expect(await screen.findByText("Invited anil@example.com. We're sending the email now; the invitation works for 7 days.")).toBeTruthy();
 
     orgService.inviteStaff.mockResolvedValue({ data: { outcome: 'added', staff: TRAINER } });
     fireEvent.click(await screen.findByText('Invite staff'));
     fireEvent.change(screen.getByLabelText(/Their email address/i), { target: { value: 'rita@example.com' } });
     fireEvent.click(screen.getByText('Send invitation'));
     expect(await screen.findByText(`${TRAINER.displayName} is now a trainer here.`)).toBeTruthy();
+
+    // A role of the gym's own that starts with a vowel reads "an".
+    orgService.inviteStaff.mockResolvedValue({ data: { outcome: 'added', staff: { ...TRAINER, roleName: 'Office manager' } } });
+    fireEvent.click(await screen.findByText('Invite staff'));
+    fireEvent.change(screen.getByLabelText(/Their email address/i), { target: { value: 'om@example.com' } });
+    fireEvent.click(screen.getByText('Send invitation'));
+    expect(await screen.findByText(`${TRAINER.displayName} is now an Office manager here.`)).toBeTruthy();
   });
 
   it("keeps the form and the typing when the server refuses, and shows ITS sentence", async () => {

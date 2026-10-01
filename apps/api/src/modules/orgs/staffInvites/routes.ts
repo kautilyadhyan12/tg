@@ -56,6 +56,8 @@ export function registerStaffInviteRoutes(
   // Every invitation is an email: the gym's own caps (20 a day) are the real limit; this
   // stops a script. Owners of several gyms can share one office address.
   const createLimit = createDualRateLimit({ name: "staff_invite_create", max: 30, ipMax: 300, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  // Making roles is setting up, not inviting: its own allowance.
+  const roleLimit = createDualRateLimit({ name: "staff_role_create", max: 60, ipMax: 600, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
   // The console asks once on its front page.
   const readLimit = createDualRateLimit({ name: "staff_invitation_read", max: 60, ipMax: 3000, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
   // A gym's whole staff may accept from its one wi-fi address.
@@ -87,7 +89,7 @@ export function registerStaffInviteRoutes(
     return reply.status(200).send(await service.listStaffRoles(inviteDeps, callerOf(req).id, params.gymId));
   });
 
-  app.post("/v1/orgs/:gymId/staff/roles", { preHandler: [app.authenticate, createLimit] }, async (req, reply) => {
+  app.post("/v1/orgs/:gymId/staff/roles", { preHandler: [app.authenticate, roleLimit] }, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
     if (params === null) return;
     const body = parseOr400(createStaffRoleRequestSchema, req.body, req, reply);

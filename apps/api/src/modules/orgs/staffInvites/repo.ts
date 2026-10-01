@@ -80,9 +80,13 @@ export async function clearInvite(tx: TransactionSql, gymId: string, inviteId: s
 /** Whether this address is the account of somebody who already runs this gym: the
  *  owner, or staff the console lets in (`getStaffAuthority`'s rule). Only this gym's
  *  staff are looked at, so it says nothing about whether the address has an account. */
-export async function staffNameAt(tx: SqlOrTx, gymId: string, email: string): Promise<{ displayName: string; role: string } | null> {
-  const rows = await tx<{ display_name: string; role: string }[]>`
-    SELECT u.display_name, s.role
+export async function staffNameAt(
+  tx: SqlOrTx,
+  gymId: string,
+  email: string,
+): Promise<{ displayName: string; role: string; roleName: string | null } | null> {
+  const rows = await tx<{ display_name: string; role: string; role_name: string | null }[]>`
+    SELECT u.display_name, s.role, s.role_name
     FROM gym_staff s
     JOIN users u ON u.id = s.user_id
     JOIN gyms g ON g.id = s.gym_id
@@ -102,7 +106,7 @@ export async function staffNameAt(tx: SqlOrTx, gymId: string, email: string): Pr
       )
     LIMIT 1`;
   const row = rows[0];
-  return row === undefined ? null : { displayName: row.display_name, role: row.role };
+  return row === undefined ? null : { displayName: row.display_name, role: row.role, roleName: row.role_name };
 }
 
 /** Counts that decide whether the gym may invite now. */
@@ -135,6 +139,8 @@ export async function insertInvite(
     invitedBy: string;
     at: Date;
     expiresAt: Date;
+    /** The address's HMAC, kept on the email for what Resend reports back. */
+    emailHmac: string;
   },
 ): Promise<StaffInviteRow> {
   const rows = await tx<RawInvite[]>`
@@ -144,8 +150,8 @@ export async function insertInvite(
   const row = rows[0];
   if (row === undefined) throw new Error("INSERT INTO gym_staff_invites returned no row");
   await tx`
-    INSERT INTO gym_staff_invite_sends (gym_id, invite_id, email, not_before, created_at)
-    VALUES (${input.gymId}, ${row.id}, ${input.email}, ${input.at}, ${input.at})`;
+    INSERT INTO gym_staff_invite_sends (gym_id, invite_id, email, email_hmac, not_before, created_at)
+    VALUES (${input.gymId}, ${row.id}, ${input.email}, ${input.emailHmac}, ${input.at}, ${input.at})`;
   return toInvite(row);
 }
 
@@ -154,13 +160,13 @@ export async function insertInvite(
  *  the owner has not taken off. */
 export async function listOpenInvites(sql: SqlOrTx, gymId: string, now: Date): Promise<StaffInvite[]> {
   const rows = await sql<
-    (RawInvite & { answered_at: Date | null; send_state: string | null; send_reason: string | null })[]
+    (RawInvite & { answered_at: Date | null; send_state: string | null; send_reason: string | null; send_result: string | null })[]
   >`
     SELECT i.id, i.gym_id, i.email::text AS email, i.role, i.privileges, i.role_name, i.created_at, i.expires_at, i.state, i.answered_at,
-           s.state AS send_state, s.reason AS send_reason
+           s.state AS send_state, s.reason AS send_reason, s.result AS send_result
     FROM gym_staff_invites i
     LEFT JOIN LATERAL (
-      SELECT x.state, x.reason FROM gym_staff_invite_sends x
+      SELECT x.state, x.reason, x.result FROM gym_staff_invite_sends x
       WHERE x.gym_id = i.gym_id AND x.invite_id = i.id
       ORDER BY x.created_at DESC, x.id DESC
       LIMIT 1
@@ -170,7 +176,13 @@ export async function listOpenInvites(sql: SqlOrTx, gymId: string, now: Date): P
     LIMIT ${STAFF_INVITES_LISTED}`;
   return rows.map((row) => {
     const invite = toInvite(row);
-    const reason: StaffInviteEmailReason | null = row.send_reason === null ? null : staffInviteEmailReasonSchema.parse(row.send_reason);
+    // Resend reported it bounced, or never left: it did not reach them (a spam report
+    // means it did).
+    const undelivered: StaffInviteEmailReason | null =
+      row.send_result === "bounced" ? "bounced" : row.send_result === "refused" || row.send_result === "failed" ? "refused" : null;
+    const notSent = row.send_state === "skipped" || row.send_state === "failed" || undelivered !== null;
+    const reason: StaffInviteEmailReason | null =
+      undelivered ?? (row.send_reason === null ? null : staffInviteEmailReasonSchema.parse(row.send_reason));
     return {
       id: invite.id,
       email: invite.email,
@@ -181,8 +193,8 @@ export async function listOpenInvites(sql: SqlOrTx, gymId: string, now: Date): P
       expiresAt: invite.expiresAt.toISOString(),
       state: invite.state === "declined" ? "declined" : invite.expiresAt.getTime() <= now.getTime() ? "ended" : "waiting",
       declinedAt: invite.state === "declined" && row.answered_at !== null ? row.answered_at.toISOString() : null,
-      emailStatus: row.send_state === "sent" ? "sent" : row.send_state === "skipped" || row.send_state === "failed" ? "not_sent" : "sending",
-      emailReason: row.send_state === "skipped" || row.send_state === "failed" ? reason : null,
+      emailStatus: notSent ? "not_sent" : row.send_state === "sent" ? "sent" : "sending",
+      emailReason: notSent ? reason : null,
     };
   });
 }
@@ -206,6 +218,21 @@ export async function answerInvite(
   await tx`
     UPDATE gym_staff_invites SET state = ${input.state}, answered_at = ${input.at}, answered_by = ${input.by}
     WHERE gym_id = ${input.gymId} AND id = ${input.inviteId}`;
+}
+
+/** How long an invitation is kept after it is made: 7 days to answer, then 90. Its
+ *  address is a stranger's until they accept; the audit rows keep what happened. */
+export const STAFF_INVITE_KEEP_DAYS = 97;
+
+/** Forget invitations older than that, a thousand at a time (the hourly job; their
+ *  emails go with them). Every one is answered or ended by then. */
+export async function forgetOldStaffInvites(sql: SqlOrTx, now: Date): Promise<number> {
+  const before = new Date(now.getTime() - STAFF_INVITE_KEEP_DAYS * 24 * 60 * 60 * 1000);
+  const rows = await sql<{ id: string }[]>`
+    DELETE FROM gym_staff_invites
+    WHERE id IN (SELECT id FROM gym_staff_invites WHERE created_at < ${before} ORDER BY created_at LIMIT 1000)
+    RETURNING id`;
+  return rows.length;
 }
 
 /** Every staff invitation of a closed gym, inside the transaction that archives it. */

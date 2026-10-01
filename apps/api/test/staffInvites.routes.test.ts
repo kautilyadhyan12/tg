@@ -17,10 +17,15 @@ import type { InviteEmail, InviteSendResult, InviteTransport } from "../src/emai
 import type { MailCheck } from "../src/modules/orgs/invites/decide.js";
 import { inviteSettings } from "../src/modules/orgs/invites/settings.js";
 import { sendDueStaffInvites, type StaffSendRun } from "../src/modules/orgs/staffInvites/sender.js";
+import { forgetOldStaffInvites } from "../src/modules/orgs/staffInvites/repo.js";
+import { emailHmac } from "../src/modules/orgs/invites/address.js";
+import { emailsUsedToday } from "../src/modules/orgs/invites/repo.js";
 import {
   ROLE_PRIVILEGES,
   STAFF_INVITE_EMAILS_PER_ADDRESS_WEEK,
   STAFF_INVITES_OPEN_MAX,
+  STAFF_INVITE_EMAILS_PER_DAY,
+  STAFF_ROLES_MAX,
   STAFF_INVITE_WORDS,
   acceptStaffInvitationResponseSchema,
   createStaffInviteResponseSchema,
@@ -94,6 +99,7 @@ d("staff invited by email (real Postgres)", () => {
     await sql`DELETE FROM gym_staff_invites WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_staff_roles WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM email_suppressions WHERE gym_id IN (${mine()})`;
+    await sql`DELETE FROM email_suppressions WHERE gym_id IS NULL AND email_hmac = ${emailHmac(settings.hmacKey, addr("supp-bounced"))}`;
     await sql`DELETE FROM gym_members WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine()})`;
     await sql`DELETE FROM gym_staff WHERE gym_id IN (${mine()})`;
@@ -670,6 +676,128 @@ d("staff invited by email (real Postgres)", () => {
       const fourth = await invite(other, addr("pestered"));
       expect(fourth.statusCode).toBe(429);
       expect(errorOf(fourth).error).toBe("too_many_to_address");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // =========================================================================
+  // ROUND ONE'S MISSING CASES
+  // =========================================================================
+
+  it(
+    `at most ${String(STAFF_INVITE_EMAILS_PER_DAY)} invitation emails a gym in 24 hours, even when each is cancelled`,
+    async () => {
+      const gym = await makeGym("Daily Limit Gym");
+      for (let n = 0; n < STAFF_INVITE_EMAILS_PER_DAY; n++) {
+        const sent = await invited(gym, addr(`day-${String(n)}`));
+        expect((await del(`${invitesUrl(gym)}/${sent.id}`, gym.owner.cookies)).statusCode).toBe(200);
+      }
+      const over = await invite(gym, addr("day-over"));
+      expect(over.statusCode).toBe(429);
+      expect(errorOf(over).error).toBe("too_many_today");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "the sender keeps a staff email from an address that bounced anywhere or unsubscribed from this gym",
+    async () => {
+      const gym = await makeGym("Suppressed Gym");
+      await sql`INSERT INTO email_suppressions (gym_id, email_hmac, reason) VALUES (${gym.id}, ${emailHmac(settings.hmacKey, addr("supp-unsub"))}, 'unsubscribed')`;
+      await sql`INSERT INTO email_suppressions (gym_id, email_hmac, reason) VALUES (NULL, ${emailHmac(settings.hmacKey, addr("supp-bounced"))}, 'bounced')`;
+      await invited(gym, addr("supp-unsub"));
+      await invited(gym, addr("supp-bounced"));
+      await runSender();
+      expect(emailsTo(addr("supp-unsub"))).toEqual([]);
+      expect(emailsTo(addr("supp-bounced"))).toEqual([]);
+      const seen = new Map((await invitesOf(gym)).map((i) => [i.email, [i.emailStatus, i.emailReason]]));
+      expect(seen.get(addr("supp-unsub"))).toEqual(["not_sent", "unsubscribed"]);
+      expect(seen.get(addr("supp-bounced"))).toEqual(["not_sent", "bounced"]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a staff email counts toward the whole app's emails a day",
+    async () => {
+      const gym = await makeGym("App Cap Gym");
+      const sent = await invited(gym, addr("cap"));
+      // Moved to a day nothing else in the database has, so the count is this email's alone.
+      const day = new Date("2099-03-04T12:00:00Z");
+      await sql`
+        UPDATE gym_staff_invite_sends SET state = 'sent', email = NULL, finished_at = ${new Date("2099-03-04T10:00:00Z")}
+        WHERE invite_id = ${sent.id}`;
+      expect(await emailsUsedToday(sql, day)).toBe(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    `at most ${String(STAFF_ROLES_MAX)} roles of a gym's own`,
+    async () => {
+      const gym = await makeGym("Many Roles Gym");
+      for (let n = 0; n < STAFF_ROLES_MAX; n++) {
+        expect((await post(`/v1/orgs/${gym.id}/staff/roles`, { name: `Role ${String(n)}`, privileges: [] }, gym.owner.cookies)).statusCode).toBe(201);
+      }
+      const over = await post(`/v1/orgs/${gym.id}/staff/roles`, { name: "One more", privileges: [] }, gym.owner.cookies);
+      expect(over.statusCode).toBe(409);
+      expect(errorOf(over).error).toBe("too_many_roles");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a Front desk person invited again is refused by their own role's name; made Manager, the name goes",
+    async () => {
+      const gym = await makeGym("Role Name Gym");
+      const made = await post(`/v1/orgs/${gym.id}/staff/roles`, { name: "Office manager", privileges: ["members.read"] }, gym.owner.cookies);
+      const roleId = (JSON.parse(made.body) as { role: { id: string } }).role.id;
+      const res = await post(invitesUrl(gym), { email: addr("rn-1"), role: "trainer", roleId }, gym.owner.cookies);
+      const id = (createStaffInviteResponseSchema.parse(JSON.parse(res.body)) as { invite: { id: string } }).invite.id;
+      const person = await signIn(addr("rn-1"));
+      expect((await accept(person, id)).statusCode).toBe(200);
+      const again = await invite(gym, addr("rn-1"));
+      expect(errorOf(again)).toMatchObject({ error: "already_staff" });
+      expect(errorOf(again).message).toContain("is already an Office manager here");
+
+      const changed = await send("PATCH", `/v1/orgs/${gym.id}/staff/${person.userId}`, gym.owner.cookies, { role: "manager" });
+      expect(changed.statusCode, changed.body).toBe(200);
+      const staff = JSON.parse((await get(`/v1/orgs/${gym.id}/staff`, gym.owner.cookies)).body) as { staff: { userId: string; role: string; roleName?: string | null }[] };
+      expect(staff.staff.find((s) => s.userId === person.userId)).toMatchObject({ role: "manager", roleName: null });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "Accept by somebody made staff another way meanwhile keeps the permissions they have",
+    async () => {
+      const gym = await makeGym("Meanwhile Gym");
+      const pending = await invited(gym, addr("mw-1"), "manager");
+      const person = await signIn(addr("mw-1"));
+      await makeMember(gym, person);
+      const appointed = await post(invitesUrl(gym), { email: addr("mw-1"), role: "trainer", privileges: ["attendance.read"] }, gym.owner.cookies);
+      expect(createStaffInviteResponseSchema.parse(JSON.parse(appointed.body)).outcome).toBe("added");
+      const res = await accept(person, pending.id);
+      expect(acceptStaffInvitationResponseSchema.parse(JSON.parse(res.body)).outcome).toBe("already_staff");
+      expect(await staffRowOf(gym, person)).toEqual({ role: "trainer", privileges: ["attendance.read"] });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "invitations are forgotten 97 days after they are made, and their emails with them; a newer one is kept",
+    async () => {
+      const gym = await makeGym("Forget Gym");
+      const old = await invited(gym, addr("old-1"));
+      const fresh = await invited(gym, addr("fresh-1"));
+      await sql`
+        UPDATE gym_staff_invites SET created_at = now() - interval '98 days', expires_at = now() - interval '91 days',
+                                     state = 'cancelled', answered_at = now() - interval '95 days'
+        WHERE id = ${old.id}`;
+      expect(await forgetOldStaffInvites(sql, new Date())).toBeGreaterThanOrEqual(1);
+      const left = await sql<{ id: string }[]>`SELECT id FROM gym_staff_invites WHERE gym_id = ${gym.id}`;
+      expect(left.map((row) => row.id)).toEqual([fresh.id]);
+      expect((await sql`SELECT 1 FROM gym_staff_invite_sends WHERE invite_id = ${old.id}`).length).toBe(0);
     },
     TEST_TIMEOUT_MS,
   );

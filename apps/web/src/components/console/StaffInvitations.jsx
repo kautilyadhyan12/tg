@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, UserPlus } from 'lucide-react';
-import { orgWords, staffRoleWord } from '@app/shared';
+import { orgWords, staffRoleWord, withArticle } from '@app/shared';
 import { formatJoinedAt } from '../../pages/console/consoleView';
 import { abilityLabels } from '../../pages/console/staffView';
 import { refreshConsoleOrgs } from '../../pages/console/consoleOrgs';
@@ -12,7 +12,6 @@ import { errorText, orgService } from '../../api/orgsApi';
 // console; No thanks tells the owner. Accepting makes nobody a member: it opens the
 // console only, which the card says.
 
-const article = (word) => (/^[aeiou]/i.test(word) ? 'an' : 'a');
 
 function InvitationCard({ invitation, onAnswered }) {
   const navigate = useNavigate();
@@ -70,7 +69,7 @@ function InvitationCard({ invitation, onAnswered }) {
             {gym.city ? <span style={{ color: 'rgba(255,255,255,0.45)' }}> · {gym.city}</span> : null}
           </div>
           <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.75)' }}>
-            {who} invited you to help run {gym.name} as {article(role)} {role}.
+            {who} invited you to help run {gym.name} as {withArticle(role)}.
           </p>
         </div>
       </div>
@@ -80,7 +79,7 @@ function InvitationCard({ invitation, onAnswered }) {
           <>You can open the console. The owner hasn&apos;t given you anything else to do yet.</>
         ) : (
           <>
-            <span className="font-semibold">As {article(role)} {role} you can:</span> {abilities.join(' · ')}. The owner
+            <span className="font-semibold">As {withArticle(role)} you can:</span> {abilities.join(' · ')}. The owner
             can change this later.
           </>
         )}

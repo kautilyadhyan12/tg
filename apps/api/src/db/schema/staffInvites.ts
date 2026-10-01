@@ -40,6 +40,7 @@ export const gymStaffInvites = pgTable(
       .where(sql`${t.state} IN ('pending','declined') AND ${t.clearedAt} IS NULL`),
     index("gym_staff_invites_email_idx").on(t.email).where(sql`${t.state} IN ('pending','declined') AND ${t.clearedAt} IS NULL`),
     index("gym_staff_invites_gym_idx").on(t.gymId, t.createdAt),
+    index("gym_staff_invites_created_idx").on(t.createdAt),
     check("gym_staff_invites_role_check", sql`${t.role} IN ('manager','trainer')`),
     check("gym_staff_invites_role_name_check", sql`${t.roleName} IS NULL OR length(${t.roleName}) BETWEEN 1 AND 40`),
     check("gym_staff_invites_privileges_check", sql`NOT ('staff.manage' = ANY (${t.privileges})) AND cardinality(${t.privileges}) <= 20`),
@@ -84,6 +85,8 @@ export const gymStaffInviteSends = pgTable(
       .notNull()
       .references(() => gymStaffInvites.id, { onDelete: "cascade" }),
     email: citext("email"),
+    /** The address's HMAC, kept for what Resend reports back after the address is cleared. */
+    emailHmac: text("email_hmac").notNull(),
     state: text("state").notNull().default("queued"),
     reason: text("reason"),
     attempts: integer("attempts").notNull().default(0),
@@ -94,8 +97,17 @@ export const gymStaffInviteSends = pgTable(
     providerId: text("provider_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
+    /** What Resend reported about an email that went, once its own record agreed. */
+    result: text("result"),
+    resultAt: timestamp("result_at", { withTimezone: true }),
   },
   (t) => [
+    index("gym_staff_invite_sends_gym_sent_idx").on(t.gymId, t.finishedAt).where(sql`${t.state} = 'sent'`),
+    index("gym_staff_invite_sends_provider_idx").on(t.providerId).where(sql`${t.providerId} IS NOT NULL`),
+    check("gym_staff_invite_sends_email_hmac_check", sql`${t.emailHmac} ~ '^[0-9a-f]{64}$'`),
+    check("gym_staff_invite_sends_result_check", sql`${t.result} IS NULL OR ${t.result} IN ('delivered','bounced','complained','failed','refused')`),
+    check("gym_staff_invite_sends_result_state_check", sql`${t.result} IS NULL OR ${t.state} = 'sent'`),
+    check("gym_staff_invite_sends_result_at_check", sql`(${t.result} IS NULL) = (${t.resultAt} IS NULL)`),
     index("gym_staff_invite_sends_due_idx").on(t.notBefore, t.createdAt, t.id).where(sql`${t.state} IN ('queued','sending')`),
     index("gym_staff_invite_sends_gym_idx").on(t.gymId, t.createdAt),
     index("gym_staff_invite_sends_invite_idx").on(t.inviteId, t.createdAt.desc()),

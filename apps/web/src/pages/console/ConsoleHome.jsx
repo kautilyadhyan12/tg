@@ -81,7 +81,9 @@ export default function ConsoleHome() {
         </Link>
       </div>
 
-      {!invitations.loading && invitations.error !== null ? (
+      {/* Only where it decides something: for somebody who runs a gym, a failed check
+          (the read allows 60 an hour) must not sit over their list. */}
+      {!invitations.loading && invitations.error !== null && runsNothing ? (
         <div className="mb-6">
           <ConsoleFailed message={invitations.error} onRetry={invitations.reload} />
         </div>

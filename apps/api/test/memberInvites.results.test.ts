@@ -19,6 +19,7 @@ import { gateFacts, resumeGym, stoppedGyms } from "../src/modules/orgs/invites/r
 import { claimDueEvent, finishEvent } from "../src/modules/webhooks/repo.js";
 import { INVITE_RESULTS, processInviteResults, type ResultsRun, type StoppedGym } from "../src/modules/orgs/invites/results.js";
 import { inviteSettings } from "../src/modules/orgs/invites/settings.js";
+import { sendDueStaffInvites } from "../src/modules/orgs/staffInvites/sender.js";
 import { RESEND_WEBHOOK_PATH } from "../src/modules/webhooks/resendRoutes.js";
 import {
   MEMBER_INVITE_WORDS,
@@ -107,7 +108,7 @@ d("what comes back (real Postgres)", () => {
     await sql`DELETE FROM gyms WHERE id IN (${mine})`;
     await sql`DELETE FROM users WHERE email LIKE ${`minvr-t-%@${DOMAIN}`}`;
     // Hard bounces are every gym's, so they are found by this suite's own addresses.
-    const locals = ["bounced", "soft", "spam", "forged", "unconfirmed", "order", "page", "twice", "early", "unknown", "wrongtag", "lease", "denied", "unknown-failed", "unknown-refused"];
+    const locals = ["staff-bounced", "staff-spam", "bounced", "soft", "spam", "forged", "unconfirmed", "order", "page", "twice", "early", "unknown", "wrongtag", "lease", "denied", "unknown-failed", "unknown-refused"];
     for (const [prefix, n] of [["stop", 50], ["bulk", 200], ["cmp", 120], ["gate", 50], ["refused", 50], ["race", 50], ["half", 200]] as const) {
       for (let i = 0; i < n; i++) locals.push(`${prefix}-${String(i)}`);
     }
@@ -195,7 +196,17 @@ d("what comes back (real Postgres)", () => {
   const report = (
     type: string,
     emailId: string,
-    opts: { secret?: string; id?: string; at?: number; bounceType?: string; bounceSubType?: string; tamper?: boolean; sendId?: string | null } = {},
+    opts: {
+      secret?: string;
+      id?: string;
+      at?: number;
+      bounceType?: string;
+      bounceSubType?: string;
+      tamper?: boolean;
+      sendId?: string | null;
+      /** A staff invitation's email (4a-i): tagged with its own tag. */
+      staffSendId?: string;
+    } = {},
   ) => {
     const sendId = opts.sendId === undefined ? (sendIdOf.get(emailId) ?? null) : opts.sendId;
     const id = opts.id ?? `msg_minvr_${randomUUID()}`;
@@ -211,7 +222,12 @@ d("what comes back (real Postgres)", () => {
         subject: "You're a member",
         ...(opts.bounceType === undefined ? {} : { bounce: { type: opts.bounceType, subType: opts.bounceSubType ?? "General", message: "x" } }),
         // As Resend sends them: an object of name and value.
-        tags: sendId === null ? { category: "invite" } : { category: "invite", invite_send: sendId },
+        tags:
+          opts.staffSendId !== undefined
+            ? { category: "staff", staff_invite_send: opts.staffSendId }
+            : sendId === null
+              ? { category: "invite" }
+              : { category: "invite", invite_send: sendId },
       },
     });
     const signature = sign(opts.secret ?? SECRET, id, at, body);
@@ -438,6 +454,7 @@ d("what comes back (real Postgres)", () => {
         emailId: providerId,
         sendId: sendIdOf.get(providerId),
         leadSendId: null,
+        staffSendId: null,
         bounceType: null,
         bounceSubType: null,
       });
@@ -800,6 +817,89 @@ d("what comes back (real Postgres)", () => {
       await sql`UPDATE webhook_events SET not_before = now() WHERE status = 'pending' AND event_id = ANY(${eventIds}::text[])`;
       await processAll();
       expect(await suppressionsOf(email)).toEqual([{ gym_id: gymA, reason: "complained" }]);
+    }, TEST_TIMEOUT_MS);
+  });
+  // =========================================================================
+  // A STAFF INVITATION'S EMAIL (4a-i): suppressed and counted as an invitation's is
+  // =========================================================================
+
+  describe("what comes back about a staff invitation's email", () => {
+    const sender = settings.sender;
+    if (sender === null) throw new Error("sending is off in the test config");
+    /** The owner invites an address as staff; the worker sends it; Resend's id and the send row. */
+    const staffSent = async (gymId: string, email: string): Promise<{ providerId: string; sendId: string }> => {
+      const res = await inject("POST", `/v1/orgs/${gymId}/staff/invites`, owner.cookies, { email, role: "trainer" });
+      expect(res.statusCode, res.body).toBe(201);
+      const providerId = `em_staff_${randomUUID()}`;
+      providerIds.push(providerId);
+      await sendDueStaffInvites({
+        sql,
+        log: { info: () => undefined, warn: () => undefined },
+        settings,
+        sender,
+        transport: { send: () => Promise.resolve({ kind: "sent", id: providerId }) },
+        mailDomain: () => Promise.resolve("accepts"),
+        now: () => new Date(Date.now() + 1),
+        sleep: () => Promise.resolve(),
+        gymIds: [gymId],
+      });
+      const row = (await sql<{ id: string; state: string }[]>`SELECT id, state FROM gym_staff_invite_sends WHERE provider_id = ${providerId}`)[0];
+      expect(row?.state).toBe("sent");
+      if (row === undefined) throw new Error("not sent");
+      return { providerId, sendId: row.id };
+    };
+    const staffResultOf = async (providerId: string) =>
+      (await sql<{ result: string | null }[]>`SELECT result FROM gym_staff_invite_sends WHERE provider_id = ${providerId}`)[0]?.result ?? null;
+    const ownersList = async (gymId: string) =>
+      (JSON.parse((await inject("GET", `/v1/orgs/${gymId}/staff/invites`, owner.cookies)).body) as {
+        invites: { email: string; emailStatus: string; emailReason: string | null }[];
+      }).invites;
+
+    it("a bounce is kept from every gym, counted, and the owner is told it did not arrive", async () => {
+      const gymId = await makeGym(owner, "Results Staff Gym");
+      const email = addr("staff-bounced");
+      const { providerId, sendId } = await staffSent(gymId, email);
+      resendRecords.set(providerId, "bounced");
+      resendTags.set(providerId, [{ name: "staff_invite_send", value: sendId }]);
+      expect((await report("email.bounced", providerId, { bounceType: "Permanent", staffSendId: sendId })).statusCode).toBe(200);
+      // The webhook keeps the staff tag, which ties the report to this one email.
+      expect((await keptEvents()).map((e) => (e.payload as { staffSendId?: string | null }).staffSendId)).toContain(sendId);
+      await processAll();
+      expect(await staffResultOf(providerId)).toBe("bounced");
+      expect(await suppressionsOf(email)).toEqual([{ gym_id: null, reason: "bounced" }]);
+      expect((await ownersList(gymId)).find((i) => i.email === email)).toMatchObject({ emailStatus: "not_sent", emailReason: "bounced" });
+    }, TEST_TIMEOUT_MS);
+
+    it("a spam report keeps that gym's emails from the address and counts toward the gym's standing: early, it pauses the gym's emails", async () => {
+      const gymId = await makeGym(owner, "Results Staff Spam Gym");
+      const email = addr("staff-spam");
+      const { providerId, sendId } = await staffSent(gymId, email);
+      resendRecords.set(providerId, "complained");
+      resendTags.set(providerId, [{ name: "staff_invite_send", value: sendId }]);
+      expect((await report("email.complained", providerId, { staffSendId: sendId })).statusCode).toBe(200);
+      await processAll();
+      expect(await staffResultOf(providerId)).toBe("complained");
+      expect(await suppressionsOf(email)).toEqual([{ gym_id: gymId, reason: "complained" }]);
+      // The owner cancels and invites the address again: the email is not sent.
+      const invites = JSON.parse((await inject("GET", `/v1/orgs/${gymId}/staff/invites`, owner.cookies)).body) as { invites: { id: string; email: string }[] };
+      const id = invites.invites.find((i) => i.email === email)?.id ?? "";
+      expect((await api().inject({ method: "DELETE", url: `/v1/orgs/${gymId}/staff/invites/${id}`, cookies: owner.cookies, remoteAddress: nextIp() })).statusCode).toBe(200);
+      const again = await inject("POST", `/v1/orgs/${gymId}/staff/invites`, owner.cookies, { email, role: "trainer" });
+      expect(again.statusCode).toBe(201);
+      await sendDueStaffInvites({
+        sql,
+        log: { info: () => undefined, warn: () => undefined },
+        settings,
+        sender,
+        transport: { send: () => Promise.reject(new Error("must not be sent")) },
+        mailDomain: () => Promise.resolve("accepts"),
+        now: () => new Date(Date.now() + 1),
+        sleep: () => Promise.resolve(),
+        gymIds: [gymId],
+      });
+      // A complaint among a gym's first emails pauses all of them, as for invitations.
+      expect((await stoppedGyms(sql)).map((g) => g.gymId)).toContain(gymId);
+      expect((await ownersList(gymId)).find((i) => i.email === email)).toMatchObject({ emailStatus: "not_sent", emailReason: "sending_stopped" });
     }, TEST_TIMEOUT_MS);
   });
 });

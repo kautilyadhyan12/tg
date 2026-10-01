@@ -29,6 +29,7 @@ import { operatorTeller } from "./modules/orgs/invites/operatorNote.js";
 import { processInviteResults } from "./modules/orgs/invites/results.js";
 import { devInviteTransport, sendDueInvites } from "./modules/orgs/invites/sender.js";
 import { sendDueLeadEmails } from "./modules/orgs/leads/sender.js";
+import { forgetOldStaffInvites } from "./modules/orgs/staffInvites/repo.js";
 import { sendDueStaffInvites } from "./modules/orgs/staffInvites/sender.js";
 import { inviteSettings } from "./modules/orgs/invites/settings.js";
 import { archiveLapsedGyms } from "./modules/orgs/archiveSweep.js";
@@ -606,8 +607,10 @@ const worker = new Worker(
     // rejection that lands the job on the failed set.
     if (job.name === ORGS_MEMBER_LIST_EXPIRY_JOB) {
       const gone = await expireStagedMemberListUploads({ sql, log });
+      // Staff invitations past their keeping (4a-i), on the same hourly tidy-up.
+      const staffInvitesForgotten = await forgetOldStaffInvites(sql, new Date());
       log.info(
-        { ...gone, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
+        { ...gone, staffInvitesForgotten, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
         "job finished",
       );
       return;
