@@ -204,6 +204,14 @@ describe('counts are bounded rather than guessed', () => {
     expect(joinedCount({ items: [member('owner', true), member('b')], nextCursor: null })).toBe(1);
   });
 
+  it('does not count an owner who trains here (an ordinary seat since §10.4) as somebody who joined', () => {
+    const owner = { ...member('owner'), staff: { role: 'owner', roleName: null } };
+    const trainer = { ...member('t'), staff: { role: 'trainer', roleName: null } };
+    expect(joinedCount({ items: [owner], nextCursor: null })).toBe(0);
+    // A trainer who joined did join; only the owner is left out.
+    expect(joinedCount({ items: [owner, trainer, member('b')], nextCursor: null })).toBe(2);
+  });
+
   it('refuses to answer when the page is truncated', () => {
     expect(joinedCount({ items: [member('owner', true)], nextCursor: 'x|y' })).toBeNull();
   });

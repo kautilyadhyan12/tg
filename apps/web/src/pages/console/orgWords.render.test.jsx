@@ -281,10 +281,10 @@ describe('Settings', () => {
     await waitFor(() => expect(gymRow.parentElement.textContent).toMatch(/Trainer/));
   });
 
-  it('says who runs this studio, and that staff cost no client seat', async () => {
+  it('says who runs this studio, and that the member app takes a place (§10.4)', async () => {
     settingsAs('studio');
     expect(
-      await screen.findByText(/Who can help you run this studio\..*paid client seats/),
+      await screen.findByText('Who can help you run this studio. Staff use the console free. Using the member app here takes one of your places.'),
     ).toBeTruthy();
     expect(await screen.findByText('2 people run this studio')).toBeTruthy();
   });

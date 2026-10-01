@@ -220,8 +220,8 @@ describe('how many people run the gym', () => {
 });
 
 describe('what the screen says becoming staff costs', () => {
-  it('says staff do not use up a paid member seat', () => {
-    expect(staffSeatsNote('gym')).toMatch(/seat/i);
+  it('says a staff login is free and the member app takes a place (§10.4)', () => {
+    expect(staffSeatsNote()).toBe('Staff use the console free. Using the member app here takes one of your places.');
   });
 
   it('does NOT claim the number beside a join code moves — that stopped being true', () => {
@@ -234,8 +234,8 @@ describe('what the screen says becoming staff costs', () => {
     // Kd's ruling in `claimSeat`'s count instead, so an appointment now changes
     // no join-code number at all. Printing the promised sentence would put a
     // false statement on screen.
-    expect(staffSeatsNote('gym')).not.toMatch(/join code/i);
-    expect(staffSeatsNote('gym')).not.toMatch(/drop|fall|fewer|one less/i);
+    expect(staffSeatsNote()).not.toMatch(/join code/i);
+    expect(staffSeatsNote()).not.toMatch(/drop|fall|fewer|one less/i);
   });
 });
 

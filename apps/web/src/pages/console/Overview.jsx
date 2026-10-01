@@ -497,8 +497,8 @@ export default function Overview() {
             <div className="font-semibold" style={{ color: '#fff' }}>
               {countLine ?? words.peopleCap}
             </div>
-            {/* `joined` counts people who are NOT the owner's own complimentary
-                seat, and is null when the page is truncated — in which case the
+            {/* `joined` counts people who are NOT the owner (by role, or an old
+                complimentary seat), and is null when the page is truncated — in which case the
                 roster is plainly not empty and this line does not appear. The
                 count above says "1 member (you)" in this same case, so the two
                 sentences agree instead of reading as a contradiction (L-5). */}

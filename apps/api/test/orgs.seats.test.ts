@@ -324,6 +324,9 @@ d("a seat is a person using the member app (real Postgres)", () => {
   // THE TABLE: EVERY KIND OF PERSON, THREE QUESTIONS
   // =========================================================================
 
+  // "Staff only" and "owner only" write no membership, so a count of `gym_members` gives
+  // them nothing by itself; what their rows catch is a meter or roster that counts
+  // `gym_staff` by mistake, since `placesUsed` makes all four counts agree.
   type Kind = "member" | "staff only" | "staff and member" | "owner only" | "owner and member" | "removed" | "another gym's member";
   const TABLE: readonly { kind: Kind; seat: boolean; features: boolean; marks: boolean }[] = [
     { kind: "member", seat: true, features: true, marks: true },

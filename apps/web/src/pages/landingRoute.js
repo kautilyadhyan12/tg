@@ -4,10 +4,10 @@
 // "I'm a member" or "I run a gym", the email and password are IDENTICAL either
 // way, and the choice decides only which screen you land on. Nothing in the
 // schema gains a "user type" — `gym_staff` already answers "does this person
-// run a gym", and the same person is deliberately BOTH: Part 3 §4.0 step 6
-// makes an owner member #1 of their own gym, complimentary and not seat-counted,
-// so the demo works on their own phone. Separate ACCOUNTS would mean a gym owner
-// cannot use their own app without logging out.
+// run a gym", and the same person can be BOTH: an owner who answers yes to "Do
+// you train here too?" is a member of their own gym on one of its places (§10.4).
+// Separate ACCOUNTS would mean a gym owner cannot use their own app without
+// logging out.
 //
 // FOUR PLACES decided where you land before this file existed — Login's submit,
 // the Google OAuth landing, `PublicRoute`'s already-signed-in redirect, and the

@@ -2581,7 +2581,7 @@ describe("the gym's numbers", () => {
     // The visitor is still on screen — one person, singular — which is what
     // makes the pair read as a contradiction without the sentence below it.
     expect(screen.getAllByText('person').length).toBeGreaterThan(0);
-    expect(screen.getByText(/Free seats/)).toBeTruthy();
+    expect(screen.getByText(/have since left the gym, or hold a free place/)).toBeTruthy();
   });
 
   it('does not explain a gap that is not there', async () => {
@@ -2597,7 +2597,7 @@ describe("the gym's numbers", () => {
     drawOverview();
 
     expect(await screen.findByText('50%')).toBeTruthy();
-    expect(screen.queryByText(/Free seats/)).toBeNull();
+    expect(screen.queryByText(/have since left the gym, or hold a free place/)).toBeNull();
   });
 
   it('says what the up arrow is comparing, because the two weeks are not the same length', async () => {

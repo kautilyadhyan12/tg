@@ -263,8 +263,8 @@ export function initials(displayName) {
  *  beside *"Last 30 days · 0% — 0 of 2 members came in the last 30 days"*. Both
  *  figures are correct and they count DIFFERENT POPULATIONS: `today.visitors`
  *  is every attendee, while `month.visitors` and its denominator are current
- *  members the gym is charged for — so the person who came was the owner, on a
- *  complimentary seat, and is deliberately not in the share.
+ *  members not on a complimentary place — so the person who came had left since,
+ *  or held an old free place (the owner's, before §10.4), and is not in the share.
  *
  *  **A reader cannot know that, and what they see is a screen disagreeing with
  *  itself** — :5807's test is not "is it on screen", it is "is it on screen AND
@@ -281,7 +281,7 @@ export function crowdNote(tiles, orgType) {
   if (count(tiles?.month?.visitors) > 0) return null;
   const cameRecently = count(tiles?.today?.visitors) > 0 || count(tiles?.week?.visitors) > 0;
   if (!cameRecently) return null;
-  return `Free seats — the owner’s, and anyone the ${orgWords(orgType).it} isn’t charged for — are counted above but not in this share.`;
+  return `People who came but have since left the ${orgWords(orgType).it}, or hold a free place, are counted above but not in this share.`;
 }
 
 /** IS THERE A TREND TO DRAW YET?

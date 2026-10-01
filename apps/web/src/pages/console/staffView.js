@@ -144,24 +144,11 @@ export function staffCountLabel(staff, orgType) {
   return n === 1 ? `1 person runs this ${it}` : `${n} people run this ${it}`;
 }
 
-/** WHAT BECOMING STAFF COSTS A GYM, in one sentence the screen can print.
- *
- *  **This is NOT the sentence the server card said the web half owed, and the
- *  difference is the point.** That entry (DECISIONS :14262) promised to explain
- *  that "promoting a member to staff makes the number beside a join code fall
- *  by one", which was true of the FIRST implementation — appointing wrote
- *  `gym_members.complimentary`, and the join code's `joined` figure excludes
- *  complimentary rows. T3 round 1's C/H-1 took that write out (it corrupted a
- *  flag meaning "did not join") and moved Kd's ruling into `claimSeat`'s own
- *  count. **So nothing writes `complimentary` any more, `joined` is unchanged
- *  by an appointment, and printing that sentence would put a false statement on
- *  screen** — :5807's class, arriving through a stale note rather than through
- *  code. The claim is struck in :14262 in place.
- *
- *  What IS true after that fix, and what this says: staff are excluded from the
- *  seat cap, so appointing somebody does not use up a paid member seat. */
-export function staffSeatsNote(orgType) {
-  return `Staff don't use up one of your paid ${orgWords(orgType).person} seats.`;
+/** WHAT BECOMING STAFF COSTS A GYM, in one sentence the screen can print (spec Part 3
+ *  §10.4): a staff login is free; using the member app takes a place, whoever uses it.
+ *  An appointment changes no join-code number either, so the sentence names none. */
+export function staffSeatsNote() {
+  return 'Staff use the console free. Using the member app here takes one of your places.';
 }
 
 // ── THE TICK BOXES (Kd ruling :11429, settled :15381) ───────────────────────
