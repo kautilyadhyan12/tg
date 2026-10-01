@@ -17,3 +17,4 @@ export * from "./classes.js";
 export * from "./invites.js";
 export * from "./billing.js";
 export * from "./leads.js";
+export * from "./staffInvites.js";

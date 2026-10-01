@@ -62,6 +62,10 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getAttendanceDay: vi.fn(),
       getPlans: vi.fn(),
       startTrial: vi.fn(),
+      // The console's front page asks for staff invitations (4a-i): none, unless a test says.
+      getMyStaffInvitations: vi.fn(() => Promise.resolve({ data: { address: 'a@example.com', addressProved: true, invitations: [] } })),
+      acceptStaffInvitation: vi.fn(),
+      declineStaffInvitation: vi.fn(),
       /** ADDED 2026-09-01: the member's gym card now carries a `GymHoursNote`,
        *  which READS on mount (Kd :26684 §2 — members see the hours). Without
        *  an entry here `getHours` is `undefined`, and the failure is a NOISY

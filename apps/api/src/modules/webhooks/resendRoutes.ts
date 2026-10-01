@@ -6,7 +6,7 @@
 // invitation or lead follow-up tag (the send row it names; 20c-v-b) and a bounce's type
 // and sub-type. The body
 // also holds the recipient's address and the subject; they are never stored or logged.
-import { INVITE_SEND_TAG, LEAD_SEND_TAG, resendEmailEventTypeSchema, resendWebhookBodySchema, svixHeadersSchema } from "@app/shared";
+import { INVITE_SEND_TAG, LEAD_SEND_TAG, STAFF_INVITE_SEND_TAG, resendEmailEventTypeSchema, resendWebhookBodySchema, svixHeadersSchema } from "@app/shared";
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import type { Sql } from "postgres";
@@ -68,6 +68,7 @@ export function registerResendWebhookRoutes(
         const tagged = (name: string) => z.string().uuid().safeParse(event.data.data?.tags?.find((tag) => tag.name === name)?.value);
         const sendId = tagged(INVITE_SEND_TAG);
         const leadSendId = tagged(LEAD_SEND_TAG);
+        const staffSendId = tagged(STAFF_INVITE_SEND_TAG);
         await repo.keepEvent(deps.sql, {
           provider: "resend",
           eventId: signed.id,
@@ -76,6 +77,7 @@ export function registerResendWebhookRoutes(
             emailId,
             sendId: sendId.success ? sendId.data : null,
             leadSendId: leadSendId.success ? leadSendId.data : null,
+            staffSendId: staffSendId.success ? staffSendId.data : null,
             bounceType: event.data.data?.bounce?.type ?? null,
             bounceSubType: event.data.data?.bounce?.subType ?? null,
           },

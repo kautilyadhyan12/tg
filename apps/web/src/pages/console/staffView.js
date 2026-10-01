@@ -1,5 +1,5 @@
-import { OWNER_ONLY_PRIVILEGES, ROLE_PRIVILEGES, orgWords } from '@app/shared';
-import { roleLabel } from './consoleView';
+import { OWNER_ONLY_PRIVILEGES, ROLE_PRIVILEGES, STAFF_INVITE_EMAIL_REASON_WORDS, orgWords } from '@app/shared';
+import { formatJoinedAt, roleLabel } from './consoleView';
 
 // Pure view helpers for the console's Staff section — Part 3 §4.7 ("list,
 // invite by email/phone with role, change role, remove; every staff mutation
@@ -341,4 +341,53 @@ export function privilegesDiffer(before, after) {
 export function roleChangeWarning(person, nextRole, orgType) {
   const name = person?.displayName ?? 'them';
   return `Make ${name} a ${roleLabel(nextRole, orgType).toLowerCase()}? Their permissions become the defaults for the new role.`;
+}
+
+// ── STAFF INVITED BY EMAIL (Part 3 §10.3; ROADMAP 4a-i) ─────────────────────
+
+/** A role's usual ticks: what the invite form starts with when the role is chosen. */
+export function roleTicks(role) {
+  return [...(ROLE_PRIVILEGES[role] ?? [])];
+}
+
+/** What the invite sends: the boxes ticked on the form, plus the role's usual ticks this
+ *  screen has no box for (as Save permissions keeps them), never "Manage staff". */
+export function inviteTicks(role, ticked, orgType) {
+  const offered = privilegeChoices(role, orgType).map((choice) => choice.value);
+  const unseen = roleTicks(role).filter((value) => !offered.includes(value));
+  return [...new Set([...ticked.filter((value) => offered.includes(value)), ...unseen])];
+}
+
+/** The permissions an invitation gives, as the tick boxes name them, least powerful
+ *  first: shown on the person's Accept card. */
+export function abilityLabels(privileges, orgType) {
+  return privilegeCopy(orgType)
+    .filter((choice) => privileges.includes(choice.value))
+    .map((choice) => choice.label);
+}
+
+/** One invitation's line on Settings → Staff: who, as what, and where it stands. */
+export function staffInviteView(invite, orgType) {
+  const role = invite.roleName || roleLabel(invite.role, orgType);
+  const status =
+    invite.state === 'declined'
+      ? `Said no thanks${invite.declinedAt ? ` · ${formatJoinedAt(invite.declinedAt)}` : ''}`
+      : invite.state === 'ended'
+        ? `Ended ${formatJoinedAt(invite.expiresAt)} · not accepted`
+        : `Waiting for them to accept · until ${formatJoinedAt(invite.expiresAt)}`;
+  const email =
+    invite.state !== 'waiting'
+      ? null
+      : invite.emailStatus === 'sent'
+        ? 'Email sent'
+        : invite.emailStatus === 'sending'
+          ? 'Sending the email…'
+          : (STAFF_INVITE_EMAIL_REASON_WORDS[invite.emailReason] ?? 'Email not sent.');
+  return {
+    title: invite.email,
+    meta: `${role} · ${status}`,
+    email,
+    emailProblem: invite.state === 'waiting' && invite.emailStatus === 'not_sent',
+    action: invite.state === 'waiting' ? 'Cancel invitation' : 'Remove',
+  };
 }
