@@ -1,4 +1,4 @@
-// MIGRATION 0061's DELETE, read out of the shipped file and run on fixture rows (ROADMAP
+// MIGRATION 0062's DELETE, read out of the shipped file and run on fixture rows (ROADMAP
 // 4a-ii round one). It runs on TEMPORARY tables of the four it reads, which shadow the real
 // ones for this connection only (Postgres looks in the session's own schema first), so it
 // never touches or locks a live row; everything is rolled back. One case each: what the
@@ -12,15 +12,15 @@ const d = describe.skipIf(url === undefined || url === "");
 
 class Rollback extends Error {}
 
-d("migration 0061 (staff rows the old rule refused)", () => {
+d("migration 0062 (staff rows the old rule refused)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 1 });
   afterAll(async () => {
     await sql.end({ timeout: 5 });
   });
 
   it("deletes the ghost and a deleted account's row; keeps owners, live members, staff never members, and people who left before", async () => {
-    const migration = await readFile(new URL("../drizzle/0061_staff_ghost_rows.sql", import.meta.url), "utf8");
-    if (!/^DELETE FROM gym_staff s/m.test(migration)) throw new Error("0061 no longer holds its DELETE");
+    const migration = await readFile(new URL("../drizzle/0062_staff_ghost_rows.sql", import.meta.url), "utf8");
+    if (!/^DELETE FROM gym_staff s/m.test(migration)) throw new Error("0062 no longer holds its DELETE");
     let kept: string[] = [];
     await sql
       .begin(async (tx) => {

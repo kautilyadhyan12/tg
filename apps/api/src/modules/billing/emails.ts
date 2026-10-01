@@ -1,7 +1,8 @@
-// The emails about a smaller size (ROADMAP Stage 3 item 1c-iii; Kd, RULINGS 2026-09-25): three
-// days before it is due, when the gym still has more members than it holds, with its three
-// choices; and on the day, when a bigger size the members fit was made instead, or none was. Plain text first, a small HTML twin; both links are to our
-// own console. Money arrives formatted by the server; dates are the gym's own time zone.
+// The emails about a smaller size (ROADMAP Stage 3 items 1c-iii and 1d-iii-b; Kd, RULINGS
+// 2026-09-25 and 2026-10-01): three days before it is due, when the gym still has more members
+// than it holds, with its three choices; and on the day, when a bigger size the members fit was
+// made instead, or none was. Plain text first, a small HTML twin; both links are to our own
+// console. Money arrives formatted by the server; dates are the gym's own time zone.
 import { orgWords } from "@app/shared";
 import type { EmailMessage } from "../../email/resend.js";
 
@@ -65,6 +66,9 @@ export interface SizeWarningWords {
   /** Where the gym moves if it does not choose: the smallest size its members fit, or null
    *  when nothing smaller than its size does (it stays). */
   fallback: { seatCap: number; priceLabel: string } | null;
+  /** Through Razorpay, where the gym stays if it does not choose: the smallest size its members
+   *  fit, offered as a choice of its own; null otherwise. */
+  offer: { seatCap: number; priceLabel: string } | null;
   /** When the smaller size starts, and when the members are counted, already worded. */
   due: string;
   decideBy: string;
@@ -84,7 +88,9 @@ export function sizeWarningEmail(w: SizeWarningWords): EmailMessage {
     `You chose to move ${gym} to ${size(w.targetSeatCap, words)} (${w.targetPriceLabel} a month) from ${w.due}.`,
     `${gym} has ${countOf(w.members, words)} now. If you do nothing, on ${w.due} ${otherwise}.`,
     `To move to ${w.targetSeatCap.toLocaleString("en-US")}, remove ${countOf(remove, words)} before ${w.decideBy}:`,
-    `Or choose another size, or stay on the one you have, from your plan:`,
+    w.offer === null
+      ? `Or choose another size, or stay on the one you have, from your plan:`
+      : `Or move to ${size(w.offer.seatCap, words)} (${w.offer.priceLabel} a month), the smallest size that fits, or choose another size, from your plan:`,
   ];
   return message(w.to, `${gym}: you have more ${words.people} than your new size allows`, lines, { 2: w.membersLink, 3: w.planLink });
 }

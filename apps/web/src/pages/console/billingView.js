@@ -412,23 +412,22 @@ export function pendingChangeText(sub, orgType) {
 }
 
 /** Whether the gym fits the smaller size waiting: how many to remove and by when, and where it
- *  moves otherwise (the smallest size that fits, or its own), or that it is ready. The members
- *  are counted at `decideAt`; until then the gym keeps its whole size. Null when none waits or
- *  the count is not known. */
+ *  moves otherwise (the smallest size that fits, or its own; through Razorpay always its own,
+ *  as Razorpay charges only a size the gym approved — Kd, RULINGS 2026-10-01), or that it is
+ *  ready. The members are counted at `decideAt`; until then the gym keeps its whole size. Null
+ *  when none waits or the count is not known. */
 export function pendingFit(org, now = Date.now()) {
   const sub = org?.subscription;
   const pending = sub?.pendingSize;
   const used = org?.seatsUsed;
   if (pending == null || !Number.isFinite(used)) return null;
-  if (used <= pending.seatCap) {
-    const date = trialEndDateLabel(pending.from);
-    return { tooMany: false, text: `You're ready: you'll move to ${countOf(pending.seatCap, org?.orgType)}${date === null ? '' : ` on ${date}`}.` };
-  }
-  return { tooMany: true, text: tooManyWarning(used, pending.seatCap, pending.decideAt, sub, pending.ifTooMany ?? null, org?.orgType, now) };
+  if (used <= pending.seatCap) return { tooMany: false, text: `Your ${orgWords(org?.orgType).people} fit.` };
+  const otherwise = isPaidThroughRazorpay(org) ? null : (pending.ifTooMany ?? null);
+  return { tooMany: true, text: tooManyWarning(used, pending.seatCap, pending.decideAt, sub, otherwise, org?.orgType, now) };
 }
 
-/** "You have 250 members. Remove 50 by 24 Oct, 11:30 pm to move to 200. Otherwise you'll move
- *  to 500 members at $129 a month." — or stay on the gym's own size when nothing smaller fits. */
+/** "You have 250 members. Remove 50 by 24 Oct, 11:30 pm to move to 200. If not, you move to 500
+ *  members ($129 a month)." — or stay on the gym's own size when nothing smaller fits. */
 function tooManyWarning(used, targetCap, decideAt, sub, fallback, orgType, now = Date.now()) {
   // Once the time has passed (an attempt at Paddle failed and is tried again), none is named:
   // the next attempt counts again.
@@ -437,9 +436,9 @@ function tooManyWarning(used, targetCap, decideAt, sub, fallback, orgType, now =
   const stayCap = paidSeatCap(sub);
   const otherwise =
     fallback != null
-      ? `move to ${countOf(fallback.seatCap, orgType)} at ${fallback.priceLabel} a month`
-      : `stay on ${Number.isFinite(stayCap) ? countOf(stayCap, orgType) : 'your size'}${typeof sub?.priceLabel === 'string' ? ` at ${sub.priceLabel} a month` : ''}`;
-  return `You have ${countOf(used, orgType)}. Remove ${count(used - targetCap)}${by === null ? '' : ` by ${by}`} to move to ${count(targetCap)}. Otherwise you'll ${otherwise}.`;
+      ? `move to ${countOf(fallback.seatCap, orgType)} (${fallback.priceLabel} a month)`
+      : `stay on ${Number.isFinite(stayCap) ? countOf(stayCap, orgType) : 'your size'}${typeof sub?.priceLabel === 'string' ? ` (${sub.priceLabel} a month)` : ''}`;
+  return `You have ${countOf(used, orgType)}. Remove ${count(used - targetCap)}${by === null ? '' : ` by ${by}`} to move to ${count(targetCap)}. If not, you ${otherwise}.`;
 }
 
 /** Where a gym with `used` members would move from `onSize` if too many for what it asks: the
@@ -462,7 +461,9 @@ export function sizeFittedText(sub, orgType) {
 
 /** THE LAST DAYS' QUESTION (Kd, RULINGS 2026-09-25): in the 3 days before a smaller size is
  *  decided, billing staff of a gym with too many members for it are asked to choose. What the
- *  pop-up says, or null when it has nothing to ask. */
+ *  pop-up says, or null when it has nothing to ask. Through Razorpay a gym that does not choose
+ *  stays on its size (Kd, RULINGS 2026-10-01): the smallest size that fits is offered, and is
+ *  approved in Razorpay's window like any other (`razorpay`). */
 export const SIZE_DECISION_DAYS = 3;
 export function sizeDecision(org, now = Date.now()) {
   const sub = org?.subscription;
@@ -475,14 +476,17 @@ export function sizeDecision(org, now = Date.now()) {
   const on = trialEndDateLabel(pending.from);
   const fallback = pending.ifTooMany ?? null;
   const stay = { seatCap: paidSeatCap(sub), priceLabel: sub.priceLabel ?? null };
+  const razorpay = isPaidThroughRazorpay(org);
+  const stays = `If you don't choose, you'll stay on ${Number.isFinite(stay.seatCap) ? countOf(stay.seatCap, orgType) : 'your size'}.`;
   return {
+    razorpay,
     question: `You asked to move to ${countOf(pending.seatCap, orgType)}${on === null ? '' : ` on ${on}`}, but you have ${count(used)}. What would you like to do?`,
     remove: `Remove ${countOf(used - pending.seatCap, orgType)}`,
     moveInstead: fallback === null ? null : { planCode: fallback.planCode, label: `Move to ${count(fallback.seatCap)} instead (${fallback.priceLabel} a month)` },
     stay: `Stay on ${Number.isFinite(stay.seatCap) ? count(stay.seatCap) : 'your size'}${stay.priceLabel === null ? '' : ` (${stay.priceLabel} a month)`}`,
     ifNothing:
-      fallback === null
-        ? `If you don't choose, you'll stay on ${Number.isFinite(stay.seatCap) ? countOf(stay.seatCap, orgType) : 'your size'}.`
+      fallback === null || razorpay
+        ? stays
         : `If you don't choose, ${on === null ? 'at your next payment' : `on ${on}`} you'll move to ${countOf(fallback.seatCap, orgType)} (${fallback.priceLabel} a month).`,
   };
 }
@@ -493,8 +497,23 @@ export function sizeKeptText(sub, orgType) {
   if (kept == null) return null;
   const cap = paidSeatCap(sub);
   const size = Number.isFinite(cap) ? countOf(cap, orgType) : 'your size';
-  const price = typeof sub?.priceLabel === 'string' ? `, so you pay ${sub.priceLabel} a month` : '';
-  return `Your size stayed at ${size}: you had ${count(kept.members)} when it was due to change, more than ${count(kept.seatCap)}${price}. Change size again whenever you're ready.`;
+  const price = typeof sub?.priceLabel === 'string' ? ` (${sub.priceLabel} a month)` : '';
+  return `Size not changed: you had ${count(kept.members)}, more than ${count(kept.seatCap)}. You stay on ${size}${price}.`;
+}
+
+/** "Cancel this change" asks first: the box's words, or null when no smaller size waits. */
+export function cancelChangeBox(sub, orgType) {
+  const pending = sub?.pendingSize;
+  if (pending == null) return null;
+  const cap = paidSeatCap(sub);
+  const size = Number.isFinite(cap) ? countOf(cap, orgType) : 'your size';
+  const price = typeof sub?.priceLabel === 'string' ? ` (${sub.priceLabel} a month)` : '';
+  return {
+    title: `Cancel the move to ${countOf(pending.seatCap, orgType)}?`,
+    line: `You stay on ${size}${price}.`,
+    confirm: 'Cancel the change',
+    back: 'Keep the change',
+  };
 }
 
 /** Every size on the gym's price list, as Change size lists them: the gym's own, one waiting,
@@ -520,8 +539,6 @@ export function sizeRows(plans, org) {
     if (cap === null || (onSize !== null && cap > onSize)) {
       return { plan, kind: 'bigger', note: trialing ? 'From your first payment' : 'Pay the difference now', warning: null, disabled: false };
     }
-    // Razorpay cannot lower what a mandate charges; a smaller size through it is its own job (1d-iii-b).
-    if (razorpay) return { plan, kind: 'smaller', note: 'Not available yet', warning: null, disabled: true };
     const over = Number.isFinite(used) && used > cap;
     if (trialing) {
       return {
@@ -537,7 +554,8 @@ export function sizeRows(plans, org) {
       plan,
       kind: 'smaller',
       note: nextOn === null ? 'From your next payment' : `From ${nextOn}`,
-      warning: over ? tooManyWarning(used, cap, decideAt, sub, fallbackPlan(plans, used, onSize), org?.orgType) : null,
+      // Through Razorpay a gym with too many members on the day stays on its size (1d-iii-b).
+      warning: over ? tooManyWarning(used, cap, decideAt, sub, razorpay ? null : fallbackPlan(plans, used, onSize), org?.orgType) : null,
       disabled: false,
     };
   });

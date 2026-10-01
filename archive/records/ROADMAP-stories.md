@@ -191,3 +191,5 @@ stage. History, never a rule: RULINGS wins where they differ.
 - 5c (ticked 2026-10-01, PR #143), the line as it stood: - 5c. [ ] **Which software are you leaving?** (spec §11.7; RULINGS 2026-09-24): each product's export steps in plain words and a preset that fills in the column matching, as data in `@app/shared`, from real exports or the vendor's own template only.
 
 - 4a-i (ticked 2026-10-01, PR #145), the line as it stood: - 4a-i. [ ] **Invite, the email, Accept**: the owner invites an address as manager or trainer; fixed words, no token in the link; the person signs in with that address and Accepts, the console opens with NO membership; the owner ticks what they may do and may use roles of the gym's own (RULINGS 2026-10-01); 7 days; Cancel; the same reply whether or not the address has an account; the Manage door lands on a waiting invitation, not on "create your organisation".
+
+- 1d-iii-b (ticked 2026-10-01, PR #148), the line as it stood: - 1d-iii-b. [ ] **A smaller size**: from the paid month's end, as 1c-iii; its plan approved when chosen. One question for Kd at its plan: who moves when the members do not fit.

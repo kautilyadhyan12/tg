@@ -4,13 +4,16 @@ import { Loader2, X } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import { applyPaidPlan, refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
 import { sizeDecision } from '../../pages/console/billingView';
+import { usePaddleSubscribe } from './usePaddleSubscribe';
 
 // THE LAST DAYS' QUESTION (ROADMAP Stage 3 item 1c-iii; Kd, RULINGS 2026-09-25). In the 3 days
 // before a smaller size is decided, billing staff of a gym with more members than it holds are
 // asked, over whichever console screen they open: remove members, move to the smallest size
 // that fits, or stay on their size. Closing it answers nothing: it comes back the next time the
 // console is opened, and if nobody chooses, the server moves the gym to the smallest size that
-// fits on the day.
+// fits on the day. Through Razorpay (1d-iii-b) a gym that does not choose stays on its size
+// (Kd, RULINGS 2026-10-01), and moving to the smallest size that fits is approved in Razorpay's
+// window like any other size.
 
 /** Closed for this visit (the browser tab), per gym and per size waiting. */
 function dismissKey(org) {
@@ -40,8 +43,9 @@ export default function SizeDecisionPrompt({ org }) {
   const [closed, setClosed] = useState(() => wasDismissed(org));
   const [working, setWorking] = useState(null);
   const [error, setError] = useState(null);
+  const { paying, payError, paid, subscribe } = usePaddleSubscribe(org?.id ?? null, org?.name ?? '');
   const dialogRef = useRef(null);
-  const open = decision !== null && !closed;
+  const open = decision !== null && !closed && paid === null;
 
   useEffect(() => {
     if (open) dialogRef.current?.focus();
@@ -49,14 +53,15 @@ export default function SizeDecisionPrompt({ org }) {
 
   if (!open) return null;
 
+  const busy = working !== null || paying !== null;
   const close = () => {
-    if (working !== null) return;
+    if (busy) return;
     rememberDismissed(org);
     setClosed(true);
   };
 
   const act = async (which, call) => {
-    if (working !== null) return;
+    if (busy) return;
     setWorking(which);
     setError(null);
     try {
@@ -75,7 +80,7 @@ export default function SizeDecisionPrompt({ org }) {
     <button
       type="button"
       onClick={onClick}
-      disabled={working !== null}
+      disabled={busy}
       className="w-full rounded-xl px-4 py-3 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
       style={
         primary
@@ -83,7 +88,7 @@ export default function SizeDecisionPrompt({ org }) {
           : { background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)', minHeight: 44 }
       }
     >
-      {working === which ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+      {working === which || (which === 'move' && paying !== null) ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
       {label}
     </button>
   );
@@ -113,7 +118,7 @@ export default function SizeDecisionPrompt({ org }) {
           <button
             type="button"
             onClick={close}
-            disabled={working !== null}
+            disabled={busy}
             aria-label="Close"
             className="rounded-lg p-2 -m-2 disabled:opacity-50"
             style={{ color: 'rgba(255,255,255,0.55)' }}
@@ -135,7 +140,10 @@ export default function SizeDecisionPrompt({ org }) {
           {decision.moveInstead !== null
             ? button(
                 decision.moveInstead.label,
-                () => void act('move', () => orgService.changeSize(org.id, decision.moveInstead.planCode, crypto.randomUUID())),
+                () =>
+                  decision.razorpay
+                    ? void subscribe(decision.moveInstead.planCode, orgService.startRazorpaySizeChange)
+                    : void act('move', () => orgService.changeSize(org.id, decision.moveInstead.planCode, crypto.randomUUID())),
                 'move',
               )
             : null}
@@ -144,9 +152,9 @@ export default function SizeDecisionPrompt({ org }) {
         <p className="text-sm mt-4" style={{ color: 'rgba(255,255,255,0.6)' }}>
           {decision.ifNothing}
         </p>
-        {error !== null ? (
+        {(error ?? payError) !== null ? (
           <p className="text-sm mt-3" style={{ color: '#ef4444' }}>
-            {error}
+            {error ?? payError}
           </p>
         ) : null}
       </div>

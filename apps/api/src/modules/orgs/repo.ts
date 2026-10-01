@@ -1132,7 +1132,7 @@ export interface StaffAuthority {
  *  this guard once denied (a membership closed after the staff row) had two sources,
  *  and both now end the staff row itself: appointing is serialised against removing
  *  by the org lock, and deleting an account deletes its staff rows (`softDeleteUser`;
- *  rows left from before, by migration 0061). The owner of a gym keeps theirs, so a
+ *  rows left from before, by migration 0062). The owner of a gym keeps theirs, so a
  *  restore gives them their gym back.
  *
  *  `users.status` is checked, so an account inside its deletion window holds nothing. */

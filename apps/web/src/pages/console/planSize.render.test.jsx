@@ -295,7 +295,7 @@ describe('Change size', () => {
     renderOverview();
     fireEvent.click(await screen.findByRole('button', { name: 'Change size' }));
     const dialog = await screen.findByRole('dialog');
-    expect(within(dialog).getByText(new RegExp(`A smaller one starts with your next payment on ${NEXT}; until then you keep your whole size\\.$`))).toBeTruthy();
+    expect(within(dialog).getByText(`Bigger sizes start today: you pay the difference for this month. Smaller sizes start on ${NEXT}.`)).toBeTruthy();
     const list = await within(dialog).findByTestId('size-list');
     const smaller = rowOf(list, 'Up to 500 members');
     expect(within(smaller).getByText(`From ${NEXT}`)).toBeTruthy();
@@ -305,7 +305,7 @@ describe('Change size', () => {
     expect(await within(dialog).findByText(`Nothing to pay now. $129 a month from ${NEXT}.`)).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
     expect(
-      await within(dialog).findByText(`Done. You'll move to 500 members ($129 a month) on ${NEXT}. Until then you keep all ${(1000).toLocaleString()}.`),
+      await within(dialog).findByText(`Done. Moving to 500 members ($129 a month) on ${NEXT}.`),
     ).toBeTruthy();
     expect(orgService.changeSize).toHaveBeenCalledTimes(1);
     expect(orgService.changeSize.mock.calls[0].slice(0, 2)).toEqual([GYM_ID, 'org_b2_us_m']);
@@ -322,13 +322,13 @@ describe('Change size', () => {
     const dialog = await screen.findByRole('dialog');
     const list = await within(dialog).findByTestId('size-list');
     const smaller = rowOf(list, 'Up to 500 members');
-    const warning = new RegExp(`^You have 620 members\\. Remove 120 by .+ to move to 500\\. Otherwise you'll stay on ${(1000).toLocaleString()} members at \\$199 a month\\.$`);
+    const warning = new RegExp(`^You have 620 members\\. Remove 120 by .+ to move to 500\\. If not, you stay on ${(1000).toLocaleString()} members \\(\\$199 a month\\)\\.$`);
     expect(within(smaller).getByText(warning)).toBeTruthy();
     fireEvent.click(within(smaller).getByRole('button', { name: 'Choose' }));
     await within(dialog).findByText(`Nothing to pay now. $129 a month from ${NEXT}.`);
     expect(within(dialog).getByText(warning)).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }));
-    await within(dialog).findByText(/^Done\. You'll move to 500 members/);
+    await within(dialog).findByText(/^Done\. Moving to 500 members/);
     expect(within(dialog).getByText(warning)).toBeTruthy();
   });
 
@@ -345,11 +345,22 @@ describe('Change size', () => {
     expect(await screen.findByText(`Changing to 500 members ($129 a month) on ${NEXT}`)).toBeTruthy();
     expect(screen.queryByText(/Next payment/)).toBeNull();
     const fit = screen.getByTestId('pending-fit');
-    expect(fit.textContent).toMatch(/^You have 620 members\. Remove 120 by .+ to move to 500\. Otherwise you'll stay on .+ members at \$199 a month\. Go to members$/);
+    expect(fit.textContent).toMatch(/^You have 620 members\. Remove 120 by .+ to move to 500\. If not, you stay on .+ members \(\$199 a month\)\. Go to members$/);
     expect(within(fit).getByRole('link', { name: 'Go to members' }).getAttribute('href')).toBe('/console/iron-house/members');
     expect(screen.getAllByText(`620 of ${(1000).toLocaleString()} members.`).length).toBeGreaterThan(0);
 
-    const cancel = screen.getByRole('button', { name: 'Cancel this change' });
+    // It asks first (Kd at 1d-iii-b's click-through): Keep the change cancels nothing.
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel this change' }));
+    let box = screen.getByTestId('cancel-change-box');
+    expect(within(box).getByText('Cancel the move to 500 members?')).toBeTruthy();
+    expect(within(box).getByText(`You stay on ${(1000).toLocaleString()} members ($199 a month).`)).toBeTruthy();
+    fireEvent.click(within(box).getByRole('button', { name: 'Keep the change' }));
+    expect(screen.queryByTestId('cancel-change-box')).toBeNull();
+    expect(orgService.keepSize).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel this change' }));
+    box = screen.getByTestId('cancel-change-box');
+    const cancel = within(box).getByRole('button', { name: 'Cancel the change' });
     fireEvent.click(cancel);
     fireEvent.click(cancel);
     await waitFor(() => expect(orgService.keepSize).toHaveBeenCalledTimes(1));
@@ -364,7 +375,7 @@ describe('Change size', () => {
   it('says the gym is ready when its members fit, and says so when a smaller size was not made', async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, seatsUsed: 190, subscription: waiting }));
     renderOverview();
-    expect(await screen.findByText(`You're ready: you'll move to 500 members on ${NEXT}.`)).toBeTruthy();
+    expect(await screen.findByText('Your members fit.')).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Go to members' })).toBeNull();
     cleanup();
     resetConsoleOrgs();
@@ -372,7 +383,7 @@ describe('Change size', () => {
     renderOverview();
     expect(
       await screen.findByText(
-        `Your size stayed at ${(1000).toLocaleString()} members: you had 620 when it was due to change, more than 500, so you pay $199 a month. Change size again whenever you're ready.`,
+        `Size not changed: you had 620, more than 500. You stay on ${(1000).toLocaleString()} members ($199 a month).`,
       ),
     ).toBeTruthy();
   });
@@ -532,7 +543,7 @@ describe('Change size through Razorpay (1d-iii-a)', () => {
     const dialog = await screen.findByRole('dialog');
     expect(
       within(dialog).getByText(
-        `A bigger size starts once you pay in Razorpay's window: the difference for the rest of this month now, then the new price from ${NEXT}. Moving to a smaller size isn't available yet for plans paid through Razorpay.`,
+        `Bigger sizes start today: you pay the difference for this month. Smaller sizes start on ${NEXT}.`,
       ),
     ).toBeTruthy();
     fireEvent.click(await within(dialog).findByRole('button', { name: 'Choose' }));
@@ -596,15 +607,59 @@ describe('Change size through Razorpay (1d-iii-a)', () => {
     expect(new Set(keys).size).toBe(2);
   });
 
-  it('a smaller size is listed, says it is not available yet, and cannot be chosen', async () => {
-    orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: { ...rupees, seatCap: 500, priceLabel: '₹12,500' } }));
+  it('a smaller size: nothing to pay now, approved in Razorpay’s window, and Done says when it starts (1d-iii-b)', async () => {
+    const on500 = { ...rupees, seatCap: 500, priceLabel: '₹12,500' };
+    orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: on500 }));
     orgService.getPlans.mockResolvedValue({ data: { plans: RUPEE_PLANS, payOnline: 'available' } });
+    orgService.previewSizeChange.mockResolvedValue({
+      data: { planCode: 'org_b1_in_m', seatCap: 200, priceLabel: '₹7,500', dueNow: null, nextPaymentAt: '2026-11-01T00:00:00.000Z' },
+    });
+    orgService.startRazorpaySizeChange.mockResolvedValue({ data: { ...WINDOW, description: 'Monthly, up to 200 members' } });
+    const waiting = { ...on500, pendingSize: { seatCap: 200, priceLabel: '₹7,500', from: '2026-11-01T00:00:00.000Z', decideAt: '2026-10-31T21:00:00.000Z', ifTooMany: null } };
+    orgService.syncCheckout.mockResolvedValueOnce({ data: { state: 'waiting' } }).mockResolvedValue({ data: { state: 'paid', subscription: waiting } });
     renderOverview();
     fireEvent.click(await screen.findByRole('button', { name: 'Change size' }));
     const dialog = await screen.findByRole('dialog');
     const smaller = within(await within(dialog).findByTestId('size-list')).getByText('Up to 200 members').closest('li');
-    expect(within(smaller).getByText('Not available yet')).toBeTruthy();
-    expect(within(smaller).getByRole('button', { name: 'Choose' }).hasAttribute('disabled')).toBe(true);
-    expect(orgService.previewSizeChange).not.toHaveBeenCalled();
+    expect(within(smaller).getByText(`From ${NEXT}`)).toBeTruthy();
+    fireEvent.click(within(smaller).getByRole('button', { name: 'Choose' }));
+    expect(await within(dialog).findByText(`Nothing to pay now. ₹7,500 a month from ${NEXT}.`)).toBeTruthy();
+    expect(within(dialog).getByText('Razorpay may check your payment method with a small charge, which it refunds.')).toBeTruthy();
+    const go = within(dialog).getByRole('button', { name: 'Continue to Razorpay' });
+    fireEvent.click(go);
+    fireEvent.click(go);
+    await waitFor(() => expect(openRazorpayCheckout).toHaveBeenCalledTimes(1));
+    expect(orgService.startRazorpaySizeChange.mock.calls[0].slice(0, 2)).toEqual([GYM_ID, 'org_b1_in_m']);
+    expect(orgService.changeSize).not.toHaveBeenCalled();
+    expect(within(dialog).queryByTestId('plan-choice-done')).toBeNull();
+    openRazorpayCheckout.mock.calls[0][0].onEvent({ type: 'completed' });
+    expect(
+      await within(dialog).findByText(`Done. Moving to 200 members (₹7,500 a month) on ${NEXT}.`, {}, { timeout: 5000 }),
+    ).toBeTruthy();
+  });
+
+  it('the last days’ question through Razorpay: doing nothing means staying, and Move instead opens Razorpay’s window for the size that fits', async () => {
+    const end = new Date(Date.now() + 2 * 86_400_000).toISOString();
+    const on1000 = { ...rupees, seatCap: 1000, priceLabel: '₹19,000', currentPeriodEnd: end };
+    const sub = {
+      ...on1000,
+      pendingSize: {
+        seatCap: 200,
+        priceLabel: '₹7,500',
+        from: end,
+        decideAt: new Date(Date.now() + 2 * 86_400_000 - 3 * 3_600_000).toISOString(),
+        ifTooMany: { planCode: 'org_b2_in_m', seatCap: 500, priceLabel: '₹12,500' },
+      },
+    };
+    window.sessionStorage.clear();
+    orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, seatsUsed: 400, subscription: sub }));
+    orgService.startRazorpaySizeChange.mockResolvedValue({ data: WINDOW });
+    renderOverview();
+    const prompt = await screen.findByTestId('size-decision');
+    expect(within(prompt).getByText(`If you don't choose, you'll stay on ${(1000).toLocaleString()} members.`)).toBeTruthy();
+    fireEvent.click(within(prompt).getByRole('button', { name: 'Move to 500 instead (₹12,500 a month)' }));
+    await waitFor(() => expect(openRazorpayCheckout).toHaveBeenCalledTimes(1));
+    expect(orgService.startRazorpaySizeChange.mock.calls[0].slice(0, 2)).toEqual([GYM_ID, 'org_b2_in_m']);
+    expect(orgService.changeSize).not.toHaveBeenCalled();
   });
 });

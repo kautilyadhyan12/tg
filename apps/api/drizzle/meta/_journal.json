@@ -426,7 +426,14 @@
       "idx": 60,
       "version": "7",
       "when": 1788220800044,
-      "tag": "0061_staff_ghost_rows",
+      "tag": "0061_razorpay_smaller_size",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1788220800045,
+      "tag": "0062_staff_ghost_rows",
       "breakpoints": true
     }
   ]

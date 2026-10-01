@@ -16,7 +16,12 @@ export const GRACE_EXPIRED = "grace_expired";
 export const TRIAL_SUBSCRIBED = "subscribed";
 
 
-export type CheckoutState = "creating" | "open" | "superseded" | "failed" | "paid";
+/** `approved` and `dropped` are a smaller size's through Razorpay (1d-iii-b): its window approved
+ *  and waiting on the gym's plan, then no longer waiting and ended at Razorpay. */
+export type CheckoutState = "creating" | "open" | "superseded" | "failed" | "paid" | "approved" | "dropped";
+
+/** Whether a checkout that replaces a plan is for a bigger or a smaller size. */
+export type SizeDirection = "bigger" | "smaller";
 
 /** Who a gym pays through: Razorpay for an Indian gym, Paddle for every other. */
 export type PayProvider = "paddle" | "razorpay";
@@ -39,6 +44,8 @@ export interface CheckoutRow {
   startsAt: Date | null;
   /** The rest of this month's difference, taken as the window is paid; null when none. */
   upfrontMinor: number | null;
+  /** Bigger or smaller, for a checkout that replaces a plan; null for a first plan. */
+  direction: SizeDirection | null;
 }
 
 interface RawCheckout {
@@ -53,9 +60,11 @@ interface RawCheckout {
   period_start: Date | null;
   starts_at: Date | null;
   upfront_minor: number | null;
+  size_direction: string | null;
 }
 
-const STATES: readonly CheckoutState[] = ["creating", "open", "superseded", "failed", "paid"];
+const STATES: readonly CheckoutState[] = ["creating", "open", "superseded", "failed", "paid", "approved", "dropped"];
+const DIRECTIONS: readonly SizeDirection[] = ["bigger", "smaller"];
 const PROVIDERS: readonly PayProvider[] = ["paddle", "razorpay"];
 
 function toCheckout(raw: RawCheckout): CheckoutRow {
@@ -63,6 +72,8 @@ function toCheckout(raw: RawCheckout): CheckoutRow {
   if (state === undefined) throw new Error(`unknown checkout state ${raw.state}`);
   const provider = PROVIDERS.find((p) => p === raw.provider);
   if (provider === undefined) throw new Error(`unknown checkout provider ${raw.provider}`);
+  const direction = raw.size_direction === null ? null : (DIRECTIONS.find((d) => d === raw.size_direction) ?? null);
+  if (raw.size_direction !== null && direction === null) throw new Error(`unknown size direction ${raw.size_direction}`);
   return {
     id: raw.id,
     gymId: raw.gym_id,
@@ -75,6 +86,7 @@ function toCheckout(raw: RawCheckout): CheckoutRow {
     periodStart: raw.period_start,
     startsAt: raw.starts_at,
     upfrontMinor: raw.upfront_minor,
+    direction,
   };
 }
 
@@ -130,7 +142,7 @@ export async function beginCheckout(
 
     const earlier = await tx<RawCheckout[]>`
       SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref,
-             c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor
+             c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor, c.size_direction
       FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
       WHERE c.gym_id = ${input.gymId} AND c.idempotency_key = ${input.idempotencyKey}`;
     const replay = earlier[0];
@@ -174,7 +186,7 @@ export async function beginCheckout(
       INSERT INTO billing_checkouts (gym_id, plan_id, created_by, idempotency_key, provider)
       VALUES (${input.gymId}, ${plan.id}, ${input.userId}, ${input.idempotencyKey}, ${input.provider})
       RETURNING id, gym_id, plan_id, ${input.planCode}::text AS plan_code, state, provider, provider_ref,
-                replaces_subscription_id, period_start, starts_at, upfront_minor`;
+                replaces_subscription_id, period_start, starts_at, upfront_minor, size_direction`;
     const row = inserted[0];
     if (row === undefined) throw new Error("checkout insert returned no row");
     await insertAudit(tx, {
@@ -221,7 +233,7 @@ export async function failCheckout(sql: SqlOrTx, input: { checkoutId: string; gy
 export async function getCheckout(sql: SqlOrTx, input: { checkoutId: string; gymId: string }): Promise<CheckoutRow | null> {
   const rows = await sql<RawCheckout[]>`
     SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref,
-             c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor
+             c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor, c.size_direction
     FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
     WHERE c.id = ${input.checkoutId} AND c.gym_id = ${input.gymId}`;
   const row = rows[0];
@@ -232,7 +244,7 @@ export async function getCheckout(sql: SqlOrTx, input: { checkoutId: string; gym
 export async function checkoutForKey(sql: SqlOrTx, input: { gymId: string; idempotencyKey: string }): Promise<CheckoutRow | null> {
   const rows = await sql<RawCheckout[]>`
     SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref,
-           c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor
+           c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor, c.size_direction
     FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
     WHERE c.gym_id = ${input.gymId} AND c.idempotency_key = ${input.idempotencyKey}`;
   const row = rows[0];
@@ -244,7 +256,7 @@ export async function checkoutForKey(sql: SqlOrTx, input: { gymId: string; idemp
 export async function checkoutForRazorpaySubscription(sql: SqlOrTx, subscriptionId: string): Promise<CheckoutRow | null> {
   const rows = await sql<RawCheckout[]>`
     SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref,
-             c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor
+             c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor, c.size_direction
     FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
     WHERE c.provider = 'razorpay' AND c.provider_ref = ${subscriptionId}`;
   const row = rows[0];
@@ -276,7 +288,7 @@ export async function checkoutsForTransactions(sql: SqlOrTx, transactionIds: rea
   if (transactionIds.length === 0) return [];
   const rows = await sql<RawCheckout[]>`
     SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref,
-             c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor
+             c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor, c.size_direction
     FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
     WHERE c.provider = 'paddle' AND c.provider_ref = ANY(${[...transactionIds]}::text[])
     ORDER BY c.created_at, c.id`;
@@ -413,9 +425,12 @@ export async function applySnapshot(
     snapshot: Snapshot;
     checkoutId: string | null;
     now: Date;
-    /** A bigger size's checkout (1d-iii-a): the gym's plan it takes the place of, and the end of
-     *  that plan's paid month as it was when the window was opened. */
-    replaces?: { rowId: string; periodEnd: Date } | null;
+    /** A bigger (1d-iii-a) or smaller (1d-iii-b) size's checkout: the gym's plan it takes the place
+     *  of, and the end of that plan's paid month as it was when the window was opened. A smaller
+     *  size (`afterRenewal`) also takes the place of that plan once it has renewed past that end
+     *  (the worker was down past the day), or failed to: the plan is then cut back to that end,
+     *  so the month it charged after it is refunded (`razorpayCancelOutcome`). */
+    replaces?: { rowId: string; periodEnd: Date; afterRenewal?: boolean } | null;
   },
 ): Promise<ApplyOutcome> {
   return await sql.begin(async (tx) => {
@@ -469,9 +484,12 @@ export async function applySnapshot(
               o.id === replaces.rowId &&
               o.provider === "razorpay" &&
               o.provider_ref !== null &&
-              o.status === "active" &&
               !o.cancel_at_period_end &&
-              o.current_period_end?.getTime() === replaces.periodEnd.getTime(),
+              (replaces.afterRenewal === true
+                ? (o.status === "active" || o.status === "past_due") &&
+                  o.current_period_end !== null &&
+                  o.current_period_end.getTime() >= replaces.periodEnd.getTime()
+                : o.status === "active" && o.current_period_end?.getTime() === replaces.periodEnd.getTime()),
           ) ?? null);
     // Razorpay's record never shows a cancel (1d-ii): whether a plan is set to end is our own
     // row's, read here under the lock, so an answer fetched before Cancel or Keep my plan was
@@ -533,12 +551,14 @@ export async function applySnapshot(
       if (replaceable !== null && replaceable.provider_ref !== null && status !== "expired") {
         // Ended first (a gym holds one live plan), set to end so any later payment of it is
         // refunded (`razorpayCancelOutcome`); `cancel_sent_at` waits for Razorpay to have ended it.
+        const until = replaces?.periodEnd ?? null;
         const ended = await tx`
           UPDATE subscriptions
           SET status = 'expired', ended_at = ${input.now}, cancel_at_period_end = true, cancel_reason = ${REPLACED},
+              current_period_end = LEAST(current_period_end, ${until}::timestamptz), past_due_since = NULL,
               pending_plan_id = NULL, pending_from = NULL, pending_requested_plan_id = NULL,
-              pending_held_at = NULL, pending_warned_at = NULL
-          WHERE id = ${replaceable.id} AND owner_id = ${input.gymId} AND status = 'active'
+              pending_held_at = NULL, pending_warned_at = NULL, pending_subscription_ref = NULL
+          WHERE id = ${replaceable.id} AND owner_id = ${input.gymId} AND status IN ('active','past_due')
           RETURNING id`;
         if (ended.length !== 1) throw new Error("the replaced plan changed under the gym's lock");
         replaced = { rowId: replaceable.id, subscriptionRef: replaceable.provider_ref };
@@ -597,7 +617,11 @@ export async function applySnapshot(
                                    THEN NULL ELSE pending_held_at END,
             pending_warned_at = CASE WHEN plan_id IS DISTINCT FROM ${s.planId}::uuid
                                        OR ${decision.status} NOT IN ('trialing','active','past_due')
-                                     THEN NULL ELSE pending_warned_at END
+                                     THEN NULL ELSE pending_warned_at END,
+            -- A smaller size approved at Razorpay stops waiting with them; the worker ends it there.
+            pending_subscription_ref = CASE WHEN plan_id IS DISTINCT FROM ${s.planId}::uuid
+                                              OR ${decision.status} NOT IN ('trialing','active','past_due')
+                                            THEN NULL ELSE pending_subscription_ref END
         WHERE id = ${existing.id}`;
       await audit(existing.id, `billing.${decision.event}`);
     }
@@ -670,7 +694,7 @@ export async function closeCheckout(sql: SqlOrTx, input: { checkoutId: string; g
 export async function openCheckoutsFor(sql: SqlOrTx, gymId: string): Promise<CheckoutRow[]> {
   const rows = await sql<RawCheckout[]>`
     SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref,
-             c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor
+             c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor, c.size_direction
     FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
     WHERE c.gym_id = ${gymId} AND c.state = 'open' AND c.provider_ref IS NOT NULL
     ORDER BY c.created_at
@@ -1052,7 +1076,8 @@ export async function finishPlanChange(
 export async function dropPendingPlan(sql: SqlOrTx, input: { gymId: string; subscriptionRowId: string; planId: string }): Promise<void> {
   await sql`
     UPDATE subscriptions
-    SET pending_plan_id = NULL, pending_from = NULL, pending_requested_plan_id = NULL, pending_held_at = NULL, pending_warned_at = NULL
+    SET pending_plan_id = NULL, pending_from = NULL, pending_requested_plan_id = NULL, pending_held_at = NULL, pending_warned_at = NULL,
+        pending_subscription_ref = NULL
     WHERE id = ${input.subscriptionRowId} AND owner_type = 'gym' AND owner_id = ${input.gymId}
       AND pending_plan_id = ${input.planId}`;
 }
@@ -1060,7 +1085,9 @@ export async function dropPendingPlan(sql: SqlOrTx, input: { gymId: string; subs
 export type KeepSizeOutcome = { kind: "kept" } | { kind: "nothing_waiting" } | { kind: "in_progress" } | { kind: "org_archived" } | { kind: "not_found" };
 
 /** "Cancel this change": the smaller size waiting is dropped, under the gym's lock, so it
- *  cannot cross the worker making it at Paddle (which holds a pending change meanwhile). */
+ *  cannot cross the worker making it at Paddle (which holds a pending change meanwhile), or one
+ *  through Razorpay already decided and taking the plan's place. A Razorpay one's approved
+ *  subscription is then ended there by the worker (`strandedSmallerSizes`). */
 export async function keepSize(sql: Sql, input: { gymId: string; userId: string }): Promise<KeepSizeOutcome> {
   return await sql.begin(async (tx) => {
     await lockOrgRow(tx, input.gymId); // subscription-writer lock
@@ -1068,11 +1095,17 @@ export async function keepSize(sql: Sql, input: { gymId: string; userId: string 
     const gym = gyms[0];
     if (gym === undefined) return { kind: "not_found" };
     if (gym.status !== "active") return { kind: "org_archived" };
-    const pending = await tx`SELECT 1 FROM billing_plan_changes WHERE gym_id = ${input.gymId} AND state = 'pending'`;
+    const pending = await tx`
+      SELECT 1 FROM billing_plan_changes WHERE gym_id = ${input.gymId} AND state = 'pending'
+      UNION ALL
+      SELECT 1 FROM subscriptions
+      WHERE owner_type = 'gym' AND owner_id = ${input.gymId} AND status IN ('active','past_due')
+        AND pending_subscription_ref IS NOT NULL AND pending_held_at IS NOT NULL`;
     if (pending.length > 0) return { kind: "in_progress" };
     const kept = await tx<{ id: string; code: string }[]>`
       UPDATE subscriptions s
-      SET pending_plan_id = NULL, pending_from = NULL, pending_requested_plan_id = NULL, pending_held_at = NULL, pending_warned_at = NULL
+      SET pending_plan_id = NULL, pending_from = NULL, pending_requested_plan_id = NULL, pending_held_at = NULL, pending_warned_at = NULL,
+          pending_subscription_ref = NULL
       FROM plans p
       WHERE p.id = COALESCE(s.pending_requested_plan_id, s.pending_plan_id) AND s.owner_type = 'gym' AND s.owner_id = ${input.gymId}
         AND s.status IN ('active','past_due')
@@ -1122,6 +1155,7 @@ export interface FittingPlan {
   code: string;
   seatCap: number;
   priceMinor: number;
+  /** Paddle's price, or Razorpay's plan for a plan paid through Razorpay. */
   priceId: string;
 }
 
@@ -1129,12 +1163,14 @@ export interface FittingPlan {
  *  the plan it is on: where a gym with too many members for the size it asked for moves
  *  instead (Kd, RULINGS 2026-09-25). Null when nothing smaller holds them. */
 export async function smallestFittingPlan(sql: SqlOrTx, input: { gymId: string; members: number }): Promise<FittingPlan | null> {
-  const rows = await sql<{ id: string; code: string; seat_cap: number; price_minor: number; paddle_price_id: string }[]>`
-    SELECT fp.id, fp.code, fp.seat_cap, fp.price_minor, fp.paddle_price_id
+  const rows = await sql<{ id: string; code: string; seat_cap: number; price_minor: number; price_id: string }[]>`
+    SELECT fp.id, fp.code, fp.seat_cap, fp.price_minor,
+           CASE WHEN s.provider = 'razorpay' THEN fp.razorpay_plan_id ELSE fp.paddle_price_id END AS price_id
     FROM subscriptions s
     JOIN plans p ON p.id = s.plan_id
     JOIN plans fp ON fp.audience = 'org' AND fp.active = true AND fp.interval = 'month'
-                 AND fp.currency = p.currency AND fp.paddle_price_id IS NOT NULL
+                 AND fp.currency = p.currency
+                 AND (CASE WHEN s.provider = 'razorpay' THEN fp.razorpay_plan_id ELSE fp.paddle_price_id END) IS NOT NULL
     WHERE s.owner_type = 'gym' AND s.owner_id = ${input.gymId}
       AND s.status IN ('trialing','active','past_due')
       AND fp.seat_cap IS NOT NULL AND fp.seat_cap >= ${input.members}
@@ -1142,7 +1178,7 @@ export async function smallestFittingPlan(sql: SqlOrTx, input: { gymId: string; 
     ORDER BY fp.seat_cap, fp.price_minor
     LIMIT 1`;
   const row = rows[0];
-  return row === undefined ? null : { id: row.id, code: row.code, seatCap: row.seat_cap, priceMinor: row.price_minor, priceId: row.paddle_price_id };
+  return row === undefined ? null : { id: row.id, code: row.code, seatCap: row.seat_cap, priceMinor: row.price_minor, priceId: row.price_id };
 }
 
 export type PendingClaimOutcome =
@@ -1206,7 +1242,7 @@ export async function claimPendingPlan(
     if (members > row.seat_cap && fitted === null) {
       await tx`
         UPDATE subscriptions SET pending_plan_id = NULL, pending_from = NULL, pending_requested_plan_id = NULL,
-                                 pending_held_at = NULL, pending_warned_at = NULL
+                                 pending_held_at = NULL, pending_warned_at = NULL, pending_subscription_ref = NULL
         WHERE id = ${input.subscriptionRowId} AND owner_type = 'gym' AND owner_id = ${input.gymId}`;
       const kept = await tx<{ id: string }[]>`
         INSERT INTO billing_plan_changes (gym_id, subscription_id, from_plan_id, to_plan_id, created_by,
@@ -1284,12 +1320,15 @@ export interface SizeWarningDue {
 /** Paying plans with a smaller size due within `within` whose billing staff have not been
  *  told about too many members yet, while there is still time to act (before the decision,
  *  `lead` ahead of the size's start). */
-export async function dueSizeWarnings(sql: SqlOrTx, input: { now: Date; within: number; lead: number; limit: number }): Promise<SizeWarningDue[]> {
+export async function dueSizeWarnings(
+  sql: SqlOrTx,
+  input: { provider: PayProvider; now: Date; within: number; lead: number; limit: number },
+): Promise<SizeWarningDue[]> {
   const rows = await sql<{ id: string; owner_id: string }[]>`
     SELECT id, owner_id FROM subscriptions
     WHERE pending_plan_id IS NOT NULL AND pending_warned_at IS NULL AND pending_held_at IS NULL
       AND pending_from <= ${new Date(input.now.getTime() + input.within)} AND pending_from > ${new Date(input.now.getTime() + input.lead)}
-      AND owner_type = 'gym' AND provider = 'paddle' AND status = 'active' AND cancel_at_period_end = false
+      AND owner_type = 'gym' AND provider = ${input.provider} AND status = 'active' AND cancel_at_period_end = false
     ORDER BY pending_from, id
     LIMIT ${input.limit}`;
   return rows.map((r) => ({ subscriptionRowId: r.id, gymId: r.owner_id }));
@@ -1310,6 +1349,8 @@ export interface SizeNoticeFacts {
   targetPriceMinor: number;
   /** When the smaller size was due (a warning), or null (a size kept). */
   pendingFrom: Date | null;
+  /** Through Razorpay a gym with too many members stays on its size (Kd, RULINGS 2026-10-01). */
+  provider: PayProvider;
 }
 
 export async function sizeNoticeFacts(
@@ -1328,10 +1369,11 @@ export async function sizeNoticeFacts(
       target_seat_cap: number | null;
       target_price_minor: number | null;
       pending_from: Date | null;
+      provider: string;
     }[]
   >`
     SELECT g.name, g.slug, g.org_type, g.timezone, p.seat_cap, p.price_minor, p.currency,
-           tp.seat_cap AS target_seat_cap, tp.price_minor AS target_price_minor, s.pending_from
+           tp.seat_cap AS target_seat_cap, tp.price_minor AS target_price_minor, s.pending_from, s.provider
     FROM subscriptions s
     JOIN gyms g ON g.id = s.owner_id
     JOIN plans p ON p.id = s.plan_id
@@ -1343,7 +1385,8 @@ export async function sizeNoticeFacts(
     END
     WHERE s.id = ${input.subscriptionRowId} AND s.owner_type = 'gym' AND s.owner_id = ${input.gymId}`;
   const row = rows[0];
-  if (row === undefined || row.target_seat_cap === null || row.target_price_minor === null) return null;
+  const provider = PROVIDERS.find((p) => p === row?.provider);
+  if (row === undefined || row.target_seat_cap === null || row.target_price_minor === null || provider === undefined) return null;
   return {
     gymName: row.name,
     gymSlug: row.slug,
@@ -1356,6 +1399,7 @@ export async function sizeNoticeFacts(
     targetSeatCap: row.target_seat_cap,
     targetPriceMinor: row.target_price_minor,
     pendingFrom: row.pending_from,
+    provider,
   };
 }
 
@@ -1455,7 +1499,13 @@ export async function requestCancel(sql: Sql, input: { gymId: string; userId: st
     if (row.provider !== "razorpay" || row.provider_ref === null) return { kind: "no_paid_plan" };
     if (row.cancel_at_period_end) return { kind: "already" };
     if (row.status === "past_due") return { kind: "overdue", rowId: row.id, subscriptionRef: row.provider_ref };
-    await tx`UPDATE subscriptions SET cancel_at_period_end = true WHERE id = ${row.id} AND owner_id = ${input.gymId}`;
+    // A smaller size waiting goes with it: there is no next month to start it in. Its approved
+    // subscription is ended at Razorpay by the worker (`strandedSmallerSizes`).
+    await tx`
+      UPDATE subscriptions
+      SET cancel_at_period_end = true, pending_plan_id = NULL, pending_from = NULL, pending_requested_plan_id = NULL,
+          pending_held_at = NULL, pending_warned_at = NULL, pending_subscription_ref = NULL
+      WHERE id = ${row.id} AND owner_id = ${input.gymId}`;
     await insertAudit(tx, {
       actorUserId: input.userId,
       gymId: input.gymId,
@@ -1605,21 +1655,22 @@ export async function dueRazorpayRenewals(sql: SqlOrTx, input: { before: Date; l
   return rows.map((r) => r.provider_ref);
 }
 
-// ── A bigger size on a plan paid through Razorpay (1d-iii-a) ───────────────────
+// ── A bigger (1d-iii-a) or smaller (1d-iii-b) size on a plan paid through Razorpay ─
 
-/** `cancel_reason` of a plan a bigger size took the place of. */
+/** `cancel_reason` of a plan a bigger or smaller size took the place of. */
 export const REPLACED = "replaced";
 
 export interface RazorpaySizeTarget {
+  direction: SizeDirection;
   subscriptionRowId: string;
   subscriptionRef: string;
-  /** When the month paid ends: the bigger size's price is first charged then. */
+  /** When the month paid ends: the new size's price is first charged then. */
   periodEnd: Date;
   fromPlanId: string;
   fromPriceMinor: number;
   toPlanId: string;
   planCode: string;
-  /** Razorpay's plan (`plan_…`) for the bigger size. */
+  /** Razorpay's plan (`plan_…`) for the new size. */
   providerPlanId: string;
   priceMinor: number;
   currency: string;
@@ -1638,13 +1689,15 @@ export type RazorpaySizeOutcome =
   | { kind: "renewing" }
   | { kind: "no_such_plan" }
   | { kind: "same_size" }
-  /** A smaller size: not through Razorpay yet (1d-iii-b). */
-  | { kind: "smaller" }
+  /** The smaller size already waiting to start. */
+  | { kind: "already_waiting" }
   | { kind: "not_set_up" };
 
-/** Which bigger size of its own price list this gym's Razorpay plan could move to now, or why
+/** Which other size of its own price list this gym's Razorpay plan could move to now, or why
  *  not: only a plan paying in good standing, not set to end, with time left in its month for a
- *  window to be paid before Razorpay charges the next one. Read with the gym in every WHERE. */
+ *  window to be paid before Razorpay charges the next one. A smaller size may be chosen with
+ *  more members than it holds: they are counted when it is due (Kd, RULINGS 2026-09-25). Read
+ *  with the gym in every WHERE. */
 export async function razorpaySizeTarget(
   sql: SqlOrTx,
   input: { gymId: string; planCode: string; now: Date; renewGuardMs: number },
@@ -1661,10 +1714,11 @@ export async function razorpaySizeTarget(
       seat_cap: number | null;
       price_minor: number;
       currency: string;
+      pending_plan_id: string | null;
     }[]
   >`
     SELECT s.id, s.status, s.provider, s.provider_ref, s.cancel_at_period_end, s.current_period_end,
-           s.plan_id, p.seat_cap, p.price_minor, p.currency
+           s.plan_id, p.seat_cap, p.price_minor, p.currency, s.pending_plan_id
     FROM subscriptions s JOIN plans p ON p.id = s.plan_id
     WHERE s.owner_type = 'gym' AND s.owner_id = ${input.gymId}
       AND s.status IN ('trialing','active','past_due')
@@ -1692,7 +1746,7 @@ export async function razorpaySizeTarget(
   const bigger = row.seat_cap !== null && (plan.seat_cap === null || plan.seat_cap > row.seat_cap);
   const smaller = plan.seat_cap !== null && (row.seat_cap === null || plan.seat_cap < row.seat_cap);
   if (plan.id === row.plan_id || (!bigger && !smaller)) return { kind: "same_size" };
-  if (!bigger) return { kind: "smaller" };
+  if (smaller && plan.id === row.pending_plan_id) return { kind: "already_waiting" };
   if (row.current_period_end === null || row.current_period_end.getTime() <= input.now.getTime() + input.renewGuardMs) {
     return { kind: "renewing" };
   }
@@ -1700,6 +1754,7 @@ export async function razorpaySizeTarget(
   return {
     kind: "ok",
     target: {
+      direction: bigger ? "bigger" : "smaller",
       subscriptionRowId: row.id,
       subscriptionRef: row.provider_ref,
       periodEnd: row.current_period_end,
@@ -1731,10 +1786,12 @@ export type BeginSizeCheckoutOutcome =
   | { kind: "org_archived" }
   | { kind: "not_found" };
 
-/** Start the window for a bigger size: under the gym's lock, so the checks and the checkout are
- *  one step, and any checkout still open for this gym is superseded (the caller cancels it at
- *  its provider) so only one can be paid. The rest of this month's difference is priced HERE,
- *  from our own price list and the month Razorpay last charged (`periodStart`, `periodEnd`). */
+/** Start the window for a bigger or smaller size: under the gym's lock, so the checks and the
+ *  checkout are one step, and any checkout still open for this gym is superseded (the caller
+ *  cancels it at its provider) so only one can be paid; a smaller size already approved is not
+ *  open, and waits until another is approved. A bigger size's rest of this month's difference is
+ *  priced HERE, from our own price list and the month Razorpay last charged (`periodStart`,
+ *  `periodEnd`); a smaller one takes nothing now. */
 export async function beginSizeCheckout(
   sql: Sql,
   input: {
@@ -1757,7 +1814,7 @@ export async function beginSizeCheckout(
 
     const earlier = await tx<RawCheckout[]>`
       SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref,
-             c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor
+             c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor, c.size_direction
       FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
       WHERE c.gym_id = ${input.gymId} AND c.idempotency_key = ${input.idempotencyKey}`;
     const replay = earlier[0];
@@ -1779,7 +1836,7 @@ export async function beginSizeCheckout(
       now: input.now,
     });
     if (charge.kind === "month_over") return { kind: "refused", outcome: { kind: "renewing" } };
-    const upfront = charge.kind === "charge" ? charge.minor : null;
+    const upfront = charge.kind === "charge" && target.direction === "bigger" ? charge.minor : null;
 
     const superseded = await tx<{ provider: string; provider_ref: string | null }[]>`
       UPDATE billing_checkouts SET state = 'superseded', updated_at = now()
@@ -1787,11 +1844,11 @@ export async function beginSizeCheckout(
       RETURNING provider, provider_ref`;
     const inserted = await tx<RawCheckout[]>`
       INSERT INTO billing_checkouts (gym_id, plan_id, created_by, idempotency_key, provider,
-                                     replaces_subscription_id, period_start, starts_at, upfront_minor)
+                                     replaces_subscription_id, period_start, starts_at, upfront_minor, size_direction)
       VALUES (${input.gymId}, ${target.toPlanId}, ${input.userId}, ${input.idempotencyKey}, 'razorpay',
-              ${target.subscriptionRowId}, ${input.periodStart}, ${target.periodEnd}, ${upfront})
+              ${target.subscriptionRowId}, ${input.periodStart}, ${target.periodEnd}, ${upfront}, ${target.direction})
       RETURNING id, gym_id, plan_id, ${input.planCode}::text AS plan_code, state, provider, provider_ref,
-                replaces_subscription_id, period_start, starts_at, upfront_minor`;
+                replaces_subscription_id, period_start, starts_at, upfront_minor, size_direction`;
     const row = inserted[0];
     if (row === undefined) throw new Error("checkout insert returned no row");
     await insertAudit(tx, {
@@ -1800,7 +1857,7 @@ export async function beginSizeCheckout(
       action: "billing.size_checkout_started",
       targetType: "billing_checkout",
       targetId: row.id,
-      meta: { plan: input.planCode, provider: "razorpay", upfront: upfront === null ? null : String(upfront) },
+      meta: { plan: input.planCode, provider: "razorpay", direction: target.direction, upfront: upfront === null ? null : String(upfront) },
     });
     return {
       kind: "created",
@@ -1831,4 +1888,213 @@ export async function replacedToCancel(sql: SqlOrTx, input: { limit: number }): 
     ORDER BY ended_at, id
     LIMIT ${input.limit}`;
   return rows.map((r) => ({ rowId: r.id, gymId: r.owner_id, subscriptionRef: r.provider_ref }));
+}
+
+// ── A smaller size on a plan paid through Razorpay (1d-iii-b) ───────────────────
+
+/** The smaller size waiting on a gym's live Razorpay plan: the subscription approved for it,
+ *  and whether it has been decided (the members fit, and it is taking the plan's place). */
+export interface RazorpayWaitingSize {
+  rowId: string;
+  subscriptionRef: string;
+  decided: boolean;
+}
+
+export async function razorpayWaitingSize(sql: SqlOrTx, gymId: string): Promise<RazorpayWaitingSize | null> {
+  const rows = await sql<{ id: string; pending_subscription_ref: string; pending_held_at: Date | null }[]>`
+    SELECT id, pending_subscription_ref, pending_held_at FROM subscriptions
+    WHERE owner_type = 'gym' AND owner_id = ${gymId} AND provider = 'razorpay'
+      AND status IN ('trialing','active','past_due') AND pending_subscription_ref IS NOT NULL
+    LIMIT 1`;
+  const row = rows[0];
+  return row === undefined ? null : { rowId: row.id, subscriptionRef: row.pending_subscription_ref, decided: row.pending_held_at !== null };
+}
+
+export type ApproveSmallerOutcome =
+  /** Waiting on the plan from now. */
+  | "approved"
+  /** Already waiting: approved by another answer about the same window (the browser's and
+   *  Razorpay's arrive together). */
+  | "already"
+  /** Not approvable: the window was closed by a newer press, or the plan changed. */
+  | "refused";
+
+/** A smaller size's window approved at Razorpay: it waits on the plan it replaces from now, in
+ *  place of any smaller size approved before it (whose subscription the worker then ends). Under
+ *  the gym's lock; only for the window still open, and only while that plan is as it was when
+ *  the window opened — paying, not set to end, the same month, no size already decided. */
+export async function approveSmallerSize(
+  sql: Sql,
+  input: { gymId: string; checkoutId: string; subscriptionRef: string },
+): Promise<ApproveSmallerOutcome> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId); // subscription-writer lock
+    const checkouts = await tx<
+      { state: string; plan_id: string; created_by: string | null; replaces_subscription_id: string | null; starts_at: Date | null; code: string }[]
+    >`
+      SELECT c.state, c.plan_id, c.created_by, c.replaces_subscription_id, c.starts_at, p.code
+      FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
+      WHERE c.id = ${input.checkoutId} AND c.gym_id = ${input.gymId} AND c.provider = 'razorpay'
+        AND c.provider_ref = ${input.subscriptionRef} AND c.size_direction = 'smaller'
+      FOR UPDATE OF c`;
+    const checkout = checkouts[0];
+    if (checkout?.state === "approved") {
+      const waiting = await tx`
+        SELECT 1 FROM subscriptions
+        WHERE owner_type = 'gym' AND owner_id = ${input.gymId} AND pending_subscription_ref = ${input.subscriptionRef}
+          AND status IN ('trialing','active','past_due')`;
+      return waiting.length > 0 ? "already" : "refused";
+    }
+    if (checkout === undefined || checkout.state !== "open" || checkout.replaces_subscription_id === null || checkout.starts_at === null) return "refused";
+    const moved = await tx<{ id: string }[]>`
+      UPDATE subscriptions
+      SET pending_plan_id = ${checkout.plan_id}, pending_from = ${checkout.starts_at}, pending_requested_plan_id = NULL,
+          pending_held_at = NULL, pending_warned_at = NULL, pending_subscription_ref = ${input.subscriptionRef}
+      WHERE id = ${checkout.replaces_subscription_id} AND owner_type = 'gym' AND owner_id = ${input.gymId}
+        AND provider = 'razorpay' AND status = 'active' AND cancel_at_period_end = false
+        AND current_period_end = ${checkout.starts_at} AND pending_held_at IS NULL
+      RETURNING id`;
+    if (moved.length !== 1) return "refused";
+    await tx`UPDATE billing_checkouts SET state = 'approved', updated_at = now() WHERE id = ${input.checkoutId} AND gym_id = ${input.gymId}`;
+    await insertAudit(tx, {
+      actorUserId: checkout.created_by,
+      gymId: input.gymId,
+      action: "billing.size_scheduled",
+      targetType: "subscription",
+      targetId: checkout.replaces_subscription_id,
+      meta: { provider: "razorpay", plan: checkout.code, from: checkout.starts_at.toISOString() },
+    });
+    return "approved";
+  });
+}
+
+/** The smaller size waiting ended at Razorpay before it took the plan's place (the gym's bank
+ *  withdrew the mandate): the gym keeps its size. Only that subscription's. */
+export async function dropRazorpayWaitingSize(sql: SqlOrTx, input: { gymId: string; subscriptionRef: string }): Promise<boolean> {
+  const rows = await sql`
+    UPDATE subscriptions
+    SET pending_plan_id = NULL, pending_from = NULL, pending_requested_plan_id = NULL, pending_held_at = NULL,
+        pending_warned_at = NULL, pending_subscription_ref = NULL
+    WHERE owner_type = 'gym' AND owner_id = ${input.gymId} AND pending_subscription_ref = ${input.subscriptionRef}
+    RETURNING id`;
+  return rows.length > 0;
+}
+
+/** Plans whose smaller size through Razorpay is due by `until`: shortly before the month paid
+ *  ends, or after it if that was missed. */
+export async function dueRazorpaySmallerSizes(sql: SqlOrTx, input: { until: Date; limit: number }): Promise<{ id: string; gymId: string }[]> {
+  const rows = await sql<{ id: string; owner_id: string }[]>`
+    SELECT id, owner_id FROM subscriptions
+    WHERE pending_plan_id IS NOT NULL AND pending_subscription_ref IS NOT NULL AND pending_from <= ${input.until}
+      AND owner_type = 'gym' AND provider = 'razorpay' AND status IN ('active','past_due') AND cancel_at_period_end = false
+    ORDER BY pending_from, id
+    LIMIT ${input.limit}`;
+  return rows.map((r) => ({ id: r.id, gymId: r.owner_id }));
+}
+
+export type RazorpaySizeClaim =
+  /** The members fit: the smaller size holds for joins from now and takes the plan's place. */
+  | { kind: "fit"; subscriptionRef: string }
+  /** More members than it holds: it is dropped and the gym stays on its size (Kd, RULINGS
+   *  2026-10-01). The count is kept for the Plan card and the email. */
+  | { kind: "kept"; members: number; subscriptionRef: string };
+
+/** Decide one plan's smaller size through Razorpay, under the gym's lock: the members counted
+ *  once. Asked again after a decision that fit, it answers the same, so the worker finishes a
+ *  replacement cut off mid-way. A plan that renewed at its own size first (the worker was down
+ *  past the day) is decided the same way: the renewal is refunded when the smaller size takes
+ *  its place (`applySnapshot`). Null when nothing waits. */
+export async function claimRazorpaySmallerSize(sql: Sql, input: { gymId: string; rowId: string; now: Date }): Promise<RazorpaySizeClaim | null> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId); // subscription-writer lock
+    const rows = await tx<
+      {
+        plan_id: string;
+        pending_plan_id: string;
+        pending_from: Date;
+        pending_held_at: Date | null;
+        pending_subscription_ref: string;
+        seat_cap: number | null;
+        code: string;
+      }[]
+    >`
+      SELECT s.plan_id, s.pending_plan_id, s.pending_from, s.pending_held_at, s.pending_subscription_ref,
+             p.seat_cap, p.code
+      FROM subscriptions s JOIN plans p ON p.id = s.pending_plan_id
+      WHERE s.id = ${input.rowId} AND s.owner_type = 'gym' AND s.owner_id = ${input.gymId}
+        AND s.provider = 'razorpay' AND s.status IN ('active','past_due') AND s.cancel_at_period_end = false
+        AND s.pending_subscription_ref IS NOT NULL
+      FOR UPDATE OF s`;
+    const row = rows[0];
+    if (row === undefined) return null;
+    const ref = row.pending_subscription_ref;
+    const drop = async (meta: Record<string, string>) => {
+      await tx`
+        UPDATE subscriptions
+        SET pending_plan_id = NULL, pending_from = NULL, pending_requested_plan_id = NULL, pending_held_at = NULL,
+            pending_warned_at = NULL, pending_subscription_ref = NULL
+        WHERE id = ${input.rowId} AND owner_id = ${input.gymId}`;
+      await insertAudit(tx, {
+        actorUserId: null,
+        gymId: input.gymId,
+        action: "billing.size_change_not_made",
+        targetType: "subscription",
+        targetId: input.rowId,
+        meta: { plan: row.code, ...meta },
+      });
+    };
+    if (row.pending_held_at !== null) return { kind: "fit", subscriptionRef: ref };
+    const members = await seatsUsed(tx, input.gymId);
+    if (row.seat_cap !== null && members > row.seat_cap) {
+      await drop({ members: String(members) });
+      // What the Plan card and the email say: the size asked for, and the members counted.
+      const key = "razorpay:" + ref;
+      await tx`
+        INSERT INTO billing_plan_changes (gym_id, subscription_id, from_plan_id, to_plan_id, created_by,
+                                          idempotency_key, provider, state, failure, members_counted, created_at)
+        VALUES (${input.gymId}, ${input.rowId}, ${row.plan_id}, ${row.pending_plan_id}, NULL,
+                ${key}, 'razorpay', 'failed', 'too_many_members', ${members}, ${input.now})
+        ON CONFLICT (gym_id, idempotency_key) DO NOTHING`;
+      return { kind: "kept", members, subscriptionRef: ref };
+    }
+    await tx`UPDATE subscriptions SET pending_held_at = ${input.now} WHERE id = ${input.rowId} AND owner_id = ${input.gymId}`;
+    await insertAudit(tx, {
+      actorUserId: null,
+      gymId: input.gymId,
+      action: "billing.size_change_decided",
+      targetType: "subscription",
+      targetId: input.rowId,
+      meta: { plan: row.code, members: String(members) },
+    });
+    return { kind: "fit", subscriptionRef: ref };
+  });
+}
+
+/** Smaller sizes approved at Razorpay that no longer wait on any plan of the gym's (cancelled,
+ *  not made, another chosen, the plan ended or replaced): the worker ends each at Razorpay and
+ *  refunds anything it took. */
+export async function strandedSmallerSizes(
+  sql: SqlOrTx,
+  input: { limit: number; gymId?: string },
+): Promise<{ checkoutId: string; gymId: string; subscriptionRef: string }[]> {
+  const gymId = input.gymId ?? null;
+  const rows = await sql<{ id: string; gym_id: string; provider_ref: string }[]>`
+    SELECT c.id, c.gym_id, c.provider_ref FROM billing_checkouts c
+    WHERE c.state = 'approved' AND c.provider = 'razorpay' AND c.provider_ref IS NOT NULL
+      AND (${gymId}::uuid IS NULL OR c.gym_id = ${gymId}::uuid)
+      AND NOT EXISTS (
+        SELECT 1 FROM subscriptions s
+        WHERE s.owner_type = 'gym' AND s.owner_id = c.gym_id AND s.pending_subscription_ref = c.provider_ref
+          AND s.status IN ('trialing','active','past_due'))
+      AND NOT EXISTS (SELECT 1 FROM subscriptions s WHERE s.provider = 'razorpay' AND s.provider_ref = c.provider_ref)
+    ORDER BY c.updated_at, c.id
+    LIMIT ${input.limit}`;
+  return rows.map((r) => ({ checkoutId: r.id, gymId: r.gym_id, subscriptionRef: r.provider_ref }));
+}
+
+/** A stranded smaller size ended at Razorpay: the worker stops asking. */
+export async function markSmallerDropped(sql: SqlOrTx, input: { checkoutId: string; gymId: string }): Promise<void> {
+  await sql`
+    UPDATE billing_checkouts SET state = 'dropped', updated_at = now()
+    WHERE id = ${input.checkoutId} AND gym_id = ${input.gymId} AND state = 'approved'`;
 }

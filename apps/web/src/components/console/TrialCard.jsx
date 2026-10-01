@@ -18,6 +18,7 @@ import {
   nextPaymentText,
   nextSizeText,
   isTrialing,
+  cancelChangeBox,
   pendingChangeText,
   pendingFit,
   planEndingText,
@@ -117,6 +118,7 @@ export default function TrialCard({ org }) {
   /** Which choice is open: 'subscribe' during a free trial, 'size' on a paid plan. */
   const [choosing, setChoosing] = useState(null);
   const [cancelling, setCancelling] = useState(false);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [cancelError, setCancelError] = useState(null);
   // `viewerPrivileges`, not `org.privileges` — absent means "this api is older
   // than this bundle" and the honest fallback is the ROLE's own defaults, never
@@ -176,6 +178,8 @@ export default function TrialCard({ org }) {
   const kept = sizeKeptText(sub, org?.orgType) ?? sizeFittedText(sub, org?.orgType);
   const muted = { color: 'rgba(255,255,255,0.6)' };
 
+  // Cancel this change asks first (Kd at 1d-iii-b's click-through): the box names what stays.
+  const changeBox = confirmingCancel ? cancelChangeBox(sub, org?.orgType) : null;
   const cancelChange = async () => {
     if (cancelling) return;
     setCancelling(true);
@@ -184,6 +188,7 @@ export default function TrialCard({ org }) {
       const res = await orgService.keepSize(org.id);
       applyPaidPlan(org.id, res.data.subscription);
       refreshConsoleOrgsAfterChange();
+      setConfirmingCancel(false);
     } catch (err) {
       setCancelError(errorText(err, "We couldn't cancel the change. Please try again."));
     } finally {
@@ -241,17 +246,57 @@ export default function TrialCard({ org }) {
             <span className="text-sm" style={{ color: 'rgba(255,255,255,0.85)' }}>
               {change}
             </span>
-            <button
-              type="button"
-              onClick={() => void cancelChange()}
-              disabled={cancelling}
-              className="self-start rounded-lg px-3 py-2 text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
-              style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)', minHeight: 40 }}
-            >
-              {cancelling ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-              Cancel this change
-            </button>
+            {changeBox === null ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setCancelError(null);
+                  setConfirmingCancel(true);
+                }}
+                className="self-start rounded-lg px-3 py-2 text-sm font-semibold flex items-center gap-2"
+                style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)', minHeight: 40 }}
+              >
+                Cancel this change
+              </button>
+            ) : null}
           </div>
+          {changeBox !== null ? (
+            <div
+              className="rounded-xl px-4 py-3 flex flex-col gap-2"
+              style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.25)' }}
+              role="group"
+              aria-label={changeBox.title}
+              data-testid="cancel-change-box"
+            >
+              <div className="font-semibold text-sm" style={{ color: '#fff' }}>
+                {changeBox.title}
+              </div>
+              <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                {changeBox.line}
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2 mt-1">
+                <button
+                  type="button"
+                  onClick={() => void cancelChange()}
+                  disabled={cancelling}
+                  className="rounded-lg px-3 py-2 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
+                  style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', minHeight: 40 }}
+                >
+                  {cancelling ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  {changeBox.confirm}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmingCancel(false)}
+                  disabled={cancelling}
+                  className="rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-50"
+                  style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)', minHeight: 40 }}
+                >
+                  {changeBox.back}
+                </button>
+              </div>
+            </div>
+          ) : null}
           {fit !== null ? (
             <div className="text-sm" style={{ color: fit.tooMany ? '#FF8A1F' : 'rgba(255,255,255,0.6)' }} data-testid="pending-fit">
               {fit.text}
