@@ -445,6 +445,16 @@ async function syncRazorpayCheckout(
     }
   }
   const live = await orgsRepo.gymLiveSubscription(deps.sql, input.gymId);
+  if (checkout.replacesRowId !== null && checkout.direction === "smaller") {
+    // A smaller size (1d-iii-b): done once it waits on the gym's plan, or has taken its place.
+    if (applied === "set_aside") return { state: "refunded" };
+    const waiting = await repo.razorpayWaitingSize(deps.sql, input.gymId);
+    const placed = checkout.providerRef === null ? null : await repo.findProviderSubscription(deps.sql, "razorpay", checkout.providerRef);
+    if (waiting?.subscriptionRef === checkout.providerRef || (placed !== null && placed.gymId === input.gymId && LIVE_STATUSES.has(placed.status))) {
+      return { state: "paid", subscription: (await currentPlan(deps, input.gymId)).subscription };
+    }
+    return { state: "waiting" };
+  }
   if (checkout.replacesRowId !== null) {
     // A bigger size (1d-iii-a): the gym already had a plan through Razorpay, so it is paid only
     // when the plan on the gym is the one this window made.
@@ -735,13 +745,16 @@ export async function changeSize(
 }
 
 /** "Cancel this change": the smaller size waiting is dropped; nothing is asked of Paddle,
- *  which still bills the size the gym is on. Safe to press twice. */
+ *  which still bills the size the gym is on. Through Razorpay, the smaller size's approved
+ *  subscription is ended there. Safe to press twice. */
 export async function keepSize(deps: BillingDeps, input: { userId: string; gymId: string }): Promise<OrgPlanChangeResponse> {
   await requirePrivilege(deps, input.gymId, input.userId, "billing.manage");
   const kept = await repo.keepSize(deps.sql, input);
   switch (kept.kind) {
     case "kept":
       deps.log.info({ event: "billing.size_kept", gymId: input.gymId }, "a gym kept its size");
+      // A smaller size approved at Razorpay is ended there now (1d-iii-b).
+      await endGymStrandedSizes(deps, input.gymId);
       return await currentPlan(deps, input.gymId);
     case "nothing_waiting":
       return await currentPlan(deps, input.gymId);
@@ -818,7 +831,7 @@ export async function applyPendingSizes(deps: BillingDeps): Promise<PendingSizes
     if (await applyPendingSize(deps, paddle, { gymId: row.gymId, subscriptionRowId: row.id }, outcome.claim)) run.applied += 1;
     else run.waiting += 1;
   }
-  run.warned = await sendSizeWarnings(deps);
+  run.warned = await sendSizeWarnings(deps, "paddle");
   return run;
 }
 
@@ -830,12 +843,12 @@ function consoleLinks(mail: BillingMail, slug: string): { plan: string; members:
 /** Email the billing staff of each gym with a smaller size due within three days that still
  *  has more members than it holds. Once per choice: marked before it is sent, so a second run
  *  never sends it again (and one lost in sending is not retried; the Plan card says it too). */
-async function sendSizeWarnings(deps: BillingDeps): Promise<number> {
+async function sendSizeWarnings(deps: BillingDeps, provider: repo.PayProvider): Promise<number> {
   const mail = deps.mail ?? null;
   if (mail === null) return 0;
   const now = deps.now();
   let sent = 0;
-  for (const due of await repo.dueSizeWarnings(deps.sql, { now, within: SIZE_WARNING_WITHIN_MS, lead: PENDING_SIZE_LEAD_MS, limit: 500 })) {
+  for (const due of await repo.dueSizeWarnings(deps.sql, { provider, now, within: SIZE_WARNING_WITHIN_MS, lead: PENDING_SIZE_LEAD_MS, limit: 500 })) {
     const facts = await repo.sizeNoticeFacts(deps.sql, { ...due, targetPlan: "pending" });
     if (facts === null || facts.pendingFrom === null || facts.members <= facts.targetSeatCap) continue;
     if (!(await repo.claimSizeWarning(deps.sql, { ...due, now }))) continue;
@@ -855,7 +868,9 @@ async function sendSizeWarnings(deps: BillingDeps): Promise<number> {
           currentPriceLabel: formatPriceMinor(facts.currentPriceMinor, facts.currency),
           targetSeatCap: facts.targetSeatCap,
           targetPriceLabel: formatPriceMinor(facts.targetPriceMinor, facts.currency),
-          fallback: fallback === null ? null : { seatCap: fallback.seatCap, priceLabel: formatPriceMinor(fallback.priceMinor, facts.currency) },
+          // Razorpay charges only a size the gym approved: there it stays unless it moves itself.
+          fallback: fallback === null || facts.provider === "razorpay" ? null : { seatCap: fallback.seatCap, priceLabel: formatPriceMinor(fallback.priceMinor, facts.currency) },
+          offer: fallback === null || facts.provider !== "razorpay" ? null : { seatCap: fallback.seatCap, priceLabel: formatPriceMinor(fallback.priceMinor, facts.currency) },
           due: dayLabel(facts.pendingFrom, facts.timezone),
           decideBy: momentLabel(decideAt, facts.timezone),
           membersLink: links.members,
@@ -1241,11 +1256,40 @@ async function applyRazorpay(deps: BillingDeps, razorpay: RazorpaySettings, sub:
     deps.log.error({ event: "billing.unplaced_subscription", provider: "razorpay", razorpayStatus: sub.status }, "a Razorpay subscription matches no checkout of ours");
     return await setAsideRazorpay(deps, razorpay, sub, null, "unmatched");
   }
-  // A bigger size's checkout (1d-iii-a): see below.
+  // A bigger (1d-iii-a) or smaller (1d-iii-b) size's checkout: see below.
   const sizeCheckout =
     checkout !== null && checkout.gymId === gymId && checkout.providerRef === sub.id && checkout.replacesRowId !== null && checkout.startsAt !== null
       ? { replacesRowId: checkout.replacesRowId, startsAt: checkout.startsAt, upfrontMinor: checkout.upfrontMinor }
       : null;
+  // A smaller size not yet the gym's plan: it waits on the plan it replaces until it is decided.
+  if (placed === null && sizeCheckout !== null && checkout !== null && checkout.direction === "smaller") {
+    const waiting = await repo.razorpayWaitingSize(deps.sql, gymId);
+    if (waiting?.subscriptionRef === sub.id) {
+      if (ENDED_AT_RAZORPAY.has(sub.status)) {
+        // Ended at Razorpay before its day (the gym's bank withdrew the mandate): the gym stays.
+        await repo.dropRazorpayWaitingSize(deps.sql, { gymId, subscriptionRef: sub.id });
+        deps.log.warn({ event: "billing.size_waiting_ended", provider: "razorpay", gymId }, "a smaller size ended at Razorpay before its day");
+        return "applied";
+      }
+      // Waiting for its day; once decided it takes the plan's place below.
+      if (!waiting.decided) return "unchanged";
+    } else if (checkout.state === "open" && sub.status === "authenticated") {
+      if (await repo.approveSmallerSize(deps.sql, { gymId, checkoutId: checkout.id, subscriptionRef: sub.id })) {
+        deps.log.info({ event: "billing.size_scheduled", provider: "razorpay", gymId }, "a gym chose a smaller size from its next payment");
+        // One chosen before it no longer waits: ended at Razorpay now.
+        await endStrandedSizes(deps, razorpay, gymId);
+        return "applied";
+      }
+      // Its plan changed while the window was open (set to end, renewed, replaced): not the gym's.
+      await repo.closeCheckout(deps.sql, { checkoutId: checkout.id, gymId });
+      return await setAsideRazorpay(deps, razorpay, sub, gymId, "duplicate");
+    } else if (RAZORPAY_NEVER_TAKEN.has(sub.status) && sub.paid_count === 0) {
+      return "unchanged";
+    } else {
+      // Approved and no longer waiting, or a window closed by a newer press: ended, refunded.
+      return await setAsideRazorpay(deps, razorpay, sub, gymId, "duplicate");
+    }
+  }
   // A window never paid, or closed unpaid, puts nothing on the gym.
   if (placed === null && RAZORPAY_NEVER_TAKEN.has(sub.status) && sub.paid_count === 0) {
     // A bigger size's window takes only its add-on, which Razorpay does not count as a payment:
@@ -1332,7 +1376,7 @@ async function applyRazorpay(deps: BillingDeps, razorpay: RazorpaySettings, sub:
     replaces: sizeCheckout === null ? null : { rowId: sizeCheckout.replacesRowId, periodEnd: sizeCheckout.startsAt },
   });
   if (outcome.replaced !== null) {
-    deps.log.info({ event: "billing.size_changed", provider: "razorpay", gymId }, "a gym moved to a bigger size");
+    deps.log.info({ event: "billing.size_changed", provider: "razorpay", gymId }, "a gym moved to its new size");
     await endReplacedPlan(deps, razorpay, { gymId, ...outcome.replaced });
   }
   if (outcome.duplicate) {
@@ -1726,6 +1770,8 @@ export async function cancelRazorpayPlan(deps: BillingDeps, input: { userId: str
       break;
     case "scheduled":
       if (outcome.sendNow && razorpay !== null) await sendDueRazorpayCancels(deps, input.gymId);
+      // A smaller size that was waiting went with the plan's next month (1d-iii-b).
+      await endGymStrandedSizes(deps, input.gymId);
       break;
     case "overdue": {
       if (razorpay === null) throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
@@ -1848,12 +1894,12 @@ async function cancelTaken(razorpay: RazorpaySettings, subscriptionId: string, a
 }
 
 
-// ── A bigger size on a plan paid through Razorpay (1d-iii-a) ────────────────────
+// ── A bigger (1d-iii-a) or smaller (1d-iii-b) size on a plan paid through Razorpay ─
 
-/** A bigger size is refused this close to the end of the month paid: its window must be paid
+/** A new size is refused this close to the end of the month paid: its window must be paid
  *  (`SIZE_WINDOW_MS`) before Razorpay charges the old plan's next month. */
 export const SIZE_RENEW_GUARD_MS = 60 * 60 * 1000;
-/** How long a bigger size's window can be paid for (Razorpay's `expire_by`). */
+/** How long a new size's window can be paid for (Razorpay's `expire_by`). */
 export const SIZE_WINDOW_MS = 30 * 60 * 1000;
 /** What Razorpay's window and receipt call the rest of this month's difference. */
 const UPFRONT_NAME = "The rest of this month at the bigger size";
@@ -1873,11 +1919,7 @@ const RAZORPAY_SIZE_REFUSALS: Record<Exclude<repo.RazorpaySizeOutcome["kind"], "
   renewing: { status: 409, code: "renewing", message: "Your plan renews within the hour. Change its size after it renews." },
   no_such_plan: { status: 404, code: "plan_not_found", message: "That plan isn't on your price list." },
   same_size: { status: 409, code: "same_size", message: "That's the size you're on." },
-  smaller: {
-    status: 409,
-    code: "smaller_not_yet",
-    message: "Moving to a smaller size isn't available yet for plans paid through Razorpay.",
-  },
+  already_waiting: { status: 409, code: "already_waiting", message: "You're already moving to that size when your paid month ends." },
   not_set_up: { status: 503, code: "payments_unavailable", message: UNAVAILABLE },
 };
 
@@ -1931,9 +1973,9 @@ async function razorpayMonth(
   return { start: new Date(sub.current_start * 1000), end: new Date(sub.current_end * 1000) };
 }
 
-/** What a bigger size costs now on a plan paid through Razorpay: the rest of this month's
- *  difference, worked out by our server from our own price list (`upgradeCharge`), and the new
- *  price from the day the paid month ends. Changes nothing. */
+/** What a new size costs on a plan paid through Razorpay: a bigger one, the rest of this month's
+ *  difference now, worked out by our server from our own price list (`upgradeCharge`); a smaller
+ *  one, nothing now. Either way the new price from the day the paid month ends. Changes nothing. */
 async function previewRazorpaySize(deps: BillingDeps, input: { gymId: string; planCode: string }): Promise<OrgPlanChangePreview> {
   const razorpay = deps.razorpay ?? null;
   if (razorpay === null) throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
@@ -1943,7 +1985,7 @@ async function previewRazorpaySize(deps: BillingDeps, input: { gymId: string; pl
   const month = await razorpayMonth(deps, razorpay, input.gymId, target);
   const charge = upgradeCharge({ fromMinor: target.fromPriceMinor, toMinor: target.priceMinor, periodStart: month.start, periodEnd: month.end, now: deps.now() });
   if (charge.kind === "month_over") throw razorpaySizeRefusal({ kind: "renewing" });
-  const due = charge.kind === "charge" ? formatPriceMinor(charge.minor, target.currency) : null;
+  const due = charge.kind === "charge" && target.direction === "bigger" ? formatPriceMinor(charge.minor, target.currency) : null;
   return {
     planCode: target.planCode,
     seatCap: target.seatCap,
@@ -1960,10 +2002,12 @@ function sizeReplayRefusal(checkout: repo.CheckoutRow): OrgsError {
   return new OrgsError(409, "checkout_replaced", "That payment window has closed. Choose the size again.");
 }
 
-/** "Change size" to a bigger one on a plan paid through Razorpay: our server creates a new
- *  Razorpay subscription at the bigger size's plan, starting when the month paid ends, with the
- *  rest of this month's difference taken as its window is paid, and the browser opens Razorpay's
- *  window for it. Nothing changes on the gym until Razorpay's own record says it was paid. */
+/** "Change size" on a plan paid through Razorpay: our server creates a new Razorpay subscription
+ *  at the new size's plan, starting when the month paid ends, and the browser opens Razorpay's
+ *  window for it. A bigger one takes the rest of this month's difference as its window is paid,
+ *  and nothing changes on the gym until Razorpay's own record says it was paid. A smaller one
+ *  takes nothing (Razorpay's ₹5 check, given back): once approved it waits on the plan, and is
+ *  decided shortly before the paid month ends (`decideRazorpaySizes`). */
 export async function startRazorpaySizeChange(
   deps: BillingDeps,
   input: { userId: string; gymId: string; planCode: string; idempotencyKey: string },
@@ -2020,13 +2064,14 @@ export async function startRazorpaySizeChange(
   if (created.kind !== "ok") {
     await repo.failCheckout(deps.sql, { checkoutId: checkout.id, gymId: input.gymId });
     const refusal = created.kind === "refused" ? { status: created.status, code: created.code } : {};
-    deps.log.warn({ event: "billing.subscription_not_created", provider: "razorpay", result: created.kind, ...refusal }, "Razorpay did not create a bigger size's subscription");
+    deps.log.warn({ event: "billing.subscription_not_created", provider: "razorpay", result: created.kind, ...refusal }, "Razorpay did not create a new size's subscription");
     throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
   }
   const sub = created.value;
   const plan = sub.plan;
-  // What Razorpay will charge must be exactly ours — the bigger size's monthly price from the
-  // day the paid month ends, and the rest of this month's difference now — or nothing is opened.
+  // What Razorpay will charge must be exactly ours — the new size's monthly price from the day
+  // the paid month ends, and a bigger one's rest of this month's difference now — or nothing is
+  // opened.
   let agrees =
     sub.plan_id === target.providerPlanId &&
     sub.status === "created" &&
@@ -2043,7 +2088,8 @@ export async function startRazorpaySizeChange(
     plan.interval === 1;
   if (agrees) {
     // Razorpay makes the add-on's invoice with the subscription (seen 2026-10-01): it is the only
-    // thing charged before the first month, and it is exactly the difference, or there is none.
+    // thing charged before the first month, and it is exactly the difference, or there is none
+    // (a smaller size's never has one: its window took ₹5 and gave it back, tried 2026-10-01).
     const invoices = await razorpay.api.listSubscriptionInvoices(sub.id);
     const mine = invoices.kind === "ok" ? invoices.value.filter((i) => i.subscription_id === sub.id) : null;
     const first = mine?.[0];
@@ -2056,7 +2102,7 @@ export async function startRazorpaySizeChange(
   if (!agrees || plan === undefined) {
     await razorpay.api.cancelSubscriptionNow(sub.id);
     await repo.failCheckout(deps.sql, { checkoutId: checkout.id, gymId: input.gymId });
-    deps.log.error({ event: "billing.price_mismatch", provider: "razorpay", plan: input.planCode }, "Razorpay's bigger size does not match our price");
+    deps.log.error({ event: "billing.price_mismatch", provider: "razorpay", plan: input.planCode }, "Razorpay's new size does not match our price");
     throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
   }
   if (!(await repo.openCheckout(deps.sql, { checkoutId: checkout.id, gymId: input.gymId, transactionId: sub.id }))) {
@@ -2103,4 +2149,96 @@ async function endReplacedPlan(
   // A month it charged after it was replaced goes back (its row is set to end: `razorpayCancelOutcome`).
   await applyRazorpaySubscription(deps, input.subscriptionRef);
   return true;
+}
+
+// ── A smaller size on a plan paid through Razorpay (1d-iii-b) ───────────────────
+
+export interface RazorpaySizesRun {
+  /** Warning emails sent: a smaller size due soon, and too many members for it. */
+  warned: number;
+  /** Decided and fitting: the smaller size took the plan's place. */
+  made: number;
+  /** Decided and fitting, but not yet in the plan's place (Razorpay unreachable): next run. */
+  waiting: number;
+  /** Not made: too many members, so the gym stays on its size (Kd, RULINGS 2026-10-01). */
+  kept: number;
+  /** Approved smaller sizes no longer waiting, ended at Razorpay this run. */
+  ended: number;
+}
+
+/** Decide each smaller size through Razorpay that is due, `PENDING_SIZE_LEAD_MS` before the
+ *  paid month ends: the members are counted under the gym's lock. If they fit, the approved
+ *  subscription takes the plan's place now, paid to that day, and the old plan is cancelled at
+ *  Razorpay, so only the smaller price is charged from then (`endReplacedPlan`; a month the old
+ *  plan takes anyway is refunded). If not, the gym stays on its size, its billing staff are told,
+ *  and the approved subscription is ended at Razorpay. Razorpay charges only a plan the gym
+ *  approved, so it is never moved to a size it did not choose. Safe to run twice. */
+export async function decideRazorpaySizes(deps: BillingDeps): Promise<RazorpaySizesRun> {
+  const run: RazorpaySizesRun = { warned: 0, made: 0, waiting: 0, kept: 0, ended: 0 };
+  const razorpay = deps.razorpay ?? null;
+  if (razorpay === null) return run;
+  const now = deps.now();
+  const due = await repo.dueRazorpaySmallerSizes(deps.sql, { until: new Date(now.getTime() + PENDING_SIZE_LEAD_MS), limit: 50 });
+  for (const row of due) {
+    const claim = await repo.claimRazorpaySmallerSize(deps.sql, { gymId: row.gymId, rowId: row.id, now });
+    if (claim === null) continue;
+    if (claim.kind === "kept") {
+      run.kept += 1;
+      deps.log.info({ event: "billing.size_kept_too_many", provider: "razorpay", gymId: row.gymId }, "a smaller size was not made: too many members");
+      await emailSizeKept(deps, row.gymId, row.id, claim.members, false);
+      continue;
+    }
+    if (claim.kind === "renewed") {
+      deps.log.error({ event: "billing.size_missed", provider: "razorpay", gymId: row.gymId }, "a plan renewed before its smaller size was decided; the size was dropped");
+      continue;
+    }
+    await applyRazorpaySubscription(deps, claim.subscriptionRef);
+    const placed = await repo.findProviderSubscription(deps.sql, "razorpay", claim.subscriptionRef);
+    if (placed !== null && placed.gymId === row.gymId && LIVE_STATUSES.has(placed.status)) {
+      run.made += 1;
+    } else if (placed !== null) {
+      // Written but not as the gym's plan (set aside and refunded): the gym keeps its size.
+      await repo.dropRazorpayWaitingSize(deps.sql, { gymId: row.gymId, subscriptionRef: claim.subscriptionRef });
+    } else {
+      run.waiting += 1;
+    }
+  }
+  run.ended = await endStrandedSizes(deps, razorpay);
+  run.warned = await sendSizeWarnings(deps, "razorpay");
+  return run;
+}
+
+/** End at Razorpay each approved smaller size that no longer waits on the gym's plan, and refund
+ *  anything it took (it never takes the ₹5 check, which Razorpay gives back itself). Marked once
+ *  Razorpay has ended it, so one that would not cancel is asked again on the next run. */
+async function endStrandedSizes(deps: BillingDeps, razorpay: RazorpaySettings, gymId?: string): Promise<number> {
+  let ended = 0;
+  for (const stranded of await repo.strandedSmallerSizes(deps.sql, { limit: 50, ...(gymId === undefined ? {} : { gymId }) })) {
+    const fetched = await razorpay.api.getSubscription(stranded.subscriptionRef);
+    if (fetched.kind === "not_found") {
+      await repo.markSmallerDropped(deps.sql, stranded);
+      continue;
+    }
+    if (fetched.kind !== "ok") continue;
+    let sub = fetched.value;
+    if (!ENDED_AT_RAZORPAY.has(sub.status)) {
+      const answer = await razorpay.api.cancelSubscriptionNow(sub.id);
+      if (!(await cancelTaken(razorpay, sub.id, answer))) {
+        deps.log.error({ event: "billing.cancel_failed", provider: "razorpay", gymId: stranded.gymId, result: answer.kind }, "Razorpay did not cancel a smaller size no longer wanted; asking again next run");
+        continue;
+      }
+      sub = { ...sub, status: "cancelled" };
+    }
+    if ((await setAsideRazorpay(deps, razorpay, sub, stranded.gymId, "duplicate")) !== "set_aside") continue;
+    await repo.markSmallerDropped(deps.sql, stranded);
+    ended += 1;
+  }
+  return ended;
+}
+
+/** After Cancel this change, or Cancel plan: the smaller size no longer waiting is ended at
+ *  Razorpay at once rather than on the worker's next run. */
+async function endGymStrandedSizes(deps: BillingDeps, gymId: string): Promise<void> {
+  const razorpay = deps.razorpay ?? null;
+  if (razorpay !== null) await endStrandedSizes(deps, razorpay, gymId);
 }

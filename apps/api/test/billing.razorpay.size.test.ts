@@ -356,13 +356,11 @@ d("a gym paying through Razorpay moves to a bigger size (real Postgres, fake Raz
   );
 
   it(
-    "refused, with nothing asked of Razorpay: a smaller or the same size, within the hour before renewal, a payment overdue, a plan set to end",
+    "refused, with nothing asked of Razorpay: the same size, within the hour before renewal, a payment overdue, a plan set to end",
     async () => {
       const gym = await payingGym(MID);
       const made = razorpay.created.length;
       const refusal = async (planCode: string) => JSON.parse((await bigger(gym.gymId, gym.cookies, planCode)).body) as { error: string; message: string };
-      expect(await refusal(SMALL)).toMatchObject({ error: "smaller_not_yet" });
-      expect(JSON.parse((await preview(gym.gymId, gym.cookies, SMALL)).body)).toMatchObject({ error: "smaller_not_yet" });
       expect(await refusal(MID)).toMatchObject({ error: "same_size" });
       expect(await refusal("zz_no_such_plan")).toMatchObject({ error: "plan_not_found" });
 

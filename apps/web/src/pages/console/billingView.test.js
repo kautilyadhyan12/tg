@@ -947,13 +947,20 @@ describe('a smaller size and the Plan card (1c-iii)', () => {
     ]);
   });
 
-  it('a plan paid through Razorpay: a bigger size is paid now; a smaller one says it is not available yet and cannot be chosen (1d-iii-a)', () => {
+  it('a plan paid through Razorpay: a bigger size is paid now; a smaller one starts with the next payment, and with too many members on the day the gym STAYS on its size (1d-iii-b)', () => {
     const rupees = { ...paying, seatCap: 500, paidThrough: 'razorpay' };
     expect(sizeRows(PLANS, gym(rupees, 100)).map((r) => [r.kind, r.note, r.warning, r.disabled])).toEqual([
-      ['smaller', 'Not available yet', null, true],
+      ['smaller', `From ${trialEndDateLabel(END)}`, null, false],
       ['current', 'Your size', null, true],
       ['bigger', 'Pay the difference now', null, false],
     ]);
+    // 300 do not fit 200. Through Paddle they would move to 500; through Razorpay, which charges
+    // only a size the gym approved, it stays on its 1,000 (Kd, RULINGS 2026-10-01).
+    const over = sizeRows(PLANS, gym({ ...waiting, paidThrough: 'razorpay', pendingSize: null }, 300));
+    expect(over[0]?.warning).toMatch(/^You have 300 members\. Remove 100 by .* to move to 200\. Otherwise you'll stay on 1,000 members at \$199 a month\.$/);
+    expect(over[0]?.disabled).toBe(false);
+    const fallback = { ...waiting, paidThrough: 'razorpay', pendingSize: { ...waiting.pendingSize, seatCap: 200, priceLabel: '$79', ifTooMany: { planCode: 'b2', seatCap: 500, priceLabel: '$129' } } };
+    expect(pendingFit(gym(fallback, 300))?.text).toMatch(/^You have 300 members\. Remove 100 by .* to move to 200\. Otherwise you'll stay on 1,000 members at \$199 a month\.$/);
   });
 
   it('in a paid trial a smaller size is made at once, so one the members do not fit cannot be chosen', () => {
@@ -998,6 +1005,13 @@ describe('the last days’ question (1c-iii)', () => {
     const none = sizeDecision(org({ subscription: { ...org().subscription, pendingSize: { ...pending, ifTooMany: null } } }), NOW);
     expect(none?.moveInstead).toBeNull();
     expect(none?.ifNothing).toBe(`If you don't choose, you'll stay on ${(1000).toLocaleString()} members.`);
+  });
+
+  it('through Razorpay the smallest size that fits is offered, and doing nothing means staying (Kd, RULINGS 2026-10-01)', () => {
+    const d = sizeDecision(org({ subscription: { ...org().subscription, paidThrough: 'razorpay' } }), NOW);
+    expect(d?.razorpay).toBe(true);
+    expect(d?.moveInstead).toEqual({ planCode: 'b2', label: 'Move to 500 instead ($129 a month)' });
+    expect(d?.ifNothing).toBe(`If you don't choose, you'll stay on ${(1000).toLocaleString()} members.`);
   });
 
   it('asks nothing when the members fit, too early, once decided, of a trainer, or with nothing waiting', () => {

@@ -9,12 +9,14 @@ import {
   applyPendingSizes,
   applyRazorpaySubscription,
   closeStaleTrialCheckouts,
+  decideRazorpaySizes,
   endExpiredGraces,
   sendDueRazorpayCancels,
   settleOwedRefunds,
   type BillingDeps,
   type PendingSizesRun,
   type RazorpayCancelsRun,
+  type RazorpaySizesRun,
   type RefundsRun,
 } from "./service.js";
 
@@ -102,6 +104,8 @@ export interface RazorpayEventsRun {
   gracesEnded: number;
   /** Plans set to end, sent to Razorpay or ended this run (1d-ii). */
   cancels: RazorpayCancelsRun;
+  /** Smaller sizes decided, and ones no longer waiting ended at Razorpay, this run (1d-iii-b). */
+  sizes: RazorpaySizesRun;
   /** Live plans past their month's end, queued to be read from Razorpay again. */
   reread: number;
 }
@@ -139,6 +143,7 @@ export async function processRazorpayEvents(deps: BillingDeps): Promise<Razorpay
     refunds: { requested: 0, notNeeded: 0, deferred: 0, failed: 0 },
     gracesEnded: 0,
     cancels: { sent: 0, failed: 0, ended: 0, replaced: 0 },
+    sizes: { warned: 0, made: 0, waiting: 0, kept: 0, ended: 0 },
     reread: 0,
   };
   run.reread = await rereadDueRazorpayPlans(deps);
@@ -172,9 +177,11 @@ export async function processRazorpayEvents(deps: BillingDeps): Promise<Razorpay
   // After the events, so a payment Razorpay took in time is written before the grace ends.
   run.gracesEnded = await endExpiredGraces(deps);
   // After the events, so Razorpay's latest record of each plan is written first.
+  run.sizes = await decideRazorpaySizes(deps);
   run.cancels = await sendDueRazorpayCancels(deps);
-  // A refund owed for a month charged after a cancel, found just now, is made this run.
-  if (run.cancels.ended > 0) {
+  // A refund owed for a month charged after a cancel, or by a size no longer wanted, found just
+  // now, is made this run.
+  if (run.cancels.ended > 0 || run.sizes.made > 0 || run.sizes.ended > 0) {
     const more = await settleOwedRefunds(deps);
     run.refunds = {
       requested: run.refunds.requested + more.requested,
