@@ -134,7 +134,7 @@ d("the week view and this day only (real Postgres)", () => {
   const makeOrg = async (cookies: Record<string, string>, name: string): Promise<CreatedOrg> => {
     const res = await post(
       "/v1/orgs",
-      { name, city: "Leeds", country: "GB", timezone: "Europe/London" },
+      { trainsHere: true, name, city: "Leeds", country: "GB", timezone: "Europe/London" },
       cookies,
     );
     expect(res.statusCode).toBe(201);

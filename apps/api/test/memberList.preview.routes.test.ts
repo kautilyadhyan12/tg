@@ -195,10 +195,10 @@ d("member list: upload and preview (real Postgres)", () => {
   /** A BRITISH gym, deliberately: the fixture's phone numbers are written the way
    *  a British export writes them ("07911 123456", no country code), so the
    *  country is doing real work here rather than being filler. */
-  const makeOrg = async (cookies: Record<string, string>, name: string): Promise<CreatedOrg> => {
+  const makeOrg = async (cookies: Record<string, string>, name: string, trainsHere = false): Promise<CreatedOrg> => {
     const res = await post(
       "/v1/orgs",
-      { name, city: "Leeds", country: "GB", timezone: "Europe/London" },
+      { trainsHere, name, city: "Leeds", country: "GB", timezone: "Europe/London" },
       cookies,
     );
     expect(res.statusCode).toBe(201);
@@ -433,13 +433,13 @@ d("member list: upload and preview (real Postgres)", () => {
   // =========================================================================
 
   it(
-    "the owner and the staff are not counted as members to match — without that, every gym's owner reads 'not on your list'",
+    "every live member takes a place, the owner and staff included (§10.4); the one who left does not",
     async () => {
       const owner = await makeUser("seat-owner");
       const plain = await makeUser("seat-plain");
       const trainer = await makeUser("seat-trainer");
       const left = await makeUser("seat-left");
-      const org = await makeOrg(owner.cookies, "Seat Rule Gym");
+      const org = await makeOrg(owner.cookies, "Seat Rule Gym", true);
       await joinAsMember(plain.cookies, org, owner.cookies);
       await joinAsMember(trainer.cookies, org, owner.cookies);
       await joinAsMember(left.cookies, org, owner.cookies);
@@ -450,10 +450,10 @@ d("member list: upload and preview (real Postgres)", () => {
 
       const res = await upload(org.org.id, owner.cookies);
       expect(res.statusCode).toBe(201);
-      // FOUR PEOPLE SIGNED IN, ONE OF THEM COUNTS: the owner holds a complimentary
-      // seat, the trainer is staff, and the fourth has left. Each of the three
-      // conditions is doing work here, and dropping any one changes this number.
-      expect(body(res).preview.seat.liveMembers).toBe(1);
+      // FOUR PEOPLE SIGNED IN, THREE TAKE A PLACE: the owner who trains here, the
+      // trainer and the plain member; the fourth has left. The marks leaving the owner
+      // and staff out are `orgs.seats.test.ts`'s worst-thing test.
+      expect(body(res).preview.seat.liveMembers).toBe(3);
     },
     TEST_TIMEOUT_MS,
   );

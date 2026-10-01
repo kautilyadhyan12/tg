@@ -1837,6 +1837,16 @@ train here too?" and a yes is an ordinary seat. `gym_members.complimentary` stay
 column and is written `false` from now on (production starts empty, RULINGS
 2026-07-13; its other readers were the per-code join counts, which go in 10.6).
 
+**Out of 4c (built 2026-10-01).**
+
+- **One count of places, every live membership**: `claimSeat`'s `paidPlacesUsed` (and Put back's `placesFree`), billing's `seatsUsed` (a smaller size's day), `listOrgsForUser`'s meter, the import preview's `seat.liveMembers`; the roster's `takesSeat` is always true. An old `complimentary` row counts like any other.
+- **The marks are a separate flag**, `inMarks` (was `seatCounted`): not staff, not complimentary. The leavers, Remove all, "Not on your list", a record's Remove and the large-change guards read it, so an export of customers never takes the owner's or a trainer's app.
+- **"Do you train here too?"** on Create your organisation (`trainsHere`, required, nothing picked; a personal trainer reads "Do you train with the app yourself too?"). Yes writes the owner's membership with no code, the answer's time as its consent, `complimentary = false`; no writes none. `gyms.owner_included_as_member` is no longer read. An owner who said no adds themselves on Members and is invited like anyone.
+- The screens: the owner's and staff's panels on In the app say their place counts in the plan; Members → Staff says "Uses the member app here, which takes one of your places" or "Uses the console only, which is free"; the Invite staff form says "Staff use the console free. Using the member app here takes one of your places." The Overview's "joined" leaves the owner out by role, and "(you)" is said of the viewer's own seat by identity.
+- The Overview's populations (adoption, regulars, slipping away, nudge, cheer) are unchanged: live members not complimentary, so an owner who trains here is among them, as staff who train already were.
+- Tests: `orgs.seats.test.ts` — the worst thing (the owner and a trainer take a place and Remove all of "not on any list" takes only the customer), the fraud (five members made staff free no place; the next person is told the gym is full), the question, and the table over member · staff only · staff and member · owner only · owner and member · removed · another gym's member against place · member features · marks. Breaks, each red: marks taking staff in, the door's count skipping staff, the roster calling staff free.
+- Cost at full size (2026-10-01, mains, 2,592 MHz, local database; `.cost/cost-4c.ts`), a gym of 10,001 members with 100 staff, 12 runs: the door's count 5 ms, billing's 6 ms, the meter 32 ms, a page of 100 on In the app 48 ms, the server answering nobody at most 3.5 ms for each. "Not on any list you have imported" took 2.2 s median (busy 8 ms, worst 39 ms) and took 1.6 s (busy 10 ms, worst 32 ms) on the code before 4c, measured the same way the same day: slow at that size already, not made so here.
+
 ### 10.5 One phone at a time (with the phone app's sign-in, ROADMAP Stage 5)
 
 `refresh_tokens` gains `client` (`web` · `phone`, existing rows `web`) and a nullable

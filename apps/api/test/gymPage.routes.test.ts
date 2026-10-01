@@ -119,7 +119,7 @@ d("a gym's own page and its enquiry form (real Postgres)", () => {
   };
 
   const makeOrg = async (cookies: Record<string, string>, name: string): Promise<CreatedOrg> => {
-    const res = await post("/v1/orgs", { name, city: "Leeds", country: "GB", timezone: "Europe/London" }, cookies);
+    const res = await post("/v1/orgs", { trainsHere: true, name, city: "Leeds", country: "GB", timezone: "Europe/London" }, cookies);
     expect(res.statusCode).toBe(201);
     const created = JSON.parse(res.body) as CreatedOrg;
     await subscribeGym(created.org.id);

@@ -152,7 +152,7 @@ d("the people selected (real Postgres)", () => {
 
   /** A gym on a trial with its postal address set. */
   const makeGym = async (owner: User, name: string): Promise<CreatedOrg> => {
-    const res = await post("/v1/orgs", { name, city: "Leeds", country: "GB", timezone: "Europe/London" }, owner.cookies);
+    const res = await post("/v1/orgs", { trainsHere: true, name, city: "Leeds", country: "GB", timezone: "Europe/London" }, owner.cookies);
     expect(res.statusCode).toBe(201);
     const created = JSON.parse(res.body) as CreatedOrg;
     await sql`

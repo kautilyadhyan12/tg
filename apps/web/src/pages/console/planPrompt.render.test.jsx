@@ -441,6 +441,7 @@ describe('the screen that says the gym is ready', () => {
     fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House' } });
     fireEvent.click(screen.getByLabelText('Country'));
     fireEvent.click(await screen.findByText('United States'));
+    fireEvent.click(screen.getByRole('radio', { name: /^Yes/ }));
     fireEvent.click(screen.getByText('Create'));
   };
 

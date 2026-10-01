@@ -107,7 +107,7 @@ d("a lead's follow-up emails (real Postgres)", () => {
   };
 
   const makeOrg = async (cookies: Record<string, string>, name: string): Promise<CreatedOrg> => {
-    const res = await post("/v1/orgs", { name, city: "Leeds", country: "GB", timezone: ZONE }, cookies);
+    const res = await post("/v1/orgs", { trainsHere: true, name, city: "Leeds", country: "GB", timezone: ZONE }, cookies);
     expect(res.statusCode).toBe(201);
     const created = JSON.parse(res.body) as CreatedOrg;
     await subscribeGym(created.org.id);
@@ -456,7 +456,7 @@ d("a lead's follow-up emails (real Postgres)", () => {
         ["Kiritimati Follow-ups Gym", "Pacific/Kiritimati"],
         ["Pago Pago Follow-ups Gym", "Pacific/Pago_Pago"],
       ] as const) {
-        const res = await post("/v1/orgs", { name, city: "Leeds", country: "GB", timezone }, owner.cookies);
+        const res = await post("/v1/orgs", { trainsHere: true, name, city: "Leeds", country: "GB", timezone }, owner.cookies);
         expect(res.statusCode).toBe(201);
         const gym = (JSON.parse(res.body) as CreatedOrg).org.id;
         await subscribeGym(gym);

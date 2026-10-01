@@ -41,7 +41,7 @@ export type RemoveRecordOutcome =
  *  ends, holding a paid place: those whose record it certainly is (`whose.ts`). */
 export function appPeopleIn(reached: readonly repo.MemberAgainstList[], entry: { id: string; formerAt: Date | null }): repo.MemberAgainstList[] {
   const recordOf = entry.formerAt === null ? currentRecordOf : pastRecordOf;
-  return reached.filter((member) => recordOf(member) === entry.id && member.seatCounted);
+  return reached.filter((member) => recordOf(member) === entry.id && member.inMarks);
 }
 
 /** `appPeopleIn`, read. BEFORE the record comes off: afterwards the match moves to another

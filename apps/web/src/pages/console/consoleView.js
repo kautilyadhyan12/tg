@@ -279,14 +279,36 @@ export function waitingCountLabel(pendingCount) {
 
 /** How many people have JOINED, as opposed to how many memberships exist.
  *
- *  The owner is member #1 by construction (Part 3 §4.0 step 6) and carries the
- *  complimentary flag, so a brand-new gym has one membership and nobody has
- *  joined it. Returns null when the page is truncated, because then the answer
- *  is not knowable from what is in hand. */
+ *  An owner who trains at their own gym holds a membership (an ordinary seat since
+ *  §10.4; a complimentary one before), so a brand-new gym can have one membership and
+ *  nobody has joined it. Returns null when the page is truncated, because then the
+ *  answer is not knowable from what is in hand. */
 export function joinedCount(page) {
   if (!page || !Array.isArray(page.items)) return null;
   if (page.nextCursor != null) return null;
-  return page.items.filter((m) => m?.complimentary !== true).length;
+  return page.items.filter((m) => m?.complimentary !== true && m?.staff?.role !== 'owner').length;
+}
+
+/** "Do you train here too?" on Create your organisation (spec Part 3 §10.4): yes gives
+ *  the owner the member app on one of the places, no the console only. */
+export function trainsHereChoices(orgType) {
+  const words = orgWords(orgType);
+  const trainer = orgType === 'personal_trainer';
+  return {
+    question: trainer ? 'Do you train with the app yourself too?' : 'Do you train here too?',
+    options: [
+      {
+        value: true,
+        label: trainer ? 'Yes, I train too' : 'Yes, I train here too',
+        hint: `You get the member app on your phone. It takes one of your ${words.people}' places, like any ${words.person}.`,
+      },
+      {
+        value: false,
+        label: 'No, I only run it',
+        hint: 'You get the console only. You can add yourself later from Members.',
+      },
+    ],
+  };
 }
 
 /** T3 L-4: WHICH code the console puts on screen under "Join code".
@@ -335,11 +357,7 @@ export function memberCountLine(page, viewerUserId = null, orgType = undefined) 
   // test caught it (:6277's class: a fix creating a defect).
   const whole = page?.nextCursor == null;
   const only = whole && items.length === 1 ? items[0] : null;
-  const isViewersOwnSeat =
-    only != null &&
-    only.complimentary === true &&
-    typeof viewerUserId === 'string' &&
-    only.userId === viewerUserId;
+  const isViewersOwnSeat = only != null && typeof viewerUserId === 'string' && only.userId === viewerUserId;
   return isViewersOwnSeat ? `1 ${orgWords(orgType).person} (you)` : label;
 }
 

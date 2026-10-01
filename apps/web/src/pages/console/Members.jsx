@@ -131,8 +131,8 @@ function RosterSheet({ member, words, seesList, canRemove, managesStaff, readOnl
           {staffTag(member, words) !== null ? (
             <p className="c-s14 c-t2">
               <span className="c-tag c-tag-soft mr-2">{staffTag(member, words)}</span>
-              {member.staff.role === 'owner' ? `Runs this ${words.it}.` : 'Also works here.'} Their place in the app is free and isn&apos;t
-              counted in your plan. Manage staff in Settings.
+              {member.staff.role === 'owner' ? `Runs this ${words.it}.` : 'Also works here.'} Their place in the app counts in your
+              plan, like any {words.person}&apos;s. Manage staff in Settings.
             </p>
           ) : free ? (
             <p className="c-s14 c-t2">

@@ -228,10 +228,9 @@ async function measure(
     needsMapping: understanding.needsMapping,
     seat: {
       cap: seatCap,
-      // The members the rule was handed ARE the gym's live, paid-for members — the
-      // seat rule's own three conditions (`repo.listMembers`). Counting them again
-      // in SQL would be a second answer to one question.
-      liveMembers: members.filter((member) => member.seatCounted).length,
+      // Every live member takes a place, the owner's and staff's included (§10.4), and
+      // the rule was handed exactly the live ones (`repo.listMembers`).
+      liveMembers: members.length,
       // What the list would BE, not what it is: the number staff are deciding about.
       // An add keeps everybody already on it; a whole list is the file.
       listSize:
@@ -376,9 +375,9 @@ async function freshMemberSide(
     [...groups.new, ...groups.changed, ...groups.unchanged].flatMap((place) => (place.entryId == null ? [] : [place.entryId])),
   );
   const side = membersAgainstNewList(
-    // The seat rule's own set: §9.7 keeps the owner and the staff out of "no longer
-    // listed". "Already in the app" is asked of every live member, just above.
-    members.filter((member) => member.seatCounted),
+    // The marks' set: §9.7 keeps the owner and the staff out of "no longer listed".
+    // "Already in the app" is asked of every live member, just above.
+    members.filter((member) => member.inMarks),
     (member) =>
       (upload.mode === "add" && member.onList) ||
       onListOf(
@@ -411,7 +410,7 @@ async function freshMemberSide(
         isLargeMemberListChange(stored.guard.entriesGoing, stored.guard.listSize) ||
         isLargeMemberListChange(side.membersLeaving.length, side.listedNow),
     },
-    seat: { ...stored.seat, cap: seatCap, liveMembers: members.filter((member) => member.seatCounted).length },
+    seat: { ...stored.seat, cap: seatCap, liveMembers: members.length },
   };
   return {
     counts,

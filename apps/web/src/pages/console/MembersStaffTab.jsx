@@ -44,6 +44,11 @@ function StaffSheet({ person, words, readOnly, busy, error, onClose, onRemove })
             <span className="c-tag c-tag-soft">{staffRoleText(person.role, person.roleName ?? null, words)}</span>
             {person.isMember ? <span className="c-tag c-tag-good">Uses the app</span> : null}
           </span>
+          <p className="c-s14 c-t2" data-testid="staff-place-line">
+            {person.isMember
+              ? `Uses the member app here, which takes one of your places, like any ${words.person}.`
+              : 'Uses the console only, which is free. Not in the member app here.'}
+          </p>
           {owner ? (
             <p className="c-s14 c-t2">The owner runs the {words.it} and can&apos;t be removed from staff.</p>
           ) : !asking ? (

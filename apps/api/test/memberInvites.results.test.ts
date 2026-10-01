@@ -137,7 +137,7 @@ d("what comes back (real Postgres)", () => {
   };
 
   const makeGym = async (owner: User, name: string): Promise<string> => {
-    const res = await inject("POST", "/v1/orgs", owner.cookies, { name, city: "Leeds", country: "GB", timezone: "Europe/London" });
+    const res = await inject("POST", "/v1/orgs", owner.cookies, { trainsHere: true, name, city: "Leeds", country: "GB", timezone: "Europe/London" });
     expect(res.statusCode).toBe(201);
     const gymId = (JSON.parse(res.body) as { org: { id: string } }).org.id;
     await sql`

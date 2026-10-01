@@ -238,7 +238,7 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
     const res = await post(
       "/v1/orgs",
       {
-        name: `Org Plans ${String(orgSeq++)} ${String(Date.now() % 100000)}`,
+        trainsHere: true, name: `Org Plans ${String(orgSeq++)} ${String(Date.now() % 100000)}`,
         city: "Austin",
         country,
         timezone: "Asia/Kolkata",

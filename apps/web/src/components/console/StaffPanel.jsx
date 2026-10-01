@@ -108,6 +108,10 @@ function AddStaffForm({
       className="rounded-2xl p-4 flex flex-col gap-3"
       style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}
     >
+      {/* §10.4: a staff login is free; the member app is a place, whoever uses it. */}
+      <p className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }} data-testid="staff-place-note">
+        Staff use the console free. Using the member app here takes one of your places.
+      </p>
       <label className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
         Their email address
         <input

@@ -4,6 +4,16 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-10-01 · 4c (Folder A): a seat is a person using the member app, the owner and staff too (branch `seat-counts-everyone`)
+
+- **Why this job:** next in Folder A after 4a-ii. **Risky (money: who a gym pays for), Opus xhigh; Kd: *"go"*.** No migration, no new package, no new cost.
+- **Built:** every count of places is every live membership (join door, Put back, billing's smaller-size day, `/v1/orgs/mine` meter, import preview, roster `takesSeat`). The marks keep their own flag, `inMarks` (was `seatCounted`): not staff, not complimentary. Create your organisation asks "Do you train here too?" (required, nothing picked; `trainsHere`); yes is an ordinary seat with no code. Members/Staff/Invite staff screens say the app takes a place and the console is free.
+- **Worst thing, first test:** the owner and a trainer take a place and Remove all of "not on any list" takes only the customer. **Fraud test:** five members made staff free no place; the next person gets `gym_full`. **Table:** 7 kinds of person × place · member features · marks.
+- **Breaks, each RED, restored sha256-identical:** marks taking staff in; the door's count skipping staff; the roster calling staff free.
+- **Verified:** api 4,615 of 4,617 in one full run (the 2: `leads.sentForYou` counting the whole app's emails, and a GBP plan another suite had inserted; both files then 171/171 alone). New suite 4/4. Web 3,403/3,403 (`poseAssets.contract` local Node 24). Shared 278/278. tsc and eslint 0 (shared, api, changed web files). 37 old tests asserted "the owner and staff are free": rewritten to the new rule, or their gyms' owners answer No.
+- **Cost at full size** (mains, 2,592 MHz; `.cost/cost-4c.ts`), 10,001 members with 100 staff: door 5 ms, billing 6 ms, meter 32 ms, a page of 100 48 ms; answering nobody at most 3.5 ms. "Not on any list" is 2.2 s at that size (busy 8 ms) and was 1.6 s (busy 10 ms) on master the same day: slow already, not made so here.
+- **Open:** Kd's click-through, then round one in a fresh terminal (`reviews/4c-1-review.md`).
+
 ## 2026-10-01 · 1d-iii-b (Folder B): a smaller size through Razorpay (branch `razorpay-smaller-size`)
 
 - **Why this job:** next on Folder B's list. **Risky (money), Opus xhigh; Kd: *"go"*.** His one question answered *"A"*: a gym with too many members on the day STAYS on its size (RULINGS 2026-10-01). Migration `0061_razorpay_smaller_size`; no new package, no new cost.

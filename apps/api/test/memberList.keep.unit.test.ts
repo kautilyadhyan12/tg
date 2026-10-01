@@ -104,7 +104,7 @@ const member = (over: Partial<ListMember> & { userId: string }): ListMember => (
   email: null,
   statedPhone: null,
   everListed: false,
-  seatCounted: true,
+  inMarks: true,
   joinedEntryId: null,
   ...over,
 });

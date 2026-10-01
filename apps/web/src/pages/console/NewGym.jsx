@@ -16,6 +16,7 @@ import {
   detectTimezone,
   orgWords,
   timezoneOptions,
+  trainsHereChoices,
 } from './consoleView';
 
 // Part 3 §4.0's onboarding wizard, reduced to the steps that have a server
@@ -123,6 +124,9 @@ export default function NewGym() {
   // whatever it detected is in the list, so the prefill cannot be silently
   // replaced by the first alphabetical zone.
   const [timezone, setTimezone] = useState(detected ?? '');
+  // "Do you train here too?" (spec Part 3 §10.4): null until answered, never guessed.
+  // Yes gives the owner the member app on one of the places; no, the console only.
+  const [trainsHere, setTrainsHere] = useState(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -160,7 +164,9 @@ export default function NewGym() {
 
   const inIndia = country === 'IN';
   const mobileOk = !inIndia || normaliseIndianMobile(mobile) !== null;
-  const canSubmit = name.trim() !== '' && country !== '' && timezone.trim() !== '' && mobileOk && !submitting;
+  const canSubmit =
+    name.trim() !== '' && country !== '' && timezone.trim() !== '' && mobileOk && trainsHere !== null && !submitting;
+  const trainChoices = trainsHereChoices(orgType);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -178,6 +184,7 @@ export default function NewGym() {
         country,
         timezone: timezone.trim(),
         ...(inIndia ? { billingMobile: mobile } : {}),
+        trainsHere,
       });
       // THE CONSOLE HAS TO BE TOLD, AND THIS IS THE ONLY PLACE THAT CAN TELL IT
       // (T3 C/H-1). Every console screen reads one kept answer to "which gyms do
@@ -420,6 +427,38 @@ export default function NewGym() {
               />
             )}
           </Field>
+
+          <div role="radiogroup" aria-label={trainChoices.question}>
+            <span className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>
+              {trainChoices.question}
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+              {trainChoices.options.map((choice) => {
+                const active = trainsHere === choice.value;
+                return (
+                  <button
+                    key={String(choice.value)}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => setTrainsHere(choice.value)}
+                    className="rounded-xl p-4 text-left"
+                    style={{
+                      background: active ? 'rgba(255,138,31,0.12)' : '#0A0908',
+                      border: active ? '1px solid rgba(255,138,31,0.45)' : '1px solid rgba(255,255,255,0.10)',
+                    }}
+                  >
+                    <div className="text-sm font-semibold" style={{ color: active ? '#FF8A1F' : '#fff' }}>
+                      {choice.label}
+                    </div>
+                    <div className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                      {choice.hint}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </ConsoleCard>
 
         {error !== null ? <ConsoleFailed message={error} /> : null}

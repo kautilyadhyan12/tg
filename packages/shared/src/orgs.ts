@@ -277,6 +277,10 @@ export const createOrgRequestSchema = z
     /** An Indian gym's owner's mobile, as typed (`normaliseIndianMobile`). The create screen
      *  asks a gym in India for it; the server reads it, stores it, and refuses it elsewhere. */
     billingMobile: z.string().max(40).optional(),
+    /** "Do you train here too?" (spec Part 3 §10.4): yes gives the owner the member app
+     *  on one of the gym's places, no gives them the console only. Asked, never
+     *  defaulted. */
+    trainsHere: z.boolean(),
   })
   .strict();
 export type CreateOrgRequest = z.infer<typeof createOrgRequestSchema>;
@@ -1089,12 +1093,10 @@ export const myOrgSchema = orgSummarySchema.extend({
    *  exactly that reason. A meter needs an exact count over the whole gym, which
    *  only the server can take.
    *
-   *  **Counted by the rule the SEAT CAP itself counts by** — live, not
-   *  complimentary, and not staff — so the meter and the door cannot disagree
-   *  about who costs money. That rule is written out in three places now
-   *  (`claimSeat`, `listMembers`, `listOrgsForUser`); a shared `sql` fragment is
-   *  R3.8's forbidden shape, and what stops the copies drifting is a test that
-   *  drives the meter and the refusal on ONE fixture (:14013's precedent).
+   *  **Counted by the rule the SEAT CAP itself counts by** — every live
+   *  membership, the owner's and staff's included (§10.4) — so the meter and the
+   *  door cannot disagree about who costs money. A test drives the meter, the
+   *  refusal and billing's count on ONE fixture.
    *
    *  Null for a non-staff caller and for an api too old to say, exactly as
    *  `subscription` above. Never rendered as a zero: "0 of 300 seats" and "we
@@ -1617,9 +1619,11 @@ export const orgMemberSchema = z.object({
   displayName: z.string(),
   joinedAt: z.string(),
   groupLabel: z.string().nullable(),
-  /** The owner's own seat (Part 3 §4.0 step 6) — excluded from seat counts. */
+  /** The owner's old automatic seat (Part 3 §4.0 step 6, before §10.4). Written false
+   *  from §10.4 on and no longer read by any count. */
   complimentary: z.boolean(),
-  /** Does this person occupy one of the gym's paid places?
+  /** Does this person occupy one of the gym's paid places? **Since §10.4 every live
+   *  membership does, the owner's and staff's included, so the server sends true.**
    *
    *  **A §2.4 ADDITION, argued rather than waved through** (Kd's finding at the
    *  staff re-smoke, :14953). The roster badge read `complimentary` alone, which

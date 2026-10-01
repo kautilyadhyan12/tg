@@ -35,7 +35,7 @@ const person = (n: number, fullName: string, over: Partial<MemberAgainstList> = 
   email: null,
   statedPhone: null,
   everListed: true,
-  seatCounted: true,
+  inMarks: true,
   onList: false,
   entryId: null,
   entryStatus: null,
@@ -93,7 +93,7 @@ describe("the worst thing: nobody loses the app who was not selected", () => {
 
   it("the owner, staff and a complimentary place never lose the app here; their record still moves", () => {
     const dee = record(1, "Coach Dee", { email: "dee@example.com" });
-    const staff = on(1, "Coach Dee", dee, { seatCounted: false });
+    const staff = on(1, "Coach Dee", dee, { inMarks: false });
     const out = plan([dee], [dee], [staff]);
     expect(out.moveIds).toEqual([dee.id]);
     expect(out.endApp).toEqual([]);
@@ -224,7 +224,7 @@ describe("every class of person ticked on In the app", () => {
 
   it("the owner, staff and a complimentary place are kept, their record left alone", () => {
     const dee = record(1, "Coach Dee");
-    const who = on(1, "Coach Dee", dee, { seatCounted: false });
+    const who = on(1, "Coach Dee", dee, { inMarks: false });
     const out = roster([who.userId], [who]);
     expect([out.moveIds, out.endApp]).toEqual([[], []]);
     expect(keptOf(out.preview, "staff")).toEqual(["Coach Dee"]);
@@ -295,7 +295,7 @@ describe("how many of the records moving nobody in the app uses", () => {
 
   it("staff use the app: their record is not counted as unused", () => {
     const dee = record(1, "Coach Dee");
-    expect(plan([dee], [dee], [on(1, "Coach Dee", dee, { seatCounted: false })]).preview.movingNotInApp).toBe(0);
+    expect(plan([dee], [dee], [on(1, "Coach Dee", dee, { inMarks: false })]).preview.movingNotInApp).toBe(0);
   });
 
   it("nobody in the app: every record moving", () => {

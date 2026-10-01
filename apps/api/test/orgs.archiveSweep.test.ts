@@ -196,7 +196,7 @@ d("gym archive sweep (real Postgres)", () => {
     const res = await post(
       "/v1/orgs",
       {
-        name: `Arch Sweep ${String(orgSeq++)} ${String(Date.now() % 100000)}`,
+        trainsHere: true, name: `Arch Sweep ${String(orgSeq++)} ${String(Date.now() % 100000)}`,
         city: "Austin",
         country: "IN",
         timezone: "Asia/Kolkata",

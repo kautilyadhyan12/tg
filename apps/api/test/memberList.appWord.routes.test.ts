@@ -128,7 +128,7 @@ d("the App word on the Members list (real Postgres)", () => {
   let gymCount = 0;
   const makeGym = async (): Promise<Gym> => {
     const owner = await register(addr(`owner-${String(++gymCount)}`));
-    const res = await post("/v1/orgs", { name: `App Word Gym ${String(gymCount)}`, city: "Leeds", country: "GB", timezone: "Europe/London" }, owner.cookies);
+    const res = await post("/v1/orgs", { trainsHere: true, name: `App Word Gym ${String(gymCount)}`, city: "Leeds", country: "GB", timezone: "Europe/London" }, owner.cookies);
     expect(res.statusCode, res.body).toBe(201);
     const { org } = JSON.parse(res.body) as { org: { id: string } };
     await sql`

@@ -89,7 +89,7 @@ try {
   await inject("POST", "/v1/auth/register", { email, password: "a-Perfectly-fine-pw-1", displayName: "Cost" }); // gitleaks:allow
   const login = await inject("POST", "/v1/auth/login", { email, password: "a-Perfectly-fine-pw-1" }); // gitleaks:allow
   const cookies = Object.fromEntries(login.cookies.map((c) => [c.name, c.value]));
-  const created = JSON.parse((await inject("POST", "/v1/orgs", { name: "Lead Cost Gym", city: "Leeds", country: "GB", timezone: "Europe/London" }, cookies)).body) as {
+  const created = JSON.parse((await inject("POST", "/v1/orgs", { trainsHere: true, name: "Lead Cost Gym", city: "Leeds", country: "GB", timezone: "Europe/London" }, cookies)).body) as {
     org: { id: string };
   };
   const gymId = created.org.id;

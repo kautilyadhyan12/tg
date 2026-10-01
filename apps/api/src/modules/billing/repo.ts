@@ -90,16 +90,13 @@ function toCheckout(raw: RawCheckout): CheckoutRow {
   };
 }
 
-/** The members a gym is paying for: live, not complimentary, not staff. The same
- *  conditions as `claimSeat`'s cap and `listOrgsForUser`'s meter (orgs/repo.ts). */
+/** The members a gym is paying for: every live membership, the owner's and staff's
+ *  included (§10.4). The same count as `claimSeat`'s cap and `listOrgsForUser`'s meter
+ *  (orgs/repo.ts). */
 export async function seatsUsed(sql: SqlOrTx, gymId: string): Promise<number> {
   const rows = await sql<{ n: number }[]>`
     SELECT count(*)::int AS n FROM gym_members m
-    WHERE m.gym_id = ${gymId} AND m.removed_at IS NULL
-      AND m.complimentary = false
-      AND NOT EXISTS (
-        SELECT 1 FROM gym_staff s
-        WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)`;
+    WHERE m.gym_id = ${gymId} AND m.removed_at IS NULL`;
   return rows[0]?.n ?? 0;
 }
 

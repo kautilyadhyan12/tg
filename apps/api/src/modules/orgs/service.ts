@@ -259,15 +259,16 @@ export async function createOrg(
         code: codeFromBytes(deps.randomBytes(6)),
         codeLabel: FIRST_CODE_LABEL,
         billingMobile,
+        trainsHere: req.trainsHere,
         // §4.0 step 1's owner row starts with the owner role's whole set. Same
         // source as an appointment's, so "what does an owner start with" has
         // one answer in one place.
         ownerPrivileges: defaultPrivilegesFor("owner"),
       });
-      // The owner is member #1 (Part 3 §4.0 step 6), which is a membership
-      // change like any other — §4.1's cache would otherwise answer from a
-      // snapshot taken before the org existed.
-      await bustEntitlements(deps.redis, ownerUserId);
+      // An owner who trains here is a member from now (§10.4), which is a membership
+      // change like any other — §4.1's cache would otherwise answer from a snapshot
+      // taken before the org existed.
+      if (req.trainsHere) await bustEntitlements(deps.redis, ownerUserId);
       // Parsed on the way OUT, like the catalog reader next door. It is not
       // ceremony: it is what would have caught a response missing
       // `currencyDisplay` after the schema gained the field (T3 round 1 L-4).
@@ -1360,7 +1361,7 @@ async function offListOf(
     const name = m.unsure === null ? m.entryFullName : eitherOf(m.unsure.records.map((record) => record.fullName));
     if (name !== null) typedInName.set(m.userId, name);
   }
-  const off = members.filter((m) => m.seatCounted && !m.onList);
+  const off = members.filter((m) => m.inMarks && !m.onList);
   // "Taken off" is only ever about the record they joined with: a former record found
   // by their email or phone can be a relative's on a shared family address.
   const ownRecord = (m: listRepo.MemberAgainstList): string | null => (m.joinedFormer ? m.joinedEntryId : null);

@@ -124,7 +124,7 @@ d("member list: an app member follows their record (real Postgres)", () => {
     const login = await post("/v1/auth/login", { email, password: PASSWORD });
     expect(login.statusCode).toBe(200);
     const cookies = cookieMap(login);
-    const res = await post("/v1/orgs", { name: `Joined ${local} Gym`, city: "Leeds", country: "GB", timezone: "Europe/London" }, cookies);
+    const res = await post("/v1/orgs", { trainsHere: true, name: `Joined ${local} Gym`, city: "Leeds", country: "GB", timezone: "Europe/London" }, cookies);
     expect(res.statusCode, res.body).toBe(201);
     const gymId = (JSON.parse(res.body) as { org: { id: string } }).org.id;
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gymId}`;

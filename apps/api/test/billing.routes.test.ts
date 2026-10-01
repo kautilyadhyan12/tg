@@ -167,7 +167,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
     };
   };
   const makeGym = async (cookies: Cookies, country = "US"): Promise<string> => {
-    const res = await post("/v1/orgs", { name: `Billing Gym ${String(seq++)}`, city: "Austin", country, timezone: "America/Chicago" }, cookies);
+    const res = await post("/v1/orgs", { trainsHere: false, name: `Billing Gym ${String(seq++)}`, city: "Austin", country, timezone: "America/Chicago" }, cookies);
     expect(res.statusCode).toBe(201);
     return (JSON.parse(res.body) as { org: { id: string } }).org.id;
   };

@@ -289,7 +289,10 @@ describe('the member-count line stops contradicting itself (T3 L-5)', () => {
   });
 
   it('leaves every other case exactly as it was', () => {
-    expect(memberCountLine({ items: [member('a')], nextCursor: null }, 'a')).toBe('1 member');
+    // The viewer's own seat is theirs whether or not it is complimentary: an owner who
+    // trains here holds an ordinary seat since §10.4.
+    expect(memberCountLine({ items: [member('a')], nextCursor: null }, 'a')).toBe('1 member (you)');
+    expect(memberCountLine({ items: [member('a')], nextCursor: null }, 'b')).toBe('1 member');
     expect(
       memberCountLine({ items: [member('owner', true), member('b')], nextCursor: null }, 'owner'),
     ).toBe('2 members');

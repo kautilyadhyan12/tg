@@ -328,6 +328,8 @@ export interface CreateOrgInput {
   codeLabel: string;
   /** An Indian gym's owner's mobile for its payments (`+91…`), already read by the service. */
   billingMobile: string | null;
+  /** The owner's "Do you train here too?": yes is an ordinary seat (§10.4). */
+  trainsHere: boolean;
   /** The owner's starting ticks, computed by the service from the owner role's
    *  template — policy stays in one place, storage in this one. */
   ownerPrivileges: readonly string[];
@@ -338,13 +340,10 @@ export interface CreateOrgResult {
   code: { code: string; label: string };
 }
 
-/** One attempt at Part 3 §4.0's steps 1, 4 and 6 as a single transaction: the
- *  org, its owner staff row, its first join code, and (per
- *  `owner_included_as_member`) the owner's own complimentary membership.
- *
- *  All four or none. A gym that exists with no code is a gym nobody can join,
- *  and an owner who is not a member cannot demo the app on their own phone in
- *  the car park — which is the entire point of step 6.
+/** One attempt at Part 3 §4.0's steps 1 and 4 as a single transaction: the org, its
+ *  owner staff row, its first join code, and — only when the owner answered yes to "Do
+ *  you train here too?" — the owner's membership, an ordinary seat (§10.4). All or
+ *  none.
  *
  *  Throws `OrgNameTakenError` on a uniqueness race; the SERVICE decides how to
  *  retry, because it owns the randomness. */
@@ -382,29 +381,12 @@ export async function createOrgAttempt(
       const codeRow = codeRows[0];
       if (codeRow === undefined) throw new Error("INSERT INTO gym_codes returned no row");
 
-      // Step 6, honouring the column rather than assuming it: the default is
-      // true, but the column is the authority and a later settings screen will
-      // flip it.
-      const includeRows = await tx<{ owner_included_as_member: boolean }[]>`
-        SELECT owner_included_as_member FROM gyms WHERE id = ${org.id}`;
-      if (includeRows[0]?.owner_included_as_member === true) {
-        // T3 ROUND 1 C/H-2: `consent_at` stays NULL, and that is the honest
-        // value — this membership is created silently by §4.0 step 6 and
-        // NOBODY ASKED THE OWNER anything. The first version wrote `now()`,
-        // reasoning that creating the org is itself the owner's choice. That
-        // reasoning is fine for a gym and indefensible for a clinic, where
-        // §2.4 makes this exact column the DPDP/GDPR consent record: a
-        // timestamp there is the app asserting that a person agreed to
-        // something they were never shown.
-        //
-        // Kd's answer to the question was larger than the question (2026-08-18,
-        // "no click will be there only gyms and fitness centers"): clinics are
-        // out of the product, so no NEW row here can be a clinic's. The NULL
-        // stays regardless — a consent record nobody collected is wrong on a
-        // gym too, it is merely harmless there.
+      // The owner's place is asked, never given (§10.4): a yes is an ordinary seat,
+      // counted like anyone's, through no code, with the answer's time as its consent.
+      if (input.trainsHere) {
         await tx`
           INSERT INTO gym_members (gym_id, user_id, code_id, consent_at, complimentary)
-          VALUES (${org.id}, ${input.ownerUserId}, ${codeRow.id}, NULL, true)`;
+          VALUES (${org.id}, ${input.ownerUserId}, NULL, now(), false)`;
       }
 
       await insertAudit(tx, {
@@ -515,32 +497,13 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
              ORDER BY so.ended_at DESC NULLS LAST, so.id
              LIMIT 1
            ) AS overdue_provider,
-           -- THE SEAT METER'S NUMERATOR, and the three conditions are
-           -- claimSeat's own, written out for the third time on purpose.
-           --
-           -- NO BACKTICKS ANYWHERE IN THIS TEMPLATE. One ends the literal and
-           -- turns a documented query into a run of parse errors — :12227's
-           -- own slip, incurred again while writing this block.
-           --
-           -- A shared sql fragment is R3.8's forbidden shape and :14493's Low-2
-           -- is what happens when two readers of one rule drift, so the copies
-           -- are anchored by a test that drives the METER and the REFUSAL on one
-           -- fixture (:14013's six-site precedent). Editing this without editing
-           -- claimSeat puts the screen and the door back into disagreement about
-           -- who costs a gym money — which is the defect Kd found on the roster
-           -- badge (:14953) arriving at the meter instead.
-           --
-           -- complimentary = false excludes the owner's §4.0-step-6 seat; the
-           -- NOT EXISTS excludes staff, free since Kd's "yes staff seats free"
-           -- ruling (:14262). Correlated per gym and the outer query is capped
-           -- at MY_ORGS_LIMIT, so the fan-out is bounded by that.
+           -- THE SEAT METER'S NUMERATOR: every live membership, the owner's and
+           -- staff's included (spec Part 3 10.4), the same count as claimSeat's
+           -- paidPlacesUsed and billing's seatsUsed. NO BACKTICKS IN THIS TEMPLATE.
+           -- Correlated per gym and the outer query is capped at MY_ORGS_LIMIT.
            (SELECT count(*)::int FROM gym_members sm
              WHERE sm.gym_id = g.id
                AND sm.removed_at IS NULL
-               AND sm.complimentary = false
-               AND NOT EXISTS (
-                 SELECT 1 FROM gym_staff ss
-                 WHERE ss.gym_id = sm.gym_id AND ss.user_id = sm.user_id)
            ) AS seats_used,
            -- HAS THIS GYM'S OWNER ALREADY SPENT THEIR ONE FREE TRIAL — the arm
            -- selector for the unskippable prompt (:22697), and the SECOND COPY
@@ -1355,7 +1318,7 @@ export type ClaimSeatOutcome =
  *  WHAT they do.
  *
  *    -- caller holds:  SELECT 1 FROM gyms WHERE id=$gym FOR UPDATE
- *    seat check: (count live, non-complimentary members) < plan.seat_cap
+ *    seat check: (count live members) < plan.seat_cap
  *    INSERT INTO gym_members ...
  *    UPDATE gym_codes SET uses = uses + 1
  *
@@ -1404,31 +1367,11 @@ async function claimSeat(
   if (held === null) {
     const cap = await seatCapFor(tx, input.org.id);
     if (cap !== null) {
-      // KD RULING 2026-08-22, "yes staff seats free" — ENFORCED HERE, which is
-      // where seats are counted, rather than by flagging staff `complimentary`.
-      //
-      // **THE FLAG WAS THE FIRST IMPLEMENTATION AND IT WAS WRONG (T3 round 1,
-      // C/H-1).** `complimentary` does not mean "this seat is unpaid", it means
-      // "this person did not JOIN" — the owner's §4.0-step-6 seat — and THREE
-      // readers act on that meaning: the console's `joinedCount`, which printed
-      // "Nobody has joined yet" under a gym with two members; the `max_uses`
-      // gate at the join door, which quietly gave a code limited to one person
-      // another place; and `orgCodeSchema.joined`. Kd's ruling is about MONEY,
-      // so it belongs in the money count and nowhere else.
-      //
-      // **A DEPARTURE FROM §4.2's WORDING, recorded rather than slipped past
-      // (R0.1):** the spec's seat check is the prose "count live,
-      // non-complimentary members", which this narrows with "and not staff".
-      // The RULING is Kd's and predates the fix; what changed is the mechanism,
-      // because the literal reading was satisfied only by corrupting the flag.
-      //
-      // **THESE TWO CONDITIONS ARE ALSO WRITTEN OUT IN `listMembers`, which is
-      // what the roster's "Complimentary" badge now reads (:14953).** A shared
-      // `sql` fragment is R3.8's forbidden shape, so they are duplicated on
-      // purpose and anchored by a test that drives BOTH — the cap's refusal and
-      // the roster's answer — on one fixture. Editing either without the other
-      // puts the screen and the door back into disagreement about who costs
-      // money, which is the defect Kd found.
+      // A SEAT IS A LIVE MEMBERSHIP, whoever holds it — the owner's and staff's
+      // included (RULINGS 2026-09-21, spec Part 3 §10.4). A staff login opens the
+      // console and takes nothing; using the member app takes a place, so
+      // appointing members as staff frees none. `paidPlacesUsed` is the one count
+      // the meter (`listOrgsForUser`) and billing (`seatsUsed`) repeat.
       const used = await paidPlacesUsed(tx, input.org.id);
       if (used >= cap) return { kind: "seat_cap", cap };
     }
@@ -1495,16 +1438,13 @@ export async function claimSeatByInvitation(
   return claim;
 }
 
-/** How many paid places the gym's live members hold: `claimSeat`'s count, which Put back
- *  asks too (`placesFree`). */
+/** How many paid places the gym's live members hold — every live membership, the
+ *  owner's and staff's included (§10.4): `claimSeat`'s count, which Put back asks too
+ *  (`placesFree`). */
 export async function paidPlacesUsed(tx: SqlOrTx, gymId: string): Promise<number> {
   const rows = await tx<{ n: number }[]>`
     SELECT count(*)::int AS n FROM gym_members m
-    WHERE m.gym_id = ${gymId} AND m.removed_at IS NULL
-      AND m.complimentary = false
-      AND NOT EXISTS (
-        SELECT 1 FROM gym_staff s
-        WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)`;
+    WHERE m.gym_id = ${gymId} AND m.removed_at IS NULL`;
   return rows[0]?.n ?? 0;
 }
 
@@ -2768,25 +2708,9 @@ export async function removeMember(
  *  cosmetic for a cursor walk: an ordering the cursor does not match drops or
  *  repeats rows silently.
  *
- *  **`takes_seat` IS `claimSeat`'s COUNT RULE, WRITTEN OUT A SECOND TIME — and
- *  the duplication is deliberate (Kd's finding at the staff re-smoke,
- *  :14953).** The screen drew its badge off `gym_members.complimentary`, which
- *  is deliberately NOT written for staff, so a trainer sat on the roster
- *  looking exactly like somebody occupying a paid place: the door and the
- *  screen disagreed about who costs money.
- *
- *  **The fix is NOT to write `complimentary` for staff — that is precisely the
- *  defect :14401 C/H-1 removed.** That column means "did not JOIN", not "unpaid
- *  seat", and three readers act on that meaning (`joinedCount`, the join door's
- *  `max_uses` gate, `orgCodeSchema.joined`), which is how an appointment once
- *  printed "Nobody has joined yet" over a two-member gym. Kd's ruling is about
- *  MONEY, so the answer is derived where money is counted and nowhere else.
- *
- *  **A shared `sql` fragment is R3.8's forbidden shape**, so the two conditions
- *  are spelled out in both places, exactly as `listStaff` and `getStaffRole`
- *  spell out their eligibility test (:14493 Low-2). What stops them drifting is
- *  a test that drives BOTH on one fixture — the roster's answer and the cap's
- *  refusal — per :14013's six-site precedent. Change one, change the other. */
+ *  **Every row here takes one of the gym's places** (§10.4): a seat is a live
+ *  membership, the owner's and staff's included, so `takesSeat` is always true and
+ *  `staff` says who also runs the gym. */
 export async function listMembers(
   sql: Sql,
   input: {
@@ -2811,7 +2735,6 @@ export async function listMembers(
       joined_at: Date;
       group_label: string | null;
       complimentary: boolean;
-      takes_seat: boolean;
       list_name: string | null;
       staff_role: string | null;
       staff_role_name: string | null;
@@ -2819,10 +2742,6 @@ export async function listMembers(
   >`
     SELECT m.id, m.user_id, u.display_name, m.joined_at,
            c.label AS group_label, m.complimentary,
-           (m.complimentary = false
-            AND NOT EXISTS (
-              SELECT 1 FROM gym_staff s
-              WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)) AS takes_seat,
            e.full_name AS list_name,
            st.role AS staff_role, st.role_name AS staff_role_name
     FROM gym_members m
@@ -2869,7 +2788,7 @@ export async function listMembers(
       joinedAt: r.joined_at,
       groupLabel: r.group_label,
       complimentary: r.complimentary,
-      takesSeat: r.takes_seat,
+      takesSeat: true,
       listName: r.list_name,
       staff: r.staff_role === null ? null : { role: toOrgRole(r.staff_role), roleName: r.staff_role_name },
     })),

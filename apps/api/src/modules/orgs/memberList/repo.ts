@@ -369,13 +369,12 @@ export async function addFields(tx: TransactionSql, gymId: string, fresh: readon
 
 /** THE GYM'S OWN APP MEMBERS, as the match reads them (§9.7).
  *
- *  **THE THREE CONDITIONS ARE THE SEAT RULE'S OWN** — live, not complimentary,
- *  not staff — and they are written out here rather than shared as an `sql`
- *  fragment (R3.8 forbids interpolating one). The owner holds a complimentary
- *  seat and is on no gym's export, so without the second condition EVERY gym's
- *  owner would read "not on your list"; staff are the same story. `claimSeat`
- *  and `listMembers` carry the same two conditions, and a test drives this
- *  answer beside the seat count on one fixture.
+ *  **EVERY LIVE MEMBER, AND `in_marks` FOR THE MARKS** — not complimentary, not
+ *  staff — written out here rather than shared as an `sql` fragment (R3.8 forbids
+ *  interpolating one). Every live member takes a place (§10.4); the owner and staff
+ *  are on no gym's export, so without `in_marks` EVERY gym's owner would read "not on
+ *  your list". `membersAgainstList` carries the same two conditions, and a test drives
+ *  both beside the place count on one fixture.
  *
  *  **THE EMAIL IS THE VERIFIED ONE OR NOTHING.** An address nobody has proved is
  *  nobody's proof: matching on one would let anybody who typed a member's address
@@ -392,7 +391,7 @@ export async function listMembers(sql: SqlOrTx, gymId: string): Promise<ListMemb
       email: string | null;
       stated_phone_e164: string | null;
       ever_listed: boolean;
-      seat_counted: boolean;
+      in_marks: boolean;
       joined_entry_id: string | null;
     }[]
   >`
@@ -400,7 +399,7 @@ export async function listMembers(sql: SqlOrTx, gymId: string): Promise<ListMemb
            u.display_name,
            (m.complimentary = false
             AND NOT EXISTS (
-              SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)) AS seat_counted,
+              SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)) AS in_marks,
            CASE
              WHEN EXISTS (
                SELECT 1 FROM one_time_tokens t
@@ -424,7 +423,7 @@ export async function listMembers(sql: SqlOrTx, gymId: string): Promise<ListMemb
     email: row.email,
     statedPhone: row.stated_phone_e164,
     everListed: row.ever_listed,
-    seatCounted: row.seat_counted,
+    inMarks: row.in_marks,
     joinedEntryId: row.joined_entry_id,
   }));
 }
@@ -841,8 +840,8 @@ export async function stagedContacts(
  *  drives that case directly rather than trusting that sign-in lower-cases everything
  *  it stores today.
  *
- *  **THE EMAIL IS THE VERIFIED ONE OR NOTHING, and the three conditions are the seat
- *  rule's own** — live, not complimentary, not staff. `listMembers`' header carries the
+ *  **THE EMAIL IS THE VERIFIED ONE OR NOTHING, and `in_marks` is the marks' own** —
+ *  not complimentary, not staff. `listMembers`' header carries the
  *  full reasoning for both; this statement is the same rule with one more column, and a
  *  test drives the two side by side so they cannot drift.
  *
@@ -907,7 +906,7 @@ export async function membersAgainstList(
       email: string | null;
       stated_phone_e164: string | null;
       ever_listed: boolean;
-      seat_counted: boolean;
+      in_marks: boolean;
       entry_id: string | null;
       entry_status: string | null;
       entry_member_number: string | null;
@@ -928,7 +927,7 @@ export async function membersAgainstList(
            st.role AS staff_role, st.role_name AS staff_role_name,
            (m.complimentary = false
             AND NOT EXISTS (
-              SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)) AS seat_counted,
+              SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)) AS in_marks,
            CASE WHEN v.proved THEN u.email::text ELSE NULL END AS email,
            m.stated_phone_e164,
            (m.last_listed_at IS NOT NULL) AS ever_listed,
@@ -1033,7 +1032,7 @@ export async function membersAgainstList(
       email: row.email,
       statedPhone: row.stated_phone_e164,
       everListed: row.ever_listed,
-      seatCounted: row.seat_counted,
+      inMarks: row.in_marks,
       isStaff: row.staff_role !== null,
       staff: row.staff_role === null ? null : { role: staffRoleOf(row.staff_role), roleName: row.staff_role_name },
       onList: row.on_list || alt !== undefined,
@@ -2432,8 +2431,8 @@ export async function setEntriesFormer(tx: TransactionSql, gymId: string, ids: r
   return rows.map((row) => row.id);
 }
 
-/** What a large removal is measured against: the list's current records and the paid
- *  places in use (the join door's own count). */
+/** What a large removal is measured against: the list's current records and the
+ *  members a removal could reach (the marks' own set: not staff, not complimentary). */
 export async function removalScale(sql: SqlOrTx, gymId: string): Promise<{ listCurrent: number; seats: number }> {
   const rows = await sql<{ list_current: number; seats: number }[]>`
     SELECT (SELECT count(*)::int FROM gym_member_list_entries e WHERE e.gym_id = ${gymId} AND e.former_at IS NULL) AS list_current,

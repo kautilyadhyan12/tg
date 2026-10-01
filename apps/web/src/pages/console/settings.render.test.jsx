@@ -598,6 +598,13 @@ describe('adding somebody', () => {
     fireEvent.click(await screen.findByText('Invite staff'));
   };
 
+  it('says a staff login is free and the member app takes a place (§10.4)', async () => {
+    await openForm();
+    expect(screen.getByTestId('staff-place-note').textContent).toBe(
+      'Staff use the console free. Using the member app here takes one of your places.',
+    );
+  });
+
   it('sends the typed email with the chosen role', async () => {
     await openForm();
     fireEvent.change(screen.getByLabelText(/Their email address/i), {

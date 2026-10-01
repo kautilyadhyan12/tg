@@ -100,8 +100,8 @@ describe("the worst thing: only people marked Left are gone", () => {
   it("an app member whose record is marked Still a member stays on the list; one marked Left comes off it", () => {
     const entries = [entry(ada, "Active"), entry(ben, "Active"), entry(cy, "Active")];
     const members: ListMember[] = [
-      { userId: "u-ben", fullName: "Ben Cole", email: ben.email, statedPhone: null, everListed: true, seatCounted: true, joinedEntryId: idOf(ben) },
-      { userId: "u-cy", fullName: "Cy Ward", email: cy.email, statedPhone: null, everListed: true, seatCounted: true, joinedEntryId: idOf(cy) },
+      { userId: "u-ben", fullName: "Ben Cole", email: ben.email, statedPhone: null, everListed: true, inMarks: true, joinedEntryId: idOf(ben) },
+      { userId: "u-cy", fullName: "Cy Ward", email: cy.email, statedPhone: null, everListed: true, inMarks: true, joinedEntryId: idOf(cy) },
     ];
     const out = run([row(2, ada, "Active")], entries, [idOf(ben)], members);
     expect(out.membersLeaving.map((p) => p.fullName)).toEqual(["Cy Ward"]);
@@ -148,7 +148,7 @@ const inApp = (n: number, rec: RecordBrief, over: Partial<MemberAgainstList> = {
   email: rec.email,
   statedPhone: rec.phone,
   everListed: true,
-  seatCounted: true,
+  inMarks: true,
   onList: true,
   entryId: rec.id,
   entryStatus: null,
@@ -213,7 +213,7 @@ describe("whose app ends with a leaver", () => {
   });
 
   it("staff on a leaver's record keep the app as staff, not as in the file", () => {
-    const out = plan(writes({ emails: ["park@example.com"] }), [inApp(1, leo, { seatCounted: false })]);
+    const out = plan(writes({ emails: ["park@example.com"] }), [inApp(1, leo, { inMarks: false })]);
     expect(out.endApp).toEqual([]);
     expect(out.preview.kept.map((k) => k.reason)).toEqual(["staff"]);
   });

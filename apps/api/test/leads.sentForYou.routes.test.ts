@@ -122,7 +122,7 @@ d("the app sends a lead's follow-ups (real Postgres)", () => {
 
   /** A gym on a plan with its postal address set, as sending needs. */
   const makeGym = async (cookies: Record<string, string>, name: string, postal: string | null = POSTAL): Promise<CreatedOrg> => {
-    const res = await post("/v1/orgs", { name, city: "Leeds", country: "GB", timezone: ZONE }, cookies);
+    const res = await post("/v1/orgs", { trainsHere: true, name, city: "Leeds", country: "GB", timezone: ZONE }, cookies);
     expect(res.statusCode).toBe(201);
     const created = JSON.parse(res.body) as CreatedOrg;
     await subscribeGym(created.org.id);
