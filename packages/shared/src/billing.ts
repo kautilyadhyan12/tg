@@ -240,7 +240,16 @@ export const paddleTransactionSchema = z.object({
     .max(100),
   /** What it charges; a free trial's checkout charges 0. */
   details: z
-    .object({ totals: z.object({ grand_total: z.string().regex(/^-?\d{1,12}$/) }).nullable().optional() })
+    .object({
+      totals: z
+        .object({
+          grand_total: z.string().regex(/^-?\d{1,12}$/),
+          /** Taken off by a discount code; our server gives none, so it is always "0". */
+          discount: z.string().regex(/^-?\d{1,12}$/).optional(),
+        })
+        .nullable()
+        .optional(),
+    })
     .nullable()
     .optional(),
   /** With `include=adjustments`: its refunds and credits, and each one's state. */

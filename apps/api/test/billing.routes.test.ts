@@ -841,6 +841,16 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       await runWorker();
       expect(await paidRows(a.gymId)).toEqual([]);
       expect(paddle.refunds).toContain(txn.transactionId);
+
+      // A code for the first payment alone: the subscription shows no discount, its payment does.
+      const b = await owner();
+      const second = opened(await checkout(b.gymId, b.cookies, BIG));
+      paddle.pay(second.transactionId);
+      const paid = paddle.txns.get(second.transactionId);
+      if (paid === undefined) throw new Error("no transaction");
+      paddle.txns.set(second.transactionId, { ...paid, details: { totals: { grand_total: "1000", discount: "1000" } } });
+      expect(JSON.parse((await post(`/v1/orgs/${b.gymId}/billing/checkouts/${second.checkoutId}/sync`, {}, b.cookies)).body)).toEqual({ state: "refunded" });
+      expect(await paidRows(b.gymId)).toEqual([]);
     },
     TEST_TIMEOUT_MS,
   );

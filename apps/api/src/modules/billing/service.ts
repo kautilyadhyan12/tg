@@ -123,7 +123,7 @@ export async function startOrgCheckout(
   // A plan paid as anybody but the owner is refunded (`paidByOwner`): one whose email Paddle's
   // window cannot be filled in with could only be paid that way.
   if (windowEmail((await repo.gymPayer(deps.sql, input.gymId)).email) === null) {
-    throw new OrgsError(409, "payer_email_unusable", "Paddle can't use the email address on the owner's account, so payments can't be taken here. Contact us to sort it out.");
+    throw new OrgsError(409, "payer_email_unusable", "Paddle can't use the email address on the owner's account, so payments can't be taken here yet.");
   }
 
   // A window this gym opened before may have been paid and not yet reached the gym
@@ -245,7 +245,8 @@ async function closeSuperseded(deps: BillingDeps, superseded: readonly { provide
       // is set aside, cancelled and refunded at once rather than when its webhook comes.
       const askedAt = deps.now();
       const fetched = await razorpay.api.getSubscription(old.ref);
-      if (fetched.kind === "ok" && fetched.value.status !== "created" && (await applyRazorpay(deps, razorpay, fetched.value, askedAt)) !== "retry") continue;
+      // Anything else (a mandate given, its payment not landed yet) is cancelled below as before.
+      if (fetched.kind === "ok" && fetched.value.status !== "created" && (await applyRazorpay(deps, razorpay, fetched.value, askedAt)) === "set_aside") continue;
     }
     const cancelled =
       old.provider === "paddle"
@@ -1088,10 +1089,13 @@ export async function applyPaddleSubscription(deps: BillingDeps, subscriptionId:
   const placed = await repo.findPaddleSubscription(deps.sql, sub.id);
   let gymId = placed?.gymId ?? null;
   let checkoutId: string | null = null;
+  let discounted = sub.discount !== null && sub.discount !== undefined;
   if (gymId === null) {
     // Without the list the gym cannot be known, and "none of ours" would cancel a real payment.
     const listed = await paddle.api.listSubscriptionTransactions(sub.id);
     if (listed.kind !== "ok") return "retry";
+    // A code for the first payment alone leaves the subscription's own discount empty.
+    discounted ||= listed.value.some((t) => (t.details?.totals?.discount ?? "0") !== "0");
     const ours = await repo.checkoutsForTransactions(deps.sql, listed.value.filter((t) => t.origin === "api").map((t) => t.id));
     const first = ours[0];
     if (first !== undefined) {
@@ -1119,7 +1123,7 @@ export async function applyPaddleSubscription(deps: BillingDeps, subscriptionId:
       return await setAside(deps, paddle, sub, gymId, "duplicate");
     }
     // Our server gives no discount, so one was typed into Paddle's window: never the gym's plan.
-    if (sub.discount !== null && sub.discount !== undefined) {
+    if (discounted) {
       deps.log.error({ event: "billing.discounted_subscription", gymId }, "a Paddle subscription carries a discount we never gave: cancelling and refunding it");
       return await setAside(deps, paddle, sub, gymId, "duplicate");
     }

@@ -544,6 +544,22 @@ d("a gym paying through Razorpay moves to a bigger size (real Postgres, fake Raz
   );
 
   it(
+    "a replaced bigger-size window whose mandate is given but whose add-on has not landed is cancelled at once by the newer press",
+    async () => {
+      const gym = await payingGym();
+      const first = opened(await bigger(gym.gymId, gym.cookies, MID));
+      // The mandate given, the rest of this month's payment still on its way.
+      const sub = razorpay.subs.get(first.subscriptionId);
+      if (sub === undefined) throw new Error("no subscription");
+      razorpay.subs.set(first.subscriptionId, { ...sub, status: "authenticated" });
+      opened(await bigger(gym.gymId, gym.cookies, BIG));
+      expect(razorpay.subs.get(first.subscriptionId)?.status).toBe("cancelled");
+      expect(razorpay.subs.get(gym.oldSub)?.status).toBe("active");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "round one H1: a second bigger size in the same month is priced from the same month and replaces the first",
     async () => {
       const gym = await payingGym();
