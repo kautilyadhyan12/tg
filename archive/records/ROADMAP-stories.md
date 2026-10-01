@@ -187,3 +187,5 @@ stage. History, never a rule: RULINGS wins where they differ.
 - 5b-iv-b (ticked 2026-09-30, PR #141), the line as it stood: - 5b-iv-b. [ ] **The warning when adding**: "Liam Hughes may already be on your list · Open · Add anyway" on a shared name, phone or member number; the exact "already on your list" stays.
 
 - 1e (ticked 2026-10-01, PR #142), the line as it stood: - 1e. [ ] **Paddle's window filled in**: the owner's email and the gym's country given to Paddle's checkout, as Razorpay's already is; the payer types only the card and postcode (Kd, RULINGS 2026-09-30). Next in Folder B after 2f-i.
+
+- 5c (ticked 2026-10-01, PR #143), the line as it stood: - 5c. [ ] **Which software are you leaving?** (spec §11.7; RULINGS 2026-09-24): each product's export steps in plain words and a preset that fills in the column matching, as data in `@app/shared`, from real exports or the vendor's own template only.
