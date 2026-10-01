@@ -454,6 +454,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
       sub_currency: string | null;
       sub_current_period_end: Date | null;
       sub_cancel_at_period_end: boolean | null;
+      sub_cancel_sent_at: Date | null;
       sub_provider: string | null;
       sub_pending_seat_cap: number | null;
       sub_pending_price_minor: number | null;
@@ -491,6 +492,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
            sub.currency AS sub_currency,
            sub.current_period_end AS sub_current_period_end,
            sub.cancel_at_period_end AS sub_cancel_at_period_end,
+           sub.cancel_sent_at AS sub_cancel_sent_at,
            sub.provider AS sub_provider,
            sub.pending_seat_cap AS sub_pending_seat_cap,
            sub.pending_price_minor AS sub_pending_price_minor,
@@ -643,7 +645,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
       SELECT su.status, su.trial_ends_at,
              LEAST(p.seat_cap, su.trial_seat_cap, CASE WHEN su.pending_held_at IS NOT NULL THEN np.seat_cap END) AS seat_cap,
              p.seat_cap AS plan_seat_cap, su.trial_seat_cap, p.price_minor, p.currency,
-             su.current_period_end, su.cancel_at_period_end, su.provider,
+             su.current_period_end, su.cancel_at_period_end, su.cancel_sent_at, su.provider,
              ap.seat_cap AS pending_seat_cap, ap.price_minor AS pending_price_minor, su.pending_from,
              CASE WHEN lc.failure = 'too_many_members' AND su.pending_plan_id IS NULL AND lc.recent THEN lc.seat_cap END AS kept_seat_cap,
              CASE WHEN lc.failure = 'too_many_members' AND su.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS kept_members,
@@ -687,6 +689,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
             currency: r.sub_currency ?? "",
             current_period_end: r.sub_current_period_end,
             cancel_at_period_end: r.sub_cancel_at_period_end ?? false,
+            cancel_sent_at: r.sub_cancel_sent_at,
             provider: r.sub_provider ?? "none",
             pending_seat_cap: r.sub_pending_seat_cap,
             pending_price_minor: r.sub_pending_price_minor,
@@ -1751,6 +1754,8 @@ export interface GymSubscriptionRow {
   currency: string;
   currentPeriodEnd: Date | null;
   cancelAtPeriodEnd: boolean;
+  /** When a Razorpay plan set to end was sent to Razorpay (1d-ii); null until then. */
+  cancelSentAt: Date | null;
   /** Who charges for it: `paddle` for a plan the gym paid for, `none` for its own free trial. */
   provider: string;
   /** A paid trial's free-trial limit, held until the first payment; null otherwise. */
@@ -1965,7 +1970,7 @@ export async function startGymTrial(
       SELECT s.status, s.trial_ends_at,
              LEAST(p.seat_cap, s.trial_seat_cap, CASE WHEN s.pending_held_at IS NOT NULL THEN np.seat_cap END) AS seat_cap,
              p.seat_cap AS plan_seat_cap, s.trial_seat_cap, p.price_minor, p.currency,
-             s.current_period_end, s.cancel_at_period_end, s.provider,
+             s.current_period_end, s.cancel_at_period_end, s.cancel_sent_at, s.provider,
              ap.seat_cap AS pending_seat_cap, ap.price_minor AS pending_price_minor, s.pending_from,
              CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL AND lc.recent THEN lc.seat_cap END AS kept_seat_cap,
              CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS kept_members,
@@ -2049,6 +2054,7 @@ export async function startGymTrial(
       currency: plan.currency,
       current_period_end: null,
       cancel_at_period_end: false,
+      cancel_sent_at: null,
       provider: "none",
       pending_seat_cap: null,
       pending_price_minor: null,
@@ -2096,6 +2102,7 @@ interface RawGymSubscription {
   currency: string;
   current_period_end: Date | null;
   cancel_at_period_end: boolean;
+  cancel_sent_at: Date | null;
   provider: string;
   pending_seat_cap: number | null;
   pending_price_minor: number | null;
@@ -2117,6 +2124,7 @@ function toGymSubscription(raw: RawGymSubscription): GymSubscriptionRow {
     currency: raw.currency,
     currentPeriodEnd: raw.current_period_end,
     cancelAtPeriodEnd: raw.cancel_at_period_end,
+    cancelSentAt: raw.cancel_sent_at,
     provider: raw.provider,
     trialSeatCap: raw.trial_seat_cap,
     pending:
@@ -2137,7 +2145,7 @@ export async function gymLiveSubscription(sql: SqlOrTx, gymId: string): Promise<
     SELECT s.status, s.trial_ends_at,
            LEAST(p.seat_cap, s.trial_seat_cap, CASE WHEN s.pending_held_at IS NOT NULL THEN np.seat_cap END) AS seat_cap,
            p.seat_cap AS plan_seat_cap, s.trial_seat_cap, p.price_minor, p.currency,
-           s.current_period_end, s.cancel_at_period_end, s.provider,
+           s.current_period_end, s.cancel_at_period_end, s.cancel_sent_at, s.provider,
            ap.seat_cap AS pending_seat_cap, ap.price_minor AS pending_price_minor, s.pending_from,
            CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL AND lc.recent THEN lc.seat_cap END AS kept_seat_cap,
            CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS kept_members,

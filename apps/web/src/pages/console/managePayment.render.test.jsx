@@ -1,8 +1,9 @@
-// Managing a gym's paid plan on screen (ROADMAP Stage 3 item 1c-i): the plan card's
-// button to Paddle's own page, the failed-payment banner, and the prompt that asks for
-// the card once the 2-day grace has run out — never a second plan.
+// Managing a gym's paid plan on screen (ROADMAP Stage 3 items 1c-i and 1d-ii): the plan card's
+// button to Paddle's own page, Razorpay's Pay now, Update payment method and Cancel plan, the
+// failed-payment banner, and the prompt that asks for the payment once the 2-day grace has run
+// out — never a second plan.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
+import { act, render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { attendanceDay, overview } from './__fixtures__/overview';
 
@@ -22,17 +23,24 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       syncCheckout: vi.fn(),
       startTrial: vi.fn(),
       openBillingPortal: vi.fn(),
+      razorpayPayLink: vi.fn(),
+      razorpayMethod: vi.fn(),
+      razorpayRefresh: vi.fn(),
+      cancelPlan: vi.fn(),
+      keepPlan: vi.fn(),
     },
   };
 });
 
 vi.mock('../../utils/paddleCheckout', () => ({ openPaddleCheckout: vi.fn(), closePaddleCheckout: vi.fn() }));
+vi.mock('../../utils/razorpayCheckout', () => ({ openRazorpayCheckout: vi.fn(), closeRazorpayCheckout: vi.fn() }));
 
 vi.mock('../../context/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'u1' }, logout: vi.fn() }),
 }));
 
 const { orgService } = await import('../../api/orgsApi');
+const { openRazorpayCheckout } = await import('../../utils/razorpayCheckout');
 const { resetConsoleOrgs } = await import('./consoleOrgs');
 const { setCurrentUserId } = await import('../../utils/storage');
 const ConsoleLayout = (await import('../../components/console/ConsoleLayout')).default;
@@ -226,37 +234,128 @@ describe('a failed payment', () => {
   });
 });
 
-describe('a plan paid through Razorpay (an Indian gym, 1d-i)', () => {
+describe('a plan paid through Razorpay (an Indian gym, 1d-i and 1d-ii)', () => {
   const INDIA = { ...OWNER, country: 'IN', currencyDisplay: 'INR' };
-  const rupees = (patch = {}) => plan({ priceLabel: '₹12,500', subscribed: true, paidThrough: 'razorpay', ...patch });
+  const rupees = (patch = {}) => plan({ priceLabel: '₹12,500', subscribed: true, paidThrough: 'razorpay', keepUntil: null, ...patch });
+  const LINK = 'https://rzp.io/rzp/MUp0Qi83';
 
-  it("says it is paid through Razorpay, and draws no Paddle page and no size change it cannot make", async () => {
+  it("says it is paid through Razorpay; its card and cancel are here, never Paddle's page or a size change it cannot make", async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: rupees() }));
     renderOverview();
     expect(await screen.findByTestId('paid-through-razorpay')).toBeTruthy();
-    expect(screen.getByText(/paid through razorpay, which emails you about each payment/i)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /manage payment|update payment method|change size/i })).toBeNull();
+    expect(screen.getByText(/paid through razorpay, which emails you about each payment\. changing your size isn't available here yet\./i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Update payment method' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Cancel plan' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /manage payment|change size|pay now|keep my plan/i })).toBeNull();
   });
 
-  it("a failed payment: the banner says Razorpay tries again and has emailed the owner, with no Paddle button and no promised link to pay", async () => {
+  it('a trainer sees no button to pay, change or cancel', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, ...TRAINER, country: 'IN', subscription: rupees({ status: 'past_due' }) }));
+    renderOverview();
+    expect(await screen.findByText(/whoever manages billing can pay it now/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /pay now|update payment method|cancel plan/i })).toBeNull();
+  });
+
+  it('Cancel plan asks first, naming the date and the members, with Keep my plan beside it; nothing is sent until it is confirmed', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: rupees() }));
+    renderOverview();
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel plan' }));
+    const box = screen.getByTestId('cancel-box');
+    expect(box.textContent).toMatch(/Cancel your plan\?/);
+    expect(box.textContent).toMatch(/Your plan ends on .+, the end of the month you paid for\. Nothing more is charged\./);
+    expect(box.textContent).toMatch(/Your 12 members keep everything until then\./);
+    expect(orgService.cancelPlan).not.toHaveBeenCalled();
+    fireEvent.click(within(screen.getByTestId('cancel-box')).getByRole('button', { name: 'Keep my plan' }));
+    expect(screen.queryByTestId('cancel-box')).toBeNull();
+
+    const ending = rupees({ cancelAtPeriodEnd: true, keepUntil: '2026-10-31T21:00:00.000Z' });
+    orgService.cancelPlan.mockResolvedValue({ data: { subscription: ending } });
+    orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: ending }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel plan' }));
+    fireEvent.click(within(screen.getByTestId('cancel-box')).getByRole('button', { name: 'Cancel plan' }));
+    await waitFor(() => expect(orgService.cancelPlan).toHaveBeenCalledWith(GYM_ID));
+    expect(await screen.findByText(/^You cancelled this plan\. You can keep it until /)).toBeTruthy();
+    expect(screen.getByText(/^Ends /)).toBeTruthy();
+
+    orgService.keepPlan.mockResolvedValue({ data: { subscription: rupees() } });
+    orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: rupees() }));
+    fireEvent.click(screen.getByRole('button', { name: 'Keep my plan' }));
+    await waitFor(() => expect(orgService.keepPlan).toHaveBeenCalledWith(GYM_ID));
+    expect(await screen.findByRole('button', { name: 'Cancel plan' })).toBeTruthy();
+  });
+
+  it('a plan set to end too close to its end to keep says so, with no Keep my plan', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: rupees({ cancelAtPeriodEnd: true, keepUntil: null }) }));
+    renderOverview();
+    expect(await screen.findByText(/too close to its end to keep it now/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /keep my plan|cancel plan/i })).toBeNull();
+  });
+
+  it('a failed payment: Pay now opens the bill in a new tab, cut off from the console', async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: rupees({ status: 'past_due' }) }));
+    orgService.razorpayPayLink.mockResolvedValue({ data: { url: LINK } });
+    orgService.razorpayRefresh.mockResolvedValue({ status: 204 });
+    const tab = fakeTab();
+    openSpy.mockReturnValue(tab);
     renderOverview();
     expect(
       await screen.findByText(
-        "A payment for your gym didn't go through. Razorpay tries again by itself, and has emailed the gym's owner about it. Your members keep everything for 2 days after a failed payment.",
+        "A payment for your gym didn't go through. Razorpay tries again by itself, or you can pay now under Plan on the Overview. Your members keep everything for 2 days after a failed payment.",
       ),
     ).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /update payment method|manage payment/i })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Pay now' }));
+    await waitFor(() => expect(tab.location.replace).toHaveBeenCalledWith(LINK));
+    expect(orgService.razorpayPayLink).toHaveBeenCalledWith(GYM_ID);
+    expect(tab.opener).toBeNull();
+    expect(await screen.findByText(/Razorpay's page for the bill is open in a new tab/)).toBeTruthy();
+    expect(orgService.openBillingPortal).not.toHaveBeenCalled();
   });
 
-  it("after the grace: the prompt names Razorpay's email and offers no Paddle page", async () => {
+  it("Pay now with nothing owed closes the tab it opened and says why", async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: rupees({ status: 'past_due' }) }));
+    orgService.razorpayPayLink.mockRejectedValue({
+      response: { status: 409, data: { error: 'nothing_owed', message: 'Nothing is owed right now. A payment just made can take a minute to show here.' } },
+    });
+    const tab = fakeTab();
+    openSpy.mockReturnValue(tab);
+    renderOverview();
+    fireEvent.click(await screen.findByRole('button', { name: 'Pay now' }));
+    expect(await screen.findByText('Nothing is owed right now. A payment just made can take a minute to show here.')).toBeTruthy();
+    expect(tab.close).toHaveBeenCalled();
+    expect(tab.location.replace).not.toHaveBeenCalled();
+  });
+
+  it("Update payment method opens Razorpay's window to change THIS plan's card, then says the bill still needs paying", async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: rupees({ status: 'past_due' }) }));
+    orgService.razorpayMethod.mockResolvedValue({
+      data: { keyId: 'rzp_test_AAAAAAAAAAAAAA', subscriptionId: 'sub_ThvJtZQg9As2NX', contact: '+919876543210', email: 'owner@gmail.com' },
+    });
+    orgService.razorpayRefresh.mockResolvedValue({ status: 204 });
+    renderOverview();
+    fireEvent.click(await screen.findByRole('button', { name: 'Update payment method' }));
+    await waitFor(() => expect(openRazorpayCheckout).toHaveBeenCalled());
+    const options = openRazorpayCheckout.mock.calls[0][0];
+    expect(options).toMatchObject({ subscriptionId: 'sub_ThvJtZQg9As2NX', changeMethod: true, email: 'owner@gmail.com', contact: '+919876543210' });
+    act(() => options.onEvent({ type: 'completed' }));
+    expect(await screen.findByText("Your payment method is updated. It doesn't pay the bill that's owed: press Pay now to pay it.")).toBeTruthy();
+  });
+
+  it('after the grace: the prompt offers Pay now and Update payment method, and no Paddle page', async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...overdue(INDIA), paymentOverdueThrough: 'razorpay' }));
+    orgService.razorpayPayLink.mockResolvedValue({ data: { url: LINK } });
+    orgService.razorpayRefresh.mockResolvedValue({ status: 204 });
+    const tab = fakeTab();
+    openSpy.mockReturnValue(tab);
     renderOverview();
     expect(await screen.findByRole('heading', { name: 'A payment is overdue' })).toBeTruthy();
     expect(screen.getByTestId('overdue-razorpay').textContent).toBe(
-      "Razorpay has emailed the gym's owner about it. Once it's paid, everything opens again on its own.",
+      "Pay the bill that's owed and everything opens again by itself. To have your next payments go through, update your payment method too.",
     );
-    expect(screen.queryByRole('button', { name: /update payment method|manage payment|subscribe/i })).toBeNull();
+    const modal = screen.getByTestId('plan-modal');
+    expect(within(modal).getByRole('button', { name: 'Update payment method' })).toBeTruthy();
+    expect(within(modal).queryByRole('button', { name: /cancel plan|manage payment|subscribe/i })).toBeNull();
+    fireEvent.click(within(modal).getByRole('button', { name: 'Pay now' }));
+    await waitFor(() => expect(tab.location.replace).toHaveBeenCalledWith(LINK));
     expect(orgService.openBillingPortal).not.toHaveBeenCalled();
   });
 });

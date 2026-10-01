@@ -716,7 +716,7 @@ export const gymStaff = pgTable(
      *  nobody defined cannot be stored even if a caller invents one. It does NOT
      *  forbid duplicates; the write path stores a sorted, de-duplicated set. */
     privileges: text("privileges").array(),
-    /** The gym's own role this person holds ("Front desk", 4a-i, `0058`), shown in place
+    /** The gym's own role this person holds ("Front desk", 4a-i, `0059`), shown in place
      *  of `role`; the ticks are what the console obeys. */
     roleName: text("role_name"),
     createdAt: createdAt(),

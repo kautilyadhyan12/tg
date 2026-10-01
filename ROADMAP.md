@@ -242,7 +242,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 1c-iii. [x] **A smaller size** — merged 2026-09-25 (PR #112).
    - 1d. **Indian gyms through Razorpay** (card or bank account; UPI, up to ₹15,000 a month, once Razorpay switches it on for the account; no GST until Kd is registered, then on top: RULINGS 2026-09-29). Subscriptions switched on by 2026-09-29. Split that day in three, as 1a–1c were:
      - 1d-i. [x] **Subscribe in rupees** — merged 2026-09-30 (PR #136).
-     - 1d-ii. [ ] **A failed payment paid, a card changed, a plan cancelled**, from the console.
+     - 1d-ii. [x] **A failed payment paid, a card changed, a plan cancelled** — merged 2026-10-01 (PR #144).
      - 1d-iii. [ ] **A bigger or smaller size** (Razorpay cannot change a UPI subscription: a new mandate for it).
    - 1e. [x] **Paddle's window filled in** — merged 2026-10-01 (PR #142).
 2. **Trials enforced** (split 2026-09-08 after Kd's trial-abuse ruling; no approval queue, ever).

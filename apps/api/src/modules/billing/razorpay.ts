@@ -40,6 +40,10 @@ export interface RazorpayApi {
   getSubscription(id: string): Promise<RazorpayResult<RazorpaySubscription>>;
   /** Cancel at once: nothing more is charged. */
   cancelSubscriptionNow(id: string): Promise<RazorpayResult<RazorpaySubscription>>;
+  /** Cancel when the month already paid for ends. Razorpay cannot take it back, and its record
+   *  does not show it: still `active`, the next charge still set (tried 2026-10-01). Asking
+   *  again answers the same. Refused for a plan not yet charged (`authenticated`). */
+  cancelSubscriptionAtCycleEnd(id: string): Promise<RazorpayResult<RazorpaySubscription>>;
   /** A subscription's invoices, the first page (Razorpay's default count, 10, raised to 100). */
   listSubscriptionInvoices(subscriptionId: string): Promise<RazorpayResult<RazorpayInvoice[]>>;
   getPayment(id: string): Promise<RazorpayResult<RazorpayPayment>>;
@@ -141,6 +145,11 @@ export function createRazorpayApi(opts: {
       const path = subPath(id);
       if (path === null) return { kind: "not_found" };
       return await call("POST", `${path}/cancel`, razorpaySubscriptionSchema, { cancel_at_cycle_end: 0 });
+    },
+    async cancelSubscriptionAtCycleEnd(id) {
+      const path = subPath(id);
+      if (path === null) return { kind: "not_found" };
+      return await call("POST", `${path}/cancel`, razorpaySubscriptionSchema, { cancel_at_cycle_end: 1 });
     },
     async listSubscriptionInvoices(subscriptionId) {
       if (!razorpaySubscriptionIdSchema.safeParse(subscriptionId).success) return { kind: "not_found" };

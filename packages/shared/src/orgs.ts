@@ -542,6 +542,10 @@ export const orgSubscriptionSchema = z.object({
    *  `cancelAtPeriodEnd`. Null during a free trial. */
   currentPeriodEnd: z.string().nullable().default(null),
   cancelAtPeriodEnd: z.boolean().default(false),
+  /** A plan paid through Razorpay that is set to end can be kept until this moment
+   *  (`PLAN_CANCEL_DECIDE_HOURS` before `currentPeriodEnd`); after it the cancel is with
+   *  Razorpay, which cannot take it back. Null otherwise. */
+  keepUntil: z.string().nullable().default(null),
   /** The gym has chosen a plan and paid for it through us (Paddle or Razorpay). In a trial this
    *  is only a paid trial made before 2026-09-30: its card saved and the first payment taken when
    *  the trial ends (`currentPeriodEnd`), `priceLabel` the plan's price. Paying now ends the
@@ -601,6 +605,10 @@ export const orgSubscriptionSchema = z.object({
  *  counted and Paddle's price changed then (Paddle takes no change within 30 minutes of a
  *  charge). */
 export const SMALLER_SIZE_DECIDE_HOURS = 3;
+
+/** A Razorpay plan set to end is sent to Razorpay this long before its paid month ends; until
+ *  then the gym can keep it (1d-ii). Razorpay cannot take a cancel back. */
+export const PLAN_CANCEL_DECIDE_HOURS = 3;
 export type OrgSubscription = z.infer<typeof orgSubscriptionSchema>;
 
 /** How long a gym's free trial lasts (Kd, RULINGS 2026-09-23). The seed writes

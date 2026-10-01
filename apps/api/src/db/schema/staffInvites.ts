@@ -1,4 +1,4 @@
-// Staff invited by email (Part 3 §10.3; ROADMAP 4a-i). Mirrors `0058_staff_invites.sql`.
+// Staff invited by email (Part 3 §10.3; ROADMAP 4a-i). Mirrors `0059_staff_invites.sql`.
 //
 // The address is kept readable: the owner must see whom they invited. It is the gym's
 // record, so the table is on `USER_LINKED_NOT_PURGED_TABLES` (who sent it, who answered

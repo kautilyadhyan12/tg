@@ -83,7 +83,10 @@ import {
   orgCheckoutSyncResponseSchema,
   orgMemberPageSchema,
   orgPlanChangePreviewSchema,
+  orgPlanCancelResponseSchema,
   orgPlanChangeResponseSchema,
+  orgRazorpayMethodResponseSchema,
+  orgRazorpayPayResponseSchema,
   orgOverviewResponseSchema,
   orgPlansResponseSchema,
   orgStaffMutationResponseSchema,
@@ -271,6 +274,26 @@ export const orgService = {
    *  dropped. Pressing it twice is harmless. */
   keepSize: (gymId) =>
     readThrough(orgPlanChangeResponseSchema, 'your size', authApi.delete(`/v1/orgs/${gymId}/billing/size/pending`)),
+
+  /** POST …/billing/razorpay/pay — Razorpay's own page for the oldest bill a plan paid through
+   *  Razorpay still owes (1d-ii). */
+  razorpayPayLink: (gymId) =>
+    readThrough(orgRazorpayPayResponseSchema, 'your bill', authApi.post(`/v1/orgs/${gymId}/billing/razorpay/pay`, {})),
+
+  /** POST …/billing/razorpay/method — what Razorpay's window needs to change the card or bank
+   *  account the plan is paid from. */
+  razorpayMethod: (gymId) =>
+    readThrough(orgRazorpayMethodResponseSchema, 'your payment method', authApi.post(`/v1/orgs/${gymId}/billing/razorpay/method`, {})),
+
+  /** POST …/billing/razorpay/refresh — the server reads the plan from Razorpay now. */
+  razorpayRefresh: (gymId) => authApi.post(`/v1/orgs/${gymId}/billing/razorpay/refresh`, {}),
+
+  /** PUT …/billing/cancel — a plan paid through Razorpay is set to end when its paid month
+   *  ends (one overdue ends now). Pressing it twice is harmless. */
+  cancelPlan: (gymId) => readThrough(orgPlanCancelResponseSchema, 'your plan', authApi.put(`/v1/orgs/${gymId}/billing/cancel`, {})),
+
+  /** DELETE …/billing/cancel — Keep my plan, while the cancel has not gone to Razorpay. */
+  keepPlan: (gymId) => readThrough(orgPlanCancelResponseSchema, 'your plan', authApi.delete(`/v1/orgs/${gymId}/billing/cancel`)),
 
   /** GET /v1/orgs/:gymId/hours — when this gym is open (Kd :26624, :26684).
    *
