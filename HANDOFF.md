@@ -4,6 +4,16 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-10-01 · 5c (Folder A): "Which software is your list in?" (branch `members-leaving-software`)
+
+- **Why this job:** next in Folder A (5b-vi waits for photo storage). Planned Risky with a column preset per product; Kd: *"go"*.
+- **Found while building:** no vendor publishes its member export's headings (19 products' help pages, their help-centre data and public GitHub code). Kd chose A: steps now, a product's preset with the first real file from it (RULINGS 2026-10-01). The job became a **screen job**: no server change, no review round.
+- **Built:** a box above Upload / Paste rows on Import, "Which software is your list in?": Glofox, Gym Insight, Gymdesk, GymMaster, Mindbody, TeamUp, WellnessLiving, Wodify, My own spreadsheet, Other software. A product shows its numbered steps, its page's warning (Mindbody's 10,000 box, Gymdesk's status tabs, TeamUp's filters), a link to its own help page, and "Saved cards, visit history, documents and photos don't come across in this file." Data in `@app/shared` `memberListSoftware.ts`; spec §11.7 notes who is left off and why.
+- **Sources:** every page opened and read 2026-10-01 (Mindbody's renders only in a browser: read in headless Edge; Glofox and Wodify through their help centres' article data).
+- **Worst thing, first test:** choosing a product changes nothing the upload sends (`contentBase64` and `mode` only), and nothing has to be chosen.
+- **Tests:** web 3,318/3,318 (`poseAssets.contract` local Node 24); the Import screen 50/50; shared 276/276; shared tsc and eslint 0; web eslint 0 on the two files; `vite build` green. Seen in headless Edge, dark and light, 1200 and 390 (`.cost/look-5c.mjs`); the empty choice was cut off on a phone, now "Choose your software".
+- **Next:** Kd's click-through, then merge on his word; then 4a in Folder A.
+
 ## 2026-09-30 · 5b-iv-b (Folder A): Add member warns "may already be on your list" (branch `members-add-warning`)
 
 - **Why this job:** next in Folder A, the last of Possible duplicates (RULINGS 2026-09-30). **Risky** (other people's records shown to staff), Opus xhigh; Kd: *"go"*. No migration, no new package, no new cost.

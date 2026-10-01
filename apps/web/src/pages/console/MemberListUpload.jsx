@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ClipboardPaste,
   Columns3,
+  ExternalLink,
   FileSpreadsheet,
   Loader2,
   Lock,
@@ -16,7 +17,15 @@ import {
   UserPlus,
   X,
 } from 'lucide-react';
-import { MEMBER_FILE_MAX_BYTES, MEMBER_LIST_PERMISSION_WORDS, memberListWarningWords } from '@app/shared';
+import {
+  MEMBER_FILE_MAX_BYTES,
+  MEMBER_LIST_NOT_IN_A_FILE_WORDS,
+  MEMBER_LIST_OTHER_SOFTWARE_STEPS,
+  MEMBER_LIST_PERMISSION_WORDS,
+  MEMBER_LIST_SOFTWARE,
+  MEMBER_LIST_SPREADSHEET_STEPS,
+  memberListWarningWords,
+} from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import {
   addedHere,
@@ -303,6 +312,62 @@ function HandEdits({ handEdits, words, checked, onChange }) {
 }
 
 /** The import box. Opened from the Members screen's "Import" card. */
+/** "Which software is your list in?" (§11.7; ROADMAP 5c): that product's own steps for
+ *  downloading its list, and the help page they come from. Nothing here changes how the
+ *  file is read: it is help, and the upload works the same whether anything is chosen. */
+function SoftwareSteps() {
+  const id = useId();
+  const [choice, setChoice] = useState('');
+  const product = MEMBER_LIST_SOFTWARE.find((s) => s.id === choice) ?? null;
+  const steps = product !== null ? product.steps : choice === 'spreadsheet' ? MEMBER_LIST_SPREADSHEET_STEPS : choice === 'other' ? MEMBER_LIST_OTHER_SOFTWARE_STEPS : null;
+  return (
+    <section className="c-card p-4 flex flex-col gap-3" data-testid="software">
+      <label htmlFor={id} className="c-s15 c-w6 c-t1">
+        Which software is your list in?
+      </label>
+      <select id={id} value={choice} onChange={(e) => setChoice(e.target.value)} className="c-input">
+        <option value="">Choose your software</option>
+        {MEMBER_LIST_SOFTWARE.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.name}
+          </option>
+        ))}
+        <option value="spreadsheet">My own spreadsheet</option>
+        <option value="other">Other software</option>
+      </select>
+      {steps !== null ? (
+        <ol className="flex flex-col gap-2 c-s14 c-t1" data-testid="software-steps">
+          {steps.map((step, i) => (
+            <li key={step} className="flex gap-2.5">
+              <span
+                aria-hidden="true"
+                className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center c-s13 c-w6"
+                style={{ background: 'var(--soft)', color: 'var(--soft-t)' }}
+              >
+                {i + 1}
+              </span>
+              <span className="pt-0.5">{step}</span>
+            </li>
+          ))}
+        </ol>
+      ) : null}
+      {product?.tip ? <p className="c-s14 c-t2">{product.tip}</p> : null}
+      {product !== null ? (
+        <p className="c-s13 c-t2 flex flex-wrap gap-x-3 gap-y-1">
+          <span>From {product.name}&apos;s help:</span>
+          {product.sources.map((source) => (
+            <a key={source.url} href={source.url} target="_blank" rel="noopener noreferrer" className="c-lk c-w6 inline-flex items-center gap-1">
+              {source.title}
+              <ExternalLink aria-hidden="true" className="w-3.5 h-3.5" />
+            </a>
+          ))}
+        </p>
+      ) : null}
+      {product !== null || choice === 'other' ? <p className="c-s14 c-t2">{MEMBER_LIST_NOT_IN_A_FILE_WORDS}</p> : null}
+    </section>
+  );
+}
+
 export default function MemberListUpload({ gymId, gym = null, words, readOnly, onClose, onImported }) {
   const titleId = useId();
   const dialogRef = useRef(null);
@@ -624,6 +689,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
   if (stage === 'upload') {
     body = (
       <>
+        <SoftwareSteps />
         {/* Two ways in, both in plain sight: a quiet second tab went unseen at Kd's
             click-through, so each carries its icon and full-strength words. */}
         <div role="tablist" className="grid grid-cols-2 gap-0.5 rounded-xl p-[3px] border" style={{ borderColor: 'var(--ctl-line)', background: 'var(--card)' }}>
