@@ -30,13 +30,17 @@ function loadScript() {
 /** Open Razorpay's window for the subscription our server made. `onEvent` hears `completed`
  *  (the mandate was given, or the first payment taken) and `closed`. Resolves once the window
  *  is asked to open; rejects when Razorpay's script cannot be loaded. */
-export async function openRazorpayCheckout({ keyId, subscriptionId, name, description, email, contact, onEvent }) {
+export async function openRazorpayCheckout({ keyId, subscriptionId, name, description, email, contact, onEvent, changeMethod = false }) {
   const Razorpay = await loadScript();
   const instance = new Razorpay({
     key: keyId,
     subscription_id: subscriptionId,
+    // The plan's card or bank account changed (1d-ii; Razorpay checkout's
+    // `subscription_card_change`): Razorpay checks the new one with ₹5 it refunds, and the plan
+    // is otherwise unchanged.
+    ...(changeMethod ? { subscription_card_change: 1 } : {}),
     name,
-    description,
+    ...(description ? { description } : {}),
     // Razorpay asks every payer for a mobile number and an email, unless the app already knows
     // them, as apps that sign in by mobile do (its checkout options `prefill`, `readonly` and
     // `hidden`, read 2026-09-29). The owner's sign-in email, and the mobile an Indian gym gave

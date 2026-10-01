@@ -16,6 +16,7 @@ import { processPaddleEvents } from "../src/modules/billing/events.js";
 import { gymSeatCap } from "../src/modules/orgs/repo.js";
 import { expireLapsedGymTrials } from "../src/modules/orgs/trialSweep.js";
 import { orgCheckoutResponseSchema } from "@app/shared";
+import { BILLING_LOCK_WAIT_MS, holdBillingSuiteLock } from "./billingSuiteLock.js";
 import { FakePaddle, paddleId } from "./fakePaddle.js";
 import { createMemoryRedis } from "../src/redis.js";
 
@@ -109,6 +110,12 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
     await sql`DELETE FROM users WHERE display_name LIKE 'billing-n1-%'`;
   };
 
+  // The other billing suite's worker sweeps every gym: the two take turns (billingSuiteLock.ts).
+  let releaseLock: (() => Promise<void>) | null = null;
+  beforeAll(async () => {
+    releaseLock = await holdBillingSuiteLock(sql);
+  }, BILLING_LOCK_WAIT_MS);
+
   beforeAll(async () => {
     await cleanup();
     for (const [code, cap, price, priceId] of [
@@ -132,6 +139,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
     await cleanup();
     await sql`DELETE FROM plans WHERE code IN (${SMALL}, ${MID}, ${BIG})`;
     await app?.close();
+    await releaseLock?.();
     await sql.end();
   }, HOOK_TIMEOUT_MS);
 
@@ -826,13 +834,15 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       await runWorker(GRACE_MS - 60_000);
       expect((await graceRow(a.subId))?.status).toBe("past_due");
       // Past 2 days: the plan stops, the console is read-only, and the gym is told why.
-      const run = await runWorker(GRACE_MS + 5000);
-      expect(run.gracesEnded).toBe(1);
+      // The sweep ends every gym's grace due, the Razorpay suite's too when it runs alongside:
+      // this gym's row and its one audit line are the proof, not the run's count.
+      expect((await runWorker(GRACE_MS + 5000)).gracesEnded).toBeGreaterThanOrEqual(1);
       expect(await graceRow(a.subId)).toMatchObject({ status: "expired", cancel_reason: "grace_expired" });
       gym = await myGym(a.gymId, a.cookies);
       expect(gym).toMatchObject({ subscription: null, consoleReadOnly: true, paymentOverdue: true });
       // Twice changes nothing.
-      expect((await runWorker(GRACE_MS + 10_000)).gracesEnded).toBe(0);
+      await runWorker(GRACE_MS + 10_000);
+      expect(await graceRow(a.subId)).toMatchObject({ status: "expired", cancel_reason: "grace_expired" });
       expect(await sql`SELECT 1 FROM audit_log WHERE gym_id = ${a.gymId} AND action = 'billing.grace_ended'`).toHaveLength(1);
 
       // The fix is the card, never a second plan.

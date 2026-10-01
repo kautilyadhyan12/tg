@@ -48,7 +48,7 @@
 // answers with the date its OLD trial ran out. A reader keying on "is this field
 // set" would put "Trial — 0 days left" on a gym that has been paying for a year.
 // Unreachable today only because nothing leaves `trialing`; pinned by a test.
-import { orgWords, PAID_PLAN_GRACE_DAYS, SMALLER_SIZE_DECIDE_HOURS } from '@app/shared';
+import { orgWords, PAID_PLAN_GRACE_DAYS, PLAN_CANCEL_DECIDE_HOURS, SMALLER_SIZE_DECIDE_HOURS } from '@app/shared';
 import { calendarDaysBetween } from '../../utils/joinClock';
 import { getItem, setItem } from '../../utils/storage';
 import { viewerPrivileges } from './consoleView';
@@ -169,30 +169,124 @@ export function consoleReadOnlyBanner(orgType) {
 }
 
 /** The read-only banner when a paid plan's payment is overdue (its grace ended): the fix
- *  is the payment method, which pays what is owed and opens everything again. Staff who
- *  cannot manage billing are told who can, never to press a button they are not shown.
- *  A plan paid through Razorpay is paid from Razorpay's own email (1d-i). */
+ *  is paying what is owed, which opens everything again — on Paddle's page by updating the
+ *  payment method, or with Pay now for a plan paid through Razorpay (1d-ii). Staff who cannot
+ *  manage billing are told who can, never to press a button they are not shown. */
 export function paymentOverdueBanner(orgType, canPay, through = 'paddle') {
   const words = orgWords(orgType);
   const fix =
     through === 'razorpay'
-      ? `${RAZORPAY_OVERDUE}; once it's paid, everything opens again by itself.`
+      ? canPay
+        ? "Press Pay now to pay it; once it's paid, everything opens again by itself."
+        : "Whoever manages billing can pay it; once it's paid, everything opens again by itself."
       : canPay
         ? 'Update your payment method to pay now; Paddle also tries your card again by itself.'
         : 'Whoever manages billing can update the payment method; Paddle also tries the card again by itself.';
   return `A payment for your ${words.it} is overdue. Nothing here can be changed and your ${words.people} get the free app only until it is paid. ${fix}`;
 }
 
-/** Who is told of an Indian gym's failed payment (1d-i): Razorpay emails its customer — the
- *  gym's owner, whose email its window is given — and its email is for changing the card, not
- *  for paying (its "Payment Retries" page, read 2026-09-30). Nothing here takes the payment
- *  yet (1d-ii), so no link to pay is promised. */
-export const RAZORPAY_OVERDUE = "Razorpay has emailed the gym's owner about it";
-
-/** Paid through Razorpay (an Indian gym, 1d-i): its size and how it pays are not changed
- *  here yet, so neither button is drawn. */
+/** Paid through Razorpay (an Indian gym, 1d-i). Its bill is paid, its card or bank account
+ *  changed and the plan cancelled from the plan card (1d-ii); its size is not changed here yet. */
 export function isPaidThroughRazorpay(org) {
   return org?.subscription?.paidThrough === 'razorpay';
+}
+
+/** A plan paid through Razorpay — live, or overdue with the console read-only — and a viewer
+ *  who manages billing: Pay now and Update payment method are drawn for them. The server
+ *  refuses anyone else. */
+export function canManageRazorpayPlan(org) {
+  return (
+    canManageBilling(viewerPrivileges(org)) &&
+    (isPaidThroughRazorpay(org) || (org?.paymentOverdue === true && org?.paymentOverdueThrough === 'razorpay'))
+  );
+}
+
+/** Is a bill of the Razorpay plan owed: a payment failed (still in its grace), or the grace ran
+ *  out and the console is read-only until it is paid. */
+export function razorpayBillOwed(org) {
+  return (
+    (isPaidThroughRazorpay(org) && org?.subscription?.status === 'past_due') ||
+    (org?.paymentOverdue === true && org?.paymentOverdueThrough === 'razorpay')
+  );
+}
+
+/** MAY THIS VIEWER CANCEL THE RAZORPAY PLAN HERE? A live plan not already set to end. */
+export function canCancelRazorpayPlan(org) {
+  const sub = org?.subscription;
+  return (
+    canManageRazorpayPlan(org) &&
+    sub?.cancelAtPeriodEnd !== true &&
+    (sub?.status === 'active' || sub?.status === 'trialing' || sub?.status === 'past_due') &&
+    !consoleIsReadOnly(org)
+  );
+}
+
+/** MAY THIS VIEWER KEEP A RAZORPAY PLAN SET TO END? Until the cancel goes to Razorpay, in the
+ *  hours before the paid month ends (the server's `keepUntil`); Razorpay cannot take it back. */
+export function canKeepRazorpayPlan(org, now = Date.now()) {
+  const sub = org?.subscription;
+  const until = Date.parse(sub?.keepUntil ?? '');
+  return canManageRazorpayPlan(org) && sub?.cancelAtPeriodEnd === true && Number.isFinite(until) && until > now;
+}
+
+/** The line under a Razorpay plan set to end: until when it can be kept, or that it can't. */
+export function planEndingText(org, now = Date.now()) {
+  const sub = org?.subscription;
+  if (!isPaidThroughRazorpay(org) || sub?.cancelAtPeriodEnd !== true) return null;
+  if (canKeepRazorpayPlan(org, now)) return `You cancelled this plan. You can keep it until ${momentLabel(sub.keepUntil)}.`;
+  return "You cancelled this plan. It's too close to its end to keep it now; you can choose a plan again once it ends.";
+}
+
+/** THE BOX BEFORE "CANCEL PLAN": when the plan ends, what is charged, and what happens to the
+ *  members, in one line each (Kd, RULINGS 2026-09-26: a box names who changes before anything
+ *  changes people). `{ title, lines, confirm }`, or null when the plan can't be cancelled here. */
+export function cancelBox(org, now = Date.now()) {
+  if (!canCancelRazorpayPlan(org)) return null;
+  const sub = org.subscription;
+  const words = orgWords(org?.orgType);
+  const used = org?.seatsUsed;
+  const counted = Number.isFinite(used) && used > 0;
+  const people = counted ? `Your ${countOf(used, org?.orgType)}` : `Your ${words.people}`;
+  const one = counted && used === 1;
+  const keep = one ? 'keeps' : 'keep';
+  const get = one ? 'gets' : 'get';
+  if (sub.status === 'past_due') {
+    return {
+      title: 'Cancel your plan now?',
+      lines: [
+        "A payment didn't go through, so your plan ends now. The unpaid payment isn't collected, and nothing more is charged.",
+        `${people} ${get} the free app only from now.`,
+      ],
+      confirm: 'Cancel plan now',
+    };
+  }
+  const date = trialEndDateLabel(sub.currentPeriodEnd);
+  const end = Date.parse(sub.currentPeriodEnd ?? '');
+  const deadline = Number.isFinite(end) ? end - PLAN_CANCEL_DECIDE_HOURS * 60 * 60 * 1000 : null;
+  const mind =
+    deadline !== null && deadline > now
+      ? `You can change your mind until ${momentLabel(new Date(deadline).toISOString())}.`
+      : "It's too close to the end to change your mind after this.";
+  if (sub.status === 'trialing') {
+    return {
+      title: 'Cancel your plan?',
+      lines: [
+        `Your plan ends with your free trial, on ${date ?? 'its last day'}. Nothing is charged.`,
+        `${people} ${keep} everything until then.`,
+        mind,
+      ],
+      confirm: 'Cancel plan',
+    };
+  }
+  return {
+    title: 'Cancel your plan?',
+    lines: [
+      `Your plan ends on ${date ?? 'the last day you paid for'}, the end of the month you paid for. Nothing more is charged.`,
+      `${people} ${keep} everything until then.`,
+      mind,
+    ],
+    confirm: 'Cancel plan',
+  };
 }
 
 /** THE LINE UNDER THE PRICES when the gym can pay online. An Indian gym pays through
@@ -673,7 +767,9 @@ export function bannerFor(org, now = Date.now()) {
       key: 'past_due',
       tone: 'warn',
       text: isPaidThroughRazorpay(org)
-        ? `A payment for your ${words.it} didn't go through. Razorpay tries again by itself, and has emailed the gym's owner about it. Your ${words.people} keep everything for ${PAID_PLAN_GRACE_DAYS} days after a failed payment.`
+        ? canManageBilling(viewerPrivileges(org))
+          ? `A payment for your ${words.it} didn't go through. Razorpay tries again by itself, or you can pay now under Plan on the Overview. Your ${words.people} keep everything for ${PAID_PLAN_GRACE_DAYS} days after a failed payment.`
+          : `A payment for your ${words.it} didn't go through. Razorpay tries again by itself, or whoever manages billing can pay it now. Your ${words.people} keep everything for ${PAID_PLAN_GRACE_DAYS} days after a failed payment.`
         : canManageBilling(viewerPrivileges(org))
         ? `A payment for your ${words.it} didn't go through. Paddle will try your card again by itself, or you can update your payment method under Plan on the Overview. Your ${words.people} keep everything for ${PAID_PLAN_GRACE_DAYS} days after a failed payment.`
         : `A payment for your ${words.it} didn't go through. Paddle will try the card again by itself, or whoever manages billing can update the payment method. Your ${words.people} keep everything for ${PAID_PLAN_GRACE_DAYS} days after a failed payment.`,

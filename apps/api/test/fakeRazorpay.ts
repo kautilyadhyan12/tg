@@ -20,6 +20,9 @@ export class FakeRazorpay implements RazorpayApi {
   invoices = new Map<string, RazorpayInvoice[]>();
   payments = new Map<string, RazorpayPayment>();
   cancelled: string[] = [];
+  /** Subscriptions asked to end when their month ends (1d-ii). Razorpay's record does not
+   *  show it (tried 2026-10-01): it stays `active` with its next charge set. */
+  endAtCycleEnd = new Set<string>();
   refunds: string[] = [];
   /** Every subscription asked for, as asked. */
   created: { planId: string; startAt: Date | null; notes: Record<string, string> }[] = [];
@@ -96,10 +99,37 @@ export class FakeRazorpay implements RazorpayApi {
     if (this.down) return Promise.resolve({ kind: "unavailable", status: 503 });
     const sub = this.subs.get(id);
     if (sub === undefined) return Promise.resolve({ kind: "not_found" });
+    // Razorpay refuses to cancel a plan it has ended ("Subscription is not cancellable in
+    // cancelled status.", tried 2026-10-01).
+    if (sub.status === "cancelled" || sub.status === "completed" || sub.status === "expired") {
+      return Promise.resolve({ kind: "refused", status: 400, code: "BAD_REQUEST_ERROR" });
+    }
     this.cancelled.push(id);
     const ended = { ...sub, status: "cancelled" as const, ended_at: this.clock, charge_at: null };
     this.subs.set(id, ended);
     return Promise.resolve({ kind: "ok", value: ended });
+  }
+
+  cancelSubscriptionAtCycleEnd(id: string): Promise<RazorpayResult<RazorpaySubscription>> {
+    if (this.down) return Promise.resolve({ kind: "unavailable", status: 503 });
+    const sub = this.subs.get(id);
+    if (sub === undefined) return Promise.resolve({ kind: "not_found" });
+    // Razorpay refuses it for a plan with no month started yet.
+    if (sub.status !== "active" && sub.status !== "pending" && sub.status !== "halted") {
+      return Promise.resolve({ kind: "refused", status: 400, code: "BAD_REQUEST_ERROR" });
+    }
+    this.endAtCycleEnd.add(id);
+    return Promise.resolve({ kind: "ok", value: { ...sub } });
+  }
+
+  /** The month ends at Razorpay: a plan asked to end then is cancelled, any other is charged. */
+  endCycle(id: string): void {
+    const sub = this.sub(id);
+    if (this.endAtCycleEnd.has(id)) {
+      this.subs.set(id, { ...sub, status: "cancelled", ended_at: sub.current_end ?? this.clock, charge_at: null });
+      return;
+    }
+    this.charge(id);
   }
 
   listSubscriptionInvoices(subscriptionId: string): Promise<RazorpayResult<RazorpayInvoice[]>> {
@@ -137,6 +167,44 @@ export class FakeRazorpay implements RazorpayApi {
     return sub;
   }
 
+  /** An invoice as Razorpay lists it: made now (each one a second after the last, so the newest
+   *  is always last), with its own page. */
+  private invoiceSeq = 0;
+  private invoice(fields: Omit<RazorpayInvoice, "id" | "entity" | "created_at" | "short_url">): RazorpayInvoice {
+    this.invoiceSeq += 1;
+    const id = razorpayId("inv");
+    return { id, entity: "invoice", created_at: this.clock + this.invoiceSeq, short_url: `https://rzp.io/rzp/${id.slice(4, 12)}`, ...fields };
+  }
+
+  /** A month's bill Razorpay made for a halted plan and did not charge (its "Payment Retries"
+   *  page): owed until it is paid from its own page. */
+  billUncharged(id: string): void {
+    const sub = this.sub(id);
+    const plan = this.plans.get(sub.plan_id);
+    if (plan === undefined) throw new Error("fake Razorpay lost a plan");
+    const list = this.invoices.get(id) ?? [];
+    // The month after the last one billed.
+    const from = list.reduce((end, i) => Math.max(end, i.billing_end ?? 0), sub.current_end ?? this.clock);
+    list.push(this.invoice({ status: "issued", subscription_id: id, payment_id: null, amount_paid: 0, amount_due: plan.item.amount, paid_at: null, billing_end: from + MONTH_S }));
+    this.invoices.set(id, list);
+  }
+
+  /** One owed bill paid from its own page: the plan's state is left as Razorpay left it. */
+  payInvoice(invoiceId: string): void {
+    for (const [subId, list] of this.invoices) {
+      const index = list.findIndex((i) => i.id === invoiceId);
+      const inv = list[index];
+      if (inv === undefined) continue;
+      const paymentId = razorpayId("pay");
+      const amount = inv.amount_due ?? 0;
+      this.payments.set(paymentId, { id: paymentId, entity: "payment", amount, currency: "INR", status: "captured", amount_refunded: 0 });
+      list[index] = { ...inv, status: "paid", payment_id: paymentId, amount_paid: amount, amount_due: 0, paid_at: this.clock };
+      this.invoices.set(subId, list);
+      return;
+    }
+    throw new Error(`fake Razorpay has no invoice ${invoiceId}`);
+  }
+
   /** The window is paid: with a start date the mandate is given and nothing charged yet;
    *  without one the first payment is taken at once. */
   authenticate(id: string): void {
@@ -159,7 +227,7 @@ export class FakeRazorpay implements RazorpayApi {
     const paymentId = razorpayId("pay");
     this.payments.set(paymentId, { id: paymentId, entity: "payment", amount: plan.item.amount, currency: plan.item.currency, status: "captured", amount_refunded: 0 });
     const list = this.invoices.get(id) ?? [];
-    list.push({ id: razorpayId("inv"), entity: "invoice", status: "paid", subscription_id: id, payment_id: paymentId, amount_paid: plan.item.amount, amount_due: 0, paid_at: this.clock });
+    list.push(this.invoice({ status: "paid", subscription_id: id, payment_id: paymentId, amount_paid: plan.item.amount, amount_due: 0, paid_at: this.clock, billing_end: start + MONTH_S }));
     this.invoices.set(id, list);
     this.subs.set(id, {
       ...sub,
@@ -179,7 +247,9 @@ export class FakeRazorpay implements RazorpayApi {
     const plan = this.plans.get(sub.plan_id);
     const list = this.invoices.get(id) ?? [];
     if (sub.status !== "pending" && sub.status !== "halted" && plan !== undefined) {
-      list.push({ id: razorpayId("inv"), entity: "invoice", status: "issued", subscription_id: id, payment_id: null, amount_paid: 0, amount_due: plan.item.amount, paid_at: null });
+      // The bill is for the month starting where the paid one ends.
+      const from = sub.current_end ?? this.clock;
+      list.push(this.invoice({ status: "issued", subscription_id: id, payment_id: null, amount_paid: 0, amount_due: plan.item.amount, paid_at: null, billing_end: from + MONTH_S }));
       this.invoices.set(id, list);
     }
     this.subs.set(id, { ...sub, status });

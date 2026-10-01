@@ -37,4 +37,13 @@ describe("Razorpay's window", () => {
     expect(made[0].hidden).toEqual({ email: true, contact: false });
     expect(made[0].readonly).toEqual({ email: true, contact: false });
   });
+
+  it('changes the card or bank account of the plan only when asked to (1d-ii)', async () => {
+    const made = fakeRazorpay();
+    await openRazorpayCheckout({ keyId: 'rzp_test_AAAAAAAAAAAAAA', subscriptionId: 'sub_AAAAAAAAAAAAAA', name: 'Pune Fitness', email: null, contact: null, changeMethod: true, onEvent: vi.fn() });
+    expect(made[0]).toMatchObject({ subscription_id: 'sub_AAAAAAAAAAAAAA', subscription_card_change: 1 });
+    expect(made[0]).not.toHaveProperty('description');
+    await openRazorpayCheckout({ keyId: 'rzp_test_AAAAAAAAAAAAAA', subscriptionId: 'sub_AAAAAAAAAAAAAA', name: 'Pune Fitness', description: 'x', email: null, contact: null, onEvent: vi.fn() });
+    expect(made[1]).not.toHaveProperty('subscription_card_change');
+  });
 });

@@ -7,6 +7,7 @@ import {
   MEMBER_LIST_BY_HAND_WORDS,
   JOIN_CODE_LENGTH,
   ORG_TYPES_PHRASE,
+  PLAN_CANCEL_DECIDE_HOURS,
   SMALLER_SIZE_DECIDE_HOURS,
   currencyForCountry,
   normaliseIndianMobile,
@@ -1190,6 +1191,12 @@ export function toOrgSubscription(row: repo.GymSubscriptionRow, fallback: { code
     priceLabel: paid ? formatPriceMinor(row.priceMinor, row.currency) : null,
     currentPeriodEnd: paid ? (row.currentPeriodEnd?.toISOString() ?? null) : null,
     cancelAtPeriodEnd: paid && row.cancelAtPeriodEnd,
+    // Razorpay cannot take a cancel back: it can be kept until it is sent, in the hours before
+    // the paid month ends (1d-ii). Paddle's own page keeps a Paddle plan.
+    keepUntil:
+      paidThrough === "razorpay" && paid && row.status !== "past_due" && row.cancelAtPeriodEnd && row.cancelSentAt === null && row.currentPeriodEnd !== null
+        ? new Date(row.currentPeriodEnd.getTime() - PLAN_CANCEL_DECIDE_HOURS * 60 * 60 * 1000).toISOString()
+        : null,
     subscribed,
     paidThrough,
     // The chosen size waits for the first payment: through the trial, and a failed charge.

@@ -1,4 +1,4 @@
-// An Indian gym pays through Razorpay (ROADMAP Stage 3 item 1d-i), against real Postgres with
+// An Indian gym pays through Razorpay (ROADMAP Stage 3 items 1d-i and 1d-ii), against real Postgres with
 // a fake Razorpay in place of Razorpay's API. DATABASE_URL-gated.
 //
 // THE WORST THING THIS JOB COULD DO: open a paid plan for a gym that has not paid — a "paid"
@@ -16,6 +16,7 @@ import { gymSeatCap } from "../src/modules/orgs/repo.js";
 import { expireLapsedGymTrials } from "../src/modules/orgs/trialSweep.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { orgCheckoutResponseSchema } from "@app/shared";
+import { BILLING_LOCK_WAIT_MS, holdBillingSuiteLock } from "./billingSuiteLock.js";
 import { FakeRazorpay } from "./fakeRazorpay.js";
 
 const url = process.env["DATABASE_URL"];
@@ -94,6 +95,12 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
     await sql`DELETE FROM users WHERE email LIKE 'billing-rzp-%@example.com'`;
   };
 
+  // The other billing suite's worker sweeps every gym: the two take turns (billingSuiteLock.ts).
+  let releaseLock: (() => Promise<void>) | null = null;
+  beforeAll(async () => {
+    releaseLock = await holdBillingSuiteLock(sql);
+  }, BILLING_LOCK_WAIT_MS);
+
   beforeAll(async () => {
     await cleanup();
     for (const [code, cap, price, planId] of [
@@ -118,6 +125,7 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
     await sql`DELETE FROM plans WHERE code IN (${SMALL}, ${BIG})`;
     await app?.close();
     await noRazorpay?.close();
+    await releaseLock?.();
     await sql.end();
   }, HOOK_TIMEOUT_MS);
 
@@ -481,8 +489,10 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
       // Razorpay gives up retrying (halted) after the grace: still unpaid.
       razorpay.fail(win.subscriptionId, "halted");
       await signedWebhook(win.subscriptionId, "subscription.halted");
-      expect((await runWorker(2 * DAY_MS + 5000)).gracesEnded).toBe(1);
+      // The sweep ends every gym's grace due, other test files' too: this gym's row is the proof.
+      expect((await runWorker(2 * DAY_MS + 5000)).gracesEnded).toBeGreaterThanOrEqual(1);
       expect(await paidRows(a.gymId)).toEqual([{ status: "expired", provider_ref: win.subscriptionId, cancel_reason: "grace_expired" }]);
+      expect(await sql`SELECT 1 FROM audit_log WHERE gym_id = ${a.gymId} AND action = 'billing.grace_ended'`).toHaveLength(1);
       expect(await myGym(a.gymId, a.cookies)).toMatchObject({ consoleReadOnly: true, paymentOverdue: true, paymentOverdueThrough: "razorpay" });
       // A second plan would charge twice: the overdue one is paid instead.
       expect(JSON.parse((await checkout(a.gymId, a.cookies, BIG)).body)).toMatchObject({ error: "payment_overdue" });
@@ -730,6 +740,610 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
       const win = opened(await checkout(a.gymId, a.cookies, BIG));
       expect([403, 404]).toContain((await sync(a.gymId, win.checkoutId, stranger.cookies)).statusCode);
       expect((await post(`/v1/orgs/${a.gymId}/billing/checkout`, { planCode: 7 }, a.cookies, { "idempotency-key": "k-bad" })).statusCode).toBe(400);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // ── 1d-ii: a plan paid through Razorpay, managed from the console ──────────────
+
+  const HOUR_MS = 60 * 60 * 1000;
+  const put = (path: string, cookies: Cookies) => api().inject({ method: "PUT", url: path, remoteAddress: nextIp(), headers: { "content-type": "application/json" }, cookies, payload: "{}" });
+  const del = (path: string, cookies: Cookies) => api().inject({ method: "DELETE", url: path, remoteAddress: nextIp(), cookies });
+  const cancelPlan = (gymId: string, cookies: Cookies) => put(`/v1/orgs/${gymId}/billing/cancel`, cookies);
+  const keepPlan = (gymId: string, cookies: Cookies) => del(`/v1/orgs/${gymId}/billing/cancel`, cookies);
+  const payLink = (gymId: string, cookies: Cookies) => post(`/v1/orgs/${gymId}/billing/razorpay/pay`, {}, cookies);
+  const method = (gymId: string, cookies: Cookies) => post(`/v1/orgs/${gymId}/billing/razorpay/method`, {}, cookies);
+  const refresh = (gymId: string, cookies: Cookies) => post(`/v1/orgs/${gymId}/billing/razorpay/refresh`, {}, cookies);
+  const planRow = async (gymId: string) =>
+    (
+      await sql<{ status: string; cancel_at_period_end: boolean; cancel_sent_at: Date | null; current_period_end: Date | null; ended_at: Date | null }[]>`
+        SELECT status, cancel_at_period_end, cancel_sent_at, current_period_end, ended_at FROM subscriptions
+        WHERE owner_type = 'gym' AND owner_id = ${gymId} AND provider = 'razorpay' ORDER BY created_at DESC LIMIT 1`
+    )[0];
+  /** A gym on a paid month through Razorpay, its month started a day ago (Razorpay's clock is set
+   *  from now, so the month's end is ahead of the worker's clock whatever day the suite runs; a
+   *  day back, so the first payment is never in the same second as a test's Cancel). */
+  const paidPlan = async () => {
+    razorpay.clock = Math.floor(Date.now() / 1000) - 24 * 60 * 60;
+    const a = await owner();
+    const win = opened(await checkout(a.gymId, a.cookies, BIG));
+    razorpay.authenticate(win.subscriptionId);
+    expect(JSON.parse((await sync(a.gymId, win.checkoutId, a.cookies)).body)).toMatchObject({ state: "paid" });
+    const end = (await planRow(a.gymId))?.current_period_end;
+    if (end === null || end === undefined) throw new Error("no period end");
+    return { ...a, sub: win.subscriptionId, end };
+  };
+  /** The worker run this long before (negative) or after the plan's month ends. */
+  const runAt = (end: Date, fromEnd: number) => runWorker(end.getTime() + fromEnd - Date.now());
+  /** Razorpay's month for this plan ends `ms` from now; the console's refresh writes it. */
+  const endsIn = async (p: { gymId: string; sub: string; cookies: Cookies }, ms: number) => {
+    const s = razorpay.subs.get(p.sub);
+    if (s === undefined) throw new Error("no subscription");
+    const end = Math.floor((Date.now() + ms) / 1000);
+    razorpay.subs.set(p.sub, { ...s, current_end: end, charge_at: end });
+    expect((await refresh(p.gymId, p.cookies)).statusCode).toBe(204);
+    return new Date(end * 1000);
+  };
+
+  it(
+    "WORST THING: Cancel plan never ends a gym's plan before the month it paid for ends, and nobody but its own billing staff can cancel, pay or change it",
+    async () => {
+      const a = await paidPlan();
+      const b = await paidPlan();
+      const trainer = await makeUser();
+      const manager = await makeUser();
+      await addStaff(a.gymId, trainer.userId, "trainer", ["members.read", "codes.invite"]);
+      await addStaff(a.gymId, manager.userId, "manager", ["members.read", "org.manage"]);
+      for (const [who, status] of [
+        [b, 404],
+        [trainer, 403],
+        [manager, 403],
+      ] as const) {
+        expect((await cancelPlan(a.gymId, who.cookies)).statusCode).toBe(status);
+        expect((await keepPlan(a.gymId, who.cookies)).statusCode).toBe(status);
+        expect((await payLink(a.gymId, who.cookies)).statusCode).toBe(status);
+        expect((await method(a.gymId, who.cookies)).statusCode).toBe(status);
+        expect((await refresh(a.gymId, who.cookies)).statusCode).toBe(status);
+      }
+      expect(await planRow(a.gymId)).toMatchObject({ status: "active", cancel_at_period_end: false });
+
+      // The owner cancels: the plan is the gym's to the end of the month it paid for.
+      const res = await cancelPlan(a.gymId, a.cookies);
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body)).toMatchObject({
+        subscription: {
+          status: "active",
+          cancelAtPeriodEnd: true,
+          currentPeriodEnd: a.end.toISOString(),
+          keepUntil: new Date(a.end.getTime() - 3 * HOUR_MS).toISOString(),
+          seatCap: 5000,
+        },
+      });
+      expect(await planRow(b.gymId)).toMatchObject({ status: "active", cancel_at_period_end: false });
+      expect(razorpay.endAtCycleEnd.has(a.sub)).toBe(false);
+
+      // Razorpay's record of it, still `active` as the real one stays, changes nothing; nor do
+      // the worker's runs until the hours before the end.
+      expect((await signedWebhook(a.sub, "subscription.charged")).statusCode).toBe(200);
+      await runWorker();
+      await runAt(a.end, -DAY_MS);
+      expect(await planRow(a.gymId)).toMatchObject({ status: "active", cancel_at_period_end: true, cancel_sent_at: null });
+      expect(razorpay.endAtCycleEnd.has(a.sub)).toBe(false);
+      expect(await myGym(a.gymId, a.cookies)).toMatchObject({ consoleReadOnly: false, subscription: { status: "active", cancelAtPeriodEnd: true } });
+      expect(await gymSeatCap(sql, a.gymId)).toBe(5000);
+
+      // Two hours before the end it goes to Razorpay, to end with the month; still the gym's.
+      await runAt(a.end, -2 * HOUR_MS);
+      expect(razorpay.endAtCycleEnd.has(a.sub)).toBe(true);
+      expect(razorpay.cancelled).not.toContain(a.sub);
+      expect(await planRow(a.gymId)).toMatchObject({ status: "active", cancel_at_period_end: true });
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ status: "active", keepUntil: null });
+
+      // Razorpay ends it when the month ends, and so does the gym's plan.
+      razorpay.endCycle(a.sub);
+      await signedWebhook(a.sub, "subscription.cancelled");
+      await runAt(a.end, 60_000);
+      expect(await planRow(a.gymId)).toMatchObject({ status: "expired" });
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toBeNull();
+      // The other gym was never touched.
+      expect(await planRow(b.gymId)).toMatchObject({ status: "active", cancel_at_period_end: false });
+      expect(razorpay.endAtCycleEnd.has(b.sub)).toBe(false);
+      expect(await sql`SELECT 1 FROM audit_log WHERE gym_id = ${a.gymId} AND action = 'billing.cancel_requested' AND actor_user_id = ${a.userId}`).toHaveLength(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "Keep my plan undoes a cancel until it goes to Razorpay, then says it is too late",
+    async () => {
+      const a = await paidPlan();
+      expect((await cancelPlan(a.gymId, a.cookies)).statusCode).toBe(200);
+      const kept = await keepPlan(a.gymId, a.cookies);
+      expect(JSON.parse(kept.body)).toMatchObject({ subscription: { cancelAtPeriodEnd: false, keepUntil: null } });
+      expect(await sql`SELECT action FROM audit_log WHERE gym_id = ${a.gymId} AND action LIKE 'billing.cancel_%' AND actor_user_id = ${a.userId} ORDER BY at, id`).toEqual([
+        { action: "billing.cancel_requested" },
+        { action: "billing.cancel_withdrawn" },
+      ]);
+      // Kept: nothing goes to Razorpay, and the month renews.
+      await runAt(a.end, -2 * HOUR_MS);
+      expect(razorpay.endAtCycleEnd.has(a.sub)).toBe(false);
+      razorpay.clock = Math.floor(a.end.getTime() / 1000);
+      razorpay.endCycle(a.sub);
+      await signedWebhook(a.sub, "subscription.charged");
+      await runAt(a.end, 60_000);
+      const renewed = await planRow(a.gymId);
+      expect(renewed).toMatchObject({ status: "active", cancel_at_period_end: false });
+      expect(renewed?.current_period_end?.getTime()).toBeGreaterThan(a.end.getTime());
+
+      // Cancelled with under three hours left: it goes to Razorpay at once, and can't be kept.
+      // (Another gym: this one's last answer was written by a worker run a month ahead.)
+      const c = await paidPlan();
+      await endsIn(c, 2 * HOUR_MS);
+      const late = JSON.parse((await cancelPlan(c.gymId, c.cookies)).body) as { subscription: { keepUntil: string | null; cancelAtPeriodEnd: boolean } };
+      expect(late.subscription).toMatchObject({ cancelAtPeriodEnd: true, keepUntil: null });
+      expect(razorpay.endAtCycleEnd.has(c.sub)).toBe(true);
+      const refused = await keepPlan(c.gymId, c.cookies);
+      expect(refused.statusCode).toBe(409);
+      expect(JSON.parse(refused.body)).toMatchObject({ error: "cancel_sent" });
+      expect((JSON.parse(refused.body) as { message: string }).message).toMatch(/^Your plan ends on .+, and it's too close to then to keep it\./);
+      expect(await planRow(c.gymId)).toMatchObject({ status: "active", cancel_at_period_end: true });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "within the last three hours Keep my plan is refused even before the cancel is sent, and a cancel Razorpay refuses is sent again",
+    async () => {
+      const a = await paidPlan();
+      expect((await cancelPlan(a.gymId, a.cookies)).statusCode).toBe(200);
+      await endsIn(a, 2 * HOUR_MS);
+      // The worker has not run yet: the cancel is still ours alone, but too close to send late.
+      expect(await planRow(a.gymId)).toMatchObject({ cancel_sent_at: null });
+      expect((await keepPlan(a.gymId, a.cookies)).statusCode).toBe(409);
+
+      razorpay.down = true;
+      try {
+        const run = await runWorker();
+        expect(run.cancels).toMatchObject({ sent: 0, failed: 1 });
+      } finally {
+        razorpay.down = false;
+      }
+      expect(await planRow(a.gymId)).toMatchObject({ cancel_at_period_end: true, cancel_sent_at: null });
+      expect((await keepPlan(a.gymId, a.cookies)).statusCode).toBe(409);
+      expect((await runWorker()).cancels).toMatchObject({ sent: 1, failed: 0 });
+      expect(razorpay.endAtCycleEnd.has(a.sub)).toBe(true);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "two workers at once send a cancel once; two presses at once set it once",
+    async () => {
+      const a = await paidPlan();
+      const [one, two] = await Promise.all([cancelPlan(a.gymId, a.cookies), cancelPlan(a.gymId, a.cookies)]);
+      expect([one.statusCode, two.statusCode]).toEqual([200, 200]);
+      expect(await sql`SELECT 1 FROM audit_log WHERE gym_id = ${a.gymId} AND action = 'billing.cancel_requested'`).toHaveLength(1);
+
+      const asked: string[] = [];
+      const real = razorpay.cancelSubscriptionAtCycleEnd.bind(razorpay);
+      razorpay.cancelSubscriptionAtCycleEnd = (id: string) => {
+        asked.push(id);
+        return real(id);
+      };
+      try {
+        await Promise.all([runAt(a.end, -2 * HOUR_MS), runAt(a.end, -2 * HOUR_MS), runAt(a.end, -HOUR_MS)]);
+      } finally {
+        razorpay.cancelSubscriptionAtCycleEnd = real;
+      }
+      expect(asked.filter((id) => id === a.sub)).toHaveLength(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a month Razorpay charges after a cancel — the worker was down — ends the plan at its paid end and is refunded in full",
+    async () => {
+      const a = await paidPlan();
+      const firstPayment = razorpay.invoices.get(a.sub)?.[0]?.payment_id;
+      expect((await cancelPlan(a.gymId, a.cookies)).statusCode).toBe(200);
+      // No worker ran before the end, so Razorpay was never told and charges the next month.
+      razorpay.clock = Math.floor(a.end.getTime() / 1000);
+      razorpay.endCycle(a.sub);
+      const lateInvoice = razorpay.invoices.get(a.sub)?.at(-1);
+      expect(lateInvoice?.status).toBe("paid");
+      await signedWebhook(a.sub, "subscription.charged");
+      await runAt(a.end, 10 * 60_000);
+      expect(await planRow(a.gymId)).toMatchObject({ status: "expired", cancel_at_period_end: true });
+      expect(razorpay.cancelled).toContain(a.sub);
+      expect(await sql`SELECT transaction_ref, reason FROM billing_refunds WHERE gym_id = ${a.gymId}`).toEqual([
+        { transaction_ref: lateInvoice?.payment_id, reason: "cancelled" },
+      ]);
+      expect(razorpay.refunds).toContain(lateInvoice?.payment_id);
+      expect(razorpay.refunds).not.toContain(firstPayment);
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toBeNull();
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a plan set to end ends when its month does even if Razorpay's webhook never comes",
+    async () => {
+      const a = await paidPlan();
+      expect((await cancelPlan(a.gymId, a.cookies)).statusCode).toBe(200);
+      // One run past the end: the cancel is sent, then the plan is read and ended.
+      const run = await runAt(a.end, 60_000);
+      expect(run.cancels).toMatchObject({ sent: 1, ended: 1 });
+      expect(await planRow(a.gymId)).toMatchObject({ status: "expired" });
+      expect(await sql`SELECT 1 FROM billing_refunds WHERE gym_id = ${a.gymId}`).toHaveLength(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a paid trial set to end is ended at Razorpay before its first charge, yet stays the gym's until the trial's last day",
+    async () => {
+      razorpay.clock = Math.floor(Date.now() / 1000);
+      const a = await owner();
+      expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
+      const t = await trialWindow(a, BIG);
+      razorpay.authenticate(t.subscriptionId);
+      await sync(a.gymId, t.checkoutId, a.cookies);
+      const row = await planRow(a.gymId);
+      expect(row).toMatchObject({ status: "trialing" });
+      const end = row?.current_period_end;
+      if (end === null || end === undefined) throw new Error("no trial end");
+
+      expect(JSON.parse((await cancelPlan(a.gymId, a.cookies)).body)).toMatchObject({ subscription: { status: "trialing", cancelAtPeriodEnd: true } });
+      await runAt(end, -2 * HOUR_MS);
+      // Razorpay takes no month-end cancel before a first charge: it is cancelled now.
+      expect(razorpay.cancelled).toContain(t.subscriptionId);
+      await signedWebhook(t.subscriptionId, "subscription.cancelled");
+      await runAt(end, -HOUR_MS);
+      expect(await planRow(a.gymId)).toMatchObject({ status: "trialing", cancel_at_period_end: true });
+      expect((await myGym(a.gymId, a.cookies))?.subscription).toMatchObject({ status: "trialing", cancelAtPeriodEnd: true });
+      await runAt(end, 60_000);
+      expect(await planRow(a.gymId)).toMatchObject({ status: "expired" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "Pay now opens Razorpay's page for the oldest bill owed, of this gym's plan only; paid, the plan opens again",
+    async () => {
+      const a = await paidPlan();
+      const b = await paidPlan();
+      expect(JSON.parse((await payLink(a.gymId, a.cookies)).body)).toMatchObject({ error: "nothing_owed" });
+      razorpay.fail(a.sub);
+      razorpay.fail(b.sub);
+      await refresh(a.gymId, a.cookies);
+      expect(await planRow(a.gymId)).toMatchObject({ status: "past_due" });
+      const owed = razorpay.invoices.get(a.sub)?.find((i) => i.status === "issued");
+      const link = await payLink(a.gymId, a.cookies);
+      expect(link.statusCode).toBe(200);
+      expect(link.headers["cache-control"]).toBe("no-store");
+      expect(JSON.parse(link.body)).toEqual({ url: owed?.short_url });
+      const bOwed = razorpay.invoices.get(b.sub)?.find((i) => i.status === "issued");
+      expect(link.body).not.toContain(String(bOwed?.short_url));
+
+      // Paid from its page: Razorpay may still say `pending`, and its own invoice says paid.
+      razorpay.payInvoice(owed?.id ?? "");
+      expect(razorpay.subs.get(a.sub)?.status).toBe("pending");
+      expect((await refresh(a.gymId, a.cookies)).statusCode).toBe(204);
+      expect(await planRow(a.gymId)).toMatchObject({ status: "active" });
+      expect(JSON.parse((await payLink(a.gymId, a.cookies)).body)).toMatchObject({ error: "nothing_owed" });
+      expect(await planRow(b.gymId)).toMatchObject({ status: "active" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a gym whose grace ran out pays its bills oldest first from the read-only console, and opens again only when none is owed",
+    async () => {
+      const a = await paidPlan();
+      razorpay.fail(a.sub);
+      await refresh(a.gymId, a.cookies);
+      // Three days on, the grace has run out (the run writes no answer of Razorpay's).
+      await runWorker(3 * DAY_MS);
+      razorpay.fail(a.sub, "halted");
+      razorpay.billUncharged(a.sub);
+      expect(await myGym(a.gymId, a.cookies)).toMatchObject({ consoleReadOnly: true, paymentOverdue: true, paymentOverdueThrough: "razorpay" });
+      const [first, second] = (razorpay.invoices.get(a.sub) ?? []).filter((i) => i.status === "issued");
+      expect(JSON.parse((await payLink(a.gymId, a.cookies)).body)).toEqual({ url: first?.short_url });
+
+      // A new card makes Razorpay's plan `active` but pays no bill: still overdue.
+      expect(JSON.parse((await method(a.gymId, a.cookies)).body)).toMatchObject({ subscriptionId: a.sub });
+      razorpay.changeCard(a.sub);
+      await refresh(a.gymId, a.cookies);
+      expect(await myGym(a.gymId, a.cookies)).toMatchObject({ consoleReadOnly: true, paymentOverdue: true });
+
+      razorpay.payInvoice(first?.id ?? "");
+      await refresh(a.gymId, a.cookies);
+      expect(await myGym(a.gymId, a.cookies)).toMatchObject({ consoleReadOnly: true });
+      expect(JSON.parse((await payLink(a.gymId, a.cookies)).body)).toEqual({ url: second?.short_url });
+      razorpay.payInvoice(second?.id ?? "");
+      await refresh(a.gymId, a.cookies);
+      expect(await myGym(a.gymId, a.cookies)).toMatchObject({ consoleReadOnly: false, paymentOverdue: false, subscription: { status: "active" } });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a halted plan whose newest bill is paid from its page counts as paid; one whose newest bill is in a state we don't know does not",
+    async () => {
+      const a = await paidPlan();
+      razorpay.fail(a.sub, "halted");
+      const list = razorpay.invoices.get(a.sub) ?? [];
+      const last = list.at(-1);
+      if (last === undefined) throw new Error("no invoice");
+      list[list.length - 1] = { ...last, status: "expired" };
+      await refresh(a.gymId, a.cookies);
+      expect(await planRow(a.gymId)).toMatchObject({ status: "past_due" });
+      razorpay.billUncharged(a.sub);
+      const newest = (razorpay.invoices.get(a.sub) ?? []).at(-1);
+      razorpay.payInvoice(newest?.id ?? "");
+      await refresh(a.gymId, a.cookies);
+      expect(await planRow(a.gymId)).toMatchObject({ status: "active" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a bill paid from its own page reaches the gym through Razorpay's invoice webhook",
+    async () => {
+      const a = await paidPlan();
+      razorpay.fail(a.sub, "halted");
+      await refresh(a.gymId, a.cookies);
+      const owed = razorpay.invoices.get(a.sub)?.find((i) => i.status === "issued");
+      razorpay.payInvoice(owed?.id ?? "");
+      const raw = JSON.stringify({ entity: "event", event: "invoice.paid", payload: { invoice: { entity: { id: owed?.id, subscription_id: a.sub } } } });
+      const res = await api().inject({
+        method: "POST",
+        url: "/v1/webhooks/razorpay",
+        remoteAddress: nextIp(),
+        headers: {
+          "content-type": "application/json",
+          "x-razorpay-signature": createHmac("sha256", WEBHOOK_SECRET).update(raw).digest("hex"),
+          "x-razorpay-event-id": `evt_${randomBytes(7).toString("hex")}`,
+        },
+        payload: raw,
+      });
+      expect(res.statusCode).toBe(200);
+      expect(await sql`SELECT 1 FROM webhook_events WHERE provider = 'razorpay' AND payload->>'subscriptionId' = ${a.sub} AND payload->>'type' = 'invoice.paid'`).toHaveLength(1);
+      await runWorker();
+      expect(await planRow(a.gymId)).toMatchObject({ status: "active" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "Update payment method hands Razorpay's window THIS gym's plan, filled in with the owner's details, to its billing staff",
+    async () => {
+      const a = await paidPlan();
+      const clerk = await makeUser();
+      await addStaff(a.gymId, clerk.userId, "manager", ["members.read", "billing.manage"]);
+      const ownerEmail = (await sql<{ email: string }[]>`SELECT email FROM users WHERE id = ${a.userId}`)[0]?.email;
+      const res = await method(a.gymId, clerk.cookies);
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body)).toEqual({ keyId: KEY_ID, subscriptionId: a.sub, contact: null, email: ownerEmail });
+      razorpay.down = true;
+      try {
+        expect((await method(a.gymId, a.cookies)).statusCode).toBe(503);
+      } finally {
+        razorpay.down = false;
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "an overdue plan cancelled ends now at Razorpay, with nothing more charged",
+    async () => {
+      const a = await paidPlan();
+      razorpay.fail(a.sub);
+      await refresh(a.gymId, a.cookies);
+      expect(await planRow(a.gymId)).toMatchObject({ status: "past_due" });
+      const res = await cancelPlan(a.gymId, a.cookies);
+      expect([res.statusCode, JSON.parse(res.body)]).toEqual([200, { subscription: null }]);
+      expect(razorpay.cancelled).toContain(a.sub);
+      expect(await planRow(a.gymId)).toMatchObject({ status: "expired", cancel_at_period_end: true });
+      expect(await myGym(a.gymId, a.cookies)).toMatchObject({ subscription: null, paymentOverdue: false });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a gym with no plan paid through Razorpay is told so, and a bad gym id is a 400",
+    async () => {
+      const a = await owner();
+      expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
+      for (const res of [await cancelPlan(a.gymId, a.cookies), await payLink(a.gymId, a.cookies), await method(a.gymId, a.cookies), await keepPlan(a.gymId, a.cookies)]) {
+        expect([res.statusCode, (JSON.parse(res.body) as { error: string }).error]).toEqual([404, "no_paid_plan"]);
+      }
+      for (const res of [await cancelPlan("not-a-gym", a.cookies), await payLink("not-a-gym", a.cookies), await method("not-a-gym", a.cookies), await refresh("not-a-gym", a.cookies)]) {
+        expect(res.statusCode).toBe(400);
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "round one H1: a halted plan paid from its bill's page is the gym's through the month that bill covers, then owed again",
+    async () => {
+      const a = await paidPlan();
+      razorpay.fail(a.sub, "halted");
+      await refresh(a.gymId, a.cookies);
+      expect(await planRow(a.gymId)).toMatchObject({ status: "past_due" });
+      const owed = razorpay.invoices.get(a.sub)?.find((i) => i.status === "issued");
+      const paidTo = new Date((owed?.billing_end ?? 0) * 1000);
+      razorpay.payInvoice(owed?.id ?? "");
+      // Re-check 2 Low: paid a moment ago, before the plan is read again — a payment on its
+      // way, never "Razorpay has stopped taking payments".
+      expect(JSON.parse((await payLink(a.gymId, a.cookies)).body)).toMatchObject({ error: "nothing_owed" });
+      await refresh(a.gymId, a.cookies);
+      const row = await planRow(a.gymId);
+      expect(row).toMatchObject({ status: "active" });
+      expect(row?.current_period_end?.toISOString()).toBe(paidTo.toISOString());
+      // Razorpay, halted, charges nothing and says nothing when that month ends; the worker
+      // reads the plan again, and the next month is owed.
+      expect(razorpay.subs.get(a.sub)?.status).toBe("halted");
+      await runAt(paidTo, -60 * 60_000);
+      expect(await planRow(a.gymId)).toMatchObject({ status: "active" });
+      const run = await runAt(paidTo, 10 * 60_000);
+      expect(run.reread).toBeGreaterThanOrEqual(1);
+      expect(await planRow(a.gymId)).toMatchObject({ status: "past_due" });
+      // Re-check N1: with no bill issued, Pay now says what is true and what to press instead.
+      // The request runs on the real clock, so the paid month is made to have ended by now.
+      const list = razorpay.invoices.get(a.sub) ?? [];
+      razorpay.invoices.set(a.sub, list.map((i) => (i.id === owed?.id ? { ...i, billing_end: Math.floor(Date.now() / 1000) - 60 } : i)));
+      const pay = await payLink(a.gymId, a.cookies);
+      expect(pay.statusCode).toBe(409);
+      expect(JSON.parse(pay.body)).toMatchObject({
+        error: "update_payment_method",
+        message: expect.stringMatching(
+          /^There's no bill to pay here, your last payment covered up to .+, and Razorpay has stopped taking payments for this plan\. Press Update payment method so it can take the next one\.$/,
+        ) as unknown,
+      });
+      // A plan Razorpay still charges, with nothing owed, is told nothing is owed.
+      const b = await paidPlan();
+      expect(JSON.parse((await payLink(b.gymId, b.cookies)).body)).toMatchObject({ error: "nothing_owed" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "round one H2: a retry Razorpay takes between Cancel and its cancel landing, on an overdue plan, is refunded",
+    async () => {
+      const a = await paidPlan();
+      const firstPayment = razorpay.invoices.get(a.sub)?.[0]?.payment_id;
+      razorpay.fail(a.sub);
+      await refresh(a.gymId, a.cookies);
+      const real = razorpay.cancelSubscriptionNow.bind(razorpay);
+      razorpay.cancelSubscriptionNow = (id: string) => {
+        // Razorpay's own retry of the failed month succeeds just before the cancel arrives.
+        razorpay.clock = Math.floor(Date.now() / 1000);
+        razorpay.chargeUnpaid(id);
+        return real(id);
+      };
+      try {
+        const res = await cancelPlan(a.gymId, a.cookies);
+        expect([res.statusCode, JSON.parse(res.body)]).toEqual([200, { subscription: null }]);
+      } finally {
+        razorpay.cancelSubscriptionNow = real;
+      }
+      const retried = razorpay.invoices.get(a.sub)?.find((i) => i.status === "paid" && i.payment_id !== firstPayment);
+      expect(retried?.payment_id).toBeTruthy();
+      expect(await sql`SELECT transaction_ref, reason FROM billing_refunds WHERE gym_id = ${a.gymId}`).toEqual([
+        { transaction_ref: retried?.payment_id, reason: "cancelled" },
+      ]);
+      await runWorker();
+      expect(razorpay.refunds).toContain(retried?.payment_id);
+      expect(razorpay.refunds).not.toContain(firstPayment);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "round one H2: a bill paid from Razorpay's email after an overdue plan was cancelled is refunded, though Razorpay says cancelled",
+    async () => {
+      const a = await paidPlan();
+      razorpay.fail(a.sub);
+      await refresh(a.gymId, a.cookies);
+      expect((await cancelPlan(a.gymId, a.cookies)).statusCode).toBe(200);
+      expect(razorpay.subs.get(a.sub)?.status).toBe("cancelled");
+      const owed = razorpay.invoices.get(a.sub)?.find((i) => i.status === "issued");
+      razorpay.clock = Math.floor(Date.now() / 1000) + 60;
+      razorpay.payInvoice(owed?.id ?? "");
+      const paid = razorpay.invoices.get(a.sub)?.find((i) => i.id === owed?.id);
+      const raw = JSON.stringify({ entity: "event", event: "invoice.paid", payload: { invoice: { entity: { id: owed?.id, subscription_id: a.sub } } } });
+      await api().inject({
+        method: "POST",
+        url: "/v1/webhooks/razorpay",
+        remoteAddress: nextIp(),
+        headers: {
+          "content-type": "application/json",
+          "x-razorpay-signature": createHmac("sha256", WEBHOOK_SECRET).update(raw).digest("hex"),
+          "x-razorpay-event-id": `evt_${randomBytes(7).toString("hex")}`,
+        },
+        payload: raw,
+      });
+      await runWorker(2 * 60_000);
+      expect(await sql`SELECT transaction_ref, reason FROM billing_refunds WHERE gym_id = ${a.gymId}`).toEqual([
+        { transaction_ref: paid?.payment_id, reason: "cancelled" },
+      ]);
+      expect(razorpay.refunds).toContain(paid?.payment_id);
+      expect(await planRow(a.gymId)).toMatchObject({ status: "expired" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "re-check N2: Razorpay's own word that a cancelled plan is cancelled logs no error; a payment after the cancel does",
+    async () => {
+      const errors: string[] = [];
+      const recording = { info: () => undefined, warn: () => undefined, error: (obj: object) => void errors.push(String((obj as { event?: string }).event)) };
+      const run = () =>
+        processRazorpayEvents({ sql, redis: createMemoryRedis(), paddle: null, razorpay: { api: razorpay, keyId: KEY_ID }, log: recording, now: () => new Date(Date.now() + 1000) });
+      const a = await paidPlan();
+      razorpay.fail(a.sub);
+      await refresh(a.gymId, a.cookies);
+      expect((await cancelPlan(a.gymId, a.cookies)).statusCode).toBe(200);
+      await signedWebhook(a.sub, "subscription.cancelled");
+      await run();
+      expect(errors).not.toContain("billing.charged_after_cancel");
+      // The unpaid bill paid after all, from its page: that one is news.
+      const owed = razorpay.invoices.get(a.sub)?.find((i) => i.status === "issued");
+      razorpay.clock = Math.floor(Date.now() / 1000) + 60;
+      razorpay.payInvoice(owed?.id ?? "");
+      await signedWebhook(a.sub, "subscription.cancelled");
+      await run();
+      expect(errors.filter((e) => e === "billing.charged_after_cancel")).toHaveLength(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "round one L1: two staff cancelling an overdue plan at once both see it cancelled, once at Razorpay, one audit line",
+    async () => {
+      const a = await paidPlan();
+      const clerk = await makeUser();
+      await addStaff(a.gymId, clerk.userId, "manager", ["members.read", "billing.manage"]);
+      razorpay.fail(a.sub);
+      await refresh(a.gymId, a.cookies);
+      const [one, two] = await Promise.all([cancelPlan(a.gymId, a.cookies), cancelPlan(a.gymId, clerk.cookies)]);
+      expect([one.statusCode, two.statusCode]).toEqual([200, 200]);
+      expect(razorpay.cancelled.filter((id) => id === a.sub)).toHaveLength(1);
+      expect(await sql`SELECT 1 FROM audit_log WHERE gym_id = ${a.gymId} AND action = 'billing.cancel_requested'`).toHaveLength(1);
+      // Pressed again later: already done, not "isn't paid through Razorpay".
+      const again = await cancelPlan(a.gymId, a.cookies);
+      expect([again.statusCode, JSON.parse(again.body)]).toEqual([200, { subscription: null }]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "round one L1: a paid trial's cancel whose answer was lost is found done on the next read, not asked forever",
+    async () => {
+      razorpay.clock = Math.floor(Date.now() / 1000);
+      const a = await owner();
+      expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
+      const t = await trialWindow(a, BIG);
+      razorpay.authenticate(t.subscriptionId);
+      await sync(a.gymId, t.checkoutId, a.cookies);
+      const end = (await planRow(a.gymId))?.current_period_end;
+      if (end === null || end === undefined) throw new Error("no trial end");
+      expect((await cancelPlan(a.gymId, a.cookies)).statusCode).toBe(200);
+      const real = razorpay.cancelSubscriptionNow.bind(razorpay);
+      razorpay.cancelSubscriptionNow = async (id: string) => {
+        await real(id);
+        return { kind: "unavailable", status: null };
+      };
+      try {
+        expect((await runAt(end, -2 * HOUR_MS)).cancels).toMatchObject({ sent: 1, failed: 0 });
+      } finally {
+        razorpay.cancelSubscriptionNow = real;
+      }
+      expect((await planRow(a.gymId))?.cancel_sent_at).not.toBeNull();
+      expect((await runAt(end, -HOUR_MS)).cancels).toMatchObject({ sent: 0, failed: 0 });
     },
     TEST_TIMEOUT_MS,
   );

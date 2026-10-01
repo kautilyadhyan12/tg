@@ -17,15 +17,25 @@
 //
 // A paying gym may move to a bigger size: Paddle charges the rest of the month at once, and
 // changes nothing if that charge fails.
+//
+// A gym paying through Razorpay pays an overdue bill, changes how it pays and cancels from the
+// console (1d-ii): Razorpay's own page for the bill, Razorpay's window for the card or bank
+// account, and a cancel kept by us and sent to Razorpay in the hours before the paid month
+// ends, since Razorpay cannot take one back.
 import {
   PAID_PLAN_GRACE_DAYS,
   payerEmailSchema,
+  PLAN_CANCEL_DECIDE_HOURS,
+  razorpayPayLinkSchema,
   SMALLER_SIZE_DECIDE_HOURS,
   type OrgBillingPortalResponse,
   type OrgCheckoutResponse,
   type OrgCheckoutSyncResponse,
   type OrgPlanChangePreview,
+  type OrgPlanCancelResponse,
   type OrgPlanChangeResponse,
+  type OrgRazorpayMethodResponse,
+  type OrgRazorpayPayResponse,
   type PaddleSubscription,
   type RazorpaySubscription,
 } from "@app/shared";
@@ -40,6 +50,7 @@ import type { Snapshot } from "./machine.js";
 import { onlinePaymentFor } from "./online.js";
 import { paddleWindowCountry, type PaddleApi, type PaddleEnvironment, type ProrationMode } from "./paddle.js";
 import type { RazorpayApi } from "./razorpay.js";
+import { ENDED_AT_RAZORPAY, oldestOwedInvoice, razorpayCancelOutcome, razorpayOwes, razorpayPaidThrough } from "./razorpayPlan.js";
 import * as repo from "./repo.js";
 
 export interface PaddleSettings {
@@ -186,7 +197,7 @@ function beginRefusal(
         409,
         "payment_overdue",
         provider === "razorpay"
-          ? "A payment is overdue. Pay it from the link in Razorpay's email to carry on."
+          ? "A payment is overdue. Press Pay now on your plan to pay it and carry on."
           : "A payment is overdue. Update your payment method to pay it and carry on.",
       );
     case "no_such_plan":
@@ -441,7 +452,7 @@ export async function openBillingPortal(
   await requirePrivilege(deps, input.gymId, input.userId, "billing.manage");
   const live = await orgsRepo.gymLiveSubscription(deps.sql, input.gymId);
   if (live?.provider === "razorpay") {
-    throw new OrgsError(409, "paid_through_razorpay", "Your plan is paid through Razorpay. Razorpay's emails to you have the link to pay or change how you pay.");
+    throw new OrgsError(409, "paid_through_razorpay", "Your plan is paid through Razorpay: pay, change how you pay or cancel from your plan on the Overview.");
   }
   const paddle = deps.paddle;
   if (paddle === null) throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
@@ -1187,9 +1198,6 @@ export async function applyRazorpaySubscription(deps: BillingDeps, subscriptionI
 /** Razorpay's statuses in which a subscription never took a mandate or a payment. */
 const RAZORPAY_NEVER_TAKEN: ReadonlySet<string> = new Set(["created", "cancelled", "expired", "completed"]);
 
-/** Razorpay invoices still owed: issued and not (fully) paid. */
-const RAZORPAY_OWED: ReadonlySet<string> = new Set(["issued", "partially_paid"]);
-
 /** Write a subscription just fetched from Razorpay onto its gym through the one rule. The
  *  gym is the one on OUR checkout row for this subscription, never the subscription's notes.
  *  `askedAt` is when Razorpay was asked: its record carries no time of its own, and an answer
@@ -1222,15 +1230,42 @@ async function applyRazorpay(deps: BillingDeps, razorpay: RazorpaySettings, sub:
     return "unknown";
   }
   let snapshot = toRazorpaySnapshot(sub, planId, askedAt);
+  // A plan the gym set to end (1d-ii): Razorpay's record never shows it, so it is read against
+  // our row — the paid month runs to its end whatever Razorpay says, and a month Razorpay
+  // charges after it is refunded.
+  const cancel = razorpayCancelOutcome(placed, sub, askedAt);
+  if (cancel.kind === "refund_after" && placed !== null) {
+    return await endChargedAfterCancel(deps, razorpay, sub, { gymId, planId, placed, after: cancel.after, askedAt });
+  }
+  if (cancel.kind === "keep_live" || cancel.kind === "ended") {
+    snapshot = {
+      status: cancel.kind === "ended" ? "canceled" : placed?.status === "trialing" ? "trialing" : "active",
+      updatedAt: askedAt,
+      planId,
+      currentPeriodEnd: placed?.currentPeriodEnd ?? null,
+      cancelAtPeriodEnd: true,
+    };
+  }
   if (snapshot === null) return "unchanged";
-  // A halted plan whose card is changed goes `active` with its missed invoices still unpaid —
-  // Razorpay does not charge them (its "Payment Retries" page) — so over a plan past due, or
-  // one whose grace ran out, `active` counts as paid only once nothing is owed.
-  if (snapshot.status === "active" && placed !== null && (placed.status === "past_due" || placed.cancelReason === repo.GRACE_EXPIRED)) {
+  // A failed payment leaves its bill owed. A halted plan whose card is changed goes `active`
+  // with its missed bills still unpaid — Razorpay does not charge them (its "Payment Retries"
+  // page) — and one whose bill is paid from its own page may stay `halted`. So while a payment
+  // has failed, and over a plan past due or whose grace ran out, the plan is paid only once
+  // Razorpay's own invoices say so (`razorpayOwes`).
+  if (
+    cancel.kind !== "ended" &&
+    (snapshot.status === "past_due" || (snapshot.status === "active" && placed !== null && (placed.status === "past_due" || placed.cancelReason === repo.GRACE_EXPIRED)))
+  ) {
     const invoices = await razorpay.api.listSubscriptionInvoices(sub.id);
     if (invoices.kind !== "ok") return "retry";
-    if (invoices.value.some((i) => i.subscription_id === sub.id && RAZORPAY_OWED.has(i.status))) {
+    if (razorpayOwes(sub, invoices.value, askedAt)) {
       snapshot = { ...snapshot, status: "past_due" };
+    } else if (sub.status === "pending" || sub.status === "halted") {
+      // Paid from the bill's own page while Razorpay still says a payment failed: paid through
+      // the month that bill covers, when the plan is read again (`rereadDueRazorpayPlans`).
+      snapshot = { ...snapshot, status: "active", currentPeriodEnd: razorpayPaidThrough(sub, invoices.value) };
+    } else {
+      snapshot = { ...snapshot, status: "active" };
     }
   }
   const outcome = await repo.applySnapshot(deps.sql, {
@@ -1263,6 +1298,35 @@ async function applyRazorpay(deps: BillingDeps, razorpay: RazorpaySettings, sub:
   }
   deps.log.info({ event: "billing.applied", provider: "razorpay", gymId, decision: outcome.decision.kind }, "a gym's paid plan changed");
   return "applied";
+}
+
+/** Razorpay took a payment for a month after the gym's plan was to end: the plan ends at the
+ *  end of the month it paid for, Razorpay's subscription is cancelled now, and every payment
+ *  taken from that end on is refunded in full (`settleOwedRefunds` makes them). */
+async function endChargedAfterCancel(
+  deps: BillingDeps,
+  razorpay: RazorpaySettings,
+  sub: RazorpaySubscription,
+  input: { gymId: string; planId: string; placed: repo.PaddleRow; after: Date; askedAt: Date },
+): Promise<ApplyResult> {
+  if (input.placed.status === "trialing" || input.placed.status === "active" || input.placed.status === "past_due") {
+    await repo.applySnapshot(deps.sql, {
+      gymId: input.gymId,
+      provider: "razorpay",
+      subscriptionId: sub.id,
+      customerId: sub.customer_id ?? null,
+      snapshot: { status: "canceled", updatedAt: input.askedAt, planId: input.planId, currentPeriodEnd: input.placed.currentPeriodEnd, cancelAtPeriodEnd: true },
+      checkoutId: null,
+      now: deps.now(),
+    });
+  }
+  return await setAsideRazorpay(deps, razorpay, sub, input.gymId, "cancelled", input.after, (owed) => {
+    // Every later event about a plan ended for its cancel comes here (Razorpay's own
+    // `subscription.cancelled` among them); only a payment written down now is news.
+    if (owed > 0) {
+      deps.log.error({ event: "billing.charged_after_cancel", provider: "razorpay", gymId: input.gymId, owed }, "Razorpay charged a plan after it was set to end: refunding it");
+    }
+  });
 }
 
 /** Razorpay's record in the one rule's terms (Razorpay docs, "Subscription States"). Null
@@ -1306,6 +1370,7 @@ async function setAsideRazorpay(
   gymId: string | null,
   reason: repo.RefundReason,
   paidAfter: Date | null = null,
+  onOwed: (owed: number) => void = () => undefined,
 ): Promise<ApplyResult> {
   if (sub.status !== "cancelled" && sub.status !== "completed" && sub.status !== "expired") {
     const cancelled = await razorpay.api.cancelSubscriptionNow(sub.id);
@@ -1313,7 +1378,7 @@ async function setAsideRazorpay(
   }
   const invoices = await razorpay.api.listSubscriptionInvoices(sub.id);
   if (invoices.kind !== "ok") return "retry";
-  await repo.oweRefunds(deps.sql, {
+  const owed = await repo.oweRefunds(deps.sql, {
     gymId,
     provider: "razorpay",
     subscriptionRef: sub.id,
@@ -1323,11 +1388,13 @@ async function setAsideRazorpay(
       i.payment_id !== null &&
       i.payment_id !== undefined &&
       i.subscription_id === sub.id &&
-      (paidAfter === null || (i.paid_at ?? 0) * 1000 >= paidAfter.getTime())
+      // Razorpay stamps a payment to the second: one in the same second as the cut is after it.
+      (paidAfter === null || (i.paid_at ?? 0) >= Math.floor(paidAfter.getTime() / 1000))
         ? [i.payment_id]
         : [],
     ),
   });
+  onOwed(owed);
   return "set_aside";
 }
 
@@ -1491,3 +1558,222 @@ export async function settleOwedRefunds(deps: BillingDeps): Promise<RefundsRun> 
   }
   return run;
 }
+
+// ── A plan paid through Razorpay, managed from the console (1d-ii) ─────────────
+
+/** A cancel is sent to Razorpay this long before the paid month ends; until then Keep my plan
+ *  undoes it. */
+export const CANCEL_LEAD_MS = PLAN_CANCEL_DECIDE_HOURS * 60 * 60 * 1000;
+
+const NOT_RAZORPAY = "This plan isn't paid through Razorpay, so there's nothing to manage here.";
+
+/** The gym's plan paid through Razorpay, for staff who manage its billing — read-only or not,
+ *  since paying an overdue bill is how a read-only console opens again. */
+async function razorpayPlan(
+  deps: BillingDeps,
+  input: { userId: string; gymId: string },
+): Promise<{ razorpay: RazorpaySettings; plan: repo.RazorpayPlanRow; timezone: string }> {
+  const { org } = await requirePrivilege(deps, input.gymId, input.userId, "billing.manage");
+  const plan = await repo.razorpayPlanFor(deps.sql, input.gymId);
+  if (plan === null) throw new OrgsError(404, "no_paid_plan", NOT_RAZORPAY);
+  const razorpay = deps.razorpay ?? null;
+  if (razorpay === null) throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
+  return { razorpay, plan, timezone: org.timezone };
+}
+
+/** "Pay now": Razorpay's own page for the oldest bill this gym's plan still owes. The bill is
+ *  found from the subscription on THIS gym's row, never one the browser names. */
+export async function payRazorpayBill(deps: BillingDeps, input: { userId: string; gymId: string }): Promise<OrgRazorpayPayResponse> {
+  const { razorpay, plan, timezone } = await razorpayPlan(deps, input);
+  const invoices = await razorpay.api.listSubscriptionInvoices(plan.subscriptionRef);
+  if (invoices.kind !== "ok") throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
+  const owed = oldestOwedInvoice(plan.subscriptionRef, invoices.value);
+  if (owed === null) {
+    // Unpaid with no bill to pay: Razorpay has stopped charging the plan (`halted`) and the
+    // month the last bill paid for is over. Only a new card or bank account starts it again.
+    if (plan.status === "past_due" || plan.overdue) {
+      const fetched = await razorpay.api.getSubscription(plan.subscriptionRef);
+      if (fetched.kind === "ok" && (fetched.value.status === "halted" || fetched.value.status === "pending")) {
+        const through = razorpayPaidThrough(fetched.value, invoices.value);
+        // A bill just paid still covers days ahead: that is a payment on its way, not a stop.
+        if (through !== null && through.getTime() > deps.now().getTime()) {
+          throw new OrgsError(409, "nothing_owed", "Nothing is owed right now. A payment just made can take a minute to show here.");
+        }
+        const covered = through === null ? "" : `, your last payment covered up to ${dayLabel(through, timezone)}`;
+        throw new OrgsError(
+          409,
+          "update_payment_method",
+          `There's no bill to pay here${covered}, and Razorpay has stopped taking payments for this plan. Press Update payment method so it can take the next one.`,
+        );
+      }
+    }
+    throw new OrgsError(409, "nothing_owed", "Nothing is owed right now. A payment just made can take a minute to show here.");
+  }
+  const link = razorpayPayLinkSchema.safeParse(owed.short_url);
+  if (!link.success) {
+    deps.log.error({ event: "billing.pay_link_missing", provider: "razorpay", gymId: input.gymId }, "an owed Razorpay bill has no page of its own");
+    throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
+  }
+  return { url: link.data };
+}
+
+/** Razorpay's states in which its window can change how a plan is paid: a plan that has taken
+ *  its mandate and is not ended. */
+const METHOD_CHANGEABLE: ReadonlySet<string> = new Set(["authenticated", "active", "pending", "halted"]);
+
+/** "Update payment method": what the browser needs to open Razorpay's window for THIS gym's
+ *  plan, to change the card or bank account it is paid from (Razorpay checkout's
+ *  `subscription_card_change`; tried on the test account, 2026-10-01: a ₹5 check, refunded by
+ *  Razorpay, and the plan otherwise unchanged). */
+export async function openRazorpayMethod(deps: BillingDeps, input: { userId: string; gymId: string }): Promise<OrgRazorpayMethodResponse> {
+  const { razorpay, plan } = await razorpayPlan(deps, input);
+  const fetched = await razorpay.api.getSubscription(plan.subscriptionRef);
+  if (fetched.kind !== "ok") throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
+  if (!METHOD_CHANGEABLE.has(fetched.value.status)) {
+    throw new OrgsError(409, "plan_ended", "This plan has ended at Razorpay, so how it's paid can't be changed.");
+  }
+  const payer = await repo.gymPayer(deps.sql, input.gymId);
+  return { keyId: razorpay.keyId, subscriptionId: plan.subscriptionRef, contact: payer.mobile, email: windowEmail(payer.email) };
+}
+
+/** After the gym paid a bill or changed how it pays: Razorpay's record of THIS gym's plan is
+ *  fetched and written now, rather than waiting for the webhook. Safe to call any number of times. */
+export async function refreshRazorpayPlan(deps: BillingDeps, input: { userId: string; gymId: string }): Promise<void> {
+  const { razorpay, plan } = await razorpayPlan(deps, input);
+  const askedAt = deps.now();
+  const fetched = await razorpay.api.getSubscription(plan.subscriptionRef);
+  if (fetched.kind !== "ok") throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
+  await applyRazorpay(deps, razorpay, fetched.value, askedAt);
+  await bustEntitlements(deps.redis, input.userId);
+}
+
+/** "Cancel plan" on a plan paid through Razorpay. A paying plan is set to end when the month
+ *  paid for ends — the gym keeps everything until then — and is sent to Razorpay in the hours
+ *  before (at once, if the end is that close). A plan whose payment is overdue ends now: it is
+ *  cancelled at Razorpay first, and nothing more is charged. */
+export async function cancelRazorpayPlan(deps: BillingDeps, input: { userId: string; gymId: string }): Promise<OrgPlanCancelResponse> {
+  await requirePrivilege(deps, input.gymId, input.userId, "billing.manage");
+  const razorpay = deps.razorpay ?? null;
+  const outcome = await repo.requestCancel(deps.sql, { ...input, now: deps.now(), leadMs: CANCEL_LEAD_MS });
+  switch (outcome.kind) {
+    case "not_found":
+      throw new OrgsError(404, "org_not_found", "Organisation not found.");
+    case "org_archived":
+      throw new OrgsError(409, "org_archived", "This organisation is archived.");
+    case "no_paid_plan":
+      throw new OrgsError(404, "no_paid_plan", NOT_RAZORPAY);
+    case "not_razorpay":
+      throw new OrgsError(409, "paid_through_paddle", "Your plan is paid through Paddle: cancel it from Manage payment.");
+    case "already":
+      break;
+    case "scheduled":
+      if (outcome.sendNow && razorpay !== null) await sendDueRazorpayCancels(deps, input.gymId);
+      break;
+    case "overdue": {
+      if (razorpay === null) throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
+      // The plan ends now, and nothing is collected from the moment Cancel was pressed: a
+      // retry Razorpay takes before its cancel lands is refunded with any later payment.
+      const pressedAt = deps.now();
+      const cancelled = await cancelTaken(razorpay, outcome.subscriptionRef, await razorpay.api.cancelSubscriptionNow(outcome.subscriptionRef));
+      if (!cancelled) {
+        deps.log.warn({ event: "billing.cancel_failed", provider: "razorpay" }, "Razorpay did not cancel an overdue plan");
+        throw new OrgsError(503, "payments_unavailable", "Razorpay couldn't be reached to cancel your plan. Please try again in a moment.");
+      }
+      await repo.markCancelSent(deps.sql, { gymId: input.gymId, userId: input.userId, rowId: outcome.rowId, now: pressedAt });
+      const askedAt = deps.now();
+      const fetched = await razorpay.api.getSubscription(outcome.subscriptionRef);
+      if (fetched.kind === "ok") {
+        await applyRazorpay(deps, razorpay, fetched.value, askedAt);
+        await setAsideRazorpay(deps, razorpay, fetched.value, input.gymId, "cancelled", pressedAt);
+      }
+      await bustEntitlements(deps.redis, input.userId);
+      break;
+    }
+  }
+  return await planNow(deps, input.gymId);
+}
+
+/** "Keep my plan": a plan set to end goes on, while the cancel has not gone to Razorpay. */
+export async function keepRazorpayPlan(deps: BillingDeps, input: { userId: string; gymId: string }): Promise<OrgPlanCancelResponse> {
+  const { org } = await requirePrivilege(deps, input.gymId, input.userId, "billing.manage");
+  const outcome = await repo.keepPlan(deps.sql, { ...input, now: deps.now(), leadMs: CANCEL_LEAD_MS });
+  switch (outcome.kind) {
+    case "not_found":
+      throw new OrgsError(404, "org_not_found", "Organisation not found.");
+    case "org_archived":
+      throw new OrgsError(409, "org_archived", "This organisation is archived.");
+    case "no_paid_plan":
+      throw new OrgsError(404, "no_paid_plan", NOT_RAZORPAY);
+    case "too_late":
+      throw new OrgsError(
+        409,
+        "cancel_sent",
+        `Your plan ends on ${outcome.endsAt === null ? "its last day" : dayLabel(outcome.endsAt, org.timezone)}, and it's too close to then to keep it. You can choose a plan again once it ends.`,
+      );
+    case "not_ending":
+    case "kept":
+      break;
+  }
+  return await planNow(deps, input.gymId);
+}
+
+/** The gym's plan as it now stands, or null when none is live. */
+async function planNow(deps: BillingDeps, gymId: string): Promise<OrgPlanCancelResponse> {
+  const live = await orgsRepo.gymLiveSubscription(deps.sql, gymId);
+  return { subscription: live === null ? null : toOrgSubscription(live) };
+}
+
+export interface RazorpayCancelsRun {
+  /** Cancels Razorpay took. */
+  sent: number;
+  /** Cancels Razorpay did not take this run: claimed again on the next. */
+  failed: number;
+  /** Plans set to end whose paid month is over, read from Razorpay again. */
+  ended: number;
+}
+
+/** Send to Razorpay each cancel whose plan's paid month ends within `CANCEL_LEAD_MS`: at the end
+ *  of the month for a plan that has charged one, at once for a paid trial not yet charged
+ *  (Razorpay refuses a month-end cancel before the first charge; the gym keeps its plan to the
+ *  trial's end all the same). Each plan is claimed in one statement, so two runs never send one
+ *  twice, and Razorpay answers a second cancel the same as the first. `gymId` sends one gym's
+ *  only (Cancel pressed close to the end). */
+export async function sendDueRazorpayCancels(deps: BillingDeps, gymId?: string): Promise<RazorpayCancelsRun> {
+  const run: RazorpayCancelsRun = { sent: 0, failed: 0, ended: 0 };
+  const razorpay = deps.razorpay ?? null;
+  if (razorpay === null) return run;
+  const now = deps.now();
+  const claimed = await repo.claimCancelsToSend(deps.sql, { now, leadMs: CANCEL_LEAD_MS, limit: 50, ...(gymId === undefined ? {} : { gymId }) });
+  for (const row of claimed) {
+    const answer =
+      row.status === "trialing"
+        ? await razorpay.api.cancelSubscriptionNow(row.subscriptionRef)
+        : await razorpay.api.cancelSubscriptionAtCycleEnd(row.subscriptionRef);
+    if (await cancelTaken(razorpay, row.subscriptionRef, answer)) {
+      run.sent += 1;
+      deps.log.info({ event: "billing.cancel_sent", provider: "razorpay", gymId: row.gymId }, "a plan set to end was cancelled at Razorpay");
+      continue;
+    }
+    run.failed += 1;
+    deps.log.error({ event: "billing.cancel_failed", provider: "razorpay", gymId: row.gymId, result: answer.kind }, "Razorpay did not take a plan's cancel; asking again next run");
+    await repo.unclaimCancel(deps.sql, { id: row.id, gymId: row.gymId, claimedAt: now });
+  }
+  if (gymId !== undefined) return run;
+  // A paid month over: the plan ends now, even if Razorpay's own webhook never comes.
+  for (const subscriptionRef of await repo.dueCancelEnds(deps.sql, { now, limit: 50 })) {
+    const result = await applyRazorpaySubscription(deps, subscriptionRef);
+    if (result === "applied" || result === "set_aside") run.ended += 1;
+  }
+  return run;
+}
+
+/** Did a cancel take? Razorpay refuses to cancel a plan it has already ended ("Subscription is
+ *  not cancellable in cancelled status.", tried 2026-10-01): a second press, or a cancel whose
+ *  answer was lost and is asked again, finds it so. Refused or unanswered, the plan is read
+ *  back, and one Razorpay has ended counts as cancelled. */
+async function cancelTaken(razorpay: RazorpaySettings, subscriptionId: string, answer: { kind: string }): Promise<boolean> {
+  if (answer.kind === "ok") return true;
+  const fetched = await razorpay.api.getSubscription(subscriptionId);
+  return fetched.kind === "ok" && ENDED_AT_RAZORPAY.has(fetched.value.status);
+}
+

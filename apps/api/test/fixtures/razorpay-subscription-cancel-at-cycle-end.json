@@ -1,0 +1,30 @@
+{
+  "id": "sub_FixtureCancel0",
+  "entity": "subscription",
+  "plan_id": "plan_ThrbJtE8RBqR7l",
+  "status": "active",
+  "current_start": 1790828920,
+  "current_end": 1793471400,
+  "ended_at": null,
+  "quantity": 1,
+  "notes": {
+    "app": "probe-1d-ii"
+  },
+  "charge_at": 1793471400,
+  "start_at": 1790828920,
+  "end_at": 1819737000,
+  "auth_attempts": 0,
+  "total_count": 12,
+  "paid_count": 1,
+  "customer_notify": false,
+  "created_at": 1790828582,
+  "expire_by": null,
+  "short_url": "https://rzp.io/rzp/fixture1",
+  "has_scheduled_changes": false,
+  "change_scheduled_at": null,
+  "source": "api",
+  "payment_method": "card",
+  "offer_id": null,
+  "halted_at": null,
+  "remaining_count": 11
+}

@@ -72,7 +72,7 @@ export const billingRefunds = pgTable(
   },
   (t) => [
     check("billing_refunds_provider_check", sql`${t.provider} IN ('paddle','razorpay')`),
-    check("billing_refunds_reason_check", sql`${t.reason} IN ('duplicate','unmatched')`),
+    check("billing_refunds_reason_check", sql`${t.reason} IN ('duplicate','unmatched','cancelled')`),
     check("billing_refunds_state_check", sql`${t.state} IN ('owed','requested','not_needed','failed')`),
     check("billing_refunds_tries_check", sql`${t.tries} >= 0`),
     check("billing_refunds_gym_check", sql`(${t.reason} = 'unmatched') = (${t.gymId} IS NULL)`),

@@ -90,6 +90,13 @@ export const razorpayInvoiceSchema = z.object({
   amount_due: z.number().int().nonnegative().nullable().optional(),
   /** When it was paid (Unix seconds); null while unpaid. */
   paid_at: z.number().int().nonnegative().nullable().optional(),
+  /** When Razorpay made it (Unix seconds): the newest is the month now due. */
+  created_at: unixSeconds.optional(),
+  /** The end of the month it pays for (Unix seconds; seen on the test account, 2026-10-01). */
+  billing_end: unixSeconds.nullable().optional(),
+  /** Razorpay's own page for it: pays it while it is owed, and is its receipt once paid.
+   *  Read through `razorpayPayLinkSchema` before anything is sent to a browser. */
+  short_url: z.string().nullable().optional(),
 });
 export type RazorpayInvoice = z.infer<typeof razorpayInvoiceSchema>;
 
@@ -113,6 +120,28 @@ export const razorpayErrorSchema = z.object({
   error: z.object({ code: z.string(), description: z.string().optional() }),
 });
 
+/** A link to one of Razorpay's own pages: https, on rzp.io or razorpay.com, nowhere else. */
+export const razorpayPayLinkSchema = z
+  .string()
+  .max(2000)
+  .url()
+  .refine((value) => {
+    let link: URL;
+    try {
+      link = new URL(value);
+    } catch {
+      return false;
+    }
+    const host = link.hostname;
+    return (
+      link.protocol === "https:" &&
+      link.username === "" &&
+      link.password === "" &&
+      link.port === "" &&
+      (host === "rzp.io" || host === "razorpay.com" || host.endsWith(".razorpay.com"))
+    );
+  }, "not a Razorpay link");
+
 /** A webhook's body: only which event and which subscription it names are read. The worker
  *  asks Razorpay for the subscription itself before anything changes. */
 export const razorpayWebhookBodySchema = z.object({
@@ -120,5 +149,7 @@ export const razorpayWebhookBodySchema = z.object({
   event: z.string().min(1).max(100),
   payload: z.object({
     subscription: z.object({ entity: z.object({ id: z.string() }) }).optional(),
+    /** An invoice event (`invoice.paid`): a bill paid from its own page names its subscription here. */
+    invoice: z.object({ entity: z.object({ subscription_id: z.string().nullable().optional() }) }).optional(),
   }),
 });

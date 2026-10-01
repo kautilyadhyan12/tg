@@ -109,6 +109,9 @@ export const subscriptions = pgTable(
     /** When billing staff were emailed that the gym has too many members for it. */
     pendingWarnedAt: timestamp("pending_warned_at", { withTimezone: true }),
     cancelReason: text("cancel_reason"),
+    /** When our server told the provider to end a plan set to end (migration `0058`): Razorpay
+     *  cannot take a cancel back, so it is sent in the hours before the paid month ends. */
+    cancelSentAt: timestamp("cancel_sent_at", { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [
@@ -143,6 +146,10 @@ export const subscriptions = pgTable(
       sql`(${t.pendingPlanId} IS NULL) = (${t.pendingFrom} IS NULL) AND (${t.pendingPlanId} IS NOT NULL OR (${t.pendingHeldAt} IS NULL AND ${t.pendingWarnedAt} IS NULL AND ${t.pendingRequestedPlanId} IS NULL))`,
     ),
     index("subscriptions_pending_plan_idx").on(t.pendingFrom).where(sql`${t.pendingPlanId} IS NOT NULL`),
+    check("subscriptions_cancel_sent_check", sql`${t.cancelSentAt} IS NULL OR ${t.cancelAtPeriodEnd}`),
+    index("subscriptions_cancel_due_idx")
+      .on(t.currentPeriodEnd)
+      .where(sql`${t.cancelAtPeriodEnd} AND ${t.provider} = 'razorpay' AND ${t.status} IN ('trialing','active','past_due')`),
   ],
 );
 
