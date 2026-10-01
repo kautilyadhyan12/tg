@@ -318,7 +318,7 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
                 )}
                 {razorpay && picked.row.kind === 'smaller' ? (
                   <p className="text-sm" style={muted}>
-                    Razorpay checks your payment method with a small charge and refunds it.
+                    Razorpay may check your payment method with a small charge, which it refunds.
                   </p>
                 ) : null}
                 {picked.row.warning !== null ? (

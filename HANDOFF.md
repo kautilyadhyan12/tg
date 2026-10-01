@@ -13,6 +13,7 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Verified:** api **4,602 of 4,602** on `aihg_b` (new suite 13/13, billing 390/390); web 3,382/3,382 (`poseAssets.contract` local Node 24); tsc, eslint 0; gitleaks clean. Real test-mode run on :3001: ₹12,500 plan → 200 approved → worker at the day: old plan `cancelled` at Razorpay, ₹7,500 plan waiting to charge; Cancel this change cancelled a second one there. Seen in headless Edge at 1000 and 390.
 - **Cost at full size:** reads no list of people; one member count per gym per month, the count Paddle's smaller size already runs.
 - **Kd's click-through on frfgrgrg: all passed** (after its 1d-iii-a checkout row, wiped when that job re-added 0060's columns by hand on `aihg_b`, was restored from Razorpay's record). His two asks, built: Cancel this change asks first; the plan screens' words cut short (RULINGS 2026-10-01).
+- **Round one: 3 High, 3 Low, all fixed (85142af), each with a test run red first.** H1 the browser's sync and Razorpay's webhook for one approval cancelled it: approval answers "already". H2 a plan that renewed before its day kept the big price: now decided as any day, the renewal refunded when the members fit. H3 "₹5" is a card's only: "a small charge". **Re-check closed the round**; its two Lows (an indent, "may check") fixed. Kd's re-click: *"all passed"*.
 
 ## 2026-10-01 · 1d-iii-a (Folder B): a bigger size through Razorpay (branch `razorpay-bigger-size`, PR #146)
 

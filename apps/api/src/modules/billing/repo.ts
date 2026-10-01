@@ -2014,7 +2014,7 @@ export async function claimRazorpaySmallerSize(sql: Sql, input: { gymId: string;
         pending_from: Date;
         pending_held_at: Date | null;
         pending_subscription_ref: string;
-          seat_cap: number | null;
+        seat_cap: number | null;
         code: string;
       }[]
     >`

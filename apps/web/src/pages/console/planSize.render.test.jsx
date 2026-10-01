@@ -624,7 +624,7 @@ describe('Change size through Razorpay (1d-iii-a)', () => {
     expect(within(smaller).getByText(`From ${NEXT}`)).toBeTruthy();
     fireEvent.click(within(smaller).getByRole('button', { name: 'Choose' }));
     expect(await within(dialog).findByText(`Nothing to pay now. ₹7,500 a month from ${NEXT}.`)).toBeTruthy();
-    expect(within(dialog).getByText('Razorpay checks your payment method with a small charge and refunds it.')).toBeTruthy();
+    expect(within(dialog).getByText('Razorpay may check your payment method with a small charge, which it refunds.')).toBeTruthy();
     const go = within(dialog).getByRole('button', { name: 'Continue to Razorpay' });
     fireEvent.click(go);
     fireEvent.click(go);
