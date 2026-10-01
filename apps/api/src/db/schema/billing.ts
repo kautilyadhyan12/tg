@@ -1,5 +1,5 @@
 // A gym paying us (ROADMAP Stage 3 items 1a, 1c-ii and 1c-iii). Mirrors `0041_paddle_billing.sql`,
-// `0044_paddle_plan_changes.sql`, `0045_paddle_smaller_size.sql` and `0060_razorpay_bigger_size.sql`.
+// `0044_paddle_plan_changes.sql`, `0045_paddle_smaller_size.sql`, `0060_razorpay_bigger_size.sql` and `0061_razorpay_smaller_size.sql`.
 import { sql } from "drizzle-orm";
 import { check, index, integer, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAt } from "./common.js";
@@ -35,6 +35,8 @@ export const billingCheckouts = pgTable(
     startsAt: timestamp("starts_at", { withTimezone: true }),
     /** The rest of this month's difference, taken as the window is paid; null under ₹1. */
     upfrontMinor: integer("upfront_minor"),
+    /** Whether the replacing plan is bigger or smaller (`0061`); null for a first plan. */
+    sizeDirection: text("size_direction"),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -42,7 +44,7 @@ export const billingCheckouts = pgTable(
     check("billing_checkouts_provider_check", sql`${t.provider} IN ('paddle','razorpay')`),
     check(
       "billing_checkouts_state_check",
-      sql`${t.state} IN ('creating','open','superseded','failed','paid')`,
+      sql`${t.state} IN ('creating','open','superseded','failed','paid','approved','dropped') AND (${t.state} NOT IN ('approved','dropped') OR ${t.sizeDirection} = 'smaller')`,
     ),
     check("billing_checkouts_key_check", sql`length(${t.idempotencyKey}) BETWEEN 1 AND 100`),
     check(
@@ -53,11 +55,18 @@ export const billingCheckouts = pgTable(
       "billing_checkouts_replaces_check",
       sql`(${t.replacesSubscriptionId} IS NULL) = (${t.startsAt} IS NULL) AND (${t.replacesSubscriptionId} IS NULL) = (${t.periodStart} IS NULL) AND (${t.replacesSubscriptionId} IS NULL OR ${t.provider} = 'razorpay') AND (${t.upfrontMinor} IS NULL OR (${t.replacesSubscriptionId} IS NOT NULL AND ${t.upfrontMinor} >= 100))`,
     ),
+    check(
+      "billing_checkouts_size_direction_check",
+      sql`(${t.sizeDirection} IS NULL) = (${t.replacesSubscriptionId} IS NULL) AND (${t.sizeDirection} IS NULL OR ${t.sizeDirection} IN ('bigger','smaller')) AND (${t.upfrontMinor} IS NULL OR ${t.sizeDirection} = 'bigger')`,
+    ),
     unique("billing_checkouts_gym_key_uq").on(t.gymId, t.idempotencyKey),
     unique("billing_checkouts_provider_ref_uq").on(t.provider, t.providerRef),
     index("billing_checkouts_gym_open_idx")
       .on(t.gymId)
       .where(sql`${t.state} IN ('creating','open')`),
+    index("billing_checkouts_approved_idx")
+      .on(t.gymId)
+      .where(sql`${t.state} = 'approved'`),
     index("billing_checkouts_trial_open_idx")
       .on(t.trialEndsAt)
       .where(sql`${t.state} = 'open' AND ${t.trialEndsAt} IS NOT NULL`),
@@ -124,7 +133,7 @@ export const billingPlanChanges = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    check("billing_plan_changes_provider_check", sql`${t.provider} IN ('paddle')`),
+    check("billing_plan_changes_provider_check", sql`${t.provider} IN ('paddle','razorpay')`),
     check("billing_plan_changes_state_check", sql`${t.state} IN ('pending','done','failed')`),
     check("billing_plan_changes_failure_check", sql`(${t.state} = 'failed') = (${t.failure} IS NOT NULL)`),
     check("billing_plan_changes_key_check", sql`length(${t.idempotencyKey}) BETWEEN 1 AND 100`),

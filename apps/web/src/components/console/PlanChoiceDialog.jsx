@@ -28,10 +28,11 @@ import { usePaddleSubscribe } from './usePaddleSubscribe';
 // gym keeps its whole size until then; if it has more members than the smaller size holds,
 // it is told how many to remove and by when, or it stays on its size.
 //
-// A plan paid through Razorpay (1d-iii-a): Razorpay cannot change what a mandate charges, so a
-// bigger size is a new plan the gym approves in Razorpay's window — the difference for the rest
-// of this month now, the new price from the next payment — and Confirm opens that window. A
-// smaller size through Razorpay is not built yet, and its rows say so.
+// A plan paid through Razorpay (1d-iii-a, 1d-iii-b): Razorpay cannot change what a mandate
+// charges, so a new size is a new plan the gym approves in Razorpay's window, and Continue opens
+// that window. A bigger one: the difference for the rest of this month now, the new price from
+// the next payment. A smaller one: nothing now (Razorpay's ₹5 check, given back), the new price
+// from the next payment, and the gym keeps its whole size until then.
 //
 // Unlike the prompt a gym on no plan meets (`PlanModal`), this one closes: the gym
 // already has a plan, and nothing here is owed.
@@ -52,9 +53,7 @@ function doneText(changed, words, firstPaymentOn) {
   const pending = changed.pendingSize;
   if (pending != null) {
     const on = trialEndDateLabel(pending.from);
-    const paidCap = Number.isFinite(changed.planSeatCap) ? changed.planSeatCap : changed.seatCap;
-    const keep = Number.isFinite(paidCap) ? ` Until then you keep all ${paidCap.toLocaleString()}.` : '';
-    return `Done. You'll move to ${pending.seatCap.toLocaleString()} ${words.people} (${pending.priceLabel} a month)${on === null ? ' at your next payment' : ` on ${on}`}.${keep}`;
+    return `Done. Moving to ${pending.seatCap.toLocaleString()} ${words.people} (${pending.priceLabel} a month)${on === null ? ' at your next payment' : ` on ${on}`}.`;
   }
   if (changed.status === 'trialing') {
     return firstPaymentOn === null
@@ -123,7 +122,7 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
   const confirm = async () => {
     if (picked === null || confirming) return;
     if (razorpay) {
-      // Razorpay's window, for a new plan at the bigger size; the dialog says Done once it is on the gym.
+      // Razorpay's window, for a new plan at the size picked; the dialog says Done once the server has it.
       if (paying === null) void subscribe(picked.row.plan.code, orgService.startRazorpaySizeChange);
       return;
     }
@@ -148,7 +147,7 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
   const firstPaymentOn = trialEndDateLabel(sub?.currentPeriodEnd);
   const rows = mode === 'size' ? sizeRows(plans.list, org) : [];
   // A smaller size chosen with too many members: the warning stays on the last screen too.
-  const doneWarning = changed?.pendingSize != null ? (picked?.row.warning ?? null) : null;
+  const doneWarning = (changed ?? paid)?.pendingSize != null ? (picked?.row.warning ?? null) : null;
 
   return (
     <div
@@ -212,11 +211,9 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
           <>
             <p className="text-sm mt-3" style={muted}>
               {mode === 'size'
-                ? razorpay
-                  ? `A bigger size starts once you pay in Razorpay's window: the difference for the rest of this month now, then the new price${firstPaymentOn === null ? ' from your next payment' : ` from ${firstPaymentOn}`}. Moving to a smaller size isn't available yet for plans paid through Razorpay.`
-                  : inTrial
+                ? inTrial && !razorpay
                   ? `Your trial allows up to ${sub?.seatCap} ${words.people} until your first payment${firstPaymentOn === null ? '' : ` on ${firstPaymentOn}`}; the size you choose starts then. Nothing is charged now.`
-                  : `A bigger size starts at once and you pay the difference for the rest of this month. A smaller one starts with your next payment${firstPaymentOn === null ? '' : ` on ${firstPaymentOn}`}; until then you keep your whole size.`
+                  : `Bigger sizes start today: you pay the difference for this month. Smaller sizes start${firstPaymentOn === null ? ' with your next payment' : ` on ${firstPaymentOn}`}.`
                 : `You pay today and get the size you choose at once. Your free trial ends then.`}
             </p>
 
@@ -319,6 +316,11 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
                     {sizeChargeText(picked.preview)}
                   </p>
                 )}
+                {razorpay && picked.row.kind === 'smaller' ? (
+                  <p className="text-sm" style={muted}>
+                    Razorpay may check your payment method with a small charge, which it refunds.
+                  </p>
+                ) : null}
                 {picked.row.warning !== null ? (
                   <p className="text-sm" style={warn}>
                     {picked.row.warning}
@@ -345,7 +347,7 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
                     style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F', minHeight: 44 }}
                   >
                     {confirming || paying !== null ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                    {razorpay ? 'Continue to payment' : 'Confirm'}
+                    {razorpay ? (picked.row.kind === 'smaller' ? 'Continue to Razorpay' : 'Continue to payment') : 'Confirm'}
                   </button>
                 </div>
               </div>
