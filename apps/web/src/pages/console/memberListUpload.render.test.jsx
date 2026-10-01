@@ -681,6 +681,7 @@ describe('every part of the box, in its order', () => {
   it('Upload: both ways in, the drop box and its words, and pasted rows with Continue', async () => {
     renderBox();
     expect(screen.getByRole('heading', { name: 'Import members' })).toBeTruthy();
+    expect(screen.getByTestId('file-kinds').textContent).toBe('Works with CSV and Excel (.xlsx) files, or rows pasted from a spreadsheet.');
     expect(screen.getByRole('tab', { name: 'Upload a file' }).getAttribute('aria-selected')).toBe('true');
     const drop = within(screen.getByTestId('drop-zone'));
     expect(drop.getByText('Drop your file here')).toBeTruthy();
@@ -690,6 +691,14 @@ describe('every part of the box, in its order', () => {
       'Copy the rows in your spreadsheet, with the headings, and paste them here.',
     );
     expect(screen.getByRole('button', { name: 'Continue' }).disabled).toBe(true);
+    // An example of what to paste, as a spreadsheet shows it (Kd, 2026-10-01).
+    const example = within(screen.getByTestId('paste-example'));
+    expect(example.getByText(/select the rows with their headings, copy them, and paste them below/)).toBeTruthy();
+    expect(example.getAllByRole('columnheader').map((th) => th.textContent)).toEqual(['Name', 'Email', 'Phone', 'Status']);
+    expect(example.getAllByRole('row').slice(1).map((tr) => tr.textContent)).toEqual([
+      'Ada Lovelaceada@example.com07700 900123Active',
+      'Ben Carterben@example.com07700 900456Frozen',
+    ]);
     expect(screen.getByRole('button', { name: 'Close' })).toBeTruthy();
   });
 

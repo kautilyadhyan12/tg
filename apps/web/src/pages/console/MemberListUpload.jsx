@@ -314,6 +314,47 @@ function HandEdits({ handEdits, words, checked, onChange }) {
 }
 
 /** The import box. Opened from the Members screen's "Import" card. */
+/** What Paste rows wants, shown as a spreadsheet shows it: the headings row first, then
+ *  one row a person (Kd's click-through, 2026-10-01: a gym needs to see an example). */
+const PASTE_EXAMPLE = [
+  ['Name', 'Email', 'Phone', 'Status'],
+  ['Ada Lovelace', 'ada@example.com', '07700 900123', 'Active'],
+  ['Ben Carter', 'ben@example.com', '07700 900456', 'Frozen'],
+];
+
+function PasteExample() {
+  const [head, ...rows] = PASTE_EXAMPLE;
+  return (
+    <div className="flex flex-col gap-2" data-testid="paste-example">
+      <p className="c-s14 c-t2">In your spreadsheet, select the rows with their headings, copy them, and paste them below. For example:</p>
+      <div className="rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--line)' }}>
+        <table className="w-full c-s13 text-left" style={{ borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ background: 'var(--raise)' }}>
+              {head.map((cell) => (
+                <th key={cell} scope="col" className="px-2.5 sm:px-3 py-2 c-w6 c-t1">
+                  {cell}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row[0]} className="border-t" style={{ borderColor: 'var(--line)' }}>
+                {row.map((cell) => (
+                  <td key={cell} className="px-2.5 sm:px-3 py-2 c-t2 align-top">
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 /** Every choice of the software box, in its order. */
 const SOFTWARE_CHOICES = [...MEMBER_LIST_SOFTWARE.map((s) => [s.id, s.name]), ['spreadsheet', 'My own spreadsheet'], ['other', 'Other software']];
 
@@ -776,6 +817,9 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
   if (stage === 'upload') {
     body = (
       <>
+        <p className="c-s14 c-t2 -mt-1" data-testid="file-kinds">
+          Works with CSV and Excel (.xlsx) files, or rows pasted from a spreadsheet.
+        </p>
         <SoftwareSteps />
         {/* Two ways in, both in plain sight: a quiet second tab went unseen at Kd's
             click-through, so each carries its icon and full-strength words. */}
@@ -843,6 +887,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
           </>
         ) : (
           <>
+            <PasteExample />
             <textarea
               aria-label="Paste your rows"
               placeholder="Copy the rows in your spreadsheet, with the headings, and paste them here."
