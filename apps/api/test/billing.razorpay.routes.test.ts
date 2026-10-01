@@ -11,6 +11,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { processRazorpayEvents } from "../src/modules/billing/events.js";
+import { claimCancelsToSend } from "../src/modules/billing/repo.js";
 import { applyRazorpaySubscription } from "../src/modules/billing/service.js";
 import { gymSeatCap } from "../src/modules/orgs/repo.js";
 import { expireLapsedGymTrials } from "../src/modules/orgs/trialSweep.js";
@@ -388,6 +389,39 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
   );
 
   it(
+    "WORST THING: a window paid in the instant a second press replaces it is refunded — the gym is never charged with no plan",
+    async () => {
+      const a = await owner();
+      const first = opened(await checkout(a.gymId, a.cookies, BIG));
+      // The owner pays the first window in one tab just as a second press, in another, closes it.
+      razorpay.duringNextCancel = (id) => {
+        if (id === first.subscriptionId) razorpay.authenticate(id);
+        return Promise.resolve();
+      };
+      const second = opened(await checkout(a.gymId, a.cookies, BIG));
+      expect([razorpay.subs.get(first.subscriptionId)?.status, razorpay.subs.get(first.subscriptionId)?.paid_count]).toEqual(["cancelled", 1]);
+      const firstPayment = razorpay.invoices.get(first.subscriptionId)?.[0]?.payment_id;
+      expect(firstPayment).toBeDefined();
+
+      expect(JSON.parse((await sync(a.gymId, first.checkoutId, a.cookies)).body)).toEqual({ state: "refunded" });
+      await runWorker();
+      expect(razorpay.refunds).toContain(firstPayment);
+      expect(await sql`SELECT 1 FROM subscriptions WHERE owner_id = ${a.gymId} AND provider = 'razorpay' AND status <> 'expired'`).toHaveLength(0);
+
+      // The second window still opens the plan, and its payment is kept.
+      razorpay.authenticate(second.subscriptionId);
+      expect(JSON.parse((await sync(a.gymId, second.checkoutId, a.cookies)).body)).toMatchObject({ state: "paid", subscription: { status: "active" } });
+      await runWorker();
+      expect((await paidRows(a.gymId)).map((r) => [r.provider_ref, r.status, r.cancel_reason])).toEqual([
+        [first.subscriptionId, "expired", "duplicate"],
+        [second.subscriptionId, "active", null],
+      ]);
+      expect(razorpay.refunds).not.toContain(razorpay.invoices.get(second.subscriptionId)?.[0]?.payment_id);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "WORST THING: a subscription something else on the same Razorpay account made is never touched",
     async () => {
       const foreign = razorpay.foreign(BIG_PLAN);
@@ -657,7 +691,11 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
       const win = opened(await checkout(a.gymId, a.cookies, BIG));
       const eventId = `evt_${randomBytes(7).toString("hex")}`;
       for (let i = 0; i < 3; i++) expect((await signedWebhook(win.subscriptionId, "subscription.charged", WEBHOOK_SECRET, eventId)).statusCode).toBe(200);
-      expect(await sql`SELECT 1 FROM webhook_events WHERE provider = 'razorpay' AND event_id = ${eventId}`).toHaveLength(1);
+      expect(await sql`SELECT 1 FROM webhook_events WHERE provider = 'razorpay' AND event_id = ${`evt:${eventId}`}`).toHaveLength(1);
+      // Razorpay's id header is not signed: one shaped like the worker's own re-read takes nothing from it.
+      const due = `due:${win.subscriptionId}:${String(Math.floor(Date.now() / (15 * 60 * 1000)))}`;
+      expect((await signedWebhook(win.subscriptionId, "subscription.charged", WEBHOOK_SECRET, due)).statusCode).toBe(200);
+      expect(await sql`SELECT 1 FROM webhook_events WHERE provider = 'razorpay' AND event_id = ${due}`).toHaveLength(0);
 
       const raw = JSON.stringify({ entity: "event", event: "subscription.pending", payload: { subscription: { entity: { id: win.subscriptionId } } } });
       const unnamed = () =>
@@ -672,6 +710,19 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
       expect((await unnamed()).statusCode).toBe(200);
       const byBody = `body:${createHash("sha256").update(raw).digest("hex")}`;
       expect(await sql`SELECT 1 FROM webhook_events WHERE provider = 'razorpay' AND event_id = ${byBody}`).toHaveLength(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a webhook with no signature of Razorpay's shape is refused before its body is read, and a body over 64 KB is refused even signed",
+    async () => {
+      const big = JSON.stringify({ entity: "event", event: "subscription.charged", pad: "x".repeat(70 * 1024) });
+      const send = (headers: Record<string, string>) =>
+        api().inject({ method: "POST", url: "/v1/webhooks/razorpay", remoteAddress: nextIp(), headers: { "content-type": "application/json", ...headers }, payload: big });
+      expect((await send({})).statusCode).toBe(401);
+      expect((await send({ "x-razorpay-signature": "ABC" })).statusCode).toBe(401);
+      expect((await send({ "x-razorpay-signature": createHmac("sha256", WEBHOOK_SECRET).update(big).digest("hex") })).statusCode).toBe(413);
     },
     TEST_TIMEOUT_MS,
   );
@@ -936,6 +987,50 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
         razorpay.cancelSubscriptionAtCycleEnd = real;
       }
       expect(asked.filter((id) => id === a.sub)).toHaveLength(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a cancel claimed by a run that stopped before sending it is sent when the month ends, so Razorpay charges no month after it",
+    async () => {
+      const a = await paidPlan();
+      expect((await cancelPlan(a.gymId, a.cookies)).statusCode).toBe(200);
+      // A run claims the cancel two hours before the end, then dies before asking Razorpay.
+      const claimed = await claimCancelsToSend(sql, { now: new Date(a.end.getTime() - 2 * HOUR_MS), leadMs: 3 * HOUR_MS, limit: 50, gymId: a.gymId });
+      expect(claimed.map((c) => c.subscriptionRef)).toEqual([a.sub]);
+      await runAt(a.end, -HOUR_MS);
+      expect(razorpay.endAtCycleEnd.has(a.sub)).toBe(false);
+      // The month is over and Razorpay was never told: it is cancelled there now.
+      await runAt(a.end, 60_000);
+      expect(await planRow(a.gymId)).toMatchObject({ status: "expired", cancel_at_period_end: true });
+      expect(razorpay.subs.get(a.sub)?.status).toBe("cancelled");
+      expect(await sql`SELECT 1 FROM billing_refunds WHERE gym_id = ${a.gymId}`).toHaveLength(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a second plan set aside whose cancel Razorpay does not take is asked again until Razorpay has ended it",
+    async () => {
+      const a = await owner();
+      const first = opened(await checkout(a.gymId, a.cookies, BIG));
+      const second = opened(await checkout(a.gymId, a.cookies, BIG));
+      razorpay.authenticate(second.subscriptionId);
+      expect(JSON.parse((await sync(a.gymId, second.checkoutId, a.cookies)).body)).toMatchObject({ state: "paid" });
+      // The first window was paid anyway, in the instant before Razorpay cancelled it.
+      const firstSub = razorpay.subs.get(first.subscriptionId);
+      if (firstSub === undefined) throw new Error("no first subscription");
+      razorpay.subs.set(first.subscriptionId, { ...firstSub, status: "created", ended_at: null });
+      razorpay.authenticate(first.subscriptionId);
+      await signedWebhook(first.subscriptionId);
+      razorpay.cancelFailures = 1;
+      await runWorker();
+      expect(razorpay.subs.get(first.subscriptionId)?.status).toBe("active");
+      // The event is asked again after its wait, and the cancel taken then.
+      await runWorker(2 * 60_000);
+      expect(razorpay.subs.get(first.subscriptionId)?.status).toBe("cancelled");
+      expect(razorpay.refunds).toContain(razorpay.invoices.get(first.subscriptionId)?.[0]?.payment_id);
     },
     TEST_TIMEOUT_MS,
   );

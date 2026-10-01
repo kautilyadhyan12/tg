@@ -176,11 +176,20 @@ export const paddlePortalSessionSchema = z.object({
 });
 export type PaddlePortalSession = z.infer<typeof paddlePortalSessionSchema>;
 
+/** A customer (`GET /customers/{id}`): who paid. Paddle keeps one per email. */
+export const paddleCustomerSchema = z.object({
+  id: paddleCustomerIdSchema,
+  email: z.string().max(320),
+});
+export type PaddleCustomer = z.infer<typeof paddleCustomerSchema>;
+
 /** A subscription (`GET /subscriptions/{id}`). */
 export const paddleSubscriptionSchema = z.object({
   id: paddleSubscriptionIdSchema,
   status: z.enum(["active", "canceled", "past_due", "paused", "trialing"]),
   customer_id: paddleCustomerIdSchema.nullable(),
+  /** A discount on it. Our server never gives one. */
+  discount: z.object({ id: z.string().max(60) }).passthrough().nullable().optional(),
   currency_code: z.string().length(3),
   updated_at: instant,
   canceled_at: instant.nullable(),
@@ -231,7 +240,16 @@ export const paddleTransactionSchema = z.object({
     .max(100),
   /** What it charges; a free trial's checkout charges 0. */
   details: z
-    .object({ totals: z.object({ grand_total: z.string().regex(/^-?\d{1,12}$/) }).nullable().optional() })
+    .object({
+      totals: z
+        .object({
+          grand_total: z.string().regex(/^-?\d{1,12}$/),
+          /** Taken off by a discount code; our server gives none, so it is always "0". */
+          discount: z.string().regex(/^-?\d{1,12}$/).optional(),
+        })
+        .nullable()
+        .optional(),
+    })
     .nullable()
     .optional(),
   /** With `include=adjustments`: its refunds and credits, and each one's state. */

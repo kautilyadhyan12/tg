@@ -572,7 +572,7 @@ describe('Change size through Razorpay (1d-iii-a)', () => {
     expect(orgService.syncCheckout).toHaveBeenCalledWith(GYM_ID, WINDOW.checkoutId);
   });
 
-  it('a payment made after the plan changed says nothing changed and it will be refunded', async () => {
+  it('a payment that couldn’t be used says it will be refunded and the plan hasn’t changed', async () => {
     orgService.startRazorpaySizeChange.mockResolvedValue({ data: WINDOW });
     orgService.syncCheckout.mockResolvedValue({ data: { state: 'refunded' } });
     const dialog = await openBigger();
@@ -581,7 +581,7 @@ describe('Change size through Razorpay (1d-iii-a)', () => {
     openRazorpayCheckout.mock.calls[0][0].onEvent({ type: 'completed' });
     expect(
       await within(dialog).findByText(
-        'Your plan changed while you were paying, so nothing changed and that payment will be refunded. Reload the page to see your plan.',
+        'That payment couldn’t be used, so it will be refunded in full. Your plan hasn’t changed. Reload the page to see it.',
       ),
     ).toBeTruthy();
     expect(within(dialog).queryByTestId('plan-choice-done')).toBeNull();

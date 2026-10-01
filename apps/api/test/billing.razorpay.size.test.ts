@@ -500,11 +500,61 @@ d("a gym paying through Razorpay moves to a bigger size (real Postgres, fake Raz
       const paidFirst = (razorpay.invoices.get(first.subscriptionId) ?? [])[0]?.payment_id;
       expect(paidFirst).toBeDefined();
       expect(razorpay.refunds).toContain(paidFirst);
-      expect((await rows(gym.gymId)).map((r) => [r.status, r.provider_ref])).toEqual([["active", gym.oldSub]]);
+      // The paid window is kept only as set aside; the gym's plan is as it was.
+      expect((await rows(gym.gymId)).map((r) => [r.status, r.provider_ref, r.cancel_reason])).toEqual([
+        ["active", gym.oldSub, null],
+        ["expired", first.subscriptionId, "duplicate"],
+      ]);
       // The second window still works.
       razorpay.authenticate(second.subscriptionId);
       expect(JSON.parse((await sync(gym.gymId, second.checkoutId, gym.cookies)).body)).toMatchObject({ state: "paid", subscription: { seatCap: 5000 } });
       expect(razorpay.refunds).not.toContain((razorpay.invoices.get(second.subscriptionId) ?? [])[0]?.payment_id);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "WORST THING: a bigger size paid and written in the instant a second press replaces it is refunded, and the gym keeps the plan it paid for",
+    async () => {
+      const gym = await payingGym();
+      const first = opened(await bigger(gym.gymId, gym.cookies, MID));
+      // The first window is paid, and its page writes it, while a second press is closing it.
+      razorpay.duringNextCancel = async (id) => {
+        if (id !== first.subscriptionId) return;
+        razorpay.authenticate(id);
+        await sync(gym.gymId, first.checkoutId, gym.cookies);
+      };
+      const second = opened(await bigger(gym.gymId, gym.cookies, BIG));
+      expect(JSON.parse((await sync(gym.gymId, first.checkoutId, gym.cookies)).body)).toEqual({ state: "refunded" });
+      await runWorker();
+      const upfront = (razorpay.invoices.get(first.subscriptionId) ?? [])[0]?.payment_id;
+      expect(upfront).toBeDefined();
+      expect(razorpay.refunds).toContain(upfront);
+      // The plan the gym paid for is still its plan, and still live at Razorpay.
+      expect((await rows(gym.gymId)).filter((r) => r.status === "active").map((r) => [r.provider_ref, r.plan, r.cancel_at_period_end])).toEqual([[gym.oldSub, SMALL, false]]);
+      expect(razorpay.subs.get(gym.oldSub)?.status).toBe("active");
+      expect(await gymSeatCap(sql, gym.gymId)).toBe(1);
+
+      // The second window still works.
+      razorpay.authenticate(second.subscriptionId);
+      expect(JSON.parse((await sync(gym.gymId, second.checkoutId, gym.cookies)).body)).toMatchObject({ state: "paid", subscription: { seatCap: 5000 } });
+      expect(razorpay.refunds).not.toContain((razorpay.invoices.get(second.subscriptionId) ?? [])[0]?.payment_id);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a replaced bigger-size window whose mandate is given but whose add-on has not landed is cancelled at once by the newer press",
+    async () => {
+      const gym = await payingGym();
+      const first = opened(await bigger(gym.gymId, gym.cookies, MID));
+      // The mandate given, the rest of this month's payment still on its way.
+      const sub = razorpay.subs.get(first.subscriptionId);
+      if (sub === undefined) throw new Error("no subscription");
+      razorpay.subs.set(first.subscriptionId, { ...sub, status: "authenticated" });
+      opened(await bigger(gym.gymId, gym.cookies, BIG));
+      expect(razorpay.subs.get(first.subscriptionId)?.status).toBe("cancelled");
+      expect(razorpay.subs.get(gym.oldSub)?.status).toBe("active");
     },
     TEST_TIMEOUT_MS,
   );

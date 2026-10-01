@@ -15,7 +15,6 @@ import { loadConfig } from "../src/config.js";
 import { processPaddleEvents } from "../src/modules/billing/events.js";
 import { gymSeatCap } from "../src/modules/orgs/repo.js";
 import { expireLapsedGymTrials } from "../src/modules/orgs/trialSweep.js";
-import { orgCheckoutResponseSchema } from "@app/shared";
 import { BILLING_LOCK_WAIT_MS, holdBillingSuiteLock } from "./billingSuiteLock.js";
 import { FakePaddle, paddleId } from "./fakePaddle.js";
 import { createMemoryRedis } from "../src/redis.js";
@@ -60,6 +59,9 @@ const PRICES: Record<string, { amount: string; currency: string }> = {
 d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
   const paddle = new FakePaddle(PRICES);
+  // A window paid with the email it is filled in with: the gym's owner's (1e).
+  paddle.payerEmailFor = async (gymId) =>
+    (await sql<{ email: string }[]>`SELECT u.email FROM gyms g JOIN users u ON u.id = g.owner_user_id WHERE g.id = ${gymId}`)[0]?.email ?? null;
   let app: Awaited<ReturnType<typeof buildApp>> | undefined;
   const api = () => {
     if (app === undefined) throw new Error("beforeAll did not build the app");
@@ -331,17 +333,19 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
   );
 
   it(
-    "an owner's stored email the console can't read back is left out, and Paddle's window asks for it; the reply still reads",
+    "an owner's stored email Paddle's window can't be filled in with opens no window: a plan paid as anybody else is refunded",
     async () => {
       const odd = await owner("AT");
       // A dot before the @, as a migrated or Google account may hold.
       const oddEmail = `billing-t-odd-${String(seq++)}.@example.com`;
       await sql`UPDATE users SET email = ${oddEmail} WHERE id = ${odd.userId}`;
+      const made = paddle.created;
       const res = await checkout(odd.gymId, odd.cookies, BIG);
-      expect(res.statusCode).toBe(200);
-      const reply: unknown = JSON.parse(res.body);
-      expect(reply).toMatchObject({ email: null, country: "AT" });
-      expect(orgCheckoutResponseSchema.safeParse(reply).success).toBe(true);
+      expect(res.statusCode).toBe(409);
+      expect(JSON.parse(res.body)).toMatchObject({ error: "payer_email_unusable" });
+      expect(res.body).not.toContain(oddEmail);
+      expect(paddle.created).toBe(made);
+      expect(await sql`SELECT 1 FROM billing_checkouts WHERE gym_id = ${odd.gymId}`).toHaveLength(0);
     },
     TEST_TIMEOUT_MS,
   );
@@ -362,6 +366,20 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
     await signedWebhook(subscriptionEvent(extraSub));
     return { a, extraTxn: first.transactionId, extraSub };
   };
+
+  it(
+    "a second plan set aside whose cancel Paddle does not take is asked again until Paddle has ended it",
+    async () => {
+      paddle.cancelFailures = 1;
+      const { extraSub } = await payTwice(true);
+      await runWorker();
+      expect(paddle.subs.get(extraSub)?.status).toBe("active");
+      // The event is asked again after its wait, and the cancel taken then.
+      await runWorker(2 * 60_000);
+      expect(paddle.subs.get(extraSub)?.status).toBe("canceled");
+    },
+    TEST_TIMEOUT_MS,
+  );
 
   it(
     "WORST THING: a second payment still finishing at Paddle is refunded once it finishes, and once only",
@@ -742,6 +760,97 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       expect((await openPortal(a.gymId, a.cookies)).statusCode).toBe(200);
       expect(paddle.portalCalls.at(-1)).toEqual({ customerId: a.customerId, subscriptionIds: [a.subId] });
       expect((await openPortal(a.gymId, bookkeeper.cookies)).statusCode).toBe(409);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "WORST THING: another gym paying its own plan as this gym's owner is refunded, and never locks this gym out of its Paddle page",
+    async () => {
+      const victim = await owner();
+      const victimTxn = opened(await checkout(victim.gymId, victim.cookies, BIG)) as ReturnType<typeof opened> & { email: string | null };
+      const victimEmail = victimTxn.email;
+      if (victimEmail === null) throw new Error("no owner's email");
+      paddle.pay(victimTxn.transactionId, "api", true, victimEmail);
+      expect(JSON.parse((await post(`/v1/orgs/${victim.gymId}/billing/checkouts/${victimTxn.checkoutId}/sync`, {}, victim.cookies)).body)).toMatchObject({ state: "paid" });
+
+      // Another gym's owner opens Paddle's window from the browser's console with the victim's
+      // owner's email: Paddle files it under the victim's account.
+      const other = await owner();
+      const txn = opened(await checkout(other.gymId, other.cookies, BIG));
+      const subId = paddle.pay(txn.transactionId, "api", true, victimEmail.toUpperCase());
+      expect(paddle.subs.get(subId)?.customer_id).toBe(paddle.customersByEmail.get(victimEmail.toLowerCase()));
+      expect(JSON.parse((await post(`/v1/orgs/${other.gymId}/billing/checkouts/${txn.checkoutId}/sync`, {}, other.cookies)).body)).toEqual({ state: "refunded" });
+      await runWorker();
+      expect(await paidRows(other.gymId)).toEqual([]);
+      expect(paddle.cancelledSubs).toContain(subId);
+      expect(paddle.refunds).toContain(txn.transactionId);
+
+      // The victim's owner still opens their own Paddle page.
+      expect((await openPortal(victim.gymId, victim.cookies)).statusCode).toBe(200);
+      // The other gym's owner, paying as themselves, gets the plan.
+      const again = opened(await checkout(other.gymId, other.cookies, BIG));
+      paddle.pay(again.transactionId);
+      expect(JSON.parse((await post(`/v1/orgs/${other.gymId}/billing/checkouts/${again.checkoutId}/sync`, {}, other.cookies)).body)).toMatchObject({ state: "paid" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "people with no say in a gym's billing never use up its address's allowance: its owner at that address can still Subscribe",
+    async () => {
+      const a = await owner();
+      const member = await makeUser();
+      await sql`INSERT INTO gym_members (gym_id, user_id) VALUES (${a.gymId}, ${member.userId})`;
+      const trainer = await makeUser();
+      await addStaff(a.gymId, trainer.userId, "trainer", ["members.read"]);
+      const strangers = [member, trainer, await makeUser(), await makeUser(), await makeUser(), await makeUser(), await makeUser()];
+      const at = "10.99.0.7";
+      const press = (cookies: Cookies, gymId: string) =>
+        api().inject({
+          method: "POST",
+          url: `/v1/orgs/${gymId}/billing/checkout`,
+          remoteAddress: at,
+          headers: { "content-type": "application/json", "idempotency-key": randomBytes(8).toString("hex") },
+          cookies,
+          payload: JSON.stringify({ planCode: BIG }),
+        });
+      // 7 × 18 presses: more than the address's 120 an hour, each person under their own 20.
+      const codes = new Map<number, number>();
+      for (const s of strangers) {
+        for (let i = 0; i < 18; i++) {
+          const code = (await press(s.cookies, i % 2 === 0 ? a.gymId : "00000000-0000-4000-8000-000000000000")).statusCode;
+          codes.set(code, (codes.get(code) ?? 0) + 1);
+        }
+      }
+      expect([...codes.keys()].sort()).toEqual([403, 404]);
+      const res = await press(a.cookies, a.gymId);
+      expect([res.statusCode, res.body]).toEqual([200, expect.any(String)]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a plan paid with a discount code typed into Paddle's window is refunded: our server gives no discount",
+    async () => {
+      const a = await owner();
+      const txn = opened(await checkout(a.gymId, a.cookies, BIG));
+      const subId = paddle.pay(txn.transactionId);
+      paddle.update(subId, { discount: { id: "dsc_01h0000000000000000000000" } });
+      expect(JSON.parse((await post(`/v1/orgs/${a.gymId}/billing/checkouts/${txn.checkoutId}/sync`, {}, a.cookies)).body)).toEqual({ state: "refunded" });
+      await runWorker();
+      expect(await paidRows(a.gymId)).toEqual([]);
+      expect(paddle.refunds).toContain(txn.transactionId);
+
+      // A code for the first payment alone: the subscription shows no discount, its payment does.
+      const b = await owner();
+      const second = opened(await checkout(b.gymId, b.cookies, BIG));
+      paddle.pay(second.transactionId);
+      const paid = paddle.txns.get(second.transactionId);
+      if (paid === undefined) throw new Error("no transaction");
+      paddle.txns.set(second.transactionId, { ...paid, details: { totals: { grand_total: "1000", discount: "1000" } } });
+      expect(JSON.parse((await post(`/v1/orgs/${b.gymId}/billing/checkouts/${second.checkoutId}/sync`, {}, b.cookies)).body)).toEqual({ state: "refunded" });
+      expect(await paidRows(b.gymId)).toEqual([]);
     },
     TEST_TIMEOUT_MS,
   );
