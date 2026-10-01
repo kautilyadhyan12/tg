@@ -82,13 +82,13 @@ export async function claimNextStaffSend(
 
 /** What the worker checks about a claimed email just before it goes. */
 export interface StaffSendContext {
-  invite: { email: string; role: "manager" | "trainer" | null; open: boolean; inviterName: string | null } | null;
+  invite: { email: string; role: "manager" | "trainer" | null; roleName: string | null; open: boolean; inviterName: string | null } | null;
   gym: { name: string; orgType: string; active: boolean; onPlan: boolean; stopped: boolean } | null;
 }
 
 export async function staffSendContext(sql: SqlOrTx, send: ClaimedStaffSend, now: Date): Promise<StaffSendContext> {
-  const invites = await sql<{ email: string; role: string; open: boolean; inviter_name: string | null }[]>`
-    SELECT i.email::text AS email, i.role,
+  const invites = await sql<{ email: string; role: string; role_name: string | null; open: boolean; inviter_name: string | null }[]>`
+    SELECT i.email::text AS email, i.role, i.role_name,
            (i.state = 'pending' AND i.cleared_at IS NULL AND i.expires_at > ${now}) AS open,
            u.display_name AS inviter_name
     FROM gym_staff_invites i
@@ -110,6 +110,7 @@ export async function staffSendContext(sql: SqlOrTx, send: ClaimedStaffSend, now
         : {
             email: invite.email,
             role: invite.role === "manager" || invite.role === "trainer" ? invite.role : null,
+            roleName: invite.role_name,
             open: invite.open,
             inviterName: invite.inviter_name,
           },

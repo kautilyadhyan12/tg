@@ -17,6 +17,7 @@ export interface StaffInviteRow {
   email: string;
   role: InviteRole;
   privileges: string[];
+  roleName: string | null;
   createdAt: Date;
   expiresAt: Date;
   state: StaffInviteState;
@@ -28,6 +29,7 @@ interface RawInvite {
   email: string;
   role: string;
   privileges: string[];
+  role_name: string | null;
   created_at: Date;
   expires_at: Date;
   state: string;
@@ -49,6 +51,7 @@ const toInvite = (row: RawInvite): StaffInviteRow => ({
   email: row.email,
   role: toRole(row.role, row.id),
   privileges: row.privileges,
+  roleName: row.role_name,
   createdAt: row.created_at,
   expiresAt: row.expires_at,
   state: toState(row.state, row.id),
@@ -58,7 +61,7 @@ const toInvite = (row: RawInvite): StaffInviteRow => ({
  *  locked; ended or not. At most one, by the open unique index. */
 export async function lockOpenInviteFor(tx: TransactionSql, gymId: string, email: string): Promise<StaffInviteRow | null> {
   const rows = await tx<RawInvite[]>`
-    SELECT id, gym_id, email::text AS email, role, privileges, created_at, expires_at, state
+    SELECT id, gym_id, email::text AS email, role, privileges, role_name, created_at, expires_at, state
     FROM gym_staff_invites
     WHERE gym_id = ${gymId} AND email = ${email}
       AND state IN ('pending','declined') AND cleared_at IS NULL
@@ -123,12 +126,21 @@ export async function inviteCounts(
 /** Write the invitation and queue its email, in the caller's transaction. */
 export async function insertInvite(
   tx: TransactionSql,
-  input: { gymId: string; email: string; role: InviteRole; privileges: readonly string[]; invitedBy: string; at: Date; expiresAt: Date },
+  input: {
+    gymId: string;
+    email: string;
+    role: InviteRole;
+    privileges: readonly string[];
+    roleName: string | null;
+    invitedBy: string;
+    at: Date;
+    expiresAt: Date;
+  },
 ): Promise<StaffInviteRow> {
   const rows = await tx<RawInvite[]>`
-    INSERT INTO gym_staff_invites (gym_id, email, role, privileges, invited_by, created_at, expires_at)
-    VALUES (${input.gymId}, ${input.email}, ${input.role}, ${[...input.privileges]}, ${input.invitedBy}, ${input.at}, ${input.expiresAt})
-    RETURNING id, gym_id, email::text AS email, role, privileges, created_at, expires_at, state`;
+    INSERT INTO gym_staff_invites (gym_id, email, role, privileges, role_name, invited_by, created_at, expires_at)
+    VALUES (${input.gymId}, ${input.email}, ${input.role}, ${[...input.privileges]}, ${input.roleName}, ${input.invitedBy}, ${input.at}, ${input.expiresAt})
+    RETURNING id, gym_id, email::text AS email, role, privileges, role_name, created_at, expires_at, state`;
   const row = rows[0];
   if (row === undefined) throw new Error("INSERT INTO gym_staff_invites returned no row");
   await tx`
@@ -144,7 +156,7 @@ export async function listOpenInvites(sql: SqlOrTx, gymId: string, now: Date): P
   const rows = await sql<
     (RawInvite & { answered_at: Date | null; send_state: string | null; send_reason: string | null })[]
   >`
-    SELECT i.id, i.gym_id, i.email::text AS email, i.role, i.privileges, i.created_at, i.expires_at, i.state, i.answered_at,
+    SELECT i.id, i.gym_id, i.email::text AS email, i.role, i.privileges, i.role_name, i.created_at, i.expires_at, i.state, i.answered_at,
            s.state AS send_state, s.reason AS send_reason
     FROM gym_staff_invites i
     LEFT JOIN LATERAL (
@@ -164,6 +176,7 @@ export async function listOpenInvites(sql: SqlOrTx, gymId: string, now: Date): P
       email: invite.email,
       role: invite.role,
       privileges: invite.privileges,
+      roleName: invite.roleName,
       invitedAt: invite.createdAt.toISOString(),
       expiresAt: invite.expiresAt.toISOString(),
       state: invite.state === "declined" ? "declined" : invite.expiresAt.getTime() <= now.getTime() ? "ended" : "waiting",
@@ -177,7 +190,7 @@ export async function listOpenInvites(sql: SqlOrTx, gymId: string, now: Date): P
 /** One open invitation of this gym, locked. */
 export async function lockOpenInvite(tx: TransactionSql, gymId: string, inviteId: string): Promise<StaffInviteRow | null> {
   const rows = await tx<RawInvite[]>`
-    SELECT id, gym_id, email::text AS email, role, privileges, created_at, expires_at, state
+    SELECT id, gym_id, email::text AS email, role, privileges, role_name, created_at, expires_at, state
     FROM gym_staff_invites
     WHERE gym_id = ${gymId} AND id = ${inviteId} AND state IN ('pending','declined') AND cleared_at IS NULL
     FOR UPDATE`;
@@ -212,7 +225,7 @@ export interface MyInviteRow extends StaffInviteRow {
 /** Open invitations to exactly this address that have not ended, at gyms still open. */
 export async function invitesForAddress(sql: SqlOrTx, email: string, now: Date): Promise<MyInviteRow[]> {
   const rows = await sql<(RawInvite & { gym_name: string; gym_city: string | null; org_type: string; invited_by: string | null })[]>`
-    SELECT i.id, i.gym_id, i.email::text AS email, i.role, i.privileges, i.created_at, i.expires_at, i.state,
+    SELECT i.id, i.gym_id, i.email::text AS email, i.role, i.privileges, i.role_name, i.created_at, i.expires_at, i.state,
            g.name AS gym_name, g.city AS gym_city, g.org_type, u.display_name AS invited_by
     FROM gym_staff_invites i
     JOIN gyms g ON g.id = i.gym_id
@@ -249,7 +262,7 @@ export async function lockInviteFor(
   input: { gymId: string; inviteId: string; email: string; userId: string },
 ): Promise<StaffInviteRow | null> {
   const rows = await tx<RawInvite[]>`
-    SELECT id, gym_id, email::text AS email, role, privileges, created_at, expires_at, state
+    SELECT id, gym_id, email::text AS email, role, privileges, role_name, created_at, expires_at, state
     FROM gym_staff_invites
     WHERE gym_id = ${input.gymId} AND id = ${input.inviteId} AND email = ${input.email}
       AND ((state IN ('pending','declined') AND cleared_at IS NULL) OR (state = 'accepted' AND answered_by = ${input.userId}))
@@ -284,11 +297,59 @@ export async function staffRowOf(
  *  written) is written afresh, so the invitation is the owner's yes from now. */
 export async function writeStaff(
   tx: TransactionSql,
-  input: { gymId: string; userId: string; role: InviteRole; privileges: readonly string[]; at: Date },
+  input: { gymId: string; userId: string; role: InviteRole; privileges: readonly string[]; roleName: string | null; at: Date },
 ): Promise<void> {
   await tx`
-    INSERT INTO gym_staff (gym_id, user_id, role, privileges, created_at)
-    VALUES (${input.gymId}, ${input.userId}, ${input.role}, ${[...input.privileges]}, ${input.at})
+    INSERT INTO gym_staff (gym_id, user_id, role, privileges, role_name, created_at)
+    VALUES (${input.gymId}, ${input.userId}, ${input.role}, ${[...input.privileges]}, ${input.roleName}, ${input.at})
     ON CONFLICT (gym_id, user_id) DO UPDATE
-    SET role = EXCLUDED.role, privileges = EXCLUDED.privileges, created_at = EXCLUDED.created_at`;
+    SET role = EXCLUDED.role, privileges = EXCLUDED.privileges, role_name = EXCLUDED.role_name, created_at = EXCLUDED.created_at`;
+}
+
+// ── The gym's own roles (Kd, RULINGS 2026-10-01) ─────────────────────────────
+
+export interface StaffRoleRow {
+  id: string;
+  name: string;
+  privileges: string[];
+}
+
+/** The gym's own roles, by name. */
+export async function listRoles(sql: SqlOrTx, gymId: string): Promise<StaffRoleRow[]> {
+  return await sql<StaffRoleRow[]>`
+    SELECT id, name::text AS name, privileges FROM gym_staff_roles
+    WHERE gym_id = ${gymId}
+    ORDER BY lower(name::text), id`;
+}
+
+/** One of the gym's own roles; null for any other gym's id. */
+export async function roleById(sql: SqlOrTx, gymId: string, roleId: string): Promise<StaffRoleRow | null> {
+  const rows = await sql<StaffRoleRow[]>`
+    SELECT id, name::text AS name, privileges FROM gym_staff_roles WHERE gym_id = ${gymId} AND id = ${roleId}`;
+  return rows[0] ?? null;
+}
+
+export async function countRoles(tx: SqlOrTx, gymId: string): Promise<number> {
+  const rows = await tx<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_staff_roles WHERE gym_id = ${gymId}`;
+  return rows[0]?.n ?? 0;
+}
+
+/** Make a role; null when the gym already has one of that name (any case). */
+export async function insertRole(
+  tx: TransactionSql,
+  input: { gymId: string; name: string; privileges: readonly string[]; by: string; at: Date },
+): Promise<StaffRoleRow | null> {
+  const rows = await tx<StaffRoleRow[]>`
+    INSERT INTO gym_staff_roles (gym_id, name, privileges, created_by, created_at)
+    VALUES (${input.gymId}, ${input.name}, ${[...input.privileges]}, ${input.by}, ${input.at})
+    ON CONFLICT (gym_id, name) DO NOTHING
+    RETURNING id, name::text AS name, privileges`;
+  return rows[0] ?? null;
+}
+
+/** Delete a role. Staff and invitations that have its name keep it and their ticks. */
+export async function deleteRole(tx: TransactionSql, gymId: string, roleId: string): Promise<string | null> {
+  const rows = await tx<{ name: string }[]>`
+    DELETE FROM gym_staff_roles WHERE gym_id = ${gymId} AND id = ${roleId} RETURNING name::text AS name`;
+  return rows[0]?.name ?? null;
 }

@@ -6,6 +6,12 @@
 --                          (never "manage staff"), who sent it, 7 days to accept.
 --                          Open = pending or declined and not cleared; one open
 --                          invitation an address a gym.
+-- gym_staff_roles          the gym's own roles ("Front desk"): a name and its ticks,
+--                          offered beside Manager and Trainer on the invite form (Kd,
+--                          RULINGS 2026-10-01). Never "manage staff".
+-- gym_staff.role_name      the gym's own role a person holds, shown in its place; the
+--                          `role` underneath stays manager or trainer, and the ticks are
+--                          what the console obeys.
 -- gym_staff_invite_sends   each email, queued in the same transaction as its invitation
 --                          and sent by the worker; the address is cleared when it is done.
 
@@ -15,6 +21,7 @@ CREATE TABLE gym_staff_invites (
   email citext NOT NULL,
   role text NOT NULL,
   privileges text[] NOT NULL,
+  role_name text,
   invited_by uuid REFERENCES users(id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL,
   expires_at timestamptz NOT NULL,
@@ -23,6 +30,7 @@ CREATE TABLE gym_staff_invites (
   answered_by uuid REFERENCES users(id) ON DELETE SET NULL,
   cleared_at timestamptz,
   CONSTRAINT gym_staff_invites_role_check CHECK (role IN ('manager','trainer')),
+  CONSTRAINT gym_staff_invites_role_name_check CHECK (role_name IS NULL OR length(role_name) BETWEEN 1 AND 40),
   CONSTRAINT gym_staff_invites_privileges_check CHECK (NOT ('staff.manage' = ANY (privileges)) AND cardinality(privileges) <= 20),
   CONSTRAINT gym_staff_invites_state_check CHECK (state IN ('pending','accepted','declined','cancelled')),
   CONSTRAINT gym_staff_invites_answered_check CHECK ((state = 'pending') = (answered_at IS NULL)),
@@ -35,6 +43,20 @@ CREATE UNIQUE INDEX gym_staff_invites_open_uq ON gym_staff_invites (gym_id, emai
 CREATE INDEX gym_staff_invites_email_idx ON gym_staff_invites (email)
   WHERE state IN ('pending','declined') AND cleared_at IS NULL;--> statement-breakpoint
 CREATE INDEX gym_staff_invites_gym_idx ON gym_staff_invites (gym_id, created_at);--> statement-breakpoint
+CREATE TABLE gym_staff_roles (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  gym_id uuid NOT NULL REFERENCES gyms(id) ON DELETE CASCADE,
+  name citext NOT NULL,
+  privileges text[] NOT NULL,
+  created_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL,
+  CONSTRAINT gym_staff_roles_name_uq UNIQUE (gym_id, name),
+  CONSTRAINT gym_staff_roles_name_check CHECK (length(name) BETWEEN 1 AND 40),
+  CONSTRAINT gym_staff_roles_privileges_check CHECK (NOT ('staff.manage' = ANY (privileges)) AND cardinality(privileges) <= 20)
+);--> statement-breakpoint
+ALTER TABLE gym_staff ADD COLUMN role_name text;--> statement-breakpoint
+ALTER TABLE gym_staff ADD CONSTRAINT gym_staff_role_name_check
+  CHECK (role_name IS NULL OR (role <> 'owner' AND length(role_name) BETWEEN 1 AND 40));--> statement-breakpoint
 CREATE TABLE gym_staff_invite_sends (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   gym_id uuid NOT NULL REFERENCES gyms(id) ON DELETE CASCADE,

@@ -13,6 +13,9 @@ import {
   acceptStaffInvitationResponseSchema,
   cancelStaffInviteResponseSchema,
   createStaffInviteResponseSchema,
+  createStaffRoleResponseSchema,
+  deleteStaffRoleResponseSchema,
+  staffRolesResponseSchema,
   declineStaffInvitationResponseSchema,
   myStaffInvitationsResponseSchema,
   staffInvitesResponseSchema,
@@ -1167,6 +1170,22 @@ export const orgService = {
    *  who is staff at once; `'invited'` when an email is on its way. Not retried. */
   inviteStaff: (gymId, body) =>
     readThrough(createStaffInviteResponseSchema, 'that invitation', authApi.post(`/v1/orgs/${gymId}/staff/invites`, body)),
+
+  /** GET /v1/orgs/:gymId/staff/roles — the gym's own roles (RULINGS 2026-10-01). */
+  getStaffRoles: (gymId) =>
+    readThrough(staffRolesResponseSchema, 'your roles', authApi.get(`/v1/orgs/${gymId}/staff/roles`)),
+
+  /** POST /v1/orgs/:gymId/staff/roles — make one: a name and its ticks. */
+  createStaffRole: (gymId, body) =>
+    readThrough(createStaffRoleResponseSchema, 'that role', authApi.post(`/v1/orgs/${gymId}/staff/roles`, body)),
+
+  /** DELETE /v1/orgs/:gymId/staff/roles/:roleId — staff who have it keep it. */
+  deleteStaffRole: (gymId, roleId) =>
+    readThrough(
+      deleteStaffRoleResponseSchema,
+      'that role',
+      authApi.delete(`/v1/orgs/${gymId}/staff/roles/${encodeURIComponent(roleId)}`),
+    ),
 
   /** GET /v1/orgs/:gymId/staff/invites — the invitations waiting, ended or declined. */
   getStaffInvites: (gymId) =>

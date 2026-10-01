@@ -25,6 +25,9 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       inviteStaff: vi.fn(),
       getStaffInvites: vi.fn(),
       cancelStaffInvite: vi.fn(),
+      getStaffRoles: vi.fn(),
+      createStaffRole: vi.fn(),
+      deleteStaffRole: vi.fn(),
       updateStaffRole: vi.fn(),
       updateStaffPrivileges: vi.fn(),
       removeStaff: vi.fn(),
@@ -238,6 +241,8 @@ beforeEach(() => {
   orgService.inviteStaff.mockResolvedValue({ data: { outcome: 'invited', invite: INVITE } });
   orgService.getStaffInvites.mockResolvedValue({ data: { invites: [] } });
   orgService.cancelStaffInvite.mockResolvedValue({ data: { status: 'cancelled' } });
+  orgService.getStaffRoles.mockResolvedValue({ data: { roles: [] } });
+  orgService.deleteStaffRole.mockResolvedValue({ data: { status: 'deleted' } });
   orgService.updateStaffRole.mockResolvedValue({ data: { staff: MANAGER } });
   orgService.updateStaffPrivileges.mockResolvedValue({ data: { staff: MANAGER } });
   orgService.removeStaff.mockResolvedValue({ data: { status: 'removed' } });
@@ -780,6 +785,78 @@ describe('adding somebody', () => {
 // ── Who gets in at all ──────────────────────────────────────────────────────
 
 // ── Staff invited by email (4a-i) ──────────────────────────────────────────
+
+describe("the gym's own roles", () => {
+  const FRONT_DESK = { id: '1f1c2b8e-0a4d-4f7e-9b1a-2c3d4e5f6a7b', name: 'Front desk', privileges: ['attendance.read', 'members.read'] };
+  const openForm = async () => {
+    await drawStaff();
+    fireEvent.click(await screen.findByText('Invite staff'));
+  };
+  const tickedNow = () =>
+    within(screen.getByTestId('invite-ticks'))
+      .getAllByRole('checkbox')
+      .filter((box) => box.checked).length;
+
+  it('shows the roles in one row, and choosing one ticks its permissions right underneath', async () => {
+    orgService.getStaffRoles.mockResolvedValue({ data: { roles: [FRONT_DESK] } });
+    await openForm();
+    const row = screen.getByRole('radiogroup');
+    expect(within(row).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Manager', 'Trainer', 'Front desk']);
+    fireEvent.click(await screen.findByRole('radio', { name: 'Front desk' }));
+    expect(tickedNow()).toBe(2);
+    fireEvent.change(screen.getByLabelText(/Their email address/i), { target: { value: 'desk@example.com' } });
+    fireEvent.click(screen.getByText('Send invitation'));
+    await waitFor(() => expect(orgService.inviteStaff).toHaveBeenCalledTimes(1));
+    const sent = orgService.inviteStaff.mock.calls[0][1];
+    expect(sent).toMatchObject({ email: 'desk@example.com', role: 'trainer', roleId: FRONT_DESK.id });
+    expect([...sent.privileges].sort()).toEqual(['attendance.read', 'members.read']);
+  });
+
+  it('+ New role saves a name with the ticked permissions and chooses it', async () => {
+    orgService.createStaffRole.mockResolvedValue({ data: { role: { ...FRONT_DESK, privileges: ['attendance.read'] } } });
+    await openForm();
+    fireEvent.click(screen.getByText('New role'));
+    fireEvent.change(screen.getByLabelText('Role name'), { target: { value: 'Front desk' } });
+    for (const box of within(screen.getByTestId('invite-ticks')).getAllByRole('checkbox')) {
+      if (box.checked) fireEvent.click(box);
+    }
+    fireEvent.click(screen.getByText('See who came in'));
+    fireEvent.click(screen.getByText('Save role'));
+    await waitFor(() => expect(orgService.createStaffRole).toHaveBeenCalledWith(ORG.id, { name: 'Front desk', privileges: ['attendance.read'] }));
+    expect((await screen.findByRole('radio', { name: 'Front desk' })).getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByText('Send invitation')).toBeTruthy();
+  });
+
+  it('a role without a name is not saved, and a refusal is said', async () => {
+    orgService.createStaffRole.mockRejectedValue(apiError(409, 'role_name_reserved', 'Manager is already one of the app\'s roles. Choose another name.'));
+    await openForm();
+    fireEvent.click(screen.getByText('New role'));
+    fireEvent.click(screen.getByText('Save role'));
+    expect(screen.getByText('Give the role a name.')).toBeTruthy();
+    expect(orgService.createStaffRole).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('Role name'), { target: { value: 'Manager' } });
+    fireEvent.click(screen.getByText('Save role'));
+    expect(await screen.findByText("Manager is already one of the app's roles. Choose another name.")).toBeTruthy();
+  });
+
+  it('a role is deleted only after asking, and says staff keep it', async () => {
+    orgService.getStaffRoles.mockResolvedValue({ data: { roles: [FRONT_DESK] } });
+    await openForm();
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete the role Front desk' }));
+    expect(orgService.deleteStaffRole).not.toHaveBeenCalled();
+    expect(screen.getByText(/Staff who have it keep it/)).toBeTruthy();
+    fireEvent.click(screen.getByText('Delete role'));
+    await waitFor(() => expect(orgService.deleteStaffRole).toHaveBeenCalledWith(ORG.id, FRONT_DESK.id));
+    await waitFor(() => expect(screen.queryByRole('radio', { name: 'Front desk' })).toBeNull());
+  });
+
+  it("shows a person's own role name on their row", async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, { ...MANAGER, role: 'trainer', roleName: 'Front desk' }] } });
+    await drawStaff();
+    const row = await screen.findByTestId('staff-u2');
+    expect(within(row).getByText(/Front desk · since/)).toBeTruthy();
+  });
+});
 
 describe('the invitations waiting', () => {
   it('lists each invitation with its role, until when, and whether the email went', async () => {

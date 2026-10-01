@@ -382,6 +382,14 @@ describe('a person invited to help run a gym', () => {
     expect(within(card).queryByText(/See the member list/)).toBeNull();
   });
 
+  it("a card for one of the gym's own roles names it", async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [ORG] } });
+    invitationsAre([{ ...STAFF_INVITATION, roleName: 'Front desk' }]);
+    drawHome();
+    const card = await screen.findByTestId(`staff-invitation-${STAFF_INVITATION.id}`);
+    expect(within(card).getByText('Kd Owner invited you to help run Iron House as a Front desk.')).toBeTruthy();
+  });
+
   it('a card with nothing ticked says so plainly', async () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [ORG] } });
     invitationsAre([{ ...STAFF_INVITATION, privileges: [] }]);

@@ -368,7 +368,7 @@ export function abilityLabels(privileges, orgType) {
 
 /** One invitation's line on Settings → Staff: who, as what, and where it stands. */
 export function staffInviteView(invite, orgType) {
-  const role = roleLabel(invite.role, orgType);
+  const role = invite.roleName || roleLabel(invite.role, orgType);
   const status =
     invite.state === 'declined'
       ? `Said no thanks${invite.declinedAt ? ` · ${formatJoinedAt(invite.declinedAt)}` : ''}`

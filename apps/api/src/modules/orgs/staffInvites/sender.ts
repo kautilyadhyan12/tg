@@ -121,7 +121,8 @@ async function sendOne(deps: StaffSenderDeps, claim: repo.ClaimedStaffSend): Pro
   const message = staffMessage(deps, claim, email, {
     gymName,
     inviterName: cleanGymText(ctx.invite.inviterName ?? "", GYM_TEXT_IN_EMAIL_CHARS),
-    role: staffRoleWord(ctx.invite.role, ctx.gym.orgType),
+    // The gym's own role's name when it has one, cleaned as the gym's own words are.
+    role: (ctx.invite.roleName === null ? "" : cleanGymText(ctx.invite.roleName, GYM_TEXT_IN_EMAIL_CHARS)) || staffRoleWord(ctx.invite.role, ctx.gym.orgType),
   });
   if (!(await repo.markMaybeSent(deps.sql, claim, now))) return leaseLost(deps, claim);
   const result = await deps.transport.send(message);

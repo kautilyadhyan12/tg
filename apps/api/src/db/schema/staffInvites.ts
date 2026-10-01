@@ -4,7 +4,7 @@
 // record, so the table is on `USER_LINKED_NOT_PURGED_TABLES` (who sent it, who answered
 // it) and a closed gym's invitations are deleted with its list (`archiveSweep.ts`).
 import { sql } from "drizzle-orm";
-import { check, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { check, index, integer, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { citext } from "./common.js";
 import { users } from "./identity.js";
 import { gyms } from "./tenancy.js";
@@ -21,6 +21,8 @@ export const gymStaffInvites = pgTable(
     role: text("role").notNull(),
     /** The ticks the owner chose on the invite form: what Accept gives. */
     privileges: text("privileges").array().notNull(),
+    /** The gym's own role it is for ("Front desk"), shown in place of the role. */
+    roleName: text("role_name"),
     invitedBy: uuid("invited_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
@@ -39,12 +41,33 @@ export const gymStaffInvites = pgTable(
     index("gym_staff_invites_email_idx").on(t.email).where(sql`${t.state} IN ('pending','declined') AND ${t.clearedAt} IS NULL`),
     index("gym_staff_invites_gym_idx").on(t.gymId, t.createdAt),
     check("gym_staff_invites_role_check", sql`${t.role} IN ('manager','trainer')`),
+    check("gym_staff_invites_role_name_check", sql`${t.roleName} IS NULL OR length(${t.roleName}) BETWEEN 1 AND 40`),
     check("gym_staff_invites_privileges_check", sql`NOT ('staff.manage' = ANY (${t.privileges})) AND cardinality(${t.privileges}) <= 20`),
     check("gym_staff_invites_state_check", sql`${t.state} IN ('pending','accepted','declined','cancelled')`),
     check("gym_staff_invites_answered_check", sql`(${t.state} = 'pending') = (${t.answeredAt} IS NULL)`),
     check("gym_staff_invites_cleared_check", sql`${t.clearedAt} IS NULL OR ${t.state} IN ('pending','declined')`),
     check("gym_staff_invites_expires_check", sql`${t.expiresAt} > ${t.createdAt}`),
     check("gym_staff_invites_email_length_check", sql`length(${t.email}) BETWEEN 3 AND 254`),
+  ],
+);
+
+/** The gym's own staff roles (Kd, RULINGS 2026-10-01): a name and its ticks. */
+export const gymStaffRoles = pgTable(
+  "gym_staff_roles",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    name: citext("name").notNull(),
+    privileges: text("privileges").array().notNull(),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    unique("gym_staff_roles_name_uq").on(t.gymId, t.name),
+    check("gym_staff_roles_name_check", sql`length(${t.name}) BETWEEN 1 AND 40`),
+    check("gym_staff_roles_privileges_check", sql`NOT ('staff.manage' = ANY (${t.privileges})) AND cardinality(${t.privileges}) <= 20`),
   ],
 );
 

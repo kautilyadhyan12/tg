@@ -18,7 +18,10 @@ import {
   STAFF_INVITE_EMAILS_PER_DAY,
   STAFF_INVITE_WORDS,
   STAFF_INVITES_OPEN_MAX,
+  STAFF_ROLES_MAX,
   OWNER_ONLY_PRIVILEGES,
+  RESERVED_STAFF_ROLE_NAMES,
+  orgPrivilegeSchema,
   orgRoleSchema,
   orgTypeSchema,
   orgWords,
@@ -26,6 +29,9 @@ import {
   type AcceptStaffInvitationResponse,
   type CancelStaffInviteResponse,
   type CreateStaffInviteRequest,
+  type CreateStaffRoleRequest,
+  type StaffRole,
+  type StaffRolesResponse,
   type CreateStaffInviteResponse,
   type DeclineStaffInvitationResponse,
   type MyStaffInvitationsResponse,
@@ -63,8 +69,19 @@ export async function createStaffInvite(
 ): Promise<CreateStaffInviteResponse> {
   const { org } = await requireWritablePrivilege(deps, gymId, userId, "staff.manage");
   const words = orgWords(org.orgType);
-  // The ticks the owner chose on the form (Kd, 2026-10-01), else the role's starting ones.
-  const privileges = input.privileges === undefined ? defaultPrivilegesFor(input.role) : canonicalPrivileges(input.privileges);
+  // One of the gym's own roles: its name is shown in place of the role, which is a
+  // trainer's underneath; the ticks are what the console obeys (RULINGS 2026-10-01).
+  const ownRole = input.roleId === undefined ? null : await repo.roleById(deps.sql, gymId, input.roleId);
+  if (input.roleId !== undefined && ownRole === null) throw new OrgsError(404, "role_not_found", STAFF_INVITE_WORDS.role_not_found);
+  const role = ownRole === null ? input.role : "trainer";
+  const roleName = ownRole?.name ?? null;
+  // The ticks the owner chose on the form (Kd, 2026-10-01), else the role's own.
+  const privileges =
+    input.privileges !== undefined
+      ? canonicalPrivileges(input.privileges)
+      : ownRole !== null
+        ? canonicalPrivileges(ownRole.privileges.flatMap((p) => { const known = orgPrivilegeSchema.safeParse(p); return known.success ? [known.data] : []; }))
+        : defaultPrivilegesFor(input.role);
   if (privileges.some((privilege) => OWNER_ONLY_PRIVILEGES.includes(privilege))) {
     throw new OrgsError(409, "owner_only_privilege", STAFF_INVITE_WORDS.owner_only_privilege);
   }
@@ -73,8 +90,9 @@ export async function createStaffInvite(
   const appointed = await orgRepo.addStaff(deps.sql, {
     gymId,
     email: input.email,
-    role: input.role,
+    role,
     privileges,
+    roleName,
     actorUserId: userId,
   });
   switch (appointed.kind) {
@@ -113,8 +131,9 @@ export async function createStaffInvite(
     const written = await repo.insertInvite(tx, {
       gymId,
       email: input.email,
-      role: input.role,
+      role,
       privileges,
+      roleName,
       invitedBy: userId,
       at,
       expiresAt: new Date(at.getTime() + STAFF_INVITE_DAYS * DAY_MS),
@@ -125,7 +144,7 @@ export async function createStaffInvite(
       action: "org.staff_invited",
       targetType: "staff_invite",
       targetId: written.id,
-      meta: { role: input.role, privileges },
+      meta: { role, roleName, privileges },
     });
     return written;
   });
@@ -137,6 +156,7 @@ export async function createStaffInvite(
       email: invite.email,
       role: invite.role,
       privileges: invite.privileges,
+      roleName: invite.roleName,
       invitedAt: invite.createdAt.toISOString(),
       expiresAt: invite.expiresAt.toISOString(),
       state: "waiting",
@@ -192,6 +212,68 @@ export async function cancelStaffInvite(
   return { status: "cancelled" };
 }
 
+// ── The gym's own roles (Kd, RULINGS 2026-10-01) ─────────────────────────────
+
+export async function listStaffRoles(deps: StaffInviteDeps, userId: string, gymId: string): Promise<StaffRolesResponse> {
+  await requirePrivilege(deps, gymId, userId, "staff.manage");
+  return { roles: await repo.listRoles(deps.sql, gymId) };
+}
+
+/** Make a role: a name and its ticks, offered on the invite form from then on. */
+export async function createStaffRole(
+  deps: StaffInviteDeps,
+  userId: string,
+  gymId: string,
+  input: CreateStaffRoleRequest,
+): Promise<{ role: StaffRole }> {
+  await requireWritablePrivilege(deps, gymId, userId, "staff.manage");
+  const privileges = canonicalPrivileges(input.privileges);
+  if (privileges.some((privilege) => OWNER_ONLY_PRIVILEGES.includes(privilege))) {
+    throw new OrgsError(409, "owner_only_privilege", STAFF_INVITE_WORDS.owner_only_privilege);
+  }
+  if ((RESERVED_STAFF_ROLE_NAMES as readonly string[]).includes(input.name.toLowerCase())) {
+    throw new OrgsError(409, "role_name_reserved", STAFF_INVITE_WORDS.role_name_reserved(input.name));
+  }
+  const role = await deps.sql.begin(async (tx) => {
+    await orgRepo.lockOrgRow(tx, gymId);
+    if ((await repo.countRoles(tx, gymId)) >= STAFF_ROLES_MAX) throw new OrgsError(409, "too_many_roles", STAFF_INVITE_WORDS.too_many_roles);
+    const made = await repo.insertRole(tx, { gymId, name: input.name, privileges, by: userId, at: deps.now() });
+    if (made === null) throw new OrgsError(409, "role_name_taken", STAFF_INVITE_WORDS.role_name_taken(input.name));
+    await orgRepo.insertAudit(tx, {
+      actorUserId: userId,
+      gymId,
+      action: "org.staff_role_created",
+      targetType: "staff_role",
+      targetId: made.id,
+      meta: { name: made.name, privileges },
+    });
+    return made;
+  });
+  return { role };
+}
+
+/** Delete a role. Nobody loses anything: staff and invitations keep its name and ticks. */
+export async function deleteStaffRole(deps: StaffInviteDeps, userId: string, gymId: string, roleId: string): Promise<{ status: "deleted" }> {
+  await requireWritablePrivilege(deps, gymId, userId, "staff.manage");
+  const name = await deps.sql.begin(async (tx) => {
+    await orgRepo.lockOrgRow(tx, gymId);
+    const gone = await repo.deleteRole(tx, gymId, roleId);
+    if (gone !== null) {
+      await orgRepo.insertAudit(tx, {
+        actorUserId: userId,
+        gymId,
+        action: "org.staff_role_deleted",
+        targetType: "staff_role",
+        targetId: roleId,
+        meta: { name: gone },
+      });
+    }
+    return gone;
+  });
+  if (name === null) throw new OrgsError(404, "role_not_found", STAFF_INVITE_WORDS.role_not_found);
+  return { status: "deleted" };
+}
+
 // ── The invited person's side ────────────────────────────────────────────────
 
 interface Address {
@@ -226,6 +308,7 @@ export async function myStaffInvitations(deps: StaffInviteDeps, caller: Caller):
       id: row.id,
       role: row.role,
       privileges: row.privileges,
+      roleName: row.roleName,
       gym: { id: row.gymId, name: row.gymName, city: row.gymCity, orgType: orgTypeSchema.parse(row.orgType) },
       invitedBy: row.invitedBy,
       expiresAt: row.expiresAt.toISOString(),
@@ -270,7 +353,7 @@ export async function acceptStaffInvitation(
     }
     // Exactly what the owner ticked when inviting.
     const privileges = invite.privileges;
-    await repo.writeStaff(tx, { gymId, userId: caller.id, role: invite.role, privileges, at });
+    await repo.writeStaff(tx, { gymId, userId: caller.id, role: invite.role, privileges, roleName: invite.roleName, at });
     await repo.answerInvite(tx, { gymId, inviteId, state: "accepted", by: caller.id, at });
     await orgRepo.insertAudit(tx, {
       actorUserId: caller.id,
@@ -278,7 +361,7 @@ export async function acceptStaffInvitation(
       action: "org.staff_invite_accepted",
       targetType: "gym_staff",
       targetId: caller.id,
-      meta: { invitationId: inviteId, role: invite.role, privileges },
+      meta: { invitationId: inviteId, role: invite.role, roleName: invite.roleName, privileges },
     });
     return { kind: "accepted", org, role: invite.role };
   });

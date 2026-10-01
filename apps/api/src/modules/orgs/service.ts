@@ -1954,6 +1954,7 @@ export function toOrgStaff(row: repo.StaffRow, viewerUserId: string): OrgStaff {
     since: row.since.toISOString(),
     isYou: row.userId === viewerUserId,
     isMember: row.isMember,
+    roleName: row.roleName,
   };
 }
 

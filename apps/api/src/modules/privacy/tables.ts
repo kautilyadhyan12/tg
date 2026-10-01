@@ -376,6 +376,9 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // accepted, declined or cancelled it (`0058`), on gym_leads' footing: the gym's record;
   // `ON DELETE set null`. Deleted when the gym closes.
   "gym_staff_invites",
+  // gym_staff_roles.created_by — who made one of the gym's own staff roles (`0058`), on
+  // the same footing.
+  "gym_staff_roles",
   "api_cost_events",
   "usage_daily",
   "trace_samples",

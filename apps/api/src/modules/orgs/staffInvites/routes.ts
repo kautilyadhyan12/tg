@@ -2,6 +2,9 @@
 //   POST   /v1/orgs/:gymId/staff/invites                  invite an address as manager or trainer
 //   GET    /v1/orgs/:gymId/staff/invites                  what is waiting
 //   DELETE /v1/orgs/:gymId/staff/invites/:inviteId        cancel, or take an ended one off the list
+//   GET    /v1/orgs/:gymId/staff/roles                    the gym's own roles
+//   POST   /v1/orgs/:gymId/staff/roles                    make one: a name and its ticks
+//   DELETE /v1/orgs/:gymId/staff/roles/:roleId            delete one
 //   GET    /v1/orgs/staff-invitations                     the caller's own, by their proved address
 //   POST   /v1/orgs/staff-invitations/:invitationId/accept
 //   POST   /v1/orgs/staff-invitations/:invitationId/decline
@@ -10,7 +13,13 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
-import { createStaffInviteRequestSchema, staffInvitationParamsSchema, staffInviteParamsSchema } from "@app/shared";
+import {
+  createStaffInviteRequestSchema,
+  createStaffRoleRequestSchema,
+  staffInvitationParamsSchema,
+  staffInviteParamsSchema,
+  staffRoleParamsSchema,
+} from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import type { InviteSettings } from "../invites/settings.js";
@@ -70,6 +79,26 @@ export function registerStaffInviteRoutes(
     const params = parseOr400(staffInviteParamsSchema, req.params, req, reply);
     if (params === null) return;
     return reply.status(200).send(await service.cancelStaffInvite(inviteDeps, callerOf(req).id, params.gymId, params.inviteId));
+  });
+
+  app.get("/v1/orgs/:gymId/staff/roles", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    return reply.status(200).send(await service.listStaffRoles(inviteDeps, callerOf(req).id, params.gymId));
+  });
+
+  app.post("/v1/orgs/:gymId/staff/roles", { preHandler: [app.authenticate, createLimit] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(createStaffRoleRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    return reply.status(201).send(await service.createStaffRole(inviteDeps, callerOf(req).id, params.gymId, body));
+  });
+
+  app.delete("/v1/orgs/:gymId/staff/roles/:roleId", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(staffRoleParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    return reply.status(200).send(await service.deleteStaffRole(inviteDeps, callerOf(req).id, params.gymId, params.roleId));
   });
 
   app.get("/v1/orgs/staff-invitations", { preHandler: [app.authenticate, readLimit] }, async (req, reply) => {

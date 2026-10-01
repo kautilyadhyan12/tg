@@ -15,6 +15,11 @@ export const STAFF_INVITE_EMAILS_PER_DAY = 20;
 /** Staff invitation emails one gym may send one address in any 7 days. */
 export const STAFF_INVITE_EMAILS_PER_ADDRESS_WEEK = 3;
 
+/** The most roles of its own a gym may make. */
+export const STAFF_ROLES_MAX = 20;
+/** The longest name a gym's own role may have. */
+export const STAFF_ROLE_NAME_MAX = 40;
+
 /** The Resend tag naming a staff invitation's send row. */
 export const STAFF_INVITE_SEND_TAG = "staff_invite_send";
 
@@ -25,6 +30,8 @@ export const createStaffInviteRequestSchema = z
     /** What they may do, ticked on the form (Kd, 2026-10-01); the role's starting ticks
      *  when left out. "Manage staff" stays the owner's and is refused. */
     privileges: z.array(orgPrivilegeSchema).max(ORG_PRIVILEGES.length).optional(),
+    /** One of the gym's own roles ("Front desk"): its name is shown in place of `role`. */
+    roleId: z.string().uuid().optional(),
   })
   .strict();
 export type CreateStaffInviteRequest = z.infer<typeof createStaffInviteRequestSchema>;
@@ -77,6 +84,8 @@ export const staffInviteSchema = z
     role: staffAssignableRoleSchema,
     /** What Accept gives them. */
     privileges: z.array(z.string()),
+    /** The gym's own role it is for, or null. */
+    roleName: z.string().nullable(),
     invitedAt: z.string(),
     expiresAt: z.string(),
     state: z.enum(["waiting", "ended", "declined"]),
@@ -103,6 +112,38 @@ export type CreateStaffInviteResponse = z.infer<typeof createStaffInviteResponse
 export const cancelStaffInviteResponseSchema = z.object({ status: z.literal("cancelled") }).strict();
 export type CancelStaffInviteResponse = z.infer<typeof cancelStaffInviteResponseSchema>;
 
+// ── The gym's own roles (Kd, RULINGS 2026-10-01) ─────────────────────────────
+
+export const staffRoleSchema = z
+  .object({
+    id: z.string().uuid(),
+    name: z.string(),
+    privileges: z.array(z.string()),
+  })
+  .strict();
+export type StaffRole = z.infer<typeof staffRoleSchema>;
+
+export const staffRolesResponseSchema = z.object({ roles: z.array(staffRoleSchema) }).strict();
+export type StaffRolesResponse = z.infer<typeof staffRolesResponseSchema>;
+
+export const createStaffRoleRequestSchema = z
+  .object({
+    name: z
+      .string()
+      .transform((name) => name.replace(/\s+/g, " ").trim())
+      .pipe(z.string().min(1).max(STAFF_ROLE_NAME_MAX)),
+    privileges: z.array(orgPrivilegeSchema).max(ORG_PRIVILEGES.length),
+  })
+  .strict();
+export type CreateStaffRoleRequest = z.infer<typeof createStaffRoleRequestSchema>;
+
+export const createStaffRoleResponseSchema = z.object({ role: staffRoleSchema }).strict();
+export const deleteStaffRoleResponseSchema = z.object({ status: z.literal("deleted") }).strict();
+export const staffRoleParamsSchema = z.object({ gymId: z.string().uuid(), roleId: z.string().uuid() }).strict();
+
+/** Names a gym's own role may not take: the app's own roles, in any of its words. */
+export const RESERVED_STAFF_ROLE_NAMES = ["owner", "manager", "trainer", "coach", "clinician"] as const;
+
 // ── The invited person's side ────────────────────────────────────────────────
 
 export const myStaffInvitationSchema = z
@@ -111,6 +152,8 @@ export const myStaffInvitationSchema = z
     role: staffAssignableRoleSchema,
     /** What they will be able to do. */
     privileges: z.array(z.string()),
+    /** The gym's own role it is for ("Front desk"), or null. */
+    roleName: z.string().nullable(),
     gym: z
       .object({
         id: z.string().uuid(),
@@ -167,6 +210,10 @@ export function staffRoleWord(role: "manager" | "trainer", orgType: unknown): st
 /** The sentences a refusal is answered with. None says whether an address has an account. */
 export const STAFF_INVITE_WORDS = {
   owner_only_privilege: "Managing staff stays with the owner. You can give them any of the other permissions.",
+  role_name_taken: (name: string): string => `You already have a role called ${name}.`,
+  role_name_reserved: (name: string): string => `${name} is already one of the app's roles. Choose another name.`,
+  too_many_roles: `You can have up to ${String(STAFF_ROLES_MAX)} roles of your own. Delete one before adding another.`,
+  role_not_found: "That role isn't here any more. Choose another.",
   already_invited: (email: string): string =>
     `You've already invited ${email}. The invitation is waiting for them to accept.`,
   too_many_open: `You have ${String(STAFF_INVITES_OPEN_MAX)} invitations waiting. Cancel one before sending another.`,

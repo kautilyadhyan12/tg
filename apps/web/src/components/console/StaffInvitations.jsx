@@ -20,7 +20,7 @@ function InvitationCard({ invitation, onAnswered }) {
   const [problem, setProblem] = useState(null);
   const gym = invitation.gym;
   const words = orgWords(gym.orgType);
-  const role = staffRoleWord(invitation.role, gym.orgType);
+  const role = invitation.roleName || staffRoleWord(invitation.role, gym.orgType);
   const who = invitation.invitedBy ?? gym.name;
   const declined = invitation.state === 'declined';
   const abilities = abilityLabels(invitation.privileges ?? [], gym.orgType);

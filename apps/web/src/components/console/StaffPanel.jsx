@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { orgWords } from '@app/shared';
-import { Loader2, Plus, UserMinus } from 'lucide-react';
+import { STAFF_ROLE_NAME_MAX, orgWords } from '@app/shared';
+import { Loader2, Plus, UserMinus, X } from 'lucide-react';
 import { ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
 import { formatJoinedAt, roleLabel } from '../../pages/console/consoleView';
 import {
@@ -43,30 +43,25 @@ import { orgService, errorText, isRetryable } from '../../api/orgsApi';
 // so "nobody runs this gym" is never a true sentence and this panel cannot
 // produce it.
 
-/** INVITE SOMEBODY (Part 3 §10.3; ROADMAP 4a-i). Email plus one of two roles, which is
- *  the whole form. The server emails an invitation, or, when the address is somebody
- *  already in this gym, makes them staff at once; its reply is the same whether or not
- *  the address has an account. Each role shows what it starts with.
+/** INVITE STAFF (Part 3 §10.3; ROADMAP 4a-i). The email; the role, as one row of buttons
+ *  — Manager, Trainer, the gym's own roles and "+ New role" (Kd, RULINGS 2026-10-01) —
+ *  with what that role can do ticked straight underneath, for the owner to change before
+ *  sending. The server emails an invitation, or, when the address is somebody already in
+ *  this gym, makes them staff at once; its reply is the same whether or not the address
+ *  has an account.
  *
- *  **`readOnly` REACHES THE FIELDS AND THE ADD BUTTON, not only the "Add
- *  someone" opener that mounts this form (T3 round 1, C/H-1's second half).**
- *  The opener was guarded and these were not, so a gym lapsing while the form
- *  was open left a live Add under the panel's own "needs a plan" note. Cancel
- *  stays pressable on purpose — putting the form down is not a change.
- *
- *  **NO USER CAN REACH THAT STATE TODAY, AND IT IS FIXED ANYWAY.** This whole
- *  section is gated on `staff.manage`, which `OWNER_ONLY_PRIVILEGES` keeps to
- *  the owner's row — and an owner of a gym with no plan meets `PlanModal`
- *  instead of these screens (:23257). So the guarantee below rests on tests and
- *  mutants, never on a browser, and it must not be cited as something a person
- *  has been observed to see. **It stops being unreachable the day a second owner
- *  or delegated staff management ships, and both have live `OWED.md` lines** —
- *  the same reason `canManageStaff` was fixed before it started lying. */
+ *  **`readOnly` REACHES THE FIELDS AND THE SEND BUTTON, not only the "Invite staff"
+ *  opener that mounts this form (T3 round 1, C/H-1's second half).** The opener was
+ *  guarded and these were not, so a gym lapsing while the form was open left a live
+ *  button under the panel's own "needs a plan" note. Cancel stays pressable on purpose —
+ *  putting the form down is not a change. Nobody reaches that state today (the section is
+ *  the owner's, and an owner of a lapsed gym meets `PlanModal`); it is pinned by tests. */
 function AddStaffForm({
   email,
   setEmail,
   role,
-  setRole,
+  onChooseRole,
+  roles,
   ticks,
   setTicks,
   fieldError,
@@ -74,15 +69,39 @@ function AddStaffForm({
   readOnly,
   onAdd,
   onCancel,
+  onMakeRole,
+  onDeleteRole,
   orgType,
 }) {
   const words = orgWords(orgType);
-  const choices = staffRoleChoices(orgType);
-  // What they may do, ticked here before sending (Kd, 2026-10-01): the role fills in its
-  // usual ticks and the owner changes any of them. "Manage staff" is never offered.
-  const tickChoices = privilegeChoices(role, orgType);
+  const builtIn = staffRoleChoices(orgType);
+  const own = roles.find((r) => r.id === role) ?? null;
+  // A role of the gym's own is a trainer's underneath: every box but Manage staff.
+  const tickChoices = privilegeChoices(own === null ? role : 'trainer', orgType);
   const toggleTick = (value) =>
     setTicks((prev) => (prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]));
+  // Making a role: its name; the boxes below are its ticks.
+  const [newRole, setNewRole] = useState(null);
+  const [deleting, setDeleting] = useState(null);
+  const hint = newRole !== null ? null : own !== null ? 'One of your own roles.' : (builtIn.find((c) => c.value === role)?.hint ?? null);
+
+  const chip = (selected) => ({
+    background: selected ? 'rgba(255,138,31,0.14)' : 'rgba(255,255,255,0.04)',
+    border: selected ? '1px solid rgba(255,138,31,0.5)' : '1px solid rgba(255,255,255,0.1)',
+    color: selected ? '#FF8A1F' : '#fff',
+  });
+
+  const saveRole = async () => {
+    const name = (newRole?.name ?? '').replace(/\s+/g, ' ').trim();
+    if (name === '') {
+      setNewRole({ name: newRole?.name ?? '', error: 'Give the role a name.' });
+      return;
+    }
+    const error = await onMakeRole(name, ticks);
+    if (error === null) setNewRole(null);
+    else setNewRole({ name, error });
+  };
+
   return (
     <div
       className="rounded-2xl p-4 flex flex-col gap-3"
@@ -108,44 +127,112 @@ function AddStaffForm({
 
       <div className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
         <span id="staff-role-label">Role</span>
-        <div className="flex flex-col gap-2 mt-1.5" role="radiogroup" aria-labelledby="staff-role-label">
-          {choices.map((choice) => (
-            <button
-              key={choice.value}
-              type="button"
-              role="radio"
-              aria-checked={role === choice.value}
-              disabled={busy || readOnly}
-              onClick={() => {
-                setRole(choice.value);
-                setTicks(roleTicks(choice.value));
-              }}
-              className="text-left rounded-xl px-3 py-2.5 disabled:opacity-40"
-              style={{
-                background: role === choice.value ? 'rgba(255,138,31,0.14)' : 'rgba(255,255,255,0.04)',
-                border:
-                  role === choice.value
-                    ? '1px solid rgba(255,138,31,0.5)'
-                    : '1px solid rgba(255,255,255,0.08)',
-              }}
-            >
-              <span
-                className="text-sm font-medium"
-                style={{ color: role === choice.value ? '#FF8A1F' : '#fff' }}
-              >
-                {choice.label}
-              </span>
-              <span className="block text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                {choice.hint}
-              </span>
-            </button>
-          ))}
+        <div className="flex flex-wrap gap-2 mt-1.5" role="radiogroup" aria-labelledby="staff-role-label">
+          {[...builtIn.map((c) => ({ key: c.value, label: c.label, own: false })), ...roles.map((r) => ({ key: r.id, label: r.name, own: true }))].map(
+            (item) => {
+              const selected = newRole === null && role === item.key;
+              return (
+                <span key={item.key} className="inline-flex items-center rounded-full" style={chip(selected)}>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    disabled={busy || readOnly}
+                    onClick={() => {
+                      setNewRole(null);
+                      setDeleting(null);
+                      onChooseRole(item.key);
+                    }}
+                    className={`text-sm font-medium py-1.5 disabled:opacity-40 ${item.own ? 'pl-3 pr-1' : 'px-3'}`}
+                    style={{ color: 'inherit' }}
+                  >
+                    {item.label}
+                  </button>
+                  {item.own ? (
+                    <button
+                      type="button"
+                      aria-label={`Delete the role ${item.label}`}
+                      disabled={busy || readOnly}
+                      onClick={() => setDeleting(item.key)}
+                      className="pr-2 pl-1 py-1.5 disabled:opacity-40"
+                      style={{ color: 'rgba(255,255,255,0.45)' }}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  ) : null}
+                </span>
+              );
+            },
+          )}
+          <button
+            type="button"
+            disabled={busy || readOnly}
+            onClick={() => {
+              setDeleting(null);
+              setNewRole({ name: '', error: null });
+            }}
+            className="text-sm rounded-full px-3 py-1.5 flex items-center gap-1 disabled:opacity-40"
+            style={chip(newRole !== null)}
+          >
+            <Plus className="w-3.5 h-3.5" />
+            New role
+          </button>
         </div>
+
+        {deleting !== null ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2" role="alert">
+            <span style={{ color: 'rgba(255,255,255,0.75)' }}>
+              Delete the role {roles.find((r) => r.id === deleting)?.name}? Staff who have it keep it and what they can do.
+            </span>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={async () => {
+                const id = deleting;
+                setDeleting(null);
+                await onDeleteRole(id);
+              }}
+              className="rounded-lg px-3 py-1 font-semibold disabled:opacity-40"
+              style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}
+            >
+              Delete role
+            </button>
+            <button
+              type="button"
+              onClick={() => setDeleting(null)}
+              className="rounded-lg px-3 py-1"
+              style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
+            >
+              Keep it
+            </button>
+          </div>
+        ) : null}
+
+        {hint !== null ? <p className="mt-1.5">{hint}</p> : null}
+
+        {newRole !== null ? (
+          <div className="mt-2 flex flex-col gap-1.5">
+            <label>
+              Role name
+              <input
+                id="staff-new-role"
+                value={newRole.name}
+                maxLength={STAFF_ROLE_NAME_MAX}
+                placeholder="Front desk"
+                onChange={(e) => setNewRole({ name: e.target.value, error: null })}
+                className="w-full mt-1 rounded-xl px-3 py-2 text-sm"
+                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+              />
+            </label>
+            <span>Tick what this role can do below, then save it. You can use it again next time.</span>
+            {newRole.error ? <span style={{ color: '#ef4444' }}>{newRole.error}</span> : null}
+          </div>
+        ) : null}
       </div>
 
       <fieldset className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
         <legend>What they can do</legend>
-        <div className="flex flex-col gap-2 mt-1.5" data-testid="invite-ticks">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 mt-1.5" data-testid="invite-ticks">
           {tickChoices.map((choice) => {
             const on = ticks.includes(choice.value);
             return (
@@ -171,40 +258,66 @@ function AddStaffForm({
         </div>
       </fieldset>
 
-      <p className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
-        We&apos;ll email them an invitation. They sign in with this address and press Accept,
-        and they can open your {words.it}&apos;s console. If they&apos;re already a {words.person}{' '}
-        of your {words.it}, they get these permissions straight away. You can change what they
-        can do at any time. Managing staff stays with you.
-      </p>
+      {newRole !== null ? (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={saveRole}
+            disabled={busy || readOnly}
+            className="rounded-xl px-4 py-2 text-sm font-semibold flex items-center gap-2 disabled:opacity-40"
+            style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
+          >
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            Save role
+          </button>
+          <button
+            type="button"
+            onClick={() => setNewRole(null)}
+            disabled={busy}
+            className="rounded-xl px-4 py-2 text-sm disabled:opacity-40"
+            style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <>
+          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
+            We&apos;ll email them an invitation. They sign in with this address and press Accept,
+            and they can open your {words.it}&apos;s console. If they&apos;re already a {words.person}{' '}
+            of your {words.it}, they get these permissions straight away. You can change what they
+            can do at any time. Managing staff stays with you.
+          </p>
 
-      {fieldError !== null ? (
-        <p className="text-xs" style={{ color: '#ef4444' }}>
-          {fieldError}
-        </p>
-      ) : null}
+          {fieldError !== null ? (
+            <p className="text-xs" style={{ color: '#ef4444' }}>
+              {fieldError}
+            </p>
+          ) : null}
 
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={onAdd}
-          disabled={busy || readOnly}
-          className="rounded-xl px-4 py-2 text-sm font-semibold flex items-center gap-2 disabled:opacity-40"
-          style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
-        >
-          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-          Send invitation
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={busy}
-          className="rounded-xl px-4 py-2 text-sm disabled:opacity-40"
-          style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
-        >
-          Cancel
-        </button>
-      </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onAdd}
+              disabled={busy || readOnly}
+              className="rounded-xl px-4 py-2 text-sm font-semibold flex items-center gap-2 disabled:opacity-40"
+              style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
+            >
+              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              Send invitation
+            </button>
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={busy}
+              className="rounded-xl px-4 py-2 text-sm disabled:opacity-40"
+              style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
+            >
+              Cancel
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -605,7 +718,7 @@ function StaffRow({
   // belongs reads as a value that failed to load.
   const meta = [
     person.email,
-    roleLabel(person.role, orgType),
+    person.roleName || roleLabel(person.role, orgType),
     `since ${formatJoinedAt(person.since)}`,
   ]
     .filter((part) => typeof part === 'string' && part !== '')
@@ -759,12 +872,23 @@ export default function StaffPanel({ gymId, privileges, orgType, readOnly = fals
   // The invitations waiting, ended or declined (4a-i). Their own read and failure: a
   // list that cannot be read must not hide who already runs the gym.
   const [invites, setInvites] = useState({ loading: true, error: null, list: [] });
+  // The gym's own roles (Kd, RULINGS 2026-10-01), offered beside Manager and Trainer.
+  const [roles, setRoles] = useState([]);
   // What the last invitation did: "Invitation sent to …" or "… is now a manager".
   const [notice, setNotice] = useState(null);
 
   useEffect(() => {
     if (!allowed || gymId === null) return undefined;
     let cancelled = false;
+    orgService
+      .getStaffRoles(gymId)
+      .then((res) => {
+        if (!cancelled) setRoles(res.data?.roles ?? []);
+      })
+      .catch(() => {
+        // The form still offers Manager and Trainer; a role of the gym's own can be picked
+        // once the list reads.
+      });
     orgService
       .getStaffInvites(gymId)
       .then((res) => {
@@ -955,11 +1079,18 @@ export default function StaffPanel({ gymId, privileges, orgType, readOnly = fals
     setActionError(null);
     setNotice(null);
     try {
-      const res = await orgService.inviteStaff(gymId, { email: value, role, privileges: inviteTicks(role, ticks, orgType) });
+      const own = roles.find((r) => r.id === role) ?? null;
+      const base = own === null ? role : 'trainer';
+      const res = await orgService.inviteStaff(gymId, {
+        email: value,
+        role: base,
+        privileges: inviteTicks(base, ticks, orgType),
+        ...(own === null ? {} : { roleId: own.id }),
+      });
       const done = res.data;
       setNotice(
         done.outcome === 'added'
-          ? `${done.staff.displayName} is now ${done.staff.role === 'manager' ? 'a manager' : `a ${words.coach}`} here.`
+          ? `${done.staff.displayName} is now ${done.staff.roleName ? `a ${done.staff.roleName}` : done.staff.role === 'manager' ? 'a manager' : `a ${words.coach}`} here.`
           : `Invitation sent to ${done.invite.email}. It works for 7 days.`,
       );
       setEmail('');
@@ -982,6 +1113,45 @@ export default function StaffPanel({ gymId, privileges, orgType, readOnly = fals
         message: errorText(err, "We couldn't send that invitation. Please try again."),
         retryable: false,
       });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const chooseRole = (key) => {
+    setRole(key);
+    const own = roles.find((r) => r.id === key);
+    setTicks(own ? [...own.privileges] : roleTicks(key));
+  };
+
+  /** Save a role of the gym's own and choose it. Returns null, or the reason it was refused. */
+  const makeRole = async (name, privileges) => {
+    if (gymId === null) return 'Please try again.';
+    setBusyId('add');
+    try {
+      const res = await orgService.createStaffRole(gymId, { name, privileges: inviteTicks('trainer', privileges, orgType) });
+      const made = res.data.role;
+      setRoles((prev) => [...prev, made].sort((a, b) => a.name.localeCompare(b.name)));
+      setRole(made.id);
+      setTicks([...made.privileges]);
+      return null;
+    } catch (err) {
+      return errorText(err, "We couldn't save that role. Please try again.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const deleteRole = async (roleId) => {
+    if (gymId === null) return;
+    setBusyId('add');
+    setActionError(null);
+    try {
+      await orgService.deleteStaffRole(gymId, roleId);
+      setRoles((prev) => prev.filter((r) => r.id !== roleId));
+      if (role === roleId) chooseRole('trainer');
+    } catch (err) {
+      setActionError({ message: errorText(err, "We couldn't delete that role. Please try again."), retryable: false });
     } finally {
       setBusyId(null);
     }
@@ -1088,7 +1258,10 @@ export default function StaffPanel({ gymId, privileges, orgType, readOnly = fals
               email={email}
               setEmail={setEmail}
               role={role}
-              setRole={setRole}
+              onChooseRole={chooseRole}
+              roles={roles}
+              onMakeRole={makeRole}
+              onDeleteRole={deleteRole}
               ticks={ticks}
               setTicks={setTicks}
               fieldError={fieldError}

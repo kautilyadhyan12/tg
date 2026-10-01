@@ -92,6 +92,7 @@ d("staff invited by email (real Postgres)", () => {
   const cleanup = async () => {
     await sql`DELETE FROM gym_staff_invite_sends WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_staff_invites WHERE gym_id IN (${mine()})`;
+    await sql`DELETE FROM gym_staff_roles WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM email_suppressions WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_members WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine()})`;
@@ -477,6 +478,55 @@ d("staff invited by email (real Postgres)", () => {
       const appointed = await post(invitesUrl(gym), { email: addr("ticks-member"), role: "trainer", privileges: ["attendance.read"] }, gym.owner.cookies);
       expect(createStaffInviteResponseSchema.parse(JSON.parse(appointed.body)).outcome).toBe("added");
       expect(await staffRowOf(gym, member)).toEqual({ role: "trainer", privileges: ["attendance.read"] });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "the gym's own roles: the owner makes \"Front desk\" with its ticks, invites with it, and the name shows on the staff list and in the email",
+    async () => {
+      const gym = await makeGym("Roles Gym");
+      const rival = await makeGym("Rival Roles Gym");
+      const rolesUrl = `/v1/orgs/${gym.id}/staff/roles`;
+      const made = await post(rolesUrl, { name: "  Front   desk ", privileges: ["members.read", "attendance.read"] }, gym.owner.cookies);
+      expect(made.statusCode, made.body).toBe(201);
+      const role = (JSON.parse(made.body) as { role: { id: string; name: string; privileges: string[] } }).role;
+      expect(role).toMatchObject({ name: "Front desk", privileges: ["attendance.read", "members.read"] });
+
+      // Refused: the same name in other letters, an app role's name, Manage staff.
+      expect(errorOf(await post(rolesUrl, { name: "FRONT DESK", privileges: [] }, gym.owner.cookies)).error).toBe("role_name_taken");
+      expect(errorOf(await post(rolesUrl, { name: "Manager", privileges: [] }, gym.owner.cookies)).error).toBe("role_name_reserved");
+      expect(errorOf(await post(rolesUrl, { name: "Boss", privileges: ["staff.manage"] }, gym.owner.cookies)).error).toBe("owner_only_privilege");
+      expect((await post(rolesUrl, { name: "   ", privileges: [] }, gym.owner.cookies)).statusCode).toBe(400);
+      // Another gym's owner sees none of it and cannot use or delete it.
+      expect((await get(rolesUrl, rival.owner.cookies)).statusCode).toBe(404);
+      expect((await del(`${rolesUrl}/${role.id}`, rival.owner.cookies)).statusCode).toBe(404);
+      const rivalTries = await post(invitesUrl(rival), { email: addr("roles-rival"), role: "trainer", roleId: role.id }, rival.owner.cookies);
+      expect(rivalTries.statusCode).toBe(404);
+      expect(errorOf(rivalTries).error).toBe("role_not_found");
+      expect((JSON.parse((await get(rolesUrl, gym.owner.cookies)).body) as { roles: { name: string }[] }).roles.map((r) => r.name)).toEqual(["Front desk"]);
+
+      // Invited with it: its ticks unless the owner changed them, and its name.
+      const res = await post(invitesUrl(gym), { email: addr("roles-desk"), role: "trainer", roleId: role.id }, gym.owner.cookies);
+      expect(res.statusCode, res.body).toBe(201);
+      const body = createStaffInviteResponseSchema.parse(JSON.parse(res.body));
+      if (body.outcome !== "invited") throw new Error("not invited");
+      expect([body.invite.roleName, body.invite.privileges]).toEqual(["Front desk", ["attendance.read", "members.read"]]);
+      // The email names the role.
+      await runSender();
+      expect(emailsTo(addr("roles-desk"))[0]?.text).toContain("to help run Roles Gym as a Front desk.");
+      const person = await signIn(addr("roles-desk"));
+      expect((await myInvitations(person)).invitations[0]?.roleName).toBe("Front desk");
+      expect((await accept(person, body.invite.id)).statusCode).toBe(200);
+      const staff = JSON.parse((await get(`/v1/orgs/${gym.id}/staff`, gym.owner.cookies)).body) as { staff: { userId: string; roleName?: string | null; privileges?: string[] }[] };
+      expect(staff.staff.find((s) => s.userId === person.userId)).toMatchObject({ roleName: "Front desk", privileges: ["attendance.read", "members.read"] });
+
+      // Deleting the role takes nothing from anybody.
+      expect((await del(`${rolesUrl}/${role.id}`, gym.owner.cookies)).statusCode).toBe(200);
+      expect((JSON.parse((await get(rolesUrl, gym.owner.cookies)).body) as { roles: unknown[] }).roles).toEqual([]);
+      const after = JSON.parse((await get(`/v1/orgs/${gym.id}/staff`, gym.owner.cookies)).body) as { staff: { userId: string; roleName?: string | null }[] };
+      expect(after.staff.find((s) => s.userId === person.userId)?.roleName).toBe("Front desk");
+      expect(await readsMembers(gym, person)).toBe(200);
     },
     TEST_TIMEOUT_MS,
   );

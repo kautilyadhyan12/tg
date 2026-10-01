@@ -3357,6 +3357,8 @@ export interface StaffRow {
   since: Date;
   /** They are also a live member of the gym (staff need not be, §10.1). */
   isMember: boolean;
+  /** The gym's own role they hold ("Front desk"), or null. */
+  roleName: string | null;
 }
 
 /** Everyone who runs this gym, owner first and then oldest appointment first.
@@ -3391,9 +3393,10 @@ export async function listStaff(sql: Sql, gymId: string): Promise<StaffRow[]> {
       privileges: string[] | null;
       since: Date;
       is_member: boolean;
+      role_name: string | null;
     }[]
   >`
-    SELECT s.user_id, u.display_name, u.email, s.role, s.privileges, s.created_at AS since,
+    SELECT s.user_id, u.display_name, u.email, s.role, s.privileges, s.created_at AS since, s.role_name,
            EXISTS (SELECT 1 FROM gym_members lm
                    WHERE lm.gym_id = s.gym_id AND lm.user_id = s.user_id AND lm.removed_at IS NULL) AS is_member
     FROM gym_staff s
@@ -3421,6 +3424,7 @@ export async function listStaff(sql: Sql, gymId: string): Promise<StaffRow[]> {
     privileges: r.privileges,
     since: r.since,
     isMember: r.is_member,
+    roleName: r.role_name,
   }));
 }
 
@@ -3441,9 +3445,10 @@ async function readStaffRow(
       privileges: string[] | null;
       since: Date;
       is_member: boolean;
+      role_name: string | null;
     }[]
   >`
-    SELECT s.user_id, u.display_name, u.email, s.role, s.privileges, s.created_at AS since,
+    SELECT s.user_id, u.display_name, u.email, s.role, s.privileges, s.created_at AS since, s.role_name,
            EXISTS (SELECT 1 FROM gym_members lm
                    WHERE lm.gym_id = s.gym_id AND lm.user_id = s.user_id AND lm.removed_at IS NULL) AS is_member
     FROM gym_staff s
@@ -3460,6 +3465,7 @@ async function readStaffRow(
         privileges: row.privileges,
         since: row.since,
         isMember: row.is_member,
+        roleName: row.role_name,
       };
 }
 
@@ -3501,6 +3507,8 @@ export async function addStaff(
      *  Written with the row so a staff record is never a moment old without an
      *  effective set (:11429's snapshot). */
     privileges: readonly string[];
+    /** The gym's own role ("Front desk", 4a-i), or null. */
+    roleName?: string | null;
     actorUserId: string;
   },
 ): Promise<AddStaffOutcome> {
@@ -3519,8 +3527,8 @@ export async function addStaff(
     if (candidate === undefined) return { kind: "not_a_member" };
 
     const inserted = await tx<{ user_id: string }[]>`
-      INSERT INTO gym_staff (gym_id, user_id, role, privileges)
-      VALUES (${input.gymId}, ${candidate.user_id}, ${input.role}, ${[...input.privileges]})
+      INSERT INTO gym_staff (gym_id, user_id, role, privileges, role_name)
+      VALUES (${input.gymId}, ${candidate.user_id}, ${input.role}, ${[...input.privileges]}, ${input.roleName ?? null})
       ON CONFLICT (gym_id, user_id) DO NOTHING
       RETURNING user_id`;
 
@@ -3599,7 +3607,7 @@ export async function updateStaffRole(
     }
 
     await tx`
-      UPDATE gym_staff SET role = ${input.role}, privileges = ${[...input.privileges]}
+      UPDATE gym_staff SET role = ${input.role}, privileges = ${[...input.privileges]}, role_name = NULL
       WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;
 
     const staff = await readStaffRow(tx, input.gymId, input.userId);
