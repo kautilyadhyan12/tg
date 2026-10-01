@@ -33,6 +33,8 @@ export interface CheckoutRow {
   planId: string;
   /** A bigger size (1d-iii-a): the gym's plan it replaces once paid, null for a first plan. */
   replacesRowId: string | null;
+  /** When the replaced plan's paid month began: with `startsAt`, the month a bigger size is priced in. */
+  periodStart: Date | null;
   /** When the replaced plan's paid month ends: the new price is first charged then. */
   startsAt: Date | null;
   /** The rest of this month's difference, taken as the window is paid; null when none. */
@@ -48,6 +50,7 @@ interface RawCheckout {
   provider: string;
   provider_ref: string | null;
   replaces_subscription_id: string | null;
+  period_start: Date | null;
   starts_at: Date | null;
   upfront_minor: number | null;
 }
@@ -69,6 +72,7 @@ function toCheckout(raw: RawCheckout): CheckoutRow {
     providerRef: raw.provider_ref,
     planId: raw.plan_id,
     replacesRowId: raw.replaces_subscription_id,
+    periodStart: raw.period_start,
     startsAt: raw.starts_at,
     upfrontMinor: raw.upfront_minor,
   };
@@ -126,7 +130,7 @@ export async function beginCheckout(
 
     const earlier = await tx<RawCheckout[]>`
       SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref,
-             c.replaces_subscription_id, c.starts_at, c.upfront_minor
+             c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor
       FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
       WHERE c.gym_id = ${input.gymId} AND c.idempotency_key = ${input.idempotencyKey}`;
     const replay = earlier[0];
@@ -170,7 +174,7 @@ export async function beginCheckout(
       INSERT INTO billing_checkouts (gym_id, plan_id, created_by, idempotency_key, provider)
       VALUES (${input.gymId}, ${plan.id}, ${input.userId}, ${input.idempotencyKey}, ${input.provider})
       RETURNING id, gym_id, plan_id, ${input.planCode}::text AS plan_code, state, provider, provider_ref,
-                replaces_subscription_id, starts_at, upfront_minor`;
+                replaces_subscription_id, period_start, starts_at, upfront_minor`;
     const row = inserted[0];
     if (row === undefined) throw new Error("checkout insert returned no row");
     await insertAudit(tx, {
@@ -217,7 +221,7 @@ export async function failCheckout(sql: SqlOrTx, input: { checkoutId: string; gy
 export async function getCheckout(sql: SqlOrTx, input: { checkoutId: string; gymId: string }): Promise<CheckoutRow | null> {
   const rows = await sql<RawCheckout[]>`
     SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref,
-             c.replaces_subscription_id, c.starts_at, c.upfront_minor
+             c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor
     FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
     WHERE c.id = ${input.checkoutId} AND c.gym_id = ${input.gymId}`;
   const row = rows[0];
@@ -228,7 +232,7 @@ export async function getCheckout(sql: SqlOrTx, input: { checkoutId: string; gym
 export async function checkoutForKey(sql: SqlOrTx, input: { gymId: string; idempotencyKey: string }): Promise<CheckoutRow | null> {
   const rows = await sql<RawCheckout[]>`
     SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref,
-           c.replaces_subscription_id, c.starts_at, c.upfront_minor
+           c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor
     FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
     WHERE c.gym_id = ${input.gymId} AND c.idempotency_key = ${input.idempotencyKey}`;
   const row = rows[0];
@@ -240,7 +244,7 @@ export async function checkoutForKey(sql: SqlOrTx, input: { gymId: string; idemp
 export async function checkoutForRazorpaySubscription(sql: SqlOrTx, subscriptionId: string): Promise<CheckoutRow | null> {
   const rows = await sql<RawCheckout[]>`
     SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref,
-             c.replaces_subscription_id, c.starts_at, c.upfront_minor
+             c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor
     FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
     WHERE c.provider = 'razorpay' AND c.provider_ref = ${subscriptionId}`;
   const row = rows[0];
@@ -272,7 +276,7 @@ export async function checkoutsForTransactions(sql: SqlOrTx, transactionIds: rea
   if (transactionIds.length === 0) return [];
   const rows = await sql<RawCheckout[]>`
     SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref,
-             c.replaces_subscription_id, c.starts_at, c.upfront_minor
+             c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor
     FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
     WHERE c.provider = 'paddle' AND c.provider_ref = ANY(${[...transactionIds]}::text[])
     ORDER BY c.created_at, c.id`;
@@ -666,7 +670,7 @@ export async function closeCheckout(sql: SqlOrTx, input: { checkoutId: string; g
 export async function openCheckoutsFor(sql: SqlOrTx, gymId: string): Promise<CheckoutRow[]> {
   const rows = await sql<RawCheckout[]>`
     SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref,
-             c.replaces_subscription_id, c.starts_at, c.upfront_minor
+             c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor
     FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
     WHERE c.gym_id = ${gymId} AND c.state = 'open' AND c.provider_ref IS NOT NULL
     ORDER BY c.created_at
@@ -1753,7 +1757,7 @@ export async function beginSizeCheckout(
 
     const earlier = await tx<RawCheckout[]>`
       SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref,
-             c.replaces_subscription_id, c.starts_at, c.upfront_minor
+             c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor
       FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
       WHERE c.gym_id = ${input.gymId} AND c.idempotency_key = ${input.idempotencyKey}`;
     const replay = earlier[0];
@@ -1783,11 +1787,11 @@ export async function beginSizeCheckout(
       RETURNING provider, provider_ref`;
     const inserted = await tx<RawCheckout[]>`
       INSERT INTO billing_checkouts (gym_id, plan_id, created_by, idempotency_key, provider,
-                                     replaces_subscription_id, starts_at, upfront_minor)
+                                     replaces_subscription_id, period_start, starts_at, upfront_minor)
       VALUES (${input.gymId}, ${target.toPlanId}, ${input.userId}, ${input.idempotencyKey}, 'razorpay',
-              ${target.subscriptionRowId}, ${target.periodEnd}, ${upfront})
+              ${target.subscriptionRowId}, ${input.periodStart}, ${target.periodEnd}, ${upfront})
       RETURNING id, gym_id, plan_id, ${input.planCode}::text AS plan_code, state, provider, provider_ref,
-                replaces_subscription_id, starts_at, upfront_minor`;
+                replaces_subscription_id, period_start, starts_at, upfront_minor`;
     const row = inserted[0];
     if (row === undefined) throw new Error("checkout insert returned no row");
     await insertAudit(tx, {

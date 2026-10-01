@@ -29,6 +29,8 @@ export const billingCheckouts = pgTable(
     trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
     /** The gym's plan this checkout replaces with a bigger size (`0059`, Razorpay only). */
     replacesSubscriptionId: uuid("replaces_subscription_id").references(() => subscriptions.id),
+    /** When the replaced plan's paid month began (`0059`). */
+    periodStart: timestamp("period_start", { withTimezone: true }),
     /** When the replaced plan's paid month ends: the new price is first charged then. */
     startsAt: timestamp("starts_at", { withTimezone: true }),
     /** The rest of this month's difference, taken as the window is paid; null under ₹1. */
@@ -49,7 +51,7 @@ export const billingCheckouts = pgTable(
     ),
     check(
       "billing_checkouts_replaces_check",
-      sql`(${t.replacesSubscriptionId} IS NULL) = (${t.startsAt} IS NULL) AND (${t.replacesSubscriptionId} IS NULL OR ${t.provider} = 'razorpay') AND (${t.upfrontMinor} IS NULL OR (${t.replacesSubscriptionId} IS NOT NULL AND ${t.upfrontMinor} >= 100))`,
+      sql`(${t.replacesSubscriptionId} IS NULL) = (${t.startsAt} IS NULL) AND (${t.replacesSubscriptionId} IS NULL) = (${t.periodStart} IS NULL) AND (${t.replacesSubscriptionId} IS NULL OR ${t.provider} = 'razorpay') AND (${t.upfrontMinor} IS NULL OR (${t.replacesSubscriptionId} IS NOT NULL AND ${t.upfrontMinor} >= 100))`,
     ),
     unique("billing_checkouts_gym_key_uq").on(t.gymId, t.idempotencyKey),
     unique("billing_checkouts_provider_ref_uq").on(t.provider, t.providerRef),

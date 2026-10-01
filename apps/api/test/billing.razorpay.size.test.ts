@@ -488,4 +488,96 @@ d("a gym paying through Razorpay moves to a bigger size (real Postgres, fake Raz
     },
     TEST_TIMEOUT_MS,
   );
+  it(
+    "round one C1: a paid window that a second press closed before it was written is refunded, and its page says so",
+    async () => {
+      const gym = await payingGym();
+      const first = opened(await bigger(gym.gymId, gym.cookies, MID));
+      razorpay.authenticate(first.subscriptionId);
+      // The page stopped waiting (an e-mandate's debit slow to land, a closed tab): pressed again.
+      const second = opened(await bigger(gym.gymId, gym.cookies, BIG));
+      expect(razorpay.subs.get(first.subscriptionId)?.status).toBe("cancelled");
+      expect(JSON.parse((await sync(gym.gymId, first.checkoutId, gym.cookies)).body)).toEqual({ state: "refunded" });
+      await runWorker();
+      const paidFirst = (razorpay.invoices.get(first.subscriptionId) ?? [])[0]?.payment_id;
+      expect(paidFirst).toBeDefined();
+      expect(razorpay.refunds).toContain(paidFirst);
+      expect((await rows(gym.gymId)).map((r) => [r.status, r.provider_ref])).toEqual([["active", gym.oldSub]]);
+      // The second window still works.
+      razorpay.authenticate(second.subscriptionId);
+      expect(JSON.parse((await sync(gym.gymId, second.checkoutId, gym.cookies)).body)).toMatchObject({ state: "paid", subscription: { seatCap: 5000 } });
+      expect(razorpay.refunds).not.toContain((razorpay.invoices.get(second.subscriptionId) ?? [])[0]?.payment_id);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "round one H1: a second bigger size in the same month is priced from the same month and replaces the first",
+    async () => {
+      const gym = await payingGym();
+      const first = opened(await bigger(gym.gymId, gym.cookies, MID));
+      razorpay.authenticate(first.subscriptionId);
+      expect(JSON.parse((await sync(gym.gymId, first.checkoutId, gym.cookies)).body)).toMatchObject({ state: "paid", subscription: { seatCap: 50 } });
+
+      const before = Date.now();
+      const shown = await preview(gym.gymId, gym.cookies, BIG);
+      const after = Date.now();
+      expect(shown.statusCode).toBe(200);
+      expect(JSON.parse(shown.body)).toMatchObject({ seatCap: 5000, nextPaymentAt: gym.oldEnd.toISOString() });
+      const second = opened(await bigger(gym.gymId, gym.cookies, BIG));
+      const asked = razorpay.created.at(-1);
+      // From ₹150 to ₹200 for the rest of the same month.
+      const [low, high] = chargeBetween(15000, 20000, gym.oldSub, before, after + 2000);
+      expect(asked?.startAt?.getTime()).toBe(gym.oldEnd.getTime());
+      expect(asked?.upfront?.amountMinor).toBeGreaterThanOrEqual(low);
+      expect(asked?.upfront?.amountMinor).toBeLessThanOrEqual(high);
+
+      razorpay.authenticate(second.subscriptionId);
+      expect(JSON.parse((await sync(gym.gymId, second.checkoutId, gym.cookies)).body)).toMatchObject({ state: "paid", subscription: { seatCap: 5000 } });
+      expect((await rows(gym.gymId)).map((r) => [r.status, r.plan, r.cancel_reason])).toEqual([
+        ["expired", SMALL, "replaced"],
+        ["expired", MID, "replaced"],
+        ["active", BIG, null],
+      ]);
+      expect(razorpay.subs.get(first.subscriptionId)?.status).toBe("cancelled");
+      expect((await rows(gym.gymId))[2]?.current_period_end?.getTime()).toBe(gym.oldEnd.getTime());
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "round one tests: the old plan renewed, or its payment failed, after the window opened — the paid window is refunded and the old plan left as it is",
+    async () => {
+      // Renewed: Razorpay charged the old plan's next month before the window was written.
+      const renewed = await payingGym();
+      const win = opened(await bigger(renewed.gymId, renewed.cookies, BIG));
+      const now = razorpay.clock;
+      razorpay.clock = Math.floor(renewed.oldEnd.getTime() / 1000);
+      razorpay.charge(renewed.oldSub);
+      await webhook(renewed.oldSub);
+      await runWorker();
+      const renewedEnd = (await rows(renewed.gymId))[0]?.current_period_end;
+      expect(renewedEnd?.getTime()).toBeGreaterThan(renewed.oldEnd.getTime());
+      razorpay.clock = now;
+      razorpay.authenticate(win.subscriptionId);
+      expect(JSON.parse((await sync(renewed.gymId, win.checkoutId, renewed.cookies)).body)).toEqual({ state: "refunded" });
+      await runWorker();
+      expect(razorpay.refunds).toContain((razorpay.invoices.get(win.subscriptionId) ?? [])[0]?.payment_id);
+      expect((await rows(renewed.gymId)).filter((r) => r.status === "active").map((r) => [r.provider_ref, r.plan])).toEqual([[renewed.oldSub, SMALL]]);
+      expect(razorpay.subs.get(renewed.oldSub)?.status).toBe("active");
+
+      // Failed: the old plan's payment failed before the window was written.
+      const failed = await payingGym();
+      const win2 = opened(await bigger(failed.gymId, failed.cookies, BIG));
+      razorpay.fail(failed.oldSub);
+      await webhook(failed.oldSub);
+      await runWorker();
+      razorpay.authenticate(win2.subscriptionId);
+      expect(JSON.parse((await sync(failed.gymId, win2.checkoutId, failed.cookies)).body)).toEqual({ state: "refunded" });
+      await runWorker();
+      expect(razorpay.refunds).toContain((razorpay.invoices.get(win2.subscriptionId) ?? [])[0]?.payment_id);
+      expect((await rows(failed.gymId)).filter((r) => r.status === "past_due").map((r) => r.provider_ref)).toEqual([failed.oldSub]);
+    },
+    TEST_TIMEOUT_MS,
+  );
 });
