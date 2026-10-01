@@ -223,7 +223,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - R1. [x] **The menu, the font and the colours** — merged 2026-09-26 (PR #118).
    - R2. [x] **Classes and the Calendar** — merged 2026-09-26 (PR #119).
    - R3. [x] **Leads, and a lead's panel** — merged 2026-09-26 (PR #120).
-   - R4. [ ] **Overview, the banner and the plan prompts** (`Overview*`; "Your role" is in the menu since R1, Change size and the payment prompts drawn from the blocks). After 3c.
+   - R4. [ ] **Overview, the banner and the plan prompts** (`Overview*`; "Your role" is in the menu since R1, Change size and the payment prompts drawn from the blocks; the plan card's Change size, Update payment method and Cancel plan laid out as one set, RULINGS 2026-10-01). After 3c.
    - R5. [ ] **Attendance** (`Attendance`, `AttendancePhone`). After 16b, which rebuilds the page around the desk's live log.
    - R6. [ ] **Settings**, with a side list of its sections (`Settings`, `SettingsHours`, `SettingsPhone`). After 4a, which rebuilds Staff.
    - R7. [ ] **Your organisations, Create and the free-trial prompt** (`Orgs*`, `CreateGym*`, `GymReady`). After 3c.
