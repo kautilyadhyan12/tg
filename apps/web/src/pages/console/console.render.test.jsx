@@ -1216,7 +1216,7 @@ describe('Members', () => {
     drawMembers();
 
     expect(await screen.findByText('Rita Sen')).toBeTruthy();
-    expect(screen.getByText('Complimentary')).toBeTruthy(); // the owner's seat
+    expect(screen.getByText('Owner')).toBeTruthy(); // the owner's seat, tagged as the owner (4a-ii)
     // Opened, her panel says how she came in, and nothing more about her.
     const panel = await openInApp('Rita Sen');
     expect(panel.getByText(/Morning Batch/)).toBeTruthy();
@@ -1307,7 +1307,7 @@ describe('Members', () => {
     // anything (:28976): the roster IS drawn, and the row that would produce
     // the false refusal — the complimentary seat with its badge — is on screen.
     expect(await screen.findByText('Kd Owner')).toBeTruthy();
-    expect(screen.getByText('Complimentary')).toBeTruthy();
+    expect(screen.getByText('Owner')).toBeTruthy();
 
     expect(screen.queryByText(/cheer/i)).toBeNull();
     expect(screen.queryByLabelText(/cheer/i)).toBeNull();
@@ -1965,8 +1965,11 @@ describe('Removing a member', () => {
     drawMembers();
 
     expect(await screen.findByText('Bhaskar Das')).toBeTruthy();
-    // Two free places — the owner's and the trainer's — and NOT the third row.
-    expect(screen.getAllByText('Complimentary')).toHaveLength(2);
+    // Two free places — the owner's and the trainer's — each tagged with who they are
+    // (Kd's 4a-ii click-through: staff looked like members), and NOT the third row.
+    expect(screen.getByText('Owner')).toBeTruthy();
+    expect(screen.getByText('Staff · Trainer')).toBeTruthy();
+    expect(screen.queryByText('Complimentary')).toBeNull();
     // The control: Rita pays, so her panel offers Remove and her row no badge.
     await openInApp('Rita Sen');
     expect(removeButton()).toBeTruthy();
@@ -2050,6 +2053,7 @@ describe('Removing a member', () => {
   it('falls back to the old flag when the server is too old to send the new one', async () => {
     const legacyOwner = { ...ownerSeat };
     delete legacyOwner.takesSeat;
+    delete legacyOwner.staff;
     const legacyMember = { ...joinedMemberWithForbiddenExtras };
     delete legacyMember.takesSeat;
     orgService.getMembers.mockResolvedValue(page([legacyOwner, legacyMember]));

@@ -1090,4 +1090,50 @@ d("staff invited by email (real Postgres)", () => {
     },
     TEST_TIMEOUT_MS,
   );
+
+  it(
+    "Remove for people ticked on In the app follows the same rule: the owner's ticked staff leave the app and keep the console; a manager's ticked staff don't change",
+    async () => {
+      const gym = await makeGym("Bulk Remove Gym");
+      const mia = await memberAndStaff(gym, "bulk-mia");
+      const manager = await memberAndStaff(gym, "bulk-manager", "manager");
+      const rita = await signIn(addr("bulk-rita"));
+      await makeMember(gym, rita);
+      const previewUrl = `/v1/orgs/${gym.id}/members/selected/remove-preview`;
+      type Preview = { endApp: { userId: string | null }[]; keepConsole?: { userId: string | null }[]; kept: { reason: string; people: { userId: string | null }[] }[]; digest: string };
+      const preview = async (who: User, userIds: string[]): Promise<Preview> => {
+        const res = await post(previewUrl, { userIds }, who.cookies);
+        expect(res.statusCode, res.body).toBe(200);
+        return (JSON.parse(res.body) as { preview: Preview }).preview;
+      };
+      const ids = (people: { userId: string | null }[] | undefined) => (people ?? []).map((p) => p.userId).sort();
+
+      // A manager ticks Mia and Rita: Rita goes, Mia (staff) doesn't change.
+      const byManager = await preview(manager, [mia.userId, rita.userId]);
+      expect(ids(byManager.endApp)).toEqual([rita.userId]);
+      expect(ids(byManager.keepConsole)).toEqual([]);
+      expect(ids(byManager.kept.find((group) => group.reason === "staff")?.people)).toEqual([mia.userId]);
+
+      // The owner ticks Mia, Rita and themselves: all three leave the app; Mia and the
+      // owner keep the console, and the box says so by name.
+      const byOwner = await preview(gym.owner, [mia.userId, rita.userId, gym.owner.userId]);
+      expect(ids(byOwner.endApp)).toEqual([mia.userId, rita.userId, gym.owner.userId].sort());
+      expect(ids(byOwner.keepConsole)).toEqual([mia.userId, gym.owner.userId].sort());
+      const pressed = await post(`/v1/orgs/${gym.id}/members/selected/remove`, { userIds: [mia.userId, rita.userId, gym.owner.userId], digest: byOwner.digest }, gym.owner.cookies);
+      expect(pressed.statusCode, pressed.body).toBe(200);
+      for (const who of [mia, rita, gym.owner]) expect(await liveMembership(gym, who)).toBe(0);
+      expect((await staffRowOf(gym, mia))?.role).toBe("trainer");
+      expect(await readsMembers(gym, mia)).toBe(200);
+      expect((await staffRowOf(gym, gym.owner))?.role).toBe("owner");
+      expect(await readsMembers(gym, rita)).toBe(404);
+
+      // A manager's press with the owner's box is refused as changed: nothing more happens.
+      const ravi = await memberAndStaff(gym, "bulk-ravi");
+      const owners = await preview(gym.owner, [ravi.userId]);
+      const managerPress = await post(`/v1/orgs/${gym.id}/members/selected/remove`, { userIds: [ravi.userId], digest: owners.digest }, manager.cookies);
+      expect(managerPress.statusCode).toBe(409);
+      expect(await liveMembership(gym, ravi)).toBe(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
 });

@@ -206,7 +206,7 @@ describe('Remove from the bar', () => {
     fireEvent.click(bar().getByTestId('bar-remove'));
     const dialog = within(await screen.findByTestId('remove-box'));
     expect((await dialog.findByTestId('remove-kept')).textContent).toContain("3 won't change");
-    expect(dialog.getByTestId('remove-kept-staff').textContent).toBe('Owner and staff keep the app. Manage staff in Settings.Coach Dee');
+    expect(dialog.getByTestId('remove-kept-staff').textContent).toBe('Staff and the owner keep the app here. The owner can remove them from it on In the app.Coach Dee');
     expect(dialog.getByTestId('remove-kept-own_record').textContent).toBe("Keep the app: they're on your list with their own details.Maria Park");
     expect(dialog.getByTestId('remove-kept-gone').textContent).toBe('1 · No longer on your list.');
     expect(dialog.queryByTestId('remove-press')).toBeNull();

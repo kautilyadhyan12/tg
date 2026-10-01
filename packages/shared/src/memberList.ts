@@ -1927,6 +1927,9 @@ export const memberRemovePreviewSchema = z
     selected: z.number().int().min(0),
     move: z.array(memberRemovePersonSchema),
     endApp: z.array(memberRemovePersonSchema),
+    /** Of `endApp`, staff (and the owner) the owner ticked: they leave the app and keep
+     *  their staff access (4a-ii). Optional while an older server leaves it out. */
+    keepConsole: z.array(memberRemovePersonSchema).optional(),
     kept: z.array(z.object({ reason: memberRemoveKeptReasonSchema, people: z.array(memberRemovePersonSchema) }).strict()),
     /** Of the records moving, how many nobody in the app uses: no person in the app is
      *  theirs, and no family's shared email in the app is on them. */

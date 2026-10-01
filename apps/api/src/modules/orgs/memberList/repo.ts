@@ -122,6 +122,9 @@ export interface MemberAgainstList extends ListMember {
   entryFullName: string | null;
   /** When this membership began, for a screen naming the person. */
   joinedAt: Date;
+  /** They also run this gym (a staff row, the owner's included). Left out by a fixture
+   *  that is about members only. */
+  isStaff?: boolean;
 }
 
 /** The gym's time zone, for its own calendar day. */
@@ -908,11 +911,13 @@ export async function membersAgainstList(
       joined_former: boolean;
       same_contact: unknown;
       joined_at: Date;
+      is_staff: boolean;
     }[]
   >`
     SELECT m.user_id,
            m.joined_at,
            u.display_name,
+           EXISTS (SELECT 1 FROM gym_staff st WHERE st.gym_id = m.gym_id AND st.user_id = m.user_id) AS is_staff,
            (m.complimentary = false
             AND NOT EXISTS (
               SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)) AS seat_counted,
@@ -1020,6 +1025,7 @@ export async function membersAgainstList(
       statedPhone: row.stated_phone_e164,
       everListed: row.ever_listed,
       seatCounted: row.seat_counted,
+      isStaff: row.is_staff,
       onList: row.on_list || alt !== undefined,
       entryId: alt?.id ?? row.entry_id,
       entryStatus: alt === undefined ? row.entry_status : alt.status,
@@ -2283,16 +2289,20 @@ export async function memberContact(
 
 /** THE MEMBERSHIPS CLOSED, in one statement — `removeMember`'s own write for a set. The
  *  owner, staff and free places are refused here as well as by the rule that chose the
- *  set. Each keeps the record it was removed with, if the list said for certain which
- *  was theirs: Put back on that record gives their app back (`removedWithRecord`). */
+ *  set, except the staff in `staffToo`: people the owner ticked on "In the app", who
+ *  leave the app and keep their staff access (4a-ii). Each keeps the record it was
+ *  removed with, if the list said for certain which was theirs: Put back on that record
+ *  gives their app back (`removedWithRecord`). */
 export async function closeMemberships(
   tx: TransactionSql,
   gymId: string,
   people: readonly { userId: string; removedWith: string | null }[],
   at: Date,
+  staffToo: readonly string[] = [],
 ): Promise<{ membershipId: string; userId: string }[]> {
   if (people.length === 0) return [];
   const payload = people.map((person) => ({ user_id: person.userId, entry_id: person.removedWith }));
+  const staffIds = [...staffToo];
   const rows = await tx<{ id: string; user_id: string }[]>`
     UPDATE gym_members m
     SET removed_at = ${at}, removed_entry_id = p.entry_id
@@ -2300,8 +2310,11 @@ export async function closeMemberships(
     WHERE m.gym_id = ${gymId}
       AND m.user_id = p.user_id
       AND m.removed_at IS NULL
-      AND m.complimentary = false
-      AND NOT EXISTS (SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)
+      AND (
+        (m.complimentary = false
+         AND NOT EXISTS (SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id))
+        OR (m.user_id = ANY(${staffIds}::uuid[])
+            AND EXISTS (SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)))
     RETURNING m.id, m.user_id`;
   return rows.map((row) => ({ membershipId: row.id, userId: row.user_id }));
 }

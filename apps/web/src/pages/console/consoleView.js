@@ -170,6 +170,16 @@ export function seatIsFree(member) {
   return member.complimentary === true;
 }
 
+/** The tag on a person in the app who also runs the gym: "Owner", "Staff · Trainer",
+ *  "Staff · Front desk" (Kd's 4a-ii click-through: staff looked like members). Null for a
+ *  member, and for a row from a server that does not say. */
+export function staffTag(member, words) {
+  const staff = member?.staff;
+  if (!staff || typeof staff !== 'object') return null;
+  if (staff.role === 'owner') return 'Owner';
+  return `Staff · ${staff.roleName || (staff.role === 'manager' ? 'Manager' : words.coachCap)}`;
+}
+
 /** REMOVING SOMEBODY WHO ALSO RUNS THE GYM (ROADMAP 4a-ii), or null for a member only
  *  (and for a row from a server that does not say: then Remove stays as it was). Staff
  *  and member are separate: the owner chooses whether they lose the console too; an

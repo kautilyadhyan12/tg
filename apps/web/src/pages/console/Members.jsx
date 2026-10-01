@@ -14,6 +14,7 @@ import { MEMBER_REMOVE_TICKED_MAX, orgWords } from '@app/shared';
 import {
   canRemoveMembers,
   staffRemoveView,
+  staffTag,
   viewerPrivileges,
   groupLabelText,
   memberCountLabel,
@@ -42,7 +43,7 @@ import PlanChoiceDialog from '../../components/console/PlanChoiceDialog';
 /** One person in the app, as Leads shows a lead: their name, since when, and one tag.
  *  Everything to do with them is on their panel (`RosterSheet`). `picked` is null where
  *  staff can't tick people (a trainer, a read-only gym). */
-function RosterRow({ member, onOpen, picked = null, onTick }) {
+function RosterRow({ member, words, onOpen, picked = null, onTick }) {
   // An app member the gym's list does not hold (3a-vi-b). Only staff who may see the
   // list are sent it.
   const off = offListView(member.offList);
@@ -65,7 +66,9 @@ function RosterRow({ member, onOpen, picked = null, onTick }) {
           <span className="c-s13 c-t2 c-ell">In the app since {shortWhen(member.joinedAt)}</span>
         </span>
         <span>
-          {seatIsFree(member) ? (
+          {staffTag(member, words) !== null ? (
+            <span className="c-tag c-tag-soft">{staffTag(member, words)}</span>
+          ) : seatIsFree(member) ? (
             <span className="c-tag c-tag-soft">Complimentary</span>
           ) : off ? (
             <span className="c-tag c-tag-warn">
@@ -124,10 +127,16 @@ function RosterSheet({ member, words, seesList, canRemove, managesStaff, readOnl
           </button>
         </div>
         <div className="flex flex-col gap-4 px-4 py-5 md:px-7">
-          {free ? (
+          {staffTag(member, words) !== null ? (
+            <p className="c-s14 c-t2">
+              <span className="c-tag c-tag-soft mr-2">{staffTag(member, words)}</span>
+              {member.staff.role === 'owner' ? `Runs this ${words.it}.` : 'Also works here.'} Their place in the app is free and isn&apos;t
+              counted in your plan. Manage staff in Settings.
+            </p>
+          ) : free ? (
             <p className="c-s14 c-t2">
               <span className="c-tag c-tag-soft mr-2">Complimentary</span>
-              The owner and staff use the app for free. Manage staff in Settings.
+              This place in the app is free and isn&apos;t counted in your plan.
             </p>
           ) : null}
           {/* The name on the gym's own list, beside the name they gave the app. The email on
@@ -220,7 +229,7 @@ const NOTHING = () => undefined;
 
 /** "Already in the app · 3" under an empty list (`MembersEmpty`). Each name opens that
  *  person's panel on "In the app", as a row there does (4a-ii click-through). */
-function AlreadyInApp({ items, onOpen }) {
+function AlreadyInApp({ items, words, onOpen }) {
   if (items.length === 0) return null;
   return (
     <section className="c-card overflow-hidden" aria-labelledby="already-title">
@@ -237,7 +246,13 @@ function AlreadyInApp({ items, onOpen }) {
             >
               <span className="c-s15 c-w6 c-t1 c-ell">{m.displayName}</span>
               <span className="c-s14 c-t2">In the app since {shortWhen(m.joinedAt)}</span>
-              <span>{seatIsFree(m) ? <span className="c-tag c-tag-soft">Complimentary</span> : null}</span>
+              <span>
+                {staffTag(m, words) !== null ? (
+                  <span className="c-tag c-tag-soft">{staffTag(m, words)}</span>
+                ) : seatIsFree(m) ? (
+                  <span className="c-tag c-tag-soft">Complimentary</span>
+                ) : null}
+              </span>
               <ChevronRight aria-hidden="true" className="hidden md:block w-[18px] h-[18px] c-t3" />
             </button>
           </li>
@@ -602,6 +617,7 @@ export default function Members() {
           emptyExtra={
             <AlreadyInApp
               items={state.items}
+              words={words}
               onOpen={(m) => {
                 showTab('app');
                 openFromRoster(m);
@@ -681,6 +697,7 @@ export default function Members() {
               <RosterRow
                 key={m.userId}
                 member={m}
+                words={words}
                 onOpen={() => openFromRoster(m)}
                 picked={canTick ? rosterTicked.has(m.userId) : null}
                 onTick={() => tickRosterRow(m.userId)}

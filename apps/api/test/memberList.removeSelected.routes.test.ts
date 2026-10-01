@@ -378,7 +378,7 @@ d("Remove on the people selected (real Postgres)", () => {
   );
 
   it(
-    "staff keep their app: a ticked coach's record moves, the owner ticked on In the app is kept",
+    "staff keep their app from Your list: a ticked coach's record moves; on In the app the owner may tick themselves out of the app and stays the owner (4a-ii)",
     async () => {
       const gym = await makeGym();
       const coach = await joined(gym, "Coach Dee", "dee");
@@ -390,8 +390,9 @@ d("Remove on the people selected (real Postgres)", () => {
       expect(await inApp(gym, coach.user)).toBe(true);
 
       const owner = await rosterPreview(gym, [gym.owner.userId]);
-      expect(owner.endApp).toEqual([]);
-      expect(owner.kept.map((k) => k.reason)).toEqual(["staff"]);
+      expect(owner.endApp.map((p) => p.userId)).toEqual([gym.owner.userId]);
+      expect((owner.keepConsole ?? []).map((p) => p.userId)).toEqual([gym.owner.userId]);
+      expect(owner.kept).toEqual([]);
     },
     TEST_TIMEOUT_MS,
   );
