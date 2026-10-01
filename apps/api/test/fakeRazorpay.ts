@@ -115,7 +115,18 @@ export class FakeRazorpay implements RazorpayApi {
     return answer;
   }
 
-  cancelSubscriptionNow(id: string): Promise<RazorpayResult<RazorpaySubscription>> {
+  /** Run once at the start of the next cancel-at-once, before Razorpay acts on it: whatever
+   *  this does (a window paid, its sync) lands first. */
+  duringNextCancel: ((id: string) => Promise<unknown>) | null = null;
+
+  async cancelSubscriptionNow(id: string): Promise<RazorpayResult<RazorpaySubscription>> {
+    const during = this.duringNextCancel;
+    this.duringNextCancel = null;
+    if (during !== null) await during(id);
+    return await this.cancelNow(id);
+  }
+
+  private cancelNow(id: string): Promise<RazorpayResult<RazorpaySubscription>> {
     if (this.down) return Promise.resolve({ kind: "unavailable", status: 503 });
     if (this.cancelFailures > 0) {
       this.cancelFailures -= 1;

@@ -1,5 +1,6 @@
 // A gym paying us (ROADMAP Stage 3 items 1a, 1c-i, 1c-ii, 1c-iii, 1d-i, 1d-ii and 1d-iii-a). Order per CLAUDE.md §4:
-// authenticate → rate limit → parse → service (which checks `billing.manage` on the gym) → repo.
+// authenticate → `billing.manage` on the gym → rate limit → parse → service → repo. Only the gym's
+// own billing staff spend its address's allowance, so nobody else at that address can use it up.
 // Paddle's and Razorpay's webhooks: signature on the raw body, kept once by the provider's
 // event id, 200; the worker asks the provider for the subscription before anything changes.
 import { createHash } from "node:crypto";
@@ -15,8 +16,9 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { RedisLike } from "../../redis.js";
 import { createDualRateLimit } from "../auth/rateLimit.js";
+import { requirePrivilege } from "../orgs/service.js";
 import * as webhooks from "../webhooks/repo.js";
-import { verifyPaddleSignature } from "./paddleSignature.js";
+import { PADDLE_SIGNATURE_TOLERANCE_SECONDS, verifyPaddleSignature } from "./paddleSignature.js";
 import { verifyRazorpaySignature } from "./razorpaySignature.js";
 import * as service from "./service.js";
 
@@ -24,9 +26,11 @@ export const PADDLE_WEBHOOK_PATH = "/v1/webhooks/paddle";
 export const RAZORPAY_WEBHOOK_PATH = "/v1/webhooks/razorpay";
 
 /** Paddle's and Razorpay's subscription bodies are a few kilobytes; this leaves room and no more. */
-const WEBHOOK_BODY_LIMIT = 256 * 1024;
+const WEBHOOK_BODY_LIMIT = 64 * 1024;
 
 const gymParams = z.object({ gymId: z.string().uuid() }).strict();
+/** The gym in any billing route's path, before the route's own parse. */
+const gymInParams = z.object({ gymId: z.string().uuid() }).passthrough();
 const checkoutParams = z.object({ gymId: z.string().uuid(), checkoutId: z.string().uuid() }).strict();
 const idempotencyKey = z.string().min(1).max(100).regex(/^[\x21-\x7e]+$/);
 
@@ -58,6 +62,16 @@ export function registerBillingRoutes(
     nowSeconds: () => number;
   },
 ): void {
+  // Before the limiters: a refusal here spends nothing (404 for a stranger, 403 for staff who may not pay).
+  const billingStaff = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const params = gymInParams.safeParse(req.params);
+    if (!params.success) {
+      await reply.status(400).send({ error: "validation_error", message: "gymId: invalid_string", requestId: req.id });
+      return;
+    }
+    await requirePrivilege(deps, params.data.gymId, requireUserId(req), "billing.manage");
+  };
+
   // An owner subscribes once; these leave room for a slow network and a changed mind.
   const checkoutLimit = createDualRateLimit({
     name: "billing_checkout",
@@ -79,7 +93,7 @@ export function registerBillingRoutes(
 
   app.post(
     "/v1/orgs/:gymId/billing/checkout",
-    { preHandler: [app.authenticate, checkoutLimit] },
+    { preHandler: [app.authenticate, billingStaff, checkoutLimit] },
     async (req, reply) => {
       const params = parseOr400(gymParams, req.params, req, reply);
       if (params === null) return;
@@ -109,7 +123,7 @@ export function registerBillingRoutes(
 
   app.post(
     "/v1/orgs/:gymId/billing/portal",
-    { preHandler: [app.authenticate, portalLimit] },
+    { preHandler: [app.authenticate, billingStaff, portalLimit] },
     async (req, reply) => {
       const params = parseOr400(gymParams, req.params, req, reply);
       if (params === null) return;
@@ -140,7 +154,7 @@ export function registerBillingRoutes(
 
   app.post(
     "/v1/orgs/:gymId/billing/size/preview",
-    { preHandler: [app.authenticate, sizePreviewLimit] },
+    { preHandler: [app.authenticate, billingStaff, sizePreviewLimit] },
     async (req, reply) => {
       const params = parseOr400(gymParams, req.params, req, reply);
       if (params === null) return;
@@ -153,7 +167,7 @@ export function registerBillingRoutes(
 
   app.post(
     "/v1/orgs/:gymId/billing/size",
-    { preHandler: [app.authenticate, sizeChangeLimit] },
+    { preHandler: [app.authenticate, billingStaff, sizeChangeLimit] },
     async (req, reply) => {
       const params = parseOr400(gymParams, req.params, req, reply);
       if (params === null) return;
@@ -175,7 +189,7 @@ export function registerBillingRoutes(
   // mandate charges, so this opens its window for a new plan; nothing changes until it is paid.
   app.post(
     "/v1/orgs/:gymId/billing/size/razorpay",
-    { preHandler: [app.authenticate, sizeChangeLimit] },
+    { preHandler: [app.authenticate, billingStaff, sizeChangeLimit] },
     async (req, reply) => {
       const params = parseOr400(gymParams, req.params, req, reply);
       if (params === null) return;
@@ -197,7 +211,7 @@ export function registerBillingRoutes(
   // it takes no key.
   app.delete(
     "/v1/orgs/:gymId/billing/size/pending",
-    { preHandler: [app.authenticate, sizeChangeLimit] },
+    { preHandler: [app.authenticate, billingStaff, sizeChangeLimit] },
     async (req, reply) => {
       const params = parseOr400(gymParams, req.params, req, reply);
       if (params === null) return;
@@ -219,7 +233,7 @@ export function registerBillingRoutes(
 
   app.post(
     "/v1/orgs/:gymId/billing/razorpay/pay",
-    { preHandler: [app.authenticate, razorpayLimit] },
+    { preHandler: [app.authenticate, billingStaff, razorpayLimit] },
     async (req, reply) => {
       const params = parseOr400(gymParams, req.params, req, reply);
       if (params === null) return;
@@ -230,7 +244,7 @@ export function registerBillingRoutes(
 
   app.post(
     "/v1/orgs/:gymId/billing/razorpay/method",
-    { preHandler: [app.authenticate, razorpayLimit] },
+    { preHandler: [app.authenticate, billingStaff, razorpayLimit] },
     async (req, reply) => {
       const params = parseOr400(gymParams, req.params, req, reply);
       if (params === null) return;
@@ -242,7 +256,7 @@ export function registerBillingRoutes(
   // The console asks after Razorpay's page or window closes, every few seconds for a minute.
   app.post(
     "/v1/orgs/:gymId/billing/razorpay/refresh",
-    { preHandler: [app.authenticate, syncLimit] },
+    { preHandler: [app.authenticate, billingStaff, syncLimit] },
     async (req, reply) => {
       const params = parseOr400(gymParams, req.params, req, reply);
       if (params === null) return;
@@ -255,7 +269,7 @@ export function registerBillingRoutes(
   // (DELETE). Each is the same state however often it is sent, so neither takes a key.
   app.put(
     "/v1/orgs/:gymId/billing/cancel",
-    { preHandler: [app.authenticate, sizeChangeLimit] },
+    { preHandler: [app.authenticate, billingStaff, sizeChangeLimit] },
     async (req, reply) => {
       const params = parseOr400(gymParams, req.params, req, reply);
       if (params === null) return;
@@ -266,7 +280,7 @@ export function registerBillingRoutes(
 
   app.delete(
     "/v1/orgs/:gymId/billing/cancel",
-    { preHandler: [app.authenticate, sizeChangeLimit] },
+    { preHandler: [app.authenticate, billingStaff, sizeChangeLimit] },
     async (req, reply) => {
       const params = parseOr400(gymParams, req.params, req, reply);
       if (params === null) return;
@@ -277,7 +291,7 @@ export function registerBillingRoutes(
 
   app.post(
     "/v1/orgs/:gymId/billing/checkouts/:checkoutId/sync",
-    { preHandler: [app.authenticate, syncLimit] },
+    { preHandler: [app.authenticate, billingStaff, syncLimit] },
     async (req, reply) => {
       const params = parseOr400(checkoutParams, req.params, req, reply);
       if (params === null) return;
@@ -295,6 +309,20 @@ export function registerBillingRoutes(
     scope.removeAllContentTypeParsers();
     scope.addContentTypeParser("*", { parseAs: "buffer", bodyLimit: WEBHOOK_BODY_LIMIT }, (_req, body, next) => {
       next(null, body);
+    });
+    // A request with no signature of the right shape, or Paddle's older than its tolerance, is
+    // refused before its body is read.
+    scope.addHook("onRequest", async (req, reply) => {
+      if (req.routeOptions.url === PADDLE_WEBHOOK_PATH) {
+        const header = req.headers["paddle-signature"];
+        const ts = typeof header === "string" && header.length <= 2000 ? /(?:^|;)\s*ts=(\d{1,12})\s*(?:;|$)/.exec(header)?.[1] : undefined;
+        if (ts === undefined || !header?.includes("h1=") || Math.abs(deps.nowSeconds() - Number(ts)) > PADDLE_SIGNATURE_TOLERANCE_SECONDS) {
+          await reply.status(401).send();
+        }
+      } else if (req.routeOptions.url === RAZORPAY_WEBHOOK_PATH) {
+        const header = req.headers["x-razorpay-signature"];
+        if (typeof header !== "string" || !/^[0-9a-f]{64}$/.test(header)) await reply.status(401).send();
+      }
     });
 
     scope.post(
@@ -368,11 +396,12 @@ export function registerBillingRoutes(
         const subscriptionId = razorpaySubscriptionIdSchema.safeParse(named);
         if (!subscriptionId.success) return reply.status(200).send();
         // Razorpay's id for the event, sent the same on every delivery of it; without one,
-        // the body's own hash: a second delivery of the same bytes is the same event.
+        // the body's own hash: a second delivery of the same bytes is the same event. The header
+        // is not signed, so it is kept apart from the worker's own ids (`due:…`, events.ts).
         const idHeader = req.headers["x-razorpay-event-id"];
         const eventId =
           typeof idHeader === "string" && /^[\x21-\x7e]{1,100}$/.test(idHeader)
-            ? idHeader
+            ? `evt:${idHeader}`
             : `body:${createHash("sha256").update(body).digest("hex")}`;
         await webhooks.keepRazorpayEvent(deps.sql, {
           eventId,

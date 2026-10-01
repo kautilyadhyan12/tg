@@ -48,7 +48,7 @@ export function usePaddleSubscribe(gymId, gymName = '') {
           refreshConsoleOrgsAfterChange();
           if (mounted.current) {
             setPaying(null);
-            setPayError('Your plan changed while you were paying, so nothing changed and that payment will be refunded. Reload the page to see your plan.');
+            setPayError('That payment couldn’t be used, so it will be refunded in full. Your plan hasn’t changed. Reload the page to see it.');
           }
           return;
         }

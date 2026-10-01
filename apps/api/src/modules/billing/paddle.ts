@@ -6,10 +6,12 @@
 // The API key needs, besides what 1a's calls use, `customer_portal_session.write` for
 // Paddle's own page (1c-i); without it Paddle answers 403 and the button says paying
 // online isn't available (found on Kd's sandbox key, 2026-09-24). A size change (1c-ii)
-// needs `subscription.write`.
+// needs `subscription.write`, and placing a new plan `customer.read` (who paid; Kd's sandbox key
+// has it, 2026-10-01).
 import {
   paddleAdjustmentSchema,
   paddleCustomerIdSchema,
+  paddleCustomerSchema,
   paddleEnvelope,
   paddleErrorSchema,
   paddleListEnvelope,
@@ -22,6 +24,7 @@ import {
   paddleSubscriptionSchema,
   paddleTransactionIdSchema,
   paddleTransactionSchema,
+  type PaddleCustomer,
   type PaddlePortalSession,
   type PaddlePrice,
   type PaddleSubscription,
@@ -52,6 +55,8 @@ export interface PaddleApi {
   /** A subscription's transactions, oldest first (the first page: 30). */
   listSubscriptionTransactions(subscriptionId: string): Promise<PaddleResult<PaddleTransaction[]>>;
   cancelSubscriptionNow(id: string): Promise<PaddleResult<null>>;
+  /** Who paid: the customer's email (needs the key's `customer.read`). */
+  getCustomer(id: string): Promise<PaddleResult<PaddleCustomer>>;
   refundTransaction(id: string, reason: string): Promise<PaddleResult<null>>;
   /** A short-lived sign-in to Paddle's customer portal for one customer, with deep links
    *  for these subscriptions. Its links are never logged or kept. */
@@ -190,6 +195,10 @@ export function createPaddleApi(opts: {
       const path = subPath(id);
       if (path === null) return { kind: "not_found" };
       return ignore(await call("POST", `${path}/cancel`, paddleEnvelope(paddleSubscriptionSchema), { effective_from: "immediately" }));
+    },
+    async getCustomer(id) {
+      if (!paddleCustomerIdSchema.safeParse(id).success) return { kind: "not_found" };
+      return unwrap(await call("GET", `/customers/${id}`, paddleEnvelope(paddleCustomerSchema)));
     },
     async refundTransaction(id, reason) {
       if (!paddleTransactionIdSchema.safeParse(id).success) return { kind: "not_found" };
