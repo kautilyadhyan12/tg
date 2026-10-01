@@ -2,7 +2,8 @@
 -- `0016` onwards are; its journal entry is part of this commit.
 --
 -- gym_staff_invites        one row an invitation: the address (readable, the owner sees
---                          whom they invited), the role, who sent it, 7 days to accept.
+--                          whom they invited), the role and the ticks the owner chose
+--                          (never "manage staff"), who sent it, 7 days to accept.
 --                          Open = pending or declined and not cleared; one open
 --                          invitation an address a gym.
 -- gym_staff_invite_sends   each email, queued in the same transaction as its invitation
@@ -13,6 +14,7 @@ CREATE TABLE gym_staff_invites (
   gym_id uuid NOT NULL REFERENCES gyms(id) ON DELETE CASCADE,
   email citext NOT NULL,
   role text NOT NULL,
+  privileges text[] NOT NULL,
   invited_by uuid REFERENCES users(id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL,
   expires_at timestamptz NOT NULL,
@@ -21,6 +23,7 @@ CREATE TABLE gym_staff_invites (
   answered_by uuid REFERENCES users(id) ON DELETE SET NULL,
   cleared_at timestamptz,
   CONSTRAINT gym_staff_invites_role_check CHECK (role IN ('manager','trainer')),
+  CONSTRAINT gym_staff_invites_privileges_check CHECK (NOT ('staff.manage' = ANY (privileges)) AND cardinality(privileges) <= 20),
   CONSTRAINT gym_staff_invites_state_check CHECK (state IN ('pending','accepted','declined','cancelled')),
   CONSTRAINT gym_staff_invites_answered_check CHECK ((state = 'pending') = (answered_at IS NULL)),
   CONSTRAINT gym_staff_invites_cleared_check CHECK (cleared_at IS NULL OR state IN ('pending','declined')),

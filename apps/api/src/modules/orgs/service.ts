@@ -859,7 +859,7 @@ export function defaultPrivilegesFor(role: OrgRole): OrgPrivilege[] {
 /** One order, everywhere: sorted, no repeats. A set stored two different ways
  *  reads as two different sets in an audit log, and "did anything change" is
  *  then a question about ordering rather than about access. */
-function canonicalPrivileges(privileges: readonly OrgPrivilege[]): OrgPrivilege[] {
+export function canonicalPrivileges(privileges: readonly OrgPrivilege[]): OrgPrivilege[] {
   return [...new Set(privileges)].sort();
 }
 

@@ -19,6 +19,8 @@ export const gymStaffInvites = pgTable(
       .references(() => gyms.id, { onDelete: "cascade" }),
     email: citext("email").notNull(),
     role: text("role").notNull(),
+    /** The ticks the owner chose on the invite form: what Accept gives. */
+    privileges: text("privileges").array().notNull(),
     invitedBy: uuid("invited_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
@@ -37,6 +39,7 @@ export const gymStaffInvites = pgTable(
     index("gym_staff_invites_email_idx").on(t.email).where(sql`${t.state} IN ('pending','declined') AND ${t.clearedAt} IS NULL`),
     index("gym_staff_invites_gym_idx").on(t.gymId, t.createdAt),
     check("gym_staff_invites_role_check", sql`${t.role} IN ('manager','trainer')`),
+    check("gym_staff_invites_privileges_check", sql`NOT ('staff.manage' = ANY (${t.privileges})) AND cardinality(${t.privileges}) <= 20`),
     check("gym_staff_invites_state_check", sql`${t.state} IN ('pending','accepted','declined','cancelled')`),
     check("gym_staff_invites_answered_check", sql`(${t.state} = 'pending') = (${t.answeredAt} IS NULL)`),
     check("gym_staff_invites_cleared_check", sql`${t.clearedAt} IS NULL OR ${t.state} IN ('pending','declined')`),

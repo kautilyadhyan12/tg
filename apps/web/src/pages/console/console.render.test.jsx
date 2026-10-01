@@ -329,6 +329,7 @@ describe('Your organisations', () => {
 const STAFF_INVITATION = {
   id: '22222222-2222-4222-8222-222222222222',
   role: 'trainer',
+  privileges: ['attendance.read', 'codes.invite', 'members.read'],
   gym: { id: ORG.id, name: 'Iron House', city: 'Austin', orgType: 'gym' },
   invitedBy: 'Kd Owner',
   expiresAt: '2026-10-08T09:00:00.000Z',
@@ -370,6 +371,23 @@ describe('a person invited to help run a gym', () => {
     fireEvent.click(await screen.findByText('No thanks'));
     await waitFor(() => expect(orgService.declineStaffInvitation).toHaveBeenCalledWith(STAFF_INVITATION.id));
     await waitFor(() => expect(orgService.getMyStaffInvitations).toHaveBeenCalledTimes(2));
+  });
+
+  it("the card lists the permissions the owner chose, not the role's usual ones", async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [ORG] } });
+    invitationsAre([{ ...STAFF_INVITATION, privileges: ['attendance.read'] }]);
+    drawHome();
+    const card = await screen.findByTestId(`staff-invitation-${STAFF_INVITATION.id}`);
+    expect(within(card).getByText(/See who came in\./)).toBeTruthy();
+    expect(within(card).queryByText(/See the member list/)).toBeNull();
+  });
+
+  it('a card with nothing ticked says so plainly', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [ORG] } });
+    invitationsAre([{ ...STAFF_INVITATION, privileges: [] }]);
+    drawHome();
+    const card = await screen.findByTestId(`staff-invitation-${STAFF_INVITATION.id}`);
+    expect(within(card).getByText(/hasn't given you anything else to do yet/)).toBeTruthy();
   });
 
   it('a declined one can still be accepted, and says so', async () => {

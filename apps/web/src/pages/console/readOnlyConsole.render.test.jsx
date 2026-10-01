@@ -365,7 +365,11 @@ async function openSection(name) {
  *  class guard at the foot of this file for why every note assertion needs
  *  scoping. */
 async function sectionBody(name) {
-  const heading = await screen.findByRole('button', { name: new RegExp(name, 'i') });
+  // The section's own heading: the one button naming it that controls a body ("Invite
+  // staff" names it too).
+  const heading = (await screen.findAllByRole('button', { name: new RegExp(name, 'i') })).find((b) =>
+    b.hasAttribute('aria-controls'),
+  );
   const bodyId = heading.getAttribute('aria-controls');
   expect(bodyId).toBeTruthy();
   const body = document.getElementById(bodyId);
@@ -729,7 +733,7 @@ describe('the staff list', () => {
 
     await openSection('staff');
     expect(await screen.findByText('Dev Roy')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /invite someone/i }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: /invite staff/i }).disabled).toBe(true);
     // The trainer's row carries both: a role change and a removal.
     expect(screen.getByRole('button', { name: /make manager/i }).disabled).toBe(true);
     expect(screen.getByRole('button', { name: /^remove$/i }).disabled).toBe(true);
@@ -768,7 +772,7 @@ describe('the staff list', () => {
 
     await openSection('staff');
     await screen.findByText('Dev Roy');
-    expect(screen.getByRole('button', { name: /invite someone/i }).disabled).toBe(false);
+    expect(screen.getByRole('button', { name: /invite staff/i }).disabled).toBe(false);
     expect(screen.getByRole('button', { name: /make manager/i }).disabled).toBe(false);
     expect(screen.getByRole('button', { name: /^remove$/i }).disabled).toBe(false);
     expect(screen.queryByText(READ_ONLY_NOTE)).toBeNull();
@@ -929,7 +933,7 @@ describe('a step already open when the gym lapses', () => {
 
     await openSection('staff');
     await screen.findByText('Dev Roy');
-    screen.getByRole('button', { name: /invite someone/i }).click();
+    screen.getByRole('button', { name: /invite staff/i }).click();
 
     const add = await screen.findByRole('button', { name: /^send invitation$/i });
     expect(add.disabled).toBe(false);

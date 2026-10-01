@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2, UserPlus } from 'lucide-react';
 import { orgWords, staffRoleWord } from '@app/shared';
 import { formatJoinedAt } from '../../pages/console/consoleView';
-import { startingAbilities } from '../../pages/console/staffView';
+import { abilityLabels } from '../../pages/console/staffView';
 import { refreshConsoleOrgs } from '../../pages/console/consoleOrgs';
 import { errorText, orgService } from '../../api/orgsApi';
 
@@ -23,6 +23,7 @@ function InvitationCard({ invitation, onAnswered }) {
   const role = staffRoleWord(invitation.role, gym.orgType);
   const who = invitation.invitedBy ?? gym.name;
   const declined = invitation.state === 'declined';
+  const abilities = abilityLabels(invitation.privileges ?? [], gym.orgType);
 
   const accept = async () => {
     setBusy('accept');
@@ -75,8 +76,14 @@ function InvitationCard({ invitation, onAnswered }) {
       </div>
 
       <div className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>
-        <span className="font-semibold">As {article(role)} {role} you can:</span>{' '}
-        {startingAbilities(invitation.role, gym.orgType).join(' · ')}. The owner can change this later.
+        {abilities.length === 0 ? (
+          <>You can open the console. The owner hasn&apos;t given you anything else to do yet.</>
+        ) : (
+          <>
+            <span className="font-semibold">As {article(role)} {role} you can:</span> {abilities.join(' · ')}. The owner
+            can change this later.
+          </>
+        )}
       </div>
       <p className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
         This opens {gym.name}&apos;s console. It doesn&apos;t make you a {words.person} of the {words.it}.
@@ -124,7 +131,7 @@ export default function StaffInvitations({ invitations, onAnswered }) {
   if (invitations.length === 0) return null;
   return (
     <div className="flex flex-col gap-3 mb-6">
-      <h2 className="text-sm font-semibold uppercase tracking-wide" style={{ color: 'rgba(255,255,255,0.5)' }}>
+      <h2 className="text-sm font-semibold uppercase tracking-wide" style={{ color: 'var(--t2, rgba(255,255,255,0.5))' }}>
         You&apos;re invited
       </h2>
       {invitations.map((invitation) => (

@@ -345,13 +345,24 @@ export function roleChangeWarning(person, nextRole, orgType) {
 
 // ── STAFF INVITED BY EMAIL (Part 3 §10.3; ROADMAP 4a-i) ─────────────────────
 
-/** What a role starts with, as the tick boxes name it, least powerful first: shown
- *  under each role on the invite form and on the person's Accept card, so nobody is
- *  surprised by what the role can do. The owner changes the ticks after they accept. */
-export function startingAbilities(role, orgType) {
-  const starting = ROLE_PRIVILEGES[role] ?? [];
+/** A role's usual ticks: what the invite form starts with when the role is chosen. */
+export function roleTicks(role) {
+  return [...(ROLE_PRIVILEGES[role] ?? [])];
+}
+
+/** What the invite sends: the boxes ticked on the form, plus the role's usual ticks this
+ *  screen has no box for (as Save permissions keeps them), never "Manage staff". */
+export function inviteTicks(role, ticked, orgType) {
+  const offered = privilegeChoices(role, orgType).map((choice) => choice.value);
+  const unseen = roleTicks(role).filter((value) => !offered.includes(value));
+  return [...new Set([...ticked.filter((value) => offered.includes(value)), ...unseen])];
+}
+
+/** The permissions an invitation gives, as the tick boxes name them, least powerful
+ *  first: shown on the person's Accept card. */
+export function abilityLabels(privileges, orgType) {
   return privilegeCopy(orgType)
-    .filter((choice) => starting.includes(choice.value))
+    .filter((choice) => privileges.includes(choice.value))
     .map((choice) => choice.label);
 }
 

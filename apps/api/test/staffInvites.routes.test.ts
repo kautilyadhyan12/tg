@@ -444,6 +444,43 @@ d("staff invited by email (real Postgres)", () => {
     TEST_TIMEOUT_MS,
   );
 
+  it(
+    "the person gets exactly the permissions the owner ticked, never Manage staff; somebody already in the gym too",
+    async () => {
+      const gym = await makeGym("Ticks Gym");
+      const chosen = ["schedule.manage", "attendance.read", "members.read"];
+      const res = await post(invitesUrl(gym), { email: addr("ticks-1"), role: "trainer", privileges: chosen }, gym.owner.cookies);
+      expect(res.statusCode, res.body).toBe(201);
+      const body = createStaffInviteResponseSchema.parse(JSON.parse(res.body));
+      if (body.outcome !== "invited") throw new Error("not invited");
+      expect(body.invite.privileges).toEqual([...chosen].sort());
+      const person = await signIn(addr("ticks-1"));
+      expect((await myInvitations(person)).invitations[0]?.privileges).toEqual([...chosen].sort());
+      expect((await accept(person, body.invite.id)).statusCode).toBe(200);
+      expect(await staffRowOf(gym, person)).toEqual({ role: "trainer", privileges: [...chosen].sort() });
+
+      // Nothing ticked is a person who can open the console and do nothing yet.
+      const none = await post(invitesUrl(gym), { email: addr("ticks-none"), role: "manager", privileges: [] }, gym.owner.cookies);
+      expect(createStaffInviteResponseSchema.parse(JSON.parse(none.body)).outcome).toBe("invited");
+
+      // Manage staff stays the owner's: refused, and nothing written.
+      const owners = await post(invitesUrl(gym), { email: addr("ticks-2"), role: "manager", privileges: ["members.read", "staff.manage"] }, gym.owner.cookies);
+      expect(owners.statusCode).toBe(409);
+      expect(errorOf(owners).error).toBe("owner_only_privilege");
+      expect((await invitesOf(gym)).map((i) => i.email)).not.toContain(addr("ticks-2"));
+      // A word that is not a permission is a 400.
+      expect((await post(invitesUrl(gym), { email: addr("ticks-3"), role: "trainer", privileges: ["everything"] }, gym.owner.cookies)).statusCode).toBe(400);
+
+      // Somebody already in the gym gets the ticked permissions at once.
+      const member = await signIn(addr("ticks-member"));
+      await makeMember(gym, member);
+      const appointed = await post(invitesUrl(gym), { email: addr("ticks-member"), role: "trainer", privileges: ["attendance.read"] }, gym.owner.cookies);
+      expect(createStaffInviteResponseSchema.parse(JSON.parse(appointed.body)).outcome).toBe("added");
+      expect(await staffRowOf(gym, member)).toEqual({ role: "trainer", privileges: ["attendance.read"] });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   // =========================================================================
   // ENDED, DECLINED, CANCELLED
   // =========================================================================

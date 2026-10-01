@@ -14,8 +14,9 @@ import {
   roleChangeWarning,
   staffCountLabel,
   staffRoleChoices,
+  inviteTicks,
+  roleTicks,
   staffInviteView,
-  startingAbilities,
   unknownPrivileges,
   unknownPrivilegesNote,
 } from '../../pages/console/staffView';
@@ -66,6 +67,8 @@ function AddStaffForm({
   setEmail,
   role,
   setRole,
+  ticks,
+  setTicks,
   fieldError,
   busy,
   readOnly,
@@ -75,6 +78,11 @@ function AddStaffForm({
 }) {
   const words = orgWords(orgType);
   const choices = staffRoleChoices(orgType);
+  // What they may do, ticked here before sending (Kd, 2026-10-01): the role fills in its
+  // usual ticks and the owner changes any of them. "Manage staff" is never offered.
+  const tickChoices = privilegeChoices(role, orgType);
+  const toggleTick = (value) =>
+    setTicks((prev) => (prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]));
   return (
     <div
       className="rounded-2xl p-4 flex flex-col gap-3"
@@ -99,7 +107,7 @@ function AddStaffForm({
       </label>
 
       <div className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
-        <span id="staff-role-label">What they can do</span>
+        <span id="staff-role-label">Role</span>
         <div className="flex flex-col gap-2 mt-1.5" role="radiogroup" aria-labelledby="staff-role-label">
           {choices.map((choice) => (
             <button
@@ -108,7 +116,10 @@ function AddStaffForm({
               role="radio"
               aria-checked={role === choice.value}
               disabled={busy || readOnly}
-              onClick={() => setRole(choice.value)}
+              onClick={() => {
+                setRole(choice.value);
+                setTicks(roleTicks(choice.value));
+              }}
               className="text-left rounded-xl px-3 py-2.5 disabled:opacity-40"
               style={{
                 background: role === choice.value ? 'rgba(255,138,31,0.14)' : 'rgba(255,255,255,0.04)',
@@ -127,19 +138,44 @@ function AddStaffForm({
               <span className="block text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
                 {choice.hint}
               </span>
-              <span className="block text-xs mt-1" style={{ color: 'rgba(255,255,255,0.6)' }}>
-                Starts with: {startingAbilities(choice.value, orgType).join(' · ')}
-              </span>
             </button>
           ))}
         </div>
       </div>
 
+      <fieldset className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
+        <legend>What they can do</legend>
+        <div className="flex flex-col gap-2 mt-1.5" data-testid="invite-ticks">
+          {tickChoices.map((choice) => {
+            const on = ticks.includes(choice.value);
+            return (
+              <label key={choice.value} className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  checked={on}
+                  disabled={busy || readOnly}
+                  onChange={() => toggleTick(choice.value)}
+                  className="mt-0.5"
+                />
+                <span>
+                  <span className="block text-sm" style={{ color: on ? '#fff' : 'rgba(255,255,255,0.5)' }}>
+                    {choice.label}
+                  </span>
+                  <span className="block" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                    {choice.hint}
+                  </span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+
       <p className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
         We&apos;ll email them an invitation. They sign in with this address and press Accept,
         and they can open your {words.it}&apos;s console. If they&apos;re already a {words.person}{' '}
         of your {words.it}, they get these permissions straight away. You can change what they
-        can do at any time.
+        can do at any time. Managing staff stays with you.
       </p>
 
       {fieldError !== null ? (
@@ -718,6 +754,7 @@ export default function StaffPanel({ gymId, privileges, orgType, readOnly = fals
   // that opens on the more powerful role hands out more authority to an owner
   // who does not read it, and this form's whole subject is authority.
   const [role, setRole] = useState('trainer');
+  const [ticks, setTicks] = useState(() => roleTicks('trainer'));
   const [fieldError, setFieldError] = useState(null);
   // The invitations waiting, ended or declined (4a-i). Their own read and failure: a
   // list that cannot be read must not hide who already runs the gym.
@@ -918,7 +955,7 @@ export default function StaffPanel({ gymId, privileges, orgType, readOnly = fals
     setActionError(null);
     setNotice(null);
     try {
-      const res = await orgService.inviteStaff(gymId, { email: value, role });
+      const res = await orgService.inviteStaff(gymId, { email: value, role, privileges: inviteTicks(role, ticks, orgType) });
       const done = res.data;
       setNotice(
         done.outcome === 'added'
@@ -927,6 +964,7 @@ export default function StaffPanel({ gymId, privileges, orgType, readOnly = fals
       );
       setEmail('');
       setRole('trainer');
+      setTicks(roleTicks('trainer'));
       setAdding(false);
       reload();
     } catch (err) {
@@ -1051,6 +1089,8 @@ export default function StaffPanel({ gymId, privileges, orgType, readOnly = fals
               setEmail={setEmail}
               role={role}
               setRole={setRole}
+              ticks={ticks}
+              setTicks={setTicks}
               fieldError={fieldError}
               busy={busyId === 'add'}
               readOnly={readOnly}
@@ -1073,7 +1113,7 @@ export default function StaffPanel({ gymId, privileges, orgType, readOnly = fals
               style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
             >
               <Plus className="w-4 h-4" />
-              Invite someone
+              Invite staff
             </button>
           )}
         </div>

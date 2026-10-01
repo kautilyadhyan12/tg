@@ -18,6 +18,7 @@ import {
   STAFF_INVITE_EMAILS_PER_DAY,
   STAFF_INVITE_WORDS,
   STAFF_INVITES_OPEN_MAX,
+  OWNER_ONLY_PRIVILEGES,
   orgRoleSchema,
   orgTypeSchema,
   orgWords,
@@ -33,7 +34,7 @@ import {
 import type { Sql } from "postgres";
 import { accountAddress } from "../../auth/service.js";
 import * as orgRepo from "../repo.js";
-import { defaultPrivilegesFor, OrgsError, requirePrivilege, requireWritablePrivilege, toOrgStaff } from "../service.js";
+import { canonicalPrivileges, defaultPrivilegesFor, OrgsError, requirePrivilege, requireWritablePrivilege, toOrgStaff } from "../service.js";
 import type { InviteSettings } from "../invites/settings.js";
 import * as repo from "./repo.js";
 
@@ -62,13 +63,18 @@ export async function createStaffInvite(
 ): Promise<CreateStaffInviteResponse> {
   const { org } = await requireWritablePrivilege(deps, gymId, userId, "staff.manage");
   const words = orgWords(org.orgType);
+  // The ticks the owner chose on the form (Kd, 2026-10-01), else the role's starting ones.
+  const privileges = input.privileges === undefined ? defaultPrivilegesFor(input.role) : canonicalPrivileges(input.privileges);
+  if (privileges.some((privilege) => OWNER_ONLY_PRIVILEGES.includes(privilege))) {
+    throw new OrgsError(409, "owner_only_privilege", STAFF_INVITE_WORDS.owner_only_privilege);
+  }
 
   // Somebody already in the gym is appointed at once (RULINGS 2026-09-21).
   const appointed = await orgRepo.addStaff(deps.sql, {
     gymId,
     email: input.email,
     role: input.role,
-    privileges: defaultPrivilegesFor(input.role),
+    privileges,
     actorUserId: userId,
   });
   switch (appointed.kind) {
@@ -108,6 +114,7 @@ export async function createStaffInvite(
       gymId,
       email: input.email,
       role: input.role,
+      privileges,
       invitedBy: userId,
       at,
       expiresAt: new Date(at.getTime() + STAFF_INVITE_DAYS * DAY_MS),
@@ -118,7 +125,7 @@ export async function createStaffInvite(
       action: "org.staff_invited",
       targetType: "staff_invite",
       targetId: written.id,
-      meta: { role: input.role },
+      meta: { role: input.role, privileges },
     });
     return written;
   });
@@ -129,6 +136,7 @@ export async function createStaffInvite(
       id: invite.id,
       email: invite.email,
       role: invite.role,
+      privileges: invite.privileges,
       invitedAt: invite.createdAt.toISOString(),
       expiresAt: invite.expiresAt.toISOString(),
       state: "waiting",
@@ -217,6 +225,7 @@ export async function myStaffInvitations(deps: StaffInviteDeps, caller: Caller):
     invitations: rows.map((row) => ({
       id: row.id,
       role: row.role,
+      privileges: row.privileges,
       gym: { id: row.gymId, name: row.gymName, city: row.gymCity, orgType: orgTypeSchema.parse(row.orgType) },
       invitedBy: row.invitedBy,
       expiresAt: row.expiresAt.toISOString(),
@@ -259,7 +268,8 @@ export async function acceptStaffInvitation(
       await repo.answerInvite(tx, { gymId, inviteId, state: "accepted", by: caller.id, at });
       return { kind: "already_staff", org, role: toRole(existing.role) };
     }
-    const privileges = defaultPrivilegesFor(invite.role);
+    // Exactly what the owner ticked when inviting.
+    const privileges = invite.privileges;
     await repo.writeStaff(tx, { gymId, userId: caller.id, role: invite.role, privileges, at });
     await repo.answerInvite(tx, { gymId, inviteId, state: "accepted", by: caller.id, at });
     await orgRepo.insertAudit(tx, {

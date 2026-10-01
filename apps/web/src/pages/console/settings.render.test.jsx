@@ -304,7 +304,7 @@ describe('who runs this gym', () => {
     // could not fetch — they cannot see who is already on it, so they cannot
     // see that the person is there twice, or that the one they meant to remove
     // still is. The join-code panel took the same decision for the same reason.
-    expect(screen.queryByText('Invite someone')).toBeNull();
+    expect(screen.queryByText('Invite staff')).toBeNull();
   });
 });
 
@@ -586,7 +586,7 @@ describe('taking somebody’s keys back', () => {
 describe('adding somebody', () => {
   const openForm = async () => {
     await drawStaff();
-    fireEvent.click(await screen.findByText('Invite someone'));
+    fireEvent.click(await screen.findByText('Invite staff'));
   };
 
   it('sends the typed email with the chosen role', async () => {
@@ -600,6 +600,7 @@ describe('adding somebody', () => {
     expect(orgService.inviteStaff).toHaveBeenCalledWith(ORG.id, {
       email: 'anil@example.com',
       role: 'manager',
+      privileges: ROLE_PRIVILEGES.manager,
     });
   });
 
@@ -670,6 +671,7 @@ describe('adding somebody', () => {
     expect(orgService.inviteStaff).toHaveBeenCalledWith(ORG.id, {
       email: 'anil@example.com',
       role: 'trainer',
+      privileges: ROLE_PRIVILEGES.trainer,
     });
   });
 
@@ -690,16 +692,43 @@ describe('adding somebody', () => {
     expect(orgService.inviteStaff).not.toHaveBeenCalled();
   });
 
-  it('says an invitation is emailed, and shows what each role starts with', async () => {
+  const ticked = () =>
+    within(screen.getByTestId('invite-ticks'))
+      .getAllByRole('checkbox')
+      .filter((box) => box.checked)
+      .map((box) => box.closest('label').querySelector('span span').textContent);
+
+  it("says an invitation is emailed, and ticks the role's usual permissions, which the owner can change", async () => {
     await openForm();
     expect(screen.getByText(/We'll email them an invitation/i)).toBeTruthy();
     expect(screen.queryByText(/send them your join code/i)).toBeNull();
-    expect(screen.getByText('Starts with: See the member list · Share the join code · See who came in')).toBeTruthy();
-    expect(
-      screen.getByText(
-        'Starts with: See the member list · Share the join code · See who came in · Let people into the gym · Remove members · Change join codes',
-      ),
-    ).toBeTruthy();
+    expect(ticked()).toEqual(['See the member list', 'Share the join code', 'See who came in']);
+    fireEvent.click(screen.getByText('Manager'));
+    expect(ticked()).toEqual([
+      'See the member list',
+      'Share the join code',
+      'See who came in',
+      'Let people into the gym',
+      'Remove members',
+      'Change join codes',
+    ]);
+    // Managing staff is never offered.
+    expect(within(screen.getByTestId('invite-ticks')).queryByText('Manage staff')).toBeNull();
+  });
+
+  it("sends exactly the permissions ticked, plus the role's ones this form has no box for", async () => {
+    await openForm();
+    fireEvent.change(screen.getByLabelText(/Their email address/i), { target: { value: 'anil@example.com' } });
+    fireEvent.click(screen.getByText('Manager'));
+    fireEvent.click(screen.getByText('Remove members'));
+    fireEvent.click(screen.getByText('Change join codes'));
+    fireEvent.click(screen.getByText('Send invitation'));
+    await waitFor(() => expect(orgService.inviteStaff).toHaveBeenCalledTimes(1));
+    const sent = orgService.inviteStaff.mock.calls[0][1];
+    expect(sent.role).toBe('manager');
+    expect([...sent.privileges].sort()).toEqual(
+      ['attendance.read', 'codes.invite', 'members.confirm', 'members.read', 'schedule.manage'].sort(),
+    );
   });
 
   it('refuses something that is not an email address, without asking the server', async () => {
@@ -717,7 +746,7 @@ describe('adding somebody', () => {
     expect(await screen.findByText('Invitation sent to anil@example.com. It works for 7 days.')).toBeTruthy();
 
     orgService.inviteStaff.mockResolvedValue({ data: { outcome: 'added', staff: TRAINER } });
-    fireEvent.click(await screen.findByText('Invite someone'));
+    fireEvent.click(await screen.findByText('Invite staff'));
     fireEvent.change(screen.getByLabelText(/Their email address/i), { target: { value: 'rita@example.com' } });
     fireEvent.click(screen.getByText('Send invitation'));
     expect(await screen.findByText(`${TRAINER.displayName} is now a trainer here.`)).toBeTruthy();

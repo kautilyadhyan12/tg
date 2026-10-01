@@ -16,6 +16,7 @@ export interface StaffInviteRow {
   gymId: string;
   email: string;
   role: InviteRole;
+  privileges: string[];
   createdAt: Date;
   expiresAt: Date;
   state: StaffInviteState;
@@ -26,6 +27,7 @@ interface RawInvite {
   gym_id: string;
   email: string;
   role: string;
+  privileges: string[];
   created_at: Date;
   expires_at: Date;
   state: string;
@@ -46,6 +48,7 @@ const toInvite = (row: RawInvite): StaffInviteRow => ({
   gymId: row.gym_id,
   email: row.email,
   role: toRole(row.role, row.id),
+  privileges: row.privileges,
   createdAt: row.created_at,
   expiresAt: row.expires_at,
   state: toState(row.state, row.id),
@@ -55,7 +58,7 @@ const toInvite = (row: RawInvite): StaffInviteRow => ({
  *  locked; ended or not. At most one, by the open unique index. */
 export async function lockOpenInviteFor(tx: TransactionSql, gymId: string, email: string): Promise<StaffInviteRow | null> {
   const rows = await tx<RawInvite[]>`
-    SELECT id, gym_id, email::text AS email, role, created_at, expires_at, state
+    SELECT id, gym_id, email::text AS email, role, privileges, created_at, expires_at, state
     FROM gym_staff_invites
     WHERE gym_id = ${gymId} AND email = ${email}
       AND state IN ('pending','declined') AND cleared_at IS NULL
@@ -120,12 +123,12 @@ export async function inviteCounts(
 /** Write the invitation and queue its email, in the caller's transaction. */
 export async function insertInvite(
   tx: TransactionSql,
-  input: { gymId: string; email: string; role: InviteRole; invitedBy: string; at: Date; expiresAt: Date },
+  input: { gymId: string; email: string; role: InviteRole; privileges: readonly string[]; invitedBy: string; at: Date; expiresAt: Date },
 ): Promise<StaffInviteRow> {
   const rows = await tx<RawInvite[]>`
-    INSERT INTO gym_staff_invites (gym_id, email, role, invited_by, created_at, expires_at)
-    VALUES (${input.gymId}, ${input.email}, ${input.role}, ${input.invitedBy}, ${input.at}, ${input.expiresAt})
-    RETURNING id, gym_id, email::text AS email, role, created_at, expires_at, state`;
+    INSERT INTO gym_staff_invites (gym_id, email, role, privileges, invited_by, created_at, expires_at)
+    VALUES (${input.gymId}, ${input.email}, ${input.role}, ${[...input.privileges]}, ${input.invitedBy}, ${input.at}, ${input.expiresAt})
+    RETURNING id, gym_id, email::text AS email, role, privileges, created_at, expires_at, state`;
   const row = rows[0];
   if (row === undefined) throw new Error("INSERT INTO gym_staff_invites returned no row");
   await tx`
@@ -141,7 +144,7 @@ export async function listOpenInvites(sql: SqlOrTx, gymId: string, now: Date): P
   const rows = await sql<
     (RawInvite & { answered_at: Date | null; send_state: string | null; send_reason: string | null })[]
   >`
-    SELECT i.id, i.gym_id, i.email::text AS email, i.role, i.created_at, i.expires_at, i.state, i.answered_at,
+    SELECT i.id, i.gym_id, i.email::text AS email, i.role, i.privileges, i.created_at, i.expires_at, i.state, i.answered_at,
            s.state AS send_state, s.reason AS send_reason
     FROM gym_staff_invites i
     LEFT JOIN LATERAL (
@@ -160,6 +163,7 @@ export async function listOpenInvites(sql: SqlOrTx, gymId: string, now: Date): P
       id: invite.id,
       email: invite.email,
       role: invite.role,
+      privileges: invite.privileges,
       invitedAt: invite.createdAt.toISOString(),
       expiresAt: invite.expiresAt.toISOString(),
       state: invite.state === "declined" ? "declined" : invite.expiresAt.getTime() <= now.getTime() ? "ended" : "waiting",
@@ -173,7 +177,7 @@ export async function listOpenInvites(sql: SqlOrTx, gymId: string, now: Date): P
 /** One open invitation of this gym, locked. */
 export async function lockOpenInvite(tx: TransactionSql, gymId: string, inviteId: string): Promise<StaffInviteRow | null> {
   const rows = await tx<RawInvite[]>`
-    SELECT id, gym_id, email::text AS email, role, created_at, expires_at, state
+    SELECT id, gym_id, email::text AS email, role, privileges, created_at, expires_at, state
     FROM gym_staff_invites
     WHERE gym_id = ${gymId} AND id = ${inviteId} AND state IN ('pending','declined') AND cleared_at IS NULL
     FOR UPDATE`;
@@ -208,7 +212,7 @@ export interface MyInviteRow extends StaffInviteRow {
 /** Open invitations to exactly this address that have not ended, at gyms still open. */
 export async function invitesForAddress(sql: SqlOrTx, email: string, now: Date): Promise<MyInviteRow[]> {
   const rows = await sql<(RawInvite & { gym_name: string; gym_city: string | null; org_type: string; invited_by: string | null })[]>`
-    SELECT i.id, i.gym_id, i.email::text AS email, i.role, i.created_at, i.expires_at, i.state,
+    SELECT i.id, i.gym_id, i.email::text AS email, i.role, i.privileges, i.created_at, i.expires_at, i.state,
            g.name AS gym_name, g.city AS gym_city, g.org_type, u.display_name AS invited_by
     FROM gym_staff_invites i
     JOIN gyms g ON g.id = i.gym_id
@@ -245,7 +249,7 @@ export async function lockInviteFor(
   input: { gymId: string; inviteId: string; email: string; userId: string },
 ): Promise<StaffInviteRow | null> {
   const rows = await tx<RawInvite[]>`
-    SELECT id, gym_id, email::text AS email, role, created_at, expires_at, state
+    SELECT id, gym_id, email::text AS email, role, privileges, created_at, expires_at, state
     FROM gym_staff_invites
     WHERE gym_id = ${input.gymId} AND id = ${input.inviteId} AND email = ${input.email}
       AND ((state IN ('pending','declined') AND cleared_at IS NULL) OR (state = 'accepted' AND answered_by = ${input.userId}))

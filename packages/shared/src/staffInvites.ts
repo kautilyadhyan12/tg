@@ -3,7 +3,7 @@
 // that address and taps Accept, and the console opens with that role and no membership.
 import { z } from "zod";
 import { authEmailSchema } from "./auth.js";
-import { orgRoleSchema, orgStaffSchema, orgTypeSchema, staffAssignableRoleSchema } from "./orgs.js";
+import { ORG_PRIVILEGES, orgPrivilegeSchema, orgRoleSchema, orgStaffSchema, orgTypeSchema, staffAssignableRoleSchema } from "./orgs.js";
 import { orgWords } from "./orgWords.js";
 
 /** An invitation nobody accepts stops working after this many days. */
@@ -22,6 +22,9 @@ export const createStaffInviteRequestSchema = z
   .object({
     email: authEmailSchema,
     role: staffAssignableRoleSchema,
+    /** What they may do, ticked on the form (Kd, 2026-10-01); the role's starting ticks
+     *  when left out. "Manage staff" stays the owner's and is refused. */
+    privileges: z.array(orgPrivilegeSchema).max(ORG_PRIVILEGES.length).optional(),
   })
   .strict();
 export type CreateStaffInviteRequest = z.infer<typeof createStaffInviteRequestSchema>;
@@ -72,6 +75,8 @@ export const staffInviteSchema = z
     id: z.string().uuid(),
     email: z.string(),
     role: staffAssignableRoleSchema,
+    /** What Accept gives them. */
+    privileges: z.array(z.string()),
     invitedAt: z.string(),
     expiresAt: z.string(),
     state: z.enum(["waiting", "ended", "declined"]),
@@ -104,6 +109,8 @@ export const myStaffInvitationSchema = z
   .object({
     id: z.string().uuid(),
     role: staffAssignableRoleSchema,
+    /** What they will be able to do. */
+    privileges: z.array(z.string()),
     gym: z
       .object({
         id: z.string().uuid(),
@@ -159,6 +166,7 @@ export function staffRoleWord(role: "manager" | "trainer", orgType: unknown): st
 
 /** The sentences a refusal is answered with. None says whether an address has an account. */
 export const STAFF_INVITE_WORDS = {
+  owner_only_privilege: "Managing staff stays with the owner. You can give them any of the other permissions.",
   already_invited: (email: string): string =>
     `You've already invited ${email}. The invitation is waiting for them to accept.`,
   too_many_open: `You have ${String(STAFF_INVITES_OPEN_MAX)} invitations waiting. Cancel one before sending another.`,
