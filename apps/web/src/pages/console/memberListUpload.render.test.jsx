@@ -5,6 +5,9 @@
 // people off the gym's list without ever seeing whose names. So the first test: the
 // people missing from the file are named before anything can be imported, nothing is
 // picked for staff, and a large change waits for the typed number.
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { cwd } from 'node:process';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 import { memberListConfirmedSchema, memberListLeaversSchema, memberListMissingSchema, memberListPreviewSchema, memberListRowsPageSchema } from '@app/shared';
@@ -623,6 +626,39 @@ describe('Which software is your list in? (5c)', () => {
     expect(shown()).toBe('Choose your software');
   });
 
+  it("Home, End and a letter move as a browser's list does, and Tab closes it: one Tab stop (review of 5c, L1, L2)", () => {
+    renderBox();
+    fireEvent.keyDown(trigger(), { key: 'ArrowDown' });
+    const options = screen.getAllByRole('option');
+    expect(options.every((o) => o.getAttribute('tabindex') === '-1')).toBe(true);
+    fireEvent.keyDown(options[0], { key: 'End' });
+    expect(document.activeElement.textContent).toBe('Other software');
+    fireEvent.keyDown(document.activeElement, { key: 'Home' });
+    expect(document.activeElement.textContent).toBe('Glofox');
+    fireEvent.keyDown(document.activeElement, { key: 'g' });
+    expect(document.activeElement.textContent).toBe('Gym Insight');
+    fireEvent.keyDown(document.activeElement, { key: 'g' });
+    expect(document.activeElement.textContent).toBe('Gymdesk');
+    fireEvent.keyDown(document.activeElement, { key: 'w' });
+    expect(document.activeElement.textContent).toBe('WellnessLiving');
+    fireEvent.keyDown(document.activeElement, { key: 'Tab' });
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(document.activeElement).toBe(trigger());
+    expect(shown()).toBe('Choose your software');
+  });
+
+  // jsdom draws nothing, so the focus ring is checked where it is written: the option's
+  // focus rule keeps the app's ring (review of 5c, High 3). The browser check is the proof.
+  it('a focused choice keeps the focus ring: its rule never turns the outline off', () => {
+    // jsdom gives no file address for this file, so the stylesheet is found from the web app's root.
+    const css = readFileSync(resolve(cwd(), 'src/components/console/console.css'), 'utf8');
+    const rule = css.match(/\.c-opt:focus-visible\s*\{([^}]*)\}/);
+    expect(rule).not.toBeNull();
+    expect(rule[1]).not.toMatch(/outline\s*:\s*(none|0)/);
+    expect(rule[1]).toMatch(/outline-offset\s*:\s*-2px/);
+    expect(css).not.toMatch(/\.c-opt[^{]*\{[^}]*outline\s*:\s*(none|0)/);
+  });
+
   it("a product shows its own steps, its tip, its help page, that menus change, and what no file brings", () => {
     renderBox();
     choose('Mindbody');
@@ -631,12 +667,12 @@ describe('Which software is your list in? (5c)', () => {
     const steps = within(screen.getByTestId('software-steps')).getAllByRole('listitem').map((li) => li.textContent);
     expect(steps).toEqual([
       '1Click Insights, then Reports, and open Mailing Lists (under Clients).',
-      '2At the top left, choose Email List. In List Clients, choose who to include, and choose Clients Only.',
+      "2At the top left, choose Email List. In List Clients, choose all your clients; in Client's Opt-in Status, choose all clients; and choose Clients Only.",
       '3Click Generate, then Export to Excel.',
     ]);
     expect(
       screen.getByText(
-        'Use Export to Excel, not the box of addresses at the top: that box stops at 10,000. If the file you get ends in .xls, open it in Excel and save it as .xlsx or CSV first.',
+        'Use Export to Excel, not the box of addresses at the top: that box stops at 10,000.',
       ),
     ).toBeTruthy();
     const link = screen.getByRole('link', { name: 'Export client email or mailing addresses' });
@@ -650,6 +686,22 @@ describe('Which software is your list in? (5c)', () => {
     expect(shown()).toBe('GymMaster');
     expect(screen.getAllByRole('link').map((a) => a.textContent)).toEqual(['Run Standard Report', 'Standard Report Options']);
     expect(screen.queryByText(/that box stops at 10,000/)).toBeNull();
+  });
+
+  // An .xls is refused and a file of some people asks about the rest (review of 5c, High 1
+  // and High 2), so both are said under EVERY product's steps, and under Other software's.
+  it('every product, and other software, says download everybody and save an .xls first', () => {
+    renderBox();
+    for (const name of ['Glofox', 'Gym Insight', 'Gymdesk', 'GymMaster', 'Mindbody', 'TeamUp', 'WellnessLiving', 'Wodify', 'Other software']) {
+      choose(name);
+      expect(within(screen.getByTestId('software-notes')).getAllByRole('listitem').map((li) => li.textContent), name).toEqual([
+        'Download everybody, whatever their status: Import reads each file as your whole list.',
+        'If the file you get ends in .xls, open it in Excel and save it as .xlsx or CSV first.',
+      ]);
+      expect(screen.getByTestId('software-steps').textContent, name).not.toMatch(/CSV or Excel\./);
+    }
+    choose('My own spreadsheet');
+    expect(screen.queryByTestId('software-notes')).toBeNull();
   });
 
   it('your own spreadsheet says upload or paste; other software says where to look', () => {

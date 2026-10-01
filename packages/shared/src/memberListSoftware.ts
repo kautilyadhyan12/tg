@@ -50,7 +50,7 @@ export const MEMBER_LIST_SOFTWARE: readonly MemberListSoftware[] = [
     name: "Gym Insight",
     steps: [
       "Click Accounts on the left, then Member List at the bottom of that page.",
-      "Under Statuses and Types, tick the members you want, then click Update.",
+      "Under Statuses and Types, tick every status and every type, then click Update.",
       "Click the export button at the bottom of the report, then Download when it's ready.",
     ],
     tip: null,
@@ -63,7 +63,7 @@ export const MEMBER_LIST_SOFTWARE: readonly MemberListSoftware[] = [
     id: "gymdesk",
     name: "Gymdesk",
     steps: ["Open the Members tab.", "Export the list as a CSV file."],
-    tip: "The list opens on your active members. Frozen and Canceled members are on their own tabs, so export those too if you want them here.",
+    tip: "The list opens on your active members. Visitors, Website Signup, Frozen and Canceled are on their own tabs: export each tab, and put all their rows into one spreadsheet before you upload it.",
     sources: [{ title: "Member list", url: "https://docs.gymdesk.com/en/help/docs/member-list", read: READ }],
   },
   {
@@ -71,7 +71,7 @@ export const MEMBER_LIST_SOFTWARE: readonly MemberListSoftware[] = [
     name: "GymMaster",
     steps: [
       "Go to Report & Till, then Standard Reports.",
-      "Choose Members, then the report that lists the members you want.",
+      "Choose Members, then the report that lists all your members.",
       "Click Show Report, then Export to CSV.",
     ],
     tip: null,
@@ -85,10 +85,10 @@ export const MEMBER_LIST_SOFTWARE: readonly MemberListSoftware[] = [
     name: "Mindbody",
     steps: [
       "Click Insights, then Reports, and open Mailing Lists (under Clients).",
-      "At the top left, choose Email List. In List Clients, choose who to include, and choose Clients Only.",
+      "At the top left, choose Email List. In List Clients, choose all your clients; in Client's Opt-in Status, choose all clients; and choose Clients Only.",
       "Click Generate, then Export to Excel.",
     ],
-    tip: "Use Export to Excel, not the box of addresses at the top: that box stops at 10,000. If the file you get ends in .xls, open it in Excel and save it as .xlsx or CSV first.",
+    tip: "Use Export to Excel, not the box of addresses at the top: that box stops at 10,000.",
     sources: [
       {
         title: "Export client email or mailing addresses",
@@ -113,8 +113,8 @@ export const MEMBER_LIST_SOFTWARE: readonly MemberListSoftware[] = [
     name: "WellnessLiving",
     steps: [
       "Click the App Drawer, then View All, then Clients.",
-      "Filter the list to the clients you want.",
-      "Click Export and choose CSV or Excel.",
+      "Clear any filters, so the list shows every client.",
+      "Click Export and choose CSV.",
     ],
     tip: null,
     sources: [{ title: "Export the client list", url: "https://help.wellnessliving.com/en/articles/11055902-export-the-client-list", read: READ }],
@@ -124,7 +124,7 @@ export const MEMBER_LIST_SOFTWARE: readonly MemberListSoftware[] = [
     name: "Wodify",
     steps: [
       "Go to People, then Clients.",
-      "Choose the group of clients at the top, and tick the clients you want.",
+      "At the top, choose the group that holds all your clients, and tick every client.",
       "Click the three-dot icon, then Export. An Excel file downloads.",
     ],
     tip: null,
@@ -145,6 +145,14 @@ export const MEMBER_LIST_OTHER_SOFTWARE_STEPS: readonly string[] = [
 
 /** Under every product's steps: the steps are as its page said on the day it was read. */
 export const MEMBER_LIST_STEPS_MAY_CHANGE_WORDS = "Software changes its menus from time to time. If a step looks different, its help page has the latest steps.";
+
+/** Under every product's steps, and Other software's: Import reads each file as the gym's
+ *  whole list, so a file of only the active members asks about everybody else. */
+export const MEMBER_LIST_EVERYBODY_WORDS = "Download everybody, whatever their status: Import reads each file as your whole list.";
+
+/** Under the same: an .xls (Excel 97-2003) is refused by the reader, and some products'
+ *  "Excel" is one. */
+export const MEMBER_LIST_SAVE_XLS_WORDS = "If the file you get ends in .xls, open it in Excel and save it as .xlsx or CSV first.";
 
 /** What no file brings, whichever software it came from (§11.7). */
 export const MEMBER_LIST_NOT_IN_A_FILE_WORDS = "Saved cards, visit history, documents and photos don't come across in this file.";

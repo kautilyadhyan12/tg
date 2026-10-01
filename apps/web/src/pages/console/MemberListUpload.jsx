@@ -20,9 +20,11 @@ import {
 } from 'lucide-react';
 import {
   MEMBER_FILE_MAX_BYTES,
+  MEMBER_LIST_EVERYBODY_WORDS,
   MEMBER_LIST_NOT_IN_A_FILE_WORDS,
   MEMBER_LIST_OTHER_SOFTWARE_STEPS,
   MEMBER_LIST_PERMISSION_WORDS,
+  MEMBER_LIST_SAVE_XLS_WORDS,
   MEMBER_LIST_SOFTWARE,
   MEMBER_LIST_SPREADSHEET_STEPS,
   MEMBER_LIST_STEPS_MAY_CHANGE_WORDS,
@@ -313,7 +315,6 @@ function HandEdits({ handEdits, words, checked, onChange }) {
   );
 }
 
-/** The import box. Opened from the Members screen's "Import" card. */
 /** What Paste rows wants, shown as a spreadsheet shows it: the headings row first, then
  *  one row a person (Kd's click-through, 2026-10-01: a gym needs to see an example). */
 const PASTE_EXAMPLE = [
@@ -388,11 +389,28 @@ function SoftwarePick({ labelId, choice, onChoose }) {
       close();
       return;
     }
-    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-    e.preventDefault();
+    // One Tab stop, as a browser's dropdown: Tab closes the list and moves on from it.
+    if (e.key === 'Tab') {
+      setOpen(false);
+      button.current?.focus();
+      return;
+    }
     const options = [...(wrap.current?.querySelectorAll('[role=option]') ?? [])];
     const at = options.indexOf(document.activeElement);
-    const next = e.key === 'ArrowDown' ? Math.min(at + 1, options.length - 1) : Math.max(at - 1, 0);
+    let next = null;
+    if (e.key === 'ArrowDown') next = Math.min(at + 1, options.length - 1);
+    else if (e.key === 'ArrowUp') next = Math.max(at - 1, 0);
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = options.length - 1;
+    else if (e.key.length === 1 && /\S/.test(e.key)) {
+      // A letter jumps to the next choice starting with it, after the one in focus.
+      const letter = e.key.toLowerCase();
+      const order = [...options.slice(at + 1), ...options.slice(0, at + 1)];
+      const found = order.find((o) => o.textContent.trim().toLowerCase().startsWith(letter));
+      if (found !== undefined) next = options.indexOf(found);
+    }
+    if (next === null) return;
+    e.preventDefault();
     options[next]?.focus();
   };
   return (
@@ -431,6 +449,7 @@ function SoftwarePick({ labelId, choice, onChoose }) {
               key={value}
               type="button"
               role="option"
+              tabIndex={-1}
               aria-selected={choice === value}
               onClick={() => {
                 onChoose(value);
@@ -479,6 +498,12 @@ function SoftwareSteps() {
         </ol>
       ) : null}
       {product?.tip ? <p className="c-s14 c-t2">{product.tip}</p> : null}
+      {product !== null || choice === 'other' ? (
+        <ul className="flex flex-col gap-1 c-s14 c-t2 list-disc pl-5" data-testid="software-notes">
+          <li>{MEMBER_LIST_EVERYBODY_WORDS}</li>
+          <li>{MEMBER_LIST_SAVE_XLS_WORDS}</li>
+        </ul>
+      ) : null}
       {product !== null ? (
         <p className="c-s13 c-t2 flex flex-wrap gap-x-3 gap-y-1">
           <span>From {product.name}&apos;s help:</span>
@@ -496,6 +521,7 @@ function SoftwareSteps() {
   );
 }
 
+/** The import box. Opened from the Members screen's "Import" card. */
 export default function MemberListUpload({ gymId, gym = null, words, readOnly, onClose, onImported }) {
   const titleId = useId();
   const dialogRef = useRef(null);
