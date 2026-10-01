@@ -1889,13 +1889,16 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
   );
 
   it(
-    "round one H3: a former billing manager (membership closed, staff row left) is sent nothing; the owner and a current one are",
+    "round one H3: a former billing manager (staff access taken) is sent nothing; the owner and a current one are",
     async () => {
       const a = await payingOn(MID);
       const ghost = await makeUser();
       const current = await makeUser();
       await addStaff(a.gymId, ghost.userId, "manager", ["members.read", "billing.manage"]);
+      // Since 4a-ii a closed membership leaves staff access alone; what ends it is the
+      // staff row going (Remove on Staff, "also staff" on Members, or a deleted account).
       await sql`INSERT INTO gym_members (gym_id, user_id, removed_at) VALUES (${a.gymId}, ${ghost.userId}, now())`;
+      await sql`DELETE FROM gym_staff WHERE gym_id = ${a.gymId} AND user_id = ${ghost.userId}`;
       await addStaff(a.gymId, current.userId, "manager", ["members.read", "billing.manage"]);
       expect((await cancelChange(a.gymId, ghost.cookies)).statusCode).toBe(404);
       await addMember(a.gymId);

@@ -13,6 +13,7 @@ import MemberListRemove from './MemberListRemove';
 import { MEMBER_REMOVE_TICKED_MAX, orgWords } from '@app/shared';
 import {
   canRemoveMembers,
+  staffRemoveView,
   viewerPrivileges,
   groupLabelText,
   memberCountLabel,
@@ -21,6 +22,7 @@ import {
 } from './consoleView';
 import { canMakeRoomNow, consoleIsReadOnly, memberMeterText, readOnlyNote, seatMeter } from './billingView';
 import { shortWhen } from './memberListPeople';
+import { canManageStaff } from './staffView';
 import PlanChoiceDialog from '../../components/console/PlanChoiceDialog';
 
 // The Members screen (spec Part 3 §4.3, §18.2), drawn from `console.css` (spec §17):
@@ -82,15 +84,19 @@ function RosterRow({ member, onOpen, picked = null, onTick }) {
  *  them on the list, or Remove (One Remove, RULINGS 2026-09-27: someone on the list moves
  *  to past members AND leaves the app in the same step). A side panel on a computer, the
  *  whole screen on a phone, as a lead's panel is. */
-function RosterSheet({ member, words, seesList, canRemove, readOnly, busy, onClose, onRemove, onPutOnList, onOpenRecord }) {
+function RosterSheet({ member, words, seesList, canRemove, managesStaff, readOnly, busy, onClose, onRemove, onPutOnList, onOpenRecord }) {
   const [asking, setAsking] = useState(false);
+  const [alsoStaff, setAlsoStaff] = useState(false);
   const off = offListView(member.offList);
   const free = seatIsFree(member);
+  // Staff and the owner are removed here too since 4a-ii, by the owner alone.
+  const staff = staffRemoveView(member, words);
+  const mayRemove = canRemove && (staff === null ? !free : managesStaff);
   // Remove moves a record to past members only when the server named the record that is
   // certainly theirs (`recordId`); a gym with no list, someone on no list, and a family's
   // shared email the list can't place lose their app access and nothing else (round one
   // of 5b-v-a-i, High-6).
-  const movesRecord = seesList && !free && member.recordId !== undefined;
+  const movesRecord = seesList && (!free || staff !== null) && member.recordId !== undefined;
   const question = movesRecord
     ? `Remove ${member.displayName}? They'll be moved to past ${words.people} and lose access to your ${words.it} in the app. Their own workout history isn't affected, and you can put them back at any time.`
     : `Remove ${member.displayName}'s app access? They'll lose access to your ${words.it} in the app. Their own workout history isn't affected.`;
@@ -150,15 +156,45 @@ function RosterSheet({ member, words, seesList, canRemove, readOnly, busy, onClo
               </button>
             ) : null}
             {/* A trainer is refused the removal, so it is not drawn for them; a lapsed gym
-                greys it rather than hiding it (the server's 403 enforces both). The owner
-                and staff are removed with staff. */}
-            {!free && canRemove && !asking ? (
+                greys it rather than hiding it (the server's 403 enforces both). Staff and
+                the owner only for someone who manages staff. */}
+            {mayRemove && !asking ? (
               <button type="button" onClick={() => setAsking(true)} disabled={busy || readOnly} className="c-btn c-btn-s">
                 Remove
               </button>
             ) : null}
           </div>
-          {asking ? (
+          {asking && staff !== null ? (
+            <div className="flex flex-col gap-3">
+              <p className="c-s14 c-t1">{question}</p>
+              <p className="c-s14 c-t1">{staff.staffLine}</p>
+              {staff.tickLabel !== null ? (
+                <div className="flex items-start gap-2">
+                  <Tick state={alsoStaff ? 'on' : 'off'} label={staff.tickLabel} onClick={() => setAlsoStaff((on) => !on)} />
+                  <span className="flex flex-col gap-0.5">
+                    <span className="c-s14 c-w6 c-t1">{staff.tickLabel}</span>
+                    <span className="c-s13 c-t2">{alsoStaff ? staff.goLine : staff.keepLine}</span>
+                  </span>
+                </div>
+              ) : null}
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAsking(false);
+                    onRemove({ alsoStaff: staff.tickLabel !== null && alsoStaff });
+                  }}
+                  disabled={busy || readOnly}
+                  className="c-btn c-btn-sm c-btn-danger"
+                >
+                  {alsoStaff ? 'Remove from app and staff' : 'Remove from app'}
+                </button>
+                <button type="button" onClick={() => setAsking(false)} disabled={busy || readOnly} className="c-btn c-btn-sm c-btn-s">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : asking ? (
             <ConfirmInline
               newLook
               question={question}
@@ -242,6 +278,8 @@ export default function Members() {
   const gymId = org?.id ?? null;
   // §4.3's "Remove hidden" for a trainer, off the org row the screen already has.
   const canRemove = canRemoveMembers(viewerPrivileges(org));
+  // Removing staff or the owner from the app is the owner's (4a-ii).
+  const managesStaff = canManageStaff(viewerPrivileges(org));
   // The gym's own list is `members.confirm`'s.
   const canSeeList = viewerPrivileges(org).includes('members.confirm');
   // Which tab, kept in the address so a reload stays on it.
@@ -346,12 +384,12 @@ export default function Members() {
     }
   };
 
-  const removeMember = async (member) => {
+  const removeMember = async (member, { alsoStaff = false } = {}) => {
     if (gymId === null) return;
     setRemovingId(member.userId);
     setRemoveError(null);
     try {
-      await orgService.removeMember(gymId, member.userId);
+      await orgService.removeMember(gymId, member.userId, { alsoStaff });
       setOpenUserId(null);
       setListKey((n) => n + 1);
       reloadRoster();
@@ -671,10 +709,11 @@ export default function Members() {
           words={words}
           seesList={canSeeList}
           canRemove={canRemove}
+          managesStaff={managesStaff}
           readOnly={readOnly}
           busy={removingId === openMember.userId}
           onClose={() => setOpenUserId(null)}
-          onRemove={() => removeMember(openMember)}
+          onRemove={(options) => removeMember(openMember, options)}
           onPutOnList={() => putOnList(openMember)}
           onOpenRecord={(recordId) => {
             setOpenUserId(null);

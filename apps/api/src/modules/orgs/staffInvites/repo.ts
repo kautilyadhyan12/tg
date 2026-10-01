@@ -1,7 +1,7 @@
 // Staff invitations' rows (Part 3 §10.3; ROADMAP 4a-i). Every query names the gym, or
 // the caller's own proved address for the invited person's side.
 import type { Sql, TransactionSql } from "postgres";
-import { staffInviteEmailReasonSchema, type StaffInvite, type StaffInviteEmailReason } from "@app/shared";
+import { STAFF_INVITE_RESENDS_MAX, staffInviteEmailReasonSchema, type StaffInvite, type StaffInviteEmailReason } from "@app/shared";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -78,7 +78,7 @@ export async function clearInvite(tx: TransactionSql, gymId: string, inviteId: s
 }
 
 /** Whether this address is the account of somebody who already runs this gym: the
- *  owner, or staff the console lets in (`getStaffAuthority`'s rule). Only this gym's
+ *  owner, or staff, whose account is live (`getStaffAuthority`'s rule). Only this gym's
  *  staff are looked at, so it says nothing about whether the address has an account. */
 export async function staffNameAt(
   tx: SqlOrTx,
@@ -89,21 +89,9 @@ export async function staffNameAt(
     SELECT u.display_name, s.role, s.role_name
     FROM gym_staff s
     JOIN users u ON u.id = s.user_id
-    JOIN gyms g ON g.id = s.gym_id
     WHERE s.gym_id = ${gymId}
       AND u.email = ${email}
       AND u.status = 'active'
-      AND (
-        g.owner_user_id = s.user_id
-        OR EXISTS (
-          SELECT 1 FROM gym_members m
-          WHERE m.gym_id = s.gym_id AND m.user_id = s.user_id AND m.removed_at IS NULL
-        )
-        OR NOT EXISTS (
-          SELECT 1 FROM gym_members m
-          WHERE m.gym_id = s.gym_id AND m.user_id = s.user_id AND m.removed_at >= s.created_at
-        )
-      )
     LIMIT 1`;
   const row = rows[0];
   return row === undefined ? null : { displayName: row.display_name, role: row.role, roleName: row.role_name };
@@ -157,21 +145,30 @@ export async function insertInvite(
 
 /** The owner's list: the newest open invitations (at most `STAFF_INVITES_LISTED`) with
  *  their latest email. At most 20 wait at once; the rest are ended or declined ones
- *  the owner has not taken off. */
-export async function listOpenInvites(sql: SqlOrTx, gymId: string, now: Date): Promise<StaffInvite[]> {
+ *  the owner has not taken off. With `inviteId`, that one only. */
+export async function listOpenInvites(sql: SqlOrTx, gymId: string, now: Date, inviteId: string | null = null): Promise<StaffInvite[]> {
   const rows = await sql<
-    (RawInvite & { answered_at: Date | null; send_state: string | null; send_reason: string | null; send_result: string | null })[]
+    (RawInvite & {
+      answered_at: Date | null;
+      send_state: string | null;
+      send_reason: string | null;
+      send_result: string | null;
+      sent_at: Date | null;
+      sends: number;
+    })[]
   >`
     SELECT i.id, i.gym_id, i.email::text AS email, i.role, i.privileges, i.role_name, i.created_at, i.expires_at, i.state, i.answered_at,
-           s.state AS send_state, s.reason AS send_reason, s.result AS send_result
+           s.state AS send_state, s.reason AS send_reason, s.result AS send_result, s.created_at AS sent_at,
+           (SELECT count(*)::int FROM gym_staff_invite_sends c WHERE c.gym_id = i.gym_id AND c.invite_id = i.id) AS sends
     FROM gym_staff_invites i
     LEFT JOIN LATERAL (
-      SELECT x.state, x.reason, x.result FROM gym_staff_invite_sends x
+      SELECT x.state, x.reason, x.result, x.created_at FROM gym_staff_invite_sends x
       WHERE x.gym_id = i.gym_id AND x.invite_id = i.id
       ORDER BY x.created_at DESC, x.id DESC
       LIMIT 1
     ) s ON true
     WHERE i.gym_id = ${gymId} AND i.state IN ('pending','declined') AND i.cleared_at IS NULL
+      AND (${inviteId}::uuid IS NULL OR i.id = ${inviteId}::uuid)
     ORDER BY i.created_at DESC, i.id DESC
     LIMIT ${STAFF_INVITES_LISTED}`;
   return rows.map((row) => {
@@ -195,8 +192,38 @@ export async function listOpenInvites(sql: SqlOrTx, gymId: string, now: Date): P
       declinedAt: invite.state === "declined" && row.answered_at !== null ? row.answered_at.toISOString() : null,
       emailStatus: notSent ? "not_sent" : row.send_state === "sent" ? "sent" : "sending",
       emailReason: notSent ? reason : null,
+      lastSentAt: (row.sent_at ?? invite.createdAt).toISOString(),
+      resendsLeft: resendsLeft(row.sends),
     };
   });
+}
+
+/** Send again presses left, from how many emails the invitation has had (the first is
+ *  the invitation's own). */
+export function resendsLeft(sends: number): number {
+  return Math.max(0, STAFF_INVITE_RESENDS_MAX - Math.max(0, sends - 1));
+}
+
+/** How many emails this invitation has had, and whether the newest is still to go. */
+export async function sendsOf(tx: SqlOrTx, gymId: string, inviteId: string): Promise<{ count: number; waiting: boolean }> {
+  const rows = await tx<{ n: number; waiting: boolean }[]>`
+    SELECT count(*)::int AS n, coalesce(bool_or(state IN ('queued','sending')), false) AS waiting
+    FROM gym_staff_invite_sends WHERE gym_id = ${gymId} AND invite_id = ${inviteId}`;
+  return { count: rows[0]?.n ?? 0, waiting: rows[0]?.waiting ?? false };
+}
+
+/** Send again: open again until `expiresAt` (a No thanks is undone: the owner is asking
+ *  once more) and queue another email, in the caller's transaction. */
+export async function resendInvite(
+  tx: TransactionSql,
+  input: { gymId: string; inviteId: string; email: string; emailHmac: string; at: Date; expiresAt: Date },
+): Promise<void> {
+  await tx`
+    UPDATE gym_staff_invites SET state = 'pending', answered_at = NULL, answered_by = NULL, expires_at = ${input.expiresAt}
+    WHERE gym_id = ${input.gymId} AND id = ${input.inviteId}`;
+  await tx`
+    INSERT INTO gym_staff_invite_sends (gym_id, invite_id, email, email_hmac, not_before, created_at)
+    VALUES (${input.gymId}, ${input.inviteId}, ${input.email}, ${input.emailHmac}, ${input.at}, ${input.at})`;
 }
 
 /** One open invitation of this gym, locked. */
@@ -298,30 +325,15 @@ export async function lockInviteFor(
   return row === undefined ? null : toInvite(row);
 }
 
-/** This person's staff row here, and whether the console lets them in by it. */
-export async function staffRowOf(
-  tx: SqlOrTx,
-  gymId: string,
-  userId: string,
-): Promise<{ role: string; counts: boolean } | null> {
-  const rows = await tx<{ role: string; counts: boolean }[]>`
-    SELECT s.role,
-           (g.owner_user_id = s.user_id
-            OR EXISTS (
-              SELECT 1 FROM gym_members m
-              WHERE m.gym_id = s.gym_id AND m.user_id = s.user_id AND m.removed_at IS NULL)
-            OR NOT EXISTS (
-              SELECT 1 FROM gym_members m
-              WHERE m.gym_id = s.gym_id AND m.user_id = s.user_id AND m.removed_at >= s.created_at)
-           ) AS counts
-    FROM gym_staff s JOIN gyms g ON g.id = s.gym_id
-    WHERE s.gym_id = ${gymId} AND s.user_id = ${userId}`;
+/** This person's staff row here: the console lets them in by it (the caller's account
+ *  is live, or it would not be asking). */
+export async function staffRowOf(tx: SqlOrTx, gymId: string, userId: string): Promise<{ role: string } | null> {
+  const rows = await tx<{ role: string }[]>`
+    SELECT role FROM gym_staff WHERE gym_id = ${gymId} AND user_id = ${userId}`;
   return rows[0] ?? null;
 }
 
-/** Make this person staff with the invitation's role and that role's starting ticks. A
- *  row the console no longer lets them in by (their membership closed after it was
- *  written) is written afresh, so the invitation is the owner's yes from now. */
+/** Make this person staff with the invitation's role and that role's starting ticks. */
 export async function writeStaff(
   tx: TransactionSql,
   input: { gymId: string; userId: string; role: InviteRole; privileges: readonly string[]; roleName: string | null; at: Date },

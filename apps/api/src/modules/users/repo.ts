@@ -628,7 +628,7 @@ export interface DeletedUserRow {
 }
 
 /** Part 4 §5.2 Day 0, users-owned part, one transaction: soft-delete the row,
- *  close memberships, delete push tokens. Refresh-token revocation is the
+ *  close memberships, end staff access (not at a gym they own), delete push tokens. Refresh-token revocation is the
  *  auth module's (service call, in users/service.ts). Returns null when the
  *  user was not active (already deleted → idempotent no-op). */
 export async function softDeleteUser(
@@ -691,6 +691,14 @@ export async function softDeleteUser(
         WHERE email_hmac = ${inviteHmac} AND state = 'accepted'
           AND gym_id = ANY(${closed.map((row) => row.gym_id)}::uuid[])`;
     }
+    // ROADMAP 4a-ii: deleting an account ends what it may do at any gym, so a restore
+    // gives back the account and not the console. A gym the person OWNS keeps its owner
+    // (the gym would otherwise be left with nobody able to run it). Inline for the reason
+    // the membership close is.
+    await tx`
+      DELETE FROM gym_staff s
+      WHERE s.user_id = ${userId}
+        AND NOT EXISTS (SELECT 1 FROM gyms g WHERE g.id = s.gym_id AND g.owner_user_id = s.user_id)`;
     await tx`DELETE FROM push_tokens WHERE user_id = ${userId}`;
     return { email: row.email, displayName: row.display_name };
   });

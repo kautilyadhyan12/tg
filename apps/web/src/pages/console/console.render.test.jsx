@@ -102,6 +102,7 @@ const ownerSeat = {
   groupLabel: 'Front Desk',
   complimentary: true,
   takesSeat: false,
+  staff: { role: 'owner', roleName: null },
 };
 
 /** A TRAINER who joined the gym like anybody else and was later handed the
@@ -115,6 +116,7 @@ const staffMemberSeat = {
   groupLabel: 'Front Desk',
   complimentary: false,
   takesSeat: false,
+  staff: { role: 'trainer', roleName: null },
 };
 
 /** A joined member carrying FOUR fields the server does not send and Part 3
@@ -1929,7 +1931,7 @@ describe('Removing a member', () => {
     // Asked, the only Remove left is the one inside the question.
     fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
     await waitFor(() =>
-      expect(orgService.removeMember).toHaveBeenCalledWith('11111111-1111-1111-1111-111111111111', 'u2'),
+      expect(orgService.removeMember).toHaveBeenCalledWith('11111111-1111-1111-1111-111111111111', 'u2', { alsoStaff: false }),
     );
     await waitFor(() => expect(screen.queryByText('Rita Sen')).toBeNull());
     // `find`, not `get`: the roster re-read passes through its loading state,
@@ -1937,14 +1939,15 @@ describe('Removing a member', () => {
     expect(await screen.findByText('Kd Owner')).toBeTruthy();
   });
 
-  it('offers NO remove control beside the owner’s own complimentary seat', async () => {
-    // The server refuses to remove staff, and the owner is member #1 of their
-    // own gym — so the button would be a live refusal wearing a working button's
-    // clothes.
+  it('the owner’s own place: Remove says they stay the owner, offers no staff tick, and sends no tick (4a-ii)', async () => {
     orgService.getMembers.mockResolvedValue(page([ownerSeat]));
     drawMembers();
-    await openInApp('Kd Owner');
-    expect(removeButton()).toBeNull();
+    const panel = await openInApp('Kd Owner');
+    fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
+    expect(panel.getByText('Kd Owner owns this gym. They stay the owner and keep the console.')).toBeTruthy();
+    expect(panel.queryByRole('checkbox')).toBeNull();
+    fireEvent.click(panel.getByRole('button', { name: 'Remove from app' }));
+    await waitFor(() => expect(orgService.removeMember).toHaveBeenCalledWith(ORG.id, 'u1', { alsoStaff: false }));
   });
 
   /** KD'S FINDING AT THE STAFF RE-SMOKE (:14953): *"when a member is added as a
@@ -1969,11 +1972,55 @@ describe('Removing a member', () => {
     expect(removeButton()).toBeTruthy();
   });
 
-  it('offers NO Remove beside a staff member, because the server refuses it', async () => {
-    // `removeMember` refuses anybody who is still staff, so drawing the button
-    // is drawing a live refusal. Ending their membership is the Staff screen's
-    // own flow — keys first, then the membership.
+  /** 4a-ii, THE WORST THING on this screen: the owner removes somebody who is also staff
+   *  and thinks they are gone. The box names that they are staff and says, under the tick,
+   *  whether they keep the console; the tick is what is sent. */
+  it('a staff member: the box says they are staff, and the tick decides whether they keep the console (4a-ii)', async () => {
     orgService.getMembers.mockResolvedValue(page([staffMemberSeat]));
+    drawMembers();
+    const panel = await openInApp('Bhaskar Das');
+    fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
+    expect(panel.getByText('Bhaskar Das is also staff here (trainer).')).toBeTruthy();
+    const tick = panel.getByRole('checkbox', { name: 'Also remove Bhaskar Das from staff' });
+    expect(tick.getAttribute('aria-checked')).toBe('false');
+    expect(panel.getByText(/They keep their staff access and can still open the console\./)).toBeTruthy();
+    fireEvent.click(tick);
+    expect(tick.getAttribute('aria-checked')).toBe('true');
+    expect(panel.getByText("They lose their staff access too and can't open the console any more.")).toBeTruthy();
+    fireEvent.click(panel.getByRole('button', { name: 'Remove from app and staff' }));
+    await waitFor(() => expect(orgService.removeMember).toHaveBeenCalledWith(ORG.id, 'u4', { alsoStaff: true }));
+  });
+
+  it('a staff member left unticked is removed from the app only', async () => {
+    orgService.getMembers.mockResolvedValue(page([staffMemberSeat]));
+    drawMembers();
+    const panel = await openInApp('Bhaskar Das');
+    fireEvent.click(panel.getByRole('button', { name: 'Remove' }));
+    fireEvent.click(panel.getByRole('button', { name: 'Remove from app' }));
+    await waitFor(() => expect(orgService.removeMember).toHaveBeenCalledWith(ORG.id, 'u4', { alsoStaff: false }));
+  });
+
+  it('a manager who may remove members is offered no Remove beside staff or the owner, only beside members', async () => {
+    orgService.getMine.mockResolvedValue({
+      data: { orgs: [{ ...ORG, staffRole: 'manager', privileges: ['members.read', 'members.confirm', 'members.remove'] }] },
+    });
+    orgService.getMembers.mockResolvedValue(page([ownerSeat, staffMemberSeat, joinedMemberWithForbiddenExtras]));
+    drawMembers();
+    await openInApp('Bhaskar Das');
+    expect(removeButton()).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await openInApp('Kd Owner');
+    expect(removeButton()).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await openInApp('Rita Sen');
+    expect(removeButton()).toBeTruthy();
+  });
+
+  it('offers NO Remove beside a staff member when the server does not say who is staff', async () => {
+    // An API older than this web build: no `staff` on the row, and it refuses staff.
+    const legacyStaff = { ...staffMemberSeat };
+    delete legacyStaff.staff;
+    orgService.getMembers.mockResolvedValue(page([legacyStaff]));
     drawMembers();
     await openInApp('Bhaskar Das');
     expect(removeButton()).toBeNull();

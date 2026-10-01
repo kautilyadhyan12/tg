@@ -16,6 +16,7 @@ import {
   staffRoleChoices,
   inviteTicks,
   roleTicks,
+  sentAgainNotice,
   staffInviteView,
   unknownPrivileges,
   unknownPrivilegesNote,
@@ -797,9 +798,9 @@ function StaffRow({
 }
 
 /** THE INVITATIONS (4a-i): each address, its role, where it stands and whether its email
- *  went, with Cancel (or Remove, for one that ended or was declined). Nothing is drawn
- *  when there are none. */
-function InvitedList({ invites, orgType, busyId, readOnly, onCancel }) {
+ *  went, with Send again (4a-ii) and Cancel (or Remove, for one that ended or was
+ *  declined). Nothing is drawn when there are none. */
+function InvitedList({ invites, orgType, busyId, readOnly, onCancel, onResend }) {
   if (invites.loading) return null;
   if (invites.error !== null) {
     return (
@@ -835,16 +836,34 @@ function InvitedList({ invites, orgType, busyId, readOnly, onCancel }) {
                   {view.email}
                 </div>
               ) : null}
+              {view.sendAgainNote !== null ? (
+                <div className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                  {view.sendAgainNote}
+                </div>
+              ) : null}
             </div>
-            <button
-              type="button"
-              onClick={() => onCancel(invite)}
-              disabled={busyId === invite.id || readOnly}
-              className="self-start sm:self-center text-xs rounded-lg px-3 py-1.5 flex-shrink-0 disabled:opacity-40"
-              style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
-            >
-              {view.action}
-            </button>
+            <div className="self-start sm:self-center flex gap-2 flex-shrink-0">
+              {view.canSendAgain ? (
+                <button
+                  type="button"
+                  onClick={() => onResend(invite)}
+                  disabled={busyId === invite.id || readOnly}
+                  className="text-xs rounded-lg px-3 py-1.5 font-semibold disabled:opacity-40"
+                  style={{ background: 'rgba(249,115,22,0.15)', color: '#f97316' }}
+                >
+                  Send again
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => onCancel(invite)}
+                disabled={busyId === invite.id || readOnly}
+                className="text-xs rounded-lg px-3 py-1.5 disabled:opacity-40"
+                style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
+              >
+                {view.action}
+              </button>
+            </div>
           </div>
         );
       })}
@@ -1157,6 +1176,27 @@ export default function StaffPanel({ gymId, privileges, orgType, readOnly = fals
     }
   };
 
+  const resendInvite = async (invite) => {
+    if (gymId === null) return;
+    setBusyId(invite.id);
+    setActionError(null);
+    setNotice(null);
+    try {
+      const res = await orgService.resendStaffInvite(gymId, invite.id);
+      setNotice(sentAgainNotice(res.data.invite));
+      reload();
+    } catch (err) {
+      // The server's sentence says why and what to do (a bounced address, the week's
+      // three, still sending); pressing again would get the same answer.
+      setActionError({
+        message: errorText(err, "We couldn't send that invitation again. Please try again."),
+        retryable: false,
+      });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const cancelInvite = async (invite) => {
     if (gymId === null) return;
     setBusyId(invite.id);
@@ -1250,6 +1290,7 @@ export default function StaffPanel({ gymId, privileges, orgType, readOnly = fals
             busyId={busyId}
             readOnly={readOnly}
             onCancel={cancelInvite}
+            onResend={resendInvite}
           />
 
           {adding ? (

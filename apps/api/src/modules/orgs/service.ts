@@ -1440,6 +1440,7 @@ export async function listOrgMembers(
         groupLabel: m.groupLabel,
         complimentary: m.complimentary,
         takesSeat: m.takesSeat,
+        staff: m.staff,
         ...(seesList && listName !== null
           ? { onList: { name: listName } }
           : {}),
@@ -1890,6 +1891,7 @@ export async function removeOrgMember(
   userId: string,
   gymId: string,
   targetUserId: string,
+  options: { alsoStaff: boolean } = { alsoStaff: false },
 ): Promise<RemoveMemberResponse> {
   const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.remove");
   const { privileges } = await requirePrivilege(deps, gymId, userId, "members.remove");
@@ -1899,6 +1901,8 @@ export async function removeOrgMember(
     gymId,
     userId: targetUserId,
     actorUserId: userId,
+    actorManagesStaff: privileges.includes("staff.manage"),
+    alsoStaff: options.alsoStaff,
     // ONE REMOVE (RULINGS 2026-09-27): the current record that is certainly theirs becomes
     // a past member in the same step — that record only, never another at their address,
     // and none when a family's shared email leaves the list unable to say. The membership
@@ -1926,11 +1930,13 @@ export async function removeOrgMember(
       // never in THIS gym is indistinguishable from a user id that does not
       // exist, so holding a uuid tells the caller nothing.
       throw new OrgsError(404, "member_not_found", `That person isn't a ${orgWords(org.orgType).person} of this ${orgWords(org.orgType).it}.`);
-    case "is_staff":
+    case "staff_owner_only":
+      throw new OrgsError(403, "staff_owner_only", "Only the owner can remove staff from the app.");
+    case "owner_stays_owner":
       throw new OrgsError(
         409,
-        "member_is_staff",
-        `${outcome.role === "owner" ? "The owner" : "A staff member"} can't be removed from the ${orgWords(org.orgType).person} list. Staff membership is managed with staff.`,
+        "owner_stays_owner",
+        `The owner stays the owner of the ${orgWords(org.orgType).it}. Only their place in the app can be removed.`,
       );
     default:
       return assertNever(outcome);
@@ -2290,7 +2296,7 @@ function assertNever(x: never): never {
  *
  *  **The two conditions are ORed rather than merged**, because they are genuinely
  *  different questions: `getStaffAuthority` answers "what may this person do
- *  here" and admits an invited manager who never joined (:14401's ghost rule);
+ *  here" and admits a manager who is not a member;
  *  `isLiveMember` answers "is this person in this gym today". Requiring both
  *  would lock a manager out of a screen they administer. */
 async function requireGymAudience(deps: OrgsDeps, gymId: string, userId: string): Promise<void> {
@@ -2722,8 +2728,7 @@ function requireAttendanceCursor(
  *  place this differs from every other read in this module. A manager who never
  *  joined the gym has authority over it and is not a member of it; letting
  *  authority stand in for membership would put staff into a gym's own attendance
- *  numbers without anybody deciding that (:14401's ghost rule pointed the other
- *  way — it is about authority OUTLIVING membership, never replacing it).
+ *  numbers without anybody deciding that.
  *
  *  **NOTHING ON THIS PATH ASKS WHETHER THE MEMBER HAS PAID THE GYM** — Kd,
  *  2026-09-01: *"if a memebr is not part of the gym or have not paid then gym

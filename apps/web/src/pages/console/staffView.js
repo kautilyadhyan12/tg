@@ -1,4 +1,4 @@
-import { OWNER_ONLY_PRIVILEGES, ROLE_PRIVILEGES, STAFF_INVITE_EMAIL_REASON_WORDS, orgWords } from '@app/shared';
+import { OWNER_ONLY_PRIVILEGES, ROLE_PRIVILEGES, STAFF_INVITE_EMAIL_REASON_WORDS, STAFF_INVITE_RESENDS_MAX, orgWords } from '@app/shared';
 import { formatJoinedAt, roleLabel } from './consoleView';
 
 // Pure view helpers for the console's Staff section — Part 3 §4.7 ("list,
@@ -366,7 +366,12 @@ export function abilityLabels(privileges, orgType) {
     .map((choice) => choice.label);
 }
 
-/** One invitation's line on Settings → Staff: who, as what, and where it stands. */
+/** Email reasons Send again cannot help: the address bounced, refused, complained or
+ *  unsubscribed. The reason line already says what to do. */
+const BLOCKED_REASONS = ['bounced', 'refused', 'complained', 'unsubscribed'];
+
+/** One invitation's line on Settings → Staff: who, as what, and where it stands, and
+ *  whether Send again is offered (4a-ii) or, when it is not, why. */
 export function staffInviteView(invite, orgType) {
   const role = invite.roleName || roleLabel(invite.role, orgType);
   const status =
@@ -375,19 +380,35 @@ export function staffInviteView(invite, orgType) {
       : invite.state === 'ended'
         ? `Ended ${formatJoinedAt(invite.expiresAt)} · not accepted`
         : `Waiting for them to accept · until ${formatJoinedAt(invite.expiresAt)}`;
+  const sentAgain = invite.lastSentAt !== undefined && invite.lastSentAt !== invite.invitedAt;
   const email =
     invite.state !== 'waiting'
       ? null
       : invite.emailStatus === 'sent'
-        ? 'Email sent'
+        ? sentAgain
+          ? `Email sent again · ${formatJoinedAt(invite.lastSentAt)}`
+          : 'Email sent'
         : invite.emailStatus === 'sending'
           ? 'Sending the email…'
           : (STAFF_INVITE_EMAIL_REASON_WORDS[invite.emailReason] ?? 'Email not sent.');
+  const blocked = invite.emailStatus === 'not_sent' && BLOCKED_REASONS.includes(invite.emailReason);
+  const left = invite.resendsLeft ?? 0;
   return {
     title: invite.email,
     meta: `${role} · ${status}`,
     email,
     emailProblem: invite.state === 'waiting' && invite.emailStatus === 'not_sent',
     action: invite.state === 'waiting' ? 'Cancel invitation' : 'Remove',
+    canSendAgain: left > 0 && invite.emailStatus !== 'sending' && !blocked,
+    // Said, never hidden, once the button is gone for having been used up.
+    sendAgainNote:
+      left === 0 && !blocked
+        ? `Sent ${STAFF_INVITE_RESENDS_MAX + 1} times, so it can't be sent again. Remove it and invite them again if they still need it.`
+        : null,
   };
+}
+
+/** What the owner is told once Send again has worked. */
+export function sentAgainNotice(invite) {
+  return `Sent again to ${invite.email}. The invitation now works until ${formatJoinedAt(invite.expiresAt)}.`;
 }

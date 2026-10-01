@@ -2,13 +2,14 @@
 //   POST   /v1/orgs/:gymId/staff/invites                  invite an address as manager or trainer
 //   GET    /v1/orgs/:gymId/staff/invites                  what is waiting
 //   DELETE /v1/orgs/:gymId/staff/invites/:inviteId        cancel, or take an ended one off the list
+//   POST   /v1/orgs/:gymId/staff/invites/:inviteId/resend send again, with 7 more days
 //   GET    /v1/orgs/:gymId/staff/roles                    the gym's own roles
 //   POST   /v1/orgs/:gymId/staff/roles                    make one: a name and its ticks
 //   DELETE /v1/orgs/:gymId/staff/roles/:roleId            delete one
 //   GET    /v1/orgs/staff-invitations                     the caller's own, by their proved address
 //   POST   /v1/orgs/staff-invitations/:invitationId/accept
 //   POST   /v1/orgs/staff-invitations/:invitationId/decline
-// The owner's three need `staff.manage`, checked in the service. The caller's own need
+// The owner's need `staff.manage`, checked in the service. The caller's own need
 // only a sign-in: their proved address is the whole credential.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
@@ -81,6 +82,12 @@ export function registerStaffInviteRoutes(
     const params = parseOr400(staffInviteParamsSchema, req.params, req, reply);
     if (params === null) return;
     return reply.status(200).send(await service.cancelStaffInvite(inviteDeps, callerOf(req).id, params.gymId, params.inviteId));
+  });
+
+  app.post("/v1/orgs/:gymId/staff/invites/:inviteId/resend", { preHandler: [app.authenticate, createLimit] }, async (req, reply) => {
+    const params = parseOr400(staffInviteParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    return reply.status(200).send(await service.resendStaffInvite(inviteDeps, callerOf(req).id, params.gymId, params.inviteId));
   });
 
   app.get("/v1/orgs/:gymId/staff/roles", { preHandler: [app.authenticate] }, async (req, reply) => {

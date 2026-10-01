@@ -25,6 +25,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       inviteStaff: vi.fn(),
       getStaffInvites: vi.fn(),
       cancelStaffInvite: vi.fn(),
+      resendStaffInvite: vi.fn(),
       getStaffRoles: vi.fn(),
       createStaffRole: vi.fn(),
       deleteStaffRole: vi.fn(),
@@ -146,6 +147,8 @@ const INVITE = {
   declinedAt: null,
   emailStatus: 'sent',
   emailReason: null,
+  lastSentAt: '2026-10-01T09:00:00.000Z',
+  resendsLeft: 3,
 };
 
 const apiError = (status, error, message) => ({
@@ -900,6 +903,53 @@ describe('the invitations waiting', () => {
     fireEvent.click(await screen.findByText('Cancel invitation'));
     await waitFor(() => expect(orgService.cancelStaffInvite).toHaveBeenCalledWith(ORG.id, INVITE.id));
     await waitFor(() => expect(orgService.getStaffInvites).toHaveBeenCalledTimes(2));
+  });
+
+  it('Send again sends that one again, says until when, and reads the lists again (4a-ii)', async () => {
+    orgService.getStaffInvites.mockResolvedValue({ data: { invites: [INVITE] } });
+    orgService.resendStaffInvite.mockResolvedValue({
+      data: { invite: { ...INVITE, expiresAt: '2026-10-10T09:00:00.000Z', lastSentAt: '2026-10-03T09:00:00.000Z', resendsLeft: 2, emailStatus: 'sending' } },
+    });
+    await drawStaff();
+    const row = await screen.findByTestId(`staff-invite-${INVITE.id}`);
+    fireEvent.click(within(row).getByText('Send again'));
+    await waitFor(() => expect(orgService.resendStaffInvite).toHaveBeenCalledWith(ORG.id, INVITE.id));
+    expect(await screen.findByText(/^Sent again to anil@example\.com\. The invitation now works until /)).toBeTruthy();
+    await waitFor(() => expect(orgService.getStaffInvites).toHaveBeenCalledTimes(2));
+  });
+
+  it('Send again is offered for an ended or declined one, says when it was sent again, and is not offered where it cannot help', async () => {
+    const id = (n) => `${n}f1c2b8e-0a4d-4f7e-9b1a-2c3d4e5f6a7b`;
+    orgService.getStaffInvites.mockResolvedValue({
+      data: {
+        invites: [
+          { ...INVITE, id: id(1), email: 'again@example.com', lastSentAt: '2026-10-03T09:00:00.000Z', resendsLeft: 2 },
+          { ...INVITE, id: id(2), email: 'late@example.com', state: 'ended' },
+          { ...INVITE, id: id(3), email: 'no@example.com', state: 'declined', declinedAt: '2026-10-02T09:00:00.000Z' },
+          { ...INVITE, id: id(4), email: 'bounce@example.com', emailStatus: 'not_sent', emailReason: 'bounced' },
+          { ...INVITE, id: id(5), email: 'going@example.com', emailStatus: 'sending' },
+          { ...INVITE, id: id(6), email: 'used@example.com', resendsLeft: 0 },
+        ],
+      },
+    });
+    await drawStaff();
+    const row = async (n) => within(await screen.findByTestId(`staff-invite-${id(n)}`));
+    expect((await row(1)).getByText(/^Email sent again · /)).toBeTruthy();
+    for (const n of [1, 2, 3]) expect((await row(n)).getByText('Send again')).toBeTruthy();
+    // A bounced address, an email still going, and one sent four times: no button.
+    for (const n of [4, 5, 6]) expect((await row(n)).queryByText('Send again')).toBeNull();
+    expect((await row(4)).getByText(/emails to this address bounce/i)).toBeTruthy();
+    expect((await row(6)).getByText("Sent 4 times, so it can't be sent again. Remove it and invite them again if they still need it.")).toBeTruthy();
+  });
+
+  it("Send again's refusal is the server's own sentence", async () => {
+    orgService.getStaffInvites.mockResolvedValue({ data: { invites: [INVITE] } });
+    orgService.resendStaffInvite.mockRejectedValue(
+      apiError(429, 'too_many_to_address', "You've sent anil@example.com 3 invitations this week. Try again next week."),
+    );
+    await drawStaff();
+    fireEvent.click(await screen.findByText('Send again'));
+    expect(await screen.findByText("You've sent anil@example.com 3 invitations this week. Try again next week.")).toBeTruthy();
   });
 
   it('shows nothing under Invited when there are none', async () => {
