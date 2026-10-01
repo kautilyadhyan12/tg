@@ -74,6 +74,8 @@ export const razorpaySubscriptionSchema = z.object({
   paid_count: z.number().int().nonnegative(),
   notes: notesSchema,
   created_at: unixSeconds,
+  /** When its window can no longer be paid (Unix seconds); null when it has no limit. */
+  expire_by: unixSeconds.nullable().optional(),
   /** Sent back when a subscription is created (not when fetched): what it will charge. */
   plan: razorpayPlanSchema.optional(),
 });
@@ -85,6 +87,8 @@ export const razorpayInvoiceSchema = z.object({
   status: z.string(),
   subscription_id: razorpaySubscriptionIdSchema.nullable().optional(),
   payment_id: razorpayPaymentIdSchema.nullable().optional(),
+  /** Its whole amount: a bigger size's add-on is an invoice of its own (seen 2026-10-01). */
+  amount: z.number().int().nonnegative().nullable().optional(),
   amount_paid: z.number().int().nonnegative().nullable().optional(),
   /** What is still owed on it: above 0 on an invoice Razorpay could not charge. */
   amount_due: z.number().int().nonnegative().nullable().optional(),

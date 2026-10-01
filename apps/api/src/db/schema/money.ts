@@ -150,6 +150,9 @@ export const subscriptions = pgTable(
     index("subscriptions_cancel_due_idx")
       .on(t.currentPeriodEnd)
       .where(sql`${t.cancelAtPeriodEnd} AND ${t.provider} = 'razorpay' AND ${t.status} IN ('trialing','active','past_due')`),
+    index("subscriptions_replaced_uncancelled_idx")
+      .on(t.endedAt)
+      .where(sql`${t.cancelReason} = 'replaced' AND ${t.cancelSentAt} IS NULL`),
   ],
 );
 

@@ -270,6 +270,17 @@ export const orgService = {
       authApi.post(`/v1/orgs/${gymId}/billing/size`, { planCode }, { headers: { 'Idempotency-Key': key } }),
     ),
 
+  /** POST …/billing/size/razorpay — a bigger size on a plan paid through Razorpay (1d-iii-a):
+   *  our server makes a new Razorpay plan at the bigger size, the rest of this month's difference
+   *  taken as its window is paid, and answers what the window needs. Nothing changes until it is
+   *  paid. `key` is the press's Idempotency-Key: the same key reopens the same window. */
+  startRazorpaySizeChange: (gymId, planCode, key) =>
+    readThrough(
+      orgCheckoutResponseSchema,
+      'that payment',
+      authApi.post(`/v1/orgs/${gymId}/billing/size/razorpay`, { planCode }, { headers: { 'Idempotency-Key': key } }),
+    ),
+
   /** DELETE …/billing/size/pending — keep the current size: the smaller size waiting is
    *  dropped. Pressing it twice is harmless. */
   keepSize: (gymId) =>

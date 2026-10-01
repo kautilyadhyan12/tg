@@ -31,11 +31,16 @@ export type RazorpayResult<T> =
 export interface RazorpayApi {
   /** A subscription to one plan, created before the browser opens Razorpay's window. With
    *  `startAt` the mandate is taken now and the first payment on that day (the gym's own
-   *  free trial); without it the first payment is taken as the window is paid. */
+   *  free trial, or the day a replaced plan's paid month ends); without it the first payment is
+   *  taken as the window is paid. `upfront` is taken as the window is paid, before the first
+   *  payment (Razorpay's add-on: its window says "a payment of ₹1,700 will be charged now",
+   *  tried 2026-10-01), and `expireBy` is when the window can no longer be paid. */
   createSubscription(input: {
     planId: string;
     startAt: Date | null;
     notes: Record<string, string>;
+    upfront?: { name: string; amountMinor: number; currency: string } | null;
+    expireBy?: Date | null;
   }): Promise<RazorpayResult<RazorpaySubscription>>;
   getSubscription(id: string): Promise<RazorpayResult<RazorpaySubscription>>;
   /** Cancel at once: nothing more is charged. */
@@ -133,6 +138,10 @@ export function createRazorpayApi(opts: {
         // Razorpay emails the payer about each charge and a failed one, with its own link.
         customer_notify: true,
         ...(input.startAt === null ? {} : { start_at: Math.ceil(input.startAt.getTime() / 1000) }),
+        ...(input.upfront == null
+          ? {}
+          : { addons: [{ item: { name: input.upfront.name, amount: input.upfront.amountMinor, currency: input.upfront.currency } }] }),
+        ...(input.expireBy == null ? {} : { expire_by: Math.floor(input.expireBy.getTime() / 1000) }),
         notes: input.notes,
       });
     },

@@ -6,6 +6,7 @@ import { GYM_TRIAL_MEMBERS, type PaddleSubscription } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { insertAudit, lockOrgRow } from "../orgs/repo.js";
 import { decide, type Decision, type LocalStatus, type Snapshot } from "./machine.js";
+import { upgradeCharge } from "./razorpayPlan.js";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -30,6 +31,14 @@ export interface CheckoutRow {
   providerRef: string | null;
   /** The plan it sold. */
   planId: string;
+  /** A bigger size (1d-iii-a): the gym's plan it replaces once paid, null for a first plan. */
+  replacesRowId: string | null;
+  /** When the replaced plan's paid month began: with `startsAt`, the month a bigger size is priced in. */
+  periodStart: Date | null;
+  /** When the replaced plan's paid month ends: the new price is first charged then. */
+  startsAt: Date | null;
+  /** The rest of this month's difference, taken as the window is paid; null when none. */
+  upfrontMinor: number | null;
 }
 
 interface RawCheckout {
@@ -40,6 +49,10 @@ interface RawCheckout {
   state: string;
   provider: string;
   provider_ref: string | null;
+  replaces_subscription_id: string | null;
+  period_start: Date | null;
+  starts_at: Date | null;
+  upfront_minor: number | null;
 }
 
 const STATES: readonly CheckoutState[] = ["creating", "open", "superseded", "failed", "paid"];
@@ -50,7 +63,19 @@ function toCheckout(raw: RawCheckout): CheckoutRow {
   if (state === undefined) throw new Error(`unknown checkout state ${raw.state}`);
   const provider = PROVIDERS.find((p) => p === raw.provider);
   if (provider === undefined) throw new Error(`unknown checkout provider ${raw.provider}`);
-  return { id: raw.id, gymId: raw.gym_id, planCode: raw.plan_code, state, provider, providerRef: raw.provider_ref, planId: raw.plan_id };
+  return {
+    id: raw.id,
+    gymId: raw.gym_id,
+    planCode: raw.plan_code,
+    state,
+    provider,
+    providerRef: raw.provider_ref,
+    planId: raw.plan_id,
+    replacesRowId: raw.replaces_subscription_id,
+    periodStart: raw.period_start,
+    startsAt: raw.starts_at,
+    upfrontMinor: raw.upfront_minor,
+  };
 }
 
 /** The members a gym is paying for: live, not complimentary, not staff. The same
@@ -104,7 +129,8 @@ export async function beginCheckout(
     if (gym.status !== "active") return { kind: "org_archived" };
 
     const earlier = await tx<RawCheckout[]>`
-      SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref
+      SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref,
+             c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor
       FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
       WHERE c.gym_id = ${input.gymId} AND c.idempotency_key = ${input.idempotencyKey}`;
     const replay = earlier[0];
@@ -147,7 +173,8 @@ export async function beginCheckout(
     const inserted = await tx<RawCheckout[]>`
       INSERT INTO billing_checkouts (gym_id, plan_id, created_by, idempotency_key, provider)
       VALUES (${input.gymId}, ${plan.id}, ${input.userId}, ${input.idempotencyKey}, ${input.provider})
-      RETURNING id, gym_id, plan_id, ${input.planCode}::text AS plan_code, state, provider, provider_ref`;
+      RETURNING id, gym_id, plan_id, ${input.planCode}::text AS plan_code, state, provider, provider_ref,
+                replaces_subscription_id, period_start, starts_at, upfront_minor`;
     const row = inserted[0];
     if (row === undefined) throw new Error("checkout insert returned no row");
     await insertAudit(tx, {
@@ -193,9 +220,21 @@ export async function failCheckout(sql: SqlOrTx, input: { checkoutId: string; gy
 
 export async function getCheckout(sql: SqlOrTx, input: { checkoutId: string; gymId: string }): Promise<CheckoutRow | null> {
   const rows = await sql<RawCheckout[]>`
-    SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref
+    SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref,
+             c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor
     FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
     WHERE c.id = ${input.checkoutId} AND c.gym_id = ${input.gymId}`;
+  const row = rows[0];
+  return row === undefined ? null : toCheckout(row);
+}
+
+/** The checkout an earlier press with this key made for this gym, if any. */
+export async function checkoutForKey(sql: SqlOrTx, input: { gymId: string; idempotencyKey: string }): Promise<CheckoutRow | null> {
+  const rows = await sql<RawCheckout[]>`
+    SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref,
+           c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor
+    FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
+    WHERE c.gym_id = ${input.gymId} AND c.idempotency_key = ${input.idempotencyKey}`;
   const row = rows[0];
   return row === undefined ? null : toCheckout(row);
 }
@@ -204,7 +243,8 @@ export async function getCheckout(sql: SqlOrTx, input: { checkoutId: string; gym
  *  where the subscription's gym comes from. */
 export async function checkoutForRazorpaySubscription(sql: SqlOrTx, subscriptionId: string): Promise<CheckoutRow | null> {
   const rows = await sql<RawCheckout[]>`
-    SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref
+    SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref,
+             c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor
     FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
     WHERE c.provider = 'razorpay' AND c.provider_ref = ${subscriptionId}`;
   const row = rows[0];
@@ -235,7 +275,8 @@ export async function planForRazorpayPlan(sql: SqlOrTx, razorpayPlanId: string):
 export async function checkoutsForTransactions(sql: SqlOrTx, transactionIds: readonly string[]): Promise<CheckoutRow[]> {
   if (transactionIds.length === 0) return [];
   const rows = await sql<RawCheckout[]>`
-    SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref
+    SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref,
+             c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor
     FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
     WHERE c.provider = 'paddle' AND c.provider_ref = ANY(${[...transactionIds]}::text[])
     ORDER BY c.created_at, c.id`;
@@ -354,6 +395,9 @@ export interface ApplyOutcome {
   rowId: string | null;
   /** The row was set aside as a duplicate, now or before: cancel and refund at Paddle. */
   duplicate: boolean;
+  /** The gym's plan this one took the place of (a bigger size, 1d-iii-a), ended in this write:
+   *  the caller cancels it at Razorpay. */
+  replaced: { rowId: string; subscriptionRef: string } | null;
 }
 
 /** Write the provider's record of one subscription onto the gym, through the one rule.
@@ -369,6 +413,9 @@ export async function applySnapshot(
     snapshot: Snapshot;
     checkoutId: string | null;
     now: Date;
+    /** A bigger size's checkout (1d-iii-a): the gym's plan it takes the place of, and the end of
+     *  that plan's paid month as it was when the window was opened. */
+    replaces?: { rowId: string; periodEnd: Date } | null;
   },
 ): Promise<ApplyOutcome> {
   return await sql.begin(async (tx) => {
@@ -393,15 +440,39 @@ export async function applySnapshot(
     const existing = rows[0] ?? null;
     // A subscription placed on one gym never moves to another.
     if (existing !== null && existing.owner_id !== input.gymId) {
-      return { decision: { kind: "ignore", reason: "not_ours" }, rowId: existing.id, duplicate: false };
+      return { decision: { kind: "ignore", reason: "not_ours" }, rowId: existing.id, duplicate: false, replaced: null };
     }
-    const others = await tx<{ id: string; status: string; provider: string }[]>`
-      SELECT id, status, provider FROM subscriptions
+    const others = await tx<
+      {
+        id: string;
+        status: string;
+        provider: string;
+        provider_ref: string | null;
+        cancel_at_period_end: boolean;
+        current_period_end: Date | null;
+      }[]
+    >`
+      SELECT id, status, provider, provider_ref, cancel_at_period_end, current_period_end FROM subscriptions
       WHERE owner_type = 'gym' AND owner_id = ${input.gymId}
         AND status IN ('trialing','active','past_due')
         AND (${existing?.id ?? null}::uuid IS NULL OR id <> ${existing?.id ?? null}::uuid)`;
     // The gym's own free trial gives way to the plan it paid for during it.
     const localTrial = others.find(isLocalTrial) ?? null;
+    // A bigger size gives way only to the plan it was priced against, still as it was then:
+    // paying, not set to end, the same month. Anything else and it is a second plan.
+    const replaces = existing === null ? (input.replaces ?? null) : null;
+    const replaceable =
+      replaces === null
+        ? null
+        : (others.find(
+            (o) =>
+              o.id === replaces.rowId &&
+              o.provider === "razorpay" &&
+              o.provider_ref !== null &&
+              o.status === "active" &&
+              !o.cancel_at_period_end &&
+              o.current_period_end?.getTime() === replaces.periodEnd.getTime(),
+          ) ?? null);
     // Razorpay's record never shows a cancel (1d-ii): whether a plan is set to end is our own
     // row's, read here under the lock, so an answer fetched before Cancel or Keep my plan was
     // pressed never undoes it.
@@ -421,7 +492,7 @@ export async function applySnapshot(
               cancelAtPeriodEnd: existing.cancel_at_period_end,
               graceEnded: existing.cancel_reason === GRACE_EXPIRED,
             },
-      otherLive: others.some((o) => !isLocalTrial(o)),
+      otherLive: others.some((o) => !isLocalTrial(o) && o.id !== replaceable?.id),
       snapshot,
     });
     const s = snapshot;
@@ -437,6 +508,7 @@ export async function applySnapshot(
     };
 
     let rowId = existing?.id ?? null;
+    let replaced: ApplyOutcome["replaced"] = null;
     if (decision.kind === "insert" || decision.kind === "duplicate") {
       const status = decision.kind === "insert" ? decision.status : "expired";
       const ended = status === "expired" ? input.now : null;
@@ -458,6 +530,19 @@ export async function applySnapshot(
           meta: { provider: input.provider, via: input.provider },
         });
       }
+      if (replaceable !== null && replaceable.provider_ref !== null && status !== "expired") {
+        // Ended first (a gym holds one live plan), set to end so any later payment of it is
+        // refunded (`razorpayCancelOutcome`); `cancel_sent_at` waits for Razorpay to have ended it.
+        const ended = await tx`
+          UPDATE subscriptions
+          SET status = 'expired', ended_at = ${input.now}, cancel_at_period_end = true, cancel_reason = ${REPLACED},
+              pending_plan_id = NULL, pending_from = NULL, pending_requested_plan_id = NULL,
+              pending_held_at = NULL, pending_warned_at = NULL
+          WHERE id = ${replaceable.id} AND owner_id = ${input.gymId} AND status = 'active'
+          RETURNING id`;
+        if (ended.length !== 1) throw new Error("the replaced plan changed under the gym's lock");
+        replaced = { rowId: replaceable.id, subscriptionRef: replaceable.provider_ref };
+      }
       const inserted = await tx<{ id: string }[]>`
         INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, trial_ends_at, trial_seat_cap,
                                    current_period_end, cancel_at_period_end, provider, provider_ref,
@@ -471,6 +556,16 @@ export async function applySnapshot(
       rowId = inserted[0]?.id ?? null;
       if (rowId === null) throw new Error("subscription insert returned no row");
       await audit(rowId, decision.kind === "duplicate" ? "billing.duplicate" : `billing.${decision.event}`);
+      if (replaced !== null) {
+        await insertAudit(tx, {
+          actorUserId: null,
+          gymId: input.gymId,
+          action: "billing.size_replaced",
+          targetType: "subscription",
+          targetId: replaced.rowId,
+          meta: { provider: input.provider, via: input.provider, by: rowId },
+        });
+      }
     } else if (decision.kind === "update" && existing !== null) {
       await tx`
         UPDATE subscriptions
@@ -512,7 +607,7 @@ export async function applySnapshot(
         WHERE id = ${input.checkoutId} AND gym_id = ${input.gymId}`;
     }
     const duplicate = decision.kind === "duplicate" || existing?.cancel_reason === "duplicate";
-    return { decision, rowId, duplicate };
+    return { decision, rowId, duplicate, replaced };
   });
 }
 
@@ -574,7 +669,8 @@ export async function closeCheckout(sql: SqlOrTx, input: { checkoutId: string; g
  *  whether it was paid meanwhile. */
 export async function openCheckoutsFor(sql: SqlOrTx, gymId: string): Promise<CheckoutRow[]> {
   const rows = await sql<RawCheckout[]>`
-    SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref
+    SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref,
+             c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor
     FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
     WHERE c.gym_id = ${gymId} AND c.state = 'open' AND c.provider_ref IS NOT NULL
     ORDER BY c.created_at
@@ -1507,4 +1603,232 @@ export async function dueRazorpayRenewals(sql: SqlOrTx, input: { before: Date; l
     ORDER BY current_period_end, id
     LIMIT ${input.limit}`;
   return rows.map((r) => r.provider_ref);
+}
+
+// ── A bigger size on a plan paid through Razorpay (1d-iii-a) ───────────────────
+
+/** `cancel_reason` of a plan a bigger size took the place of. */
+export const REPLACED = "replaced";
+
+export interface RazorpaySizeTarget {
+  subscriptionRowId: string;
+  subscriptionRef: string;
+  /** When the month paid ends: the bigger size's price is first charged then. */
+  periodEnd: Date;
+  fromPlanId: string;
+  fromPriceMinor: number;
+  toPlanId: string;
+  planCode: string;
+  /** Razorpay's plan (`plan_…`) for the bigger size. */
+  providerPlanId: string;
+  priceMinor: number;
+  currency: string;
+  seatCap: number | null;
+}
+
+export type RazorpaySizeOutcome =
+  | { kind: "ok"; target: RazorpaySizeTarget }
+  | { kind: "no_paid_plan" }
+  | { kind: "not_razorpay" }
+  | { kind: "payment_overdue" }
+  /** A paid trial made before 2f-i, not yet charged: its size waits for its first payment. */
+  | { kind: "in_trial" }
+  | { kind: "plan_ending" }
+  /** The month paid ends within `renewGuardMs`, or has ended and its renewal is not written. */
+  | { kind: "renewing" }
+  | { kind: "no_such_plan" }
+  | { kind: "same_size" }
+  /** A smaller size: not through Razorpay yet (1d-iii-b). */
+  | { kind: "smaller" }
+  | { kind: "not_set_up" };
+
+/** Which bigger size of its own price list this gym's Razorpay plan could move to now, or why
+ *  not: only a plan paying in good standing, not set to end, with time left in its month for a
+ *  window to be paid before Razorpay charges the next one. Read with the gym in every WHERE. */
+export async function razorpaySizeTarget(
+  sql: SqlOrTx,
+  input: { gymId: string; planCode: string; now: Date; renewGuardMs: number },
+): Promise<RazorpaySizeOutcome> {
+  const live = await sql<
+    {
+      id: string;
+      status: string;
+      provider: string;
+      provider_ref: string | null;
+      cancel_at_period_end: boolean;
+      current_period_end: Date | null;
+      plan_id: string;
+      seat_cap: number | null;
+      price_minor: number;
+      currency: string;
+    }[]
+  >`
+    SELECT s.id, s.status, s.provider, s.provider_ref, s.cancel_at_period_end, s.current_period_end,
+           s.plan_id, p.seat_cap, p.price_minor, p.currency
+    FROM subscriptions s JOIN plans p ON p.id = s.plan_id
+    WHERE s.owner_type = 'gym' AND s.owner_id = ${input.gymId}
+      AND s.status IN ('trialing','active','past_due')
+    LIMIT 1`;
+  const row = live[0];
+  if (row === undefined) {
+    const overdue = await sql`
+      SELECT 1 FROM subscriptions
+      WHERE owner_type = 'gym' AND owner_id = ${input.gymId} AND cancel_reason = ${GRACE_EXPIRED}
+      LIMIT 1`;
+    return overdue.length > 0 ? { kind: "payment_overdue" } : { kind: "no_paid_plan" };
+  }
+  if (row.provider !== "razorpay" || row.provider_ref === null) return { kind: "not_razorpay" };
+  if (row.status === "past_due") return { kind: "payment_overdue" };
+  if (row.status === "trialing") return { kind: "in_trial" };
+  if (row.cancel_at_period_end) return { kind: "plan_ending" };
+
+  const plans = await sql<{ id: string; code: string; seat_cap: number | null; razorpay_plan_id: string | null; price_minor: number; currency: string }[]>`
+    SELECT id, code, seat_cap, razorpay_plan_id, price_minor, currency FROM plans
+    WHERE code = ${input.planCode} AND audience = 'org' AND active = true
+      AND interval = 'month' AND currency = ${row.currency}`;
+  const plan = plans[0];
+  if (plan === undefined) return { kind: "no_such_plan" };
+  // Bigger means more members: a capless plan is bigger than any capped one.
+  const bigger = row.seat_cap !== null && (plan.seat_cap === null || plan.seat_cap > row.seat_cap);
+  const smaller = plan.seat_cap !== null && (row.seat_cap === null || plan.seat_cap < row.seat_cap);
+  if (plan.id === row.plan_id || (!bigger && !smaller)) return { kind: "same_size" };
+  if (!bigger) return { kind: "smaller" };
+  if (row.current_period_end === null || row.current_period_end.getTime() <= input.now.getTime() + input.renewGuardMs) {
+    return { kind: "renewing" };
+  }
+  if (plan.razorpay_plan_id === null) return { kind: "not_set_up" };
+  return {
+    kind: "ok",
+    target: {
+      subscriptionRowId: row.id,
+      subscriptionRef: row.provider_ref,
+      periodEnd: row.current_period_end,
+      fromPlanId: row.plan_id,
+      fromPriceMinor: row.price_minor,
+      toPlanId: plan.id,
+      planCode: plan.code,
+      providerPlanId: plan.razorpay_plan_id,
+      priceMinor: plan.price_minor,
+      currency: plan.currency,
+      seatCap: plan.seat_cap,
+    },
+  };
+}
+
+export type BeginSizeCheckoutOutcome =
+  | {
+      kind: "created";
+      checkout: CheckoutRow;
+      target: RazorpaySizeTarget;
+      /** The checkouts this press replaced, still open at their provider: the caller closes each. */
+      superseded: { provider: PayProvider; ref: string }[];
+    }
+  | { kind: "replay"; checkout: CheckoutRow }
+  | { kind: "key_reused" }
+  | { kind: "refused"; outcome: Exclude<RazorpaySizeOutcome, { kind: "ok" }> }
+  /** Razorpay's month is not the one our row holds (a renewal not yet written). */
+  | { kind: "plan_changed_meanwhile" }
+  | { kind: "org_archived" }
+  | { kind: "not_found" };
+
+/** Start the window for a bigger size: under the gym's lock, so the checks and the checkout are
+ *  one step, and any checkout still open for this gym is superseded (the caller cancels it at
+ *  its provider) so only one can be paid. The rest of this month's difference is priced HERE,
+ *  from our own price list and the month Razorpay last charged (`periodStart`, `periodEnd`). */
+export async function beginSizeCheckout(
+  sql: Sql,
+  input: {
+    gymId: string;
+    userId: string;
+    planCode: string;
+    idempotencyKey: string;
+    now: Date;
+    renewGuardMs: number;
+    periodStart: Date;
+    periodEnd: Date;
+  },
+): Promise<BeginSizeCheckoutOutcome> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId); // subscription-writer lock
+    const gyms = await tx<{ status: string }[]>`SELECT status FROM gyms WHERE id = ${input.gymId}`;
+    const gym = gyms[0];
+    if (gym === undefined) return { kind: "not_found" };
+    if (gym.status !== "active") return { kind: "org_archived" };
+
+    const earlier = await tx<RawCheckout[]>`
+      SELECT c.id, c.gym_id, c.plan_id, p.code AS plan_code, c.state, c.provider, c.provider_ref,
+             c.replaces_subscription_id, c.period_start, c.starts_at, c.upfront_minor
+      FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
+      WHERE c.gym_id = ${input.gymId} AND c.idempotency_key = ${input.idempotencyKey}`;
+    const replay = earlier[0];
+    if (replay !== undefined) {
+      return replay.plan_code === input.planCode && replay.replaces_subscription_id !== null
+        ? { kind: "replay", checkout: toCheckout(replay) }
+        : { kind: "key_reused" };
+    }
+
+    const found = await razorpaySizeTarget(tx, input);
+    if (found.kind !== "ok") return { kind: "refused", outcome: found };
+    const target = found.target;
+    if (target.periodEnd.getTime() !== input.periodEnd.getTime()) return { kind: "plan_changed_meanwhile" };
+    const charge = upgradeCharge({
+      fromMinor: target.fromPriceMinor,
+      toMinor: target.priceMinor,
+      periodStart: input.periodStart,
+      periodEnd: input.periodEnd,
+      now: input.now,
+    });
+    if (charge.kind === "month_over") return { kind: "refused", outcome: { kind: "renewing" } };
+    const upfront = charge.kind === "charge" ? charge.minor : null;
+
+    const superseded = await tx<{ provider: string; provider_ref: string | null }[]>`
+      UPDATE billing_checkouts SET state = 'superseded', updated_at = now()
+      WHERE gym_id = ${input.gymId} AND state IN ('creating','open')
+      RETURNING provider, provider_ref`;
+    const inserted = await tx<RawCheckout[]>`
+      INSERT INTO billing_checkouts (gym_id, plan_id, created_by, idempotency_key, provider,
+                                     replaces_subscription_id, period_start, starts_at, upfront_minor)
+      VALUES (${input.gymId}, ${target.toPlanId}, ${input.userId}, ${input.idempotencyKey}, 'razorpay',
+              ${target.subscriptionRowId}, ${input.periodStart}, ${target.periodEnd}, ${upfront})
+      RETURNING id, gym_id, plan_id, ${input.planCode}::text AS plan_code, state, provider, provider_ref,
+                replaces_subscription_id, period_start, starts_at, upfront_minor`;
+    const row = inserted[0];
+    if (row === undefined) throw new Error("checkout insert returned no row");
+    await insertAudit(tx, {
+      actorUserId: input.userId,
+      gymId: input.gymId,
+      action: "billing.size_checkout_started",
+      targetType: "billing_checkout",
+      targetId: row.id,
+      meta: { plan: input.planCode, provider: "razorpay", upfront: upfront === null ? null : String(upfront) },
+    });
+    return {
+      kind: "created",
+      checkout: toCheckout(row),
+      target,
+      superseded: superseded.flatMap((s) => {
+        const provider = PROVIDERS.find((p) => p === s.provider);
+        return s.provider_ref === null || provider === undefined ? [] : [{ provider, ref: s.provider_ref }];
+      }),
+    };
+  });
+}
+
+/** Razorpay has ended a replaced plan: the worker stops asking. */
+export async function markReplacedCancelSent(sql: SqlOrTx, input: { gymId: string; rowId: string; now: Date }): Promise<void> {
+  await sql`
+    UPDATE subscriptions SET cancel_sent_at = ${input.now}
+    WHERE id = ${input.rowId} AND owner_type = 'gym' AND owner_id = ${input.gymId}
+      AND cancel_reason = ${REPLACED} AND cancel_sent_at IS NULL`;
+}
+
+/** Replaced plans Razorpay has not yet been seen to end: cancelled there by the worker. */
+export async function replacedToCancel(sql: SqlOrTx, input: { limit: number }): Promise<{ rowId: string; gymId: string; subscriptionRef: string }[]> {
+  const rows = await sql<{ id: string; owner_id: string; provider_ref: string }[]>`
+    SELECT id, owner_id, provider_ref FROM subscriptions
+    WHERE owner_type = 'gym' AND provider = 'razorpay' AND provider_ref IS NOT NULL
+      AND cancel_reason = ${REPLACED} AND cancel_sent_at IS NULL
+    ORDER BY ended_at, id
+    LIMIT ${input.limit}`;
+  return rows.map((r) => ({ rowId: r.id, gymId: r.owner_id, subscriptionRef: r.provider_ref }));
 }

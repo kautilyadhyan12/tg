@@ -70,6 +70,9 @@ export type OrgCheckoutResponse = z.infer<typeof orgCheckoutResponseSchema>;
 export const orgCheckoutSyncResponseSchema = z.discriminatedUnion("state", [
   z.object({ state: z.literal("waiting") }),
   z.object({ state: z.literal("trial_ended") }),
+  /** A bigger size paid after the plan changed meanwhile (1d-iii-a): nothing changed, and what
+   *  was paid is refunded. */
+  z.object({ state: z.literal("refunded") }),
   z.object({ state: z.literal("paid"), subscription: orgSubscriptionSchema }),
 ]);
 export type OrgCheckoutSyncResponse = z.infer<typeof orgCheckoutSyncResponseSchema>;

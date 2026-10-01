@@ -755,7 +755,11 @@ describe('who is offered which choice', () => {
     ['the gym’s own free trial', trialing(6), { subscribed: false, pay: true, bigger: false }],
     ['a free trial in rupees (Razorpay, 1d-i)', trialing(6, { currencyDisplay: 'INR' }), { subscribed: false, pay: true, bigger: false }],
     ['a trial paid for through Razorpay (its size is not changed here yet)', paidTrial({ currencyDisplay: 'INR', subscription: { paidThrough: 'razorpay', priceLabel: '₹12,500' } }), { subscribed: true, pay: false, bigger: false }],
-    ['a plan paid through Razorpay', paying({ paidThrough: 'razorpay', priceLabel: '₹12,500' }, { currencyDisplay: 'INR' }), { subscribed: true, pay: false, bigger: false }],
+    // A bigger size in Razorpay's window (1d-iii-a).
+    ['a plan paid through Razorpay', paying({ paidThrough: 'razorpay', priceLabel: '₹12,500' }, { currencyDisplay: 'INR' }), { subscribed: true, pay: false, bigger: true }],
+    ['a plan paid through Razorpay, set to end', paying({ paidThrough: 'razorpay', cancelAtPeriodEnd: true }, { currencyDisplay: 'INR' }), { subscribed: true, pay: false, bigger: false }],
+    ['a plan paid through Razorpay, a payment failed', paying({ paidThrough: 'razorpay', status: 'past_due' }, { currencyDisplay: 'INR' }), { subscribed: true, pay: false, bigger: false }],
+    ['a plan paid through Razorpay, a trainer', paying({ paidThrough: 'razorpay' }, { currencyDisplay: 'INR', ...trainer }), { subscribed: true, pay: false, bigger: false }],
     ['a trial the gym has paid for', paidTrial(), { subscribed: true, pay: false, bigger: true }],
     ['a paid plan in good standing', paying(), { subscribed: true, pay: false, bigger: true }],
     ['a paid plan set to end', paying({ cancelAtPeriodEnd: true }), { subscribed: true, pay: false, bigger: false }],
@@ -940,6 +944,15 @@ describe('a smaller size and the Plan card (1c-iii)', () => {
       ['smaller', `From ${trialEndDateLabel(END)}`, null],
       ['current', 'Your size', null],
       ['bigger', 'Pay the difference now', null],
+    ]);
+  });
+
+  it('a plan paid through Razorpay: a bigger size is paid now; a smaller one says it is not available yet and cannot be chosen (1d-iii-a)', () => {
+    const rupees = { ...paying, seatCap: 500, paidThrough: 'razorpay' };
+    expect(sizeRows(PLANS, gym(rupees, 100)).map((r) => [r.kind, r.note, r.warning, r.disabled])).toEqual([
+      ['smaller', 'Not available yet', null, true],
+      ['current', 'Your size', null, true],
+      ['bigger', 'Pay the difference now', null, false],
     ]);
   });
 

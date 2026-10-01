@@ -239,14 +239,24 @@ describe('a plan paid through Razorpay (an Indian gym, 1d-i and 1d-ii)', () => {
   const rupees = (patch = {}) => plan({ priceLabel: '₹12,500', subscribed: true, paidThrough: 'razorpay', keepUntil: null, ...patch });
   const LINK = 'https://rzp.io/rzp/MUp0Qi83';
 
-  it("says it is paid through Razorpay; its card and cancel are here, never Paddle's page or a size change it cannot make", async () => {
+  it("says it is paid through Razorpay; its card, cancel and Change size are here, never Paddle's page", async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: rupees() }));
     renderOverview();
-    expect(await screen.findByTestId('paid-through-razorpay')).toBeTruthy();
-    expect(screen.getByText(/paid through razorpay, which emails you about each payment\. changing your size isn't available here yet\./i)).toBeTruthy();
+    expect((await screen.findByTestId('paid-through-razorpay')).textContent).toBe('Paid through Razorpay, which emails you about each payment.');
     expect(screen.getByRole('button', { name: 'Update payment method' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Cancel plan' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /manage payment|change size|pay now|keep my plan/i })).toBeNull();
+    // A bigger size is paid in Razorpay's window (1d-iii-a).
+    expect(screen.getByRole('button', { name: 'Change size' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /manage payment|pay now|keep my plan/i })).toBeNull();
+  });
+
+  it('a trial paid through Razorpay, not yet charged, says its size changes after the first payment, and offers no Change size', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: rupees({ status: 'trialing', trialEndsAt: '2026-11-01T00:00:00.000Z' }) }));
+    renderOverview();
+    expect((await screen.findByTestId('paid-through-razorpay')).textContent).toBe(
+      'Paid through Razorpay, which emails you about each payment. You can change your size once your first payment is taken.',
+    );
+    expect(screen.queryByRole('button', { name: 'Change size' })).toBeNull();
   });
 
   it('a trainer sees no button to pay, change or cancel', async () => {

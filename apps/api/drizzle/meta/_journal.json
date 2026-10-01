@@ -414,6 +414,13 @@
       "when": 1788220800042,
       "tag": "0059_staff_invites",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1788220800043,
+      "tag": "0060_razorpay_bigger_size",
+      "breakpoints": true
     }
   ]
 }

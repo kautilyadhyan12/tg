@@ -138,7 +138,7 @@ export async function processRazorpayEvents(deps: BillingDeps): Promise<Razorpay
     forgotten: 0,
     refunds: { requested: 0, notNeeded: 0, deferred: 0, failed: 0 },
     gracesEnded: 0,
-    cancels: { sent: 0, failed: 0, ended: 0 },
+    cancels: { sent: 0, failed: 0, ended: 0, replaced: 0 },
     reread: 0,
   };
   run.reread = await rereadDueRazorpayPlans(deps);

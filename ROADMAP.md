@@ -225,7 +225,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - R1. [x] **The menu, the font and the colours** — merged 2026-09-26 (PR #118).
    - R2. [x] **Classes and the Calendar** — merged 2026-09-26 (PR #119).
    - R3. [x] **Leads, and a lead's panel** — merged 2026-09-26 (PR #120).
-   - R4. [ ] **Overview, the banner and the plan prompts** (`Overview*`; "Your role" is in the menu since R1, Change size and the payment prompts drawn from the blocks). After 3c.
+   - R4. [ ] **Overview, the banner and the plan prompts** (`Overview*`; "Your role" is in the menu since R1, Change size and the payment prompts drawn from the blocks; the plan card's Change size, Update payment method and Cancel plan laid out as one set, RULINGS 2026-10-01). After 3c.
    - R5. [ ] **Attendance** (`Attendance`, `AttendancePhone`). After 16b, which rebuilds the page around the desk's live log.
    - R6. [ ] **Settings**, with a side list of its sections (`Settings`, `SettingsHours`, `SettingsPhone`). After 4a, which rebuilds Staff.
    - R7. [ ] **Your organisations, Create and the free-trial prompt** (`Orgs*`, `CreateGym*`, `GymReady`). After 3c.
@@ -243,7 +243,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 1d. **Indian gyms through Razorpay** (card or bank account; UPI, up to ₹15,000 a month, once Razorpay switches it on for the account; no GST until Kd is registered, then on top: RULINGS 2026-09-29). Subscriptions switched on by 2026-09-29. Split that day in three, as 1a–1c were:
      - 1d-i. [x] **Subscribe in rupees** — merged 2026-09-30 (PR #136).
      - 1d-ii. [x] **A failed payment paid, a card changed, a plan cancelled** — merged 2026-10-01 (PR #144).
-     - 1d-iii. [ ] **A bigger or smaller size** (Razorpay cannot change a UPI subscription: a new mandate for it).
+     - 1d-iii. **A bigger or smaller size.** Razorpay refuses to change what an Indian card, UPI or bank mandate charges (tried 2026-10-01), so a new size is a new plan the gym approves in Razorpay's window. Split that day in two:
+       - 1d-iii-a. [x] **A bigger size** — merged 2026-10-01 (PR #146).
+       - 1d-iii-b. [ ] **A smaller size**: from the paid month's end, as 1c-iii; its plan approved when chosen. One question for Kd at its plan: who moves when the members do not fit.
    - 1e. [x] **Paddle's window filled in** — merged 2026-10-01 (PR #142).
 2. **Trials enforced** (split 2026-09-08 after Kd's trial-abuse ruling; no approval queue, ever).
    - 2a. [x] **The price list, the 10-day gym trial at 200 members, no individual trial, one free scan a day** — merged 2026-09-24 (PR #101).

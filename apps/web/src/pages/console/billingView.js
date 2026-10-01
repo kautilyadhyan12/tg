@@ -314,14 +314,14 @@ export function canPayDuringTrial(org) {
 }
 
 /** MAY THIS VIEWER CHANGE SIZE (bigger or smaller)? A plan paid through us, in good standing
- *  (a paid trial counts), not set to end. */
+ *  (a paid trial counts), not set to end. A plan paid through Razorpay moves to a bigger size in
+ *  Razorpay's window once it is paying (1d-iii-a); a trial it paid for waits for its first payment. */
 export function canChangeSize(org) {
   const sub = org?.subscription;
   return (
     canManageBilling(viewerPrivileges(org)) &&
     isSubscribed(org) &&
-    !isPaidThroughRazorpay(org) &&
-    (sub?.status === 'active' || sub?.status === 'trialing') &&
+    (sub?.status === 'active' || (sub?.status === 'trialing' && !isPaidThroughRazorpay(org))) &&
     sub?.cancelAtPeriodEnd !== true &&
     !consoleIsReadOnly(org)
   );
@@ -509,6 +509,7 @@ export function sizeRows(plans, org) {
   const waiting = sub.pendingSize?.seatCap ?? null;
   const used = org?.seatsUsed;
   const nextOn = trialEndDateLabel(sub.currentPeriodEnd);
+  const razorpay = isPaidThroughRazorpay(org);
   return plans.map((plan) => {
     const cap = Number.isFinite(plan?.seatCap) ? plan.seatCap : null;
     if (cap === onSize) return { plan, kind: 'current', note: 'Your size', warning: null, disabled: true };
@@ -519,6 +520,8 @@ export function sizeRows(plans, org) {
     if (cap === null || (onSize !== null && cap > onSize)) {
       return { plan, kind: 'bigger', note: trialing ? 'From your first payment' : 'Pay the difference now', warning: null, disabled: false };
     }
+    // Razorpay cannot lower what a mandate charges; a smaller size through it is its own job (1d-iii-b).
+    if (razorpay) return { plan, kind: 'smaller', note: 'Not available yet', warning: null, disabled: true };
     const over = Number.isFinite(used) && used > cap;
     if (trialing) {
       return {

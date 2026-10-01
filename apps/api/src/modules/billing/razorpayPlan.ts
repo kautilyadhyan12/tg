@@ -116,3 +116,34 @@ export function oldestOwedInvoice(subscriptionId: string, invoices: readonly Raz
 function invoiceTime(invoice: RazorpayInvoice): number {
   return invoice.created_at ?? invoice.paid_at ?? 0;
 }
+
+/** Razorpay takes no payment under ₹1 (its smallest amount, 100 paise). */
+export const RAZORPAY_MIN_CHARGE_MINOR = 100;
+
+export type UpgradeCharge =
+  /** Taken as the window is paid: the difference for the rest of the month paid, in paise. */
+  | { kind: "charge"; minor: number }
+  /** Under ₹1, or the bigger size costs no more: nothing is taken now. */
+  | { kind: "free" }
+  /** The month paid is over (or has no length): there is no rest of it to price. */
+  | { kind: "month_over" };
+
+/** What a bigger size costs now on a plan paid through Razorpay: the difference between the two
+ *  monthly prices for the share of the month paid that is still to run, to the second, rounded
+ *  to the nearest paisa (Kd, RULINGS 2026-09-25: a bigger size is charged for the rest of the
+ *  month at once, then the new price from the next bill). `periodStart` and `periodEnd` are the
+ *  month Razorpay last charged (its `current_start` and `current_end`). */
+export function upgradeCharge(input: { fromMinor: number; toMinor: number; periodStart: Date; periodEnd: Date; now: Date }): UpgradeCharge {
+  const start = Math.floor(input.periodStart.getTime() / 1000);
+  const end = Math.floor(input.periodEnd.getTime() / 1000);
+  const now = Math.floor(input.now.getTime() / 1000);
+  if (end <= start || now >= end) return { kind: "month_over" };
+  const difference = input.toMinor - input.fromMinor;
+  if (difference <= 0) return { kind: "free" };
+  // A clock behind Razorpay's: the whole month is still to run, never more.
+  const left = Math.min(end - now, end - start);
+  // At most ₹10 lakh × 31 days in seconds: well inside a safe integer.
+  const minor = Math.round((difference * left) / (end - start));
+  if (!Number.isSafeInteger(minor)) throw new Error("upgrade charge out of range");
+  return minor < RAZORPAY_MIN_CHARGE_MINOR ? { kind: "free" } : { kind: "charge", minor };
+}
