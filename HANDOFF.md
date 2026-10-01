@@ -12,7 +12,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Worst thing, first test:** a cancel never ends a plan before the month paid for ends, and only this gym's billing staff can cancel, pay or change it. **Breaks, each RED, restored sha256-identical:** a Razorpay-ended plan ended at once (4 table rows + the trial test), the cancel sent the moment it is pressed, the worker cancelling now instead of at the month's end.
 - **Also fixed:** `fakePaddle`'s fixed clock (2026-10-01T00:00Z) was overtaken by real time today, turning two Paddle paid-trial tests red on every branch; it now stays a day ahead of now.
 - **Verified:** api **4,511 of 4,511** on `aihg_b` (rule table 59/59, Razorpay suite 35/35, Paddle 57/57); shared 274/274; web 3,338/3,338 (`poseAssets.contract` local Node 24); tsc and eslint 0. The real adapter run against the test account matched the fake. Seen in headless Edge on frfgrgrg: the box, the set-to-end card, Keep my plan (left as it was).
-- **Not reachable on the test account:** a real failed payment (Razorpay retries over 3 days), so Pay now's happy path is proven on the fake only. **Open:** Kd's click-through, round one, merge; 1d-iii next.
+- **Not reachable on the test account:** a real failed payment (Razorpay retries over 3 days), so Pay now's happy path is proven on the fake only.
+- **Kd's click-through: *"ok pass"*** after two fixes it found: the box's "and get the free app only after" cut (*"not needed"*), and its Go back is now Keep my plan. **Open:** round one, merge; 1d-iii next.
 
 ## 2026-09-30 · 1e (Folder B): Paddle's window filled in (branch `paddle-window-filled`)
 

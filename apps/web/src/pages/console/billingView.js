@@ -272,7 +272,7 @@ export function cancelBox(org, now = Date.now()) {
       title: 'Cancel your plan?',
       lines: [
         `Your plan ends with your free trial, on ${date ?? 'its last day'}. Nothing is charged.`,
-        `${people} ${keep} everything until then, and ${get} the free app only after.`,
+        `${people} ${keep} everything until then.`,
         mind,
       ],
       confirm: 'Cancel plan',
@@ -282,7 +282,7 @@ export function cancelBox(org, now = Date.now()) {
     title: 'Cancel your plan?',
     lines: [
       `Your plan ends on ${date ?? 'the last day you paid for'}, the end of the month you paid for. Nothing more is charged.`,
-      `${people} ${keep} everything until then, and ${get} the free app only after.`,
+      `${people} ${keep} everything until then.`,
       mind,
     ],
     confirm: 'Cancel plan',

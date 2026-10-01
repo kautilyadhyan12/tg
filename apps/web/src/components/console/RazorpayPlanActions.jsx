@@ -230,7 +230,7 @@ export default function RazorpayPlanActions({ org, cancel = false, openTab = () 
               busy={false}
               style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)', minHeight: 44 }}
             >
-              Go back
+              Keep my plan
             </ActionButton>
           </div>
         </div>

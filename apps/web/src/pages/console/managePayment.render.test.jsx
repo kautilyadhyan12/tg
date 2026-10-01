@@ -256,16 +256,16 @@ describe('a plan paid through Razorpay (an Indian gym, 1d-i and 1d-ii)', () => {
     expect(screen.queryByRole('button', { name: /pay now|update payment method|cancel plan/i })).toBeNull();
   });
 
-  it('Cancel plan asks first, naming the date and the members; nothing is sent until it is confirmed', async () => {
+  it('Cancel plan asks first, naming the date and the members, with Keep my plan beside it; nothing is sent until it is confirmed', async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: rupees() }));
     renderOverview();
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel plan' }));
     const box = screen.getByTestId('cancel-box');
     expect(box.textContent).toMatch(/Cancel your plan\?/);
     expect(box.textContent).toMatch(/Your plan ends on .+, the end of the month you paid for\. Nothing more is charged\./);
-    expect(box.textContent).toMatch(/Your 12 members keep everything until then, and get the free app only after\./);
+    expect(box.textContent).toMatch(/Your 12 members keep everything until then\./);
     expect(orgService.cancelPlan).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Go back' }));
+    fireEvent.click(within(screen.getByTestId('cancel-box')).getByRole('button', { name: 'Keep my plan' }));
     expect(screen.queryByTestId('cancel-box')).toBeNull();
 
     const ending = rupees({ cancelAtPeriodEnd: true, keepUntil: '2026-10-31T21:00:00.000Z' });

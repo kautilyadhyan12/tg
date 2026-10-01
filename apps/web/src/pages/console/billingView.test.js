@@ -1105,7 +1105,7 @@ describe('a plan paid through Razorpay, managed from the console (1d-ii)', () =>
     expect(box.title).toBe('Cancel your plan?');
     expect(box.confirm).toBe('Cancel plan');
     expect(box.lines[0]).toMatch(/^Your plan ends on .+, the end of the month you paid for\. Nothing more is charged\.$/);
-    expect(box.lines[1]).toBe('Your 143 members keep everything until then, and get the free app only after.');
+    expect(box.lines[1]).toBe('Your 143 members keep everything until then.');
     expect(box.lines[2]).toMatch(/^You can change your mind until .+\.$/);
     // Inside the last three hours it says the cancel can't be taken back.
     expect(cancelBox(gym({ currentPeriodEnd: '2026-10-20T12:00:00.000Z' }), NOW).lines[2]).toBe("It's too close to the end to change your mind after this.");
@@ -1119,9 +1119,9 @@ describe('a plan paid through Razorpay, managed from the console (1d-ii)', () =>
       confirm: 'Cancel plan now',
     });
     expect(cancelBox(gym({ status: 'trialing' }), NOW).lines[0]).toMatch(/^Your plan ends with your free trial, on .+\. Nothing is charged\.$/);
-    expect(cancelBox(gym({}, { seatsUsed: 1, orgType: 'studio' }), NOW).lines[1]).toBe('Your 1 client keeps everything until then, and gets the free app only after.');
+    expect(cancelBox(gym({}, { seatsUsed: 1, orgType: 'studio' }), NOW).lines[1]).toBe('Your 1 client keeps everything until then.');
     expect(cancelBox(gym({ status: 'past_due' }, { seatsUsed: 1 }), NOW).lines[1]).toBe('Your 1 member gets the free app only from now.');
-    expect(cancelBox(gym({}, { seatsUsed: 0 }), NOW).lines[1]).toBe('Your members keep everything until then, and get the free app only after.');
+    expect(cancelBox(gym({}, { seatsUsed: 0 }), NOW).lines[1]).toBe('Your members keep everything until then.');
     expect(cancelBox(gym({}, { staffRole: 'trainer', privileges: ['members.read'] }), NOW)).toBeNull();
     expect(cancelBox(gym({ cancelAtPeriodEnd: true }), NOW)).toBeNull();
   });
