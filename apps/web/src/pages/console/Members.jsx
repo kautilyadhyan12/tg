@@ -10,6 +10,7 @@ import ApplicationsQueue from './ApplicationsQueue';
 import MemberListPanel, { Tick } from './MemberListPanel';
 import MemberListPerson from './MemberListPerson';
 import MemberListRemove from './MemberListRemove';
+import MembersStaffTab from './MembersStaffTab';
 import { MEMBER_REMOVE_TICKED_MAX, orgWords } from '@app/shared';
 import {
   canRemoveMembers,
@@ -297,19 +298,20 @@ export default function Members() {
   const gymId = org?.id ?? null;
   // §4.3's "Remove hidden" for a trainer, off the org row the screen already has.
   const canRemove = canRemoveMembers(viewerPrivileges(org));
-  // Removing staff or the owner from the app is the owner's (4a-ii).
-  const managesStaff = canManageStaff(viewerPrivileges(org));
   // The gym's own list is `members.confirm`'s.
   const canSeeList = viewerPrivileges(org).includes('members.confirm');
   // Which tab, kept in the address so a reload stays on it.
   const [searchParams, setSearchParams] = useSearchParams();
-  const tab = canSeeList && searchParams.get('view') !== 'app' ? 'list' : 'app';
+  // Removing staff or the owner from the app, and the Staff tab, are the owner's (4a-ii).
+  const managesStaff = canManageStaff(viewerPrivileges(org));
+  const view = searchParams.get('view');
+  const tab = view === 'staff' && managesStaff ? 'staff' : canSeeList && view !== 'app' ? 'list' : 'app';
   // Only the tab changes: the rest of the address (the development build's `?look=light`) stays.
   const showTab = (next) =>
     setSearchParams(
       (was) => {
         const params = new URLSearchParams(was);
-        if (next === 'app') params.set('view', 'app');
+        if (next === 'app' || next === 'staff') params.set('view', next);
         else params.delete('view');
         return params;
       },
@@ -590,6 +592,7 @@ export default function Members() {
           {[
             ['list', 'Your list'],
             ['app', 'In the app'],
+            ...(managesStaff ? [['staff', 'Staff']] : []),
           ].map(([key, label]) => (
             <button
               key={key}
@@ -628,6 +631,8 @@ export default function Members() {
           canRemove={canRemove}
         />
       ) : null}
+
+      {tab === 'staff' && gymId !== null ? <MembersStaffTab gymId={gymId} orgSlug={orgSlug} words={words} readOnly={readOnly} onChanged={reloadRoster} /> : null}
 
       {/* Search and, with people ticked, the bar stay at the top on a computer (as on the list). */}
       {tab === 'app' ? (

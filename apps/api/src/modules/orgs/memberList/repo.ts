@@ -125,6 +125,13 @@ export interface MemberAgainstList extends ListMember {
   /** They also run this gym (a staff row, the owner's included). Left out by a fixture
    *  that is about members only. */
   isStaff?: boolean;
+  /** That staff row's role and the gym's own name for it, for the list's Staff tag. */
+  staff?: { role: "owner" | "manager" | "trainer"; roleName: string | null } | null;
+}
+
+function staffRoleOf(role: string): "owner" | "manager" | "trainer" {
+  if (role === "owner" || role === "manager" || role === "trainer") return role;
+  throw new Error("a staff row holds a role that no longer parses");
 }
 
 /** The gym's time zone, for its own calendar day. */
@@ -911,13 +918,14 @@ export async function membersAgainstList(
       joined_former: boolean;
       same_contact: unknown;
       joined_at: Date;
-      is_staff: boolean;
+      staff_role: string | null;
+      staff_role_name: string | null;
     }[]
   >`
     SELECT m.user_id,
            m.joined_at,
            u.display_name,
-           EXISTS (SELECT 1 FROM gym_staff st WHERE st.gym_id = m.gym_id AND st.user_id = m.user_id) AS is_staff,
+           st.role AS staff_role, st.role_name AS staff_role_name,
            (m.complimentary = false
             AND NOT EXISTS (
               SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id)) AS seat_counted,
@@ -935,6 +943,7 @@ export async function membersAgainstList(
            alt.list        AS same_contact
     FROM gym_members m
     JOIN users u ON u.id = m.user_id
+    LEFT JOIN gym_staff st ON st.gym_id = m.gym_id AND st.user_id = m.user_id
     LEFT JOIN gym_member_list_entries j ON j.gym_id = m.gym_id AND j.id = m.entry_id
     CROSS JOIN LATERAL (
       SELECT EXISTS (
@@ -1025,7 +1034,8 @@ export async function membersAgainstList(
       statedPhone: row.stated_phone_e164,
       everListed: row.ever_listed,
       seatCounted: row.seat_counted,
-      isStaff: row.is_staff,
+      isStaff: row.staff_role !== null,
+      staff: row.staff_role === null ? null : { role: staffRoleOf(row.staff_role), roleName: row.staff_role_name },
       onList: row.on_list || alt !== undefined,
       entryId: alt?.id ?? row.entry_id,
       entryStatus: alt === undefined ? row.entry_status : alt.status,

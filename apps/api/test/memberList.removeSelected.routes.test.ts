@@ -397,6 +397,25 @@ d("Remove on the people selected (real Postgres)", () => {
     TEST_TIMEOUT_MS,
   );
 
+  it(
+    "Your list tags a record whose person also runs the gym, with their role, and nobody else's; another gym reads nothing (4a-ii)",
+    async () => {
+      const gym = await makeGym();
+      const other = await makeGym();
+      const coach = await joined(gym, "Coach Dee", "tag-dee");
+      const member = await joined(gym, "Rae Lin", "tag-rae");
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, role_name) VALUES (${gym.id}, ${coach.user.userId}, 'trainer', 'Front desk')`;
+      const res = await get(`/v1/orgs/${gym.id}/member-list/entries`, gym.owner.cookies);
+      expect(res.statusCode, res.body).toBe(200);
+      const entries = (JSON.parse(res.body) as { page: { entries: { entryId: string; staff: unknown }[] } }).page.entries;
+      const staffOf = (id: string) => entries.find((e) => e.entryId === id)?.staff;
+      expect(staffOf(coach.entryId)).toEqual({ role: "trainer", roleName: "Front desk" });
+      expect(staffOf(member.entryId)).toBeNull();
+      expect((await get(`/v1/orgs/${gym.id}/member-list/entries`, other.owner.cookies)).statusCode).toBe(404);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   // =========================================================================
   // IN THE APP
   // =========================================================================

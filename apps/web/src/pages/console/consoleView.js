@@ -177,7 +177,13 @@ export function staffTag(member, words) {
   const staff = member?.staff;
   if (!staff || typeof staff !== 'object') return null;
   if (staff.role === 'owner') return 'Owner';
-  return `Staff · ${staff.roleName || (staff.role === 'manager' ? 'Manager' : words.coachCap)}`;
+  return `Staff · ${staffRoleText(staff.role, staff.roleName, words)}`;
+}
+
+/** A role in words: "Owner", "Manager", "Trainer" ("Coach" at a studio), or the gym's own. */
+export function staffRoleText(role, roleName, words) {
+  if (role === 'owner') return 'Owner';
+  return roleName || (role === 'manager' ? 'Manager' : words.coachCap);
 }
 
 /** REMOVING SOMEBODY WHO ALSO RUNS THE GYM (ROADMAP 4a-ii), or null for a member only

@@ -1725,6 +1725,13 @@ export const memberListEntrySchema = z.object({
   /** An import found a problem with this current member that staff have not fixed yet:
    *  the row's one "Review needed" tag, however many problems (5b-v-d-iv). */
   needsReview: z.boolean().default(false),
+  /** The person in the app this record is theirs also runs the gym: their role and the
+   *  gym's own name for it, for the row's Staff tag (4a-ii); null for a member. */
+  staff: z
+    .object({ role: z.enum(["owner", "manager", "trainer"]), roleName: z.string().nullable() })
+    .strict()
+    .nullable()
+    .default(null),
   /** **THE GYM'S OWN COLUMNS ARE NOT HERE, AND THAT IS DELIBERATE.** A page holds a
    *  hundred people and a gym may keep forty of its own columns of up to five hundred
    *  characters each, so carrying them would be two megabytes of a screen that shows

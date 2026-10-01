@@ -118,6 +118,7 @@ async function detailOf(
     invitation: invitation[0] ?? null,
     app: appOrThrow(app[0]),
     needsReview: entry.formerAt === null && entry.review.needsReview.length > 0,
+    staff: mine.find((member) => member.staff != null)?.staff ?? null,
     extra: fields.map((field) => ({ key: field.key, label: field.label, value: values.extra[field.key] ?? "" })),
     handEdited: entry.handEdited,
     // A past member is not on the list, so nothing of theirs is waiting to be reviewed.
