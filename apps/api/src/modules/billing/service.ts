@@ -1309,7 +1309,6 @@ async function endChargedAfterCancel(
   sub: RazorpaySubscription,
   input: { gymId: string; planId: string; placed: repo.PaddleRow; after: Date; askedAt: Date },
 ): Promise<ApplyResult> {
-  deps.log.error({ event: "billing.charged_after_cancel", provider: "razorpay", gymId: input.gymId }, "Razorpay charged a plan set to end: cancelling and refunding it");
   if (input.placed.status === "trialing" || input.placed.status === "active" || input.placed.status === "past_due") {
     await repo.applySnapshot(deps.sql, {
       gymId: input.gymId,
@@ -1321,7 +1320,13 @@ async function endChargedAfterCancel(
       now: deps.now(),
     });
   }
-  return await setAsideRazorpay(deps, razorpay, sub, input.gymId, "cancelled", input.after);
+  return await setAsideRazorpay(deps, razorpay, sub, input.gymId, "cancelled", input.after, (owed) => {
+    // Every later event about a plan ended for its cancel comes here (Razorpay's own
+    // `subscription.cancelled` among them); only a payment written down now is news.
+    if (owed > 0) {
+      deps.log.error({ event: "billing.charged_after_cancel", provider: "razorpay", gymId: input.gymId, owed }, "Razorpay charged a plan after it was set to end: refunding it");
+    }
+  });
 }
 
 /** Razorpay's record in the one rule's terms (Razorpay docs, "Subscription States"). Null
@@ -1365,6 +1370,7 @@ async function setAsideRazorpay(
   gymId: string | null,
   reason: repo.RefundReason,
   paidAfter: Date | null = null,
+  onOwed: (owed: number) => void = () => undefined,
 ): Promise<ApplyResult> {
   if (sub.status !== "cancelled" && sub.status !== "completed" && sub.status !== "expired") {
     const cancelled = await razorpay.api.cancelSubscriptionNow(sub.id);
@@ -1372,7 +1378,7 @@ async function setAsideRazorpay(
   }
   const invoices = await razorpay.api.listSubscriptionInvoices(sub.id);
   if (invoices.kind !== "ok") return "retry";
-  await repo.oweRefunds(deps.sql, {
+  const owed = await repo.oweRefunds(deps.sql, {
     gymId,
     provider: "razorpay",
     subscriptionRef: sub.id,
@@ -1388,6 +1394,7 @@ async function setAsideRazorpay(
         : [],
     ),
   });
+  onOwed(owed);
   return "set_aside";
 }
 
@@ -1562,23 +1569,40 @@ const NOT_RAZORPAY = "This plan isn't paid through Razorpay, so there's nothing 
 
 /** The gym's plan paid through Razorpay, for staff who manage its billing — read-only or not,
  *  since paying an overdue bill is how a read-only console opens again. */
-async function razorpayPlan(deps: BillingDeps, input: { userId: string; gymId: string }): Promise<{ razorpay: RazorpaySettings; plan: repo.RazorpayPlanRow }> {
-  await requirePrivilege(deps, input.gymId, input.userId, "billing.manage");
+async function razorpayPlan(
+  deps: BillingDeps,
+  input: { userId: string; gymId: string },
+): Promise<{ razorpay: RazorpaySettings; plan: repo.RazorpayPlanRow; timezone: string }> {
+  const { org } = await requirePrivilege(deps, input.gymId, input.userId, "billing.manage");
   const plan = await repo.razorpayPlanFor(deps.sql, input.gymId);
   if (plan === null) throw new OrgsError(404, "no_paid_plan", NOT_RAZORPAY);
   const razorpay = deps.razorpay ?? null;
   if (razorpay === null) throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
-  return { razorpay, plan };
+  return { razorpay, plan, timezone: org.timezone };
 }
 
 /** "Pay now": Razorpay's own page for the oldest bill this gym's plan still owes. The bill is
  *  found from the subscription on THIS gym's row, never one the browser names. */
 export async function payRazorpayBill(deps: BillingDeps, input: { userId: string; gymId: string }): Promise<OrgRazorpayPayResponse> {
-  const { razorpay, plan } = await razorpayPlan(deps, input);
+  const { razorpay, plan, timezone } = await razorpayPlan(deps, input);
   const invoices = await razorpay.api.listSubscriptionInvoices(plan.subscriptionRef);
   if (invoices.kind !== "ok") throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
   const owed = oldestOwedInvoice(plan.subscriptionRef, invoices.value);
   if (owed === null) {
+    // Unpaid with no bill to pay: Razorpay has stopped charging the plan (`halted`) and the
+    // month the last bill paid for is over. Only a new card or bank account starts it again.
+    if (plan.status === "past_due" || plan.overdue) {
+      const fetched = await razorpay.api.getSubscription(plan.subscriptionRef);
+      if (fetched.kind === "ok" && (fetched.value.status === "halted" || fetched.value.status === "pending")) {
+        const through = razorpayPaidThrough(fetched.value, invoices.value);
+        const covered = through === null ? "" : `, your last payment covered up to ${dayLabel(through, timezone)}`;
+        throw new OrgsError(
+          409,
+          "update_payment_method",
+          `There's no bill to pay here${covered}, and Razorpay has stopped taking payments for this plan. Press Update payment method so it can take the next one.`,
+        );
+      }
+    }
     throw new OrgsError(409, "nothing_owed", "Nothing is owed right now. A payment just made can take a minute to show here.");
   }
   const link = razorpayPayLinkSchema.safeParse(owed.short_url);

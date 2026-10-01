@@ -16,6 +16,7 @@ import { gymSeatCap } from "../src/modules/orgs/repo.js";
 import { expireLapsedGymTrials } from "../src/modules/orgs/trialSweep.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { orgCheckoutResponseSchema } from "@app/shared";
+import { BILLING_LOCK_WAIT_MS, holdBillingSuiteLock } from "./billingSuiteLock.js";
 import { FakeRazorpay } from "./fakeRazorpay.js";
 
 const url = process.env["DATABASE_URL"];
@@ -94,6 +95,12 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
     await sql`DELETE FROM users WHERE email LIKE 'billing-rzp-%@example.com'`;
   };
 
+  // The other billing suite's worker sweeps every gym: the two take turns (billingSuiteLock.ts).
+  let releaseLock: (() => Promise<void>) | null = null;
+  beforeAll(async () => {
+    releaseLock = await holdBillingSuiteLock(sql);
+  }, BILLING_LOCK_WAIT_MS);
+
   beforeAll(async () => {
     await cleanup();
     for (const [code, cap, price, planId] of [
@@ -118,6 +125,7 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
     await sql`DELETE FROM plans WHERE code IN (${SMALL}, ${BIG})`;
     await app?.close();
     await noRazorpay?.close();
+    await releaseLock?.();
     await sql.end();
   }, HOOK_TIMEOUT_MS);
 
@@ -752,10 +760,11 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
         SELECT status, cancel_at_period_end, cancel_sent_at, current_period_end, ended_at FROM subscriptions
         WHERE owner_type = 'gym' AND owner_id = ${gymId} AND provider = 'razorpay' ORDER BY created_at DESC LIMIT 1`
     )[0];
-  /** A gym on a paid month through Razorpay, its month starting now (Razorpay's clock is set to
-   *  now, so the month's end is ahead of the worker's clock whatever day the suite runs). */
+  /** A gym on a paid month through Razorpay, its month started a day ago (Razorpay's clock is set
+   *  from now, so the month's end is ahead of the worker's clock whatever day the suite runs; a
+   *  day back, so the first payment is never in the same second as a test's Cancel). */
   const paidPlan = async () => {
-    razorpay.clock = Math.floor(Date.now() / 1000);
+    razorpay.clock = Math.floor(Date.now() / 1000) - 24 * 60 * 60;
     const a = await owner();
     const win = opened(await checkout(a.gymId, a.cookies, BIG));
     razorpay.authenticate(win.subscriptionId);
@@ -1179,6 +1188,18 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
       const run = await runAt(paidTo, 10 * 60_000);
       expect(run.reread).toBeGreaterThanOrEqual(1);
       expect(await planRow(a.gymId)).toMatchObject({ status: "past_due" });
+      // Re-check N1: with no bill issued, Pay now says what is true and what to press instead.
+      const pay = await payLink(a.gymId, a.cookies);
+      expect(pay.statusCode).toBe(409);
+      expect(JSON.parse(pay.body)).toMatchObject({
+        error: "update_payment_method",
+        message: expect.stringMatching(
+          /^There's no bill to pay here, your last payment covered up to .+, and Razorpay has stopped taking payments for this plan\. Press Update payment method so it can take the next one\.$/,
+        ) as unknown,
+      });
+      // A plan Razorpay still charges, with nothing owed, is told nothing is owed.
+      const b = await paidPlan();
+      expect(JSON.parse((await payLink(b.gymId, b.cookies)).body)).toMatchObject({ error: "nothing_owed" });
     },
     TEST_TIMEOUT_MS,
   );
@@ -1245,6 +1266,31 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
       ]);
       expect(razorpay.refunds).toContain(paid?.payment_id);
       expect(await planRow(a.gymId)).toMatchObject({ status: "expired" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "re-check N2: Razorpay's own word that a cancelled plan is cancelled logs no error; a payment after the cancel does",
+    async () => {
+      const errors: string[] = [];
+      const recording = { info: () => undefined, warn: () => undefined, error: (obj: object) => void errors.push(String((obj as { event?: string }).event)) };
+      const run = () =>
+        processRazorpayEvents({ sql, redis: createMemoryRedis(), paddle: null, razorpay: { api: razorpay, keyId: KEY_ID }, log: recording, now: () => new Date(Date.now() + 1000) });
+      const a = await paidPlan();
+      razorpay.fail(a.sub);
+      await refresh(a.gymId, a.cookies);
+      expect((await cancelPlan(a.gymId, a.cookies)).statusCode).toBe(200);
+      await signedWebhook(a.sub, "subscription.cancelled");
+      await run();
+      expect(errors).not.toContain("billing.charged_after_cancel");
+      // The unpaid bill paid after all, from its page: that one is news.
+      const owed = razorpay.invoices.get(a.sub)?.find((i) => i.status === "issued");
+      razorpay.clock = Math.floor(Date.now() / 1000) + 60;
+      razorpay.payInvoice(owed?.id ?? "");
+      await signedWebhook(a.sub, "subscription.cancelled");
+      await run();
+      expect(errors.filter((e) => e === "billing.charged_after_cancel")).toHaveLength(1);
     },
     TEST_TIMEOUT_MS,
   );

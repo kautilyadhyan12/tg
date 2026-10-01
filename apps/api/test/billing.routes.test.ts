@@ -16,6 +16,7 @@ import { processPaddleEvents } from "../src/modules/billing/events.js";
 import { gymSeatCap } from "../src/modules/orgs/repo.js";
 import { expireLapsedGymTrials } from "../src/modules/orgs/trialSweep.js";
 import { orgCheckoutResponseSchema } from "@app/shared";
+import { BILLING_LOCK_WAIT_MS, holdBillingSuiteLock } from "./billingSuiteLock.js";
 import { FakePaddle, paddleId } from "./fakePaddle.js";
 import { createMemoryRedis } from "../src/redis.js";
 
@@ -109,6 +110,12 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
     await sql`DELETE FROM users WHERE display_name LIKE 'billing-n1-%'`;
   };
 
+  // The other billing suite's worker sweeps every gym: the two take turns (billingSuiteLock.ts).
+  let releaseLock: (() => Promise<void>) | null = null;
+  beforeAll(async () => {
+    releaseLock = await holdBillingSuiteLock(sql);
+  }, BILLING_LOCK_WAIT_MS);
+
   beforeAll(async () => {
     await cleanup();
     for (const [code, cap, price, priceId] of [
@@ -132,6 +139,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
     await cleanup();
     await sql`DELETE FROM plans WHERE code IN (${SMALL}, ${MID}, ${BIG})`;
     await app?.close();
+    await releaseLock?.();
     await sql.end();
   }, HOOK_TIMEOUT_MS);
 
