@@ -17,6 +17,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { EmailMessage } from "../src/email/resend.js";
 import { processRazorpayEvents } from "../src/modules/billing/events.js";
+import { dueSizeWarnings } from "../src/modules/billing/repo.js";
 import { SIZE_WINDOW_MS } from "../src/modules/billing/service.js";
 import { gymSeatCap } from "../src/modules/orgs/repo.js";
 import { createMemoryRedis } from "../src/redis.js";
@@ -488,19 +489,82 @@ d("a gym paying through Razorpay moves to a smaller size (real Postgres, fake Ra
   );
 
   it(
-    "the worker was down past the day and both plans charged: the old plan's month stands, the smaller plan's charge is refunded and it is cancelled",
+    "round one H2: the worker was down past the day and both plans charged, the members fit — the smaller size is made all the same, and the old plan's renewal is refunded in full",
     async () => {
       const gym = await payingGym(BIG);
       const win = await chooseAndApprove(gym);
       const taken = await monthEnds(gym, gym.oldSub, win.subscriptionId);
       expect(taken).toHaveLength(2);
-      const [oldMonth, newMonth] = taken;
+      const [oldRenewal, newMonth] = taken;
+      expect(razorpay.payments.get(oldRenewal ?? "")?.amount).toBe(20000);
+      expect(razorpay.refunds).toContain(oldRenewal);
+      expect(razorpay.refunds).not.toContain(newMonth);
+      expect(razorpay.subs.get(gym.oldSub)?.status).toBe("cancelled");
+      expect(razorpay.subs.get(win.subscriptionId)?.status).toBe("active");
+      // The month after the day: the smaller price only. The old plan's first month stands.
+      expect(kept(gym.oldSub)).toEqual([20000]);
+      expect(kept(win.subscriptionId)).toEqual([10000]);
+      const now = await rows(gym.gymId);
+      expect(now.map((r) => [r.status, r.provider_ref, r.plan, r.pending])).toEqual([
+        ["expired", gym.oldSub, BIG, null],
+        ["active", win.subscriptionId, SMALL, null],
+      ]);
+      expect(await gymSeatCap(sql, gym.gymId)).toBe(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "round one H2: the worker was down past the day and the members did NOT fit — the gym stays on its size, the smaller plan's charge is refunded, and the card and the email say so",
+    async () => {
+      const gym = await payingGym(BIG);
+      await addMember(gym.gymId);
+      await addMember(gym.gymId);
+      const win = await chooseAndApprove(gym);
+      mails.length = 0;
+      const taken = await monthEnds(gym, gym.oldSub, win.subscriptionId);
+      expect(taken).toHaveLength(2);
+      const [oldRenewal, newMonth] = taken;
       expect(razorpay.refunds).toContain(newMonth);
-      expect(razorpay.refunds).not.toContain(oldMonth);
+      expect(razorpay.refunds).not.toContain(oldRenewal);
       expect(razorpay.subs.get(win.subscriptionId)?.status).toBe("cancelled");
       const now = await rows(gym.gymId);
       expect(now.filter((r) => r.status === "active").map((r) => [r.provider_ref, r.plan, r.pending])).toEqual([[gym.oldSub, BIG, null]]);
-      expect(await gymSeatCap(sql, gym.gymId)).toBe(5000);
+      expect((await myGym(gym.gymId, gym.cookies))?.subscription).toMatchObject({ seatCap: 5000, pendingSize: null, sizeKept: { seatCap: 1, members: 2 } });
+      expect(mails.filter((m) => m.to === gym.email).map((m) => m.text)).toEqual([expect.stringContaining("had 2 members when its smaller size was due")]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "round one H1: the browser's sync and Razorpay's webhook for one approval, at the same moment, both leave it waiting — neither cancels it",
+    async () => {
+      const gym = await payingGym(BIG);
+      const win = opened(await choose(gym.gymId, gym.cookies, SMALL));
+      razorpay.authenticate(win.subscriptionId);
+      await webhook(win.subscriptionId);
+      // The gym's lock held while both read: each sees nothing waiting and the window open.
+      let release: () => void = () => undefined;
+      const held = sql.begin(async (tx) => {
+        await tx`SELECT 1 FROM gyms WHERE id = ${gym.gymId} FOR UPDATE`;
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const both = Promise.all([sync(gym.gymId, win.checkoutId, gym.cookies), runWorker()]);
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      release();
+      await held;
+      const [synced] = await both;
+      expect(synced).toMatchObject({ state: "paid", subscription: { pendingSize: { seatCap: 1 } } });
+      expect(razorpay.subs.get(win.subscriptionId)?.status).toBe("authenticated");
+      expect(razorpay.cancelled).not.toContain(win.subscriptionId);
+      expect((await rows(gym.gymId)).map((r) => [r.plan, r.pending, r.pending_ref])).toEqual([[BIG, SMALL, win.subscriptionId]]);
+      // Its day: made, and the month is charged once, at the smaller price.
+      await decideRun(gym);
+      const taken = await monthEnds(gym, win.subscriptionId, gym.oldSub);
+      expect(taken.map((id) => razorpay.payments.get(id)?.amount)).toEqual([10000]);
     },
     TEST_TIMEOUT_MS,
   );
@@ -555,6 +619,11 @@ d("a gym paying through Razorpay moves to a smaller size (real Postgres, fake Ra
       await addMember(gym.gymId);
       await chooseAndApprove(gym, SMALL);
       mails.length = 0;
+      // Each provider's worker warns its own gyms only.
+      const due = async (provider: "paddle" | "razorpay") =>
+        (await dueSizeWarnings(sql, { provider, now: new Date(gym.oldEnd.getTime() - 2 * DAY_S * 1000), within: 3 * DAY_S * 1000, lead: 3 * HOUR_MS, limit: 500 })).map((d) => d.gymId);
+      expect(await due("razorpay")).toContain(gym.gymId);
+      expect(await due("paddle")).not.toContain(gym.gymId);
       await runWorker(gym.oldEnd.getTime() - 4 * DAY_S * 1000);
       expect(mails.filter((m) => m.to === gym.email)).toEqual([]);
       await runWorker(gym.oldEnd.getTime() - 2 * DAY_S * 1000);

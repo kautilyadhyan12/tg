@@ -318,7 +318,7 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
                 )}
                 {razorpay && picked.row.kind === 'smaller' ? (
                   <p className="text-sm" style={muted}>
-                    Razorpay verifies your payment method with a refundable ₹5 charge.
+                    Razorpay checks your payment method with a small charge and refunds it.
                   </p>
                 ) : null}
                 {picked.row.warning !== null ? (

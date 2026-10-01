@@ -425,9 +425,12 @@ export async function applySnapshot(
     snapshot: Snapshot;
     checkoutId: string | null;
     now: Date;
-    /** A bigger size's checkout (1d-iii-a): the gym's plan it takes the place of, and the end of
-     *  that plan's paid month as it was when the window was opened. */
-    replaces?: { rowId: string; periodEnd: Date } | null;
+    /** A bigger (1d-iii-a) or smaller (1d-iii-b) size's checkout: the gym's plan it takes the place
+     *  of, and the end of that plan's paid month as it was when the window was opened. A smaller
+     *  size (`afterRenewal`) also takes the place of that plan once it has renewed past that end
+     *  (the worker was down past the day), or failed to: the plan is then cut back to that end,
+     *  so the month it charged after it is refunded (`razorpayCancelOutcome`). */
+    replaces?: { rowId: string; periodEnd: Date; afterRenewal?: boolean } | null;
   },
 ): Promise<ApplyOutcome> {
   return await sql.begin(async (tx) => {
@@ -481,9 +484,12 @@ export async function applySnapshot(
               o.id === replaces.rowId &&
               o.provider === "razorpay" &&
               o.provider_ref !== null &&
-              o.status === "active" &&
               !o.cancel_at_period_end &&
-              o.current_period_end?.getTime() === replaces.periodEnd.getTime(),
+              (replaces.afterRenewal === true
+                ? (o.status === "active" || o.status === "past_due") &&
+                  o.current_period_end !== null &&
+                  o.current_period_end.getTime() >= replaces.periodEnd.getTime()
+                : o.status === "active" && o.current_period_end?.getTime() === replaces.periodEnd.getTime()),
           ) ?? null);
     // Razorpay's record never shows a cancel (1d-ii): whether a plan is set to end is our own
     // row's, read here under the lock, so an answer fetched before Cancel or Keep my plan was
@@ -545,12 +551,14 @@ export async function applySnapshot(
       if (replaceable !== null && replaceable.provider_ref !== null && status !== "expired") {
         // Ended first (a gym holds one live plan), set to end so any later payment of it is
         // refunded (`razorpayCancelOutcome`); `cancel_sent_at` waits for Razorpay to have ended it.
+        const until = replaces?.periodEnd ?? null;
         const ended = await tx`
           UPDATE subscriptions
           SET status = 'expired', ended_at = ${input.now}, cancel_at_period_end = true, cancel_reason = ${REPLACED},
+              current_period_end = LEAST(current_period_end, ${until}::timestamptz), past_due_since = NULL,
               pending_plan_id = NULL, pending_from = NULL, pending_requested_plan_id = NULL,
               pending_held_at = NULL, pending_warned_at = NULL, pending_subscription_ref = NULL
-          WHERE id = ${replaceable.id} AND owner_id = ${input.gymId} AND status = 'active'
+          WHERE id = ${replaceable.id} AND owner_id = ${input.gymId} AND status IN ('active','past_due')
           RETURNING id`;
         if (ended.length !== 1) throw new Error("the replaced plan changed under the gym's lock");
         replaced = { rowId: replaceable.id, subscriptionRef: replaceable.provider_ref };
@@ -1342,7 +1350,7 @@ export interface SizeNoticeFacts {
   /** When the smaller size was due (a warning), or null (a size kept). */
   pendingFrom: Date | null;
   /** Through Razorpay a gym with too many members stays on its size (Kd, RULINGS 2026-10-01). */
-  provider: string;
+  provider: PayProvider;
 }
 
 export async function sizeNoticeFacts(
@@ -1377,7 +1385,8 @@ export async function sizeNoticeFacts(
     END
     WHERE s.id = ${input.subscriptionRowId} AND s.owner_type = 'gym' AND s.owner_id = ${input.gymId}`;
   const row = rows[0];
-  if (row === undefined || row.target_seat_cap === null || row.target_price_minor === null) return null;
+  const provider = PROVIDERS.find((p) => p === row?.provider);
+  if (row === undefined || row.target_seat_cap === null || row.target_price_minor === null || provider === undefined) return null;
   return {
     gymName: row.name,
     gymSlug: row.slug,
@@ -1390,7 +1399,7 @@ export async function sizeNoticeFacts(
     targetSeatCap: row.target_seat_cap,
     targetPriceMinor: row.target_price_minor,
     pendingFrom: row.pending_from,
-    provider: row.provider,
+    provider,
   };
 }
 
@@ -1901,23 +1910,42 @@ export async function razorpayWaitingSize(sql: SqlOrTx, gymId: string): Promise<
   return row === undefined ? null : { rowId: row.id, subscriptionRef: row.pending_subscription_ref, decided: row.pending_held_at !== null };
 }
 
+export type ApproveSmallerOutcome =
+  /** Waiting on the plan from now. */
+  | "approved"
+  /** Already waiting: approved by another answer about the same window (the browser's and
+   *  Razorpay's arrive together). */
+  | "already"
+  /** Not approvable: the window was closed by a newer press, or the plan changed. */
+  | "refused";
+
 /** A smaller size's window approved at Razorpay: it waits on the plan it replaces from now, in
  *  place of any smaller size approved before it (whose subscription the worker then ends). Under
  *  the gym's lock; only for the window still open, and only while that plan is as it was when
  *  the window opened — paying, not set to end, the same month, no size already decided. */
-export async function approveSmallerSize(sql: Sql, input: { gymId: string; checkoutId: string; subscriptionRef: string }): Promise<boolean> {
+export async function approveSmallerSize(
+  sql: Sql,
+  input: { gymId: string; checkoutId: string; subscriptionRef: string },
+): Promise<ApproveSmallerOutcome> {
   return await sql.begin(async (tx) => {
     await lockOrgRow(tx, input.gymId); // subscription-writer lock
     const checkouts = await tx<
-      { plan_id: string; created_by: string | null; replaces_subscription_id: string | null; starts_at: Date | null; code: string }[]
+      { state: string; plan_id: string; created_by: string | null; replaces_subscription_id: string | null; starts_at: Date | null; code: string }[]
     >`
-      SELECT c.plan_id, c.created_by, c.replaces_subscription_id, c.starts_at, p.code
+      SELECT c.state, c.plan_id, c.created_by, c.replaces_subscription_id, c.starts_at, p.code
       FROM billing_checkouts c JOIN plans p ON p.id = c.plan_id
       WHERE c.id = ${input.checkoutId} AND c.gym_id = ${input.gymId} AND c.provider = 'razorpay'
-        AND c.provider_ref = ${input.subscriptionRef} AND c.state = 'open' AND c.size_direction = 'smaller'
+        AND c.provider_ref = ${input.subscriptionRef} AND c.size_direction = 'smaller'
       FOR UPDATE OF c`;
     const checkout = checkouts[0];
-    if (checkout === undefined || checkout.replaces_subscription_id === null || checkout.starts_at === null) return false;
+    if (checkout?.state === "approved") {
+      const waiting = await tx`
+        SELECT 1 FROM subscriptions
+        WHERE owner_type = 'gym' AND owner_id = ${input.gymId} AND pending_subscription_ref = ${input.subscriptionRef}
+          AND status IN ('trialing','active','past_due')`;
+      return waiting.length > 0 ? "already" : "refused";
+    }
+    if (checkout === undefined || checkout.state !== "open" || checkout.replaces_subscription_id === null || checkout.starts_at === null) return "refused";
     const moved = await tx<{ id: string }[]>`
       UPDATE subscriptions
       SET pending_plan_id = ${checkout.plan_id}, pending_from = ${checkout.starts_at}, pending_requested_plan_id = NULL,
@@ -1926,7 +1954,7 @@ export async function approveSmallerSize(sql: Sql, input: { gymId: string; check
         AND provider = 'razorpay' AND status = 'active' AND cancel_at_period_end = false
         AND current_period_end = ${checkout.starts_at} AND pending_held_at IS NULL
       RETURNING id`;
-    if (moved.length !== 1) return false;
+    if (moved.length !== 1) return "refused";
     await tx`UPDATE billing_checkouts SET state = 'approved', updated_at = now() WHERE id = ${input.checkoutId} AND gym_id = ${input.gymId}`;
     await insertAudit(tx, {
       actorUserId: checkout.created_by,
@@ -1936,7 +1964,7 @@ export async function approveSmallerSize(sql: Sql, input: { gymId: string; check
       targetId: checkout.replaces_subscription_id,
       meta: { provider: "razorpay", plan: checkout.code, from: checkout.starts_at.toISOString() },
     });
-    return true;
+    return "approved";
   });
 }
 
@@ -1958,7 +1986,7 @@ export async function dueRazorpaySmallerSizes(sql: SqlOrTx, input: { until: Date
   const rows = await sql<{ id: string; owner_id: string }[]>`
     SELECT id, owner_id FROM subscriptions
     WHERE pending_plan_id IS NOT NULL AND pending_subscription_ref IS NOT NULL AND pending_from <= ${input.until}
-      AND owner_type = 'gym' AND provider = 'razorpay' AND status = 'active' AND cancel_at_period_end = false
+      AND owner_type = 'gym' AND provider = 'razorpay' AND status IN ('active','past_due') AND cancel_at_period_end = false
     ORDER BY pending_from, id
     LIMIT ${input.limit}`;
   return rows.map((r) => ({ id: r.id, gymId: r.owner_id }));
@@ -1969,13 +1997,13 @@ export type RazorpaySizeClaim =
   | { kind: "fit"; subscriptionRef: string }
   /** More members than it holds: it is dropped and the gym stays on its size (Kd, RULINGS
    *  2026-10-01). The count is kept for the Plan card and the email. */
-  | { kind: "kept"; members: number; subscriptionRef: string }
-  /** The plan renewed at its own size before it was decided (the worker was down): dropped. */
-  | { kind: "renewed"; subscriptionRef: string };
+  | { kind: "kept"; members: number; subscriptionRef: string };
 
 /** Decide one plan's smaller size through Razorpay, under the gym's lock: the members counted
  *  once. Asked again after a decision that fit, it answers the same, so the worker finishes a
- *  replacement cut off mid-way. Null when nothing waits. */
+ *  replacement cut off mid-way. A plan that renewed at its own size first (the worker was down
+ *  past the day) is decided the same way: the renewal is refunded when the smaller size takes
+ *  its place (`applySnapshot`). Null when nothing waits. */
 export async function claimRazorpaySmallerSize(sql: Sql, input: { gymId: string; rowId: string; now: Date }): Promise<RazorpaySizeClaim | null> {
   return await sql.begin(async (tx) => {
     await lockOrgRow(tx, input.gymId); // subscription-writer lock
@@ -1986,16 +2014,15 @@ export async function claimRazorpaySmallerSize(sql: Sql, input: { gymId: string;
         pending_from: Date;
         pending_held_at: Date | null;
         pending_subscription_ref: string;
-        current_period_end: Date | null;
-        seat_cap: number | null;
+          seat_cap: number | null;
         code: string;
       }[]
     >`
       SELECT s.plan_id, s.pending_plan_id, s.pending_from, s.pending_held_at, s.pending_subscription_ref,
-             s.current_period_end, p.seat_cap, p.code
+             p.seat_cap, p.code
       FROM subscriptions s JOIN plans p ON p.id = s.pending_plan_id
       WHERE s.id = ${input.rowId} AND s.owner_type = 'gym' AND s.owner_id = ${input.gymId}
-        AND s.provider = 'razorpay' AND s.status = 'active' AND s.cancel_at_period_end = false
+        AND s.provider = 'razorpay' AND s.status IN ('active','past_due') AND s.cancel_at_period_end = false
         AND s.pending_subscription_ref IS NOT NULL
       FOR UPDATE OF s`;
     const row = rows[0];
@@ -2016,11 +2043,6 @@ export async function claimRazorpaySmallerSize(sql: Sql, input: { gymId: string;
         meta: { plan: row.code, ...meta },
       });
     };
-    // Renewed first, decided or not: the plan's next month is paid, so the size waits no longer.
-    if (row.current_period_end !== null && row.current_period_end.getTime() > row.pending_from.getTime()) {
-      await drop({ reason: "renewed" });
-      return { kind: "renewed", subscriptionRef: ref };
-    }
     if (row.pending_held_at !== null) return { kind: "fit", subscriptionRef: ref };
     const members = await seatsUsed(tx, input.gymId);
     if (row.seat_cap !== null && members > row.seat_cap) {

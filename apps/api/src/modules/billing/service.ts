@@ -1273,13 +1273,16 @@ async function applyRazorpay(deps: BillingDeps, razorpay: RazorpaySettings, sub:
       }
       // Waiting for its day; once decided it takes the plan's place below.
       if (!waiting.decided) return "unchanged";
-    } else if (checkout.state === "open" && sub.status === "authenticated") {
-      if (await repo.approveSmallerSize(deps.sql, { gymId, checkoutId: checkout.id, subscriptionRef: sub.id })) {
+    } else if ((checkout.state === "open" || checkout.state === "approved") && sub.status === "authenticated") {
+      const approved = await repo.approveSmallerSize(deps.sql, { gymId, checkoutId: checkout.id, subscriptionRef: sub.id });
+      if (approved === "approved") {
         deps.log.info({ event: "billing.size_scheduled", provider: "razorpay", gymId }, "a gym chose a smaller size from its next payment");
         // One chosen before it no longer waits: ended at Razorpay now.
         await endStrandedSizes(deps, razorpay, gymId);
         return "applied";
       }
+      // The browser's answer and Razorpay's event about one approval, together: the other made it.
+      if (approved === "already") return "unchanged";
       // Its plan changed while the window was open (set to end, renewed, replaced): not the gym's.
       await repo.closeCheckout(deps.sql, { checkoutId: checkout.id, gymId });
       return await setAsideRazorpay(deps, razorpay, sub, gymId, "duplicate");
@@ -1373,7 +1376,10 @@ async function applyRazorpay(deps: BillingDeps, razorpay: RazorpaySettings, sub:
     snapshot,
     checkoutId,
     now: deps.now(),
-    replaces: sizeCheckout === null ? null : { rowId: sizeCheckout.replacesRowId, periodEnd: sizeCheckout.startsAt },
+    replaces:
+      sizeCheckout === null
+        ? null
+        : { rowId: sizeCheckout.replacesRowId, periodEnd: sizeCheckout.startsAt, afterRenewal: checkout?.direction === "smaller" },
   });
   if (outcome.replaced !== null) {
     deps.log.info({ event: "billing.size_changed", provider: "razorpay", gymId }, "a gym moved to its new size");
@@ -2188,18 +2194,15 @@ export async function decideRazorpaySizes(deps: BillingDeps): Promise<RazorpaySi
       await emailSizeKept(deps, row.gymId, row.id, claim.members, false);
       continue;
     }
-    if (claim.kind === "renewed") {
-      deps.log.error({ event: "billing.size_missed", provider: "razorpay", gymId: row.gymId }, "a plan renewed before its smaller size was decided; the size was dropped");
-      continue;
-    }
     await applyRazorpaySubscription(deps, claim.subscriptionRef);
     const placed = await repo.findProviderSubscription(deps.sql, "razorpay", claim.subscriptionRef);
     if (placed !== null && placed.gymId === row.gymId && LIVE_STATUSES.has(placed.status)) {
       run.made += 1;
     } else if (placed !== null) {
       // Written but not as the gym's plan (set aside and refunded): the gym keeps its size.
+      deps.log.error({ event: "billing.size_not_placed", provider: "razorpay", gymId: row.gymId }, "a decided smaller size was set aside; the gym keeps its size");
       await repo.dropRazorpayWaitingSize(deps.sql, { gymId: row.gymId, subscriptionRef: claim.subscriptionRef });
-    } else {
+    } else if ((await repo.razorpayWaitingSize(deps.sql, row.gymId))?.subscriptionRef === claim.subscriptionRef) {
       run.waiting += 1;
     }
   }
