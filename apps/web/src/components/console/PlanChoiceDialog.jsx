@@ -53,9 +53,7 @@ function doneText(changed, words, firstPaymentOn) {
   const pending = changed.pendingSize;
   if (pending != null) {
     const on = trialEndDateLabel(pending.from);
-    const paidCap = Number.isFinite(changed.planSeatCap) ? changed.planSeatCap : changed.seatCap;
-    const keep = Number.isFinite(paidCap) ? ` Until then you keep all ${paidCap.toLocaleString()}.` : '';
-    return `Done. You'll move to ${pending.seatCap.toLocaleString()} ${words.people} (${pending.priceLabel} a month)${on === null ? ' at your next payment' : ` on ${on}`}.${keep}`;
+    return `Done. Moving to ${pending.seatCap.toLocaleString()} ${words.people} (${pending.priceLabel} a month)${on === null ? ' at your next payment' : ` on ${on}`}.`;
   }
   if (changed.status === 'trialing') {
     return firstPaymentOn === null
@@ -213,11 +211,9 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
           <>
             <p className="text-sm mt-3" style={muted}>
               {mode === 'size'
-                ? razorpay
-                  ? `A bigger size starts once you pay in Razorpay's window: the difference for the rest of this month now, then the new price${firstPaymentOn === null ? ' from your next payment' : ` from ${firstPaymentOn}`}. A smaller one starts${firstPaymentOn === null ? ' with your next payment' : ` on ${firstPaymentOn}`}: you approve it in Razorpay's window now, and keep your whole size until then.`
-                  : inTrial
+                ? inTrial && !razorpay
                   ? `Your trial allows up to ${sub?.seatCap} ${words.people} until your first payment${firstPaymentOn === null ? '' : ` on ${firstPaymentOn}`}; the size you choose starts then. Nothing is charged now.`
-                  : `A bigger size starts at once and you pay the difference for the rest of this month. A smaller one starts with your next payment${firstPaymentOn === null ? '' : ` on ${firstPaymentOn}`}; until then you keep your whole size.`
+                  : `Bigger sizes start today: you pay the difference for this month. Smaller sizes start${firstPaymentOn === null ? ' with your next payment' : ` on ${firstPaymentOn}`}.`
                 : `You pay today and get the size you choose at once. Your free trial ends then.`}
             </p>
 
@@ -322,7 +318,7 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
                 )}
                 {razorpay && picked.row.kind === 'smaller' ? (
                   <p className="text-sm" style={muted}>
-                    Razorpay checks your card or bank account with ₹5 and gives it back.
+                    Razorpay verifies your payment method with a refundable ₹5 charge.
                   </p>
                 ) : null}
                 {picked.row.warning !== null ? (

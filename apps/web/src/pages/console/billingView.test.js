@@ -911,19 +911,19 @@ describe('a smaller size and the Plan card (1c-iii)', () => {
     const by = new Date('2026-10-25T03:00:00.000Z').toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
     expect(pendingFit(gym(waiting, 1100))).toEqual({
       tooMany: true,
-      text: `You have ${(1100).toLocaleString()} members. Remove 600 by ${by} to move to 500. Otherwise you'll stay on ${(1000).toLocaleString()} members at $199 a month.`,
+      text: `You have ${(1100).toLocaleString()} members. Remove 600 by ${by} to move to 500. If not, you stay on ${(1000).toLocaleString()} members ($199 a month).`,
     });
     // A smaller size that fits them: the server's fallback is named.
     const withFallback = { ...waiting, pendingSize: { ...waiting.pendingSize, ifTooMany: { planCode: 'b2', seatCap: 800, priceLabel: '$169' } } };
-    expect(pendingFit(gym(withFallback, 620))?.text).toBe(`You have 620 members. Remove 120 by ${by} to move to 500. Otherwise you'll move to 800 members at $169 a month.`);
-    expect(pendingFit(gym(waiting, 500))).toEqual({ tooMany: false, text: `You're ready: you'll move to 500 members on ${trialEndDateLabel(END)}.` });
+    expect(pendingFit(gym(withFallback, 620))?.text).toBe(`You have 620 members. Remove 120 by ${by} to move to 500. If not, you move to 800 members ($169 a month).`);
+    expect(pendingFit(gym(waiting, 500))).toEqual({ tooMany: false, text: 'Your members fit.' });
     expect(pendingFit(gym(waiting, undefined))).toBeNull();
     expect(pendingFit(gym(paying, 620))).toBeNull();
   });
 
   it('says a size that was not made, and why', () => {
     expect(sizeKeptText({ ...paying, sizeKept: { seatCap: 500, members: 620 } }, 'gym')).toBe(
-      `Your size stayed at ${(1000).toLocaleString()} members: you had 620 when it was due to change, more than 500, so you pay $199 a month. Change size again whenever you're ready.`,
+      `Size not changed: you had 620, more than 500. You stay on ${(1000).toLocaleString()} members ($199 a month).`,
     );
     expect(sizeKeptText(paying, 'gym')).toBeNull();
   });
@@ -936,9 +936,9 @@ describe('a smaller size and the Plan card (1c-iii)', () => {
       ['b3', 'current', 'Your size', true],
     ]);
     // 620 do not fit 200; the smallest size under 1,000 that holds them is none here (500 < 620).
-    expect(rows[0]?.warning).toMatch(/^You have 620 members\. Remove 420 by .* to move to 200\. Otherwise you'll stay on /);
+    expect(rows[0]?.warning).toMatch(/^You have 620 members\. Remove 420 by .* to move to 200\. If not, you stay on /);
     const fallbackRows = sizeRows(PLANS, gym(waiting, 300));
-    expect(fallbackRows[0]?.warning).toMatch(/^You have 300 members\. Remove 100 by .* to move to 200\. Otherwise you'll move to 500 members at \$129 a month\.$/);
+    expect(fallbackRows[0]?.warning).toMatch(/^You have 300 members\. Remove 100 by .* to move to 200\. If not, you move to 500 members \(\$129 a month\)\.$/);
     const fits = sizeRows(PLANS, gym({ ...paying, seatCap: 500 }, 100));
     expect(fits.map((r) => [r.kind, r.note, r.warning])).toEqual([
       ['smaller', `From ${trialEndDateLabel(END)}`, null],
@@ -957,10 +957,10 @@ describe('a smaller size and the Plan card (1c-iii)', () => {
     // 300 do not fit 200. Through Paddle they would move to 500; through Razorpay, which charges
     // only a size the gym approved, it stays on its 1,000 (Kd, RULINGS 2026-10-01).
     const over = sizeRows(PLANS, gym({ ...waiting, paidThrough: 'razorpay', pendingSize: null }, 300));
-    expect(over[0]?.warning).toMatch(/^You have 300 members\. Remove 100 by .* to move to 200\. Otherwise you'll stay on 1,000 members at \$199 a month\.$/);
+    expect(over[0]?.warning).toMatch(/^You have 300 members\. Remove 100 by .* to move to 200\. If not, you stay on 1,000 members \(\$199 a month\)\.$/);
     expect(over[0]?.disabled).toBe(false);
     const fallback = { ...waiting, paidThrough: 'razorpay', pendingSize: { ...waiting.pendingSize, seatCap: 200, priceLabel: '$79', ifTooMany: { planCode: 'b2', seatCap: 500, priceLabel: '$129' } } };
-    expect(pendingFit(gym(fallback, 300))?.text).toMatch(/^You have 300 members\. Remove 100 by .* to move to 200\. Otherwise you'll stay on 1,000 members at \$199 a month\.$/);
+    expect(pendingFit(gym(fallback, 300))?.text).toMatch(/^You have 300 members\. Remove 100 by .* to move to 200\. If not, you stay on 1,000 members \(\$199 a month\)\.$/);
   });
 
   it('in a paid trial a smaller size is made at once, so one the members do not fit cannot be chosen', () => {
@@ -1063,7 +1063,7 @@ describe('re-check N2 (1c-iii): no remove-by time once it has passed', () => {
     const org = { orgType: 'gym', seatsUsed: 52, subscription: { status: 'active', seatCap: 5000, planSeatCap: 5000, priceLabel: '$20', pendingSize: pending } };
     expect(pendingFit(org, Date.parse('2026-10-31T20:00:00.000Z'))?.text).toMatch(/^You have 52 members\. Remove 2 by .+ to move to 50\. /);
     expect(pendingFit(org, Date.parse('2026-10-31T21:05:00.000Z'))?.text).toBe(
-      `You have 52 members. Remove 2 to move to 50. Otherwise you'll stay on ${(5000).toLocaleString()} members at $20 a month.`,
+      `You have 52 members. Remove 2 to move to 50. If not, you stay on ${(5000).toLocaleString()} members ($20 a month).`,
     );
   });
 });
