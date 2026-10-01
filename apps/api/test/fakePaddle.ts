@@ -3,7 +3,7 @@
 // window, a trialing one) the way a completed checkout does, the customer portal's
 // sessions, and a subscription's price previewed and changed (1c-ii).
 import { randomBytes } from "node:crypto";
-import type { PaddlePortalSession, PaddlePrice, PaddleSubscription, PaddleSubscriptionPreview, PaddleTransaction } from "@app/shared";
+import type { PaddleCustomer, PaddlePortalSession, PaddlePrice, PaddleSubscription, PaddleSubscriptionPreview, PaddleTransaction } from "@app/shared";
 import type { PaddleApi, PaddleResult, ProrationMode } from "../src/modules/billing/paddle.js";
 
 /** A trial window as our server made one before 2f-i (1c-ii): a price of its own, the plan's
@@ -29,6 +29,11 @@ export class FakePaddle implements PaddleApi {
   refunds: string[] = [];
   /** Paddle keeps one customer per email and reuses it when a window is filled in with it. */
   customersByEmail = new Map<string, string>();
+  /** Each customer's email; null: the window was paid with the email it was filled in with,
+   *  its gym's owner's, read through `payerEmailFor`. */
+  customers = new Map<string, { email: string | null; gymId: string | null }>();
+  /** The owner's email Paddle's window is filled in with for a gym (1e). */
+  payerEmailFor: ((gymId: string) => Promise<string | null>) | null = null;
   adjustments = new Map<string, { action: string; status: "pending_approval" | "approved" | "rejected" | "reversed" }[]>();
   /** Every portal session asked for: the customer and the subscriptions named. */
   portalCalls: { customerId: string; subscriptionIds: string[] }[] = [];
@@ -136,10 +141,22 @@ export class FakePaddle implements PaddleApi {
     if (this.listRefused) return Promise.resolve<PaddleResult<PaddleTransaction[]>>({ kind: "refused", status: 403, code: "forbidden" });
     return Promise.resolve(this.ok([...this.txns.values()].filter((t) => t.subscription_id === subscriptionId)));
   }
+  /** Answer this many cancels with a 503, cancelling nothing. */
+  cancelFailures = 0;
   cancelSubscriptionNow(id: string) {
+    if (this.cancelFailures > 0) {
+      this.cancelFailures -= 1;
+      return Promise.resolve<PaddleResult<null>>({ kind: "unavailable", status: 503 });
+    }
     this.cancelledSubs.push(id);
     this.update(id, { status: "canceled", canceled_at: this.tick() });
     return Promise.resolve<PaddleResult<null>>(this.ok(null));
+  }
+  async getCustomer(id: string): Promise<PaddleResult<PaddleCustomer>> {
+    const customer = this.customers.get(id);
+    if (customer === undefined) return { kind: "not_found" };
+    const email = customer.email ?? (customer.gymId === null || this.payerEmailFor === null ? null : await this.payerEmailFor(customer.gymId));
+    return this.ok({ id, email: email ?? `someone-${id}@example.org` });
   }
   refundTransaction(id: string) {
     if (this.refundFailures > 0) {
@@ -292,6 +309,9 @@ export class FakePaddle implements PaddleApi {
     if (email !== null) {
       customerId = this.customersByEmail.get(email.toLowerCase()) ?? customerId;
       this.customersByEmail.set(email.toLowerCase(), customerId);
+      this.customers.set(customerId, { email, gymId: null });
+    } else {
+      this.customers.set(customerId, { email: null, gymId: this.customData.get(txnId)?.["gym_id"] ?? null });
     }
     this.txns.set(txnId, { ...txn, status: complete ? "completed" : "paid", subscription_id: subId, origin });
     const trialDays = txn.items[0]?.price.trial_period?.frequency ?? null;

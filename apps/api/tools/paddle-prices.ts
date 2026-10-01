@@ -5,7 +5,8 @@
 //
 //   $env:DATABASE_URL='…'; $env:PADDLE_API_KEY='…'; corepack pnpm --filter api exec tsx tools/paddle-prices.ts
 //
-// PADDLE_ENV (sandbox by default) must match the key. Keys are never printed.
+// PADDLE_ENV (sandbox by default) must match the key, which needs customer.read (checked last).
+// Keys are never printed.
 import postgres from "postgres";
 import { z } from "zod";
 import { createPaddleApi } from "../src/modules/billing/paddle.js";
@@ -106,5 +107,15 @@ try {
 }
 if (problems > 0) {
   console.error(`${String(problems)} plan(s) need attention.`);
+  process.exitCode = 1;
+}
+// A new plan is placed only once Paddle says who paid (`paidByOwner`): a key that may not read
+// customers would leave every gym that pays with no plan. A made-up id answers "not found" when
+// the key may read customers, and is refused when it may not.
+const canRead = await paddle.getCustomer(`ctm_${"0".repeat(26)}`);
+if (canRead.kind === "not_found" || canRead.kind === "ok") {
+  console.log("The key may read customers (customer.read).");
+} else {
+  console.error(`The key may not read customers (${canRead.kind}): give it customer.read in Paddle, or no payment will be placed on a gym.`);
   process.exitCode = 1;
 }

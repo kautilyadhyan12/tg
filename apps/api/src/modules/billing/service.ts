@@ -120,6 +120,11 @@ export async function startOrgCheckout(
   }
   const paddle = deps.paddle;
   if (paddle === null) throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
+  // A plan paid as anybody but the owner is refunded (`paidByOwner`): one whose email Paddle's
+  // window cannot be filled in with could only be paid that way.
+  if (windowEmail((await repo.gymPayer(deps.sql, input.gymId)).email) === null) {
+    throw new OrgsError(409, "payer_email_unusable", "Paddle can't use the email address on the owner's account, so payments can't be taken here yet.");
+  }
 
   // A window this gym opened before may have been paid and not yet reached the gym
   // (the tab closed before it was confirmed): put that payment on the gym first, so the
@@ -235,6 +240,14 @@ function beginRefusal(
 async function closeSuperseded(deps: BillingDeps, superseded: readonly { provider: repo.PayProvider; ref: string }[]): Promise<void> {
   for (const old of superseded) {
     const razorpay = deps.razorpay ?? null;
+    if (old.provider === "razorpay" && razorpay !== null) {
+      // Paid in the moments before this press: never the gym's plan now (`applySnapshot`), so it
+      // is set aside, cancelled and refunded at once rather than when its webhook comes.
+      const askedAt = deps.now();
+      const fetched = await razorpay.api.getSubscription(old.ref);
+      // Anything else (a mandate given, its payment not landed yet) is cancelled below as before.
+      if (fetched.kind === "ok" && fetched.value.status !== "created" && (await applyRazorpay(deps, razorpay, fetched.value, askedAt)) === "set_aside") continue;
+    }
     const cancelled =
       old.provider === "paddle"
         ? deps.paddle === null
@@ -405,8 +418,11 @@ export async function syncOrgCheckout(
     const txn = await paddle.api.getTransaction(checkout.providerRef);
     if (txn.kind === "ok" && txn.value.subscription_id !== null && (txn.value.status === "paid" || txn.value.status === "completed")) {
       subscriptionId = txn.value.subscription_id;
-      await applyPaddleSubscription(deps, subscriptionId);
+      const applied = await applyPaddleSubscription(deps, subscriptionId);
       await bustEntitlements(deps.redis, input.userId);
+      // Paid but not put on the gym (a newer press closed its window, the gym already had a
+      // plan, or it was paid as somebody other than the owner): refunded.
+      if (applied === "set_aside") return { state: "refunded" };
     }
   }
   // Paid means a plan paid through Paddle is on the gym, a paid trial included; the gym's
@@ -464,6 +480,11 @@ async function syncRazorpayCheckout(
     if (placed === null || placed.gymId !== input.gymId) return { state: "waiting" };
     if (live !== null && LIVE_STATUSES.has(placed.status)) return { state: "paid", subscription: toOrgSubscription(live) };
     return { state: "waiting" };
+  }
+  // Paid but not put on the gym (a newer press closed its window, or the gym already had a plan): refunded.
+  const setAsideRow = checkout.providerRef === null ? null : await repo.findProviderSubscription(deps.sql, "razorpay", checkout.providerRef);
+  if (applied === "set_aside" || (setAsideRow !== null && setAsideRow.gymId === input.gymId && setAsideRow.cancelReason === "duplicate")) {
+    return { state: "refunded" };
   }
   if (live !== null && live.provider === "razorpay") {
     return { state: "paid", subscription: toOrgSubscription(live) };
@@ -1068,10 +1089,13 @@ export async function applyPaddleSubscription(deps: BillingDeps, subscriptionId:
   const placed = await repo.findPaddleSubscription(deps.sql, sub.id);
   let gymId = placed?.gymId ?? null;
   let checkoutId: string | null = null;
+  let discounted = sub.discount !== null && sub.discount !== undefined;
   if (gymId === null) {
     // Without the list the gym cannot be known, and "none of ours" would cancel a real payment.
     const listed = await paddle.api.listSubscriptionTransactions(sub.id);
     if (listed.kind !== "ok") return "retry";
+    // A code for the first payment alone leaves the subscription's own discount empty.
+    discounted ||= listed.value.some((t) => (t.details?.totals?.discount ?? "0") !== "0");
     const ours = await repo.checkoutsForTransactions(deps.sql, listed.value.filter((t) => t.origin === "api").map((t) => t.id));
     const first = ours[0];
     if (first !== undefined) {
@@ -1088,6 +1112,21 @@ export async function applyPaddleSubscription(deps: BillingDeps, subscriptionId:
   if (plan === null) {
     deps.log.error({ event: "billing.unknown_price" }, "a Paddle subscription is not at one of our plans' prices");
     return "unknown";
+  }
+  if (placed === null) {
+    // Paid as somebody other than the gym's owner: Paddle files it under that person's account,
+    // whose page would then show this gym's plan, and lock its own gym out of it.
+    const payer = await paidByOwner(deps, paddle, sub, gymId);
+    if (payer === "retry") return "retry";
+    if (payer === "someone_else") {
+      deps.log.error({ event: "billing.wrong_payer", gymId }, "a Paddle subscription was paid as somebody other than the gym's owner: cancelling and refunding it");
+      return await setAside(deps, paddle, sub, gymId, "duplicate");
+    }
+    // Our server gives no discount, so one was typed into Paddle's window: never the gym's plan.
+    if (discounted) {
+      deps.log.error({ event: "billing.discounted_subscription", gymId }, "a Paddle subscription carries a discount we never gave: cancelling and refunding it");
+      return await setAside(deps, paddle, sub, gymId, "duplicate");
+    }
   }
 
   const snapshot = toSnapshot(sub, plan.id);
@@ -1115,6 +1154,20 @@ export async function applyPaddleSubscription(deps: BillingDeps, subscriptionId:
   deps.log.info({ event: "billing.applied", gymId, decision: outcome.decision.kind }, "a gym's paid plan changed");
   if (align && sub.status === "trialing") return await alignTrial(deps, paddle, sub, gymId);
   return "applied";
+}
+
+/** Was this subscription paid as the gym's owner? Paddle's window is filled in with the owner's
+ *  email (1e) and keeps one customer per email, but the browser can open it with any email. */
+async function paidByOwner(deps: BillingDeps, paddle: PaddleSettings, sub: PaddleSubscription, gymId: string): Promise<"owner" | "someone_else" | "retry"> {
+  if (sub.customer_id === null) return "someone_else";
+  const customer = await paddle.api.getCustomer(sub.customer_id);
+  if (customer.kind !== "ok") {
+    // A 403 is an API key without `customer.read`: the payment waits rather than being refunded.
+    if (customer.kind !== "unavailable") deps.log.error({ event: "billing.customer_not_read", gymId, result: customer.kind }, "Paddle did not answer who paid; asking again");
+    return "retry";
+  }
+  const owner = (await repo.gymPayer(deps.sql, gymId)).email;
+  return owner !== null && owner.trim().toLowerCase() === customer.value.email.trim().toLowerCase() ? "owner" : "someone_else";
 }
 
 /** A Paddle trial never runs past the gym's own free trial (1c-ii round one, H2). Paddle
@@ -1203,9 +1256,12 @@ async function setAside(
   gymId: string | null,
   reason: repo.RefundReason,
 ): Promise<ApplyResult> {
-  if (sub.status !== "canceled") {
+  let ended = sub.status === "canceled";
+  if (!ended) {
     const cancelled = await paddle.api.cancelSubscriptionNow(sub.id);
-    if (cancelled.kind !== "ok") deps.log.error({ event: "billing.cancel_failed", result: cancelled.kind }, "could not cancel a subscription at Paddle");
+    // Refused or unanswered: read back, and one Paddle has ended counts as cancelled.
+    ended = cancelled.kind === "ok" || (await paddleEnded(paddle, sub.id));
+    if (!ended) deps.log.error({ event: "billing.cancel_failed", result: cancelled.kind }, "could not cancel a subscription at Paddle; asking again");
   }
   const listed = await paddle.api.listSubscriptionTransactions(sub.id);
   if (listed.kind !== "ok") return "retry";
@@ -1217,7 +1273,13 @@ async function setAside(
     // A trial's checkout charged nothing, so there is nothing to give back.
     transactionRefs: listed.value.filter((t) => MONEY_TAKEN.has(t.status) && t.details?.totals?.grand_total !== "0").map((t) => t.id),
   });
-  return "set_aside";
+  // Not ended at Paddle: it would charge the next month, so its event is asked again.
+  return ended ? "set_aside" : "retry";
+}
+
+async function paddleEnded(paddle: PaddleSettings, subscriptionId: string): Promise<boolean> {
+  const fetched = await paddle.api.getSubscription(subscriptionId);
+  return fetched.kind === "ok" && fetched.value.status === "canceled";
 }
 
 // ── Razorpay (1d-i) ─────────────────────────────────────────────────────────────
@@ -1239,8 +1301,15 @@ const RAZORPAY_NEVER_TAKEN: ReadonlySet<string> = new Set(["created", "cancelled
 /** Write a subscription just fetched from Razorpay onto its gym through the one rule. The
  *  gym is the one on OUR checkout row for this subscription, never the subscription's notes.
  *  `askedAt` is when Razorpay was asked: its record carries no time of its own, and an answer
- *  asked for earlier never overwrites one asked for later, however slowly it arrived. */
-async function applyRazorpay(deps: BillingDeps, razorpay: RazorpaySettings, sub: RazorpaySubscription, askedAt: Date): Promise<ApplyResult> {
+ *  asked for earlier never overwrites one asked for later, however slowly it arrived.
+ *  `endedAgain`: read again after the cancel this call sent for a plan past its end. */
+async function applyRazorpay(
+  deps: BillingDeps,
+  razorpay: RazorpaySettings,
+  sub: RazorpaySubscription,
+  askedAt: Date,
+  endedAgain = false,
+): Promise<ApplyResult> {
   const placed = await repo.findProviderSubscription(deps.sql, "razorpay", sub.id);
   const checkout = await repo.checkoutForRazorpaySubscription(deps.sql, sub.id);
   let gymId = placed?.gymId ?? null;
@@ -1334,6 +1403,20 @@ async function applyRazorpay(deps: BillingDeps, razorpay: RazorpaySettings, sub:
   // our row — the paid month runs to its end whatever Razorpay says, and a month Razorpay
   // charges after it is refunded.
   const cancel = razorpayCancelOutcome(placed, sub, askedAt);
+  if (cancel.kind === "ended" && !ENDED_AT_RAZORPAY.has(sub.status) && !endedAgain) {
+    // The paid month is over and Razorpay still holds the plan: its cancel never reached Razorpay
+    // (a run that claimed it stopped before sending it). Ended there now, before it charges the
+    // next month, then read again, so a month charged in the meantime is seen and refunded.
+    if (!(await cancelTaken(razorpay, sub.id, await razorpay.api.cancelSubscriptionNow(sub.id)))) {
+      deps.log.error({ event: "billing.cancel_failed", provider: "razorpay", gymId }, "a plan past its end is still live at Razorpay; asking again");
+      return "retry";
+    }
+    deps.log.warn({ event: "billing.cancel_sent_late", provider: "razorpay", gymId }, "a plan's cancel was sent at its end: its earlier send never reached Razorpay");
+    const readAt = deps.now();
+    const again = await razorpay.api.getSubscription(sub.id);
+    if (again.kind !== "ok") return "retry";
+    return await applyRazorpay(deps, razorpay, again.value, readAt, true);
+  }
   if (cancel.kind === "refund_after" && placed !== null) {
     return await endChargedAfterCancel(deps, razorpay, sub, { gymId, planId, placed, after: cancel.after, askedAt });
   }
@@ -1480,9 +1563,11 @@ async function setAsideRazorpay(
   paidAfter: Date | null = null,
   onOwed: (owed: number) => void = () => undefined,
 ): Promise<ApplyResult> {
-  if (sub.status !== "cancelled" && sub.status !== "completed" && sub.status !== "expired") {
-    const cancelled = await razorpay.api.cancelSubscriptionNow(sub.id);
-    if (cancelled.kind !== "ok") deps.log.error({ event: "billing.cancel_failed", provider: "razorpay", result: cancelled.kind }, "could not cancel a subscription at Razorpay");
+  let ended = ENDED_AT_RAZORPAY.has(sub.status);
+  if (!ended) {
+    const answer = await razorpay.api.cancelSubscriptionNow(sub.id);
+    ended = await cancelTaken(razorpay, sub.id, answer);
+    if (!ended) deps.log.error({ event: "billing.cancel_failed", provider: "razorpay", result: answer.kind }, "could not cancel a subscription at Razorpay; asking again");
   }
   const invoices = await razorpay.api.listSubscriptionInvoices(sub.id);
   if (invoices.kind !== "ok") return "retry";
@@ -1503,7 +1588,8 @@ async function setAsideRazorpay(
     ),
   });
   onOwed(owed);
-  return "set_aside";
+  // Not ended at Razorpay: it would charge the next month, so its event is asked again.
+  return ended ? "set_aside" : "retry";
 }
 
 export const REFUNDS = {

@@ -457,6 +457,17 @@ export async function applySnapshot(
     if (existing !== null && existing.owner_id !== input.gymId) {
       return { decision: { kind: "ignore", reason: "not_ours" }, rowId: existing.id, duplicate: false, replaced: null };
     }
+    // A checkout a newer press closed (`beginCheckout` and `beginSizeCheckout` close it under
+    // this same lock) is never the gym's plan, however it was paid in the instant before its
+    // cancel landed: it is set aside and refunded, and the plan the gym has stays.
+    const checkoutState =
+      existing === null && input.checkoutId !== null
+        ? ((
+            await tx<{ state: string }[]>`
+              SELECT state FROM billing_checkouts WHERE id = ${input.checkoutId} AND gym_id = ${input.gymId} FOR UPDATE`
+          )[0]?.state ?? null)
+        : null;
+    const closedByNewerPress = checkoutState === "superseded" || checkoutState === "failed";
     const others = await tx<
       {
         id: string;
@@ -498,7 +509,7 @@ export async function applySnapshot(
       input.provider === "razorpay" && existing !== null
         ? { ...input.snapshot, cancelAtPeriodEnd: existing.cancel_at_period_end }
         : input.snapshot;
-    const decision = decide({
+    const decision: Decision = closedByNewerPress ? { kind: "duplicate" } : decide({
       row:
         existing === null
           ? null
@@ -625,7 +636,7 @@ export async function applySnapshot(
         WHERE id = ${existing.id}`;
       await audit(existing.id, `billing.${decision.event}`);
     }
-    if (input.checkoutId !== null && (decision.kind === "insert" || decision.kind === "duplicate")) {
+    if (input.checkoutId !== null && !closedByNewerPress && (decision.kind === "insert" || decision.kind === "duplicate")) {
       await tx`
         UPDATE billing_checkouts SET state = 'paid', updated_at = now()
         WHERE id = ${input.checkoutId} AND gym_id = ${input.gymId}`;
@@ -743,7 +754,8 @@ export async function otherGymsOfCustomer(sql: SqlOrTx, input: { customerRef: st
   const rows = await sql<{ owner_id: string }[]>`
     SELECT DISTINCT owner_id FROM subscriptions
     WHERE provider = 'paddle' AND provider_customer_ref = ${input.customerRef}
-      AND owner_type = 'gym' AND owner_id <> ${input.gymId}`;
+      AND owner_type = 'gym' AND owner_id <> ${input.gymId}
+      AND cancel_reason IS DISTINCT FROM 'duplicate'`;
   return rows.map((r) => r.owner_id);
 }
 
