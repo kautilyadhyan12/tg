@@ -225,7 +225,7 @@ describe('orgService endpoints', () => {
       seen.push({ url: config.url, method: config.method, data: config.data, key: config.headers?.['Idempotency-Key'] });
       const data = config.url.endsWith('/sync')
         ? { state: 'waiting' }
-        : { checkoutId: '44444444-4444-4444-4444-444444444444', provider: 'paddle', environment: 'sandbox', clientToken: 'test_x', transactionId: `txn_${'a'.repeat(26)}` };
+        : { checkoutId: '44444444-4444-4444-4444-444444444444', provider: 'paddle', environment: 'sandbox', clientToken: 'test_x', transactionId: `txn_${'a'.repeat(26)}`, email: 'owner@example.com', country: 'AT' };
       return { data, status: 200, statusText: '', headers: {}, config, request: {} };
     };
     await orgService.startCheckout('gym-1', 'org_b1_us_m', 'press-1');

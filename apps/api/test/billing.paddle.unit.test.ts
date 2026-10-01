@@ -2,8 +2,10 @@
 // the request Paddle's API reference asks for (POST /customers/{customer_id}/portal-sessions
 // with `subscription_ids`, developer.paddle.com, read 2026-09-24), its documented reply read
 // back, and an id not in Paddle's shape never sent.
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { createPaddleApi } from "../src/modules/billing/paddle.js";
+import { SUPPORTED_COUNTRIES } from "@app/shared";
+import { createPaddleApi, paddleWindowCountry } from "../src/modules/billing/paddle.js";
 
 const CUSTOMER = "ctm_01grnn4zta5a1mf02jjze7y2ys";
 const SUB = "sub_01h04vsc0qhwtsbsxh3422wjs4";
@@ -78,5 +80,31 @@ describe("Paddle's customer portal session, the real adapter", () => {
     tampered.data.urls.general.overview = "https://evil.example/cpl_x";
     const off = recording(201, tampered);
     expect((await off.api.createPortalSession(CUSTOMER, [SUB])).kind).toBe("unavailable");
+  });
+});
+
+// Which country Paddle's window is given (ROADMAP Stage 3 item 1e). The postcode list is Paddle's
+// own reply, not ours: `fixtures/paddle-countries.json` is its sandbox `GET /countries` of
+// 2026-09-30, 252 countries, of which the 10 with `uses_postal_code: true` are taken only with a
+// postcode. Given one of them without, the window drops the address (seen that day for GB and US:
+// "Invalid values for fields in request", the country guessed).
+describe("paddleWindowCountry", () => {
+  const paddleCountries = (
+    JSON.parse(readFileSync(new URL("./fixtures/paddle-countries.json", import.meta.url), "utf8")) as {
+      data: { iso: string; uses_postal_code: boolean }[];
+    }
+  ).data;
+
+  it("gives every country Paddle lists, and every one a gym can choose, except those Paddle takes only with a postcode", () => {
+    expect(paddleCountries).toHaveLength(252);
+    for (const { iso, uses_postal_code } of paddleCountries) {
+      expect([iso, paddleWindowCountry(iso)]).toEqual([iso, uses_postal_code ? null : iso]);
+    }
+    const listed = new Set(paddleCountries.map((c) => c.iso));
+    for (const country of SUPPORTED_COUNTRIES) expect([country, listed.has(country)]).toEqual([country, true]);
+  });
+
+  it("gives nothing for no country, or one not in the two-letter shape", () => {
+    for (const bad of [null, "", "at", "AUT", "A1", " AT"]) expect(paddleWindowCountry(bad)).toBeNull();
   });
 });

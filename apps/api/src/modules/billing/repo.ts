@@ -211,13 +211,17 @@ export async function checkoutForRazorpaySubscription(sql: SqlOrTx, subscription
   return row === undefined ? null : toCheckout(row);
 }
 
-/** Who pays for the gym, as Razorpay's window is told (Kd, RULINGS 2026-09-29): its owner's
- *  email and the mobile given for its payments (`+91…`), each null when there is none. */
-export async function gymPayer(sql: SqlOrTx, gymId: string): Promise<{ email: string | null; mobile: string | null }> {
-  const rows = await sql<{ email: string | null; billing_mobile: string | null }[]>`
-    SELECT u.email, g.billing_mobile FROM gyms g LEFT JOIN users u ON u.id = g.owner_user_id
+/** Who pays for the gym, as the payment window is told (Kd, RULINGS 2026-09-29 and 2026-09-30):
+ *  its owner's email, the mobile given for its payments (`+91…`) and the gym's country, each
+ *  null when there is none. */
+export async function gymPayer(
+  sql: SqlOrTx,
+  gymId: string,
+): Promise<{ email: string | null; mobile: string | null; country: string | null }> {
+  const rows = await sql<{ email: string | null; billing_mobile: string | null; country: string | null }[]>`
+    SELECT u.email, g.billing_mobile, g.country FROM gyms g LEFT JOIN users u ON u.id = g.owner_user_id
     WHERE g.id = ${gymId}`;
-  return { email: rows[0]?.email ?? null, mobile: rows[0]?.billing_mobile ?? null };
+  return { email: rows[0]?.email ?? null, mobile: rows[0]?.billing_mobile ?? null, country: rows[0]?.country ?? null };
 }
 
 /** Which of our rupee plans a Razorpay plan is: only by the id `tools/razorpay-plans.ts` recorded. */
@@ -568,6 +572,14 @@ export async function managedPlanFor(sql: SqlOrTx, gymId: string): Promise<Manag
     customerRef: row.provider_customer_ref,
     overdue: row.status === "past_due" || row.cancel_reason === GRACE_EXPIRED,
   };
+}
+
+/** The gym's owner, for the words of a refusal: their account and the name they go by. */
+export async function gymOwner(sql: SqlOrTx, gymId: string): Promise<{ userId: string; displayName: string } | null> {
+  const rows = await sql<{ id: string; display_name: string }[]>`
+    SELECT u.id, u.display_name FROM gyms g JOIN users u ON u.id = g.owner_user_id WHERE g.id = ${gymId}`;
+  const row = rows[0];
+  return row === undefined ? null : { userId: row.id, displayName: row.display_name };
 }
 
 /** The other gyms paid by this Paddle customer. Paddle keeps one customer per email and

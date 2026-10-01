@@ -19,6 +19,7 @@
 // changes nothing if that charge fails.
 import {
   PAID_PLAN_GRACE_DAYS,
+  payerEmailSchema,
   SMALLER_SIZE_DECIDE_HOURS,
   type OrgBillingPortalResponse,
   type OrgCheckoutResponse,
@@ -37,7 +38,7 @@ import { formatPriceMinor, holdsPrivilege, OrgsError, requirePrivilege, toOrgSub
 import { dayLabel, momentLabel, sizeFittedEmail, sizeKeptEmail, sizeWarningEmail } from "./emails.js";
 import type { Snapshot } from "./machine.js";
 import { onlinePaymentFor } from "./online.js";
-import type { PaddleApi, PaddleEnvironment, ProrationMode } from "./paddle.js";
+import { paddleWindowCountry, type PaddleApi, type PaddleEnvironment, type ProrationMode } from "./paddle.js";
 import type { RazorpayApi } from "./razorpay.js";
 import * as repo from "./repo.js";
 
@@ -116,7 +117,7 @@ export async function startOrgCheckout(
   if (outcome.kind === "replay") {
     const { checkout } = outcome;
     if (checkout.state === "open" && checkout.providerRef !== null && checkout.provider === "paddle") {
-      return checkoutResponse(paddle, checkout.id, checkout.providerRef);
+      return checkoutResponse(paddle, checkout.id, checkout.providerRef, await repo.gymPayer(deps.sql, input.gymId));
     }
     throw replayRefusal(checkout);
   }
@@ -158,7 +159,7 @@ export async function startOrgCheckout(
     await paddle.api.cancelTransaction(txn.id);
     throw new OrgsError(409, "checkout_replaced", "That payment window has closed. Press Subscribe again.");
   }
-  return checkoutResponse(paddle, checkoutId, txn.id);
+  return checkoutResponse(paddle, checkoutId, txn.id, await repo.gymPayer(deps.sql, input.gymId));
 }
 
 /** A press that repeats an earlier one's key, when that checkout can no longer be opened. */
@@ -335,17 +336,32 @@ function razorpayResponse(
     subscriptionId,
     description: description.slice(0, 200) || "Monthly plan",
     contact: payer.mobile,
-    email: payer.email,
+    email: windowEmail(payer.email),
   };
 }
 
-function checkoutResponse(paddle: PaddleSettings, checkoutId: string, transactionId: string): OrgCheckoutResponse {
+/** The owner's email for a payment window, or null when the console could not read it back. */
+function windowEmail(email: string | null): string | null {
+  return email !== null && payerEmailSchema.safeParse(email).success ? email : null;
+}
+
+/** Paddle's window, filled in with the owner's email and the gym's country (Kd, RULINGS
+ *  2026-09-30), whoever of the billing staff opens it; only billing staff, who alone may open a
+ *  checkout, get them. */
+function checkoutResponse(
+  paddle: PaddleSettings,
+  checkoutId: string,
+  transactionId: string,
+  payer: { email: string | null; country: string | null },
+): OrgCheckoutResponse {
   return {
     checkoutId,
     provider: "paddle",
     environment: paddle.environment,
     clientToken: paddle.clientToken,
     transactionId,
+    email: windowEmail(payer.email),
+    country: paddleWindowCountry(payer.country),
   };
 }
 
@@ -432,15 +448,12 @@ export async function openBillingPortal(
   const plan = await repo.managedPlanFor(deps.sql, input.gymId);
   if (plan === null) throw new OrgsError(404, "no_paid_plan", "This plan isn't paid through us, so there's nothing to manage here.");
   // Paddle's page shows everything its customer pays for: it opens only for somebody
-  // who manages the billing of every gym that customer pays for.
-  for (const otherGymId of await repo.otherGymsOfCustomer(deps.sql, { customerRef: plan.customerRef, gymId: input.gymId })) {
+  // who manages the billing of every gym that customer pays for. Paddle keeps one customer
+  // per email and the window is filled in with the owner's (1e), so an owner's gyms share one.
+  const otherGyms = await repo.otherGymsOfCustomer(deps.sql, { customerRef: plan.customerRef, gymId: input.gymId });
+  for (const otherGymId of otherGyms) {
     if (!(await holdsPrivilege(deps, otherGymId, input.userId, "billing.manage"))) {
-      throw new OrgsError(
-        409,
-        "shared_payer",
-        // "organisation": the other one may be a studio or a trainer, whatever this one is.
-        "This payment account also pays for another organisation whose billing you don't manage, so it can't be opened here. The person who pays can open it.",
-      );
+      throw new OrgsError(409, "shared_payer", await sharedPayerMessage(deps, input.gymId, otherGyms));
     }
   }
 
@@ -458,6 +471,18 @@ export async function openBillingPortal(
   }
   // Money owed: straight to the card, where Paddle shows the overdue amount and takes it.
   return { url: plan.overdue ? deepLinks.update_subscription_payment_method : session.value.urls.general.overview };
+}
+
+/** Why Paddle's page can't be opened here, naming the owner when they can open it. */
+async function sharedPayerMessage(deps: BillingDeps, gymId: string, otherGyms: readonly string[]): Promise<string> {
+  // "organisation": the other one may be a studio or a trainer, whatever this one is.
+  const refusal = "This payment account also pays for another organisation whose billing you don't manage, so it can't be opened here.";
+  const owner = await repo.gymOwner(deps.sql, gymId);
+  if (owner === null || owner.displayName.trim() === "") return `${refusal} The person who pays can open it.`;
+  for (const otherGymId of otherGyms) {
+    if (!(await holdsPrivilege(deps, otherGymId, owner.userId, "billing.manage"))) return `${refusal} The person who pays can open it.`;
+  }
+  return `${refusal} Ask ${owner.displayName.trim()}, the owner, to open it.`;
 }
 
 // ── A size change: bigger (1c-ii) or smaller (1c-iii) ─────────────────────────

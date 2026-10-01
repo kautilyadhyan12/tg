@@ -86,6 +86,17 @@ export interface PaddleCatalogueApi {
 
 export const PADDLE_TIMEOUT_MS = 10_000;
 
+/** The countries whose address Paddle takes only with a postcode (`uses_postal_code` in its
+ *  `GET /countries`, read 2026-09-30). Given one without a postcode, Paddle's window drops the
+ *  whole address and guesses the country from where the payer is. */
+export const PADDLE_POSTCODE_COUNTRIES: ReadonlySet<string> = new Set(["AU", "CA", "DE", "ES", "FR", "GB", "IN", "IT", "NL", "US"]);
+
+/** The country Paddle's window can be given for a gym: its own, unless Paddle needs a postcode with it. */
+export function paddleWindowCountry(country: string | null): string | null {
+  if (country === null || !/^[A-Z]{2}$/.test(country) || PADDLE_POSTCODE_COUNTRIES.has(country)) return null;
+  return country;
+}
+
 export function paddleBaseUrl(environment: PaddleEnvironment): string {
   return environment === "sandbox" ? "https://sandbox-api.paddle.com" : "https://api.paddle.com";
 }

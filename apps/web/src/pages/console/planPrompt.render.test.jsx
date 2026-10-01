@@ -651,7 +651,7 @@ describe('subscribing from the prompt', () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...spent, subscription: PAID, consoleReadOnly: false }));
     orgService.getPlans.mockResolvedValue({ data: { plans: OFFERS, payOnline: 'available' } });
     orgService.startCheckout.mockResolvedValue({
-      data: { checkoutId: 'c1', provider: 'paddle', environment: 'sandbox', clientToken: 'test_x', transactionId: 'txn_1' },
+      data: { checkoutId: 'c1', provider: 'paddle', environment: 'sandbox', clientToken: 'test_x', transactionId: 'txn_1', email: 'owner@example.com', country: 'AT' },
     });
     orgService.syncCheckout.mockResolvedValueOnce({ data: { state: 'waiting' } });
     orgService.syncCheckout.mockResolvedValue({ data: { state: 'paid', subscription: PAID } });
@@ -668,7 +668,8 @@ describe('subscribing from the prompt', () => {
     // The plan and a key for this press; never an amount.
     expect(orgService.startCheckout).toHaveBeenCalledWith(GYM_ID, 'org_b2_us_m', expect.stringMatching(/^[0-9a-f-]{36}$/));
     const opened = openPaddleCheckout.mock.calls[0][0];
-    expect(opened).toMatchObject({ environment: 'sandbox', clientToken: 'test_x', transactionId: 'txn_1' });
+    // Filled in with what the server sent: the owner's email and the gym's country.
+    expect(opened).toMatchObject({ environment: 'sandbox', clientToken: 'test_x', transactionId: 'txn_1', email: 'owner@example.com', country: 'AT' });
 
     opened.onEvent({ type: 'completed', transactionId: 'txn_1' });
     expect(await screen.findByText(/confirming your payment/i)).toBeTruthy();
