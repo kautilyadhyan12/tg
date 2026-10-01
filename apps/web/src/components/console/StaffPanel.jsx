@@ -14,6 +14,8 @@ import {
   roleChangeWarning,
   staffCountLabel,
   staffRoleChoices,
+  staffInviteView,
+  startingAbilities,
   unknownPrivileges,
   unknownPrivilegesNote,
 } from '../../pages/console/staffView';
@@ -40,16 +42,10 @@ import { orgService, errorText, isRetryable } from '../../api/orgsApi';
 // so "nobody runs this gym" is never a true sentence and this panel cannot
 // produce it.
 
-/** ADD SOMEBODY. Email plus one of two roles, which is the whole form.
- *
- *  **The email must already belong to a member of this gym.** §4.7 says "invite
- *  by email", and inviting a stranger means SENDING them one — nothing in this
- *  product has ever sent an email, so that half is deferred rather than faked.
- *  The other reason is security and it is the one that will outlive the first: a
- *  lookup across all accounts would answer "does this address have an account"
- *  for anything an owner cares to type. The server scopes it to this gym's own
- *  roster and its refusal names the fix, so the sentence below says the same
- *  thing BEFORE the refusal rather than after it.
+/** INVITE SOMEBODY (Part 3 §10.3; ROADMAP 4a-i). Email plus one of two roles, which is
+ *  the whole form. The server emails an invitation, or, when the address is somebody
+ *  already in this gym, makes them staff at once; its reply is the same whether or not
+ *  the address has an account. Each role shows what it starts with.
  *
  *  **`readOnly` REACHES THE FIELDS AND THE ADD BUTTON, not only the "Add
  *  someone" opener that mounts this form (T3 round 1, C/H-1's second half).**
@@ -131,14 +127,19 @@ function AddStaffForm({
               <span className="block text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
                 {choice.hint}
               </span>
+              <span className="block text-xs mt-1" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                Starts with: {startingAbilities(choice.value, orgType).join(' · ')}
+              </span>
             </button>
           ))}
         </div>
       </div>
 
       <p className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
-        They have to be a {words.person} of your {words.it} already. If they haven&apos;t joined
-        yet, send them your join code first.
+        We&apos;ll email them an invitation. They sign in with this address and press Accept,
+        and they can open your {words.it}&apos;s console. If they&apos;re already a {words.person}{' '}
+        of your {words.it}, they get these permissions straight away. You can change what they
+        can do at any time.
       </p>
 
       {fieldError !== null ? (
@@ -156,7 +157,7 @@ function AddStaffForm({
           style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
         >
           {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-          Add
+          Send invitation
         </button>
         <button
           type="button"
@@ -212,7 +213,9 @@ function RemoveControl({ person, busy, readOnly, words, onRemove }) {
     return (
       <button
         type="button"
-        onClick={() => setStage('choosing')}
+        // Somebody who joined by a staff invitation is not a member: there is only
+        // their access to take back.
+        onClick={() => setStage(person.isMember === false ? false : 'choosing')}
         disabled={busy || readOnly}
         className="text-xs rounded-lg px-3 py-1.5 flex items-center gap-1.5 disabled:opacity-40"
         style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
@@ -275,7 +278,9 @@ function RemoveControl({ person, busy, readOnly, words, onRemove }) {
       <span className="text-xs sm:text-right" style={{ color: 'rgba(255,255,255,0.75)' }}>
         {alsoRemoveFromGym
           ? `Remove ${person.displayName} from your ${words.it} as well? They lose your ${words.it}'s features. They keep every workout they have done.`
-          : `Take ${person.displayName}'s keys back? They stay a ${words.person} of your ${words.it}.`}
+          : person.isMember === false
+            ? `Take ${person.displayName}'s keys back? They won't be able to open your ${words.it}'s console.`
+            : `Take ${person.displayName}'s keys back? They stay a ${words.person} of your ${words.it}.`}
       </span>
       <div className="flex items-center gap-2 self-start sm:self-end">
         <button
@@ -642,6 +647,62 @@ function StaffRow({
   );
 }
 
+/** THE INVITATIONS (4a-i): each address, its role, where it stands and whether its email
+ *  went, with Cancel (or Remove, for one that ended or was declined). Nothing is drawn
+ *  when there are none. */
+function InvitedList({ invites, orgType, busyId, readOnly, onCancel }) {
+  if (invites.loading) return null;
+  if (invites.error !== null) {
+    return (
+      <p className="text-xs" style={{ color: '#ef4444' }}>
+        {invites.error}
+      </p>
+    );
+  }
+  if (invites.list.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-2" data-testid="staff-invites">
+      <h3 className="text-xs font-semibold uppercase tracking-wide mt-2" style={{ color: 'rgba(255,255,255,0.45)' }}>
+        Invited
+      </h3>
+      {invites.list.map((invite) => {
+        const view = staffInviteView(invite, orgType);
+        return (
+          <div
+            key={invite.id}
+            data-testid={`staff-invite-${invite.id}`}
+            className="rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-3"
+            style={{ background: '#121110', border: '1px dashed rgba(255,255,255,0.12)' }}
+          >
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold truncate" style={{ color: '#fff' }}>
+                {view.title}
+              </div>
+              <div className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                {view.meta}
+              </div>
+              {view.email !== null ? (
+                <div className="text-xs mt-0.5" style={{ color: view.emailProblem ? '#f59e0b' : 'rgba(255,255,255,0.45)' }}>
+                  {view.email}
+                </div>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              onClick={() => onCancel(invite)}
+              disabled={busyId === invite.id || readOnly}
+              className="self-start sm:self-center text-xs rounded-lg px-3 py-1.5 flex-shrink-0 disabled:opacity-40"
+              style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}
+            >
+              {view.action}
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function StaffPanel({ gymId, privileges, orgType, readOnly = false }) {
   const allowed = canManageStaff(privileges);
   // The words this panel speaks (roadmap 2b).
@@ -658,6 +719,29 @@ export default function StaffPanel({ gymId, privileges, orgType, readOnly = fals
   // who does not read it, and this form's whole subject is authority.
   const [role, setRole] = useState('trainer');
   const [fieldError, setFieldError] = useState(null);
+  // The invitations waiting, ended or declined (4a-i). Their own read and failure: a
+  // list that cannot be read must not hide who already runs the gym.
+  const [invites, setInvites] = useState({ loading: true, error: null, list: [] });
+  // What the last invitation did: "Invitation sent to …" or "… is now a manager".
+  const [notice, setNotice] = useState(null);
+
+  useEffect(() => {
+    if (!allowed || gymId === null) return undefined;
+    let cancelled = false;
+    orgService
+      .getStaffInvites(gymId)
+      .then((res) => {
+        if (!cancelled) setInvites({ loading: false, error: null, list: res.data?.invites ?? [] });
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setInvites({ loading: false, error: errorText(err, "We couldn't load your invitations."), list: [] });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [gymId, attempt, allowed]);
 
   useEffect(() => {
     // Not merely a UI guard: without it a manager's Settings screen would fire a
@@ -817,34 +901,30 @@ export default function StaffPanel({ gymId, privileges, orgType, readOnly = fals
       setFieldError('Type the email address they use for the app.');
       return;
     }
-    // THE SERVER'S FLOOR IS 3 AND ITS REFUSAL IS NOT A SENTENCE (T3 Low).
-    // `addOrgStaffRequestSchema` is `.min(3)`, and a one- or two-character entry
-    // comes back as the raw `email: too_small`, which `errorText` then prints at
-    // an owner verbatim. Mirroring the bound here — with the number cited rather
-    // than chosen — means the only thing on screen is a sentence somebody wrote.
-    // Deliberately NOT an address-format check: the server does not do one
-    // either (the column is `citext` and the match is an equality against rows
-    // we already store), so a format opinion here could reject an address the
-    // app itself accepted at registration.
+    // The server's refusals of a bad address are raw (`email: invalid_string`), so the
+    // form says it first in words: sign-in's own rule (`authEmailSchema`, at most 254)
+    // is an email shape, and this is the same rough shape.
     if (value.length < 3) {
       setFieldError('That looks too short for an email address.');
       return;
     }
-    // AND THE UPPER BOUND, because only mirroring the lower one left the same
-    // defect at the other end (T3 round 2 L-4): the schema is
-    // `.min(3).max(320)`, and a pasted 321-character entry came back as the raw
-    // `email: too_big`. 320 is the RFC's local@domain maximum and is quoted from
-    // the schema, not chosen here.
-    if (value.length > 320) {
-      setFieldError('That is too long to be an email address.');
+    if (value.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+      setFieldError("That doesn't look like an email address.");
       return;
     }
     if (gymId === null) return;
     setFieldError(null);
     setBusyId('add');
     setActionError(null);
+    setNotice(null);
     try {
-      await orgService.addStaff(gymId, { email: value, role });
+      const res = await orgService.inviteStaff(gymId, { email: value, role });
+      const done = res.data;
+      setNotice(
+        done.outcome === 'added'
+          ? `${done.staff.displayName} is now ${done.staff.role === 'manager' ? 'a manager' : `a ${words.coach}`} here.`
+          : `Invitation sent to ${done.invite.email}. It works for 7 days.`,
+      );
       setEmail('');
       setRole('trainer');
       setAdding(false);
@@ -861,8 +941,26 @@ export default function StaffPanel({ gymId, privileges, orgType, readOnly = fals
       // promise that pressing a button fixes an address that is simply not in
       // this gym.
       setActionError({
-        message: errorText(err, "We couldn't add them. Please try again."),
+        message: errorText(err, "We couldn't send that invitation. Please try again."),
         retryable: false,
+      });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const cancelInvite = async (invite) => {
+    if (gymId === null) return;
+    setBusyId(invite.id);
+    setActionError(null);
+    setNotice(null);
+    try {
+      await orgService.cancelStaffInvite(gymId, invite.id);
+      reload();
+    } catch (err) {
+      setActionError({
+        message: errorText(err, "We couldn't cancel that invitation. Please try again."),
+        retryable: isRetryable(err),
       });
     } finally {
       setBusyId(null);
@@ -916,6 +1014,12 @@ export default function StaffPanel({ gymId, privileges, orgType, readOnly = fals
         </p>
       ) : null}
 
+      {notice !== null ? (
+        <p role="status" className="mb-3 text-sm" style={{ color: '#22c55e' }}>
+          {notice}
+        </p>
+      ) : null}
+
       {!state.loading && state.error === null ? (
         <div className="flex flex-col gap-3">
           {state.staff.map((person) => (
@@ -931,6 +1035,14 @@ export default function StaffPanel({ gymId, privileges, orgType, readOnly = fals
               onSavePrivileges={(privileges) => savePrivileges(person, privileges)}
             />
           ))}
+
+          <InvitedList
+            invites={invites}
+            orgType={orgType}
+            busyId={busyId}
+            readOnly={readOnly}
+            onCancel={cancelInvite}
+          />
 
           {adding ? (
             <AddStaffForm
@@ -952,13 +1064,16 @@ export default function StaffPanel({ gymId, privileges, orgType, readOnly = fals
           ) : (
             <button
               type="button"
-              onClick={() => setAdding(true)}
+              onClick={() => {
+                setAdding(true);
+                setNotice(null);
+              }}
               disabled={readOnly}
               className="self-start rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-2 disabled:opacity-40"
               style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
             >
               <Plus className="w-4 h-4" />
-              Add someone
+              Invite someone
             </button>
           )}
         </div>

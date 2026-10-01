@@ -22,7 +22,9 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getMine: vi.fn(),
       updateOrg: vi.fn(),
       getStaff: vi.fn(),
-      addStaff: vi.fn(),
+      inviteStaff: vi.fn(),
+      getStaffInvites: vi.fn(),
+      cancelStaffInvite: vi.fn(),
       updateStaffRole: vi.fn(),
       updateStaffPrivileges: vi.fn(),
       removeStaff: vi.fn(),
@@ -130,6 +132,19 @@ const TRAINER = {
   isYou: false,
 };
 
+/** A staff invitation waiting for its answer (4a-i). */
+const INVITE = {
+  id: '6f1c2b8e-0a4d-4f7e-9b1a-2c3d4e5f6a7b',
+  email: 'anil@example.com',
+  role: 'trainer',
+  invitedAt: '2026-10-01T09:00:00.000Z',
+  expiresAt: '2026-10-08T09:00:00.000Z',
+  state: 'waiting',
+  declinedAt: null,
+  emailStatus: 'sent',
+  emailReason: null,
+};
+
 const apiError = (status, error, message) => ({
   response: { status, data: { error, message, requestId: 'r' } },
 });
@@ -220,7 +235,9 @@ beforeEach(() => {
   orgService.getMine.mockResolvedValue({ data: { orgs: [ORG] } });
   orgService.updateOrg.mockResolvedValue({ data: { org: ORG } });
   orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER] } });
-  orgService.addStaff.mockResolvedValue({ data: { staff: TRAINER } });
+  orgService.inviteStaff.mockResolvedValue({ data: { outcome: 'invited', invite: INVITE } });
+  orgService.getStaffInvites.mockResolvedValue({ data: { invites: [] } });
+  orgService.cancelStaffInvite.mockResolvedValue({ data: { status: 'cancelled' } });
   orgService.updateStaffRole.mockResolvedValue({ data: { staff: MANAGER } });
   orgService.updateStaffPrivileges.mockResolvedValue({ data: { staff: MANAGER } });
   orgService.removeStaff.mockResolvedValue({ data: { status: 'removed' } });
@@ -287,7 +304,7 @@ describe('who runs this gym', () => {
     // could not fetch — they cannot see who is already on it, so they cannot
     // see that the person is there twice, or that the one they meant to remove
     // still is. The join-code panel took the same decision for the same reason.
-    expect(screen.queryByText('Add someone')).toBeNull();
+    expect(screen.queryByText('Invite someone')).toBeNull();
   });
 });
 
@@ -569,7 +586,7 @@ describe('taking somebody’s keys back', () => {
 describe('adding somebody', () => {
   const openForm = async () => {
     await drawStaff();
-    fireEvent.click(await screen.findByText('Add someone'));
+    fireEvent.click(await screen.findByText('Invite someone'));
   };
 
   it('sends the typed email with the chosen role', async () => {
@@ -578,9 +595,9 @@ describe('adding somebody', () => {
       target: { value: 'anil@example.com' },
     });
     fireEvent.click(screen.getByText('Manager'));
-    fireEvent.click(screen.getByText('Add'));
-    await waitFor(() => expect(orgService.addStaff).toHaveBeenCalledTimes(1));
-    expect(orgService.addStaff).toHaveBeenCalledWith(ORG.id, {
+    fireEvent.click(screen.getByText('Send invitation'));
+    await waitFor(() => expect(orgService.inviteStaff).toHaveBeenCalledTimes(1));
+    expect(orgService.inviteStaff).toHaveBeenCalledWith(ORG.id, {
       email: 'anil@example.com',
       role: 'manager',
     });
@@ -613,22 +630,22 @@ describe('adding somebody', () => {
   it('refuses a too-SHORT entry in words, without asking the server', async () => {
     await openForm();
     fireEvent.change(screen.getByLabelText(/Their email address/i), { target: { value: 'ab' } });
-    fireEvent.click(screen.getByText('Add'));
+    fireEvent.click(screen.getByText('Send invitation'));
     expect(screen.getByText(/too short for an email address/i)).toBeTruthy();
     expect(screen.queryByText(/too_small/)).toBeNull();
-    expect(orgService.addStaff).not.toHaveBeenCalled();
+    expect(orgService.inviteStaff).not.toHaveBeenCalled();
   });
 
   it('refuses a too-LONG entry in words, without asking the server', async () => {
     await openForm();
-    // 321 characters — one past the schema's `.max(320)`, the RFC maximum.
-    const tooLong = `${'a'.repeat(310)}@example.com`;
-    expect(tooLong.length).toBe(322);
+    // Past sign-in's own 254.
+    const tooLong = `${'a'.repeat(250)}@example.com`;
+    expect(tooLong.length).toBe(262);
     fireEvent.change(screen.getByLabelText(/Their email address/i), { target: { value: tooLong } });
-    fireEvent.click(screen.getByText('Add'));
-    expect(screen.getByText(/too long to be an email address/i)).toBeTruthy();
+    fireEvent.click(screen.getByText('Send invitation'));
+    expect(screen.getByText(/doesn't look like an email address/i)).toBeTruthy();
     expect(screen.queryByText(/too_big/)).toBeNull();
-    expect(orgService.addStaff).not.toHaveBeenCalled();
+    expect(orgService.inviteStaff).not.toHaveBeenCalled();
   });
 
   /** The positive control for both: a length the server accepts must still be
@@ -639,8 +656,8 @@ describe('adding somebody', () => {
     fireEvent.change(screen.getByLabelText(/Their email address/i), {
       target: { value: 'rita@example.com' },
     });
-    fireEvent.click(screen.getByText('Add'));
-    await waitFor(() => expect(orgService.addStaff).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByText('Send invitation'));
+    await waitFor(() => expect(orgService.inviteStaff).toHaveBeenCalledTimes(1));
   });
 
   it('starts on the SMALLER grant, so a form nobody reads hands out less', async () => {
@@ -648,9 +665,9 @@ describe('adding somebody', () => {
     fireEvent.change(screen.getByLabelText(/Their email address/i), {
       target: { value: 'anil@example.com' },
     });
-    fireEvent.click(screen.getByText('Add'));
-    await waitFor(() => expect(orgService.addStaff).toHaveBeenCalledTimes(1));
-    expect(orgService.addStaff).toHaveBeenCalledWith(ORG.id, {
+    fireEvent.click(screen.getByText('Send invitation'));
+    await waitFor(() => expect(orgService.inviteStaff).toHaveBeenCalledTimes(1));
+    expect(orgService.inviteStaff).toHaveBeenCalledWith(ORG.id, {
       email: 'anil@example.com',
       role: 'trainer',
     });
@@ -661,40 +678,60 @@ describe('adding somebody', () => {
     fireEvent.change(screen.getByLabelText(/Their email address/i), {
       target: { value: '  anil@example.com  ' },
     });
-    fireEvent.click(screen.getByText('Add'));
-    await waitFor(() => expect(orgService.addStaff).toHaveBeenCalledTimes(1));
-    expect(orgService.addStaff.mock.calls[0][1].email).toBe('anil@example.com');
+    fireEvent.click(screen.getByText('Send invitation'));
+    await waitFor(() => expect(orgService.inviteStaff).toHaveBeenCalledTimes(1));
+    expect(orgService.inviteStaff.mock.calls[0][1].email).toBe('anil@example.com');
   });
 
   it('asks for an email instead of sending an empty one', async () => {
     await openForm();
-    fireEvent.click(screen.getByText('Add'));
+    fireEvent.click(screen.getByText('Send invitation'));
     expect(await screen.findByText(/Type the email address/i)).toBeTruthy();
-    expect(orgService.addStaff).not.toHaveBeenCalled();
+    expect(orgService.inviteStaff).not.toHaveBeenCalled();
   });
 
-  it('warns BEFORE the refusal that they have to be a member already', async () => {
-    // The server's 404 says the same thing, but only after an owner has typed an
-    // address and been turned down. The gym-scoped lookup is deliberate (a
-    // global one is an account-existence oracle), so this is a permanent rule
-    // and belongs on the form.
+  it('says an invitation is emailed, and shows what each role starts with', async () => {
     await openForm();
-    expect(screen.getByText(/member of your gym already/i)).toBeTruthy();
+    expect(screen.getByText(/We'll email them an invitation/i)).toBeTruthy();
+    expect(screen.queryByText(/send them your join code/i)).toBeNull();
+    expect(screen.getByText('Starts with: See the member list · Share the join code · See who came in')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Starts with: See the member list · Share the join code · See who came in · Let people into the gym · Remove members · Change join codes',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('refuses something that is not an email address, without asking the server', async () => {
+    await openForm();
+    fireEvent.change(screen.getByLabelText(/Their email address/i), { target: { value: 'anil at example' } });
+    fireEvent.click(screen.getByText('Send invitation'));
+    expect(screen.getByText(/doesn't look like an email address/i)).toBeTruthy();
+    expect(orgService.inviteStaff).not.toHaveBeenCalled();
+  });
+
+  it('says the invitation went, or that somebody already in the gym is now staff', async () => {
+    await openForm();
+    fireEvent.change(screen.getByLabelText(/Their email address/i), { target: { value: 'anil@example.com' } });
+    fireEvent.click(screen.getByText('Send invitation'));
+    expect(await screen.findByText('Invitation sent to anil@example.com. It works for 7 days.')).toBeTruthy();
+
+    orgService.inviteStaff.mockResolvedValue({ data: { outcome: 'added', staff: TRAINER } });
+    fireEvent.click(await screen.findByText('Invite someone'));
+    fireEvent.change(screen.getByLabelText(/Their email address/i), { target: { value: 'rita@example.com' } });
+    fireEvent.click(screen.getByText('Send invitation'));
+    expect(await screen.findByText(`${TRAINER.displayName} is now a trainer here.`)).toBeTruthy();
   });
 
   it("keeps the form and the typing when the server refuses, and shows ITS sentence", async () => {
-    orgService.addStaff.mockRejectedValue(
-      apiError(
-        404,
-        'not_a_member',
-        'Nobody in this gym has that email address. They need to join the gym first — send them your join code.',
-      ),
+    orgService.inviteStaff.mockRejectedValue(
+      apiError(409, 'already_invited', "You've already invited ghost@example.com. The invitation is waiting for them to accept."),
     );
     await openForm();
     const box = screen.getByLabelText(/Their email address/i);
     fireEvent.change(box, { target: { value: 'ghost@example.com' } });
-    fireEvent.click(screen.getByText('Add'));
-    expect(await screen.findByText(/Nobody in this gym has that email address/i)).toBeTruthy();
+    fireEvent.click(screen.getByText('Send invitation'));
+    expect(await screen.findByText(/You've already invited ghost@example.com/i)).toBeTruthy();
     // Closing the form on a refusal throws away what they typed and hides the
     // reason with it — a recorded defect on the join-code editor.
     expect(screen.getByLabelText(/Their email address/i).value).toBe('ghost@example.com');
@@ -705,13 +742,80 @@ describe('adding somebody', () => {
     fireEvent.change(screen.getByLabelText(/Their email address/i), {
       target: { value: 'anil@example.com' },
     });
-    fireEvent.click(screen.getByText('Add'));
+    fireEvent.click(screen.getByText('Send invitation'));
     await waitFor(() => expect(orgService.getStaff).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.queryByLabelText(/Their email address/i)).toBeNull());
   });
 });
 
 // ── Who gets in at all ──────────────────────────────────────────────────────
+
+// ── Staff invited by email (4a-i) ──────────────────────────────────────────
+
+describe('the invitations waiting', () => {
+  it('lists each invitation with its role, until when, and whether the email went', async () => {
+    orgService.getStaffInvites.mockResolvedValue({
+      data: {
+        invites: [
+          INVITE,
+          { ...INVITE, id: '7f1c2b8e-0a4d-4f7e-9b1a-2c3d4e5f6a7b', email: 'nomail@example.com', role: 'manager', emailStatus: 'not_sent', emailReason: 'no_mail_domain' },
+          { ...INVITE, id: '8f1c2b8e-0a4d-4f7e-9b1a-2c3d4e5f6a7b', email: 'late@example.com', state: 'ended' },
+          { ...INVITE, id: '9f1c2b8e-0a4d-4f7e-9b1a-2c3d4e5f6a7b', email: 'no@example.com', state: 'declined', declinedAt: '2026-10-02T09:00:00.000Z' },
+        ],
+      },
+    });
+    await drawStaff();
+    const waiting = await screen.findByTestId(`staff-invite-${INVITE.id}`);
+    expect(within(waiting).getByText('anil@example.com')).toBeTruthy();
+    expect(within(waiting).getByText(/^Trainer · Waiting for them to accept · until /)).toBeTruthy();
+    expect(within(waiting).getByText('Email sent')).toBeTruthy();
+    expect(within(waiting).getByText('Cancel invitation')).toBeTruthy();
+    const noMail = screen.getByTestId('staff-invite-7f1c2b8e-0a4d-4f7e-9b1a-2c3d4e5f6a7b');
+    expect(within(noMail).getByText(/^Manager · Waiting/)).toBeTruthy();
+    expect(within(noMail).getByText(/this email address can't receive email/i)).toBeTruthy();
+    const ended = screen.getByTestId('staff-invite-8f1c2b8e-0a4d-4f7e-9b1a-2c3d4e5f6a7b');
+    expect(within(ended).getByText(/^Trainer · Ended .* · not accepted$/)).toBeTruthy();
+    expect(within(ended).getByText('Remove')).toBeTruthy();
+    expect(within(ended).queryByText('Email sent')).toBeNull();
+    const declined = screen.getByTestId('staff-invite-9f1c2b8e-0a4d-4f7e-9b1a-2c3d4e5f6a7b');
+    expect(within(declined).getByText(/^Trainer · Said no thanks · /)).toBeTruthy();
+  });
+
+  it('Cancel invitation cancels that one and reads the lists again', async () => {
+    orgService.getStaffInvites.mockResolvedValue({ data: { invites: [INVITE] } });
+    await drawStaff();
+    fireEvent.click(await screen.findByText('Cancel invitation'));
+    await waitFor(() => expect(orgService.cancelStaffInvite).toHaveBeenCalledWith(ORG.id, INVITE.id));
+    await waitFor(() => expect(orgService.getStaffInvites).toHaveBeenCalledTimes(2));
+  });
+
+  it('shows nothing under Invited when there are none', async () => {
+    await drawStaff();
+    await screen.findByText('Kd Owner');
+    expect(screen.queryByTestId('staff-invites')).toBeNull();
+  });
+
+  it("a list it cannot read says so, and who runs the gym is still shown", async () => {
+    orgService.getStaffInvites.mockRejectedValue(offline());
+    await drawStaff();
+    expect(await screen.findByText('Kd Owner')).toBeTruthy();
+    expect(await screen.findByText(/couldn't|can't reach/i)).toBeTruthy();
+  });
+});
+
+describe('taking the keys back from somebody who is not a member', () => {
+  it('asks only about their access: there is no membership to end', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, { ...MANAGER, isMember: false }] } });
+    await drawStaff();
+    const row = await screen.findByTestId('staff-u2');
+    fireEvent.click(within(row).getByText('Remove'));
+    expect(within(row).queryByText('Remove from the gym too')).toBeNull();
+    expect(within(row).getByText("Take Rita Sen's keys back? They won't be able to open your gym's console.")).toBeTruthy();
+    fireEvent.click(within(row).getByText('Take the keys'));
+    await waitFor(() => expect(orgService.removeStaff).toHaveBeenCalledWith(ORG.id, 'u2'));
+    expect(orgService.removeMember).not.toHaveBeenCalled();
+  });
+});
 
 describe('a manager or trainer at this address', () => {
   it('is told, and the screen asks the server NOTHING about staff', async () => {

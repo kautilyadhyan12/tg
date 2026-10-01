@@ -607,14 +607,17 @@ export async function gateFacts(sql: SqlOrTx, now: Date): Promise<{ gymId: strin
   }));
 }
 
-/** Emails the whole app sent in the last 24 hours, or is sending now: invitations and
- *  the lead follow-ups the app sends (20c-v), which share INVITE_EMAILS_PER_DAY. */
+/** Emails the whole app sent in the last 24 hours, or is sending now: invitations, the
+ *  lead follow-ups the app sends (20c-v) and staff invitations (4a), which share
+ *  INVITE_EMAILS_PER_DAY. */
 export async function emailsUsedToday(sql: SqlOrTx, now: Date): Promise<number> {
   const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const rows = await sql<{ n: number }[]>`
     SELECT ((SELECT count(*) FROM gym_invite_sends
             WHERE (state = 'sent' AND finished_at > ${dayAgo}) OR (state = 'sending' AND lease_until >= ${now}))
          + (SELECT count(*) FROM gym_lead_sends
+            WHERE (state = 'sent' AND finished_at > ${dayAgo}) OR (state = 'sending' AND lease_until >= ${now}))
+         + (SELECT count(*) FROM gym_staff_invite_sends
             WHERE (state = 'sent' AND finished_at > ${dayAgo}) OR (state = 'sending' AND lease_until >= ${now})))::int AS n`;
   return rows[0]?.n ?? 0;
 }

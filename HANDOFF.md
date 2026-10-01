@@ -4,6 +4,16 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-10-01 · 4a-i (Folder A): staff invited by email, the email, Accept (branch `staff-invited-by-email`)
+
+- **Why this job:** next in Folder A. Planned **Risky** (sign-in, other people's data, sends email), Opus xhigh; Kd: *"i agree the plan"*, asked about the ticks (answered: the role sets the starting ticks, shown on the form; the owner changes them after, as today), then *"go"*. Split 4a into 4a-i (this) and 4a-ii (Send again, a bounced staff email shown, `removeMember`). Migration `0058_staff_invites`; no new package, no new cost.
+- **Built:** Settings → Staff "Invite someone": email + Manager/Trainer, each role with "Starts with: …"; Send invitation emails fixed words ("{owner} invited you to help run {gym} as a trainer. Sign in with this email address…"), link `/staff-invitation` with no token; somebody already in the gym is made staff at once. "Invited" list: role, until when, Email sent / why not, Cancel invitation / Remove. The console's front page shows "You're invited" cards (Accept, No thanks) and lands a new person on them instead of Create. Accept = staff with the role's ticks, NO membership. Limits: 20 waiting, 20 emails a day a gym, 3 to one address a week; 7 days.
+- **Found and fixed while building:** a past member hired as staff would have been locked out (the ghost rule refused any closed membership); now only a membership closed AFTER the staff row is a ghost (`getStaffAuthority`, `listStaff`; one fixture in `orgs.routes` changed to a real ghost). Staff rows carry `isMember`, so Remove offers "Remove from the gym too" only to members.
+- **Worst thing, first test:** a stranger made staff by somebody else's invitation — forwarded email, Gmail dots, Apple relay, a password account nobody proved, another gym's id; capitals are the same person. **Breaks, each RED, restored sha256-identical:** looked up by id alone, the proof check removed, Gmail dots ignored.
+- **Tests:** api 4,465 of 4,466 in one full run (the one red was that ghost fixture; `leads.routes` hit a cleanup deadlock under load); both files then 176/176; staff invites 11/11 + rule 17/17; shared 278/278; web 3,340/3,340 (`poseAssets.contract` local Node 24); tsc and eslint 0 (api, shared, changed web files); `vite build` green. Seen in headless Edge, dark and light, 1200 and 390 (`.cost/look-4a-i.mjs`).
+- **Cost at full size** (mains, 2,592 MHz): a gym of 10,000 members, 100 invitations listed, one address invited by 19 gyms: answering nobody median 0.4–0.7 ms, worst 3.5 ms, for the list, Staff, Send invitation, the invited person's page and Accept; the worker's run 4.6 ms at most. A timer-based reading shows ~15.7 ms on Windows for any wait past 20 ms doing nothing (measured), so a setImmediate probe is used (`.cost/cost-4a-i.ts`).
+- **Next:** Kd's click-through, then round one (`reviews/4a-i-1-review.md`).
+
 ## 2026-10-01 · 5c (Folder A): "Which software is your list in?" (branch `members-leaving-software`)
 
 - **Why this job:** next in Folder A (5b-vi waits for photo storage). Planned Risky with a column preset per product; Kd: *"go"*.

@@ -37,6 +37,9 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getOverview: vi.fn(),
       getAttendanceDay: vi.fn(),
       getStaff: vi.fn(),
+      // Settings → Staff reads its invitations (4a-i); the console's front page, the person's own.
+      getStaffInvites: vi.fn(() => Promise.resolve({ data: { invites: [] } })),
+      getMyStaffInvitations: vi.fn(() => Promise.resolve({ data: { address: 'a@example.com', addressProved: true, invitations: [] } })),
       getPlans: vi.fn(),
       startTrial: vi.fn(),
       updateOrg: vi.fn(),
@@ -726,7 +729,7 @@ describe('the staff list', () => {
 
     await openSection('staff');
     expect(await screen.findByText('Dev Roy')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /add someone/i }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: /invite someone/i }).disabled).toBe(true);
     // The trainer's row carries both: a role change and a removal.
     expect(screen.getByRole('button', { name: /make manager/i }).disabled).toBe(true);
     expect(screen.getByRole('button', { name: /^remove$/i }).disabled).toBe(true);
@@ -765,7 +768,7 @@ describe('the staff list', () => {
 
     await openSection('staff');
     await screen.findByText('Dev Roy');
-    expect(screen.getByRole('button', { name: /add someone/i }).disabled).toBe(false);
+    expect(screen.getByRole('button', { name: /invite someone/i }).disabled).toBe(false);
     expect(screen.getByRole('button', { name: /make manager/i }).disabled).toBe(false);
     expect(screen.getByRole('button', { name: /^remove$/i }).disabled).toBe(false);
     expect(screen.queryByText(READ_ONLY_NOTE)).toBeNull();
@@ -914,7 +917,7 @@ describe('a step already open when the gym lapses', () => {
     expect(screen.getByLabelText(/maximum people/i).disabled).toBe(true);
   });
 
-  it('greys the add-staff form Add, its email box and its role buttons', async () => {
+  it('greys the invite form Send invitation, its email box and its role buttons', async () => {
     // **NOBODY CAN REACH THIS IN A BROWSER TODAY** — the Staff section is gated
     // on `staff.manage`, which only an owner's row may carry, and an owner of a
     // lapsed gym meets `PlanModal` instead of Settings. It is fixed and pinned
@@ -926,14 +929,14 @@ describe('a step already open when the gym lapses', () => {
 
     await openSection('staff');
     await screen.findByText('Dev Roy');
-    screen.getByRole('button', { name: /add someone/i }).click();
+    screen.getByRole('button', { name: /invite someone/i }).click();
 
-    const add = await screen.findByRole('button', { name: /^add$/i });
+    const add = await screen.findByRole('button', { name: /^send invitation$/i });
     expect(add.disabled).toBe(false);
 
     await theGymLapsesUnderTheScreen();
 
-    expect(screen.getByRole('button', { name: /^add$/i }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: /^send invitation$/i }).disabled).toBe(true);
     expect(screen.getByLabelText(/their email address/i).disabled).toBe(true);
     expect(screen.getByRole('radio', { name: /trainer/i }).disabled).toBe(true);
     expect(screen.getByRole('button', { name: /^cancel$/i }).disabled).toBe(false);

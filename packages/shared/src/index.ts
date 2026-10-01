@@ -35,3 +35,4 @@ export * from "./razorpay.js";
 export * from "./leads.js";
 export * from "./leadImport.js";
 export * from "./gymPage.js";
+export * from "./staffInvites.js";

@@ -1794,6 +1794,15 @@ separate, ending a staff person's membership leaves their keys, and RULINGS
 2026-08-22's question ("do they also stop being a member?") is asked in both
 directions. Marking attendance still needs a membership.
 
+**Out of 4a-i (built 2026-10-01).** 4a was split in two: 4a-i is below; 4a-ii is Send again, a bounced staff email shown to the owner, and `removeMember`'s change.
+
+- Migration `0058`: `gym_staff_invites` (the address readable, role, invited by, 7 days; `pending` · `accepted` · `declined` · `cancelled`; `cleared_at` for an ended or declined one the owner removed or a new one replaced; one OPEN invitation an address a gym, by a partial unique index) and `gym_staff_invite_sends` (each email, queued in the invitation's transaction, its address cleared when done).
+- Routes: `POST/GET /v1/orgs/:gymId/staff/invites`, `DELETE …/:inviteId` (`staff.manage`, owner only); the invited person's own are `GET /v1/orgs/staff-invitations` and `POST …/:invitationId/accept|decline` — routes of their own rather than inside 10.2's `GET /v1/orgs/invitations`, which the member web reads before setup: a staff invitation is the console's. An address that is somebody already IN the gym is appointed at once (`addStaff`, RULINGS 2026-09-21); already staff or already invited (live) is a 409. Limits: 20 waiting, 20 emails a day a gym, 3 to one address in 7 days; the owner's list shows the newest 100.
+- **Who it opens for** is 10.2's rule: the account's own address, proved in a session begun after the proof, matched exactly (citext: case only). A declined one may still be accepted until it ends; a second Accept is `already_staff`. Accept writes `gym_staff` with the role's starting ticks and no membership.
+- **A past member invited as staff runs the gym.** `getStaffAuthority` and `listStaff` refused anyone whose membership was ever closed (the ghost of 2026-08-22); they now refuse only a membership closed AFTER the staff row was written, so the ghost stays shut and a past member hired as a trainer is let in. Accepting re-writes a ghost's row, so the invitation is the owner's yes from then.
+- The staff row carries `isMember`, so Remove offers "Remove from the gym too" only to somebody who is a member.
+- **The email** goes through 9.12's worker, daily cap, kill switch and suppressions after the leads' follow-ups, with `decideStaffSend`: no list, age, postal-address or shared-mailbox check (it is one person the owner typed, and a front desk's shared address is a fair place to invite a front desk), and no unsubscribe link (a one-to-one work email, not marketing). Its link is `{WEB_ORIGIN}/staff-invitation`, which sends a signed-out person to sign in through the Manage door and a signed-in one to `/console`, where the invitation waits above the list (and in place of the redirect to Create, for somebody who runs nothing).
+
 ### 10.4 A seat is a person using the member app (4c)
 
 **The rule.** A seat is a LIVE `gym_members` row — the owner's and staff's included.

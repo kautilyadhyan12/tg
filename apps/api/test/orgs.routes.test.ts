@@ -4162,8 +4162,10 @@ d("orgs routes (real Postgres)", () => {
     );
     await del(`/v1/orgs/${gymA.org.id}/staff/${exMember.userId}`, { cookies: ownerA.cookies });
     await del(`/v1/orgs/${gymA.org.id}/members/${exMember.userId}`, { cookies: ownerA.cookies });
-    await sql`INSERT INTO gym_staff (gym_id, user_id, role)
-              VALUES (${gymA.org.id}, ${exMember.userId}, 'manager')`;
+    // The ghost: a staff row written BEFORE the membership closed (since 4a-i, one
+    // written after it is a past member re-appointed, and is let in).
+    await sql`INSERT INTO gym_staff (gym_id, user_id, role, created_at)
+              VALUES (${gymA.org.id}, ${exMember.userId}, 'manager', now() - interval '1 day')`;
     expect(await staffRoleOf(gymA.org.id, exMember.userId)).toBeNull();
 
     // (b) NEVER a member of gym A — §4.7's invited manager — who happens to

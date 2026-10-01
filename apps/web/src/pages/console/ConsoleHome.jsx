@@ -1,8 +1,11 @@
+import { useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { Building2, Plus, ChevronRight } from 'lucide-react';
 import { orgTypeLabel, roleLabel } from './consoleView';
 import { useConsoleOrgs } from './useConsoleOrg';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
+import StaffInvitations from '../../components/console/StaffInvitations';
+import { errorText, orgService } from '../../api/orgsApi';
 
 // "Your organisations" — the console's front door.
 //
@@ -21,6 +24,32 @@ import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleS
 // redirect, because "you run nothing" is a claim, and at an owner of three gyms
 // whose connection blipped it is the empty-state defect this project has
 // already shipped once. That is why `error` is checked before `orgs.length`.
+//
+// UNLESS A STAFF INVITATION IS WAITING (Part 3 §10.3; ROADMAP 4a-i): a person who came
+// in through the Manage door to accept one lands on it, never on "create your
+// organisation". So the redirect also waits for that read, and a failed read is shown
+// with Try again rather than taken as "no invitation".
+
+/** The staff invitations waiting for the signed-in address. */
+function useStaffInvitations() {
+  const [state, setState] = useState({ loading: true, error: null, list: [] });
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    orgService
+      .getMyStaffInvitations()
+      .then((res) => {
+        if (!cancelled) setState({ loading: false, error: null, list: res.data?.invitations ?? [] });
+      })
+      .catch((err) => {
+        if (!cancelled) setState({ loading: false, error: errorText(err, "We couldn't check for invitations."), list: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [attempt]);
+  return { ...state, reload: () => setAttempt((n) => n + 1) };
+}
 
 export default function ConsoleHome() {
   // The SAME kept answer every console screen reads (`consoleOrgs.js`), so
@@ -29,8 +58,10 @@ export default function ConsoleHome() {
   // listed without a reload.
   const state = useConsoleOrgs();
   const retry = state.reload;
+  const invitations = useStaffInvitations();
+  const runsNothing = !state.loading && state.error === null && state.orgs.length === 0;
 
-  if (!state.loading && state.error === null && state.orgs.length === 0) {
+  if (runsNothing && !invitations.loading && invitations.error === null && invitations.list.length === 0) {
     return <Navigate to="/console/new" replace />;
   }
 
@@ -46,11 +77,19 @@ export default function ConsoleHome() {
           style={{ background: 'linear-gradient(135deg,#FF8A1F,#FFB347)', color: '#0A0908' }}
         >
           <Plus className="w-4 h-4" />
-          Create another
+          {runsNothing ? 'Create an organisation' : 'Create another'}
         </Link>
       </div>
 
-      {state.loading ? <ConsoleLoading label="Loading your organisations…" /> : null}
+      {!invitations.loading && invitations.error !== null ? (
+        <div className="mb-6">
+          <ConsoleFailed message={invitations.error} onRetry={invitations.reload} />
+        </div>
+      ) : null}
+
+      <StaffInvitations invitations={invitations.list} onAnswered={invitations.reload} />
+
+      {state.loading || (runsNothing && invitations.loading) ? <ConsoleLoading label="Loading your organisations…" /> : null}
 
       {!state.loading && state.error !== null ? (
         <ConsoleFailed message={state.error} onRetry={retry} />

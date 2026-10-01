@@ -1940,7 +1940,7 @@ export async function removeOrgMember(
 /** `isYou` is computed HERE against the caller, never inferred by the screen
  *  (:10726's Low-3 — the last thing this console derived instead of comparing
  *  was true only by coincidence). */
-function toOrgStaff(row: repo.StaffRow, viewerUserId: string): OrgStaff {
+export function toOrgStaff(row: repo.StaffRow, viewerUserId: string): OrgStaff {
   return {
     userId: row.userId,
     displayName: row.displayName,
@@ -1953,6 +1953,7 @@ function toOrgStaff(row: repo.StaffRow, viewerUserId: string): OrgStaff {
     privileges: [...privilegesFor(row.role, row.privileges)],
     since: row.since.toISOString(),
     isYou: row.userId === viewerUserId,
+    isMember: row.isMember,
   };
 }
 

@@ -372,6 +372,10 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // gym_page_photos.added_by — which member of staff put a photo on the gym's page
   // (`0050`), on gym_leads' footing: the gym's record of its own page; `ON DELETE set null`.
   "gym_page_photos",
+  // gym_staff_invites.invited_by and answered_by — who sent a staff invitation and who
+  // accepted, declined or cancelled it (`0058`), on gym_leads' footing: the gym's record;
+  // `ON DELETE set null`. Deleted when the gym closes.
+  "gym_staff_invites",
   "api_cost_events",
   "usage_daily",
   "trace_samples",

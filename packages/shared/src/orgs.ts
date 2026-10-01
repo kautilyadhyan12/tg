@@ -1982,6 +1982,8 @@ export const orgStaffSchema = z.object({
   privileges: z.array(z.string()).optional(),
   since: z.string(),
   isYou: z.boolean(),
+  /** Also a live member of the gym; staff invited by email need not be (§10.1). */
+  isMember: z.boolean().optional(),
 });
 export type OrgStaff = z.infer<typeof orgStaffSchema>;
 

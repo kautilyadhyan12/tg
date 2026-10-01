@@ -43,6 +43,7 @@ import { registerGymPageRoutes } from "./gymPage/routes.js";
 import type { PhotoStore } from "./gymPage/photoStore.js";
 import type { RobotCheck } from "./gymPage/robotCheck.js";
 import { registerInvitationRoutes } from "./invites/joinRoutes.js";
+import { registerStaffInviteRoutes } from "./staffInvites/routes.js";
 import type { InviteSettings } from "./invites/settings.js";
 import { registerMemberListRoutes } from "./memberList/routes.js";
 import * as service from "./service.js";
@@ -119,6 +120,9 @@ export function registerOrgRoutes(
   // A person's own invitations: what is waiting for their address, Join, No thanks
   // (Part 3 §10.2).
   registerInvitationRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites });
+
+  // Staff invited by email, and the invited person's Accept (Part 3 §10.3).
+  registerStaffInviteRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites });
 
   app.post("/v1/orgs", { preHandler: [app.authenticate] }, async (req, reply) => {
     const body = parseOr400(createOrgRequestSchema, req.body, req, reply);

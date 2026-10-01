@@ -40,6 +40,10 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getMemberList: vi.fn(),
       getMemberListEntries: vi.fn(),
       getMemberListEntry: vi.fn(),
+      // The console's front page asks for staff invitations (4a-i): none, unless a test says.
+      getMyStaffInvitations: vi.fn(() => Promise.resolve({ data: { address: 'a@example.com', addressProved: true, invitations: [] } })),
+      acceptStaffInvitation: vi.fn(),
+      declineStaffInvitation: vi.fn(),
     },
   };
 });
@@ -209,6 +213,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   resetConsoleOrgs();
   orgService.getMine.mockResolvedValue({ data: { orgs: [ORG] } });
+  orgService.getMyStaffInvitations.mockResolvedValue({ data: { address: 'a@example.com', addressProved: true, invitations: [] } });
   orgService.getCodes.mockResolvedValue({ data: { codes: [LIVE_CODE] } });
   orgService.getMembers.mockResolvedValue(page([ownerSeat]));
   // Nobody waiting, by default: every test that is not about the queue should
@@ -316,6 +321,85 @@ describe('Your organisations', () => {
     drawHome();
     fireEvent.click(await screen.findByText('Try again'));
     expect(await screen.findByText('Iron House')).toBeTruthy();
+  });
+});
+
+// ── A staff invitation waiting (4a-i) ───────────────────────────────────────
+
+const STAFF_INVITATION = {
+  id: '22222222-2222-4222-8222-222222222222',
+  role: 'trainer',
+  gym: { id: ORG.id, name: 'Iron House', city: 'Austin', orgType: 'gym' },
+  invitedBy: 'Kd Owner',
+  expiresAt: '2026-10-08T09:00:00.000Z',
+  state: 'pending',
+};
+const invitationsAre = (invitations) =>
+  orgService.getMyStaffInvitations.mockResolvedValue({ data: { address: 'anil@example.com', addressProved: true, invitations } });
+
+describe('a person invited to help run a gym', () => {
+  it('lands on the invitation, never on "Create your organisation"', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [] } });
+    invitationsAre([STAFF_INVITATION]);
+    drawConsoleFrom('/console');
+    const card = await screen.findByTestId(`staff-invitation-${STAFF_INVITATION.id}`);
+    expect(within(card).getByText('Kd Owner invited you to help run Iron House as a trainer.')).toBeTruthy();
+    expect(within(card).getByText(/See the member list · Share the join code · See who came in/)).toBeTruthy();
+    expect(within(card).getByText(/It doesn't make you a member of the gym/)).toBeTruthy();
+    expect(screen.queryByText('Create your organisation')).toBeNull();
+  });
+
+  it("Accept opens that gym's console", async () => {
+    orgService.getMine.mockResolvedValueOnce({ data: { orgs: [] } }).mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'trainer', isMember: false }] } });
+    invitationsAre([STAFF_INVITATION]);
+    orgService.acceptStaffInvitation.mockResolvedValue({
+      data: { outcome: 'accepted', role: 'trainer', gym: { id: ORG.id, slug: ORG.slug, name: ORG.name, orgType: 'gym' } },
+    });
+    drawConsoleFrom('/console');
+    fireEvent.click(await screen.findByText('Accept'));
+    await waitFor(() => expect(orgService.acceptStaffInvitation).toHaveBeenCalledWith(STAFF_INVITATION.id));
+    await waitFor(() => expect(screen.queryByTestId(`staff-invitation-${STAFF_INVITATION.id}`)).toBeNull());
+    expect(orgService.getMine.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('No thanks answers it and reads the invitations again', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [ORG] } });
+    invitationsAre([STAFF_INVITATION]);
+    orgService.declineStaffInvitation.mockResolvedValue({ data: { state: 'declined' } });
+    drawHome();
+    fireEvent.click(await screen.findByText('No thanks'));
+    await waitFor(() => expect(orgService.declineStaffInvitation).toHaveBeenCalledWith(STAFF_INVITATION.id));
+    await waitFor(() => expect(orgService.getMyStaffInvitations).toHaveBeenCalledTimes(2));
+  });
+
+  it('a declined one can still be accepted, and says so', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [ORG] } });
+    invitationsAre([{ ...STAFF_INVITATION, state: 'declined' }]);
+    drawHome();
+    const card = await screen.findByTestId(`staff-invitation-${STAFF_INVITATION.id}`);
+    expect(within(card).getByText(/You said no thanks. You can still accept until/)).toBeTruthy();
+    expect(within(card).getByText('Accept')).toBeTruthy();
+    expect(within(card).queryByText('No thanks')).toBeNull();
+  });
+
+  it('a failed check for invitations is said, with Try again, and never sends anybody to create an organisation', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [] } });
+    orgService.getMyStaffInvitations.mockRejectedValueOnce(offline());
+    drawConsoleFrom('/console');
+    fireEvent.click(await screen.findByText('Try again'));
+    await waitFor(() => expect(orgService.getMyStaffInvitations).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('Create your organisation')).toBeTruthy();
+  });
+
+  it('a refusal to Accept is shown on the card', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [] } });
+    invitationsAre([STAFF_INVITATION]);
+    orgService.acceptStaffInvitation.mockRejectedValue(
+      apiError(409, 'invitation_ended', 'This invitation from Iron House has ended. Ask them to send you a new one.'),
+    );
+    drawConsoleFrom('/console');
+    fireEvent.click(await screen.findByText('Accept'));
+    expect(await screen.findByText('This invitation from Iron House has ended. Ask them to send you a new one.')).toBeTruthy();
   });
 });
 

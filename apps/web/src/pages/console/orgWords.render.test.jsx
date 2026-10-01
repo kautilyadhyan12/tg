@@ -27,6 +27,9 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getOverview: vi.fn(),
       getAttendanceDay: vi.fn(),
       getStaff: vi.fn(),
+      // Settings → Staff reads its invitations (4a-i); the console's front page, the person's own.
+      getStaffInvites: vi.fn(() => Promise.resolve({ data: { invites: [] } })),
+      getMyStaffInvitations: vi.fn(() => Promise.resolve({ data: { address: 'a@example.com', addressProved: true, invitations: [] } })),
       updateOrg: vi.fn(),
       getHours: vi.fn(() =>
         Promise.resolve({
