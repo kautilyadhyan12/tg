@@ -52,6 +52,7 @@ try {
       emailId,
       sendId: null,
       leadSendId: send.id,
+      staffSendId: null,
       bounceType: kind === "bounce" ? "Permanent" : null,
       bounceSubType: kind === "bounce" ? "General" : null,
     },

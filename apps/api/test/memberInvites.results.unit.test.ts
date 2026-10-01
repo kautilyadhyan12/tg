@@ -145,6 +145,7 @@ const ev = (type: StoredResendEvent["type"], bounceType: string | null = null, b
   emailId: "e",
   sendId: null,
   leadSendId: null,
+  staffSendId: null,
   bounceType,
   bounceSubType,
 });

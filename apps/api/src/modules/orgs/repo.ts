@@ -1145,9 +1145,12 @@ export interface StaffAuthority {
  *  closes. :13552's standing lesson, earned again: a reviewer's fix is a claim
  *  and takes the same evidence as the code it replaces.
  *
- *  So the denial is precisely the ghost: **they HELD a membership here and it is
- *  closed.** Never-a-member is allowed (the invite flow, and today's fixtures);
- *  currently-a-member is allowed; left-the-gym is not.
+ *  So the denial is precisely the ghost: **they HELD a membership here and it was
+ *  closed after they became staff.** Never-a-member is allowed (the invite flow, and
+ *  today's fixtures); currently-a-member is allowed; left-the-gym is not. A membership
+ *  that ended BEFORE the staff row was written is not a ghost: a past member the owner
+ *  later invites as staff (4a) runs the gym like anybody invited. `listStaff` keeps the
+ *  same rule.
  *
  *  **The owner is exempt on top of that, and it is not a convenience.**
  *  `gyms.owner_included_as_member` is READ by `createOrgAttempt` and the column
@@ -1178,7 +1181,7 @@ export async function getStaffAuthority(
         )
         OR NOT EXISTS (
           SELECT 1 FROM gym_members m
-          WHERE m.gym_id = s.gym_id AND m.user_id = s.user_id
+          WHERE m.gym_id = s.gym_id AND m.user_id = s.user_id AND m.removed_at >= s.created_at
         )
       )`;
   const row = rows[0];
@@ -3360,6 +3363,10 @@ export interface StaffRow {
    *  the rule lives in one place rather than in every reader. */
   privileges: string[] | null;
   since: Date;
+  /** They are also a live member of the gym (staff need not be, §10.1). */
+  isMember: boolean;
+  /** The gym's own role they hold ("Front desk"), or null. */
+  roleName: string | null;
 }
 
 /** Everyone who runs this gym, owner first and then oldest appointment first.
@@ -3393,9 +3400,13 @@ export async function listStaff(sql: Sql, gymId: string): Promise<StaffRow[]> {
       role: string;
       privileges: string[] | null;
       since: Date;
+      is_member: boolean;
+      role_name: string | null;
     }[]
   >`
-    SELECT s.user_id, u.display_name, u.email, s.role, s.privileges, s.created_at AS since
+    SELECT s.user_id, u.display_name, u.email, s.role, s.privileges, s.created_at AS since, s.role_name,
+           EXISTS (SELECT 1 FROM gym_members lm
+                   WHERE lm.gym_id = s.gym_id AND lm.user_id = s.user_id AND lm.removed_at IS NULL) AS is_member
     FROM gym_staff s
     JOIN users u ON u.id = s.user_id
     JOIN gyms g ON g.id = s.gym_id
@@ -3409,7 +3420,7 @@ export async function listStaff(sql: Sql, gymId: string): Promise<StaffRow[]> {
         )
         OR NOT EXISTS (
           SELECT 1 FROM gym_members m
-          WHERE m.gym_id = s.gym_id AND m.user_id = s.user_id
+          WHERE m.gym_id = s.gym_id AND m.user_id = s.user_id AND m.removed_at >= s.created_at
         )
       )
     ORDER BY (s.role = 'owner') DESC, s.created_at ASC, s.user_id ASC`;
@@ -3420,6 +3431,8 @@ export async function listStaff(sql: Sql, gymId: string): Promise<StaffRow[]> {
     role: toOrgRole(r.role),
     privileges: r.privileges,
     since: r.since,
+    isMember: r.is_member,
+    roleName: r.role_name,
   }));
 }
 
@@ -3439,9 +3452,13 @@ async function readStaffRow(
       role: string;
       privileges: string[] | null;
       since: Date;
+      is_member: boolean;
+      role_name: string | null;
     }[]
   >`
-    SELECT s.user_id, u.display_name, u.email, s.role, s.privileges, s.created_at AS since
+    SELECT s.user_id, u.display_name, u.email, s.role, s.privileges, s.created_at AS since, s.role_name,
+           EXISTS (SELECT 1 FROM gym_members lm
+                   WHERE lm.gym_id = s.gym_id AND lm.user_id = s.user_id AND lm.removed_at IS NULL) AS is_member
     FROM gym_staff s
     JOIN users u ON u.id = s.user_id
     WHERE s.gym_id = ${gymId} AND s.user_id = ${userId}`;
@@ -3455,6 +3472,8 @@ async function readStaffRow(
         role: toOrgRole(row.role),
         privileges: row.privileges,
         since: row.since,
+        isMember: row.is_member,
+        roleName: row.role_name,
       };
 }
 
@@ -3496,6 +3515,8 @@ export async function addStaff(
      *  Written with the row so a staff record is never a moment old without an
      *  effective set (:11429's snapshot). */
     privileges: readonly string[];
+    /** The gym's own role ("Front desk", 4a-i), or null. */
+    roleName?: string | null;
     actorUserId: string;
   },
 ): Promise<AddStaffOutcome> {
@@ -3514,8 +3535,8 @@ export async function addStaff(
     if (candidate === undefined) return { kind: "not_a_member" };
 
     const inserted = await tx<{ user_id: string }[]>`
-      INSERT INTO gym_staff (gym_id, user_id, role, privileges)
-      VALUES (${input.gymId}, ${candidate.user_id}, ${input.role}, ${[...input.privileges]})
+      INSERT INTO gym_staff (gym_id, user_id, role, privileges, role_name)
+      VALUES (${input.gymId}, ${candidate.user_id}, ${input.role}, ${[...input.privileges]}, ${input.roleName ?? null})
       ON CONFLICT (gym_id, user_id) DO NOTHING
       RETURNING user_id`;
 
@@ -3594,7 +3615,7 @@ export async function updateStaffRole(
     }
 
     await tx`
-      UPDATE gym_staff SET role = ${input.role}, privileges = ${[...input.privileges]}
+      UPDATE gym_staff SET role = ${input.role}, privileges = ${[...input.privileges]}, role_name = NULL
       WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;
 
     const staff = await readStaffRow(tx, input.gymId, input.userId);

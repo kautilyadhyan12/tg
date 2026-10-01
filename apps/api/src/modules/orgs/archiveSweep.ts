@@ -111,6 +111,7 @@
 // nothing and a retried job is free.
 import type { Sql } from "postgres";
 import { deleteLeadsForGym } from "./leads/repo.js";
+import { deleteStaffInvitesForGym } from "./staffInvites/repo.js";
 import { deleteListForGym as deleteMemberListForGym } from "./memberList/repo.js";
 import { insertAudit } from "./repo.js";
 
@@ -317,6 +318,7 @@ export async function archiveLapsedGyms(
       // archived, list kept" is a state nothing else in the system would ever
       // notice, and a separate statement is one timeout away from producing it.
       await deleteLeadsForGym(tx, row.id);
+      await deleteStaffInvitesForGym(tx, row.id);
       await deleteMemberListForGym(tx, row.id);
     }
     return rows;

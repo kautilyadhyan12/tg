@@ -39,6 +39,7 @@ const { ProtectedRoute } = await import('../components/common/ProtectedRoute');
 const { forgetInvitations, resetInvitations } = await import('../components/gym/invitationsStore');
 const InvitationsPanel = (await import('../components/gym/InvitationsPanel')).default;
 const InvitationLink = (await import('./InvitationLink')).default;
+const StaffInvitationLink = (await import('./StaffInvitationLink')).default;
 const { MEMBER_DOOR, GYM_DOOR, readDoor, rememberDoor } = await import('./landingRoute');
 
 const USER = { id: '3f0c1a52-6a3b-4a53-9a55-2d6f3f6b9b10', email: 'alice@example.com', displayName: 'Alice' };
@@ -76,6 +77,7 @@ const draw = (entry) =>
           <Route path="/invitations" element={<ProtectedRoute requireInvitations={false}><InvitationsPanel showEmpty /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><InvitationsPanel /></ProtectedRoute>} />
           <Route path="/join/:slug" element={<InvitationLink />} />
+          <Route path="/staff-invitation" element={<StaffInvitationLink />} />
         </Routes>
       </AuthProvider>
     </MemoryRouter>,
@@ -291,6 +293,23 @@ describe("the invitation email's link", () => {
     draw('/join/iron-house');
     expect(await screen.findByText("You're invited to Iron House")).toBeTruthy();
     await waitFor(() => expect(orgService.getInvitations).toHaveBeenCalled());
+  });
+});
+
+describe("a staff invitation email's link (4a-i)", () => {
+  it('signed out: sends the person to sign in through the Manage door', async () => {
+    authService.getMe.mockRejectedValue(Object.assign(new Error('unauthorized'), { response: { status: 401 } }));
+    rememberDoor(MEMBER_DOOR);
+    draw('/staff-invitation');
+    expect(await screen.findByRole('heading', { name: "You're invited to help run a gym" })).toBeTruthy();
+    fireEvent.click(screen.getByRole('link', { name: /Sign in/ }));
+    expect(await screen.findByText('SIGN IN PAGE')).toBeTruthy();
+    expect(readDoor()).toBe(GYM_DOOR);
+  });
+
+  it('signed in: goes to the console, where the invitation waits', async () => {
+    draw('/staff-invitation');
+    expect(await screen.findByText('GYM CONSOLE')).toBeTruthy();
   });
 });
 

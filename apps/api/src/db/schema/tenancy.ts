@@ -716,11 +716,15 @@ export const gymStaff = pgTable(
      *  nobody defined cannot be stored even if a caller invents one. It does NOT
      *  forbid duplicates; the write path stores a sorted, de-duplicated set. */
     privileges: text("privileges").array(),
+    /** The gym's own role this person holds ("Front desk", 4a-i, `0059`), shown in place
+     *  of `role`; the ticks are what the console obeys. */
+    roleName: text("role_name"),
     createdAt: createdAt(),
   },
   (t) => [
     primaryKey({ columns: [t.gymId, t.userId] }),
     check("gym_staff_role_check", sql`${t.role} IN ('owner','manager','trainer')`),
+    check("gym_staff_role_name_check", sql`${t.roleName} IS NULL OR (${t.role} <> 'owner' AND length(${t.roleName}) BETWEEN 1 AND 40)`),
     /** **THIS LIST WAS TWO PRIVILEGES BEHIND THE DATABASE UNTIL 2026-09-22.**
      *  `0019_gym_attendance.sql` widened the deployed CHECK to take
      *  `attendance.read` and this mirror was not moved with it, so a schema

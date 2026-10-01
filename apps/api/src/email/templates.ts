@@ -2,7 +2,7 @@
 // HTML twin for the ones that render it. The two CODE emails carry no link at
 // all: a code is typed, never clicked, so there is nothing there to phish
 // with. The deletion-undo email carries exactly one link, to our own origin.
-import { leadFollowUpLetter, leadGreeting } from "@app/shared";
+import { leadFollowUpLetter, leadGreeting, withArticle } from "@app/shared";
 import type { EmailMessage } from "./resend.js";
 
 const APP_NAME = "AI Home Gym";
@@ -85,6 +85,38 @@ export function memberInviteEmail(words: {
     `<p>${escapeHtml(lines.why)}</p>` +
     `<p style="color:#666;font-size:12px">${escapeHtml(lines.footer)}<br>${escapeHtml(lines.stop)} ${link(words.unsubscribeLink)}</p>`;
   return { to: words.to, subject: `You're a member of ${gym} — get the app`, text, html };
+}
+
+/** A gym's invitation to help run it (Part 3 §10.3; ROADMAP 4a-i). Fixed words; the
+ *  inviter's name, the gym's name and the role arrive already cleaned (`cleanGymText`),
+ *  and the one link is to our own sign-in page. It carries no token: accepting needs a
+ *  sign-in with this same address. */
+export function staffInviteEmail(words: {
+  to: string;
+  inviterName: string;
+  gymName: string;
+  role: string;
+  days: number;
+  signInLink: string;
+}): EmailMessage {
+  const gym = words.gymName;
+  const who = words.inviterName === "" ? gym : words.inviterName;
+  const lines = {
+    lead: `${who} invited you to help run ${gym} as ${withArticle(words.role)}.`,
+    how: `Sign in with this email address, ${words.to}, and press Accept:`,
+    only: `The invitation works for ${String(words.days)} days, and only for someone who signs in with this address.`,
+    ignore: "If you weren't expecting it, you can ignore this email.",
+    footer: `Sent by ${APP_NAME} on behalf of ${gym}.`,
+  };
+  const text = `${lines.lead}\n\n${lines.how}\n${words.signInLink}\n\n${lines.only}\n\n${lines.ignore}\n\n${lines.footer}\n`;
+  const link = (href: string) => `<a href="${escapeHtml(href)}">${escapeHtml(href)}</a>`;
+  const html =
+    `<p>${escapeHtml(lines.lead)}</p>` +
+    `<p>${escapeHtml(lines.how)}<br>${link(words.signInLink)}</p>` +
+    `<p>${escapeHtml(lines.only)}</p>` +
+    `<p>${escapeHtml(lines.ignore)}</p>` +
+    `<p style="color:#666;font-size:12px">${escapeHtml(lines.footer)}</p>`;
+  return { to: words.to, subject: `Help run ${gym} on ${APP_NAME}`, text, html };
 }
 
 /** A lead's follow-up email `step`, sent by the app for the gym (Part 3 §16.3; ROADMAP

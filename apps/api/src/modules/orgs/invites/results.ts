@@ -4,16 +4,18 @@
 //
 // A lead's follow-up the app sent for the gym (§16.3; ROADMAP 20c-v-b) is acted on the
 // same way and counts toward the same standing; a complaint about one also takes that
-// lead's "Happy to hear from us" tick off, as its Stop link does.
+// lead's "Happy to hear from us" tick off, as its Stop link does. So is a staff
+// invitation (§10.3; ROADMAP 4a-i).
 //
 // Everything here is safe to run twice: a result only moves to a more serious one, a
 // suppression is kept once, and only the run that stops a gym tells the operator.
-import { INVITE_SEND_TAG, LEAD_SEND_TAG, type MemberInviteEmailResult } from "@app/shared";
+import { INVITE_SEND_TAG, LEAD_SEND_TAG, STAFF_INVITE_SEND_TAG, type MemberInviteEmailResult } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import type { EmailRecordReader } from "../../../email/resend.js";
 import * as webhooks from "../../webhooks/repo.js";
 import * as leadRepo from "../leads/emailsRepo.js";
 import * as listRepo from "../memberList/repo.js";
+import * as staffRepo from "../staffInvites/sendRepo.js";
 import { insertAudit } from "../repo.js";
 import { emailHmac } from "./address.js";
 import * as repo from "./repo.js";
@@ -147,8 +149,8 @@ async function processOne(deps: ResultsDeps, event: webhooks.ClaimedEvent): Prom
     return "deferred";
   }
   // A tagged report must be about the email Resend holds under that tag.
-  const tagName = send.kind === "invite" ? INVITE_SEND_TAG : LEAD_SEND_TAG;
-  const tagValue = send.kind === "invite" ? payload.sendId : payload.leadSendId;
+  const tagName = send.kind === "invite" ? INVITE_SEND_TAG : send.kind === "staff" ? STAFF_INVITE_SEND_TAG : LEAD_SEND_TAG;
+  const tagValue = send.kind === "invite" ? payload.sendId : send.kind === "staff" ? payload.staffSendId : payload.leadSendId;
   const tagAgrees =
     record.kind === "found" && (tagValue === null || record.tags.some((tag) => tag.name === tagName && tag.value === tagValue));
   const confirmation = record.kind === "found" && tagAgrees ? confirm(payload.type, record.lastEvent) : "disagrees";
@@ -176,7 +178,7 @@ async function processOne(deps: ResultsDeps, event: webhooks.ClaimedEvent): Prom
   // Before the gym's lock, in its own transaction, as the Stop link does it: the lead is
   // never locked after the gym's row. Twice is once.
   if (send.kind === "lead" && effect.suppress === "complained") await untickComplainedLead(deps, send, at);
-  const rows = send.kind === "invite" ? inviteRows : leadRows;
+  const rows = send.kind === "invite" ? inviteRows : send.kind === "staff" ? staffRows : leadRows;
   const done = await deps.sql
     .begin(async (tx) => {
       await listRepo.lockGym(tx, send.gymId);
@@ -232,10 +234,18 @@ class LeaseLost extends Error {}
 
 /** The email a report names: an invitation or a lead's follow-up, by its tag, or else by
  *  Resend's id among the emails that went. */
-type ReportedSend = (repo.ReportedSend & { kind: "invite" }) | (leadRepo.ReportedLeadSend & { kind: "lead" });
+type ReportedSend =
+  | (repo.ReportedSend & { kind: "invite" })
+  | (leadRepo.ReportedLeadSend & { kind: "lead" })
+  | (staffRepo.ReportedStaffSend & { kind: "staff" });
 
 async function reportedSend(sql: Sql, payload: webhooks.StoredResendEvent): Promise<ReportedSend | null> {
   const providerId = payload.emailId;
+  // A report tagged as a staff invitation is about that one or nothing.
+  if (payload.staffSendId !== null) {
+    const staff = await staffRepo.staffSendForReport(sql, { staffSendId: payload.staffSendId, providerId });
+    return staff === null ? null : { ...staff, kind: "staff" };
+  }
   if (payload.sendId !== null || payload.leadSendId === null) {
     const invite = await repo.sendForReport(sql, { sendId: payload.sendId, providerId });
     if (invite !== null) return { ...invite, kind: "invite" };
@@ -243,7 +253,10 @@ async function reportedSend(sql: Sql, payload: webhooks.StoredResendEvent): Prom
     if (payload.sendId !== null) return null;
   }
   const lead = await leadRepo.leadSendForReport(sql, { leadSendId: payload.leadSendId, providerId });
-  return lead === null ? null : { ...lead, kind: "lead" };
+  if (lead !== null) return { ...lead, kind: "lead" };
+  if (payload.leadSendId !== null) return null;
+  const staff = await staffRepo.staffSendForReport(sql, { staffSendId: null, providerId });
+  return staff === null ? null : { ...staff, kind: "staff" };
 }
 
 /** The writes a confirmed report makes, for each kind of email. */
@@ -253,6 +266,11 @@ interface ResultRows {
   setResult: (tx: TransactionSql, gymId: string, sendId: string, result: MemberInviteEmailResult, at: Date) => Promise<void>;
 }
 const inviteRows: ResultRows = { markWentAfterAll: repo.markWentAfterAll, forResult: repo.sendForResult, setResult: repo.setResult };
+const staffRows: ResultRows = {
+  markWentAfterAll: staffRepo.markStaffWentAfterAll,
+  forResult: staffRepo.staffSendForResult,
+  setResult: staffRepo.setStaffResult,
+};
 const leadRows: ResultRows = {
   markWentAfterAll: leadRepo.markLeadWentAfterAll,
   forResult: leadRepo.leadSendForResult,

@@ -10,6 +10,15 @@
 // the owner to press the button again — a visible duplicate beats a silent one.
 import {
   acceptInvitationResponseSchema,
+  acceptStaffInvitationResponseSchema,
+  cancelStaffInviteResponseSchema,
+  createStaffInviteResponseSchema,
+  createStaffRoleResponseSchema,
+  deleteStaffRoleResponseSchema,
+  staffRolesResponseSchema,
+  declineStaffInvitationResponseSchema,
+  myStaffInvitationsResponseSchema,
+  staffInvitesResponseSchema,
   gymEnquiryResponseSchema,
   gymPagePhotoResponseSchema,
   gymPagePhotosResponseSchema,
@@ -1177,6 +1186,60 @@ export const orgService = {
       orgStaffMutationResponseSchema,
       'that change',
       authApi.post(`/v1/orgs/${gymId}/staff`, body),
+    ),
+
+  /** POST /v1/orgs/:gymId/staff/invites — invite an address as manager or trainer
+   *  (Part 3 §10.3). `outcome: 'added'` when the address is somebody already in the gym,
+   *  who is staff at once; `'invited'` when an email is on its way. Not retried. */
+  inviteStaff: (gymId, body) =>
+    readThrough(createStaffInviteResponseSchema, 'that invitation', authApi.post(`/v1/orgs/${gymId}/staff/invites`, body)),
+
+  /** GET /v1/orgs/:gymId/staff/roles — the gym's own roles (RULINGS 2026-10-01). */
+  getStaffRoles: (gymId) =>
+    readThrough(staffRolesResponseSchema, 'your roles', authApi.get(`/v1/orgs/${gymId}/staff/roles`)),
+
+  /** POST /v1/orgs/:gymId/staff/roles — make one: a name and its ticks. */
+  createStaffRole: (gymId, body) =>
+    readThrough(createStaffRoleResponseSchema, 'that role', authApi.post(`/v1/orgs/${gymId}/staff/roles`, body)),
+
+  /** DELETE /v1/orgs/:gymId/staff/roles/:roleId — staff who have it keep it. */
+  deleteStaffRole: (gymId, roleId) =>
+    readThrough(
+      deleteStaffRoleResponseSchema,
+      'that role',
+      authApi.delete(`/v1/orgs/${gymId}/staff/roles/${encodeURIComponent(roleId)}`),
+    ),
+
+  /** GET /v1/orgs/:gymId/staff/invites — the invitations waiting, ended or declined. */
+  getStaffInvites: (gymId) =>
+    readThrough(staffInvitesResponseSchema, 'your staff invitations', authApi.get(`/v1/orgs/${gymId}/staff/invites`)),
+
+  /** DELETE /v1/orgs/:gymId/staff/invites/:inviteId — cancel, or take an ended one off the list. */
+  cancelStaffInvite: (gymId, inviteId) =>
+    readThrough(
+      cancelStaffInviteResponseSchema,
+      'that invitation',
+      authApi.delete(`/v1/orgs/${gymId}/staff/invites/${encodeURIComponent(inviteId)}`),
+    ),
+
+  /** GET /v1/orgs/staff-invitations — staff invitations waiting for the signed-in address. */
+  getMyStaffInvitations: () =>
+    readThrough(myStaffInvitationsResponseSchema, 'your invitations', authApi.get('/v1/orgs/staff-invitations')),
+
+  /** POST /v1/orgs/staff-invitations/:invitationId/accept — Accept: the console opens. */
+  acceptStaffInvitation: (invitationId) =>
+    readThrough(
+      acceptStaffInvitationResponseSchema,
+      'your answer',
+      authApi.post(`/v1/orgs/staff-invitations/${encodeURIComponent(invitationId)}/accept`, {}),
+    ),
+
+  /** POST /v1/orgs/staff-invitations/:invitationId/decline — No thanks. */
+  declineStaffInvitation: (invitationId) =>
+    readThrough(
+      declineStaffInvitationResponseSchema,
+      'your answer',
+      authApi.post(`/v1/orgs/staff-invitations/${encodeURIComponent(invitationId)}/decline`, {}),
     ),
 
   /** PATCH /v1/orgs/:gymId/staff/:userId — change what somebody may do.

@@ -25,6 +25,7 @@ import Achievements    from './pages/Achievements';
 import Settings        from './pages/Settings';
 import JoinGym         from './pages/JoinGym';
 import InvitationLink  from './pages/InvitationLink';
+import StaffInvitationLink from './pages/StaffInvitationLink';
 import GymPublicPage   from './pages/GymPublicPage';
 import Invitations     from './pages/Invitations';
 import MyGyms          from './pages/MyGyms';
@@ -184,6 +185,8 @@ export default function App() {
                 exists it opens sign-in; the invitation itself hangs on the
                 address, never on this link. */}
             <Route path="/join/:slug" element={<InvitationLink />} />
+            {/* A staff invitation email's link (Part 3 §10.3): sign in through the Manage door. */}
+            <Route path="/staff-invitation" element={<StaffInvitationLink />} />
             {/* A gym's own page and its enquiry form (20c-iv-a): public, no sign-in. */}
             <Route path="/gyms/:slug" element={<GymPublicPage />} />
             <Route path="/invitations" element={

@@ -631,6 +631,7 @@ d("what comes back from a lead's follow-up (real Postgres)", () => {
         emailId: toJon.providerId,
         sendId: null,
         leadSendId: tagOf(toJon),
+        staffSendId: null,
         bounceType: null,
         bounceSubType: null,
       });
