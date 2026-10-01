@@ -962,6 +962,15 @@ describe('the invitations waiting', () => {
     expect(row.getByText('Send again')).toBeTruthy();
   });
 
+  it('Send again refused because they are already staff: says so and reads the list again, so the row goes', async () => {
+    orgService.getStaffInvites.mockResolvedValue({ data: { invites: [INVITE] } });
+    orgService.resendStaffInvite.mockRejectedValue(apiError(409, 'already_staff', 'Anil Rao is already a trainer here. Change what they can do instead of inviting them again.'));
+    await drawStaff();
+    fireEvent.click(await screen.findByText('Send again'));
+    expect(await screen.findByText(/Anil Rao is already a trainer here\./)).toBeTruthy();
+    await waitFor(() => expect(orgService.getStaffInvites).toHaveBeenCalledTimes(2));
+  });
+
   it("Send again's refusal is the server's own sentence", async () => {
     orgService.getStaffInvites.mockResolvedValue({ data: { invites: [INVITE] } });
     orgService.resendStaffInvite.mockRejectedValue(

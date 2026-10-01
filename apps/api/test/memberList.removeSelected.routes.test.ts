@@ -419,6 +419,11 @@ d("Remove on the people selected (real Postgres)", () => {
       expect(asManager.statusCode, asManager.body).toBe(200);
       const managerSees = (JSON.parse(asManager.body) as { page: { entries: { staff: unknown }[] } }).page.entries;
       expect(managerSees.every((e) => e.staff === null)).toBe(true);
+      // And on the one record's own panel (the re-check's L4).
+      const panelAs = async (who: User) =>
+        (JSON.parse((await get(`/v1/orgs/${gym.id}/member-list/entries/${coach.entryId}`, who.cookies)).body) as { entry: { staff: unknown } }).entry.staff;
+      expect(await panelAs(member.user)).toBeNull();
+      expect(await panelAs(gym.owner)).toEqual({ role: "trainer", roleName: "Front desk" });
 
       // The owner's staff list says whose list record removing them from the app moves
       // (round one, L5): the coach, joined through their record.

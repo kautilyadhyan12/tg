@@ -22,7 +22,7 @@ import {
   unknownPrivilegesNote,
 } from '../../pages/console/staffView';
 import { readOnlyNote } from '../../pages/console/billingView';
-import { orgService, errorText, isRetryable } from '../../api/orgsApi';
+import { orgService, errorText, errorCode, isRetryable } from '../../api/orgsApi';
 
 // WHO RUNS THIS GYM — Part 3 §4.7's Staff surface, on §3.1's Settings screen.
 //
@@ -1192,6 +1192,9 @@ export default function StaffPanel({ gymId, privileges, orgType, readOnly = fals
         message: errorText(err, "We couldn't send that invitation again. Please try again."),
         retryable: false,
       });
+      // Already staff, or gone: the server took it off the list, so the list is read
+      // again rather than offering Send again on it (round one's re-check, N1).
+      if (['already_staff', 'invite_not_found'].includes(errorCode(err))) reload();
     } finally {
       setBusyId(null);
     }
