@@ -99,6 +99,11 @@ export class FakeRazorpay implements RazorpayApi {
     if (this.down) return Promise.resolve({ kind: "unavailable", status: 503 });
     const sub = this.subs.get(id);
     if (sub === undefined) return Promise.resolve({ kind: "not_found" });
+    // Razorpay refuses to cancel a plan it has ended ("Subscription is not cancellable in
+    // cancelled status.", tried 2026-10-01).
+    if (sub.status === "cancelled" || sub.status === "completed" || sub.status === "expired") {
+      return Promise.resolve({ kind: "refused", status: 400, code: "BAD_REQUEST_ERROR" });
+    }
     this.cancelled.push(id);
     const ended = { ...sub, status: "cancelled" as const, ended_at: this.clock, charge_at: null };
     this.subs.set(id, ended);
@@ -178,7 +183,9 @@ export class FakeRazorpay implements RazorpayApi {
     const plan = this.plans.get(sub.plan_id);
     if (plan === undefined) throw new Error("fake Razorpay lost a plan");
     const list = this.invoices.get(id) ?? [];
-    list.push(this.invoice({ status: "issued", subscription_id: id, payment_id: null, amount_paid: 0, amount_due: plan.item.amount, paid_at: null }));
+    // The month after the last one billed.
+    const from = list.reduce((end, i) => Math.max(end, i.billing_end ?? 0), sub.current_end ?? this.clock);
+    list.push(this.invoice({ status: "issued", subscription_id: id, payment_id: null, amount_paid: 0, amount_due: plan.item.amount, paid_at: null, billing_end: from + MONTH_S }));
     this.invoices.set(id, list);
   }
 
@@ -220,7 +227,7 @@ export class FakeRazorpay implements RazorpayApi {
     const paymentId = razorpayId("pay");
     this.payments.set(paymentId, { id: paymentId, entity: "payment", amount: plan.item.amount, currency: plan.item.currency, status: "captured", amount_refunded: 0 });
     const list = this.invoices.get(id) ?? [];
-    list.push(this.invoice({ status: "paid", subscription_id: id, payment_id: paymentId, amount_paid: plan.item.amount, amount_due: 0, paid_at: this.clock }));
+    list.push(this.invoice({ status: "paid", subscription_id: id, payment_id: paymentId, amount_paid: plan.item.amount, amount_due: 0, paid_at: this.clock, billing_end: start + MONTH_S }));
     this.invoices.set(id, list);
     this.subs.set(id, {
       ...sub,
@@ -240,7 +247,9 @@ export class FakeRazorpay implements RazorpayApi {
     const plan = this.plans.get(sub.plan_id);
     const list = this.invoices.get(id) ?? [];
     if (sub.status !== "pending" && sub.status !== "halted" && plan !== undefined) {
-      list.push(this.invoice({ status: "issued", subscription_id: id, payment_id: null, amount_paid: 0, amount_due: plan.item.amount, paid_at: null }));
+      // The bill is for the month starting where the paid one ends.
+      const from = sub.current_end ?? this.clock;
+      list.push(this.invoice({ status: "issued", subscription_id: id, payment_id: null, amount_paid: 0, amount_due: plan.item.amount, paid_at: null, billing_end: from + MONTH_S }));
       this.invoices.set(id, list);
     }
     this.subs.set(id, { ...sub, status });

@@ -309,6 +309,8 @@ export interface PaddleRow {
   /** Set to end when the month paid for ends (`currentPeriodEnd`). */
   cancelAtPeriodEnd: boolean;
   currentPeriodEnd: Date | null;
+  /** When the cancel went to Razorpay (an overdue plan's: when Cancel was pressed). */
+  cancelSentAt: Date | null;
 }
 
 export async function findPaddleSubscription(sql: SqlOrTx, subscriptionId: string): Promise<PaddleRow | null> {
@@ -326,9 +328,10 @@ export async function findProviderSubscription(sql: SqlOrTx, provider: PayProvid
       ended_at: Date | null;
       cancel_at_period_end: boolean;
       current_period_end: Date | null;
+      cancel_sent_at: Date | null;
     }[]
   >`
-    SELECT id, owner_id, status, cancel_reason, ended_at, cancel_at_period_end, current_period_end FROM subscriptions
+    SELECT id, owner_id, status, cancel_reason, ended_at, cancel_at_period_end, current_period_end, cancel_sent_at FROM subscriptions
     WHERE provider = ${provider} AND provider_ref = ${subscriptionId} AND owner_type = 'gym'`;
   const row = rows[0];
   return row === undefined
@@ -341,6 +344,7 @@ export async function findProviderSubscription(sql: SqlOrTx, provider: PayProvid
         endedAt: row.ended_at,
         cancelAtPeriodEnd: row.cancel_at_period_end,
         currentPeriodEnd: row.current_period_end,
+        cancelSentAt: row.cancel_sent_at,
       };
 }
 
@@ -1343,7 +1347,14 @@ export async function requestCancel(sql: Sql, input: { gymId: string; userId: st
       LIMIT 1
       FOR UPDATE`;
     const row = rows[0];
-    if (row === undefined) return { kind: "no_paid_plan" };
+    if (row === undefined) {
+      // A second press after the first ended an overdue plan finds it already done.
+      const ended = await tx`
+        SELECT 1 FROM subscriptions
+        WHERE owner_type = 'gym' AND owner_id = ${input.gymId} AND provider = 'razorpay' AND cancel_at_period_end
+          AND ended_at > ${new Date(input.now.getTime() - 10 * 60 * 1000)}`;
+      return ended.length > 0 ? { kind: "already" } : { kind: "no_paid_plan" };
+    }
     if (row.provider === "paddle") return { kind: "not_razorpay" };
     if (row.provider !== "razorpay" || row.provider_ref === null) return { kind: "no_paid_plan" };
     if (row.cancel_at_period_end) return { kind: "already" };
@@ -1363,13 +1374,15 @@ export async function requestCancel(sql: Sql, input: { gymId: string; userId: st
 }
 
 /** An overdue plan cancelled at Razorpay: marked as ended by the gym, so a payment Razorpay
- *  takes after it is refunded. Its end is written from Razorpay's record by the one rule. */
+ *  takes after `now` — the moment Cancel was pressed — is refunded. Its end is written from
+ *  Razorpay's record by the one rule. */
 export async function markCancelSent(sql: Sql, input: { gymId: string; userId: string; rowId: string; now: Date }): Promise<void> {
   await sql.begin(async (tx) => {
     await lockOrgRow(tx, input.gymId); // subscription-writer lock
     const moved = await tx<{ id: string }[]>`
-      UPDATE subscriptions SET cancel_at_period_end = true, cancel_sent_at = COALESCE(cancel_sent_at, ${input.now})
+      UPDATE subscriptions SET cancel_at_period_end = true, cancel_sent_at = ${input.now}
       WHERE id = ${input.rowId} AND owner_type = 'gym' AND owner_id = ${input.gymId} AND provider = 'razorpay'
+        AND cancel_sent_at IS NULL
       RETURNING id`;
     if (moved.length === 0) return;
     await insertAudit(tx, {
@@ -1476,6 +1489,21 @@ export async function dueCancelEnds(sql: SqlOrTx, input: { now: Date; limit: num
     WHERE owner_type = 'gym' AND provider = 'razorpay' AND provider_ref IS NOT NULL
       AND cancel_at_period_end AND status IN ('trialing','active')
       AND current_period_end <= ${input.now}
+    ORDER BY current_period_end, id
+    LIMIT ${input.limit}`;
+  return rows.map((r) => r.provider_ref);
+}
+
+/** Live plans paid through Razorpay whose month ended before `before` and which are not set to
+ *  end (`dueCancelEnds` reads those): read from Razorpay again, since a plan Razorpay has
+ *  stopped charging (`halted`) sends no event when its next month falls due, and a webhook can
+ *  be lost. */
+export async function dueRazorpayRenewals(sql: SqlOrTx, input: { before: Date; limit: number }): Promise<string[]> {
+  const rows = await sql<{ provider_ref: string }[]>`
+    SELECT provider_ref FROM subscriptions
+    WHERE owner_type = 'gym' AND provider = 'razorpay' AND provider_ref IS NOT NULL
+      AND NOT cancel_at_period_end AND status IN ('trialing','active')
+      AND current_period_end <= ${input.before}
     ORDER BY current_period_end, id
     LIMIT ${input.limit}`;
   return rows.map((r) => r.provider_ref);

@@ -481,8 +481,10 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
       // Razorpay gives up retrying (halted) after the grace: still unpaid.
       razorpay.fail(win.subscriptionId, "halted");
       await signedWebhook(win.subscriptionId, "subscription.halted");
-      expect((await runWorker(2 * DAY_MS + 5000)).gracesEnded).toBe(1);
+      // The sweep ends every gym's grace due, other test files' too: this gym's row is the proof.
+      expect((await runWorker(2 * DAY_MS + 5000)).gracesEnded).toBeGreaterThanOrEqual(1);
       expect(await paidRows(a.gymId)).toEqual([{ status: "expired", provider_ref: win.subscriptionId, cancel_reason: "grace_expired" }]);
+      expect(await sql`SELECT 1 FROM audit_log WHERE gym_id = ${a.gymId} AND action = 'billing.grace_ended'`).toHaveLength(1);
       expect(await myGym(a.gymId, a.cookies)).toMatchObject({ consoleReadOnly: true, paymentOverdue: true, paymentOverdueThrough: "razorpay" });
       // A second plan would charge twice: the overdue one is paid instead.
       expect(JSON.parse((await checkout(a.gymId, a.cookies, BIG)).body)).toMatchObject({ error: "payment_overdue" });
@@ -1151,6 +1153,145 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
       for (const res of [await cancelPlan("not-a-gym", a.cookies), await payLink("not-a-gym", a.cookies), await method("not-a-gym", a.cookies), await refresh("not-a-gym", a.cookies)]) {
         expect(res.statusCode).toBe(400);
       }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "round one H1: a halted plan paid from its bill's page is the gym's through the month that bill covers, then owed again",
+    async () => {
+      const a = await paidPlan();
+      razorpay.fail(a.sub, "halted");
+      await refresh(a.gymId, a.cookies);
+      expect(await planRow(a.gymId)).toMatchObject({ status: "past_due" });
+      const owed = razorpay.invoices.get(a.sub)?.find((i) => i.status === "issued");
+      const paidTo = new Date((owed?.billing_end ?? 0) * 1000);
+      razorpay.payInvoice(owed?.id ?? "");
+      await refresh(a.gymId, a.cookies);
+      const row = await planRow(a.gymId);
+      expect(row).toMatchObject({ status: "active" });
+      expect(row?.current_period_end?.toISOString()).toBe(paidTo.toISOString());
+      // Razorpay, halted, charges nothing and says nothing when that month ends; the worker
+      // reads the plan again, and the next month is owed.
+      expect(razorpay.subs.get(a.sub)?.status).toBe("halted");
+      await runAt(paidTo, -60 * 60_000);
+      expect(await planRow(a.gymId)).toMatchObject({ status: "active" });
+      const run = await runAt(paidTo, 10 * 60_000);
+      expect(run.reread).toBeGreaterThanOrEqual(1);
+      expect(await planRow(a.gymId)).toMatchObject({ status: "past_due" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "round one H2: a retry Razorpay takes between Cancel and its cancel landing, on an overdue plan, is refunded",
+    async () => {
+      const a = await paidPlan();
+      const firstPayment = razorpay.invoices.get(a.sub)?.[0]?.payment_id;
+      razorpay.fail(a.sub);
+      await refresh(a.gymId, a.cookies);
+      const real = razorpay.cancelSubscriptionNow.bind(razorpay);
+      razorpay.cancelSubscriptionNow = (id: string) => {
+        // Razorpay's own retry of the failed month succeeds just before the cancel arrives.
+        razorpay.clock = Math.floor(Date.now() / 1000);
+        razorpay.chargeUnpaid(id);
+        return real(id);
+      };
+      try {
+        const res = await cancelPlan(a.gymId, a.cookies);
+        expect([res.statusCode, JSON.parse(res.body)]).toEqual([200, { subscription: null }]);
+      } finally {
+        razorpay.cancelSubscriptionNow = real;
+      }
+      const retried = razorpay.invoices.get(a.sub)?.find((i) => i.status === "paid" && i.payment_id !== firstPayment);
+      expect(retried?.payment_id).toBeTruthy();
+      expect(await sql`SELECT transaction_ref, reason FROM billing_refunds WHERE gym_id = ${a.gymId}`).toEqual([
+        { transaction_ref: retried?.payment_id, reason: "cancelled" },
+      ]);
+      await runWorker();
+      expect(razorpay.refunds).toContain(retried?.payment_id);
+      expect(razorpay.refunds).not.toContain(firstPayment);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "round one H2: a bill paid from Razorpay's email after an overdue plan was cancelled is refunded, though Razorpay says cancelled",
+    async () => {
+      const a = await paidPlan();
+      razorpay.fail(a.sub);
+      await refresh(a.gymId, a.cookies);
+      expect((await cancelPlan(a.gymId, a.cookies)).statusCode).toBe(200);
+      expect(razorpay.subs.get(a.sub)?.status).toBe("cancelled");
+      const owed = razorpay.invoices.get(a.sub)?.find((i) => i.status === "issued");
+      razorpay.clock = Math.floor(Date.now() / 1000) + 60;
+      razorpay.payInvoice(owed?.id ?? "");
+      const paid = razorpay.invoices.get(a.sub)?.find((i) => i.id === owed?.id);
+      const raw = JSON.stringify({ entity: "event", event: "invoice.paid", payload: { invoice: { entity: { id: owed?.id, subscription_id: a.sub } } } });
+      await api().inject({
+        method: "POST",
+        url: "/v1/webhooks/razorpay",
+        remoteAddress: nextIp(),
+        headers: {
+          "content-type": "application/json",
+          "x-razorpay-signature": createHmac("sha256", WEBHOOK_SECRET).update(raw).digest("hex"),
+          "x-razorpay-event-id": `evt_${randomBytes(7).toString("hex")}`,
+        },
+        payload: raw,
+      });
+      await runWorker(2 * 60_000);
+      expect(await sql`SELECT transaction_ref, reason FROM billing_refunds WHERE gym_id = ${a.gymId}`).toEqual([
+        { transaction_ref: paid?.payment_id, reason: "cancelled" },
+      ]);
+      expect(razorpay.refunds).toContain(paid?.payment_id);
+      expect(await planRow(a.gymId)).toMatchObject({ status: "expired" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "round one L1: two staff cancelling an overdue plan at once both see it cancelled, once at Razorpay, one audit line",
+    async () => {
+      const a = await paidPlan();
+      const clerk = await makeUser();
+      await addStaff(a.gymId, clerk.userId, "manager", ["members.read", "billing.manage"]);
+      razorpay.fail(a.sub);
+      await refresh(a.gymId, a.cookies);
+      const [one, two] = await Promise.all([cancelPlan(a.gymId, a.cookies), cancelPlan(a.gymId, clerk.cookies)]);
+      expect([one.statusCode, two.statusCode]).toEqual([200, 200]);
+      expect(razorpay.cancelled.filter((id) => id === a.sub)).toHaveLength(1);
+      expect(await sql`SELECT 1 FROM audit_log WHERE gym_id = ${a.gymId} AND action = 'billing.cancel_requested'`).toHaveLength(1);
+      // Pressed again later: already done, not "isn't paid through Razorpay".
+      const again = await cancelPlan(a.gymId, a.cookies);
+      expect([again.statusCode, JSON.parse(again.body)]).toEqual([200, { subscription: null }]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "round one L1: a paid trial's cancel whose answer was lost is found done on the next read, not asked forever",
+    async () => {
+      razorpay.clock = Math.floor(Date.now() / 1000);
+      const a = await owner();
+      expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
+      const t = await trialWindow(a, BIG);
+      razorpay.authenticate(t.subscriptionId);
+      await sync(a.gymId, t.checkoutId, a.cookies);
+      const end = (await planRow(a.gymId))?.current_period_end;
+      if (end === null || end === undefined) throw new Error("no trial end");
+      expect((await cancelPlan(a.gymId, a.cookies)).statusCode).toBe(200);
+      const real = razorpay.cancelSubscriptionNow.bind(razorpay);
+      razorpay.cancelSubscriptionNow = async (id: string) => {
+        await real(id);
+        return { kind: "unavailable", status: null };
+      };
+      try {
+        expect((await runAt(end, -2 * HOUR_MS)).cancels).toMatchObject({ sent: 1, failed: 0 });
+      } finally {
+        razorpay.cancelSubscriptionNow = real;
+      }
+      expect((await planRow(a.gymId))?.cancel_sent_at).not.toBeNull();
+      expect((await runAt(end, -HOUR_MS)).cancels).toMatchObject({ sent: 0, failed: 0 });
     },
     TEST_TIMEOUT_MS,
   );

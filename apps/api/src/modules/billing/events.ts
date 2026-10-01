@@ -3,6 +3,7 @@
 // one rule (`applyPaddleSubscription`, `applyRazorpaySubscription`). Safe to run twice: the
 // rule ignores a record it already holds, and every event is leased and finished by its lease.
 import * as webhooks from "../webhooks/repo.js";
+import * as repo from "./repo.js";
 import {
   applyPaddleSubscription,
   applyPendingSizes,
@@ -101,6 +102,29 @@ export interface RazorpayEventsRun {
   gracesEnded: number;
   /** Plans set to end, sent to Razorpay or ended this run (1d-ii). */
   cancels: RazorpayCancelsRun;
+  /** Live plans past their month's end, queued to be read from Razorpay again. */
+  reread: number;
+}
+
+/** A live plan's month must have ended this long ago before it is read again: Razorpay charges
+ *  at the month's end, and its own event is the usual way the next month arrives. */
+export const RENEWAL_GRACE_MS = 5 * 60 * 1000;
+/** A plan still past its month's end is read again at most this often. */
+export const REREAD_EVERY_MS = 15 * 60 * 1000;
+
+/** Queue a read from Razorpay of each live plan whose month ended `RENEWAL_GRACE_MS` ago or more
+ *  (1d-ii): Razorpay sends no event when a plan it has stopped charging (`halted`) falls due
+ *  again, and a webhook can be lost. Kept as an event once per plan per quarter hour, so a plan
+ *  Razorpay is slow to charge is asked four times an hour, not every minute. */
+export async function rereadDueRazorpayPlans(deps: BillingDeps): Promise<number> {
+  if ((deps.razorpay ?? null) === null) return 0;
+  const now = deps.now();
+  const due = await repo.dueRazorpayRenewals(deps.sql, { before: new Date(now.getTime() - RENEWAL_GRACE_MS), limit: 200 });
+  const bucket = Math.floor(now.getTime() / REREAD_EVERY_MS);
+  for (const subscriptionId of due) {
+    await webhooks.keepRazorpayEvent(deps.sql, { eventId: `due:${subscriptionId}:${String(bucket)}`, payload: { type: "renewal.due", subscriptionId } });
+  }
+  return due.length;
 }
 
 /** Razorpay's kept events (1d-i), then the refunds owed, the graces due and the cancels due:
@@ -115,7 +139,9 @@ export async function processRazorpayEvents(deps: BillingDeps): Promise<Razorpay
     refunds: { requested: 0, notNeeded: 0, deferred: 0, failed: 0 },
     gracesEnded: 0,
     cancels: { sent: 0, failed: 0, ended: 0 },
+    reread: 0,
   };
+  run.reread = await rereadDueRazorpayPlans(deps);
   for (let taken = 0; taken < PADDLE_EVENTS.perRun; taken++) {
     const event = await webhooks.claimDueRazorpayEvent(deps.sql, deps.now(), PADDLE_EVENTS.leaseMs);
     if (event === null) break;

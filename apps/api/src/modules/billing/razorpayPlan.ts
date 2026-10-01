@@ -23,6 +23,9 @@ export interface CancelRow {
   currentPeriodEnd: Date | null;
   /** When the plan stopped being the gym's; null while live. */
   endedAt: Date | null;
+  /** When the cancel went to Razorpay; for a plan whose payment was overdue, when Cancel was
+   *  pressed, as it ends at once. Null until then. */
+  cancelSentAt: Date | null;
 }
 
 export type CancelOutcome =
@@ -40,17 +43,18 @@ export type CancelOutcome =
   | { kind: "refund_after"; after: Date };
 
 const LIVE: ReadonlySet<LocalStatus> = new Set(["trialing", "active", "past_due"]);
-const ENDED_AT_RAZORPAY: ReadonlySet<string> = new Set(["cancelled", "completed", "expired"]);
-/** States in which Razorpay may still charge, or has charged. */
-const MAY_CHARGE: ReadonlySet<string> = new Set(["authenticated", "active", "pending", "halted"]);
+export const ENDED_AT_RAZORPAY: ReadonlySet<string> = new Set(["cancelled", "completed", "expired"]);
 
 /** What Razorpay's record means for a plan our row holds. */
 export function razorpayCancelOutcome(row: CancelRow | null, sub: RazorpaySubscription, askedAt: Date): CancelOutcome {
   if (row === null || !row.cancelAtPeriodEnd) return { kind: "none" };
   if (!LIVE.has(row.status)) {
-    // Ended for our cancel: a later payment is not the gym's to make.
-    const after = row.endedAt ?? row.currentPeriodEnd;
-    return after !== null && MAY_CHARGE.has(sub.status) ? { kind: "refund_after", after } : { kind: "none" };
+    // Ended for our cancel: no later payment is the gym's to make, whatever Razorpay says of
+    // the plan now (a bill can be paid from its own page after a cancel). The cut is the
+    // earliest of the paid month's end, the cancel and the write that ended it: a payment
+    // landing between them is still after the plan was to end.
+    const after = earliest(row.currentPeriodEnd, row.cancelSentAt, row.endedAt);
+    return after === null ? { kind: "none" } : { kind: "refund_after", after };
   }
   // A plan ended at once (its payment overdue) has no paid month left to run.
   if (row.status === "past_due") return { kind: "scheduled" };
@@ -64,20 +68,38 @@ export function razorpayCancelOutcome(row: CancelRow | null, sub: RazorpaySubscr
   return { kind: "scheduled" };
 }
 
+function earliest(...moments: (Date | null)[]): Date | null {
+  let first: Date | null = null;
+  for (const m of moments) if (m !== null && (first === null || m.getTime() < first.getTime())) first = m;
+  return first;
+}
+
 /** Is a bill of this plan still unpaid? A payment that failed leaves its invoice owed, and a
  *  plan whose card was changed after it gave up (`halted`) goes `active` with those invoices
  *  still owed (Razorpay, "Payment Retries"). Paid only on Razorpay's own word: while Razorpay
- *  says a payment failed (`pending`, `halted`), only the newest invoice paid counts, so an
- *  invoice in a state this code does not know never reads as paid. */
-export function razorpayOwes(sub: RazorpaySubscription, invoices: readonly RazorpayInvoice[]): boolean {
+ *  says a payment failed (`pending`, `halted`), the plan is paid only through the month its
+ *  newest invoice, paid, covers (`razorpayPaidThrough`) — a halted plan is not charged again,
+ *  so its next month is owed the moment that one ends — and an invoice in a state this code
+ *  does not know never reads as paid. */
+export function razorpayOwes(sub: RazorpaySubscription, invoices: readonly RazorpayInvoice[], askedAt: Date): boolean {
   const mine = invoices.filter((i) => i.subscription_id === sub.id);
   if (mine.some((i) => RAZORPAY_OWED.has(i.status))) return true;
   if (sub.status !== "pending" && sub.status !== "halted") return false;
+  const through = razorpayPaidThrough(sub, mine);
+  return through === null || askedAt.getTime() >= through.getTime();
+}
+
+/** The end of the month the newest invoice of this plan pays for, when that invoice is paid:
+ *  its own billing period, else the plan's current month. Null when the newest is not paid. */
+export function razorpayPaidThrough(sub: RazorpaySubscription, invoices: readonly RazorpayInvoice[]): Date | null {
   let newest: RazorpayInvoice | null = null;
-  for (const invoice of mine) {
+  for (const invoice of invoices) {
+    if (invoice.subscription_id !== sub.id) continue;
     if (newest === null || invoiceTime(invoice) > invoiceTime(newest)) newest = invoice;
   }
-  return newest?.status !== "paid";
+  if (newest?.status !== "paid") return null;
+  const end = newest.billing_end ?? sub.current_end;
+  return end === null ? null : new Date(end * 1000);
 }
 
 /** The oldest bill still owed, which Pay now opens: Razorpay keeps each month's bill, and a

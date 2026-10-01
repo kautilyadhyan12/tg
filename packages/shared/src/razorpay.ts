@@ -92,6 +92,8 @@ export const razorpayInvoiceSchema = z.object({
   paid_at: z.number().int().nonnegative().nullable().optional(),
   /** When Razorpay made it (Unix seconds): the newest is the month now due. */
   created_at: unixSeconds.optional(),
+  /** The end of the month it pays for (Unix seconds; seen on the test account, 2026-10-01). */
+  billing_end: unixSeconds.nullable().optional(),
   /** Razorpay's own page for it: pays it while it is owed, and is its receipt once paid.
    *  Read through `razorpayPayLinkSchema` before anything is sent to a browser. */
   short_url: z.string().nullable().optional(),

@@ -53,6 +53,8 @@
       "comment": null,
       "short_url": "https://rzp.io/rzp/fixture1",
       "view_less": true,
+      "billing_start": 1790828920,
+      "billing_end": 1793471400,
       "type": "invoice",
       "group_taxes_discounts": false,
       "created_at": 1790828583,

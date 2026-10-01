@@ -149,7 +149,7 @@ export const subscriptions = pgTable(
     check("subscriptions_cancel_sent_check", sql`${t.cancelSentAt} IS NULL OR ${t.cancelAtPeriodEnd}`),
     index("subscriptions_cancel_due_idx")
       .on(t.currentPeriodEnd)
-      .where(sql`${t.cancelAtPeriodEnd} AND ${t.provider} = razorpay AND ${t.status} IN (trialing,active,past_due)`),
+      .where(sql`${t.cancelAtPeriodEnd} AND ${t.provider} = 'razorpay' AND ${t.status} IN ('trialing','active','past_due')`),
   ],
 );
 

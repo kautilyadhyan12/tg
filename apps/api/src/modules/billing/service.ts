@@ -50,7 +50,7 @@ import type { Snapshot } from "./machine.js";
 import { onlinePaymentFor } from "./online.js";
 import { paddleWindowCountry, type PaddleApi, type PaddleEnvironment, type ProrationMode } from "./paddle.js";
 import type { RazorpayApi } from "./razorpay.js";
-import { oldestOwedInvoice, razorpayCancelOutcome, razorpayOwes } from "./razorpayPlan.js";
+import { ENDED_AT_RAZORPAY, oldestOwedInvoice, razorpayCancelOutcome, razorpayOwes, razorpayPaidThrough } from "./razorpayPlan.js";
 import * as repo from "./repo.js";
 
 export interface PaddleSettings {
@@ -1258,7 +1258,15 @@ async function applyRazorpay(deps: BillingDeps, razorpay: RazorpaySettings, sub:
   ) {
     const invoices = await razorpay.api.listSubscriptionInvoices(sub.id);
     if (invoices.kind !== "ok") return "retry";
-    snapshot = { ...snapshot, status: razorpayOwes(sub, invoices.value) ? "past_due" : "active" };
+    if (razorpayOwes(sub, invoices.value, askedAt)) {
+      snapshot = { ...snapshot, status: "past_due" };
+    } else if (sub.status === "pending" || sub.status === "halted") {
+      // Paid from the bill's own page while Razorpay still says a payment failed: paid through
+      // the month that bill covers, when the plan is read again (`rereadDueRazorpayPlans`).
+      snapshot = { ...snapshot, status: "active", currentPeriodEnd: razorpayPaidThrough(sub, invoices.value) };
+    } else {
+      snapshot = { ...snapshot, status: "active" };
+    }
   }
   const outcome = await repo.applySnapshot(deps.sql, {
     gymId,
@@ -1374,7 +1382,8 @@ async function setAsideRazorpay(
       i.payment_id !== null &&
       i.payment_id !== undefined &&
       i.subscription_id === sub.id &&
-      (paidAfter === null || (i.paid_at ?? 0) * 1000 >= paidAfter.getTime())
+      // Razorpay stamps a payment to the second: one in the same second as the cut is after it.
+      (paidAfter === null || (i.paid_at ?? 0) >= Math.floor(paidAfter.getTime() / 1000))
         ? [i.payment_id]
         : [],
     ),
@@ -1634,15 +1643,21 @@ export async function cancelRazorpayPlan(deps: BillingDeps, input: { userId: str
       break;
     case "overdue": {
       if (razorpay === null) throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
-      const cancelled = await razorpay.api.cancelSubscriptionNow(outcome.subscriptionRef);
-      if (cancelled.kind !== "ok") {
-        deps.log.warn({ event: "billing.cancel_failed", provider: "razorpay", result: cancelled.kind }, "Razorpay did not cancel an overdue plan");
+      // The plan ends now, and nothing is collected from the moment Cancel was pressed: a
+      // retry Razorpay takes before its cancel lands is refunded with any later payment.
+      const pressedAt = deps.now();
+      const cancelled = await cancelTaken(razorpay, outcome.subscriptionRef, await razorpay.api.cancelSubscriptionNow(outcome.subscriptionRef));
+      if (!cancelled) {
+        deps.log.warn({ event: "billing.cancel_failed", provider: "razorpay" }, "Razorpay did not cancel an overdue plan");
         throw new OrgsError(503, "payments_unavailable", "Razorpay couldn't be reached to cancel your plan. Please try again in a moment.");
       }
-      await repo.markCancelSent(deps.sql, { gymId: input.gymId, userId: input.userId, rowId: outcome.rowId, now: deps.now() });
+      await repo.markCancelSent(deps.sql, { gymId: input.gymId, userId: input.userId, rowId: outcome.rowId, now: pressedAt });
       const askedAt = deps.now();
       const fetched = await razorpay.api.getSubscription(outcome.subscriptionRef);
-      if (fetched.kind === "ok") await applyRazorpay(deps, razorpay, fetched.value, askedAt);
+      if (fetched.kind === "ok") {
+        await applyRazorpay(deps, razorpay, fetched.value, askedAt);
+        await setAsideRazorpay(deps, razorpay, fetched.value, input.gymId, "cancelled", pressedAt);
+      }
       await bustEntitlements(deps.redis, input.userId);
       break;
     }
@@ -1706,7 +1721,7 @@ export async function sendDueRazorpayCancels(deps: BillingDeps, gymId?: string):
       row.status === "trialing"
         ? await razorpay.api.cancelSubscriptionNow(row.subscriptionRef)
         : await razorpay.api.cancelSubscriptionAtCycleEnd(row.subscriptionRef);
-    if (answer.kind === "ok") {
+    if (await cancelTaken(razorpay, row.subscriptionRef, answer)) {
       run.sent += 1;
       deps.log.info({ event: "billing.cancel_sent", provider: "razorpay", gymId: row.gymId }, "a plan set to end was cancelled at Razorpay");
       continue;
@@ -1723,3 +1738,14 @@ export async function sendDueRazorpayCancels(deps: BillingDeps, gymId?: string):
   }
   return run;
 }
+
+/** Did a cancel take? Razorpay refuses to cancel a plan it has already ended ("Subscription is
+ *  not cancellable in cancelled status.", tried 2026-10-01): a second press, or a cancel whose
+ *  answer was lost and is asked again, finds it so. Refused or unanswered, the plan is read
+ *  back, and one Razorpay has ended counts as cancelled. */
+async function cancelTaken(razorpay: RazorpaySettings, subscriptionId: string, answer: { kind: string }): Promise<boolean> {
+  if (answer.kind === "ok") return true;
+  const fetched = await razorpay.api.getSubscription(subscriptionId);
+  return fetched.kind === "ok" && ENDED_AT_RAZORPAY.has(fetched.value.status);
+}
+
