@@ -14,6 +14,14 @@ export const razorpayId = (prefix: string) =>
 
 const MONTH_S = 30 * 24 * 60 * 60;
 
+type CreateInput = {
+  planId: string;
+  startAt: Date | null;
+  notes: Record<string, string>;
+  upfront?: { name: string; amountMinor: number; currency: string } | null;
+  expireBy?: Date | null;
+};
+
 export class FakeRazorpay implements RazorpayApi {
   plans = new Map<string, RazorpayPlan>();
   subs = new Map<string, RazorpaySubscription>();
@@ -25,12 +33,16 @@ export class FakeRazorpay implements RazorpayApi {
   endAtCycleEnd = new Set<string>();
   refunds: string[] = [];
   /** Every subscription asked for, as asked. */
-  created: { planId: string; startAt: Date | null; notes: Record<string, string> }[] = [];
+  created: CreateInput[] = [];
+  /** Make the next subscription's add-on invoice carry a different amount than the one asked. */
+  wrongUpfront = false;
   down = false;
   /** Make the next subscription's plan carry a different amount than the one on record. */
   wrongAmount = false;
   /** Answer this many refund requests with a 503, making nothing. */
   refundFailures = 0;
+  /** Answer this many cancels-at-once with a 503, cancelling nothing. */
+  cancelFailures = 0;
   /** Razorpay's clock, in seconds. */
   clock = Math.floor(Date.parse("2026-10-01T00:00:00Z") / 1000);
 
@@ -51,7 +63,9 @@ export class FakeRazorpay implements RazorpayApi {
     return this.down ? { kind: "unavailable", status: 503 } : { kind: "ok", value };
   }
 
-  createSubscription(input: { planId: string; startAt: Date | null; notes: Record<string, string> }): Promise<RazorpayResult<RazorpaySubscription>> {
+  /** A bigger size's add-on (1d-iii-a) is an invoice Razorpay makes with the subscription, owed
+   *  until the window is paid, which pays it (seen on the test account, 2026-10-01). */
+  createSubscription(input: CreateInput): Promise<RazorpayResult<RazorpaySubscription>> {
     if (this.down) return Promise.resolve({ kind: "unavailable", status: 503 });
     const plan = this.plans.get(input.planId);
     if (plan === undefined) return Promise.resolve({ kind: "refused", status: 400, code: "BAD_REQUEST_ERROR" });
@@ -74,8 +88,14 @@ export class FakeRazorpay implements RazorpayApi {
       paid_count: 0,
       notes: { ...input.notes },
       created_at: this.clock,
+      expire_by: input.expireBy == null ? null : Math.floor(input.expireBy.getTime() / 1000),
     };
     this.subs.set(id, sub);
+    if (input.upfront != null) {
+      const amount = input.upfront.amountMinor + (this.wrongUpfront ? 100 : 0);
+      this.invoices.set(id, [this.invoice({ status: "issued", subscription_id: id, payment_id: null, amount, amount_paid: 0, amount_due: amount, paid_at: null, billing_end: null })]);
+    }
+    this.wrongUpfront = false;
     const shown = this.wrongAmount ? { ...plan, item: { ...plan.item, amount: plan.item.amount + 100 } } : plan;
     this.wrongAmount = false;
     return Promise.resolve({ kind: "ok", value: { ...sub, plan: shown } });
@@ -97,6 +117,10 @@ export class FakeRazorpay implements RazorpayApi {
 
   cancelSubscriptionNow(id: string): Promise<RazorpayResult<RazorpaySubscription>> {
     if (this.down) return Promise.resolve({ kind: "unavailable", status: 503 });
+    if (this.cancelFailures > 0) {
+      this.cancelFailures -= 1;
+      return Promise.resolve({ kind: "unavailable", status: 503 });
+    }
     const sub = this.subs.get(id);
     if (sub === undefined) return Promise.resolve({ kind: "not_found" });
     // Razorpay refuses to cancel a plan it has ended ("Subscription is not cancellable in
@@ -209,6 +233,11 @@ export class FakeRazorpay implements RazorpayApi {
    *  without one the first payment is taken at once. */
   authenticate(id: string): void {
     const sub = this.sub(id);
+    if (sub.expire_by != null && this.clock > sub.expire_by) throw new Error("fake Razorpay: this window has expired");
+    if (sub.status !== "created") throw new Error(`fake Razorpay: a ${sub.status} subscription has no window to pay`);
+    // The add-on is taken as the window is paid.
+    const owed = (this.invoices.get(id) ?? []).find((i) => i.status === "issued" && i.billing_end === null);
+    if (owed !== undefined) this.payInvoice(owed.id);
     const customer = razorpayId("cust");
     if (sub.start_at !== null && sub.start_at > this.clock) {
       this.subs.set(id, { ...sub, status: "authenticated", customer_id: customer });
@@ -280,6 +309,11 @@ export class FakeRazorpay implements RazorpayApi {
       }),
     );
     this.subs.set(id, { ...this.sub(id), status: "active" });
+  }
+
+  /** A window not paid by its `expire_by`: Razorpay expires the subscription. */
+  expire(id: string): void {
+    this.subs.set(id, { ...this.sub(id), status: "expired", ended_at: this.clock, charge_at: null });
   }
 
   /** A subscription made by something other than our server on the same Razorpay account. */

@@ -16,7 +16,11 @@
 // first payment taken when the trial ends) are still followed to their end.
 //
 // A paying gym may move to a bigger size: Paddle charges the rest of the month at once, and
-// changes nothing if that charge fails.
+// changes nothing if that charge fails. Razorpay cannot change what an Indian card, UPI or bank
+// account mandate charges (1d-iii-a; refused on the test account, 2026-10-01), so a gym paying
+// through Razorpay approves a new plan in Razorpay's window: the rest of this month's difference
+// taken now, the new price from the day the paid month ends. Once paid it takes the old plan's
+// place, and the old one is cancelled at Razorpay; anything it takes after that is refunded.
 //
 // A gym paying through Razorpay pays an overdue bill, changes how it pays and cancels from the
 // console (1d-ii): Razorpay's own page for the bill, Razorpay's window for the card or bank
@@ -50,7 +54,14 @@ import type { Snapshot } from "./machine.js";
 import { onlinePaymentFor } from "./online.js";
 import { paddleWindowCountry, type PaddleApi, type PaddleEnvironment, type ProrationMode } from "./paddle.js";
 import type { RazorpayApi } from "./razorpay.js";
-import { ENDED_AT_RAZORPAY, oldestOwedInvoice, razorpayCancelOutcome, razorpayOwes, razorpayPaidThrough } from "./razorpayPlan.js";
+import {
+  ENDED_AT_RAZORPAY,
+  oldestOwedInvoice,
+  razorpayCancelOutcome,
+  razorpayOwes,
+  razorpayPaidThrough,
+  upgradeCharge,
+} from "./razorpayPlan.js";
 import * as repo from "./repo.js";
 
 export interface PaddleSettings {
@@ -433,6 +444,15 @@ async function syncRazorpayCheckout(
     }
   }
   const live = await orgsRepo.gymLiveSubscription(deps.sql, input.gymId);
+  if (checkout.replacesRowId !== null) {
+    // A bigger size (1d-iii-a): the gym already had a plan through Razorpay, so it is paid only
+    // when the plan on the gym is the one this window made.
+    const placed = checkout.providerRef === null ? null : await repo.findProviderSubscription(deps.sql, "razorpay", checkout.providerRef);
+    if (placed === null || placed.gymId !== input.gymId) return { state: "waiting" };
+    if (placed.cancelReason === "duplicate") return { state: "refunded" };
+    if (live !== null && LIVE_STATUSES.has(placed.status)) return { state: "paid", subscription: toOrgSubscription(live) };
+    return { state: "waiting" };
+  }
   if (live !== null && live.provider === "razorpay") {
     return { state: "paid", subscription: toOrgSubscription(live) };
   }
@@ -506,7 +526,7 @@ const SIZE_REFUSALS: Record<string, { status: number; message: string }> = {
     message: "Your free trial isn't paid for yet. Choose a plan to pay today and get its full size at once.",
   },
   no_paid_plan: { status: 409, message: "This plan isn't paid through us, so its size can't be changed here." },
-  paid_through_razorpay: { status: 409, message: "A plan paid through Razorpay can't change size here yet." },
+  paid_through_razorpay: { status: 409, message: "This plan is paid through Razorpay, so its new size is paid in Razorpay's window." },
   payment_overdue: { status: 409, message: "A payment is overdue. Update your payment method to pay it, then change your size." },
   plan_ending: { status: 409, message: "Your plan is set to end, so its size can't be changed." },
   plan_not_found: { status: 404, message: "That plan isn't on your price list." },
@@ -587,7 +607,8 @@ export async function previewSizeChange(
   input: { userId: string; gymId: string; planCode: string },
 ): Promise<OrgPlanChangePreview> {
   await requirePrivilege(deps, input.gymId, input.userId, "billing.manage");
-  await refuseRazorpayPlan(deps, input.gymId);
+  const live = await orgsRepo.gymLiveSubscription(deps.sql, input.gymId);
+  if (live?.provider === "razorpay") return await previewRazorpaySize(deps, input);
   const paddle = deps.paddle;
   if (paddle === null) throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
   const found = await repo.sizeTarget(deps.sql, { ...input, now: deps.now() });
@@ -1230,6 +1251,23 @@ async function applyRazorpay(deps: BillingDeps, razorpay: RazorpaySettings, sub:
     return "unknown";
   }
   let snapshot = toRazorpaySnapshot(sub, planId, askedAt);
+  // A bigger size (1d-iii-a): Razorpay holds it `authenticated` until the replaced plan's month
+  // ends and its first monthly charge is taken, but the gym has paid for the rest of this month
+  // at the bigger size, so it is the gym's paying plan from now, paid to that day. Only once
+  // Razorpay's own invoice says the rest of this month was paid.
+  const sizeCheckout =
+    checkout !== null && checkout.gymId === gymId && checkout.providerRef === sub.id && checkout.replacesRowId !== null && checkout.startsAt !== null
+      ? { replacesRowId: checkout.replacesRowId, startsAt: checkout.startsAt, upfrontMinor: checkout.upfrontMinor }
+      : null;
+  if (sizeCheckout !== null && sub.status === "authenticated" && snapshot !== null) {
+    if (placed === null && sizeCheckout.upfrontMinor !== null) {
+      const invoices = await razorpay.api.listSubscriptionInvoices(sub.id);
+      if (invoices.kind !== "ok") return "retry";
+      const upfront = sizeCheckout.upfrontMinor;
+      if (!invoices.value.some((i) => i.subscription_id === sub.id && i.status === "paid" && i.amount_paid === upfront)) return "unchanged";
+    }
+    snapshot = { ...snapshot, status: "active", currentPeriodEnd: sub.start_at === null ? sizeCheckout.startsAt : new Date(sub.start_at * 1000) };
+  }
   // A plan the gym set to end (1d-ii): Razorpay's record never shows it, so it is read against
   // our row — the paid month runs to its end whatever Razorpay says, and a month Razorpay
   // charges after it is refunded.
@@ -1276,7 +1314,12 @@ async function applyRazorpay(deps: BillingDeps, razorpay: RazorpaySettings, sub:
     snapshot,
     checkoutId,
     now: deps.now(),
+    replaces: sizeCheckout === null ? null : { rowId: sizeCheckout.replacesRowId, periodEnd: sizeCheckout.startsAt },
   });
+  if (outcome.replaced !== null) {
+    deps.log.info({ event: "billing.size_changed", provider: "razorpay", gymId }, "a gym moved to a bigger size");
+    await endReplacedPlan(deps, razorpay, { gymId, ...outcome.replaced });
+  }
   if (outcome.duplicate) {
     if (outcome.decision.kind === "duplicate") {
       deps.log.error({ event: "billing.duplicate_subscription", provider: "razorpay", gymId }, "a second paid plan for one gym: cancelling and refunding it");
@@ -1730,6 +1773,8 @@ export interface RazorpayCancelsRun {
   failed: number;
   /** Plans set to end whose paid month is over, read from Razorpay again. */
   ended: number;
+  /** Plans a bigger size replaced, cancelled at Razorpay this run (1d-iii-a). */
+  replaced: number;
 }
 
 /** Send to Razorpay each cancel whose plan's paid month ends within `CANCEL_LEAD_MS`: at the end
@@ -1739,16 +1784,22 @@ export interface RazorpayCancelsRun {
  *  twice, and Razorpay answers a second cancel the same as the first. `gymId` sends one gym's
  *  only (Cancel pressed close to the end). */
 export async function sendDueRazorpayCancels(deps: BillingDeps, gymId?: string): Promise<RazorpayCancelsRun> {
-  const run: RazorpayCancelsRun = { sent: 0, failed: 0, ended: 0 };
+  const run: RazorpayCancelsRun = { sent: 0, failed: 0, ended: 0, replaced: 0 };
   const razorpay = deps.razorpay ?? null;
   if (razorpay === null) return run;
   const now = deps.now();
   const claimed = await repo.claimCancelsToSend(deps.sql, { now, leadMs: CANCEL_LEAD_MS, limit: 50, ...(gymId === undefined ? {} : { gymId }) });
   for (const row of claimed) {
-    const answer =
+    let answer =
       row.status === "trialing"
         ? await razorpay.api.cancelSubscriptionNow(row.subscriptionRef)
         : await razorpay.api.cancelSubscriptionAtCycleEnd(row.subscriptionRef);
+    if (row.status !== "trialing" && answer.kind === "refused") {
+      // A bigger size whose first monthly charge is still to come (1d-iii-a) can only be ended
+      // at once; the gym keeps it to the end of the month it paid for all the same.
+      const fetched = await razorpay.api.getSubscription(row.subscriptionRef);
+      if (fetched.kind === "ok" && fetched.value.status === "authenticated") answer = await razorpay.api.cancelSubscriptionNow(row.subscriptionRef);
+    }
     if (await cancelTaken(razorpay, row.subscriptionRef, answer)) {
       run.sent += 1;
       deps.log.info({ event: "billing.cancel_sent", provider: "razorpay", gymId: row.gymId }, "a plan set to end was cancelled at Razorpay");
@@ -1759,6 +1810,10 @@ export async function sendDueRazorpayCancels(deps: BillingDeps, gymId?: string):
     await repo.unclaimCancel(deps.sql, { id: row.id, gymId: row.gymId, claimedAt: now });
   }
   if (gymId !== undefined) return run;
+  // A plan a bigger size replaced, not yet seen ended at Razorpay: cancelled now.
+  for (const old of await repo.replacedToCancel(deps.sql, { limit: 50 })) {
+    if (await endReplacedPlan(deps, razorpay, old)) run.replaced += 1;
+  }
   // A paid month over: the plan ends now, even if Razorpay's own webhook never comes.
   for (const subscriptionRef of await repo.dueCancelEnds(deps.sql, { now, limit: 50 })) {
     const result = await applyRazorpaySubscription(deps, subscriptionRef);
@@ -1777,3 +1832,241 @@ async function cancelTaken(razorpay: RazorpaySettings, subscriptionId: string, a
   return fetched.kind === "ok" && ENDED_AT_RAZORPAY.has(fetched.value.status);
 }
 
+
+// ── A bigger size on a plan paid through Razorpay (1d-iii-a) ────────────────────
+
+/** A bigger size is refused this close to the end of the month paid: its window must be paid
+ *  (`SIZE_WINDOW_MS`) before Razorpay charges the old plan's next month. */
+export const SIZE_RENEW_GUARD_MS = 60 * 60 * 1000;
+/** How long a bigger size's window can be paid for (Razorpay's `expire_by`). */
+export const SIZE_WINDOW_MS = 30 * 60 * 1000;
+/** What Razorpay's window and receipt call the rest of this month's difference. */
+const UPFRONT_NAME = "The rest of this month at the bigger size";
+
+const LIVE_STATUSES: ReadonlySet<string> = new Set(["trialing", "active", "past_due"]);
+
+const RAZORPAY_SIZE_REFUSALS: Record<Exclude<repo.RazorpaySizeOutcome["kind"], "ok">, { status: number; code: string; message: string }> = {
+  no_paid_plan: { status: 409, code: "no_paid_plan", message: "This plan isn't paid through us, so its size can't be changed here." },
+  not_razorpay: { status: 409, code: "paid_through_paddle", message: "This plan isn't paid through Razorpay. Reload the page and try again." },
+  payment_overdue: { status: 409, code: "payment_overdue", message: "A payment is overdue. Press Pay now on your plan to pay it, then change your size." },
+  in_trial: {
+    status: 409,
+    code: "in_trial",
+    message: "Your plan's first payment hasn't been taken yet. You can change its size once it has.",
+  },
+  plan_ending: { status: 409, code: "plan_ending", message: "Your plan is set to end, so its size can't be changed." },
+  renewing: { status: 409, code: "renewing", message: "Your plan renews within the hour. Change its size after it renews." },
+  no_such_plan: { status: 404, code: "plan_not_found", message: "That plan isn't on your price list." },
+  same_size: { status: 409, code: "same_size", message: "That's the size you're on." },
+  smaller: {
+    status: 409,
+    code: "smaller_not_yet",
+    message: "Moving to a smaller size isn't available yet for plans paid through Razorpay.",
+  },
+  not_set_up: { status: 503, code: "payments_unavailable", message: UNAVAILABLE },
+};
+
+function razorpaySizeRefusal(outcome: Exclude<repo.RazorpaySizeOutcome, { kind: "ok" }>): OrgsError {
+  const refusal = RAZORPAY_SIZE_REFUSALS[outcome.kind];
+  return new OrgsError(refusal.status, refusal.code, refusal.message);
+}
+
+const CHANGED_MEANWHILE = () => new OrgsError(409, "plan_changed_meanwhile", "Your plan changed meanwhile. Reload the page and try again.");
+
+/** The month Razorpay last charged the gym's plan: its own record, fetched now. Refused unless
+ *  Razorpay says it is paying and its month is the one our row holds; a renewal Razorpay has
+ *  made and we have not written yet is written first. */
+async function razorpayMonth(
+  deps: BillingDeps,
+  razorpay: RazorpaySettings,
+  target: repo.RazorpaySizeTarget,
+): Promise<{ start: Date; end: Date }> {
+  const askedAt = deps.now();
+  const fetched = await razorpay.api.getSubscription(target.subscriptionRef);
+  if (fetched.kind !== "ok") throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
+  const sub = fetched.value;
+  if (sub.status === "pending" || sub.status === "halted") throw razorpaySizeRefusal({ kind: "payment_overdue" });
+  if (sub.status !== "active" || sub.current_start === null || sub.current_end === null) {
+    await applyRazorpay(deps, razorpay, sub, askedAt);
+    throw CHANGED_MEANWHILE();
+  }
+  if (sub.current_end * 1000 !== target.periodEnd.getTime()) {
+    await applyRazorpay(deps, razorpay, sub, askedAt);
+    throw CHANGED_MEANWHILE();
+  }
+  return { start: new Date(sub.current_start * 1000), end: new Date(sub.current_end * 1000) };
+}
+
+/** What a bigger size costs now on a plan paid through Razorpay: the rest of this month's
+ *  difference, worked out by our server from our own price list (`upgradeCharge`), and the new
+ *  price from the day the paid month ends. Changes nothing. */
+async function previewRazorpaySize(deps: BillingDeps, input: { gymId: string; planCode: string }): Promise<OrgPlanChangePreview> {
+  const razorpay = deps.razorpay ?? null;
+  if (razorpay === null) throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
+  const found = await repo.razorpaySizeTarget(deps.sql, { ...input, now: deps.now(), renewGuardMs: SIZE_RENEW_GUARD_MS });
+  if (found.kind !== "ok") throw razorpaySizeRefusal(found);
+  const target = found.target;
+  const month = await razorpayMonth(deps, razorpay, target);
+  const charge = upgradeCharge({ fromMinor: target.fromPriceMinor, toMinor: target.priceMinor, periodStart: month.start, periodEnd: month.end, now: deps.now() });
+  if (charge.kind === "month_over") throw razorpaySizeRefusal({ kind: "renewing" });
+  const due = charge.kind === "charge" ? formatPriceMinor(charge.minor, target.currency) : null;
+  return {
+    planCode: target.planCode,
+    seatCap: target.seatCap,
+    priceLabel: formatPriceMinor(target.priceMinor, target.currency),
+    dueNow: due === null ? null : { totalLabel: due, subtotalLabel: due, taxLabel: null },
+    nextPaymentAt: target.periodEnd.toISOString(),
+  };
+}
+
+/** Why an earlier press of the same key cannot open its window again. */
+function sizeReplayRefusal(checkout: repo.CheckoutRow): OrgsError {
+  if (checkout.state === "paid") return new OrgsError(409, "size_changed", "Your new size is already paid for.");
+  if (checkout.state === "creating") return new OrgsError(409, "checkout_in_progress", "Still opening. Try again in a moment.");
+  return new OrgsError(409, "checkout_replaced", "That payment window has closed. Choose the size again.");
+}
+
+/** "Change size" to a bigger one on a plan paid through Razorpay: our server creates a new
+ *  Razorpay subscription at the bigger size's plan, starting when the month paid ends, with the
+ *  rest of this month's difference taken as its window is paid, and the browser opens Razorpay's
+ *  window for it. Nothing changes on the gym until Razorpay's own record says it was paid. */
+export async function startRazorpaySizeChange(
+  deps: BillingDeps,
+  input: { userId: string; gymId: string; planCode: string; idempotencyKey: string },
+): Promise<OrgCheckoutResponse> {
+  await requirePrivilege(deps, input.gymId, input.userId, "billing.manage");
+  const razorpay = deps.razorpay ?? null;
+  if (razorpay === null) throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
+
+  // The same press again: answered from its own checkout, whatever the plan is now.
+  const earlier = await repo.checkoutForKey(deps.sql, { gymId: input.gymId, idempotencyKey: input.idempotencyKey });
+  if (earlier !== null) return await replaySizeCheckout(deps, razorpay, input, earlier);
+
+  const found = await repo.razorpaySizeTarget(deps.sql, { ...input, now: deps.now(), renewGuardMs: SIZE_RENEW_GUARD_MS });
+  if (found.kind !== "ok") throw razorpaySizeRefusal(found);
+  const month = await razorpayMonth(deps, razorpay, found.target);
+
+  const begun = await repo.beginSizeCheckout(deps.sql, {
+    ...input,
+    now: deps.now(),
+    renewGuardMs: SIZE_RENEW_GUARD_MS,
+    periodStart: month.start,
+    periodEnd: month.end,
+  });
+  switch (begun.kind) {
+    case "replay":
+      return await replaySizeCheckout(deps, razorpay, input, begun.checkout);
+    case "key_reused":
+      throw new OrgsError(422, "idempotency_key_reused", "This Idempotency-Key was already used for a different plan.");
+    case "refused":
+      throw razorpaySizeRefusal(begun.outcome);
+    case "plan_changed_meanwhile":
+      throw CHANGED_MEANWHILE();
+    case "org_archived":
+      throw new OrgsError(409, "org_archived", "This organisation is archived.");
+    case "not_found":
+      throw new OrgsError(404, "org_not_found", "Organisation not found.");
+    case "created":
+      break;
+  }
+  const { checkout, target } = begun;
+  await closeSuperseded(deps, begun.superseded);
+  const startsAt = checkout.startsAt;
+  if (startsAt === null) throw new Error("a size checkout without its start");
+
+  const expireBy = new Date(deps.now().getTime() + SIZE_WINDOW_MS);
+  const upfront = checkout.upfrontMinor;
+  const created = await razorpay.api.createSubscription({
+    planId: target.providerPlanId,
+    startAt: startsAt,
+    notes: { app: RAZORPAY_APP_NOTE, gym_id: input.gymId, checkout_id: checkout.id },
+    upfront: upfront === null ? null : { name: UPFRONT_NAME, amountMinor: upfront, currency: target.currency },
+    expireBy,
+  });
+  if (created.kind !== "ok") {
+    await repo.failCheckout(deps.sql, { checkoutId: checkout.id, gymId: input.gymId });
+    const refusal = created.kind === "refused" ? { status: created.status, code: created.code } : {};
+    deps.log.warn({ event: "billing.subscription_not_created", provider: "razorpay", result: created.kind, ...refusal }, "Razorpay did not create a bigger size's subscription");
+    throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
+  }
+  const sub = created.value;
+  const plan = sub.plan;
+  // What Razorpay will charge must be exactly ours — the bigger size's monthly price from the
+  // day the paid month ends, and the rest of this month's difference now — or nothing is opened.
+  let agrees =
+    sub.plan_id === target.providerPlanId &&
+    sub.status === "created" &&
+    sub.quantity === 1 &&
+    sub.paid_count === 0 &&
+    sub.start_at === Math.ceil(startsAt.getTime() / 1000) &&
+    (sub.expire_by ?? null) === Math.floor(expireBy.getTime() / 1000) &&
+    sub.notes["checkout_id"] === checkout.id &&
+    plan !== undefined &&
+    plan.id === target.providerPlanId &&
+    plan.item.amount === target.priceMinor &&
+    plan.item.currency === target.currency &&
+    plan.period === "monthly" &&
+    plan.interval === 1;
+  if (agrees) {
+    // Razorpay makes the add-on's invoice with the subscription (seen 2026-10-01): it is the only
+    // thing charged before the first month, and it is exactly the difference, or there is none.
+    const invoices = await razorpay.api.listSubscriptionInvoices(sub.id);
+    const mine = invoices.kind === "ok" ? invoices.value.filter((i) => i.subscription_id === sub.id) : null;
+    const first = mine?.[0];
+    agrees =
+      mine !== null &&
+      (upfront === null
+        ? mine.length === 0
+        : mine.length === 1 && first !== undefined && first.status === "issued" && first.amount === upfront && (first.amount_due ?? upfront) === upfront);
+  }
+  if (!agrees || plan === undefined) {
+    await razorpay.api.cancelSubscriptionNow(sub.id);
+    await repo.failCheckout(deps.sql, { checkoutId: checkout.id, gymId: input.gymId });
+    deps.log.error({ event: "billing.price_mismatch", provider: "razorpay", plan: input.planCode }, "Razorpay's bigger size does not match our price");
+    throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
+  }
+  if (!(await repo.openCheckout(deps.sql, { checkoutId: checkout.id, gymId: input.gymId, transactionId: sub.id }))) {
+    await razorpay.api.cancelSubscriptionNow(sub.id);
+    throw new OrgsError(409, "checkout_replaced", "That payment window has closed. Choose the size again.");
+  }
+  return razorpayResponse(razorpay, checkout.id, sub.id, plan.item.name, await repo.gymPayer(deps.sql, input.gymId));
+}
+
+/** An earlier press's window, opened again while Razorpay still waits for it to be paid. */
+async function replaySizeCheckout(
+  deps: BillingDeps,
+  razorpay: RazorpaySettings,
+  input: { gymId: string; planCode: string },
+  checkout: repo.CheckoutRow,
+): Promise<OrgCheckoutResponse> {
+  if (checkout.replacesRowId === null || checkout.planCode !== input.planCode) {
+    throw new OrgsError(422, "idempotency_key_reused", "This Idempotency-Key was already used for a different plan.");
+  }
+  if (checkout.state === "open" && checkout.providerRef !== null && checkout.provider === "razorpay") {
+    const fetched = await razorpay.api.getSubscription(checkout.providerRef);
+    if (fetched.kind === "unavailable") throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
+    if (fetched.kind === "ok" && fetched.value.status === "created") {
+      const plan = await razorpay.api.getPlan(fetched.value.plan_id);
+      if (plan.kind === "ok") return razorpayResponse(razorpay, checkout.id, fetched.value.id, plan.value.item.name, await repo.gymPayer(deps.sql, input.gymId));
+    }
+  }
+  throw sizeReplayRefusal(checkout);
+}
+
+/** End at Razorpay the plan a bigger size replaced, and refund anything it took after that.
+ *  False when Razorpay did not take the cancel: the worker asks again (`replacedToCancel`). */
+async function endReplacedPlan(
+  deps: BillingDeps,
+  razorpay: RazorpaySettings,
+  input: { gymId: string; rowId: string; subscriptionRef: string },
+): Promise<boolean> {
+  const answer = await razorpay.api.cancelSubscriptionNow(input.subscriptionRef);
+  if (!(await cancelTaken(razorpay, input.subscriptionRef, answer))) {
+    deps.log.error({ event: "billing.cancel_failed", provider: "razorpay", gymId: input.gymId, result: answer.kind }, "Razorpay did not cancel a replaced plan; asking again next run");
+    return false;
+  }
+  await repo.markReplacedCancelSent(deps.sql, { gymId: input.gymId, rowId: input.rowId, now: deps.now() });
+  // A month it charged after it was replaced goes back (its row is set to end: `razorpayCancelOutcome`).
+  await applyRazorpaySubscription(deps, input.subscriptionRef);
+  return true;
+}

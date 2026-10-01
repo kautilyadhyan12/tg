@@ -6,6 +6,7 @@ import { applyPaidPlan, refreshConsoleOrgsAfterChange } from '../../pages/consol
 import {
   chosenSeatCap,
   firstPaymentText,
+  isPaidThroughRazorpay,
   planPriceText,
   planSeatLabel,
   pricesNote,
@@ -26,6 +27,11 @@ import { usePaddleSubscribe } from './usePaddleSubscribe';
 // now; a smaller one starts with the next payment, nothing charged or given back, and the
 // gym keeps its whole size until then; if it has more members than the smaller size holds,
 // it is told how many to remove and by when, or it stays on its size.
+//
+// A plan paid through Razorpay (1d-iii-a): Razorpay cannot change what a mandate charges, so a
+// bigger size is a new plan the gym approves in Razorpay's window — the difference for the rest
+// of this month now, the new price from the next payment — and Confirm opens that window. A
+// smaller size through Razorpay is not built yet, and its rows say so.
 //
 // Unlike the prompt a gym on no plan meets (`PlanModal`), this one closes: the gym
 // already has a plan, and nothing here is owed.
@@ -97,6 +103,7 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
   }, [gymId, words]);
 
   const busy = confirming || paying?.phase === 'confirming';
+  const razorpay = isPaidThroughRazorpay(org);
   const close = () => {
     if (!busy) onClose();
   };
@@ -115,6 +122,11 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
 
   const confirm = async () => {
     if (picked === null || confirming) return;
+    if (razorpay) {
+      // Razorpay's window, for a new plan at the bigger size; the dialog says Done once it is on the gym.
+      if (paying === null) void subscribe(picked.row.plan.code, orgService.startRazorpaySizeChange);
+      return;
+    }
     setConfirming(true);
     setError(null);
     try {
@@ -176,7 +188,11 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
         {changed !== null || paid !== null ? (
           <>
             <p className="text-sm mt-4" style={{ color: 'rgba(255,255,255,0.85)' }} data-testid="plan-choice-done">
-              {changed !== null ? doneText(changed, words, firstPaymentOn) : paidText(paid, words)}
+              {changed !== null
+                ? doneText(changed, words, firstPaymentOn)
+                : mode === 'size'
+                  ? doneText(paid, words, firstPaymentOn)
+                  : paidText(paid, words)}
             </p>
             {doneWarning !== null ? (
               <p className="text-sm mt-2" style={warn}>
@@ -196,7 +212,9 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
           <>
             <p className="text-sm mt-3" style={muted}>
               {mode === 'size'
-                ? inTrial
+                ? razorpay
+                  ? `A bigger size starts once you pay in Razorpay's window: the difference for the rest of this month now, then the new price${firstPaymentOn === null ? ' from your next payment' : ` from ${firstPaymentOn}`}. Moving to a smaller size isn't available yet for plans paid through Razorpay.`
+                  : inTrial
                   ? `Your trial allows up to ${sub?.seatCap} ${words.people} until your first payment${firstPaymentOn === null ? '' : ` on ${firstPaymentOn}`}; the size you choose starts then. Nothing is charged now.`
                   : `A bigger size starts at once and you pay the difference for the rest of this month. A smaller one starts with your next payment${firstPaymentOn === null ? '' : ` on ${firstPaymentOn}`}; until then you keep your whole size.`
                 : `You pay today and get the size you choose at once. Your free trial ends then.`}
@@ -313,7 +331,7 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
                       setPicked(null);
                       setError(null);
                     }}
-                    disabled={confirming}
+                    disabled={confirming || paying !== null}
                     className="flex-1 rounded-xl px-4 py-2.5 text-sm font-medium disabled:opacity-50"
                     style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.75)', minHeight: 44 }}
                   >
@@ -322,12 +340,12 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
                   <button
                     type="button"
                     onClick={() => void confirm()}
-                    disabled={picked.preview === null || confirming}
+                    disabled={picked.preview === null || confirming || paying !== null}
                     className="flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
                     style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F', minHeight: 44 }}
                   >
-                    {confirming ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                    Confirm
+                    {confirming || paying !== null ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                    {razorpay ? 'Continue to payment' : 'Confirm'}
                   </button>
                 </div>
               </div>
@@ -336,6 +354,12 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
             {(error ?? payError) !== null ? (
               <p className="text-sm mt-4" style={{ color: '#ef4444' }}>
                 {error ?? payError}
+              </p>
+            ) : null}
+
+            {mode === 'size' && (paying?.phase === 'confirming' || payNote !== null) ? (
+              <p className="text-sm mt-5" style={muted}>
+                {paying?.phase === 'confirming' ? 'Confirming your payment…' : payNote}
               </p>
             ) : null}
 

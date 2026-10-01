@@ -276,8 +276,8 @@ export default function TrialCard({ org }) {
       <SeatLine org={org} />
       {razorpay ? (
         <div className="text-sm mt-3" style={muted} data-testid="paid-through-razorpay">
-          Paid through Razorpay, which emails you about each payment. Changing your size isn&apos;t available here
-          yet.
+          Paid through Razorpay, which emails you about each payment.
+          {trialing ? ' You can change your size once your first payment is taken.' : null}
         </div>
       ) : null}
       {payNow ? (

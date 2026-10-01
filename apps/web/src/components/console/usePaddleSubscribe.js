@@ -22,7 +22,8 @@ const SYNC_GAP_MS = 2000;
  *
  *  `paying` is null, or which plan and whether the window is opening, open, or the payment
  *  is being confirmed. `paid` is the gym's plan once the payment is on it. `gymName` heads
- *  Razorpay's window. */
+ *  Razorpay's window. `subscribe`'s `start` asks the server for the window: Subscribe's, or a
+ *  bigger size's on a plan paid through Razorpay (1d-iii-a). */
 export function usePaddleSubscribe(gymId, gymName = '') {
   const [paying, setPaying] = useState(null);
   const [payNote, setPayNote] = useState(null);
@@ -42,6 +43,15 @@ export function usePaddleSubscribe(gymId, gymName = '') {
     for (let tries = 0; tries < SYNC_TRIES; tries += 1) {
       try {
         const res = await orgService.syncCheckout(gymId, checkoutId);
+        if (res.data?.state === 'refunded') {
+          closeCheckout();
+          refreshConsoleOrgsAfterChange();
+          if (mounted.current) {
+            setPaying(null);
+            setPayError('Your plan changed while you were paying, so nothing changed and that payment will be refunded. Reload the page to see your plan.');
+          }
+          return;
+        }
         if (res.data?.state === 'trial_ended') {
           closeCheckout();
           refreshConsoleOrgsAfterChange();
@@ -73,14 +83,14 @@ export function usePaddleSubscribe(gymId, gymName = '') {
     refreshConsoleOrgsAfterChange();
   };
 
-  const subscribe = async (planCode) => {
+  const subscribe = async (planCode, start = orgService.startCheckout) => {
     if (gymId === null || paying !== null) return;
     setPaying({ planCode, phase: 'opening' });
     setPayNote(null);
     setPayError(null);
     try {
       const key = crypto.randomUUID();
-      const res = await orgService.startCheckout(gymId, planCode, key);
+      const res = await start(gymId, planCode, key);
       const { checkoutId } = res.data;
       const onEvent = (event) => {
         if (!mounted.current) return;

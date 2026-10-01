@@ -1,5 +1,5 @@
 // A gym paying us (ROADMAP Stage 3 items 1a, 1c-ii and 1c-iii). Mirrors `0041_paddle_billing.sql`,
-// `0044_paddle_plan_changes.sql` and `0045_paddle_smaller_size.sql`.
+// `0044_paddle_plan_changes.sql`, `0045_paddle_smaller_size.sql` and `0059_razorpay_bigger_size.sql`.
 import { sql } from "drizzle-orm";
 import { check, index, integer, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAt } from "./common.js";
@@ -27,6 +27,12 @@ export const billingCheckouts = pgTable(
     state: text("state").notNull().default("creating"),
     /** A trial checkout's gym's own trial end (`0044`): after it, the checkout is cancelled. */
     trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
+    /** The gym's plan this checkout replaces with a bigger size (`0059`, Razorpay only). */
+    replacesSubscriptionId: uuid("replaces_subscription_id").references(() => subscriptions.id),
+    /** When the replaced plan's paid month ends: the new price is first charged then. */
+    startsAt: timestamp("starts_at", { withTimezone: true }),
+    /** The rest of this month's difference, taken as the window is paid; null under ₹1. */
+    upfrontMinor: integer("upfront_minor"),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -40,6 +46,10 @@ export const billingCheckouts = pgTable(
     check(
       "billing_checkouts_ref_check",
       sql`${t.state} IN ('creating','failed','superseded') OR ${t.providerRef} IS NOT NULL`,
+    ),
+    check(
+      "billing_checkouts_replaces_check",
+      sql`(${t.replacesSubscriptionId} IS NULL) = (${t.startsAt} IS NULL) AND (${t.replacesSubscriptionId} IS NULL OR ${t.provider} = 'razorpay') AND (${t.upfrontMinor} IS NULL OR (${t.replacesSubscriptionId} IS NOT NULL AND ${t.upfrontMinor} >= 100))`,
     ),
     unique("billing_checkouts_gym_key_uq").on(t.gymId, t.idempotencyKey),
     unique("billing_checkouts_provider_ref_uq").on(t.provider, t.providerRef),

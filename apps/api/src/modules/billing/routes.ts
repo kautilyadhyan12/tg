@@ -1,4 +1,4 @@
-// A gym paying us (ROADMAP Stage 3 items 1a, 1c-i, 1c-ii, 1c-iii, 1d-i and 1d-ii). Order per CLAUDE.md §4:
+// A gym paying us (ROADMAP Stage 3 items 1a, 1c-i, 1c-ii, 1c-iii, 1d-i, 1d-ii and 1d-iii-a). Order per CLAUDE.md §4:
 // authenticate → rate limit → parse → service (which checks `billing.manage` on the gym) → repo.
 // Paddle's and Razorpay's webhooks: signature on the raw body, kept once by the provider's
 // event id, 200; the worker asks the provider for the subscription before anything changes.
@@ -168,6 +168,28 @@ export function registerBillingRoutes(
         idempotencyKey: key,
       });
       return reply.status(200).send(changed);
+    },
+  );
+
+  // A bigger size on a plan paid through Razorpay (1d-iii-a): Razorpay cannot change what a
+  // mandate charges, so this opens its window for a new plan; nothing changes until it is paid.
+  app.post(
+    "/v1/orgs/:gymId/billing/size/razorpay",
+    { preHandler: [app.authenticate, sizeChangeLimit] },
+    async (req, reply) => {
+      const params = parseOr400(gymParams, req.params, req, reply);
+      if (params === null) return;
+      const key = parseOr400(idempotencyKey, req.headers["idempotency-key"], req, reply);
+      if (key === null) return;
+      const body = parseOr400(orgPlanChangeRequestSchema, req.body, req, reply);
+      if (body === null) return;
+      const window = await service.startRazorpaySizeChange(deps, {
+        userId: requireUserId(req),
+        gymId: params.gymId,
+        planCode: body.planCode,
+        idempotencyKey: key,
+      });
+      return reply.status(200).send(window);
     },
   );
 

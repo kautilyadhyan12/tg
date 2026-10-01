@@ -407,6 +407,13 @@
       "when": 1788220800041,
       "tag": "0058_razorpay_cancel",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1788220800042,
+      "tag": "0059_razorpay_bigger_size",
+      "breakpoints": true
     }
   ]
 }
