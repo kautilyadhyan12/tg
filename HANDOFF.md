@@ -4,6 +4,15 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-10-01 · 1d-iii-b (Folder B): a smaller size through Razorpay (branch `razorpay-smaller-size`)
+
+- **Why this job:** next on Folder B's list. **Risky (money), Opus xhigh; Kd: *"go"*.** His one question answered *"A"*: a gym with too many members on the day STAYS on its size (RULINGS 2026-10-01). Migration `0061_razorpay_smaller_size`; no new package, no new cost.
+- **Measured on the Razorpay test account first:** a subscription with a future `start_at` and no add-on asks "a refundable amount of ₹5 … then ₹7,500 every month"; once approved it is `authenticated`, `paid_count` 0, no invoice.
+- **Built:** smaller rows in Change size for Razorpay plans (Continue to Razorpay, the ₹5 line). Approved, it waits on the plan (`pending_subscription_ref`); 3 h before the paid month ends the worker counts members: fit → the new plan takes the old one's place and the old is cancelled at Razorpay (a later charge of it refunded); too many → the new plan is cancelled, the gym stays and is emailed. Cancel this change, Cancel plan, a second smaller size, a bigger size, a withdrawn mandate and a missed day each end the waiting plan (`strandedSmallerSizes`). The 3-day email and the last days' box say it stays, and offer "Move to 500" through Razorpay's window.
+- **Worst thing, first tests:** one month never charged twice; too many members → nobody removed, size and price kept. **Breaks:** members never counted, size taken at approval, decision never applied — each RED, restored sha256-identical; "old plan never cancelled" stayed green (two other paths cancel it).
+- **Verified:** api **4,602 of 4,602** on `aihg_b` (new suite 13/13, billing 390/390); web 3,382/3,382 (`poseAssets.contract` local Node 24); tsc, eslint 0; gitleaks clean. Real test-mode run on :3001: ₹12,500 plan → 200 approved → worker at the day: old plan `cancelled` at Razorpay, ₹7,500 plan waiting to charge; Cancel this change cancelled a second one there. Seen in headless Edge at 1000 and 390.
+- **Cost at full size:** reads no list of people; one member count per gym per month, the count Paddle's smaller size already runs.
+
 ## 2026-10-01 · 1d-iii-a (Folder B): a bigger size through Razorpay (branch `razorpay-bigger-size`, PR #146)
 
 - **Why this job:** next on Folder B's list. 1d-iii split in two (ROADMAP): this is the bigger size; 1d-iii-b, the smaller, is next. **Risky (money), Opus xhigh; Kd: *"go"*.** Migration `0060_razorpay_bigger_size` (renumbered after Folder A's 0059 merged); no new package, no new cost.
