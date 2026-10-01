@@ -12,7 +12,7 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Breaks, each RED, restored sha256-identical:** marks taking staff in; the door's count skipping staff; the roster calling staff free.
 - **Verified:** api 4,615 of 4,617 in one full run (the 2: `leads.sentForYou` counting the whole app's emails, and a GBP plan another suite had inserted; both files then 171/171 alone). New suite 4/4. Web 3,403/3,403 (`poseAssets.contract` local Node 24). Shared 278/278. tsc and eslint 0 (shared, api, changed web files). 37 old tests asserted "the owner and staff are free": rewritten to the new rule, or their gyms' owners answer No.
 - **Cost at full size** (mains, 2,592 MHz; `.cost/cost-4c.ts`), 10,001 members with 100 staff: door 5 ms, billing 6 ms, meter 32 ms, a page of 100 48 ms; answering nobody at most 3.5 ms. "Not on any list" is 2.2 s at that size (busy 8 ms) and was 1.6 s (busy 10 ms) on master the same day: slow already, not made so here.
-- **Open:** Kd's click-through, then round one in a fresh terminal (`reviews/4c-1-review.md`).
+- **Kd's click-through: all passed.** Round one: 1 High (the Staff card still said staff use no seat), 2 Low, 3 weak tests, all fixed (4612055); the re-check closed the round. Merged on Kd's word (PR #150).
 
 ## 2026-10-01 · 1f (Folder B): the money passes' fixes (branch `money-safety-fixes`)
 
