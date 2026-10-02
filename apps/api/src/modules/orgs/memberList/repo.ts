@@ -1135,6 +1135,11 @@ export async function expireStagedUploads(
  *  notice. */
 export async function deleteListForGym(tx: TransactionSql, gymId: string): Promise<void> {
   await tx`DELETE FROM gym_member_list_uploads WHERE gym_id = ${gymId}`;
+  // A visit that names an app account is that person's active day: it lets go of the
+  // record and stays, as `deleteEntry` does; the rest go with the records.
+  await tx`
+    UPDATE gym_attendance SET entry_id = NULL
+    WHERE gym_id = ${gymId} AND entry_id IS NOT NULL AND user_id IS NOT NULL`;
   await tx`DELETE FROM gym_member_list_entries WHERE gym_id = ${gymId}`;
   // The gym's own column headings (3a-v-b). Nothing points at them once the entries
   // are gone, and a catalogue outliving the gym it belongs to would be the one row of

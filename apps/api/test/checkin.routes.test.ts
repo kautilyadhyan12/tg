@@ -9,6 +9,8 @@ import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
+import { archiveLapsedGyms } from "../src/modules/orgs/archiveSweep.js";
+import { rollUpGymDays } from "../src/modules/orgs/rollup.js";
 import { makePass, passWindow } from "../src/modules/orgs/checkin/pass.js";
 import { checkinPassKey } from "../src/modules/orgs/checkin/routes.js";
 import { proveAddress } from "./proveAddress.js";
@@ -75,6 +77,7 @@ d("check-in at the front desk (real Postgres)", () => {
     await sql`DELETE FROM gym_member_lists WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_staff WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM audit_log WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM org_daily_stats WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM streaks WHERE user_id IN (${myUsers})`;
     await sql`DELETE FROM user_achievements WHERE user_id IN (${myUsers})`;
     await sql`DELETE FROM user_xp WHERE user_id IN (${myUsers})`;
@@ -544,6 +547,15 @@ d("check-in at the front desk (real Postgres)", () => {
     expect((await scan(desk, number)).result).toBe("checked_in");
     expect((await scan(desk, await passOf(both))).result).toBe("already");
     expect((await sql`SELECT 1 FROM gym_attendance WHERE gym_id = ${ironHouse} AND (entry_id = ${record} OR user_id = ${both.userId})`).length).toBe(1);
+
+    // The other order: the pass first, then the key tag.
+    const other = await makeUser("both-2", "Bela Both");
+    const otherNumber = `B2-${uniq()}`;
+    const otherRecord = await addRecord(ironHouse, { fullName: "Bela Both", email: other.email, memberNumber: otherNumber });
+    await join(ironHouse, other, otherRecord);
+    expect((await scan(desk, await passOf(other))).result).toBe("checked_in");
+    expect((await scan(desk, otherNumber)).result).toBe("already");
+    expect((await sql`SELECT 1 FROM gym_attendance WHERE gym_id = ${ironHouse} AND (entry_id = ${otherRecord} OR user_id = ${other.userId})`).length).toBe(1);
   });
 
   it("a desk's visit keeps the member's streak alive", async () => {
@@ -781,6 +793,29 @@ d("check-in at the front desk (real Postgres)", () => {
     expect(left).toEqual([{ entry_id: null, user_id: app1.userId }]);
   });
 
+  it("a gym closing keeps its app members' desk visits (their streak days), and only the visits of people without the app go with its list", async () => {
+    const closingOwner = await makeUser("arch-owner", "Arch Owner");
+    const gym = await makeGym(closingOwner, "Closing Down Gym");
+    const gymDesk = await makeDesk(gym, closingOwner);
+    const member = await makeUser("arch-member", "Asha Archive");
+    const number = `AR-${uniq()}`;
+    await join(gym, member, await addRecord(gym, { fullName: "Asha Archive", email: member.email, memberNumber: number }));
+    const paper = `AP-${uniq()}`;
+    await addRecord(gym, { fullName: "Paper Only", phone: "+919800000008", memberNumber: paper });
+    expect((await scan(gymDesk, number)).result).toBe("checked_in");
+    expect((await scan(gymDesk, paper)).result).toBe("checked_in");
+
+    // The plan ended five months ago: the sweep closes the gym and deletes its list.
+    await sql`
+      UPDATE subscriptions SET status = 'canceled', ended_at = now() - interval '5 months'
+      WHERE owner_type = 'gym' AND owner_id = ${gym}`;
+    await archiveLapsedGyms({ sql, log: { info: () => undefined } }, { gymIds: [gym] });
+    expect((await sql<{ status: string }[]>`SELECT status FROM gyms WHERE id = ${gym}`)[0]?.status).toBe("archived");
+    expect(await visits(gym)).toEqual([
+      { user_id: member.userId, entry_id: null, device_id: gymDesk.deviceId, method: "key_tag", slot_key: "hours_unset" },
+    ]);
+  });
+
   it("the console's day read counts the visits it can name: a visit of somebody without the app waits for the live log", async () => {
     const quietOwner = await makeUser("quiet", "Quiet Owner");
     const quiet = await makeGym(quietOwner, "Quiet Gym");
@@ -793,5 +828,18 @@ d("check-in at the front desk (real Postgres)", () => {
     };
     expect(day.attendance.totals).toEqual({ visits: 0, people: 0 });
     expect(day.attendance.people).toEqual([]);
+
+    // The nightly numbers agree: yesterday's desk visit of somebody without the app is
+    // neither a visit nor a visitor there yet.
+    await sql`
+      INSERT INTO gym_attendance (gym_id, entry_id, device_id, day, method, hours_status, slot_key)
+      SELECT ${quiet}, id, ${quietDesk.deviceId}, (now() AT TIME ZONE 'Asia/Kolkata')::date - 1, 'key_tag', 'hours_unset', 'hours_unset'
+      FROM gym_member_list_entries WHERE gym_id = ${quiet} AND member_number = ${number}`;
+    await sql`UPDATE gyms SET created_at = now() - interval '3 days' WHERE id = ${quiet}`;
+    await rollUpGymDays({ sql, log: { info: () => undefined } }, { gymIds: [quiet], allHours: true, days: 1 });
+    const stats = await sql<{ visits: number; visitors: number }[]>`
+      SELECT visits, visitors FROM org_daily_stats
+      WHERE gym_id = ${quiet} AND day = (now() AT TIME ZONE 'Asia/Kolkata')::date - 1`;
+    expect(stats).toEqual([{ visits: 0, visitors: 0 }]);
   });
 });
