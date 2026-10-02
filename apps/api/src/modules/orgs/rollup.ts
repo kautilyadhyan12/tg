@@ -213,8 +213,8 @@ export async function rollUpGymDays(
     -- **IT IS KEPT DELIBERATELY.** The member's own tap refuses a non-member, but
     -- since 16a the front desk writes visits too, and a person on the gym's list
     -- who never joined in the app is checked in on their record by their proved
-    -- email — so an attendance row no longer implies a live membership. Staff marking somebody present is ruled "not now" rather than
-    -- never (:27900), and that is a SECOND writer with a different actor. The
+    -- email — so an attendance row no longer implies a live membership. Staff
+    -- checking somebody in (16b) is a third writer, with a different actor. The
     -- ruling names both conditions; this file enforces both, and the suite
     -- proves this one by inserting a visit for somebody removed beforehand —
     -- a row the mark route could not have produced.
