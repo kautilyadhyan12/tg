@@ -125,7 +125,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 3b-ii-b. [x] **Not me, and the edges** — merged 2026-09-24 (PR #104).
      - 3b-iii. [ ] **Change email** (RULINGS 2026-09-23, E): in Settings, proved by a code sent to the new address; memberships and workouts stay with the account. Its place in Folder A's order is Kd's.
    - 3c. [x] **Join codes switched off** — merged 2026-10-02 (PR #152).
-   - 3d. [ ] **The two extra passes' fixes** over "getting in" (3a-i to 3c, 4a, 4c; spec §10.7): 8 High, 2 Low, from `reviews/getting-in-*-findings.md`.
+   - 3d. [x] **The two extra passes' fixes** over "getting in" — merged 2026-10-02 (PR #154).
    - ~~3c. **The code admits at once**~~ **(STRUCK 2026-09-21, never built)**; its plan of 2026-09-19 (spec Part 3 §9.13) went with it.
    - The line as Kd ruled it (RULINGS 2026-09-17): a roster upload that reconciles, invitations by email, and a code that admits at once — the code part reversed 2026-09-21; the rest is the lines above.
 4. **Staff, seats and the gym's own details** (split 2026-09-21; 4a and 4c are Part 1 of the re-plan and are built right after item 5, RULINGS 2026-09-21).
