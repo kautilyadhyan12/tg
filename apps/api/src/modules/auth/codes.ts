@@ -142,12 +142,11 @@ export async function redeemCode(
 ): Promise<void> {
   const live = await repo.findLiveCode(deps.sql, input.email, input.purpose);
   if (live === null) throw invalidCode();
-  // DEFENCE IN DEPTH, not a guarantee: `recordFailedAttempt` expires the row in
-  // the same statement that counts the fifth guess, so `findLiveCode` never
-  // returns an exhausted code and this line is unreachable today. It stays so
-  // that a future writer who changes that statement cannot open the door by
-  // accident; no test can observe it, and none claims to.
-  if (live.attempts >= SIGN_IN_CODE_RULES.maxAttempts) throw invalidCode();
+  // The try is taken BEFORE the guess is compared, in one statement, so guesses sent
+  // at the same moment get five tries between them, never one each. No try left:
+  // nothing is compared.
+  const attempts = await repo.takeAttempt(deps.sql, live.id, SIGN_IN_CODE_RULES.maxAttempts);
+  if (attempts === null) throw invalidCode();
 
   const expected = Buffer.from(live.codeHash, "hex");
   const presented = Buffer.from(
@@ -156,9 +155,9 @@ export async function redeemCode(
   );
   const matches = expected.length === presented.length && timingSafeEqual(expected, presented);
   if (!matches) {
-    const attempts = await repo.recordFailedAttempt(deps.sql, live.id, SIGN_IN_CODE_RULES.maxAttempts);
     const left = SIGN_IN_CODE_RULES.maxAttempts - attempts;
     if (left <= 0) {
+      await repo.expireCode(deps.sql, live.id);
       throw new WrongGuessError(400, "invalid_code", "Too many wrong tries. Ask for a new code.");
     }
     throw new WrongGuessError(

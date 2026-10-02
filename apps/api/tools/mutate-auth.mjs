@@ -105,11 +105,20 @@ const MUTANTS = [
   },
   {
     id: 'A3',
-    target: 'repo',
-    why: 'five wrong guesses no longer kill the code — a million guesses are allowed',
+    target: 'codes',
+    why: 'the fifth wrong guess no longer kills the code (the try count still refuses a sixth)',
     expect: 'five wrong guesses',
-    from: 'CASE WHEN attempts + 1 >= ${maxAttempts} THEN now() ELSE expires_at END',
-    to: 'CASE WHEN attempts + 1 >= ${maxAttempts} + 1000000 THEN now() ELSE expires_at END',
+    from: '      await repo.expireCode(deps.sql, live.id);',
+    to: '      void 0;',
+  },
+  {
+    id: 'A3b',
+    target: 'repo',
+    suite: 'test/auth.signupBurst.test.ts',
+    why: 'guesses sent at the same moment each get a try: a million tries are allowed',
+    expect: 'at one code at the same moment',
+    from: 'WHERE id = ${id} AND attempts < ${maxAttempts} AND used_at IS NULL',
+    to: 'WHERE id = ${id} AND attempts < ${maxAttempts} + 1000000 AND used_at IS NULL',
   },
   {
     id: 'A4',
@@ -134,6 +143,10 @@ const MUTANTS = [
     expect: 'an expired code is refused',
     from: '    WHERE email = ${email} AND purpose = ${purpose}\n      AND used_at IS NULL AND expires_at > now()',
     to: '    WHERE email = ${email} AND purpose = ${purpose}\n      AND used_at IS NULL',
+    // Since Stage 4 item 10 a try is taken only on a live code (`takeAttempt` also reads
+    // `expires_at > now()`), so an expired code is refused by two walls and this read is
+    // one of them: no test can see one alone go. Recorded, not hidden.
+    aliveByDesign: true,
   },
   {
     id: 'A7',

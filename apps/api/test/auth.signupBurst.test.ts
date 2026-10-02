@@ -322,6 +322,30 @@ d("a whole gym signing up on one internet address (real Postgres)", () => {
     expect((await post(elsewhere(), "/v1/auth/code/verify", { email, code })).statusCode).toBe(200);
   });
 
+  it("15 guesses at one code at the same moment: only five are tried, the right code is then refused, and the address is charged five", { timeout: 30_000 }, async () => {
+    const ip = gymAddress();
+    const email = "burst-race-guess@example.com";
+    expect((await askForCode(ip, email)).statusCode).toBe(200);
+    const code = lastCodeFor(email);
+    const wrong = (i: number) => String((Number(code) + 1 + i) % 1_000_000).padStart(6, "0");
+    const answers = await Promise.all(Array.from({ length: 15 }, (_, i) => post(elsewhere(), "/v1/auth/code/verify", { email, code: wrong(i) })));
+    expect(answers.every((a) => a.statusCode === 400)).toBe(true);
+    const row = (await sql<{ attempts: number }[]>`SELECT attempts FROM sign_in_codes WHERE email = ${email}`)[0];
+    expect(row?.attempts).toBe(5);
+    expect((await post(elsewhere(), "/v1/auth/code/verify", { email, code })).statusCode).toBe(400);
+    expect((await sql`SELECT 1 FROM users WHERE email = ${email}`).length).toBe(0);
+  });
+
+  it("the address is charged once for each try a code granted, never more", { timeout: 30_000 }, async () => {
+    const ip = gymAddress();
+    const email = "burst-race-charge@example.com";
+    expect((await askForCode(ip, email)).statusCode).toBe(200);
+    const code = lastCodeFor(email);
+    const wrong = (i: number) => String((Number(code) + 1 + i) % 1_000_000).padStart(6, "0");
+    await Promise.all(Array.from({ length: 15 }, (_, i) => post(ip, "/v1/auth/code/verify", { email, code: wrong(i) })));
+    expect(await redis.get(`rl:code_verify_wrong:ip:${ip}`)).toBe("5");
+  });
+
   it("Google: made-up callbacks and sign-ins started spend nothing; a member at the address still signs in", { timeout: 60_000 }, async () => {
     const ip = gymAddress();
     for (let i = 0; i < 400; i++) await get(ip, "/v1/auth/google/callback?code=x&state=y");
