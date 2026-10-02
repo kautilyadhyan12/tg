@@ -31,7 +31,7 @@ export function Names({ people, testId }) {
     <div className="flex flex-col gap-1.5">
       <ul className="flex flex-col gap-1" data-testid={testId}>
         {list.map((p) => (
-          <li key={p.entryId ?? p.userId} className="c-s15 c-t1 c-ell">
+          <li key={p.id ?? p.entryId ?? p.userId} className="c-s15 c-t1 c-ell">
             {p.name || 'No name'}
           </li>
         ))}

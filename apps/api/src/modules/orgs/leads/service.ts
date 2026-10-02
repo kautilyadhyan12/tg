@@ -27,6 +27,7 @@ import {
   type LeadEnquiry,
   type LeadJoinCandidate,
   type LeadStatus,
+  type LeadsFilter,
   type LeadsQuery,
   type LeadsResponse,
   type UpdateLeadRequest,
@@ -349,6 +350,20 @@ function decodeCursor(raw: string): repo.LeadCursor | null {
   return cursor.success ? cursor.data : null;
 }
 
+/** What the list's status, chip and search choose, for the page and for "Select all". */
+export function filterInput(gymId: string, filter: LeadsFilter, today: string, app: AppSending): repo.LeadsFilterInput {
+  const typed = (filter.q ?? "").trim();
+  return {
+    gymId,
+    status: filter.status ?? null,
+    like: typed === "" ? null : `%${escapeLike(typed)}%`,
+    digits: phoneDigits(typed),
+    dueBy: filter.followUp === "due" ? today : null,
+    problemOnly: filter.followUp === "problem",
+    app,
+  };
+}
+
 export async function listLeads(
   deps: LeadsDeps,
   userId: string,
@@ -364,21 +379,10 @@ export async function listLeads(
     cursor = decodeCursor(query.cursor);
     if (cursor === null) throw new OrgsError(400, "validation_error", "cursor: not a cursor");
   }
-  const typed = (query.q ?? "").trim();
   const facts = await emailsRepo.gymSendingFacts(deps.sql, gymId, deps.now());
   const app = appSending(facts, deps.sending);
   const [page, counts] = await Promise.all([
-    repo.leadsPage(deps.sql, {
-      gymId,
-      status: query.status ?? null,
-      like: typed === "" ? null : `%${escapeLike(typed)}%`,
-      digits: phoneDigits(typed),
-      dueBy: query.followUp === "due" ? today : null,
-      problemOnly: query.followUp === "problem",
-      app,
-      cursor,
-      limit: LEADS_PAGE + 1,
-    }),
+    repo.leadsPage(deps.sql, { ...filterInput(gymId, query, today, app), cursor, limit: LEADS_PAGE + 1 }),
     repo.leadCounts(deps.sql, gymId, today, app),
   ]);
   const shown = page.rows.slice(0, LEADS_PAGE);
