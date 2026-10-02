@@ -971,8 +971,6 @@ export const orgService = {
       authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/leads/${encodeURIComponent(leadId)}/follow-up`, { step, email }),
     ),
 
-  /** GET …/leads/email-settings — Settings' "Send them for me" (20c-v): the switch, where
-   *  replies go, and how many new leads the app has emailed this month. */
   // CHECK-IN DEVICES (Settings, `org.manage`; ROADMAP 16b-i). A link comes back once, from
   // the add and the new-link presses, and is never read again.
   getCheckinDevices: (gymId) =>
@@ -996,6 +994,8 @@ export const orgService = {
       authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/checkin-devices/${encodeURIComponent(deviceId)}/off`),
     ),
 
+  /** GET …/leads/email-settings — Settings' "Send them for me" (20c-v): the switch, where
+   *  replies go, and how many new leads the app has emailed this month. */
   getLeadEmailSettings: (gymId) =>
     readThrough(
       leadEmailSettingsResponseSchema,

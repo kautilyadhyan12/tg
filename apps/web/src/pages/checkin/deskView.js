@@ -4,13 +4,17 @@
 // The worst thing the desk screen could do is leave one member's name and payment word up
 // for the next person in the queue, so an answer is shown for RESULT_SHOW_MS and then the
 // screen goes back to "Scan your pass", and a new scan clears the old answer at once.
-import { CHECKIN_WORDS } from '@app/shared';
+import { CHECKIN_PASS_WINDOW_SECONDS, CHECKIN_WORDS } from '@app/shared';
 import { visitTimeLabel } from '../../components/gym/attendanceView';
 
 /** How long one answer stays on the desk. */
 export const RESULT_SHOW_MS = 5000;
 /** The camera reads the same QR many times a second: one read of a code in this time. */
 export const CAMERA_SAME_CODE_MS = 3000;
+/** How long the server takes a pass (its window and the next). A code that was let in is
+ *  not sent again within it: the server has spent the pass and would answer "Show a fresh
+ *  pass" to somebody who is checked in, so the desk shows their answer again instead. */
+export const SAME_PASS_MS = CHECKIN_PASS_WINDOW_SECONDS * 2 * 1000;
 /** The longest thing the scan takes (`CHECKIN_READ_MAX`): longer typing is not a scan. */
 export const DESK_READ_MAX = 64;
 
@@ -33,6 +37,25 @@ export function readyCode(typed) {
   return code;
 }
 
+/** Something was read, but it is longer than any pass or key tag (a long barcode, a QR
+ *  holding a web address). */
+export function tooLongToScan(typed) {
+  return typeof typed === 'string' && typed.trim().length > DESK_READ_MAX;
+}
+
+export const NOT_A_SCAN = {
+  tone: 'plain',
+  title: "That isn't a pass or key tag",
+  name: null,
+  notice: null,
+  hint: 'Scan the pass in the app, or a key tag.',
+};
+
+/** A good answer: the person is in, so the same code within SAME_PASS_MS shows it again. */
+export function isLetIn(answer) {
+  return answer?.result === 'checked_in' || answer?.result === 'already';
+}
+
 /** The gym's own words on the person's record, for the orange line under a green tick.
  *  Never a reason to refuse: it is for staff to see. */
 export function noticeLine(notice) {
@@ -40,7 +63,7 @@ export function noticeLine(notice) {
   const parts = [];
   if (typeof notice.status === 'string' && notice.status.trim() !== '') parts.push(`Status: ${notice.status.trim()}`);
   if (typeof notice.payment === 'string' && notice.payment.trim() !== '') parts.push(`Payment: ${notice.payment.trim()}`);
-  if (notice.onList === false) parts.push('Not on your list');
+  if (notice.onList === false) parts.push("Not on the gym's list");
   return parts.length === 0 ? null : parts.join(' · ');
 }
 
@@ -130,4 +153,12 @@ export function writeDeskNames(storage, names) {
   } catch {
     // Storage blocked: the desk still works, without its names at the top.
   }
+}
+
+/** A browser somebody is signed in to is not a desk: whoever stands at it could open the
+ *  console in the next tab. The desk and its set-up say so and wait for a sign-out. */
+export function signedInLine(user) {
+  const who = typeof user?.email === 'string' && user.email !== '' ? user.email : typeof user?.displayName === 'string' ? user.displayName : null;
+  const as = who === null ? 'This browser is signed in to AI Home Gym.' : `This browser is signed in as ${who}.`;
+  return `${as} Anyone at this desk could open your console in another tab, so the desk works only in a browser nobody is signed in to. Sign out here, or open the link in another browser.`;
 }

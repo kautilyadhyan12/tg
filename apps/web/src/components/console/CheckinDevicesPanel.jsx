@@ -48,9 +48,9 @@ function LinkBox({ shown, clock, onDone }) {
         Open this link on {shown.device.name}
       </p>
       <p className="text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>
-        Open it on the tablet or computer itself, in the browser it will stay in. It works once
-        {until === '' ? '' : `, until ${until}`}. Whoever opens it first becomes this device, so
-        don&apos;t post it anywhere others can see it.
+        Open it on the tablet or computer itself, in a browser nobody is signed in to, and leave
+        it there. It works once{until === '' ? '' : `, until ${until}`}. Whoever opens it first
+        becomes this device, so don&apos;t post it anywhere others can see it.
       </p>
       <div className="flex flex-col sm:flex-row gap-2">
         <input

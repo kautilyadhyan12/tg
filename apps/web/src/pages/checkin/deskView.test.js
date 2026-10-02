@@ -3,7 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { CHECKIN_WORDS, checkinScanResponseSchema } from '@app/shared';
 import {
   DESK_NAMES_KEY,
+  NOT_A_SCAN,
+  SAME_PASS_MS,
   claimTrouble,
+  isLetIn,
+  signedInLine,
+  tooLongToScan,
   deskAnswer,
   deskTrouble,
   noticeLine,
@@ -62,8 +67,8 @@ describe('noticeLine', () => {
     [{ status: null, payment: 'Overdue', onList: true }, 'Payment: Overdue'],
     [{ status: ' Frozen ', payment: 'Paid', onList: true }, 'Status: Frozen · Payment: Paid'],
     [{ status: '  ', payment: '', onList: true }, null],
-    [{ status: null, payment: null, onList: false }, 'Not on your list'],
-    [{ status: 'Cancelled', payment: 'Overdue', onList: false }, 'Status: Cancelled · Payment: Overdue · Not on your list'],
+    [{ status: null, payment: null, onList: false }, "Not on the gym's list"],
+    [{ status: 'Cancelled', payment: 'Overdue', onList: false }, "Status: Cancelled · Payment: Overdue · Not on the gym's list"],
     [null, null],
   ])('%j', (notice, expected) => {
     expect(noticeLine(notice)).toBe(expected);
@@ -182,5 +187,47 @@ describe('the desk’s own names', () => {
     };
     expect(readDeskNames(blocked)).toBeNull();
     expect(() => writeDeskNames(blocked, { gymName: 'a', deviceName: 'b' })).not.toThrow();
+  });
+});
+
+describe('a scan longer than any pass or key tag', () => {
+  it.each([
+    ['x'.repeat(64), false],
+    [`  ${'x'.repeat(64)}  `, false],
+    ['x'.repeat(65), true],
+    ['', false],
+    [null, false],
+  ])('%j', (typed, expected) => {
+    expect(tooLongToScan(typed)).toBe(expected);
+  });
+  it('says what it is, with no name', () => {
+    expect(NOT_A_SCAN).toMatchObject({ title: "That isn't a pass or key tag", name: null });
+  });
+});
+
+describe('the same pass again', () => {
+  it('is kept for the two windows the server takes a pass in', () => {
+    expect(SAME_PASS_MS).toBe(60_000);
+  });
+  it.each([
+    [{ result: 'checked_in' }, true],
+    [{ result: 'already' }, true],
+    [{ result: 'fresh_pass_needed' }, false],
+    [{ result: 'not_a_member' }, false],
+    [{ result: 'see_staff' }, false],
+    [null, false],
+  ])('%j', (answer, expected) => {
+    expect(isLetIn(answer)).toBe(expected);
+  });
+});
+
+describe('a browser somebody is signed in to', () => {
+  it('names the account and says what to do', () => {
+    expect(signedInLine({ email: 'owner@irongym.example' })).toBe(
+      'This browser is signed in as owner@irongym.example. Anyone at this desk could open your console in another tab, so the desk works only in a browser nobody is signed in to. Sign out here, or open the link in another browser.',
+    );
+  });
+  it('without an address, still says it is signed in', () => {
+    expect(signedInLine({})).toMatch(/^This browser is signed in to AI Home Gym\./);
   });
 });

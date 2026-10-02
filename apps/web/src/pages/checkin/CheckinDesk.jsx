@@ -1,20 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { AlertTriangle, Camera, CheckCircle2, Loader2, QrCode, RefreshCw, ScanLine, XCircle } from 'lucide-react';
+import { AlertTriangle, Camera, CheckCircle2, Loader2, LogOut, QrCode, RefreshCw, ScanLine, XCircle } from 'lucide-react';
 import { CHECKIN_WORDS } from '@app/shared';
 import { checkinService } from '../../api/checkinApi';
+import { useAuth } from '../../context/AuthContext';
 import { consoleLook } from '../console/consoleMenu';
 import DeskCamera from './DeskCamera';
 import {
   CAMERA_SAME_CODE_MS,
   DESK_READ_MAX,
+  NOT_A_SCAN,
   RESULT_SHOW_MS,
+  SAME_PASS_MS,
   claimTrouble,
   deskAnswer,
   deskTrouble,
+  isLetIn,
   readDeskNames,
   readyCode,
+  signedInLine,
   tokenFromHash,
+  tooLongToScan,
   writeDeskNames,
 } from './deskView';
 import '../../components/console/console.css';
@@ -26,6 +32,9 @@ import '../../components/console/console.css';
 //
 // `/check-in/setup#<token>` is the one-time link: the token is read, wiped from the
 // address bar, spent, and the page moves to `/check-in`, the desk itself.
+//
+// A browser somebody is signed in to is never a desk, set up or in use: whoever stood at
+// it could open the console in the next tab. It says so and offers Sign out.
 
 const TONES = {
   good: { background: 'var(--good-bg)', color: 'var(--good)', Icon: CheckCircle2 },
@@ -46,21 +55,40 @@ function DeskShell({ children, look }) {
   return <div className={`c-console t-${look} min-h-screen flex flex-col`}>{children}</div>;
 }
 
-function SetUp({ look }) {
+function SignedIn({ look, user, logout }) {
+  const [busy, setBusy] = useState(false);
+  const signOut = async () => {
+    setBusy(true);
+    try {
+      await logout();
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <DeskShell look={look}>
+      <main className="flex-grow flex items-center justify-center px-4 py-10">
+        <div className="c-card w-full max-w-lg p-6 flex flex-col gap-4" role="alert">
+          <h1 className="c-h2">Sign out to use this as a check-in desk</h1>
+          <p className="c-s15 c-t2">{signedInLine(user)}</p>
+          <button type="button" className="c-btn c-btn-p self-start" onClick={() => void signOut()} disabled={busy}>
+            <LogOut aria-hidden="true" className="w-5 h-5" />
+            Sign out
+          </button>
+        </div>
+      </main>
+    </DeskShell>
+  );
+}
+
+function SetUp({ look, token }) {
   const navigate = useNavigate();
-  // Read once, before anything wipes it; a second run of the effect (React's development
-  // double run) must not spend the link twice.
-  const [token] = useState(() => (typeof window === 'undefined' ? null : tokenFromHash(window.location.hash)));
+  // A second run of the effect (React's development double run) must not spend the link twice.
   const started = useRef(false);
   // A link with no token in it spends nothing and says so.
   const [problem, setProblem] = useState(() => (token === null ? CHECKIN_WORDS.link_not_valid : null));
 
   useEffect(() => {
-    // The token leaves the address bar at once, so it is not left on the screen or in the
-    // browser's history whatever happens next.
-    if (typeof window !== 'undefined' && window.location.hash !== '') {
-      window.history.replaceState(window.history.state, '', window.location.pathname);
-    }
     if (started.current) return;
     started.current = true;
     if (token === null) return;
@@ -162,6 +190,9 @@ function Desk({ look }) {
   const seq = useRef(0);
   const clearTimer = useRef(null);
   const lastCameraRead = useRef({ code: '', at: 0 });
+  // The codes let in within SAME_PASS_MS, and what was shown for each.
+  const letIn = useRef(new Map());
+  const inFlight = useRef(null);
 
   useEffect(() => {
     document.title = 'Check-in';
@@ -179,10 +210,33 @@ function Desk({ look }) {
     }, RESULT_SHOW_MS);
   }, []);
 
+  /** Shown at once, in place of anything still in flight. */
+  const showNow = useCallback(
+    (answer) => {
+      seq.current += 1;
+      inFlight.current = null;
+      setPending(false);
+      show(answer);
+    },
+    [show],
+  );
+
   const send = useCallback(
     async (code) => {
+      // The same pass again while it is still alive is the person who was just let in (a
+      // member holding the phone up, a scanner reading twice): the server has spent it and
+      // would say "Show a fresh pass", so their own answer is shown again instead.
+      const now = Date.now();
+      for (const [kept, entry] of letIn.current) if (now - entry.at >= SAME_PASS_MS) letIn.current.delete(kept);
+      const before = letIn.current.get(code);
+      if (before !== undefined) {
+        showNow(before.shown);
+        return;
+      }
+      if (inFlight.current === code) return;
       const mine = seq.current + 1;
       seq.current = mine;
+      inFlight.current = code;
       // The last person's answer goes the moment the next scan arrives.
       if (clearTimer.current !== null) clearTimeout(clearTimer.current);
       clearTimer.current = null;
@@ -192,6 +246,7 @@ function Desk({ look }) {
         const answer = await checkinService.scan(code);
         if (seq.current !== mine) return;
         setStopped(null);
+        if (isLetIn(answer)) letIn.current.set(code, { at: Date.now(), shown: deskAnswer(answer) });
         if (names === null || names.gymName !== answer.gymName) {
           const next = { gymName: answer.gymName, deviceName: names?.deviceName ?? '' };
           setNames(next);
@@ -202,6 +257,7 @@ function Desk({ look }) {
         if (seq.current !== mine) return;
         const trouble = deskTrouble(err);
         if (trouble.stop) {
+          letIn.current.clear();
           setStopped(trouble);
           setNames(null);
           writeDeskNames(storage(), null);
@@ -209,30 +265,42 @@ function Desk({ look }) {
           show(trouble);
         }
       } finally {
-        if (seq.current === mine) setPending(false);
+        if (seq.current === mine) {
+          setPending(false);
+          inFlight.current = null;
+        }
       }
     },
-    [names, show],
+    [names, show, showNow],
   );
 
   const onSubmit = (event) => {
     event.preventDefault();
-    const code = readyCode(typed);
+    const read = typed;
     setTyped('');
+    if (tooLongToScan(read)) {
+      showNow(NOT_A_SCAN);
+      return;
+    }
+    const code = readyCode(read);
     if (code !== null) void send(code);
   };
 
   const onCameraCode = useCallback(
     (text) => {
-      const code = readyCode(text);
-      if (code === null) return;
+      if (typeof text !== 'string') return;
       const now = Date.now();
       const last = lastCameraRead.current;
-      if (last.code === code && now - last.at < CAMERA_SAME_CODE_MS) return;
-      lastCameraRead.current = { code, at: now };
-      void send(code);
+      if (last.code === text && now - last.at < CAMERA_SAME_CODE_MS) return;
+      lastCameraRead.current = { code: text, at: now };
+      if (tooLongToScan(text)) {
+        showNow(NOT_A_SCAN);
+        return;
+      }
+      const code = readyCode(text);
+      if (code !== null) void send(code);
     },
-    [send],
+    [send, showNow],
   );
 
   // The scanner types into this box, so it always holds the focus.
@@ -288,7 +356,22 @@ function Desk({ look }) {
 
 export default function CheckinDesk() {
   const location = useLocation();
+  const { user, logout } = useAuth();
   const look = consoleLook(location.search, import.meta.env.DEV);
-  if (location.pathname === '/check-in/setup') return <SetUp look={look} />;
+  const setUp = location.pathname === '/check-in/setup';
+  // Read once and kept in memory, so a set-up held back by a signed-in browser goes ahead
+  // after Sign out without the link being opened again.
+  const [token] = useState(() => (setUp && typeof window !== 'undefined' ? tokenFromHash(window.location.hash) : null));
+
+  useEffect(() => {
+    // The token leaves the address bar at once, so it is not left on the screen or in the
+    // browser's history whatever happens next.
+    if (setUp && typeof window !== 'undefined' && window.location.hash !== '') {
+      window.history.replaceState(window.history.state, '', window.location.pathname);
+    }
+  }, [setUp]);
+
+  if (user !== null && user !== undefined) return <SignedIn look={look} user={user} logout={logout} />;
+  if (setUp) return <SetUp look={look} token={token} />;
   return <Desk look={look} />;
 }

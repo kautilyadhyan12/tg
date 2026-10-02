@@ -12,14 +12,38 @@ vi.mock('../../api/checkinApi', () => ({
   checkinService: { claimDevice: vi.fn(), scan: vi.fn() },
 }));
 vi.mock('jsqr', () => ({ default: vi.fn() }));
+// Who is signed in to this browser: a small store, so a sign-out redraws the page as the
+// real AuthContext does.
+vi.mock('../../context/AuthContext', async () => {
+  const { useSyncExternalStore } = await import('react');
+  const listeners = new Set();
+  const auth = {
+    user: null,
+    set(user) {
+      auth.user = user;
+      listeners.forEach((l) => l());
+    },
+  };
+  const logout = vi.fn(async () => auth.set(null));
+  const subscribe = (l) => {
+    listeners.add(l);
+    return () => listeners.delete(l);
+  };
+  return {
+    testAuth: auth,
+    useAuth: () => ({ user: useSyncExternalStore(subscribe, () => auth.user), logout }),
+  };
+});
 
 const { checkinService } = await import('../../api/checkinApi');
 const jsQR = (await import('jsqr')).default;
+const { testAuth } = await import('../../context/AuthContext');
 const CheckinDesk = (await import('./CheckinDesk')).default;
-const { DESK_NAMES_KEY, RESULT_SHOW_MS } = await import('./deskView');
+const { DESK_NAMES_KEY, RESULT_SHOW_MS, SAME_PASS_MS } = await import('./deskView');
 
 const TOKEN = 'a'.repeat(20) + 'B_-' + 'c'.repeat(20);
 const PASS = 'AHGP' + 'A'.repeat(58);
+const PASS_B = 'AHGP' + 'B'.repeat(58);
 
 const checkedIn = (name, notice = { status: null, payment: null, onList: true }) => ({
   result: 'checked_in',
@@ -48,12 +72,17 @@ function scan(code) {
 beforeEach(() => {
   window.localStorage.clear();
   window.history.replaceState(null, '', '/');
+  testAuth.user = null;
 });
 
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
   vi.clearAllMocks();
+  // An answer one test set up and never used must not reach the next test.
+  checkinService.scan.mockReset();
+  checkinService.claimDevice.mockReset();
+  jsQR.mockReset();
 });
 
 describe('the worst thing: somebody else’s details left on the desk', () => {
@@ -103,10 +132,54 @@ describe('the worst thing: somebody else’s details left on the desk', () => {
     mount();
     scan(PASS);
     expect(await screen.findByText('Olivia Bennett')).toBeTruthy();
-    scan(PASS);
+    scan(PASS_B);
     expect(await screen.findByText(CHECKIN_WORDS.device_not_recognised)).toBeTruthy();
     expect(screen.queryByText('Olivia Bennett')).toBeNull();
     expect(screen.queryByText(/Overdue/)).toBeNull();
+  });
+
+  it('the same pass again within a minute shows the person their own answer, never "Show a fresh pass"', async () => {
+    // The server spends a pass on its first use: sent again it would say "Show a fresh pass".
+    checkinService.scan.mockResolvedValueOnce(checkedIn('Olivia Bennett')).mockResolvedValue({ result: 'fresh_pass_needed', gymName: 'Iron House' });
+    mount();
+    scan(PASS);
+    expect(await screen.findByText('Olivia Bennett')).toBeTruthy();
+    scan(PASS);
+    expect(screen.getByText('Checked in')).toBeTruthy();
+    expect(screen.getByText('Olivia Bennett')).toBeTruthy();
+    expect(screen.queryByText('Show a fresh pass')).toBeNull();
+    expect(checkinService.scan).toHaveBeenCalledTimes(1);
+  });
+
+  it('two people in turn, and the first still holding the phone up: each sees their own answer', async () => {
+    checkinService.scan
+      .mockResolvedValueOnce(checkedIn('Olivia Bennett'))
+      .mockResolvedValueOnce(checkedIn('Liam Hughes'))
+      .mockResolvedValue({ result: 'fresh_pass_needed', gymName: 'Iron House' });
+    mount();
+    scan(PASS);
+    await screen.findByText('Olivia Bennett');
+    scan(PASS_B);
+    await screen.findByText('Liam Hughes');
+    scan(PASS);
+    expect(screen.getByText('Olivia Bennett')).toBeTruthy();
+    expect(screen.queryByText('Liam Hughes')).toBeNull();
+    expect(screen.queryByText('Show a fresh pass')).toBeNull();
+    expect(checkinService.scan).toHaveBeenCalledTimes(2);
+  });
+
+  it('after the pass has died the same code goes to the server again', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    checkinService.scan.mockResolvedValueOnce(checkedIn('Olivia Bennett')).mockResolvedValueOnce({ result: 'fresh_pass_needed', gymName: 'Iron House' });
+    mount();
+    scan(PASS);
+    await screen.findByText('Olivia Bennett');
+    await act(async () => {
+      vi.advanceTimersByTime(SAME_PASS_MS + 100);
+    });
+    scan(PASS);
+    expect(await screen.findByText('Show a fresh pass')).toBeTruthy();
+    expect(checkinService.scan).toHaveBeenCalledTimes(2);
   });
 
   it('an answer that arrives after a newer scan is never shown', async () => {
@@ -162,6 +235,46 @@ describe('the worst thing: a set-up link that makes a second desk', () => {
   });
 });
 
+describe('the worst thing: a desk in a browser somebody is signed in to', () => {
+  it('the set-up link is not spent, leaves the address bar, and waits for a sign-out', async () => {
+    testAuth.user = { id: 'u1', email: 'owner@irongym.example', displayName: 'Iron House owner' };
+    checkinService.claimDevice.mockResolvedValue({ gymName: 'Iron House', deviceName: 'Front desk' });
+    window.history.replaceState(null, '', `/check-in/setup#${TOKEN}`);
+    mount('/check-in/setup');
+
+    expect(screen.getByText('Sign out to use this as a check-in desk')).toBeTruthy();
+    expect(screen.getByText(/This browser is signed in as owner@irongym\.example\./)).toBeTruthy();
+    await waitFor(() => expect(window.location.hash).toBe(''));
+    expect(checkinService.claimDevice).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText(/scanner/i)).toBeNull();
+
+    // Signing out goes on with the same link, without opening it again.
+    fireEvent.click(screen.getByRole('button', { name: /sign out/i }));
+    expect(await screen.findByText('Scan your pass or key tag')).toBeTruthy();
+    expect(checkinService.claimDevice).toHaveBeenCalledTimes(1);
+    expect(checkinService.claimDevice).toHaveBeenCalledWith(TOKEN);
+  });
+
+  it('a desk already set up stops scanning while somebody is signed in', async () => {
+    window.localStorage.setItem(DESK_NAMES_KEY, JSON.stringify({ gymName: 'Iron House', deviceName: 'Front desk' }));
+    testAuth.user = { id: 'u1', email: 'owner@irongym.example' };
+    mount();
+    expect(screen.getByText('Sign out to use this as a check-in desk')).toBeTruthy();
+    expect(screen.queryByLabelText(/scanner/i)).toBeNull();
+    expect(checkinService.scan).not.toHaveBeenCalled();
+  });
+
+  it('somebody signing in at a working desk takes the scanner away at once', async () => {
+    checkinService.scan.mockResolvedValue(checkedIn('Olivia Bennett'));
+    mount();
+    scan(PASS);
+    await screen.findByText('Olivia Bennett');
+    act(() => testAuth.set({ id: 'u1', email: 'owner@irongym.example' }));
+    expect(screen.queryByText('Olivia Bennett')).toBeNull();
+    expect(screen.queryByLabelText(/scanner/i)).toBeNull();
+  });
+});
+
 describe('the desk is locked', () => {
   it('has no link, so nothing on it leads into the console', async () => {
     checkinService.scan.mockResolvedValue(checkedIn('Olivia Bennett'));
@@ -199,11 +312,11 @@ describe('every answer the scan gives', () => {
     expect(container.querySelector('[data-notice]')).toBeNull();
   });
 
-  it('an app member the list no longer holds is green, with "Not on your list" in orange', async () => {
+  it('an app member the list no longer holds is green, with "Not on the gym\'s list" in orange', async () => {
     checkinService.scan.mockResolvedValue(checkedIn('Arjun Shah', { status: null, payment: null, onList: false }));
     const { container } = mount();
     scan(PASS);
-    expect(await screen.findByText('Not on your list')).toBeTruthy();
+    expect(await screen.findByText("Not on the gym's list")).toBeTruthy();
     expect(container.querySelector('[data-tone="good"]')).not.toBeNull();
   });
 
@@ -273,6 +386,13 @@ describe('the scanner box', () => {
     expect(screen.getByLabelText(/scanner/i).value).toBe('');
   });
 
+  it('something longer than any pass or key tag says so, and sends nothing', async () => {
+    mount();
+    scan('https://example.com/' + 'x'.repeat(60));
+    expect(await screen.findByText("That isn't a pass or key tag")).toBeTruthy();
+    expect(checkinService.scan).not.toHaveBeenCalled();
+  });
+
   it('an Enter with nothing typed sends nothing', () => {
     mount();
     scan('   ');
@@ -316,20 +436,33 @@ describe('the camera', () => {
     while (restore.length > 0) restore.pop()();
   });
 
-  it('reads a pass once, however many frames show it, and closing it turns the camera off', async () => {
+  it('a pass held up for its whole life is sent once and never turns into "Show a fresh pass"', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     jsQR.mockReturnValue({ data: PASS });
-    checkinService.scan.mockResolvedValue(checkedIn('Olivia Bennett'));
+    checkinService.scan.mockResolvedValueOnce(checkedIn('Olivia Bennett')).mockResolvedValue({ result: 'fresh_pass_needed', gymName: 'Iron House' });
     mount();
     fireEvent.click(screen.getByRole('button', { name: /use the camera/i }));
     expect(await screen.findByText('Olivia Bennett')).toBeTruthy();
-    // Several frames have been read by now; the one pass went once.
-    await new Promise((resolve) => setTimeout(resolve, 700));
-    expect(jsQR.mock.calls.length).toBeGreaterThan(1);
+    for (let second = 0; second < SAME_PASS_MS / 1000 - 1; second += 1) {
+      await act(async () => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(screen.queryByText('Show a fresh pass')).toBeNull();
+    }
+    expect(jsQR.mock.calls.length).toBeGreaterThan(100);
     expect(checkinService.scan).toHaveBeenCalledTimes(1);
     expect(checkinService.scan).toHaveBeenCalledWith(PASS);
 
     fireEvent.click(screen.getByRole('button', { name: /close the camera/i }));
     expect(stop).toHaveBeenCalled();
+  });
+
+  it('a QR that is no pass (a web address) says so once, and sends nothing', async () => {
+    jsQR.mockReturnValue({ data: 'https://example.com/' + 'x'.repeat(60) });
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: /use the camera/i }));
+    expect(await screen.findByText("That isn't a pass or key tag")).toBeTruthy();
+    expect(checkinService.scan).not.toHaveBeenCalled();
   });
 
   it('a camera the browser refuses says what to do instead', async () => {
