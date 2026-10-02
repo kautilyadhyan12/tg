@@ -467,12 +467,9 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
   // could straddle a commit: a removal landing between them produces a response
   // where the gym is in NEITHER list — the exact silence the ruling exists to
   // end — or in BOTH, drawn as "You're a member" over a membership that has
-  // just ended. One transaction makes the pair consistent by construction
-  // rather than self-healing on the next reload.
-  //
-  // Sequential inside the transaction on purpose: one connection cannot run two
-  // statements at once, so `Promise.all` here would only queue them.
-  const { rows, former } = await deps.sql.begin(async (tx) => ({
+  // just ended. One REPEATABLE READ transaction makes the pair one snapshot; at
+  // READ COMMITTED each statement takes its own.
+  const { rows, former } = await deps.sql.begin("isolation level repeatable read read only", async (tx) => ({
     rows: await repo.listOrgsForUser(tx, userId),
     former: await repo.listFormerOrgsForUser(tx, userId),
   }));

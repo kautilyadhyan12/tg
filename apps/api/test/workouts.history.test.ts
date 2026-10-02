@@ -7,7 +7,7 @@ import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { seed } from "../src/db/seed.js";
-import { lockXpForUser } from "../src/modules/gamification/repo.js";
+import { getStreakForUpdate, lockXpForUser } from "../src/modules/gamification/repo.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -644,6 +644,41 @@ d("workouts history + progress + gamification (real Postgres)", () => {
     } finally {
       releaseA(); // never strand A's transaction if an assertion throws
       await Promise.allSettled([aP, bP]); // and never leak an unhandled rejection
+    }
+  });
+
+  it("a first streak is locked before its row exists: a second sync waits for the first", { timeout: 30_000 }, async () => {
+    const uid = crypto.randomUUID();
+    let releaseA = (): void => {};
+    const aHolds = new Promise<void>((r) => (releaseA = r));
+    let aLocked = (): void => {};
+    const aReady = new Promise<void>((r) => (aLocked = r));
+    const aP = sql.begin(async (tx) => {
+      await getStreakForUpdate(tx, uid);
+      aLocked();
+      await aHolds;
+    });
+    await Promise.race([aReady, aP]);
+
+    let bEntered = (): void => {};
+    const bInTx = new Promise<void>((r) => (bEntered = r));
+    let bRead = false;
+    const bP = sql.begin(async (tx) => {
+      bEntered();
+      await getStreakForUpdate(tx, uid);
+      bRead = true;
+    });
+    try {
+      await bInTx;
+      await new Promise((r) => setTimeout(r, 400));
+      expect(bRead).toBe(false);
+      releaseA();
+      await aP;
+      await bP;
+      expect(bRead).toBe(true);
+    } finally {
+      releaseA();
+      await Promise.allSettled([aP, bP]);
     }
   });
 

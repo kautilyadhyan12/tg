@@ -422,6 +422,8 @@ export async function createOneTimeToken(
   input: { userId: string; purpose: OneTimePurpose; tokenHash: string; expiresAt: Date },
 ): Promise<void> {
   await sql.begin(async (tx) => {
+    // Two requests at once would each miss the other's new token and both stay live.
+    await tx`SELECT 1 FROM users WHERE id = ${input.userId} FOR NO KEY UPDATE`;
     await tx`
       UPDATE one_time_tokens SET expires_at = now()
       WHERE user_id = ${input.userId} AND purpose = ${input.purpose}

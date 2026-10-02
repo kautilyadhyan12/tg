@@ -7,7 +7,7 @@
 // Gates in CLAUDE.md §4's order: privilege (and a live plan, for a write), then the
 // rate limit, then the handler. Every write is one transaction holding the gym's
 // row — the lock the confirm and the join door take — and every statement inside
-// it uses `tx`: the API's pool is one connection.
+// it uses `tx`: a read on the pool would see outside the transaction.
 import {
   isLargeMemberListChange,
   MEMBER_LIST_BY_HAND_WORDS,

@@ -1905,6 +1905,9 @@ export async function startGymTrial(
       return { kind: "already_subscribed", subscription: toGymSubscription(existing) };
     }
 
+    // One trial per OWNER: the gym's lock does not cover the owner's other gyms, so
+    // two presses on two of them would both read "never had one".
+    await tx`SELECT pg_advisory_xact_lock(hashtext(${`gym-trial:${gym.owner_user_id}`}))`;
     const used = await tx<{ one: number }[]>`
       SELECT 1 AS one
       FROM subscriptions s JOIN gyms g ON g.id = s.owner_id

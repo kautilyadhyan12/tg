@@ -1017,6 +1017,60 @@ d("join by invitation (real Postgres)", () => {
   );
 
   it(
+    "two people tapping Join at the same instant on ONE server: one takes the last place, the other is told the gym is full",
+    async () => {
+      const gym = await makeGym("Last Place Gym", SMALL_PLAN);
+      const people = ["early0", "early1", "tap0", "tap1"];
+      for (const local of people) await addInvited(gym, { fullName: local, email: addr(local) });
+      const [early0, early1, tap0, tap1] = await Promise.all(people.map((local) => signIn(addr(local))));
+      if (early0 === undefined || early1 === undefined || tap0 === undefined || tap1 === undefined) throw new Error("sign-in failed");
+      for (const who of [early0, early1]) expect((await accept(who, await inviteIdOf(gym, who.email))).statusCode).toBe(200);
+      const ids = await Promise.all([tap0, tap1].map((who) => inviteIdOf(gym, who.email)));
+
+      const taps = await Promise.all([tap0, tap1].map((who, i) => accept(who, ids[i] ?? "")));
+      expect(taps.map((res) => res.statusCode).sort()).toEqual([200, 409]);
+      expect(taps.map((res) => (res.statusCode === 409 ? errorOf(res).error : "joined")).sort()).toEqual(["gym_full", "joined"]);
+      expect(await liveMembers(gym)).toBe(3);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "My Gyms read while the person is taken off and put back: the gym is always in exactly one of the two lists",
+    async () => {
+      const gym = await makeGym("Flicker Gym");
+      await addInvited(gym, { fullName: "Flick", email: addr("flick") });
+      const flick = await signIn(addr("flick"));
+      expect((await accept(flick, await inviteIdOf(gym, flick.email))).statusCode).toBe(200);
+
+      const toggling = { on: true };
+      const toggler = (async () => {
+        while (toggling.on) {
+          await sql`
+            UPDATE gym_members SET removed_at = CASE WHEN removed_at IS NULL THEN now() ELSE NULL END
+            WHERE gym_id = ${gym.id} AND user_id = ${flick.userId}`;
+        }
+      })();
+      const seen: string[] = [];
+      try {
+        for (let i = 0; i < 80; i++) {
+          const res = await get("/v1/orgs/mine", flick.cookies);
+          expect(res.statusCode).toBe(200);
+          const body = JSON.parse(res.body) as { orgs: { id: string }[]; formerOrgs: { id: string }[] };
+          const now = body.orgs.some((o) => o.id === gym.id);
+          const before = body.formerOrgs.some((o) => o.id === gym.id);
+          seen.push(now && before ? "both" : now ? "member" : before ? "former" : "neither");
+        }
+      } finally {
+        toggling.on = false;
+        await toggler;
+      }
+      expect(seen.filter((s) => s === "both" || s === "neither")).toEqual([]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "a gym's induction on one wi-fi address is not refused, and one person's eleventh answer in an hour is",
     async () => {
       const gym = await makeGym("Induction Gym");

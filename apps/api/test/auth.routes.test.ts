@@ -328,6 +328,34 @@ d("auth routes (real Postgres)", () => {
     expect(ok.json<{ user: { emailVerified: boolean } }>().user.emailVerified).toBe(true);
   });
 
+  it("links asked for at the same instant: only the newest one stays live", { timeout: 30_000 }, async () => {
+    const { createOneTimeToken } = await import("../src/modules/auth/repo.js");
+    const { sha256Hex, mintOpaqueToken } = await import("../src/modules/auth/tokens.js");
+    await post(api(), "/v1/auth/register", {
+      email: "p21-twin-links@example.com",
+      password: PASSWORD,
+      displayName: "Twin Links",
+    });
+    const [u] = await sql<{ id: string }[]>`
+      SELECT id FROM users WHERE email = 'p21-twin-links@example.com'`;
+    const userId = u?.id ?? "";
+    expect(userId).not.toBe("");
+    await Promise.all(
+      Array.from({ length: 6 }, () =>
+        createOneTimeToken(sql, {
+          userId,
+          purpose: "password_reset",
+          tokenHash: sha256Hex(mintOpaqueToken()),
+          expiresAt: new Date(Date.now() + 60_000),
+        }),
+      ),
+    );
+    const live = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM one_time_tokens
+      WHERE user_id = ${userId} AND purpose = 'password_reset' AND used_at IS NULL AND expires_at > now()`;
+    expect(live[0]?.n).toBe(1);
+  });
+
   it("refresh: missing/garbage cookie → 401", async () => {
     expect((await post(api(), "/v1/auth/refresh", {})).statusCode).toBe(401);
     const garbage = await post(api(), "/v1/auth/refresh", {}, { cookies: { refreshToken: "ff".repeat(32) } });

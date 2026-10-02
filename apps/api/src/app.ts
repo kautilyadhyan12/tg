@@ -258,7 +258,7 @@ export async function buildApp(
   const analytics = createAnalytics(config);
   app.decorate("analytics", analytics);
 
-  const sql = postgres(config.DATABASE_URL, { prepare: false, max: 1 });
+  const sql = postgres(config.DATABASE_URL, { prepare: false, max: config.DATABASE_POOL_MAX });
   // P2.4: REDIS_URL → real Redis; otherwise the in-memory adapter (config
   // fail-fast makes REDIS_URL mandatory in production).
   const redis =

@@ -185,10 +185,9 @@ interface Measured {
  *  preview shows.
  *
  *  **IT TAKES AN EXECUTOR AND NOT `deps`, SO THE CONFIRM CAN RUN IT INSIDE ITS OWN
- *  TRANSACTION.** The API's Postgres pool is one connection: a query sent on
- *  `deps.sql` while a transaction holds that connection waits for the transaction,
- *  which is waiting for the query. Passing `tx` in is what makes the rule's three
- *  sets the ones the lock is holding still, rather than a second, later read. */
+ *  TRANSACTION.** A query sent on `deps.sql` runs on another connection, outside
+ *  the lock. Passing `tx` in is what makes the rule's three sets the ones the lock
+ *  is holding still, rather than a second, later read. */
 async function measure(
   sql: Sql | TransactionSql,
   gymId: string,
@@ -1087,9 +1086,9 @@ export async function previewLeavers(
 /** APPLY A STAGED UPLOAD TO THE GYM'S LIST — the one transaction that writes it.
  *
  *  **EVERY STATEMENT INSIDE USES `tx` AND NOT `deps.sql`, AND THAT IS NOT A STYLE
- *  POINT.** The API's Postgres pool is ONE connection: a query sent on `deps.sql`
- *  while this transaction holds it would wait for the transaction, which is waiting
- *  for the query — the whole API stopped, not just this request.
+ *  POINT.** A query sent on `deps.sql` runs on another connection, outside this
+ *  transaction and its lock, and while the pool is full it waits for a connection
+ *  this transaction may be holding.
  *
  *  **THE PRIVILEGE GATE AND THE LIMITER COME BEFORE THE TRANSACTION**, which is
  *  CLAUDE.md §4's order and also keeps the gym's row lock held for the shortest time

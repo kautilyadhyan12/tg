@@ -770,6 +770,23 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
     TEST_TIMEOUT_MS,
   );
 
+  it(
+    "an owner pressing Start free trial on two gyms at the same instant gets one trial",
+    async () => {
+      const owner = await makeUser("arm-twin");
+      const first = await makeOrg(owner.cookies, "US");
+      const second = await makeOrg(owner.cookies, "US");
+
+      const presses = await Promise.all(
+        [first, second].map((gym) => post(`/v1/orgs/${gym.org.id}/trial`, {}, owner.cookies)),
+      );
+      expect(presses.map((res) => res.statusCode).sort()).toEqual([200, 409]);
+      const refused = presses.find((res) => res.statusCode === 409);
+      expect((JSON.parse(refused?.body ?? "{}") as { error?: string }).error).toBe("trial_already_used");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   /** A PLAIN MEMBER IS TOLD NOTHING — §2.4's boundary, the same line that
    *  withholds `subscription` and `seatsUsed`. When a gym's trial ran out is the
    *  gym's business, not its members'.

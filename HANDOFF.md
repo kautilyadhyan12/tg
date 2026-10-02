@@ -4,6 +4,15 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-10-02 · Stage 4 item 11 (Folder B): the api talks to Postgres on ten connections (branch `db-pool`)
+
+- **Why this job:** next in Folder B (19a–19d wait on Folder A's 16a and 17c, 19b on photo storage). **Risky (it changes how every request runs beside another, sign-in and money included), Opus xhigh; Kd: *"go"*.** No migration, no new package, no new cost.
+- **Built:** `DATABASE_POOL_MAX` (1–50, default 10) opens the api's pool (was `max: 1`). Neon's smallest compute allows 104 connections and its pooler 10,000 clients (Neon's connection-pooling page, read 2026-10-02); the worker keeps its 2. With one connection every transaction ran alone in its process, so all 128 transactions were audited for a check that only that made safe: four were, all fixed. One trial per OWNER takes an owner lock (two gyms pressed at once gave two trials); My Gyms reads its two lists in one REPEATABLE READ snapshot; a new one-time token locks its user (two at once left two live links); a first streak takes an advisory lock (no row to lock yet). Old "the pool is one connection" comments and spec Part 3's rule reworded.
+- **Worst thing, first test:** two people tap Join at the same instant on ONE server for a gym's last place: one gets it, one is told the gym is full. **Breaks, each RED, restored sha256-identical:** the pool back to 1 (`/health` stuck behind a waiting sign-in), the gym's row lock removed (both joined). The four fixes removed: two trials, two live links, the streak not waiting, My Gyms showing the gym in neither list 11 times in 80.
+- **Verified:** api **4,705 of 4,706** in one full run on `aihg_b` (the one, `leads.sentForYou`'s whole-app day count, the known full-run flake; the file then 18/18 alone); new tests 8/8; tsc and eslint 0 (api).
+- **Cost** (`tools/measure-pool-cost.ts`, 10,000 leads, mains 2,592 MHz, 3 runs each): four staff opening the Delete box for all, a bystander's request waited median 21–26 ms, worst 289–425 ms on one connection; median 2.2–2.8 ms, worst 93–133 ms on ten.
+- **Found, older than this job, on ROADMAP's known defects with their fixes:** the archive sweep can archive a gym paying at that instant and delete its list; a lead's "may have gone" mark skips the Send-for-me switch; an account deleted mid-Remove-all answers a server error.
+
 ## 2026-10-02 · Stage 4 item 10 (Folder B): a whole gym signs up on one internet address (branch `signup-burst`)
 
 - **Why this job:** 19a, 19c and 19d wait on Folder A's 16a and 17c; 19b on photo storage. **Risky (sign-in), Opus xhigh; Kd: *"ok"*** after asking whether a hacker with many accounts gains (no; one hole closed by the check: *"yes add"*). No migration, no new package, no new cost (Turnstile is free; its keys already set for the gym page).
