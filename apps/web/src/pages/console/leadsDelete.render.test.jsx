@@ -180,6 +180,52 @@ describe('the worst thing: a lead nobody ticked', () => {
   });
 });
 
+describe('when Select all moves', () => {
+  const selectEveryone = async () => {
+    draw();
+    await screen.findAllByTestId('lead-row');
+    fireEvent.click(tickBox('Select every lead shown'));
+    fireEvent.click(screen.getByTestId('select-everyone'));
+    await waitFor(() => expect(within(bar()).getByText('120 selected')).toBeTruthy());
+  };
+
+  it('a press refused because the leads changed reads the box again for the new count, and deletes nothing', async () => {
+    api.selectAllLeads.mockResolvedValue({ data: { selection: { count: 120, digest: DIGEST_ALL } } });
+    api.previewDeleteLeads.mockResolvedValue(box([{ id: TOM, name: 'Tom Reid' }]));
+    api.deleteSelectedLeads.mockRejectedValueOnce(
+      Object.assign(new Error('409'), {
+        response: {
+          status: 409,
+          data: { error: 'selection_changed', message: 'The leads you selected have changed, so nothing was done.', count: 121, digest: DIGEST_2 },
+        },
+      }),
+    );
+    await selectEveryone();
+    fireEvent.click(within(bar()).getByRole('button', { name: 'Delete' }));
+    fireEvent.click(await within(dialog()).findByRole('button', { name: 'Delete 1 lead' }));
+
+    await waitFor(() =>
+      expect(api.previewDeleteLeads).toHaveBeenLastCalledWith('g1', { kind: 'all', filter: {}, count: 121, digest: DIGEST_2 }),
+    );
+    expect(within(bar()).getByText('121 selected')).toBeTruthy();
+    expect(within(dialog()).getByTestId('delete-note').textContent).toContain('nothing was done');
+    expect(within(dialog()).queryByTestId('delete-done')).toBeNull();
+  });
+
+  it('unticking one after Select all leaves the other rows shown ticked, and Delete sends only those', async () => {
+    api.selectAllLeads.mockResolvedValue({ data: { selection: { count: 120, digest: DIGEST_ALL } } });
+    api.previewDeleteLeads.mockResolvedValue(box([{ id: ARJUN, name: 'Arjun Shah' }]));
+    await selectEveryone();
+    fireEvent.click(tickBox('Select Tom Reid'));
+    expect(within(bar()).getByText('1 selected')).toBeTruthy();
+    expect(tickBox('Select Tom Reid').getAttribute('aria-checked')).toBe('false');
+    expect(tickBox('Select Arjun Shah').getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(within(bar()).getByRole('button', { name: 'Delete' }));
+    await within(dialog()).findByText('Arjun Shah');
+    expect(api.previewDeleteLeads).toHaveBeenCalledWith('g1', { kind: 'ticked', leadIds: [ARJUN] });
+  });
+});
+
 describe('the box and the bar', () => {
   it('names a few, then "and N more", and See all shows the rest', async () => {
     const many = Array.from({ length: 12 }, (_, i) => ({ id: `cccccccc-cccc-4ccc-8ccc-${String(i).padStart(12, '0')}`, name: `Spam ${String(i + 1)}` }));

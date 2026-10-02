@@ -362,6 +362,104 @@ d("deleting the leads selected (real Postgres)", () => {
   );
 
   it(
+    "a Select all press sent again after it went through says it was done, even with a new lead since, which stays",
+    async () => {
+      const owner = await makeUser("again-all-owner");
+      const org = await makeOrg(owner.cookies, "Again All Gym");
+      await addLead(org.org.id, owner.cookies, "Flood A");
+      await addLead(org.org.id, owner.cookies, "Flood B");
+      const filter = { q: "flood" };
+      const all = await selectAll(org.org.id, filter, owner.cookies);
+      const selection = { kind: "all", filter, count: all.count, digest: all.digest };
+      const preview = previewOf(await post(previewUrl(org.org.id), { selection }, owner.cookies));
+      const body = { selection, digest: preview.digest };
+      expect(JSON.parse((await post(deleteUrl(org.org.id), body, owner.cookies)).body)).toEqual({ deleted: { deleted: 2, alreadyDeleted: false } });
+
+      const again = await post(deleteUrl(org.org.id), body, owner.cookies);
+      expect(again.statusCode).toBe(200);
+      expect(JSON.parse(again.body)).toEqual({ deleted: { deleted: 2, alreadyDeleted: true } });
+
+      await addLead(org.org.id, owner.cookies, "Flood Later");
+      const later = await post(deleteUrl(org.org.id), body, owner.cookies);
+      expect(later.statusCode).toBe(200);
+      expect(JSON.parse(later.body)).toEqual({ deleted: { deleted: 2, alreadyDeleted: true } });
+      expect(await storedNames(org.org.id)).toEqual(["Flood Later"]);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "Select all is refused when one lead was swapped for another at the same count",
+    async () => {
+      const owner = await makeUser("swap-owner");
+      const org = await makeOrg(owner.cookies, "Swap Gym");
+      await addLead(org.org.id, owner.cookies, "Swap One");
+      const two = await addLead(org.org.id, owner.cookies, "Swap Two");
+      const all = await selectAll(org.org.id, {}, owner.cookies);
+      expect(all.count).toBe(2);
+      expect((await api().inject({ method: "DELETE", url: `${leadsUrl(org.org.id)}/${two.id}`, remoteAddress: nextIp(), cookies: owner.cookies })).statusCode).toBe(204);
+      await addLead(org.org.id, owner.cookies, "Swap Three");
+      const selection = { kind: "all", filter: {}, count: all.count, digest: all.digest };
+      const box = await post(previewUrl(org.org.id), { selection }, owner.cookies);
+      expect(box.statusCode).toBe(409);
+      expect(JSON.parse(box.body)).toMatchObject({ error: "selection_changed", count: 2 });
+      expect(await storedNames(org.org.id)).toEqual(["Swap One", "Swap Three"]);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "a lead moved out of the filter while the press waits for the gym is not deleted: nothing is",
+    async () => {
+      const owner = await makeUser("wait-owner");
+      const org = await makeOrg(owner.cookies, "Waiting Press Gym");
+      await addLead(org.org.id, owner.cookies, "Vic New");
+      const moved = await addLead(org.org.id, owner.cookies, "Wes Moved");
+      const filter = { status: "new" };
+      const all = await selectAll(org.org.id, filter, owner.cookies);
+      const selection = { kind: "all", filter, count: all.count, digest: all.digest };
+      const preview = previewOf(await post(previewUrl(org.org.id), { selection }, owner.cookies));
+
+      // A colleague holds the gym (as every lead write does) and moves Wes to Contacted while
+      // the press waits for it.
+      let press: ReturnType<typeof post> | undefined;
+      await sql.begin(async (tx) => {
+        await tx`SELECT 1 FROM gyms WHERE id = ${org.org.id} FOR UPDATE`;
+        press = post(deleteUrl(org.org.id), { selection, digest: preview.digest }, owner.cookies);
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        await tx`UPDATE gym_leads SET status = 'contacted' WHERE gym_id = ${org.org.id} AND id = ${moved.id}`;
+      });
+      if (press === undefined) throw new Error("the press was never sent");
+      const res = await press;
+      expect(res.statusCode).toBe(409);
+      expect(JSON.parse(res.body)).toMatchObject({ error: "selection_changed", count: 1 });
+      expect(await storedNames(org.org.id)).toEqual(["Vic New", "Wes Moved"]);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "a press whose box names nobody deletes nothing, logs nothing and shows the box again",
+    async () => {
+      const owner = await makeUser("empty-owner");
+      const rival = await makeUser("empty-rival");
+      const org = await makeOrg(owner.cookies, "Empty Box Gym");
+      const rivalOrg = await makeOrg(rival.cookies, "Empty Rival Gym");
+      const mine = await addLead(org.org.id, owner.cookies, "Uma Mine");
+      const selection = { kind: "ticked", leadIds: [mine.id] };
+      const preview = previewOf(await post(previewUrl(rivalOrg.org.id), { selection }, rival.cookies));
+      expect(preview).toMatchObject({ leads: [], gone: 1 });
+      const press = await post(deleteUrl(rivalOrg.org.id), { selection, digest: preview.digest }, rival.cookies);
+      expect(press.statusCode).toBe(409);
+      expect(JSON.parse(press.body)).toMatchObject({ error: "leads_changed", preview: { leads: [], gone: 1 } });
+      const logged = await sql`SELECT 1 FROM audit_log WHERE gym_id = ${rivalOrg.org.id} AND action = 'org.leads_selected_deleted'`;
+      expect(logged).toHaveLength(0);
+      expect(await storedNames(org.org.id)).toEqual(["Uma Mine"]);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
     "a body that is not a selection is refused with 400 and deletes nothing",
     async () => {
       const owner = await makeUser("bad-owner");

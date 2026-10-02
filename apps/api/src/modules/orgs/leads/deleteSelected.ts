@@ -42,18 +42,19 @@ export function leadsDigest(gymId: string, ids: readonly string[]): string {
     .digest("hex");
 }
 
-/** Every lead the filter chooses now, as the list would show them. */
-async function idsMatching(deps: LeadsDeps, gymId: string, timezone: string, filter: LeadsFilter): Promise<string[]> {
+/** Every lead the filter chooses now, as the list would show them, read on `sql` (the
+ *  lock's transaction, for the press). */
+async function idsMatching(deps: LeadsDeps, sql: Sql | TransactionSql, gymId: string, timezone: string, filter: LeadsFilter): Promise<string[]> {
   const now = deps.now();
-  const app = appSending(await emailsRepo.gymSendingFacts(deps.sql, gymId, now), deps.sending);
-  return await repo.leadIdsMatching(deps.sql, filterInput(gymId, filter, dayInTz(now, timezone), app));
+  const app = appSending(await emailsRepo.gymSendingFacts(sql, gymId, now), deps.sending);
+  return await repo.leadIdsMatching(sql, filterInput(gymId, filter, dayInTz(now, timezone), app));
 }
 
 /** The leads selected: the ones ticked, or everyone "Select all" chose if they are still
  *  exactly the same leads. */
-async function selectedIds(deps: LeadsDeps, gymId: string, timezone: string, selection: LeadSelection): Promise<string[]> {
+async function selectedIds(deps: LeadsDeps, sql: Sql | TransactionSql, gymId: string, timezone: string, selection: LeadSelection): Promise<string[]> {
   if (selection.kind === "ticked") return [...new Set(selection.leadIds)];
-  const ids = await idsMatching(deps, gymId, timezone, selection.filter);
+  const ids = await idsMatching(deps, sql, gymId, timezone, selection.filter);
   const digest = leadsDigest(gymId, ids);
   if (ids.length !== selection.count || digest !== selection.digest) throw new LeadSelectionChanged({ count: ids.length, digest });
   return ids;
@@ -80,7 +81,7 @@ export async function selectAllLeads(
 ): Promise<LeadsSelectedAll | null> {
   const { org } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
-  const ids = await idsMatching(deps, gymId, org.timezone, request.filter);
+  const ids = await idsMatching(deps, deps.sql, gymId, org.timezone, request.filter);
   return { count: ids.length, digest: leadsDigest(gymId, ids) };
 }
 
@@ -94,7 +95,7 @@ export async function previewDeleteLeads(
 ): Promise<LeadsDeletePreview | null> {
   const { org } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
-  return await boxFor(deps.sql, gymId, await selectedIds(deps, gymId, org.timezone, selection));
+  return await boxFor(deps.sql, gymId, await selectedIds(deps, deps.sql, gymId, org.timezone, selection));
 }
 
 export type DeleteLeadsAnswer =
@@ -116,17 +117,32 @@ export async function deleteSelectedLeads(
 ): Promise<DeleteLeadsAnswer> {
   const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return { kind: "rate_limited" };
-  const ids = await selectedIds(deps, gymId, org.timezone, input.selection);
   const at = deps.now();
   return await deps.sql.begin(async (tx): Promise<DeleteLeadsAnswer> => {
     await lockGym(tx, gymId);
-    // Only ids under the lock: the names were the box's, and its digest names these ids.
+    // The same press again (a retry, or a colleague's) finds its leads gone because that
+    // press deleted them: say so. A digest names ids that never come back, so a press logged
+    // with it did exactly this, whatever has arrived since.
+    const earlier = async (): Promise<DeleteLeadsAnswer | null> => {
+      const deleted = await repo.deletedLeadsByDigest(tx, gymId, input.digest, new Date(at.getTime() - REPLAY_MS));
+      return deleted === null ? null : { kind: "deleted", deleted: { deleted, alreadyDeleted: true } };
+    };
+    // Read under the lock, so nothing moves into or out of the filter before the delete.
+    let ids: string[];
+    try {
+      ids = await selectedIds(deps, tx, gymId, org.timezone, input.selection);
+    } catch (err) {
+      if (err instanceof LeadSelectionChanged) {
+        const done = await earlier();
+        if (done !== null) return done;
+      }
+      throw err;
+    }
+    // Only ids: the names were the box's, and its digest names these ids.
     const held = await repo.leadIdsIn(tx, gymId, ids);
-    if (leadsDigest(gymId, held) !== input.digest) {
-      // The same press again (a retry, or a colleague's): the leads are gone because that
-      // press deleted them, so say so rather than showing an empty box.
-      const earlier = held.length === 0 ? await repo.deletedLeadsByDigest(tx, gymId, input.digest, new Date(at.getTime() - REPLAY_MS)) : null;
-      if (earlier !== null) return { kind: "deleted", deleted: { deleted: earlier, alreadyDeleted: true } };
+    if (held.length === 0 || leadsDigest(gymId, held) !== input.digest) {
+      const done = held.length === 0 ? await earlier() : null;
+      if (done !== null) return done;
       return { kind: "changed", preview: await boxFor(tx, gymId, ids) };
     }
     const deleted = await repo.deleteLeads(tx, userId, gymId, held);
