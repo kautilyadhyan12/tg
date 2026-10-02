@@ -168,20 +168,26 @@ export async function buildApp(
     // after five seconds.
     maxAge: 7200,
   });
-  // The floor under every route. A signed-in person's requests count against THAT
-  // PERSON, and only the rest against the internet address: a gym's wi-fi or a phone
-  // company's gateway puts a whole gym on one address (ROADMAP Stage 4 item 10). One
-  // person signing in made 7 requests with no session (measured 2026-10-02), so 1,000
-  // a minute lets well over a hundred people at one address sign in in the same
-  // minute. A token that does not check out counts against the address.
+  // The app-wide floor under the per-route limits. A gym's front desk and its members on
+  // the gym's wi-fi are ONE address (ROADMAP Stage 4 item 10), so a signed-in person is
+  // counted on their own (by the access token, only once its signature verifies; the
+  // answer is reused by `authenticate`) and an address counts only the people who are
+  // not signed in. One person signing in made 7 requests with no session (measured
+  // 2026-10-02), so 600 a minute lets some eighty people at one address sign in in the
+  // same minute.
   await app.register(rateLimit, {
     global: true,
     keyGenerator: (req) => {
       const claims = accessClaimsOf(req, config);
-      return claims === null ? `ip:${req.ip}` : `user:${claims.userId}`;
+      return claims === null ? `address:${req.ip}` : `person:${claims.userId}`;
     },
-    max: (_req, key) => (key.startsWith("user:") ? 300 : 1000),
+    max: 600,
     timeWindow: "1 minute",
+    // A typed refusal that says how long to wait, the shape the code door's 429 has.
+    errorResponseBuilder: (_req, context) => {
+      const seconds = Math.max(1, Math.ceil(context.ttl / 1000));
+      return new AuthError(429, "rate_limited", `Too many requests. Please try again in ${String(seconds)} seconds.`, seconds);
+    },
   });
 
   // Unmatched routes: same typed shape as errors, and rate-limited too —

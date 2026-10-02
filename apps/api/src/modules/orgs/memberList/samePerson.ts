@@ -96,6 +96,35 @@ const push = <K, V>(map: Map<K, V[]>, key: K, value: V): void => {
   else list.push(value);
 };
 
+/** The records under one key, and where the ones nobody has taken begin. */
+interface Bucket<E> {
+  list: E[];
+  start: number;
+}
+
+const pushBucket = <E>(map: Map<string, Bucket<E>>, key: string, entry: E): void => {
+  const bucket = map.get(key);
+  if (bucket === undefined) map.set(key, { list: [entry], start: 0 });
+  else bucket.list.push(entry);
+};
+
+/** The first record of a bucket nobody has taken that `fits`. A record once taken is
+ *  never given back, so the taken ones at a bucket's front are stepped past once: a file
+ *  of ten thousand rows on one member number was quadratic (the security pass over
+ *  "getting in", 2026-10-02). */
+function firstFree<E>(bucket: Bucket<E> | undefined, taken: ReadonlySet<E>, fits: (entry: E) => boolean): E | undefined {
+  if (bucket === undefined) return undefined;
+  for (let i = bucket.start; i < bucket.list.length; i += 1) {
+    const entry = bucket.list[i];
+    if (entry === undefined || taken.has(entry)) {
+      if (i === bucket.start) bucket.start += 1;
+      continue;
+    }
+    if (fits(entry)) return entry;
+  }
+  return undefined;
+}
+
 /** Pairs each row with at most one record and each record with at most one row.
  *  `renames` is false for an upload that adds people: a record missing from such a file
  *  has not left, so no row may take it over under another name. */
@@ -120,10 +149,10 @@ export function matchRows<E extends WhoFields & { former: boolean }>(
   };
 
   // 1. Every carried field equal.
-  const bySignature = new Map<string, E[]>();
-  for (const entry of ordered) push(bySignature, sameSignature(entry, carries), entry);
+  const bySignature = new Map<string, Bucket<E>>();
+  for (const entry of ordered) pushBucket(bySignature, sameSignature(entry, carries), entry);
   rows.forEach((row, at) => {
-    const found = bySignature.get(sameSignature(row, carries))?.find((entry) => !taken.has(entry));
+    const found = firstFree(bySignature.get(sameSignature(row, carries)), taken, () => true);
     if (found !== undefined) pair(at, found, "same");
   });
 
@@ -137,20 +166,18 @@ export function matchRows<E extends WhoFields & { former: boolean }>(
   if (carries.fullName) {
     for (const step of steps) {
       if (!step.carried) continue;
-      const byKey = new Map<string, E[]>();
+      const byKey = new Map<string, Bucket<E>>();
       for (const entry of ordered) {
         const value = step.valueOf(entry);
         const words = nameWordsOf(entry);
-        if (value !== null && words !== null) push(byKey, `${value}\n${words}`, entry);
+        if (value !== null && words !== null) pushBucket(byKey, `${value}\n${words}`, entry);
       }
       rows.forEach((row, at) => {
         if (matches[at] !== null) return;
         const value = step.valueOf(row);
         const words = nameWordsOf(row);
         if (value === null || words === null) return;
-        const found = byKey
-          .get(`${value}\n${words}`)
-          ?.find((entry) => !taken.has(entry) && (step.by === "memberNumber" || !birthsDiffer(row, entry)));
+        const found = firstFree(byKey.get(`${value}\n${words}`), taken, (entry) => step.by === "memberNumber" || !birthsDiffer(row, entry));
         if (found !== undefined) pair(at, found, step.by);
       });
     }

@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { proveAddress } from "./proveAddress.js";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { dayInTz } from "../src/modules/gamification/streak.js";
@@ -127,6 +128,7 @@ d("a lead's follow-up emails (real Postgres)", () => {
   const makeStaff = async (org: CreatedOrg, owner: Record<string, string>, local: string, role: "manager" | "trainer") => {
     const person = await makeUser(local);
     await joinAsMember(person.cookies, org, owner);
+    await proveAddress(sql, person.email);
     expect((await post(`/v1/orgs/${org.org.id}/staff`, { email: person.email, role }, owner)).statusCode).toBe(201);
     return person;
   };
@@ -329,6 +331,7 @@ d("a lead's follow-up emails (real Postgres)", () => {
       const manager = await makeUser("order-manager");
       const org = await makeOrg(owner.cookies, "Order Follow-ups Gym");
       await joinAsMember(manager.cookies, org, owner.cookies);
+      await proveAddress(sql, manager.email);
       expect((await post(`/v1/orgs/${org.org.id}/staff`, { email: manager.email, role: "manager" }, owner.cookies)).statusCode).toBe(201);
       const gym = org.org.id;
       const lead = await addLead(gym, manager.cookies);

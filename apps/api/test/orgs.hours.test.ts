@@ -39,6 +39,7 @@
 //      of the boundary are driven.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { proveAddress } from "./proveAddress.js";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 // Called DIRECTLY by the tenancy block at the bottom of this file — see its
@@ -1048,6 +1049,7 @@ d("gym opening hours (real Postgres)", () => {
       // BY EMAIL, and scoped to the gym's own roster — the staff route's own
       // shape (:14262: looking a stranger up across `users` would turn it into
       // an oracle). The join above is what puts this person on that roster.
+      await proveAddress(sql, trainer.email);
       const added = await post(
         `/v1/orgs/${org.org.id}/staff`,
         { email: trainer.email, role: "trainer" },

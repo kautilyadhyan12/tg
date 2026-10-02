@@ -97,29 +97,29 @@ describe("api skeleton", () => {
     return codes;
   };
 
-  it("rate limit: nobody signed in — the address's 1,001st request in a minute gets 429", async () => {
+  it("rate limit: nobody signed in — the address's 601st request in a minute gets 429", async () => {
     // Dedicated client IP so this test's requests don't drain the
     // default client's bucket for the other tests.
-    const codes = await hits(1001, "10.9.9.9");
-    expect(codes.slice(0, 1000).every((c) => c === 404)).toBe(true);
-    expect(codes[1000]).toBe(429);
+    const codes = await hits(601, "10.9.9.9");
+    expect(codes.slice(0, 600).every((c) => c === 404)).toBe(true);
+    expect(codes[600]).toBe(429);
   });
 
-  it("rate limit: two signed-in people at ONE address each get their own 300 a minute, and the address's own count is untouched", async () => {
+  it("rate limit: two signed-in people at ONE address each get their own 600 a minute, and the address's own count is untouched", async () => {
     const ip = "10.9.9.10";
     const one = { [ACCESS_COOKIE]: signAccessToken(randomUUID(), config, randomUUID()) };
     const two = { [ACCESS_COOKIE]: signAccessToken(randomUUID(), config, randomUUID()) };
-    const first = await hits(301, ip, one);
-    expect(first.slice(0, 300).every((c) => c === 404)).toBe(true);
-    expect(first[300]).toBe(429);
-    expect((await hits(300, ip, two)).every((c) => c === 404)).toBe(true);
+    const first = await hits(601, ip, one);
+    expect(first.slice(0, 600).every((c) => c === 404)).toBe(true);
+    expect(first[600]).toBe(429);
+    expect((await hits(600, ip, two)).every((c) => c === 404)).toBe(true);
     expect((await hit(ip)).statusCode).toBe(404);
   });
 
   it("rate limit: a token that does not check out counts against the address", async () => {
     const ip = "10.9.9.11";
     const forged = { [ACCESS_COOKIE]: signAccessToken(randomUUID(), { ...config, JWT_SECRET: "another-secret-0123456789abcdef-32!!" }, randomUUID()) };
-    expect((await hits(1000, ip, forged)).every((c) => c === 404)).toBe(true);
+    expect((await hits(600, ip, forged)).every((c) => c === 404)).toBe(true);
     expect((await hit(ip, { [ACCESS_COOKIE]: "not-a-token" })).statusCode).toBe(429);
     expect((await hit(ip)).statusCode).toBe(429);
   });
@@ -133,9 +133,9 @@ describe("api skeleton", () => {
     expect(res.headers["access-control-max-age"]).toBe("7200");
   });
 
-  it("CORS: a browser's pre-checks are answered before the floor, and spend none of the address's", async () => {
+  it("CORS: 601 of a browser's pre-checks are answered before the floor, and spend none of the address's", async () => {
     const ip = "10.9.9.12";
-    for (let i = 0; i < 1001; i++) {
+    for (let i = 0; i < 601; i++) {
       const pre = await app.inject({
         method: "OPTIONS",
         url: "/v1/users/me",

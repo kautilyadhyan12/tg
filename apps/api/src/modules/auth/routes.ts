@@ -236,7 +236,7 @@ export function registerAuthRoutes(
   // not the address's, and not the person whose address a robot typed. A request that
   // would send nothing (the handler answers it 400) spends none of the 20. Every answer
   // is put to Cloudflare, and failures are never counted against the address: one person
-  // there could otherwise lock out everybody sharing it; the floor of 1,000 a minute an
+  // there could otherwise lock out everybody sharing it; the floor of 600 a minute an
   // address bounds the asks. Each answer is used once (Cloudflare refuses it a second
   // time). Redis down: let it through with a log; `codeSendLimit` and the day's ceiling
   // still apply.

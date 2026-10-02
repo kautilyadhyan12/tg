@@ -3437,6 +3437,11 @@ export async function addStaff(
         AND m.removed_at IS NULL
         AND u.email = ${input.email}
         AND u.status = 'active'
+        -- Only an account that proved the address: anybody can register one under an
+        -- address they do not hold. Anyone else is sent the emailed invitation.
+        AND EXISTS (
+          SELECT 1 FROM one_time_tokens t
+          WHERE t.user_id = u.id AND t.purpose = 'verify_email' AND t.used_at IS NOT NULL)
       LIMIT 1
       -- Held until commit: an account deletion (softDeleteUser, which deletes staff rows)
       -- waits for this appointment, or this one sees the account gone (4a-ii round one).

@@ -263,12 +263,18 @@ export async function answerInvite(
 export const STAFF_INVITE_KEEP_DAYS = 97;
 
 /** Forget invitations older than that, a thousand at a time (the hourly job; their
- *  emails go with them). Every one is answered or ended by then. */
+ *  emails go with them). Send again moves the 7 days on, so the 90 count from the end
+ *  of the newest 7: an invitation sent again is kept while it can still be answered. */
 export async function forgetOldStaffInvites(sql: SqlOrTx, now: Date): Promise<number> {
-  const before = new Date(now.getTime() - STAFF_INVITE_KEEP_DAYS * 24 * 60 * 60 * 1000);
+  const day = 24 * 60 * 60 * 1000;
+  const before = new Date(now.getTime() - STAFF_INVITE_KEEP_DAYS * day);
+  const endedBefore = new Date(now.getTime() - (STAFF_INVITE_KEEP_DAYS - 7) * day);
   const rows = await sql<{ id: string }[]>`
     DELETE FROM gym_staff_invites
-    WHERE id IN (SELECT id FROM gym_staff_invites WHERE created_at < ${before} ORDER BY created_at LIMIT 1000)
+    WHERE id IN (
+      SELECT id FROM gym_staff_invites
+      WHERE created_at < ${before} AND expires_at < ${endedBefore}
+      ORDER BY created_at LIMIT 1000)
     RETURNING id`;
   return rows.length;
 }

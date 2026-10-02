@@ -117,6 +117,9 @@ export interface MemberListDeps {
   /** Runs after a press has read its group and before it writes; a test changes the
    *  list here to reach the check made under the gym's lock. Production passes nothing. */
   afterInviteGroupRead?: () => Promise<void>;
+  /** Runs after each batch of a press has committed; a test changes the list here to
+   *  reach the next batch's lock. Production passes nothing. */
+  afterInviteBatch?: () => Promise<void>;
 }
 
 /** A file refusal as this route answers it. 400 for everything the uploader can
@@ -631,6 +634,14 @@ interface Read {
   lastFileSha256: string | null;
 }
 
+/** THE LAST FEW MOVED-LIST COMPARISONS, by gym, upload, the list's version and the gym's
+ *  own columns. A staged file never changes and the version moves with every write to the
+ *  list, so the same key is the same answer; without this, every read of a 10,000-row
+ *  preview on a moved list compared the whole file again and held the server each time
+ *  (the security pass over "getting in", 2026-10-02). Each entry holds its file, so few. */
+const MOVED_READS_KEPT = 4;
+const movedReads = new Map<string, { file: MemberListStagedFile; measured: Measured; regrouped: MemberListGroups }>();
+
 async function readStaged(deps: MemberListDeps, gymId: string, upload: repo.UploadRow): Promise<Read> {
   const state = await repo.listState(deps.sql, gymId);
   const moved = (state?.version ?? 0) !== upload.baseVersion;
@@ -657,15 +668,26 @@ async function readStaged(deps: MemberListDeps, gymId: string, upload: repo.Uplo
     };
   }
   // THE LIST HAS MOVED (or the grouping is older than its record ids), so the whole
-  // comparison runs again over the stored rows.
+  // comparison runs again over the stored rows — once per version of the list.
   if (!moved && groups === null) throw expired();
-  const file = await repo.stagedFile(deps.sql, gymId, upload.id);
-  if (file === null) throw expired();
-  // The gym's catalogue as it WOULD be after this file, by the same pure rule the stage
-  // and the confirm use: the file's columns are compared only where the gym keeps them.
-  const catalogue = growFields(await repo.listFields(deps.sql, gymId), file.understanding.extraFields, MEMBER_LIST_MAX_EXTRA_FIELDS).catalogue;
-  const { measured, reconciled } = await measure(deps.sql, gymId, file.understanding, upload.mode, state, catalogue);
-  const regrouped = groupsOf(reconciled);
+  const fields = await repo.listFields(deps.sql, gymId);
+  const key = JSON.stringify([gymId, upload.id, state?.version ?? 0, fields]);
+  let again = movedReads.get(key);
+  if (again === undefined) {
+    const file = await repo.stagedFile(deps.sql, gymId, upload.id);
+    if (file === null) throw expired();
+    // The gym's catalogue as it WOULD be after this file, by the same pure rule the stage
+    // and the confirm use: the file's columns are compared only where the gym keeps them.
+    const catalogue = growFields(fields, file.understanding.extraFields, MEMBER_LIST_MAX_EXTRA_FIELDS).catalogue;
+    const { measured, reconciled } = await measure(deps.sql, gymId, file.understanding, upload.mode, state, catalogue);
+    again = { file, measured, regrouped: groupsOf(reconciled) };
+    movedReads.set(key, again);
+    for (const old of movedReads.keys()) {
+      if (movedReads.size <= MOVED_READS_KEPT) break;
+      movedReads.delete(old);
+    }
+  }
+  const { file, measured, regrouped } = again;
   const side = await freshMemberSide(deps, gymId, upload, regrouped, measured.counts, state);
   if (side === null) throw expired();
   return {
@@ -1319,33 +1341,8 @@ export async function confirmUpload(
     };
   });
   await bustAfterRemoval(deps, gymId, closedUsers);
-
-  // A confirm bulk-loads a gym's people into a table whose statistics may still say
-  // it holds almost nothing, and the planner then costs the per-member lookup behind
-  // every read of that list against a table it believes is empty. **What that is
-  // worth, measured, is in `repo.analyseEntries`'s own note and is not repeated
-  // here** — one number in one place (CLAUDE.md §4). It is a modest win bought
-  // cheaply, not a rescue.
-  //
-  // AFTER THE COMMIT, so the gym's row lock is already released; and HOUSEKEEPING, so
-  // it is warned about and never fails a confirm that has already been applied.
-  if (answer.kind === "confirmed" && !answer.confirmed.alreadyConfirmed && changedAnything(answer.confirmed)) {
-    try {
-      await repo.analyseEntries(deps.sql);
-    } catch (err) {
-      deps.log.warn(
-        { event: "memberlist.analyse_failed", gymId, error: err instanceof Error ? err.name : "unknown" },
-        "member list entries could not be analysed after a confirm",
-      );
-    }
-  }
   return answer;
 }
-
-/** Whether a confirm actually wrote a row. Nothing written means the statistics are
- *  as true as they were a moment ago. */
-const changedAnything = (done: MemberListConfirmed): boolean =>
-  done.applied.new > 0 || done.applied.changed > 0 || done.applied.gone > 0;
 
 /** What a statement did, against what the rule said it would. Loud, with no cell in
  *  the message — the numbers are counts and the id is an upload's. */

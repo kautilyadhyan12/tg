@@ -47,6 +47,7 @@
 //      ratio cannot exceed 100%.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { proveAddress } from "./proveAddress.js";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { rollUpGymDays } from "../src/modules/orgs/rollup.js";
@@ -819,6 +820,7 @@ d("gym overview numbers (real Postgres)", () => {
       // `not_a_member` to an email that has not joined (:14401 — requiring a
       // membership wherever authority is decided).
       await joinAsMember(manager.cookies, org, owner.cookies);
+      await proveAddress(sql, manager.email);
       const added = await post(
         `/v1/orgs/${org.org.id}/staff`,
         { email: manager.email, role: "manager" },

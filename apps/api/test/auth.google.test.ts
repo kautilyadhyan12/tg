@@ -214,10 +214,10 @@ d("google oauth routes (real Postgres)", () => {
     expect(users[0]?.n).toBe(0);
   });
 
-  it("a callback whose state is not ours does no work and costs nothing: 700 from ONE IP are all turned away the same (R3.7; Stage 4 item 10)", { timeout: 60_000 }, async () => {
+  it("a callback whose state is not ours does no work and costs nothing: 550 from ONE IP are all turned away the same (R3.7; Stage 4 item 10)", { timeout: 60_000 }, async () => {
     const ip = "10.7.99.99"; // dedicated so no other test shares this address
     const answers = new Set<string>();
-    for (let i = 0; i < 700; i++) {
+    for (let i = 0; i < 550; i++) {
       const res = await get(api(), "/v1/auth/google/callback?code=x&state=y", { ip });
       answers.add(`${String(res.statusCode)} ${String(res.headers.location)}`);
     }

@@ -6,6 +6,7 @@
 // Every claim is checked against the database, never against a reply.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { proveAddress } from "./proveAddress.js";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { RobotCheck, RobotCheckAnswer } from "../src/modules/orgs/gymPage/robotCheck.js";
@@ -135,6 +136,7 @@ d("a gym's own page and its enquiry form (real Postgres)", () => {
     const id = (JSON.parse(applied.body) as { application?: { id: string } }).application?.id;
     if (id === undefined) throw new Error("apply returned no application");
     expect((await post(`/v1/orgs/${org.org.id}/applications/${id}/confirm`, {}, owner)).statusCode).toBe(200);
+    await proveAddress(sql, person.email);
     expect((await post(`/v1/orgs/${org.org.id}/staff`, { email: person.email, role }, owner)).statusCode).toBe(201);
     return person;
   };

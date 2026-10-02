@@ -297,10 +297,10 @@ d("a whole gym signing up on one internet address (real Postgres)", () => {
 
   it("code checks: junk and guesses at addresses with no code spend none of the address's 1,000", { timeout: 60_000 }, async () => {
     const ip = gymAddress();
-    for (let i = 0; i < 300; i++) expect((await post(ip, "/v1/auth/code/verify", {})).statusCode).toBe(400);
-    for (let i = 0; i < 300; i++) expect((await post(ip, "/v1/auth/code/verify", { email: `burst-nobody-${String(i)}@example.com`, code: "123456" })).statusCode).toBe(400);
+    for (let i = 0; i < 290; i++) expect((await post(ip, "/v1/auth/code/verify", {})).statusCode).toBe(400);
+    for (let i = 0; i < 290; i++) expect((await post(ip, "/v1/auth/code/verify", { email: `burst-nobody-${String(i)}@example.com`, code: "123456" })).statusCode).toBe(400);
     // Neither count the address has for code checks moved (1,000 junk requests would take a
-    // second minute here: the app-wide floor is 1,000 a minute an address).
+    // second minute here: the app-wide floor is 600 a minute an address).
     expect(await redis.get(`rl:code_verify_wrong:ip:${ip}`)).toBeNull();
     expect(await redis.get(`rl:code_verify:ip:${ip}`)).toBeNull();
     const member = "burst-member-checks@example.com";
@@ -348,8 +348,8 @@ d("a whole gym signing up on one internet address (real Postgres)", () => {
 
   it("Google: made-up callbacks and sign-ins started spend nothing; a member at the address still signs in", { timeout: 60_000 }, async () => {
     const ip = gymAddress();
-    for (let i = 0; i < 400; i++) await get(ip, "/v1/auth/google/callback?code=x&state=y");
-    for (let i = 0; i < 300; i++) expect((await get(ip, "/v1/auth/google")).statusCode).toBe(302);
+    for (let i = 0; i < 300; i++) await get(ip, "/v1/auth/google/callback?code=x&state=y");
+    for (let i = 0; i < 250; i++) expect((await get(ip, "/v1/auth/google")).statusCode).toBe(302);
     const res = await signInWithGoogle(ip, { subject: "burst-g-after-junk", email: "burst-g-after-junk@example.com", name: "Member" });
     expect(res.headers.location).toBe(`${baseEnv.WEB_ORIGIN}/auth/google/success`);
   });

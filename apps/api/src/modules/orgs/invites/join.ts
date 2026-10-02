@@ -23,6 +23,7 @@ import { accountAddress } from "../../auth/service.js";
 import { bustEntitlements, yourPlansAt } from "../../entitlements/service.js";
 import { claimSeatByInvitation, gymHasLivePlan, insertAudit, lockOrg, type OrgRow } from "../repo.js";
 import { OrgsError } from "../service.js";
+import { lockLiveAccount } from "../staffInvites/repo.js";
 import { emailHmac } from "./address.js";
 import { underAgeAt } from "./age.js";
 import * as repo from "./repo.js";
@@ -107,6 +108,9 @@ export async function acceptInvitation(deps: JoinDeps, caller: Caller, inviteId:
   const outcome = await deps.sql.begin(async (tx): Promise<AcceptOutcome> => {
     const org = await lockOrg(tx, gymId);
     if (org === null || org.status !== "active") return { kind: "none" };
+    // The account, read live and held: a deletion committed before this is seen, and one
+    // that comes after waits for it and then closes the membership written here.
+    if (!(await lockLiveAccount(tx, caller.id))) return { kind: "none" };
     const invite = await repo.lockInvitation(tx, { gymId, inviteId, hmac });
     if (invite === null || invite.state === "withdrawn") return { kind: "none" };
     if (invite.state === "accepted") {

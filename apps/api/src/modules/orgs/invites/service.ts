@@ -222,9 +222,11 @@ export const INVITE_PRESS_BATCH = 500;
  *
  *  The group is worked out one statement at a time; the first batch is written under
  *  the gym's lock after the list's version is checked again, so a list changed since the
- *  group was read is refused; the rest follow in batches of their own. An address
- *  another press invited in between is left alone by the unique key and counted as
- *  already invited, so nobody is queued twice however the presses interleave. */
+ *  group was read is refused; the rest follow in batches of their own, each under the
+ *  gym's lock too, so a person taken off or sent an email in between is seen and left
+ *  alone. An address another press invited in between is left alone by the unique key
+ *  and counted as already invited, so nobody is queued twice however the presses
+ *  interleave. */
 export async function pressInvite(
   deps: MemberListDeps,
   userId: string,
@@ -285,7 +287,13 @@ export async function pressInvite(
   });
   if (first === null) throw await changed();
   let queued = first;
-  for (const batch of batches.slice(1)) queued += await repo.queueFirst(deps.sql, gymId, batch, at);
+  for (const batch of batches.slice(1)) {
+    await deps.afterInviteBatch?.();
+    queued += await deps.sql.begin(async (tx) => {
+      await listRepo.lockGym(tx, gymId);
+      return await repo.queueFirst(tx, gymId, batch, at);
+    });
+  }
   return {
     queued,
     skipped: { ...group.skipped, alreadyInvited: group.skipped.alreadyInvited + group.reach.length - queued },

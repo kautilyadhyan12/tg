@@ -8,6 +8,7 @@
 import { addAnyway } from "./memberListAddAnyway.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { proveAddress } from "./proveAddress.js";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { archiveLapsedGyms } from "../src/modules/orgs/archiveSweep.js";
@@ -124,6 +125,7 @@ d("a gym's leads (real Postgres)", () => {
   const makeStaff = async (org: CreatedOrg, owner: Record<string, string>, local: string, role: "manager" | "trainer") => {
     const person = await makeUser(local);
     await joinAsMember(person.cookies, org, owner);
+    await proveAddress(sql, person.email);
     expect((await post(`/v1/orgs/${org.org.id}/staff`, { email: person.email, role }, owner)).statusCode).toBe(201);
     return person;
   };
@@ -458,8 +460,8 @@ d("a gym's leads (real Postgres)", () => {
       const manager = await makeStaff(org, owner.cookies, "limit-manager", "manager");
       const lead = await addLead(gym, owner.cookies);
       // The owner has spent 299 of their 300 writes this hour (addLead above was one). Set in
-      // the limiter's own count: 300 real presses in one test would meet the app-wide floor
-      // of 300 a minute a person first.
+      // the limiter's own count, so the test does not lean on the app-wide floor of 600 a
+      // minute a person.
       for (let i = 0; i < 298; i += 1) await limits.incrWithTtl(`rl:leads_write:id:${owner.userId}`, 3600);
       expect((await patch(leadUrl(gym, lead.id), { notes: "the 300th" }, owner.cookies)).statusCode).toBe(200);
       const over = await patch(leadUrl(gym, lead.id), { notes: "the 301st" }, owner.cookies);
