@@ -223,3 +223,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 ## 16b (split 2026-10-02 into 16b-i and 16b-ii)
 
 - 16b. [ ] **The desk page and the live log.** The locked check-in page (scanner box, camera button, green · grey · red · orange, cleared after a few seconds), Settings → Check-in devices, staff check-in on the Attendance page with the new `attendance.mark` tick, the log refreshing itself every 5 seconds. New packages: `qrcode-generator`, `jsqr` (Kd's yes, RULINGS 2026-09-21). From 16a: the staff check-in route (`method` `staff`), and the Attendance page and Overview reading visits by record — they count only app accounts' visits until then; the desk page lives at `/check-in/setup#<token>`.
+
+## 16b-i (merged 2026-10-02, PR #157)
+
+- 16b-i. [ ] **The front desk** (split 2026-10-02; the whole line as written is in `archive/records/ROADMAP-stories.md`). Settings → Check-in devices (add, the one-time link, New link, Switch off, key tags paused), and the locked desk page at `/check-in/setup#<token>` → `/check-in`: scanner box, camera (`jsqr`), green · grey · red · orange, cleared after 5 seconds. No server change.
