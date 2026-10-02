@@ -555,20 +555,22 @@ export async function findLiveCode(
   return rows[0] === undefined ? null : signInCodeColumns(rows[0]);
 }
 
-/** One wrong guess, atomically: bump the count and, on the last allowed one,
- *  kill the code in the same statement. Returns the new count. */
-export async function recordFailedAttempt(
-  sql: Sql,
-  id: string,
-  maxAttempts: number,
-): Promise<number> {
+/** TAKES ONE TRY at a live code, BEFORE the guess is compared, in one statement: guesses
+ *  sent at the same moment wait on the row, and only `maxAttempts` of them get a try.
+ *  Returns the tries taken counting this one, or null when the code had none left (or
+ *  is used or expired), and then no guess may be compared. */
+export async function takeAttempt(sql: Sql, id: string, maxAttempts: number): Promise<number | null> {
   const rows = await sql<{ attempts: number }[]>`
     UPDATE sign_in_codes
-    SET attempts = attempts + 1,
-        expires_at = CASE WHEN attempts + 1 >= ${maxAttempts} THEN now() ELSE expires_at END
-    WHERE id = ${id}
+    SET attempts = attempts + 1
+    WHERE id = ${id} AND attempts < ${maxAttempts} AND used_at IS NULL AND expires_at > now()
     RETURNING attempts`;
-  return rows[0]?.attempts ?? maxAttempts;
+  return rows[0]?.attempts ?? null;
+}
+
+/** A wrong guess on the last try kills the code. */
+export async function expireCode(sql: Sql, id: string): Promise<void> {
+  await sql`UPDATE sign_in_codes SET expires_at = now() WHERE id = ${id} AND used_at IS NULL`;
 }
 
 /** Single use, one UPDATE — a code presented twice at once is consumed once. */

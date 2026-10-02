@@ -23,8 +23,12 @@ export interface DualRateLimitOptions {
    *  gym join door, where a single ACCOUNT applying twice is already odd but
    *  thirty accounts applying from one gym's wi-fi on induction day is the
    *  normal case. Adding the option is strictly additive — an options object
-   *  without it behaves exactly as before, which the auth suite proves. */
-  ipMax?: number;
+   *  without it behaves exactly as before, which the auth suite proves.
+   *
+   *  `null`: the address is not counted here at all, for a door where one person at a
+   *  shared address could otherwise use up everybody's allowance (sign-in's code check
+   *  counts the address apart, only for wrong guesses at live codes). */
+  ipMax?: number | null;
   windowMs: number;
   /** Extracts the identifier (normalized email) from the request; return null
    *  to count only the IP dimension. */
@@ -36,14 +40,14 @@ export function createDualRateLimit(
   opts: DualRateLimitOptions,
 ): (req: FastifyRequest, reply: FastifyReply) => Promise<void> {
   const windowSeconds = Math.max(1, Math.ceil(opts.windowMs / 1000));
-  const ipMax = opts.ipMax ?? opts.max;
+  const ipMax = opts.ipMax === undefined ? opts.max : opts.ipMax;
 
   const hit = async (
     req: FastifyRequest,
     dimension: "ip" | "id",
     value: string,
   ): Promise<boolean> => {
-    const max = dimension === "ip" ? ipMax : opts.max;
+    const max = dimension === "ip" ? (ipMax ?? Number.POSITIVE_INFINITY) : opts.max;
     const count = await opts.redis.incrWithTtl(`rl:${opts.name}:${dimension}:${value}`, windowSeconds);
     if (count === null) {
       // Redis down → fail open, but NEVER silently (T3 P2.4): a silent
@@ -67,7 +71,7 @@ export function createDualRateLimit(
   return async (req, reply) => {
     const id = opts.identifier(req);
     const idOk = id === null ? true : await hit(req, "id", id);
-    const ipOk = idOk ? await hit(req, "ip", req.ip) : true;
+    const ipOk = idOk && ipMax !== null ? await hit(req, "ip", req.ip) : true;
     if (idOk && !ipOk && id !== null) await opts.redis.decrIfPositive(`rl:${opts.name}:id:${id}`);
     if (!ipOk || !idOk) {
       // Same client-facing shape as the global limiter's 429 (R8.1).

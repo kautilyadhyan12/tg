@@ -17,3 +17,8 @@ export class AuthError extends Error {
     this.retryAfterSeconds = retryAfterSeconds;
   }
 }
+
+/** A wrong guess at a LIVE code — counted against the code, and against the internet
+ *  address it came from (sign-in's address ceiling counts nothing else). Answered
+ *  exactly as any other wrong code. */
+export class WrongGuessError extends AuthError {}

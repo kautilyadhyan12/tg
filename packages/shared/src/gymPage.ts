@@ -15,6 +15,7 @@ import {
   MEMBER_LIST_MAX_TYPED_PHONE_CHARS,
 } from "./memberList.js";
 import { gymHoursSchema, orgTypeSchema } from "./orgs.js";
+import { ROBOT_CHECK_TOKEN_MAX_CHARS } from "./robotCheck.js";
 
 /** The facilities a gym may tick, in the order the page lists them. The amenity
  *  lists of gym directories (ClassPass, Google's business profile) name the same. */
@@ -85,8 +86,6 @@ const ownFacilitySchema = z.string().trim().min(1).max(GYM_PAGE_MAX_OWN_FACILITY
 export const GYM_ENQUIRY_MAX_MESSAGE_CHARS = 1000;
 /** The messages one lead keeps from the form, newest first; an older one goes. */
 export const GYM_ENQUIRIES_KEPT_PER_LEAD = 20;
-/** A robot check's answer is at most this long (Cloudflare Turnstile's own limit). */
-export const ROBOT_CHECK_TOKEN_MAX_CHARS = 2048;
 
 // ── PHOTOS (20c-iv-b; RULINGS 2026-09-28: "just for people to see facilities") ──
 
@@ -258,13 +257,6 @@ export const leadEnquirySchema = z
 export type LeadEnquiry = z.infer<typeof leadEnquirySchema>;
 export const leadEnquiriesResponseSchema = z.object({ enquiries: z.array(leadEnquirySchema) }).strict();
 export type LeadEnquiriesResponse = z.infer<typeof leadEnquiriesResponseSchema>;
-
-/** Cloudflare Turnstile's Siteverify reply, read at the edge: only `success` decides. */
-export const robotCheckReplySchema = z.object({
-  success: z.boolean(),
-  "error-codes": z.array(z.string()).optional(),
-});
-export type RobotCheckReply = z.infer<typeof robotCheckReplySchema>;
 
 /** The words a person using the form reads. */
 export const ENQUIRY_WORDS = {

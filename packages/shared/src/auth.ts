@@ -3,6 +3,7 @@
 // password 8–128, one-time tokens ≤128 (authController.js:107,193,234,238).
 // All request bodies are .strict() so unknown keys are rejected (Part IV #5).
 import { z } from "zod";
+import { ROBOT_CHECK_TOKEN_MAX_CHARS } from "./robotCheck.js";
 
 /** citext in the DB handles case; trim + lowercase here so rate-limit
  *  identifier keys and lookups agree on one canonical form. */
@@ -58,8 +59,35 @@ export const SIGN_IN_CODE_RULES = {
 
 export const signInCodeSchema = z.string().regex(/^\d{6}$/, "six digits");
 
-export const sendCodeRequestSchema = z.object({ email: authEmailSchema }).strict();
+/** Sends from one internet address in an hour before the code needs the robot check. A
+ *  gym's wi-fi or a phone company's gateway puts many people on one address (ROADMAP
+ *  Stage 4 item 10); past this many, each send needs the check's answer instead of a
+ *  refusal. */
+export const SIGN_IN_FREE_SENDS_PER_ADDRESS = 20;
+
+/** `robotToken`: Cloudflare Turnstile's answer, sent only once the server asked for it. */
+export const sendCodeRequestSchema = z
+  .object({ email: authEmailSchema, robotToken: z.string().min(1).max(ROBOT_CHECK_TOKEN_MAX_CHARS).optional() })
+  .strict();
 export type SendCodeRequest = z.infer<typeof sendCodeRequestSchema>;
+
+/** The words the sign-in page shows around the robot check. */
+export const SIGN_IN_ROBOT_WORDS = {
+  /** Asked for: many people at this internet address asked for codes this hour. */
+  robot_check: "One quick check that you're not a robot, then we'll send your code.",
+  robot_failed: "We couldn't check that you're not a robot. Please try again.",
+  /** The check's script did not load (an ad blocker, or a network that stops it). */
+  robot_blocked: "The robot check didn't load. Turn off any ad blocker for this page and reload it, or sign in with Google.",
+  robot_unavailable: "We couldn't send your code just now. Please try again in a minute.",
+} as const;
+
+/** The refusal that asks for the check, with the key its box draws with. */
+export const signInRobotRefusalSchema = z.object({
+  error: z.enum(["robot_check", "robot_failed"]),
+  message: z.string(),
+  robotCheckKey: z.string().min(1),
+});
+export type SignInRobotRefusal = z.infer<typeof signInRobotRefusalSchema>;
 
 export const sendCodeResponseSchema = z.object({
   message: z.string(),

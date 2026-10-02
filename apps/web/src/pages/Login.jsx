@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useTransition } from '../context/TransitionContext';
 import { Dumbbell, ArrowRight, Zap, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { SIGN_IN_CODE_RULES } from '@app/shared';
+import { SIGN_IN_CODE_RULES, SIGN_IN_ROBOT_WORDS } from '@app/shared';
 import { GYM_DOOR, MEMBER_DOOR, landingRoute, readDoor, rememberDoor } from './landingRoute';
+import { useRobotCheck } from './useRobotCheck';
 
 // ONE "GET STARTED" SCREEN (Kd, 2026-09-07). Sign-up and sign-in are the same
 // act: type your email, type the 6-digit code we send, you are in — a new
@@ -30,6 +31,7 @@ const GOOGLE_LOGIN_URL = `${import.meta.env.VITE_API_URL}/v1/auth/google`;
 const GOOGLE_ERROR_MESSAGES = {
   google_failed: 'Google sign-in failed. Please try again.',
   google_not_configured: 'Google sign-in is currently unavailable.',
+  google_busy: 'Google sign-in is busy here just now. Please try again in a minute, or continue with email.',
 };
 
 /** The server's message is written for people (it says how many tries are
@@ -91,6 +93,25 @@ export default function Login() {
   // from this so it never says "we sent" when nothing was.
   const [arrival,  setArrival]  = useState('sent');
 
+  // THE ROBOT CHECK (ROADMAP Stage 4 item 10). A gym's wi-fi puts a whole gym on one
+  // internet address, so past that address's first 20 codes an hour the server asks
+  // for Cloudflare's check instead of refusing. The box is drawn only once asked for;
+  // when it passes, the press that was asked continues by itself.
+  const [robotKey,  setRobotKey]  = useState(null);
+  const [robotNote, setRobotNote] = useState('');
+  const waiting = useRef(null);
+  const { boxRef: robotBox, token: heldToken, failed: robotFailed, blocked: robotBlocked, reset: resetRobot } = useRobotCheck(robotKey, {
+    action: 'sign_in',
+    // Most people pass without a tap; the box shows only for those who must.
+    appearance: 'interaction-only',
+    onToken: (token) => {
+      const press = waiting.current;
+      waiting.current = null;
+      if (press === 'email') void continueWithEmail(token);
+      else if (press === 'resend') void resendCode(token);
+    },
+  });
+
   useEffect(() => {
     if (step !== 'code' || resendAt <= now) return undefined;
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -111,7 +132,8 @@ export default function Login() {
   //                has an account (RULINGS 2026-09-07) — so the screen must
   //                only ever claim the wait, never that a live code is waiting.
   //   null       — refused for another reason; the words are on screen
-  const requestCode = async () => {
+  // `press` says which button asked, so a robot check the server asks for can finish it.
+  const requestCode = async (press, robotToken) => {
     const address = email.trim();
     if (!address) {
       setProblem('Please type your email address.');
@@ -120,13 +142,23 @@ export default function Login() {
     setBusy(true);
     setProblem('');
     try {
-      const res = await sendCode(address);
+      const res = await sendCode(address, robotToken);
       setResendAt(Date.now() + (res?.resendAfterSeconds ?? 0) * 1000);
       setNow(Date.now());
       setArrival('sent');
+      setRobotNote('');
       return 'sent';
     } catch (err) {
-      if (err?.response?.data?.error === 'code_too_soon') {
+      const refusal = err?.response?.data;
+      if (refusal?.error === 'robot_check' || refusal?.error === 'robot_failed') {
+        setRobotKey(refusal.robotCheckKey);
+        setRobotNote(refusal.message);
+        // Asked for the first time: the press finishes once the box passes. A failed
+        // answer waits for the person to press again, so it can never loop.
+        if (refusal.error === 'robot_check') waiting.current = press;
+        return null;
+      }
+      if (refusal?.error === 'code_too_soon') {
         setResendAt(Date.now() + (err.response.data.retryAfterSeconds ?? 0) * 1000);
         setNow(Date.now());
         setArrival('too-soon');
@@ -135,38 +167,52 @@ export default function Login() {
       setProblem(messageFrom(err, 'We could not send the code. Please try again.'));
       return null;
     } finally {
+      // An answer is good for one send, whatever came of it.
+      if (robotToken) resetRobot();
       setBusy(false);
     }
   };
 
-  const handleEmailSubmit = async (e) => {
-    e.preventDefault();
-    // Sent or too soon, the code box is next. "Too soon" here is usually "Use
-    // a different email" then the same address inside the gap, with a good
-    // code in the inbox; stranding the person on the address step would make
-    // them wait the gap out and spend a code on a resend they never needed.
-    // The header says which of the two happened.
-    if ((await requestCode()) !== null) {
+  // Sent or too soon, the code box is next. "Too soon" here is usually "Use
+  // a different email" then the same address inside the gap, with a good
+  // code in the inbox; stranding the person on the address step would make
+  // them wait the gap out and spend a code on a resend they never needed.
+  // The header says which of the two happened.
+  async function continueWithEmail(robotToken) {
+    if ((await requestCode('email', robotToken)) !== null) {
       setCode('');
       setStep('code');
     }
+  }
+
+  const handleEmailSubmit = async (e) => {
+    e.preventDefault();
+    await continueWithEmail(heldToken ?? undefined);
   };
 
-  const handleResend = async () => {
+  const handleResend = () => resendCode(heldToken ?? undefined);
+
+  async function resendCode(robotToken) {
     if (secondsToResend > 0 || busy) return;
     // "New code sent." is said only when one WAS. A second tab on the same
     // address can press Resend after its own countdown while the first tab's
     // code is still inside the gap: the server refuses, the countdown takes
     // the server's number, and the person is told only that — not that the
     // code they have is good, because it may already have signed them in.
-    const result = await requestCode();
+    const result = await requestCode('resend', robotToken);
     if (result === 'sent') {
       setCode('');
       toast.success('New code sent.');
     } else if (result === 'too-soon') {
       toast(TOO_SOON_WORDS);
     }
-  };
+  }
+
+  const robotLine = robotBlocked
+    ? SIGN_IN_ROBOT_WORDS.robot_blocked
+    : robotFailed
+      ? SIGN_IN_ROBOT_WORDS.robot_failed
+      : robotNote;
 
   const handleCodeSubmit = async (e) => {
     e.preventDefault();
@@ -454,6 +500,16 @@ export default function Login() {
                 </button>
               </div>
             </form>
+          )}
+
+          {/* The robot check: only once the server has asked for it. */}
+          {robotKey !== null && (
+            <div className="mt-4 space-y-2" data-testid="robot-check">
+              <div ref={robotBox} />
+              {robotLine && (
+                <p role="status" className="text-sm" style={{ color: 'rgba(255,255,255,0.65)' }}>{robotLine}</p>
+              )}
+            </div>
           )}
 
           {/* Or divider */}

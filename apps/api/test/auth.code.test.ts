@@ -440,8 +440,14 @@ d("sign-in by email code (real Postgres)", () => {
   it("a gym's induction on its one wi-fi address: sixty people each get a code and sign in", { timeout: 120_000 }, async () => {
     // Since join codes went (3c), signing in with the invited address is the only way
     // into a gym; the security pass over "getting in" (2026-10-02) saw the 21st person
-    // at one address refused a code. Its own app: the limits count for its life.
-    const desk = await buildApp(loadConfig(baseEnv), { emailSender: sender, usersEmailSender: usersSender });
+    // at one address refused a code. Its own app: the limits count for its life. Past the
+    // address's first 20 an hour each send answers the robot check, as the sign-in page
+    // does (Stage 4 item 10); this one passes every answer.
+    const desk = await buildApp(loadConfig(baseEnv), {
+      emailSender: sender,
+      usersEmailSender: usersSender,
+      robotCheck: { siteKey: "induction-site-key", verify: () => Promise.resolve("passed" as const) },
+    });
     try {
       const at = (path: string, body: unknown) =>
         desk.inject({
@@ -453,7 +459,11 @@ d("sign-in by email code (real Postgres)", () => {
         });
       const people = Array.from({ length: 60 }, (_, n) => `code-induction-${String(n)}@example.com`);
       const sends = [];
-      for (const email of people) sends.push((await at("/v1/auth/code/send", { email })).statusCode);
+      for (const email of people) {
+        const first = await at("/v1/auth/code/send", { email });
+        const asked = first.statusCode === 403 && (JSON.parse(first.body) as { error: string }).error === "robot_check";
+        sends.push((asked ? await at("/v1/auth/code/send", { email, robotToken: `answer-${email}` }) : first).statusCode);
+      }
       expect(sends.filter((code) => code !== 200)).toEqual([]);
       const verifies = [];
       for (const email of people) verifies.push((await at("/v1/auth/code/verify", { email, code: lastCodeFor(email) })).statusCode);

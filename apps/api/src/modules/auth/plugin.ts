@@ -20,6 +20,28 @@ declare module "fastify" {
   }
 }
 
+/** The access token's claims, checked once per request: the app-wide rate limit reads
+ *  them first (`app.ts`), and `authenticate` reuses the answer. null: no token, or one
+ *  that does not check out. */
+const checked = new WeakMap<FastifyRequest, { userId: string; familyId: string | null } | null>();
+export function accessClaimsOf(req: FastifyRequest, config: AppConfig): { userId: string; familyId: string | null } | null {
+  if (checked.has(req)) return checked.get(req) ?? null;
+  const header = req.headers.authorization;
+  const bearer =
+    header !== undefined && header.startsWith("Bearer ") ? header.slice("Bearer ".length) : null;
+  const token = bearer ?? req.cookies[ACCESS_COOKIE] ?? null;
+  let claims: { userId: string; familyId: string | null } | null = null;
+  if (token !== null && token !== "") {
+    try {
+      claims = verifyAccessTokenClaims(token, config);
+    } catch {
+      claims = null; // invalid/expired/refresh-typed
+    }
+  }
+  checked.set(req, claims);
+  return claims;
+}
+
 export function registerAuthenticate(
   app: FastifyInstance,
   deps: { sql: Sql; config: AppConfig },
@@ -33,20 +55,9 @@ export function registerAuthenticate(
         requestId: req.id,
       });
 
-    const header = req.headers.authorization;
-    const bearer =
-      header !== undefined && header.startsWith("Bearer ") ? header.slice("Bearer ".length) : null;
-    const token = bearer ?? req.cookies[ACCESS_COOKIE] ?? null;
-    if (token === null || token === "") {
-      await unauthorized();
-      return;
-    }
-
-    let claims: { userId: string; familyId: string | null };
-    try {
-      claims = verifyAccessTokenClaims(token, deps.config);
-    } catch {
-      await unauthorized(); // invalid/expired/refresh-typed — uniformly dark
+    const claims = accessClaimsOf(req, deps.config);
+    if (claims === null) {
+      await unauthorized(); // missing/invalid/expired/refresh-typed — uniformly dark
       return;
     }
 

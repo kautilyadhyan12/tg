@@ -10,7 +10,10 @@ import type { AppConfig } from "../../config.js";
 import type { RedisLike } from "../../redis.js";
 import type { EmailSender } from "./email.js";
 import { errorSummary, type GoogleVerifier } from "./google.js";
+import { WrongGuessError } from "./errors.js";
 import { createDualRateLimit } from "./rateLimit.js";
+import type { RobotCheck } from "../orgs/gymPage/robotCheck.js";
+import { SIGN_IN_FREE_SENDS_PER_ADDRESS, SIGN_IN_ROBOT_WORDS } from "@app/shared";
 import {
   changePasswordRequestSchema,
   forgotPasswordRequestSchema,
@@ -123,6 +126,7 @@ export function registerAuthRoutes(
     emailSender?: EmailSender;
     // null = Google not configured; the routes redirect cleanly (google.ts).
     googleVerifier?: GoogleVerifier | null;
+    robotCheck: RobotCheck;
     /** Tests only: a hasher that can hold a password check open; unset is argon2id. */
     hasher?: service.PasswordHasher;
   },
@@ -165,40 +169,45 @@ export function registerAuthRoutes(
     identifier: (req) => req.authUser?.id ?? null,
     redis: deps.redis,
   });
-  // OAuth routes drive an external Google token exchange + a user INSERT, so
-  // they carry a per-route limit like the other auth entry points (R3.7). No
-  // email in the request → IP-only. 20/hr matches the auth limiter's number.
-  const googleLimit = createDualRateLimit({
-    name: "google",
-    max: 20,
-    windowMs: HOUR_MS,
-    identifier: () => null,
-    redis: deps.redis,
-  });
+  // GOOGLE (R3.7). A callback drives a token exchange with Google and maybe a user
+  // INSERT. A whole gym signs in on one wi-fi (ROADMAP Stage 4 item 10), so the address
+  // is charged only for what one person there could not do for free: an answer Google
+  // refused. 60 of those in a minute and the address waits out that minute before
+  // Google is asked again. A callback whose state is not ours is refused before any
+  // work and costs nothing; starting a sign-in only redirects. Both stay under the
+  // app-wide floor. A troublemaker at the address can hold Google back only while they
+  // keep failing, and never for longer than a minute after.
+  const GOOGLE_REFUSED_MAX = 60;
+  const GOOGLE_REFUSED_WINDOW_S = 60;
+  const googleRefusedKey = (req: FastifyRequest) => `rl:google_refused:ip:${req.ip}`;
 
   // ── sign-in by email code (Kd 2026-09-07) ─────────────────────────────────
   // The per-ADDRESS limits are in the database (two unused codes a day, five
   // guesses a code). These Redis buckets are the wall against a client that VARIES
   // the address, which the per-address rule cannot see: every send is an
-  // email Kd pays for, and on the free plan a burst of a hundred takes sign-in
-  // down for real users. Since join codes went (3c) a code is the only way a member
-  // gets into their gym, so the per-IP ceiling admits a gym's whole induction on its
-  // one wi-fi in an hour — the 200 people the Join door plans for, some asking twice
-  // (it was 20, and the 21st person at one gym was refused: the security pass over
-  // "getting in", 2026-10-02). On top of it sits ONE ceiling on sends a day across
-  // everyone — the outage-and-bill stop.
+  // email Kd pays for. A gym's wi-fi or a phone company's gateway puts a whole
+  // gym on one internet address (ROADMAP Stage 4 item 10: 200 people in an hour),
+  // so the address's first 20 sends an hour go straight through and every send
+  // after needs the robot check (`codeRobotGate`), not a refusal. 500 an hour is
+  // the ceiling even with the check: 200 people at two codes a day each (the
+  // database's own limit), with room. On top sits ONE ceiling on sends a day
+  // across everyone — the outage-and-bill stop.
   const codeSendLimit = createDualRateLimit({
     name: "code_send",
     max: 10,
-    ipMax: 300,
+    ipMax: 500,
     windowMs: HOUR_MS,
     identifier: identifierFrom,
     redis: deps.redis,
   });
+  // A guess is worth nothing past the code's own five (the database's rule, per code).
+  // The person is counted here; the ADDRESS only for wrong guesses at live codes
+  // (`guessRoom`, below), so junk and guesses at addresses with no code spend none of a
+  // gym's allowance — a whole gym's tries are 200 people at five each.
   const codeVerifyLimit = createDualRateLimit({
     name: "code_verify",
     max: 20,
-    ipMax: 600,
+    ipMax: null,
     windowMs: HOUR_MS,
     identifier: identifierFrom,
     redis: deps.redis,
@@ -222,7 +231,41 @@ export function registerAuthRoutes(
     }
   };
 
-  app.post("/v1/auth/code/send", { preHandler: [codeSendLimit, dailySendCeiling] }, async (req, reply) => {
+  // THE ROBOT CHECK, past the address's first 20 sends an hour. It runs before the
+  // limits, so a request without a passed check counts against nobody's allowance —
+  // not the address's, and not the person whose address a robot typed. A request that
+  // would send nothing (the handler answers it 400) spends none of the 20. Every answer
+  // is put to Cloudflare, and failures are never counted against the address: one person
+  // there could otherwise lock out everybody sharing it; the floor of 600 a minute an
+  // address bounds the asks. Each answer is used once (Cloudflare refuses it a second
+  // time). Redis down: let it through with a log; `codeSendLimit` and the day's ceiling
+  // still apply.
+  const HOUR_S = HOUR_MS / 1000;
+  const codeRobotGate = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    // Answered here, so a request that would send nothing reaches no count after this one.
+    const body = parseBody(sendCodeRequestSchema, req, reply);
+    if (body === null) return;
+    const sends = await deps.redis.incrWithTtl(`rl:code_send_free:ip:${req.ip}`, HOUR_S);
+    if (sends === null) {
+      req.log.warn({ event: "ratelimit.open_redis_down", limiter: "code_send_free" }, "rate limiter failing open (Redis unavailable)");
+      return;
+    }
+    if (sends <= SIGN_IN_FREE_SENDS_PER_ADDRESS) return;
+    const token = body.robotToken;
+    if (token === undefined) {
+      await reply.status(403).send({ error: "robot_check", message: SIGN_IN_ROBOT_WORDS.robot_check, robotCheckKey: deps.robotCheck.siteKey, requestId: req.id });
+      return;
+    }
+    const answer = await deps.robotCheck.verify(token, "sign_in");
+    if (answer === "passed") return;
+    if (answer === "unavailable") {
+      await reply.status(503).send({ error: "robot_unavailable", message: SIGN_IN_ROBOT_WORDS.robot_unavailable, requestId: req.id });
+      return;
+    }
+    await reply.status(403).send({ error: "robot_failed", message: SIGN_IN_ROBOT_WORDS.robot_failed, robotCheckKey: deps.robotCheck.siteKey, requestId: req.id });
+  };
+
+  app.post("/v1/auth/code/send", { preHandler: [codeRobotGate, codeSendLimit, dailySendCeiling] }, async (req, reply) => {
     const input = parseBody(sendCodeRequestSchema, req, reply);
     if (input === null) return;
     const rules = await service.requestSignInCode(authDeps, input.email);
@@ -233,10 +276,27 @@ export function registerAuthRoutes(
     return reply.status(200).send({ message: "We emailed you a 6-digit code.", ...rules });
   });
 
-  app.post("/v1/auth/code/verify", { preHandler: [codeVerifyLimit] }, async (req, reply) => {
+  // 1,000 wrong guesses at live codes an hour from one address. Counted after the guess
+  // (a live code must exist, so each one costs a send, past 20 a robot check); read before.
+  const WRONG_GUESSES_PER_ADDRESS = 1000;
+  const wrongGuessKey = (req: FastifyRequest) => `rl:code_verify_wrong:ip:${req.ip}`;
+  const guessRoom = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    if (Number((await deps.redis.get(wrongGuessKey(req))) ?? "0") >= WRONG_GUESSES_PER_ADDRESS) {
+      await reply.status(429).send({ error: "rate_limited", message: "Too many attempts. Please try again later.", requestId: req.id });
+    }
+  };
+
+  app.post("/v1/auth/code/verify", { preHandler: [codeVerifyLimit, guessRoom] }, async (req, reply) => {
     const input = parseBody(verifyCodeRequestSchema, req, reply);
     if (input === null) return;
-    const { user, tokens, isNewAccount } = await service.signInWithCode(authDeps, input, requestMeta(req));
+    let signedIn: Awaited<ReturnType<typeof service.signInWithCode>>;
+    try {
+      signedIn = await service.signInWithCode(authDeps, input, requestMeta(req));
+    } catch (err) {
+      if (err instanceof WrongGuessError) await deps.redis.incrWithTtl(wrongGuessKey(req), HOUR_S);
+      throw err;
+    }
+    const { user, tokens, isNewAccount } = signedIn;
     setSessionCookies(reply, deps.config, tokens);
     return reply.status(200).send({ user, isNewAccount });
   });
@@ -335,7 +395,7 @@ export function registerAuthRoutes(
     reply.redirect(`${deps.config.WEB_ORIGIN}/login?error=${errorCode}`);
 
   // Step 1: send the browser to Google (with a CSRF `state` cookie).
-  app.get("/v1/auth/google", { preHandler: [googleLimit] }, async (_req, reply) => {
+  app.get("/v1/auth/google", async (_req, reply) => {
     if (googleVerifier === null) return loginRedirect(reply, "google_not_configured");
     const state = mintOpaqueToken();
     reply.setCookie(OAUTH_STATE_COOKIE, state, stateCookieOptions(deps.config, OAUTH_STATE_TTL_S));
@@ -343,7 +403,7 @@ export function registerAuthRoutes(
   });
 
   // Step 2: Google redirects back with `code` + `state`.
-  app.get("/v1/auth/google/callback", { preHandler: [googleLimit] }, async (req, reply) => {
+  app.get("/v1/auth/google/callback", async (req, reply) => {
     if (googleVerifier === null) return loginRedirect(reply, "google_not_configured");
     const parsed = googleCallbackQuerySchema.safeParse(req.query);
     const cookieState = req.cookies[OAUTH_STATE_COOKIE];
@@ -360,6 +420,9 @@ export function registerAuthRoutes(
     ) {
       return loginRedirect(reply, "google_failed");
     }
+    if (Number((await deps.redis.get(googleRefusedKey(req))) ?? "0") >= GOOGLE_REFUSED_MAX) {
+      return loginRedirect(reply, "google_busy");
+    }
     let tokens: service.SessionTokens;
     try {
       const identity = await googleVerifier.exchange(code);
@@ -370,6 +433,7 @@ export function registerAuthRoutes(
       // error — a gaxios failure carries client_secret + the auth code on
       // .config, which pino's redact paths do not cover (T3 finding).
       app.log.warn({ event: "auth.google.callback_failed", err: errorSummary(err) }, "google sign-in failed");
+      await deps.redis.incrWithTtl(googleRefusedKey(req), GOOGLE_REFUSED_WINDOW_S);
       return loginRedirect(reply, "google_failed");
     }
     setSessionCookies(reply, deps.config, tokens);

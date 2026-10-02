@@ -1,9 +1,11 @@
 // App skeleton tests via fastify.inject (no listening socket, no real DB
 // needed except for /health, which pings — that case runs when DATABASE_URL
 // is set, i.e. locally against Neon and in DB-enabled CI runs).
+import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
+import { ACCESS_COOKIE, signAccessToken } from "../src/modules/auth/tokens.js";
 
 const WEB_ORIGIN = "http://localhost:5173";
 const realDbUrl = process.env["DATABASE_URL"];
@@ -85,16 +87,64 @@ describe("api skeleton", () => {
     expect(res.headers["access-control-allow-origin"]).toBeUndefined();
   });
 
-  it("rate limit: an address's 601st request in a minute from nobody signed in gets 429", async () => {
-    // Dedicated client IP so this test's 601 requests don't drain the
-    // default client's bucket for the other tests. Signed-in people are counted
-    // on their own (app.rateLimit.test.ts).
-    let last = 0;
+  // The floor counts a signed-in person against themselves and everyone else against the
+  // internet address (ROADMAP Stage 4 item 10: a whole gym on one wi-fi).
+  const hit = (ip: string, cookies: Record<string, string> = {}) =>
+    app.inject({ method: "GET", url: "/nope", remoteAddress: ip, cookies });
+  const hits = async (n: number, ip: string, cookies: Record<string, string> = {}) => {
+    const codes: number[] = [];
+    for (let i = 0; i < n; i++) codes.push((await hit(ip, cookies)).statusCode);
+    return codes;
+  };
+
+  it("rate limit: nobody signed in — the address's 601st request in a minute gets 429", async () => {
+    // Dedicated client IP so this test's requests don't drain the
+    // default client's bucket for the other tests.
+    const codes = await hits(601, "10.9.9.9");
+    expect(codes.slice(0, 600).every((c) => c === 404)).toBe(true);
+    expect(codes[600]).toBe(429);
+  });
+
+  it("rate limit: two signed-in people at ONE address each get their own 600 a minute, and the address's own count is untouched", async () => {
+    const ip = "10.9.9.10";
+    const one = { [ACCESS_COOKIE]: signAccessToken(randomUUID(), config, randomUUID()) };
+    const two = { [ACCESS_COOKIE]: signAccessToken(randomUUID(), config, randomUUID()) };
+    const first = await hits(601, ip, one);
+    expect(first.slice(0, 600).every((c) => c === 404)).toBe(true);
+    expect(first[600]).toBe(429);
+    expect((await hits(600, ip, two)).every((c) => c === 404)).toBe(true);
+    expect((await hit(ip)).statusCode).toBe(404);
+  });
+
+  it("rate limit: a token that does not check out counts against the address", async () => {
+    const ip = "10.9.9.11";
+    const forged = { [ACCESS_COOKIE]: signAccessToken(randomUUID(), { ...config, JWT_SECRET: "another-secret-0123456789abcdef-32!!" }, randomUUID()) };
+    expect((await hits(600, ip, forged)).every((c) => c === 404)).toBe(true);
+    expect((await hit(ip, { [ACCESS_COOKIE]: "not-a-token" })).statusCode).toBe(429);
+    expect((await hit(ip)).statusCode).toBe(429);
+  });
+
+  it("CORS: a browser may remember the answer to its pre-check for two hours", async () => {
+    const res = await app.inject({
+      method: "OPTIONS",
+      url: "/v1/users/me",
+      headers: { origin: WEB_ORIGIN, "access-control-request-method": "PATCH" },
+    });
+    expect(res.headers["access-control-max-age"]).toBe("7200");
+  });
+
+  it("CORS: 601 of a browser's pre-checks are answered before the floor, and spend none of the address's", async () => {
+    const ip = "10.9.9.12";
     for (let i = 0; i < 601; i++) {
-      const res = await app.inject({ method: "GET", url: "/nope", remoteAddress: "10.9.9.9" });
-      last = res.statusCode;
+      const pre = await app.inject({
+        method: "OPTIONS",
+        url: "/v1/users/me",
+        remoteAddress: ip,
+        headers: { origin: WEB_ORIGIN, "access-control-request-method": "PATCH" },
+      });
+      expect(pre.statusCode).toBe(204);
     }
-    expect(last).toBe(429);
+    expect((await hit(ip)).statusCode).toBe(404);
   });
 
   it.skipIf(realDbUrl === undefined || realDbUrl === "")(
