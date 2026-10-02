@@ -12,7 +12,8 @@
 //
 // **THE STAMP IS `ended_at` AND IT STARTS THE ARCHIVE CLOCK** (Kd ruling
 // 2026-08-31: a gym with no plan is archived four months later, replacing Part 3
-// §4.2's fourteen days). `archiveSweep.ts` is its only reader. It is written
+// §4.2's fourteen days; the archive is switched off, RULINGS 2026-10-02).
+// `archiveSweep.ts` is its only reader. It is written
 // from the SAME injected `now` as the comparison above it, so the row's own
 // record of when it ended agrees with the instant this run decided it had —
 // and `tools/trial-sweep.ts --now` therefore stamps the date an operator is

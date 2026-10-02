@@ -4,7 +4,8 @@
 //
 // **SWITCHED OFF (Kd, RULINGS 2026-10-02): a gym that stops paying is never
 // closed or emptied by the clock, and the worker no longer runs this.** Running
-// it by hand closes gyms against that ruling. The text below is from when it ran.
+// it by hand closes gyms against that ruling, so it refuses to run without
+// `--switched-off-i-know`. The text below is from when it ran.
 //
 // The worker runs this nightly at 04:30; this door exists for two reasons and
 // the second is the important one.
@@ -18,8 +19,8 @@
 //      future instant, close the gym at another four months later, both in the
 //      same three minutes.
 //
-//   corepack pnpm --filter api exec tsx tools/archive-sweep.ts
-//   corepack pnpm --filter api exec tsx tools/archive-sweep.ts --now=2027-01-05T10:00:00Z
+//   corepack pnpm --filter api exec tsx tools/archive-sweep.ts --switched-off-i-know
+//   corepack pnpm --filter api exec tsx tools/archive-sweep.ts --switched-off-i-know --now=2027-01-05T10:00:00Z
 //
 // **THERE IS NO DRY RUN, on purpose** — `tools/orgs-sweep.ts`'s reasoning, and
 // `tools/trial-sweep.ts`'s: a dry run means a second copy of the sweep's
@@ -28,9 +29,9 @@
 // and it is the real one.
 //
 // **WHAT MAKES THAT ACCEPTABLE HERE IS THAT THE RUN IS REVERSIBLE, and it is the
-// only reason:** `tools/gym-restore.ts` re-opens a gym closed by mistake, and
-// nothing about a mistake here destroys anything — no membership, no code, no
-// workout, no subscription row is touched. `archived_at` deliberately survives
+// only reason:** `tools/gym-restore.ts` re-opens a gym closed by mistake — but
+// the gym's member list, leads and staff invitations are deleted with the closing
+// and a restore does not bring them back. `archived_at` deliberately survives
 // the restore, so a gym re-opened by hand is never closed again by this job.
 //
 // **`--now` IS A DEVELOPMENT INSTRUMENT AND POINTS AT WHATEVER DATABASE
@@ -59,6 +60,14 @@ const envSchema = z.object({
 const env = envSchema.safeParse(process.env);
 if (!env.success) {
   console.error("Missing env: DATABASE_URL. (secrets never printed)");
+  process.exit(1);
+}
+
+if (!process.argv.includes("--switched-off-i-know")) {
+  console.error(
+    "The gym archive is switched off (RULINGS 2026-10-02): a gym that stops paying is never closed. " +
+      "This run would close lapsed gyms and delete their member lists; pass --switched-off-i-know to run it anyway.",
+  );
   process.exit(1);
 }
 

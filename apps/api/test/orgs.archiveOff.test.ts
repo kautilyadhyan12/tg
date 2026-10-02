@@ -18,12 +18,14 @@ describe("the nightly gym archive is switched off", () => {
       const connection = new Redis(redisUrl ?? "", { db: 15, maxRetriesPerRequest: null });
       const queue = new Queue(`archive-off-${String(Date.now())}`, { connection });
       try {
-        // What the worker before this change registered at boot, beside a neighbour.
-        await queue.upsertJobScheduler(ORGS_ARCHIVE_JOB, { pattern: "30 4 * * *" }, { name: ORGS_ARCHIVE_JOB });
+        // What the worker before this change registered at boot, by its literal name,
+        // beside a neighbour.
+        await queue.upsertJobScheduler("orgs.archive", { pattern: "30 4 * * *" }, { name: "orgs.archive" });
         await queue.upsertJobScheduler("orgs.trial_expiry", { pattern: "0 4 * * *" }, { name: "orgs.trial_expiry" });
-        expect((await queue.getJobSchedulers()).map((s) => s.key).sort()).toEqual([ORGS_ARCHIVE_JOB, "orgs.trial_expiry"]);
+        expect((await queue.getJobSchedulers()).map((s) => s.key).sort()).toEqual(["orgs.archive", "orgs.trial_expiry"]);
         expect(await queue.getDelayedCount()).toBe(2);
 
+        expect(ORGS_ARCHIVE_JOB).toBe("orgs.archive");
         await unscheduleArchiveSweep(queue);
         expect((await queue.getJobSchedulers()).map((s) => s.key)).toEqual(["orgs.trial_expiry"]);
         const delayed = await queue.getDelayed();
@@ -46,7 +48,15 @@ describe("the nightly gym archive is switched off", () => {
   it("the worker removes the archive schedule, never registers it, and never runs the archive", () => {
     const worker = readFileSync(new URL("../src/worker.ts", import.meta.url), "utf8");
     expect(worker).toContain("await unscheduleArchiveSweep(queue);");
-    expect(worker).not.toMatch(/upsertJobScheduler\(\s*ORGS_ARCHIVE_JOB/);
+    // The job's name appears only in the import, the re-export, the list of known
+    // jobs and the skipped branch, so nothing can register or add it by any call shape.
+    const mentions = worker.split("\n").filter((line) => /ORGS_ARCHIVE_JOB|orgs\.archive/.test(line)).map((line) => line.trim());
+    expect(mentions).toEqual([
+      'import { ORGS_ARCHIVE_JOB, unscheduleArchiveSweep } from "./modules/orgs/archiveSchedule.js";',
+      "export { ORGS_ARCHIVE_JOB };",
+      "job.name !== ORGS_ARCHIVE_JOB &&",
+      "if (job.name === ORGS_ARCHIVE_JOB) {",
+    ]);
     expect(worker).not.toContain("archiveLapsedGyms");
     expect(worker).not.toContain("archiveSweep.js");
     const branch = /if \(job\.name === ORGS_ARCHIVE_JOB\) \{([\s\S]*?)\n {4}\}/.exec(worker);
