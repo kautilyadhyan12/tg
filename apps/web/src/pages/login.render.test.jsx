@@ -11,7 +11,7 @@
 // `PublicRoute` is exercised here too — it is the second place a signed-in
 // person gets sent somewhere, and it used to spell the destination itself.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 // One mutable auth state serves both subjects: `Login` reads `sendCode` and
@@ -143,7 +143,7 @@ describe('from the address to the code', () => {
   it('asks the server for a code for the typed address and moves to the code step', async () => {
     drawLogin();
     await askForCode('  Kd@Example.com ');
-    expect(authState.sendCode).toHaveBeenCalledWith('Kd@Example.com');
+    expect(authState.sendCode).toHaveBeenCalledWith('Kd@Example.com', undefined);
     expect(screen.getByText(/we sent a 6-digit code to/i)).toBeTruthy();
     expect(screen.getByText('Kd@Example.com')).toBeTruthy();
     // The screen never invents the countdown — it shows the server's number.
@@ -384,5 +384,96 @@ describe('landing on the Get started page while already signed in', () => {
   it('still shows the form to somebody with no session', () => {
     drawPublicRoute();
     expect(screen.getByText('THE LOGIN FORM')).toBeTruthy();
+  });
+});
+
+// ── The robot check (ROADMAP Stage 4 item 10) ───────────────────────────────
+
+describe('the robot check, once the server asks for it', () => {
+  // Cloudflare's box, as the page sees it: `pass()` hands the page a token.
+  let drawn = null;
+  const turnstile = {
+    render: vi.fn((_el, options) => {
+      drawn = options;
+      return 'widget-1';
+    }),
+    reset: vi.fn(),
+    remove: vi.fn(),
+  };
+  const pass = (token) => act(() => drawn.callback(token));
+  const askedFor = () =>
+    refusal(403, 'robot_check', "One quick check that you're not a robot, then we'll send your code.", { robotCheckKey: 'site-key' });
+
+  beforeEach(() => {
+    drawn = null;
+    window.turnstile = turnstile;
+    for (const fn of Object.values(turnstile)) fn.mockClear();
+  });
+  afterEach(() => {
+    delete window.turnstile;
+  });
+
+  it('draws no box until the server asks', async () => {
+    drawLogin();
+    await askForCode();
+    expect(turnstile.render).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-testid="robot-check"]')).toBeNull();
+  });
+
+  it('asked for: the box appears with its words, and once it passes the code is sent by itself', async () => {
+    authState.sendCode = vi
+      .fn()
+      .mockRejectedValueOnce(askedFor())
+      .mockResolvedValueOnce({ resendAfterSeconds: 60, expiresInSeconds: 600 });
+    drawLogin();
+    typeEmail('kd@example.com');
+    fireEvent.click(screen.getByText('Continue with email'));
+    await waitFor(() => expect(turnstile.render).toHaveBeenCalled());
+    expect(turnstile.render.mock.calls[0][1]).toMatchObject({ sitekey: 'site-key', action: 'sign_in' });
+    expect(screen.getByRole('status').textContent).toMatch(/not a robot, then we'll send your code/);
+    // Still on the address step: nothing was sent.
+    expect(screen.queryByText('6-digit code')).toBeNull();
+
+    pass('tok-1');
+    await screen.findByText('6-digit code');
+    expect(authState.sendCode).toHaveBeenLastCalledWith('kd@example.com', 'tok-1');
+    expect(authState.sendCode).toHaveBeenCalledTimes(2);
+    // The answer is spent: the box is reset for the next send.
+    expect(turnstile.reset).toHaveBeenCalledWith('widget-1');
+  });
+
+  it('a failed answer waits for the person to press again, so it can never loop', async () => {
+    authState.sendCode = vi
+      .fn()
+      .mockRejectedValueOnce(askedFor())
+      .mockRejectedValueOnce(refusal(403, 'robot_failed', "We couldn't check that you're not a robot. Please try again.", { robotCheckKey: 'site-key' }))
+      .mockResolvedValueOnce({ resendAfterSeconds: 60, expiresInSeconds: 600 });
+    drawLogin();
+    typeEmail('kd@example.com');
+    fireEvent.click(screen.getByText('Continue with email'));
+    await waitFor(() => expect(turnstile.render).toHaveBeenCalled());
+    pass('tok-1');
+    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/couldn't check/));
+    pass('tok-2');
+    expect(authState.sendCode).toHaveBeenCalledTimes(2);
+
+    fireEvent.click(screen.getByText('Continue with email'));
+    await screen.findByText('6-digit code');
+    expect(authState.sendCode).toHaveBeenLastCalledWith('kd@example.com', 'tok-2');
+  });
+
+  it('asked for on Resend: once the box passes, the new code is sent by itself', async () => {
+    authState.sendCode = vi
+      .fn()
+      .mockResolvedValueOnce({ resendAfterSeconds: 0, expiresInSeconds: 600 })
+      .mockRejectedValueOnce(askedFor())
+      .mockResolvedValueOnce({ resendAfterSeconds: 60, expiresInSeconds: 600 });
+    drawLogin();
+    await askForCode('kd@example.com');
+    fireEvent.click(screen.getByText('Resend code'));
+    await waitFor(() => expect(turnstile.render).toHaveBeenCalled());
+    pass('tok-9');
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('New code sent.'));
+    expect(authState.sendCode).toHaveBeenLastCalledWith('kd@example.com', 'tok-9');
   });
 });

@@ -13,7 +13,7 @@ import postgres from "postgres";
 import { createAnalytics, type Analytics } from "./analytics.js";
 import { createResendTransport } from "./email/resend.js";
 import { createDevEmailSender, createResendEmailSender, type EmailSender } from "./modules/auth/email.js";
-import { registerAuthenticate } from "./modules/auth/plugin.js";
+import { accessClaimsOf, registerAuthenticate } from "./modules/auth/plugin.js";
 import { AuthError, type PasswordHasher } from "./modules/auth/service.js";
 import { registerAuthRoutes } from "./modules/auth/routes.js";
 import { createGoogleVerifier, type GoogleVerifier } from "./modules/auth/google.js";
@@ -80,7 +80,7 @@ export interface BuildAppOverrides {
   /** Tests replace Paddle's API with a fake; the keys in the config still switch it on. */
   paddleApi?: PaddleApi;
   razorpayApi?: RazorpayApi;
-  /** Tests answer the gym page's robot check themselves; unset asks Cloudflare. */
+  /** Tests answer the robot check themselves; unset asks Cloudflare. */
   robotCheck?: RobotCheck;
   /** Tests keep a gym page's photos where they can look; unset is `PHOTO_DIR`. */
   photoStore?: PhotoStore;
@@ -162,10 +162,24 @@ export async function buildApp(
     // the Card 4 preflight bug (inject() tests cannot see either).
     // Content-Disposition carries a download's file name (the member list's CSV).
     exposedHeaders: ["Idempotent-Replay", "Content-Disposition"],
+    // A browser asks before each save it sends with a JSON body, and that question
+    // carries no sign-in, so it counts against the internet address below. Two hours
+    // is Chromium's own ceiling; without it a browser asks again after five seconds.
+    maxAge: 7200,
   });
+  // The floor under every route. A signed-in person's requests count against THAT
+  // PERSON, and only the rest against the internet address: a gym's wi-fi or a phone
+  // company's gateway puts a whole gym on one address (ROADMAP Stage 4 item 10). One
+  // person signing in made 7 requests with no session (measured 2026-10-02), so 1,000
+  // a minute lets well over a hundred people at one address sign in in the same
+  // minute. A token that does not check out counts against the address.
   await app.register(rateLimit, {
     global: true,
-    max: 300, // generous global floor; strict per-route limits land with auth (P2.1, R3.7)
+    keyGenerator: (req) => {
+      const claims = accessClaimsOf(req, config);
+      return claims === null ? `ip:${req.ip}` : `user:${claims.userId}`;
+    },
+    max: (_req, key) => (key.startsWith("user:") ? 300 : 1000),
     timeWindow: "1 minute",
   });
 
@@ -271,10 +285,14 @@ export async function buildApp(
       : createDevUsersEmailSender(app.log, config));
 
   registerAuthenticate(app, { sql, config });
+  // One robot check for the whole app: the sign-in code past an address's first 20
+  // an hour, and a gym page's enquiry form.
+  const robotCheck = overrides.robotCheck ?? createRobotCheck(config);
   registerAuthRoutes(app, {
     sql,
     config,
     redis,
+    robotCheck,
     googleVerifier: overrides.googleVerifier ?? createGoogleVerifier(config),
     emailSender,
     ...(overrides.passwordHasher === undefined ? {} : { hasher: overrides.passwordHasher }),
@@ -300,7 +318,7 @@ export async function buildApp(
       redis,
       invites,
       onlinePayments: { paddle: paddle !== null, razorpay: razorpay !== null },
-      robotCheck: overrides.robotCheck ?? createRobotCheck(config),
+      robotCheck,
       // The server's own disk until Cloudflare R2 is connected at deploy (Stage 4 item 1).
       photos: overrides.photoStore ?? createDiskPhotoStore(config.PHOTO_DIR ?? join(tmpdir(), "aihg-gym-photos")),
     },

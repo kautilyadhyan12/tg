@@ -11,6 +11,8 @@ import type { RedisLike } from "../../redis.js";
 import type { EmailSender } from "./email.js";
 import { errorSummary, type GoogleVerifier } from "./google.js";
 import { createDualRateLimit } from "./rateLimit.js";
+import type { RobotCheck } from "../orgs/gymPage/robotCheck.js";
+import { SIGN_IN_FREE_SENDS_PER_ADDRESS, SIGN_IN_ROBOT_WORDS } from "@app/shared";
 import {
   changePasswordRequestSchema,
   forgotPasswordRequestSchema,
@@ -114,6 +116,19 @@ function identifierFrom(req: FastifyRequest): string | null {
   return null;
 }
 
+/** The robot check's answer, read before the body is parsed; the parse checks it again. */
+function robotTokenFrom(req: FastifyRequest): string | null {
+  const body: unknown = req.body;
+  if (typeof body === "object" && body !== null && "robotToken" in body && typeof body.robotToken === "string") {
+    return body.robotToken === "" ? null : body.robotToken;
+  }
+  return null;
+}
+
+/** Failed robot checks one internet address may make at sign-in in an hour; past it the
+ *  address is refused before Cloudflare is asked again. */
+const SIGN_IN_ROBOT_FAILS_MAX = 30;
+
 export function registerAuthRoutes(
   app: FastifyInstance,
   deps: {
@@ -123,6 +138,7 @@ export function registerAuthRoutes(
     emailSender?: EmailSender;
     // null = Google not configured; the routes redirect cleanly (google.ts).
     googleVerifier?: GoogleVerifier | null;
+    robotCheck: RobotCheck;
     /** Tests only: a hasher that can hold a password check open; unset is argon2id. */
     hasher?: service.PasswordHasher;
   },
@@ -167,10 +183,14 @@ export function registerAuthRoutes(
   });
   // OAuth routes drive an external Google token exchange + a user INSERT, so
   // they carry a per-route limit like the other auth entry points (R3.7). No
-  // email in the request → IP-only. 20/hr matches the auth limiter's number.
+  // email in the request → IP-only. One sign-in is two requests (to Google and
+  // back), and a whole gym signs in on one wi-fi (ROADMAP Stage 4 item 10): 200
+  // people in an hour is 400, with room for a second try. Google itself stands
+  // between a robot and an account.
   const googleLimit = createDualRateLimit({
     name: "google",
-    max: 20,
+    max: 600,
+    ipMax: 600,
     windowMs: HOUR_MS,
     identifier: () => null,
     redis: deps.redis,
@@ -180,23 +200,27 @@ export function registerAuthRoutes(
   // The per-ADDRESS limits are in the database (two unused codes a day, five
   // guesses a code). These Redis buckets are the wall against a client that VARIES
   // the address, which the per-address rule cannot see: every send is an
-  // email Kd pays for, and on the free plan a burst of a hundred takes sign-in
-  // down for real users. So the per-IP ceiling is the same order as the
-  // per-address one (a gym induction day is thirty people on one wi-fi, which
-  // twenty an hour still admits over the day), and on top of it sits ONE
-  // ceiling on sends a day across everyone — the outage-and-bill stop.
+  // email Kd pays for. A gym's wi-fi or a phone company's gateway puts a whole
+  // gym on one internet address (ROADMAP Stage 4 item 10: 200 people in an hour),
+  // so the address's first 20 sends an hour go straight through and every send
+  // after needs the robot check (`codeRobotGate`), not a refusal. 500 an hour is
+  // the ceiling even with the check: 200 people at two codes a day each (the
+  // database's own limit), with room. On top sits ONE ceiling on sends a day
+  // across everyone — the outage-and-bill stop.
   const codeSendLimit = createDualRateLimit({
     name: "code_send",
     max: 10,
-    ipMax: 20,
+    ipMax: 500,
     windowMs: HOUR_MS,
     identifier: identifierFrom,
     redis: deps.redis,
   });
+  // A guess is worth nothing past the code's own five (the database's rule, per
+  // code), so the address may take a whole gym's tries: 200 people at five each.
   const codeVerifyLimit = createDualRateLimit({
     name: "code_verify",
     max: 20,
-    ipMax: 40,
+    ipMax: 1000,
     windowMs: HOUR_MS,
     identifier: identifierFrom,
     redis: deps.redis,
@@ -220,7 +244,40 @@ export function registerAuthRoutes(
     }
   };
 
-  app.post("/v1/auth/code/send", { preHandler: [codeSendLimit, dailySendCeiling] }, async (req, reply) => {
+  // THE ROBOT CHECK, past the address's first 20 sends an hour. It runs before the
+  // limits, so a request without a passed check counts against nobody's allowance —
+  // not the address's, and not the person whose address a robot typed. Each answer
+  // is used once (Cloudflare refuses it a second time). Redis down: let it through
+  // with a log; `codeSendLimit` and the day's ceiling still apply.
+  const HOUR_S = HOUR_MS / 1000;
+  const codeRobotGate = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const sends = await deps.redis.incrWithTtl(`rl:code_send_free:ip:${req.ip}`, HOUR_S);
+    if (sends === null) {
+      req.log.warn({ event: "ratelimit.open_redis_down", limiter: "code_send_free" }, "rate limiter failing open (Redis unavailable)");
+      return;
+    }
+    if (sends <= SIGN_IN_FREE_SENDS_PER_ADDRESS) return;
+    const token = robotTokenFrom(req);
+    if (token === null) {
+      await reply.status(403).send({ error: "robot_check", message: SIGN_IN_ROBOT_WORDS.robot_check, robotCheckKey: deps.robotCheck.siteKey, requestId: req.id });
+      return;
+    }
+    const failsKey = `rl:code_send_robot_fail:ip:${req.ip}`;
+    if (Number((await deps.redis.get(failsKey)) ?? "0") >= SIGN_IN_ROBOT_FAILS_MAX) {
+      await reply.status(429).send({ error: "rate_limited", message: "Too many attempts. Please try again later.", requestId: req.id });
+      return;
+    }
+    const answer = await deps.robotCheck.verify(token);
+    if (answer === "passed") return;
+    if (answer === "unavailable") {
+      await reply.status(503).send({ error: "robot_unavailable", message: SIGN_IN_ROBOT_WORDS.robot_unavailable, requestId: req.id });
+      return;
+    }
+    await deps.redis.incrWithTtl(failsKey, HOUR_S);
+    await reply.status(403).send({ error: "robot_failed", message: SIGN_IN_ROBOT_WORDS.robot_failed, robotCheckKey: deps.robotCheck.siteKey, requestId: req.id });
+  };
+
+  app.post("/v1/auth/code/send", { preHandler: [codeRobotGate, codeSendLimit, dailySendCeiling] }, async (req, reply) => {
     const input = parseBody(sendCodeRequestSchema, req, reply);
     if (input === null) return;
     const rules = await service.requestSignInCode(authDeps, input.email);

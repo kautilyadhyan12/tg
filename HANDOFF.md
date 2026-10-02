@@ -4,6 +4,16 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-10-02 · Stage 4 item 10 (Folder B): a whole gym signs up on one internet address (branch `signup-burst`)
+
+- **Why this job:** 19a, 19c and 19d wait on Folder A's 16a and 17c; 19b on photo storage. **Risky (sign-in), Opus xhigh; Kd: *"ok"*** after asking whether a hacker with many accounts gains (no; one hole closed by the check: *"yes add"*). No migration, no new package, no new cost (Turnstile is free; its keys already set for the gym page).
+- **Built:** sending a code: an address's first 20 an hour go straight through, every send after needs Cloudflare Turnstile's check (`robot_check` → the page draws the box, hidden unless a tap is needed, and sends by itself once it passes), 500 an hour the ceiling; a check without a passed answer counts against nobody. Checking a code 1,000 an address, Google 600. A person's own limits unchanged. Password routes (no screen uses them) keep 20. The app-wide floor counts a signed-in person against themselves (300 a minute) and the rest against the address (1,000 a minute); the token is checked once a request (`accessClaimsOf`); browsers keep the CORS pre-check 2 hours. Shared: `robotCheck.ts` (was in `gymPage.ts`: a load-order loop with `auth.ts`).
+- **Worst thing, first tests:** 200 people on one address all sign in by code and by Google (RED on master: 180 of 200 refused from the 21st); at a busy address one person still gets two codes a day, five guesses, ten sends an hour. **Breaks, each RED, restored sha256-identical:** the check after the limits, no answer let through, a passed check lifting the person's ten, a failed answer let through.
+- **Measured:** one sign-in is 7 requests with no session and 3–5 more after (headless Edge, the api's own log). Real run on :3001 with Cloudflare's test keys: 20 × 200, the 21st 403 `robot_check`; in Edge the box passed and the code step came by itself (390 and 1280).
+- **Verified:** api **4,654 of 4,654** in one full run on `aihg_b` (first run 4,652: `leads.sentForYou`'s known flake, and `leads.routes`' 300 presses in a minute meeting the per-person floor — the test now fills the Leads count directly); new suite 12/12; shared 278/278; web 3,421/3,421 (`poseAssets.contract` local Node 24); tsc and eslint 0 (api, shared, the changed web files; `AuthContext.jsx` has 5 `only-export-components` errors on master too).
+- **Cost:** reads no list of people. The token check is 0.11 ms a request (3 runs of 100,000, mains 2,592 MHz, `.cost/cost-10.mts`); signed-in routes already made it and now reuse it.
+- **Open:** Kd's click-through; round one; the phone app's sign-in answers the check (ROADMAP Stage 5 item 2).
+
 ## 2026-10-01 · 4c (Folder A): a seat is a person using the member app, the owner and staff too (branch `seat-counts-everyone`)
 
 - **Why this job:** next in Folder A after 4a-ii. **Risky (money: who a gym pays for), Opus xhigh; Kd: *"go"*.** No migration, no new package, no new cost.

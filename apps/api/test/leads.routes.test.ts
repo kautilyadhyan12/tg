@@ -11,6 +11,7 @@ import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { archiveLapsedGyms } from "../src/modules/orgs/archiveSweep.js";
+import { createMemoryRedis } from "../src/redis.js";
 import { LEADS_PAGE, ROLE_PRIVILEGES, type Lead, type LeadsResponse } from "@app/shared";
 
 const url = process.env["DATABASE_URL"];
@@ -46,6 +47,8 @@ const cookieMap = (res: { cookies: { name: string; value: string }[] }) =>
 d("a gym's leads (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
   let app: App | undefined;
+  // The limits' own store, so a test can say how much of an hour is already spent.
+  const limits = createMemoryRedis();
   const api = (): App => {
     if (app === undefined) throw new Error("beforeAll did not build the app");
     return app;
@@ -170,6 +173,7 @@ d("a gym's leads (real Postgres)", () => {
         sendPasswordResetEmail: () => Promise.resolve(),
         sendSignInCodeEmail: () => Promise.resolve(),
       },
+      redis: limits,
     });
     await api().ready();
   }, TIMEOUT_MS);
@@ -451,14 +455,13 @@ d("a gym's leads (real Postgres)", () => {
       const gym = org.org.id;
       const manager = await makeStaff(org, owner.cookies, "limit-manager", "manager");
       const lead = await addLead(gym, owner.cookies);
-      // The owner spends their 300 writes an hour (addLead above was one), each from a new
-      // address so that only the leads limiter can answer.
-      let refused = 0;
-      for (let i = 0; i < 300; i += 1) {
-        const res = await patch(leadUrl(gym, lead.id), { notes: `n${String(i)}` }, owner.cookies);
-        if (res.statusCode === 429) refused += 1;
-      }
-      expect(refused).toBe(1);
+      // The owner has spent 299 of their 300 writes this hour (addLead above was one). Set in
+      // the limiter's own count: 300 real presses in one test would meet the app-wide floor
+      // of 300 a minute a person first.
+      for (let i = 0; i < 298; i += 1) await limits.incrWithTtl(`rl:leads_write:id:${owner.userId}`, 3600);
+      expect((await patch(leadUrl(gym, lead.id), { notes: "the 300th" }, owner.cookies)).statusCode).toBe(200);
+      const over = await patch(leadUrl(gym, lead.id), { notes: "the 301st" }, owner.cookies);
+      expect({ status: over.statusCode, error: (JSON.parse(over.body) as { error: string }).error }).toEqual({ status: 429, error: "rate_limited" });
       // One front desk: both workers from ONE address. The owner is still refused; the manager is not.
       const desk = "10.63.0.1";
       const at = (cookies: Record<string, string>, body: unknown) =>

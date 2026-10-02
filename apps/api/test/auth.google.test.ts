@@ -214,13 +214,16 @@ d("google oauth routes (real Postgres)", () => {
     expect(users[0]?.n).toBe(0);
   });
 
-  it("callback rate limit: 21st attempt from ONE IP → 429 (R3.7)", { timeout: 30_000 }, async () => {
+  it("callback rate limit: 601st attempt from ONE IP → 429 (R3.7; a whole gym is 400, Stage 4 item 10)", { timeout: 60_000 }, async () => {
     const ip = "10.7.99.99"; // dedicated so no other test shares this bucket
     let last: Awaited<ReturnType<typeof get>> | undefined;
+    let sixHundredth = 0;
     // Bad state → the limiter (preHandler) runs before the handler; no DB work.
-    for (let i = 0; i < 21; i++) {
+    for (let i = 0; i < 601; i++) {
       last = await get(api(), "/v1/auth/google/callback?code=x&state=y", { ip });
+      if (i === 599) sixHundredth = last.statusCode;
     }
+    expect(sixHundredth).toBe(302);
     expect(last?.statusCode).toBe(429);
   });
 
