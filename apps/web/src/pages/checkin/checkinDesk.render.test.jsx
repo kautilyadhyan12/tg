@@ -168,6 +168,37 @@ describe('the worst thing: somebody else’s details left on the desk', () => {
     expect(checkinService.scan).toHaveBeenCalledTimes(2);
   });
 
+  it('the last person’s pass read again never replaces the next person’s scan while it is on its way', async () => {
+    let answerB;
+    checkinService.scan
+      .mockResolvedValueOnce(checkedIn('Olivia Bennett', { status: null, payment: 'Overdue', onList: true }))
+      .mockImplementationOnce(() => new Promise((resolve) => (answerB = resolve)));
+    mount();
+    scan(PASS);
+    await screen.findByText('Olivia Bennett');
+    scan(PASS_B);
+    expect(screen.getByText('Checking…')).toBeTruthy();
+    // Olivia is still in front of the camera: her pass is read again.
+    scan(PASS);
+    expect(screen.queryByText('Olivia Bennett')).toBeNull();
+    expect(screen.getByText('Checking…')).toBeTruthy();
+    await act(async () => answerB(checkedIn('Liam Hughes')));
+    expect(screen.getByText('Liam Hughes')).toBeTruthy();
+    expect(screen.queryByText('Olivia Bennett')).toBeNull();
+    expect(checkinService.scan).toHaveBeenCalledTimes(2);
+  });
+
+  it('a read that is no pass never replaces a scan on its way either', async () => {
+    let answerB;
+    checkinService.scan.mockImplementationOnce(() => new Promise((resolve) => (answerB = resolve)));
+    mount();
+    scan(PASS_B);
+    scan('https://example.com/' + 'x'.repeat(60));
+    expect(screen.getByText('Checking…')).toBeTruthy();
+    await act(async () => answerB(checkedIn('Liam Hughes')));
+    expect(screen.getByText('Liam Hughes')).toBeTruthy();
+  });
+
   it('after the pass has died the same code goes to the server again', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     checkinService.scan.mockResolvedValueOnce(checkedIn('Olivia Bennett')).mockResolvedValueOnce({ result: 'fresh_pass_needed', gymName: 'Iron House' });

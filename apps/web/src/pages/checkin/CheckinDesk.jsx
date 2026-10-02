@@ -210,12 +210,11 @@ function Desk({ look }) {
     }, RESULT_SHOW_MS);
   }, []);
 
-  /** Shown at once, in place of anything still in flight. */
+  /** An answer the desk already has, shown at once — but never over a scan still on its
+   *  way: that is the next person, and their answer is the one they are waiting for. */
   const showNow = useCallback(
     (answer) => {
-      seq.current += 1;
-      inFlight.current = null;
-      setPending(false);
+      if (inFlight.current !== null) return;
       show(answer);
     },
     [show],
