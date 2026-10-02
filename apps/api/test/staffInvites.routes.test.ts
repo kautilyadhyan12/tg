@@ -16,7 +16,7 @@ import { loadConfig } from "../src/config.js";
 import type { InviteEmail, InviteSendResult, InviteTransport } from "../src/email/resend.js";
 import type { MailCheck } from "../src/modules/orgs/invites/decide.js";
 import { inviteSettings } from "../src/modules/orgs/invites/settings.js";
-import { sendDueStaffInvites, type StaffSendRun } from "../src/modules/orgs/staffInvites/sender.js";
+import { sendDueStaffInvites, type StaffSendRun, type StaffSenderDeps } from "../src/modules/orgs/staffInvites/sender.js";
 import { forgetOldStaffInvites } from "../src/modules/orgs/staffInvites/repo.js";
 import { emailHmac } from "../src/modules/orgs/invites/address.js";
 import { emailsUsedToday } from "../src/modules/orgs/invites/repo.js";
@@ -220,7 +220,7 @@ d("staff invited by email (real Postgres)", () => {
   const domains = new Map<string, MailCheck>();
   const log = { info: () => undefined, warn: () => undefined };
   const ourGyms = async () => (await mine()).map((row) => (row as { id: string }).id);
-  const runSender = async (): Promise<StaffSendRun> =>
+  const runSender = async (over: Partial<StaffSenderDeps> = {}): Promise<StaffSendRun> =>
     await sendDueStaffInvites({
       gymIds: await ourGyms(),
       sql,
@@ -231,6 +231,7 @@ d("staff invited by email (real Postgres)", () => {
       mailDomain: (domain) => Promise.resolve(domains.get(domain) ?? "accepts"),
       now: () => new Date(Date.now() + 1),
       sleep: () => Promise.resolve(),
+      ...over,
     });
   const emailsTo = (address: string) => outbox.filter((message) => message.to === address);
 
@@ -453,6 +454,24 @@ d("staff invited by email (real Postgres)", () => {
       expect(twice.statusCode).toBe(409);
       expect(errorOf(twice).error).toBe("already_invited");
       expect((await invitesOf(gym)).filter((i) => i.email === addr("ap-waiting")).length).toBe(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // The security pass over "getting in" (2026-10-02): anybody can register an account
+  // under an address they do not hold, and typing that address on Staff made it a
+  // manager at once, with the whole member list.
+  it(
+    "a member whose account never proved its address is sent the invitation, not made staff",
+    async () => {
+      const gym = await makeGym("Unproved Gym");
+      const squatter = await registerWithPassword(addr("unproved"));
+      await makeMember(gym, squatter);
+      const res = await invite(gym, addr("unproved"), "manager");
+      expect(res.statusCode, res.body).toBe(201);
+      expect(createStaffInviteResponseSchema.parse(JSON.parse(res.body)).outcome).toBe("invited");
+      expect(await staffRowOf(gym, squatter)).toBeNull();
+      expect(await readsMembers(gym, squatter)).not.toBe(200);
     },
     TEST_TIMEOUT_MS,
   );
@@ -806,6 +825,29 @@ d("staff invited by email (real Postgres)", () => {
     TEST_TIMEOUT_MS,
   );
 
+  // The integrity pass over "getting in" (2026-10-02): the worker decided on what it read
+  // before asking the address's mail domain, and never looked again.
+  it(
+    "an invitation the owner cancels while the worker asks the mail domain is not sent",
+    async () => {
+      await runSender();
+      const gym = await makeGym("Gap Staff Gym");
+      const sent = await invited(gym, addr("gap-wes"));
+      const run = await runSender({
+        mailDomain: async () => {
+          expect((await del(`${invitesUrl(gym)}/${sent.id}`, gym.owner.cookies)).statusCode).toBe(200);
+          return "accepts";
+        },
+      });
+      expect(emailsTo(addr("gap-wes"))).toHaveLength(0);
+      expect(run.sent).toBe(0);
+      const rows = await sql<{ state: string; reason: string | null }[]>`
+        SELECT state, reason FROM gym_staff_invite_sends WHERE invite_id = ${sent.id}`;
+      expect(rows).toEqual([{ state: "skipped", reason: "invitation_closed" }]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   // =========================================================================
   // THE EMAIL
   // =========================================================================
@@ -995,6 +1037,25 @@ d("staff invited by email (real Postgres)", () => {
   const ageSends = (inviteId: string) =>
     sql`UPDATE gym_staff_invite_sends SET created_at = created_at - interval '8 days' WHERE invite_id = ${inviteId}`;
   const DAY = 24 * 60 * 60 * 1000;
+
+  // The integrity pass over "getting in" (2026-10-02): the hourly tidy-up counted 97 days
+  // from when an invitation was made, and Send again moves its 7 days on.
+  it(
+    "an invitation sent again 95 days after it was made is kept while its new 7 days run",
+    async () => {
+      const gym = await makeGym("Late Again Gym");
+      const sent = await invited(gym, addr("late-again"));
+      await runSender();
+      await sql`
+        UPDATE gym_staff_invites SET created_at = now() - interval '95 days', expires_at = now() - interval '88 days'
+        WHERE id = ${sent.id}`;
+      await ageSends(sent.id);
+      expect((await resent(gym, sent.id)).state).toBe("waiting");
+      await forgetOldStaffInvites(sql, new Date(Date.now() + 3 * DAY));
+      expect((await invitesOf(gym)).map((i) => i.id)).toEqual([sent.id]);
+    },
+    TEST_TIMEOUT_MS,
+  );
 
   it(
     `Send again: ${String(STAFF_INVITE_RESENDS_MAX)} times, each one more email and 7 more days from now; then refused; a declined or ended one waits again and can be accepted`,

@@ -14,6 +14,7 @@ import { createAnalytics, type Analytics } from "./analytics.js";
 import { createResendTransport } from "./email/resend.js";
 import { createDevEmailSender, createResendEmailSender, type EmailSender } from "./modules/auth/email.js";
 import { registerAuthenticate } from "./modules/auth/plugin.js";
+import { ACCESS_COOKIE, verifyAccessTokenClaims } from "./modules/auth/tokens.js";
 import { AuthError, type PasswordHasher } from "./modules/auth/service.js";
 import { registerAuthRoutes } from "./modules/auth/routes.js";
 import { createGoogleVerifier, type GoogleVerifier } from "./modules/auth/google.js";
@@ -163,10 +164,31 @@ export async function buildApp(
     // Content-Disposition carries a download's file name (the member list's CSV).
     exposedHeaders: ["Idempotent-Replay", "Content-Disposition"],
   });
+  // The app-wide floor under the per-route limits. A gym's front desk and its members on
+  // the gym's wi-fi are ONE address, so a signed-in person is counted on their own (by
+  // the access token, only once its signature verifies) and an address counts only the
+  // people who are not signed in (the security pass over "getting in", 2026-10-02).
   await app.register(rateLimit, {
     global: true,
-    max: 300, // generous global floor; strict per-route limits land with auth (P2.1, R3.7)
+    keyGenerator: (req) => {
+      const header = req.headers.authorization;
+      const token = (header?.startsWith("Bearer ") === true ? header.slice("Bearer ".length) : null) ?? req.cookies[ACCESS_COOKIE] ?? null;
+      if (token !== null && token !== "") {
+        try {
+          return `person:${verifyAccessTokenClaims(token, config).userId}`;
+        } catch {
+          // Not a token we signed: counted as the address it came from.
+        }
+      }
+      return `address:${req.ip}`;
+    },
+    max: 600,
     timeWindow: "1 minute",
+    // A typed refusal that says how long to wait, the shape the code door's 429 has.
+    errorResponseBuilder: (_req, context) => {
+      const seconds = Math.max(1, Math.ceil(context.ttl / 1000));
+      return new AuthError(429, "rate_limited", `Too many requests. Please try again in ${String(seconds)} seconds.`, seconds);
+    },
   });
 
   // Unmatched routes: same typed shape as errors, and rate-limited too —

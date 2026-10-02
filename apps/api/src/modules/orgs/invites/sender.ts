@@ -149,8 +149,61 @@ async function sendOne(deps: SenderDeps, claim: repo.ClaimedSend): Promise<Tally
   }
   const email = claim.email;
   if (email === null) return await stop(deps, claim, "not_on_list");
-  const ctx = await repo.sendContext(deps.sql, claim);
   const hmac = emailHmac(deps.settings.hmacKey, email);
+  const { facts, ctx, gymName } = await readFacts(deps, claim, email, hmac, now);
+  let decision = decideSend(facts);
+  if (decision.kind === "check_mail") decision = decideSend({ ...facts, mail: await deps.mailDomain(emailDomain(email)) });
+  switch (decision.kind) {
+    case "skip":
+      return await stop(deps, claim, decision.reason);
+    case "retry":
+    case "check_mail":
+      return await hold(deps, claim, "dns_unavailable");
+    case "send":
+      break;
+  }
+  if (ctx.gym === null) throw new Error("decideSend allowed a send without a gym");
+  const message = inviteMessage(deps.settings, deps.sender, claim, email, ctx.gym, gymName);
+  if (!(await repo.markMaybeSent(deps.sql, claim, hmac, now))) {
+    // Something moved while the worker decided (staff took the person off, they
+    // unsubscribed), or the claim is no longer this run's: read again to say which.
+    const again = decideSend({ ...(await readFacts(deps, claim, email, hmac, now)).facts, mail: "accepts" });
+    return again.kind === "skip" ? await stop(deps, claim, again.reason) : leaseLost(deps, claim);
+  }
+  const result = await deps.transport.send(message);
+  switch (result.kind) {
+    case "sent":
+      return await finish(deps, claim, { kind: "sent", providerId: result.id });
+    case "not_sent": {
+      deps.log.warn(
+        { event: "invite.send_refused", sendId: claim.id, gymId: claim.gymId, status: result.status },
+        "the email service refused an invitation email; it waits",
+      );
+      const reason: MemberInviteEmailReason = result.status === 400 || result.status === 422 ? "provider_refused" : "provider_unavailable";
+      const held = await hold(deps, claim, reason);
+      // A key, an account or a rate problem is every email's: the run stops.
+      return held === "held" && [401, 403, 429].includes(result.status) ? "stop" : held;
+    }
+    case "unclear": {
+      deps.log.warn(
+        { event: "invite.send_unclear", sendId: claim.id, gymId: claim.gymId, status: result.status, attempts: claim.attempts },
+        "an invitation email may not have gone; it will be tried again under the same key",
+      );
+      await repo.retrySend(deps.sql, claim, new Date(now.getTime() + retryAfter(claim)));
+      return "retried";
+    }
+  }
+}
+
+/** What decides whether an invitation email may go, read now. */
+async function readFacts(
+  deps: SenderDeps,
+  claim: repo.ClaimedSend,
+  email: string,
+  hmac: string,
+  now: Date,
+): Promise<{ facts: SendFacts; ctx: repo.SendContext; gymName: string }> {
+  const ctx = await repo.sendContext(deps.sql, claim);
   const suppression = (await repo.suppressionsFor(deps.sql, claim.gymId, [hmac])).get(hmac) ?? null;
   const gymName = ctx.gym === null ? "" : gymNameForEmail(ctx.gym.name);
   const today = ctx.gym === null ? null : dayInTz(now, ctx.gym.timezone);
@@ -175,43 +228,7 @@ async function sendOne(deps: SenderDeps, claim: repo.ClaimedSend): Promise<Tally
     shared: isSharedAddress(email),
     mail: null,
   };
-  let decision = decideSend(facts);
-  if (decision.kind === "check_mail") decision = decideSend({ ...facts, mail: await deps.mailDomain(emailDomain(email)) });
-  switch (decision.kind) {
-    case "skip":
-      return await stop(deps, claim, decision.reason);
-    case "retry":
-    case "check_mail":
-      return await hold(deps, claim, "dns_unavailable");
-    case "send":
-      break;
-  }
-  if (ctx.gym === null) throw new Error("decideSend allowed a send without a gym");
-  const message = inviteMessage(deps.settings, deps.sender, claim, email, ctx.gym, gymName);
-  if (!(await repo.markMaybeSent(deps.sql, claim, now))) return leaseLost(deps, claim);
-  const result = await deps.transport.send(message);
-  switch (result.kind) {
-    case "sent":
-      return await finish(deps, claim, { kind: "sent", providerId: result.id });
-    case "not_sent": {
-      deps.log.warn(
-        { event: "invite.send_refused", sendId: claim.id, gymId: claim.gymId, status: result.status },
-        "the email service refused an invitation email; it waits",
-      );
-      const reason: MemberInviteEmailReason = result.status === 400 || result.status === 422 ? "provider_refused" : "provider_unavailable";
-      const held = await hold(deps, claim, reason);
-      // A key, an account or a rate problem is every email's: the run stops.
-      return held === "held" && [401, 403, 429].includes(result.status) ? "stop" : held;
-    }
-    case "unclear": {
-      deps.log.warn(
-        { event: "invite.send_unclear", sendId: claim.id, gymId: claim.gymId, status: result.status, attempts: claim.attempts },
-        "an invitation email may not have gone; it will be tried again under the same key",
-      );
-      await repo.retrySend(deps.sql, claim, new Date(now.getTime() + retryAfter(claim)));
-      return "retried";
-    }
-  }
+  return { facts, ctx, gymName };
 }
 
 const retryAfter = (claim: repo.ClaimedSend): number =>

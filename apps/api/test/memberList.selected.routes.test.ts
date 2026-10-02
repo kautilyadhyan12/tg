@@ -9,6 +9,7 @@
 import { addAnyway } from "./memberListAddAnyway.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { proveAddress } from "./proveAddress.js";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { InviteEmail, InviteTransport } from "../src/email/resend.js";
@@ -170,6 +171,7 @@ d("the people selected (real Postgres)", () => {
     const id = (JSON.parse(applied.body) as { application?: { id: string } }).application?.id;
     if (id === undefined) throw new Error("apply returned no application");
     expect((await post(`/v1/orgs/${org.org.id}/applications/${id}/confirm`, {}, owner.cookies)).statusCode).toBe(200);
+    await proveAddress(sql, who.email);
     expect((await post(`/v1/orgs/${org.org.id}/staff`, { email: who.email, role: "trainer" }, owner.cookies)).statusCode).toBe(201);
   };
 

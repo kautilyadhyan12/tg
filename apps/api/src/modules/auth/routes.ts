@@ -181,14 +181,16 @@ export function registerAuthRoutes(
   // guesses a code). These Redis buckets are the wall against a client that VARIES
   // the address, which the per-address rule cannot see: every send is an
   // email Kd pays for, and on the free plan a burst of a hundred takes sign-in
-  // down for real users. So the per-IP ceiling is the same order as the
-  // per-address one (a gym induction day is thirty people on one wi-fi, which
-  // twenty an hour still admits over the day), and on top of it sits ONE
-  // ceiling on sends a day across everyone — the outage-and-bill stop.
+  // down for real users. Since join codes went (3c) a code is the only way a member
+  // gets into their gym, so the per-IP ceiling admits a gym's whole induction on its
+  // one wi-fi in an hour — the 200 people the Join door plans for, some asking twice
+  // (it was 20, and the 21st person at one gym was refused: the security pass over
+  // "getting in", 2026-10-02). On top of it sits ONE ceiling on sends a day across
+  // everyone — the outage-and-bill stop.
   const codeSendLimit = createDualRateLimit({
     name: "code_send",
     max: 10,
-    ipMax: 20,
+    ipMax: 300,
     windowMs: HOUR_MS,
     identifier: identifierFrom,
     redis: deps.redis,
@@ -196,7 +198,7 @@ export function registerAuthRoutes(
   const codeVerifyLimit = createDualRateLimit({
     name: "code_verify",
     max: 20,
-    ipMax: 40,
+    ipMax: 600,
     windowMs: HOUR_MS,
     identifier: identifierFrom,
     redis: deps.redis,

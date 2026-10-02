@@ -8,6 +8,7 @@
 // member the gym meant to invite.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { proveAddress } from "./proveAddress.js";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { emailHmac } from "../src/modules/orgs/invites/address.js";
@@ -320,6 +321,7 @@ d("not me, and the edges (real Postgres)", () => {
       await addInvited(gym, { fullName: "Tom Reed", email: addr("tom") });
       const tom = await signIn(addr("tom"), "Tom Reed");
       expect((await accept(tom, await inviteIdOf(gym, addr("tom")))).statusCode).toBe(200);
+      await proveAddress(sql, addr("tom"));
       const appointed = await post(`/v1/orgs/${gym.id}/staff`, { email: addr("tom"), role: "trainer" }, gym.owner.cookies);
       expect(appointed.statusCode, appointed.body).toBe(201);
       const asTrainer = await rosterOf(gym, tom);
@@ -515,6 +517,7 @@ d("not me, and the edges (real Postgres)", () => {
       await addInvited(gym, { fullName: "Jay Fox", email: addr("jay") });
       const jay = await signIn(addr("jay"), "Jay Fox");
       expect((await accept(jay, await inviteIdOf(gym, addr("jay")))).statusCode).toBe(200);
+      await proveAddress(sql, addr("jay"));
       expect((await post(`/v1/orgs/${gym.id}/staff`, { email: addr("jay"), role: "trainer" }, gym.owner.cookies)).statusCode).toBe(201);
       expect((await get(`/v1/orgs/${gym.id}/member-list/not-me`, jay.cookies)).statusCode).toBe(403);
     },

@@ -122,12 +122,23 @@ export async function staffSendContext(sql: SqlOrTx, send: ClaimedStaffSend, now
 }
 
 /** Record, before an email is handed to Resend, that from now on it may have gone.
- *  False when the claim is no longer this run's: then nothing may be sent. */
-export async function markMaybeSent(sql: SqlOrTx, send: ClaimedStaffSend, at: Date): Promise<boolean> {
+ *  False when the claim is no longer this run's, or when what the worker decided on
+ *  moved since it read it (the invitation cancelled or ended, the address unsubscribed,
+ *  the gym stopped): then nothing may be sent. One statement, so a change committed
+ *  before it is seen here and one committed after it is after the email. */
+export async function markMaybeSent(sql: SqlOrTx, send: ClaimedStaffSend, hmac: string, at: Date): Promise<boolean> {
   const rows = await sql<{ id: string }[]>`
-    UPDATE gym_staff_invite_sends SET maybe_sent_at = coalesce(maybe_sent_at, ${at})
-    WHERE id = ${send.id} AND gym_id = ${send.gymId} AND state = 'sending' AND attempts = ${send.attempts}
-    RETURNING id`;
+    UPDATE gym_staff_invite_sends s SET maybe_sent_at = coalesce(s.maybe_sent_at, ${at})
+    WHERE s.id = ${send.id} AND s.gym_id = ${send.gymId} AND s.state = 'sending' AND s.attempts = ${send.attempts}
+      AND EXISTS (
+        SELECT 1 FROM gym_staff_invites i
+        WHERE i.id = s.invite_id AND i.gym_id = s.gym_id AND i.state = 'pending' AND i.cleared_at IS NULL
+          AND i.expires_at > ${at} AND i.email = s.email)
+      AND NOT EXISTS (
+        SELECT 1 FROM email_suppressions x
+        WHERE x.email_hmac = ${hmac} AND (x.gym_id = s.gym_id OR x.gym_id IS NULL))
+      AND EXISTS (SELECT 1 FROM gyms g WHERE g.id = s.gym_id AND g.status = 'active' AND g.invites_stopped_at IS NULL)
+    RETURNING s.id`;
   return rows.length === 1;
 }
 

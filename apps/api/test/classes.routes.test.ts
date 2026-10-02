@@ -20,6 +20,7 @@
 // the route.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { proveAddress } from "./proveAddress.js";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { fillClassSessions, fillClassSessionsJob } from "../src/modules/orgs/classes/fill.js";
@@ -288,6 +289,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       const rivalOrg = await makeOrg(rival.cookies, "Rival Classes Gym");
       await joinAsMember(member.cookies, org, owner.cookies);
       await joinAsMember(trainer.cookies, org, owner.cookies);
+      await proveAddress(sql, trainer.email);
       expect(
         (await post(`/v1/orgs/${org.org.id}/staff`, { email: trainer.email, role: "trainer" }, owner.cookies))
           .statusCode,
@@ -434,12 +436,14 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
 
       // THEIR trainer — real staff, of the wrong gym.
       await joinAsMember(theirCoach.cookies, rivalOrg, rival.cookies);
+      await proveAddress(sql, theirCoach.email);
       expect(
         (await post(`/v1/orgs/${rivalOrg.org.id}/staff`, { email: theirCoach.email, role: "trainer" }, rival.cookies))
           .statusCode,
       ).toBe(201);
       // OUR trainer, and one of our members who is not staff.
       await joinAsMember(ourCoach.cookies, org, owner.cookies);
+      await proveAddress(sql, ourCoach.email);
       expect(
         (await post(`/v1/orgs/${org.org.id}/staff`, { email: ourCoach.email, role: "trainer" }, owner.cookies))
           .statusCode,
@@ -532,6 +536,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       const manager = await makeUser("tick-manager");
       const org = await makeOrg(owner.cookies, "Ticks Classes Gym");
       await joinAsMember(manager.cookies, org, owner.cookies);
+      await proveAddress(sql, manager.email);
       expect(
         (await post(`/v1/orgs/${org.org.id}/staff`, { email: manager.email, role: "manager" }, owner.cookies))
           .statusCode,
@@ -751,6 +756,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       const org = await makeOrg(owner.cookies, "Own Classes Gym");
       for (const person of [dana, sam]) {
         await joinAsMember(person.cookies, org, owner.cookies);
+        await proveAddress(sql, person.email);
         expect(
           (await post(`/v1/orgs/${org.org.id}/staff`, { email: person.email, role: "trainer" }, owner.cookies))
             .statusCode,
@@ -846,6 +852,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       const coach = await makeUser("rep-coach");
       const org = await makeOrg(owner.cookies, "Repeat Edit Gym");
       await joinAsMember(coach.cookies, org, owner.cookies);
+      await proveAddress(sql, coach.email);
       expect(
         (await post(`/v1/orgs/${org.org.id}/staff`, { email: coach.email, role: "trainer" }, owner.cookies))
           .statusCode,
@@ -1294,6 +1301,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       const org = await makeOrg(owner.cookies, "Coach Classes Gym");
       const rivalOrg = await makeOrg(rival.cookies, "Coach Rival Gym");
       await joinAsMember(coach.cookies, org, owner.cookies);
+      await proveAddress(sql, coach.email);
       expect(
         (await post(`/v1/orgs/${org.org.id}/staff`, { email: coach.email, role: "trainer" }, owner.cookies))
           .statusCode,

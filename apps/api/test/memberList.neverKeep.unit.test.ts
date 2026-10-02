@@ -292,6 +292,37 @@ describe("a postcode is an address, in every word the English-speaking world wri
   });
 
   it.each([
+    // The security pass over "getting in" (2026-10-02) uploaded these and they were
+    // kept: a locker's combination is a key, a memorable word and a maiden name are
+    // the answers banks use to let somebody in.
+    ["Locker combo"],
+    ["Locker combination"],
+    ["Lock combination"],
+    ["Combination lock"],
+    ["Padlock"],
+    ["Padlock code"],
+    ["Memorable word"],
+    ["Memorable information"],
+    ["Mother's maiden name"],
+    ["Maiden name"],
+  ])("drops %s, a key or a secret answer", (header) => {
+    for (const sheet of [NO_HINTS, WITH_ADDRESS, WITH_POSTCODE]) {
+      expect(neverKeptByHeader(header, sheet)).toBe("password_or_pin");
+    }
+  });
+
+  it.each([
+    // …while a gym's "combo" is a package it sells (an Indian gym's "Gym + Yoga combo").
+    ["Combo"],
+    ["Membership combo"],
+    ["Combo pack"],
+    ["Gym + Yoga combo"],
+    ["Combination plan"],
+  ])("keeps %s, a package and not a lock", (header) => {
+    expect(neverKeptByHeader(header, NO_HINTS)).toBe(null);
+  });
+
+  it.each([
     // Re-check of PR #90: round one's fix made the bare-PIN rule fire only on a
     // heading that IS "PIN", and these then fell through both rules and were
     // kept on every sheet. "Member PIN" is the ordinary wording for a gym's

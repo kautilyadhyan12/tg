@@ -8,6 +8,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import Fastify from "fastify";
 import postgres from "postgres";
+import { proveAddress } from "./proveAddress.js";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { InviteEmail, InviteSendResult, InviteTransport } from "../src/email/resend.js";
@@ -171,6 +172,7 @@ d("press Invite (real Postgres)", () => {
 
   const appoint = async (who: User, org: CreatedOrg, owner: User, role: "trainer" | "manager") => {
     await join(who, org, owner);
+    await proveAddress(sql, who.email);
     expect((await post(`/v1/orgs/${org.org.id}/staff`, { email: who.email, role }, owner.cookies)).statusCode).toBe(201);
   };
 
@@ -731,6 +733,113 @@ d("press Invite (real Postgres)", () => {
       expect((await previewInvite(off, owner.userId, gym, {}, () => Promise.resolve(true)))?.blocked).toBe("invites_off");
       const views = await invitationsOf(sql, sendingOff, gym, [{ id: "00000000-0000-4000-8000-000000000000", email: addr("off-ida") }]);
       expect(views[0]?.state).toBe("pending");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // THE WORST THING THE FIXES OVER "GETTING IN" GUARD (the integrity pass, 2026-10-02):
+  // somebody staff took off the list is invited, emailed and let in anyway. Batches after
+  // the first were written with no lock, so a take-off between them was overwritten.
+  it(
+    "a person taken off while a big press is between batches is never invited or emailed",
+    async () => {
+      const owner = await makeUser("between-owner");
+      const gym = (await makeGym(owner, "Between Gym")).org.id;
+      const people = 503;
+      await sql`INSERT INTO gym_member_lists (gym_id, version) VALUES (${gym}, 1)`;
+      await sql`
+        INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source, status)
+        SELECT ${gym}, 'Person ' || n, 'minv-t-between' || n || ${`@${DOMAIN}`},
+               encode(sha256(convert_to(${gym} || '-between-' || n, 'UTF8')), 'hex'), 'upload', 'Active'
+        FROM generate_series(1, ${people}) AS n`;
+      const seen = await previewOf(gym, owner);
+      expect(seen.reach).toBe(people);
+      const taken: { email: string | null } = { email: null };
+      const deps = {
+        sql,
+        redis: createMemoryRedis(),
+        log: { warn: () => undefined },
+        now: () => new Date(),
+        invites: settings,
+        afterInviteBatch: async () => {
+          if (taken.email !== null) return;
+          // Somebody the first batch did not reach: a colleague presses Remove on them.
+          const waiting = await sql<{ id: string; email: string }[]>`
+            SELECT e.id, e.email::text AS email FROM gym_member_list_entries e
+            WHERE e.gym_id = ${gym}
+              AND NOT EXISTS (SELECT 1 FROM gym_invite_sends s WHERE s.gym_id = e.gym_id AND s.email = e.email)
+            ORDER BY e.full_name LIMIT 1`;
+          const pat = waiting[0];
+          if (pat === undefined) throw new Error("the first batch reached everybody");
+          expect((await del(entryUrl(gym, pat.id), owner.cookies)).statusCode).toBe(200);
+          taken.email = pat.email;
+        },
+      };
+      const pressed = await pressInvite(
+        deps,
+        owner.userId,
+        gym,
+        { version: seen.version, expectedCount: seen.reach, permissionConfirmed: true },
+        () => Promise.resolve(true),
+      );
+      const takenOff = taken.email;
+      if (takenOff === null) throw new Error("the press never reached a second batch");
+      expect(pressed?.queued).toBe(people - 1);
+      const emails = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_invite_sends WHERE gym_id = ${gym} AND email = ${takenOff}`;
+      expect(emails[0]?.n).toBe(0);
+      const invitations = await sql<{ state: string }[]>`
+        SELECT state FROM gym_invites WHERE gym_id = ${gym} AND email_hmac = ${emailHmac(settings.hmacKey, takenOff)}`;
+      expect(invitations.filter((invite) => invite.state === "pending")).toEqual([]);
+      await sql`DELETE FROM gym_invite_sends WHERE gym_id = ${gym}`;
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // The same worst thing at the worker: what it decided on moved while it asked the
+  // address's mail domain, the widest part of its look (the integrity pass, 2026-10-02).
+  it(
+    "taken off, or unsubscribed, while the worker asks the mail domain: no email goes",
+    async () => {
+      await runSender();
+      const owner = await makeUser("gap-owner");
+      const gym = (await makeGym(owner, "Gap Gym")).org.id;
+      const uma = await typeIn(gym, owner, { fullName: "Uma", email: addr("gap-uma") });
+      expect((await post(`${entryUrl(gym, uma.entry.entryId)}/invite`, {}, owner.cookies)).statusCode).toBe(200);
+      const tookOff = await runSender({
+        mailDomain: async () => {
+          expect((await del(entryUrl(gym, uma.entry.entryId), owner.cookies)).statusCode).toBe(200);
+          return "accepts";
+        },
+      });
+      expect(callsTo(addr("gap-uma"))).toHaveLength(0);
+      expect(tookOff.sent).toBe(0);
+
+      const val = await typeIn(gym, owner, { fullName: "Val", email: addr("gap-val") });
+      expect((await post(`${entryUrl(gym, val.entry.entryId)}/invite`, {}, owner.cookies)).statusCode).toBe(200);
+      const invite = (await sql<{ id: string }[]>`
+        SELECT id FROM gym_invites WHERE gym_id = ${gym} AND email_hmac = ${emailHmac(settings.hmacKey, addr("gap-val"))}`)[0];
+      if (invite === undefined) throw new Error("Val was not invited");
+      const unsubscribed = await runSender({
+        mailDomain: async () => {
+          const res = await api().inject({
+            method: "POST",
+            url: `/v1/email/unsubscribe?t=${unsubscribeToken(settings.hmacKey, invite.id)}`,
+            remoteAddress: nextIp(),
+            headers: { "content-type": "application/x-www-form-urlencoded" },
+            payload: "List-Unsubscribe=One-Click",
+          });
+          expect(res.statusCode).toBe(200);
+          return "accepts";
+        },
+      });
+      expect(callsTo(addr("gap-val"))).toHaveLength(0);
+      expect(unsubscribed.sent).toBe(0);
+      const finished = await sql<{ state: string; reason: string | null }[]>`
+        SELECT state, reason FROM gym_invite_sends WHERE gym_id = ${gym} ORDER BY created_at`;
+      expect(finished).toEqual([
+        { state: "skipped", reason: "invitation_withdrawn" },
+        { state: "skipped", reason: "unsubscribed" },
+      ]);
     },
     TEST_TIMEOUT_MS,
   );

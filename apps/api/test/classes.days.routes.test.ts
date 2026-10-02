@@ -7,6 +7,7 @@
 // never only the reply, and every refused URL has a positive control.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { proveAddress } from "./proveAddress.js";
 import { randomUUID } from "node:crypto";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
@@ -163,6 +164,7 @@ d("the week view and this day only (real Postgres)", () => {
         .statusCode,
     ).toBe(200);
     if (role !== null) {
+      await proveAddress(sql, person.email);
       expect(
         (await post(`/v1/orgs/${org.org.id}/staff`, { email: person.email, role }, ownerCookies))
           .statusCode,

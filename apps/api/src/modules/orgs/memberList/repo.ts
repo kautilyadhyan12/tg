@@ -1959,34 +1959,31 @@ export async function exportRows(sql: SqlOrTx, gymId: string, ids: readonly stri
   }));
 }
 
-/** TELL POSTGRES WHAT IS NOW IN THE TABLE, after a confirm has filled it.
+/** TELL POSTGRES WHAT IS NOW IN THE TABLE, once confirms have filled it.
  *
- *  A confirm writes up to ten thousand rows into a table whose statistics still say
- *  it holds ONE — statistics are table-wide, so that is the true state before
- *  anybody has a list — and the planner then costs the per-member lookup in
- *  `membersAgainstList` against a table it believes is empty. That statement answers
- *  everything about a gym's own people and runs on the preview read and on every
- *  page of names, on the ONE connection the whole API shares.
+ *  A confirm writes up to ten thousand rows into a table whose statistics may still say
+ *  it holds almost nothing, and the planner then costs the per-member lookup in
+ *  `membersAgainstList` against a table it believes is empty. **Measured 2026-09-21**
+ *  (`.cost/stale.ts`, 10,000 entries against 200 members): stale 39.7 · 22.1 · 21.6 ms,
+ *  after an ANALYZE 10.2 · 9.8 · 9.3 ms. Autovacuum reaches the same place by itself.
  *
- *  **Measured 2026-09-21** (`.cost/stale.ts`, 10,000 entries against 200 members,
- *  three runs each, the processor at its full 2,592 MHz): stale **39.7 · 22.1 ·
- *  21.6 ms**, and after this **10.2 · 9.8 · 9.3 ms**. Walking the whole list a page
- *  at a time straight after a confirm was **3,198 ms** with it and **4,514 ms**
- *  without. Autovacuum reaches the same place by itself within about a minute; the
- *  minute in question is the one where staff are looking at the list they have just
- *  confirmed and paging through it.
- *
- *  Postgres's own manual says to run this after a bulk load, which is exactly what a
- *  confirm is. **It costs 269 ms at ten thousand rows**, once, and a gym confirms a
- *  list about once a month. It is a modest win bought cheaply, not a rescue: an
- *  earlier note here claimed a hundredfold and 3,152 ms, which is not reproducible
- *  and is struck.
- *
- *  **IT RUNS AFTER THE TRANSACTION HAS COMMITTED**, so the gym's row lock is already
- *  released and nothing waits on it but the connection; and it is HOUSEKEEPING, so a
- *  failure is warned about and never fails a confirm that has already been applied. */
-export async function analyseEntries(sql: Sql): Promise<void> {
+ *  **NOT ON THE REQUEST PATH.** It used to run after every confirm on the API's one
+ *  connection, and ANALYZE reads the WHOLE table, every gym's people: the security pass
+ *  over "getting in" (2026-10-02) measured 1.1–1.3 s of the API answering nobody after a
+ *  one-row confirm on a table of 40,808. The worker runs this every five minutes on its
+ *  own connection and analyses only when at least `MEMBER_LIST_ANALYSE_AFTER` rows have
+ *  changed since the last ANALYZE (Postgres's own count); ANALYZE takes no lock that
+ *  holds a read or a write. */
+export const MEMBER_LIST_ANALYSE_AFTER = 1000;
+
+export async function analyseEntriesIfMoved(sql: Sql): Promise<{ changed: number; analysed: boolean }> {
+  const rows = await sql<{ changed: string }[]>`
+    SELECT n_mod_since_analyze::text AS changed FROM pg_stat_user_tables
+    WHERE relid = 'gym_member_list_entries'::regclass`;
+  const changed = Number(rows[0]?.changed ?? "0");
+  if (changed < MEMBER_LIST_ANALYSE_AFTER) return { changed, analysed: false };
   await sql`ANALYZE gym_member_list_entries`;
+  return { changed, analysed: true };
 }
 
 // ── KEEPING THE LIST BY HAND (3a-iv; §9.9, §11.6) ───────────────────────────
@@ -2343,12 +2340,15 @@ export async function removedWithRecord(
     JOIN users u ON u.id = m.user_id
     WHERE m.gym_id = ${gymId}
       AND m.removed_entry_id = ${entryId}
-      AND u.deleted_at IS NULL
+      AND u.deleted_at IS NULL AND u.status = 'active'
       AND NOT EXISTS (
         SELECT 1 FROM gym_members l
         WHERE l.gym_id = m.gym_id AND l.user_id = m.user_id AND l.id <> m.id
           AND (l.removed_at IS NULL OR l.joined_at > m.joined_at))
-    ORDER BY m.joined_at, m.id`;
+    ORDER BY m.joined_at, m.id
+    -- Held: an account deleted while Put back runs is seen here, or waits for it and
+    -- then closes the membership Put back opened.
+    FOR SHARE OF u`;
   return rows.map((row) => ({ membershipId: row.id, userId: row.user_id, email: row.email }));
 }
 

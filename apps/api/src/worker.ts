@@ -35,6 +35,7 @@ import { inviteSettings } from "./modules/orgs/invites/settings.js";
 import { archiveLapsedGyms } from "./modules/orgs/archiveSweep.js";
 import { fillClassSessionsJob } from "./modules/orgs/classes/fill.js";
 import { expireStagedMemberListUploads } from "./modules/orgs/memberList/expiry.js";
+import { analyseEntriesIfMoved } from "./modules/orgs/memberList/repo.js";
 import { rollUpGymDays } from "./modules/orgs/rollup.js";
 import { ORGS_SWEEP_JOB, runJoinSweep, scheduleJoinSweep } from "./modules/orgs/joinSweepSchedule.js";
 import { expireLapsedGymTrials } from "./modules/orgs/trialSweep.js";
@@ -73,6 +74,7 @@ export const ORGS_ARCHIVE_JOB = "orgs.archive";
 export const ORGS_ROLLUP_JOB = "orgs.daily_rollup";
 export const ORGS_MEMBER_LIST_EXPIRY_JOB = "orgs.member_list_expiry";
 export const ORGS_CLASS_FILL_JOB = "orgs.class_fill";
+export const ORGS_MEMBER_LIST_ANALYSE_JOB = "orgs.member_list_analyse";
 
 const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
 const sql = postgres(config.DATABASE_URL, { prepare: false, max: 2 });
@@ -222,6 +224,28 @@ try {
   );
 } catch (err) {
   log.fatal({ err }, "failed to register the member-list expiry schedule");
+  process.exit(1);
+}
+
+// THE MEMBER LIST'S STATISTICS, every five minutes, on this process's own connection
+// (`analyseEntriesIfMoved`: it analyses only once enough rows have changed). Minutes
+// 2, 7, 12 … keep it off the hourly and nightly schedules' minutes.
+try {
+  await queue.upsertJobScheduler(
+    ORGS_MEMBER_LIST_ANALYSE_JOB,
+    { pattern: "2-59/5 * * * *" },
+    {
+      name: ORGS_MEMBER_LIST_ANALYSE_JOB,
+      opts: {
+        // Analysing twice is harmless; the next run tries again anyway.
+        attempts: 1,
+        removeOnComplete: { count: 50 },
+        removeOnFail: { count: 200 },
+      },
+    },
+  );
+} catch (err) {
+  log.fatal({ err }, "failed to register the member-list statistics schedule");
   process.exit(1);
 }
 
@@ -529,7 +553,8 @@ const worker = new Worker(
       job.name !== ORGS_ARCHIVE_JOB &&
       job.name !== ORGS_ROLLUP_JOB &&
       job.name !== ORGS_MEMBER_LIST_EXPIRY_JOB &&
-      job.name !== ORGS_CLASS_FILL_JOB
+      job.name !== ORGS_CLASS_FILL_JOB &&
+      job.name !== ORGS_MEMBER_LIST_ANALYSE_JOB
     ) {
       throw new Error(`unknown job on ${ROLLUPS_QUEUE}: ${job.name}`);
     }
@@ -612,6 +637,15 @@ const worker = new Worker(
     // Returns here for the same reason as its five siblings: one statement, so
     // the run either applied or raised, and a raise is already an unhandled
     // rejection that lands the job on the failed set.
+    if (job.name === ORGS_MEMBER_LIST_ANALYSE_JOB) {
+      const analysed = await analyseEntriesIfMoved(sql);
+      log.info(
+        { ...analysed, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
+        "job finished",
+      );
+      return;
+    }
+
     if (job.name === ORGS_CLASS_FILL_JOB) {
       const filled = await fillClassSessionsJob({ sql, log });
       log.info(

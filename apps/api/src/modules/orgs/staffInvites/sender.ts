@@ -92,20 +92,8 @@ async function sendOne(deps: StaffSenderDeps, claim: repo.ClaimedStaffSend): Pro
   }
   const email = claim.email;
   if (email === null) return await stop(deps, claim, "invitation_closed");
-  const ctx = await repo.staffSendContext(deps.sql, claim, now);
   const hmac = emailHmac(deps.settings.hmacKey, email);
-  const suppression = (await suppressionsFor(deps.sql, claim.gymId, [hmac])).get(hmac) ?? null;
-  const gymName = ctx.gym === null ? "" : gymNameForEmail(ctx.gym.name);
-  const facts: StaffSendFacts = {
-    inviteOpen: ctx.invite !== null && ctx.invite.open && ctx.invite.role !== null && ctx.invite.email.toLowerCase() === email.toLowerCase(),
-    gym:
-      ctx.gym === null
-        ? null
-        : { active: ctx.gym.active, onPlan: ctx.gym.onPlan, stopped: ctx.gym.stopped, named: gymName !== "" },
-    suppression,
-    addressValid: authEmailSchema.safeParse(email).success,
-    mail: null,
-  };
+  const { facts, ctx, gymName } = await readFacts(deps, claim, email, hmac, now);
   let decision = decideStaffSend(facts);
   if (decision.kind === "check_mail") decision = decideStaffSend({ ...facts, mail: await deps.mailDomain(emailDomain(email)) });
   switch (decision.kind) {
@@ -124,7 +112,12 @@ async function sendOne(deps: StaffSenderDeps, claim: repo.ClaimedStaffSend): Pro
     // The gym's own role's name when it has one, cleaned as the gym's own words are.
     role: (ctx.invite.roleName === null ? "" : cleanGymText(ctx.invite.roleName, GYM_TEXT_IN_EMAIL_CHARS)) || staffRoleWord(ctx.invite.role, ctx.gym.orgType),
   });
-  if (!(await repo.markMaybeSent(deps.sql, claim, now))) return leaseLost(deps, claim);
+  if (!(await repo.markMaybeSent(deps.sql, claim, hmac, now))) {
+    // Something moved while the worker decided (the owner cancelled, the address
+    // unsubscribed), or the claim is no longer this run's: read again to say which.
+    const again = decideStaffSend({ ...(await readFacts(deps, claim, email, hmac, now)).facts, mail: "accepts" });
+    return again.kind === "skip" ? await stop(deps, claim, again.reason) : leaseLost(deps, claim);
+  }
   const result = await deps.transport.send(message);
   switch (result.kind) {
     case "sent":
@@ -148,6 +141,30 @@ async function sendOne(deps: StaffSenderDeps, claim: repo.ClaimedStaffSend): Pro
       return "retried";
     }
   }
+}
+
+/** What decides whether a staff invitation email may go, read now. */
+async function readFacts(
+  deps: StaffSenderDeps,
+  claim: repo.ClaimedStaffSend,
+  email: string,
+  hmac: string,
+  now: Date,
+): Promise<{ facts: StaffSendFacts; ctx: repo.StaffSendContext; gymName: string }> {
+  const ctx = await repo.staffSendContext(deps.sql, claim, now);
+  const suppression = (await suppressionsFor(deps.sql, claim.gymId, [hmac])).get(hmac) ?? null;
+  const gymName = ctx.gym === null ? "" : gymNameForEmail(ctx.gym.name);
+  const facts: StaffSendFacts = {
+    inviteOpen: ctx.invite !== null && ctx.invite.open && ctx.invite.role !== null && ctx.invite.email.toLowerCase() === email.toLowerCase(),
+    gym:
+      ctx.gym === null
+        ? null
+        : { active: ctx.gym.active, onPlan: ctx.gym.onPlan, stopped: ctx.gym.stopped, named: gymName !== "" },
+    suppression,
+    addressValid: authEmailSchema.safeParse(email).success,
+    mail: null,
+  };
+  return { facts, ctx, gymName };
 }
 
 const retryAfter = (claim: repo.ClaimedStaffSend): number =>

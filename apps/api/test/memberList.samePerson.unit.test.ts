@@ -528,3 +528,22 @@ describe("the same person next month: 5a's second month, the case that found it"
     expect(Object.fromEntries(out.fieldChanges.map((f) => [f.field, f.count]))).toEqual({ phone: 2, email: 1, fullName: 1 });
   });
 });
+
+describe("a file whose rows share one key is matched in one pass", () => {
+  // The security pass over "getting in" (2026-10-02): ten thousand rows of "Ann Lee" on
+  // member number X1, each with its own address, held the server for 1.5–2.5 s, because
+  // every row walked past every record already taken.
+  it("pairs 20,000 rows on one member number and name with 20,000 records, each once, quickly", () => {
+    const size = 20_000;
+    const who = (email: string) => ({ fullName: "Ann Lee", email, phone: null, memberNumber: "X1", dateOfBirth: null });
+    const entries = Array.from({ length: size }, (_, i) => ({ ...who(`ann.${String(i)}@first.example`), former: false }));
+    const rows = Array.from({ length: size }, (_, i) => who(`ann.${String(i)}@second.example`));
+    const carries = { fullName: true, email: true, phone: false, memberNumber: true, dateOfBirth: false };
+    const started = performance.now();
+    const matches = matchRows(rows, entries, carries, true);
+    const took = performance.now() - started;
+    expect(matches.every((match) => match?.by === "memberNumber")).toBe(true);
+    expect(new Set(matches.map((match) => match?.entry)).size).toBe(size);
+    expect(took).toBeLessThan(1_000);
+  });
+});

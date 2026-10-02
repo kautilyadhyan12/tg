@@ -17,6 +17,8 @@ import { argon2idHasher, type PasswordHasher } from "../src/modules/auth/service
 import { verifyAccessTokenClaims } from "../src/modules/auth/tokens.js";
 import { emailHmac } from "../src/modules/orgs/invites/address.js";
 import { acceptInvitation, type JoinDeps } from "../src/modules/orgs/invites/join.js";
+import { restore } from "../src/modules/orgs/memberList/byHandService.js";
+import { softDeleteUser } from "../src/modules/users/repo.js";
 import { inviteSettings } from "../src/modules/orgs/invites/settings.js";
 import { createMemoryRedis } from "../src/redis.js";
 import {
@@ -900,6 +902,90 @@ d("join by invitation (real Postgres)", () => {
         const results = await Promise.all([1, 2, 3, 4].map(() => acceptInvitation(deps, callerOf(abe), inviteId)));
         expect(results.map((result) => result.outcome).sort()).toEqual(["already_member", "already_member", "already_member", "joined"]);
         expect(await membershipsOf(gym, abe)).toHaveLength(1);
+      } finally {
+        await pool.end({ timeout: 5 });
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // The integrity pass over "getting in" (2026-10-02): an account deleted between Join's
+  // first read of it and its transaction was left a live member, holding a place, shown
+  // by name on the gym's list.
+  it(
+    "an account deleted while its Join waits for the gym is not let in",
+    async () => {
+      const gym = await makeGym("Deleted Join Gym");
+      await addInvited(gym, { fullName: "Ann Hale", email: addr("ann-gone") });
+      const ann = await signIn(addr("ann-gone"));
+      const inviteId = await inviteIdOf(gym, addr("ann-gone"));
+      const { pool, deps, callerOf } = racing();
+      const holder = postgres(url ?? "", { prepare: false, max: 1 });
+      try {
+        let joining: Promise<unknown> = Promise.resolve();
+        await holder.begin(async (tx) => {
+          // Staff hold the gym (any write does); Ann's Join reads her account, then waits.
+          await tx`SELECT 1 FROM gyms WHERE id = ${gym.id} FOR UPDATE`;
+          joining = acceptInvitation(deps, callerOf(ann), inviteId).then(
+            (answer) => answer.outcome,
+            (err: unknown) => (err as { code?: string }).code ?? "error",
+          );
+          await new Promise((resolve) => setTimeout(resolve, 400));
+          // Her "Delete my account" on another phone commits meanwhile.
+          expect(await softDeleteUser(sql, ann.userId)).not.toBeNull();
+        });
+        expect(await joining).not.toBe("joined");
+        expect((await membershipsOf(gym, ann)).filter((row) => row.removed_at === null)).toHaveLength(0);
+      } finally {
+        await holder.end({ timeout: 5 });
+        await pool.end({ timeout: 5 });
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "an account deleted while Put back reopens its membership is not left in the gym",
+    async () => {
+      const gym = await makeGym("Deleted Back Gym");
+      const bea = await (async () => {
+        const entry = await addInvited(gym, { fullName: "Bea Moss", email: addr("bea-gone") });
+        const who = await signIn(addr("bea-gone"));
+        expect((await accept(who, await inviteIdOf(gym, addr("bea-gone")))).statusCode).toBe(200);
+        return { who, entryId: entry.entry.entryId };
+      })();
+      // Staff press Remove on her record: her app goes with it.
+      expect((await send("DELETE", entryUrl(gym, bea.entryId), gym.owner.cookies)).statusCode).toBe(200);
+      expect((await membershipsOf(gym, bea.who)).filter((row) => row.removed_at === null)).toHaveLength(0);
+
+      // Put back, with her deletion committed the moment Put back has read her membership.
+      const pool = postgres(url ?? "", { prepare: false, max: 4 });
+      let deleting: Promise<unknown> = Promise.resolve();
+      const atRead = (tx: postgres.TransactionSql): postgres.TransactionSql =>
+        new Proxy(tx, {
+          apply: (target, self, args: unknown[]) => {
+            const query: unknown = Reflect.apply(target, self, args);
+            const text = Array.isArray(args[0]) ? args[0].join("?") : "";
+            if (!text.includes("m.removed_entry_id =")) return query;
+            return (query as Promise<unknown>).then(async (rows) => {
+              deleting = softDeleteUser(sql, bea.who.userId);
+              await new Promise((resolve) => setTimeout(resolve, 400));
+              return rows;
+            });
+          },
+        });
+      const watched = new Proxy(pool, {
+        get: (target, prop, receiver): unknown =>
+          prop === "begin"
+            ? (body: (tx: postgres.TransactionSql) => Promise<unknown>) => target.begin((tx) => body(atRead(tx)))
+            : Reflect.get(target, prop, receiver),
+      });
+      try {
+        const deps = { sql: watched, redis: createMemoryRedis(), log: { warn: () => undefined }, now: () => new Date(), invites: settings };
+        await restore(deps, gym.owner.userId, gym.id, bea.entryId, () => Promise.resolve(true));
+        await deleting;
+        expect((await sql<{ status: string }[]>`SELECT status FROM users WHERE id = ${bea.who.userId}`)[0]?.status).toBe("deleted");
+        expect((await membershipsOf(gym, bea.who)).filter((row) => row.removed_at === null)).toHaveLength(0);
       } finally {
         await pool.end({ timeout: 5 });
       }
