@@ -13,7 +13,6 @@ import {
   MEMBER_DOOR,
   forgetDoor,
   forgetJoinCode,
-  joinPageFor,
   landingRoute,
   readDoor,
   readJoinCode,
@@ -89,32 +88,26 @@ describe('landingRoute picks the screen the door promised', () => {
   });
 });
 
-describe('landingRoute with a poster code kept through sign-in', () => {
+// Join codes are switched off (ROADMAP 3c; spec Part 3 §10.6): a code an older
+// visit left in this browser no longer steers anybody anywhere.
+describe('landingRoute ignores a poster code kept by an older visit', () => {
   const done = { onboardingCompleted: true };
 
-  it('sends someone already set up to the join page, the code in the address', () => {
-    expect(landingRoute(done, MEMBER_DOOR, 'K7QM2X')).toBe('/org/join?code=K7QM2X');
-    expect(landingRoute(done, null, 'K7QM2X')).toBe('/org/join?code=K7QM2X');
+  it('sends someone already set up to the dashboard, never to the join page', () => {
+    expect(landingRoute(done, MEMBER_DOOR, 'K7QM2X')).toBe('/dashboard');
+    expect(landingRoute(done, null, 'K7QM2X')).toBe('/dashboard');
+    expect(landingRoute({}, MEMBER_DOOR, 'K7QM2X')).toBe('/dashboard');
   });
 
-  it('sends someone not set up into setup, which puts the code first', () => {
+  it('sends someone not set up into setup, and the gym door to the console', () => {
     expect(landingRoute({ onboardingCompleted: false }, MEMBER_DOOR, 'K7QM2X')).toBe('/onboarding');
-  });
-
-  it('still sends the gym door to the console', () => {
     expect(landingRoute(done, GYM_DOOR, 'K7QM2X')).toBe('/console');
-    expect(landingRoute({ onboardingCompleted: false }, GYM_DOOR, 'K7QM2X')).toBe('/console');
   });
 
-  it('fails open to the join page when the onboarding flag is missing, as it does to the dashboard', () => {
-    expect(landingRoute({}, MEMBER_DOOR, 'K7QM2X')).toBe('/org/join?code=K7QM2X');
-  });
-
-  it('never builds an address from something that is not a code', () => {
-    expect(landingRoute(done, MEMBER_DOOR, null)).toBe('/dashboard');
-    expect(landingRoute(done, MEMBER_DOOR, '')).toBe('/dashboard');
-    expect(landingRoute(done, MEMBER_DOOR, 'K7QM2X&next=/console')).toBe('/dashboard');
-    expect(landingRoute(done, MEMBER_DOOR, '//evil.example')).toBe('/dashboard');
+  it('is not handed the kept code by sign-in, the Google return or the signed-in redirect', () => {
+    for (const file of ['./Login.jsx', './googleSuccessRoute.js', '../components/common/ProtectedRoute.jsx', './Onboarding.jsx']) {
+      expect(read(file), file).not.toMatch(/readJoinCode|joinPageFor|rememberJoinCode/);
+    }
   });
 });
 
@@ -157,13 +150,6 @@ describe('the poster code survives the trip through sign-in', () => {
     const full = { ...store, setItem: () => { throw new Error('quota'); } };
     expect(rememberJoinCode('K7QM2X', full)).toBe(false);
     expect(readJoinCode(store)).toBeNull();
-  });
-
-  it('builds the join page only from a code', () => {
-    expect(joinPageFor('k7qm2x')).toBe('/org/join?code=K7QM2X');
-    for (const bad of [null, undefined, '', 'K7QM2X&next=/console', '//evil.example']) {
-      expect(joinPageFor(bad)).toBeNull();
-    }
   });
 
   it('reads a stored value that is not a code as no code', () => {

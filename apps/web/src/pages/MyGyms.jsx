@@ -99,8 +99,8 @@ export default function MyGyms() {
       ) : gyms.length === 0 ? (
         // REACHABLE BY TYPING THE ADDRESS, not through the nav — the item is
         // only drawn for a member. It says where joining happens rather than
-        // leaving somebody on an empty screen, and it points at the ONE place
-        // that door lives (Kd: the code box stays in Settings).
+        // leaving somebody on an empty screen, and it points at Settings → Gym,
+        // where invitations wait (join codes are switched off, ROADMAP 3c).
         <div
           className="rounded-2xl p-4"
           style={{ background: '#121110', border: '1px solid rgba(255,255,255,0.08)' }}
@@ -109,8 +109,8 @@ export default function MyGyms() {
             You haven&apos;t joined a {ORG_TYPES_PHRASE} yet.
           </p>
           <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
-            They give you a code. Enter it in Settings and this fills in once they
-            confirm you.
+            A {ORG_TYPES_PHRASE} invites the email address it has for you, and the
+            invitation shows up in Settings → Gym.
           </p>
           <Link
             to="/settings"

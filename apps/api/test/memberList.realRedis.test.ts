@@ -86,6 +86,8 @@ d("the reader gate and the front desk's allowance, on a real Redis", () => {
         WEB_ORIGIN: "http://localhost:5173",
         JWT_SECRET: "memberlist-redis-secret-01234567", // dummy test value, gitleaks:allow
         LOG_LEVEL: "error",
+        // The join door is a fixture here; join codes are off by default (ROADMAP 3c).
+        JOIN_CODES: "on",
       }),
       { redis },
     );

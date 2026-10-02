@@ -448,7 +448,7 @@ export const ORG_TYPE_CHOICES = [
   {
     value: 'personal_trainer',
     label: 'Personal trainer',
-    hint: 'You train your own clients; they join with your code',
+    hint: 'You train your own clients and invite them by email',
   },
 ];
 

@@ -614,11 +614,11 @@ describe('adding somebody', () => {
     fireEvent.click(screen.getByText('Manager'));
     fireEvent.click(screen.getByText('Send invitation'));
     await waitFor(() => expect(orgService.inviteStaff).toHaveBeenCalledTimes(1));
-    expect(orgService.inviteStaff).toHaveBeenCalledWith(ORG.id, {
-      email: 'anil@example.com',
-      role: 'manager',
-      privileges: ROLE_PRIVILEGES.manager,
-    });
+    const [gymId, sent] = orgService.inviteStaff.mock.calls[0];
+    expect(gymId).toBe(ORG.id);
+    expect(sent).toMatchObject({ email: 'anil@example.com', role: 'manager' });
+    // The join code ticks have no box and are not sent (3c).
+    expect([...sent.privileges].sort()).toEqual(ROLE_PRIVILEGES.manager.filter((p) => !p.startsWith('codes.')).sort());
   });
 
   /** T3 C/H-1 AT THE SCREEN. The helper decides the wording; this proves the
@@ -630,13 +630,13 @@ describe('adding somebody', () => {
   it("tells a STUDIO owner their trainer cannot see the client list, in the studio's word", async () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, orgType: 'studio' }] } });
     await openForm();
-    expect(screen.getByText(/can't see your client list/i)).toBeTruthy();
+    expect(screen.getByText(/can't see your clients in the app/i)).toBeTruthy();
     expect(screen.queryByText(/Can see your (member|client) list/i)).toBeNull();
   });
 
   it('tells a GYM owner their trainer CAN see it — the same control, the other answer', async () => {
     await openForm();
-    expect(screen.getByText(/Can see your member list/i)).toBeTruthy();
+    expect(screen.getByText(/Can see who's in the app/i)).toBeTruthy();
   });
 
   /** T3 round 2 L-2 and L-4. Both length mirrors were observed by nothing — the
@@ -685,11 +685,10 @@ describe('adding somebody', () => {
     });
     fireEvent.click(screen.getByText('Send invitation'));
     await waitFor(() => expect(orgService.inviteStaff).toHaveBeenCalledTimes(1));
-    expect(orgService.inviteStaff).toHaveBeenCalledWith(ORG.id, {
-      email: 'anil@example.com',
-      role: 'trainer',
-      privileges: ROLE_PRIVILEGES.trainer,
-    });
+    const [gymId, sent] = orgService.inviteStaff.mock.calls[0];
+    expect(gymId).toBe(ORG.id);
+    expect(sent).toMatchObject({ email: 'anil@example.com', role: 'trainer' });
+    expect([...sent.privileges].sort()).toEqual(ROLE_PRIVILEGES.trainer.filter((p) => !p.startsWith('codes.')).sort());
   });
 
   it('trims what was typed, so a trailing space is not a "nobody has that email"', async () => {
@@ -719,16 +718,16 @@ describe('adding somebody', () => {
     await openForm();
     expect(screen.getByText(/We'll email them an invitation/i)).toBeTruthy();
     expect(screen.queryByText(/send them your join code/i)).toBeNull();
-    expect(ticked()).toEqual(['See the member list', 'Share the join code', 'See who came in']);
+    expect(ticked()).toEqual(["See who's in the app", 'See who came in']);
     fireEvent.click(screen.getByText('Manager'));
     expect(ticked()).toEqual([
-      'See the member list',
-      'Share the join code',
+      "See who's in the app",
       'See who came in',
-      'Let people into the gym',
+      'Keep the member list and invite',
       'Remove members',
-      'Change join codes',
     ]);
+    // Join codes are switched off (3c): their two ticks get no box.
+    expect(within(screen.getByTestId('invite-ticks')).queryByText(/join code/i)).toBeNull();
     // Managing staff is never offered.
     expect(within(screen.getByTestId('invite-ticks')).queryByText('Manage staff')).toBeNull();
   });
@@ -738,13 +737,12 @@ describe('adding somebody', () => {
     fireEvent.change(screen.getByLabelText(/Their email address/i), { target: { value: 'anil@example.com' } });
     fireEvent.click(screen.getByText('Manager'));
     fireEvent.click(screen.getByText('Remove members'));
-    fireEvent.click(screen.getByText('Change join codes'));
     fireEvent.click(screen.getByText('Send invitation'));
     await waitFor(() => expect(orgService.inviteStaff).toHaveBeenCalledTimes(1));
     const sent = orgService.inviteStaff.mock.calls[0][1];
     expect(sent.role).toBe('manager');
     expect([...sent.privileges].sort()).toEqual(
-      ['attendance.read', 'codes.invite', 'members.confirm', 'members.read', 'schedule.manage'].sort(),
+      ['attendance.read', 'members.confirm', 'members.read', 'schedule.manage'].sort(),
     );
   });
 
@@ -1177,12 +1175,13 @@ describe('what one person is allowed to do', () => {
   it('ticks exactly what the SERVER says, not what the role would give', async () => {
     orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER_TICKED] } });
     const row = await openTicks('staff-u2');
-    expect(within(row).getByLabelText(/See the member list/i).checked).toBe(true);
-    expect(within(row).getByLabelText(/Share the join code/i).checked).toBe(true);
+    expect(within(row).getByLabelText(/See who's in the app/i).checked).toBe(true);
+    // Join codes are switched off (3c): their tick has no box, though the person holds it.
+    expect(within(row).queryByLabelText(/join code/i)).toBeNull();
     // In the manager TEMPLATE and not in this person's set — the difference is
     // the whole feature, and a screen reading the template would tick it.
     expect(within(row).getByLabelText(/Remove members/i).checked).toBe(false);
-    expect(within(row).getByLabelText(/Let people into the gym/i).checked).toBe(false);
+    expect(within(row).getByLabelText(/Keep the member list and invite/i).checked).toBe(false);
   });
 
   /** :15534 C/H-1 on screen. The server answers 409 `owner_only_privilege`, so
@@ -1194,7 +1193,7 @@ describe('what one person is allowed to do', () => {
     expect(within(row).queryByLabelText(/Manage staff/i)).toBeNull();
     // Positive control: the boxes ARE drawn, so "no Manage staff" is not just an
     // unopened panel satisfying the assertion.
-    expect(within(row).getByLabelText(/See the member list/i)).toBeTruthy();
+    expect(within(row).getByLabelText(/See who's in the app/i)).toBeTruthy();
   });
 
   it('sends the WHOLE set, including the boxes the owner never touched', async () => {
@@ -1225,11 +1224,11 @@ describe('what one person is allowed to do', () => {
     // declines to send it leaves an owner tapping a dead button.
     orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER_TICKED] } });
     const row = await openTicks('staff-u2');
-    fireEvent.click(within(row).getByLabelText(/See the member list/i));
-    fireEvent.click(within(row).getByLabelText(/Share the join code/i));
+    fireEvent.click(within(row).getByLabelText(/See who's in the app/i));
     fireEvent.click(within(row).getByText('Save permissions'));
     await waitFor(() => expect(orgService.updateStaffPrivileges).toHaveBeenCalledTimes(1));
-    expect(orgService.updateStaffPrivileges.mock.calls[0][2]).toEqual({ privileges: [] });
+    // Every box cleared; the join code tick, which has no box (3c), is kept as it was.
+    expect(orgService.updateStaffPrivileges.mock.calls[0][2]).toEqual({ privileges: ['codes.invite'] });
   });
 
   it('asks the server NOTHING until something actually changes', async () => {
@@ -1428,7 +1427,7 @@ describe('a leftover row holding a tick it should never have had', () => {
     // Not offered — that box is the owner's alone.
     expect(within(row).queryByLabelText(/Manage staff/i)).toBeNull();
 
-    fireEvent.click(within(row).getByLabelText(/Share the join code/i));
+    fireEvent.click(within(row).getByLabelText(/See who came in/i));
     fireEvent.click(within(row).getByText('Save permissions'));
 
     await waitFor(() => expect(orgService.updateStaffPrivileges).toHaveBeenCalled());
@@ -1450,9 +1449,9 @@ describe('an older server that sends no permissions at all', () => {
   it('shows what the ROLE gives, not an empty set', async () => {
     orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER] } });
     const row = await openTicks('staff-u2');
-    expect(within(row).getByLabelText(/See the member list/i).checked).toBe(true);
+    expect(within(row).getByLabelText(/See who's in the app/i).checked).toBe(true);
     expect(within(row).getByLabelText(/Remove members/i).checked).toBe(true);
-    expect(within(row).getByLabelText(/Let people into the gym/i).checked).toBe(true);
+    expect(within(row).getByLabelText(/Keep the member list and invite/i).checked).toBe(true);
   });
 });
 

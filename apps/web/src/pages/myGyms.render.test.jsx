@@ -291,6 +291,9 @@ describe('the screen', () => {
     drawScreen();
     await waitFor(() => expect(screen.getByText(/haven't joined a gym, studio or trainer yet/i)).toBeTruthy());
     expect(screen.getByRole('link', { name: /settings/i }).getAttribute('href')).toBe('/settings');
+    // Join codes are switched off (3c): the way in is an invitation to this address.
+    expect(screen.getByText(/invites the email address it has for you, and the invitation shows up in Settings → Gym\./)).toBeTruthy();
+    expect(screen.queryByText(/code/i)).toBeNull();
   });
 
   // THE EMPTY-VS-FAILED CLASS (:8267/:8343), which this project has shipped

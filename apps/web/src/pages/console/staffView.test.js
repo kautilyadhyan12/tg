@@ -12,6 +12,9 @@ import {
   canManageStaff,
   effectivePrivileges,
   isOwnerOnlyPrivilege,
+  isRetiredPrivilege,
+  retiredPrivileges,
+  abilityLabels,
   otherStaffRole,
   privilegeChoices,
   privilegesDiffer,
@@ -90,7 +93,7 @@ describe('the roles this screen hands out', () => {
   it('does NOT promise a STUDIO trainer the member list — the server refuses it', () => {
     const trainer = staffRoleChoices('studio').find((c) => c.value === 'trainer');
     expect(trainer.hint).not.toMatch(/can see your member list/i);
-    expect(trainer.hint).toMatch(/join code/i);
+    expect(trainer.hint).toMatch(/can see who came in/i);
   });
 
   /** The denial is SAID rather than merely omitted. A studio owner appointing a
@@ -98,20 +101,20 @@ describe('the roles this screen hands out', () => {
    *  a 403 later — :5807's shape from the side where the app stays silent. */
   it('TELLS a studio owner the client list is not included, in the studio\'s word', () => {
     const trainer = staffRoleChoices('studio').find((c) => c.value === 'trainer');
-    expect(trainer.hint).toMatch(/can't see your client list/i);
+    expect(trainer.hint).toMatch(/can't see your clients in the app/i);
     expect(trainer.hint).not.toMatch(/member/i);
   });
 
-  it('DOES promise a GYM trainer the member list, which is the case §2.2 grants', () => {
+  it('DOES promise a GYM trainer who is in the app, which is the case §2.2 grants', () => {
     const trainer = staffRoleChoices('gym').find((c) => c.value === 'trainer');
-    expect(trainer.hint).toMatch(/can see your member list/i);
+    expect(trainer.hint).toMatch(/can see who's in the app/i);
   });
 
   /** The server gives a personal trainer's assistant the one client list, so
    *  the hint promises exactly that — in the trainer's word. */
   it("DOES promise a PERSONAL TRAINER's assistant the client list", () => {
     const trainer = staffRoleChoices('personal_trainer').find((c) => c.value === 'trainer');
-    expect(trainer.hint).toMatch(/can see your client list/i);
+    expect(trainer.hint).toMatch(/can see who's in the app/i);
     expect(trainer.hint).not.toMatch(/can't see/i);
   });
 
@@ -120,7 +123,7 @@ describe('the roles this screen hands out', () => {
   it('treats an unknown org type as NOT a gym — the refusing sentence, said positively', () => {
     for (const orgType of [undefined, 'clinic', 'something_new']) {
       const trainer = staffRoleChoices(orgType).find((c) => c.value === 'trainer');
-      expect(trainer.hint).toMatch(/can't see your (member|client) list/i);
+      expect(trainer.hint).toMatch(/can't see your (members|clients) in the app/i);
     }
   });
 
@@ -135,9 +138,9 @@ describe('the roles this screen hands out', () => {
   it("makes a MANAGER the same promise in each type's own word", () => {
     const gym = staffRoleChoices('gym').find((c) => c.value === 'manager');
     const studio = staffRoleChoices('studio').find((c) => c.value === 'manager');
-    expect(gym.hint).toBe('Can confirm people joining, remove members, and manage your join codes.');
-    expect(studio.hint).toBe('Can confirm people joining, remove clients, and manage your join codes.');
-    expect(gym.hint.replace('members', 'PEOPLE')).toBe(studio.hint.replace('clients', 'PEOPLE'));
+    expect(gym.hint).toBe('Can keep your member list, invite people and remove members.');
+    expect(studio.hint).toBe('Can keep your client list, invite people and remove clients.');
+    expect(gym.hint.replaceAll('member', 'PERSON')).toBe(studio.hint.replaceAll('client', 'PERSON'));
   });
 
   it('calls the third role Trainer at a gym and Coach everywhere else', () => {
@@ -277,12 +280,14 @@ describe('which boxes a row is offered', () => {
   it('describes the ticks in the studio’s own words', () => {
     const at = (type) =>
       Object.fromEntries(privilegeChoices('manager', type).map((c) => [c.value, c]));
-    expect(at('studio')['members.read'].label).toBe('See the client list');
+    expect(at('studio')['members.read'].label).toBe("See who's in the app");
     expect(at('studio')['members.read'].hint).toBe('Who has joined your studio, and when.');
-    expect(at('studio')['members.confirm'].label).toBe('Let people into the studio');
+    expect(at('studio')['members.confirm'].label).toBe('Keep the client list and invite');
+    // The same tick opens Leads and the gym's own page, so the box says so.
+    expect(at('studio')['members.confirm'].hint).toBe("Import and change the list, send invitations, and see Leads and your studio's page.");
     expect(at('studio')['members.remove'].label).toBe('Remove clients');
     expect(at('studio')['members.remove'].hint).toBe('Take somebody out of your studio.');
-    expect(at('gym')['members.read'].label).toBe('See the member list');
+    expect(at('gym')['members.read'].label).toBe("See who's in the app");
     expect(at('gym')['members.remove'].label).toBe('Remove members');
     // The VALUES — what is saved — are identical whatever the words.
     expect(Object.keys(at('studio'))).toEqual(Object.keys(at('gym')));
@@ -349,8 +354,9 @@ describe('what a row shows as ticked', () => {
     // this role", read through the exported surface rather than by reaching for
     // an internal list — so this stays true of whatever the screen can draw.
     const drawable = privilegeChoices('trainer').map((c) => c.value);
-    expect(effectivePrivileges({ role: 'trainer' })).toEqual(
-      [...ROLE_PRIVILEGES.trainer].filter((p) => drawable.includes(p)).sort(byOrder),
+    // The join code tick has no box but is still the role's (ROADMAP 3c), so it is kept.
+    expect([...effectivePrivileges({ role: 'trainer' })].sort()).toEqual(
+      [...ROLE_PRIVILEGES.trainer].filter((p) => drawable.includes(p) || isRetiredPrivilege(p)).sort(),
     );
     expect(effectivePrivileges({ role: 'trainer' }).length).toBeGreaterThan(0);
   });
@@ -399,12 +405,27 @@ describe('what a row shows as ticked', () => {
     // `attendance.read` one Kd's ruling 18 requires, without which "the owner
     // can change it" is a sentence with no control behind it (:28107).
     const drawable = privilegeChoices('trainer').map((c) => c.value);
-    for (const granted of ROLE_PRIVILEGES.trainer) {
+    for (const granted of ROLE_PRIVILEGES.trainer.filter((p) => !isRetiredPrivilege(p))) {
       expect(drawable).toContain(granted);
     }
     const person = { role: 'trainer', privileges: [...ROLE_PRIVILEGES.trainer] };
     expect(unknownPrivileges(person)).toEqual([]);
     expect(unknownPrivilegesNote(person)).toBeNull();
+  });
+
+  // Join codes are switched off (ROADMAP 3c): their two ticks get no box, are not
+  // "permissions this screen is too old to show", and a save keeps them.
+  it('draws no box for the join code ticks, and keeps them on the person', () => {
+    for (const role of ['owner', 'manager', 'trainer']) {
+      const drawable = privilegeChoices(role).map((c) => c.value);
+      expect(drawable).not.toContain('codes.invite');
+      expect(drawable).not.toContain('codes.manage');
+    }
+    const person = { role: 'trainer', privileges: ['members.read', 'codes.invite', 'codes.manage', 'attendance.read'] };
+    expect(retiredPrivileges(person)).toEqual(['codes.invite', 'codes.manage']);
+    expect(unknownPrivileges(person)).toEqual([]);
+    expect(unknownPrivilegesNote(person)).toBeNull();
+    expect(abilityLabels(ROLE_PRIVILEGES.manager, 'gym').join(' · ')).not.toMatch(/code/i);
   });
 
   it('is NEVER empty on that fallback — an empty row is the defect it exists to prevent', () => {
@@ -511,10 +532,3 @@ describe('the question asked before a role changes', () => {
     expect(roleChangeWarning(RITA, 'trainer', 'gym')).toMatch(/a trainer\?/);
   });
 });
-
-/** The drawing order, derived from the module rather than restated, so this
- *  helper cannot disagree with the list the screen renders. */
-function byOrder(a, b) {
-  const order = privilegeChoices('owner').map((c) => c.value);
-  return order.indexOf(a) - order.indexOf(b);
-}

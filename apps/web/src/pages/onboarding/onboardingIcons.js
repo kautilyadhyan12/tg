@@ -24,7 +24,6 @@ import {
   Sprout,
   Sun,
   Target,
-  Ticket,
   TrendingDown,
   TrendingUp,
   User,
@@ -46,7 +45,7 @@ export const STEP_ICONS = {
   equipment: Dumbbell,
   health: HeartPulse,
   food: Utensils,
-  code: Ticket,
+  gym: Building2,
   plan: ClipboardCheck,
 };
 

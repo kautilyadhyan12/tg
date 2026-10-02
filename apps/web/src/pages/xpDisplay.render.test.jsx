@@ -397,10 +397,9 @@ describe('Dashboard — the gym arrives as a greeting rather than as a card', ()
     expect(screen.queryByText(/Iron House|Smoke Test Gym/)).toBeNull();
   });
 
-  it('still tells a WAITING person where their request stands, with the button', async () => {
-    // The row that must NOT have gone with the membership: somebody waiting has
-    // no `My Gyms` item at all (:28822 — it appears once a gym approves them),
-    // so this dashboard is where their request lives.
+  it('no longer asks about a request to join by code: join codes are switched off (ROADMAP 3c)', async () => {
+    // The route answers 410, so the dashboard does not ask, and an old request
+    // waiting from before the switch is not drawn with a button nobody can answer.
     orgApi.getMyApplications.mockResolvedValue({
       data: {
         applications: [
@@ -422,8 +421,10 @@ describe('Dashboard — the gym arrives as a greeting rather than as a card', ()
 
     renderPage(<Dashboard />);
 
-    expect(await screen.findByText(/waiting for iron house to confirm you/i)).toBeTruthy();
-    expect(screen.getByRole('button', { name: /remind them/i })).toBeTruthy();
+    await waitFor(() => expect(orgApi.getMine).toHaveBeenCalled());
+    expect(orgApi.getMyApplications).not.toHaveBeenCalled();
+    expect(screen.queryByText(/waiting for iron house to confirm you/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /remind them/i })).toBeNull();
   });
 
   it('still tells a REMOVED member they were removed (Kd 2026-08-20)', async () => {

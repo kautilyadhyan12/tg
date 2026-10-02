@@ -30,6 +30,8 @@ const baseEnv = {
   WEB_ORIGIN: "http://localhost:5173",
   JWT_SECRET: "member-app-word-secret-0123456789ab", // dummy test value, gitleaks:allow
   LOG_LEVEL: "error",
+  // The join door is a fixture here; join codes are off by default (ROADMAP 3c).
+  JOIN_CODES: "on",
 };
 const PASSWORD = "a-Perfectly-fine-pw-1"; // dummy fixture, gitleaks:allow
 

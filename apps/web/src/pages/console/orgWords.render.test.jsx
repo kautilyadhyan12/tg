@@ -234,7 +234,7 @@ describe('the roster', () => {
     orgService.getMembers.mockResolvedValue({ data: { items: [], nextCursor: null } });
     membersAs('studio');
     expect(await screen.findByRole('heading', { name: 'Clients' })).toBeTruthy();
-    expect(await screen.findByText(/Share your join code and clients will appear here\./i)).toBeTruthy();
+    expect(await screen.findByText(/Invite clients from Your list\. They appear here once they join\./i)).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Members' })).toBeNull();
   });
 
@@ -242,7 +242,7 @@ describe('the roster', () => {
     orgService.getMembers.mockResolvedValue({ data: { items: [], nextCursor: null } });
     membersAs('gym');
     expect(await screen.findByRole('heading', { name: 'Members' })).toBeTruthy();
-    expect(await screen.findByText(/Share your join code and members will appear here\./i)).toBeTruthy();
+    expect(await screen.findByText(/Invite members from Your list\. They appear here once they join\./i)).toBeTruthy();
   });
 });
 

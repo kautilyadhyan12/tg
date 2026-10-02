@@ -324,8 +324,8 @@ export interface CreateOrgInput {
   timezone: string;
   locale: string;
   currencyDisplay: string;
-  code: string;
-  codeLabel: string;
+  /** The gym's first join code; null while join codes are switched off (ROADMAP 3c). */
+  code: { code: string; label: string } | null;
   /** An Indian gym's owner's mobile for its payments (`+91…`), already read by the service. */
   billingMobile: string | null;
   /** The owner's "Do you train here too?": yes is an ordinary seat (§10.4). */
@@ -337,11 +337,11 @@ export interface CreateOrgInput {
 
 export interface CreateOrgResult {
   org: OrgRow;
-  code: { code: string; label: string };
+  code: { code: string; label: string } | null;
 }
 
 /** One attempt at Part 3 §4.0's steps 1 and 4 as a single transaction: the org, its
- *  owner staff row, its first join code, and — only when the owner answered yes to "Do
+ *  owner staff row, its first join code (none while codes are switched off), and — only when the owner answered yes to "Do
  *  you train here too?" — the owner's membership, an ordinary seat (§10.4). All or
  *  none.
  *
@@ -374,12 +374,16 @@ export async function createOrgAttempt(
         INSERT INTO gym_staff (gym_id, user_id, role, privileges)
         VALUES (${org.id}, ${input.ownerUserId}, 'owner', ${[...input.ownerPrivileges]})`;
 
-      const codeRows = await tx<{ id: string; code: string; label: string }[]>`
-        INSERT INTO gym_codes (gym_id, code, label)
-        VALUES (${org.id}, ${input.code}, ${input.codeLabel})
-        RETURNING id, code, label`;
-      const codeRow = codeRows[0];
-      if (codeRow === undefined) throw new Error("INSERT INTO gym_codes returned no row");
+      let code: { code: string; label: string } | null = null;
+      if (input.code !== null) {
+        const codeRows = await tx<{ id: string; code: string; label: string }[]>`
+          INSERT INTO gym_codes (gym_id, code, label)
+          VALUES (${org.id}, ${input.code.code}, ${input.code.label})
+          RETURNING id, code, label`;
+        const codeRow = codeRows[0];
+        if (codeRow === undefined) throw new Error("INSERT INTO gym_codes returned no row");
+        code = { code: codeRow.code, label: codeRow.label };
+      }
 
       // The owner's place is asked, never given (§10.4): a yes is an ordinary seat,
       // counted like anyone's, through no code, with the answer's time as its consent.
@@ -398,7 +402,7 @@ export async function createOrgAttempt(
         meta: { orgType: org.orgType },
       });
 
-      return { org, code: { code: codeRow.code, label: codeRow.label } };
+      return { org, code };
     });
   } catch (err) {
     if (isUniqueViolation(err)) {

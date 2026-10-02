@@ -144,6 +144,8 @@ export interface OrgsDeps {
    *  waiting for a 1-in-a-billion coincidence. Production passes
    *  `crypto.randomBytes`. */
   randomBytes: (n: number) => Uint8Array;
+  /** `JOIN_CODES` (ROADMAP 3c): off, a new gym gets no code. */
+  joinCodes: boolean;
   /** The invitations' key, so removing a member can withdraw their invitation; null
    *  when invitations are switched off. */
   invites: InviteSettings | null;
@@ -256,8 +258,7 @@ export async function createOrg(
         timezone: req.timezone,
         locale: req.locale,
         currencyDisplay,
-        code: codeFromBytes(deps.randomBytes(6)),
-        codeLabel: FIRST_CODE_LABEL,
+        code: deps.joinCodes ? { code: codeFromBytes(deps.randomBytes(6)), label: FIRST_CODE_LABEL } : null,
         billingMobile,
         trainsHere: req.trainsHere,
         // §4.0 step 1's owner row starts with the owner role's whole set. Same

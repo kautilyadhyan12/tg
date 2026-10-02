@@ -203,3 +203,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 ## 20c-vii (merged 2026-10-02, PR #151)
 
 - 20c-vii. [ ] **Delete many leads at once**: tick boxes and one action bar, as Gmail and HubSpot do, with a box naming who goes; clears a flood of form messages in one step. Kd's order.
+
+## 3c (merged 2026-10-02, PR #152)
+
+- 3c. [ ] **Join codes switched off** (RULINGS 2026-09-21; spec §10.6) — this number's old card, below, is STRUCK and was never built. Built LAST in Part 1, so there is never a build in which nobody can join. The join route, the waiting-room routes and the five code routes answer 410 behind one switch, their code and suites kept (off, not deleted); creating an organisation mints no code; the waiting room's sweep, reminders and nudge stop. The console's code cards become "Bring your members in". On the member web, only what keeps it true: the join page becomes the invitations page, the code boxes in Settings and setup give way to the invitations list (setup is eleven screens), and the carried poster code leaves the sign-in routing. Opus xhigh (it touches sign-in's routing).

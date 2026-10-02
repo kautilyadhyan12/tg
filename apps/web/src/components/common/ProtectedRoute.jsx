@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Navigate, useSearchParams } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { landingRoute, readDoor, readJoinCode, rememberJoinCode } from '../../pages/landingRoute';
+import { landingRoute, readDoor } from '../../pages/landingRoute';
 import InvitationsGate from '../../pages/InvitationsGate';
 import SignUpNote from '../../pages/SignUpNote';
 import { refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
@@ -100,8 +100,7 @@ export const ProtectedRoute = ({ children, requireOnboarding = true, requireSign
   // to someone who trains not to someone who create organisation"*, so a person
   // who runs an organisation meets it the first time they come to train. It is
   // drawn IN PLACE rather than sent to an address of its own, so the address
-  // the person was on their way to (a poster's join link with its code) is
-  // still there when they continue.
+  // the person was on their way to is still there when they continue.
   //
   // `!== true`, the opposite of the setup check below, on purpose: a profile
   // read that failed shows the note to someone who has already ticked it (one
@@ -129,27 +128,5 @@ export const PublicRoute = ({ children }) => {
   const { user, loading } = useAuth();
   if (loading) return <Spinner />;
   if (!user) return children;
-  return <Navigate to={landingRoute(user, readDoor(), readJoinCode())} replace />;
-};
-
-// The poster address, `/org/join?code=…`, sits behind `ProtectedRoute`, which
-// sends a signed-out person to sign in and an unfinished one into setup. Both
-// leave the address behind, so the code is kept on the way (ROADMAP 4b-ii-b):
-// the sign-in page and setup read it on arrival. This link is the newest word,
-// so one with no code, or none the server could have made, leaves no code kept
-// (`rememberJoinCode`). It is written in an effect, and React runs a render's
-// effects before it draws the next render — here, the page the guard's redirect
-// leads to. Someone already set up stays on the page, which reads the code from
-// the address itself.
-export const CarryJoinCode = ({ children }) => {
-  const { user, loading } = useAuth();
-  const [params] = useSearchParams();
-  const code = params.get('code');
-  const leaving = !loading && (!user || user.onboardingCompleted === false);
-
-  useEffect(() => {
-    if (leaving) rememberJoinCode(code);
-  }, [leaving, code]);
-
-  return children;
+  return <Navigate to={landingRoute(user, readDoor())} replace />;
 };

@@ -6,7 +6,6 @@ import ScrollJump from '../../components/console/ScrollJump';
 import { orgService, errorText, errorCode } from '../../api/orgsApi';
 import { useConsoleOrg } from './useConsoleOrg';
 import { refreshConsoleOrgsAfterChange } from './consoleOrgs';
-import ApplicationsQueue from './ApplicationsQueue';
 import MemberListPanel, { Tick } from './MemberListPanel';
 import MemberListPerson from './MemberListPerson';
 import MemberListRemove from './MemberListRemove';
@@ -26,9 +25,11 @@ import { canMakeRoomNow, consoleIsReadOnly, memberMeterText, readOnlyNote, seatM
 import { shortWhen } from './memberListPeople';
 import { canManageStaff } from './staffView';
 import PlanChoiceDialog from '../../components/console/PlanChoiceDialog';
+import ApplicationsQueue from './ApplicationsQueue';
 
 // The Members screen (spec Part 3 §4.3, §18.2), drawn from `console.css` (spec §17):
-// the title with the plan meter, Import and Add member, Waiting to join, and two tabs —
+// the title with the plan meter, Import and Add member, Waiting to join (drawn only while
+// join codes are on), and two tabs —
 // "Your list" (the gym's own list, `MemberListPanel`) and "In the app" (the roster; kept
 // as its own tab, Kd 2026-09-28). On "In the app", staff who may remove people tick them and
 // press Remove (5b-v-b-ii): a box names who loses the app, whose record moves to past
@@ -455,6 +456,22 @@ export default function Members() {
     }
   };
 
+  // Overview's "Bring your members in" opens Import or Add here (`?open=`), once.
+  const opening = searchParams.get('open');
+  useEffect(() => {
+    if (opening === null || !org) return undefined;
+    setSearchParams(
+      (was) => {
+        const params = new URLSearchParams(was);
+        params.delete('open');
+        return params;
+      },
+      { replace: true },
+    );
+    if ((opening === 'import' || opening === 'add') && canSeeList && !readOnly) setAction(opening);
+    return undefined;
+  }, [opening, org, canSeeList, readOnly, setSearchParams]);
+
   if (orgLoading) {
     return (
       <div className="c-page">
@@ -584,7 +601,8 @@ export default function Members() {
       {choosing ? <PlanChoiceDialog org={org} mode="size" onClose={() => setChoosing(false)} /> : null}
 
       {/* WAITING TO JOIN, above the tabs: people at the door must not be hidden behind the
-          other tab. It reads its own endpoint and owns its own failure. */}
+          other tab. It reads its own endpoint, owns its own failure, and draws nothing while
+          join codes are switched off (ROADMAP 3c). */}
       <ApplicationsQueue gymId={gymId} orgType={org?.orgType} readOnly={readOnly} onRosterChanged={reloadRoster} />
 
       {canSeeList ? (
@@ -679,7 +697,9 @@ export default function Members() {
       {tab === 'app' && !state.loading && state.error === null && state.items.length === 0 && rosterQuery === '' ? (
         <section className="c-card p-5 md:p-6 flex flex-col gap-1">
           <p className="c-s15 c-w6 c-t1">Nobody has joined yet.</p>
-          <p className="c-s14 c-t2">Share your join code and {words.people} will appear here.</p>
+          <p className="c-s14 c-t2">
+            {canSeeList ? `Invite ${words.people} from Your list. They appear here once they join.` : 'They appear here once they join.'}
+          </p>
         </section>
       ) : null}
 
