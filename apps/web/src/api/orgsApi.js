@@ -12,6 +12,9 @@ import {
   acceptInvitationResponseSchema,
   acceptStaffInvitationResponseSchema,
   cancelStaffInviteResponseSchema,
+  checkinDeviceLinkResponseSchema,
+  checkinDeviceResponseSchema,
+  checkinDevicesResponseSchema,
   createStaffInviteResponseSchema,
   createStaffRoleResponseSchema,
   deleteStaffRoleResponseSchema,
@@ -966,6 +969,29 @@ export const orgService = {
       leadResponseSchema,
       'this lead',
       authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/leads/${encodeURIComponent(leadId)}/follow-up`, { step, email }),
+    ),
+
+  // CHECK-IN DEVICES (Settings, `org.manage`; ROADMAP 16b-i). A link comes back once, from
+  // the add and the new-link presses, and is never read again.
+  getCheckinDevices: (gymId) =>
+    readThrough(checkinDevicesResponseSchema, 'your check-in devices', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/checkin-devices`)),
+  addCheckinDevice: (gymId, name) =>
+    readThrough(
+      checkinDeviceLinkResponseSchema,
+      'the new device',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/checkin-devices`, { name }),
+    ),
+  renewCheckinDeviceLink: (gymId, deviceId) =>
+    readThrough(
+      checkinDeviceLinkResponseSchema,
+      'the new link',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/checkin-devices/${encodeURIComponent(deviceId)}/link`),
+    ),
+  switchOffCheckinDevice: (gymId, deviceId) =>
+    readThrough(
+      checkinDeviceResponseSchema,
+      'the device',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/checkin-devices/${encodeURIComponent(deviceId)}/off`),
     ),
 
   /** GET …/leads/email-settings — Settings' "Send them for me" (20c-v): the switch, where

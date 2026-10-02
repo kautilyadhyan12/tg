@@ -24,7 +24,8 @@ function isAuthEndpoint(url) {
 // Guard against redirect loops: a 401 while already on an auth page (e.g. a
 // wrong login password) must not reload /login forever. The invitation email's
 // link (`/join/…`) is a page for the signed-out too: it says which address to
-// sign in with. So is a gym's own page (`/gyms/…`), where anybody sends the gym a message.
+// sign in with. So is a gym's own page (`/gyms/…`), where anybody sends the gym a message,
+// and the front desk (`/check-in`), which is a device, not a person.
 function redirectToLogin() {
   if (typeof window === 'undefined') return; // SSR / node tests: no-op
   const p = window.location.pathname;
@@ -32,7 +33,8 @@ function redirectToLogin() {
     !p.startsWith('/login') && !p.startsWith('/register') &&
     !p.startsWith('/verify-email') && !p.startsWith('/reset-password') &&
     !p.startsWith('/forgot-password') && !p.startsWith('/restore-account') &&
-    !p.startsWith('/join/') && !p.startsWith('/gyms/')
+    !p.startsWith('/join/') && !p.startsWith('/gyms/') &&
+    !p.startsWith('/check-in')
   ) {
     window.location.href = '/login';
   }

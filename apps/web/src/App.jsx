@@ -32,6 +32,7 @@ import Running         from './pages/Running';
 import RunPlanner      from './pages/RunPlanner';
 import ActiveRun       from './pages/ActiveRun';
 import RunSummary      from './pages/RunSummary';
+import CheckinDesk     from './pages/checkin/CheckinDesk';
 
 // Gym console — its own route group (Part 3 §3.1: `/console/:orgSlug/...`, and
 // v1 §4's separate `apps/dashboard` folded into `apps/web` as a route group —
@@ -176,6 +177,10 @@ export default function App() {
             <Route path="/staff-invitation" element={<StaffInvitationLink />} />
             {/* A gym's own page and its enquiry form (20c-iv-a): public, no sign-in. */}
             <Route path="/gyms/:slug" element={<GymPublicPage />} />
+            {/* THE FRONT DESK (16b-i): a device the owner set up in Settings, no sign-in.
+                `/check-in/setup` takes the one-time link; `/check-in` is the desk. */}
+            <Route path="/check-in/setup" element={<CheckinDesk />} />
+            <Route path="/check-in" element={<CheckinDesk />} />
             <Route path="/invitations" element={
               <ProtectedRoute requireInvitations={false}>
                 <AppLayout><Invitations /></AppLayout>

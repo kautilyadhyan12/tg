@@ -47,6 +47,8 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
         }),
       ),
       updateLeadEmailSettings: vi.fn(),
+      /** Settings' check-in devices box (16b-i) reads on mount too: a gym with none. */
+      getCheckinDevices: vi.fn(() => Promise.resolve({ data: { devices: [] } })),
     },
   };
 });

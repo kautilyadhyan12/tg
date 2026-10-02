@@ -2153,7 +2153,7 @@ In: what was read (a pass · a member number · staff's pick), the gym, the time
 gym's opening periods, the person's record and membership. Out: `checked_in` ·
 `already` (with the first time) · `fresh_pass_needed` · `not_a_member`, and beside the
 first two the gym's own status and payment words as a notice. It NEVER blocks on a
-status, a payment word or the hour. **Twice:** the visit's place in the day is the
+status, a payment word or the hour (a gym that runs its memberships and bills in the app may choose to stop people at the desk: RULINGS 2026-10-02, ROADMAP 16d). **Twice:** the visit's place in the day is the
 opening period the scan falls in, or "outside hours" when it falls in none, and the
 table's own uniqueness — gym, person, day, period (`slot_key`, built 2026-09-01) —
 makes a second scan the same visit. A member number that fits two records asks staff
