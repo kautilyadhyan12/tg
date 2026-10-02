@@ -278,7 +278,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 
 12. [ ] **The front page, built LAST** (Kd, RULINGS 2026-09-25): what the app does, "Create your gym" into today's console pages, "Get the app", and the list of gyms that said yes to being shown, filtered by city, each opening its page and lead form (20c-iv).
 
-13. [ ] **A gym that stops paying is never closed by the clock** (Kd, RULINGS 2026-10-02): the nightly archive is switched off, which also ends its race with a payment (found by Stage 4 item 11's audit).
+13. [x] **A gym that stops paying is never closed by the clock** — merged 2026-10-02 (PR #158).
 
 14. [ ] **A gym gone for good: its member list is deleted after 6 months** (Kd, RULINGS 2026-10-02; Folder B, before launch). No payment for 6 months and nobody from the gym signed in: the owner is emailed a month and a week before, with a download; then its member list, leads and staff invitations are deleted, never members' own history.
 

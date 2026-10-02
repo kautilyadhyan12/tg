@@ -11,7 +11,7 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Worst thing, first test:** a gym that stopped paying finds its member list deleted when it comes back: the real-Redis test (an old worker's schedule removed, the neighbour kept, twice is fine) and the worker's source never running the archive. Break: removal made a no-op → RED (`['orgs.archive','orgs.trial_expiry']`), restored sha256-identical.
 - **Verified:** archiveOff + archiveSweep + codesRetired 24/24 on `aihg_b`; tsc and eslint 0 (api). Real worker on Redis /1 with the old schedule planted: `worker.started`, `orgs.archive` gone, the six others registered.
 - **Round one: no Critical or High; 5 Low and 2 weak tests, all fixed** (Ordinary: no re-check). The old four-month ruling marked SUPERSEDED and the new line moved into date order; three comments; `tools/archive-sweep.ts` refuses without `--switched-off-i-know` (shown: exit 1); the tests plant the literal `"orgs.archive"` and pin every mention of the job in `worker.ts` (breaks: the name changed, a re-register by literal name, each RED, restored sha256-identical). Found for 16b: a lapsed gym's desk tablet keeps checking in (ROADMAP known defects, with its fix). archiveOff + archiveSweep + codesRetired + trialSweep 33/33; tsc and eslint 0.
-- **Open:** Stage 4 item 14 builds the 6-month rule before launch (needs a "last signed in" date per gym, unverified whether one exists).
+- **Merged on Kd's word (PR #158, 2026-10-02)**; ROADMAP ticked. **Next in Folder B:** 19a. Stage 4 item 14 builds the 6-month rule before launch (needs a "last signed in" date per gym, unverified whether one exists).
 
 ## 2026-10-02 · Stage 4 item 11 (Folder B): the api talks to Postgres on ten connections (branch `db-pool`)
 
