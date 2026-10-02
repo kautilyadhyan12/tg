@@ -55,6 +55,7 @@
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { proveAddress } from "./proveAddress.js";
 import { GYM_CHEER_PRESETS, ON_A_ROLL_MIN_WEEKS } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
@@ -1130,6 +1131,7 @@ d("gym cheers and the on-a-roll list (real Postgres)", () => {
 
       const trainer = await makeUser("c9-trainer");
       await joinAsMember(trainer.cookies, org, owner.cookies);
+      await proveAddress(sql, "orgcheer-t-c9-trainer@example.com");
       const hired = await post(
         `/v1/orgs/${org.org.id}/staff`,
         { email: "orgcheer-t-c9-trainer@example.com", role: "trainer" },

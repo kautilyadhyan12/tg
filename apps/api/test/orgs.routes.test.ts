@@ -26,6 +26,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import postgres from "postgres";
+import { proveAddress } from "./proveAddress.js";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { JOIN_CODE_ALPHABET } from "@app/shared";
@@ -3457,6 +3458,7 @@ d("orgs routes (real Postgres)", () => {
     const org = await makeOrg(owner.cookies, "Orgs Test Staff Add");
     await joinAsMember(hire.cookies, org, owner.cookies);
 
+    await proveAddress(sql, "orgs-t-staff-add-hire@example.com");
     const res = await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "orgs-t-staff-add-hire@example.com", role: "trainer" },
@@ -3523,6 +3525,7 @@ d("orgs routes (real Postgres)", () => {
     // Appoint the member: they now run the gym AND use the app, so their place is
     // still taken and the gym is still full (RULINGS 2026-09-21: the fraud of making
     // members "staff" to pay for fewer places).
+    await proveAddress(sql, "orgs-t-staff-seat-hire@example.com");
     const appointed = await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "orgs-t-staff-seat-hire@example.com", role: "trainer" },
@@ -3595,6 +3598,7 @@ d("orgs routes (real Postgres)", () => {
 
     // (3) APPOINT THEM (§10.4). They use the app, so their place is still taken —
     // on the screen and at the door — and `complimentary` has not moved.
+    await proveAddress(sql, "orgs-t-seat-both-payer@example.com");
     expect(
       (
         await post(
@@ -3651,6 +3655,7 @@ d("orgs routes (real Postgres)", () => {
     const before = await readCodes(org.org.id, owner.cookies);
     expect(before[0]?.joined).toBe(1);
 
+    await proveAddress(sql, "orgs-t-staff-numbers-hire@example.com");
     await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "orgs-t-staff-numbers-hire@example.com", role: "trainer" },
@@ -3680,6 +3685,7 @@ d("orgs routes (real Postgres)", () => {
     const org = await makeOrg(owner.cookies, "Orgs Test Staff Case");
     await joinAsMember(hire.cookies, org, owner.cookies);
 
+    await proveAddress(sql, "ORGS-T-STAFF-CASE-HIRE@EXAMPLE.COM");
     const res = await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "ORGS-T-STAFF-CASE-HIRE@EXAMPLE.COM", role: "manager" },
@@ -3702,11 +3708,13 @@ d("orgs routes (real Postgres)", () => {
     // The outsider is a REAL, live member — of the wrong gym.
     await joinAsMember(outsider.cookies, otherOrg, otherOwner.cookies);
 
+    await proveAddress(sql, "orgs-t-staff-oracle-outsider@example.com");
     const real = await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "orgs-t-staff-oracle-outsider@example.com", role: "trainer" },
       { cookies: owner.cookies },
     );
+    await proveAddress(sql, "orgs-t-staff-oracle-nobody@example.com");
     const fictional = await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "orgs-t-staff-oracle-nobody@example.com", role: "trainer" },
@@ -3737,6 +3745,7 @@ d("orgs routes (real Postgres)", () => {
     });
     expect(removed.statusCode).toBe(200);
 
+    await proveAddress(sql, "orgs-t-staff-left-leaver@example.com");
     const res = await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "orgs-t-staff-left-leaver@example.com", role: "trainer" },
@@ -3751,6 +3760,7 @@ d("orgs routes (real Postgres)", () => {
     const org = await makeOrg(owner.cookies, "Orgs Test Staff Dup");
     await joinAsMember(hire.cookies, org, owner.cookies);
 
+    await proveAddress(sql, "orgs-t-staff-dup-hire@example.com");
     const first = await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "orgs-t-staff-dup-hire@example.com", role: "manager" },
@@ -3759,6 +3769,7 @@ d("orgs routes (real Postgres)", () => {
     expect(first.statusCode).toBe(201);
 
     // A stale screen offering "add as trainer" must not silently DEMOTE them.
+    await proveAddress(sql, "orgs-t-staff-dup-hire@example.com");
     const second = await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "orgs-t-staff-dup-hire@example.com", role: "trainer" },
@@ -3775,6 +3786,7 @@ d("orgs routes (real Postgres)", () => {
     const hire = await makeUser("staff-role-hire");
     const org = await makeOrg(owner.cookies, "Orgs Test Staff Role");
     await joinAsMember(hire.cookies, org, owner.cookies);
+    await proveAddress(sql, "orgs-t-staff-role-hire@example.com");
     await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "orgs-t-staff-role-hire@example.com", role: "trainer" },
@@ -3811,6 +3823,7 @@ d("orgs routes (real Postgres)", () => {
     const hire = await makeUser("staff-ownrole-hire");
     const org = await makeOrg(owner.cookies, "Orgs Test Staff Owner Role");
     await joinAsMember(hire.cookies, org, owner.cookies);
+    await proveAddress(sql, "orgs-t-staff-ownrole-hire@example.com");
     await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "orgs-t-staff-ownrole-hire@example.com", role: "manager" },
@@ -3846,6 +3859,7 @@ d("orgs routes (real Postgres)", () => {
     const hire = await makeUser("staff-rm-hire");
     const org = await makeOrg(owner.cookies, "Orgs Test Staff Remove");
     await joinAsMember(hire.cookies, org, owner.cookies);
+    await proveAddress(sql, "orgs-t-staff-rm-hire@example.com");
     await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "orgs-t-staff-rm-hire@example.com", role: "trainer" },
@@ -3887,6 +3901,7 @@ d("orgs routes (real Postgres)", () => {
     const other = await makeUser("staff-lastowner-other");
     const org = await makeOrg(owner.cookies, "Orgs Test Staff Last Owner");
     await joinAsMember(other.cookies, org, owner.cookies);
+    await proveAddress(sql, "orgs-t-staff-lastowner-other@example.com");
     await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "orgs-t-staff-lastowner-other@example.com", role: "trainer" },
@@ -3985,6 +4000,7 @@ d("orgs routes (real Postgres)", () => {
     const ghost = await makeUser("staff-ghost-ghost");
     const org = await makeOrg(owner.cookies, "Orgs Test Staff Ghost");
     await joinAsMember(ghost.cookies, org, owner.cookies);
+    await proveAddress(sql, "orgs-t-staff-ghost-ghost@example.com");
     await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "orgs-t-staff-ghost-ghost@example.com", role: "manager" },
@@ -4036,6 +4052,7 @@ d("orgs routes (real Postgres)", () => {
     // The same person trains at B and works the desk at A.
     await joinAsMember(dual.cookies, gymA, ownerA.cookies);
     await joinAsMember(dual.cookies, gymB, ownerB.cookies);
+    await proveAddress(sql, "orgs-t-xg-seat-dual@example.com");
     await post(
       `/v1/orgs/${gymA.org.id}/staff`,
       { email: "orgs-t-xg-seat-dual@example.com", role: "trainer" },
@@ -4095,6 +4112,7 @@ d("orgs routes (real Postgres)", () => {
     // sideways.
     await joinAsMember(exMember.cookies, gymA, ownerA.cookies);
     await joinAsMember(exMember.cookies, gymB, ownerB.cookies);
+    await proveAddress(sql, "orgs-t-xg-auth-ex@example.com");
     await post(
       `/v1/orgs/${gymA.org.id}/staff`,
       { email: "orgs-t-xg-auth-ex@example.com", role: "manager" },
@@ -4130,6 +4148,7 @@ d("orgs routes (real Postgres)", () => {
       ["orgs-t-agree-ghost@example.com", "manager"],
       ["orgs-t-agree-live@example.com", "trainer"],
     ] as const) {
+      await proveAddress(sql, who);
       await post(`/v1/orgs/${org.org.id}/staff`, { email: who, role }, { cookies: owner.cookies });
     }
     expect((await readStaff(org.org.id, owner.cookies)).map((s) => s.role)).toEqual([
@@ -4193,11 +4212,13 @@ d("orgs routes (real Postgres)", () => {
     const org = await makeOrg(owner.cookies, "Orgs Test Staff Denied");
     await joinAsMember(manager.cookies, org, owner.cookies);
     await joinAsMember(trainer.cookies, org, owner.cookies);
+    await proveAddress(sql, "orgs-t-staff-403-manager@example.com");
     await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "orgs-t-staff-403-manager@example.com", role: "manager" },
       { cookies: owner.cookies },
     );
+    await proveAddress(sql, "orgs-t-staff-403-trainer@example.com");
     await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "orgs-t-staff-403-trainer@example.com", role: "trainer" },
@@ -4211,6 +4232,7 @@ d("orgs routes (real Postgres)", () => {
       expect((await get(`/v1/orgs/${org.org.id}/staff`, { cookies: who.cookies })).statusCode).toBe(
         403,
       );
+      await proveAddress(sql, "orgs-t-staff-403-owner@example.com");
       const added = await post(
         `/v1/orgs/${org.org.id}/staff`,
         { email: "orgs-t-staff-403-owner@example.com", role: "trainer" },
@@ -4265,6 +4287,7 @@ d("orgs routes (real Postgres)", () => {
     expect(
       (await get(`/v1/orgs/${org.org.id}/staff`, { cookies: stranger.cookies })).statusCode,
     ).toBe(404);
+    await proveAddress(sql, "orgs-t-staff-tenant-hire@example.com");
     expect(
       (
         await post(
@@ -4309,6 +4332,7 @@ d("orgs routes (real Postgres)", () => {
     const org = await makeOrg(owner.cookies, "Orgs Test Staff Validation");
 
     // Unknown role.
+    await proveAddress(sql, "orgs-t-staff-400-owner@example.com");
     expect(
       (
         await post(
@@ -4319,6 +4343,7 @@ d("orgs routes (real Postgres)", () => {
       ).statusCode,
     ).toBe(400);
     // Unknown key — `.strict()` rejects rather than silently carrying it.
+    await proveAddress(sql, "orgs-t-staff-400-owner@example.com");
     expect(
       (
         await post(
@@ -4346,6 +4371,7 @@ d("orgs routes (real Postgres)", () => {
     const id = org.org.id;
 
     expect((await get(`/v1/orgs/${id}/staff`)).statusCode).toBe(401);
+    await proveAddress(sql, "a@example.com");
     expect(
       (await post(`/v1/orgs/${id}/staff`, { email: "a@example.com", role: "trainer" })).statusCode,
     ).toBe(401);
@@ -4378,6 +4404,7 @@ d("orgs routes (real Postgres)", () => {
     const hire = await makeUser("ticks-start-hire");
     const org = await makeOrg(owner.cookies, "Orgs Test Ticks Start");
     await joinAsMember(hire.cookies, org, owner.cookies);
+    await proveAddress(sql, "orgs-t-ticks-start-hire@example.com");
     await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "orgs-t-ticks-start-hire@example.com", role: "trainer" },
@@ -4428,6 +4455,7 @@ d("orgs routes (real Postgres)", () => {
     const desk = await makeUser("mine-privs-desk");
     const org = await makeOrg(owner.cookies, "Orgs Test Mine Privileges");
     await joinAsMember(desk.cookies, org, owner.cookies);
+    await proveAddress(sql, "orgs-t-mine-privs-desk@example.com");
     await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "orgs-t-mine-privs-desk@example.com", role: "trainer" },
@@ -4501,6 +4529,7 @@ d("orgs routes (real Postgres)", () => {
     const joiner = await makeUser("ticks-widen-joiner");
     const org = await makeOrg(owner.cookies, "Orgs Test Ticks Widen");
     await joinAsMember(desk.cookies, org, owner.cookies);
+    await proveAddress(sql, "orgs-t-ticks-widen-desk@example.com");
     await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "orgs-t-ticks-widen-desk@example.com", role: "trainer" },
@@ -4555,6 +4584,7 @@ d("orgs routes (real Postgres)", () => {
     const org = await makeOrg(owner.cookies, "Orgs Test Ticks Narrow");
     await joinAsMember(manager.cookies, org, owner.cookies);
     await joinAsMember(member.cookies, org, owner.cookies);
+    await proveAddress(sql, "orgs-t-ticks-narrow-manager@example.com");
     await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "orgs-t-ticks-narrow-manager@example.com", role: "manager" },
@@ -4702,11 +4732,13 @@ d("orgs routes (real Postgres)", () => {
     const org = await makeOrg(owner.cookies, "Orgs Test Ticks Escalation");
     await joinAsMember(manager.cookies, org, owner.cookies);
     await joinAsMember(trainer.cookies, org, owner.cookies);
+    await proveAddress(sql, "orgs-t-ticks-esc-manager@example.com");
     await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "orgs-t-ticks-esc-manager@example.com", role: "manager" },
       { cookies: owner.cookies },
     );
+    await proveAddress(sql, "orgs-t-ticks-esc-trainer@example.com");
     await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "orgs-t-ticks-esc-trainer@example.com", role: "trainer" },
@@ -4877,6 +4909,7 @@ d("orgs routes (real Postgres)", () => {
     const org = await makeOrg(owner.cookies, "Orgs Test Ticks Reset");
     await joinAsMember(person.cookies, org, owner.cookies);
     await joinAsMember(member.cookies, org, owner.cookies);
+    await proveAddress(sql, "orgs-t-ticks-reset-person@example.com");
     await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "orgs-t-ticks-reset-person@example.com", role: "manager" },
@@ -4928,6 +4961,7 @@ d("orgs routes (real Postgres)", () => {
     const hire = await makeUser("ticks-audit-hire");
     const org = await makeOrg(owner.cookies, "Orgs Test Ticks Audit");
     await joinAsMember(hire.cookies, org, owner.cookies);
+    await proveAddress(sql, "orgs-t-ticks-audit-hire@example.com");
     await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "orgs-t-ticks-audit-hire@example.com", role: "trainer" },
@@ -4979,6 +5013,7 @@ d("orgs routes (real Postgres)", () => {
     const legacy = await makeUser("ticks-legacy-manager");
     const org = await makeOrg(owner.cookies, "Orgs Test Ticks Legacy");
     await joinAsMember(legacy.cookies, org, owner.cookies);
+    await proveAddress(sql, "orgs-t-ticks-legacy-manager@example.com");
     await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "orgs-t-ticks-legacy-manager@example.com", role: "manager" },
@@ -5027,6 +5062,7 @@ d("orgs routes (real Postgres)", () => {
     const hire = await makeUser("ticks-400-hire");
     const org = await makeOrg(owner.cookies, "Orgs Test Ticks Validation");
     await joinAsMember(hire.cookies, org, owner.cookies);
+    await proveAddress(sql, "orgs-t-ticks-400-hire@example.com");
     await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "orgs-t-ticks-400-hire@example.com", role: "trainer" },
@@ -5075,6 +5111,7 @@ d("orgs routes (real Postgres)", () => {
     const hire = await makeUser("staff-order-hire");
     const org = await makeOrg(owner.cookies, "Orgs Test Staff Order");
     await joinAsMember(hire.cookies, org, owner.cookies);
+    await proveAddress(sql, "orgs-t-staff-order-hire@example.com");
     await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: "orgs-t-staff-order-hire@example.com", role: "trainer" },
@@ -5575,6 +5612,7 @@ d("orgs routes (real Postgres)", () => {
       // hand-typed copy of `makeUser`'s naming convention. The `local` variable
       // that rebuilt it is gone, and with it the `void person` that only existed
       // because the loop was not using its own subject.
+      await proveAddress(sql, person.email);
       const appointed = await post(
         `/v1/orgs/${org.org.id}/staff`,
         { email: person.email, role },
@@ -5626,6 +5664,7 @@ d("orgs routes (real Postgres)", () => {
     const helper = await makeUser("edit-grant-helper");
     const org = await makeOrg(owner.cookies, "Orgs Test Edit Grant");
     await joinAsMember(helper.cookies, org, owner.cookies);
+    await proveAddress(sql, helper.email);
     await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: helper.email, role: "manager" },
@@ -5982,6 +6021,7 @@ d("orgs routes (real Postgres)", () => {
     // in exactly this order, so the fixture does too.
     const org = await makeOrg(owner.cookies, "Orgs Test Trial Priv", { country: "US" });
     await joinAsMember(helper.cookies, org, owner.cookies);
+    await proveAddress(sql, helper.email);
     const appointed = await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: helper.email, role: "manager" },
@@ -6204,6 +6244,7 @@ d("orgs routes (real Postgres)", () => {
     expect((JSON.parse(blocked.body) as { error: string }).error).toBe("seat_cap_reached");
 
     // §10.4: handing that member the keys frees NOTHING — they still use the app.
+    await proveAddress(sql, first.email);
     expect(
       (
         await post(
@@ -6258,6 +6299,7 @@ d("orgs routes (real Postgres)", () => {
     const org = await makeOrg(owner.cookies, `Orgs Test ReadOnly ${tag}`);
     await joinAsMember(member.cookies, org, owner.cookies);
     const pendingId = await applyWithCode(waiting.cookies, org.joinCode.code);
+    await proveAddress(sql, member.email);
     const appointed = await post(
       `/v1/orgs/${org.org.id}/staff`,
       { email: member.email, role: "manager" },

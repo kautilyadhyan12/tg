@@ -19,6 +19,7 @@
 // wrote the rows anyway would pass any assertion about status codes.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { proveAddress } from "./proveAddress.js";
 import { buildApp } from "../src/app.js";
 import { everyoneLeft } from "./memberListEveryoneLeft.js";
 import { loadConfig } from "../src/config.js";
@@ -1042,6 +1043,7 @@ d("member list: the wider record, kept (real Postgres)", () => {
       const org = await makeOrg(owner.cookies, "Tenancy Kept Gym");
       await makeOrg(rival.cookies, "Tenancy Rival Gym");
       await joinAsMember(trainer.cookies, org, owner.cookies);
+      await proveAddress(sql, trainer.email);
       expect(
         (await post(`/v1/orgs/${org.org.id}/staff`, { email: trainer.email, role: "trainer" }, owner.cookies)).statusCode,
       ).toBe(201);

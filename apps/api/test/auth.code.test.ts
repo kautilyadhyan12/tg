@@ -437,6 +437,32 @@ d("sign-in by email code (real Postgres)", () => {
 
   // ── the one ceiling across everyone ─────────────────────────────────────
 
+  it("a gym's induction on its one wi-fi address: sixty people each get a code and sign in", { timeout: 120_000 }, async () => {
+    // Since join codes went (3c), signing in with the invited address is the only way
+    // into a gym; the security pass over "getting in" (2026-10-02) saw the 21st person
+    // at one address refused a code. Its own app: the limits count for its life.
+    const desk = await buildApp(loadConfig(baseEnv), { emailSender: sender, usersEmailSender: usersSender });
+    try {
+      const at = (path: string, body: unknown) =>
+        desk.inject({
+          method: "POST",
+          url: path,
+          remoteAddress: "203.0.113.50",
+          headers: { "content-type": "application/json" },
+          payload: JSON.stringify(body),
+        });
+      const people = Array.from({ length: 60 }, (_, n) => `code-induction-${String(n)}@example.com`);
+      const sends = [];
+      for (const email of people) sends.push((await at("/v1/auth/code/send", { email })).statusCode);
+      expect(sends.filter((code) => code !== 200)).toEqual([]);
+      const verifies = [];
+      for (const email of people) verifies.push((await at("/v1/auth/code/verify", { email, code: lastCodeFor(email) })).statusCode);
+      expect(verifies.filter((code) => code !== 200)).toEqual([]);
+    } finally {
+      await desk.close();
+    }
+  });
+
   it("stops sending codes for the day once the ceiling across ALL addresses is hit", { timeout: 60_000 }, async () => {
     // A client that varies the address is invisible to the per-address cap,
     // and every send is an email Kd pays for. Its own app, because the

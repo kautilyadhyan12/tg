@@ -252,8 +252,9 @@ export async function suppressionsFor(
  *  invitation nobody was ever emailed about, queueing its first email again. An address
  *  with an email that went, may have gone or is waiting is left alone — by the check
  *  here and, for two presses at once, by the unique index on a live first email — so a
- *  second press, a second member of staff or a retry queues nothing more. Answers how
- *  many were queued. */
+ *  second press, a second member of staff or a retry queues nothing more. An address no
+ *  current record holds any more is left alone too: it was taken off since the group was
+ *  read. Called under the gym's lock. Answers how many were queued. */
 export async function queueFirst(
   tx: SqlOrTx,
   gymId: string,
@@ -266,6 +267,9 @@ export async function queueFirst(
     WITH input AS (
       SELECT r.hmac, r.email, r.ord
       FROM jsonb_to_recordset(${tx.json(payload)}) AS r(hmac text, email text, ord int)
+      WHERE EXISTS (
+        SELECT 1 FROM gym_member_list_entries e
+        WHERE e.gym_id = ${gymId} AND e.former_at IS NULL AND e.email = r.email::citext)
     ),
     created AS (
       INSERT INTO gym_invites (gym_id, email_hmac, created_at)
@@ -695,12 +699,25 @@ export async function claimNextSend(sql: Sql, limits: ClaimLimits): Promise<Clai
 }
 
 /** Record, before an email is handed to Resend, that from now on it may have gone.
- *  False when the claim is no longer this run's: then nothing may be sent. */
-export async function markMaybeSent(sql: SqlOrTx, send: ClaimedSend, at: Date): Promise<boolean> {
+ *  False when the claim is no longer this run's, or when what the worker decided on
+ *  moved since it read it (the invitation closed, the person taken off the list or
+ *  unsubscribed, the gym stopped): then nothing may be sent. One statement, so a change
+ *  committed before it is seen here and one committed after it is after the email. */
+export async function markMaybeSent(sql: SqlOrTx, send: ClaimedSend, hmac: string, at: Date): Promise<boolean> {
   const rows = await sql<{ id: string }[]>`
-    UPDATE gym_invite_sends SET maybe_sent_at = coalesce(maybe_sent_at, ${at})
-    WHERE id = ${send.id} AND gym_id = ${send.gymId} AND state = 'sending' AND attempts = ${send.attempts}
-    RETURNING id`;
+    UPDATE gym_invite_sends s SET maybe_sent_at = coalesce(s.maybe_sent_at, ${at})
+    WHERE s.id = ${send.id} AND s.gym_id = ${send.gymId} AND s.state = 'sending' AND s.attempts = ${send.attempts}
+      AND EXISTS (
+        SELECT 1 FROM gym_invites i
+        WHERE i.id = s.invite_id AND i.gym_id = s.gym_id AND i.state = 'pending' AND i.email_hmac = ${hmac})
+      AND EXISTS (
+        SELECT 1 FROM gym_member_list_entries e
+        WHERE e.gym_id = s.gym_id AND e.former_at IS NULL AND e.email = s.email)
+      AND NOT EXISTS (
+        SELECT 1 FROM email_suppressions x
+        WHERE x.email_hmac = ${hmac} AND (x.gym_id = s.gym_id OR x.gym_id IS NULL))
+      AND EXISTS (SELECT 1 FROM gyms g WHERE g.id = s.gym_id AND g.status = 'active' AND g.invites_stopped_at IS NULL)
+    RETURNING s.id`;
   return rows.length === 1;
 }
 

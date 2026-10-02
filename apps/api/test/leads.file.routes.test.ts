@@ -8,6 +8,7 @@
 // Whatever those say, no lead from a file is ticked or due an email.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { proveAddress } from "./proveAddress.js";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { emailHmac } from "../src/modules/orgs/invites/address.js";
@@ -140,6 +141,7 @@ d("leads from a file (real Postgres, real worker)", () => {
   const makeStaff = async (org: CreatedOrg, owner: Record<string, string>, local: string, role: "manager" | "trainer") => {
     const person = await makeUser(local);
     await joinAsMember(person.cookies, org, owner);
+    await proveAddress(sql, person.email);
     expect((await post(`/v1/orgs/${org.org.id}/staff`, { email: person.email, role }, owner)).statusCode).toBe(201);
     return person;
   };

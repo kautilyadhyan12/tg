@@ -85,11 +85,12 @@ describe("api skeleton", () => {
     expect(res.headers["access-control-allow-origin"]).toBeUndefined();
   });
 
-  it("rate limit: 301st request in a minute gets 429", async () => {
-    // Dedicated client IP so this test's 301 requests don't drain the
-    // default client's bucket for the other tests.
+  it("rate limit: an address's 601st request in a minute from nobody signed in gets 429", async () => {
+    // Dedicated client IP so this test's 601 requests don't drain the
+    // default client's bucket for the other tests. Signed-in people are counted
+    // on their own (app.rateLimit.test.ts).
     let last = 0;
-    for (let i = 0; i < 301; i++) {
+    for (let i = 0; i < 601; i++) {
       const res = await app.inject({ method: "GET", url: "/nope", remoteAddress: "10.9.9.9" });
       last = res.statusCode;
     }

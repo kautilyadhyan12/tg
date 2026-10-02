@@ -25,6 +25,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { proveAddress } from "./proveAddress.js";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { archiveLapsedGyms } from "../src/modules/orgs/archiveSweep.js";
@@ -294,6 +295,7 @@ d("member list: upload and preview (real Postgres)", () => {
       const rivalOrg = await makeOrg(rival.cookies, "Rival Gym");
       await joinAsMember(member.cookies, org, owner.cookies);
       await joinAsMember(trainer.cookies, org, owner.cookies);
+      await proveAddress(sql, trainer.email);
       const appointed = await post(
         `/v1/orgs/${org.org.id}/staff`,
         { email: trainer.email, role: "trainer" },
@@ -445,6 +447,7 @@ d("member list: upload and preview (real Postgres)", () => {
       await joinAsMember(plain.cookies, org, owner.cookies);
       await joinAsMember(trainer.cookies, org, owner.cookies);
       await joinAsMember(left.cookies, org, owner.cookies);
+      await proveAddress(sql, trainer.email);
       expect(
         (await post(`/v1/orgs/${org.org.id}/staff`, { email: trainer.email, role: "trainer" }, owner.cookies)).statusCode,
       ).toBe(201);
@@ -736,6 +739,7 @@ d("member list: upload and preview (real Postgres)", () => {
       const second = await makeUser("limit-second");
       const org = await makeOrg(owner.cookies, "Front Desk Gym");
       await joinAsMember(second.cookies, org, owner.cookies);
+      await proveAddress(sql, second.email);
       expect(
         (await post(`/v1/orgs/${org.org.id}/staff`, { email: second.email, role: "manager" }, owner.cookies)).statusCode,
       ).toBe(201);

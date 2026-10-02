@@ -9,6 +9,7 @@
 // against the three questions that used to be one flag.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { proveAddress } from "./proveAddress.js";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { emailHmac } from "../src/modules/orgs/invites/address.js";
@@ -142,6 +143,7 @@ d("a seat is a person using the member app (real Postgres)", () => {
   };
   /** The owner appoints somebody already in the gym (`addStaff`, through the route). */
   const appoint = async (gym: Gym, who: User) => {
+    await proveAddress(sql, who.email);
     const res = await post(`/v1/orgs/${gym.id}/staff`, { email: who.email, role: "trainer" }, gym.owner.cookies);
     expect(res.statusCode, res.body).toBe(201);
   };

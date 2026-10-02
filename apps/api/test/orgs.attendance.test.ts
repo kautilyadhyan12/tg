@@ -47,6 +47,7 @@
 //      and leave the lifetime XP total where it was.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { proveAddress } from "./proveAddress.js";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 
@@ -872,6 +873,7 @@ d("gym attendance (real Postgres)", () => {
       // is a 404 on the add), and a fixture that skipped it would be testing a
       // journey the product does not have.
       await joinAsMember(trainer.cookies, org, owner.cookies);
+      await proveAddress(sql, trainer.email);
       const added = await post(
         `/v1/orgs/${org.org.id}/staff`,
         { email: trainer.email, role: "trainer" },
@@ -905,6 +907,7 @@ d("gym attendance (real Postgres)", () => {
       const staff = await makeUser("db-staff");
       const org = await makeOrg(owner.cookies, "Round Trip Gym");
       await joinAsMember(staff.cookies, org, owner.cookies); // staff must be a member first
+      await proveAddress(sql, staff.email);
       const added = await post(
         `/v1/orgs/${org.org.id}/staff`,
         { email: staff.email, role: "manager" },

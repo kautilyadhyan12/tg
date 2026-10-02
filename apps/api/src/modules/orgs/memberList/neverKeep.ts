@@ -406,6 +406,20 @@ const PASSWORD_WORDS = [
   "lock code",
   "locker code",
   "locker pin",
+  // A lock's combination, never a bare "combo": an Indian gym's "Gym + Yoga combo" is
+  // a package it sells.
+  "locker combo",
+  "locker combination",
+  "lock combo",
+  "lock combination",
+  "combination lock",
+  "combo lock",
+  "padlock",
+  // The answers a bank asks to let somebody in.
+  "memorable word",
+  "memorable information",
+  "memorable answer",
+  "maiden name",
   "key code",
   "alarm code",
   "access code",

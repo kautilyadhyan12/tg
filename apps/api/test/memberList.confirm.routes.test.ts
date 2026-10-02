@@ -20,10 +20,14 @@
 // server, and would go on passing if somebody deleted the route.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { proveAddress } from "./proveAddress.js";
 import { buildApp } from "../src/app.js";
 import { everyoneLeft } from "./memberListEveryoneLeft.js";
 import { loadConfig } from "../src/config.js";
 import { expireStagedMemberListUploads } from "../src/modules/orgs/memberList/expiry.js";
+import { MEMBER_LIST_ANALYSE_AFTER, analyseEntriesIfMoved } from "../src/modules/orgs/memberList/repo.js";
+import { readPreview } from "../src/modules/orgs/memberList/service.js";
+import { createMemoryRedis } from "../src/redis.js";
 import { MEMBER_LIST_STATUS_CHIPS_MAX } from "@app/shared";
 import type { MemberListConfirmed, MemberListEntriesPage, MemberListPreview, MemberListView } from "@app/shared";
 
@@ -315,6 +319,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       const rivalOrg = await makeOrg(rival.cookies, "Rival Confirm Gym");
       await joinAsMember(member.cookies, org, owner.cookies);
       await joinAsMember(trainer.cookies, org, owner.cookies);
+      await proveAddress(sql, trainer.email);
       expect(
         (await post(`/v1/orgs/${org.org.id}/staff`, { email: trainer.email, role: "trainer" }, owner.cookies))
           .statusCode,
@@ -431,6 +436,42 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       const names = await sql<{ full_name: string }[]>`
         SELECT full_name FROM gym_member_list_entries WHERE gym_id = ${org.org.id} ORDER BY full_name`;
       expect(names.map((n) => n.full_name)).toEqual(["Member 0001", "Member 0002", "Member 0003", "Member 0004"]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // The security pass over "getting in" (2026-10-02): on a moved list every read of a
+  // staged preview compared the whole file again, a quarter of a second of the server
+  // answering nobody at ten thousand rows, each time.
+  it(
+    "on a moved list, a staged preview is compared once per version of the list, however often it is read",
+    async () => {
+      const owner = await makeUser("moved-read-owner");
+      const org = await makeOrg(owner.cookies, "Moved Read Gym");
+      const first = await stage(org.org.id, owner.cookies, file(many(1, 4, "Active")));
+      expect((await post(confirmUrl(org.org.id, first.uploadId), { permissionConfirmed: true }, owner.cookies)).statusCode).toBe(200);
+      const second = await stage(org.org.id, owner.cookies, file(many(1, 2, "Active")));
+      await sql`UPDATE gym_member_lists SET version = version + 1 WHERE gym_id = ${org.org.id}`;
+
+      let fileReads = 0;
+      const counting = new Proxy(sql, {
+        apply: (target, self, args: unknown[]) => {
+          if (Array.isArray(args[0]) && args[0].join("?").includes("SELECT rows FROM gym_member_list_uploads")) fileReads += 1;
+          const query: unknown = Reflect.apply(target, self, args);
+          return query;
+        },
+      });
+      const deps = { sql: counting, redis: createMemoryRedis(), log: { warn: () => undefined }, now: () => new Date() };
+      const read = () => readPreview(deps, owner.userId, org.org.id, second.uploadId, () => Promise.resolve(true));
+      const answers = [await read(), await read(), await read()];
+      expect(fileReads).toBe(1);
+      expect(answers[1]).toEqual(answers[0]);
+      expect(answers[2]).toEqual(answers[0]);
+      expect(answers[0]?.list.gone).toBe(2);
+
+      await sql`UPDATE gym_member_lists SET version = version + 1 WHERE gym_id = ${org.org.id}`;
+      await read();
+      expect(fileReads).toBe(2);
     },
     TEST_TIMEOUT_MS,
   );
@@ -957,39 +998,33 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
     TEST_TIMEOUT_MS,
   );
 
-  // THE POST-CONFIRM `ANALYZE` IS OBSERVED, not assumed. Removing the call left the
-  // whole suite green (review of PR #88), because its only other observable is the
-  // warn path when it fails. `pg_stat_user_tables` is where it shows.
-  //
-  // **The honest limit of this one:** the statistics are the TABLE's, not this gym's,
-  // so another suite confirming a list in the same window could bump the timestamp
-  // too and hold this green with our own call gone. It is a shared-database test and
-  // that cannot be designed away here; what it does catch is the call being dropped
-  // outright, which is what actually happens in a refactor.
+  // THE STATISTICS ARE BROUGHT UP TO DATE BY THE WORKER, not by the confirm: an ANALYZE
+  // on the API's one connection held every request for over a second (the security pass
+  // over "getting in", 2026-10-02). Observed in `pg_stat_user_tables`, which is the
+  // table's and not this gym's, so another suite's writes can only add to the count.
   it(
-    "a confirm that changed something brings the table's statistics up to date",
+    "after a confirm of more people than the threshold, the worker's check analyses the table",
     async () => {
       const owner = await makeUser("analyze-owner");
       const org = await makeOrg(owner.cookies, "Analyze Gym");
       const lastAnalyze = async () => {
         const rows = await sql<{ at: Date | null }[]>`
-          SELECT greatest(last_analyze, last_autoanalyze) AS at
-          FROM pg_stat_user_tables WHERE relname = 'gym_member_list_entries'`;
+          SELECT last_analyze AS at FROM pg_stat_user_tables WHERE relname = 'gym_member_list_entries'`;
         return rows[0]?.at?.getTime() ?? 0;
       };
+      const preview = await stage(org.org.id, owner.cookies, file(many(1, MEMBER_LIST_ANALYSE_AFTER + 50, "Active")));
+      expect((await post(confirmUrl(org.org.id, preview.uploadId), { permissionConfirmed: true }, owner.cookies)).statusCode).toBe(200);
       const before = await lastAnalyze();
 
-      const preview = await stage(org.org.id, owner.cookies, file(many(1, 4, "Active")));
-      expect((await post(confirmUrl(org.org.id, preview.uploadId), { permissionConfirmed: true }, owner.cookies)).statusCode).toBe(200);
-
-      // It runs AFTER the commit and the statistics collector is not instant, so this
-      // waits for it rather than reading once and hoping.
-      let after = await lastAnalyze();
-      for (let tries = 0; tries < 40 && after <= before; tries += 1) {
+      // The statistics collector is not instant, so this waits for the count to arrive.
+      let run = await analyseEntriesIfMoved(sql);
+      for (let tries = 0; tries < 40 && !run.analysed; tries += 1) {
         await new Promise((resolve) => setTimeout(resolve, 250));
-        after = await lastAnalyze();
+        run = await analyseEntriesIfMoved(sql);
       }
-      expect(after, "the statistics were refreshed after the confirm").toBeGreaterThan(before);
+      expect(run.analysed, "the worker's check analysed after the confirm").toBe(true);
+      expect(run.changed).toBeGreaterThanOrEqual(MEMBER_LIST_ANALYSE_AFTER);
+      expect(await lastAnalyze()).toBeGreaterThan(before);
     },
     TEST_TIMEOUT_MS,
   );
@@ -1089,6 +1124,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
         await verify(person.email);
       }
       // The trainer trains here AND is a member; the comp member is on a free place.
+      await proveAddress(sql, trainer.email);
       expect(
         (await post(`/v1/orgs/${org.org.id}/staff`, { email: trainer.email, role: "trainer" }, owner.cookies))
           .statusCode,
@@ -1319,6 +1355,7 @@ d("member list: pressing confirm, and the list you keep (real Postgres)", () => 
       const org = await makeOrg(owner.cookies, "Limit Gym");
       // Staff are appointed from the gym's own people, so the colleague joins first.
       await joinAsMember(mate.cookies, org, owner.cookies);
+      await proveAddress(sql, mate.email);
       expect(
         (await post(`/v1/orgs/${org.org.id}/staff`, { email: mate.email, role: "manager" }, owner.cookies)).statusCode,
       ).toBe(201);

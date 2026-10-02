@@ -7,6 +7,7 @@
 // Outcomes are read from the tables, never from the replies alone.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { proveAddress } from "./proveAddress.js";
 import { buildApp } from "../src/app.js";
 import { everyoneLeft } from "./memberListEveryoneLeft.js";
 import { addAnyway } from "./memberListAddAnyway.js";
@@ -157,6 +158,7 @@ d("member list: keeping it by hand (real Postgres)", () => {
 
   const appoint = async (who: User, org: CreatedOrg, owner: User, role: "trainer" | "manager") => {
     await join(who, org, owner);
+    await proveAddress(sql, who.email);
     expect((await post(`/v1/orgs/${org.org.id}/staff`, { email: who.email, role }, owner.cookies)).statusCode).toBe(201);
   };
 
