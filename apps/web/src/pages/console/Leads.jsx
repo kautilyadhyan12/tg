@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ChevronRight, FileUp, Globe, Loader2, Search, UserPlus } from 'lucide-react';
-import { LEAD_EMAIL_SETTINGS_WORDS, LEAD_FILE_WORDS, LEAD_LIST_WORDS, LEAD_QUERY_MAX_CHARS } from '@app/shared';
+import { ChevronRight, FileUp, Globe, Loader2, Search, Trash2, UserPlus } from 'lucide-react';
+import { LEAD_EMAIL_SETTINGS_WORDS, LEAD_FILE_WORDS, LEAD_LIST_WORDS, LEAD_QUERY_MAX_CHARS, LEADS_TICKED_MAX } from '@app/shared';
 import { orgService, errorStatus, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import ScrollJump from '../../components/console/ScrollJump';
 import GymPageSheet from './GymPageSheet';
 import LeadFileImport from './LeadFileImport';
 import LeadSheet from './LeadSheet';
+import LeadsDelete from './LeadsDelete';
+import { Tick } from './MemberListPanel';
 import { useConsoleOrg } from './useConsoleOrg';
 import { orgWords, viewerPrivileges } from './consoleView';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
@@ -20,7 +22,11 @@ import {
   addedDay,
   addedWords,
   candidateLine,
+  deletedLine,
+  leadSelectionOf,
+  leadsPageTickState,
   leadsQueryString,
+  leadsSelectionFilter,
   showsEmailDue,
   sourceWord,
   statusChips,
@@ -37,8 +43,15 @@ import {
 // "Your gym page" (20c-iv-a) opens the gym's own page, whose form adds people here.
 // A long list keeps its tools on screen: search and chips pinned, Back to top and Go to the
 // bottom (RULINGS 2026-09-28, the rule Members set).
+// Delete many at once (20c-vii): a tick box on every row and on the heading, "Select all 1,240
+// leads" once a page is ticked, and a bar — "37 selected · Delete · Clear" — whose Delete opens
+// a box naming every lead that goes. Nothing happens to a lead that was not selected. A new
+// filter or search clears the selection, as on Members (§18.5).
 
 const count = (n) => n.toLocaleString('en');
+
+const NOBODY = new Set();
+const leadsWord = (k) => `${count(k)} ${k === 1 ? 'lead' : 'leads'}`;
 
 export default function Leads() {
   const { orgSlug } = useParams();
@@ -61,6 +74,14 @@ export default function Leads() {
   const [notice, setNotice] = useState(null);
   /** The newest request for a page: an answer to an older one is dropped. */
   const latest = useRef(0);
+  /** The leads selected, and the filters they were selected under: a new filter or search is
+   *  a new list, so the selection belongs to `for` and is read as empty for any other. */
+  const [sel, setSel] = useState({ for: null, ticked: NOBODY, all: null });
+  const [selecting, setSelecting] = useState(false);
+  /** A line about the selection: its limit, or why Select all failed. */
+  const [selNote, setSelNote] = useState(null);
+  /** The selection the Delete box was opened for: it keeps it after the list clears. */
+  const [deleteFor, setDeleteFor] = useState(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setFilters((f) => (f.query === typed ? f : { ...f, query: typed })), 300);
@@ -127,6 +148,75 @@ export default function Leads() {
     }
   };
 
+  // ── Selecting leads (20c-vii) ──
+  const mine = sel.for === filters ? sel : { for: filters, ticked: NOBODY, all: null };
+  const ticked = mine.ticked;
+  const all = mine.all;
+  const picked = all !== null ? all.count : ticked.size;
+  const selection = useMemo(() => leadSelectionOf(ticked, all), [ticked, all]);
+  const loadedIds = page.leads.map((lead) => lead.id);
+  const { pageIds, pageTicked } = leadsPageTickState(loadedIds, ticked, all);
+  const headState = pageTicked ? 'on' : picked > 0 ? 'some' : 'off';
+  const rowPicked = (id) => all !== null || ticked.has(id);
+  const clearSelection = () => {
+    setSel({ for: filters, ticked: NOBODY, all: null });
+    setSelNote(null);
+  };
+  const tickPage = () => {
+    if (pageTicked) {
+      clearSelection();
+      return;
+    }
+    setSel({ for: filters, ticked: new Set(pageIds), all: null });
+    setSelNote(null);
+  };
+  const tooMany = `You can select up to ${count(LEADS_TICKED_MAX)} leads one at a time. To select more, tick the box at the top, then Select all.`;
+  const tickRow = (id) => {
+    // From "Select all", unticking one leaves the rest of the rows shown ticked.
+    if (all !== null) {
+      const next = new Set(loadedIds.slice(0, LEADS_TICKED_MAX));
+      next.delete(id);
+      setSel({ for: filters, ticked: next, all: null });
+      setSelNote(loadedIds.length > LEADS_TICKED_MAX ? tooMany : null);
+      return;
+    }
+    const next = new Set(ticked);
+    if (next.has(id)) next.delete(id);
+    else if (next.size >= LEADS_TICKED_MAX) {
+      setSelNote(tooMany);
+      return;
+    } else next.add(id);
+    setSel({ for: filters, ticked: next, all: null });
+    setSelNote(null);
+  };
+  const selectEveryone = async () => {
+    const asked = filters;
+    const filter = leadsSelectionFilter(asked);
+    setSelecting(true);
+    setSelNote(null);
+    try {
+      const res = await orgService.selectAllLeads(gymId, filter);
+      setSel({ for: asked, ticked: NOBODY, all: { filter, ...res.data.selection } });
+    } catch (err) {
+      setSelNote(errorText(err, "We couldn't select all the leads. Please try again."));
+    } finally {
+      setSelecting(false);
+    }
+  };
+  // A "Select all" whose leads changed: the bar and the box take the server's new count.
+  const selectionMoved = useCallback((fresh) => {
+    setSel((s) => (s.all === null ? s : { ...s, all: { ...s.all, count: fresh.count, digest: fresh.digest } }));
+    setDeleteFor((d) => (d === null || d.kind !== 'all' ? d : { ...d, count: fresh.count, digest: fresh.digest }));
+  }, []);
+  const leadsDeleted = useCallback(
+    (done) => {
+      setSel({ for: filters, ticked: NOBODY, all: null });
+      setNotice(deletedLine(done));
+      setTick((n) => n + 1);
+    },
+    [filters],
+  );
+
   if (orgLoading) {
     return (
       <div className="c-page">
@@ -156,13 +246,50 @@ export default function Leads() {
 
   const noLeads = page.counts !== null && page.counts.all === 0;
   const searching = filters.query.trim() !== '' || filters.status !== 'all' || filters.due || filters.problem;
+  // A lapsed gym's staff change nothing, so they tick nothing (§4.2).
+  const canTick = !readOnly;
+  const matchWord = searching ? ' that match' : '';
+  const barButtons = (
+    <>
+      <button type="button" onClick={() => setDeleteFor(selection)} data-testid="bar-delete" className="c-btn c-btn-danger c-btn-sm">
+        <Trash2 aria-hidden="true" className="w-4 h-4" />
+        Delete
+      </button>
+      <button type="button" onClick={clearSelection} className="c-btn c-btn-sm c-btn-link">
+        Clear
+      </button>
+    </>
+  );
+  // Gmail's line under the heading: the page is selected, and every lead can be.
+  let selectLine = null;
+  if (all !== null) {
+    selectLine = (
+      <>
+        <span>{`All ${leadsWord(all.count)}${matchWord} ${all.count === 1 ? 'is' : 'are'} selected.`}</span>
+        <button type="button" onClick={clearSelection} className="c-btn-link c-w6">
+          Clear
+        </button>
+      </>
+    );
+  } else if (pageTicked && page.total > ticked.size) {
+    selectLine = (
+      <>
+        <span>
+          {ticked.size < loadedIds.length ? `The first ${leadsWord(ticked.size)} shown are selected.` : `All ${leadsWord(ticked.size)} shown are selected.`}
+        </span>
+        <button type="button" onClick={() => void selectEveryone()} disabled={selecting} data-testid="select-everyone" className="c-btn-link c-w6">
+          {`Select all ${leadsWord(page.total)}${matchWord}`}
+        </button>
+      </>
+    );
+  }
   const openLead = (id) => {
     setNotice(null);
     setOpenId(id);
   };
 
   return (
-    <div className="c-page">
+    <div className={`c-page ${picked > 0 ? 'pb-20 md:pb-0' : ''}`}>
       <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between md:gap-6">
         <div className="flex flex-col gap-1.5 min-w-0">
           <h1 className="c-h1">Leads</h1>
@@ -289,7 +416,23 @@ export default function Leads() {
                 {count(page.total)} {page.total === 1 ? 'lead' : 'leads'} match
               </p>
             ) : null}
+            {picked > 0 && !page.loading && page.leads.length > 0 ? (
+              <div className="hidden md:block c-card overflow-hidden w-full">
+                <div className="c-selbar c-selbar-top" data-testid="sel-bar">
+                  <span className="c-s14 c-w6 c-t1 flex-grow" data-testid="sel-count">
+                    {`${count(picked)} selected`}
+                  </span>
+                  {barButtons}
+                </div>
+              </div>
+            ) : null}
           </div>
+
+          {selNote !== null ? (
+            <p className="c-s14 c-t1" role="status" data-testid="selection-note">
+              {selNote}
+            </p>
+          ) : null}
 
           {notice !== null ? (
             <p className="c-s14 c-w6" role="status" style={{ color: 'var(--good)' }}>
@@ -313,20 +456,41 @@ export default function Leads() {
 
           {!page.loading && page.leads.length > 0 ? (
             <section className="c-card overflow-hidden">
-              <div className="c-lead-grid c-th hidden md:grid px-5 py-3" data-testid="leads-head">
-                <span style={{ gridArea: 'who' }}>Name</span>
-                <span style={{ gridArea: 'src' }}>Heard of you from</span>
-                <span style={{ gridArea: 'added' }}>Added</span>
-                <span style={{ gridArea: 'tag' }}>Status</span>
+              <div className={`hidden md:flex items-center ${canTick ? 'pl-1' : ''}`} data-testid="leads-head">
+                {canTick ? <Tick state={headState} label={pageTicked ? 'Clear the selection' : 'Select every lead shown'} onClick={tickPage} /> : null}
+                <div className={`c-lead-grid c-th grid flex-grow py-3 ${canTick ? 'pr-5' : 'px-5'}`}>
+                  <span style={{ gridArea: 'who' }}>Name</span>
+                  <span style={{ gridArea: 'src' }}>Heard of you from</span>
+                  <span style={{ gridArea: 'added' }}>Added</span>
+                  <span style={{ gridArea: 'tag' }}>Status</span>
+                </div>
               </div>
+              {selectLine !== null ? (
+                <div
+                  className="c-s14 c-t2 flex flex-wrap justify-center gap-x-2 gap-y-1 px-4 py-2.5 border-b md:border-t text-center"
+                  style={{ borderColor: 'var(--line)' }}
+                  data-testid="select-line"
+                >
+                  {selectLine}
+                </div>
+              ) : null}
               <ul>
                 {page.leads.map((lead, i) => (
-                  <li key={lead.id} className={i > 0 ? 'border-t' : 'md:border-t'} style={{ borderColor: 'var(--line)' }}>
+                  <li
+                    key={lead.id}
+                    className={`flex items-start md:items-center ${canTick ? 'pl-1' : ''} ${i > 0 ? 'border-t' : 'md:border-t'} ${rowPicked(lead.id) ? 'c-picked' : ''}`}
+                    style={{ borderColor: 'var(--line)' }}
+                  >
+                    {canTick ? (
+                      <span className="pt-1 md:pt-0">
+                        <Tick state={rowPicked(lead.id) ? 'on' : 'off'} label={`Select ${lead.fullName}`} onClick={() => tickRow(lead.id)} />
+                      </span>
+                    ) : null}
                     <button
                       type="button"
                       data-testid="lead-row"
                       onClick={() => openLead(lead.id)}
-                      className="c-lead-grid grid w-full text-left min-h-11 px-4 py-3.5 md:px-5"
+                      className={`c-lead-grid grid flex-grow min-w-0 text-left min-h-11 py-3.5 ${canTick ? 'pr-4 md:pr-5' : 'px-4 md:px-5'}`}
                     >
                       <span className="flex flex-col gap-0.5 min-w-0" style={{ gridArea: 'who' }}>
                         <span className="c-s15 c-w6 c-t1 c-ell">{lead.fullName}</span>
@@ -369,7 +533,27 @@ export default function Leads() {
         </>
       )}
 
-      {!page.refused ? <ScrollJump /> : null}
+      {!page.refused ? <ScrollJump raised={picked > 0} /> : null}
+
+      {/* The bar on a phone, just above the tab bar, as on Members. */}
+      {picked > 0 && !page.refused ? (
+        <div className="c-selbar c-selbar-phone" data-testid="sel-bar-phone">
+          <Tick state={headState} label={pageTicked ? 'Clear the selection' : 'Select every lead shown'} onClick={tickPage} />
+          <span className="c-s14 c-w6 c-t1 flex-grow">{`${count(picked)} selected`}</span>
+          {barButtons}
+        </div>
+      ) : null}
+
+      {deleteFor !== null ? (
+        <LeadsDelete
+          gymId={gymId}
+          selection={deleteFor}
+          words={words}
+          onSelectionChanged={selectionMoved}
+          onDeleted={leadsDeleted}
+          onClose={() => setDeleteFor(null)}
+        />
+      ) : null}
 
       {pageOpen ? <GymPageSheet gymId={gymId} gym={org} words={words} readOnly={readOnly} onClose={() => setPageOpen(false)} /> : null}
 

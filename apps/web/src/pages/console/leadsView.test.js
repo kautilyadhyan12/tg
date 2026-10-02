@@ -2,13 +2,19 @@ import { describe, expect, it } from 'vitest';
 import {
   addedDay,
   addedWords,
+  deleteGoneLine,
+  deleteTitle,
+  deletedLine,
   detailsRequest,
   createLeadRequest,
   followUpEmail,
   followUpState,
   joinedWords,
   leadProblem,
+  leadSelectionOf,
+  leadsPageTickState,
   leadsQueryString,
+  leadsSelectionFilter,
   SENT_FOR_YOU_NOTE,
   WAITING_FOR_YOU_NOTE,
   showsEmailDue,
@@ -287,5 +293,38 @@ describe('the follow-up emails (20c-ii)', () => {
     expect(leadsQueryString({ status: 'all', query: '', due: true })).toBe('followUp=due');
     expect(leadsQueryString({ status: 'all', query: '', problem: true })).toBe('followUp=problem');
     expect(leadsQueryString({ status: 'new', query: 'pri', due: false })).toBe('status=new&q=pri');
+  });
+});
+
+describe('deleting many leads (20c-vii)', () => {
+  it("Select all means the list's status, chip and search, never its place in the list", () => {
+    expect(leadsSelectionFilter({ status: 'all', query: '  ', due: false, problem: false })).toEqual({});
+    expect(leadsSelectionFilter({ status: 'new', query: ' spam ', due: false, problem: false })).toEqual({ status: 'new', q: 'spam' });
+    expect(leadsSelectionFilter({ status: 'all', query: '', due: true, problem: true })).toEqual({ followUp: 'due' });
+    expect(leadsSelectionFilter({ status: 'all', query: '', due: false, problem: true })).toEqual({ followUp: 'problem' });
+  });
+
+  it("sends the leads ticked, or Select all's filter with its count and digest, or nothing", () => {
+    expect(leadSelectionOf(new Set(), null)).toBeNull();
+    expect(leadSelectionOf(new Set(['a']), null)).toEqual({ kind: 'ticked', leadIds: ['a'] });
+    const all = { filter: { status: 'new' }, count: 9, digest: 'd' };
+    expect(leadSelectionOf(new Set(['a']), all)).toEqual({ kind: 'all', filter: { status: 'new' }, count: 9, digest: 'd' });
+  });
+
+  it('the heading ticks every row shown, and is on only when every one is', () => {
+    expect(leadsPageTickState(['a', 'b'], new Set(['a']), null)).toEqual({ pageIds: ['a', 'b'], pageTicked: false });
+    expect(leadsPageTickState(['a', 'b'], new Set(['a', 'b']), null).pageTicked).toBe(true);
+    expect(leadsPageTickState([], new Set(), null).pageTicked).toBe(false);
+  });
+
+  it('says how many go, and how many had gone already', () => {
+    expect(deleteTitle(null)).toBe('Delete leads');
+    expect(deleteTitle({ leads: [{ id: 'a', name: 'A' }] })).toBe('Delete 1 lead?');
+    expect(deleteTitle({ leads: Array.from({ length: 1240 }, (_, i) => ({ id: String(i), name: 'x' })) })).toBe('Delete 1,240 leads?');
+    expect(deleteGoneLine(0)).toBeNull();
+    expect(deleteGoneLine(1)).toBe('1 lead you selected was already deleted.');
+    expect(deleteGoneLine(3)).toBe('3 leads you selected were already deleted.');
+    expect(deletedLine({ deleted: 37, alreadyDeleted: false })).toBe('37 leads deleted.');
+    expect(deletedLine({ deleted: 1, alreadyDeleted: true })).toBe('1 lead was already deleted.');
   });
 });
