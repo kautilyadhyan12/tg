@@ -214,17 +214,14 @@ d("google oauth routes (real Postgres)", () => {
     expect(users[0]?.n).toBe(0);
   });
 
-  it("callback rate limit: 601st attempt from ONE IP → 429 (R3.7; a whole gym is 400, Stage 4 item 10)", { timeout: 60_000 }, async () => {
-    const ip = "10.7.99.99"; // dedicated so no other test shares this bucket
-    let last: Awaited<ReturnType<typeof get>> | undefined;
-    let sixHundredth = 0;
-    // Bad state → the limiter (preHandler) runs before the handler; no DB work.
-    for (let i = 0; i < 601; i++) {
-      last = await get(api(), "/v1/auth/google/callback?code=x&state=y", { ip });
-      if (i === 599) sixHundredth = last.statusCode;
+  it("a callback whose state is not ours does no work and costs nothing: 700 from ONE IP are all turned away the same (R3.7; Stage 4 item 10)", { timeout: 60_000 }, async () => {
+    const ip = "10.7.99.99"; // dedicated so no other test shares this address
+    const answers = new Set<string>();
+    for (let i = 0; i < 700; i++) {
+      const res = await get(api(), "/v1/auth/google/callback?code=x&state=y", { ip });
+      answers.add(`${String(res.statusCode)} ${String(res.headers.location)}`);
     }
-    expect(sixHundredth).toBe(302);
-    expect(last?.statusCode).toBe(429);
+    expect([...answers]).toEqual([`302 ${baseEnv.WEB_ORIGIN}/login?error=google_failed`]);
   });
 
   it("not configured: both routes redirect with google_not_configured", { timeout: 30_000 }, async () => {

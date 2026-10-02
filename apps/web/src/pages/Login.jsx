@@ -31,6 +31,7 @@ const GOOGLE_LOGIN_URL = `${import.meta.env.VITE_API_URL}/v1/auth/google`;
 const GOOGLE_ERROR_MESSAGES = {
   google_failed: 'Google sign-in failed. Please try again.',
   google_not_configured: 'Google sign-in is currently unavailable.',
+  google_busy: 'Google sign-in is busy here just now. Please try again in a minute, or continue with email.',
 };
 
 /** The server's message is written for people (it says how many tries are

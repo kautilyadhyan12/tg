@@ -18,7 +18,7 @@ import type { FastifyBaseLogger } from "fastify";
 import type { Sql } from "postgres";
 import { SIGN_IN_CODE_RULES } from "@app/shared";
 import type { AppConfig } from "../../config.js";
-import { AuthError } from "./errors.js";
+import { AuthError, WrongGuessError } from "./errors.js";
 import * as repo from "./repo.js";
 import type { CodePurpose, SignInCodeRow } from "./repo.js";
 import { mintSixDigitCode, signInCodeHash } from "./tokens.js";
@@ -159,9 +159,9 @@ export async function redeemCode(
     const attempts = await repo.recordFailedAttempt(deps.sql, live.id, SIGN_IN_CODE_RULES.maxAttempts);
     const left = SIGN_IN_CODE_RULES.maxAttempts - attempts;
     if (left <= 0) {
-      throw new AuthError(400, "invalid_code", "Too many wrong tries. Ask for a new code.");
+      throw new WrongGuessError(400, "invalid_code", "Too many wrong tries. Ask for a new code.");
     }
-    throw new AuthError(
+    throw new WrongGuessError(
       400,
       "invalid_code",
       `That code is not right. You have ${String(left)} ${left === 1 ? "try" : "tries"} left.`,

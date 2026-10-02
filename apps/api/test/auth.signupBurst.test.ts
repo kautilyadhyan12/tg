@@ -56,9 +56,11 @@ const robot: RobotCheck & { asked: number } = {
 };
 
 const identities = new Map<string, GoogleIdentity>();
+let googleAsked = 0;
 const google: GoogleVerifier = {
   authUrl: (state) => `https://accounts.google.test/o/oauth2/v2/auth?state=${encodeURIComponent(state)}`,
   exchange: (code) => {
+    googleAsked += 1;
     const id = identities.get(code);
     return id === undefined ? Promise.reject(new Error("unknown code")) : Promise.resolve(id);
   },
@@ -286,23 +288,65 @@ d("a whole gym signing up on one internet address (real Postgres)", () => {
     expect(await codesFor("burst-ceiling-501@example.com")).toBe(0);
   });
 
-  it("code checks: 1,000 an hour from one address; the 1,001st is refused", { timeout: 30_000 }, async () => {
+  it("500 requests that would send nothing, then a member at the same address still gets a code", { timeout: 60_000 }, async () => {
     const ip = gymAddress();
-    for (let i = 0; i < 999; i++) await redis.incrWithTtl(`rl:code_verify:ip:${ip}`, 3600);
-    const thousandth = await post(ip, "/v1/auth/code/verify", { email: "burst-nocode@example.com", code: "123456" });
-    expect(thousandth.statusCode).toBe(400);
-    const over = await post(ip, "/v1/auth/code/verify", { email: "burst-nocode-2@example.com", code: "123456" });
-    expect(over.statusCode).toBe(429);
-    expect(errorOf(over)).toBe("rate_limited");
+    for (let i = 0; i < 500; i++) expect((await post(ip, "/v1/auth/code/send", {})).statusCode).toBe(400);
+    const member = "burst-member-after-empty@example.com";
+    expect((await askForCode(ip, member)).statusCode).toBe(200);
   });
 
-  it("Google: 600 steps an hour from one address; the 601st is refused", { timeout: 30_000 }, async () => {
+  it("code checks: junk and guesses at addresses with no code spend none of the address's 1,000", { timeout: 60_000 }, async () => {
     const ip = gymAddress();
-    for (let i = 0; i < 599; i++) await redis.incrWithTtl(`rl:google:ip:${ip}`, 3600);
-    expect((await get(ip, "/v1/auth/google")).statusCode).toBe(302);
-    const over = await get(ip, "/v1/auth/google");
+    for (let i = 0; i < 300; i++) expect((await post(ip, "/v1/auth/code/verify", {})).statusCode).toBe(400);
+    for (let i = 0; i < 300; i++) expect((await post(ip, "/v1/auth/code/verify", { email: `burst-nobody-${String(i)}@example.com`, code: "123456" })).statusCode).toBe(400);
+    // Neither count the address has for code checks moved (1,000 junk requests would take a
+    // second minute here: the app-wide floor is 1,000 a minute an address).
+    expect(await redis.get(`rl:code_verify_wrong:ip:${ip}`)).toBeNull();
+    expect(await redis.get(`rl:code_verify:ip:${ip}`)).toBeNull();
+    const member = "burst-member-checks@example.com";
+    expect((await signInByCode(ip, member)).statusCode).toBe(200);
+  });
+
+  it("code checks: 1,000 wrong guesses at live codes an hour from one address; then it is refused", { timeout: 30_000 }, async () => {
+    const ip = gymAddress();
+    for (let i = 0; i < 999; i++) await redis.incrWithTtl(`rl:code_verify_wrong:ip:${ip}`, 3600);
+    const email = "burst-guesser@example.com";
+    expect((await askForCode(ip, email)).statusCode).toBe(200);
+    const code = lastCodeFor(email);
+    const wrong = code === "000000" ? "000001" : "000000";
+    expect((await post(ip, "/v1/auth/code/verify", { email, code: wrong })).statusCode).toBe(400);
+    const over = await post(ip, "/v1/auth/code/verify", { email, code });
     expect(over.statusCode).toBe(429);
     expect(errorOf(over)).toBe("rate_limited");
+    // Elsewhere, the same person's right code still works: the address was refused, not them.
+    expect((await post(elsewhere(), "/v1/auth/code/verify", { email, code })).statusCode).toBe(200);
+  });
+
+  it("Google: made-up callbacks and sign-ins started spend nothing; a member at the address still signs in", { timeout: 60_000 }, async () => {
+    const ip = gymAddress();
+    for (let i = 0; i < 400; i++) await get(ip, "/v1/auth/google/callback?code=x&state=y");
+    for (let i = 0; i < 300; i++) expect((await get(ip, "/v1/auth/google")).statusCode).toBe(302);
+    const res = await signInWithGoogle(ip, { subject: "burst-g-after-junk", email: "burst-g-after-junk@example.com", name: "Member" });
+    expect(res.headers.location).toBe(`${baseEnv.WEB_ORIGIN}/auth/google/success`);
+  });
+
+  it("Google: 60 answers Google refused from one address in a minute, then the next waits that minute without asking Google", { timeout: 60_000 }, async () => {
+    const ip = gymAddress();
+    for (let i = 0; i < 60; i++) {
+      const start = await get(ip, "/v1/auth/google");
+      const state = start.cookies.find((c) => c.name === OAUTH_STATE_COOKIE)?.value ?? "";
+      const res = await get(ip, `/v1/auth/google/callback?code=made-up-${String(i)}&state=${encodeURIComponent(state)}`, { [OAUTH_STATE_COOKIE]: state });
+      expect(res.headers.location).toBe(`${baseEnv.WEB_ORIGIN}/login?error=google_failed`);
+    }
+    // Those 60 were refused by Google (unknown codes). The next is not put to Google at all.
+    const askedBefore = googleAsked;
+    const member = { subject: "burst-g-member-waits", email: "burst-g-member-waits@example.com", name: "Member" };
+    const refused = await signInWithGoogle(ip, member);
+    expect(refused.headers.location).toBe(`${baseEnv.WEB_ORIGIN}/login?error=google_busy`);
+    expect(googleAsked).toBe(askedBefore);
+    now += 61 * 1000;
+    const later = await signInWithGoogle(ip, member);
+    expect(later.headers.location).toBe(`${baseEnv.WEB_ORIGIN}/auth/google/success`);
   });
 });
 
@@ -331,7 +375,7 @@ r("a whole gym on one internet address, on the real Redis", () => {
   });
 
   it("junk spends nothing, the first 20 go straight through, the 21st is asked, and made-up answers never lock out a member who passes", { timeout: 60_000 }, async () => {
-    for (let i = 0; i < 10; i++) expect((await send({})).statusCode).toBe(400);
+    for (let i = 0; i < 500; i++) expect((await send({})).statusCode).toBe(400);
     for (let i = 0; i < 20; i++) expect((await send({ email: `burst-r${run}-${String(i)}@example.com` })).statusCode).toBe(200);
     expect(errorOf(await send({ email: `burst-r${run}-asked@example.com` }))).toBe("robot_check");
     await Promise.all(Array.from({ length: 40 }, (_, i) => send({ email: `burst-r${run}-troll-${String(i)}@example.com`, robotToken: "made-up" })));
