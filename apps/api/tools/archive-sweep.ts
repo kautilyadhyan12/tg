@@ -2,6 +2,10 @@
 // with no plan is closed four months later, replacing Part 3 §4.2's fourteen
 // days).
 //
+// **SWITCHED OFF (Kd, RULINGS 2026-10-02): a gym that stops paying is never
+// closed or emptied by the clock, and the worker no longer runs this.** Running
+// it by hand closes gyms against that ruling. The text below is from when it ran.
+//
 // The worker runs this nightly at 04:30; this door exists for two reasons and
 // the second is the important one.
 //
