@@ -1399,10 +1399,13 @@ d("0001_init on a real database", () => {
 
     expect([...byName.keys()].sort()).toEqual([
       "gym_attendance_hours_status_check",
+      // 0063: a desk's scan names its device; a visit names an account or a record.
+      "gym_attendance_how_check",
       "gym_attendance_method_check",
       "gym_attendance_session_pairing_check",
       "gym_attendance_session_range_check",
       "gym_attendance_slot_key_agrees_check",
+      "gym_attendance_who_check",
     ]);
 
     // ALL FIVE STATUSES, by name. A vocabulary that lost one would let a reader
@@ -1421,6 +1424,10 @@ d("0001_init on a real database", () => {
     // CHECK on a live attendance table later is the migration nobody wants.
     expect(byName.get("gym_attendance_method_check")).toContain("'manual'");
     expect(byName.get("gym_attendance_method_check")).toContain("'qr'");
+    for (const method of ["pass", "key_tag", "staff"]) {
+      expect(byName.get("gym_attendance_method_check")).toContain(`'${method}'`);
+    }
+    expect(byName.get("gym_attendance_who_check")).toBe("CHECK (((user_id IS NOT NULL) OR (entry_id IS NOT NULL)))");
 
     // BOTH ARMS OF THE PAIRING: a window is present exactly when the status is
     // `in_session`. One arm alone admits a row that claims a session and names

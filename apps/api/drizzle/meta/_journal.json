@@ -435,6 +435,13 @@
       "when": 1788220800045,
       "tag": "0062_staff_ghost_rows",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1788220800046,
+      "tag": "0063_checkin_desk",
+      "breakpoints": true
     }
   ]
 }

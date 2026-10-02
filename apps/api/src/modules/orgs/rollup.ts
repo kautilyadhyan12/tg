@@ -188,17 +188,21 @@ export async function rollUpGymDays(
     -- joining workouts through the raw table would count their sets and reps
     -- TWICE. "count(DISTINCT w.id)" would hide it for the workout count and
     -- silently double "sum(sets_count)" beside it.
+    --
+    -- App accounts' visits only, as the console's day read counts them until the
+    -- live log counts by record (ROADMAP 16b): a desk's visit of somebody without
+    -- the app names no account.
     present AS (
       SELECT DISTINCT t.gym_id, t.day, a.user_id
       FROM target t
-      JOIN gym_attendance a ON a.gym_id = t.gym_id AND a.day = t.day
+      JOIN gym_attendance a ON a.gym_id = t.gym_id AND a.day = t.day AND a.user_id IS NOT NULL
     ),
     att AS (
       SELECT t.gym_id, t.day,
              count(*)::int AS visits,
              count(DISTINCT a.user_id)::int AS visitors
       FROM target t
-      JOIN gym_attendance a ON a.gym_id = t.gym_id AND a.day = t.day
+      JOIN gym_attendance a ON a.gym_id = t.gym_id AND a.day = t.day AND a.user_id IS NOT NULL
       GROUP BY t.gym_id, t.day
     ),
     -- **:29961 RULING 2, AND IT IS TWO CONDITIONS.** "present" is the second
@@ -206,11 +210,11 @@ export async function rollUpGymDays(
     -- membership interval, "[joined_at, removed_at)" measured against the gym's
     -- own day.
     --
-    -- **IT IS REDUNDANT TODAY AND IS KEPT DELIBERATELY.** The only writer of
-    -- "gym_attendance" is a member marking themselves, which already refuses a
-    -- non-member — so an attendance row implies a live membership at the moment
-    -- it was made. Staff marking somebody present is ruled "not now" rather than
-    -- never (:27900), and that is a SECOND writer with a different actor. The
+    -- **IT IS KEPT DELIBERATELY.** The member's own tap refuses a non-member, but
+    -- since 16a the front desk writes visits too, and a person on the gym's list
+    -- who never joined in the app is checked in on their record by their proved
+    -- email — so an attendance row no longer implies a live membership. Staff
+    -- checking somebody in (16b) is a third writer, with a different actor. The
     -- ruling names both conditions; this file enforces both, and the suite
     -- proves this one by inserting a visit for somebody removed beforehand —
     -- a row the mark route could not have produced.

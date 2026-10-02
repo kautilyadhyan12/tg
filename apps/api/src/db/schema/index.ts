@@ -18,3 +18,4 @@ export * from "./invites.js";
 export * from "./billing.js";
 export * from "./leads.js";
 export * from "./staffInvites.js";
+export * from "./checkin.js";

@@ -301,12 +301,18 @@ export const gymAttendance = pgTable(
     gymId: uuid("gym_id")
       .notNull()
       .references(() => gyms.id, { onDelete: "cascade" }),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id),
-    markedByUserId: uuid("marked_by_user_id")
-      .notNull()
-      .references(() => users.id),
+    /** The app account, when the person has one; a visit of somebody without the app
+     *  names only their record (spec Part 3 §12.6). */
+    userId: uuid("user_id").references(() => users.id),
+    /** Null for a desk's scan, which names its device instead (`gym_attendance_how_check`). */
+    markedByUserId: uuid("marked_by_user_id").references(() => users.id),
+    /** The member's record on the gym's list. Foreign key `(gym_id, entry_id)` → the
+     *  record, ON DELETE CASCADE, and `gym_attendance_who_check` — both in
+     *  `0063_checkin_desk.sql`, which Drizzle's builder cannot express. */
+    entryId: uuid("entry_id"),
+    /** The desk device that read a pass or key tag; foreign key `(gym_id, device_id)` →
+     *  `gym_checkin_devices`, in `0063_checkin_desk.sql`. */
+    deviceId: uuid("device_id"),
     day: date("day").notNull(),
     markedAt: timestamp("marked_at", { withTimezone: true }).notNull().defaultNow(),
     method: text("method").notNull(),
@@ -317,7 +323,12 @@ export const gymAttendance = pgTable(
     createdAt: createdAt(),
   },
   (t) => [
-    check("gym_attendance_method_check", sql`${t.method} IN ('manual','qr')`),
+    check("gym_attendance_method_check", sql`${t.method} IN ('manual','qr','pass','key_tag','staff')`),
+    check("gym_attendance_who_check", sql`${t.userId} IS NOT NULL OR ${t.entryId} IS NOT NULL`),
+    check(
+      "gym_attendance_how_check",
+      sql`(${t.method} IN ('pass','key_tag') AND ${t.deviceId} IS NOT NULL AND ${t.markedByUserId} IS NULL) OR (${t.method} IN ('manual','qr','staff') AND ${t.deviceId} IS NULL AND ${t.markedByUserId} IS NOT NULL)`,
+    ),
     check(
       "gym_attendance_hours_status_check",
       sql`${t.hoursStatus} IN ('in_session','open_24h','outside_hours','closed_day','hours_unset')`,
@@ -335,6 +346,9 @@ export const gymAttendance = pgTable(
       sql`CASE WHEN ${t.hoursStatus} = 'in_session' THEN ${t.slotKey} = ${t.sessionOpensMinute}::text || '-' || ${t.sessionClosesMinute}::text ELSE ${t.slotKey} = ${t.hoursStatus} END`,
     ),
     uniqueIndex("gym_attendance_gym_user_day_slot_uq").on(t.gymId, t.userId, t.day, t.slotKey),
+    uniqueIndex("gym_attendance_gym_entry_day_slot_uq")
+      .on(t.gymId, t.entryId, t.day, t.slotKey)
+      .where(sql`${t.entryId} IS NOT NULL`),
     index("gym_attendance_gym_day_idx").on(t.gymId, t.day, t.markedAt),
   ],
 );
