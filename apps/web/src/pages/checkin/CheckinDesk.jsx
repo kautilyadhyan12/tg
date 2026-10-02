@@ -193,6 +193,8 @@ function Desk({ look }) {
   // The codes let in within SAME_PASS_MS, and what was shown for each.
   const letIn = useRef(new Map());
   const inFlight = useRef(null);
+  // The code whose answer is on the screen now, or null.
+  const onScreen = useRef(null);
 
   useEffect(() => {
     document.title = 'Check-in';
@@ -201,11 +203,13 @@ function Desk({ look }) {
     };
   }, []);
 
-  const show = useCallback((answer) => {
+  const show = useCallback((answer, code = null) => {
     if (clearTimer.current !== null) clearTimeout(clearTimer.current);
+    onScreen.current = code;
     setShown(answer);
     clearTimer.current = setTimeout(() => {
       clearTimer.current = null;
+      onScreen.current = null;
       setShown(null);
     }, RESULT_SHOW_MS);
   }, []);
@@ -213,9 +217,9 @@ function Desk({ look }) {
   /** An answer the desk already has, shown at once — but never over a scan still on its
    *  way: that is the next person, and their answer is the one they are waiting for. */
   const showNow = useCallback(
-    (answer) => {
+    (answer, code = null) => {
       if (inFlight.current !== null) return;
-      show(answer);
+      show(answer, code);
     },
     [show],
   );
@@ -229,7 +233,8 @@ function Desk({ look }) {
       for (const [kept, entry] of letIn.current) if (now - entry.at >= SAME_PASS_MS) letIn.current.delete(kept);
       const before = letIn.current.get(code);
       if (before !== undefined) {
-        showNow(before.shown);
+        // Not over somebody else's answer: the next person keeps their few seconds.
+        if (onScreen.current === null || onScreen.current === code) showNow(before.shown, code);
         return;
       }
       if (inFlight.current === code) return;
@@ -251,7 +256,7 @@ function Desk({ look }) {
           setNames(next);
           writeDeskNames(storage(), next);
         }
-        show(deskAnswer(answer));
+        show(deskAnswer(answer), code);
       } catch (err) {
         if (seq.current !== mine) return;
         const trouble = deskTrouble(err);
@@ -261,7 +266,7 @@ function Desk({ look }) {
           setNames(null);
           writeDeskNames(storage(), null);
         } else {
-          show(trouble);
+          show(trouble, code);
         }
       } finally {
         if (seq.current === mine) {

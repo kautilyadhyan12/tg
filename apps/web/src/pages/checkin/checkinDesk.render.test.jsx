@@ -152,6 +152,7 @@ describe('the worst thing: somebody else’s details left on the desk', () => {
   });
 
   it('two people in turn, and the first still holding the phone up: each sees their own answer', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     checkinService.scan
       .mockResolvedValueOnce(checkedIn('Olivia Bennett'))
       .mockResolvedValueOnce(checkedIn('Liam Hughes'))
@@ -161,6 +162,9 @@ describe('the worst thing: somebody else’s details left on the desk', () => {
     await screen.findByText('Olivia Bennett');
     scan(PASS_B);
     await screen.findByText('Liam Hughes');
+    await act(async () => {
+      vi.advanceTimersByTime(RESULT_SHOW_MS + 100);
+    });
     scan(PASS);
     expect(screen.getByText('Olivia Bennett')).toBeTruthy();
     expect(screen.queryByText('Liam Hughes')).toBeNull();
@@ -186,6 +190,19 @@ describe('the worst thing: somebody else’s details left on the desk', () => {
     expect(screen.getByText('Liam Hughes')).toBeTruthy();
     expect(screen.queryByText('Olivia Bennett')).toBeNull();
     expect(checkinService.scan).toHaveBeenCalledTimes(2);
+  });
+
+  it('the last person’s pass read again leaves the next person’s answer up', async () => {
+    checkinService.scan.mockResolvedValueOnce(checkedIn('Olivia Bennett')).mockResolvedValueOnce(checkedIn('Liam Hughes'));
+    mount();
+    scan(PASS);
+    await screen.findByText('Olivia Bennett');
+    scan(PASS_B);
+    await screen.findByText('Liam Hughes');
+    // Olivia is still in front of the camera.
+    scan(PASS);
+    expect(screen.getByText('Liam Hughes')).toBeTruthy();
+    expect(screen.queryByText('Olivia Bennett')).toBeNull();
   });
 
   it('a read that is no pass never replaces a scan on its way either', async () => {
