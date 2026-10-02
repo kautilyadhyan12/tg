@@ -555,8 +555,6 @@ export async function findLiveCode(
   return rows[0] === undefined ? null : signInCodeColumns(rows[0]);
 }
 
-/** One wrong guess, atomically: bump the count and, on the last allowed one,
- *  kill the code in the same statement. Returns the new count. */
 /** TAKES ONE TRY at a live code, BEFORE the guess is compared, in one statement: guesses
  *  sent at the same moment wait on the row, and only `maxAttempts` of them get a try.
  *  Returns the tries taken counting this one, or null when the code had none left (or
