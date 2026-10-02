@@ -1,0 +1,285 @@
+// Check-in's reads and writes (spec Part 3 §12; ROADMAP 16a). Every statement names its
+// gym in the WHERE, and a device is found by its key's hash alone and then knows its gym.
+import type { Sql, TransactionSql } from "postgres";
+import { CHECKIN_DEVICES_MAX, gymClockFormatSchema, type GymAttendanceMethod, type GymClockFormat } from "@app/shared";
+import { readAttendanceContext } from "../repo.js";
+import type { ScanPeriod, VisitToday } from "./scanRule.js";
+
+type SqlOrTx = Sql | TransactionSql;
+
+export interface DeviceRow {
+  id: string;
+  name: string;
+  state: "waiting" | "on" | "off";
+  linkExpiresAt: Date | null;
+  lastSeenAt: Date | null;
+  createdAt: Date;
+}
+
+interface RawDevice {
+  id: string;
+  name: string;
+  state: string;
+  link_expires_at: Date | null;
+  last_seen_at: Date | null;
+  created_at: Date;
+}
+
+const toDevice = (row: RawDevice): DeviceRow => ({
+  id: row.id,
+  name: row.name,
+  state: row.state === "on" ? "on" : row.state === "waiting" ? "waiting" : "off",
+  linkExpiresAt: row.state === "waiting" ? row.link_expires_at : null,
+  lastSeenAt: row.last_seen_at,
+  createdAt: row.created_at,
+});
+
+/** A device's state, worked out by the database's clock in each statement below: a link
+ *  that ran out unopened leaves the device off. */
+
+export async function devicesFor(sql: SqlOrTx, gymId: string): Promise<DeviceRow[]> {
+  const rows = await sql<RawDevice[]>`
+    SELECT id, name, CASE WHEN switched_off_at IS NOT NULL THEN 'off' WHEN key_hash IS NOT NULL THEN 'on' WHEN link_expires_at > now() THEN 'waiting' ELSE 'off' END AS state,
+           link_expires_at, last_seen_at, created_at
+    FROM gym_checkin_devices
+    WHERE gym_id = ${gymId}
+    ORDER BY created_at, id
+    LIMIT ${CHECKIN_DEVICES_MAX}`;
+  return rows.map(toDevice);
+}
+
+/** The gym's devices are counted under the gym's lock, so two adds cannot pass the cap together. */
+export async function countDevices(tx: TransactionSql, gymId: string): Promise<number> {
+  const rows = await tx<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_checkin_devices WHERE gym_id = ${gymId}`;
+  return rows[0]?.n ?? 0;
+}
+
+export async function insertDevice(
+  tx: TransactionSql,
+  input: { gymId: string; name: string; linkHash: string; linkMinutes: number; createdBy: string },
+): Promise<DeviceRow> {
+  const rows = await tx<RawDevice[]>`
+    INSERT INTO gym_checkin_devices (gym_id, name, link_hash, link_expires_at, created_by_user_id)
+    VALUES (${input.gymId}, ${input.name}, ${input.linkHash},
+            now() + make_interval(mins => ${input.linkMinutes}), ${input.createdBy})
+    RETURNING id, name, CASE WHEN switched_off_at IS NOT NULL THEN 'off' WHEN key_hash IS NOT NULL THEN 'on' WHEN link_expires_at > now() THEN 'waiting' ELSE 'off' END AS state, link_expires_at, last_seen_at, created_at`;
+  const row = rows[0];
+  if (row === undefined) throw new Error("adding a check-in device returned no row");
+  return toDevice(row);
+}
+
+/** A new link: the key the device held stops working at once, and a device switched off
+ *  is on again once the link is opened. */
+export async function renewLink(
+  tx: TransactionSql,
+  input: { gymId: string; deviceId: string; linkHash: string; linkMinutes: number },
+): Promise<DeviceRow | null> {
+  const rows = await tx<RawDevice[]>`
+    UPDATE gym_checkin_devices
+    SET key_hash = NULL, switched_off_at = NULL, link_hash = ${input.linkHash},
+        link_expires_at = now() + make_interval(mins => ${input.linkMinutes})
+    WHERE gym_id = ${input.gymId} AND id = ${input.deviceId}
+    RETURNING id, name, CASE WHEN switched_off_at IS NOT NULL THEN 'off' WHEN key_hash IS NOT NULL THEN 'on' WHEN link_expires_at > now() THEN 'waiting' ELSE 'off' END AS state, link_expires_at, last_seen_at, created_at`;
+  const row = rows[0];
+  return row === undefined ? null : toDevice(row);
+}
+
+/** Switched off: its key and any open link stop working in the same statement. Doing it
+ *  twice leaves the first time it was switched off. */
+export async function switchOff(tx: TransactionSql, gymId: string, deviceId: string): Promise<DeviceRow | null> {
+  const rows = await tx<RawDevice[]>`
+    UPDATE gym_checkin_devices
+    SET key_hash = NULL, link_hash = NULL, link_expires_at = NULL,
+        switched_off_at = COALESCE(switched_off_at, now())
+    WHERE gym_id = ${gymId} AND id = ${deviceId}
+    RETURNING id, name, CASE WHEN switched_off_at IS NOT NULL THEN 'off' WHEN key_hash IS NOT NULL THEN 'on' WHEN link_expires_at > now() THEN 'waiting' ELSE 'off' END AS state, link_expires_at, last_seen_at, created_at`;
+  const row = rows[0];
+  return row === undefined ? null : toDevice(row);
+}
+
+/** The tablet opens its link: in one statement the link is used up and the key written,
+ *  so a link opened twice at once gives one device a key. Only an open gym's link works. */
+export async function claimLink(
+  sql: Sql,
+  linkHash: string,
+  keyHash: string,
+): Promise<{ gymName: string; deviceName: string } | null> {
+  const rows = await sql<{ gym_name: string; device_name: string }[]>`
+    UPDATE gym_checkin_devices d
+    SET key_hash = ${keyHash}, link_hash = NULL, link_expires_at = NULL, last_seen_at = now()
+    FROM gyms g
+    WHERE d.link_hash = ${linkHash} AND d.link_expires_at > now() AND d.switched_off_at IS NULL
+      AND g.id = d.gym_id AND g.status = 'active'
+    RETURNING g.name AS gym_name, d.name AS device_name`;
+  const row = rows[0];
+  return row === undefined ? null : { gymName: row.gym_name, deviceName: row.device_name };
+}
+
+export interface DeskDevice {
+  deviceId: string;
+  gymId: string;
+  gymName: string;
+  timezone: string;
+  clockFormat: GymClockFormat;
+}
+
+/** The device a key belongs to, if it is switched on and its gym is open. */
+export async function deviceByKey(sql: SqlOrTx, keyHash: string): Promise<DeskDevice | null> {
+  const rows = await sql<{ id: string; gym_id: string; gym_name: string; timezone: string; clock_format: string }[]>`
+    SELECT d.id, d.gym_id, g.name AS gym_name, g.timezone, g.clock_format
+    FROM gym_checkin_devices d
+    JOIN gyms g ON g.id = d.gym_id
+    WHERE d.key_hash = ${keyHash} AND d.switched_off_at IS NULL AND g.status = 'active'`;
+  const row = rows[0];
+  if (row === undefined) return null;
+  return {
+    deviceId: row.id,
+    gymId: row.gym_id,
+    gymName: row.gym_name,
+    timezone: row.timezone,
+    clockFormat: gymClockFormatSchema.parse(row.clock_format),
+  };
+}
+
+/** "Last seen", written at most once a minute. */
+export async function touchDevice(sql: SqlOrTx, gymId: string, deviceId: string): Promise<void> {
+  await sql`
+    UPDATE gym_checkin_devices SET last_seen_at = now()
+    WHERE gym_id = ${gymId} AND id = ${deviceId}
+      AND (last_seen_at IS NULL OR last_seen_at < now() - interval '1 minute')`;
+}
+
+// ── WHO A READ NAMES ──
+
+export interface RecordWords {
+  id: string;
+  fullName: string;
+  status: string | null;
+  payment: string | null;
+}
+
+interface RawRecord {
+  id: string;
+  full_name: string;
+  status: string | null;
+  payment_status: string | null;
+}
+
+const toRecord = (row: RawRecord): RecordWords => ({
+  id: row.id,
+  fullName: row.full_name,
+  status: row.status,
+  payment: row.payment_status,
+});
+
+export async function recordWords(sql: SqlOrTx, gymId: string, entryId: string): Promise<RecordWords | null> {
+  const rows = await sql<RawRecord[]>`
+    SELECT id, full_name, status, payment_status FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND id = ${entryId}`;
+  const row = rows[0];
+  return row === undefined ? null : toRecord(row);
+}
+
+/** The gym's CURRENT records with this member number, folding case as its index does;
+ *  two are enough to know the number does not say who. */
+export async function recordsByMemberNumber(
+  sql: SqlOrTx,
+  gymId: string,
+  memberNumber: string,
+): Promise<(RecordWords & { email: string | null; phone: string | null })[]> {
+  const rows = await sql<(RawRecord & { email: string | null; phone_e164: string | null })[]>`
+    SELECT id, full_name, status, payment_status, email::text AS email, phone_e164
+    FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND lower(member_number) = lower(${memberNumber}) AND former_at IS NULL
+    ORDER BY listed_seq
+    LIMIT 2`;
+  return rows.map((row) => ({ ...toRecord(row), email: row.email, phone: row.phone_e164 }));
+}
+
+/** An account's name, and the gym's current records on its address when the address is
+ *  proved (the email is the link between a person and their record, RULINGS 2026-09-28). */
+export async function recordsByProvedEmail(
+  sql: SqlOrTx,
+  gymId: string,
+  userId: string,
+): Promise<{ displayName: string; records: RecordWords[] } | null> {
+  const users = await sql<{ display_name: string; proved: boolean }[]>`
+    SELECT u.display_name,
+           EXISTS (SELECT 1 FROM one_time_tokens t
+                   WHERE t.user_id = u.id AND t.purpose = 'verify_email' AND t.used_at IS NOT NULL) AS proved
+    FROM users u WHERE u.id = ${userId} AND u.status = 'active'`;
+  const user = users[0];
+  if (user === undefined) return null;
+  if (!user.proved) return { displayName: user.display_name, records: [] };
+  const rows = await sql<RawRecord[]>`
+    SELECT e.id, e.full_name, e.status, e.payment_status
+    FROM gym_member_list_entries e
+    JOIN users u ON u.id = ${userId}
+    WHERE e.gym_id = ${gymId} AND e.former_at IS NULL AND e.email = u.email
+    ORDER BY e.listed_seq
+    LIMIT 20`;
+  return { displayName: user.display_name, records: rows.map(toRecord) };
+}
+
+// ── THE VISIT ──
+
+export interface Who {
+  userId: string | null;
+  entryId: string | null;
+}
+
+/** The gym's period now, its day, and this person's visits there today — by their
+ *  account or their record, since either may carry an earlier visit. */
+export async function scanContext(
+  sql: Sql,
+  gymId: string,
+  who: Who,
+): Promise<{ day: string; period: ScanPeriod; visitsToday: VisitToday[] } | null> {
+  const ctx = await readAttendanceContext(sql, gymId);
+  if (ctx === null) return null;
+  const rows = await sql<{ slot_key: string; marked_at: Date }[]>`
+    SELECT slot_key, marked_at FROM gym_attendance
+    WHERE gym_id = ${gymId} AND day = ${ctx.day}::date
+      AND (user_id = ${who.userId}::uuid OR entry_id = ${who.entryId}::uuid)`;
+  return {
+    day: ctx.day,
+    period: { hoursStatus: ctx.hoursStatus, opensMinute: ctx.opensMinute, closesMinute: ctx.closesMinute },
+    visitsToday: rows.map((row) => ({ slotKey: row.slot_key, markedAt: row.marked_at })),
+  };
+}
+
+/** Writes the visit, or finds the one already there: the database's two unique keys (an
+ *  account's, a record's) decide when two scans race, never a read before the write. */
+export async function insertVisit(
+  sql: Sql,
+  input: {
+    gymId: string;
+    who: Who;
+    deviceId: string | null;
+    markedBy: string | null;
+    method: GymAttendanceMethod;
+    day: string;
+    period: ScanPeriod;
+    slotKey: string;
+  },
+): Promise<{ inserted: true; markedAt: Date } | { inserted: false; firstAt: Date }> {
+  const inserted = await sql<{ marked_at: Date }[]>`
+    INSERT INTO gym_attendance
+      (gym_id, user_id, entry_id, device_id, marked_by_user_id, day, method, hours_status,
+       session_opens_minute, session_closes_minute, slot_key)
+    VALUES (${input.gymId}, ${input.who.userId}, ${input.who.entryId}, ${input.deviceId}, ${input.markedBy},
+            ${input.day}::date, ${input.method}, ${input.period.hoursStatus},
+            ${input.period.opensMinute}, ${input.period.closesMinute}, ${input.slotKey})
+    ON CONFLICT DO NOTHING
+    RETURNING marked_at`;
+  const row = inserted[0];
+  if (row !== undefined) return { inserted: true, markedAt: row.marked_at };
+  const first = await sql<{ marked_at: Date | null }[]>`
+    SELECT min(marked_at) AS marked_at FROM gym_attendance
+    WHERE gym_id = ${input.gymId} AND day = ${input.day}::date AND slot_key = ${input.slotKey}
+      AND (user_id = ${input.who.userId}::uuid OR entry_id = ${input.who.entryId}::uuid)`;
+  const firstAt = first[0]?.marked_at;
+  // The conflict was with a row that names this account or record, so it is there.
+  if (firstAt === undefined || firstAt === null) throw new Error("a visit's conflict found no visit");
+  return { inserted: false, firstAt };
+}

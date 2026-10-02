@@ -101,6 +101,11 @@ const envSchema = z.object({
   // once set: every stored key would stop matching, and people already invited could
   // be invited again.
   INVITE_HMAC_SECRET: z.string().min(32).optional(),
+  // Signs every member's check-in pass (spec Part 3 §12.2). In production, unset means
+  // passes are switched off (the pass and a pass's scan answer 503) while key tags still
+  // work; outside production a key derived from JWT_SECRET stands in. Changing it only
+  // makes the passes of the next minute stop working.
+  CHECKIN_PASS_SECRET: z.string().min(32).optional(),
   // The most invitation emails the whole app sends in any 24 hours.
   INVITE_EMAILS_PER_DAY: z.coerce.number().int().positive().default(2000),
   // The off switch: while "true" the worker sends no invitation; they wait.

@@ -14,6 +14,7 @@
 // claim (:8707): the two DPDP statements are the whole exception, and any
 // THIRD writer of these tables is a defect, not a precedent.
 import type { Sql, TransactionSql } from "postgres";
+import { slotKeyFor } from "./attendanceSlot.js";
 import {
   ATTENDANCE_PAGE_LIMIT,
   ATTENDANCE_SUMMARY_LIMIT,
@@ -4263,8 +4264,8 @@ function toAttendanceVisitRow(raw: {
  *  backstop and not the guarantee; the guarantee is the overlap check on write.
  *
  *  Null for a gym that does not exist, which the service turns into its 404. */
-async function readAttendanceContext(
-  tx: TransactionSql,
+export async function readAttendanceContext(
+  tx: SqlOrTx,
   gymId: string,
 ): Promise<{
   day: string;
@@ -4337,26 +4338,6 @@ async function readAttendanceContext(
     };
   }
   return { ...common, hoursStatus: "outside_hours", opensMinute: null, closesMinute: null };
-}
-
-/** THE KEY THAT DECIDES WHETHER TWO TAPS ARE ONE VISIT OR TWO — Kd's rulings of
- *  2026-09-01 (:27992, :28055), and the ONLY place it is derived.
- *
- *  The session window when there is one, so a morning and an evening visit are
- *  different keys and BOTH count; the status name otherwise, so a gym with no
- *  sessions gets ONE attendance per day. **The database's
- *  `gym_attendance_slot_key_agrees_check` re-derives exactly this expression and
- *  refuses a row that disagrees** — so a second writer that "simplifies" this to
- *  a constant gets a 23514 instead of silently collapsing every gym to one visit
- *  a day, which is the direction that otherwise fails with no error anywhere. */
-function slotKeyFor(
-  hoursStatus: GymAttendanceHoursStatus,
-  opensMinute: number | null,
-  closesMinute: number | null,
-): string {
-  return hoursStatus === "in_session" && opensMinute !== null && closesMinute !== null
-    ? `${String(opensMinute)}-${String(closesMinute)}`
-    : hoursStatus;
 }
 
 export type MarkAttendanceOutcome =
@@ -4639,10 +4620,14 @@ export async function getGymAttendanceDay(
 
   // THE DAY'S TOTALS, over every row of the day. `count(DISTINCT user_id)` is
   // load-bearing HERE and only here — see `GymAttendanceDayRow.totals`.
+  //
+  // Every read on this page counts the visits of app accounts only, the ones its list of
+  // people can name; a desk's visit of somebody without the app joins it with the live
+  // log (ROADMAP 16b).
   const totalsRows = await sql<{ visits: string; people: string }[]>`
     SELECT count(*) AS visits, count(DISTINCT user_id) AS people
     FROM gym_attendance
-    WHERE gym_id = ${input.gymId} AND day = ${gym.day}::date`;
+    WHERE gym_id = ${input.gymId} AND day = ${gym.day}::date AND user_id IS NOT NULL`;
 
   // THE DAY'S SHAPE, over every row of the day — never over the page below.
   const summary = await sql<
@@ -4658,7 +4643,7 @@ export async function getGymAttendanceDay(
            count(*) AS visits,
            count(DISTINCT user_id) AS people
     FROM gym_attendance
-    WHERE gym_id = ${input.gymId} AND day = ${gym.day}::date
+    WHERE gym_id = ${input.gymId} AND day = ${gym.day}::date AND user_id IS NOT NULL
     GROUP BY hours_status, session_opens_minute, session_closes_minute
     ORDER BY session_opens_minute NULLS LAST, hours_status
     LIMIT ${ATTENDANCE_SUMMARY_LIMIT}`;
@@ -4684,7 +4669,7 @@ export async function getGymAttendanceDay(
     WITH page AS (
       SELECT a.user_id, min(a.marked_at) AS first_marked_at
       FROM gym_attendance a
-      WHERE a.gym_id = ${input.gymId} AND a.day = ${gym.day}::date
+      WHERE a.gym_id = ${input.gymId} AND a.day = ${gym.day}::date AND a.user_id IS NOT NULL
         AND (${statuses}::text[] IS NULL OR a.hours_status = ANY (${statuses}::text[]))
       GROUP BY a.user_id
       HAVING (${input.cursor?.markedAt ?? null}::timestamptz IS NULL

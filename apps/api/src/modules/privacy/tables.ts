@@ -326,6 +326,10 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // these lists at all: they are not a person's own data to export or purge, and
   // what ends them is the gym closing (archiveSweep.ts deletes all three).
   "gym_member_list_uploads",
+  // gym_checkin_devices.created_by_user_id — WHICH MEMBER OF STAFF ADDED A DESK DEVICE
+  // (spec Part 3 §12.3), on gym_member_list_uploads' footing: the gym's own record of who
+  // set up its front desk, set to NULL when that account is deleted.
+  "gym_checkin_devices",
   // gym_class_types.coach_user_id, gym_class_schedules.coach_user_id and
   // gym_class_sessions.coach_user_id — WHICH MEMBER OF STAFF COACHES A CLASS
   // (Part 3 §13.3, migrations `0035` and `0036`), joined on the day the tables

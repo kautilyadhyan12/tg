@@ -2188,7 +2188,9 @@ at the gym (ROADMAP Stage 5 item 8) is struck, never built.
 
 ### 12.8 Limits
 
-A device: 120 scans a minute. Every refusal looks the same from outside and says
+A device: 120 scans a minute, of which at most 20 key tags; after 10 key tags nobody has
+within 10 minutes, the device takes no key tags for 10 minutes and the console says so
+(RULINGS 2026-10-02: a typed member number must not read the gym's list). Every refusal looks the same from outside and says
 nothing about who is or is not a member beyond the one red line. A device key is
 random, stored hashed, and useless for anything but the scan.
 

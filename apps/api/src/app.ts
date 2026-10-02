@@ -40,6 +40,7 @@ import { GeoError } from "./modules/geo/errors.js";
 import { registerOrgRoutes, type OrgRouteOverrides } from "./modules/orgs/routes.js";
 import { inviteSettings } from "./modules/orgs/invites/settings.js";
 import { registerUnsubscribeRoutes } from "./modules/orgs/invites/unsubscribe.js";
+import { registerCheckinRoutes } from "./modules/orgs/checkin/routes.js";
 import { createRobotCheck, type RobotCheck } from "./modules/orgs/gymPage/robotCheck.js";
 import { createDiskPhotoStore, type PhotoStore } from "./modules/orgs/gymPage/photoStore.js";
 import { registerResendWebhookRoutes } from "./modules/webhooks/resendRoutes.js";
@@ -332,6 +333,9 @@ export async function buildApp(
     },
     overrides.orgs ?? {},
   );
+  // Check-in at the front desk (spec Part 3 §12): the member's pass, the desk devices and
+  // the scan, whose device key is the one credential that is not a person's session.
+  registerCheckinRoutes(app, { sql, redis, config });
   // The unsubscribe link in every invitation: public, and not under /v1/orgs.
   registerUnsubscribeRoutes(app, { sql, redis, settings: invites });
   // What Resend reports about each email: signed, kept once, acted on by the worker.
