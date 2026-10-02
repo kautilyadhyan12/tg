@@ -9,6 +9,9 @@ import { createHash, randomBytes } from "node:crypto";
 import type { Sql } from "postgres";
 import {
   CHECKIN_DEVICES_MAX,
+  CHECKIN_KEY_TAG_MISSES,
+  CHECKIN_KEY_TAG_PAUSE_MINUTES,
+  CHECKIN_KEY_TAGS_PER_MINUTE,
   CHECKIN_LINK_TTL_MINUTES,
   CHECKIN_WORDS,
   checkinDeviceLinkResponseSchema,
@@ -60,7 +63,19 @@ const randomToken = (): string => randomBytes(32).toString("base64url");
 
 const deviceNotFound = (): OrgsError => new OrgsError(404, "device_not_found", CHECKIN_WORDS.device_not_found);
 
-function toDevice(row: repo.DeviceRow): CheckinDevice {
+// A device's key tags: this minute's count, the misses of the last 10 minutes, and the
+// pause they lead to (RULINGS 2026-10-02), each kept by device in Redis.
+const tagCountKey = (deviceId: string): string => `rl:checkin_tags_device:${deviceId}`;
+const tagMissKey = (deviceId: string): string => `checkin:tag_misses:${deviceId}`;
+const tagPauseKey = (deviceId: string): string => `checkin:tag_pause:${deviceId}`;
+
+/** Until when a device takes no key tags, or null; Redis down reads as not paused. */
+async function pausedUntil(deps: Pick<CheckinDeps, "redis">, deviceId: string): Promise<string | null> {
+  const until = await deps.redis.get(tagPauseKey(deviceId));
+  return until !== null && !Number.isNaN(Date.parse(until)) ? until : null;
+}
+
+async function toDevice(deps: Pick<CheckinDeps, "redis">, row: repo.DeviceRow): Promise<CheckinDevice> {
   return {
     id: row.id,
     name: row.name,
@@ -68,6 +83,7 @@ function toDevice(row: repo.DeviceRow): CheckinDevice {
     linkExpiresAt: row.linkExpiresAt?.toISOString() ?? null,
     lastSeenAt: row.lastSeenAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
+    keyTagsPausedUntil: row.state === "on" ? await pausedUntil(deps, row.id) : null,
   };
 }
 
@@ -97,7 +113,8 @@ export async function listDevices(
 ): Promise<CheckinDevicesResponse | null> {
   await requirePrivilege(deps, gymId, userId, "org.manage");
   if (!(await limit())) return null;
-  return checkinDevicesResponseSchema.parse({ devices: (await repo.devicesFor(deps.sql, gymId)).map(toDevice) });
+  const rows = await repo.devicesFor(deps.sql, gymId);
+  return checkinDevicesResponseSchema.parse({ devices: await Promise.all(rows.map((row) => toDevice(deps, row))) });
 }
 
 export async function addDevice(
@@ -132,7 +149,7 @@ export async function addDevice(
     });
     return row;
   });
-  return checkinDeviceLinkResponseSchema.parse({ device: toDevice(device), link: linkFor(deps, token) });
+  return checkinDeviceLinkResponseSchema.parse({ device: await toDevice(deps, device), link: linkFor(deps, token) });
 }
 
 /** A new one-time link for a device (its browser forgot its key, or it is a new tablet):
@@ -160,7 +177,7 @@ export async function renewDeviceLink(
     });
     return row;
   });
-  return checkinDeviceLinkResponseSchema.parse({ device: toDevice(device), link: linkFor(deps, token) });
+  return checkinDeviceLinkResponseSchema.parse({ device: await toDevice(deps, device), link: linkFor(deps, token) });
 }
 
 /** Switched off at once. Not behind the plan: an owner whose plan lapsed can still stop a
@@ -187,7 +204,7 @@ export async function switchOffDevice(
     });
     return row;
   });
-  return checkinDeviceResponseSchema.parse({ device: toDevice(device) });
+  return checkinDeviceResponseSchema.parse({ device: await toDevice(deps, device) });
 }
 
 // ── THE DESK ──
@@ -220,6 +237,30 @@ export function deviceRoom(deps: Pick<CheckinDeps, "redis" | "log">, device: rep
     }
     return count <= DEVICE_SCANS_PER_MINUTE;
   };
+}
+
+/** Whether this device may read a key tag now: not while paused, and 20 a minute. Redis
+ *  down lets it through with a log, as every limiter here does. */
+async function keyTagRoom(deps: CheckinDeps, device: repo.DeskDevice): Promise<void> {
+  if ((await pausedUntil(deps, device.deviceId)) !== null) {
+    throw new OrgsError(429, "key_tags_paused", CHECKIN_WORDS.key_tags_paused);
+  }
+  const count = await deps.redis.incrWithTtl(tagCountKey(device.deviceId), 60);
+  if (count === null) {
+    deps.log.warn({ event: "ratelimit.open_redis_down", limiter: "checkin_key_tags" }, "rate limiter failing open (Redis unavailable)");
+    return;
+  }
+  if (count > CHECKIN_KEY_TAGS_PER_MINUTE) throw new OrgsError(429, "key_tags_slow", CHECKIN_WORDS.key_tags_slow);
+}
+
+/** A key tag nobody has: the tenth in 10 minutes pauses the device's key tags for 10. */
+async function keyTagMissed(deps: CheckinDeps, device: repo.DeskDevice): Promise<void> {
+  const misses = await deps.redis.incrWithTtl(tagMissKey(device.deviceId), CHECKIN_KEY_TAG_PAUSE_MINUTES * 60);
+  if (misses === null || misses < CHECKIN_KEY_TAG_MISSES) return;
+  const until = new Date(deps.now().getTime() + CHECKIN_KEY_TAG_PAUSE_MINUTES * 60_000);
+  await deps.redis.setex(tagPauseKey(device.deviceId), CHECKIN_KEY_TAG_PAUSE_MINUTES * 60, until.toISOString());
+  await deps.redis.del(tagMissKey(device.deviceId));
+  deps.log.warn({ event: "checkin.key_tags_paused", gymId: device.gymId, deviceId: device.deviceId }, "a desk's key tags paused after too many unknown numbers");
 }
 
 interface Named {
@@ -304,8 +345,10 @@ export async function scan(deps: CheckinDeps, device: repo.DeskDevice, code: str
     read = pass.read;
     if (pass.userId !== null) named = await namedByAccount(deps.sql, gymId, pass.userId);
   } else {
+    await keyTagRoom(deps, device);
     read = { kind: "key_tag" };
     named = await namedByMemberNumber(deps.sql, gymId, code);
+    if (named.person.kind === "not_a_member") await keyTagMissed(deps, device);
   }
   await repo.touchDevice(deps.sql, gymId, device.deviceId);
 

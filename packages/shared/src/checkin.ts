@@ -75,6 +75,12 @@ export const CHECKIN_DEVICE_NAME_MAX = 60;
 export const CHECKIN_DEVICES_MAX = 20;
 /** How long a device's one-time link works. */
 export const CHECKIN_LINK_TTL_MINUTES = 60;
+/** A key tag is a short number anyone can type, so a device reads at most 20 a minute,
+ *  and after 10 numbers nobody has within 10 minutes it takes none for 10 minutes
+ *  (RULINGS 2026-10-02). A pass cannot be guessed and is not held to either. */
+export const CHECKIN_KEY_TAGS_PER_MINUTE = 20;
+export const CHECKIN_KEY_TAG_MISSES = 10;
+export const CHECKIN_KEY_TAG_PAUSE_MINUTES = 10;
 
 export const checkinDeviceIdParamsSchema = z
   .object({ gymId: z.string().uuid(), deviceId: z.string().uuid() })
@@ -97,6 +103,8 @@ export const checkinDeviceSchema = z
     linkExpiresAt: z.string().datetime().nullable(),
     lastSeenAt: z.string().datetime().nullable(),
     createdAt: z.string().datetime(),
+    /** Until when the device takes no key tags, after too many numbers nobody has. */
+    keyTagsPausedUntil: z.string().datetime().nullable(),
   })
   .strict();
 export type CheckinDevice = z.infer<typeof checkinDeviceSchema>;
@@ -134,4 +142,6 @@ export const CHECKIN_WORDS = {
   checkin_unavailable: "Check-in isn't working right now. Please try again in a moment.",
   too_many_devices: `A gym can have up to ${String(CHECKIN_DEVICES_MAX)} check-in devices.`,
   device_not_found: "That check-in device isn't here any more.",
+  key_tags_slow: "Too many cards at once. Please wait a moment and scan again.",
+  key_tags_paused: "Cards aren't being taken at this desk for a few minutes. Show your pass in the app, or ask staff to check you in.",
 } as const;

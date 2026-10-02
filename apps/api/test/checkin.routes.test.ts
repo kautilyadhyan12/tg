@@ -38,6 +38,8 @@ const TEST_TIMEOUT_MS = 60_000;
 const HOOK_TIMEOUT_MS = 60_000;
 const LIVE_PLAN = "zz_chk_live";
 const KEY = Buffer.from(PASS_SECRET, "utf8");
+/** A pass nobody signed: a working desk answers it (grey) without reading any key tag. */
+const PROBE = `AHGP${"A".repeat(58)}`;
 
 let ipCounter = 0;
 const nextIp = () => `10.16.${String(Math.floor(ipCounter / 250) % 250)}.${String((ipCounter++ % 250) + 1)}`;
@@ -330,6 +332,53 @@ d("check-in at the front desk (real Postgres)", () => {
     expect(JSON.stringify(answer)).not.toContain("9812345678");
   });
 
+  it(
+    "nobody can read the gym's members by typing numbers at the desk: 20 key tags a minute, and 10 unknown numbers pause key tags for 10 minutes",
+    async () => {
+      // Thirty members numbered in sequence, as gym software numbers them.
+      const base = `SQ${uniq()}-`;
+      for (let n = 1001; n <= 1030; n++) {
+        await addRecord(ironHouse, { fullName: `Seq ${String(n)}`, phone: `+9198${String(10000000 + n)}`, memberNumber: `${base}${String(n)}` });
+      }
+      const typer = await makeDesk(ironHouse, owner, "Typed-at desk");
+      const answers = [];
+      for (let n = 1001; n <= 1030; n++) answers.push(await post("/v1/checkin/scan", { code: `${base}${String(n)}` }, typer.cookies));
+      const names = answers.filter((res) => res.statusCode === 200).map((res) => (JSON.parse(res.body) as ScanAnswer).person?.name);
+      expect(names).toHaveLength(20);
+      const slowed = answers.filter((res) => res.statusCode === 429);
+      expect(slowed).toHaveLength(10);
+      expect(JSON.parse(slowed[0]?.body ?? "{}")).toMatchObject({ error: "key_tags_slow" });
+      expect(slowed.every((res) => !res.body.includes("Seq"))).toBe(true);
+
+      // Guessing numbers nobody has: the tenth pauses this desk's key tags, even for a real number.
+      const guesser = await makeDesk(ironHouse, owner, "Guessed-at desk");
+      for (let n = 0; n < 10; n++) {
+        expect((await scan(guesser, `GUESS-${uniq()}`)).result).toBe("not_a_member");
+      }
+      const paused = await post("/v1/checkin/scan", { code: `${base}1001` }, guesser.cookies);
+      expect(paused.statusCode).toBe(429);
+      expect(JSON.parse(paused.body)).toMatchObject({ error: "key_tags_paused" });
+      expect(paused.body).not.toContain("Seq");
+
+      // A member's pass still works there, and the owner's console says the desk is paused.
+      const passer = await makeUser("paused-pass", "Pia Pass");
+      await join(ironHouse, passer, null);
+      expect((await scan(guesser, await passOf(passer))).result).toBe("checked_in");
+      const listed = JSON.parse((await get(`/v1/orgs/${ironHouse}/checkin-devices`, owner.cookies)).body) as {
+        devices: { id: string; keyTagsPausedUntil: string | null }[];
+      };
+      const pausedUntil = listed.devices.find((dv) => dv.id === guesser.deviceId)?.keyTagsPausedUntil ?? "";
+      const minutes = (Date.parse(pausedUntil) - Date.now()) / 60_000;
+      expect(minutes).toBeGreaterThan(9);
+      expect(minutes).toBeLessThanOrEqual(10);
+      expect(listed.devices.find((dv) => dv.id === typer.deviceId)?.keyTagsPausedUntil).toBeNull();
+
+      // A slowed read wrote no visit, and another desk at the gym is not paused by it.
+      expect((await scan(desk, `${base}1030`)).result).toBe("checked_in");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   // ===========================================================================
   // ONE PASS, TWO GYMS (RULINGS 2026-09-23)
   // ===========================================================================
@@ -593,7 +642,7 @@ d("check-in at the front desk (real Postgres)", () => {
     expect((await get(`/v1/orgs/${ironHouse}/checkin-devices`)).statusCode).toBe(401);
     expect((await sql`SELECT 1 FROM gym_checkin_devices WHERE gym_id = ${ironHouse}`).length).toBe(before);
     // The desk still works: nobody switched it off.
-    expect((await post("/v1/checkin/scan", { code: "ANY-1" }, desk.cookies)).statusCode).toBe(200);
+    expect((await post("/v1/checkin/scan", { code: PROBE }, desk.cookies)).statusCode).toBe(200);
   });
 
   it("another gym's device cannot be renewed or switched off by naming it under your own gym", async () => {
@@ -601,7 +650,7 @@ d("check-in at the front desk (real Postgres)", () => {
     const other = await makeGym(otherOwner, "Ola Gym");
     expect((await post(`/v1/orgs/${other}/checkin-devices/${desk.deviceId}/off`, {}, otherOwner.cookies)).statusCode).toBe(404);
     expect((await post(`/v1/orgs/${other}/checkin-devices/${desk.deviceId}/link`, {}, otherOwner.cookies)).statusCode).toBe(404);
-    expect((await post("/v1/checkin/scan", { code: "ANY-2" }, desk.cookies)).statusCode).toBe(200);
+    expect((await post("/v1/checkin/scan", { code: PROBE }, desk.cookies)).statusCode).toBe(200);
   });
 
   it("a link works once and runs out; a name is checked", async () => {
@@ -629,11 +678,11 @@ d("check-in at the front desk (real Postgres)", () => {
 
   it("switching a device off stops it at once; a new link stops the old key and turns it back on", async () => {
     const spare = await makeDesk(ironHouse, owner, "Spare desk");
-    expect((await post("/v1/checkin/scan", { code: "ANY-3" }, spare.cookies)).statusCode).toBe(200);
+    expect((await post("/v1/checkin/scan", { code: PROBE }, spare.cookies)).statusCode).toBe(200);
     const off = await post(`/v1/orgs/${ironHouse}/checkin-devices/${spare.deviceId}/off`, {}, owner.cookies);
     expect(off.statusCode).toBe(200);
     expect((JSON.parse(off.body) as { device: { state: string } }).device.state).toBe("off");
-    const refused = await post("/v1/checkin/scan", { code: "ANY-4" }, spare.cookies);
+    const refused = await post("/v1/checkin/scan", { code: PROBE }, spare.cookies);
     expect(refused.statusCode).toBe(401);
     expect(JSON.parse(refused.body)).toMatchObject({ error: "device_not_recognised" });
     // Twice is fine.
@@ -643,13 +692,13 @@ d("check-in at the front desk (real Postgres)", () => {
     expect(renewed.statusCode).toBe(200);
     const token = (JSON.parse(renewed.body) as { link: string }).link.split("#")[1] ?? "";
     const claimed = await post("/v1/checkin/device/claim", { token });
-    expect((await post("/v1/checkin/scan", { code: "ANY-5" }, cookieMap(claimed))).statusCode).toBe(200);
-    expect((await post("/v1/checkin/scan", { code: "ANY-6" }, spare.cookies)).statusCode).toBe(401);
+    expect((await post("/v1/checkin/scan", { code: PROBE }, cookieMap(claimed))).statusCode).toBe(200);
+    expect((await post("/v1/checkin/scan", { code: PROBE }, spare.cookies)).statusCode).toBe(401);
 
     // A new link on a working device stops the key it had.
     const again = await post(`/v1/orgs/${ironHouse}/checkin-devices/${spare.deviceId}/link`, {}, owner.cookies);
     expect(again.statusCode).toBe(200);
-    expect((await post("/v1/checkin/scan", { code: "ANY-7" }, cookieMap(claimed))).statusCode).toBe(401);
+    expect((await post("/v1/checkin/scan", { code: PROBE }, cookieMap(claimed))).statusCode).toBe(401);
   });
 
   it("a closed gym's desk stops; an owner whose plan lapsed can still switch a device off", async () => {
@@ -658,14 +707,14 @@ d("check-in at the front desk (real Postgres)", () => {
     const lapsedDesk = await makeDesk(lapsed, lapsedOwner);
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${lapsed}`;
     expect((await post(`/v1/orgs/${lapsed}/checkin-devices`, { name: "New" }, lapsedOwner.cookies)).statusCode).toBe(409);
-    expect((await post("/v1/checkin/scan", { code: "ANY-8" }, lapsedDesk.cookies)).statusCode).toBe(200);
+    expect((await post("/v1/checkin/scan", { code: PROBE }, lapsedDesk.cookies)).statusCode).toBe(200);
     expect((await post(`/v1/orgs/${lapsed}/checkin-devices/${lapsedDesk.deviceId}/off`, {}, lapsedOwner.cookies)).statusCode).toBe(200);
 
     const closingOwner = await makeUser("closing", "Closing Owner");
     const closing = await makeGym(closingOwner, "Closing Gym");
     const closingDesk = await makeDesk(closing, closingOwner);
     await sql`UPDATE gyms SET status = 'archived' WHERE id = ${closing}`;
-    expect((await post("/v1/checkin/scan", { code: "ANY-9" }, closingDesk.cookies)).statusCode).toBe(401);
+    expect((await post("/v1/checkin/scan", { code: PROBE }, closingDesk.cookies)).statusCode).toBe(401);
     await sql`UPDATE gyms SET status = 'active' WHERE id = ${closing}`;
   });
 
@@ -720,12 +769,12 @@ d("check-in at the front desk (real Postgres)", () => {
     const busy = await makeDesk(ironHouse, owner, "Busy desk");
     let refused = 0;
     for (let n = 0; n < 121; n++) {
-      const res = await post("/v1/checkin/scan", { code: `BUSY-${String(n)}` }, busy.cookies);
+      const res = await post("/v1/checkin/scan", { code: PROBE }, busy.cookies);
       if (res.statusCode === 429) refused++;
     }
     expect(refused).toBe(1);
     // Another desk at the gym is not held back by it.
-    expect((await post("/v1/checkin/scan", { code: "ANY-10" }, desk.cookies)).statusCode).toBe(200);
+    expect((await post("/v1/checkin/scan", { code: PROBE }, desk.cookies)).statusCode).toBe(200);
   });
 
   it("without Redis a pass is refused (it could be shown twice) and a key tag still works", async () => {
