@@ -36,7 +36,7 @@ import { archiveLapsedGyms } from "./modules/orgs/archiveSweep.js";
 import { fillClassSessionsJob } from "./modules/orgs/classes/fill.js";
 import { expireStagedMemberListUploads } from "./modules/orgs/memberList/expiry.js";
 import { rollUpGymDays } from "./modules/orgs/rollup.js";
-import { sweepJoinApplications } from "./modules/orgs/sweep.js";
+import { ORGS_SWEEP_JOB, runJoinSweep, scheduleJoinSweep } from "./modules/orgs/joinSweepSchedule.js";
 import { expireLapsedGymTrials } from "./modules/orgs/trialSweep.js";
 import { purgeDueUsers, purgeShortfall } from "./modules/privacy/purge.js";
 import { processPaddleEvents, processRazorpayEvents } from "./modules/billing/events.js";
@@ -67,7 +67,7 @@ if (redisUrl === undefined) {
 
 export const ROLLUPS_QUEUE = "rollups";
 export const DPDP_PURGE_JOB = "dpdp.purge";
-export const ORGS_SWEEP_JOB = "orgs.join_sweep";
+export { ORGS_SWEEP_JOB };
 export const ORGS_TRIAL_SWEEP_JOB = "orgs.trial_expiry";
 export const ORGS_ARCHIVE_JOB = "orgs.archive";
 export const ORGS_ROLLUP_JOB = "orgs.daily_rollup";
@@ -122,25 +122,7 @@ try {
 // so the waiting room is neither chased nor expired; a request still waiting stays
 // as it is.
 try {
-  if (config.JOIN_CODES) {
-    await queue.upsertJobScheduler(
-      ORGS_SWEEP_JOB,
-      { pattern: "30 3 * * *" },
-      {
-        name: ORGS_SWEEP_JOB,
-        opts: {
-          // R3.5: every statement in the sweep is set-based and its WHERE
-          // excludes the state it produces, so a retry is a no-op.
-          attempts: 3,
-          backoff: { type: "exponential", delay: 60_000 },
-          removeOnComplete: { count: 50 },
-          removeOnFail: { count: 200 },
-        },
-      },
-    );
-  } else {
-    await queue.removeJobScheduler(ORGS_SWEEP_JOB);
-  }
+  await scheduleJoinSweep(queue, config.JOIN_CODES);
 } catch (err) {
   log.fatal({ err }, "failed to register the join-application sweep schedule");
   process.exit(1);
@@ -563,13 +545,11 @@ const worker = new Worker(
     // below to have an opinion about.
     if (job.name === ORGS_SWEEP_JOB) {
       // A run queued before the schedule was taken out does nothing.
-      if (!config.JOIN_CODES) {
-        log.info({ event: "job.finished", job: job.name, skipped: "join_codes_off" }, "job finished");
-        return;
-      }
-      const swept = await sweepJoinApplications({ sql, log });
+      const swept = await runJoinSweep({ sql, log }, config.JOIN_CODES);
       log.info(
-        { ...swept, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
+        swept === null
+          ? { event: "job.finished", job: job.name, skipped: "join_codes_off" }
+          : { ...swept, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
         "job finished",
       );
       return;

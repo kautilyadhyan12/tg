@@ -2880,6 +2880,13 @@ describe('join codes switched off', () => {
     expect(screen.queryByText(/share your code/i)).toBeNull();
   });
 
+  it('Overview names no join code when the codes read fails for another reason', async () => {
+    orgService.getCodes.mockRejectedValue({ response: { status: 500, data: {} } });
+    drawOverview();
+    expect(await screen.findByText("We couldn't load this part of your gym's page.")).toBeTruthy();
+    expect(screen.queryByText(/join code/i)).toBeNull();
+  });
+
   it('Overview draws the card for nobody who cannot keep the list', async () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'trainer' }] } });
     drawOverview();
@@ -2893,6 +2900,14 @@ describe('join codes switched off', () => {
     const card = await screen.findByTestId('bring-members-in');
     expect(within(card).queryAllByRole('link')).toHaveLength(0);
     expect(within(card).getByRole('button', { name: 'Import members' }).disabled).toBe(true);
+  });
+
+  it('Members tells a trainer only that people appear once they join: a trainer has no Your list to invite from', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'trainer' }] } });
+    orgService.getMembers.mockResolvedValue({ data: { items: [], nextCursor: null } });
+    drawMembers();
+    expect(await screen.findByText('They appear here once they join.')).toBeTruthy();
+    expect(screen.queryByText(/from Your list/)).toBeNull();
   });
 
   it('Members draws no "Waiting to join" and no error over the retired queue', async () => {

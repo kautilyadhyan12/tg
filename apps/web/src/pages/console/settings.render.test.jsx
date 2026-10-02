@@ -630,13 +630,13 @@ describe('adding somebody', () => {
   it("tells a STUDIO owner their trainer cannot see the client list, in the studio's word", async () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, orgType: 'studio' }] } });
     await openForm();
-    expect(screen.getByText(/can't see your client list/i)).toBeTruthy();
+    expect(screen.getByText(/can't see your clients in the app/i)).toBeTruthy();
     expect(screen.queryByText(/Can see your (member|client) list/i)).toBeNull();
   });
 
   it('tells a GYM owner their trainer CAN see it — the same control, the other answer', async () => {
     await openForm();
-    expect(screen.getByText(/Can see your member list/i)).toBeTruthy();
+    expect(screen.getByText(/Can see who's in the app/i)).toBeTruthy();
   });
 
   /** T3 round 2 L-2 and L-4. Both length mirrors were observed by nothing — the

@@ -10,10 +10,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
+import { Queue } from "bullmq";
+import { Redis } from "ioredis";
 import { paidPlacesUsed } from "../src/modules/orgs/repo.js";
+import { ORGS_SWEEP_JOB, runJoinSweep, scheduleJoinSweep } from "../src/modules/orgs/joinSweepSchedule.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
+const redisUrl = process.env["TEST_REDIS_URL"];
 
 const baseEnv = {
   NODE_ENV: "test",
@@ -269,6 +273,57 @@ d("join codes switched off (real Postgres)", () => {
       const joined = await send(need(on), "POST", "/v1/orgs/join", asker.cookies, { code });
       expect(joined.statusCode, joined.body).toBe(200);
       expect(await requests(gym.id)).toEqual(["pending"]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+  // =========================================================================
+  // THE WORKER: THE WAITING ROOM IS NEITHER CHASED NOR EXPIRED
+  // =========================================================================
+
+  it.skipIf(redisUrl === undefined || redisUrl === "")(
+    "with the switch off, the sweep's schedule is taken out of a real Redis, and taking it out twice is fine",
+    async () => {
+      // A throwaway queue on Redis number 15, so the worker's own queue is never touched.
+      const connection = new Redis(redisUrl ?? "", { db: 15, maxRetriesPerRequest: null });
+      const queue = new Queue(`codes3c-sweep-${String(Date.now())}`, { connection });
+      try {
+        await scheduleJoinSweep(queue, true);
+        expect((await queue.getJobSchedulers()).map((scheduler) => scheduler.key)).toEqual([ORGS_SWEEP_JOB]);
+        expect(await queue.getDelayedCount()).toBe(1);
+
+        await scheduleJoinSweep(queue, false);
+        expect(await queue.getJobSchedulers()).toEqual([]);
+        expect(await queue.getDelayedCount()).toBe(0);
+        await expect(scheduleJoinSweep(queue, false)).resolves.toBeUndefined();
+      } finally {
+        await queue.obliterate({ force: true });
+        await queue.close();
+        await connection.quit();
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "with the switch off, a sweep already queued leaves a request past its deadline waiting; with it on, the same request expires",
+    async () => {
+      const gym = await makeGym(need(off));
+      const codeId = await oldPosterCode(gym.id, "SWP3CC");
+      const waiting = await signIn("sweep-waiting");
+      const requestId = await waitingRequest(gym.id, codeId, waiting);
+      // Past its deadline, and the gym was told long enough ago: the sweep would expire it.
+      await sql`
+        UPDATE gym_join_applications
+           SET expires_at = now() - interval '1 day', gym_notified_at = now() - interval '10 days'
+         WHERE id = ${requestId}`;
+      const log = { info: () => undefined };
+
+      expect(await runJoinSweep({ sql, log }, false, { gymIds: [gym.id] })).toBeNull();
+      expect(await requests(gym.id)).toEqual(["pending"]);
+
+      const swept = await runJoinSweep({ sql, log }, true, { gymIds: [gym.id] });
+      expect(swept?.expired).toBe(1);
+      expect(await requests(gym.id)).toEqual(["expired"]);
     },
     TEST_TIMEOUT_MS,
   );

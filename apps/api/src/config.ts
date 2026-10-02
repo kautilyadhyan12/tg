@@ -115,6 +115,8 @@ const envSchema = z.object({
   // Join codes (ROADMAP 3c; RULINGS 2026-09-21): an invitation to an address is the only
   // way into a gym, so the code routes and the waiting room answer 410 and a new gym gets
   // no code. "on" exists for the old suites, which keep that code from rotting unseen.
+  // Switching it on in a real deployment brings back every request left waiting, however
+  // old, confirmable with one tap: cancel those first (`gym_join_applications`, pending).
   JOIN_CODES: z
     .enum(["on", "off"])
     .default("off")

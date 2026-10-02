@@ -87,8 +87,8 @@ export function staffRoleChoices(orgType) {
   const words = orgWords(orgType);
   const trainerHint =
     orgType === 'gym' || orgType === 'personal_trainer'
-      ? `Can see your ${words.person} list and who came in.`
-      : `Can see who came in. They can't see your ${words.person} list yet.`;
+      ? "Can see who's in the app and who came in."
+      : `Can see who came in. They can't see your ${words.people} in the app yet.`;
   return [
     {
       value: 'manager',
@@ -195,7 +195,7 @@ function privilegeCopy(orgType) {
     {
       value: 'members.confirm',
       label: `Keep the ${words.person} list and invite`,
-      hint: 'Import and change the list, and send invitations.',
+      hint: `Import and change the list, send invitations, and see Leads and your ${words.it}'s page.`,
     },
     {
       value: 'members.remove',

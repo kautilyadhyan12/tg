@@ -697,7 +697,9 @@ export default function Members() {
       {tab === 'app' && !state.loading && state.error === null && state.items.length === 0 && rosterQuery === '' ? (
         <section className="c-card p-5 md:p-6 flex flex-col gap-1">
           <p className="c-s15 c-w6 c-t1">Nobody has joined yet.</p>
-          <p className="c-s14 c-t2">Invite {words.people} from Your list. They appear here once they join.</p>
+          <p className="c-s14 c-t2">
+            {canSeeList ? `Invite ${words.people} from Your list. They appear here once they join.` : 'They appear here once they join.'}
+          </p>
         </section>
       ) : null}
 

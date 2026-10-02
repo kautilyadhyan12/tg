@@ -101,20 +101,20 @@ describe('the roles this screen hands out', () => {
    *  a 403 later — :5807's shape from the side where the app stays silent. */
   it('TELLS a studio owner the client list is not included, in the studio\'s word', () => {
     const trainer = staffRoleChoices('studio').find((c) => c.value === 'trainer');
-    expect(trainer.hint).toMatch(/can't see your client list/i);
+    expect(trainer.hint).toMatch(/can't see your clients in the app/i);
     expect(trainer.hint).not.toMatch(/member/i);
   });
 
-  it('DOES promise a GYM trainer the member list, which is the case §2.2 grants', () => {
+  it('DOES promise a GYM trainer who is in the app, which is the case §2.2 grants', () => {
     const trainer = staffRoleChoices('gym').find((c) => c.value === 'trainer');
-    expect(trainer.hint).toMatch(/can see your member list/i);
+    expect(trainer.hint).toMatch(/can see who's in the app/i);
   });
 
   /** The server gives a personal trainer's assistant the one client list, so
    *  the hint promises exactly that — in the trainer's word. */
   it("DOES promise a PERSONAL TRAINER's assistant the client list", () => {
     const trainer = staffRoleChoices('personal_trainer').find((c) => c.value === 'trainer');
-    expect(trainer.hint).toMatch(/can see your client list/i);
+    expect(trainer.hint).toMatch(/can see who's in the app/i);
     expect(trainer.hint).not.toMatch(/can't see/i);
   });
 
@@ -123,7 +123,7 @@ describe('the roles this screen hands out', () => {
   it('treats an unknown org type as NOT a gym — the refusing sentence, said positively', () => {
     for (const orgType of [undefined, 'clinic', 'something_new']) {
       const trainer = staffRoleChoices(orgType).find((c) => c.value === 'trainer');
-      expect(trainer.hint).toMatch(/can't see your (member|client) list/i);
+      expect(trainer.hint).toMatch(/can't see your (members|clients) in the app/i);
     }
   });
 
@@ -283,6 +283,8 @@ describe('which boxes a row is offered', () => {
     expect(at('studio')['members.read'].label).toBe('See the client list');
     expect(at('studio')['members.read'].hint).toBe('Who has joined your studio, and when.');
     expect(at('studio')['members.confirm'].label).toBe('Keep the client list and invite');
+    // The same tick opens Leads and the gym's own page, so the box says so.
+    expect(at('studio')['members.confirm'].hint).toBe("Import and change the list, send invitations, and see Leads and your studio's page.");
     expect(at('studio')['members.remove'].label).toBe('Remove clients');
     expect(at('studio')['members.remove'].hint).toBe('Take somebody out of your studio.');
     expect(at('gym')['members.read'].label).toBe('See the member list');

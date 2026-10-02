@@ -193,7 +193,8 @@ export default function Overview() {
             ? { loading: false, error: null, retryable: true, list: null, retired: true }
             : {
                 loading: false,
-                error: errorText(codesOutcome.reason, `We couldn't load this ${words.it}'s join code.`),
+                // Neutral words: on a server with codes switched off there is no code to name.
+                error: errorText(codesOutcome.reason, `We couldn't load this part of your ${words.it}'s page.`),
                 retryable: isRetryable(codesOutcome.reason),
                 list: null,
                 retired: false,
