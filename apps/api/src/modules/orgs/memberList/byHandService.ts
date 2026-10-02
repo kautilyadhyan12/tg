@@ -8,6 +8,7 @@
 // rate limit, then the handler. Every write is one transaction holding the gym's
 // row — the lock the confirm and the join door take — and every statement inside
 // it uses `tx`: a read on the pool would see outside the transaction.
+import { ChosenPeopleMovedError, onceMoreIfMoved } from "./onceMore.js";
 import {
   isLargeMemberListChange,
   MEMBER_LIST_BY_HAND_WORDS,
@@ -936,7 +937,7 @@ export async function removeUnlisted(
   if (!(await limit())) return { kind: "rate_limited" };
   const at = deps.now();
   const removedUsers: string[] = [];
-  const answer = await deps.sql.begin(async (tx): Promise<RemoveAnswer> => {
+  const answer = await onceMoreIfMoved(() => deps.sql.begin(async (tx): Promise<RemoveAnswer> => {
     await repo.lockGym(tx, gymId);
     const [state, members] = await Promise.all([repo.listState(tx, gymId), repo.membersAgainstList(tx, gymId)]);
     const version = state?.version ?? 0;
@@ -963,10 +964,10 @@ export async function removeUnlisted(
       people.map((person) => ({ userId: person.userId, removedWith: pastRecordOf(person) })),
       at,
     );
-    // Under the gym's lock the set cannot move between the rule and the write, so a
-    // difference is a fault of ours and nothing is committed.
+    // Under the gym's lock only an account deleted at that instant can move the set
+    // (`onceMore.ts`); nothing is committed.
     if (closed.length !== ids.length) {
-      throw new Error(`remove-unlisted closed ${String(closed.length)} memberships where the rule chose ${String(ids.length)}`);
+      throw new ChosenPeopleMovedError(`remove-unlisted closed ${String(closed.length)} memberships where the rule chose ${String(ids.length)}`);
     }
     await repo.insertRemovalAudits(tx, { actorUserId: userId, gymId, group: input.group, removed: closed });
     await withdrawForAccounts(tx, deps.invites ?? null, { gymId, userIds: closed.map((row) => row.userId), at });
@@ -981,7 +982,7 @@ export async function removeUnlisted(
     });
     removedUsers.push(...closed.map((row) => row.userId));
     return { kind: "removed", group: input.group, removed: closed.length, alreadyRemoved: false };
-  });
+  }));
 
   if (answer.kind === "removed" && !answer.alreadyRemoved && removedUsers.length > 0) {
     // After the commit, as a single removal does. A failed bust leaves the cached

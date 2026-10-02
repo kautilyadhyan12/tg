@@ -23,6 +23,7 @@
 // second is this route in particular — reading a file costs a worker, 5 MiB and up
 // to fifteen seconds, so the cheap refusals belong in front of the limiter as well
 // as in front of the work.
+import { ChosenPeopleMovedError, onceMoreIfMoved } from "./onceMore.js";
 import { createHash } from "node:crypto";
 import type { Sql, TransactionSql } from "postgres";
 import type { MemberAppView } from "@app/shared";
@@ -1114,7 +1115,7 @@ export async function confirmUpload(
   const settings = deps.invites ?? null;
   const closedUsers: string[] = [];
 
-  const answer = await deps.sql.begin(async (tx): Promise<ConfirmAnswer> => {
+  const answer = await onceMoreIfMoved(() => deps.sql.begin(async (tx): Promise<ConfirmAnswer> => {
     // THE MODULE'S LOCK ORDER: the gym's row, then the child rows (§9.7). The join
     // door takes this same row, which is what makes a join and a confirm unable to
     // interleave — a member cannot appear half-way through the rule being worked out.
@@ -1250,7 +1251,7 @@ export async function confirmUpload(
     const endApp = leavers?.endApp ?? [];
     const closed = await repo.closeMemberships(tx, gymId, endApp, at);
     if (closed.length !== endApp.length) {
-      throw new Error(`an import closed ${String(closed.length)} memberships where the rule chose ${String(endApp.length)}`);
+      throw new ChosenPeopleMovedError(`an import closed ${String(closed.length)} memberships where the rule chose ${String(endApp.length)}`);
     }
     await withdrawForAccounts(tx, settings, { gymId, userIds: closed.map((row) => row.userId), at });
     if (closed.length > 0) {
@@ -1338,7 +1339,7 @@ export async function confirmUpload(
         members: reconciled.members,
       },
     };
-  });
+  }));
   await bustAfterRemoval(deps, gymId, closedUsers);
   return answer;
 }

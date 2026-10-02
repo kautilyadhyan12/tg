@@ -2657,7 +2657,9 @@ export async function removeMember(
     // they were a member here: this route never touches somebody who is staff only.
     const endStaff = async (): Promise<void> => {
       if (staff === undefined || !input.alsoStaff) return;
-      await tx`DELETE FROM gym_staff WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;
+      // An account deleted at this instant has already removed the row and said so.
+      const gone = await tx`DELETE FROM gym_staff WHERE gym_id = ${input.gymId} AND user_id = ${input.userId} RETURNING user_id`;
+      if (gone.length === 0) return;
       await insertAudit(tx, {
         actorUserId: input.actorUserId,
         gymId: input.gymId,
