@@ -4,6 +4,15 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-10-02 · 16b-i (Folder A): the front desk (branch `checkin-desk-page`)
+
+- **Why this job:** next in Folder A after 16a. 16b was split in two (this, and 16b-ii staff check-in and the live log). **Risky (other people's names on a screen; the set-up link works like a sign-in), Opus xhigh; Kd: *"go"*.** No server change, no migration; new package `jsqr` (RULINGS 2026-09-21), loaded only when the camera opens (its own 130 kB chunk, 47 kB gzipped, measured by `vite build`).
+- **Built:** Settings → Check-in devices (old look, as Settings is until R6): add with the one-time link shown once, New link (asks first when the device is on), Switch off (asks first; works on a lapsed plan), Turn on with a new link, the key-tag pause line. The desk (new look, both looks): `/check-in/setup#<token>` wipes the token from the address bar, claims, keeps only the gym's and device's names, moves to `/check-in`; one scanner box that keeps the focus, a camera (front camera, 5 reads a second, one read per code in 3 s), green · grey · red · amber answers cleared after 5 s, a switched-off device saying so until set up again. Its own axios with no session refresh; `/check-in` added to the sign-in redirect's exceptions.
+- **Worst thing, first tests:** a name and payment word gone after 5 s; the next scan takes the last person off at once; a late answer never shown over a newer scan; a switched-off device never brings the last person back; the link spent once and gone from the address bar. **Breaks, each RED, restored sha256-identical:** no time-out; no clearing on a new scan (first GREEN — the case of a refused next scan was missing, added, then RED); no guard on a late answer.
+- **Verified:** new suites 22 + 53 + 28 + 14 green; Settings' three suites green (the greyed-sections census now counts six boxes); web full run 3,534 of 3,535 (`settingsHealth` "Try again", the known full-run flake, 9/9 alone) plus `poseAssets.contract` (local Node 24); eslint 0 on every touched file (the package's 65 old errors are in files this job does not touch). Real run on :3000/:5173 in headless Edge: add, claim, key tag 1001 green then "Already", red, grey, camera playing, switch off, desk refusing; dark and light, 1000 and 400 wide. Smoke devices and visit removed; Olivia Bennett (1001, Active, Overdue) left on local Iron House for the click-through.
+- **Cost at full size:** reads no list of people (a gym's devices, at most 20).
+- **Open:** Kd's click-through; round one; 16b-ii.
+
 ## 2026-10-02 · Stage 4 item 11 (Folder B): the api talks to Postgres on ten connections (branch `db-pool`)
 
 - **Why this job:** next in Folder B (19a–19d wait on Folder A's 16a and 17c, 19b on photo storage). **Risky (it changes how every request runs beside another, sign-in and money included), Opus xhigh; Kd: *"go"*.** No migration, no new package, no new cost.

@@ -5,6 +5,7 @@ import GymDetailsPanel from '../../components/console/GymDetailsPanel';
 import OpeningHoursPanel from '../../components/console/OpeningHoursPanel';
 import AttendanceSettingsPanel from '../../components/console/AttendanceSettingsPanel';
 import LeadEmailsPanel from '../../components/console/LeadEmailsPanel';
+import CheckinDevicesPanel from '../../components/console/CheckinDevicesPanel';
 import StaffPanel from '../../components/console/StaffPanel';
 import { useConsoleOrg } from './useConsoleOrg';
 import { canManageStaff } from './staffView';
@@ -183,6 +184,11 @@ export default function Settings() {
           readOnly={readOnly}
         />
       ) : null}
+
+      {/* CHECK-IN DEVICES (16b-i): the front desk's tablets, on `org.manage` as the server
+          gates them. Keyed per gym for the panels' reason above: it holds a typed name and
+          a link shown once. */}
+      {canEditGym ? <CheckinDevicesPanel key={`checkin-devices-${org.id}`} org={org} readOnly={readOnly} /> : null}
 
       {/* FOLLOW-UP EMAILS TO LEADS (20c-v): the owner's "Send them for me", on the
           privilege the server gates it with. Keyed per gym for the panels' reason above:
