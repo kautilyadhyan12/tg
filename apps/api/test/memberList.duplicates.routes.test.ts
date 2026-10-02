@@ -59,6 +59,8 @@ const baseEnv = {
   WEB_ORIGIN: "http://localhost:5173",
   JWT_SECRET: "memberlist-duplicates-secret-012345", // dummy test value, gitleaks:allow
   LOG_LEVEL: "error",
+  // The join door is a fixture here; join codes are off by default (ROADMAP 3c).
+  JOIN_CODES: "on",
 };
 
 type App = Awaited<ReturnType<typeof buildApp>>;

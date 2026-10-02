@@ -460,11 +460,21 @@ describe('the join door is reachable at all', () => {
   const codeAt = (rel) =>
     stripComments(readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8'));
 
-  it('App.jsx routes /org/join to the JoinGym page', () => {
+  // Join codes are switched off (ROADMAP 3c): an old poster's address opens the
+  // invitations page, and no screen draws a code box.
+  it('App.jsx sends /org/join to the invitations page, not the JoinGym page', () => {
     const src = codeAt('../../App.jsx');
-    expect(src).toMatch(/path=(["'])\/org\/join\1/);
-    expect(src).toMatch(/<JoinGym\s*\/>/);
-    expect(src).toMatch(/import\s+JoinGym\s+from/);
+    expect(src).toMatch(/path=(["'])\/org\/join\1\s+element=\{<Navigate to="\/invitations" replace \/>\}/);
+    expect(src).not.toMatch(/<JoinGym\s*\/>/);
+  });
+
+  it('no screen draws the code box or reads requests to join by code', () => {
+    for (const rel of ['../../pages/Settings.jsx', '../../pages/onboarding/OnboardingScreens.jsx', '../../pages/Dashboard.jsx', '../../pages/MyGyms.jsx']) {
+      const src = codeAt(rel);
+      expect(src, rel).not.toMatch(/<JoinGymPanel\b/);
+      expect(src, rel).not.toMatch(/withApplications/);
+    }
+    expect(codeAt('../../pages/onboarding/OnboardingScreens.jsx')).toMatch(/<InvitationsPanel\b/);
   });
 
   it('the JoinGym page renders the shared panel rather than its own form', () => {
@@ -488,11 +498,11 @@ describe('the join door is reachable at all', () => {
     expect(src).toMatch(/<GymMembershipCard\s+showMemberships=\{false\}/);
   });
 
-  it('Settings has a Gym tab carrying BOTH the card and the code box', () => {
+  it('Settings has a Gym tab carrying the invitations and the card', () => {
     const src = codeAt('../../pages/Settings.jsx');
     expect(src).toMatch(/id:\s*(["'])gym\1/);
     expect(src).toMatch(/<GymMembershipCard\b/);
-    expect(src).toMatch(/<JoinGymPanel\b/);
+    expect(src).toMatch(/<InvitationsPanel\b/);
     // T3 ROUND 2, rule 4: the three above all live INSIDE `GymTab()`, so the
     // line that actually puts it on screen could be deleted and every one of
     // them still passed — the Gym tab renders empty and the suite stays green,
@@ -515,7 +525,7 @@ describe('the gym card on the dashboard', () => {
       ok({ applications: [{ ...APPLICATION, org: ORG }] }),
     );
     orgService.getMine.mockReturnValue(ok({ orgs: [] }));
-    draw(<GymMembershipCard />);
+    draw(<GymMembershipCard withApplications />);
     await waitFor(() =>
       expect(screen.getByText(/waiting for iron house to confirm you/i)).toBeTruthy(),
     );
@@ -532,7 +542,7 @@ describe('the gym card on the dashboard', () => {
     orgService.getMine.mockReturnValue(
       ok({ orgs: [{ ...ORG, staffRole: null, isMember: true, joinedAt: null }] }),
     );
-    draw(<GymMembershipCard />);
+    draw(<GymMembershipCard withApplications />);
     await waitFor(() => expect(screen.getByText(/you're a member of iron house/i)).toBeTruthy());
   });
 
@@ -541,7 +551,7 @@ describe('the gym card on the dashboard', () => {
       ok({ applications: [{ ...APPLICATION, status: 'rejected', org: ORG }] }),
     );
     orgService.getMine.mockReturnValue(ok({ orgs: [] }));
-    draw(<GymMembershipCard />);
+    draw(<GymMembershipCard withApplications />);
     await waitFor(() =>
       expect(screen.getByText(/iron house didn't confirm your request/i)).toBeTruthy(),
     );
@@ -556,7 +566,7 @@ describe('the gym card on the dashboard', () => {
     );
     orgService.getMine.mockReturnValue(ok({ orgs: [] }));
     const toCodeBox = vi.fn();
-    draw(<GymMembershipCard onTryAgain={toCodeBox} />);
+    draw(<GymMembershipCard withApplications onTryAgain={toCodeBox} />);
     const again = await screen.findByRole('button', { name: /try again/i });
     expect(screen.queryByRole('link', { name: /try again/i })).toBeNull();
     fireEvent.click(again);
@@ -580,7 +590,7 @@ describe('the gym card on the dashboard', () => {
         formerOrgs: [{ ...GONE, removedAt: '2026-08-20T04:41:16.656Z' }],
       }),
     );
-    draw(<GymMembershipCard />);
+    draw(<GymMembershipCard withApplications />);
 
     expect(await screen.findByText(/you're a client of flow studio/i)).toBeTruthy();
     expect(screen.getByText(/you're no longer a client of old studio/i)).toBeTruthy();
@@ -595,7 +605,7 @@ describe('the gym card on the dashboard', () => {
     orgService.getMine.mockReturnValue(
       ok({ orgs: [], formerOrgs: [{ ...ORG, removedAt: '2026-08-20T04:41:16.656Z' }] }),
     );
-    draw(<GymMembershipCard />);
+    draw(<GymMembershipCard withApplications />);
 
     expect(
       await screen.findByText(/you're no longer a member of iron house/i),
@@ -627,14 +637,14 @@ describe('the gym card on the dashboard', () => {
     // the component rather than directly.
     orgService.getMyApplications.mockReturnValue(ok({ applications: [] }));
     orgService.getMine.mockReturnValue(ok({ orgs: [{ ...ORG, staffRole: null, isMember: true, joinedAt: null }] }));
-    draw(<GymMembershipCard />);
+    draw(<GymMembershipCard withApplications />);
     expect(await screen.findByText(/you're a member of iron house/i)).toBeTruthy();
   });
 
   it('DRAWS NOTHING when both reads fail — silence claims nothing', async () => {
     orgService.getMyApplications.mockReturnValue(Promise.reject(new Error('Network Error')));
     orgService.getMine.mockReturnValue(Promise.reject(new Error('Network Error')));
-    const { container } = draw(<GymMembershipCard />);
+    const { container } = draw(<GymMembershipCard withApplications />);
     await waitFor(() => expect(orgService.getMine).toHaveBeenCalled());
     expect(container.textContent).toBe('');
   });
@@ -644,14 +654,14 @@ describe('the gym card on the dashboard', () => {
       ok({ applications: [{ ...APPLICATION, org: ORG }] }),
     );
     orgService.getMine.mockReturnValue(Promise.reject(new Error('Network Error')));
-    draw(<GymMembershipCard />);
+    draw(<GymMembershipCard withApplications />);
     await waitFor(() => expect(screen.getByText(/waiting for iron house/i)).toBeTruthy());
   });
 
   it('draws nothing at all for somebody with no gym', async () => {
     orgService.getMyApplications.mockReturnValue(ok({ applications: [] }));
     orgService.getMine.mockReturnValue(ok({ orgs: [] }));
-    const { container } = draw(<GymMembershipCard />);
+    const { container } = draw(<GymMembershipCard withApplications />);
     await waitFor(() => expect(orgService.getMine).toHaveBeenCalled());
     expect(container.textContent).toBe('');
   });
@@ -667,7 +677,7 @@ describe('the gym card on the dashboard', () => {
       ok({ applications: [{ ...APPLICATION, org: ORG }] }),
     );
     orgService.getMine.mockReturnValue(ok({ orgs: [] }));
-    draw(<GymMembershipCard />);
+    draw(<GymMembershipCard withApplications />);
 
     // 20 Aug → 2 Sep is thirteen days. The number is the SERVER'S `expiresAt`
     // read through the same helper the gym's own queue uses, so the two screens
@@ -691,7 +701,7 @@ describe('the gym card on the dashboard', () => {
       }),
     );
     standAt(NOW);
-    draw(<GymMembershipCard />);
+    draw(<GymMembershipCard withApplications />);
 
     fireEvent.click(await screen.findByRole('button', { name: /remind them/i }));
     await waitFor(() => expect(screen.getByText(/still waiting/i)).toBeTruthy());
@@ -728,7 +738,7 @@ describe('the gym card on the dashboard', () => {
       }),
     );
     standAt(NOW);
-    draw(<GymMembershipCard />);
+    draw(<GymMembershipCard withApplications />);
     fireEvent.click(await screen.findByRole('button', { name: /remind them/i }));
 
     await waitFor(() => expect(screen.getByText(/still waiting/i)).toBeTruthy());
@@ -755,7 +765,7 @@ describe('the gym card on the dashboard', () => {
       }),
     );
     orgService.getMine.mockReturnValue(ok({ orgs: [] }));
-    draw(<GymMembershipCard />);
+    draw(<GymMembershipCard withApplications />);
 
     // T3 r1 Low-1: this used to read "you reminded them TODAY", a claim about
     // the calendar the 24-hour rule does not make — a nudge at 23:00 Monday
@@ -774,7 +784,7 @@ describe('the gym card on the dashboard', () => {
     orgService.getMine.mockReturnValue(
       ok({ orgs: [{ ...ORG, staffRole: null, isMember: true, joinedAt: null }] }),
     );
-    draw(<GymMembershipCard />);
+    draw(<GymMembershipCard withApplications />);
     await screen.findByText(/you're a member of iron house/i);
     expect(screen.queryByRole('button', { name: /remind them/i })).toBeNull();
   });
@@ -795,7 +805,7 @@ describe('the gym card on the dashboard', () => {
     orgService.nudgeApplication.mockImplementation(() =>
       Promise.reject(new Error('Network Error')),
     );
-    draw(<GymMembershipCard />);
+    draw(<GymMembershipCard withApplications />);
     fireEvent.click(await screen.findByRole('button', { name: /remind them/i }));
 
     await waitFor(() => expect(screen.getByText(/couldn't reach the server/i)).toBeTruthy());
@@ -813,7 +823,7 @@ describe('the gym card on the dashboard', () => {
       ok({ applications: [{ ...APPLICATION, status: 'expired', org: ORG }] }),
     );
     orgService.getMine.mockReturnValue(ok({ orgs: [] }));
-    draw(<GymMembershipCard />);
+    draw(<GymMembershipCard withApplications />);
 
     expect(
       await screen.findByText(/your request to iron house expired before anyone confirmed it/i),
@@ -845,7 +855,7 @@ describe('the gym card on a screen that does not show memberships', () => {
 
   it('drops the membership row on the dashboard and KEEPS it everywhere else', async () => {
     memberOnly();
-    const dashboard = draw(<GymMembershipCard showMemberships={false} />);
+    const dashboard = draw(<GymMembershipCard withApplications showMemberships={false} />);
     await waitFor(() => expect(orgService.getMine).toHaveBeenCalled());
     expect(screen.queryByText(/you're a member of iron house/i)).toBeNull();
     // AND IT DRAWS NOTHING AT ALL rather than an empty box. A membership was
@@ -856,7 +866,7 @@ describe('the gym card on a screen that does not show memberships', () => {
 
     // THE OTHER HALF, same fixture: Settings → Gym still draws it whole, which
     // is what makes this a MOVE rather than a deletion.
-    draw(<GymMembershipCard />);
+    draw(<GymMembershipCard withApplications />);
     expect(await screen.findByText(/you're a member of iron house/i)).toBeTruthy();
   });
 
@@ -881,7 +891,7 @@ describe('the gym card on a screen that does not show memberships', () => {
       }),
     );
 
-    draw(<GymMembershipCard showMemberships={false} />);
+    draw(<GymMembershipCard withApplications showMemberships={false} />);
 
     expect(await screen.findByText(/waiting for iron house to confirm you/i)).toBeTruthy();
     expect(screen.getByRole('button', { name: /remind them/i })).toBeTruthy();
@@ -897,7 +907,7 @@ describe('the gym card when the gym cannot take members', () => {
     standAt(NOW);
     orgService.getMyApplications.mockReturnValue(ok({ applications: [HELD] }));
     orgService.getMine.mockReturnValue(ok({ orgs: [] }));
-    draw(<GymMembershipCard />);
+    draw(<GymMembershipCard withApplications />);
 
     // The headline is unchanged — they ARE still waiting, and that is true.
     expect(await screen.findByText(/waiting for iron house to confirm you/i)).toBeTruthy();
@@ -913,7 +923,7 @@ describe('the gym card when the gym cannot take members', () => {
     standAt(NOW);
     orgService.getMyApplications.mockReturnValue(ok({ applications: [HELD] }));
     orgService.getMine.mockReturnValue(ok({ orgs: [] }));
-    draw(<GymMembershipCard />);
+    draw(<GymMembershipCard withApplications />);
 
     await screen.findByText(/being held/i);
     expect(document.body.textContent).not.toMatch(/expires in/i);
@@ -929,7 +939,7 @@ describe('the gym card when the gym cannot take members', () => {
     standAt(NOW);
     orgService.getMyApplications.mockReturnValue(ok({ applications: [HELD] }));
     orgService.getMine.mockReturnValue(ok({ orgs: [] }));
-    draw(<GymMembershipCard />);
+    draw(<GymMembershipCard withApplications />);
 
     const button = await screen.findByRole('button', { name: /remind them/i });
     expect(button.disabled).toBe(false);
@@ -944,7 +954,7 @@ describe('the gym card when the gym cannot take members', () => {
     standAt(NOW);
     orgService.getMyApplications.mockReturnValue(ok({ applications: [HELD] }));
     orgService.getMine.mockReturnValue(ok({ orgs: [] }));
-    draw(<GymMembershipCard />);
+    draw(<GymMembershipCard withApplications />);
 
     await screen.findByText(/being held/i);
     const text = document.body.textContent ?? '';
@@ -966,7 +976,7 @@ describe('the gym card when the gym cannot take members', () => {
       ok({ applications: [{ ...APPLICATION, orgCanConfirm: true, org: ORG }] }),
     );
     orgService.getMine.mockReturnValue(ok({ orgs: [] }));
-    draw(<GymMembershipCard />);
+    draw(<GymMembershipCard withApplications />);
 
     expect(await screen.findByText(/one tap at the front desk/i)).toBeTruthy();
     expect(screen.getByText(/expires in 13 days/i)).toBeTruthy();

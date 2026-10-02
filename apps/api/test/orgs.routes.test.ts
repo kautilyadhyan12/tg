@@ -50,6 +50,8 @@ const baseEnv = {
   WEB_ORIGIN: "http://localhost:5173",
   JWT_SECRET: "orgs-test-secret-0123456789abcdef-32", // dummy test value, gitleaks:allow
   LOG_LEVEL: "error",
+  // The join door is a fixture here; join codes are off by default (ROADMAP 3c).
+  JOIN_CODES: "on",
 };
 
 const CAP1_PLAN = "zz_orgs_cap1";

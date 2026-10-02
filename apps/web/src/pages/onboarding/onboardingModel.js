@@ -102,7 +102,7 @@ export const SCREENS = [
   { id: 'equipment', title: 'Equipment',     desc: 'What you have to train with' },
   { id: 'health',    title: 'Health',        desc: 'One question, so your plan is careful' },
   { id: 'food',      title: 'Food',          desc: 'What you eat, so meals can be suggested' },
-  { id: 'code',      title: 'Your code',     desc: `Only if a ${ORG_TYPES_PHRASE} gave you one` },
+  { id: 'gym',       title: 'Your gym',      desc: `Only if a ${ORG_TYPES_PHRASE} invited you` },
   { id: 'plan',      title: 'Your plan',     desc: 'Check it, adjust anything, then finish' },
 ];
 
@@ -120,14 +120,8 @@ export const targetDirection = (weightGoal) => (weightGoal === 'lose' || weightG
  *  count does not jump when "Lose weight" is chosen. */
 export const asksTarget = (weightGoal) => directionOf(weightGoal) !== 'maintain';
 
-/** The screens in the order this person meets them. `codeFirst` is for someone
- *  who came from a poster link with its code (ROADMAP 4b-ii-b): "Your code"
- *  moves to the front, so they can ask to join before the questions, and the
- *  count stays the same. */
-export const visibleScreens = (answers, { codeFirst = false } = {}) => {
-  const shown = SCREENS.filter((s) => s.id !== 'target' || asksTarget(answers.weightGoal));
-  return codeFirst ? [...shown.filter((s) => s.id === 'code'), ...shown.filter((s) => s.id !== 'code')] : shown;
-};
+/** The screens in the order this person meets them. */
+export const visibleScreens = (answers) => SCREENS.filter((s) => s.id !== 'target' || asksTarget(answers.weightGoal));
 
 const answered = (v) => v !== null && v !== undefined;
 
@@ -169,7 +163,7 @@ export function screenAnswered(id, a) {
     case 'equipment': return Array.isArray(a.availableEquipment) && a.availableEquipment.length > 0;
     case 'health':    return a.health?.answered === true;
     case 'food':      return answered(a.diet) && answered(a.mealsPerDay);
-    case 'code':      return true;
+    case 'gym':       return true;
     case 'plan':      return visibleScreens(a).every((s) => s.id === 'plan' || screenAnswered(s.id, a));
     default:          return false;
   }
@@ -178,15 +172,15 @@ export function screenAnswered(id, a) {
 /** Where a returning person lands: the first screen still unanswered, or the
  *  last one when every screen has its answer. "Your code" is always answered,
  *  so with it first this is where its Continue goes on to. */
-export function firstOpenScreen(answers, order = {}) {
-  const screens = visibleScreens(answers, order);
+export function firstOpenScreen(answers) {
+  const screens = visibleScreens(answers);
   return (screens.find((s) => !screenAnswered(s.id, answers)) ?? screens[screens.length - 1]).id;
 }
 
 /** Where the step bar may jump: every screen up to the first one still
  *  unanswered. A screen past that would skip a question. */
-export function reachableScreens(answers, order = {}) {
-  const screens = visibleScreens(answers, order);
+export function reachableScreens(answers) {
+  const screens = visibleScreens(answers);
   const open = screens.findIndex((s) => !screenAnswered(s.id, answers));
   return new Set(screens.slice(0, open === -1 ? screens.length : open + 1).map((s) => s.id));
 }
@@ -849,7 +843,7 @@ export function answerValue(id, a, units) {
  *  they are met, each with what it holds. */
 export const answerRows = (a, units) =>
   visibleScreens(a)
-    .filter((s) => s.id !== 'code' && s.id !== 'plan')
+    .filter((s) => s.id !== 'gym' && s.id !== 'plan')
     .map((s) => ({ id: s.id, title: s.title, value: answerValue(s.id, a, units) }));
 
 /** The week of workouts as the person asked for it, or null until both

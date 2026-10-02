@@ -119,11 +119,10 @@ export function forgetDoor(store = defaultStore()) {
 
 // ── A poster's code, kept through sign-in and setup (ROADMAP 4b-ii-b) ───────
 //
-// `/org/join?code=…` needs a signed-in, set-up person, so everyone else is sent
-// away from it — to sign in, or into setup — and the address with its code was
-// lost on the way. The code is kept here, in the same tab store as the door and
-// for the same reason: "Continue with Google" leaves the site and comes back.
-// It is only ever put in a box; sending it is the person's own tap.
+// SWITCHED OFF with join codes (ROADMAP 3c; spec Part 3 §10.6): nothing keeps a
+// code any more and sign-in no longer reads one; `/org/join` opens the
+// invitations page. The store is kept, and sign-out still forgets a code an
+// older visit left behind.
 
 const JOIN_CODE_KEY = 'aihg_join_code';
 
@@ -179,10 +178,6 @@ export function forgetJoinCode(store = defaultStore()) {
  *  Callers own "is there a session at all" — this answers only the destination,
  *  which is the part all four of them were spelling differently.
  *
- *  `joinCode` is a kept poster code (`readJoinCode`). Someone who has finished
- *  setup goes to the join page with it in the box; someone who has not goes to
- *  setup, which puts it first. The gym door still goes to the console.
- *
  *  THE GYM DOOR IS ANSWERED FIRST, before the onboarding check (the Kd
  *  amendment in this file's header): the wizard is the member app's gate and
  *  the console is not the member app. `ProtectedRoute` still walls every member
@@ -198,16 +193,8 @@ export function forgetJoinCode(store = defaultStore()) {
  *  a brand-new owner — the exact person pressing it — into the member app
  *  instead, with no way to find the screen that makes them an owner.
  */
-export function landingRoute(user, door, joinCode = null) {
+export function landingRoute(user, door) {
   if (door === GYM_DOOR) return '/console';
   if (user?.onboardingCompleted === false) return '/onboarding';
-  return joinPageFor(joinCode) ?? '/dashboard';
-}
-
-/** The join page with `joinCode` in its box, or null when it is not a code.
- *  The one place that address is built: for signing in, and for setup's Finish
- *  when a poster's code was never sent. */
-export function joinPageFor(joinCode) {
-  const code = linkedJoinCodeSchema.safeParse(joinCode);
-  return code.success ? `/org/join?code=${encodeURIComponent(code.data)}` : null;
+  return '/dashboard';
 }

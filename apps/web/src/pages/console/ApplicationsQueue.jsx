@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
-import { orgService, errorText, errorStatus } from '../../api/orgsApi';
+import { codesRetired, orgService, errorText, errorStatus } from '../../api/orgsApi';
 import { readOnlyQueueNote } from './billingView';
 import {
   expiresInLabel,
@@ -194,7 +194,8 @@ export default function ApplicationsQueue({
         setState({
           loading: false,
           error: errorText(err, "We couldn't check who's waiting to join."),
-          forbidden: errorStatus(err) === 403,
+          // Join codes switched off (ROADMAP 3c) is drawn as nothing, like a refusal.
+          forbidden: errorStatus(err) === 403 || codesRetired(err),
           items: [],
           nextCursor: null,
           pendingCount: 0,

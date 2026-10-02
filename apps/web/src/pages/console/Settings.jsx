@@ -232,13 +232,6 @@ export default function Settings() {
         </ConsoleCard>
       ) : null}
 
-      <p className="text-sm" style={{ color: 'rgba(255,255,255,0.45)' }}>
-        Your join codes are on{' '}
-        <Link to={`/console/${orgSlug}`} style={{ color: '#FF8A1F' }}>
-          your {words.it}&apos;s main screen
-        </Link>
-        .
-      </p>
     </div>
   );
 }

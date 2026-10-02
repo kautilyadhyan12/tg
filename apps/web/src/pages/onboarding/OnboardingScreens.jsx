@@ -2,7 +2,7 @@
 // 2026-09-07, 2026-09-09 and 2026-09-10). Every tap and every wheel saves at
 // once through `save`; the one typed box, the name, saves when the person
 // leaves it. Nothing here decides a number: the plan panel shows the server's.
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { AlertTriangle, Check, ChevronRight, Dumbbell, ShieldCheck } from 'lucide-react';
 import {
   CHECK_FIRST_OPTIONS,
@@ -13,7 +13,7 @@ import {
 } from '@app/shared';
 import DisclaimerTick from '../../components/common/DisclaimerTick';
 import GymMembershipCard from '../../components/gym/GymMembershipCard';
-import JoinGymPanel from '../../components/gym/JoinGymPanel';
+import InvitationsPanel from '../../components/gym/InvitationsPanel';
 import HealthQuestion from './HealthQuestion';
 import NumberWheel from './NumberWheel';
 import { DIET_ICONS, EQUIPMENT_ICONS, GOAL_ICONS, LEVEL_ICONS, STEP_ICONS, WEIGHT_GOAL_ICONS } from './onboardingIcons';
@@ -772,57 +772,20 @@ export function FoodScreen({ answers, save }) {
 }
 
 // ── Screen 11 ───────────────────────────────────────────────────────────────
-// The gym code, applied before the plan screen (RULINGS 2026-09-07) so a person
-// walks out of setup already waiting on their gym rather than hunting for the
-// box afterwards.
-//
-// THE SAME TWO COMPONENTS SETTINGS' GYM TAB DRAWS, for the reason that tab and
-// `/org/join` already share one panel: three places asking for a code must not
-// answer differently. The card above says nothing at all unless this person is
-// in a place or waiting on one, so somebody with no code sees the box alone.
-//
-// IT ASKS FOR NOTHING. Most people have no code, so this screen never holds
-// Continue or Finish (`screenAnswered`), and the server's finish check has no
-// word for it either.
-//
-// A POSTER'S CODE (`poster.code`, ROADMAP 4b-ii-b) arrives filled in, on this
-// screen moved to the front of setup, and is sent only by the person's own tap
-// on "Ask to join"; once sent, the page forgets it (`poster.sent`).
-//
-// NO LINK HERE LEAVES SETUP. `ProtectedRoute` sends an unfinished account
-// straight back to the wizard, so a link out would look like a way on and be a
-// loop. The panel's "Back to your dashboard" is not offered
-// (`dashboardLink={false}`), and the card's "Try again" on a refused or expired
-// request puts the cursor in the code box just below instead of linking to the
-// join door's own address (`onTryAgain`).
-export function CodeScreen({ poster }) {
-  const [applied, setApplied] = useState(0);
-  const panel = useRef(null);
-  const toCodeBox = () => {
-    const box = panel.current?.querySelector('#gym-join-code');
-    // After a code is sent the panel shows its answer instead of the box, and
-    // its own "Enter a different code" is then what the person is shown.
-    const target = box ?? panel.current;
-    box?.focus();
-    target?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
-  };
+// "Your gym" (ROADMAP 3c; spec Part 3 §10.6): where the code box was. The invitations
+// waiting for this address, each with its Join, and the gyms this person is already
+// in. It asks for nothing, so it never holds Continue or Finish (`screenAnswered`).
+// No link here leaves setup: `ProtectedRoute` would send an unfinished account back.
+export function GymScreen() {
+  const [joined, setJoined] = useState(0);
   return (
     <div className="space-y-4">
-      <Question>Have a code from your {ORG_TYPES_PHRASE}?</Question>
-      <GymMembershipCard refreshToken={applied} onTryAgain={toCodeBox} />
-      <div ref={panel}>
-        <JoinGymPanel
-          dashboardLink={false}
-          initialCode={poster?.code ?? ''}
-          onApplied={() => {
-            setApplied((n) => n + 1);
-            poster?.sent();
-          }}
-        />
-      </div>
+      <Question>Invited by a {ORG_TYPES_PHRASE}?</Question>
+      <InvitationsPanel onJoined={() => setJoined((n) => n + 1)} />
+      <GymMembershipCard refreshToken={joined} />
       <p className="text-gray-400 text-xs">
-        No code? Carry on — everything works without one, and you can enter a code any time in
-        Settings.
+        No invitation? Carry on — everything works without one. A {ORG_TYPES_PHRASE} invites the email
+        address it has for you, and the invitation shows up in Settings → Gym.
       </p>
     </div>
   );

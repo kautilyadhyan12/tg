@@ -335,12 +335,15 @@ function Row({ row, onTryAgain }) {
  *  `/org/join`: onboarding's screen 11 passes one that puts the cursor in the
  *  box below, because an account that has not finished setup following that
  *  link is sent straight back to the wizard. */
-export default function GymMembershipCard({ refreshToken = 0, showMemberships = true, onTryAgain }) {
+export default function GymMembershipCard({ refreshToken = 0, showMemberships = true, onTryAgain, withApplications = false }) {
   const [rows, setRows] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.allSettled([orgService.getMyApplications(), orgService.getMine()]).then(
+    // Requests to join by code are read only with `withApplications`: join codes are
+    // switched off (ROADMAP 3c) and their routes answer 410. Its tests keep it on.
+    const applications = withApplications ? orgService.getMyApplications() : Promise.resolve({ data: { applications: [] } });
+    void Promise.allSettled([applications, orgService.getMine()]).then(
       ([appsOutcome, orgsOutcome]) => {
         if (cancelled) return;
         setRows(
@@ -359,7 +362,7 @@ export default function GymMembershipCard({ refreshToken = 0, showMemberships = 
     return () => {
       cancelled = true;
     };
-  }, [refreshToken]);
+  }, [refreshToken, withApplications]);
 
   // FILTERED AT RENDER, NOT AT READ, so `rows` stays the whole truth: the same
   // state feeds a screen that shows memberships and one that does not, and a

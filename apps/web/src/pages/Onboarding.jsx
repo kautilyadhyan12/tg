@@ -1,6 +1,6 @@
 // Onboarding v2 (ROADMAP Stage 1 items 4a-ii to 4c; RULINGS 2026-09-07,
 // 2026-09-09 and 2026-09-10): goal · about you · target · your day · your
-// training · your week · equipment · health · food · your code · your plan.
+// training · your week · equipment · health · food · your gym · your plan.
 // Every answer is saved the moment it is given, and the server's plan number
 // sits on every screen from the moment it exists. Setup asks nothing about
 // running (RULINGS 2026-09-13). The last screen shows the plan, a way back to
@@ -13,10 +13,9 @@ import { ArrowLeft, Check, ChevronLeft, ChevronRight, LogOut } from 'lucide-reac
 import { useAuth } from '../context/AuthContext';
 import { useDisclaimerTap } from '../hooks/useDisclaimerTap';
 import PlanPanel from './onboarding/PlanPanel';
-import { forgetJoinCode, joinPageFor, readJoinCode } from './landingRoute';
 import {
   AboutScreen,
-  CodeScreen,
+  GymScreen,
   DayScreen,
   EquipmentScreen,
   FoodScreen,
@@ -55,7 +54,7 @@ const SCREEN_VIEWS = {
   equipment: EquipmentScreen,
   health: HealthScreen,
   food: FoodScreen,
-  code: CodeScreen,
+  gym: GymScreen,
   plan: PlanScreen,
 };
 
@@ -87,23 +86,6 @@ export default function Onboarding() {
   // the app" sits beside Sign out for them.
   const finished = user?.onboardingCompleted === true;
   const returnTo = RETURN_TO.has(location.state?.returnTo) ? location.state.returnTo : '/dashboard';
-
-  // A code from a poster link (ROADMAP 4b-ii-b; Kd, 2026-09-13): someone not yet
-  // set up meets "Your code" FIRST, the code in its box, and asks to join before
-  // the questions. The order is fixed for this visit, so sending the code never
-  // moves the screen they are on; once sent, the code is forgotten and a return
-  // to that screen finds the box empty. A code still unsent at Finish is not
-  // dropped: Finish lands on the join page with it in the box, still unsent.
-  const [posterCode, setPosterCode] = useState(() => (finished ? null : readJoinCode()));
-  const [codeFirst] = useState(() => posterCode !== null);
-  const order = { codeFirst };
-  const poster = {
-    code: posterCode,
-    sent: () => {
-      forgetJoinCode();
-      setPosterCode(null);
-    },
-  };
 
   // Sign out, for everyone, and THE ONLY WAY OUT OF THIS SCREEN WITHOUT
   // FINISHING IT for someone who has not (Kd, 2026-08-19). `ProtectedRoute`
@@ -212,15 +194,15 @@ export default function Onboarding() {
       : hs.status === 'failed'
         ? { text: hs.error, retry: hs.retry }
         : null;
-  const screens = visibleScreens(answers, order);
-  const landing = () => (codeFirst ? 'code' : firstOpenScreen({ ...ob.first, health: hs.first }));
+  const screens = visibleScreens(answers);
+  const landing = () => firstOpenScreen({ ...ob.first, health: hs.first });
   const current = picked ?? (loaded ? landing() : SCREENS[0].id);
   const index = Math.max(0, screens.findIndex((s) => s.id === current));
   const screen = screens[index];
   const isLast = index === screens.length - 1;
   const direction = directionOf(answers.weightGoal);
   const answered = screenAnswered(screen.id, answers);
-  const reachable = reachableScreens(answers, order);
+  const reachable = reachableScreens(answers);
 
   /** Leaving a screen forward first saves its typed box, if it has one. */
   const leave = () => (screen.id === 'about' ? commitName() : true);
@@ -241,7 +223,7 @@ export default function Onboarding() {
     goTo(id);
     setAdjusting(true);
   };
-  const nextScreen = adjusting || (codeFirst && screen.id === 'code') ? firstOpenScreen(answers, order) : screens[index + 1]?.id;
+  const nextScreen = adjusting ? firstOpenScreen(answers) : screens[index + 1]?.id;
 
   const goNext = async () => {
     if (!leave()) return;
@@ -249,9 +231,8 @@ export default function Onboarding() {
     const saved = await ob.settled();
     setBusy(false);
     if (!saved) return;
-    // From "Your code" at the front, on to the first question still open: where
-    // this person would have landed without a poster. From a screen opened by
-    // Adjust, the same — which is the plan once every question is answered.
+    // From a screen opened by Adjust, on to the first question still open —
+    // which is the plan once every question is answered.
     goTo(nextScreen);
   };
 
@@ -293,11 +274,8 @@ export default function Onboarding() {
       updateUser({ onboardingCompleted: true, displayName: result.answers.displayName });
       toast.success("You're all set. Let's train.");
       // Everyone here came through the member door, heading for the member
-      // app — or back to the screen in it that sent them here. A poster's code
-      // never sent goes with them to the join page, in its box and still unsent
-      // (Kd, 2026-09-13): they are set up now, and a set-up person with a code
-      // lands there. The join page forgets the kept copy on arrival.
-      navigate(joinPageFor(posterCode) ?? returnTo);
+      // app — or back to the screen in it that sent them here.
+      navigate(returnTo);
       return;
     }
     if (result.missing) {
@@ -494,7 +472,6 @@ export default function Onboarding() {
                     name={name}
                     direction={direction}
                     health={health}
-                    poster={poster}
                     planNote={planTap}
                     adjust={adjust}
                     busy={busy}

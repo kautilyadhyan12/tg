@@ -87,13 +87,13 @@ export function staffRoleChoices(orgType) {
   const words = orgWords(orgType);
   const trainerHint =
     orgType === 'gym' || orgType === 'personal_trainer'
-      ? `Can see your ${words.person} list and your join code.`
-      : `Can see your join code. They can't see your ${words.person} list yet.`;
+      ? "Can see who's in the app and who came in."
+      : `Can see who came in. They can't see your ${words.people} in the app yet.`;
   return [
     {
       value: 'manager',
       label: 'Manager',
-      hint: `Can confirm people joining, remove ${words.people}, and manage your join codes.`,
+      hint: `Can keep your ${words.person} list, invite people and remove ${words.people}.`,
     },
     { value: 'trainer', label: words.coachCap, hint: trainerHint },
   ];
@@ -171,7 +171,7 @@ function privilegeCopy(orgType) {
   return [
     {
       value: 'members.read',
-      label: `See the ${words.person} list`,
+      label: "See who's in the app",
       hint: `Who has joined your ${words.it}, and when.`,
     },
     {
@@ -194,8 +194,8 @@ function privilegeCopy(orgType) {
     },
     {
       value: 'members.confirm',
-      label: `Let people into the ${words.it}`,
-      hint: 'Say yes or no to people waiting to join.',
+      label: `Keep the ${words.person} list and invite`,
+      hint: `Import and change the list, send invitations, and see Leads and your ${words.it}'s page.`,
     },
     {
       value: 'members.remove',
@@ -239,9 +239,23 @@ const PRIVILEGE_ORDER = privilegeCopy('gym').map((p) => p.value);
  *  An unknown role takes the REFUSING side, like `canManageStaff` above: a role
  *  invented later is offered the smaller set until somebody decides otherwise. */
 export function privilegeChoices(role, orgType) {
-  const copy = privilegeCopy(orgType);
+  const copy = privilegeCopy(orgType).filter((choice) => !isRetiredPrivilege(choice.value));
   if (role === 'owner') return copy;
   return copy.filter((choice) => !isOwnerOnlyPrivilege(choice.value));
+}
+
+/** The join code's two ticks: kept on a person and carried through a save, but no box
+ *  is drawn, since join codes are switched off and they let nobody do anything (ROADMAP
+ *  3c; spec Part 3 §10.6). */
+const RETIRED_PRIVILEGES = ['codes.invite', 'codes.manage'];
+
+export function isRetiredPrivilege(privilege) {
+  return RETIRED_PRIVILEGES.includes(privilege);
+}
+
+/** The retired ticks this person holds, for the save to keep. */
+export function retiredPrivileges(person) {
+  return effectivePrivileges(person).filter(isRetiredPrivilege);
 }
 
 /** Is this one of the ticks only an owner's row may carry? Read from the shared
@@ -338,10 +352,11 @@ export function roleTicks(role) {
 }
 
 /** What the invite sends: the boxes ticked on the form, plus the role's usual ticks this
- *  screen has no box for (as Save permissions keeps them), never "Manage staff". */
+ *  screen has no box for (as Save permissions keeps them), never "Manage staff" and never
+ *  the join code ticks, which let nobody do anything now (ROADMAP 3c). */
 export function inviteTicks(role, ticked, orgType) {
   const offered = privilegeChoices(role, orgType).map((choice) => choice.value);
-  const unseen = roleTicks(role).filter((value) => !offered.includes(value));
+  const unseen = roleTicks(role).filter((value) => !offered.includes(value) && !isRetiredPrivilege(value));
   return [...new Set([...ticked.filter((value) => offered.includes(value)), ...unseen])];
 }
 
@@ -349,7 +364,7 @@ export function inviteTicks(role, ticked, orgType) {
  *  first: shown on the person's Accept card. */
 export function abilityLabels(privileges, orgType) {
   return privilegeCopy(orgType)
-    .filter((choice) => privileges.includes(choice.value))
+    .filter((choice) => privileges.includes(choice.value) && !isRetiredPrivilege(choice.value))
     .map((choice) => choice.label);
 }
 

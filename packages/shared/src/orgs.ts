@@ -487,9 +487,9 @@ export type UpdateOrgResponse = z.infer<typeof updateOrgResponseSchema>;
 
 export const createOrgResponseSchema = z.object({
   org: orgSummarySchema,
-  /** Part 3 §4.0 step 4 — the first code is created WITH the org, never as a
-   *  second call the owner could skip and end up with an org nobody can join. */
-  joinCode: joinCodeSchema,
+  /** Part 3 §4.0 step 4 — the first code is created WITH the org. Null while join
+   *  codes are switched off (ROADMAP 3c): an invitation is the way in. */
+  joinCode: joinCodeSchema.nullable(),
 });
 export type CreateOrgResponse = z.infer<typeof createOrgResponseSchema>;
 

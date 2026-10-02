@@ -112,6 +112,15 @@ const envSchema = z.object({
   // Where the app tells its operator that a gym's invitations were stopped (the "have
   // a look" list, until the admin panel). Unset: the log alone says so.
   OPERATOR_EMAIL: z.string().trim().email().max(254).optional(),
+  // Join codes (ROADMAP 3c; RULINGS 2026-09-21): an invitation to an address is the only
+  // way into a gym, so the code routes and the waiting room answer 410 and a new gym gets
+  // no code. "on" exists for the old suites, which keep that code from rotting unseen.
+  // Switching it on in a real deployment brings back every request left waiting, however
+  // old, confirmable with one tap: cancel those first (`gym_join_applications`, pending).
+  JOIN_CODES: z
+    .enum(["on", "off"])
+    .default("off")
+    .transform((value) => value === "on"),
   // Paddle sells our plans (ROADMAP Stage 3 item 1a). Sandbox until Kd's live account is
   // approved; each key is checked against the environment below at boot. All unset:
   // paying online answers 503 and the webhook answers 503; the rest of the app runs.

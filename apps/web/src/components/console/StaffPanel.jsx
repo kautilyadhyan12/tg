@@ -10,6 +10,7 @@ import {
   effectivePrivileges,
   otherStaffRole,
   privilegeChoices,
+  retiredPrivileges,
   privilegesDiffer,
   roleChangeWarning,
   staffCountLabel,
@@ -564,7 +565,7 @@ function PrivilegesControl({ person, busy, readOnly, orgType, onSave }) {
   // "these ticks differ from the stored set", which stays true of a lapsed gym.
   // The SAVE button is what read-only takes away — mixing the two would make an
   // edited-but-unsaveable panel claim nothing had been touched.
-  const dirty = !ownerRow && privilegesDiffer(current, ticked);
+  const dirty = !ownerRow && privilegesDiffer(current, [...ticked, ...retiredPrivileges(person)]);
 
   return (
     <div
@@ -622,7 +623,7 @@ function PrivilegesControl({ person, busy, readOnly, orgType, onSave }) {
             type="button"
             disabled={busy || readOnly || !dirty}
             onClick={async () => {
-              const saved = await onSave([...ticked, ...unknownPrivileges(person)]);
+              const saved = await onSave([...ticked, ...retiredPrivileges(person), ...unknownPrivileges(person)]);
               if (saved) closeIt();
             }}
             className="text-xs rounded-lg px-3 py-1.5 font-semibold disabled:opacity-40"
