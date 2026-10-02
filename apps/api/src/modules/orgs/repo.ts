@@ -1906,6 +1906,9 @@ export async function startGymTrial(
       return { kind: "already_subscribed", subscription: toGymSubscription(existing) };
     }
 
+    // One trial per OWNER: the gym's lock does not cover the owner's other gyms, so
+    // two presses on two of them would both read "never had one".
+    await tx`SELECT pg_advisory_xact_lock(hashtext(${`gym-trial:${gym.owner_user_id}`}))`;
     const used = await tx<{ one: number }[]>`
       SELECT 1 AS one
       FROM subscriptions s JOIN gyms g ON g.id = s.owner_id
@@ -2655,7 +2658,9 @@ export async function removeMember(
     // they were a member here: this route never touches somebody who is staff only.
     const endStaff = async (): Promise<void> => {
       if (staff === undefined || !input.alsoStaff) return;
-      await tx`DELETE FROM gym_staff WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;
+      // An account deleted at this instant has already removed the row and said so.
+      const gone = await tx`DELETE FROM gym_staff WHERE gym_id = ${input.gymId} AND user_id = ${input.userId} RETURNING user_id`;
+      if (gone.length === 0) return;
       await insertAudit(tx, {
         actorUserId: input.actorUserId,
         gymId: input.gymId,

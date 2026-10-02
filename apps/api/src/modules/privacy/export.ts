@@ -95,17 +95,12 @@ export interface ExportDeps {
  *  Reads run sequentially: an export is a rare, rate-limited request, and
  *  serial reads keep it from being a way to open 17 concurrent connections.
  *
- *  THE ACCEPTED CEILING, amended (T3 round 2, F3 — round 1's F8 priced this
- *  without the pool). app.ts builds `postgres(url, { max: 1 })`: ONE
- *  connection per API process. So an export does not merely cost memory and
- *  event-loop time — it SERIALISES the process's only connection for all 18
- *  round trips, and every other in-flight request queues behind it. Bounded
- *  today by the 3/hour per-user cap and by §6's sizing (~120 KB/user·month
- *  heavy, so a two-year user is ~3 MB), and prod serves nobody yet. The
- *  trigger that moves this to §5.2's worker form is now explicit: a real
- *  user's export approaching tens of MB, OR the pool staying at max:1 once
- *  the API serves concurrent traffic. Kd's call, recorded not silently
- *  changed. */
+ *  THE ACCEPTED CEILING. An export holds one of the process's
+ *  `DATABASE_POOL_MAX` connections for its 18 round trips (it was the only one
+ *  until ROADMAP Stage 4 item 11). Bounded by the 3/hour per-user cap and by
+ *  §6's sizing (~120 KB/user·month heavy, so a two-year user is ~3 MB). The
+ *  trigger that moves this to §5.2's worker form: a real user's export
+ *  approaching tens of MB. */
 export async function buildUserExport(deps: ExportDeps, userId: string): Promise<DpdpExport> {
   const user = await selectExportUser(deps.sql, userId);
   // The route authenticates first, so this is a deleted/vanished account

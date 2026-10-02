@@ -211,10 +211,9 @@ export async function previewInvite(
 }
 
 
-/** How many people one press writes in one transaction. The api has one database
- *  connection, so a press of ten thousand in one transaction would hold every other
- *  request for as long as it took; written in batches, other requests are answered in
- *  between (measured in spec §9.12's notes). */
+/** How many people one press writes in one transaction. Each batch holds the gym's
+ *  lock and one of the api's database connections; written in batches, the gym's
+ *  other writes are answered in between (measured in spec §9.12's notes). */
 export const INVITE_PRESS_BATCH = 500;
 
 /** Press Invite: queue the first email for everybody the preview counted, if the list

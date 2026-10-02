@@ -328,6 +328,101 @@ d("auth routes (real Postgres)", () => {
     expect(ok.json<{ user: { emailVerified: boolean } }>().user.emailVerified).toBe(true);
   });
 
+  it("links asked for at the same instant: only the newest one stays live", { timeout: 30_000 }, async () => {
+    const { createOneTimeToken } = await import("../src/modules/auth/repo.js");
+    const { sha256Hex, mintOpaqueToken } = await import("../src/modules/auth/tokens.js");
+    await post(api(), "/v1/auth/register", {
+      email: "p21-twin-links@example.com",
+      password: PASSWORD,
+      displayName: "Twin Links",
+    });
+    const [u] = await sql<{ id: string }[]>`
+      SELECT id FROM users WHERE email = 'p21-twin-links@example.com'`;
+    const userId = u?.id ?? "";
+    expect(userId).not.toBe("");
+    await Promise.all(
+      Array.from({ length: 6 }, () =>
+        createOneTimeToken(sql, {
+          userId,
+          purpose: "password_reset",
+          tokenHash: sha256Hex(mintOpaqueToken()),
+          expiresAt: new Date(Date.now() + 60_000),
+        }),
+      ),
+    );
+    const live = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM one_time_tokens
+      WHERE user_id = ${userId} AND purpose = 'password_reset' AND used_at IS NULL AND expires_at > now()`;
+    expect(live[0]?.n).toBe(1);
+  });
+
+  /** A refresh held halfway: its new token written, its old one not yet revoked. A
+   *  side connection holds the old token's row; `revoke` runs while the refresh waits. */
+  const revokeDuringRefresh = async (local: string, revoke: (userId: string, refresh: string) => Promise<unknown>) => {
+    const { sha256Hex } = await import("../src/modules/auth/tokens.js");
+    const email = `p21-${local}@example.com`;
+    await post(api(), "/v1/auth/register", { email, password: PASSWORD, displayName: local });
+    const login = await post(api(), "/v1/auth/login", { email, password: PASSWORD });
+    const refresh = cookieMap(login)["refreshToken"] ?? "";
+    const [u] = await sql<{ id: string }[]>`SELECT id FROM users WHERE email = ${email}`;
+    const userId = u?.id ?? "";
+    expect(userId).not.toBe("");
+
+    let release = (): void => undefined;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let held = (): void => undefined;
+    const isHeld = new Promise<void>((resolve) => {
+      held = resolve;
+    });
+    const holder = sql.begin(async (tx) => {
+      await tx`SELECT id FROM refresh_tokens WHERE token_hash = ${sha256Hex(refresh)} FOR UPDATE`;
+      held();
+      await released;
+    });
+    const waiting = async (count: number) => {
+      for (let i = 0; i < 250; i++) {
+        const [row] = await sql<{ n: number }[]>`
+          SELECT count(*)::int AS n FROM pg_stat_activity
+          WHERE datname = current_database() AND wait_event_type = 'Lock'
+            AND (query LIKE '%refresh_tokens%' OR query LIKE '%FROM users WHERE id%')`;
+        if ((row?.n ?? 0) >= count) return;
+        await new Promise((resolve) => {
+          setTimeout(resolve, 20);
+        });
+      }
+    };
+    try {
+      await isHeld;
+      const refreshing = post(api(), "/v1/auth/refresh", {}, { cookies: { refreshToken: refresh } });
+      await waiting(1);
+      const revoking = revoke(userId, refresh);
+      await waiting(2);
+      release();
+      await refreshing;
+      await revoking;
+    } finally {
+      release();
+      await holder;
+    }
+    const live = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM refresh_tokens WHERE user_id = ${userId} AND revoked_at IS NULL`;
+    return live[0]?.n;
+  };
+
+  it("log out everywhere while a session is refreshing: no session survives", { timeout: 30_000 }, async () => {
+    const { revokeAllRefreshTokens } = await import("../src/modules/auth/repo.js");
+    expect(await revokeDuringRefresh("inflight-all", (userId) => revokeAllRefreshTokens(sql, userId))).toBe(0);
+  });
+
+  it("log out while that same session is refreshing: its new token is revoked too", { timeout: 30_000 }, async () => {
+    const live = await revokeDuringRefresh("inflight-out", (_userId, refresh) =>
+      post(api(), "/v1/auth/logout", {}, { cookies: { refreshToken: refresh } }),
+    );
+    expect(live).toBe(0);
+  });
+
   it("refresh: missing/garbage cookie → 401", async () => {
     expect((await post(api(), "/v1/auth/refresh", {})).statusCode).toBe(401);
     const garbage = await post(api(), "/v1/auth/refresh", {}, { cookies: { refreshToken: "ff".repeat(32) } });

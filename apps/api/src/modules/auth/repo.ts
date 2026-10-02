@@ -398,16 +398,30 @@ export async function rotateRefreshToken(
 
 /** Reuse detection (Part 4 §3.1: "reuse of a revoked member kills the family"). */
 export async function revokeFamily(sql: Sql, userId: string, familyId: string): Promise<void> {
-  await sql`
-    UPDATE refresh_tokens SET revoked_at = now()
-    WHERE user_id = ${userId} AND family_id = ${familyId} AND revoked_at IS NULL`;
+  await sql.begin(async (tx) => {
+    await waitOutRotations(tx, userId);
+    await tx`
+      UPDATE refresh_tokens SET revoked_at = now()
+      WHERE user_id = ${userId} AND family_id = ${familyId} AND revoked_at IS NULL`;
+  });
 }
 
 /** "Log out everywhere" (§3.1 read shape) — reset/change-password sweeps. */
 export async function revokeAllRefreshTokens(sql: Sql, userId: string): Promise<void> {
-  await sql`
-    UPDATE refresh_tokens SET revoked_at = now()
-    WHERE user_id = ${userId} AND revoked_at IS NULL`;
+  await sql.begin(async (tx) => {
+    await waitOutRotations(tx, userId);
+    await tx`
+      UPDATE refresh_tokens SET revoked_at = now()
+      WHERE user_id = ${userId} AND revoked_at IS NULL`;
+  });
+}
+
+/** A rotation in flight has inserted its successor (holding a key-share lock on the
+ *  user through the foreign key) and not yet revoked the old token; a revoke that ran
+ *  now would miss the successor. Locking the user waits it out, and a rotation that
+ *  starts after finds its old token revoked and rolls back. */
+async function waitOutRotations(tx: TransactionSql, userId: string): Promise<void> {
+  await tx`SELECT 1 FROM users WHERE id = ${userId} FOR UPDATE`;
 }
 
 // ── one-time tokens (hashed; migration 0003, R3.7) ──────────────────────────
@@ -422,6 +436,8 @@ export async function createOneTimeToken(
   input: { userId: string; purpose: OneTimePurpose; tokenHash: string; expiresAt: Date },
 ): Promise<void> {
   await sql.begin(async (tx) => {
+    // Two requests at once would each miss the other's new token and both stay live.
+    await tx`SELECT 1 FROM users WHERE id = ${input.userId} FOR NO KEY UPDATE`;
     await tx`
       UPDATE one_time_tokens SET expires_at = now()
       WHERE user_id = ${input.userId} AND purpose = ${input.purpose}

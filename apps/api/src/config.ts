@@ -7,6 +7,11 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   DATABASE_URL: z.string().url(),
+  // Connections each API process keeps to Postgres (ROADMAP Stage 4 item 11). One meant
+  // a slow statement held every other request. Neon's smallest compute (0.25 CU) allows
+  // 104 connections and its pooler 10,000 clients; 10 per process plus the worker's 2
+  // leaves room for several processes.
+  DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(50).default(10),
   WEB_ORIGIN: z.string().url(), // exact origin for CORS-with-credentials (Part IV #6)
   SENTRY_DSN: z.string().url().optional(),
   POSTHOG_API_KEY: z.string().min(1).optional(),

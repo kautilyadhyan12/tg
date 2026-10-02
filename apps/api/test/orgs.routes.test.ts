@@ -1551,6 +1551,58 @@ d("orgs routes (real Postgres)", () => {
     expect((await del(`/v1/orgs/${org.org.id}/members/${manager.userId}?alsoStaff=yes`, { cookies: owner.cookies })).statusCode).toBe(400);
   });
 
+  it("removing a trainer from the app while they delete their account: one staff-removed line, not two", { timeout: 60_000 }, async () => {
+    const owner = await makeUser("rmgone-owner");
+    const trainer = await makeUser("rmgone-trainer");
+    const org = await makeOrg(owner.cookies, "Orgs Test Remove Gone");
+    await joinAsMember(trainer.cookies, org, owner.cookies);
+    await sql`INSERT INTO gym_staff (gym_id, user_id, role) VALUES (${org.org.id}, ${trainer.userId}, 'trainer')`;
+
+    // The account deletion, caught half way: it holds the trainer's membership and,
+    // once the removal waits on it, takes them off staff and ends the membership.
+    let release = (): void => undefined;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let held = (): void => undefined;
+    const isHeld = new Promise<void>((resolve) => {
+      held = resolve;
+    });
+    const deletion = sql.begin(async (tx) => {
+      await tx`SELECT 1 FROM gym_members WHERE gym_id = ${org.org.id} AND user_id = ${trainer.userId} AND removed_at IS NULL FOR UPDATE`;
+      held();
+      await released;
+      await tx`DELETE FROM gym_staff WHERE gym_id = ${org.org.id} AND user_id = ${trainer.userId}`;
+      await tx`
+        INSERT INTO audit_log (actor_user_id, gym_id, action, target_type, target_id, meta)
+        VALUES (${trainer.userId}, ${org.org.id}, 'org.staff_removed', 'gym_staff', ${trainer.userId}, '{}'::jsonb)`;
+      await tx`UPDATE gym_members SET removed_at = now() WHERE gym_id = ${org.org.id} AND user_id = ${trainer.userId}`;
+    });
+    try {
+      await isHeld;
+      const removing = del(`/v1/orgs/${org.org.id}/members/${trainer.userId}?alsoStaff=true`, { cookies: owner.cookies });
+      for (let i = 0; i < 250; i++) {
+        const [row] = await sql<{ n: number }[]>`
+          SELECT count(*)::int AS n FROM pg_stat_activity
+          WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%gym_members%'`;
+        if ((row?.n ?? 0) > 0) break;
+        await new Promise((resolve) => {
+          setTimeout(resolve, 20);
+        });
+      }
+      release();
+      await deletion;
+      expect((await removing).statusCode).toBe(200);
+    } finally {
+      release();
+      await deletion.catch(() => undefined);
+    }
+    const lines = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM audit_log
+      WHERE gym_id = ${org.org.id} AND action = 'org.staff_removed' AND target_id = ${trainer.userId}`;
+    expect(lines[0]?.n).toBe(1);
+  });
+
   it("only owner and manager may remove — a trainer gets 403, another gym's owner gets 404", { timeout: 60_000 }, async () => {
     const owner = await makeUser("rmpriv-owner");
     const trainer = await makeUser("rmpriv-trainer");

@@ -10,6 +10,7 @@
 // Nothing happens to anyone who was not selected (CLAUDE.md §4). The box is worked out by
 // the same pure function the press runs under the gym's lock, and the press carries the
 // box's digest: if the answer has moved, nobody is removed and the new box is sent back.
+import { ChosenPeopleMovedError, onceMoreIfMoved } from "./onceMore.js";
 import { createHash } from "node:crypto";
 import {
   isLargeMemberListChange,
@@ -427,7 +428,7 @@ async function press(
   const at = deps.now();
   const settings = deps.invites ?? null;
   const closedUsers: string[] = [];
-  const answer = await deps.sql.begin(async (tx): Promise<RemoveSelectedAnswer> => {
+  const answer = await onceMoreIfMoved(() => deps.sql.begin(async (tx): Promise<RemoveSelectedAnswer> => {
     await repo.lockGym(tx, gymId);
     const plan = await planOn(tx);
     if (plan.preview.digest !== input.digest) {
@@ -456,7 +457,7 @@ async function press(
     }
     const closed = await repo.closeMemberships(tx, gymId, plan.endApp, at, plan.staffIds);
     if (closed.length !== plan.endApp.length) {
-      throw new Error(`remove-selected closed ${String(closed.length)} memberships where the rule chose ${String(plan.endApp.length)}`);
+      throw new ChosenPeopleMovedError(`remove-selected closed ${String(closed.length)} memberships where the rule chose ${String(plan.endApp.length)}`);
     }
     await withdrawForAccounts(tx, settings, { gymId, userIds: closed.map((row) => row.userId), at });
     const endedWith = new Map<string, number>();
@@ -491,7 +492,7 @@ async function press(
     if (moved.length > 0) await repo.bumpListVersion(tx, gymId);
     closedUsers.push(...closed.map((row) => row.userId));
     return { kind: "removed", removed: { moved: moved.length, endedApp: closed.length, alreadyRemoved: false } };
-  });
+  }));
   await bustAfterRemoval(deps, gymId, closedUsers);
   return answer;
 }

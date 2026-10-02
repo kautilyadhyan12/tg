@@ -770,6 +770,56 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
     TEST_TIMEOUT_MS,
   );
 
+  it(
+    "an owner pressing Start free trial on two gyms at the same instant gets one trial",
+    async () => {
+      for (let round = 0; round < 3; round++) {
+        const owner = await makeUser(`arm-twin-${String(round)}`);
+        const first = await makeOrg(owner.cookies, "US");
+        const second = await makeOrg(owner.cookies, "US");
+        const gymIds = [first.org.id, second.org.id];
+
+        // Both presses wait at their gym's lock and are let go together, so both reach
+        // the owner's check at once.
+        let release = (): void => undefined;
+        const released = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        let held = (): void => undefined;
+        const isHeld = new Promise<void>((resolve) => {
+          held = resolve;
+        });
+        const holder = sql.begin(async (tx) => {
+          await tx`SELECT 1 FROM gyms WHERE id IN ${tx(gymIds)} ORDER BY id FOR UPDATE`;
+          held();
+          await released;
+        });
+        try {
+          await isHeld;
+          const pressing = Promise.all(gymIds.map((id) => post(`/v1/orgs/${id}/trial`, {}, owner.cookies)));
+          for (let i = 0; i < 250; i++) {
+            const [row] = await sql<{ n: number }[]>`
+              SELECT count(*)::int AS n FROM pg_stat_activity
+              WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%FROM gyms WHERE id%'`;
+            if ((row?.n ?? 0) >= 2) break;
+            await new Promise((resolve) => {
+              setTimeout(resolve, 20);
+            });
+          }
+          release();
+          const presses = await pressing;
+          expect(presses.map((res) => res.statusCode).sort()).toEqual([200, 409]);
+          const refused = presses.find((res) => res.statusCode === 409);
+          expect((JSON.parse(refused?.body ?? "{}") as { error?: string }).error).toBe("trial_already_used");
+        } finally {
+          release();
+          await holder;
+        }
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   /** A PLAIN MEMBER IS TOLD NOTHING — §2.4's boundary, the same line that
    *  withholds `subscription` and `seatsUsed`. When a gym's trial ran out is the
    *  gym's business, not its members'.

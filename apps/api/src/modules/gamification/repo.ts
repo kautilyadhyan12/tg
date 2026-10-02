@@ -29,9 +29,11 @@ const toState = (r: StreakDbRow | undefined): StreakState =>
         freezesAvailable: r.freezes_available,
       };
 
-/** Row-locked read inside the caller's transaction: two concurrent syncs of
- *  the same user serialize here — no lost streak increments. */
+/** Locked read inside the caller's transaction: two concurrent syncs of the
+ *  same user serialize here — no lost streak increments. The advisory lock
+ *  covers a first sync, when there is no row for FOR UPDATE to lock. */
 export async function getStreakForUpdate(tx: TransactionSql, userId: string): Promise<StreakState> {
+  await tx`SELECT pg_advisory_xact_lock(hashtext(${`streak:${userId}`}))`;
   const rows = await tx<StreakDbRow[]>`
     SELECT current, longest, last_activity_date::text, freezes_available
     FROM streaks WHERE user_id = ${userId} FOR UPDATE`;

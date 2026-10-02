@@ -317,6 +317,63 @@ d("member list: keeping it by hand (real Postgres)", () => {
   );
 
   it(
+    "Remove all while one of those members deletes their account: nothing is half done, and staff are told the list changed",
+    async () => {
+      const owner = await makeUser("gone-owner");
+      const org = await makeOrg(owner, "Moved Hand Gym");
+      const gym = org.org.id;
+      await typeIn(gym, owner, { fullName: "Somebody Listed", email: "mhand-t-gone-listed@example.com" });
+      const leaving = await member("gone-leaving", org, owner);
+      const staying = await member("gone-staying", org, owner);
+      const page = await unlisted(gym, owner, "never_listed");
+      expect(page.people.map((p) => p.userId).sort()).toEqual([leaving.userId, staying.userId].sort());
+
+      // The account deletion, caught half way: it holds the leaving member's row and
+      // closes it once the press is waiting on that row.
+      let release = (): void => undefined;
+      const released = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let held = (): void => undefined;
+      const isHeld = new Promise<void>((resolve) => {
+        held = resolve;
+      });
+      const deletion = sql.begin(async (tx) => {
+        await tx`SELECT 1 FROM gym_members WHERE gym_id = ${gym} AND user_id = ${leaving.userId} AND removed_at IS NULL FOR UPDATE`;
+        held();
+        await released;
+        await tx`UPDATE gym_members SET removed_at = now() WHERE gym_id = ${gym} AND user_id = ${leaving.userId}`;
+      });
+      try {
+        await isHeld;
+        const pressing = removeAll(gym, owner, page);
+        for (let i = 0; i < 250; i++) {
+          const [row] = await sql<{ n: number }[]>`
+            SELECT count(*)::int AS n FROM pg_stat_activity
+            WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%gym_members%'`;
+          if ((row?.n ?? 0) > 0) break;
+          await new Promise((resolve) => {
+            setTimeout(resolve, 20);
+          });
+        }
+        release();
+        await deletion;
+        const res = await pressing;
+        expect(res.statusCode).toBe(409);
+        expect((JSON.parse(res.body) as { error: string }).error).toBe("list_changed");
+      } finally {
+        release();
+        await deletion.catch(() => undefined);
+      }
+      expect(await liveMembers(gym)).toContain(staying.userId);
+      const audits = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM audit_log WHERE gym_id = ${gym} AND action = 'org.member_list_unlisted_removed'`;
+      expect(audits[0]?.n).toBe(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "a removal is refused when the group moved between the look and the press — one leaves, one joins, the count the same — and nobody is removed",
     async () => {
       const owner = await makeUser("moved-owner");

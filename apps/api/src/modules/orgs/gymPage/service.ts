@@ -177,16 +177,13 @@ export async function addPhoto(
   const id = randomUUID();
   const key = photoKey(gymId, id, read.type);
   await deps.photos.put(key, read.bytes);
-  let photo: GymPageStaffPhoto;
+  let saved: { photo: GymPageStaffPhoto; twin: boolean };
   try {
-    photo = await deps.sql.begin(async (tx) => {
+    saved = await deps.sql.begin(async (tx) => {
       await lockGym(tx, gymId);
       // The same key sent twice at once: the second waits here and finds the first.
       const first = await repo.photoByUploadKey(tx, gymId, uploadKey);
-      if (first !== null) {
-        await removeFiles(deps, [key]);
-        return { id: first.id, width: first.width, height: first.height, uploadKey };
-      }
+      if (first !== null) return { photo: { id: first.id, width: first.width, height: first.height, uploadKey }, twin: true };
       const count = (await repo.photosFor(tx, gymId)).length;
       if (count >= GYM_PAGE_MAX_PHOTOS) throw new OrgsError(409, "photos_full", GYM_PAGE_PHOTO_WORDS.full);
       await repo.insertPhoto(
@@ -197,13 +194,15 @@ export async function addPhoto(
         deps.now(),
       );
       await insertAudit(tx, { actorUserId: userId, gymId, action: "org.page_photo_added", targetType: "gym", targetId: gymId, meta: { photo: id } });
-      return { id, width: read.width, height: read.height, uploadKey };
+      return { photo: { id, width: read.width, height: read.height, uploadKey }, twin: false };
     });
   } catch (err) {
     await removeFiles(deps, [key]);
     throw err;
   }
-  return photo;
+  // The twin's file goes after the commit, so the gym's lock is not held across storage.
+  if (saved.twin) await removeFiles(deps, [key]);
+  return saved.photo;
 }
 
 export async function removePhoto(deps: GymPageDeps, userId: string, gymId: string, photoId: string, limit: Limit): Promise<GymPageStaffPhoto[] | null> {

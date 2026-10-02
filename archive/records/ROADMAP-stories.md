@@ -215,3 +215,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 ## 16a (merged 2026-10-02, PR #155)
 
 - 16a. [ ] **The scan, on the server.** The pass (signed, 30 seconds, used once), the desk device and its key that can do nothing but scan, the ONE pure scan rule with its table test (each way in × who they are × first · same period · next period · outside hours × the pass fresh · old · used · garbled), the migration (`gym_attendance` takes a member record, a device and the new ways in; `gym_checkin_devices`). **First tests: a stranger's green tick on somebody else's pass; a desk key reaching anything but the scan.** No screen; ticked on merge.
+
+## Stage 4 item 11 (merged 2026-10-02, PR #156)
+
+- 11. [ ] **The API talks to the database on one connection** (found 2026-09-20 by PR #87's review, measuring with a bystander request). `app.ts` opens the pool with `max: 1`, so any slow statement anywhere in the app is time in which every other request waits — `GET /health` included, which is how it was measured. It is not a member-list problem and the member list no longer holds the connection for long (spec §9.9's table), but at 20 gyms of 200 arriving in bursts it is the ceiling everything else meets. Raise it with a number chosen against the database's own connection limit and the number of API processes, and state it. Before launch.
