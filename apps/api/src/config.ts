@@ -175,7 +175,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     })
     .refine((c) => c.NODE_ENV !== "production" || c.TURNSTILE_SECRET_KEY !== undefined, {
       path: ["TURNSTILE_SECRET_KEY"],
-      message: "TURNSTILE_SECRET_KEY is required in production (the gym page's enquiry form)",
+      message: "TURNSTILE_SECRET_KEY is required in production (sign-in past an address's first 20 codes an hour, and the gym page's enquiry form)",
     })
     .refine((c) => c.NODE_ENV !== "production" || c.PHOTO_DIR !== undefined, {
       path: ["PHOTO_DIR"],

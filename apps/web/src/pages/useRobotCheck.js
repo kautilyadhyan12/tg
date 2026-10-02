@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-// Cloudflare Turnstile's box on a gym page's form (ROADMAP 20c-iv-a). Its script is
-// loaded once, from Cloudflare, only on the pages that show the form; the box gives a
-// token the server checks once. A token is spent by a send, so after any send that
-// did not go through the box is reset for a new one.
+// Cloudflare Turnstile's box on a gym page's form (ROADMAP 20c-iv-a), and on the sign-in
+// page once the server asks for it (Stage 4 item 10). Its script is loaded once, from
+// Cloudflare, only on the pages that show the box; the box gives a token the server
+// checks once. A token is spent by a send, so after any send the box is reset for a new one.
 
 const SCRIPT_URL = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
 let loading = null;
@@ -28,9 +28,15 @@ function loadTurnstile() {
 }
 
 /** `{ boxRef, token, failed, blocked, reset }`: put `boxRef` on an empty div. `blocked`:
- *  Cloudflare's script never loaded (a blocker), so trying again cannot help. */
-export function useRobotCheck(siteKey) {
+ *  Cloudflare's script never loaded (a blocker), so trying again cannot help. `onToken`
+ *  hears each new token as it arrives. `appearance`: Cloudflare's own setting; 'interaction-only'
+ *  shows the box only when the person must tap it. */
+export function useRobotCheck(siteKey, { action = 'enquiry', appearance = 'always', onToken } = {}) {
   const boxRef = useRef(null);
+  const heard = useRef(onToken);
+  useEffect(() => {
+    heard.current = onToken;
+  });
   const widgetId = useRef(null);
   const [token, setToken] = useState(null);
   const [failed, setFailed] = useState(false);
@@ -44,10 +50,12 @@ export function useRobotCheck(siteKey) {
         if (gone || boxRef.current === null) return;
         widgetId.current = turnstile.render(boxRef.current, {
           sitekey: siteKey,
-          action: 'enquiry',
+          action,
+          appearance,
           callback: (value) => {
             setFailed(false);
             setToken(value);
+            heard.current?.(value);
           },
           'expired-callback': () => setToken(null),
           'error-callback': () => {
@@ -65,7 +73,7 @@ export function useRobotCheck(siteKey) {
       if (widgetId.current !== null && window.turnstile) window.turnstile.remove(widgetId.current);
       widgetId.current = null;
     };
-  }, [siteKey]);
+  }, [siteKey, action, appearance]);
 
   const reset = useCallback(() => {
     setToken(null);

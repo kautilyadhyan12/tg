@@ -13,8 +13,7 @@ import postgres from "postgres";
 import { createAnalytics, type Analytics } from "./analytics.js";
 import { createResendTransport } from "./email/resend.js";
 import { createDevEmailSender, createResendEmailSender, type EmailSender } from "./modules/auth/email.js";
-import { registerAuthenticate } from "./modules/auth/plugin.js";
-import { ACCESS_COOKIE, verifyAccessTokenClaims } from "./modules/auth/tokens.js";
+import { accessClaimsOf, registerAuthenticate } from "./modules/auth/plugin.js";
 import { AuthError, type PasswordHasher } from "./modules/auth/service.js";
 import { registerAuthRoutes } from "./modules/auth/routes.js";
 import { createGoogleVerifier, type GoogleVerifier } from "./modules/auth/google.js";
@@ -81,7 +80,7 @@ export interface BuildAppOverrides {
   /** Tests replace Paddle's API with a fake; the keys in the config still switch it on. */
   paddleApi?: PaddleApi;
   razorpayApi?: RazorpayApi;
-  /** Tests answer the gym page's robot check themselves; unset asks Cloudflare. */
+  /** Tests answer the robot check themselves; unset asks Cloudflare. */
   robotCheck?: RobotCheck;
   /** Tests keep a gym page's photos where they can look; unset is `PHOTO_DIR`. */
   photoStore?: PhotoStore;
@@ -163,24 +162,24 @@ export async function buildApp(
     // the Card 4 preflight bug (inject() tests cannot see either).
     // Content-Disposition carries a download's file name (the member list's CSV).
     exposedHeaders: ["Idempotent-Replay", "Content-Disposition"],
+    // A browser asks before each save it sends with a JSON body. That question is
+    // answered here, before the floor below counts anything; two hours (Chromium's own
+    // ceiling) saves a round trip a save, where a browser would otherwise ask again
+    // after five seconds.
+    maxAge: 7200,
   });
   // The app-wide floor under the per-route limits. A gym's front desk and its members on
-  // the gym's wi-fi are ONE address, so a signed-in person is counted on their own (by
-  // the access token, only once its signature verifies) and an address counts only the
-  // people who are not signed in (the security pass over "getting in", 2026-10-02).
+  // the gym's wi-fi are ONE address (ROADMAP Stage 4 item 10), so a signed-in person is
+  // counted on their own (by the access token, only once its signature verifies; the
+  // answer is reused by `authenticate`) and an address counts only the people who are
+  // not signed in. One person signing in made 7 requests with no session (measured
+  // 2026-10-02), so 600 a minute lets some eighty people at one address sign in in the
+  // same minute.
   await app.register(rateLimit, {
     global: true,
     keyGenerator: (req) => {
-      const header = req.headers.authorization;
-      const token = (header?.startsWith("Bearer ") === true ? header.slice("Bearer ".length) : null) ?? req.cookies[ACCESS_COOKIE] ?? null;
-      if (token !== null && token !== "") {
-        try {
-          return `person:${verifyAccessTokenClaims(token, config).userId}`;
-        } catch {
-          // Not a token we signed: counted as the address it came from.
-        }
-      }
-      return `address:${req.ip}`;
+      const claims = accessClaimsOf(req, config);
+      return claims === null ? `address:${req.ip}` : `person:${claims.userId}`;
     },
     max: 600,
     timeWindow: "1 minute",
@@ -293,10 +292,14 @@ export async function buildApp(
       : createDevUsersEmailSender(app.log, config));
 
   registerAuthenticate(app, { sql, config });
+  // One robot check for the whole app: the sign-in code past an address's first 20
+  // an hour, and a gym page's enquiry form.
+  const robotCheck = overrides.robotCheck ?? createRobotCheck(config);
   registerAuthRoutes(app, {
     sql,
     config,
     redis,
+    robotCheck,
     googleVerifier: overrides.googleVerifier ?? createGoogleVerifier(config),
     emailSender,
     ...(overrides.passwordHasher === undefined ? {} : { hasher: overrides.passwordHasher }),
@@ -322,7 +325,7 @@ export async function buildApp(
       redis,
       invites,
       onlinePayments: { paddle: paddle !== null, razorpay: razorpay !== null },
-      robotCheck: overrides.robotCheck ?? createRobotCheck(config),
+      robotCheck,
       // The server's own disk until Cloudflare R2 is connected at deploy (Stage 4 item 1).
       photos: overrides.photoStore ?? createDiskPhotoStore(config.PHOTO_DIR ?? join(tmpdir(), "aihg-gym-photos")),
       joinCodes: config.JOIN_CODES,

@@ -8,6 +8,11 @@
 // 2026-09-28 against the real Siteverify, though Cloudflare's testing page says it takes
 // only the dummy one. It checks nothing: never point a shared server at it; production
 // refuses to start without real keys (`config.ts`).
+//
+// One site key serves the gym page's form and sign-in, so with our own keys a reply must
+// name the form the answer was solved on (Cloudflare's guidance: check `action`). The
+// test pair's replies name none, so it is not checked there. The key's own list of
+// domains, set in Cloudflare's dashboard, is what ties an answer to our site.
 import { robotCheckReplySchema } from "@app/shared";
 import type { AppConfig } from "../../../config.js";
 
@@ -18,11 +23,13 @@ const SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverif
 const TIMEOUT_MS = 5000;
 
 export type RobotCheckAnswer = "passed" | "failed" | "unavailable";
+/** The form the box was drawn on: the widget's `action`. */
+export type RobotCheckAction = "enquiry" | "sign_in";
 
 export interface RobotCheck {
   /** Public: the widget on the page draws with it. */
   siteKey: string;
-  verify(token: string): Promise<RobotCheckAnswer>;
+  verify(token: string, action: RobotCheckAction): Promise<RobotCheckAnswer>;
 }
 
 type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body: string; signal: AbortSignal }) => Promise<{
@@ -36,9 +43,10 @@ export function createRobotCheck(
 ): RobotCheck {
   const siteKey = config.TURNSTILE_SITE_KEY ?? TEST_SITE_KEY;
   const secret = config.TURNSTILE_SECRET_KEY ?? TEST_SECRET_KEY;
+  const checksAction = config.TURNSTILE_SECRET_KEY !== undefined;
   return {
     siteKey,
-    async verify(token: string): Promise<RobotCheckAnswer> {
+    async verify(token: string, action: RobotCheckAction): Promise<RobotCheckAnswer> {
       let reply: unknown;
       try {
         const res = await fetchImpl(SITEVERIFY_URL, {
@@ -54,7 +62,7 @@ export function createRobotCheck(
       }
       const parsed = robotCheckReplySchema.safeParse(reply);
       if (!parsed.success) return "unavailable";
-      if (parsed.data.success) return "passed";
+      if (parsed.data.success) return !checksAction || parsed.data.action === action ? "passed" : "failed";
       // Cloudflare's own fault, not the person's: they may try again.
       return parsed.data["error-codes"]?.includes("internal-error") === true ? "unavailable" : "failed";
     },

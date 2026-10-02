@@ -349,7 +349,7 @@ export async function sendEnquiry(
     await limits.robotFailed();
     return "received";
   }
-  const checked = await deps.robotCheck.verify(body.robotToken);
+  const checked = await deps.robotCheck.verify(body.robotToken, "enquiry");
   if (checked === "unavailable") throw new OrgsError(503, "robot_check_unavailable", ENQUIRY_WORDS.robot_unavailable);
   if (checked === "failed") {
     await limits.robotFailed();

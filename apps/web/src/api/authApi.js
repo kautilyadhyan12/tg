@@ -98,7 +98,8 @@ export const authService = {
   // Sign-in by 6-digit email code — the main way in (Kd 2026-09-07). A proved
   // code signs in AND creates the account if the address is new; the server
   // sets the same httpOnly cookies as every other sign-in.
-  sendCode:        (email)            => authApi.post('/v1/auth/code/send', { email }),
+  // `robotToken`: the robot check's answer, once the server has asked for it.
+  sendCode:        (email, robotToken) => authApi.post('/v1/auth/code/send', robotToken ? { email, robotToken } : { email }),
   verifyCode:      (email, code)      => authApi.post('/v1/auth/code/verify', { email, code }),
   // Deleting the account is confirmed with a code emailed to the account's
   // own address (there is no password to ask for).

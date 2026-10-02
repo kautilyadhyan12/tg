@@ -131,8 +131,8 @@ export function AuthProvider({ children }) {
   // ── Sign-in by email code (Kd 2026-09-07) ─────────────────────────────────
   // Step 1 sends the code; the server's reply carries the countdown the screen
   // shows (resendAfterSeconds), so the screen never invents a number.
-  const sendCode = async (email) => {
-    const res = await authService.sendCode(email);
+  const sendCode = async (email, robotToken) => {
+    const res = await authService.sendCode(email, robotToken);
     return res.data;
   };
 
