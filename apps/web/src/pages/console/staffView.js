@@ -171,7 +171,7 @@ function privilegeCopy(orgType) {
   return [
     {
       value: 'members.read',
-      label: `See the ${words.person} list`,
+      label: "See who's in the app",
       hint: `Who has joined your ${words.it}, and when.`,
     },
     {

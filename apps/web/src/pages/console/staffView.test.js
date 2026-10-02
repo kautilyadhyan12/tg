@@ -280,14 +280,14 @@ describe('which boxes a row is offered', () => {
   it('describes the ticks in the studio’s own words', () => {
     const at = (type) =>
       Object.fromEntries(privilegeChoices('manager', type).map((c) => [c.value, c]));
-    expect(at('studio')['members.read'].label).toBe('See the client list');
+    expect(at('studio')['members.read'].label).toBe("See who's in the app");
     expect(at('studio')['members.read'].hint).toBe('Who has joined your studio, and when.');
     expect(at('studio')['members.confirm'].label).toBe('Keep the client list and invite');
     // The same tick opens Leads and the gym's own page, so the box says so.
     expect(at('studio')['members.confirm'].hint).toBe("Import and change the list, send invitations, and see Leads and your studio's page.");
     expect(at('studio')['members.remove'].label).toBe('Remove clients');
     expect(at('studio')['members.remove'].hint).toBe('Take somebody out of your studio.');
-    expect(at('gym')['members.read'].label).toBe('See the member list');
+    expect(at('gym')['members.read'].label).toBe("See who's in the app");
     expect(at('gym')['members.remove'].label).toBe('Remove members');
     // The VALUES — what is saved — are identical whatever the words.
     expect(Object.keys(at('studio'))).toEqual(Object.keys(at('gym')));

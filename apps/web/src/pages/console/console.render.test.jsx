@@ -348,7 +348,7 @@ describe('a person invited to help run a gym', () => {
     drawConsoleFrom('/console');
     const card = await screen.findByTestId(`staff-invitation-${STAFF_INVITATION.id}`);
     expect(within(card).getByText('Kd Owner invited you to help run Iron House as a trainer.')).toBeTruthy();
-    expect(within(card).getByText(/See the member list · See who came in/)).toBeTruthy();
+    expect(within(card).getByText(/See who's in the app · See who came in/)).toBeTruthy();
     expect(within(card).getByText(/It doesn't make you a member of the gym/)).toBeTruthy();
     expect(screen.queryByText('Create your organisation')).toBeNull();
   });
@@ -382,7 +382,7 @@ describe('a person invited to help run a gym', () => {
     drawHome();
     const card = await screen.findByTestId(`staff-invitation-${STAFF_INVITATION.id}`);
     expect(within(card).getByText(/See who came in\./)).toBeTruthy();
-    expect(within(card).queryByText(/See the member list/)).toBeNull();
+    expect(within(card).queryByText(/See who's in the app/)).toBeNull();
   });
 
   it("a card for one of the gym's own roles names it", async () => {

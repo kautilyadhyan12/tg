@@ -718,10 +718,10 @@ describe('adding somebody', () => {
     await openForm();
     expect(screen.getByText(/We'll email them an invitation/i)).toBeTruthy();
     expect(screen.queryByText(/send them your join code/i)).toBeNull();
-    expect(ticked()).toEqual(['See the member list', 'See who came in']);
+    expect(ticked()).toEqual(["See who's in the app", 'See who came in']);
     fireEvent.click(screen.getByText('Manager'));
     expect(ticked()).toEqual([
-      'See the member list',
+      "See who's in the app",
       'See who came in',
       'Keep the member list and invite',
       'Remove members',
@@ -1175,7 +1175,7 @@ describe('what one person is allowed to do', () => {
   it('ticks exactly what the SERVER says, not what the role would give', async () => {
     orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER_TICKED] } });
     const row = await openTicks('staff-u2');
-    expect(within(row).getByLabelText(/See the member list/i).checked).toBe(true);
+    expect(within(row).getByLabelText(/See who's in the app/i).checked).toBe(true);
     // Join codes are switched off (3c): their tick has no box, though the person holds it.
     expect(within(row).queryByLabelText(/join code/i)).toBeNull();
     // In the manager TEMPLATE and not in this person's set — the difference is
@@ -1193,7 +1193,7 @@ describe('what one person is allowed to do', () => {
     expect(within(row).queryByLabelText(/Manage staff/i)).toBeNull();
     // Positive control: the boxes ARE drawn, so "no Manage staff" is not just an
     // unopened panel satisfying the assertion.
-    expect(within(row).getByLabelText(/See the member list/i)).toBeTruthy();
+    expect(within(row).getByLabelText(/See who's in the app/i)).toBeTruthy();
   });
 
   it('sends the WHOLE set, including the boxes the owner never touched', async () => {
@@ -1224,7 +1224,7 @@ describe('what one person is allowed to do', () => {
     // declines to send it leaves an owner tapping a dead button.
     orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER_TICKED] } });
     const row = await openTicks('staff-u2');
-    fireEvent.click(within(row).getByLabelText(/See the member list/i));
+    fireEvent.click(within(row).getByLabelText(/See who's in the app/i));
     fireEvent.click(within(row).getByText('Save permissions'));
     await waitFor(() => expect(orgService.updateStaffPrivileges).toHaveBeenCalledTimes(1));
     // Every box cleared; the join code tick, which has no box (3c), is kept as it was.
@@ -1449,7 +1449,7 @@ describe('an older server that sends no permissions at all', () => {
   it('shows what the ROLE gives, not an empty set', async () => {
     orgService.getStaff.mockResolvedValue({ data: { staff: [OWNER, MANAGER] } });
     const row = await openTicks('staff-u2');
-    expect(within(row).getByLabelText(/See the member list/i).checked).toBe(true);
+    expect(within(row).getByLabelText(/See who's in the app/i).checked).toBe(true);
     expect(within(row).getByLabelText(/Remove members/i).checked).toBe(true);
     expect(within(row).getByLabelText(/Keep the member list and invite/i).checked).toBe(true);
   });
