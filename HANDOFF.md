@@ -4,6 +4,15 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-10-02 · Stage 4 item 13 (Folder B): a gym that stops paying is never closed by the clock (branch `archive-sweep-paid`)
+
+- **Why this job:** next in Folder B (RULINGS 2026-10-02). Planned as a lock fix for the archive racing a payment; Kd then ruled that an unpaid gym is never closed or emptied (*"whenevr gym pays things gets normal agin"*), and, asked for a recommendation, took a 6-month guard for gyms gone for good (*"lets do 6 month go"*), now Stage 4 item 14. **Ordinary** (it removes a schedule and changes no rule that grants or sends anything). No migration, no new package, no new cost, no screen.
+- **Built:** `archiveSchedule.ts` takes the 04:30 `orgs.archive` schedule (and its queued run) out of Redis at worker start; a run already queued logs `skipped: "archive_off"` and closes nobody. `archiveSweep.ts` and `tools/archive-sweep.ts` kept, headers say switched off (and that a switch back on needs `lockOrgRow` per gym first).
+- **Worst thing, first test:** a gym that stopped paying finds its member list deleted when it comes back: the real-Redis test (an old worker's schedule removed, the neighbour kept, twice is fine) and the worker's source never running the archive. Break: removal made a no-op → RED (`['orgs.archive','orgs.trial_expiry']`), restored sha256-identical.
+- **Verified:** archiveOff + archiveSweep + codesRetired 24/24 on `aihg_b`; tsc and eslint 0 (api). Real worker on Redis /1 with the old schedule planted: `worker.started`, `orgs.archive` gone, the six others registered.
+- **Round one: no Critical or High; 5 Low and 2 weak tests, all fixed** (Ordinary: no re-check). The old four-month ruling marked SUPERSEDED and the new line moved into date order; three comments; `tools/archive-sweep.ts` refuses without `--switched-off-i-know` (shown: exit 1); the tests plant the literal `"orgs.archive"` and pin every mention of the job in `worker.ts` (breaks: the name changed, a re-register by literal name, each RED, restored sha256-identical). Found for 16b: a lapsed gym's desk tablet keeps checking in (ROADMAP known defects, with its fix). archiveOff + archiveSweep + codesRetired + trialSweep 33/33; tsc and eslint 0.
+- **Merged on Kd's word (PR #158, 2026-10-02)**; ROADMAP ticked. **Next in Folder B:** 19a. Stage 4 item 14 builds the 6-month rule before launch (needs a "last signed in" date per gym, unverified whether one exists).
+
 ## 2026-10-02 · Stage 4 item 11 (Folder B): the api talks to Postgres on ten connections (branch `db-pool`)
 
 - **Why this job:** next in Folder B (19a–19d wait on Folder A's 16a and 17c, 19b on photo storage). **Risky (it changes how every request runs beside another, sign-in and money included), Opus xhigh; Kd: *"go"*.** No migration, no new package, no new cost.

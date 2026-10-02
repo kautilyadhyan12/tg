@@ -944,7 +944,8 @@ function notOnPlanMessage(orgType: OrgType): string {
 }
 
 /** WHAT A CLOSED GYM'S STAFF ARE TOLD — Part 3 §4.2's archived state, which
- *  `archiveSweep.ts` finally writes (Kd's four months, 2026-08-31).
+ *  `archiveSweep.ts` finally writes (Kd's four months, 2026-08-31; switched off,
+ *  RULINGS 2026-10-02, so only a gym closed by hand reaches it).
  *
  *  **It is `startGymTrial`'s existing sentence, hoisted rather than re-worded**,
  *  so the two doors that refuse a closed gym to its own STAFF say one thing.
@@ -1016,7 +1017,7 @@ export async function requireWritablePrivilege(
   }
   // **A CLOSED GYM CANNOT BE CHANGED EVEN IF A PLAN SAYS OTHERWISE** — Kd's
   // ruling of 2026-08-31 that a lapsed gym is archived after four months, and
-  // the state `archiveSweep.ts` writes.
+  // the state `archiveSweep.ts` writes (switched off, RULINGS 2026-10-02).
   //
   // **IT IS SECOND, AND THE ORDER IS THE ONLY REASON THIS IS INVISIBLE TODAY.**
   // Every gym the sweep can close has no live plan, so the check above answers
