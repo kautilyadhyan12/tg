@@ -1,3 +1,11 @@
+// **SWITCHED OFF (Kd, RULINGS 2026-10-02).** A gym that stops paying is never
+// closed or emptied by the clock: its console locks, its members get the free app,
+// and paying again brings everything back. Nothing schedules this any more
+// (`archiveSchedule.ts`); it is kept, not deleted. Its check-then-act below is
+// reachable now that payments exist: if it is ever switched back on, it first
+// takes `lockOrgRow` per gym and re-checks there. "Nothing is deleted" below has
+// not been true since the member list, leads and staff invitations were added to it.
+//
 // A GYM WITH NO PLAN IS CLOSED FOUR MONTHS LATER — the third and last piece of
 // Kd's :22215 §5 step 1, and the writer that has never existed.
 //

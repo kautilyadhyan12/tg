@@ -32,7 +32,7 @@ import { sendDueLeadEmails } from "./modules/orgs/leads/sender.js";
 import { forgetOldStaffInvites } from "./modules/orgs/staffInvites/repo.js";
 import { sendDueStaffInvites } from "./modules/orgs/staffInvites/sender.js";
 import { inviteSettings } from "./modules/orgs/invites/settings.js";
-import { archiveLapsedGyms } from "./modules/orgs/archiveSweep.js";
+import { ORGS_ARCHIVE_JOB, unscheduleArchiveSweep } from "./modules/orgs/archiveSchedule.js";
 import { fillClassSessionsJob } from "./modules/orgs/classes/fill.js";
 import { expireStagedMemberListUploads } from "./modules/orgs/memberList/expiry.js";
 import { analyseEntriesIfMoved } from "./modules/orgs/memberList/repo.js";
@@ -70,7 +70,7 @@ export const ROLLUPS_QUEUE = "rollups";
 export const DPDP_PURGE_JOB = "dpdp.purge";
 export { ORGS_SWEEP_JOB };
 export const ORGS_TRIAL_SWEEP_JOB = "orgs.trial_expiry";
-export const ORGS_ARCHIVE_JOB = "orgs.archive";
+export { ORGS_ARCHIVE_JOB };
 export const ORGS_ROLLUP_JOB = "orgs.daily_rollup";
 export const ORGS_MEMBER_LIST_EXPIRY_JOB = "orgs.member_list_expiry";
 export const ORGS_CLASS_FILL_JOB = "orgs.class_fill";
@@ -161,37 +161,13 @@ try {
   process.exit(1);
 }
 
-// A gym with no plan is closed four months later (Kd ruling 2026-08-31,
-// replacing Part 3 §4.2's fourteen days). 04:30 UTC — a fourth distinct minute
-// for the fourth schedule, for the reason the three blocks above already give.
-//
-// **IT RUNS AFTER THE TRIAL EXPIRY AND DOES NOT DEPEND ON DOING SO.** The two
-// are four months apart in the data, so the order of one night's runs cannot
-// change an outcome; the half hour is the same operational courtesy as the
-// others (a slow job must not look like a late one in the logs).
-//
-// A DAILY CADENCE AGAINST A FOUR-MONTH CLOCK, said out loud: a gym therefore
-// keeps its console for up to 24 hours past the four months. On four months that
-// is under 1%, it errs in the generous direction (nobody is closed EARLY), and
-// running it more often would buy precision nobody asked for.
+// The nightly gym archive is switched off (Kd, RULINGS 2026-10-02): a gym that stops
+// paying is never closed or emptied by the clock. The schedule an earlier worker put
+// in Redis is taken out here.
 try {
-  await queue.upsertJobScheduler(
-    ORGS_ARCHIVE_JOB,
-    { pattern: "30 4 * * *" },
-    {
-      name: ORGS_ARCHIVE_JOB,
-      opts: {
-        // R3.5: the statement is set-based and its WHERE excludes the state it
-        // produces, so a retry is a no-op.
-        attempts: 3,
-        backoff: { type: "exponential", delay: 60_000 },
-        removeOnComplete: { count: 50 },
-        removeOnFail: { count: 200 },
-      },
-    },
-  );
+  await unscheduleArchiveSweep(queue);
 } catch (err) {
-  log.fatal({ err }, "failed to register the gym archive schedule");
+  log.fatal({ err }, "failed to remove the gym archive schedule");
   process.exit(1);
 }
 
@@ -595,18 +571,13 @@ const worker = new Worker(
       return;
     }
 
-    // Returns here for the same reason as its two siblings: the closure and its
-    // audit rows are one transaction, so the run either applied or raised.
+    // A run queued before the schedule was taken out closes no gym.
     if (job.name === ORGS_ARCHIVE_JOB) {
-      const closed = await archiveLapsedGyms({ sql, log });
-      log.info(
-        { ...closed, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
-        "job finished",
-      );
+      log.info({ event: "job.finished", job: job.name, skipped: "archive_off" }, "job finished");
       return;
     }
 
-    // Returns here for the same reason as its three siblings: one statement,
+    // Returns here for the same reason as its siblings: one statement,
     // so the run either applied or raised, and a raise is already an unhandled
     // rejection that lands the job on the failed set. There is no
     // "succeeded but not really" state for the purge's certification check
