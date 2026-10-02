@@ -12,7 +12,8 @@ entries move to `archive/records/` when this file passes forty entries. The reco
 - **Measured:** one sign-in is 7 requests with no session and 3–5 more after (headless Edge, the api's own log). Real run on :3001 with Cloudflare's test keys: 20 × 200, the 21st 403 `robot_check`; in Edge the box passed and the code step came by itself (390 and 1280).
 - **Verified:** api **4,654 of 4,654** in one full run on `aihg_b` (first run 4,652: `leads.sentForYou`'s known flake, and `leads.routes`' 300 presses in a minute meeting the per-person floor — the test now fills the Leads count directly); new suite 12/12; shared 278/278; web 3,421/3,421 (`poseAssets.contract` local Node 24); tsc and eslint 0 (api, shared, the changed web files; `AuthContext.jsx` has 5 `only-export-components` errors on master too).
 - **Cost:** reads no list of people. The token check is 0.11 ms a request (3 runs of 100,000, mains 2,592 MHz, `.cost/cost-10.mts`); signed-in routes already made it and now reuse it.
-- **Open:** Kd's click-through; round one; the phone app's sign-in answers the check (ROADMAP Stage 5 item 2).
+- **Kd's click-through: passed** (kautilyadb@gmail.com at a busy address: the check passed unseen, the code came by itself, landed on Create your gym).
+- **Round one: 1 High, 4 Low, 3 weak tests, all fixed, each new test RED on the old code.** H1 20 empty requests and 30 made-up answers locked a whole address out of codes for an hour: failures are no longer counted against the address. L2 a request that sends nothing no longer spends the free 20. L4 with our keys a reply must name its form (`sign_in` / `enquiry`). L3 a comment. A real-Redis case added. IPv6 /64 noted on Stage 4 item 1. api **4,666 of 4,666**; shared 278/278. Open: the re-check; the phone app's check (Stage 5 item 2).
 
 ## 2026-10-02 · 3c (Folder A): join codes switched off (branch `join-codes-off`)
 

@@ -15,7 +15,7 @@ import type { EmailSender } from "../src/modules/auth/email.js";
 import type { GoogleIdentity, GoogleVerifier } from "../src/modules/auth/google.js";
 import { OAUTH_STATE_COOKIE } from "../src/modules/auth/tokens.js";
 import type { RobotCheck, RobotCheckAnswer } from "../src/modules/orgs/gymPage/robotCheck.js";
-import { createMemoryRedis } from "../src/redis.js";
+import { createIoRedis, createMemoryRedis } from "../src/redis.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -223,7 +223,7 @@ d("a whole gym signing up on one internet address (real Postgres)", () => {
     expect((await post(elsewhere(), "/v1/auth/code/send", { email })).statusCode).toBe(200);
   });
 
-  it("a failed check sends nothing; Cloudflare unreachable is a plain 503; 30 failures and the address is refused before Cloudflare is asked", { timeout: 30_000 }, async () => {
+  it("a failed check sends nothing; Cloudflare unreachable is a plain 503", { timeout: 30_000 }, async () => {
     const ip = gymAddress();
     await makeBusy(ip);
     const email = "burst-robot@example.com";
@@ -234,13 +234,26 @@ d("a whole gym signing up on one internet address (real Postgres)", () => {
     expect(down.statusCode).toBe(503);
     expect(errorOf(down)).toBe("robot_unavailable");
     expect(await codesFor(email)).toBe(0);
+  });
 
-    for (let i = 1; i < 30; i++) await post(ip, "/v1/auth/code/send", { email, robotToken: "made-up" });
+  it("however many made-up answers one person sends from the gym's address, a member there who passes the check still gets a code", { timeout: 60_000 }, async () => {
+    const ip = gymAddress();
+    // A troublemaker at the gym: 20 requests that send nothing, then 40 made-up answers at once.
+    for (let i = 0; i < 20; i++) await post(ip, "/v1/auth/code/send", {});
+    await Promise.all(Array.from({ length: 40 }, (_, i) => post(ip, "/v1/auth/code/send", { email: `burst-troll-${String(i)}@example.com`, robotToken: "made-up" })));
+    const member = "burst-member-after-troll@example.com";
+    const res = await askForCode(ip, member);
+    expect(res.statusCode).toBe(200);
+    expect(await codesFor(member)).toBe(1);
+  });
+
+  it("requests that send nothing do not spend the address's free 20", { timeout: 30_000 }, async () => {
+    const ip = gymAddress();
+    for (let i = 0; i < 25; i++) expect((await post(ip, "/v1/auth/code/send", i % 2 === 0 ? {} : { email: `not-an-address-${String(i)}` })).statusCode).toBe(400);
     const askedBefore = robot.asked;
-    const refused = await post(ip, "/v1/auth/code/send", { email, robotToken: `pass-${email}` });
-    expect(refused.statusCode).toBe(429);
+    const res = await post(ip, "/v1/auth/code/send", { email: "burst-after-junk@example.com" });
+    expect(res.statusCode).toBe(200);
     expect(robot.asked).toBe(askedBefore);
-    expect(await codesFor(email)).toBe(0);
   });
 
   it("an answer sent while the address is under 20 is never asked about; one too long is a 400", { timeout: 30_000 }, async () => {
@@ -290,5 +303,39 @@ d("a whole gym signing up on one internet address (real Postgres)", () => {
     const over = await get(ip, "/v1/auth/google");
     expect(over.statusCode).toBe(429);
     expect(errorOf(over)).toBe("rate_limited");
+  });
+});
+
+// The same door on the REAL Redis, whose counts run as Lua scripts, not the in-memory
+// stand-in above. Where TEST_REDIS_URL is set (`test:local` and CI's database job). Its
+// address and emails are new every run, since the real Redis keeps an hour's counts.
+const redisUrl = process.env["TEST_REDIS_URL"];
+const r = describe.skipIf(url === undefined || url === "" || redisUrl === undefined || redisUrl === "");
+
+r("a whole gym on one internet address, on the real Redis", () => {
+  const sql = postgres(url ?? "", { prepare: false, max: 2 });
+  let app: App | undefined;
+  const run = `${String(Date.now())}${String(Math.floor(Math.random() * 1000))}`;
+  const ip = `10.64.${String(Math.floor(Math.random() * 250) + 1)}.${String(Math.floor(Math.random() * 250) + 1)}`;
+  const send = (body: unknown) =>
+    (app as App).inject({ method: "POST", url: "/v1/auth/code/send", remoteAddress: ip, headers: { "content-type": "application/json" }, payload: JSON.stringify(body) });
+
+  beforeAll(async () => {
+    app = await buildApp(loadConfig(baseEnv), { emailSender: sender, robotCheck: robot, redis: createIoRedis(redisUrl ?? "") });
+    await app.ready();
+  }, 60_000);
+  afterAll(async () => {
+    await app?.close();
+    await sql`DELETE FROM sign_in_codes WHERE email LIKE ${`burst-r${run}-%`}`;
+    await sql.end({ timeout: 5 });
+  });
+
+  it("junk spends nothing, the first 20 go straight through, the 21st is asked, and made-up answers never lock out a member who passes", { timeout: 60_000 }, async () => {
+    for (let i = 0; i < 10; i++) expect((await send({})).statusCode).toBe(400);
+    for (let i = 0; i < 20; i++) expect((await send({ email: `burst-r${run}-${String(i)}@example.com` })).statusCode).toBe(200);
+    expect(errorOf(await send({ email: `burst-r${run}-asked@example.com` }))).toBe("robot_check");
+    await Promise.all(Array.from({ length: 40 }, (_, i) => send({ email: `burst-r${run}-troll-${String(i)}@example.com`, robotToken: "made-up" })));
+    const member = `burst-r${run}-member@example.com`;
+    expect((await send({ email: member, robotToken: `pass-${member}` })).statusCode).toBe(200);
   });
 });

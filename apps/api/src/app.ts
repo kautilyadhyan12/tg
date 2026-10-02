@@ -162,9 +162,10 @@ export async function buildApp(
     // the Card 4 preflight bug (inject() tests cannot see either).
     // Content-Disposition carries a download's file name (the member list's CSV).
     exposedHeaders: ["Idempotent-Replay", "Content-Disposition"],
-    // A browser asks before each save it sends with a JSON body, and that question
-    // carries no sign-in, so it counts against the internet address below. Two hours
-    // is Chromium's own ceiling; without it a browser asks again after five seconds.
+    // A browser asks before each save it sends with a JSON body. That question is
+    // answered here, before the floor below counts anything; two hours (Chromium's own
+    // ceiling) saves a round trip a save, where a browser would otherwise ask again
+    // after five seconds.
     maxAge: 7200,
   });
   // The floor under every route. A signed-in person's requests count against THAT

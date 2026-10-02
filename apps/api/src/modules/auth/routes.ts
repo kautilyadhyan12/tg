@@ -116,19 +116,6 @@ function identifierFrom(req: FastifyRequest): string | null {
   return null;
 }
 
-/** The robot check's answer, read before the body is parsed; the parse checks it again. */
-function robotTokenFrom(req: FastifyRequest): string | null {
-  const body: unknown = req.body;
-  if (typeof body === "object" && body !== null && "robotToken" in body && typeof body.robotToken === "string") {
-    return body.robotToken === "" ? null : body.robotToken;
-  }
-  return null;
-}
-
-/** Failed robot checks one internet address may make at sign-in in an hour; past it the
- *  address is refused before Cloudflare is asked again. */
-const SIGN_IN_ROBOT_FAILS_MAX = 30;
-
 export function registerAuthRoutes(
   app: FastifyInstance,
   deps: {
@@ -246,34 +233,34 @@ export function registerAuthRoutes(
 
   // THE ROBOT CHECK, past the address's first 20 sends an hour. It runs before the
   // limits, so a request without a passed check counts against nobody's allowance —
-  // not the address's, and not the person whose address a robot typed. Each answer
-  // is used once (Cloudflare refuses it a second time). Redis down: let it through
-  // with a log; `codeSendLimit` and the day's ceiling still apply.
+  // not the address's, and not the person whose address a robot typed. A request that
+  // would send nothing (the handler answers it 400) spends none of the 20. Every answer
+  // is put to Cloudflare, and failures are never counted against the address: one person
+  // there could otherwise lock out everybody sharing it; the floor of 1,000 a minute an
+  // address bounds the asks. Each answer is used once (Cloudflare refuses it a second
+  // time). Redis down: let it through with a log; `codeSendLimit` and the day's ceiling
+  // still apply.
   const HOUR_S = HOUR_MS / 1000;
   const codeRobotGate = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const body = sendCodeRequestSchema.safeParse(req.body);
+    if (!body.success) return;
     const sends = await deps.redis.incrWithTtl(`rl:code_send_free:ip:${req.ip}`, HOUR_S);
     if (sends === null) {
       req.log.warn({ event: "ratelimit.open_redis_down", limiter: "code_send_free" }, "rate limiter failing open (Redis unavailable)");
       return;
     }
     if (sends <= SIGN_IN_FREE_SENDS_PER_ADDRESS) return;
-    const token = robotTokenFrom(req);
-    if (token === null) {
+    const token = body.data.robotToken;
+    if (token === undefined) {
       await reply.status(403).send({ error: "robot_check", message: SIGN_IN_ROBOT_WORDS.robot_check, robotCheckKey: deps.robotCheck.siteKey, requestId: req.id });
       return;
     }
-    const failsKey = `rl:code_send_robot_fail:ip:${req.ip}`;
-    if (Number((await deps.redis.get(failsKey)) ?? "0") >= SIGN_IN_ROBOT_FAILS_MAX) {
-      await reply.status(429).send({ error: "rate_limited", message: "Too many attempts. Please try again later.", requestId: req.id });
-      return;
-    }
-    const answer = await deps.robotCheck.verify(token);
+    const answer = await deps.robotCheck.verify(token, "sign_in");
     if (answer === "passed") return;
     if (answer === "unavailable") {
       await reply.status(503).send({ error: "robot_unavailable", message: SIGN_IN_ROBOT_WORDS.robot_unavailable, requestId: req.id });
       return;
     }
-    await deps.redis.incrWithTtl(failsKey, HOUR_S);
     await reply.status(403).send({ error: "robot_failed", message: SIGN_IN_ROBOT_WORDS.robot_failed, robotCheckKey: deps.robotCheck.siteKey, requestId: req.id });
   };
 

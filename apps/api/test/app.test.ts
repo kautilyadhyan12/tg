@@ -133,6 +133,20 @@ describe("api skeleton", () => {
     expect(res.headers["access-control-max-age"]).toBe("7200");
   });
 
+  it("CORS: a browser's pre-checks are answered before the floor, and spend none of the address's", async () => {
+    const ip = "10.9.9.12";
+    for (let i = 0; i < 1001; i++) {
+      const pre = await app.inject({
+        method: "OPTIONS",
+        url: "/v1/users/me",
+        remoteAddress: ip,
+        headers: { origin: WEB_ORIGIN, "access-control-request-method": "PATCH" },
+      });
+      expect(pre.statusCode).toBe(204);
+    }
+    expect((await hit(ip)).statusCode).toBe(404);
+  });
+
   it.skipIf(realDbUrl === undefined || realDbUrl === "")(
     "/health pings the database and returns ok",
     async () => {
