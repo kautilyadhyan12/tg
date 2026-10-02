@@ -4,6 +4,15 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-10-02 · 19a re-planned (Folder B): the leaderboard, for accuracy (branch `leaderboard-members`)
+
+- **Why:** 19a was next in Folder B. Kd judged its plan too thin (*"people will get angry and feel bad if the leaderboard is not accurate and tansparent"*), gave the chat a free hand, and noted that some gyms use only the member features. Planning only: no code.
+- **Read and measured:** PushPress, Wodify, Strava, Myzone, F45, Fitbit, the UK children's code, Duolingo (2026-10-02). In the repo: the camera counts 3 of 58 exercises (`aihg_b`); a visit made before the app carries only `entry_id`, while every reader keys on `user_id`; "On a roll" has its own weekly streak; runs still go to the old server; nothing deletes or back-dates a visit.
+- **Agreed** (Kd: *"i agree with you"*): Gym days · Workout days (any finished workout, A) · Streak, one rule with "On a roll"; five periods; what counted; boards that need check-in only while the gym checks in; Hide me, staff not ranked, at least 3 people; photos and a tap for the profile (Kd's ask). Spec Part 3 §15.5 rewritten; four RULINGS lines and four amendments; ROADMAP 19a split in four; Stage 5 item 1 gains the camera's one-person lock.
+- **Plan page:** https://claude.ai/artifact/LTFJYnb3JEVQ3yAwGgg1GZ
+- **Open:** the global board's shape (Kd's ask; after launch; the recommendation is unanswered). 16b-ii (Folder A) and 19a-i must share ONE function for whose visit it is.
+- **Next:** 19a-i on this branch, in a fresh terminal (Kd's ask), Opus xhigh: its ten-line plan to Kd, then go.
+
 ## 2026-10-02 · 16b-i (Folder A): the front desk (branch `checkin-desk-page`)
 
 - **Why this job:** next in Folder A after 16a. 16b was split in two (this, and 16b-ii staff check-in and the live log). **Risky (other people's names on a screen; the set-up link works like a sign-in), Opus xhigh; Kd: *"go"*.** No server change, no migration; new package `jsqr` (RULINGS 2026-09-21), loaded only when the camera opens (its own 130 kB chunk, 47 kB gzipped, measured by `vite build`).

@@ -2545,18 +2545,106 @@ per-address ceiling).
 Name, words, place, start and end in the gym's time zone, places or no limit. "I'm
 coming" is 13.4's Book rule on an event row — one counting rule in the app, not two.
 
-### 15.5 The leaderboard — only checked facts
+### 15.5 The leaderboard — only what the desk, staff or the app recorded
 
-Tabs, each ranking ONE thing, each for this week · this month · all time, in the gym's
-time zone: **Visits** (§12 rows by pass, key tag or staff; one a period of the day) ·
-**Classes** (bookings marked attended) · **Streak** (weeks in a row with at least one
-visit) · **Workouts** (days with an app workout — one a day at most, so logging ten
-changes nothing) · **Running** (GPS distance recorded by the phone app, with sanity
-limits on speed; shown once running exists). Equal numbers share a place. A number
-somebody typed is never ranked. "Hide me" (RULINGS 2026-09-07) greys a person's row to
-everybody else and keeps it for the gym; the info symbol says exactly what each tab
-counts. Worked out by one query a tab over indexed rows, its cost measured at 2,100
-members (CLAUDE.md §4, cost at full size). It replaces item 1b's single scored list.
+*(RE-PLANNED 2026-10-02 for accuracy at Kd's request — *"people will get angry and feel
+bad if the leaderboard is not accurate and tansparent"* — RULINGS that day. The plan with
+pictures: https://claude.ai/artifact/LTFJYnb3JEVQ3yAwGgg1GZ. Read that day: PushPress's Committed Club,
+Wodify's Weekly Streaks, Strava's clubs and under-18 defaults, Myzone, F45, Fitbit, the
+UK ICO children's code (standard 7), Duolingo on streaks its own outages broke.)*
+
+**The worst thing it could do to a real person:** show somebody who chose Hide me to
+another member — in a row, a photo, a profile, a count, or a gap in the places. The
+first test written.
+
+**Three boards, each ranking ONE fact.** Equal numbers share a place (1, 2, 2, 4) and
+are listed by name, as PushPress does.
+- **Gym days** — a day with at least one visit at this gym made by `pass`, `key_tag` or
+  `staff` (a door machine later); `manual` (the old tap) and `qr` never count. The day is
+  the visit's stored `day`. A visit is the person's when its `user_id` is theirs, or when
+  it has no `user_id` and its `entry_id` is their membership's record (`gym_members.
+  entry_id`) held by exactly one live member — so visits from before the app count.
+  16b-ii counts Attendance and Overview by record too: ONE function decides whose visit
+  it is, and whichever job merges second uses the first's.
+- **Workout days** (19a-ii) — a day, in the gym's zone, with a finished app workout,
+  however its reps were counted (Kd's choice, 2026-10-02: the camera counts 3 of the 58
+  exercises): at least one set saved, started on or after the current membership's
+  `joined_at` and not in the future, and reaching the server (`created_at`) within 7
+  days of its start. A home workout counts at each of the person's gyms (2026-09-23).
+- **Streak** — weeks, Monday to Sunday in the gym's dates, in a row with a gym day. Last
+  week keeps it alive until this Sunday ends. A week in which the gym recorded no counted
+  visit for anybody is skipped: it neither counts nor breaks. It ranks the streak now;
+  the person's best is in their own sheet. "On a roll" (`getGymRegulars`) moves onto
+  this one rule in 19a-i, so the two never show different numbers.
+- Later: **Classes** (booked and came, with 17f) and **Running** (Stage 5 item 4: the
+  distance the server measures from the GPS track, never a typed one, with any stretch
+  faster than a person runs dropped).
+
+**Periods**, for the two day boards: this week · last week · this month · last month ·
+all time, in the gym's time zone (`gyms.timezone`), "today" from an injectable clock,
+ISO weeks (`date_trunc('week')`, as the console's calendar). Each board prints its dates
+("Mon 28 Sep – Sun 4 Oct, Iron Temple's time"). Last week and last month stay, because a
+reset otherwise wipes the winners (Strava keeps last week; Myzone shows last month's
+leaders for 7 days).
+
+**Who is on it.** Live app members (`removed_at IS NULL`, `users.status = 'active'`) with
+a number above 0. Not ranked: the gym's staff (greyed "Staff, not ranked" for staff)
+and hidden people. People without the app are not on it; the staff page says how many.
+Members see the top 100 and their own place, with how many more reach the next place;
+staff see everyone. No board until 3 people are on it.
+
+**Hidden**: (a) Hide me, the person's own switch for every gym
+(`users.leaderboard_opt_out`), on the board and in Settings; (b) under 18, by the age
+they gave or the record's date of birth, until they choose Show me — a floor only, since
+invitations refuse under-18s and Stage 4 item 9 makes the app 18+; (c) taken off by
+staff (19a-iii; `gym_members.hidden_from_boards`), and told so. Hidden people are taken
+out BEFORE places are given, so no gap gives them away. They see their own row greyed,
+with the place they would have; staff see them greyed, with the reason.
+
+**Names, photos, profiles.** Members see the first name and last initial of the person's
+app name, never an email: an automatic name (the email's first part, "New User") gives
+way to the gym record's name, or else the person is asked to add a name and is off the
+board until they do. Staff see the full name, as on Members. Each row has a round photo
+(5b-vi, after photo storage; initials until then; RULINGS 2026-10-02: members see it
+wherever its owner is shown, never while hidden). A tap opens the person's profile on
+the gym page: their place on every board members see, and their posts once 19b exists;
+nothing for a hidden person.
+
+**What counted.** The person, and staff, open a number to see each counted day: visits
+with their time and how (the desk's name, the member of staff) and "2 visits, 1 day";
+workouts with their time and whether the camera or the person counted them (staff see
+workout dates only, never what the workout was); and what did not count, with why
+("saved 9 days late"). Other members never see a time. Every number equals its own
+list, by test.
+
+**Day-circles** (2026-09-17, amended 2026-10-02): on a week view, seven circles, Monday to
+Sunday, for the days THAT board counted, so they add up to its number; the Streak's
+circles are its last seven weeks; month and all-time views show none.
+
+**Gyms that use only part of the app** (Kd, 2026-10-02). Gym days and Streak show to
+members only while the gym has recorded a counted visit in the last 30 days; Workout
+days needs nothing. The gym switches any board off (19a-iii), and the console says why a
+board is not showing. A lapsed gym's members see no board (2026-08-28); its staff can
+still look.
+
+**Fresh, never stored.** Worked out from the rows each time it opens, one query a board;
+the page refreshes every minute while open and says when ("updated 10:42 am"), so a
+staff fix (19a-iv) shows at once. Cost at full size (CLAUDE.md §4): 2,100 members with
+three years of visits and workouts — how long the server answers nobody for each board
+and period — measured before review.
+
+**Proof.** Route tests: a stranger, a former or removed member and another gym's staff
+get 404 from every new route, a member of staff without the tick 403. A plain model of
+every board, kept in the api's tests, and a seeded random generator (no new package):
+thousands of gyms with ties, hidden people, households on one record, joined records,
+deleted records, rejoins, visits from before the app and silent weeks, on which the
+database and the model must agree on every place and number. Real clocks, each checked
+against the tz database: Asia/Kolkata, America/New_York, Europe/London, Asia/Kathmandu,
+Australia/Lord_Howe, America/Santiago, and 29 February 2028. The deliberate breaks
+(CLAUDE.md §4) are on Hide me.
+
+**Jobs** (ROADMAP 19a-i to 19a-iv): the members' board with Gym days and Streak · Workout
+days · the board in the console · fixing a visit (after 16b-ii).
 
 ### 15.6 Challenges (the document's "leagues and tournaments")
 
@@ -2582,7 +2670,7 @@ shared. Without it the trainer can still write a plan from what the gym may see
 
 ### 15.8 Cards
 
-**19a** the leaderboard's tabs (after 16a; takes item 1b's place) · **19b** Updates,
+**19a** the leaderboard, in four jobs (§15.5; takes item 1b's place) · **19b** Updates,
 reactions and the safety tools (needs R2, Stage 4 item 4, and a Cloudflare Stream
 account — Kd's, $5 a month for each 1,000 minutes kept and $1 for each 1,000 watched)
 · **19c** events · **19d** challenges · **19e** a gym's own plan (after Stage 1 items
