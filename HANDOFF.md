@@ -4,6 +4,16 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-10-02 · 3c (Folder A): join codes switched off (branch `join-codes-off`)
+
+- **Why this job:** next in Folder A after 4c (5b-vi waits on photo storage). **Risky (sign-in's routing), Opus xhigh; Kd: *"go"*.** No migration, no new package, no new cost.
+- **Built:** `JOIN_CODES` (off unless `on`): the join route, the five waiting-room routes and the five code routes answer 410 `join_codes_retired` to anybody before anything is read; a new gym gets no code (`joinCode: null`); the worker removes the sweep's schedule and skips a queued run. Console: "Bring your members in" (Import members, Add member → Members `?open=`) where the code was on Overview and "is ready"; the queue draws nothing on the 410; the two code ticks get no box, kept on a save, not sent on an invite. Member web: `/org/join` → `/invitations`; Settings and setup's "Your gym" show the invitations; no kept code in sign-in, the Google return or setup.
+- **Off, not deleted:** handlers, tables, `JoinGymPanel`, `JoinCodesPanel`, `ApplicationsQueue` and their suites stay; the 29 api suites using the code door as a fixture set `JOIN_CODES: "on"`; the console's code panels still draw when the server answers 200.
+- **Worst thing, first test (RED first):** a stranger with an old poster code is not let in, and staff cannot approve a request already waiting. **Breaks, each RED, restored sha256-identical (961c6e…):** the switch inverted; the join route's check removed; the approve route's check removed.
+- **Verified:** api 4,629 of 4,631 in one full run (the 2: an `orgs.routes` timeout under load and `leads.sentForYou`; both files then 171/171 alone); new suite 4/4 (44 route × person answers all 410). Web 3,398/3,398 (`poseAssets.contract` local Node 24). Shared 278/278. tsc 0 (api, shared); eslint 0 (api, changed web files; member `Settings.jsx` has 4 errors on master too). gitleaks clean. Worker run on local Redis: `bull:rollups:repeat:orgs.join_sweep` 1 → 0.
+- **Cost at full size:** reads no list of people; a retired route answers before authentication and any database read.
+- **Open:** Kd's click-through; round one; then the two extra passes over all of "getting in" (spec §10.7) before any gym uses it.
+
 ## 2026-10-01 · 4c (Folder A): a seat is a person using the member app, the owner and staff too (branch `seat-counts-everyone`)
 
 - **Why this job:** next in Folder A after 4a-ii. **Risky (money: who a gym pays for), Opus xhigh; Kd: *"go"*.** No migration, no new package, no new cost.
