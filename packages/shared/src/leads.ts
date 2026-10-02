@@ -406,3 +406,95 @@ export const LEAD_WORDS = {
   join_exact:
     "Your list already has a record with exactly this name and contact. If it is this person, choose it. If not, change the lead's name, email or phone first.",
 } as const;
+
+// ── Delete the leads selected (20c-vii) ──────────────────────────────────────
+//
+// Staff tick leads, or tick the page and press "Select all 1,240 leads", then Delete. A box
+// names who goes before anything does; the press carries the box's digest, and if anyone
+// selected has changed since, nothing is deleted and the answer carries the new box. Nothing
+// happens to a lead that was not selected (CLAUDE.md §4), as on the member list (§18.5).
+
+const leadDigestSchema = z.string().regex(/^[0-9a-f]{64}$/);
+
+/** The most leads ticked one by one. Past it, "Select all" sends the filter instead. */
+export const LEADS_TICKED_MAX = 500;
+
+/** What `GET /leads` filters by, without the page's cursor: the set "Select all" means. */
+export const leadsFilterSchema = leadsQuerySchema.omit({ cursor: true });
+export type LeadsFilter = z.infer<typeof leadsFilterSchema>;
+
+/** Either the leads ticked one by one, or everyone a filter matched when staff pressed
+ *  "Select all": the count and a digest of exactly who they were. */
+export const leadSelectionSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("ticked"),
+      leadIds: z.array(z.string().uuid()).min(1).max(LEADS_TICKED_MAX),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("all"),
+      filter: leadsFilterSchema,
+      count: z.number().int().min(0),
+      digest: leadDigestSchema,
+    })
+    .strict(),
+]);
+export type LeadSelection = z.infer<typeof leadSelectionSchema>;
+
+/** "Select all": who the filter matches now, as a count and a digest to send back. */
+export const leadsSelectAllRequestSchema = z.object({ filter: leadsFilterSchema }).strict();
+export type LeadsSelectAllRequest = z.infer<typeof leadsSelectAllRequestSchema>;
+
+export const leadsSelectedAllSchema = z.object({ count: z.number().int().min(0), digest: leadDigestSchema }).strict();
+export type LeadsSelectedAll = z.infer<typeof leadsSelectedAllSchema>;
+export const leadsSelectedAllResponseSchema = z.object({ selection: leadsSelectedAllSchema }).strict();
+
+/** A "Select all" whose filter matches other leads now: nothing was done. */
+export const leadsSelectionChangedSchema = z.object({
+  error: z.literal("selection_changed"),
+  message: z.string(),
+  count: z.number().int().min(0),
+  digest: leadDigestSchema,
+  requestId: z.string().optional(),
+});
+
+/** The box: every lead the press deletes, newest first as the list shows them, and how
+ *  many selected are no longer there. `digest` names exactly these leads. */
+export const leadsDeletePreviewSchema = z
+  .object({
+    selected: z.number().int().min(0),
+    leads: z.array(z.object({ id: z.string().uuid(), name: z.string() }).strict()),
+    gone: z.number().int().min(0),
+    digest: leadDigestSchema,
+  })
+  .strict();
+export type LeadsDeletePreview = z.infer<typeof leadsDeletePreviewSchema>;
+export const leadsDeletePreviewResponseSchema = z.object({ preview: leadsDeletePreviewSchema }).strict();
+
+export const leadsDeletePreviewRequestSchema = z.object({ selection: leadSelectionSchema }).strict();
+export type LeadsDeletePreviewRequest = z.infer<typeof leadsDeletePreviewRequestSchema>;
+
+/** Press Delete: the selection and the box's digest. */
+export const leadsDeleteRequestSchema = z.object({ selection: leadSelectionSchema, digest: leadDigestSchema }).strict();
+export type LeadsDeleteRequest = z.infer<typeof leadsDeleteRequestSchema>;
+
+/** Done. `alreadyDeleted` answers the same press again (a retry, or a colleague's): that
+ *  press did it, and nothing was done now. */
+export const leadsDeletedSchema = z.object({ deleted: z.number().int().min(0), alreadyDeleted: z.boolean() }).strict();
+export type LeadsDeleted = z.infer<typeof leadsDeletedSchema>;
+export const leadsDeletedResponseSchema = z.object({ deleted: leadsDeletedSchema }).strict();
+
+/** The press's refusal when the box moved: nothing deleted, the new box. */
+export const leadsDeleteChangedSchema = z.object({
+  error: z.literal("leads_changed"),
+  message: z.string(),
+  preview: leadsDeletePreviewSchema,
+  requestId: z.string().optional(),
+});
+
+export const LEADS_DELETE_WORDS = {
+  selection_changed: "The leads you selected have changed, so nothing was done. Check who is selected now and try again.",
+  leads_changed: "Some of these leads changed since you opened this, so nothing was deleted. Check who will be deleted now.",
+} as const;

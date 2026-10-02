@@ -7,6 +7,7 @@ import {
   LEAD_SOURCE_WORDS,
   LEAD_STATUSES,
   LEAD_STATUS_WORDS,
+  LEADS_TICKED_MAX,
   leadFirstName,
   leadFollowUpLetter,
   leadGreeting,
@@ -29,6 +30,59 @@ export function leadsQueryString({ status, query, due = false, problem = false }
   if (q !== '') params.set('q', q);
   if (cursor !== null) params.set('cursor', cursor);
   return params.toString();
+}
+
+// ── The leads selected (20c-vii) ──
+
+/** What "Select all" means: the list's status, chip and search, without the page's place. */
+export function leadsSelectionFilter({ status, query, due = false, problem = false }) {
+  const out = {};
+  if (status !== 'all') out.status = status;
+  if (due) out.followUp = 'due';
+  else if (problem) out.followUp = 'problem';
+  const q = query.trim();
+  if (q !== '') out.q = q;
+  return out;
+}
+
+/** The selection a press sends: the rows ticked, or everyone "Select all" chose with the
+ *  count and digest the server gave. Null when nobody is selected. */
+export function leadSelectionOf(ticked, all) {
+  if (all !== null) return { kind: 'all', filter: all.filter, count: all.count, digest: all.digest };
+  if (ticked.size === 0) return null;
+  return { kind: 'ticked', leadIds: [...ticked] };
+}
+
+/** The rows the heading's box ticks (every row loaded, up to the most that can be ticked one
+ *  by one), and whether they are all ticked (or everyone, after Select all). */
+export function leadsPageTickState(loadedIds, ticked, all) {
+  const pageIds = loadedIds.slice(0, LEADS_TICKED_MAX);
+  const pageTicked = all !== null || (pageIds.length > 0 && pageIds.every((id) => ticked.has(id)));
+  return { pageIds, pageTicked };
+}
+
+const leadsWord = (k) => `${k.toLocaleString('en')} ${k === 1 ? 'lead' : 'leads'}`;
+
+/** The Delete box's title: "Delete 37 leads?". */
+export function deleteTitle(preview) {
+  return preview === null || preview.leads.length === 0 ? 'Delete leads' : `Delete ${leadsWord(preview.leads.length)}?`;
+}
+
+/** What goes with them, and what doesn't. */
+export function deleteLine(words) {
+  return `Their names, contact details, notes and the messages they sent you are deleted. This can't be undone. Your list of ${words.people} doesn't change.`;
+}
+
+/** Selected, but deleted already (by a colleague, say): nothing to do for them. */
+export function deleteGoneLine(gone) {
+  if (gone === 0) return null;
+  return gone === 1 ? '1 lead you selected was already deleted.' : `${gone.toLocaleString('en')} leads you selected were already deleted.`;
+}
+
+/** After the press. */
+export function deletedLine(done) {
+  if (done.alreadyDeleted) return `${leadsWord(done.deleted)} ${done.deleted === 1 ? 'was' : 'were'} already deleted.`;
+  return `${leadsWord(done.deleted)} deleted.`;
 }
 
 export const SOURCE_CHOICES = LEAD_SOURCES.map((source) => ({ key: source, label: LEAD_SOURCE_WORDS[source] }));

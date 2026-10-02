@@ -224,6 +224,64 @@ export async function deleteLead(tx: TransactionSql, gymId: string, leadId: stri
   return rows.length > 0;
 }
 
+/** Every lead a filter chooses now, in the list's order (20c-vii's "Select all"). */
+export async function leadIdsMatching(sql: SqlOrTx, input: LeadsFilterInput): Promise<string[]> {
+  const rows = await sql<{ id: string }[]>`
+    SELECT l.id FROM gym_leads l
+    WHERE ${filterCondition(sql, input)}
+    ORDER BY l.created_at DESC, l.id DESC`;
+  return rows.map((row) => row.id);
+}
+
+/** Of `ids`, the gym's leads that are still there, with their names, newest first. Another
+ *  gym's id is nobody. */
+export async function leadNames(sql: SqlOrTx, gymId: string, ids: readonly string[]): Promise<{ id: string; name: string }[]> {
+  if (ids.length === 0) return [];
+  const rows = await sql<{ id: string; full_name: string }[]>`
+    SELECT l.id, l.full_name FROM gym_leads l
+    WHERE l.gym_id = ${gymId} AND l.id = ANY(${[...ids]}::uuid[])
+    ORDER BY l.created_at DESC, l.id DESC`;
+  return rows.map((row) => ({ id: row.id, name: row.full_name }));
+}
+
+/** Of `ids`, the gym's leads that are still there. Another gym's id is nobody. */
+export async function leadIdsIn(sql: SqlOrTx, gymId: string, ids: readonly string[]): Promise<string[]> {
+  if (ids.length === 0) return [];
+  const rows = await sql<{ id: string }[]>`
+    SELECT l.id FROM gym_leads l WHERE l.gym_id = ${gymId} AND l.id = ANY(${[...ids]}::uuid[])`;
+  return rows.map((row) => row.id);
+}
+
+/** Delete these leads of this gym, with one activity-log line for each, in one statement:
+ *  a flood of 10,000 builds no rows in the server's own memory. How many were deleted. */
+export async function deleteLeads(tx: TransactionSql, actorUserId: string, gymId: string, ids: readonly string[]): Promise<number> {
+  if (ids.length === 0) return 0;
+  const rows = await tx<{ n: number }[]>`
+    WITH gone AS (
+      DELETE FROM gym_leads WHERE gym_id = ${gymId} AND id = ANY(${[...ids]}::uuid[]) RETURNING id
+    ), logged AS (
+      INSERT INTO audit_log (actor_user_id, gym_id, action, target_type, target_id, meta)
+      SELECT ${actorUserId}, ${gymId}, 'org.lead_deleted', 'lead', gone.id::text, '{"via":"selected"}'::jsonb FROM gone
+      RETURNING 1
+    )
+    SELECT count(*)::int AS n FROM logged`;
+  return rows[0]?.n ?? 0;
+}
+
+/** The same press seen before: its audit row by the box's digest, since `since`. */
+export async function deletedLeadsByDigest(tx: TransactionSql, gymId: string, digest: string, since: Date): Promise<number | null> {
+  const rows = await tx<{ deleted: string | null }[]>`
+    SELECT meta->>'deleted' AS deleted
+    FROM audit_log
+    WHERE gym_id = ${gymId} AND at >= ${since}
+      AND action = 'org.leads_selected_deleted'
+      AND meta->>'digest' = ${digest}
+    ORDER BY at DESC
+    LIMIT 1`;
+  const row = rows[0];
+  return row === undefined ? null : Number(row.deleted ?? "0");
+}
+
 /** Every lead of a closed gym, inside the transaction that archives it. */
 export async function deleteLeadsForGym(tx: TransactionSql, gymId: string): Promise<void> {
   await tx`DELETE FROM gym_leads WHERE gym_id = ${gymId}`;
@@ -244,24 +302,40 @@ export interface LeadsPageRow extends LeadRow {
  *  the digits of a phone search (at least four), or null; `dueBy` the gym's today when
  *  only leads due a follow-up from staff are wanted — not those the app sends (`app`,
  *  20c-v). */
-export async function leadsPage(
-  sql: SqlOrTx,
-  input: {
-    gymId: string;
-    status: LeadStatus | null;
-    like: string | null;
-    digits: string | null;
-    dueBy: string | null;
-    /** Only New leads with an email problem (`emailProblemCondition`). */
-    problemOnly: boolean;
-    app: { on: boolean; roomLeft: boolean; pageStopped: boolean };
-    cursor: LeadCursor | null;
-    limit: number;
-  },
-): Promise<{ rows: LeadsPageRow[]; total: number }> {
-  const { gymId, status, like, digits, dueBy, cursor } = input;
+export interface LeadsFilterInput {
+  gymId: string;
+  status: LeadStatus | null;
+  like: string | null;
+  digits: string | null;
+  dueBy: string | null;
+  /** Only New leads with an email problem (`emailProblemCondition`). */
+  problemOnly: boolean;
+  app: { on: boolean; roomLeft: boolean; pageStopped: boolean };
+}
+
+/** The leads a status, chip and search choose, as the WHERE of `gym_leads l`: one
+ *  statement for the page, its total and "Select all" (20c-vii), so they never differ. */
+function filterCondition(sql: SqlOrTx, input: LeadsFilterInput) {
+  const { gymId, status, like, digits, dueBy } = input;
   const due = dueBy === null ? sql`true` : staffDueCondition(sql, dueBy, input.app);
   const problem = input.problemOnly ? emailProblemCondition(sql, gymId) : sql`true`;
+  return sql`
+    l.gym_id = ${gymId}
+      AND (${status}::text IS NULL OR l.status = ${status}::text)
+      AND ${due}
+      AND ${problem}
+      AND ((${like}::text IS NULL AND ${digits}::text IS NULL)
+           OR l.full_name ILIKE ${like}::text
+           OR l.email::text ILIKE ${like}::text
+           OR replace(coalesce(l.phone_e164, ''), '+', '') LIKE '%' || ${digits}::text || '%')`;
+}
+
+export async function leadsPage(
+  sql: SqlOrTx,
+  input: LeadsFilterInput & { cursor: LeadCursor | null; limit: number },
+): Promise<{ rows: LeadsPageRow[]; total: number }> {
+  const { cursor } = input;
+  const where = filterCondition(sql, input);
   const rows = await sql<(DbLead & { cursor_at: string })[]>`
     SELECT l.id, l.full_name, l.email, l.phone_e164, l.source, l.status, l.notes, l.email_ok_at, l.email_ok_by_page, l.entry_id,
            (e.id IS NOT NULL AND e.former_at IS NULL) AS on_list, l.created_at, l.status_changed_at,
@@ -269,14 +343,7 @@ export async function leadsPage(
            to_char(l.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_at
     FROM gym_leads l
     LEFT JOIN gym_member_list_entries e ON e.gym_id = l.gym_id AND e.id = l.entry_id
-    WHERE l.gym_id = ${gymId}
-      AND (${status}::text IS NULL OR l.status = ${status}::text)
-      AND ${due}
-      AND ${problem}
-      AND ((${like}::text IS NULL AND ${digits}::text IS NULL)
-           OR l.full_name ILIKE ${like}::text
-           OR l.email::text ILIKE ${like}::text
-           OR replace(coalesce(l.phone_e164, ''), '+', '') LIKE '%' || ${digits}::text || '%')
+    WHERE ${where}
       -- Sent as text and cast here: a parameter typed timestamptz goes through a JavaScript
       -- Date on its way in and loses the microseconds, and with them every lead of the
       -- same millisecond after the page's last.
@@ -287,14 +354,7 @@ export async function leadsPage(
   const totals = await sql<{ n: number }[]>`
     SELECT count(*)::int AS n
     FROM gym_leads l
-    WHERE l.gym_id = ${gymId}
-      AND (${status}::text IS NULL OR l.status = ${status}::text)
-      AND ${due}
-      AND ${problem}
-      AND ((${like}::text IS NULL AND ${digits}::text IS NULL)
-           OR l.full_name ILIKE ${like}::text
-           OR l.email::text ILIKE ${like}::text
-           OR replace(coalesce(l.phone_e164, ''), '+', '') LIKE '%' || ${digits}::text || '%')`;
+    WHERE ${where}`;
   return { rows: rows.map((row) => ({ ...toRow(row), cursorAt: row.cursor_at })), total: totals[0]?.n ?? 0 };
 }
 

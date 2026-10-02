@@ -7,13 +7,17 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
 import {
+  LEADS_DELETE_WORDS,
   MEMBER_FILE_MAX_BASE64_CHARS,
   createLeadRequestSchema,
   joinLeadRequestSchema,
   leadFileAddRequestSchema,
   leadFileCheckRequestSchema,
   leadFollowUpSentRequestSchema,
+  leadsDeletePreviewRequestSchema,
+  leadsDeleteRequestSchema,
   leadsQuerySchema,
+  leadsSelectAllRequestSchema,
   updateLeadEmailSettingsRequestSchema,
   updateLeadRequestSchema,
 } from "@app/shared";
@@ -22,6 +26,7 @@ import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { pageTurnedAwayKey } from "../gymPage/service.js";
 import type { InviteSettings } from "../invites/settings.js";
 import { leadParamsSchema, orgParamsSchema } from "../schemas.js";
+import { deleteSelectedLeads, LeadSelectionChanged, previewDeleteLeads, selectAllLeads } from "./deleteSelected.js";
 import * as emailSettings from "./emailSettings.js";
 import * as fileService from "./fileService.js";
 import * as service from "./service.js";
@@ -53,6 +58,17 @@ function requireUserId(req: FastifyRequest): string {
   const userId = req.authUser?.id;
   if (userId === undefined) throw new Error("authenticate preHandler did not run");
   return userId;
+}
+
+/** A "Select all" whose filter now matches other leads: nothing was done. */
+function sendSelectionChanged(err: LeadSelectionChanged, req: FastifyRequest, reply: FastifyReply): FastifyReply {
+  return reply.status(409).send({
+    error: "selection_changed",
+    message: LEADS_DELETE_WORDS.selection_changed,
+    count: err.now.count,
+    digest: err.now.digest,
+    requestId: req.id,
+  });
 }
 
 export interface LeadRouteDeps {
@@ -162,6 +178,57 @@ export function registerLeadRoutes(app: FastifyInstance, deps: LeadRouteDeps): v
       return reply.status(200).send(done);
     },
   );
+
+  // ── The leads selected (20c-vii). Static paths, so never read as a lead's id. ──
+
+  /** "Select all": who the filter matches now, as a count and a digest. */
+  app.post("/v1/orgs/:gymId/leads/selection", signedIn, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(leadsSelectAllRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const selection = await selectAllLeads(leadDeps, requireUserId(req), params.gymId, body, readGate(req, reply));
+    if (selection === null) return;
+    return reply.status(200).send({ selection });
+  });
+
+  /** The box: every lead Delete would remove. */
+  app.post("/v1/orgs/:gymId/leads/selected/delete-preview", signedIn, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(leadsDeletePreviewRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    try {
+      const preview = await previewDeleteLeads(leadDeps, requireUserId(req), params.gymId, body.selection, readGate(req, reply));
+      if (preview === null) return;
+      return await reply.status(200).send({ preview });
+    } catch (err) {
+      if (err instanceof LeadSelectionChanged) return await sendSelectionChanged(err, req, reply);
+      throw err;
+    }
+  });
+
+  /** Delete exactly the box's leads, or nothing (409 `leads_changed`, with the new box). */
+  app.post("/v1/orgs/:gymId/leads/selected/delete", signedIn, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(leadsDeleteRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    try {
+      const answer = await deleteSelectedLeads(leadDeps, requireUserId(req), params.gymId, body, writeGate(req, reply));
+      if (answer.kind === "rate_limited") return;
+      if (answer.kind === "deleted") return await reply.status(200).send({ deleted: answer.deleted });
+      return await reply.status(409).send({
+        error: "leads_changed",
+        message: LEADS_DELETE_WORDS.leads_changed,
+        preview: answer.preview,
+        requestId: req.id,
+      });
+    } catch (err) {
+      if (err instanceof LeadSelectionChanged) return await sendSelectionChanged(err, req, reply);
+      throw err;
+    }
+  });
 
   app.get("/v1/orgs/:gymId/leads/:leadId", signedIn, async (req, reply) => {
     const params = parseOr400(leadParamsSchema, req.params, req, reply);

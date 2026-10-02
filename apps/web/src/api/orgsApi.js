@@ -35,7 +35,12 @@ import {
   leadFileAddResponseSchema,
   leadFileCheckResponseSchema,
   leadResponseSchema,
+  leadsDeleteChangedSchema,
+  leadsDeletedResponseSchema,
+  leadsDeletePreviewResponseSchema,
   leadsResponseSchema,
+  leadsSelectedAllResponseSchema,
+  leadsSelectionChangedSchema,
   memberInviteChangedSchema,
   memberInvitedResponseSchema,
   memberInviteOneResponseSchema,
@@ -982,6 +987,31 @@ export const orgService = {
 
   deleteLead: (gymId, leadId) => authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/leads/${encodeURIComponent(leadId)}`),
 
+  /** "Select all" on Leads (20c-vii): who the filter matches now, as a count and a digest. */
+  selectAllLeads: (gymId, filter) =>
+    readThrough(
+      leadsSelectedAllResponseSchema,
+      'the leads selected',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/leads/selection`, { filter }),
+    ),
+
+  /** The Delete box: every lead the press would delete. */
+  previewDeleteLeads: (gymId, selection) =>
+    readThrough(
+      leadsDeletePreviewResponseSchema,
+      'who would be deleted',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/leads/selected/delete-preview`, { selection }),
+    ),
+
+  /** Delete the leads selected, as the box showed them (`digest`). A 409 answers with the
+   *  box as it is now (`leadsDeleteChanged`), or a "Select all" that moved (`leadsSelectionChanged`). */
+  deleteSelectedLeads: (gymId, selection, digest) =>
+    readThrough(
+      leadsDeletedResponseSchema,
+      'the deletion',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/leads/selected/delete`, { selection, digest }),
+    ),
+
   /** POST …/leads/from-file/check — who in a file would be added; nothing is saved (20c-iii). */
   checkLeadFile: (gymId, body) =>
     readThrough(
@@ -1543,6 +1573,18 @@ export function leaversChanged(err) {
 export function removeRefused(err) {
   const parsed = memberRemoveRefusedSchema.safeParse(err?.response?.data);
   return parsed.success ? { kind: parsed.data.error, message: parsed.data.message, preview: parsed.data.preview } : null;
+}
+
+/** A "Select all" of leads that matches other leads now: its new count and digest. */
+export function leadsSelectionChanged(err) {
+  const parsed = leadsSelectionChangedSchema.safeParse(err?.response?.data);
+  return parsed.success ? { count: parsed.data.count, digest: parsed.data.digest } : null;
+}
+
+/** Delete refused because the box moved: its message and the box as it is now. */
+export function leadsDeleteChanged(err) {
+  const parsed = leadsDeleteChangedSchema.safeParse(err?.response?.data);
+  return parsed.success ? { message: parsed.data.message, preview: parsed.data.preview } : null;
 }
 
 /** A failed download's body is a Blob: read as the JSON error it is, so `errorText`,
