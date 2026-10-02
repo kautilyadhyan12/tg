@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { normaliseIndianMobile } from '@app/shared';
 import Select from '../../components/common/Select';
+import BringMembersInCard from '../../components/console/BringMembersInCard';
 import JoinCodeCard from '../../components/console/JoinCodeCard';
 import PlanModal from '../../components/console/PlanModal';
 import { ConsoleCard, ConsoleFailed } from '../../components/console/ConsoleStates';
@@ -211,7 +212,7 @@ export default function NewGym() {
     }
   };
 
-  // ── Step 4/6: the gym exists, here is its code ──────────────────────────
+  // ── Step 4/6: the gym exists, here is how people come in ───────────────
   if (created !== null) {
     return (
       <div className="max-w-2xl mx-auto px-4 md:px-8 py-8 flex flex-col gap-5">
@@ -259,21 +260,25 @@ export default function NewGym() {
           </p>
         </div>
 
-        {/* The create response carries `{ code, label }` only; the fields that
-            decide live-vs-dead are absent because a code one second old cannot
-            be paused, expired or used up. Stated here rather than defaulted
-            silently — these are facts about a brand-new row, not fallbacks. */}
-        <JoinCodeCard
-          orgType={created.org.orgType}
-          code={{
-            code: created.joinCode.code,
-            label: created.joinCode.label,
-            paused: false,
-            expiresAt: null,
-            maxUses: null,
-            joined: 0,
-          }}
-        />
+        {/* No code while join codes are switched off (ROADMAP 3c): "Bring your members
+            in" stands in its place; the owner holds every privilege. With codes on, the
+            create response carries `{ code, label }` only — a code one second old cannot
+            be paused, expired or used up, so those facts are stated, not defaulted. */}
+        {created.joinCode === null ? (
+          <BringMembersInCard orgSlug={created.org.slug} orgType={created.org.orgType} />
+        ) : (
+          <JoinCodeCard
+            orgType={created.org.orgType}
+            code={{
+              code: created.joinCode.code,
+              label: created.joinCode.label,
+              paused: false,
+              expiresAt: null,
+              maxUses: null,
+              joined: 0,
+            }}
+          />
+        )}
 
         <button
           type="button"
@@ -294,7 +299,7 @@ export default function NewGym() {
         Create your organisation
       </h1>
       <p className="text-sm mb-6" style={{ color: 'rgba(255,255,255,0.45)' }}>
-        You&apos;ll get a join code to hand to your {words.people}.
+        Then you can bring your {words.people} in: import your list, or add people one at a time.
       </p>
 
       <form onSubmit={submit} className="flex flex-col gap-5">

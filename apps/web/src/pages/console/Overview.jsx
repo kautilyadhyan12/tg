@@ -3,10 +3,11 @@ import { Link, useParams } from 'react-router-dom';
 import { Users, ChevronRight } from 'lucide-react';
 import JoinCodeCard from '../../components/console/JoinCodeCard';
 import JoinCodesPanel from '../../components/console/JoinCodesPanel';
+import BringMembersInCard from '../../components/console/BringMembersInCard';
 import OverviewNumbers from '../../components/console/OverviewNumbers';
 import TrialCard from '../../components/console/TrialCard';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
-import { orgService, errorText, isRetryable } from '../../api/orgsApi';
+import { codesRetired, orgService, errorText, isRetryable } from '../../api/orgsApi';
 import { useAuth } from '../../context/AuthContext';
 import { useConsoleOrg } from './useConsoleOrg';
 import { consoleIsReadOnly } from './billingView';
@@ -105,7 +106,9 @@ export default function Overview() {
   // Unreachable today (no route creates a trainer row), and fixed anyway: the
   // API's guarantee is real and tested, and a screen that cannot express it is
   // the client half of the same defect.
-  const [codes, setCodes] = useState({ loading: true, error: null, retryable: true, list: null });
+  // `retired`: the server has join codes switched off (ROADMAP 3c; spec Part 3 §10.6),
+  // so "Bring your members in" stands where the code was.
+  const [codes, setCodes] = useState({ loading: true, error: null, retryable: true, list: null, retired: false });
   const [members, setMembers] = useState({ loading: true, error: null, retryable: true, page: null });
   // :11385 — "the gym is reminded… a count the owner cannot miss". This is the
   // screen an owner lands on, so the number lives here as well as on the list
@@ -185,13 +188,16 @@ export default function Overview() {
       if (cancelled) return;
       setCodes(
         codesOutcome.status === 'fulfilled'
-          ? { loading: false, error: null, retryable: true, list: codesOutcome.value.data?.codes ?? [] }
-          : {
-              loading: false,
-              error: errorText(codesOutcome.reason, `We couldn't load this ${words.it}'s join code.`),
-              retryable: isRetryable(codesOutcome.reason),
-              list: null,
-            },
+          ? { loading: false, error: null, retryable: true, list: codesOutcome.value.data?.codes ?? [], retired: false }
+          : codesRetired(codesOutcome.reason)
+            ? { loading: false, error: null, retryable: true, list: null, retired: true }
+            : {
+                loading: false,
+                error: errorText(codesOutcome.reason, `We couldn't load this ${words.it}'s join code.`),
+                retryable: isRetryable(codesOutcome.reason),
+                list: null,
+                retired: false,
+              },
       );
       setMembers(
         membersOutcome.status === 'fulfilled'
@@ -234,7 +240,7 @@ export default function Overview() {
   }, [gymId, attempt, words]);
 
   const retry = () => {
-    setCodes({ loading: true, error: null, retryable: true, list: null });
+    setCodes({ loading: true, error: null, retryable: true, list: null, retired: false });
     setMembers({ loading: true, error: null, retryable: true, page: null });
     setWaiting(null);
     setOverview({ loading: true, error: null, retryable: true, data: null });
@@ -256,7 +262,7 @@ export default function Overview() {
    *  caller, so there is no floating promise here (R2.5). */
   const reloadCodes = async () => {
     const res = await orgService.getCodes(gymId);
-    setCodes({ loading: false, error: null, retryable: true, list: res.data?.codes ?? [] });
+    setCodes({ loading: false, error: null, retryable: true, list: res.data?.codes ?? [], retired: false });
   };
 
   /** Re-read the NUMBERS ONLY, after a cheer goes out.
@@ -433,7 +439,10 @@ export default function Overview() {
       {!codes.loading && codes.error !== null ? (
         <ConsoleFailed message={codes.error} onRetry={codes.retryable ? retry : undefined} />
       ) : null}
-      {!codes.loading && codes.error === null ? (
+      {codes.retired && viewerPrivileges(org).includes('members.confirm') ? (
+        <BringMembersInCard orgSlug={orgSlug} orgType={org.orgType} readOnly={consoleIsReadOnly(org)} />
+      ) : null}
+      {!codes.loading && codes.error === null && !codes.retired ? (
         shownCode !== null ? (
           <JoinCodeCard code={shownCode} orgType={org.orgType} />
         ) : (
@@ -456,7 +465,7 @@ export default function Overview() {
           not read would offer a second code to a gym that may already be at its
           limit. The failure card above already says what happened, with the
           retry. */}
-      {!codes.loading && codes.error === null ? (
+      {!codes.loading && codes.error === null && !codes.retired ? (
         <JoinCodesPanel
           gymId={org.id}
           orgType={org.orgType}
@@ -512,7 +521,7 @@ export default function Overview() {
               </div>
             ) : joined === 0 ? (
               <div className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                Nobody has joined yet — share your code.
+                {codes.retired ? `Nobody has joined yet — invite your ${words.people}.` : 'Nobody has joined yet — share your code.'}
               </div>
             ) : null}
           </div>

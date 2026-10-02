@@ -9,7 +9,7 @@
 // just that the screen draws.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, configure } from '@testing-library/react';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { MemoryRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { CURRENT_DISCLAIMER_VERSION, DISCLAIMER_WORDINGS } from '@app/shared';
 
 configure({ asyncUtilTimeout: 3000 });
@@ -37,19 +37,13 @@ vi.mock('react-hot-toast', () => {
 
 const toast = (await import('react-hot-toast')).default;
 const { AuthProvider } = await import('../context/AuthContext');
-const { CarryJoinCode, ProtectedRoute, PublicRoute } = await import('../components/common/ProtectedRoute');
+const { ProtectedRoute, PublicRoute } = await import('../components/common/ProtectedRoute');
 const Login = (await import('./Login')).default;
 const GoogleAuthSuccess = (await import('./GoogleAuthSuccess')).default;
 const { APP_VERSION } = await import('../api/healthApi');
 const { GYM_DOOR, readJoinCode, rememberDoor } = await import('./landingRoute');
 
 const WORDS = DISCLAIMER_WORDINGS.sign_up[CURRENT_DISCLAIMER_VERSION.sign_up];
-
-/** The join page's stand-in: it prints the code its address carries. */
-function JoinPage() {
-  const { search } = useLocation();
-  return <p>JOIN PAGE {new URLSearchParams(search).get('code')}</p>;
-}
 
 /** The routes as App.jsx draws them, each page behind its own guard. */
 const draw = (entry) =>
@@ -62,16 +56,9 @@ const draw = (entry) =>
           <Route path="/onboarding" element={<ProtectedRoute requireOnboarding={false}><p>SET UP YOUR PROFILE</p></ProtectedRoute>} />
           <Route path="/dashboard" element={<ProtectedRoute><p>MEMBER APP</p></ProtectedRoute>} />
           <Route path="/console" element={<ProtectedRoute requireOnboarding={false} requireSignUpNote={false}><p>GYM CONSOLE</p></ProtectedRoute>} />
-          <Route
-            path="/org/join"
-            element={
-              <CarryJoinCode>
-                <ProtectedRoute>
-                  <JoinPage />
-                </ProtectedRoute>
-              </CarryJoinCode>
-            }
-          />
+          {/* An old poster's address, as App.jsx draws it since join codes were switched off (3c). */}
+          <Route path="/org/join" element={<Navigate to="/invitations" replace />} />
+          <Route path="/invitations" element={<ProtectedRoute requireInvitations={false}><p>INVITATIONS PAGE</p></ProtectedRoute>} />
         </Routes>
       </AuthProvider>
     </MemoryRouter>,
@@ -200,29 +187,28 @@ describe('the sign-up note', () => {
     expect(await screen.findByText('MEMBER APP')).toBeTruthy();
   });
 
-  it("keeps a poster link's address: someone set up goes on to the join page with its code", async () => {
+  it("takes an old poster link to the invitations page after the note, with no code kept (3c)", async () => {
     signedIn();
     profileSays({ onboardingCompleted: true, signUpDisclaimerAgreed: false });
     draw('/org/join?code=K7QM2X');
 
     await note();
-    expect(screen.queryByText(/JOIN PAGE/)).toBeNull();
     await tickIt();
     fireEvent.click(continueButton());
-    expect(await screen.findByText('JOIN PAGE K7QM2X')).toBeTruthy();
+    expect(await screen.findByText('INVITATIONS PAGE')).toBeTruthy();
+    expect(readJoinCode()).toBeNull();
   });
 
-  it("keeps a poster link's code for someone not set up, who goes on into setup with it", async () => {
+  it('sends somebody not set up from an old poster link into setup, with no code kept (3c)', async () => {
     signedIn();
     profileSays({ onboardingCompleted: false, signUpDisclaimerAgreed: false });
     draw('/org/join?code=k7qm2x');
 
     await note();
-    await waitFor(() => expect(readJoinCode()).toBe('K7QM2X'));
     await tickIt();
     fireEvent.click(continueButton());
     expect(await screen.findByText('SET UP YOUR PROFILE')).toBeTruthy();
-    expect(readJoinCode()).toBe('K7QM2X');
+    expect(readJoinCode()).toBeNull();
   });
 
   it('never shows to an account that has ticked it', async () => {

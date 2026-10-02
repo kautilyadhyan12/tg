@@ -84,13 +84,22 @@ export interface OrgRouteOverrides {
 
 export function registerOrgRoutes(
   app: FastifyInstance,
-  deps: { sql: Sql; redis: RedisLike; invites: InviteSettings | null; onlinePayments: OnlinePayments; robotCheck: RobotCheck; photos: PhotoStore },
+  deps: {
+    sql: Sql;
+    redis: RedisLike;
+    invites: InviteSettings | null;
+    onlinePayments: OnlinePayments;
+    robotCheck: RobotCheck;
+    photos: PhotoStore;
+    joinCodes: boolean;
+  },
   overrides: OrgRouteOverrides = {},
 ): void {
   const orgDeps: service.OrgsDeps = {
     sql: deps.sql,
     redis: deps.redis,
     randomBytes: overrides.randomBytes ?? ((n) => randomBytes(n)),
+    joinCodes: deps.joinCodes,
     invites: deps.invites,
     // Only the attendance hook uses it: a streak that fails to recompute warns
     // rather than losing a visit that is already committed (R8.5 — the
@@ -599,6 +608,19 @@ export function registerOrgRoutes(
     return reply.status(200).send(orgs);
   });
 
+  // JOIN CODES SWITCHED OFF (ROADMAP 3c; spec Part 3 §10.6). The join door, the waiting
+  // room and the five code routes answer 410 to everybody, signed in or not, before
+  // anything is read: an invitation to an address is the only way into a gym. The
+  // handlers stay, and the old suites run them with `JOIN_CODES=on`.
+  const codesRetired = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    if (deps.joinCodes) return;
+    await reply.status(410).send({
+      error: "join_codes_retired",
+      message: "Join codes have been switched off. A gym now invites people by email.",
+      requestId: req.id,
+    });
+  };
+
   // OWED (2026-08-18): `/v1/orgs/join` had no per-route limit, only the global
   // 300/min floor. It is closed here because this card rewrites the route
   // anyway, and it is now the door a stranger with a leaked code knocks on.
@@ -622,7 +644,7 @@ export function registerOrgRoutes(
 
   app.post(
     "/v1/orgs/join",
-    { preHandler: [app.authenticate, applyLimit] },
+    { preHandler: [codesRetired, app.authenticate, applyLimit] },
     async (req, reply) => {
       const body = parseOr400(joinOrgRequestSchema, req.body, req, reply);
       if (body === null) return;
@@ -635,7 +657,7 @@ export function registerOrgRoutes(
    *  would matter if these shared a prefix — they do not, but the ordering
    *  convention in this file is deliberate and `applications` is a literal
    *  segment that must never be read as a gym id. */
-  app.get("/v1/orgs/applications/mine", { preHandler: [app.authenticate] }, async (req, reply) => {
+  app.get("/v1/orgs/applications/mine", { preHandler: [codesRetired, app.authenticate] }, async (req, reply) => {
     const applications = await service.listMyApplications(orgDeps, requireUserId(req));
     return reply.status(200).send(applications);
   });
@@ -664,7 +686,7 @@ export function registerOrgRoutes(
 
   app.post(
     "/v1/orgs/applications/:applicationId/nudge",
-    { preHandler: [app.authenticate, nudgeLimit] },
+    { preHandler: [codesRetired, app.authenticate, nudgeLimit] },
     async (req, reply) => {
       const params = parseOr400(myApplicationParamsSchema, req.params, req, reply);
       if (params === null) return;
@@ -679,7 +701,7 @@ export function registerOrgRoutes(
 
   app.get(
     "/v1/orgs/:gymId/applications",
-    { preHandler: [app.authenticate] },
+    { preHandler: [codesRetired, app.authenticate] },
     async (req, reply) => {
       const params = parseOr400(orgParamsSchema, req.params, req, reply);
       if (params === null) return;
@@ -697,7 +719,7 @@ export function registerOrgRoutes(
 
   app.post(
     "/v1/orgs/:gymId/applications/:applicationId/confirm",
-    { preHandler: [app.authenticate] },
+    { preHandler: [codesRetired, app.authenticate] },
     async (req, reply) => {
       const params = parseOr400(applicationParamsSchema, req.params, req, reply);
       if (params === null) return;
@@ -713,7 +735,7 @@ export function registerOrgRoutes(
 
   app.post(
     "/v1/orgs/:gymId/applications/:applicationId/reject",
-    { preHandler: [app.authenticate] },
+    { preHandler: [codesRetired, app.authenticate] },
     async (req, reply) => {
       const params = parseOr400(applicationParamsSchema, req.params, req, reply);
       if (params === null) return;
@@ -729,7 +751,7 @@ export function registerOrgRoutes(
 
   // Part 3 §3.3's `GET /codes`, read half — the console's only way to show an
   // owner their own join code after the day they created the gym.
-  app.get("/v1/orgs/:gymId/codes", { preHandler: [app.authenticate] }, async (req, reply) => {
+  app.get("/v1/orgs/:gymId/codes", { preHandler: [codesRetired, app.authenticate] }, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
     if (params === null) return;
     const codes = await service.listOrgCodes(orgDeps, requireUserId(req), params.gymId);
@@ -747,7 +769,7 @@ export function registerOrgRoutes(
   // proves the caller is staff of this gym — a check a script cannot pass. What
   // an abusive owner can do to their own gym is bounded by the code cap. The
   // apply-side floor is what protects the join door and it is untouched.
-  app.post("/v1/orgs/:gymId/codes", { preHandler: [app.authenticate] }, async (req, reply) => {
+  app.post("/v1/orgs/:gymId/codes", { preHandler: [codesRetired, app.authenticate] }, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
     if (params === null) return;
     const body = parseOr400(createOrgCodeRequestSchema, req.body, req, reply);
@@ -764,7 +786,7 @@ export function registerOrgRoutes(
   // it; the smoke sheet is what proves it in a real browser).
   app.patch(
     "/v1/orgs/:gymId/codes/:code",
-    { preHandler: [app.authenticate] },
+    { preHandler: [codesRetired, app.authenticate] },
     async (req, reply) => {
       const params = parseOr400(codeParamsSchema, req.params, req, reply);
       if (params === null) return;
@@ -788,7 +810,7 @@ export function registerOrgRoutes(
   // gym's codes.
   app.post(
     "/v1/orgs/:gymId/codes/:code/rotate",
-    { preHandler: [app.authenticate] },
+    { preHandler: [codesRetired, app.authenticate] },
     async (req, reply) => {
       const params = parseOr400(codeParamsSchema, req.params, req, reply);
       if (params === null) return;
@@ -812,7 +834,7 @@ export function registerOrgRoutes(
   // sheet's remove step is what proves it in a real browser.
   app.delete(
     "/v1/orgs/:gymId/codes/:code",
-    { preHandler: [app.authenticate] },
+    { preHandler: [codesRetired, app.authenticate] },
     async (req, reply) => {
       const params = parseOr400(codeParamsSchema, req.params, req, reply);
       if (params === null) return;

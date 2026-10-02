@@ -348,7 +348,7 @@ describe('a person invited to help run a gym', () => {
     drawConsoleFrom('/console');
     const card = await screen.findByTestId(`staff-invitation-${STAFF_INVITATION.id}`);
     expect(within(card).getByText('Kd Owner invited you to help run Iron House as a trainer.')).toBeTruthy();
-    expect(within(card).getByText(/See the member list · Share the join code · See who came in/)).toBeTruthy();
+    expect(within(card).getByText(/See the member list · See who came in/)).toBeTruthy();
     expect(within(card).getByText(/It doesn't make you a member of the gym/)).toBeTruthy();
     expect(screen.queryByText('Create your organisation')).toBeNull();
   });
@@ -478,9 +478,9 @@ describe('Create a gym', () => {
     // Kd 2026-09-07: a trainer's CLIENTS join by code like members. The screen
     // must not ask a trainer for a "gym name" or promise them "members".
     drawNew();
-    expect(screen.getByText(/hand to your members/i)).toBeTruthy();
+    expect(screen.getByText(/bring your members in/i)).toBeTruthy();
     fireEvent.click(screen.getByText('Personal trainer'));
-    expect(screen.getByText(/hand to your clients/i)).toBeTruthy();
+    expect(screen.getByText(/bring your clients in/i)).toBeTruthy();
     expect(screen.queryByLabelText('Gym name')).toBeNull();
     fireEvent.change(screen.getByLabelText('Your business name'), { target: { value: 'Coach Priya' } });
     await chooseCountry('India');
@@ -576,6 +576,21 @@ describe('Create a gym', () => {
     expect(await screen.findByText('K7QM2X')).toBeTruthy();
     expect(screen.getByText(/set up in USD/)).toBeTruthy();
     expect(screen.getByText(/Give this code to your members/i)).toBeTruthy();
+  });
+
+  it('shows "Bring your members in" where the code was, once join codes are switched off (3c)', async () => {
+    orgService.createOrg.mockResolvedValue({ data: { org: { ...ORG }, joinCode: null } });
+    drawNew();
+    fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House' } });
+    await chooseCountry('United States');
+    fireEvent.click(screen.getByRole('radio', { name: /^Yes/ }));
+    fireEvent.click(screen.getByText('Create'));
+
+    const card = await screen.findByTestId('bring-members-in');
+    expect(within(card).getByText('Bring your members in')).toBeTruthy();
+    expect(within(card).getByRole('link', { name: 'Import members' }).getAttribute('href')).toBe('/console/iron-house/members?open=import');
+    expect(screen.queryByTestId('join-code-card')).toBeNull();
+    expect(screen.queryByText(/Give this code/i)).toBeNull();
   });
 
   it("shows the server's own refusal rather than a rewrite of it", async () => {
@@ -2838,5 +2853,67 @@ describe("the gym's numbers", () => {
     const cards = await screen.findAllByText(/Couldn't reach the server/i);
     expect(cards).toHaveLength(1);
     expect(screen.getAllByText('Try again')).toHaveLength(1);
+  });
+});
+
+// ── Join codes switched off (ROADMAP 3c; spec Part 3 §10.6) ──────────────────
+// The server answers 410 `join_codes_retired` on the code and waiting-room routes.
+// The console then draws "Bring your members in" where the code was, and no queue.
+describe('join codes switched off', () => {
+  const retired = () => apiError(410, 'join_codes_retired', 'Join codes have been switched off. A gym now invites people by email.');
+
+  beforeEach(() => {
+    orgService.getCodes.mockRejectedValue(retired());
+    orgService.getApplications.mockRejectedValue(retired());
+  });
+
+  it('Overview shows "Bring your members in" with Import and Add, and no code, no code controls and no error', async () => {
+    drawOverview();
+    const card = await screen.findByTestId('bring-members-in');
+    expect(within(card).getByRole('link', { name: 'Import members' }).getAttribute('href')).toBe('/console/iron-house/members?open=import');
+    expect(within(card).getByRole('link', { name: 'Add member' }).getAttribute('href')).toBe('/console/iron-house/members?open=add');
+    expect(screen.queryByTestId('join-code-card')).toBeNull();
+    expect(screen.queryByText('New code')).toBeNull();
+    expect(screen.queryByText(/join code/i)).toBeNull();
+    expect(screen.queryByText(/Try again/)).toBeNull();
+    expect(await screen.findByText(/Nobody has joined yet — invite your members\./)).toBeTruthy();
+    expect(screen.queryByText(/share your code/i)).toBeNull();
+  });
+
+  it('Overview draws the card for nobody who cannot keep the list', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'trainer' }] } });
+    drawOverview();
+    expect(await screen.findByText('1 member (you)')).toBeTruthy();
+    expect(screen.queryByTestId('bring-members-in')).toBeNull();
+  });
+
+  it('Overview greys the card on a read-only gym', async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, consoleReadOnly: true }] } });
+    drawOverview();
+    const card = await screen.findByTestId('bring-members-in');
+    expect(within(card).queryAllByRole('link')).toHaveLength(0);
+    expect(within(card).getByRole('button', { name: 'Import members' }).disabled).toBe(true);
+  });
+
+  it('Members draws no "Waiting to join" and no error over the retired queue', async () => {
+    drawMembers();
+    expect(await screen.findByText('Kd Owner')).toBeTruthy();
+    await waitFor(() => expect(orgService.getApplications).toHaveBeenCalled());
+    expect(screen.queryByText('Waiting to join')).toBeNull();
+    expect(screen.queryByText(/couldn't check who's waiting/i)).toBeNull();
+  });
+
+  it('Members opens Import, or Add, when the card sent the person there', async () => {
+    const listView = { data: { list: { hasList: true, version: 1, lastConfirmedAt: null, counts: { entries: 1, inApp: 0, canBeInvited: 1, noEmail: 0, former: 0 }, statuses: [], membershipTypes: [], paymentStatuses: [], fields: [], appWords: [] } } };
+    const listPage = { data: { page: { total: 1, entries: [{ entryId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', fullName: 'Lena List', email: 'lena@members.example', phone: null, memberNumber: null, status: 'Active', membershipType: null, joinedOn: null, endsOn: null, endsOnKind: null, paymentStatus: null, dateOfBirth: null, formerAt: null, source: 'upload', inApp: false, invitation: null, app: { word: 'not_in_app', tone: 'grey', at: null, line: 'Not invited yet', lineTone: 'plain' } }], cursor: null } } };
+    orgService.getMemberList.mockResolvedValue(listView);
+    orgService.getMemberListEntries.mockResolvedValue(listPage);
+    drawAt('/console/iron-house/members?open=import', <Members />, '/console/:orgSlug/members');
+    expect(await screen.findByTestId('member-import')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Your list' }).getAttribute('aria-selected')).toBe('true');
+    cleanup();
+
+    drawAt('/console/iron-house/members?open=add', <Members />, '/console/:orgSlug/members');
+    expect(await screen.findByRole('dialog', { name: 'Add member' })).toBeTruthy();
   });
 });

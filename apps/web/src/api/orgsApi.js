@@ -1511,6 +1511,12 @@ export function errorCode(err) {
   return typeof code === 'string' ? code : null;
 }
 
+/** Join codes are switched off on this server (ROADMAP 3c): the code and waiting-room
+ *  routes answer 410 `join_codes_retired`, and the console draws what replaces them. */
+export function codesRetired(err) {
+  return errorStatus(err) === 410 && errorCode(err) === 'join_codes_retired';
+}
+
 /** The fresh preview a refused Invite press answers with (409 `invite_changed`), or
  *  null for any other failure. */
 export function inviteChangedPreview(err) {

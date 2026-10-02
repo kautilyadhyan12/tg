@@ -79,8 +79,8 @@ describe('googleSuccessRoute (OAuth landing routing)', () => {
   });
 
   // A poster's code, kept while the person was away at Google.
-  it('lands with a kept poster code: the join page once set up, setup otherwise', () => {
-    expect(googleSuccessRoute({ onboardingCompleted: true }, false, MEMBER_DOOR, 'K7QM2X')).toBe('/org/join?code=K7QM2X');
+  it('ignores a poster code an older visit kept: join codes are switched off (ROADMAP 3c)', () => {
+    expect(googleSuccessRoute({ onboardingCompleted: true }, false, MEMBER_DOOR, 'K7QM2X')).toBe('/dashboard');
     expect(googleSuccessRoute({ onboardingCompleted: false }, false, MEMBER_DOOR, 'K7QM2X')).toBe('/onboarding');
     expect(googleSuccessRoute({ onboardingCompleted: true }, false, GYM_DOOR, 'K7QM2X')).toBe('/console');
     expect(googleSuccessRoute(null, false, MEMBER_DOOR, 'K7QM2X')).toBe('/login?error=google_failed');

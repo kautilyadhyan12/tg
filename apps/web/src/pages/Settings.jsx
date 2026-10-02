@@ -23,7 +23,6 @@ import { CURRENT_DISCLAIMER_VERSION, DISCLAIMER_WORDINGS } from '@app/shared';
 import { authService } from '../api/authApi';
 import mlApi from '../api/mlApi'; // KEPT: avatar/profile-picture only — no new-API home (owed card)
 import Select from '../components/common/Select';
-import JoinGymPanel from '../components/gym/JoinGymPanel';
 import GymMembershipCard from '../components/gym/GymMembershipCard';
 import InvitationsPanel from '../components/gym/InvitationsPanel';
 
@@ -547,29 +546,18 @@ function HealthCard() {
 
 // ── Gym tab ───────────────────────────────────────────────────────────────────
 //
-// v1 §8: "Member enters code at registration or in Settings." This is the
-// Settings half, and until it existed there was no half at all — the join
-// endpoint had shipped and no screen in the app called it, so a gym could hand
-// out a code nobody could redeem.
-//
-// The panel is shared with `/org/join`, the address a poster QR points at, so
-// the two cannot answer differently. `GymMembershipCard` above it is the same
-// component the dashboard draws: a person who is waiting, or was refused, or is
-// already in, is told so HERE too, rather than having to remember what the
-// dashboard said.
+// The invitations waiting for this address and the gyms this person is in. The
+// code box is gone: join codes are switched off and an invitation is the only way
+// into a gym (ROADMAP 3c; spec Part 3 §10.6).
 function GymTab() {
-  // T3 r1 L-6: the card and the panel are two views of ONE fact and sat an inch
-  // apart, so the panel could say "You've asked to join Iron House" over a card
-  // that still said nothing until the page was reloaded. The counter re-reads
-  // the card the moment the panel gets an answer.
-  const [applied, setApplied] = useState(0);
+  // A Join re-reads the card below, so the two never disagree on screen.
+  const [joined, setJoined] = useState(0);
   return (
     <div className="flex flex-col gap-5">
       {/* Invitations still open for this address, a declined one with its Join
-          (Part 3 §10.2). A Join re-reads the card below. */}
-      <InvitationsPanel onJoined={() => setApplied((n) => n + 1)} />
-      <GymMembershipCard refreshToken={applied} />
-      <JoinGymPanel onApplied={() => setApplied((n) => n + 1)} />
+          (Part 3 §10.2). */}
+      <InvitationsPanel showEmpty onJoined={() => setJoined((n) => n + 1)} />
+      <GymMembershipCard refreshToken={joined} />
     </div>
   );
 }

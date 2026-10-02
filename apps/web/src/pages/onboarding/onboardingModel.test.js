@@ -196,18 +196,18 @@ describe('which screens a person sees, and where they land', () => {
     expect(m.screenAnswered('food', EMPTY)).toBe(false);
   });
 
-  it('never holds anyone on screen 11: the gym code asks nothing', () => {
-    // Most people have no code, and one who has may apply now, in Settings, or
+  it('never holds anyone on "Your gym": it asks nothing', () => {
+    // Most people have no invitation, and one who has may join now, in Settings, or
     // never — so this screen is answered whatever the person has done.
-    expect(m.screenAnswered('code', EMPTY)).toBe(true);
-    expect(m.screenAnswered('code', ALL)).toBe(true);
+    expect(m.screenAnswered('gym', EMPTY)).toBe(true);
+    expect(m.screenAnswered('gym', ALL)).toBe(true);
     // …which is why the step bar can always reach it once everything before it
     // is answered. A person with every answer in lands one screen on, on the plan.
-    expect([...m.reachableScreens(ALL)]).toContain('code');
+    expect([...m.reachableScreens(ALL)]).toContain('gym');
     expect(m.firstOpenScreen(ALL)).toBe('plan');
     // And the server has no word for it either: nothing can be missing for it.
-    expect([...missingSetupAnswerSchema.options]).not.toContain('code');
-    expect(Object.values(m.SCREEN_OF_MISSING)).not.toContain('code');
+    expect([...missingSetupAnswerSchema.options]).not.toContain('gym');
+    expect(Object.values(m.SCREEN_OF_MISSING)).not.toContain('gym');
   });
 
   it('names the food answers as open before any refusal, and drops each one as it is given', () => {
@@ -246,23 +246,11 @@ describe('which screens a person sees, and where they land', () => {
     expect(gap.has('equipment')).toBe(false);
   });
 
-  it('puts "Your code" first for a poster code, keeping the count, and lands and reaches in that order', () => {
-    const codeFirst = { codeFirst: true };
-    const ids = (a, order) => m.visibleScreens(a, order).map((s) => s.id);
-    expect(ids(EMPTY, codeFirst)).toEqual(['code', ...ids(EMPTY).filter((id) => id !== 'code')]);
-    expect(ids(EMPTY, codeFirst)).toHaveLength(ids(EMPTY).length);
-    expect(ids({ ...EMPTY, weightGoal: 'maintain' }, codeFirst)).toEqual(
-      ['code', ...ids({ ...EMPTY, weightGoal: 'maintain' }).filter((id) => id !== 'code')],
-    );
-    // Without a poster, nothing moves.
-    expect(ids(EMPTY, { codeFirst: false })).toEqual(ids(EMPTY));
-    // "Your code" never holds anyone, so its Continue goes to the first open
-    // question — the last screen, your plan, once every one is answered.
-    expect(m.firstOpenScreen(EMPTY, codeFirst)).toBe('goal');
-    expect(m.firstOpenScreen({ ...ALL, availableEquipment: [] }, codeFirst)).toBe('equipment');
-    expect(m.firstOpenScreen(ALL, codeFirst)).toBe('plan');
-    expect([...m.reachableScreens(EMPTY, codeFirst)]).toEqual(['code', 'goal']);
-    expect([...m.reachableScreens(ALL, codeFirst)]).toEqual(ids(ALL, codeFirst));
+  it('keeps "Your gym" in its place for everybody: a poster code moves nothing (ROADMAP 3c)', () => {
+    const ids = m.visibleScreens(EMPTY).map((s) => s.id);
+    expect(ids.indexOf('gym')).toBe(ids.length - 2);
+    expect(ids).not.toContain('code');
+    expect(m.firstOpenScreen(EMPTY)).toBe('goal');
   });
 
   it('counts the plan screen answered exactly when every screen before it is, so it is reached last and landed on only then', () => {
@@ -984,7 +972,7 @@ describe('the plan screen (ROADMAP 4c)', () => {
     expect(kept.find((r) => r.id === 'goal').value).toBe('Keep my weight');
     expect(kept.find((r) => r.id === 'training').value).toBe('Beginner');
     // Never the gym code, and never the plan itself.
-    expect(kept.map((r) => r.id)).not.toContain('code');
+    expect(kept.map((r) => r.id)).not.toContain('gym');
     expect(kept.map((r) => r.id)).not.toContain('plan');
   });
 

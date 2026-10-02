@@ -117,22 +117,30 @@ try {
 // therefore die up to 24 hours after its 14-day mark and a chase can land up to
 // 24 hours late. That is inside the tolerance of every number Kd ratified, and
 // running it hourly would buy precision nobody asked for on a fortnight.
+//
+// While join codes are switched off (ROADMAP 3c) the schedule is taken out of Redis,
+// so the waiting room is neither chased nor expired; a request still waiting stays
+// as it is.
 try {
-  await queue.upsertJobScheduler(
-    ORGS_SWEEP_JOB,
-    { pattern: "30 3 * * *" },
-    {
-      name: ORGS_SWEEP_JOB,
-      opts: {
-        // R3.5: every statement in the sweep is set-based and its WHERE
-        // excludes the state it produces, so a retry is a no-op.
-        attempts: 3,
-        backoff: { type: "exponential", delay: 60_000 },
-        removeOnComplete: { count: 50 },
-        removeOnFail: { count: 200 },
+  if (config.JOIN_CODES) {
+    await queue.upsertJobScheduler(
+      ORGS_SWEEP_JOB,
+      { pattern: "30 3 * * *" },
+      {
+        name: ORGS_SWEEP_JOB,
+        opts: {
+          // R3.5: every statement in the sweep is set-based and its WHERE
+          // excludes the state it produces, so a retry is a no-op.
+          attempts: 3,
+          backoff: { type: "exponential", delay: 60_000 },
+          removeOnComplete: { count: 50 },
+          removeOnFail: { count: 200 },
+        },
       },
-    },
-  );
+    );
+  } else {
+    await queue.removeJobScheduler(ORGS_SWEEP_JOB);
+  }
 } catch (err) {
   log.fatal({ err }, "failed to register the join-application sweep schedule");
   process.exit(1);
@@ -554,6 +562,11 @@ const worker = new Worker(
     // "succeeded but not really" state for the purge's certification check
     // below to have an opinion about.
     if (job.name === ORGS_SWEEP_JOB) {
+      // A run queued before the schedule was taken out does nothing.
+      if (!config.JOIN_CODES) {
+        log.info({ event: "job.finished", job: job.name, skipped: "join_codes_off" }, "job finished");
+        return;
+      }
       const swept = await sweepJoinApplications({ sql, log });
       log.info(
         { ...swept, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },

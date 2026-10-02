@@ -4,7 +4,7 @@ import { AuthProvider } from './context/AuthContext';
 import { TransitionProvider } from './context/TransitionContext';
 import { RunProvider } from './context/RunContext';
 import RunMiniBar from './components/running/RunMiniBar';
-import { CarryJoinCode, ProtectedRoute, PublicRoute } from './components/common/ProtectedRoute';
+import { ProtectedRoute, PublicRoute } from './components/common/ProtectedRoute';
 import AppLayout from './components/common/AppLayout';
 
 // Pages
@@ -23,7 +23,6 @@ import Coach           from './pages/Coach';
 import Nutrition       from './pages/Nutrition';
 import Achievements    from './pages/Achievements';
 import Settings        from './pages/Settings';
-import JoinGym         from './pages/JoinGym';
 import InvitationLink  from './pages/InvitationLink';
 import StaffInvitationLink from './pages/StaffInvitationLink';
 import GymPublicPage   from './pages/GymPublicPage';
@@ -165,22 +164,10 @@ export default function App() {
                 <AppLayout><MyGyms /></AppLayout>
               </ProtectedRoute>
             } />
-            {/* The address a gym's poster points at — the web twin of Part 6
-                §2's `aihg://org/join?code=` deep link, so a QR works in a
-                browser and on a phone without two entry paths existing. The
-                same panel is inside Settings → Gym, which is where v1 §8 puts
-                it ("member enters code at registration or in Settings").
-                NOTHING is added to the sidebar: this is a member joining a gym,
-                not a way into the gym console (Kd ruling 2026-08-19 shut that
-                crossing in both directions). `CarryJoinCode` keeps the code for
-                somebody the guard sends to sign in or into setup. */}
-            <Route path="/org/join" element={
-              <CarryJoinCode>
-                <ProtectedRoute>
-                  <AppLayout><JoinGym /></AppLayout>
-                </ProtectedRoute>
-              </CarryJoinCode>
-            } />
+            {/* The address an old gym poster points at. Join codes are switched
+                off (ROADMAP 3c; spec Part 3 §10.6), so it opens the invitations
+                page: an invitation to the person's email is the way in now. */}
+            <Route path="/org/join" element={<Navigate to="/invitations" replace />} />
             {/* The invitation email's link (Part 3 §10.2). Until the phone app
                 exists it opens sign-in; the invitation itself hangs on the
                 address, never on this link. */}

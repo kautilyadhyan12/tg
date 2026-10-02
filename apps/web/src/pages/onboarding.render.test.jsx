@@ -23,13 +23,13 @@ vi.setConfig({ testTimeout: 15_000 });
 // One auth state serves both the page and the app's own route guard.
 const auth = { user: null, loading: false, updateUser: vi.fn(), logout: vi.fn(() => Promise.resolve()) };
 vi.mock('../context/AuthContext', () => ({ useAuth: () => auth }));
-// Screen 11 draws the join door's own two components (4b-ii), which read on
-// mount. `...actual` keeps `errorText`, which the page itself uses.
+// "Your gym" draws the invitations and the gym card, which read on mount. `...actual` keeps `errorText`, which the page itself uses.
 vi.mock('../api/orgsApi', async (importOriginal) => ({
   ...(await importOriginal()),
   orgService: {
     join: vi.fn(),
     getMyApplications: vi.fn(() => Promise.resolve({ data: { applications: [] } })),
+    getInvitations: vi.fn(),
     getMine: vi.fn(() => Promise.resolve({ data: { gyms: [] } })),
     nudgeApplication: vi.fn(),
     getHours: vi.fn(() => Promise.resolve({ data: { hours: { mode: 'unset', timezone: 'UTC', week: [], closures: [] } } })),
@@ -51,6 +51,7 @@ vi.mock('../api/healthApi', async (importOriginal) => ({
 
 const toast = (await import('react-hot-toast')).default;
 const { orgService } = await import('../api/orgsApi');
+const { forgetInvitations, sayNotNow } = await import('../components/gym/invitationsStore');
 const { DIETS } = await import('./onboarding/onboardingModel');
 const Onboarding = (await import('./Onboarding')).default;
 const { ProtectedRoute } = await import('../components/common/ProtectedRoute');
@@ -220,7 +221,7 @@ const next = async (title) => {
  *  Continue, three times. */
 const toPlan = async () => {
   await next('Food');
-  await next('Your code');
+  await next('Your gym');
   await next('Your plan');
 };
 /** Back to the health screen from where a person with every answer in lands —
@@ -295,6 +296,7 @@ beforeEach(() => {
   orgService.join.mockReset();
   orgService.join.mockRejectedValue(new Error('no join expected in this test'));
   orgService.getMyApplications.mockResolvedValue({ data: { applications: [] } });
+  orgService.getInvitations.mockResolvedValue({ data: { address: 'kd@example.com', addressProved: true, invitations: [] } });
   orgService.getMine.mockResolvedValue({ data: { gyms: [] } });
 });
 afterEach(() => cleanup());
@@ -963,7 +965,7 @@ describe('onboarding screens 1–7', () => {
     await agree();
     expect(agreeBox().getAttribute('aria-checked')).toBe('true');
     // And back in one tap, as from an Adjust — not a Continue through Food and
-    // Your code.
+    // Your gym.
     expect(screen.queryByRole('button', { name: /continue/i })).toBeNull();
     await backToFinish();
     await waitFor(() => expect(button(/finish setup/i).disabled).toBe(false));
@@ -982,7 +984,7 @@ describe('onboarding screens 1–7', () => {
     await agree();
     expect(button(/continue/i).disabled).toBe(true);
     expect(button('Food').disabled).toBe(true);
-    expect(button('Your code').disabled).toBe(true);
+    expect(button('Your gym').disabled).toBe(true);
     expect(button('Your plan').disabled).toBe(true);
     expect(screen.queryByRole('button', { name: /finish setup/i })).toBeNull();
     expect(screen.queryByText('MEMBER APP')).toBeNull();
@@ -1269,7 +1271,7 @@ describe('onboarding screens 1–7', () => {
     await heading('Food');
     tap('3 meals a day');
     await stored({ mealsPerDay: 3 });
-    await next('Your code');
+    await next('Your gym');
     await next('Your plan');
     // Cleared from another device meanwhile: the server refuses the finish and
     // names it, though no plan number is missing.
@@ -1288,86 +1290,56 @@ describe('onboarding screens 1–7', () => {
     await screen.findByText('MEMBER APP');
   });
 
-  it('asks for a gym code without ever holding anyone, in the join door\'s own words', async () => {
+  it('shows "Your gym" without ever holding anyone, with no code box (3c)', async () => {
     serve(ALL, screeningOf({ hasCondition: false }));
     draw();
     await heading('Your plan'); // every answer in: the last screen
-    tap('Your code');
-    await heading('Your code');
-    expect(screen.getByText('Have a code from your gym, studio or trainer?')).toBeTruthy();
-    expect(screen.getByLabelText('Your join code')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /ask to join/i })).toBeTruthy();
-    // Nothing here is an answer: with no code typed at all, the plan and its
-    // Finish are one Continue on, and Finish is offered once the notes are ticked.
-    expect(screen.getByText(/No code\? Carry on/)).toBeTruthy();
+    tap('Your gym');
+    await heading('Your gym');
+    expect(screen.getByText('Invited by a gym, studio or trainer?')).toBeTruthy();
+    expect(screen.queryByLabelText(/your join code/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /ask to join/i })).toBeNull();
+    // Nothing here is an answer: the plan and its Finish are one Continue on.
+    expect(screen.getByText(/No invitation\? Carry on/)).toBeTruthy();
     await next('Your plan');
     await agreeOnHealth();
     await waitFor(() => expect(button(/finish setup/i).disabled).toBe(false));
     tap(/finish setup/i);
     await screen.findByText('MEMBER APP');
-    // Setup finished without one, and none was ever sent.
     expect(orgService.join).not.toHaveBeenCalled();
+    expect(orgService.getMyApplications).not.toHaveBeenCalled();
   });
 
-  it('applies a code on screen 11 through the join door itself, and finishes after it', async () => {
-    orgService.join.mockResolvedValue({
+  it('shows an invitation waiting for this address, with its Join, on "Your gym"', async () => {
+    orgService.getInvitations.mockResolvedValue({
       data: {
-        outcome: 'pending',
-        org: { id: 'gym-1', slug: 'iron-house', name: 'Iron House', orgType: 'gym' },
-        application: { applicationId: 'app-1', status: 'pending', expiresAt: null, orgCanConfirm: true, lastNudgeAt: null },
-      },
-    });
-    serve(ALL, screeningOf({ hasCondition: false }));
-    draw();
-    await heading('Your plan');
-    tap('Your code');
-    await heading('Your code');
-    fireEvent.change(screen.getByLabelText('Your join code'), { target: { value: 'abc123' } });
-    fireEvent.click(button(/ask to join/i));
-    await waitFor(() => expect(orgService.join).toHaveBeenCalledWith({ code: 'ABC123' }));
-    expect(await screen.findByText("You've asked to join Iron House.")).toBeTruthy();
-    // The panel's usual way out is a dead end mid-setup — an unfinished
-    // account is sent straight back here — so it is not offered.
-    expect(screen.queryByRole('link', { name: /back to your dashboard/i })).toBeNull();
-
-    await next('Your plan');
-    await agreeOnHealth();
-    tap(/finish setup/i);
-    await screen.findByText('MEMBER APP');
-  });
-
-  it("a refused or expired request's Try again puts the cursor in the code box below, and never leaves setup", async () => {
-    // The card's Try again links to the join door everywhere else. From here
-    // that address sends an unfinished account straight back to this wizard,
-    // so on screen 11 it goes to the box that is already on the screen.
-    orgService.getMyApplications.mockResolvedValue({
-      data: {
-        applications: [
+        address: 'kd@example.com',
+        addressProved: true,
+        invitations: [
           {
-            id: 'app-1', status: 'rejected', appliedAt: '2026-08-19T09:00:00.000Z', expiresAt: '2026-09-02T09:00:00.000Z',
-            decidedAt: null, nudgedAt: null,
-            org: {
-              id: 'gym-1', slug: 'iron-house', name: 'Iron House', city: null, orgType: 'gym', timezone: 'UTC',
-              locale: 'en', currencyDisplay: 'USD', status: 'active',
-            },
+            id: '6c1f8a2e-6a1b-4f43-9a55-0d6f3f6b9b11',
+            state: 'pending',
+            gym: { id: '7d2a9b3f-7b2c-4a54-8b66-1e7a4a7c0c22', name: 'Iron House', city: 'Leeds', orgType: 'gym' },
+            canTakeMembers: true,
+            notMe: false,
+            yourPlan: null,
           },
         ],
       },
     });
+    // The invitations are read for a signed-in account, past the "You're invited"
+    // screen that comes before setup, as "Not now" leaves it.
+    auth.user = { ...auth.user, id: 'u1' };
+    forgetInvitations();
+    sayNotNow('u1');
     serve(ALL, screeningOf({ hasCondition: false }));
     draw();
     await heading('Your plan');
-    tap('Your code');
-    await heading('Your code');
-    expect(await screen.findByText("Iron House didn't confirm your request")).toBeTruthy();
-    expect(screen.queryByRole('link', { name: /try again/i })).toBeNull();
-    const codeBox = screen.getByLabelText('Your join code');
-    expect(document.activeElement).not.toBe(codeBox);
-
-    tap(/try again/i);
-    expect(document.activeElement).toBe(codeBox);
-    // Still here, on the code screen of setup.
-    expect(screen.getByRole('heading', { name: 'Your code' })).toBeTruthy();
+    tap('Your gym');
+    await heading('Your gym');
+    expect((await screen.findAllByText(/Iron House/)).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /^join/i })).toBeTruthy();
+    // Still in setup.
     expect(screen.queryByText('MEMBER APP')).toBeNull();
   });
 
