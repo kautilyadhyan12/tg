@@ -274,7 +274,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 
 10. [x] **Sign-up survives a whole gym arriving at once** — merged 2026-10-02 (PR #153).
 
-11. [ ] **The API talks to the database on one connection** (found 2026-09-20 by PR #87's review, measuring with a bystander request). `app.ts` opens the pool with `max: 1`, so any slow statement anywhere in the app is time in which every other request waits — `GET /health` included, which is how it was measured. It is not a member-list problem and the member list no longer holds the connection for long (spec §9.9's table), but at 20 gyms of 200 arriving in bursts it is the ceiling everything else meets. Raise it with a number chosen against the database's own connection limit and the number of API processes, and state it. Before launch.
+11. [x] **The API talks to the database on ten connections** — merged 2026-10-02 (PR #156).
 
 12. [ ] **The front page, built LAST** (Kd, RULINGS 2026-09-25): what the app does, "Create your gym" into today's console pages, "Get the app", and the list of gyms that said yes to being shown, filtered by city, each opening its page and lead form (20c-iv).
 
