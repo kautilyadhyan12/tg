@@ -800,6 +800,7 @@ export async function mergeEntries(
     // (the reference test lists every table that does).
     await repo.moveMembershipLinks(tx, gymId, goneId, keepId);
     await repo.moveLeadLinks(tx, gymId, goneId, keepId);
+    await repo.moveVisitLinks(tx, gymId, goneId, keepId);
     await repo.deleteEntry(tx, gymId, goneId);
     const lost = await leftOff(tx, gymId, gone.values, [keepId], reached);
     if (lost > 0 && !acknowledgeLeavesList) throw new LeavesList(lost, "merge");

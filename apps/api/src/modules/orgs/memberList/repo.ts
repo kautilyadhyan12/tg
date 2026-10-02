@@ -2160,6 +2160,11 @@ export async function setEntryFormer(tx: TransactionSql, gymId: string, entryId:
  *  foreign key's ON DELETE SET NULL); the last test in
  *  `memberList.byHand.routes.test.ts` lists every table that points at a record. */
 export async function deleteEntry(tx: TransactionSql, gymId: string, entryId: string): Promise<boolean> {
+  // A visit that also names an app account stays that person's visit; the visits only
+  // the record holds go with it (`gym_attendance_entry_fk`, ON DELETE CASCADE).
+  await tx`
+    UPDATE gym_attendance SET entry_id = NULL
+    WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND user_id IS NOT NULL`;
   const rows = await tx<{ id: string }[]>`
     DELETE FROM gym_member_list_entries
     WHERE gym_id = ${gymId} AND id = ${entryId}
@@ -2180,6 +2185,35 @@ export async function moveMembershipLinks(tx: TransactionSql, gymId: string, fro
     WHERE gym_id = ${gymId} AND removed_entry_id = ${fromEntryId}
     RETURNING id`;
   return joined.length + removed.length;
+}
+
+/** Two records joined: the visits of the one not kept become the kept one's (16a). A
+ *  visit in a period the kept record already has a visit for is the same visit, so it
+ *  goes rather than counting the person twice, and the app account it named is given to
+ *  the kept visit when that one names none. */
+export async function moveVisitLinks(tx: TransactionSql, gymId: string, fromEntryId: string, toEntryId: string): Promise<number> {
+  const twins = await tx<{ day: string; slot_key: string; user_id: string | null }[]>`
+    DELETE FROM gym_attendance a
+    WHERE a.gym_id = ${gymId} AND a.entry_id = ${fromEntryId}
+      AND EXISTS (
+        SELECT 1 FROM gym_attendance k
+        WHERE k.gym_id = ${gymId} AND k.entry_id = ${toEntryId} AND k.day = a.day AND k.slot_key = a.slot_key)
+    RETURNING a.day::text AS day, a.slot_key, a.user_id`;
+  for (const twin of twins) {
+    if (twin.user_id === null) continue;
+    await tx`
+      UPDATE gym_attendance SET user_id = ${twin.user_id}
+      WHERE gym_id = ${gymId} AND entry_id = ${toEntryId} AND day = ${twin.day}::date
+        AND slot_key = ${twin.slot_key} AND user_id IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM gym_attendance o
+          WHERE o.gym_id = ${gymId} AND o.user_id = ${twin.user_id} AND o.day = ${twin.day}::date AND o.slot_key = ${twin.slot_key})`;
+  }
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_attendance SET entry_id = ${toEntryId}
+    WHERE gym_id = ${gymId} AND entry_id = ${fromEntryId}
+    RETURNING id`;
+  return rows.length;
 }
 
 /** Two records joined: a joined lead linked to the one not kept is linked to the kept

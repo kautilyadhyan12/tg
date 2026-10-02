@@ -36,3 +36,4 @@ export * from "./leads.js";
 export * from "./leadImport.js";
 export * from "./gymPage.js";
 export * from "./staffInvites.js";
+export * from "./checkin.js";

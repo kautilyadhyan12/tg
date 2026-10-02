@@ -2277,8 +2277,11 @@ export type RemoveGymClosureResponse = z.infer<typeof removeGymClosureResponseSc
  *  **It is in the contract before anything can write it, deliberately** (:26469
  *  §4): a manual tap can be sent from home and a scan cannot, the gym SEES which
  *  is which, and a single "attended" boolean would throw away the only thing
- *  that makes the number trustworthy — which no later card recovers. */
-export const gymAttendanceMethodSchema = z.enum(["manual", "qr"]);
+ *  that makes the number trustworthy — which no later card recovers.
+ *
+ *  The desk (spec Part 3 §12, ROADMAP 16a) writes `pass` (the member's QR), `key_tag`
+ *  (the gym's own barcode, read as the member number) and `staff`. */
+export const gymAttendanceMethodSchema = z.enum(["manual", "qr", "pass", "key_tag", "staff"]);
 export type GymAttendanceMethod = z.infer<typeof gymAttendanceMethodSchema>;
 
 /** WHAT THE GYM'S OPENING HOURS SAID ABOUT THIS VISIT, decided once when it was

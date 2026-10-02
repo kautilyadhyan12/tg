@@ -1038,10 +1038,11 @@ d("member list: keeping it by hand (real Postgres)", () => {
   // point at a record, each with its gym: a membership, by the record its invitation was
   // for (3b-ii, §13.2), driven in `invitations.join.routes.test.ts`; and a joined lead
   // (20c-i), driven in `leads.routes.test.ts`. The join moves both onto the kept record
-  // and deleting clears both. The day another table points at a record (visits,
-  // bookings), this fails: that job must make the join move its rows too, decide what
-  // deleting does to them, and drive both.
-  it("the tables that point at a list record are the membership, the joined lead and a Different people pair, each with its gym", async () => {
+  // and deleting clears both. A visit (16a) is moved by the join too, and deleting keeps
+  // only an app member's visits; both driven in `checkin.routes.test.ts`. The day another
+  // table points at a record (bookings), this fails: that job must make the join move its
+  // rows too, decide what deleting does to them, and drive both.
+  it("the tables that point at a list record are the membership, the joined lead, a visit and a Different people pair, each with its gym", async () => {
     const refs = await sql<{ ref: string }[]>`
       SELECT DISTINCT tc.table_name || '.' || kcu.column_name AS ref
       FROM information_schema.table_constraints tc
@@ -1052,6 +1053,8 @@ d("member list: keeping it by hand (real Postgres)", () => {
       WHERE tc.constraint_type = 'FOREIGN KEY' AND ccu.table_name = 'gym_member_list_entries'
       ORDER BY 1`;
     expect(refs.map((r) => r.ref).sort()).toEqual([
+      "gym_attendance.entry_id",
+      "gym_attendance.gym_id",
       "gym_leads.entry_id",
       "gym_leads.gym_id",
       // A pair staff marked Different people (0056): goes with either record, never moved,
