@@ -1112,6 +1112,10 @@ d("member list: keeping it by hand (real Postgres)", () => {
     expect(refs.map((r) => r.ref).sort()).toEqual([
       "gym_attendance.entry_id",
       "gym_attendance.gym_id",
+      // A visit staff removed (0068): moved by the join and kept or deleted as a visit is;
+      // driven in `checkin.fixVisit.routes.test.ts`.
+      "gym_attendance_removed.entry_id",
+      "gym_attendance_removed.gym_id",
       "gym_leads.entry_id",
       "gym_leads.gym_id",
       // A pair staff marked Different people (0056): goes with either record, never moved,

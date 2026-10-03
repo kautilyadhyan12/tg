@@ -13,6 +13,10 @@ import {
   panelPlace,
   rowTag,
   staffVisitNotCountedText,
+  addVisitBox,
+  addVisitWindow,
+  canFixVisits,
+  removeVisitBox,
   staffWorkoutNotCountedText,
   takeOffBox,
 } from './leaderboardStaffView';
@@ -212,6 +216,90 @@ describe('what did not count, said about somebody else', () => {
   it('a visit', () => {
     expect(staffVisitNotCountedText({ why: 'own_tap' })).toMatch(/^Their own "I'm here" tap/);
     expect(staffVisitNotCountedText({ why: 'app_code' })).toMatch(/^Checked in with the app's code/);
+    expect(staffVisitNotCountedText({ why: 'removed', by: 'Sam Desk', removedOn: '2026-10-07' })).toBe('Visit removed by Sam Desk (staff) on 7 Oct');
+  });
+});
+
+describe('fixing a visit: the boxes', () => {
+  const COUNTED = {
+    timezone: 'Asia/Kolkata',
+    period: 'this_week',
+    from: '2026-10-05',
+    to: '2026-10-11',
+    value: 2,
+    days: [
+      { day: '2026-10-06', visits: [{ id: 'v2', at: '2026-10-06T06:30:00.000Z', how: 'desk', by: 'Front desk', addedOn: null }] },
+      {
+        day: '2026-10-05',
+        visits: [
+          { id: 'v1', at: '2026-10-05T12:30:00.000Z', how: 'desk', by: 'Front desk', addedOn: null },
+          { id: 'v0', at: '2026-10-05T02:30:00.000Z', how: 'staff', by: 'Sam Desk', addedOn: '2026-10-07' },
+        ],
+      },
+    ],
+  };
+
+  it('only staff who check people in fix a visit', () => {
+    expect(canFixVisits(['attendance.read', 'attendance.mark'])).toBe(true);
+    expect(canFixVisits(['attendance.read', 'leaderboard.manage'])).toBe(false);
+    expect(canFixVisits(undefined)).toBe(false);
+  });
+
+  it('a visit can be added from yesterday back to 62 days', () => {
+    expect(addVisitWindow('2026-10-07')).toEqual({ min: '2026-08-06', max: '2026-10-06' });
+    expect(addVisitWindow('2026-03-01')).toEqual({ min: '2025-12-29', max: '2026-02-28' });
+  });
+
+  it('removing the only visit of a day names the person, the visit and the number it leaves', () => {
+    const day = COUNTED.days[0];
+    const box = removeVisitBox('Chen Wu', day.visits[0], day, COUNTED);
+    expect(box.title).toBe('Remove this visit of Chen Wu?');
+    expect(box.button).toBe('Remove visit');
+    expect(box.changes).toEqual([
+      'Chen Wu — the 12:00 pm visit on Tue 6 Oct is removed.',
+      'Their Gym days, this week, go from 2 to 1. Their streak is worked out again without that day.',
+    ]);
+    expect(box.keeps).toEqual([
+      'In their app, Chen Wu still sees it under "Didn\'t count", with your name and today\'s date.',
+      "Nobody else's visits change.",
+    ]);
+  });
+
+  it('removing one of two visits on a day says the number stays; an added visit is named as added', () => {
+    const day = COUNTED.days[1];
+    expect(removeVisitBox('Chen Wu', day.visits[0], day, COUNTED).changes).toEqual([
+      'Chen Wu — the 6:00 pm visit on Mon 5 Oct is removed.',
+      'They have another visit that day, so their Gym days, this week, stay at 2.',
+    ]);
+    expect(removeVisitBox('Chen Wu', day.visits[1], day, COUNTED).changes[0]).toBe('Chen Wu — the visit added for Mon 5 Oct is removed.');
+  });
+
+  it('adding: nothing to press until a day is picked, or on a day that already counts', () => {
+    expect(addVisitBox('Chen Wu', '', COUNTED)).toMatchObject({ ready: false, changes: ['Pick the day they came.'] });
+    expect(addVisitBox('Chen Wu', '2026-10-06', COUNTED)).toMatchObject({
+      ready: false,
+      changes: ['Chen Wu already has a visit that counts on Tue 6 Oct. Nothing will be added.'],
+    });
+  });
+
+  it('adding a day inside the period says the new number; a day outside it says the number here stays', () => {
+    const inside = addVisitBox('Chen Wu', '2026-10-07', COUNTED);
+    expect(inside.ready).toBe(true);
+    expect(inside.title).toBe('Add a visit for Chen Wu');
+    expect(inside.changes).toEqual([
+      'Chen Wu — a visit is added for Wed 7 Oct.',
+      'Their Gym days, this week, go from 2 to 3. Their streak is worked out again with that day.',
+    ]);
+    expect(inside.keeps).toEqual(["In their app, Chen Wu sees it with your name and today's date.", "Nobody else's visits change."]);
+    expect(inside.done).toBe('Visit added for Chen Wu on Wed 7 Oct.');
+    const outside = addVisitBox('Chen Wu', '2026-09-30', COUNTED);
+    expect(outside.changes[1]).toBe(
+      'Wed 30 Sep is outside this week, so the number here stays at 2. It counts wherever that day does. Their streak is worked out again with that day.',
+    );
+    // All time has no start: every earlier day is inside it.
+    expect(addVisitBox('Chen Wu', '2026-09-30', { ...COUNTED, period: 'all_time', from: null }).changes[1]).toMatch(
+      /^Their Gym days, all time, go from 2 to 3\./,
+    );
   });
 });
 

@@ -498,15 +498,28 @@ function AttendanceDay({ org }) {
           gymId={gymId}
           words={words}
           keepsList={viewerPrivileges(org).includes('members.confirm')}
+          timezone={timezone}
           onCheckedIn={() => {
             setCheckedIn((n) => n + 1);
             // The day list is read again when it shows today, so the person is in it.
             if (day === gymToday(timezone)) setAttempt((a) => a + 1);
           }}
+          // A visit added for the day on screen shows in its list.
+          onAdded={(added) => {
+            if (day === added) setAttempt((a) => a + 1);
+          }}
         />
       ) : null}
 
-      <CheckedInToday gymId={gymId} words={words} refreshSignal={checkedIn} />
+      <CheckedInToday
+        gymId={gymId}
+        words={words}
+        refreshSignal={checkedIn}
+        canFix={mayCheckIn}
+        onRemoved={() => {
+          if (day === gymToday(timezone)) setAttempt((a) => a + 1);
+        }}
+      />
 
       {/* ── THE DAY, AND THE WAY BETWEEN DAYS ─────────────────────────────────
           The same control as "closed on a date" on the hours screen, down to

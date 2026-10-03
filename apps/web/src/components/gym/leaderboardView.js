@@ -157,8 +157,13 @@ export function timeText(at, timezone) {
     .replace(/\s?([ap])m$/i, (_, p) => ` ${p.toLowerCase()}m`);
 }
 
-/** One counted visit, in words. */
+/** "Sam (staff)", or "staff" when the member of staff has typed no name. */
+const staffWords = (by) => (typeof by === 'string' && by.trim() !== '' ? `${by.trim()} (staff)` : 'staff');
+
+/** One counted visit, in words. A visit staff added on a later day has no time of its own:
+ *  it says who added it and when. */
 export function visitText(visit, timezone) {
+  if (typeof visit.addedOn === 'string') return `Added by ${staffWords(visit.by)} on ${shortDay(visit.addedOn)}`;
   const when = timeText(visit.at, timezone);
   if (visit.how === 'staff') return `${when} · checked in by ${visit.by ?? 'staff'}`;
   return `${when} · scanned at ${visit.by ?? 'the front desk'}`;
@@ -169,7 +174,14 @@ export function dayCountText(visits) {
   return visits === 1 ? '1 visit' : `${visits} visits, 1 day`;
 }
 
+/** A visit staff removed: who removed it and when. */
+export function removedText(item) {
+  const on = typeof item.removedOn === 'string' ? ` on ${shortDay(item.removedOn)}` : '';
+  return `Visit removed by ${staffWords(item.by)}${on}`;
+}
+
 export function notCountedText(item) {
+  if (item.why === 'removed') return removedText(item);
   return item.why === 'own_tap'
     ? 'Your own "I\'m here" tap — only front-desk and staff check-ins count'
     : 'Checked in with the app\'s code — only front-desk and staff check-ins count';

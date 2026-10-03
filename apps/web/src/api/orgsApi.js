@@ -18,6 +18,8 @@ import {
   checkinLogResponseSchema,
   checkinPassResponseSchema,
   checkinPeopleResponseSchema,
+  addVisitResponseSchema,
+  removeVisitResponseSchema,
   staffCheckinResponseSchema,
   createStaffInviteResponseSchema,
   createStaffRoleResponseSchema,
@@ -990,6 +992,15 @@ export const orgService = {
     ),
   staffCheckIn: (gymId, pick) =>
     readThrough(staffCheckinResponseSchema, 'the check-in', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/attendance/check-in`, pick)),
+  /** Fixing a visit (19a-iv): a visit for an earlier day, and a wrong visit removed. */
+  addVisit: (gymId, pick, day) =>
+    readThrough(addVisitResponseSchema, 'the visit', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/attendance/visits`, { pick, day })),
+  removeVisit: (gymId, visitId) =>
+    readThrough(
+      removeVisitResponseSchema,
+      'the visit',
+      authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/attendance/visits/${encodeURIComponent(visitId)}`),
+    ),
   getCheckinLog: (gymId, since) =>
     readThrough(
       checkinLogResponseSchema,

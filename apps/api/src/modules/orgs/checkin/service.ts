@@ -17,6 +17,9 @@ import {
   CHECKIN_SEARCH_LIMIT,
   CHECKIN_WORDS,
   STAFF_CHECKIN_WORDS,
+  VISIT_ADD_DAYS_BACK,
+  VISIT_FIX_WORDS,
+  addVisitResponseSchema,
   checkinDeviceLinkResponseSchema,
   checkinDeviceResponseSchema,
   checkinDevicesResponseSchema,
@@ -25,7 +28,10 @@ import {
   checkinPeopleResponseSchema,
   checkinScanResponseSchema,
   claimCheckinDeviceResponseSchema,
+  removeVisitResponseSchema,
   staffCheckinResponseSchema,
+  type AddVisitRequest,
+  type AddVisitResponse,
   type CheckinDevice,
   type CheckinDeviceLinkResponse,
   type CheckinDeviceResponse,
@@ -39,6 +45,7 @@ import {
   type CheckinScanResponse,
   type ClaimCheckinDeviceResponse,
   type GymClockFormat,
+  type RemoveVisitResponse,
   type StaffCheckinResponse,
 } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
@@ -667,6 +674,97 @@ export async function staffCheckIn(
     });
   }
   throw new OrgsError(404, "person_not_found", STAFF_CHECKIN_WORDS.person_not_found);
+}
+
+// ── FIXING A VISIT (19a-iv; spec Part 3 §12.5, §15.5) ──
+// The worst thing this could do to a real person: let somebody with no right to (another
+// gym's staff, a trainer without the tick, a member) add a visit nobody made or remove a
+// real one, or do either with no trace. So the tick is asked before anything is read, a
+// visit is only ever found with its gym, and both are noted with who did it.
+
+const FIX_TICK = "attendance.mark";
+
+/** Staff add a visit somebody made on an earlier day of the gym's calendar. */
+export async function addVisit(
+  deps: CheckinDeps,
+  staffId: string,
+  gymId: string,
+  request: AddVisitRequest,
+  limit: Limit,
+): Promise<AddVisitResponse | null> {
+  await requireWritablePrivilege(deps, gymId, staffId, FIX_TICK);
+  if (!(await limit())) return null;
+  const window = await repo.addWindow(deps.sql, gymId, VISIT_ADD_DAYS_BACK);
+  if (window === null) throw new OrgsError(404, "org_not_found", "We couldn't find that organisation.");
+  const { pick, day } = request;
+  if (day >= window.today || day < window.earliest) throw new OrgsError(400, "day_not_allowed", VISIT_FIX_WORDS.day_not_allowed);
+
+  /** One try; null when the person's record went while it was being written. */
+  const attempt = async (): Promise<{ name: string; added: boolean } | null> => {
+    const named = "entryId" in pick ? await namedByRecord(deps.sql, gymId, pick.entryId) : await namedByAccount(deps.sql, gymId, pick.userId);
+    const who = named.who;
+    if (who === null) throw new OrgsError(404, "person_not_found", STAFF_CHECKIN_WORDS.person_not_found);
+    const written = await deps.sql.begin(async (tx) => {
+      const visit = await repo.insertAddedVisit(tx, { gymId, who, markedBy: staffId, day });
+      if (visit !== null && visit !== "already") {
+        await insertAudit(tx, {
+          actorUserId: staffId,
+          gymId,
+          action: "attendance.visit_added",
+          targetType: "gym_attendance",
+          targetId: visit.id,
+          meta: { day },
+        });
+      }
+      return visit;
+    });
+    if (written === null) return null;
+    const added = written !== "already";
+    if (who.userId !== null) await keepStreak(deps, gymId, who.userId, day, added);
+    return { name: named.name, added };
+  };
+
+  let done: { name: string; added: boolean } | null = null;
+  try {
+    done = await attempt();
+  } catch (err) {
+    if (!lostARace(err)) throw err;
+  }
+  done ??= await attempt();
+  if (done === null) throw new OrgsError(503, "checkin_unavailable", CHECKIN_WORDS.checkin_unavailable);
+  return addVisitResponseSchema.parse({ result: done.added ? "added" : "already", person: { name: done.name }, day });
+}
+
+/** Staff remove a wrong visit of this gym. It is kept with who removed it, and a second
+ *  ask for the same visit answers as the first did. */
+export async function removeVisit(
+  deps: CheckinDeps,
+  staffId: string,
+  gymId: string,
+  visitId: string,
+  limit: Limit,
+): Promise<RemoveVisitResponse | null> {
+  await requireWritablePrivilege(deps, gymId, staffId, FIX_TICK);
+  if (!(await limit())) return null;
+  const done = await deps.sql.begin(async (tx) => {
+    const gone = await repo.removeVisit(tx, gymId, visitId, staffId);
+    if (gone === null) {
+      const day = await repo.removedVisitDay(tx, gymId, visitId);
+      return day === null ? null : { day, userId: null };
+    }
+    await insertAudit(tx, {
+      actorUserId: staffId,
+      gymId,
+      action: "attendance.visit_removed",
+      targetType: "gym_attendance",
+      targetId: visitId,
+      meta: { day: gone.day, method: gone.method },
+    });
+    return { day: gone.day, userId: gone.userId };
+  });
+  if (done === null) throw new OrgsError(404, "visit_not_found", VISIT_FIX_WORDS.visit_not_found);
+  if (done.userId !== null) await keepStreak(deps, gymId, done.userId, done.day, true);
+  return removeVisitResponseSchema.parse({ removed: true, day: done.day });
 }
 
 /** The live log: today's newest visits, or those since the screen's newest. */

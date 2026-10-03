@@ -246,3 +246,39 @@ export type CheckinLogResponse = z.infer<typeof checkinLogResponseSchema>;
 export const STAFF_CHECKIN_WORDS = {
   person_not_found: "That person isn't on your list any more.",
 } as const;
+
+// ── FIXING A VISIT (ROADMAP 19a-iv; spec Part 3 §12.5, §15.5) ──
+// Staff holding `attendance.mark` add a visit somebody made on an earlier day, or remove
+// a wrong one. Both say who did it, to the person too.
+
+/** A visit can be added this many days back: every day of last month's board. */
+export const VISIT_ADD_DAYS_BACK = 62;
+
+/** A real calendar date, YYYY-MM-DD. */
+const calendarDay = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((value) => {
+    const at = new Date(`${value}T00:00:00Z`);
+    return !Number.isNaN(at.getTime()) && at.toISOString().slice(0, 10) === value;
+  });
+
+/** `day` is a day of the gym's own calendar before its today. */
+export const addVisitRequestSchema = z.object({ pick: checkinPickSchema, day: calendarDay }).strict();
+export type AddVisitRequest = z.infer<typeof addVisitRequestSchema>;
+
+/** `already`: the person has a visit that counts on that day, so nothing was added. */
+export const addVisitResponseSchema = z
+  .object({ result: z.enum(["added", "already"]), person: checkinPersonSchema, day: calendarDay })
+  .strict();
+export type AddVisitResponse = z.infer<typeof addVisitResponseSchema>;
+
+export const visitIdParamsSchema = z.object({ gymId: z.string().uuid(), visitId: z.string().uuid() }).strict();
+
+export const removeVisitResponseSchema = z.object({ removed: z.literal(true), day: calendarDay }).strict();
+export type RemoveVisitResponse = z.infer<typeof removeVisitResponseSchema>;
+
+export const VISIT_FIX_WORDS = {
+  day_not_allowed: `A visit can be added for a day before today, up to ${String(VISIT_ADD_DAYS_BACK)} days back.`,
+  visit_not_found: "That visit isn't there any more.",
+} as const;

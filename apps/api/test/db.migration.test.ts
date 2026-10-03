@@ -1603,6 +1603,8 @@ d("0001_init on a real database", () => {
     const byName = new Map(rows.map((r) => [r.name, r.def.replace(/\s+/g, " ")]));
 
     expect([...byName.keys()].sort()).toEqual([
+      // 0068: only staff make a visit with no hour (one added on a later day).
+      "gym_attendance_added_later_check",
       "gym_attendance_hours_status_check",
       // 0063: a desk's scan names its device; a visit names an account or a record.
       "gym_attendance_how_check",

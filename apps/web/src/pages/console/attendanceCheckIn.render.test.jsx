@@ -14,6 +14,8 @@ const api = {
   getCheckinLog: vi.fn(),
   findCheckinPeople: vi.fn(),
   staffCheckIn: vi.fn(),
+  addVisit: vi.fn(),
+  removeVisit: vi.fn(),
 };
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -25,6 +27,8 @@ vi.mock('../../context/AuthContext', () => ({
 
 const Attendance = (await import('./Attendance')).default;
 const { resetConsoleOrgs } = await import('./consoleOrgs');
+const { addDays, gymToday } = await import('./hoursView');
+const { dayLabel } = await import('../../components/gym/leaderboardView');
 
 const ORG = {
   id: 'g1',
@@ -73,6 +77,8 @@ beforeEach(() => {
   api.getCheckinLog.mockReset().mockResolvedValue(logAnswer([]));
   api.findCheckinPeople.mockReset();
   api.staffCheckIn.mockReset();
+  api.addVisit.mockReset();
+  api.removeVisit.mockReset();
 });
 afterEach(() => {
   cleanup();
@@ -217,6 +223,119 @@ describe('what the search box promises', () => {
   });
 });
 
+// The worst thing the screen could do: add or remove a visit for somebody staff did not
+// pick, or without the box that names them and the day.
+describe('fixing a visit on Attendance', () => {
+  const today = gymToday('Europe/London');
+  const yesterday = addDays(today, -1);
+
+  it('an earlier day turns Check in into Add visit, behind a box naming the person and the day', async () => {
+    api.findCheckinPeople.mockResolvedValue({ data: { people: [ANIL, ANITA] } });
+    api.addVisit.mockResolvedValue({ data: { result: 'added', person: { name: 'Anita Kumar' }, day: yesterday } });
+    drawScreen();
+    const dayBox = await screen.findByLabelText('Day they came');
+    expect(dayBox.value).toBe(today);
+    expect(dayBox.max).toBe(today);
+    expect(dayBox.min).toBe(addDays(today, -62));
+    fireEvent.change(dayBox, { target: { value: yesterday } });
+    await typeSearch('Kumar');
+    await screen.findByText('Anita Kumar');
+    expect(screen.queryByRole('button', { name: 'Check in Anita Kumar' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add a visit for Anita Kumar' }));
+    const box = screen.getByRole('group', { name: 'Add a visit for Anita Kumar' });
+    expect(box.textContent).toContain(`Add a visit for Anita Kumar on ${dayLabel(yesterday)}?`);
+    expect(box.textContent).toContain('It counts as a gym day on the leaderboard and for their streak.');
+    expect(box.textContent).toContain("In their app, they see it with your name and today's date.");
+    // Nothing yet, and nobody else can be pressed while the box is open.
+    expect(api.addVisit).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Add a visit for Anil Kumar' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add visit' }));
+    const said = await screen.findByRole('status');
+    expect(said.textContent).toBe(`Anita Kumar — Visit added for ${dayLabel(yesterday)}`);
+    expect(api.addVisit).toHaveBeenCalledTimes(1);
+    expect(api.addVisit).toHaveBeenCalledWith('g1', { entryId: 'e-anita' }, yesterday);
+    expect(api.staffCheckIn).not.toHaveBeenCalled();
+  });
+
+  it('Cancel adds nothing; a day that already counts says nothing was added; a refusal is in the server\'s words', async () => {
+    api.findCheckinPeople.mockResolvedValue({ data: { people: [ANIL] } });
+    drawScreen();
+    fireEvent.change(await screen.findByLabelText('Day they came'), { target: { value: yesterday } });
+    await typeSearch('Anil');
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a visit for Anil Kumar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(api.addVisit).not.toHaveBeenCalled();
+
+    api.addVisit.mockResolvedValueOnce({ data: { result: 'already', person: { name: 'Anil Kumar' }, day: yesterday } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add a visit for Anil Kumar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add visit' }));
+    expect((await screen.findByRole('status')).textContent).toBe(
+      `Anil Kumar — Already has a visit that counts on ${dayLabel(yesterday)}. Nothing was added.`,
+    );
+
+    api.addVisit.mockRejectedValueOnce({ response: { status: 404, data: { message: "That person isn't on your list any more." } } });
+    await typeSearch('Anil');
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a visit for Anil Kumar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add visit' }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain("That person isn't on your list any more."));
+  });
+
+  it('a date box emptied goes back to today, where the button checks in', async () => {
+    api.findCheckinPeople.mockResolvedValue({ data: { people: [ANIL] } });
+    drawScreen();
+    const dayBox = await screen.findByLabelText('Day they came');
+    fireEvent.change(dayBox, { target: { value: yesterday } });
+    fireEvent.change(dayBox, { target: { value: '' } });
+    expect(dayBox.value).toBe(today);
+    await typeSearch('Anil');
+    expect(await screen.findByRole('button', { name: 'Check in Anil Kumar' })).toBeTruthy();
+  });
+
+  it('Remove on a visit today: a box names the person and the time; the press is for THAT visit, and it leaves the list', async () => {
+    api.getCheckinLog.mockResolvedValue(
+      logAnswer([lv('v2', '2026-10-03T06:05:00.000Z', 'Ravi Noapp', { method: 'staff', by: 'Iron Owner' }), lv('v1', '2026-10-03T06:02:00.000Z', 'Asha App')]),
+    );
+    api.removeVisit.mockResolvedValue({ data: { removed: true, day: '2026-10-03' } });
+    drawScreen();
+    await screen.findByText('Ravi Noapp');
+    fireEvent.click(screen.getByRole('button', { name: "Remove Ravi Noapp's 07:05 check-in" }));
+    const box = screen.getByRole('group', { name: "Remove Ravi Noapp's check-in" });
+    expect(box.textContent).toContain("Remove Ravi Noapp's 07:05 check-in?");
+    expect(box.textContent).toContain('It no longer counts as a visit today');
+    expect(api.removeVisit).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove visit' }));
+    await waitFor(() => expect(screen.queryByText('Ravi Noapp')).toBeNull());
+    expect(api.removeVisit).toHaveBeenCalledTimes(1);
+    expect(api.removeVisit).toHaveBeenCalledWith('g1', 'v2');
+    expect(screen.getByText('Asha App')).toBeTruthy();
+  });
+
+  it('Cancel removes nothing; a failed removal says so and keeps the visit; staff without the tick see no Remove', async () => {
+    api.getCheckinLog.mockResolvedValue(logAnswer([lv('v1', '2026-10-03T06:02:00.000Z', 'Asha App')]));
+    api.removeVisit.mockRejectedValue({ response: { status: 409, data: { message: 'Your gym has no plan.' } } });
+    drawScreen();
+    await screen.findByText('Asha App');
+    fireEvent.click(screen.getByRole('button', { name: "Remove Asha App's 07:02 check-in" }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(api.removeVisit).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: "Remove Asha App's 07:02 check-in" }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove visit' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Your gym has no plan.');
+    expect(screen.getByRole('group', { name: "Remove Asha App's check-in" })).toBeTruthy();
+
+    cleanup();
+    resetConsoleOrgs();
+    api.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, privileges: ['attendance.read'] }], formerOrgs: [] } });
+    drawScreen();
+    await screen.findByText('Asha App');
+    expect(screen.queryByRole('button', { name: /^Remove / })).toBeNull();
+    expect(screen.queryByLabelText('Day they came')).toBeNull();
+  });
+});
+
 describe('checked in today', () => {
   it('shows each visit with how and by whom, and asks every 5 seconds from the newest it has', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -253,7 +372,8 @@ describe('checked in today', () => {
     expect(maya.textContent).toContain('Key tag · Front desk');
     expect(maya.textContent).toContain('Active · Overdue');
     const asha = screen.getByText('Asha App').closest('li');
-    expect(asha.textContent).toBe('07:02Asha AppPass · Front desk');
+    // Nothing under her but how she came in, then the row's Remove.
+    expect(asha.textContent).toBe('07:02Asha AppPass · Front deskRemove');
   });
 
   it('keeps asking after a failure that may clear, and stops with the server\'s words after one that will not', async () => {
