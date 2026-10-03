@@ -12,8 +12,16 @@ describe('where each page sits on a phone', () => {
     expect(keys(menu.more)).toEqual(['leads', 'leaderboard', 'settings']);
   });
 
-  it('a manager: Leads and Leaderboard under More, no Settings', () => {
+  // A manager's usual permissions hold the price list (17a-i), which is a box in Settings.
+  it('a manager: Leads, Leaderboard and Settings under More', () => {
     const menu = consoleMenu('iron-house', ROLE_PRIVILEGES.manager, 'gym');
+    expect(keys(menu.tabs)).toEqual(['overview', 'members', 'attendance', 'classes']);
+    expect(keys(menu.more)).toEqual(['leads', 'leaderboard', 'settings']);
+  });
+
+  it('a manager without the price list, staff or the gym details: no Settings', () => {
+    const none = ROLE_PRIVILEGES.manager.filter((p) => p !== 'memberships.manage');
+    const menu = consoleMenu('iron-house', none, 'gym');
     expect(keys(menu.tabs)).toEqual(['overview', 'members', 'attendance', 'classes']);
     expect(keys(menu.more)).toEqual(['leads', 'leaderboard']);
   });

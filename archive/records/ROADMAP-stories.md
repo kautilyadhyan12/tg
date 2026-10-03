@@ -235,3 +235,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 **16f, as it stood when it was built (merged 2026-10-04, PR #164):**
 
 - 16f. [ ] **The desk reads a pass in poor light** (Kd, RULINGS 2026-10-03): the camera asks for a sharper picture and reads more often, the pass is drawn to survive glare and keeps the phone's screen awake, each measured with a real phone in dim and bright light; Check-in devices says a USB scanner is the reliable way for a busy desk. The desk also plays a sound for each answer (let in · let in with the gym's warning word · not let in), with a mute button. Next in Folder A after 16e; a screen job with a real-phone test.
+
+**17a, as it stood before it was split in three (2026-10-04):**
+
+- 17a. [ ] **Membership types, and a person's membership.** The gym's price list (repeating · one time · pack · day pass as a pack of 1 · trial; what each includes), a person's membership on their record with ONE pure status rule and its exhaustive test, "paid" marked by hand until Part 5, a file's word ("Gold") linked to a type once for everyone. Settings → Memberships, and the person's page. Needs 3a-v-b.

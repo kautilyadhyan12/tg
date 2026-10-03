@@ -2281,7 +2281,20 @@ the gym's country) · for `recurring`, the period (so many weeks, months or year
 `one_time` and `trial`, the length · for `pack`, the classes it holds and the days it
 lasts · what it includes (`all_classes` · so many bookings a week · `gym_only`) and
 which class types it covers (all, or a chosen set — personal training is one) ·
-archived, never deleted once anybody holds it. `memberships.manage` (owner and manager).
+archived, never deleted once anybody holds it. `memberships.manage` (owner and manager
+by default; the owner can tick it for anyone on staff, RULINGS 2026-10-04).
+
+*(17a-i's notes, 2026-10-04.)* The gym's own currency is the COUNTRY's own —
+`MEMBER_CURRENCY` in `@app/shared`: pounds in the UK, euros in the euro area, Canadian
+dollars in Canada — not `COUNTRY_CURRENCY`, which is what the gym pays US in. The server
+stamps it on a type when it is made and never changes it, nor the type's kind. Reading
+the list needs `members.read`. One live type of a name per gym, whatever its capitals;
+60 live types. A type has a description (optional), and its class limit is so many a
+WEEK OR A MONTH (`limited`, `bookings_limit`, `bookings_period`), not a week alone
+(RULINGS 2026-10-04: the gym’s own options; PushPress and TeamUp count both). The screen
+asks "How is it paid?" in the industry’s words: Recurring · One-time payment · Class pack
+· Day pass · Trial. Built in three jobs: 17a-i the price list, 17a-ii a person's membership,
+17a-iii a file's word linked to a type.
 
 ### 13.2 A person's membership
 
