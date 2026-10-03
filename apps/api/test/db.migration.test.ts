@@ -1151,6 +1151,59 @@ d("0001_init on a real database", () => {
       });
   });
 
+  /** `0064`'s backfill: an owner's and a manager's stored ticks gain "check people in";
+   *  a trainer's, and a row reading its role's defaults, are left as they were. */
+  it("0064's backfill gives owners and managers attendance.mark and nobody else", async () => {
+    const migration = await readFile(new URL("../drizzle/0064_attendance_mark.sql", import.meta.url), "utf8");
+    const matches = migration
+      .split("--> statement-breakpoint")
+      .map((s) => s.trim())
+      .filter((s) => s.includes("array_append"));
+    const backfill = matches[0];
+    if (matches.length !== 1 || backfill === undefined || !backfill.includes("UPDATE")) {
+      throw new Error(`0064 no longer contains exactly one backfill UPDATE (found ${String(matches.length)})`);
+    }
+    const before = ["members.read", "attendance.read"];
+
+    await sql
+      .begin(async (tx) => {
+        const ids: Record<string, string> = {};
+        for (const name of ["owner", "manager", "trainer", "defaults"]) {
+          const [user] = await tx<{ id: string }[]>`
+            INSERT INTO users (display_name) VALUES (${`zz-0064-${name}`}) RETURNING id`;
+          if (user === undefined) throw new Error("0064 user insert failed");
+          ids[name] = user.id;
+        }
+        const owner = ids.owner ?? "";
+        const [gym] = await tx<{ id: string }[]>`
+          INSERT INTO gyms (slug, name, owner_user_id) VALUES ('zz-0064', 'zz 0064', ${owner}) RETURNING id`;
+        const gymId = gym?.id;
+        if (gymId === undefined) throw new Error("0064 gym insert failed");
+        await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${owner}, 'owner', ${before})`;
+        await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${ids.manager ?? ""}, 'manager', ${before})`;
+        await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${ids.trainer ?? ""}, 'trainer', ${before})`;
+        await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${ids.defaults ?? ""}, 'manager', NULL)`;
+
+        await tx.unsafe(backfill);
+        await tx.unsafe(backfill);
+
+        const rows = await tx<{ display_name: string; privileges: string[] | null }[]>`
+          SELECT u.display_name, s.privileges FROM gym_staff s JOIN users u ON u.id = s.user_id
+          WHERE s.gym_id = ${gymId} ORDER BY u.display_name`;
+        expect(rows).toEqual([
+          { display_name: "zz-0064-defaults", privileges: null },
+          { display_name: "zz-0064-manager", privileges: [...before, "attendance.mark"] },
+          { display_name: "zz-0064-owner", privileges: [...before, "attendance.mark"] },
+          { display_name: "zz-0064-trainer", privileges: before },
+        ]);
+        throw new Error("ROLLBACK-0064-BACKFILL-FIXTURE");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0064-BACKFILL-FIXTURE") return;
+        throw err;
+      });
+  });
+
   /** MIGRATION `0015`'s BACKFILL, and it had NO GUARD AT ALL until T3 round 1
    *  (Low-1) — which is the highest-value item that round found.
    *

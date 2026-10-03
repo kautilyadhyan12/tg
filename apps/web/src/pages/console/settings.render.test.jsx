@@ -725,6 +725,7 @@ describe('adding somebody', () => {
     expect(ticked()).toEqual([
       "See who's in the app",
       'See who came in',
+      'Check people in',
       'Keep the member list and invite',
       'Remove members',
     ]);
@@ -744,7 +745,7 @@ describe('adding somebody', () => {
     const sent = orgService.inviteStaff.mock.calls[0][1];
     expect(sent.role).toBe('manager');
     expect([...sent.privileges].sort()).toEqual(
-      ['attendance.read', 'members.confirm', 'members.read', 'schedule.manage'].sort(),
+      ['attendance.mark', 'attendance.read', 'members.confirm', 'members.read', 'schedule.manage'].sort(),
     );
   });
 

@@ -44,6 +44,7 @@ function open(devices, { readOnly = false } = {}) {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.useRealTimers();
 });
 
 describe('the closed box says what is there', () => {
@@ -71,6 +72,9 @@ describe('the closed box says what is there', () => {
 
 describe('adding a device', () => {
   it('shows its link once, for that device, and Done takes it away for good', async () => {
+    // The day the link is made, so its end reads as a time today ("15:00"), not a date.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-02T13:00:00.000Z'));
     const added = device({ name: 'Front desk', state: 'waiting', linkExpiresAt: '2026-10-02T14:00:00.000Z' });
     orgService.addCheckinDevice.mockResolvedValue({ data: { device: added, link: LINK } });
     open([]);

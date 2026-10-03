@@ -1755,6 +1755,7 @@ export const ORG_PRIVILEGES = [
   "billing.manage",
   "attendance.read",
   "schedule.manage",
+  "attendance.mark",
 ] as const;
 export const orgPrivilegeSchema = z.enum(ORG_PRIVILEGES);
 export type OrgPrivilege = z.infer<typeof orgPrivilegeSchema>;
@@ -1901,7 +1902,13 @@ export type OrgPrivilege = z.infer<typeof orgPrivilegeSchema>;
  *  default, so it could not be owner-only — **and absent from the api's
  *  `LAST_OWNER_REQUIRED_PRIVILEGES`**: an owner ticked down from it still holds
  *  `staff.manage` and can tick it straight back, and a gym whose timetable
- *  nobody can edit is inconvenienced, not stranded. */
+ *  nobody can edit is inconvenienced, not stranded.
+ *
+ *  `attendance.mark` is "check people in" from the console's Attendance page (spec
+ *  Part 3 §12.5: owner and manager by default; the owner can give it to a trainer).
+ *  It is a separate tick from `attendance.read`, which every role holds: seeing who
+ *  came in is not the power to say somebody did. Its search shows a name, a member
+ *  number and an email, the least that tells two people of one name apart. */
 export const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>> = {
   owner: [
     "members.read",
@@ -1914,6 +1921,7 @@ export const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>>
     "billing.manage",
     "attendance.read",
     "schedule.manage",
+    "attendance.mark",
   ],
   manager: [
     "members.read",
@@ -1923,6 +1931,7 @@ export const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>>
     "members.remove",
     "attendance.read",
     "schedule.manage",
+    "attendance.mark",
   ],
   trainer: ["members.read", "codes.invite", "attendance.read"],
 };
@@ -2386,7 +2395,10 @@ export type GymAttendanceVisit = z.infer<typeof gymAttendanceVisitSchema>;
  *  the two cannot disagree. */
 export const gymAttendancePersonSchema = z
   .object({
-    userId: z.string().uuid(),
+    /** The person's app account, or null for somebody without the app who was checked in
+     *  on their record (a key tag, or staff); `entryId` is then their record (16b-ii). */
+    userId: z.string().uuid().nullable(),
+    entryId: z.string().uuid().nullable().default(null),
     displayName: z.string(),
     /** **A KNOWING DEVIATION FROM Part 3 §2.4, RULED BY KD ON 2026-09-03**
      *  (*"gym can see email also"*), recorded as one per R0.3.

@@ -18,6 +18,10 @@ const api = {
   getAttendanceDay: vi.fn(),
   getAttendanceHistory: vi.fn(),
   updateOrg: vi.fn(),
+  // The live log above the day list (16b-ii): empty, so these cases see the day list alone.
+  getCheckinLog: vi.fn(async () => ({ data: { log: { day: '2026-09-02', timezone: 'Europe/London', clockFormat: '24h', visits: [] } } })),
+  findCheckinPeople: vi.fn(),
+  staffCheckIn: vi.fn(),
 };
 // THE NETWORK IS MOCKED; THE MODULE'S PURE HELPERS ARE NOT. `isRetryable` is the
 // rule deciding whether a failed read gets a Try again, and a hand-written copy
@@ -369,15 +373,15 @@ describe('an empty day says WHICH empty', () => {
 
   // THE :8267/:8343 CLASS, which this project has shipped once. The three cases
   // look identical in the data and only one of them is a problem.
-  it('tells the owner the button is switched off, and where to turn it on', async () => {
+  it('tells the owner the app button is switched off, and that the desk and staff still check people in', async () => {
     api.getMine.mockResolvedValue({
       data: { orgs: [{ ...ORG, manualAttendanceEnabled: false }], formerOrgs: [] },
     });
     api.getAttendanceDay.mockResolvedValue(empty());
     drawScreen();
-    await waitFor(() => expect(screen.getByText(/the button is switched off/i)).toBeTruthy());
-    expect(screen.getByText(/settings/i)).toBeTruthy();
-    expect(screen.queryByText(/nobody has marked themselves in/i)).toBeNull();
+    await waitFor(() => expect(screen.getByText(/can't mark themselves in from the app/i)).toBeTruthy());
+    expect(screen.getByText(/switched off in Settings/i)).toBeTruthy();
+    expect(screen.getByText(/front desk and staff can still check them in/i)).toBeTruthy();
   });
 
 
@@ -385,7 +389,7 @@ describe('an empty day says WHICH empty', () => {
     api.getAttendanceDay.mockResolvedValue(empty());
     drawScreen();
     await waitFor(() =>
-      expect(screen.getByText(/nobody has marked themselves in on this day yet/i)).toBeTruthy(),
+      expect(screen.getByText(/nobody has checked in on this day yet/i)).toBeTruthy(),
     );
     expect(screen.queryByText(/switched off/i)).toBeNull();
   });
@@ -396,7 +400,7 @@ describe('an empty day says WHICH empty', () => {
     api.getAttendanceDay.mockRejectedValue(new Error('offline'));
     drawScreen();
     await waitFor(() => expect(screen.getByText(/couldn't load who came in/i)).toBeTruthy());
-    expect(screen.queryByText(/nobody has marked themselves in/i)).toBeNull();
+    expect(screen.queryByText(/nobody has checked in on this day/i)).toBeNull();
     // The people section is not drawn at all. Matched as the exact heading
     // rather than a loose /who came/i, which the ERROR SENTENCE itself contains
     // ("We couldn't load who came in.") — a pattern that matches the thing it is
