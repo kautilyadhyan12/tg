@@ -5098,7 +5098,8 @@ d("orgs routes (real Postgres)", () => {
       // **THE TRAINER LISTS ELSEWHERE IN THIS FILE DID NOT MOVE WITH IT, and
       // that is the assertion rather than an oversight**: §13.3 grants the
       // timetable to owner and manager only, so a trainer's three ticks are
-      // still three.
+      // still three. `attendance.mark` (16b-ii, `0064`) is owner and manager too.
+      "attendance.mark",
       "attendance.read",
       "codes.invite",
       "codes.manage",

@@ -351,7 +351,7 @@ export const gymAttendance = pgTable(
       .where(sql`${t.entryId} IS NOT NULL`),
     index("gym_attendance_gym_day_idx").on(t.gymId, t.day, t.markedAt),
     // `gym_attendance_counted_idx` — (gym_id, day) INCLUDE (user_id, entry_id) WHERE method is
-    // a desk scan or a staff check-in — is in `0064_leaderboard_show_me.sql`: the leaderboard
+    // a desk scan or a staff check-in — is in `0065_leaderboard_show_me.sql`: the leaderboard
     // reads from it alone, and Drizzle's builder cannot express INCLUDE.
   ],
 );
@@ -755,10 +755,11 @@ export const gymStaff = pgTable(
      *  migration `0035`), because a mirror that is already wrong is where the
      *  next wrong one hides. **The order is `ORG_PRIVILEGES`' order**: this
      *  array, that array and `0035`'s CHECK are one vocabulary written three
-     *  times, and they move together or not at all. */
+     *  times, and they move together or not at all. `attendance.mark` is the
+     *  eleventh (`0064`). */
     check(
       "gym_staff_privileges_check",
-      sql`${t.privileges} IS NULL OR ${t.privileges} <@ ARRAY['members.read','codes.invite','codes.manage','members.confirm','members.remove','staff.manage','org.manage','billing.manage','attendance.read','schedule.manage']::text[]`,
+      sql`${t.privileges} IS NULL OR ${t.privileges} <@ ARRAY['members.read','codes.invite','codes.manage','members.confirm','members.remove','staff.manage','org.manage','billing.manage','attendance.read','schedule.manage','attendance.mark']::text[]`,
     ),
   ],
 );

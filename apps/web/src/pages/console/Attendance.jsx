@@ -15,6 +15,9 @@ import {
   repeatVisitLabel,
   searchCoversEverybody,
 } from './attendanceView';
+import { viewerPrivileges } from './consoleView';
+import { canCheckPeopleIn, personKey } from './checkinLogView';
+import { CheckedInToday, CheckSomeoneIn } from './AttendanceCheckIn';
 
 // WHO CAME IN — the console's Attendance section.
 //
@@ -105,7 +108,7 @@ function PersonRow({ person, timezone, clockFormat, onPick, picked }) {
             // 12-hour clock — and a duplicate sibling key silently drops a fiber
             // (:20867, the guard in `test-setup.js`).
             <span
-              key={`${person.userId}-${i}-${chip.markedAt}`}
+              key={`${personKey(person)}-${i}-${chip.markedAt}`}
               className="text-2xs px-1.5 py-0.5 rounded-md whitespace-nowrap"
               style={
                 isExceptionStatus(chip.hoursStatus)
@@ -145,7 +148,7 @@ function PersonHistory({ gymId, person, onClose }) {
   useEffect(() => {
     let cancelled = false;
     void orgService
-      .getAttendanceHistory(gymId, { userId: person.userId })
+      .getAttendanceHistory(gymId, person.userId === null ? { entryId: person.entryId } : { userId: person.userId })
       .then((res) => {
         if (cancelled) return;
         const answer = res.data?.attendance;
@@ -169,7 +172,7 @@ function PersonHistory({ gymId, person, onClose }) {
     return () => {
       cancelled = true;
     };
-  }, [gymId, person.userId]);
+  }, [gymId, person.userId, person.entryId]);
 
   // One row per DAY with the times inside it — the same rule as everywhere else
   // attendance is drawn, so a member who came twice reads the same on the
@@ -320,6 +323,8 @@ function AttendanceDay({ org }) {
   // one zone looking at a gym in another must open the gym's own day; `gymToday`
   // is the same reader the hours screens use.
   const [day, setDay] = useState(() => gymToday(timezone));
+  const mayCheckIn = canCheckPeopleIn(viewerPrivileges(org));
+  const [checkedIn, setCheckedIn] = useState(0);
   const [search, setSearch] = useState('');
   const [picked, setPicked] = useState(null);
 
@@ -483,9 +488,25 @@ function AttendanceDay({ org }) {
           Attendance
         </h1>
         <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          Who came in, by day. Times are your {words.it}&apos;s own.
+          {mayCheckIn ? 'Check people in, and see who came in, by day.' : 'Who came in, by day.'} Times are your{' '}
+          {words.it}&apos;s own.
         </p>
       </div>
+
+      {mayCheckIn ? (
+        <CheckSomeoneIn
+          gymId={gymId}
+          words={words}
+          keepsList={viewerPrivileges(org).includes('members.confirm')}
+          onCheckedIn={() => {
+            setCheckedIn((n) => n + 1);
+            // The day list is read again when it shows today, so the person is in it.
+            if (day === gymToday(timezone)) setAttempt((a) => a + 1);
+          }}
+        />
+      ) : null}
+
+      <CheckedInToday gymId={gymId} words={words} refreshSignal={checkedIn} />
 
       {/* ── THE DAY, AND THE WAY BETWEEN DAYS ─────────────────────────────────
           The same control as "closed on a date" on the hours screen, down to
@@ -672,14 +693,14 @@ function AttendanceDay({ org }) {
               <>
                 <ul className="mt-1 flex flex-col">
                   {shown.map((person) => (
-                    <li key={person.userId}>
+                    <li key={personKey(person)}>
                       <PersonRow
                         person={person}
                         timezone={zone}
                         clockFormat={clockFormat}
-                        picked={picked?.userId === person.userId}
+                        picked={picked !== null && personKey(picked) === personKey(person)}
                         onPick={(p) =>
-                          setPicked((held) => (held?.userId === p.userId ? null : p))
+                          setPicked((held) => (held !== null && personKey(held) === personKey(p) ? null : p))
                         }
                       />
                       {/* THE HISTORY OPENS UNDER THE PERSON IT IS ABOUT, and it
@@ -687,9 +708,9 @@ function AttendanceDay({ org }) {
                           another rebuilds it rather than showing the previous
                           member's visits under the new name while the read is in
                           flight — the sibling of the screen-level key above. */}
-                      {picked?.userId === person.userId ? (
+                      {picked !== null && personKey(picked) === personKey(person) ? (
                         <PersonHistory
-                          key={`history-${person.userId}`}
+                          key={`history-${personKey(person)}`}
                           gymId={gymId}
                           person={person}
                           onClose={() => setPicked(null)}
@@ -743,10 +764,11 @@ function EmptyDay({ reason, words }) {
     return (
       <div className="mt-2">
         <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-          Nobody can mark themselves in — the button is switched off for your {words.it}.
+          Nobody has checked in on this day yet.
         </p>
         <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
-          Turn it back on in Settings, under &ldquo;Marking attendance&rdquo;.
+          {words.peopleCap} can&apos;t mark themselves in from the app — that&apos;s switched off in Settings, under
+          &ldquo;Marking attendance&rdquo;. Your front desk and staff can still check them in.
         </p>
       </div>
     );
@@ -760,7 +782,7 @@ function EmptyDay({ reason, words }) {
   }
   return (
     <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.55)' }}>
-      Nobody has marked themselves in on this day yet.
+      Nobody has checked in on this day yet.
     </p>
   );
 }

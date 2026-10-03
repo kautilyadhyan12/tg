@@ -190,7 +190,14 @@ function privilegeCopy(orgType) {
       // came in is a smaller thing than letting somebody into the gym.
       value: 'attendance.read',
       label: 'See who came in',
-      hint: 'The list of people who marked themselves in each day.',
+      hint: 'Who checked in each day, and the live list on Attendance.',
+    },
+    {
+      // Spec Part 3 §12.5 (16b-ii): owner and manager by default; the owner can tick it
+      // for a trainer who works the front desk.
+      value: 'attendance.mark',
+      label: 'Check people in',
+      hint: 'Find a person on Attendance and check them in by hand.',
     },
     {
       value: 'members.confirm',

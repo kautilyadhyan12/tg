@@ -1,6 +1,7 @@
 // WHOSE VISIT IT IS, AND THE STREAK (spec Part 3 §15.5). One rule each, used by the
 // leaderboard and by the console's "On a roll", so the two never show different numbers.
-// 16b-ii counts Attendance and Overview by record through `visitsWithOwner` too.
+// Attendance and Overview count a person as their account OR their record (16b-ii), which
+// is a head count for staff, not this rule.
 import type { Sql, TransactionSql } from "postgres";
 
 type SqlOrTx = Sql | TransactionSql;

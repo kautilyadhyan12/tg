@@ -15,6 +15,9 @@ import {
   checkinDeviceLinkResponseSchema,
   checkinDeviceResponseSchema,
   checkinDevicesResponseSchema,
+  checkinLogResponseSchema,
+  checkinPeopleResponseSchema,
+  staffCheckinResponseSchema,
   createStaffInviteResponseSchema,
   createStaffRoleResponseSchema,
   deleteStaffRoleResponseSchema,
@@ -992,6 +995,24 @@ export const orgService = {
       checkinDeviceResponseSchema,
       'the device',
       authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/checkin-devices/${encodeURIComponent(deviceId)}/off`),
+    ),
+
+  // STAFF CHECK-IN AND THE LIVE LOG (Attendance; ROADMAP 16b-ii). The search and the
+  // check-in need `attendance.mark`; the log needs `attendance.read` and has its own
+  // allowance, since the page asks for it every 5 seconds.
+  findCheckinPeople: (gymId, query) =>
+    readThrough(
+      checkinPeopleResponseSchema,
+      'the people',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/attendance/people`, { params: { query } }),
+    ),
+  staffCheckIn: (gymId, pick) =>
+    readThrough(staffCheckinResponseSchema, 'the check-in', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/attendance/check-in`, pick)),
+  getCheckinLog: (gymId, since) =>
+    readThrough(
+      checkinLogResponseSchema,
+      'the check-ins',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/attendance/log`, { params: since === null ? {} : { since } }),
     ),
 
   /** GET …/leads/email-settings — Settings' "Send them for me" (20c-v): the switch, where

@@ -865,7 +865,7 @@ d("check-in at the front desk (real Postgres)", () => {
     ]);
   });
 
-  it("the console's day read counts the visits it can name: a visit of somebody without the app waits for the live log", async () => {
+  it("the console's day read and the nightly numbers count a desk's visit of somebody without the app (16b-ii)", async () => {
     const quietOwner = await makeUser("quiet", "Quiet Owner");
     const quiet = await makeGym(quietOwner, "Quiet Gym");
     const quietDesk = await makeDesk(quiet, quietOwner);
@@ -875,11 +875,11 @@ d("check-in at the front desk (real Postgres)", () => {
     const day = JSON.parse((await get(`/v1/orgs/${quiet}/attendance`, quietOwner.cookies)).body) as {
       attendance: { totals: { visits: number; people: number }; people: unknown[] };
     };
-    expect(day.attendance.totals).toEqual({ visits: 0, people: 0 });
-    expect(day.attendance.people).toEqual([]);
+    expect(day.attendance.totals).toEqual({ visits: 1, people: 1 });
+    expect(day.attendance.people).toMatchObject([{ userId: null, displayName: "No App" }]);
 
-    // The nightly numbers agree: yesterday's desk visit of somebody without the app is
-    // neither a visit nor a visitor there yet.
+    // The nightly numbers agree: yesterday's desk visit of somebody without the app is a
+    // visit and a visitor there too.
     await sql`
       INSERT INTO gym_attendance (gym_id, entry_id, device_id, day, method, hours_status, slot_key)
       SELECT ${quiet}, id, ${quietDesk.deviceId}, (now() AT TIME ZONE 'Asia/Kolkata')::date - 1, 'key_tag', 'hours_unset', 'hours_unset'
@@ -889,6 +889,6 @@ d("check-in at the front desk (real Postgres)", () => {
     const stats = await sql<{ visits: number; visitors: number }[]>`
       SELECT visits, visitors FROM org_daily_stats
       WHERE gym_id = ${quiet} AND day = (now() AT TIME ZONE 'Asia/Kolkata')::date - 1`;
-    expect(stats).toEqual([{ visits: 0, visitors: 0 }]);
+    expect(stats).toEqual([{ visits: 1, visitors: 1 }]);
   });
 });
