@@ -4,8 +4,13 @@
 
 export const BOARD_TABS = [
   { id: 'gym_days', label: 'Gym days' },
+  { id: 'workout_days', label: 'Workout days' },
   { id: 'streak', label: 'Streak' },
 ];
+
+// What each board counts one of.
+const UNIT = { gym_days: 'gym day', workout_days: 'workout day', streak: 'week' };
+const plural = (n, unit) => `${n} ${unit}${n === 1 ? '' : 's'}`;
 
 export const PERIODS = [
   { id: 'this_week', label: 'This week' },
@@ -42,7 +47,7 @@ export function weekdayInitial(day) {
 export function datesLine(board) {
   const whose = `${board.gymName}'s time`;
   if (board.board === 'streak') return `Weeks in a row, up to this week · ${whose}`;
-  if (board.from === null) return `Every gym day up to ${dayLabel(board.to)} · ${whose}`;
+  if (board.from === null) return `Every ${UNIT[board.board]} up to ${dayLabel(board.to)} · ${whose}`;
   return `${dayLabel(board.from)} – ${dayLabel(board.to)} · ${whose}`;
 }
 
@@ -54,6 +59,14 @@ export function whatCounts(boardId, gymName) {
       'Weeks in a row, Monday to Sunday, with at least one gym day.',
       'Last week keeps your streak going until this Sunday ends.',
       `A week when ${gymName} checked nobody in doesn't count and doesn't break it.`,
+      common,
+    ];
+  }
+  if (boardId === 'workout_days') {
+    return [
+      `One workout day for each day you finished a workout in the app since you joined ${gymName}, at the gym or at home.`,
+      'Two workouts on one day are one workout day. A workout counts however its reps were counted, by the camera or by you.',
+      'It needs at least one set, and to be saved within 7 days.',
       common,
     ];
   }
@@ -70,7 +83,7 @@ export function statusText(board) {
     case 'too_few':
       return board.board === 'streak'
         ? 'The board shows once 3 people have a streak.'
-        : 'The board shows once 3 people have a gym day in this period.';
+        : `The board shows once 3 people have a ${UNIT[board.board]} in this period.`;
     case 'no_checkins':
       return `${board.gymName} hasn't checked anyone in at the front desk in the last 30 days, so there's no board for now.`;
     case 'paused':
@@ -104,17 +117,15 @@ export function ordinal(n) {
   return `${n}${{ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] ?? 'th'}`;
 }
 
-/** "5 gym days", "1 week" */
+/** "5 gym days", "2 workout days", "1 week" */
 export function valueText(value, boardId) {
-  const unit = boardId === 'streak' ? 'week' : 'gym day';
-  return `${value} ${unit}${value === 1 ? '' : 's'}`;
+  return plural(value, UNIT[boardId]);
 }
 
 /** "2 more gym days to reach 3rd", or null. */
 export function nextPlaceText(me, boardId) {
   if (me.toNextPlace === null || me.nextPlace === null) return null;
-  const more = boardId === 'streak' ? `${me.toNextPlace} more week${me.toNextPlace === 1 ? '' : 's'}` : `${me.toNextPlace} more gym day${me.toNextPlace === 1 ? '' : 's'}`;
-  return `${more} to reach ${ordinal(me.nextPlace)}`;
+  return `${plural(me.toNextPlace, `more ${UNIT[boardId]}`)} to reach ${ordinal(me.nextPlace)}`;
 }
 
 /** "Updated 10:42 am", in the gym's zone. */
@@ -150,6 +161,31 @@ export function notCountedText(item) {
     : 'Checked in with the app\'s code — only front-desk and staff check-ins count';
 }
 
+/** One counted workout, in words. */
+export function workoutText(workout, timezone) {
+  const when = timeText(workout.at, timezone);
+  const by = { camera: 'counted by the camera', you: 'counted by you', both: 'counted by the camera and by you' }[workout.countedBy];
+  return by === undefined ? when : `${when} · ${by}`;
+}
+
+/** "2 workouts, 1 day" */
+export function workoutCountText(workouts) {
+  return workouts === 1 ? '1 workout' : `${workouts} workouts, 1 day`;
+}
+
+export function workoutNotCountedText(item, gymName) {
+  switch (item.why) {
+    case 'saved_late':
+      return `Saved ${item.daysLate} days after the workout — a workout counts when it is saved within 7 days`;
+    case 'before_joining':
+      return `Before you joined ${gymName}`;
+    case 'no_sets':
+      return 'No sets saved';
+    default:
+      return 'Its time is still ahead — it counts once that time has passed';
+  }
+}
+
 /** One week of the Streak's "what counted". */
 export function weekText(week, gymName) {
   const label = `Week of ${shortDay(week.weekStart)}`;
@@ -169,8 +205,8 @@ export function weekText(week, gymName) {
 export function circleLabel(circle, day, boardId) {
   const when = boardId === 'streak' ? `Week of ${shortDay(day)}` : dayLabel(day);
   const what = {
-    yes: boardId === 'streak' ? 'counted' : 'gym day',
-    no: boardId === 'streak' ? 'no gym day' : 'no gym day',
+    yes: boardId === 'streak' ? 'counted' : UNIT[boardId],
+    no: boardId === 'workout_days' ? 'no workout day' : 'no gym day',
     skipped: 'nobody checked in at the gym',
     open: 'this week, still open',
   }[circle];

@@ -1,5 +1,5 @@
-// What the leaderboard costs at full size (ROADMAP 19a-i; CLAUDE.md §4 "Cost at full size").
-// One gym of 2,100 live app members (the biggest; --members= for another size) with three years of desk visits; every board and period
+// What the leaderboard costs at full size (ROADMAP 19a; CLAUDE.md §4 "Cost at full size").
+// One gym of 2,100 live app members (the biggest; --members= for another size) with three years of desk visits and app workouts; every board and period
 // read as a member reads it, and the console's "On a roll". Half the members have a record on
 // the gym's list and a tenth of their visits name only the record, so the by-record path is
 // timed too. Two numbers each, over several runs:
@@ -12,7 +12,8 @@
 //
 // --keep leaves the gym in place (for EXPLAIN); the next run removes it first.
 //
-// LOCAL DATABASES ONLY: it writes a gym, 2,100 accounts and ~650,000 visits, and removes them.
+// LOCAL DATABASES ONLY: it writes a gym, 2,100 accounts, ~650,000 visits and as many
+// workouts, and removes them.
 import { createHash, randomUUID } from "node:crypto";
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import postgres from "postgres";
@@ -42,6 +43,7 @@ async function cleanup(): Promise<void> {
   await sql`DELETE FROM gym_member_list_entries WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_staff WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gyms WHERE slug LIKE ${PREFIX + "%"}`;
+  await sql`DELETE FROM workouts WHERE user_id IN (SELECT id FROM users WHERE email LIKE ${PREFIX + "%@example.com"})`;
   await sql`DELETE FROM users WHERE email LIKE ${PREFIX + "%@example.com"}`;
   await sql`DELETE FROM plans WHERE code = ${PLAN}`;
 }
@@ -76,7 +78,9 @@ async function seed(): Promise<{ gymId: string; viewers: string[] }> {
   }));
   for (let i = 0; i < records.length; i += 1000) await sql`INSERT INTO gym_member_list_entries ${sql(records.slice(i, i + 1000))}`;
   const recordOf = new Map(records.map((r) => [r.email, r.id]));
-  const members = users.map((u) => ({ gym_id: gymId, user_id: u.id, entry_id: recordOf.get(u.email) ?? null }));
+  // Everybody joined before the three years began, so every workout is inside a membership.
+  const joinedAt = new Date(Date.now() - (365 * YEARS + 30) * 86_400_000);
+  const members = users.map((u) => ({ gym_id: gymId, user_id: u.id, entry_id: recordOf.get(u.email) ?? null, joined_at: joinedAt }));
   for (let i = 0; i < members.length; i += 1000) await sql`INSERT INTO gym_members ${sql(members.slice(i, i + 1000))}`;
   // Three years of visits: each member comes on about two days in seven, all in SQL.
   await sql`
@@ -88,9 +92,27 @@ async function seed(): Promise<{ gymId: string; viewers: string[] }> {
     CROSS JOIN generate_series((now() AT TIME ZONE 'Asia/Kolkata')::date - ${365 * YEARS}::int,
                                (now() AT TIME ZONE 'Asia/Kolkata')::date, interval '1 day') d
     WHERE m.gym_id = ${gymId} AND random() < 0.3`;
+  // Three years of app workouts at the same rate, each saved forty minutes after it began.
+  await sql`
+    INSERT INTO workouts (id, user_id, started_at, platform, engine_version, sets_count, created_at)
+    SELECT gen_random_uuid(), m.user_id, t.at, 'android', 'cost', 3, t.at + interval '40 minutes'
+    FROM gym_members m
+    CROSS JOIN generate_series((now() AT TIME ZONE 'Asia/Kolkata')::date - ${365 * YEARS}::int,
+                               (now() AT TIME ZONE 'Asia/Kolkata')::date - 1, interval '1 day') d
+    CROSS JOIN LATERAL (SELECT (d::date + time '07:00') AT TIME ZONE 'Asia/Kolkata' AS at) t
+    WHERE m.gym_id = ${gymId} AND random() < 0.3`;
+  const viewers = users.slice(1, 3).map((u) => u.id);
+  // The viewers' own sets, three a workout: "what counted" reads who counted each.
+  await sql`
+    INSERT INTO workout_sets (workout_id, user_id, exercise_id, started_at, set_index, mode, reps, duration_ms)
+    SELECT w.id, w.user_id, (SELECT id FROM exercises ORDER BY slug LIMIT 1), w.started_at, i, 'log_only', 10, 60000
+    FROM workouts w CROSS JOIN generate_series(0, 2) i
+    WHERE w.user_id = ANY(${viewers})`;
   // As autovacuum leaves a table in production: the boards' index is read alone.
   await sql`VACUUM ANALYZE gym_attendance`;
-  return { gymId, viewers: users.slice(1, 3).map((u) => u.id) };
+  await sql`VACUUM ANALYZE workouts`;
+  await sql`VACUUM ANALYZE workout_sets`;
+  return { gymId, viewers };
 }
 
 const median = (xs: number[]): number => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] ?? 0;
@@ -110,8 +132,10 @@ async function time(fn: () => Promise<unknown>): Promise<{ wall: number; js: num
 await cleanup();
 const { gymId, viewers } = await seed();
 const visits = await sql<{ n: string }[]>`SELECT count(*) AS n FROM gym_attendance WHERE gym_id = ${gymId}`;
+const workouts = await sql<{ n: string }[]>`
+  SELECT count(*) AS n FROM workouts WHERE user_id IN (SELECT user_id FROM gym_members WHERE gym_id = ${gymId})`;
 const mhz = await import("node:os").then((os) => os.cpus()[0]?.speed ?? 0);
-console.log(`one gym: ${String(MEMBERS)} members, ${visits[0]?.n ?? "?"} visits over ${String(YEARS)} years; cpu ${String(mhz)} MHz; ${String(RUNS)} runs each`);
+console.log(`one gym: ${String(MEMBERS)} members, ${visits[0]?.n ?? "?"} visits and ${workouts[0]?.n ?? "?"} workouts over ${String(YEARS)} years; cpu ${String(mhz)} MHz; ${String(RUNS)} runs each`);
 
 const deps = { sql, now: () => new Date() };
 const delay = monitorEventLoopDelay({ resolution: 1 });
@@ -121,8 +145,13 @@ for (const period of LEADERBOARD_PERIODS) {
   const q: LeaderboardQuery = { board: "gym_days", period };
   queries.push([`board gym_days ${period}`, () => getLeaderboard(deps, viewers[0] ?? "", gymId, q)]);
 }
+for (const period of LEADERBOARD_PERIODS) {
+  const q: LeaderboardQuery = { board: "workout_days", period };
+  queries.push([`board workout_days ${period}`, () => getLeaderboard(deps, viewers[0] ?? "", gymId, q)]);
+}
 queries.push(["board streak", () => getLeaderboard(deps, viewers[0] ?? "", gymId, { board: "streak", period: "this_week" })]);
 queries.push(["what counted, all time", () => getMyCounted(deps, viewers[0] ?? "", gymId, { board: "gym_days", period: "all_time" })]);
+queries.push(["what counted, workouts all time", () => getMyCounted(deps, viewers[0] ?? "", gymId, { board: "workout_days", period: "all_time" })]);
 queries.push(["what counted, streak", () => getMyCounted(deps, viewers[0] ?? "", gymId, { board: "streak", period: "this_week" })]);
 queries.push(["a profile", () => getProfile(deps, viewers[0] ?? "", gymId, viewers[1] ?? "", "this_week")]);
 queries.push(["On a roll (console)", () => getGymRegulars(sql, { gymId })]);
@@ -136,7 +165,7 @@ for (const [name, fn] of queries) {
     walls.push(t.wall);
     jss.push(t.js);
   }
-  console.log(`${name.padEnd(28)} total median ${fmt(median(walls))} (worst ${fmt(Math.max(...walls))}) · server thread busy median ${fmt(median(jss))} (worst ${fmt(Math.max(...jss))})`);
+  console.log(`${name.padEnd(31)} total median ${fmt(median(walls))} (worst ${fmt(Math.max(...walls))}) · server thread busy median ${fmt(median(jss))} (worst ${fmt(Math.max(...jss))})`);
 }
 delay.disable();
 console.log(`longest single stall of the thread during all reads: ${fmt(delay.max / 1e6)}`);

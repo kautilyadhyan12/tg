@@ -15,17 +15,21 @@ import {
   notCountedText,
   ordinal,
   statusText,
+  timeText,
   updatedText,
   valueText,
   visitText,
   weekText,
   weekdayInitial,
   whatCounts,
+  workoutCountText,
+  workoutNotCountedText,
+  workoutText,
 } from './leaderboardView';
 
-// THE GYM'S LEADERBOARD (spec Part 3 §15.5; ROADMAP 19a-i). Two boards, each ranking one
-// fact the desk or staff recorded. Worked out fresh by the server; this screen asks again
-// every minute while it is open and says when.
+// THE GYM'S LEADERBOARD (spec Part 3 §15.5; ROADMAP 19a). Three boards, each ranking one
+// fact the desk, staff or the app recorded. Worked out fresh by the server; this screen
+// asks again every minute while it is open and says when.
 
 const ORANGE = '#FF8A1F';
 const MUTED = 'rgba(255,255,255,0.45)';
@@ -151,6 +155,37 @@ function CountedSheet({ gymId, boardId, period, onClose }) {
                 </div>
               )}
             </>
+          ) : boardId === 'workout_days' ? (
+            <>
+              {data.workoutDays.length === 0 ? (
+                <p className="text-sm" style={{ color: MUTED }}>No workout days in this period yet.</p>
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {data.workoutDays.map((d) => (
+                    <li key={d.day} className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                      <p className="text-sm text-white">
+                        {dayLabel(d.day)} <span style={{ color: MUTED }}>· {workoutCountText(d.workouts.length)}</span>
+                      </p>
+                      {d.workouts.map((w) => (
+                        <p key={w.at} className="text-xs mt-1" style={{ color: MUTED }}>{workoutText(w, data.timezone)}</p>
+                      ))}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {data.workoutsNotCounted.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide mt-1 mb-1" style={{ color: MUTED }}>Didn&apos;t count</p>
+                  <ul className="flex flex-col gap-1">
+                    {data.workoutsNotCounted.map((n) => (
+                      <li key={n.at + n.why} className="text-xs" style={{ color: MUTED }}>
+                        {dayLabel(n.day)} · {timeText(n.at, data.timezone)} · {workoutNotCountedText(n, data.gymName)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
           ) : (
             <ul className="flex flex-col gap-1.5">
               {data.weeks.map((w) => {
@@ -202,7 +237,7 @@ function ProfileSheet({ gymId, row, period, onClose }) {
           {state.data.boards.map((b) => (
             <li key={b.board} className="flex justify-between text-sm rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)' }}>
               <span className="text-white">
-                {b.board === 'streak' ? 'Streak' : `Gym days, ${periodLabel}`}
+                {b.board === 'streak' ? 'Streak' : `${BOARD_TABS.find((t) => t.id === b.board)?.label ?? ''}, ${periodLabel}`}
               </span>
               <span style={{ color: MUTED }}>
                 {b.place === null ? '—' : ordinal(b.place)} · {valueText(b.value, b.board)}
@@ -316,7 +351,7 @@ export default function Leaderboard({ gym }) {
             </button>
           ))}
         </div>
-        {boardId === 'gym_days' && (
+        {boardId !== 'streak' && (
           <select
             aria-label="Period"
             value={period}
