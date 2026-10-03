@@ -295,7 +295,12 @@ d("workout days: which workouts count (real Postgres)", () => {
         const lastWeek = await read(g.id, who, "last_week", now);
         expect(lastWeek.board.circleDays).toEqual(["2026-09-28", "2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04"]);
         expect(lastWeek.board.me.circles).toEqual(["no", "no", "yes", "yes", "no", "no", "yes"]);
-        expect((await read(g.id, who, "this_month", now)).board.me.circles).toBeNull();
+        // A month and all time carry this week's marks.
+        for (const period of ["this_month", "last_month", "all_time"] as const) {
+          const b = (await read(g.id, who, period, now)).board;
+          expect(b.circleDays).toEqual(["2026-10-05", "2026-10-06", "2026-10-07", "2026-10-08", "2026-10-09", "2026-10-10", "2026-10-11"]);
+          expect(b.me.circles).toEqual(["yes", "no", "no", "no", "no", "no", "no"]);
+        }
       }
     },
     T,

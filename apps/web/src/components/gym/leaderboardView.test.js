@@ -134,3 +134,28 @@ describe('the leaderboard in words', () => {
     expect(pickedGym([], 'b')).toBeNull();
   });
 });
+
+describe('boards the gym switched off (19a-iii)', () => {
+  it('the tabs offered are the boards still on, in their usual order', async () => {
+    const { boardTabs } = await import('./leaderboardView');
+    expect(boardTabs([]).map((t) => t.id)).toEqual(['gym_days', 'workout_days', 'streak']);
+    expect(boardTabs(['streak', 'gym_days']).map((t) => t.id)).toEqual(['workout_days']);
+    expect(boardTabs(['gym_days', 'workout_days', 'streak'])).toEqual([]);
+    expect(boardTabs(undefined).length).toBe(3);
+  });
+
+  it('says one board is off, or the whole leaderboard', async () => {
+    const { statusText } = await import('./leaderboardView');
+    const board = { status: 'switched_off', board: 'gym_days', gymName: 'Iron House' };
+    expect(statusText({ ...board, boardsOff: ['gym_days'] })).toBe('Iron House has switched this board off.');
+    expect(statusText({ ...board, boardsOff: ['gym_days', 'workout_days', 'streak'] })).toBe('Iron House has switched its leaderboard off.');
+  });
+  it('a gym that checks nobody in points at Workout days only while that tab is drawn', async () => {
+    const { statusText } = await import('./leaderboardView');
+    const board = { status: 'no_checkins', board: 'gym_days', gymName: 'Iron House' };
+    expect(statusText({ ...board, boardsOff: [] })).toMatch(/see that tab\.$/);
+    const quiet = statusText({ ...board, boardsOff: ['workout_days'] });
+    expect(quiet).toBe("Iron House hasn't checked anyone in at the front desk in the last 30 days, so Gym days and Streak aren't showing.");
+    expect(quiet).not.toMatch(/Workout days|that tab/);
+  });
+});

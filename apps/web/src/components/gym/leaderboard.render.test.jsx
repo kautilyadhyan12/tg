@@ -286,3 +286,38 @@ describe('the members’ board', () => {
     expect(await screen.findByText(/Weeks in a row, up to this week/)).toBeTruthy();
   });
 });
+
+describe('boards the gym switched off (19a-iii)', () => {
+  it('a switched-off board has no tab, and the first board still on is the one shown', async () => {
+    svc.board.mockImplementation((_gym, boardId) =>
+      Promise.resolve(
+        boardId === 'gym_days'
+          ? shown({ status: 'switched_off', boardsOff: ['gym_days'], rows: [], ranked: 0 })
+          : shown({ board: 'workout_days', boardsOff: ['gym_days'] }),
+      ),
+    );
+    render(<Leaderboard gym={GYM} />);
+    expect(await screen.findByText('Chen W.')).toBeTruthy();
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Workout days', 'Streak']);
+    expect(screen.getByRole('tab', { name: 'Workout days' }).getAttribute('aria-selected')).toBe('true');
+    expect(svc.board).toHaveBeenLastCalledWith('g1', 'workout_days', 'this_week');
+  });
+
+  it('every board switched off: one sentence, no tab, no row and no row of your own', async () => {
+    svc.board.mockResolvedValue(
+      shown({
+        status: 'switched_off',
+        boardsOff: ['gym_days', 'workout_days', 'streak'],
+        rows: [],
+        ranked: 0,
+        me: { value: 3, place: null, hidden: null, toNextPlace: null, nextPlace: null, circles: circles(3) },
+      }),
+    );
+    render(<Leaderboard gym={GYM} />);
+    expect(await screen.findByText('Iron House has switched its leaderboard off.')).toBeTruthy();
+    expect(screen.queryAllByRole('tab')).toEqual([]);
+    expect(screen.queryByLabelText('Period')).toBeNull();
+    expect(screen.queryByText(/What counted/)).toBeNull();
+    expect(svc.board).toHaveBeenCalledTimes(1);
+  });
+});

@@ -3,6 +3,7 @@ import { canManageStaff } from './staffView';
 import { canManageOrg } from './gymDetailsView';
 import { canReadAttendance } from './attendanceView';
 import { canManageSchedule } from './classesView';
+import { canSeeLeaderboard } from './leaderboardStaffView';
 import { canManageMemberships } from './membershipTypesView';
 
 /** Settings holds sections gated on three permissions (Staff: `staff.manage`; the gym's
@@ -32,6 +33,13 @@ export function consoleMenu(orgSlug, privileges, orgType) {
       phone: 'tab',
     },
     canManageSchedule(privileges) && { key: 'classes', to: `${base}/classes`, end: false, label: 'Classes', phone: 'tab' },
+    canSeeLeaderboard(privileges) && {
+      key: 'leaderboard',
+      to: `${base}/leaderboard`,
+      end: false,
+      label: 'Leaderboard',
+      phone: 'more',
+    },
     settingsIsReachable(privileges) && {
       key: 'settings',
       to: `${base}/settings`,

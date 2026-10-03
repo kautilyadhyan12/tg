@@ -117,9 +117,16 @@ export const gyms = pgTable(
     pageEmailsStoppedAt: timestamp("page_emails_stopped_at", { withTimezone: true }),
     pageEmailsStoppedReason: text("page_emails_stopped_reason"),
     pageEmailsCountedFrom: timestamp("page_emails_counted_from", { withTimezone: true }),
+    /** The leaderboard's boards the gym has switched off for its members (0067; spec
+     *  Part 3 §15.5). Empty: members see all three. */
+    leaderboardBoardsOff: text("leaderboard_boards_off").array().notNull().default(sql`'{}'::text[]`),
     createdAt: createdAt(),
   },
   (t) => [
+    check(
+      "gyms_leaderboard_boards_off_check",
+      sql`${t.leaderboardBoardsOff} <@ ARRAY['gym_days','workout_days','streak']::text[]`,
+    ),
     check("gyms_billing_mobile_check", sql`${t.billingMobile} IS NULL OR ${t.billingMobile} ~ '^\\+91[6-9][0-9]{9}$'`),
     check("gyms_postal_address_check", sql`${t.postalAddress} IS NULL OR length(${t.postalAddress}) BETWEEN 1 AND 200`),
     check(
@@ -756,10 +763,10 @@ export const gymStaff = pgTable(
      *  next wrong one hides. **The order is `ORG_PRIVILEGES`' order**: this
      *  array, that array and `0035`'s CHECK are one vocabulary written three
      *  times, and they move together or not at all. `attendance.mark` is the
-     *  eleventh (`0064`) and `memberships.manage` the twelfth (`0067`). */
+     *  eleventh (`0064`) `leaderboard.manage` the twelfth (`0067`) and `memberships.manage` the thirteenth (`0068`). */
     check(
       "gym_staff_privileges_check",
-      sql`${t.privileges} IS NULL OR ${t.privileges} <@ ARRAY['members.read','codes.invite','codes.manage','members.confirm','members.remove','staff.manage','org.manage','billing.manage','attendance.read','schedule.manage','attendance.mark','memberships.manage']::text[]`,
+      sql`${t.privileges} IS NULL OR ${t.privileges} <@ ARRAY['members.read','codes.invite','codes.manage','members.confirm','members.remove','staff.manage','org.manage','billing.manage','attendance.read','schedule.manage','attendance.mark','leaderboard.manage','memberships.manage']::text[]`,
     ),
   ],
 );

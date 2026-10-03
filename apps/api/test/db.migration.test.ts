@@ -1277,10 +1277,10 @@ d("0001_init on a real database", () => {
       });
   });
 
-  /** `0067`'s backfill, as `0064`'s above: an owner's and a manager's stored ticks, and a
-   *  manager's waiting invitation, gain "manage memberships"; nobody else's move. */
-  it("0067's backfill gives owners and managers memberships.manage and nobody else", async () => {
-    const migration = await readFile(new URL("../drizzle/0067_membership_types.sql", import.meta.url), "utf8");
+  /** `0067`'s backfill: an owner's and a manager's stored ticks gain the Leaderboard page;
+   *  a trainer's, and a row reading its role's defaults, are left as they were. */
+  it("0067's backfill gives owners and managers leaderboard.manage and nobody else", async () => {
+    const migration = await readFile(new URL("../drizzle/0067_leaderboard_console.sql", import.meta.url), "utf8");
     const matches = migration
       .split("--> statement-breakpoint")
       .map((s) => s.trim())
@@ -1291,12 +1291,11 @@ d("0001_init on a real database", () => {
       throw new Error(`0067 no longer contains its two backfill UPDATEs (found ${String(matches.length)})`);
     }
     const before = ["members.read", "attendance.read"];
-    const after = [...before, "memberships.manage"];
 
     await sql
       .begin(async (tx) => {
         const ids: Record<string, string> = {};
-        for (const name of ["owner", "manager", "trainer", "defaults"]) {
+        for (const name of ["owner", "manager", "trainer", "defaults", "frontdesk"]) {
           const [user] = await tx<{ id: string }[]>`
             INSERT INTO users (display_name) VALUES (${`zz-0067-${name}`}) RETURNING id`;
           if (user === undefined) throw new Error("0067 user insert failed");
@@ -1311,7 +1310,10 @@ d("0001_init on a real database", () => {
         await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${ids.manager ?? ""}, 'manager', ${before})`;
         await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${ids.trainer ?? ""}, 'trainer', ${before})`;
         await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${ids.defaults ?? ""}, 'manager', NULL)`;
+        await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges, role_name) VALUES (${gymId}, ${ids.frontdesk ?? ""}, 'manager', ${before}, 'Front desk')`;
 
+        // Invitations: a manager's still waiting gets it; a trainer's, a gym's own role's and
+        // a cancelled one are left alone.
         const invite = (email: string, role: string, roleName: string | null, state: string) => tx`
           INSERT INTO gym_staff_invites (gym_id, email, role, privileges, role_name, created_at, expires_at, state, answered_at)
           VALUES (${gymId}, ${email}, ${role}, ${before}, ${roleName}, now(), now() + interval '7 days', ${state},
@@ -1329,7 +1331,7 @@ d("0001_init on a real database", () => {
         const invited = await tx<{ email: string; privileges: string[] }[]>`
           SELECT email::text AS email, privileges FROM gym_staff_invites WHERE gym_id = ${gymId} ORDER BY email`;
         expect(invited).toEqual([
-          { email: "zz-0067-a@example.com", privileges: after },
+          { email: "zz-0067-a@example.com", privileges: [...before, "leaderboard.manage"] },
           { email: "zz-0067-b@example.com", privileges: before },
           { email: "zz-0067-c@example.com", privileges: before },
           { email: "zz-0067-d@example.com", privileges: before },
@@ -1340,14 +1342,95 @@ d("0001_init on a real database", () => {
           WHERE s.gym_id = ${gymId} ORDER BY u.display_name`;
         expect(rows).toEqual([
           { display_name: "zz-0067-defaults", privileges: null },
-          { display_name: "zz-0067-manager", privileges: after },
-          { display_name: "zz-0067-owner", privileges: after },
+          // One of the gym's own roles: the owner chose its ticks.
+          { display_name: "zz-0067-frontdesk", privileges: before },
+          { display_name: "zz-0067-manager", privileges: [...before, "leaderboard.manage"] },
+          { display_name: "zz-0067-owner", privileges: [...before, "leaderboard.manage"] },
           { display_name: "zz-0067-trainer", privileges: before },
         ]);
         throw new Error("ROLLBACK-0067-BACKFILL-FIXTURE");
       })
       .catch((err: unknown) => {
         if (err instanceof Error && err.message === "ROLLBACK-0067-BACKFILL-FIXTURE") return;
+        throw err;
+      });
+  });
+
+  /** `0068`'s backfill: an owner's and a manager's stored ticks gain the price list;
+   *  a trainer's, and a row reading its role's defaults, are left as they were. */
+  it("0068's backfill gives owners and managers memberships.manage and nobody else", async () => {
+    const migration = await readFile(new URL("../drizzle/0068_membership_types.sql", import.meta.url), "utf8");
+    const matches = migration
+      .split("--> statement-breakpoint")
+      .map((s) => s.trim())
+      .filter((s) => s.includes("array_append"));
+    const backfill = matches.find((s) => /UPDATE "gym_staff"\s/.test(s));
+    const invites = matches.find((s) => s.includes('UPDATE "gym_staff_invites"'));
+    if (matches.length !== 2 || backfill === undefined || invites === undefined) {
+      throw new Error(`0068 no longer contains its two backfill UPDATEs (found ${String(matches.length)})`);
+    }
+    const before = ["members.read", "attendance.read"];
+
+    await sql
+      .begin(async (tx) => {
+        const ids: Record<string, string> = {};
+        for (const name of ["owner", "manager", "trainer", "defaults", "frontdesk"]) {
+          const [user] = await tx<{ id: string }[]>`
+            INSERT INTO users (display_name) VALUES (${`zz-0068-${name}`}) RETURNING id`;
+          if (user === undefined) throw new Error("0068 user insert failed");
+          ids[name] = user.id;
+        }
+        const owner = ids.owner ?? "";
+        const [gym] = await tx<{ id: string }[]>`
+          INSERT INTO gyms (slug, name, owner_user_id) VALUES ('zz-0068', 'zz 0068', ${owner}) RETURNING id`;
+        const gymId = gym?.id;
+        if (gymId === undefined) throw new Error("0068 gym insert failed");
+        await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${owner}, 'owner', ${before})`;
+        await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${ids.manager ?? ""}, 'manager', ${before})`;
+        await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${ids.trainer ?? ""}, 'trainer', ${before})`;
+        await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${ids.defaults ?? ""}, 'manager', NULL)`;
+        await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges, role_name) VALUES (${gymId}, ${ids.frontdesk ?? ""}, 'manager', ${before}, 'Front desk')`;
+
+        // Invitations: a manager's still waiting gets it; a trainer's, a gym's own role's and
+        // a cancelled one are left alone.
+        const invite = (email: string, role: string, roleName: string | null, state: string) => tx`
+          INSERT INTO gym_staff_invites (gym_id, email, role, privileges, role_name, created_at, expires_at, state, answered_at)
+          VALUES (${gymId}, ${email}, ${role}, ${before}, ${roleName}, now(), now() + interval '7 days', ${state},
+                  ${state === "pending" ? null : tx`now()`})`;
+        await invite("zz-0068-a@example.com", "manager", null, "pending");
+        await invite("zz-0068-b@example.com", "trainer", null, "pending");
+        await invite("zz-0068-c@example.com", "manager", "Front desk", "pending");
+        await invite("zz-0068-d@example.com", "manager", null, "cancelled");
+
+        await tx.unsafe(backfill);
+        await tx.unsafe(backfill);
+        await tx.unsafe(invites);
+        await tx.unsafe(invites);
+
+        const invited = await tx<{ email: string; privileges: string[] }[]>`
+          SELECT email::text AS email, privileges FROM gym_staff_invites WHERE gym_id = ${gymId} ORDER BY email`;
+        expect(invited).toEqual([
+          { email: "zz-0068-a@example.com", privileges: [...before, "memberships.manage"] },
+          { email: "zz-0068-b@example.com", privileges: before },
+          { email: "zz-0068-c@example.com", privileges: before },
+          { email: "zz-0068-d@example.com", privileges: before },
+        ]);
+
+        const rows = await tx<{ display_name: string; privileges: string[] | null }[]>`
+          SELECT u.display_name, s.privileges FROM gym_staff s JOIN users u ON u.id = s.user_id
+          WHERE s.gym_id = ${gymId} ORDER BY u.display_name`;
+        expect(rows).toEqual([
+          { display_name: "zz-0068-defaults", privileges: null },
+          // One of the gym's own roles: the owner chose its ticks.
+          { display_name: "zz-0068-frontdesk", privileges: before },
+          { display_name: "zz-0068-manager", privileges: [...before, "memberships.manage"] },
+          { display_name: "zz-0068-owner", privileges: [...before, "memberships.manage"] },
+          { display_name: "zz-0068-trainer", privileges: before },
+        ]);
+        throw new Error("ROLLBACK-0068-BACKFILL-FIXTURE");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0068-BACKFILL-FIXTURE") return;
         throw err;
       });
   });

@@ -699,6 +699,7 @@ describe('adding somebody', () => {
       "See who's in the app",
       'See who came in',
       'Check people in',
+      'Run the leaderboard',
       'Keep the member list and invite',
       'Remove members',
       'Change membership types and prices',
@@ -719,7 +720,7 @@ describe('adding somebody', () => {
     const sent = orgService.inviteStaff.mock.calls[0][1];
     expect(sent.role).toBe('manager');
     expect([...sent.privileges].sort()).toEqual(
-      ['attendance.mark', 'attendance.read', 'members.confirm', 'members.read', 'memberships.manage', 'schedule.manage'].sort(),
+      ['attendance.mark', 'attendance.read', 'leaderboard.manage', 'members.confirm', 'members.read', 'memberships.manage', 'schedule.manage'].sort(),
     );
   });
 
