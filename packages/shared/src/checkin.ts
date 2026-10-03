@@ -145,6 +145,7 @@ export const CHECKIN_WORDS = {
   too_many_devices: `A gym can have up to ${String(CHECKIN_DEVICES_MAX)} check-in devices.`,
   device_not_found: "That check-in device isn't here any more.",
   device_name_taken: "Another check-in device already has that name. Give this one a different name.",
+  device_name_taken_since: "Another device now has this name. Switch that one off, or add this tablet as a new device.",
   link_just_made: "A new link was made for this device a moment ago. Use that one, or try again in a few seconds.",
   key_tags_slow: "Too many cards at once. Please wait a moment and scan again.",
   key_tags_paused: "Cards aren't being taken at this desk for a few minutes. Show your pass in the app, or ask staff to check you in.",

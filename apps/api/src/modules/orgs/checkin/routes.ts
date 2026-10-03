@@ -304,6 +304,12 @@ export function registerCheckinRoutes(app: FastifyInstance, deps: CheckinRouteDe
       if (reply.sent) return;
     }
     const device = cookie === null ? null : await service.deviceFor(checkinDeps, cookie.key);
+    if (device === null && cookie?.marked === true) {
+      // A marked key that is no longer a desk (switched off, or given a new link) has no
+      // allowance of its own.
+      await scanAddressLimit(req, reply);
+      if (reply.sent) return;
+    }
     if (device === null) {
       return reply.status(401).send({ error: "device_not_recognised", message: CHECKIN_WORDS.device_not_recognised, requestId: req.id });
     }

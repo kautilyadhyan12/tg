@@ -59,7 +59,8 @@ interface LogVisit {
 d("check-in, the two extra passes' fixes (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
   const redis = createMemoryRedis();
-  const config = loadConfig(baseEnv);
+  // Read here, not at the top: without a database the suite is skipped and never asks.
+  let config: ReturnType<typeof loadConfig>;
   let app: App | undefined;
   const api = (): App => {
     if (app === undefined) throw new Error("beforeAll did not build the app");
@@ -203,6 +204,7 @@ d("check-in, the two extra passes' fixes (real Postgres)", () => {
       INSERT INTO plans (code, audience, name_key, price_minor, currency, interval, seat_cap, trial_days, rank, entitlements, member_entitlements)
       VALUES (${LIVE_PLAN}, 'org', ${"plan." + LIVE_PLAN}, 0, 'INR', 'month', 100000, 0, 10, '{}'::jsonb, '{}'::jsonb)
       ON CONFLICT (code) DO UPDATE SET active = true`;
+    config = loadConfig(baseEnv);
     app = await buildApp(config, { redis });
     await api().ready();
     owner = await makeUser("owner", "Fix Owner");
@@ -324,7 +326,12 @@ d("check-in, the two extra passes' fixes (real Postgres)", () => {
     const floodDesk = await makeDesk(g, own, "Front desk", address);
     await addRecord(g, { fullName: "Real Member", memberNumber: "8401" });
 
-    const noKey = await Promise.all(Array.from({ length: 650 }, () => inject("POST", "/v1/checkin/scan", {}, { code: "1" }, address)));
+    // In turns of 50, so the app-wide limit lets its 600 through to the route before it refuses.
+    const noKey: Awaited<ReturnType<typeof inject>>[] = [];
+    for (let turn = 0; turn < 13; turn++) {
+      noKey.push(...(await Promise.all(Array.from({ length: 50 }, () => inject("POST", "/v1/checkin/scan", {}, { code: "1" }, address)))));
+    }
+    expect(noKey.filter((r) => r.statusCode === 401).length).toBeGreaterThan(400);
     expect(noKey.filter((r) => r.statusCode === 429).length).toBeGreaterThan(0);
     expect(noKey.every((r) => r.statusCode === 401 || r.statusCode === 429)).toBe(true);
     const madeUp = { checkinDevice: "A".repeat(43) };
@@ -334,6 +341,14 @@ d("check-in, the two extra passes' fixes (real Postgres)", () => {
     const real = await scanAt(floodDesk, "8401", address);
     expect(real.statusCode).toBe(200);
     expect((JSON.parse(real.body) as ScanAnswer).result).toBe("checked_in");
+
+    // A desk switched off keeps the server's mark on its cookie, and no allowance of its
+    // own: it is counted by the address, which is used up.
+    expect((await post(`/v1/orgs/${g}/checkin-devices/${floodDesk.deviceId}/off`, {}, own.cookies)).statusCode).toBe(200);
+    const dead = (await Promise.all(Array.from({ length: 100 }, () => scanAt(floodDesk, "8401", address)))).map((r) => r.statusCode);
+    expect(dead.every((status) => status === 401 || status === 429)).toBe(true);
+    expect(dead.filter((status) => status === 429).length).toBeGreaterThan(0);
+    expect((await scanAt(floodDesk, "8401")).statusCode).toBe(401);
   }, TEST_TIMEOUT_MS);
 
   it("made-up set-up links from an address never stop a real link opened there", async () => {
@@ -462,7 +477,10 @@ d("check-in, the two extra passes' fixes (real Postgres)", () => {
     expect((await addDevice(g, own, "Front desk")).statusCode).toBe(201);
     const back = await post(`/v1/orgs/${g}/checkin-devices/${first}/link`, {}, own.cookies);
     expect(back.statusCode).toBe(409);
-    expect((JSON.parse(back.body) as { error: string }).error).toBe("device_name_taken");
+    expect(JSON.parse(back.body) as { error: string; message: string }).toMatchObject({
+      error: "device_name_taken",
+      message: "Another device now has this name. Switch that one off, or add this tablet as a new device.",
+    });
   }, TEST_TIMEOUT_MS);
 
   it("New link pressed twice at once makes one link, and that one works", async () => {

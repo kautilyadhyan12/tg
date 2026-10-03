@@ -203,7 +203,7 @@ export async function renewDeviceLink(
     return row;
   }).catch((err: unknown) => {
     // A switched-off device coming back on under a name another device has taken since.
-    throw nameTaken(err) ? new OrgsError(409, "device_name_taken", CHECKIN_WORDS.device_name_taken) : err;
+    throw nameTaken(err) ? new OrgsError(409, "device_name_taken", CHECKIN_WORDS.device_name_taken_since) : err;
   });
   return checkinDeviceLinkResponseSchema.parse({ device: await toDevice(deps, device), link: linkFor(deps, token) });
 }
@@ -288,6 +288,11 @@ async function keyTagRoom(deps: CheckinDeps, device: repo.DeskDevice): Promise<v
   if (reading !== null && reading + misses > CHECKIN_KEY_TAG_MISSES) {
     await deps.redis.decrIfPositive(tagReadsKey(device.deviceId));
     throw new OrgsError(429, "key_tags_slow", CHECKIN_WORDS.key_tags_slow);
+  }
+  // A pause that began since the first look cleared the counts this read was counted in.
+  if ((await pausedUntil(deps, device.deviceId)) !== null) {
+    await deps.redis.decrIfPositive(tagReadsKey(device.deviceId));
+    throw new OrgsError(429, "key_tags_paused", CHECKIN_WORDS.key_tags_paused);
   }
 }
 
@@ -407,7 +412,11 @@ async function readThePass(deps: CheckinDeps, code: string): Promise<{ read: Sca
   const uses = await deps.redis.incrWithTtl(spent, USED_PASS_TTL_S);
   // Without Redis a pass could be shown twice, so it is refused; key tags still work.
   if (uses === null) throw new OrgsError(503, "checkin_unavailable", CHECKIN_WORDS.checkin_unavailable);
-  if (uses > 1) return { read: { kind: "pass", pass: "used" }, userId: null, spent: null };
+  if (uses > 1) {
+    // This read's own count goes back, so a first read that is given back leaves none.
+    await deps.redis.decrIfPositive(spent);
+    return { read: { kind: "pass", pass: "used" }, userId: null, spent: null };
+  }
   return { read: { kind: "pass", pass: "fresh" }, userId: pass.userId, spent };
 }
 
