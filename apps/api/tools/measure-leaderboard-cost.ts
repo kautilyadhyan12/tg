@@ -1,6 +1,7 @@
 // What the leaderboard costs at full size (ROADMAP 19a; CLAUDE.md §4 "Cost at full size").
 // One gym of 2,100 live app members (the biggest; --members= for another size) with three years of desk visits and app workouts; every board and period
-// read as a member reads it, and the console's "On a roll". Half the members have a record on
+// read as a member reads it, the console's "On a roll", and the console's Leaderboard page
+// as its owner reads it (19a-iii: everyone, a page of a hundred). Half the members have a record on
 // the gym's list and a tenth of their visits name only the record, so the by-record path is
 // timed too. Two numbers each, over several runs:
 //   - db: how long the read takes (it holds one of the pool's connections meanwhile);
@@ -18,7 +19,14 @@ import { createHash, randomUUID } from "node:crypto";
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import postgres from "postgres";
 import { LEADERBOARD_PERIODS, type LeaderboardQuery } from "@app/shared";
-import { getLeaderboard, getMyCounted, getProfile } from "../src/modules/orgs/leaderboard/service.js";
+import {
+  getLeaderboard,
+  getMyCounted,
+  getProfile,
+  getStaffCounted,
+  getStaffLeaderboard,
+  getStaffProfile,
+} from "../src/modules/orgs/leaderboard/service.js";
 import { getGymRegulars } from "../src/modules/orgs/repo.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
@@ -48,7 +56,7 @@ async function cleanup(): Promise<void> {
   await sql`DELETE FROM plans WHERE code = ${PLAN}`;
 }
 
-async function seed(): Promise<{ gymId: string; viewers: string[] }> {
+async function seed(): Promise<{ gymId: string; viewers: string[]; owner: string }> {
   await sql`
     INSERT INTO plans (code, audience, name_key, price_minor, currency, interval, seat_cap, trial_days, rank, entitlements, member_entitlements)
     VALUES (${PLAN}, 'org', ${"plan." + PLAN}, 0, 'INR', 'month', 100000, 0, 10, '{}'::jsonb, '{}'::jsonb)`;
@@ -112,7 +120,7 @@ async function seed(): Promise<{ gymId: string; viewers: string[] }> {
   await sql`VACUUM ANALYZE gym_attendance`;
   await sql`VACUUM ANALYZE workouts`;
   await sql`VACUUM ANALYZE workout_sets`;
-  return { gymId, viewers };
+  return { gymId, viewers, owner };
 }
 
 const median = (xs: number[]): number => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] ?? 0;
@@ -130,7 +138,7 @@ async function time(fn: () => Promise<unknown>): Promise<{ wall: number; js: num
 }
 
 await cleanup();
-const { gymId, viewers } = await seed();
+const { gymId, viewers, owner } = await seed();
 const visits = await sql<{ n: string }[]>`SELECT count(*) AS n FROM gym_attendance WHERE gym_id = ${gymId}`;
 const workouts = await sql<{ n: string }[]>`
   SELECT count(*) AS n FROM workouts WHERE user_id IN (SELECT user_id FROM gym_members WHERE gym_id = ${gymId})`;
@@ -155,6 +163,15 @@ queries.push(["what counted, workouts all time", () => getMyCounted(deps, viewer
 queries.push(["what counted, streak", () => getMyCounted(deps, viewers[0] ?? "", gymId, { board: "streak", period: "this_week" })]);
 queries.push(["a profile", () => getProfile(deps, viewers[0] ?? "", gymId, viewers[1] ?? "", "this_week")]);
 queries.push(["On a roll (console)", () => getGymRegulars(sql, { gymId })]);
+// The console's Leaderboard page, as the owner reads it.
+const allowed = (): Promise<boolean> => Promise.resolve(true);
+for (const period of ["this_week", "this_month", "all_time"] as const) {
+  queries.push([`staff gym_days ${period}`, () => getStaffLeaderboard(deps, owner, gymId, { board: "gym_days", period, page: 1 }, allowed)]);
+  queries.push([`staff workout_days ${period}`, () => getStaffLeaderboard(deps, owner, gymId, { board: "workout_days", period, page: 1 }, allowed)]);
+}
+queries.push(["staff streak", () => getStaffLeaderboard(deps, owner, gymId, { board: "streak", period: "this_week", page: 1 }, allowed)]);
+queries.push(["staff, a person", () => getStaffProfile(deps, owner, gymId, viewers[1] ?? "", "this_week", allowed)]);
+queries.push(["staff, what counted all time", () => getStaffCounted(deps, owner, gymId, viewers[1] ?? "", { board: "gym_days", period: "all_time" }, allowed)]);
 
 for (const [name, fn] of queries) {
   await fn(); // warm

@@ -183,3 +183,17 @@ export function rankStaffBoard(people: readonly BoardPerson[]): StaffBoard {
     );
   return { status: placed.length >= LEADERBOARD_MIN_PEOPLE ? "shown" : "too_few", ranked: placed.length, rows };
 }
+
+/** One person's line on the staff board without ranking everybody: the same place and
+ *  number `rankStaffBoard` gives them (equal numbers share a place, so a place is one more
+ *  than the people members see above them). */
+export function staffPlace(people: readonly BoardPerson[], userId: string): { place: number | null; value: number } {
+  const person = people.find((p) => p.userId === userId);
+  if (person === undefined || person.value <= 0) return { place: null, value: 0 };
+  if (hiddenReason(person) !== null) return { place: null, value: person.value };
+  let above = 0;
+  for (const other of people) {
+    if (other.value > person.value && hiddenReason(other) === null) above += 1;
+  }
+  return { place: above + 1, value: person.value };
+}

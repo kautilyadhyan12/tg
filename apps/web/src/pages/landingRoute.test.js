@@ -252,10 +252,10 @@ describe('the console routes and sign-out honour the amendment', () => {
     // landed (2026-09-02, :28107), 6 → 7 when Classes landed (2026-09-22,
     // ROADMAP 17b-i), 7 → 8 with Leads (20c-i), 8 → 9 with the phone's More
     // (R1), 9 → 10 with Members who need review (5b-v-d-iv) and 10 → 11 with Possible
-    // duplicates (5b-iv-a), and moving it is the correct response to adding a route —
+    // duplicates (5b-iv-a), 11 → 12 with the Leaderboard (19a-iii), and moving it is the correct response to adding a route —
     // the loop below is the guarantee, this number is only the proof that the
     // loop saw everything.
-    expect(consoleRoutes.length).toBe(11);
+    expect(consoleRoutes.length).toBe(12);
     for (const route of consoleRoutes) {
       expect(route).toContain('requireOnboarding={false}');
     }
@@ -270,7 +270,7 @@ describe('the console routes and sign-out honour the amendment', () => {
     const consoleRoutes = src.match(
       /path="\/console[^"]*"[\s\S]{0,120}?<ProtectedRoute([^>]*)>/g,
     ) ?? [];
-    expect(consoleRoutes.length).toBe(11);
+    expect(consoleRoutes.length).toBe(12);
     for (const route of consoleRoutes) {
       expect(route).toContain('requireSignUpNote={false}');
     }
@@ -285,7 +285,7 @@ describe('the console routes and sign-out honour the amendment', () => {
     const consoleRoutes = src.match(
       /path="\/console[^"]*"[\s\S]{0,120}?<ProtectedRoute([^>]*)>/g,
     ) ?? [];
-    expect(consoleRoutes.length).toBe(11);
+    expect(consoleRoutes.length).toBe(12);
     for (const route of consoleRoutes) {
       expect(route).toContain('requireInvitations={false}');
     }

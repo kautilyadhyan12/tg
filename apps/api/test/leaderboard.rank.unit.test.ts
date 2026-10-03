@@ -2,7 +2,16 @@
 // §15.5). The worst thing: a hidden person seen by somebody else, in a row, a count or a gap.
 import { describe, expect, it } from "vitest";
 import { LEADERBOARD_TOP } from "@app/shared";
-import { fullName, hiddenReason, isAutomaticName, rankBoard, rankStaffBoard, shownName, type BoardPerson } from "../src/modules/orgs/leaderboard/rank.js";
+import {
+  fullName,
+  hiddenReason,
+  isAutomaticName,
+  rankBoard,
+  rankStaffBoard,
+  shownName,
+  staffPlace,
+  type BoardPerson,
+} from "../src/modules/orgs/leaderboard/rank.js";
 import { addDays, mondayOf, periodRange, streakWeeks } from "../src/modules/orgs/leaderboard/periods.js";
 
 let n = 0;
@@ -257,6 +266,13 @@ describe("the staff board", () => {
       // Everyone with a number is listed once; nobody at 0 is.
       expect(staff.rows.map((r) => r.userId).sort()).toEqual(people.filter((p) => p.value > 0).map((p) => p.userId).sort());
       for (const r of staff.rows) expect(r.place === null).toBe(r.hidden !== null);
+      // A person's own panel reads the same place and number as their row, and 0 for
+      // anybody with no number or not on the board at all.
+      for (const p of people) {
+        const listed = staff.rows.find((r) => r.userId === p.userId);
+        expect(staffPlace(people, p.userId)).toEqual({ place: listed?.place ?? null, value: listed?.value ?? 0 });
+      }
+      expect(staffPlace(people, "nobody")).toEqual({ place: null, value: 0 });
     }
   });
 

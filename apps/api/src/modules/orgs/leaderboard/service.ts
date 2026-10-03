@@ -27,7 +27,17 @@ import {
 import { insertAudit, lockOrgRow } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { addDays, isWeek, mondayOf, periodRange, streakWeeks, weekDays } from "./periods.js";
-import { fullName, hiddenReason, isAutomaticName, rankBoard, rankStaffBoard, shownName, type Board, type BoardPerson } from "./rank.js";
+import {
+  fullName,
+  hiddenReason,
+  isAutomaticName,
+  rankBoard,
+  rankStaffBoard,
+  shownName,
+  staffPlace,
+  type Board,
+  type BoardPerson,
+} from "./rank.js";
 import * as repo from "./repo.js";
 
 export interface LeaderboardDeps {
@@ -405,9 +415,9 @@ export async function getStaffProfile(
     buildStreak(deps, gymId, userId, at),
   ]);
   const boards = built.map((b) => {
+    // Nobody has a streak at a gym that has stopped checking in (see getLeaderboard).
     const dormant = b.id === "streak" && !gym.checkingIn;
-    const row = dormant ? undefined : rankStaffBoard(b.people).rows.find((r) => r.userId === userId);
-    return { board: b.id, period: b.period, place: row?.place ?? null, value: row?.value ?? 0 };
+    return { board: b.id, period: b.period, ...staffPlace(dormant ? [] : b.people, userId) };
   });
   const named = fullName(person);
   return staffLeaderboardProfileResponseSchema.parse({
