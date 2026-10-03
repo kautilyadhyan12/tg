@@ -85,7 +85,7 @@ export function statusText(board) {
         ? 'The board shows once 3 people have a streak.'
         : `The board shows once 3 people have a ${UNIT[board.board]} in this period.`;
     case 'no_checkins':
-      return `${board.gymName} hasn't checked anyone in at the front desk in the last 30 days, so Gym days and Streak aren't showing. Workout days still is.`;
+      return `${board.gymName} hasn't checked anyone in at the front desk in the last 30 days, so Gym days and Streak aren't showing. Workout days doesn't need the front desk — see that tab.`;
     case 'paused':
       return `The leaderboard isn't available at ${board.gymName} right now.`;
     default:

@@ -271,7 +271,7 @@ describe('the members’ board', () => {
     expect(svc.board).toHaveBeenLastCalledWith('g1', 'workout_days', 'this_week');
     // The member's own tap on Gym days stays there, and says why.
     fireEvent.click(screen.getByRole('tab', { name: 'Gym days' }));
-    expect(await screen.findByText(/so Gym days and Streak aren't showing\. Workout days still is\./)).toBeTruthy();
+    expect(await screen.findByText(/so Gym days and Streak aren't showing\. Workout days doesn't need the front desk — see that tab\./)).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Gym days' }).getAttribute('aria-selected')).toBe('true');
   });
 

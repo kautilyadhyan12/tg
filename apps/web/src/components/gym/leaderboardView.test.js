@@ -43,7 +43,7 @@ describe('the leaderboard in words', () => {
     expect(statusText(board({ status: 'too_few', board: 'workout_days' }))).toBe('The board shows once 3 people have a workout day in this period.');
     expect(statusText(board({ status: 'too_few', board: 'streak' }))).toBe('The board shows once 3 people have a streak.');
     expect(statusText(board({ status: 'no_checkins' }))).toBe(
-      "Iron House hasn't checked anyone in at the front desk in the last 30 days, so Gym days and Streak aren't showing. Workout days still is.",
+      "Iron House hasn't checked anyone in at the front desk in the last 30 days, so Gym days and Streak aren't showing. Workout days doesn't need the front desk — see that tab.",
     );
     expect(statusText(board({ status: 'paused' }))).toBe("The leaderboard isn't available at Iron House right now.");
   });
