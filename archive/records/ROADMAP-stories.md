@@ -227,3 +227,7 @@ stage. History, never a rule: RULINGS wins where they differ.
 ## 16b-i (merged 2026-10-02, PR #157)
 
 - 16b-i. [ ] **The front desk** (split 2026-10-02; the whole line as written is in `archive/records/ROADMAP-stories.md`). Settings → Check-in devices (add, the one-time link, New link, Switch off, key tags paused), and the locked desk page at `/check-in/setup#<token>` → `/check-in`: scanner box, camera (`jsqr`), green · grey · red · orange, cleared after 5 seconds. No server change.
+
+**16c, as it stood when it was built (merged 2026-10-03, PR #161):**
+
+- 16c. [ ] **The member's side.** My Gyms shows the pass where "I'm here" was (the member web is the test rig until the phone app shows it); the member's tap answers 410 behind a switch, its code and suite kept; Settings' manual-attendance switch leaves the screen.
