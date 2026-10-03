@@ -677,9 +677,7 @@ function AttendanceDay({ org }) {
                  one of them is a problem (:8267/:8343). A FAILED read never
                  reaches here — it is drawn above. */
               <EmptyDay
-                words={words}
                 reason={emptyDayReason({
-                  manualAttendanceEnabled: org.manualAttendanceEnabled,
                   totals: answer.totals,
                   // THE EXCEPTIONS FILTER IS GONE (Kd, 2026-09-03), so no list
                   // on this screen can be emptied by one. The parameter stays in
@@ -757,22 +755,8 @@ function AttendanceDay({ org }) {
   );
 }
 
-/** THE EMPTY DAY, IN THREE SENTENCES. They look identical in the data and only
- *  one of them is a problem — the class this project has shipped once. */
-function EmptyDay({ reason, words }) {
-  if (reason === 'switch-off') {
-    return (
-      <div className="mt-2">
-        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-          Nobody has checked in on this day yet.
-        </p>
-        <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
-          {words.peopleCap} can&apos;t mark themselves in from the app — that&apos;s switched off in Settings, under
-          &ldquo;Marking attendance&rdquo;. Your front desk and staff can still check them in.
-        </p>
-      </div>
-    );
-  }
+/** THE EMPTY DAY, IN TWO SENTENCES. They look identical in the data. */
+function EmptyDay({ reason }) {
   if (reason === 'filtered') {
     return (
       <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.55)' }}>

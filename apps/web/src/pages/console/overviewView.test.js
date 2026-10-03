@@ -145,22 +145,15 @@ describe('the sentence for a gym where nothing has been recorded', () => {
   // (:19960): a test that composes the string the same way the code does agrees
   // with it whatever the constant says.
   it('names the window it can actually see, and never says "yet"', () => {
-    const text = nothingRecordedSentence(true);
-    expect(text).toBe('Nobody has marked attendance in the last 8 weeks.');
+    const text = nothingRecordedSentence();
+    expect(text).toBe('Nobody has checked in in the last 8 weeks.');
     expect(text).not.toMatch(/yet/i);
   });
 
-  it('points at the switch when the switch is what is stopping them', () => {
-    expect(nothingRecordedSentence(false)).toBe(
-      'Nobody can mark attendance — the switch is off in Settings.',
-    );
-  });
-
-  // The contract defaults the field to `true`, so an older payload that omits it
-  // must read as "on" and not fall into the switch sentence — which would tell
-  // an owner their button is off while it is on.
-  it('treats an absent switch as on', () => {
-    expect(nothingRecordedSentence(undefined)).toMatch(/^Nobody has marked attendance/);
+  // The tap's switch has left Settings (ROADMAP 16c), so nothing points at it — even
+  // when an old caller still hands over the gym's old value.
+  it('never points at a switch', () => {
+    expect(nothingRecordedSentence(false)).toBe('Nobody has checked in in the last 8 weeks.');
   });
 });
 

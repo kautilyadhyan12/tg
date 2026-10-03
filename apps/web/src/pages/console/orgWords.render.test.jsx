@@ -290,15 +290,4 @@ describe('Settings', () => {
     ).toBeTruthy();
     expect(await screen.findByText('2 people run this studio')).toBeTruthy();
   });
-
-  it('tells a studio’s owner the switch lets CLIENTS mark themselves in', async () => {
-    settingsAs('studio');
-    // The switch's state rides on the section HEADING, so it is readable
-    // without opening the section — which is the point of that summary.
-    expect(
-      await screen.findByRole('button', { name: /Marking attendance Clients can mark themselves in/ }),
-    ).toBeTruthy();
-    await openSection('Marking attendance');
-    expect(await screen.findByText(/Let clients mark themselves in/)).toBeTruthy();
-  });
 });

@@ -64,6 +64,8 @@ const baseEnv = {
   LOG_LEVEL: "error",
   // The join door is a fixture here; join codes are off by default (ROADMAP 3c).
   JOIN_CODES: "on",
+  // The member's tap is what this suite drives; it is off by default (ROADMAP 16c).
+  MEMBER_TAP: "on",
 };
 
 type App = Awaited<ReturnType<typeof buildApp>>;

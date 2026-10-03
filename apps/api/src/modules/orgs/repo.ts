@@ -79,8 +79,7 @@ export interface OrgRow {
   clockFormat: GymClockFormat;
   /** MAY A MEMBER MARK THEMSELVES PRESENT (:26469 §1.4). On the org row for
    *  `clockFormat`'s reason — the console holds it before it asks for anything
-   *  else, and the member's gym card needs it to decide whether to DRAW the
-   *  "I'm here" button at all. */
+   *  else. Kept; no screen reads it since the tap was switched off (ROADMAP 16c). */
   manualAttendanceEnabled: boolean;
   status: OrgStatus;
 }

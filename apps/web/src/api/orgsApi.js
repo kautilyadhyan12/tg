@@ -16,6 +16,7 @@ import {
   checkinDeviceResponseSchema,
   checkinDevicesResponseSchema,
   checkinLogResponseSchema,
+  checkinPassResponseSchema,
   checkinPeopleResponseSchema,
   staffCheckinResponseSchema,
   createStaffInviteResponseSchema,
@@ -80,7 +81,6 @@ import {
   gymAttendanceDayResponseSchema,
   gymAttendanceHistoryResponseSchema,
   gymHoursResponseSchema,
-  markGymAttendanceResponseSchema,
   joinOrgResponseSchema,
   removeGymClosureResponseSchema,
   setGymHoursResponseSchema,
@@ -134,6 +134,8 @@ function contractError(what) {
   err.isContractError = true;
   return err;
 }
+
+export const CHECKIN_PASS_TIMEOUT_MS = 10_000;
 
 async function readThrough(schema, what, request) {
   const res = await request;
@@ -396,32 +398,12 @@ export const orgService = {
       authApi.delete(`/v1/orgs/${gymId}/closures/${encodeURIComponent(day)}`),
     ),
 
-  /** POST /v1/orgs/:gymId/attendance — "I'm here" (Kd :26469, :27900).
-   *
-   *  **THE BODY IS EMPTY AND MUST STAY EMPTY.** The server decides the day, the
-   *  method, the hours status and the session, because every one of them grants
-   *  something (R3.1): a client that could name its own day could mark itself
-   *  present for last Tuesday. The request schema is `.strict()`, so a field
-   *  added here hopefully would be answered 400 rather than quietly ignored.
-   *  `{}` is sent for the same reason the trial and the confirm taps send it —
-   *  Fastify refuses a request that declares JSON and carries nothing.
-   *
-   *  **Safe under `authApi`'s 401 replay, and the server is what makes it so**
-   *  (R10.2): the write is idempotent on (gym, member, gym-day, slot), so a
-   *  replay answers with the FIRST visit rather than recording a second. Nothing
-   *  here adds a network-failure retry and nothing may — without that server-side
-   *  idempotence this would be a POST with no Idempotency-Key.
-   *
-   *  Refusals arrive as their own statuses and the screen prints the server's
-   *  sentence: the gym has the manual switch off, the caller is not a live
-   *  member, or the gym has been closed down (:25771). A member of a gym whose
-   *  PLAN has lapsed can still mark — Kd ruled it, and :22215 arm A agrees. */
-  markAttendance: (gymId) =>
-    readThrough(
-      markGymAttendanceResponseSchema,
-      'your attendance',
-      authApi.post(`/v1/orgs/${gymId}/attendance`, {}),
-    ),
+  /** GET /v1/users/me/checkin-pass — the person's pass for the front desk (16c): one pass
+   *  a person, good at every gym they belong to, and new every 30 seconds. Given 10
+   *  seconds: a phone that loses its signal stalls a request rather than failing it, and
+   *  the screen must hear of it while the pass it is showing is still good. */
+  getCheckinPass: () =>
+    readThrough(checkinPassResponseSchema, 'your pass', authApi.get('/v1/users/me/checkin-pass', { timeout: CHECKIN_PASS_TIMEOUT_MS })),
 
   /** GET /v1/orgs/:gymId/attendance — WHO CAME TO THE GYM ON ONE DAY, for the
    *  console's Attendance section (:28107). Needs `attendance.read`, which every
@@ -1169,8 +1151,7 @@ export const orgService = {
    *
    *  **THE BODY CARRIES ONLY WHICH OF THE FOUR LINES.** The gym, the member and
    *  the sender all come from the URL and the session, because every one of them
-   *  grants something (R3.1) — the same decision `markAttendance` above makes
-   *  about the day and the method. `sendGymCheerRequestSchema` is `.strict()`,
+   *  grants something (R3.1). `sendGymCheerRequestSchema` is `.strict()`,
    *  so a field added here hopefully is a 400 rather than a value quietly
    *  ignored.
    *

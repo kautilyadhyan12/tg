@@ -92,6 +92,7 @@ export function registerOrgRoutes(
     robotCheck: RobotCheck;
     photos: PhotoStore;
     joinCodes: boolean;
+    memberTap: boolean;
   },
   overrides: OrgRouteOverrides = {},
 ): void {
@@ -379,9 +380,22 @@ export function registerOrgRoutes(
    *  content type the simple-request rules exclude; `app.ts` lists POST, which
    *  every write in this file already depends on, and the SMOKE is what proves
    *  it in a real browser (Card 4's dead-method bug behind 250 green tests). */
+  // THE TAP SWITCHED OFF (ROADMAP 16c; spec Part 3 §12.7). A visit is made at the front
+  // desk — a pass, a key tag or staff — so the tap answers 410 to everybody, signed in or
+  // not, before anything is read: it is the route's `onRequest`, which runs before the
+  // body is parsed. The handler stays, and its suite runs it with `MEMBER_TAP=on`.
+  const tapRetired = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    if (deps.memberTap) return;
+    await reply.status(410).send({
+      error: "member_tap_retired",
+      message: "Check in at the front desk: show your pass, or ask a member of staff.",
+      requestId: req.id,
+    });
+  };
+
   app.post(
     "/v1/orgs/:gymId/attendance",
-    { preHandler: [app.authenticate, attendanceMarkLimit] },
+    { onRequest: tapRetired, preHandler: [app.authenticate, attendanceMarkLimit] },
     async (req, reply) => {
       const params = parseOr400(orgParamsSchema, req.params, req, reply);
       if (params === null) return;

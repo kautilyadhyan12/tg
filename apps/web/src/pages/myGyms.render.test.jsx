@@ -19,7 +19,7 @@ const api = {
   getMine: vi.fn(),
   getHours: vi.fn(),
   getAttendanceHistory: vi.fn(),
-  markAttendance: vi.fn(),
+  getCheckinPass: vi.fn(),
 };
 vi.mock('../api/orgsApi', () => ({
   orgService: api,
@@ -65,16 +65,9 @@ const history = (visits, over = {}) => ({
   },
 });
 
-const marked = (over = {}) => ({
-  data: {
-    status: 'created',
-    alreadyMarked: false,
-    visit: visit(),
-    timezone: 'UTC',
-    clockFormat: '24h',
-    ...over,
-  },
-});
+/** A pass as the server sends it: 62 uppercase letters and digits. */
+const PASS = `AHGP${'A2B3C4D5E6F7G8H9J2K3L4M5N6P7Q8R9S2T3U4V5W6X7Y8Z9A2B3C4D5E6F7'.slice(0, 58)}`;
+const pass = () => ({ data: { pass: PASS, refreshAt: '2026-09-02T12:00:30.000Z' } });
 
 // THE CALENDAR OPENS ON THE GYM'S CURRENT MONTH, SO EVERY FIXTURE DAY BELOW IS
 // A CLAIM ABOUT WHAT MONTH IT IS. Left on the wall clock these tests would pass
@@ -128,6 +121,8 @@ const openCalendar = async () => {
   fireEvent.click(fold());
 };
 
+const passButton = () => screen.queryByRole('button', { name: 'Show my pass' });
+
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: false });
   vi.setSystemTime(NOW);
@@ -138,7 +133,7 @@ beforeEach(() => {
   // `gymHours.render.test.jsx`.
   api.getHours.mockReset().mockResolvedValue({ data: { hours: { mode: 'unset' } } });
   api.getAttendanceHistory.mockReset().mockResolvedValue(history([]));
-  api.markAttendance.mockReset().mockResolvedValue(marked());
+  api.getCheckinPass.mockReset().mockResolvedValue(pass());
 });
 afterEach(() => {
   cleanup();
@@ -260,28 +255,24 @@ describe('the nav item', () => {
 });
 
 describe('the screen', () => {
-  it('names the gym and offers the button', async () => {
+  it('names the gym and offers the pass', async () => {
     drawScreen();
     await waitFor(() => expect(screen.getByText('Iron House')).toBeTruthy());
-    expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy();
+    expect(passButton()).toBeTruthy();
+    expect(screen.getByText('Show your pass at the front desk when you arrive.')).toBeTruthy();
   });
 
-  // RULING 4 AND :24141: ABSENT, NOT GREYED. A dead control with no explanation
-  // is the defect; and the member's own history stays, because those visits
-  // really happened.
-  it('draws NO button when the gym has the switch off, and keeps the history', async () => {
-    api.getMine.mockResolvedValue({
-      data: { orgs: [{ ...GYM, manualAttendanceEnabled: false }], formerOrgs: [] },
-    });
+  // THE TAP IS GONE FOR EVERY GYM (ROADMAP 16c), whatever the gym's old switch says.
+  it.each([true, false])('draws no "I\'m here" button, with the gym\'s old switch %s', async (manualAttendanceEnabled) => {
+    api.getMine.mockResolvedValue({ data: { orgs: [{ ...GYM, manualAttendanceEnabled }], formerOrgs: [] } });
     api.getAttendanceHistory.mockResolvedValue(history([visit()]));
     drawScreen();
     await openCalendar();
-    await waitFor(() => expect(screen.getByText('Days you came')).toBeTruthy());
-    expect(screen.queryByRole('button', { name: /i'm here/i })).toBeNull();
-    // THE HISTORY STAYS — the day is still marked and its times still open.
-    // Those visits really happened, and hiding them because the gym stopped
-    // taking new ones would remove a thing Kd ruled in.
     await waitFor(() => expect(cameOn(2)).toBeTruthy());
+    expect(screen.queryByRole('button', { name: /i'm here/i })).toBeNull();
+    expect(document.body.textContent).not.toMatch(/marks your attendance/i);
+    // The pass is offered either way, and the days they came stay.
+    expect(passButton()).toBeTruthy();
     openDay(2);
     expect(screen.getByText('06:12')).toBeTruthy();
   });
@@ -346,61 +337,7 @@ describe('the screen', () => {
   });
 });
 
-describe('saying you are here', () => {
-  it('records the visit and says what was recorded', async () => {
-    api.markAttendance.mockResolvedValue(
-      marked({
-        visit: visit({ hoursStatus: 'in_session', session: { opensMinute: 360, closesMinute: 420 } }),
-      }),
-    );
-    drawScreen();
-    await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
-    await waitFor(() =>
-      expect(screen.getByText("You're marked in — the 06:00 – 07:00 session.")).toBeTruthy(),
-    );
-    expect(api.markAttendance).toHaveBeenCalledWith('g1');
-  });
-
-  // THE VISIT LANDS IN THE LIST WITHOUT A SECOND REQUEST — both attendance
-  // reads share one rate-limit bucket (600/hour), so this screen writes down
-  // what the server told it rather than asking again.
-  it('adds the new day without re-reading the history', async () => {
-    drawScreen();
-    await openCalendar();
-    await waitFor(() => expect(screen.getByText(/no visits yet this month/i)).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
-    // THE DAY LIGHTS UP, and its times are behind the tap Kd was told about.
-    await waitFor(() => expect(cameOn(2)).toBeTruthy());
-    openDay(2);
-    expect(screen.getByText('06:12')).toBeTruthy();
-    // **AND THE MONTH WAS READ EXACTLY ONCE.** This counted a re-read after a
-    // mark before the calendar; it now also pins that neither the tap, the
-    // opened day, nor the panel's own half-minute tick asks again — the shared
-    // 600/hour bucket, with the console's day list on the other side of it.
-    expect(api.getAttendanceHistory).toHaveBeenCalledTimes(1);
-  });
-
-  // :28221's IDEMPOTENCE AT THE SCREEN. A second tap in the same session
-  // answers with the FIRST visit — so the screen must not draw a second time
-  // chip for it, which would be a count the database disagrees with.
-  it('draws ONE time when the same session is tapped twice', async () => {
-    drawScreen();
-    await openCalendar();
-    await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
-    await waitFor(() => expect(cameOn(2)).toBeTruthy());
-    api.markAttendance.mockResolvedValue(marked({ alreadyMarked: true }));
-    fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
-    await waitFor(() => expect(screen.getByText(/already marked in/i)).toBeTruthy());
-    // ONE DAY, ONE TIME. A second chip would be a count the database disagrees
-    // with — and the grid has one more way to get this wrong than the list did,
-    // so the CELL is asserted to be single as well as the chip inside it.
-    expect(screen.getAllByRole('button', { name: '2 — you came' })).toHaveLength(1);
-    openDay(2);
-    expect(screen.getAllByText('06:12')).toHaveLength(1);
-  });
-
+describe('the days they came', () => {
   // KD RULING 12 AT THE SCREEN (:27992 §1) — the case to check first. Two
   // visits in two sessions on one day is ONE row with TWO times, on the
   // member's side exactly as on the owner's.
@@ -446,108 +383,6 @@ describe('saying you are here', () => {
     expect(screen.queryByRole('button', { name: '2' })).toBeNull();
   });
 
-  // ── T3 ROUND 1 REGRESSIONS ────────────────────────────────────────────────
-  // Each of the three fails without its fix; that is the whole reason it is
-  // here (:5348 rule 3). All three describe a state the SCREEN gets into, which
-  // is where round 1's C/H defects lived and where round 1's own seven mutants
-  // did not look — they aimed at the pure helpers and the nav gate.
-
-  // C/H-1. A tap used to flip a FAILED read to `ready`, so the list appeared
-  // holding only the visit just made: a member with months of history was shown
-  // a history of one day, `more` false so not even the "most recent" line
-  // qualified it. A tap knows what it recorded and knows nothing about the rest.
-  it('never draws the history off a read that failed, even after a tap', async () => {
-    api.getAttendanceHistory.mockRejectedValue(new Error('offline'));
-    drawScreen();
-    await openCalendar();
-    await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
-    // The tap is confirmed — that part is true and stays on screen …
-    await waitFor(() => expect(screen.getByText(/you're marked in/i)).toBeTruthy());
-    // … and the month it says nothing about is still not drawn. The tap knows
-    // one day; the grid would be a claim about thirty.
-    expect(screen.getByText(/couldn't load the days you came/i)).toBeTruthy();
-    expect(cameOn(2)).toBeNull();
-  });
-
-  // C/H-2. The mount read landed AFTER the mark and replaced the list
-  // wholesale, erasing the visit — so the screen said "You're marked in." and
-  // "You haven't marked yourself in here yet." at once. The read was started
-  // before the tap, so it cannot answer for it.
-  it('does not let a read that was already in flight erase the visit', async () => {
-    let answerTheRead = () => {};
-    api.getAttendanceHistory.mockReturnValue(
-      new Promise((resolve) => {
-        answerTheRead = () => resolve(history([]));
-      }),
-    );
-    drawScreen();
-    await openCalendar();
-    await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
-    await waitFor(() => expect(screen.getByText(/you're marked in/i)).toBeTruthy());
-    // The read — which left before the tap and therefore knows nothing of it —
-    // now comes back empty.
-    answerTheRead();
-    await waitFor(() => expect(cameOn(2)).toBeTruthy());
-    openDay(2);
-    expect(screen.getByText('06:12')).toBeTruthy();
-    expect(screen.queryByText(/no visits/i)).toBeNull();
-  });
-
-  it('draws the visit once when the read comes back already carrying it', async () => {
-    let answerTheRead = () => {};
-    api.getAttendanceHistory.mockReturnValue(
-      new Promise((resolve) => {
-        answerTheRead = () => resolve(history([visit()]));
-      }),
-    );
-    drawScreen();
-    await openCalendar();
-    await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
-    await waitFor(() => expect(screen.getByText(/you're marked in/i)).toBeTruthy());
-    answerTheRead();
-    await waitFor(() => expect(cameOn(2)).toBeTruthy());
-    expect(screen.getAllByRole('button', { name: '2 — you came' })).toHaveLength(1);
-    openDay(2);
-    expect(screen.getAllByText('06:12')).toHaveLength(1);
-  });
-
-  it('prints the refusal when the server turns the mark down', async () => {
-    api.markAttendance.mockRejectedValue(new Error('409'));
-    drawScreen();
-    await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
-    await waitFor(() => expect(screen.getByText(/couldn't record that just now/i)).toBeTruthy());
-  });
-
-  // ── T3 ROUND 2 REGRESSIONS ────────────────────────────────────────────────
-  // Both round-1 fixes that shipped with nothing holding them. Neither was
-  // wrong; each was a guarantee one ordinary edit could take away in silence,
-  // which is :5348 rule 4's definition of the gap a green suite hides.
-
-  // T3 ROUND 2, F2. Round 1's L-4 made the MARK's zone and clock win over the
-  // pair the history read brought back — the fresher of two answers about the
-  // same gym. **Nothing could tell the two precedences apart**: every fixture
-  // sent `UTC` and `24h` on BOTH answers, so the test data made the defect and
-  // the fix identical (:20712's own trap, and :4856 — the fixture is part of
-  // the claim). The two answers now disagree, which is the only way to ask.
-  it('draws the new chip on the clock the MARK came back with, not the read’s', async () => {
-    api.getAttendanceHistory.mockResolvedValue(history([], { clockFormat: '24h' }));
-    api.markAttendance.mockResolvedValue(marked({ clockFormat: '12h' }));
-    drawScreen();
-    await openCalendar();
-    await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
-
-    await waitFor(() => expect(cameOn(2)).toBeTruthy());
-    openDay(2);
-    expect(screen.getByText('6:12 AM')).toBeTruthy();
-    // The stale pair winning would spell the same minute the other way.
-    expect(screen.queryByText('06:12')).toBeNull();
-  });
-
   // T3 ROUND 2, F4. A visit must never follow the member onto a DIFFERENT gym.
   // What guarantees that is the `key` on the card in `MyGyms.jsx` — React throws
   // the panel away when the gym changes, so no state can cross — and the review
@@ -572,219 +407,129 @@ describe('saying you are here', () => {
   // bought — so this drives the store directly to put the screen in the state a
   // later edit could create. That is the finding: unreachable now, one edit away.
   it('never carries a visit across to a different gym', async () => {
+    api.getAttendanceHistory.mockImplementation((gymId) => Promise.resolve(history(gymId === 'g1' ? [visit()] : [])));
     drawScreen();
     await openCalendar();
-    await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
     await waitFor(() => expect(cameOn(2)).toBeTruthy());
 
-    // Their list becomes a gym they have never marked in at, without the screen
-    // ever leaving the list arm.
+    // Their list becomes a gym they have never been to, without the screen ever
+    // leaving the list arm.
     const other = { ...GYM, id: 'g2', slug: 'bar-bell', name: 'Bar Bell Club' };
     api.getMine.mockResolvedValue({ data: { orgs: [other], formerOrgs: [] } });
     consoleOrgsRegainedFocus();
 
     await waitFor(() => expect(screen.getByText('Bar Bell Club')).toBeTruthy());
     expect(screen.queryByText('Iron House')).toBeNull();
-    // THE FIRE DOES NOT FOLLOW THEM. The grid is one more piece of state the key
-    // has to throw away, and it is drawn from `marked` as well as from the read
-    // — so a panel reused across gyms would show gym A's day on gym B's month.
+    // THE FIRE DOES NOT FOLLOW THEM, and neither does the open calendar: a panel
+    // reused across gyms would arrive unfolded, already reading gym B's month.
     expect(cameOn(2)).toBeNull();
+    expect(screen.getByRole('button', { name: /days you came/i }).getAttribute('aria-expanded')).toBe('false');
+    expect(api.getAttendanceHistory).not.toHaveBeenCalledWith('g2', expect.anything());
   });
 });
 
-// ── KD'S RULING OF 2026-09-03 (`:30867`) AT THE SCREEN ──────────────────────
-// *"i set owner gym times to 7 am to 8 am but now it is 5:28 but the i am here
-// button was still there which i told you to disable if it does not incline
-// with the gym time"* — and *"should not be able to press i am here"*, which is
-// why every assertion below is about the button's DISABLED state and not about
-// what a tap answers. The server has refused since `:30867`; being refused
-// AFTER pressing is not what he asked for.
-//
-// **ONLY `Date` IS FAKED.** `setTimeout` stays real so `waitFor` behaves
-// normally, and `setInterval` stays real so the panel's clock simply never
-// fires except in the one case that asks it to. A test that let the gate read
-// the wall clock would pass at 07:30 and fail at 05:28 — :27094 §2's defect.
-describe('the button outside opening hours', () => {
-  // 05:28 on Thursday in London, which is Kd's own moment. The gym below opens
-  // at 07:00, so this instant is the one he was looking at.
-  const KDS_MOMENT = new Date('2026-09-03T05:28:00.000Z');
-  const THURSDAY = 4;
+// THE PASS ON THE CARD (ROADMAP 16c). What the pass itself does — renewing, failing,
+// closing — is pinned in `checkinPass.render.test.jsx`; this is the card's half.
+describe('the pass', () => {
+  it('asks for no pass until the member opens it', async () => {
+    drawScreen();
+    await waitFor(() => expect(passButton()).toBeTruthy());
+    expect(api.getCheckinPass).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
 
-  const hoursOf = (over = {}) => ({
-    data: {
-      hours: {
-        mode: 'scheduled',
-        timezone: 'UTC',
-        clockFormat: '24h',
-        week: [{ weekday: THURSDAY, sessions: [{ opensMinute: 420, closesMinute: 480 }] }],
-        closures: [],
-        ...over,
+  it('opens the pass on a tap, and closes it again', async () => {
+    drawScreen();
+    await waitFor(() => expect(passButton()).toBeTruthy());
+    fireEvent.click(passButton());
+    await waitFor(() => expect(screen.getByRole('img', { name: 'Your check-in pass' })).toBeTruthy());
+    expect(api.getCheckinPass).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  // A scan at the desk is never refused for the hour (RULINGS 2026-09-21), so the pass
+  // is offered at 05:28 to a member of a gym that opens at 07:00.
+  it('is offered outside the gym’s opening hours', async () => {
+    vi.setSystemTime(new Date('2026-09-03T05:28:00.000Z'));
+    api.getHours.mockResolvedValue({
+      data: {
+        hours: {
+          mode: 'scheduled',
+          timezone: 'UTC',
+          clockFormat: '24h',
+          week: [{ weekday: 4, sessions: [{ opensMinute: 420, closesMinute: 480 }] }],
+          closures: [],
+        },
       },
-    },
-  });
-
-  beforeEach(() => {
-    vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: false });
-    vi.setSystemTime(KDS_MOMENT);
-    api.getHours.mockResolvedValue(hoursOf());
-  });
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  const button = () => screen.queryByRole('button', { name: /i'm here/i });
-
-  it('cannot be pressed before the gym opens', async () => {
-    drawScreen();
-    await waitFor(() => expect(button()?.disabled).toBe(true));
-  });
-
-  // ITS OWN CASE, AND SEPARATE FROM THE ONE ABOVE ON PURPOSE. :29500's C/H-1
-  // was a control that greyed correctly and said nothing beside it — the sixth
-  // panel in this app to disable something and the first to leave a person with
-  // no explanation. The disable half and the sentence half fail independently,
-  // so they are asserted independently rather than folded into one case that
-  // passes while half of it is broken.
-  it('says why the button is dead', async () => {
-    drawScreen();
-    await waitFor(() => expect(button()?.disabled).toBe(true));
-    expect(screen.getByText(/isn't open right now/i)).toBeTruthy();
-  });
-
-  // THE STATE IT IS *NOT* IN WHEN YOU FIND IT (:31295). Same fixture, same
-  // gym, one hour later: a gate that simply killed the button would satisfy
-  // every assertion above and fail here.
-  it('can be pressed while the gym is open', async () => {
-    vi.setSystemTime(new Date('2026-09-03T07:30:00.000Z'));
-    drawScreen();
-    await waitFor(() => expect(button()).toBeTruthy());
-    expect(button()?.disabled).toBe(false);
-    expect(screen.queryByText(/isn't open right now/i)).toBeNull();
-    fireEvent.click(button());
-    await waitFor(() => expect(api.markAttendance).toHaveBeenCalledWith('g1'));
-  });
-
-  it('cannot be pressed on a day the gym said it is closed', async () => {
-    api.getHours.mockResolvedValue(hoursOf({ closures: [{ day: '2026-09-03', note: 'Holi' }] }));
-    vi.setSystemTime(new Date('2026-09-03T07:30:00.000Z'));
-    drawScreen();
-    await waitFor(() => expect(button()?.disabled).toBe(true));
-    // The closure wins over a session that is running (:26684 §3), and the
-    // sentence says which of the two shut the day.
-    expect(screen.getByText(/closed today, so attendance isn't open/i)).toBeTruthy();
-    expect(screen.queryByText(/isn't open right now/i)).toBeNull();
-  });
-
-  // **THIS IS WHAT LETS THE REFUSAL SAY NO TIME.** The server's 409 spells
-  // today's windows because it arrives with no context; here the opening times
-  // are already on the card, on the gym's own clock, ABOVE the dead button. If
-  // that ever stops being true the sentence becomes a bare no at a locked door,
-  // which is the thing `:30867` §1 refused to ship — so it is asserted rather
-  // than assumed.
-  it('tells the member when the gym IS open, beside the button it just killed', async () => {
-    drawScreen();
-    await waitFor(() => expect(button()?.disabled).toBe(true));
-    expect(screen.getByText('Today: 07:00 – 08:00')).toBeTruthy();
-  });
-
-  // EVERY UNKNOWN ADMITS (:24141 §3a). Three ways the screen can fail to know,
-  // and none of them may take a member's door away — the server decides.
-  // **THE FIXTURE CARRIES A ZONE, AND T3 ROUND 1's L-3 IS WHY.** Written as a
-  // bare `{ mode: 'unset' }` this case passed for the wrong reason: with no
-  // timezone the gate admits at the ZONE guard, so deleting the unset branch
-  // altogether left it green — measured, and the pure suite was the only thing
-  // that went red. A fixture missing a field tests the guard that catches the
-  // missing field, not the rule the test is named for.
-  it('stays pressable when the gym has never set hours', async () => {
-    api.getHours.mockResolvedValue({
-      data: { hours: { mode: 'unset', timezone: 'UTC', clockFormat: '24h', week: [], closures: [] } },
     });
     drawScreen();
-    await waitFor(() => expect(button()).toBeTruthy());
-    expect(button()?.disabled).toBe(false);
+    await waitFor(() => expect(passButton()).toBeTruthy());
+    expect(passButton().disabled).toBe(false);
+    expect(document.body.textContent).not.toMatch(/isn't open/i);
   });
 
-  it('stays pressable for a gym that is open 24 hours', async () => {
-    api.getHours.mockResolvedValue({
-      data: { hours: { mode: 'open_24h', timezone: 'UTC', clockFormat: '24h', week: [], closures: [] } },
-    });
+  it('opens ONE pass from the card that was tapped, for a member of two gyms', async () => {
+    const other = { ...GYM, id: 'g2', slug: 'bar-bell', name: 'Bar Bell Club' };
+    api.getMine.mockResolvedValue({ data: { orgs: [GYM, other], formerOrgs: [] } });
     drawScreen();
-    await waitFor(() => expect(screen.getByText('Open 24 hours')).toBeTruthy());
-    expect(button()?.disabled).toBe(false);
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Show my pass' })).toHaveLength(2));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Show my pass' })[1]);
+    await waitFor(() => expect(screen.getAllByRole('img', { name: 'Your check-in pass' })).toHaveLength(1));
+    expect(api.getCheckinPass).toHaveBeenCalledTimes(1);
   });
 
-  it('stays pressable when the opening times could not be read', async () => {
-    api.getHours.mockRejectedValue(new Error('offline'));
+  // A scan while the pass was open made a visit this screen was never told about.
+  it('reads the open month once more when the pass is closed, and shows the new day', async () => {
     drawScreen();
-    await waitFor(() => expect(button()).toBeTruthy());
-    expect(button()?.disabled).toBe(false);
-    // And nothing is invented about a gym we could not ask about.
-    expect(screen.queryByText(/isn't open right now/i)).toBeNull();
+    await openCalendar();
+    await waitFor(() => expect(screen.getByText(/no visits yet this month/i)).toBeTruthy());
+    expect(api.getAttendanceHistory).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(passButton());
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
+    api.getAttendanceHistory.mockResolvedValue(history([visit({ method: 'pass' })]));
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+    await waitFor(() => expect(cameOn(2)).toBeTruthy());
+    expect(api.getAttendanceHistory).toHaveBeenCalledTimes(2);
   });
 
-  // THE CLOCK, AND WHY IT EXISTS. Without it the gate is decided once at paint,
-  // so a member who opens this screen at 06:59 is still refused at 07:05 —
-  // blocked from something they are entitled to do, which is :5807's second
-  // clause. `setInterval` is faked ONLY here.
-  it('comes back to life at opening time without a reload', async () => {
-    // **`useRealTimers()` FIRST, AND IT IS NOT TIDINESS — MEASURED.** Calling
-    // `useFakeTimers` while fake timers are ALREADY installed silently keeps
-    // the first `toFake` list and drops the new one: `setInterval` stayed real,
-    // the panel's tick never fired, and the test failed with the button dead
-    // while the code was right. Probed both ways in isolation — re-install
-    // fired 0, release-then-install fired 2 — rather than reasoned about.
-    vi.useRealTimers();
-    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
-    vi.setSystemTime(new Date('2026-09-03T06:59:40.000Z'));
-    drawScreen();
-    await waitFor(() => expect(button()?.disabled).toBe(true));
-
-    // ONE MECHANISM MOVES TIME, and the first draft of this test used two.
-    // `advanceTimersByTime` carries the faked `Date` forward AND fires what is
-    // due; a `setSystemTime` beside it moves `Date` while leaving every
-    // scheduled callback where it was, so the clock said 07:00 and the panel
-    // never heard about it — the test failed with the button still dead and
-    // the CODE was right. Twenty past seven, one tick fired, nothing else
-    // touched.
-    await act(async () => {
-      vi.advanceTimersByTime(60_000);
-    });
-    expect(button()?.disabled).toBe(false);
-    expect(screen.queryByText(/isn't open right now/i)).toBeNull();
-  });
-});
-
-// KD ASKED FOR THIS IN THE SAME MESSAGE THAT APPROVED THE CARD: *"there should
-// be some indication that i am here means attandance in gym so that user
-// understands"*. "I'm here" is his own wording and is untouched; what was
-// missing is anything on the card SAYING what pressing it does.
-describe('what the button is for', () => {
-  it('says that pressing it marks attendance at the gym', async () => {
-    drawScreen();
-    await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
-    expect(screen.getByText('Attendance')).toBeTruthy();
-    expect(screen.getByText(/marks your attendance at the gym/i)).toBeTruthy();
-  });
-
-  // IT DESCRIBES THE CONTROL, SO IT GOES WHERE THE CONTROL GOES. A gym with
-  // the switch off draws no button (ruling 4), and an explanation of a button
-  // that is not there is the same class of false sentence as :30867 §2.4 — the
-  // line promising nobody is turned away, left standing after they were. The
-  // history below is untouched, because those visits happened.
-  it('says nothing about a button the gym has switched off', async () => {
-    api.getMine.mockResolvedValue({
-      data: { orgs: [{ ...GYM, manualAttendanceEnabled: false }], formerOrgs: [] },
-    });
+  it('keeps the days already on screen when the read made on closing the pass fails', async () => {
     api.getAttendanceHistory.mockResolvedValue(history([visit()]));
     drawScreen();
     await openCalendar();
-    await waitFor(() => expect(screen.getByText('Days you came')).toBeTruthy());
-    expect(screen.queryByText('Attendance')).toBeNull();
-    expect(screen.queryByText(/marks your attendance at the gym/i)).toBeNull();
     await waitFor(() => expect(cameOn(2)).toBeTruthy());
-    openDay(2);
-    expect(screen.getByText('06:12')).toBeTruthy();
+
+    fireEvent.click(passButton());
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
+    api.getAttendanceHistory.mockRejectedValue(new Error('offline'));
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+    await waitFor(() => expect(api.getAttendanceHistory).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(cameOn(2)).toBeTruthy();
+    expect(screen.queryByText(/couldn't load the days you came/i)).toBeNull();
+  });
+
+  it('hands the pass the place’s type, so a trainer’s client is not told of a scanner', async () => {
+    api.getMine.mockResolvedValue({ data: { orgs: [{ ...GYM, orgType: 'personal_trainer' }], formerOrgs: [] } });
+    drawScreen();
+    await waitFor(() => expect(passButton()).toBeTruthy());
+    fireEvent.click(passButton());
+    await waitFor(() => expect(screen.getByText('Hold this up for your trainer to scan.')).toBeTruthy());
+  });
+
+  it('reads no history when the pass is closed over a calendar never opened', async () => {
+    drawScreen();
+    await waitFor(() => expect(passButton()).toBeTruthy());
+    fireEvent.click(passButton());
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(api.getAttendanceHistory).not.toHaveBeenCalled();
   });
 });
 
@@ -933,29 +678,6 @@ describe('the calendar', () => {
     fireEvent.click(screen.getByRole('button', { name: /previous month/i }));
     await waitFor(() => expect(screen.getByText('August 2026')).toBeTruthy());
     expect(screen.getByRole('button', { name: /next month/i }).disabled).toBe(false);
-  });
-
-  // **A TAP MADE TODAY MUST NOT LAND ON A MONTH SOMEBODY STEPPED BACK TO.** The
-  // panel merges this session's taps into whatever month is on screen, so this
-  // is the assertion that the merge is bounded by the grid's own dates rather
-  // than by a filter somebody remembered to write.
-  it('does not draw today s tap on a month it did not happen in', async () => {
-    api.getHours.mockResolvedValue(hoursIn('Asia/Kolkata'));
-    drawScreen();
-    await openCalendar();
-    await waitFor(() => expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: /i'm here/i }));
-    await waitFor(() => expect(cameOn(2)).toBeTruthy());
-
-    fireEvent.click(screen.getByRole('button', { name: /previous month/i }));
-    await waitFor(() => expect(screen.getByText('August 2026')).toBeTruthy());
-    // The 2nd of AUGUST is not the day they marked.
-    expect(cameOn(2)).toBeNull();
-    // …and stepping back finds it again, so this cannot be passing because the
-    // tap was simply lost.
-    fireEvent.click(screen.getByRole('button', { name: /next month/i }));
-    await waitFor(() => expect(screen.getByText('September 2026')).toBeTruthy());
-    expect(cameOn(2)).toBeTruthy();
   });
 
   // **AN ANSWER TO A DIFFERENT MONTH IS NOT AN ANSWER** (:29250 §6), AND THE
@@ -1180,9 +902,7 @@ describe('the calendar folds away', () => {
     api.getHours.mockResolvedValue(hoursIn('Asia/Kolkata'));
     drawScreen();
     // Non-vacuity: the screen really did finish drawing before this is checked.
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /i'm here/i })).toBeTruthy(),
-    );
+    await waitFor(() => expect(passButton()).toBeTruthy());
     expect(api.getAttendanceHistory).not.toHaveBeenCalled();
 
     await openCalendar();
@@ -1339,16 +1059,10 @@ describe('the cheer', () => {
   });
 });
 
-/** A STUDIO'S CLIENT, END TO END — roadmap 2b at the member's own screens.
- *
- *  Round 1 of the review found that every new `orgType` parameter on this
- *  surface had no observer: drop it at the call site and the suite stayed
- *  green while a studio's client read "Your gym isn't open right now". This
- *  describe is that observer. It mounts the REAL sidebar and the REAL screen
- *  off `/v1/orgs/mine`, with scheduled hours the client is outside of, so the
- *  nav label, the Settings-bound tab word, the button's dead sentence and the
- *  panel's own line are all read off one render. The gym is the control in the
- *  suite above this one, unchanged. */
+/** A STUDIO'S CLIENT, END TO END — roadmap 2b at the member's own screens: the REAL
+ *  sidebar and the REAL screen off `/v1/orgs/mine`, so the nav label, the heading and
+ *  the card's own line are read off one render. The gym is the control in the suite
+ *  above this one. */
 describe('a studio’s client', () => {
   const STUDIO = { ...GYM, name: 'Flow Studio', slug: 'flow-studio', orgType: 'studio' };
   // 05:28 on Thursday, the studio opens at 07:00 — Kd's own moment, one card up.
@@ -1380,33 +1094,23 @@ describe('a studio’s client', () => {
     expect(screen.queryByText('My Gyms')).toBeNull();
   });
 
-  it('is told the STUDIO is shut, and what the button is for, in the studio’s word', async () => {
+  it('reads My studios over the list, and is never told they are at a gym', async () => {
     drawScreen();
-    const button = () => screen.queryByRole('button', { name: /i'm here/i });
-    await waitFor(() => expect(button()?.disabled).toBe(true));
-    // The dead button's sentence — `attendanceShutReason`'s third argument.
-    expect(
-      screen.getByText("Your studio isn't open right now, so attendance isn't open."),
-    ).toBeTruthy();
-    // The panel's own line about the button.
-    expect(screen.getByText('Pressing this marks your attendance at the studio.')).toBeTruthy();
-    // The heading over the list.
+    await waitFor(() => expect(passButton()).toBeTruthy());
     expect(screen.getByRole('heading', { name: 'My studios' })).toBeTruthy();
-    // And nowhere on the screen is the client told they are at a gym.
+    expect(screen.getByText('Show your pass at the front desk when you arrive.')).toBeTruthy();
     expect(document.body.textContent).not.toMatch(/your gym/i);
   });
 
-  it('is told a TRAINER is shut when the place is a personal trainer', async () => {
+  // A personal trainer has no front desk.
+  it('is told to show the pass to the TRAINER when the place is a personal trainer', async () => {
     api.getMine.mockResolvedValue({
       data: { orgs: [{ ...STUDIO, name: 'Coach Priya', orgType: 'personal_trainer' }], formerOrgs: [] },
     });
     drawScreen();
-    await waitFor(() =>
-      expect(
-        screen.getByText("Your trainer isn't open right now, so attendance isn't open."),
-      ).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByText('Show your pass to your trainer when you arrive.')).toBeTruthy());
     expect(screen.getByRole('heading', { name: 'My trainers' })).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/front desk/i);
   });
 });
 

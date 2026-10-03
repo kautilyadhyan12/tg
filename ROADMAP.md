@@ -175,7 +175,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 16a. [x] **The scan, on the server** — merged 2026-10-02 (PR #155).
    - 16b-i. [x] **The front desk** — merged 2026-10-02 (PR #157).
    - 16b-ii. [x] **Staff check-in and the live log** — merged 2026-10-03 (PR #159).
-   - 16c. [ ] **The member's side.** My Gyms shows the pass where "I'm here" was (the member web is the test rig until the phone app shows it); the member's tap answers 410 behind a switch, its code and suite kept; Settings' manual-attendance switch leaves the screen.
+   - 16c. [x] **The member's side** — merged 2026-10-03 (PR #161).
    - 16d. [ ] **Who can check in** (RULINGS 2026-10-02): a Check-in setting the gym picks — everyone on the list (the starting value) or only people with a current membership, and a payment overdue let in or sent to staff — read from the app's own memberships and bills, never a file's words; a person stopped reads "Please see a member of staff" at the desk, and staff can still check them in. After 18a; Opus xhigh.
 
 17. **What a gym sells, and its timetable** (RULINGS 2026-09-21, Part 4 of the re-plan; spec Part 3 §13) — items 8 and 9's prices, planned; "the largest gym item". Every card Opus xhigh; every number a starting value the gym can change; the two extra passes run once over 17a–17f.

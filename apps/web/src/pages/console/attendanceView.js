@@ -173,13 +173,11 @@ export function searchCoversEverybody(nextCursor) {
   return nextCursor === null || nextCursor === undefined;
 }
 
-/** WHY THIS DAY IS EMPTY, AND THE THREE CASES ARE THREE DIFFERENT SENTENCES.
+/** WHY THIS DAY IS EMPTY, AND THE TWO CASES ARE TWO DIFFERENT SENTENCES.
  *
  *  They look identical in the data and only one of them is a problem, which is
  *  the :8267/:8343 class this project has shipped once:
  *
- *  - `switch-off` — the gym turned the button off, so nobody COULD mark. The
- *    thing to say is where the switch is, because that is the owner's next move.
  *  - `filtered`   — the day has visits and the EXCEPTIONS FILTER emptied the
  *    list. Saying "nobody came" here would be flatly false about a day that had
  *    two hundred people in it.
@@ -190,17 +188,10 @@ export function searchCoversEverybody(nextCursor) {
  *  Try again. Answering "nobody came" for a request that never arrived is the
  *  defect, not the empty state.
  *
- *  **THE FILTER IS ASKED FIRST, AND THE ORDER IS THE WHOLE OF THIS FUNCTION**
- *  (T3 round 1, L-1). Two of these can be true at once: a gym that has switched
- *  the button off can still be looking at a day that HAD two hundred visits
- *  before it was switched off, with the exceptions filter on and emptying the
- *  list. Answering `switch-off` there says something TRUE about the gym and
- *  the WRONG thing about the list in front of the owner — the sentence points
- *  at Settings when the fix is the filter beside it, and this function's only
- *  job is naming the reason THIS list is empty. The switch answers for a day
- *  with nothing in it; the filter answers for a day it emptied. */
-export function emptyDayReason({ manualAttendanceEnabled, totals, filtered }) {
+ *  The gym's old "members can mark themselves in" switch is not asked (ROADMAP
+ *  16c): the tap is switched off for every gym and a visit is made at the front
+ *  desk, so a gym that once turned it off is told nothing about it. */
+export function emptyDayReason({ totals, filtered }) {
   if (filtered === true && Number.isInteger(totals?.visits) && totals.visits > 0) return 'filtered';
-  if (manualAttendanceEnabled === false) return 'switch-off';
   return 'nobody';
 }
