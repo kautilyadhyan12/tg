@@ -74,14 +74,13 @@ function Initials({ text, greyed }) {
 
 function Sheet({ title, onClose, children }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title}
         className="w-full sm:max-w-md max-h-[85vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-5"
         style={{ background: '#161412', border: '1px solid rgba(255,255,255,0.08)' }}
-        onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3 mb-3">
           <h3 className="text-base font-bold text-white">{title}</h3>
@@ -248,8 +247,18 @@ export default function Leaderboard({ gym }) {
   useEffect(() => {
     shownKey.current = key;
     load();
-    const timer = window.setInterval(load, REFRESH_MS);
-    return () => window.clearInterval(timer);
+    // Not in a tab nobody is looking at; it asks again as soon as the tab is back.
+    const timer = window.setInterval(() => {
+      if (!document.hidden) load();
+    }, REFRESH_MS);
+    const onShow = () => {
+      if (!document.hidden) load();
+    };
+    document.addEventListener('visibilitychange', onShow);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onShow);
+    };
   }, [load, key]);
 
   const retry = () => {
@@ -385,7 +394,7 @@ export default function Leaderboard({ gym }) {
             </ol>
           )}
 
-          {me !== null && (
+          {me !== null && board.status !== 'no_checkins' && board.status !== 'paused' && (
             <div className="rounded-xl px-2 py-2 mt-1" style={{ background: 'rgba(255,255,255,0.03)', opacity: me.hidden !== null ? 0.6 : 1 }}>
               <button
                 type="button"

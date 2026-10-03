@@ -107,11 +107,41 @@ describe('the members’ board', () => {
     await waitFor(() => expect(svc.setHidden).toHaveBeenCalledWith(false));
   });
 
-  it('says why there is no board instead of drawing an empty one', async () => {
+  it('says why there is no board instead of drawing an empty one, and draws no row of your own', async () => {
     svc.board.mockResolvedValue(shown({ status: 'no_checkins', rows: [], ranked: 0 }));
     render(<Leaderboard gym={GYM} />);
     expect(await screen.findByText(/hasn't checked anyone in at the front desk in the last 30 days/)).toBeTruthy();
     expect(screen.queryByRole('list', { name: /people on the board/ })).toBeNull();
+    expect(screen.queryByText(/What counted/)).toBeNull();
+  });
+
+  it('a sheet closes by its X, never by a click outside it', async () => {
+    svc.profile.mockResolvedValue({ userId: 'u2', name: 'Chen W.', initials: 'CW', boards: [{ board: 'gym_days', period: 'this_week', place: 1, value: 3 }] });
+    render(<Leaderboard gym={GYM} />);
+    fireEvent.click(await screen.findByText('Chen W.'));
+    const dialog = await screen.findByRole('dialog', { name: 'Chen W.' });
+    fireEvent.click(dialog.parentElement);
+    expect(screen.getByRole('dialog', { name: 'Chen W.' })).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('does not ask again while the tab is hidden, and asks as soon as it is back', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const hidden = vi.spyOn(document, 'hidden', 'get');
+    try {
+      hidden.mockReturnValue(true);
+      render(<Leaderboard gym={GYM} />);
+      await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(1));
+      vi.advanceTimersByTime(180_000);
+      expect(svc.board).toHaveBeenCalledTimes(1);
+      hidden.mockReturnValue(false);
+      document.dispatchEvent(new Event('visibilitychange'));
+      expect(svc.board).toHaveBeenCalledTimes(2);
+    } finally {
+      hidden.mockRestore();
+      vi.useRealTimers();
+    }
   });
 
   it('a failed read says so and offers Try again, never an empty board', async () => {

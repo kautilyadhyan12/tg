@@ -29,10 +29,11 @@ export interface BoardPerson {
   under18: boolean;
 }
 
-/** The sign-up's automatic names: "New User", or the email's first part. */
+/** Not a name to show: the sign-up's automatic names ("New User", or the email's first
+ *  part), and anything typed that is itself an address. */
 export function isAutomaticName(displayName: string, email: string | null): boolean {
   const name = displayName.trim().toLowerCase();
-  if (name === "" || name === "new user") return true;
+  if (name === "" || name === "new user" || name.includes("@")) return true;
   const local = email?.split("@")[0]?.trim().toLowerCase() ?? "";
   return local !== "" && name === local.slice(0, 100);
 }

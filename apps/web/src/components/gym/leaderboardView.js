@@ -88,7 +88,7 @@ export function hiddenText(reason, gymName) {
     case 'under_18':
       return "You're hidden because you're under 18. Only you see this row.";
     case 'no_name':
-      return 'Add your name in Settings → Profile to be on the board.';
+      return 'Add your full name in Settings → Profile to be on the board.';
     case 'taken_off':
       return `${gymName} took you off the board. Only you see this row.`;
     case 'staff':

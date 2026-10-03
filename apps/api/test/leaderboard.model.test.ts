@@ -46,6 +46,14 @@ const gymToday = (instant: Date, zone: string): string =>
   new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).format(instant);
 /** 1970-01-01 was a Thursday; Monday is day 4 before it. */
 const mondayNumber = (n: number): number => n - ((n + 3) % 7);
+/** The day eighteen years before, as a calendar says it: 29 February gives 28 February. */
+function eighteenYearsBefore(day: string): string {
+  const [y, m, dd] = day.split("-").map(Number) as [number, number, number];
+  const year = y - 18;
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const date = m === 2 && dd === 29 && !leap ? 28 : dd;
+  return `${String(year)}-${String(m).padStart(2, "0")}-${String(date).padStart(2, "0")}`;
+}
 function modelRange(today: string, period: LeaderboardPeriod): [number, number] {
   const t = dayNumber(today);
   const [y, m] = today.split("-").map(Number) as [number, number];
@@ -106,10 +114,16 @@ const LAST = ["Rao", "Smith", "Wu", "Okafor", "García", "Nguyễn", "Singh", "B
 function makeGym(rand: () => number, today: (zone: string) => string): MGym {
   const pick = <V>(list: readonly V[]): V => list[Math.floor(rand() * list.length)] as V;
   const zone = pick(ZONES);
-  const t = dayNumber(today(zone));
+  const todayIs = today(zone);
+  const t = dayNumber(todayIs);
+  // Eighteen today (not under 18), and eighteen tomorrow (under 18): the edge itself.
+  const eighteenToday = eighteenYearsBefore(todayIs);
+  const eighteenTomorrow = dayOf(dayNumber(eighteenToday) + 1);
   const gym: MGym = { id: randomUUID(), zone, live: rand() < 0.9, ownerId: "", people: [], records: [], visits: [] };
   const record = (first: string, last: string, young: boolean): MRecord => {
-    const r = { id: randomUUID(), first, last, dob: young ? dayOf(t - 365 * 16) : rand() < 0.5 ? dayOf(t - 365 * 30) : null };
+    const roll = rand();
+    const dob = young ? dayOf(t - 365 * 16) : roll < 0.4 ? dayOf(t - 365 * 30) : roll < 0.5 ? eighteenToday : roll < 0.6 ? eighteenTomorrow : null;
+    const r = { id: randomUUID(), first, last, dob };
     gym.records.push(r);
     return r;
   };
@@ -150,7 +164,9 @@ function makeGym(rand: () => number, today: (zone: string) => string): MGym {
   const silent = new Set<number>();
   for (let w = 0; w < 22; w++) if (rand() < 0.2) silent.add(start + 7 * w);
   const keen = new Map<string, number>();
-  for (let day = start; day <= t + 3; day++) {
+  // Some gyms stopped checking people in six weeks ago.
+  const lastDay = rand() < 0.06 ? t - 40 : t + 3;
+  for (let day = start; day <= lastDay; day++) {
     if (silent.has(mondayNumber(day))) continue;
     for (const p of gym.people) {
       const k = keen.get(p.userId) ?? rand() * 0.5;
@@ -178,7 +194,6 @@ interface ModelRow {
 }
 
 function modelPeople(gym: MGym, today: string): { live: MPerson[]; owner: (v: MVisit) => string | null; hidden: (p: MPerson) => LeaderboardHiddenReason | null; name: (p: MPerson) => string | null } {
-  const t = dayNumber(today);
   const live = gym.people.filter((p) => p.status === "active" && p.memberships.some((m) => !m.removed));
   const liveEntry = (p: MPerson) => p.memberships.find((m) => !m.removed)?.entryId ?? null;
   const holders = new Map<string, string[]>();
@@ -201,7 +216,7 @@ function modelPeople(gym: MGym, today: string): { live: MPerson[]; owner: (v: MV
     if (p.memberships.find((m) => !m.removed)?.takenOff === true) return "taken_off";
     if (p.hideMe) return "hide_me";
     const r = gym.records.find((x) => x.id === liveEntry(p));
-    const youngRecord = r?.dob !== null && r?.dob !== undefined && dayNumber(r.dob) > t - 18 * 365.25 + 1;
+    const youngRecord = r?.dob !== null && r?.dob !== undefined && r.dob > eighteenYearsBefore(today);
     if (!p.shownAt && ((p.age ?? 99) < 18 || youngRecord)) return "under_18";
     if (name(p) === null) return "no_name";
     return null;
@@ -262,7 +277,8 @@ function modelBoard(gym: MGym, today: string, viewerId: string, query: Leaderboa
   const enough = placed.length >= 3;
   const status = !gym.live ? "paused" : !checkingIn ? "no_checkins" : enough ? "shown" : "too_few";
   const me = rows.find((r) => r.userId === viewerId);
-  const value = me?.value ?? 0;
+  // No streak at a gym that has stopped checking in: its silent weeks would never end one.
+  const value = query.board === "streak" && !checkingIn ? 0 : (me?.value ?? 0);
   const above = placed.filter((r) => r.value > value);
   const showing = status === "shown";
   return {
@@ -405,6 +421,7 @@ d("the leaderboard agrees with a plain model (real Postgres)", () => {
         ];
         let compared = 0;
         let shown = 0;
+        let stopped = 0;
         for (const gym of gyms) {
           const today = gymToday(instant, gym.zone);
           const { live } = modelPeople(gym, today);
@@ -425,11 +442,13 @@ d("the leaderboard agrees with a plain model (real Postgres)", () => {
               else expect(counted.weeks.filter((w) => w.state === "counted").length).toBe(counted.value);
               compared++;
               if (got.status === "shown") shown++;
+              if (got.status === "no_checkins") stopped++;
             }
           }
         }
         // The fixture really exercised the board, and not only its empty states.
         expect(shown).toBeGreaterThan(compared / 4);
+        expect(stopped).toBeGreaterThan(0);
         console.log(`model: ${String(count)} gyms, ${String(compared)} boards compared, ${String(shown)} shown`);
       },
       T,

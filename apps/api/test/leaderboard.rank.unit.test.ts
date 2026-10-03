@@ -143,6 +143,15 @@ describe("names: first name and last initial, never an email", () => {
     expect(shownName({ displayName: "Bobby T", email: "bob@x.com", recordName: "Robert Tables" })?.name).toBe("Bobby T.");
   });
 
+  it("a name typed as an address is no name: it gives way to the record's, or the person is off the board", () => {
+    expect(isAutomaticName("priya.s@gmail.com", "priya.s@gmail.com")).toBe(true);
+    expect(isAutomaticName("Old.Address@work.example", "new@home.example")).toBe(true);
+    expect(shownName({ displayName: "priya.s@gmail.com", email: "priya.s@gmail.com", recordName: "Priya Sharma" })?.name).toBe("Priya S.");
+    const b = rankBoard([person("probe@example.com", 9), person("Bob B", 2), person("Cat C", 1), person("Dan D", 1)], "x");
+    expect(JSON.stringify(b)).not.toContain("@");
+    expect(b.rows.map((r) => r.name)).toEqual(["Bob B.", "Cat C.", "Dan D."]);
+  });
+
   it("an email's first part is never shown, even when it looks like a name", () => {
     const b = rankBoard(
       [

@@ -1,5764 +1,5780 @@
-// Orgs repo — gyms / gym_codes / gym_members / gym_staff /
-// gym_join_applications (v1 §6.2). Every query that reads or writes a
-// tenant-owned row carries the gym id (and, for "my orgs" and the applicant's
-// own list, the user id) in its WHERE — a fetch-by-id alone would be an IDOR
-// (R3.2).
-//
-// THE HEADER USED TO SAY "the ONLY file that touches" those tables AND THAT
-// WAS ALREADY FALSE when it was written: the DPDP Day-0 flow in
-// `modules/users/repo.ts` closes `gym_members` inline, because the deletion
-// cascade is cross-cutting and R7.1 forbids it calling into this repo. The
-// 2026-08-19 waiting-room card added a second such statement beside it
-// (cancelling pending applications) and corrected this sentence rather than
-// adding a second breach of a rule the file claimed to keep. A record is a
-// claim (:8707): the two DPDP statements are the whole exception, and any
-// THIRD writer of these tables is a defect, not a precedent.
-import type { Sql, TransactionSql } from "postgres";
-import { slotKeyFor } from "./attendanceSlot.js";
-import { countedDays, streaks, visitsWithOwner } from "./leaderboard/visits.js";
-import {
-  ATTENDANCE_PAGE_LIMIT,
-  ATTENDANCE_SUMMARY_LIMIT,
-  ATTENDANCE_VISITS_PER_PERSON,
-  gymAttendanceHoursStatusSchema,
-  gymAttendanceMethodSchema,
-  gymCheerPresetSchema,
-  gymClockFormatSchema,
-  gymHoursModeSchema,
-  gymNudgePresetSchema,
-  GYM_TRIAL_MEMBERS,
-  ON_A_ROLL_LIMIT,
-  ON_A_ROLL_MIN_SPAN_DAYS,
-  ON_A_ROLL_MIN_WEEKS,
-  OVERVIEW_MONTH_DAYS,
-  OVERVIEW_WEEKS,
-  SLIPPING_AWAY_ENGAGED_DAYS,
-  SLIPPING_AWAY_LIMIT,
-  SLIPPING_AWAY_MIN_HISTORY_DAYS,
-  SLIPPING_AWAY_MIN_MEMBERSHIP_DAYS,
-  SLIPPING_AWAY_QUIET_DAYS,
-  orgApplicationStatusSchema,
-  orgRoleSchema,
-  orgStatusSchema,
-  orgSubscriptionStatusSchema,
-  orgTypeSchema,
-  planIntervalSchema,
-} from "@app/shared";
-import type {
-  GymAttendanceHoursStatus,
-  GymAttendanceMethod,
-  GymCheerPreset,
-  GymClockFormat,
-  GymHoursMode,
-  GymNudgePreset,
-  OrgApplicationStatus,
-  OrgRole,
-  OrgStatus,
-  OrgSubscriptionStatus,
-  OrgType,
-  PlanInterval,
-} from "@app/shared";
-
-type SqlOrTx = Sql | TransactionSql;
-
-export interface OrgRow {
-  id: string;
-  slug: string;
-  name: string;
-  city: string | null;
-  /** ISO 3166-1 alpha-2, or `null` for a gym created before migration `0014`
-   *  wrote the column — the wizard asked and the server discarded the answer. */
-  country: string | null;
-  orgType: OrgType;
-  timezone: string;
-  locale: string;
-  currencyDisplay: string;
-  /** Which clock this gym reads its hours on (Kd, 2026-09-01). Carried on
-   *  the ORG row as well as on the hours response, because the console
-   *  holds this row before it asks for hours and the switch must work on
-   *  a gym that has never set any. */
-  clockFormat: GymClockFormat;
-  /** MAY A MEMBER MARK THEMSELVES PRESENT (:26469 §1.4). On the org row for
-   *  `clockFormat`'s reason — the console holds it before it asks for anything
-   *  else, and the member's gym card needs it to decide whether to DRAW the
-   *  "I'm here" button at all. */
-  manualAttendanceEnabled: boolean;
-  status: OrgStatus;
-}
-
-export interface MyOrgRow extends OrgRow {
-  staffRole: OrgRole | null;
-  /** THE STORED TICKS ON THE CALLER'S OWN STAFF ROW, raw. `null` means either no
-   *  staff row at all (a plain member) or a row written before the column
-   *  existed — the service's `privilegesFor` is the one place that tells those
-   *  apart, exactly as it does for `getStaffAuthority`. Never interpreted here
-   *  (T3 round 1 C/H-1). */
-  privileges: string[] | null;
-  /** The gym's live subscription, or null when it has none. Read for EVERY row
-   *  and withheld from non-staff callers by the service, in the same place and
-   *  for the same reason `privileges` is interpreted there — one function
-   *  decides who is told what about a gym. */
-  subscription: GymSubscriptionRow | null;
-  /** Live members occupying a paid place, by `claimSeat`'s own rule. Always a
-   *  number here; the service nulls it for a caller who is not staff. */
-  seatsUsed: number;
-  /** Has the OWNER OF THIS GYM already spent their one free trial, ever —
-   *  `startGymTrial`'s own refusal condition, asked ahead of the press so a
-   *  screen can stop offering what the door will refuse. Always a boolean here;
-   *  the service nulls it for a caller who is not staff, as it does the two
-   *  fields above. */
-  ownerTrialUsed: boolean;
-  /** The gym's postal address for its invitations; the service withholds it from a
-   *  caller who is not staff. */
-  postalAddress: string | null;
-  /** IS THIS GYM'S CONSOLE READ-ONLY — i.e. will every write route refuse it.
-   *  Derived from the SAME lateral `subscription` comes out of, so this reader
-   *  cannot disagree with itself about what a live plan is. Always a boolean
-   *  here; the service nulls it for a caller who is not staff, as it does the
-   *  three fields above.
-   *
-   *  **The other reader of this rule is `gymHasLivePlan` below, and what stops
-   *  the two drifting is a TEST rather than a shared fragment** (R3.8 forbids
-   *  the fragment; :14493's Low-2 is what drift costs). That test drives this
-   *  FIELD and a refused WRITE across one gym's transition from trialling to
-   *  expired — :21580's seat-meter precedent, the same instrument for the same
-   *  hazard. */
-  consoleReadOnly: boolean;
-  /** The console is read-only because a paid plan's payment is overdue, not because a
-   *  trial ended: the fix is the card on Paddle's page (ROADMAP Stage 3 item 1c-i). */
-  paymentOverdue: boolean;
-  /** Who is owed that payment: Paddle, or Razorpay for an Indian gym (1d-i). Null when none is. */
-  paymentOverdueThrough: "paddle" | "razorpay" | null;
-  /** An Indian gym's owner's mobile for its payments (1d-i); the service shows it only to
-   *  staff who manage billing. */
-  billingMobile: string | null;
-  /** THE NEWEST CHEER THIS GYM HAS SENT THE CALLER, or null — Kd's :29961
-   *  ruling 4 reaching the member, and the whole of its delivery.
-   *
-   *  **UNLIKE THE FOUR FIELDS ABOVE, THIS ONE IS FOR A PLAIN MEMBER** and the
-   *  service does NOT null it for a non-staff caller. Those four are facts about
-   *  the GYM that §2.4 keeps from a member; this is a message addressed TO them,
-   *  and withholding it would hide the feature from the only person it is for.
-   *
-   *  **It carries the preset and the instant, never the sender.**
-   *  `gym_cheers.sent_by_user_id` is stored and deliberately not read here —
-   *  §2.4's mirror, a member learns their gym cheered them and not who was on
-   *  the desk. */
-  latestCheer: { preset: string; sentAt: Date } | null;
-  /** THE NEWEST *"we miss you"* THIS GYM HAS SENT THE CALLER, or null — Part 3
-   *  §4.1's nudge reaching the member, and the whole of its delivery.
-   *
-   *  **IT IS FOR A PLAIN MEMBER, LIKE `latestCheer` AND UNLIKE THE FIELDS ABOVE
-   *  IT**, and the service does not null it for a non-staff caller: it is a
-   *  message addressed TO them.
-   *
-   *  **IT CARRIES THE PRESET AND THE INSTANT, NEVER THE SENDER, AND NEVER THE
-   *  FACT THAT A LIST EXISTS.** §2.4's mirror, one step further than the cheer
-   *  needs it: a member learns their gym is thinking of them, not that their gym
-   *  has a screen headed *"slipping away"* with their name on it.
-   *
-   *  **ONE OF THESE TWO FIELDS REACHES THE SCREEN, NEVER BOTH** — Kd's own
-   *  question (:36694 §3): exactly one line draws on a gym's card, the newer.
-   *  They are two fields here because the SENDER'S side needs them apart. */
-  latestNudge: { preset: string; sentAt: Date } | null;
-  isMember: boolean;
-  joinedAt: Date | null;
-}
-
-export interface MembershipRow {
-  id: string;
-  joinedAt: Date;
-  groupLabel: string | null;
-}
-
-export interface MemberRow {
-  id: string;
-  userId: string;
-  displayName: string;
-  joinedAt: Date;
-  groupLabel: string | null;
-  complimentary: boolean;
-  /** Does this person occupy one of the gym's paid places? Derived, never
-   *  stored — see `listMembers`, which writes out `claimSeat`'s count rule. */
-  takesSeat: boolean;
-  /** The name on the gym's list of the record this membership was joined through
-   *  (§10.2), or null when it names none. */
-  listName: string | null;
-  /** They also run this gym: their staff role and the gym's own name for it. */
-  staff: { role: OrgRole; roleName: string | null } | null;
-}
-
-export interface CodeRow {
-  code: string;
-  label: string;
-  paused: boolean;
-  expiresAt: Date | null;
-  maxUses: number | null;
-  /** People in the gym NOW who came through this code — see `toCodeRow`. */
-  joined: number;
-}
-
-/** A join application as its own applicant sees it (Kd ruling :11072). */
-export interface ApplicationRow {
-  id: string;
-  status: OrgApplicationStatus;
-  appliedAt: Date;
-  expiresAt: Date;
-  decidedAt: Date | null;
-  /** Last time this person tapped "Remind them" (:11385 mechanic 3). */
-  nudgedAt: Date | null;
-}
-
-/** One row of the console's confirm queue. */
-export interface ApplicantRow {
-  id: string;
-  userId: string;
-  displayName: string;
-  appliedAt: Date;
-  expiresAt: Date;
-  groupLabel: string;
-  /** Stamped by the reminder sweep, and read by the expiry statement before it
-   *  is allowed to touch this row — one fact, so the mark the owner sees and
-   *  the gate the machine obeys cannot disagree (:11385's ordering rule). */
-  gymNotifiedAt: Date | null;
-  nudgedAt: Date | null;
-}
-
-interface RawOrg {
-  id: string;
-  slug: string;
-  name: string;
-  city: string | null;
-  country: string | null;
-  org_type: string;
-  timezone: string;
-  locale: string;
-  currency_display: string;
-  clock_format: string;
-  manual_attendance_enabled: boolean;
-  status: string;
-}
-
-interface RawApplication {
-  id: string;
-  status: string;
-  applied_at: Date;
-  expires_at: Date;
-  decided_at: Date | null;
-  member_nudged_at: Date | null;
-}
-
-/** The DB CHECK constraints (Part 4 §3.2) already guarantee these vocabularies.
- *  Parsing rather than casting (R2.2) means that if a constraint is ever
- *  dropped, this throws loudly here instead of quietly widening a response
- *  shape the clients trust. */
-function toOrgType(value: string): OrgType {
-  return orgTypeSchema.parse(value);
-}
-function toOrgStatus(value: string): OrgStatus {
-  return orgStatusSchema.parse(value);
-}
-function toOrgRole(value: string): OrgRole {
-  return orgRoleSchema.parse(value);
-}
-function toApplicationStatus(value: string): OrgApplicationStatus {
-  return orgApplicationStatusSchema.parse(value);
-}
-
-function toApplicationRow(raw: RawApplication): ApplicationRow {
-  return {
-    id: raw.id,
-    status: toApplicationStatus(raw.status),
-    appliedAt: raw.applied_at,
-    expiresAt: raw.expires_at,
-    decidedAt: raw.decided_at,
-    nudgedAt: raw.member_nudged_at,
-  };
-}
-
-function toOrgRow(raw: RawOrg): OrgRow {
-  return {
-    id: raw.id,
-    slug: raw.slug,
-    name: raw.name,
-    city: raw.city,
-    country: raw.country,
-    orgType: toOrgType(raw.org_type),
-    timezone: raw.timezone,
-    locale: raw.locale,
-    currencyDisplay: raw.currency_display,
-    clockFormat: gymClockFormatSchema.parse(raw.clock_format),
-    manualAttendanceEnabled: raw.manual_attendance_enabled,
-    status: toOrgStatus(raw.status),
-  };
-}
-
-/** A 23505 from any statement in this module. TS narrows via `in` — no cast. */
-function isUniqueViolation(err: unknown): boolean {
-  return typeof err === "object" && err !== null && "code" in err && err.code === "23505";
-}
-
-/** Which unique index a 23505 came from. `gyms.slug` and `gym_codes.code` are
- *  both minted from randomness and both retried, but they are retried
- *  DIFFERENTLY (a slug keeps the readable stem, a code is thrown away whole),
- *  so the caller has to be able to tell them apart. */
-export type TakenWhat = "slug" | "code";
-
-export class OrgNameTakenError extends Error {
-  readonly what: TakenWhat;
-  constructor(what: TakenWhat) {
-    super(`org create lost a uniqueness race on ${what}`);
-    this.name = "OrgNameTakenError";
-    this.what = what;
-  }
-}
-
-export interface CreateOrgInput {
-  ownerUserId: string;
-  slug: string;
-  name: string;
-  city: string | null;
-  /** The country the wizard asked for, STORED from this card on. It used to
-   *  reach the service, become a currency and evaporate — so every gym created
-   *  before migration `0014` reads back `null` and no honest backfill exists. */
-  country: string;
-  orgType: OrgType;
-  timezone: string;
-  locale: string;
-  currencyDisplay: string;
-  /** The gym's first join code; null while join codes are switched off (ROADMAP 3c). */
-  code: { code: string; label: string } | null;
-  /** An Indian gym's owner's mobile for its payments (`+91…`), already read by the service. */
-  billingMobile: string | null;
-  /** The owner's "Do you train here too?": yes is an ordinary seat (§10.4). */
-  trainsHere: boolean;
-  /** The owner's starting ticks, computed by the service from the owner role's
-   *  template — policy stays in one place, storage in this one. */
-  ownerPrivileges: readonly string[];
-}
-
-export interface CreateOrgResult {
-  org: OrgRow;
-  code: { code: string; label: string } | null;
-}
-
-/** One attempt at Part 3 §4.0's steps 1 and 4 as a single transaction: the org, its
- *  owner staff row, its first join code (none while codes are switched off), and — only when the owner answered yes to "Do
- *  you train here too?" — the owner's membership, an ordinary seat (§10.4). All or
- *  none.
- *
- *  Throws `OrgNameTakenError` on a uniqueness race; the SERVICE decides how to
- *  retry, because it owns the randomness. */
-export async function createOrgAttempt(
-  sql: Sql,
-  input: CreateOrgInput,
-): Promise<CreateOrgResult> {
-  try {
-    return await sql.begin(async (tx) => {
-      const orgRows = await tx<RawOrg[]>`
-        INSERT INTO gyms (slug, name, city, country, org_type, timezone, locale,
-                          currency_display, owner_user_id, billing_mobile)
-        VALUES (${input.slug}, ${input.name}, ${input.city}, ${input.country},
-                ${input.orgType}, ${input.timezone}, ${input.locale},
-                ${input.currencyDisplay}, ${input.ownerUserId}, ${input.billingMobile})
-        RETURNING id, slug, name, city, country, org_type, timezone, locale,
-                  currency_display, clock_format, manual_attendance_enabled, status`;
-      const rawOrg = orgRows[0];
-      if (rawOrg === undefined) throw new Error("INSERT INTO gyms returned no row");
-      const org = toOrgRow(rawOrg);
-
-      // The owner's ticks are written HERE, with the row, for the same reason
-      // an appointment's are: a staff record whose effective set arrives later
-      // is a record whose authority depends on when you looked. This is the
-      // SECOND writer of `gym_staff` in the product and the one that is easy to
-      // forget — the ticks card's own tests caught it doing exactly that.
-      await tx`
-        INSERT INTO gym_staff (gym_id, user_id, role, privileges)
-        VALUES (${org.id}, ${input.ownerUserId}, 'owner', ${[...input.ownerPrivileges]})`;
-
-      let code: { code: string; label: string } | null = null;
-      if (input.code !== null) {
-        const codeRows = await tx<{ id: string; code: string; label: string }[]>`
-          INSERT INTO gym_codes (gym_id, code, label)
-          VALUES (${org.id}, ${input.code.code}, ${input.code.label})
-          RETURNING id, code, label`;
-        const codeRow = codeRows[0];
-        if (codeRow === undefined) throw new Error("INSERT INTO gym_codes returned no row");
-        code = { code: codeRow.code, label: codeRow.label };
-      }
-
-      // The owner's place is asked, never given (§10.4): a yes is an ordinary seat,
-      // counted like anyone's, through no code, with the answer's time as its consent.
-      if (input.trainsHere) {
-        await tx`
-          INSERT INTO gym_members (gym_id, user_id, code_id, consent_at, complimentary)
-          VALUES (${org.id}, ${input.ownerUserId}, NULL, now(), false)`;
-      }
-
-      await insertAudit(tx, {
-        actorUserId: input.ownerUserId,
-        gymId: org.id,
-        action: "org.created",
-        targetType: "gym",
-        targetId: org.id,
-        meta: { orgType: org.orgType },
-      });
-
-      return { org, code };
-    });
-  } catch (err) {
-    if (isUniqueViolation(err)) {
-      // Only two unique constraints are reachable from this transaction.
-      const constraint =
-        typeof err === "object" && err !== null && "constraint_name" in err
-          ? String(err.constraint_name)
-          : "";
-      throw new OrgNameTakenError(constraint.includes("code") ? "code" : "slug");
-    }
-    throw err;
-  }
-}
-
-/** How many orgs `/mine` will return. A person belongs to one or two gyms; a
- *  multi-site owner might reach a dozen. The bound exists so the response has a
- *  ceiling at all (T3 round 1 L-4) — an unbounded list is a shape that works
- *  until the day it does not. Its own `OWED.md` line covers paginating this
- *  properly if anyone ever approaches it. */
-export const MY_ORGS_LIMIT = 100;
-
-/** Every org the caller has ANY relationship with. One row per org even when
- *  they are both staff and member (the default for an owner), so a caller can
- *  never render the same gym twice. */
-export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyOrgRow[]> {
-  const rows = await sql<
-    (RawOrg & {
-      staff_role: string | null;
-      privileges: string[] | null;
-      is_member: boolean;
-      joined_at: Date | null;
-      sub_status: string | null;
-      sub_trial_ends_at: Date | null;
-      sub_seat_cap: number | null;
-      sub_plan_seat_cap: number | null;
-      sub_price_minor: number | null;
-      sub_currency: string | null;
-      sub_current_period_end: Date | null;
-      sub_cancel_at_period_end: boolean | null;
-      sub_cancel_sent_at: Date | null;
-      sub_provider: string | null;
-      sub_pending_seat_cap: number | null;
-      sub_pending_price_minor: number | null;
-      sub_pending_from: Date | null;
-      sub_trial_seat_cap: number | null;
-      sub_kept_seat_cap: number | null;
-      sub_kept_members: number | null;
-      sub_fitted_asked_seat_cap: number | null;
-      sub_fitted_members: number | null;
-      payment_overdue: boolean;
-      overdue_provider: string | null;
-      billing_mobile: string | null;
-      seats_used: number;
-      owner_trial_used: boolean;
-      postal_address: string | null;
-      cheer_preset: string | null;
-      cheer_sent_at: Date | null;
-      nudge_preset: string | null;
-      nudge_sent_at: Date | null;
-    })[]
-  >`
-    SELECT g.id, g.slug, g.name, g.city, g.country, g.org_type, g.timezone,
-           g.locale, g.currency_display, g.clock_format, g.manual_attendance_enabled, g.status,
-           g.postal_address,
-           g.billing_mobile,
-           s.role AS staff_role,
-           s.privileges,
-           (m.id IS NOT NULL) AS is_member,
-           m.joined_at,
-           sub.status AS sub_status,
-           sub.trial_ends_at AS sub_trial_ends_at,
-           sub.seat_cap AS sub_seat_cap,
-           sub.plan_seat_cap AS sub_plan_seat_cap,
-           sub.price_minor AS sub_price_minor,
-           sub.currency AS sub_currency,
-           sub.current_period_end AS sub_current_period_end,
-           sub.cancel_at_period_end AS sub_cancel_at_period_end,
-           sub.cancel_sent_at AS sub_cancel_sent_at,
-           sub.provider AS sub_provider,
-           sub.pending_seat_cap AS sub_pending_seat_cap,
-           sub.pending_price_minor AS sub_pending_price_minor,
-           sub.pending_from AS sub_pending_from,
-           sub.trial_seat_cap AS sub_trial_seat_cap,
-           sub.kept_seat_cap AS sub_kept_seat_cap,
-           sub.kept_members AS sub_kept_members,
-           sub.fitted_asked_seat_cap AS sub_fitted_asked_seat_cap,
-           sub.fitted_members AS sub_fitted_members,
-           -- A paid plan whose grace ended while Paddle or Razorpay still retries (1c-i, 1d-i).
-           EXISTS (
-             SELECT 1 FROM subscriptions so
-             WHERE so.owner_type = 'gym' AND so.owner_id = g.id AND so.cancel_reason = 'grace_expired'
-           ) AS payment_overdue,
-           (
-             SELECT so.provider FROM subscriptions so
-             WHERE so.owner_type = 'gym' AND so.owner_id = g.id AND so.cancel_reason = 'grace_expired'
-             ORDER BY so.ended_at DESC NULLS LAST, so.id
-             LIMIT 1
-           ) AS overdue_provider,
-           -- THE SEAT METER'S NUMERATOR: every live membership, the owner's and
-           -- staff's included (spec Part 3 10.4), the same count as claimSeat's
-           -- paidPlacesUsed and billing's seatsUsed. NO BACKTICKS IN THIS TEMPLATE.
-           -- Correlated per gym and the outer query is capped at MY_ORGS_LIMIT.
-           (SELECT count(*)::int FROM gym_members sm
-             WHERE sm.gym_id = g.id
-               AND sm.removed_at IS NULL
-           ) AS seats_used,
-           -- HAS THIS GYM'S OWNER ALREADY SPENT THEIR ONE FREE TRIAL — the arm
-           -- selector for the unskippable prompt (:22697), and the SECOND COPY
-           -- of a rule whose first copy is the "used" query inside
-           -- startGymTrial, far below in this same file.
-           --
-           -- NO BACKTICKS HERE EITHER, and I incurred that slip AGAIN writing
-           -- this block — the third recorded time in this one template (:12227,
-           -- then the seat meter above, now here). One backtick ends the literal
-           -- and the rest of the query becomes a run of parse errors. The
-           -- warning fifty lines up did not stop it happening; typecheck did.
-           --
-           -- IT IS THE SAME THREE CONDITIONS DELIBERATELY, and they are the
-           -- door's rather than a paraphrase of it: gym-owned subscriptions,
-           -- anchored on THIS gym's owner_user_id, evidenced by trial_ends_at
-           -- being set. A screen fed anything looser offers a trial the door
-           -- then refuses, which is :22341 §7's defect with the sign flipped.
-           --
-           -- IT TESTS trial_ends_at AND NEVER A STATUS, which is the line to
-           -- read twice. The evidence has to SURVIVE the trial ending, so it
-           -- cannot key on trialing; and nothing in the product ever clears that
-           -- column (the shared schema says so in as many words), which is
-           -- precisely what makes it durable proof that a trial once existed.
-           -- An expired row, a canceled one and a gym that converted to paying
-           -- all still carry it.
-           --
-           -- R3.8 forbids sharing this as an sql fragment and :14493's Low-2 is
-           -- what two readers of one rule cost when they drift, so what holds
-           -- the copies together is a test driving THIS FIELD and THAT REFUSAL
-           -- on one fixture — :14013's six-site precedent, the same instrument
-           -- the seat meter above is pinned by.
-           EXISTS (
-             SELECT 1 FROM subscriptions ts JOIN gyms tg ON tg.id = ts.owner_id
-             WHERE ts.owner_type = 'gym'
-               AND tg.owner_user_id = g.owner_user_id
-               AND ts.trial_ends_at IS NOT NULL
-           ) AS owner_trial_used,
-           ch.preset AS cheer_preset,
-           ch.created_at AS cheer_sent_at,
-           nd.preset AS nudge_preset,
-           nd.created_at AS nudge_sent_at
-    FROM gyms g
-    LEFT JOIN gym_staff s ON s.gym_id = g.id AND s.user_id = ${userId}
-    LEFT JOIN gym_members m ON m.gym_id = g.id AND m.user_id = ${userId}
-                           AND m.removed_at IS NULL
-    -- THE NEWEST CHEER THIS GYM HAS SENT THE CALLER (:29961 ruling 4).
-    --
-    -- NO BACKTICKS IN THIS BLOCK EITHER — one ends the template literal and the
-    -- rest of the query becomes parse errors. Three recorded slips in this one
-    -- template already (:12227, the seat meter, the trial-used EXISTS).
-    --
-    -- A LATERAL AND NOT A SECOND ROUND TRIP: the member's card needs this beside
-    -- the gym it belongs to, and a separate read would have to be re-joined in
-    -- JavaScript by gym id. Correlated per gym, the outer query is capped at
-    -- MY_ORGS_LIMIT, and gym_cheers_user_created_idx leads with user_id,
-    -- which is this predicate's own leading column.
-    --
-    -- BOTH PREDICATES ARE LOAD-BEARING AND THEY FAIL DIFFERENTLY. Dropping
-    -- user_id hands somebody another member's cheer; dropping gym_id puts
-    -- one gym's cheer on a different gym's card, for a gym that never sent it.
-    -- Neither is visible on a fixture with one gym or one member, which is why
-    -- the test builds two of each (:28221 §3b).
-    LEFT JOIN LATERAL (
-      SELECT c.preset, c.created_at
-      FROM gym_cheers c
-      WHERE c.gym_id = g.id AND c.user_id = ${userId}
-      ORDER BY c.created_at DESC
-      LIMIT 1
-    ) ch ON true
-    -- THE NEWEST "we miss you" THIS GYM HAS SENT THE CALLER (Part 3 section 4.1;
-    -- Kd chose the panel at :36503).
-    --
-    -- A SECOND LATERAL AND NOT A UNION WITH THE ONE ABOVE, WHICH LOOKS LIKE THE
-    -- TIDIER BUILD AND IS THE WRONG ONE. The two carry different preset
-    -- vocabularies, different caps and different audit actions, and the member's
-    -- card is the only place they ever meet -- so merging them here would make
-    -- this query the one component in the system unable to tell a compliment
-    -- from a come-back, to save one scan of an index that leads with user_id.
-    --
-    -- **AND ONLY ONE OF THEM MAY REACH THE SCREEN: the newer.** Kd asked what
-    -- happens when a second message arrives -- "will messages piled up and cover
-    -- the whole screen?" (:36694 section 3) -- and the answer is that exactly one
-    -- line draws. Both fields ride the wire; the CHOICE is the client's, and it
-    -- is a build rule with a test rather than an accident of how slice 1
-    -- happened to work.
-    --
-    -- BOTH PREDICATES ARE LOAD-BEARING AND THEY FAIL DIFFERENTLY, exactly as the
-    -- cheer's do: dropping user_id hands somebody another member's message,
-    -- dropping gym_id puts one gym's message on another gym's card. Neither is
-    -- visible on a fixture with one gym or one member (:28221 section 3b).
-    LEFT JOIN LATERAL (
-      SELECT n.preset, n.created_at
-      FROM gym_nudges n
-      WHERE n.gym_id = g.id AND n.user_id = ${userId}
-      ORDER BY n.created_at DESC
-      LIMIT 1
-    ) nd ON true
-    -- §4.1's live set, the same three statuses seatCapFor, startGymTrial and
-    -- getCandidates treat as granting — so past_due still counts during v1
-    -- §10's grace. subs_one_live_uq already permits only one such row per gym;
-    -- the LIMIT is what makes that a property of the QUERY rather than a fact
-    -- this reader inherits from an index it does not name.
-    LEFT JOIN LATERAL (
-      SELECT su.status, su.trial_ends_at,
-             LEAST(p.seat_cap, su.trial_seat_cap, CASE WHEN su.pending_held_at IS NOT NULL THEN np.seat_cap END) AS seat_cap,
-             p.seat_cap AS plan_seat_cap, su.trial_seat_cap, p.price_minor, p.currency,
-             su.current_period_end, su.cancel_at_period_end, su.cancel_sent_at, su.provider,
-             ap.seat_cap AS pending_seat_cap, ap.price_minor AS pending_price_minor, su.pending_from,
-             CASE WHEN lc.failure = 'too_many_members' AND su.pending_plan_id IS NULL AND lc.recent THEN lc.seat_cap END AS kept_seat_cap,
-             CASE WHEN lc.failure = 'too_many_members' AND su.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS kept_members,
-             CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND su.pending_plan_id IS NULL AND lc.recent THEN lc.asked_seat_cap END AS fitted_asked_seat_cap,
-             CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND su.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS fitted_members
-      FROM subscriptions su JOIN plans p ON p.id = su.plan_id
-      LEFT JOIN plans np ON np.id = su.pending_plan_id
-      -- The size asked for, which the card names; np is what is being made.
-      LEFT JOIN plans ap ON ap.id = COALESCE(su.pending_requested_plan_id, su.pending_plan_id)
-      -- The last size change: a smaller size the members did not fit is said on the card.
-      LEFT JOIN LATERAL (
-        SELECT c.state, c.failure, c.members_counted, kp.seat_cap, rp.seat_cap AS asked_seat_cap,
-               -- Said until the payment after the one it was decided for.
-               c.created_at > su.current_period_end - interval '32 days' AS recent
-        FROM billing_plan_changes c JOIN plans kp ON kp.id = c.to_plan_id
-        LEFT JOIN plans rp ON rp.id = c.requested_plan_id
-        WHERE c.gym_id = su.owner_id AND c.subscription_id = su.id
-        ORDER BY c.created_at DESC
-        LIMIT 1
-      ) lc ON true
-      WHERE su.owner_type = 'gym' AND su.owner_id = g.id
-        AND su.status IN ('trialing','active','past_due')
-      LIMIT 1
-    ) sub ON true
-    WHERE s.user_id IS NOT NULL OR m.id IS NOT NULL
-    ORDER BY g.created_at DESC, g.id DESC
-    LIMIT ${MY_ORGS_LIMIT}`;
-  return rows.map((r) => ({
-    ...toOrgRow(r),
-    staffRole: r.staff_role === null ? null : toOrgRole(r.staff_role),
-    privileges: r.privileges,
-    subscription:
-      r.sub_status === null
-        ? null
-        : toGymSubscription({
-            status: r.sub_status,
-            trial_ends_at: r.sub_trial_ends_at,
-            seat_cap: r.sub_seat_cap,
-            plan_seat_cap: r.sub_plan_seat_cap,
-            price_minor: r.sub_price_minor ?? 0,
-            currency: r.sub_currency ?? "",
-            current_period_end: r.sub_current_period_end,
-            cancel_at_period_end: r.sub_cancel_at_period_end ?? false,
-            cancel_sent_at: r.sub_cancel_sent_at,
-            provider: r.sub_provider ?? "none",
-            pending_seat_cap: r.sub_pending_seat_cap,
-            pending_price_minor: r.sub_pending_price_minor,
-            pending_from: r.sub_pending_from,
-            trial_seat_cap: r.sub_trial_seat_cap,
-            kept_seat_cap: r.sub_kept_seat_cap,
-            kept_members: r.sub_kept_members,
-            fitted_asked_seat_cap: r.sub_fitted_asked_seat_cap,
-            fitted_members: r.sub_fitted_members,
-          }),
-    seatsUsed: r.seats_used,
-    ownerTrialUsed: r.owner_trial_used,
-    postalAddress: r.postal_address,
-    billingMobile: r.billing_mobile,
-    // THE CONSOLE IS READ-ONLY EXACTLY WHEN THIS GYM HAS NO LIVE PLAN — Part 3
-    // §4.2, and Kd's ruling of 2026-08-29 that it stops every member of staff.
-    //
-    // Read off the LATERAL rather than by a second query, so this response
-    // cannot say "you may change things" beside a `subscription: null` that says
-    // the gym is on nothing. It is one bit of the same row.
-    //
-    // NOT `subscription === null` AT THE CLIENT, which is the same arithmetic
-    // and a different guarantee: that null also covers "the caller is not staff"
-    // and "the api is too old", and a lock-out driven by an unknown is C97's
-    // defect. The service nulls this for a non-staff caller and the shared
-    // schema defaults it to null for an old api, so a definite `true` is the
-    // only thing that ever greys a control out.
-    consoleReadOnly: r.sub_status === null,
-    // Only while there is no live plan: a gym on a plan again owes nothing.
-    paymentOverdue: r.sub_status === null && r.payment_overdue,
-    paymentOverdueThrough:
-      r.sub_status === null && r.payment_overdue && (r.overdue_provider === "paddle" || r.overdue_provider === "razorpay")
-        ? r.overdue_provider
-        : null,
-    // BOTH HALVES OR NEITHER. The lateral either matched a row or did not, so a
-    // preset without an instant is impossible — and writing it as two
-    // independent `=== null` tests would let a future edit produce a cheer with
-    // no time on it, which the member's screen renders as "cheered" with nothing
-    // to say when.
-    latestCheer:
-      r.cheer_preset === null || r.cheer_sent_at === null
-        ? null
-        : { preset: r.cheer_preset, sentAt: r.cheer_sent_at },
-    // BOTH HALVES OR NEITHER, for the reason above it — and written as its own
-    // expression rather than folded in with the cheer's, because the two
-    // laterals succeed and fail independently and a shared guard would tie them.
-    latestNudge:
-      r.nudge_preset === null || r.nudge_sent_at === null
-        ? null
-        : { preset: r.nudge_preset, sentAt: r.nudge_sent_at },
-    isMember: r.is_member,
-    joinedAt: r.joined_at,
-  }));
-}
-
-export interface FormerOrgRow {
-  org: OrgRow;
-  removedAt: Date;
-}
-
-/** Gyms the caller was REMOVED from, recently enough to still be worth saying.
- *
- *  **Kd's ruling of 2026-08-20**: after a removal the app said nothing at all
- *  about that gym. The T3 round-1 fix stopped it saying something FALSE
- *  ("{gym} didn't confirm your request"); this is what makes it say something
- *  TRUE. A person who was let into a gym and then taken out is entitled to know
- *  that is what happened.
- *
- *  **Deliberately NOT folded into `listOrgsForUser`.** That reader means "gyms
- *  I have a live relationship with" and the CONSOLE reads the same response; a
- *  removed gym appearing in `orgs` would put a gym into a console list whose
- *  every subsequent read the server answers 404 to. Separate list, same
- *  response, one fact in one place.
- *
- *  **THIS CANNOT TELL A GYM'S REMOVAL FROM A PERSON'S OWN DELETION, and the
- *  earlier version of this comment claimed it could. T3 round 2 L2-2.** The
- *  DPDP Day-0 cascade closes memberships when somebody deletes their OWN
- *  account, and the claim that such a person can never be reading this — "by
- *  definition a live account" — is FALSE: `restoreUser` reactivates the account
- *  and DELIBERATELY leaves memberships closed (DECISIONS 2026-07-11, P2.2 T3
- *  finding 4 — auto-reopen could exceed seat caps). Both windows are 14 days
- *  (`DPDP_RETENTION_DAYS` and `DECIDED_VISIBLE_DAYS`), so a restored account
- *  reads this list carrying a `removed_at` it caused itself.
- *
- *  **Nothing user-visible is false today** — "You're no longer a member of X"
- *  is true however the membership ended — which is why this is a comment fix
- *  and not a code one. The sharp edge is real but narrow: an owner who deletes
- *  and restores their account is told they are no longer a member of their own
- *  gym while the console still lists them as its owner. **The durable fix is a
- *  reason column on `gym_members`** so the two endings can be told apart and
- *  worded differently; it is not built and is NOT invented here (R0.2), and it
- *  belongs with whatever card revisits restore at P3.10. */
-export async function listFormerOrgsForUser(
-  sql: SqlOrTx,
-  userId: string,
-): Promise<FormerOrgRow[]> {
-  // DISTINCT ON IS LOAD-BEARING (T3 round 2 L2-3). `gym_members_live_uq` is a
-  // PARTIAL unique index — `WHERE removed_at IS NULL` — so one person may hold
-  // many CLOSED rows for one gym: join, removed, join again, removed again is
-  // two. Without this the same gym arrives twice and `listOrgsForUser`'s own
-  // promise one function above ("one row per org … so a caller can never render
-  // the same gym twice") would be false of its neighbour in the same response.
-  // The client happens to dedupe by org id, which is what kept it invisible —
-  // a contract that holds only because of what the one caller does today.
-  //
-  // The inner ORDER BY is what DISTINCT ON picks with: gym first (required),
-  // then the MOST RECENT removal, so the surviving row is the latest ending.
-  const rows = await sql<(RawOrg & { removed_at: Date })[]>`
-    SELECT * FROM (
-      SELECT DISTINCT ON (m.gym_id)
-             g.id, g.slug, g.name, g.city, g.country, g.org_type, g.timezone,
-             g.locale, g.currency_display, g.clock_format, g.manual_attendance_enabled, g.status, m.removed_at
-      FROM gym_members m
-      JOIN gyms g ON g.id = m.gym_id
-      WHERE m.user_id = ${userId}
-        AND m.removed_at IS NOT NULL
-        AND m.removed_at > now() - (${DECIDED_VISIBLE_DAYS} * INTERVAL '1 day')
-        -- Somebody who was removed and has since REJOINED is simply a member
-        -- again; saying both would be one gym with two contradictory rows.
-        AND NOT EXISTS (
-          SELECT 1 FROM gym_members live
-          WHERE live.gym_id = m.gym_id AND live.user_id = m.user_id
-            AND live.removed_at IS NULL
-        )
-      ORDER BY m.gym_id, m.removed_at DESC
-    ) latest
-    ORDER BY latest.removed_at DESC, latest.id DESC
-    LIMIT ${MY_ORGS_LIMIT}`;
-  return rows.map((r) => ({ org: toOrgRow(r), removedAt: r.removed_at }));
-}
-
-export async function getOrgById(sql: SqlOrTx, gymId: string): Promise<OrgRow | null> {
-  const rows = await sql<RawOrg[]>`
-    SELECT id, slug, name, city, country, org_type, timezone, locale,
-           currency_display, clock_format, manual_attendance_enabled, status
-    FROM gyms WHERE id = ${gymId}`;
-  const row = rows[0];
-  return row === undefined ? null : toOrgRow(row);
-}
-
-/** The gym's own editable details. **Only the keys that are PRESENT are
- *  written** — an absent key leaves that column alone, while `city: null`
- *  genuinely clears the city. A patch object cannot express that distinction
- *  with `undefined` alone once it crosses into SQL, so the writer below checks
- *  `in` rather than `!== undefined`. */
-export interface OrgPatch {
-  name?: string;
-  city?: string | null;
-  country?: string;
-  /** Never accepted from a caller — the service derives it from `country` and
-   *  always sets the two together, so this key is present exactly when
-   *  `country` is (R3.1, :10010). */
-  currencyDisplay?: string;
-  timezone?: string;
-  /** Which clock this gym's hours are shown on. Bound by nothing the
-   *  currency lock protects — it moves no money and no day boundary — so it
-   *  is the one field here a paying gym may always change. */
-  clockFormat?: GymClockFormat;
-  /** The owner's attendance switch (:26469 §1.4). Bound by nothing the currency
-   *  lock protects — no money, no day boundary — so like `clockFormat` it is a
-   *  field a paying gym may always change. */
-  manualAttendanceEnabled?: boolean;
-  /** The postal address printed in the gym's invitations (Part 3 §9.12), already
-   *  tidied by the service; null clears it. */
-  postalAddress?: string | null;
-  /** An Indian gym's owner's mobile for its payments (`+91…`), already read by the service;
-   *  null clears it. */
-  billingMobile?: string | null;
-}
-
-export type UpdateOrgOutcome =
-  | { kind: "updated"; org: OrgRow; postalAddress: string | null; billingMobile: string | null; changed: readonly string[] }
-  | { kind: "unchanged"; org: OrgRow; postalAddress: string | null; billingMobile: string | null }
-  /** RENAMED from `country_locked` in the T3 round-1 fix, because the old name
-   *  described the wrong thing and the message built on it was false to a gym
-   *  with no country recorded. What is locked is the CURRENCY. */
-  | { kind: "currency_locked" }
-  | { kind: "not_found" };
-
-/** EDIT THE GYM'S OWN ROW (Kd's `org.manage`, 2026-08-26).
- *
- *  **The lock is taken for the AUDIT ROW, not for the write.** Two concurrent
- *  edits of different columns are last-write-wins and need no lock; what needs
- *  one is "did anything actually change", which is a read followed by a write
- *  and would otherwise let two owners saving at once produce an audit trail
- *  where one of them appears to have changed nothing. :14174 L-4's rule applied
- *  in the direction it points — a lock is warranted by the CONSEQUENCE — and the
- *  consequence here is the record of who changed a gym's billing country. It is
- *  `lockOrgRow`, the same instrument and the same order (org row → child rows)
- *  every other mutation in this module takes, so it adds no new deadlock edge.
- *
- *  **A NO-OP WRITES NOTHING AND SAYS SO.** Saving the same name twice must not
- *  leave two rows in `audit_log` claiming two changes; a log that records
- *  non-events is one nobody can read a real event out of.
- *
- *  `changed` names the columns that genuinely moved, so the service can put the
- *  before/after of exactly those into the audit meta rather than a whole-row
- *  snapshot nobody can diff. */
-export async function updateOrg(
-  sql: Sql,
-  input: { gymId: string; patch: OrgPatch; actorUserId: string },
-): Promise<UpdateOrgOutcome> {
-  return await sql.begin(async (tx) => {
-    await lockOrgRow(tx, input.gymId);
-    const before = await getOrgById(tx, input.gymId);
-    if (before === null) return { kind: "not_found" };
-
-    /** KD RULING 2026-08-26: **a gym's country freezes the day it starts
-     *  paying.** *"a gym should not be able to change the country as it will
-     *  create problem of money"* — his instinct, and both providers agree with
-     *  it. **Stripe refuses to change a customer's currency once they have been
-     *  invoiced even once**, and **Paddle — the route Kd ruled at :17366 —
-     *  refuses a COUNTRY change on a live subscription outright**, its own
-     *  answer being cancel-and-resubscribe. Neither freezes from day one, which
-     *  is why this is a condition and not a deleted field: before any money has
-     *  moved there is no invoice to protect, and a gym that mistyped its country
-     *  on the FIRST screen of signup — the screen that decides which price book
-     *  it is shown — would otherwise be stuck for ever.
-     *
-     *  **THE TRIAL IS DELIBERATELY NOT A LOCK.** Kd's gym trial is card-less and
-     *  10 days (`GYM_TRIAL_DAYS`), so a `trialing` gym has paid nothing and has no invoice;
-     *  locking there would freeze the typo at exactly the moment before it starts
-     *  to cost — the worst possible instant. Every other status locks, including
-     *  `canceled` and `expired`, because a subscription that ended may still have
-     *  raised invoices and because over-locking is the safe direction.
-     *
-     *  It reads `subscriptions` rather than `invoices` on purpose: an invoice
-     *  cannot exist without one (`invoices.subscription_id` is NOT NULL), and
-     *  Part 5 §3's machine leaves `trialing` on the first payment, so this
-     *  question is answerable from a column the billing card must maintain
-     *  anyway rather than from a table that card has to remember to write.
-     *
-     *  **IT ASKS WHETHER THE MONEY WOULD MOVE, NOT WHETHER THE COUNTRY WAS
-     *  MENTIONED — T3 round 1 C/H-1, and the first version asked the wrong
-     *  question in a way that broke the whole route.** A settings screen fills
-     *  every box and sends all four fields back on save, so a paying owner
-     *  fixing a typo in the NAME also re-sent an unchanged country; the old
-     *  guard saw the key, refused the entire request, and threw the name, the
-     *  city and the time zone away with it. Kd's ruling says those three stay
-     *  editable and in practice none of them were. **Every other field in this
-     *  function compares against the stored row; the country was the odd one
-     *  out, and it was the one that blocked everything.**
-     *
-     *  **THE REVIEWER'S OWN PROPOSED FIX WAS MEASURED AND REJECTED — it
-     *  re-opens the hole this rule exists to close** (T3 C/H-2). "Refuse only
-     *  when the country DIFFERS, and treat an unrecorded country as free to
-     *  set" fixes the typo case and lets one of the 59 pre-`0014` gyms — billed
-     *  in rupees, `country` NULL — record `DE` and flip itself to euros. That is
-     *  a paying gym's billing currency moving, which is the entire thing Kd
-     *  stopped. :13552's standing lesson: **a reviewer's proposed fix is a claim
-     *  and takes the same evidence as the code it replaces.**
-     *
-     *  So the question is the CURRENCY's, which is what the ruling was always
-     *  about: unchanged country ⇒ unchanged currency ⇒ allowed · an unrecorded
-     *  country recorded as the one it is ALREADY billed for ⇒ allowed, and the
-     *  gym finally has its country ⇒ closes C/H-2 · Canada → Germany ⇒ both USD
-     *  ⇒ allowed, address updated, money untouched · India → Germany ⇒ REFUSED.
-     *
-     *  **THAT THIRD EXAMPLE READ "France → Germany ⇒ both EUR" UNTIL
-     *  2026-08-28**, when Kd ruled Canada, the UK and the euro area onto US
-     *  dollars (:22215 §3.5). The example was still TRUE — France and Germany do
-     *  still share a currency in this map — but it had stopped being the
-     *  interesting case, because after that ruling the pairs that share a
-     *  currency are almost all of them. Corrected here rather than only in the
-     *  test that drives it (:5748), and the test now drives Canada → Germany so
-     *  the two agree.
-     *  It also makes the refusal TRUE: the old sentence told a gym with no
-     *  country that its country was fixed (:5807).
-     *
-     *  **INSIDE THE TRANSACTION AND UNDER THE ORG LOCK, AND THAT IS NOT
-     *  SUFFICIENT ON ITS OWN — T3 C/H-3, and this note used to claim otherwise.**
-     *  `lockOrgRow` locks the GYM row; it cannot lock a subscription that does
-     *  not exist yet, so one committing between this SELECT and the UPDATE below
-     *  is missed and a now-paying gym's currency moves.
-     *
-     *  **THE REQUIREMENT IS NOW DISCHARGED, and this note said otherwise for a
-     *  commit — T3 round 2, Low-4.** It read *"Unreachable today — nothing in the
-     *  product inserts into `subscriptions`, grep-verified — and live the day the
-     *  billing card ships"*, which stopped being true when `startGymTrial` landed
-     *  630 lines below it in this same file. **The CREATION race is genuinely
-     *  closed**: the only statement that CREATES a gym subscription is
-     *  `startGymTrial`, and it takes `lockOrgRow` on the same gym as its FIRST
-     *  statement, so a trial either commits before this guard's SELECT or waits
-     *  behind its UPDATE.
-     *
-     *  **THERE ARE NOW TWO WRITERS OF `subscriptions`, NOT ONE — this sentence
-     *  said "exactly one" for a commit (T3 round 1 on the sweep, L-3).**
-     *  `trialSweep.ts` is the second and it takes NO lock, deliberately: it only
-     *  ENDS a trial, and :19656 C/H-3 binds whatever CREATES one. **The residual
-     *  race is named rather than restructured for, because it is Low and the
-     *  restructuring is worse:** the sweep can commit `expired` between this
-     *  SELECT and the UPDATE below, letting a country change through on a gym that
-     *  lapsed in that instant. Sub-second, once per gym ever, on a gym with no
-     *  live subscription and no invoice — and the direction of the error is that
-     *  somebody edits their own address a moment before a freeze Kd imposed for
-     *  gyms that have PAID (:22341 §3). Serialising a nightly set-based sweep
-     *  against every owner's typing to close it would cost more than it buys.
-     *  **The requirement does not expire with the discharge — it binds every
-     *  FUTURE writer**: whatever else creates a gym subscription must take
-     *  `lockOrgRow` on that gym first, which is the lock and the order every
-     *  mutation in this module already uses. Own `OWED.md` line. **Do not read this
-     *  guard as complete.** */
-    const movesMoney =
-      "country" in input.patch &&
-      input.patch.currencyDisplay !== undefined &&
-      input.patch.currencyDisplay !== before.currencyDisplay;
-    if (movesMoney) {
-      const billed = await tx<{ n: number }[]>`
-        SELECT count(*)::int AS n FROM subscriptions
-        WHERE owner_type = 'gym'
-          AND owner_id = ${input.gymId}
-          AND (status <> 'trialing' OR provider NOT IN ('none','pilot'))`;
-      if ((billed[0]?.n ?? 0) > 0) return { kind: "currency_locked" };
-    }
-
-    // Compared against the CURRENT row rather than trusted from the request:
-    // a screen sending back every field it drew is the normal case, so without
-    // this every save of an untouched form would write an audit row.
-    const changed: string[] = [];
-    if ("name" in input.patch && input.patch.name !== before.name) changed.push("name");
-    if ("city" in input.patch && (input.patch.city ?? null) !== before.city) changed.push("city");
-    if ("country" in input.patch && input.patch.country !== before.country) {
-      changed.push("country");
-      // The currency moves WITH the country and never on its own. It is listed
-      // separately because it is what a gym is BILLED in — a reader of the audit
-      // log asking "when did this gym's money change" must not have to know that
-      // a country implies one.
-      if (input.patch.currencyDisplay !== before.currencyDisplay) changed.push("currencyDisplay");
-    }
-    if ("timezone" in input.patch && input.patch.timezone !== before.timezone) {
-      changed.push("timezone");
-    }
-    if ("clockFormat" in input.patch && input.patch.clockFormat !== before.clockFormat) {
-      changed.push("clockFormat");
-    }
-    if (
-      "manualAttendanceEnabled" in input.patch &&
-      input.patch.manualAttendanceEnabled !== before.manualAttendanceEnabled
-    ) {
-      changed.push("manualAttendanceEnabled");
-    }
-    const extras = (
-      await tx<{ postal_address: string | null; billing_mobile: string | null }[]>`
-        SELECT postal_address, billing_mobile FROM gyms WHERE id = ${input.gymId}`
-    )[0];
-    const postalBefore = extras?.postal_address ?? null;
-    const postalAfter = "postalAddress" in input.patch ? (input.patch.postalAddress ?? null) : postalBefore;
-    if (postalAfter !== postalBefore) changed.push("postalAddress");
-    const mobileBefore = extras?.billing_mobile ?? null;
-    const mobileAfter = "billingMobile" in input.patch ? (input.patch.billingMobile ?? null) : mobileBefore;
-    if (mobileAfter !== mobileBefore) changed.push("billingMobile");
-    if (changed.length === 0) return { kind: "unchanged", org: before, postalAddress: postalBefore, billingMobile: mobileBefore };
-
-    // Written out column by column rather than assembled from a loop over the
-    // patch's keys: a dynamic identifier built from caller-controlled data is
-    // exactly what R3.8 forbids, and `coalesce` cannot express "clear the city"
-    // because null is a legitimate destination. Each `${}` is a VALUE.
-    const rows = await tx<RawOrg[]>`
-      UPDATE gyms SET
-        name = ${"name" in input.patch ? (input.patch.name ?? before.name) : before.name},
-        city = ${"city" in input.patch ? (input.patch.city ?? null) : before.city},
-        country = ${"country" in input.patch ? (input.patch.country ?? before.country) : before.country},
-        currency_display = ${
-          "country" in input.patch
-            ? (input.patch.currencyDisplay ?? before.currencyDisplay)
-            : before.currencyDisplay
-        },
-        timezone = ${"timezone" in input.patch ? (input.patch.timezone ?? before.timezone) : before.timezone},
-        clock_format = ${
-          "clockFormat" in input.patch
-            ? (input.patch.clockFormat ?? before.clockFormat)
-            : before.clockFormat
-        },
-        manual_attendance_enabled = ${
-          "manualAttendanceEnabled" in input.patch
-            ? (input.patch.manualAttendanceEnabled ?? before.manualAttendanceEnabled)
-            : before.manualAttendanceEnabled
-        },
-        postal_address = ${postalAfter},
-        billing_mobile = ${mobileAfter}
-      WHERE id = ${input.gymId}
-      RETURNING id, slug, name, city, country, org_type, timezone, locale,
-                currency_display, clock_format, manual_attendance_enabled, status`;
-    const raw = rows[0];
-    if (raw === undefined) throw new Error("UPDATE gyms changed no row under the org lock");
-
-    await insertAudit(tx, {
-      actorUserId: input.actorUserId,
-      gymId: input.gymId,
-      action: "org.updated",
-      targetType: "gyms",
-      targetId: input.gymId,
-      // WHICH FIELDS MOVED, and their before values. The after state is the row
-      // itself, so recording it twice would only create somewhere for the two to
-      // disagree. `null` is allowed in this meta for exactly the case it means
-      // here — a city that was not set, or a country nobody had ever recorded.
-      meta: {
-        changed,
-        name: changed.includes("name") ? before.name : null,
-        city: changed.includes("city") ? before.city : null,
-        country: changed.includes("country") ? before.country : null,
-        currencyDisplay: changed.includes("currencyDisplay") ? before.currencyDisplay : null,
-        timezone: changed.includes("timezone") ? before.timezone : null,
-      },
-    });
-
-    return { kind: "updated", org: toOrgRow(raw), postalAddress: postalAfter, billingMobile: mobileAfter, changed };
-  });
-}
-
-/** A staff row's authority: the role it was appointed under, and the effective
- *  ticks stored on it. `privileges` is null only for a row written by code that
- *  predates the column (see the schema's own note). */
-export interface StaffAuthority {
-  role: OrgRole;
-  privileges: string[] | null;
-}
-
-/** WHAT THE CALLER MAY DO IN ONE ORG — their role and the ticks stored beside
- *  it. Null means "not staff here", which the service turns into a 404 — a
- *  stranger must not learn the org exists.
- *
- *  **It reads the ticks in the SAME query as the role, deliberately.** Two
- *  reads would leave a window where the role is this person's and the ticks are
- *  from a moment before an owner changed them, and the seam would decide against
- *  a set that never existed. `privileges` null is the deploy window R4.4's
- *  expand-then-contract creates; `privilegesFor` in the service is the one place
- *  that decides what null means, and it means "the role's defaults".
- *
- *  **Renamed from `getStaffRole` in the same card that gave it the ticks** — it
- *  no longer answers "what role", it answers "what authority", and a name that
- *  says role invites a caller to compare it to one (the exact thing :11429's
- *  seam exists to stop).
- *
- *  **SINCE 4a-ii THE RULE IS THE STAFF ROW AND A LIVE ACCOUNT, and nothing about
- *  membership.** Staff and member are separate (spec §10.3): an owner may end a
- *  trainer's membership and keep them as staff, or take both in one step. The ghost
- *  this guard once denied (a membership closed after the staff row) had two sources,
- *  and both now end the staff row itself: appointing is serialised against removing
- *  by the org lock, and deleting an account deletes its staff rows (`softDeleteUser`;
- *  rows left from before, by migration 0062). The owner of a gym keeps theirs, so a
- *  restore gives them their gym back.
- *
- *  `users.status` is checked, so an account inside its deletion window holds nothing. */
-export async function getStaffAuthority(
-  sql: Sql,
-  gymId: string,
-  userId: string,
-): Promise<StaffAuthority | null> {
-  const rows = await sql<{ role: string; privileges: string[] | null }[]>`
-    SELECT s.role, s.privileges
-    FROM gym_staff s
-    JOIN users u ON u.id = s.user_id
-    WHERE s.gym_id = ${gymId}
-      AND s.user_id = ${userId}
-      AND u.status = 'active'`;
-  const row = rows[0];
-  return row === undefined ? null : { role: toOrgRole(row.role), privileges: row.privileges };
-}
-
-export type ApplyOutcome =
-  // `orgCanConfirm` rides BESIDE `ApplicationRow` on both waiting arms rather
-  // than inside it: it is a fact about the GYM, and `ApplicationRow` is the
-  // shape the confirm/reject paths hand around too. Same placement as
-  // `listApplicationsForUser`'s, and for the same reason.
-  | { kind: "pending"; org: OrgRow; application: ApplicationRow; orgCanConfirm: boolean }
-  | { kind: "already_pending"; org: OrgRow; application: ApplicationRow; orgCanConfirm: boolean }
-  | { kind: "already_member"; org: OrgRow; membership: MembershipRow }
-  | { kind: "no_such_code" }
-  // `orgType` RIDES ON BOTH REFUSALS SO THE SENTENCE CAN NAME THE PLACE (Kd's
-  // roadmap line 2b): *"Ask the studio for a current one"*. It is the org's own
-  // column, read in the same transaction two statements above, and it tells the
-  // holder of the code nothing they were not about to be told anyway — the
-  // pending arm returns the whole org summary. `no_such_code` has none by
-  // construction: no code, no org, and inventing one would be the wrong kind of
-  // guess.
-  | { kind: "code_unusable"; reason: "paused" | "expired" | "exhausted"; orgType: OrgType }
-  | { kind: "org_archived"; orgType: OrgType }
-  | { kind: "consent_required" };
-
-/** :11385's ratified default: a pending application dies after 14 days if
- *  nobody acts on it. Stamped at APPLY time rather than computed by the sweep,
- *  so the row carries its own deadline and the sweep is a reader — a deadline
- *  the sweep computes is a deadline that changes when the sweep changes. */
-export const APPLICATION_TTL_DAYS = 14;
-
-/** KD RULING 2026-08-19 (:11072) — typing a code creates an APPLICATION.
- *
- *  **NO SEAT IS TAKEN AND NO MEMBERSHIP ROW IS WRITTEN HERE.** That is the
- *  whole content of the ruling: a leaked code yields the owner a reject list
- *  rather than a full roster, and a real member is never locked out by
- *  strangers because strangers consume nothing while pending. The membership
- *  is created at CONFIRM, by `claimSeat` below, which is where Part 4 §4.2
- *  now lives.
- *
- *  **NO `FOR UPDATE` ON THE ORG ROW, deliberately.** §4.2's lock exists to
- *  serialise SEAT consumption; applying consumes nothing, so taking it would
- *  serialise every applicant in a gym gym-wide for no guarantee. Two
- *  simultaneous applies from one account race on
- *  `gym_join_applications_pending_uq` instead and `ON CONFLICT DO NOTHING`
- *  settles it — the same declarative idempotence §4.2 uses, for the same
- *  reason (a raised 23505 would abort the transaction).
- *
- *  **`uses` IS NOT INCREMENTED HERE EITHER** — see `claimSeat`. A code's
- *  `uses` counts memberships it created; if applying burned a use, a stranger
- *  with a leaked code could exhaust a `max_uses` code and shut a real gym's
- *  poster down without ever getting in.
- *
- *  Check ORDER is unchanged from the pre-ruling join: the code's own refusals
- *  come before the membership check, so an existing member re-typing a paused
- *  code still gets the code refusal. That is TRUE, therefore not :5807's
- *  class, and it was reviewed as correct at :10329 — do not "improve" it into
- *  an already_member answer. */
-export async function applyByCode(
-  sql: Sql,
-  input: { userId: string; code: string; consent: boolean },
-): Promise<ApplyOutcome> {
-  const codeLookup = await sql<{ id: string; gym_id: string }[]>`
-    SELECT id, gym_id FROM gym_codes WHERE code = ${input.code}`;
-  const found = codeLookup[0];
-  if (found === undefined) return { kind: "no_such_code" };
-
-  return await sql.begin(async (tx) => {
-    const orgRows = await tx<RawOrg[]>`
-      SELECT id, slug, name, city, country, org_type, timezone, locale,
-           currency_display, clock_format, manual_attendance_enabled, status
-      FROM gyms WHERE id = ${found.gym_id}`;
-    const rawOrg = orgRows[0];
-    if (rawOrg === undefined) return { kind: "no_such_code" };
-    const org = toOrgRow(rawOrg);
-    if (org.status !== "active") return { kind: "org_archived", orgType: org.orgType };
-
-    const codeRows = await tx<
-      {
-        id: string;
-        label: string;
-        paused: boolean;
-        expires_at: Date | null;
-        joined: number;
-        max_uses: number | null;
-      }[]
-    >`
-      SELECT c.id, c.label, c.paused, c.expires_at, c.max_uses,
-             (SELECT count(*)::int FROM gym_members m
-               WHERE m.code_id = c.id AND m.removed_at IS NULL AND m.complimentary = false)
-               AS joined
-      FROM gym_codes c WHERE c.id = ${found.id} AND c.gym_id = ${found.gym_id}`;
-    const code = codeRows[0];
-    if (code === undefined) return { kind: "no_such_code" };
-    if (code.paused) return { kind: "code_unusable", reason: "paused", orgType: org.orgType };
-    if (code.expires_at !== null && code.expires_at.getTime() <= Date.now()) {
-      return { kind: "code_unusable", reason: "expired", orgType: org.orgType };
-    }
-    // MEASURED AGAINST PEOPLE WHO ARE STILL IN, not against claims ever made
-    // (Kd's smoke, 2026-08-21). A gym that limits a code to 20 means twenty
-    // people at once; under the old `uses` counter a member who left took their
-    // place with them and the code died one short, which no screen explained.
-    // `toCodeRow`'s comment carries the definition and the list of sites.
-    if (code.max_uses !== null && code.joined >= code.max_uses) {
-      return { kind: "code_unusable", reason: "exhausted", orgType: org.orgType };
-    }
-
-    // Part 3 §2.4: joining a CLINIC code IS the consent record. The refusal
-    // stays here and the TIMESTAMP is captured on the APPLICATION, then copied
-    // onto the membership at confirm — so the consent record is dated to the
-    // moment the person agreed, not to the moment the front desk got round to
-    // them. (Clinics are out of the product per :10182; this path is reachable
-    // only by a legacy row, and it stays live for exactly that reason.)
-    if (org.orgType === "clinic" && !input.consent) return { kind: "consent_required" };
-
-    const existingMember = await liveMembership(tx, org.id, input.userId);
-    if (existingMember !== null) {
-      return { kind: "already_member", org, membership: existingMember };
-    }
-
-    const consentAt = input.consent ? new Date() : null;
-    const inserted = await tx<RawApplication[]>`
-      INSERT INTO gym_join_applications (gym_id, user_id, code_id, consent_at, expires_at)
-      VALUES (${org.id}, ${input.userId}, ${code.id}, ${consentAt},
-              now() + (${APPLICATION_TTL_DAYS} * INTERVAL '1 day'))
-      ON CONFLICT (gym_id, user_id) WHERE status = 'pending' DO NOTHING
-      RETURNING id, status, applied_at, expires_at, decided_at, member_nudged_at`;
-
-    const newRow = inserted[0];
-    if (newRow === undefined) {
-      const existingRows = await tx<RawApplication[]>`
-        SELECT id, status, applied_at, expires_at, decided_at, member_nudged_at
-        FROM gym_join_applications
-        WHERE gym_id = ${org.id} AND user_id = ${input.userId} AND status = 'pending'`;
-      const existing = existingRows[0];
-      if (existing === undefined) {
-        // The conflict fired, so a pending row existed a moment ago; nothing
-        // in this transaction can have removed it. Loud rather than a
-        // fabricated reply (the `gym_members` branch's own precedent).
-        throw new Error("gym_join_applications conflict with no pending row to return");
-      }
-      return {
-        kind: "already_pending",
-        org,
-        application: toApplicationRow(existing),
-        // **`gymHasLivePlan` HERE, AND AN INLINE `EXISTS` IN
-        // `listApplicationsForUser` — the difference is deliberate.** This path
-        // asks about ONE gym and is already inside a transaction, which is the
-        // caller that function's signature was widened for; the list asks about
-        // every row it returns at once and would need a query per application.
-        // Both read §4.1's three live statuses and a test drives one gym across
-        // the transition on each surface.
-        orgCanConfirm: await gymHasLivePlan(tx, org.id),
-      };
-    }
-
-    // Part 3 §3.3: every mutating call writes `audit_log`. Applying is a
-    // mutation by the MEMBER, and it is the row that answers "when did this
-    // person first ask?" if a gym ever disputes it.
-    await insertAudit(tx, {
-      actorUserId: input.userId,
-      gymId: org.id,
-      action: "org.join_applied",
-      targetType: "gym_join_application",
-      targetId: newRow.id,
-      meta: { codeLabel: code.label },
-    });
-
-    return {
-      kind: "pending",
-      org,
-      application: toApplicationRow(newRow),
-      orgCanConfirm: await gymHasLivePlan(tx, org.id),
-    };
-  });
-}
-
-/** The caller's LIVE membership in one org, or null. Extracted because the
- *  apply path, the seat claim and the confirm path all ask the same question
- *  and three spellings of it is how two of them drift. */
-async function liveMembership(
-  tx: SqlOrTx,
-  gymId: string,
-  userId: string,
-): Promise<MembershipRow | null> {
-  const rows = await tx<{ id: string; joined_at: Date; label: string | null }[]>`
-    SELECT m.id, m.joined_at, c.label
-    FROM gym_members m
-    LEFT JOIN gym_codes c ON c.id = m.code_id
-    WHERE m.gym_id = ${gymId} AND m.user_id = ${userId} AND m.removed_at IS NULL`;
-  const row = rows[0];
-  return row === undefined
-    ? null
-    : { id: row.id, joinedAt: row.joined_at, groupLabel: row.label };
-}
-
-export type ClaimSeatOutcome =
-  | { kind: "joined"; membership: MembershipRow }
-  | { kind: "already_member"; membership: MembershipRow }
-  | { kind: "seat_cap"; cap: number };
-
-/** PART 4 §4.2, THE SEAT-SAFE JOIN — moved here INTACT when the join door
- *  became an application door (Kd ruling :11072). The statements and their
- *  order are the ones that were written and reviewed against §4.2; what
- *  changed is WHO triggers them (the gym's front desk, at confirm) and not
- *  WHAT they do.
- *
- *    -- caller holds:  SELECT 1 FROM gyms WHERE id=$gym FOR UPDATE
- *    seat check: (count live members) < plan.seat_cap
- *    INSERT INTO gym_members ...
- *    UPDATE gym_codes SET uses = uses + 1
- *
- *  **THE ORG-ROW LOCK IS THE WHOLE POINT and this function does NOT take it —
- *  its caller does, and must.** It is a precondition rather than something
- *  taken here because the confirm path locks the APPLICATION row first and
- *  lock order has to be decided in one place: application → gym, always.
- *  Locking a COUNT instead of the org row would serialise nothing — the second
- *  transaction reads the same pre-insert number.
- *
- *  §4.2 finishes "on unique_violation of gym_members_live_uq → idempotent
- *  success". Done DECLARATIVELY with ON CONFLICT on the same partial index: a
- *  raised 23505 aborts the surrounding transaction, so catching it would mean
- *  re-running the whole claim to answer "already a member". A repeat
- *  deliberately does NOT increment the code's `uses`.
- *
- *  **THE CODE'S AUTOMATIC REFUSALS (paused / expired / max_uses) ARE NOT
- *  RE-APPLIED HERE, and that is a decision, not an omission.** They gate the
- *  APPLY door, where they stop a dead poster admitting strangers. At confirm a
- *  human being has looked at a named person and said yes; refusing them
- *  because the gym paused the code afterwards would be the app overruling the
- *  gym about its own member. The SEAT cap is different and is enforced — that
- *  one is money, and it is not the front desk's to waive. */
-async function claimSeat(
-  tx: TransactionSql,
-  input: {
-    org: OrgRow;
-    userId: string;
-    /** Null for a join by invitation (§10.2), which comes through no code. */
-    codeId: string | null;
-    codeLabel: string | null;
-    consentAt: Date | null;
-    /** A join by invitation: the list record it was for (null when the list could not
-     *  say whose it was), and the moment the person was on the list. */
-    entryId?: string | null;
-    listedAt?: Date | null;
-  },
-): Promise<ClaimSeatOutcome> {
-  // T3 ROUND 1 C/H-1 (carried forward verbatim): the seat check must not run
-  // for somebody who ALREADY holds a seat. They are inside `used` themselves,
-  // so at the cap this returned "this gym has no free places" about a person
-  // already standing in the gym. Read under the caller's org lock, so it
-  // cannot race with the insert below.
-  const held = await liveMembership(tx, input.org.id, input.userId);
-
-  if (held === null) {
-    const cap = await seatCapFor(tx, input.org.id);
-    if (cap !== null) {
-      // A SEAT IS A LIVE MEMBERSHIP, whoever holds it — the owner's and staff's
-      // included (RULINGS 2026-09-21, spec Part 3 §10.4). A staff login opens the
-      // console and takes nothing; using the member app takes a place, so
-      // appointing members as staff frees none. `paidPlacesUsed` is the one count
-      // the meter (`listOrgsForUser`) and billing (`seatsUsed`) repeat.
-      const used = await paidPlacesUsed(tx, input.org.id);
-      if (used >= cap) return { kind: "seat_cap", cap };
-    }
-  }
-
-  const inserted = await tx<{ id: string; joined_at: Date }[]>`
-    INSERT INTO gym_members (gym_id, user_id, code_id, consent_at, complimentary, entry_id, last_listed_at)
-    VALUES (${input.org.id}, ${input.userId}, ${input.codeId}, ${input.consentAt}, false,
-            ${input.entryId ?? null}, ${input.listedAt ?? null})
-    ON CONFLICT (gym_id, user_id) WHERE removed_at IS NULL DO NOTHING
-    RETURNING id, joined_at`;
-
-  const newRow = inserted[0];
-  if (newRow === undefined) {
-    const existing = held ?? (await liveMembership(tx, input.org.id, input.userId));
-    if (existing === null) {
-      // The conflict fired, so a live row existed a moment ago; nothing in
-      // this transaction can remove it. Loud rather than a fabricated reply.
-      throw new Error("gym_members conflict with no live row to return");
-    }
-    return { kind: "already_member", membership: existing };
-  }
-
-  if (input.codeId !== null) await tx`UPDATE gym_codes SET uses = uses + 1 WHERE id = ${input.codeId}`;
-  return {
-    kind: "joined",
-    membership: { id: newRow.id, joinedAt: newRow.joined_at, groupLabel: input.codeLabel },
-  };
-}
-
-/** The gym's row, locked: every change to a gym's list and seats takes this first. */
-export async function lockOrg(tx: TransactionSql, gymId: string): Promise<OrgRow | null> {
-  const rows = await tx<RawOrg[]>`
-    SELECT id, slug, name, city, country, org_type, timezone, locale,
-         currency_display, clock_format, manual_attendance_enabled, status
-    FROM gyms WHERE id = ${gymId} FOR UPDATE`;
-  const raw = rows[0];
-  return raw === undefined ? null : toOrgRow(raw);
-}
-
-/** A seat taken by accepting an invitation (§10.2): no code, the tap's own consent
- *  time, the list record it was for. The caller holds the gym's lock (`lockOrg`). A
- *  person who is already a member keeps their membership, now linked to the record
- *  where it had none, and stamped as listed. */
-export async function claimSeatByInvitation(
-  tx: TransactionSql,
-  input: { org: OrgRow; userId: string; entryId: string | null; at: Date },
-): Promise<ClaimSeatOutcome> {
-  const claim = await claimSeat(tx, {
-    org: input.org,
-    userId: input.userId,
-    codeId: null,
-    codeLabel: null,
-    consentAt: input.at,
-    entryId: input.entryId,
-    listedAt: input.at,
-  });
-  if (claim.kind === "already_member") {
-    await tx`
-      UPDATE gym_members
-      SET entry_id = coalesce(entry_id, ${input.entryId}::uuid), last_listed_at = ${input.at}
-      WHERE gym_id = ${input.org.id} AND user_id = ${input.userId} AND removed_at IS NULL`;
-  }
-  return claim;
-}
-
-/** How many paid places the gym's live members hold — every live membership, the
- *  owner's and staff's included (§10.4): `claimSeat`'s count, which Put back asks too
- *  (`placesFree`). */
-export async function paidPlacesUsed(tx: SqlOrTx, gymId: string): Promise<number> {
-  const rows = await tx<{ n: number }[]>`
-    SELECT count(*)::int AS n FROM gym_members m
-    WHERE m.gym_id = ${gymId} AND m.removed_at IS NULL`;
-  return rows[0]?.n ?? 0;
-}
-
-/** CAN `wanted` MORE PEOPLE TAKE A PAID PLACE NOW — Put back giving people their app back
- *  (RULINGS 2026-09-27), asked under the caller's lock on the gym with the door's own cap
- *  and count. A gym with no live plan takes nobody, as the door refuses a join. */
-export async function placesFree(tx: TransactionSql, gymId: string, wanted: number): Promise<boolean> {
-  if (!(await gymHasLivePlan(tx, gymId))) return false;
-  const cap = await seatCapFor(tx, gymId);
-  return cap === null || (await paidPlacesUsed(tx, gymId)) + wanted <= cap;
-}
-
-/** The org's seat cap, or null when nothing caps it.
- *
- *  Null has TWO causes and they are deliberately not distinguished here: the
- *  plan declares no cap (`seat_cap` is nullable for capless tiers), or the org
- *  has no live subscription at all — which today is EVERY org, because billing
- *  does not exist yet. The uncapped-without-a-plan case is a tracked deferral
- *  (OWED.md), not an oversight: the check below is live and correct the moment
- *  a subscription row exists.
- *
- *  Status set is §4.1's, so `past_due` still grants during v1 §10's grace. */
-async function seatCapFor(tx: SqlOrTx, gymId: string): Promise<number | null> {
-  // A trial the gym has paid for keeps its free trial's limit until a payment is taken, and
-  // a smaller size holds for joins once its switch has begun (LEAST ignores the nulls).
-  const rows = await tx<{ seat_cap: number | null }[]>`
-    SELECT LEAST(p.seat_cap, s.trial_seat_cap, CASE WHEN s.pending_held_at IS NOT NULL THEN np.seat_cap END) AS seat_cap
-    FROM subscriptions s JOIN plans p ON p.id = s.plan_id
-    LEFT JOIN plans np ON np.id = s.pending_plan_id
-    WHERE s.owner_type = 'gym' AND s.owner_id = ${gymId}
-      AND s.status IN ('trialing','active','past_due')`;
-  return rows[0]?.seat_cap ?? null;
-}
-
-/** THE SAME QUESTION, FOR A CALLER OUTSIDE A TRANSACTION — the member list's
- *  preview, which shows staff where the gym stands on seats before they invite
- *  anybody (Part 3 §9.9). Exported rather than copied: the granting statuses
- *  above are already written in three places with a test holding them together,
- *  and a fourth would be a fourth answer to "is this gym paying".
- *
- *  It caps NOTHING here. A gym's list may be longer than its seats — being on a
- *  list is not holding a seat — so this is a number on a screen, and the refusal
- *  stays where seats are actually taken (`claimSeat`). */
-export async function gymSeatCap(sql: SqlOrTx, gymId: string): Promise<number | null> {
-  return await seatCapFor(sql, gymId);
-}
-
-/** DOES THIS GYM HAVE A LIVE PLAN — the one question Part 3 §4.2's read-only
- *  console turns on, and the enforcement half of Kd's ruling of 2026-08-29.
- *
- *  **It is §4.1's three granting statuses and nothing else**, the same set
- *  `seatCapFor` directly above, `startGymTrial`, `listOrgsForUser`'s lateral and
- *  `entitlements/repo.ts` all treat as live — so a gym whose members are getting
- *  gym-tier features is exactly a gym whose console still works, and the two
- *  cannot come apart. `past_due` counts, because v1 §10's grace is a paying gym
- *  having a bad week rather than a lapsed one.
- *
- *  **IT ASKS THE STATUS AND NEVER A DATE** (:21580 rule (c)). Nothing clears
- *  `trial_ends_at` when a subscription leaves `trialing`, so a reader keying on
- *  "has the trial end date passed" would seal a PAYING gym out of its own console
- *  the day billing exists. It also means this needs no notion of the 14-day
- *  window: §4.2's read-only period and the archived state after it BOTH have no
- *  live plan, so both refuse here, and the 14 days only decides when `gyms.status`
- *  flips — a separate card with its own line.
- *
- *  **A THIRD COPY OF ONE RULE, PINNED BY A TEST AND NOT BY A SHARED FRAGMENT.**
- *  R3.8 forbids interpolating a shared `sql` fragment, and :14493's Low-2 is what
- *  two readers of one rule cost when they drift. What holds this to
- *  `listOrgsForUser`'s `consoleReadOnly` is a test driving the FIELD and this
- *  REFUSAL across one gym's transition from trialling to expired — :14013's
- *  six-site precedent, and the instrument :21580 used for the seat meter.
- *
- *  Takes `SqlOrTx` so a future caller can run it inside a write's own
- *  transaction; today's caller is the service's gate, which runs it before one.
- */
-export async function gymHasLivePlan(sql: SqlOrTx, gymId: string): Promise<boolean> {
-  const rows = await sql<{ live: boolean }[]>`
-    SELECT EXISTS (
-      SELECT 1 FROM subscriptions s
-      WHERE s.owner_type = 'gym' AND s.owner_id = ${gymId}
-        AND s.status IN ('trialing','active','past_due') -- read-only gate, §4.1's live set
-    ) AS live`;
-  // A missing row is impossible — `SELECT EXISTS` always returns one — but the
-  // fallback is `false`, i.e. read-only, because refusing a write we cannot
-  // justify is the safe direction and granting one is not.
-  return rows[0]?.live ?? false;
-}
-
-/** A GYM'S ID FROM THE NAME IN THE CONSOLE'S ADDRESS BAR.
- *
- *  **It exists because the restore command was otherwise unusable, and that was
- *  found by checking rather than assumed.** `tools/gym-restore.ts` takes the gym
- *  to re-open, and its first draft said *"the same uuid the console's URL
- *  carries"* — the console's routes are `/console/:orgSlug` (`App.jsx`), so the
- *  URL carries a SLUG and the uuid appears on no screen at all. An operator
- *  instruction naming a value nobody can obtain is :5807's class arriving in a
- *  runbook, and the tool now takes either.
- *
- *  No tenancy axis, deliberately: it answers "which gym is this" for a command
- *  line with no signed-in user, and returns an id and nothing else. Any ROUTE
- *  that ever wants a slug lookup owes its own authorisation — this is not it. */
-export async function getOrgIdBySlug(sql: SqlOrTx, slug: string): Promise<string | null> {
-  const rows = await sql<{ id: string }[]>`SELECT id FROM gyms WHERE slug = ${slug}`;
-  return rows[0]?.id ?? null;
-}
-
-export type RestoreGymOutcome =
-  | { kind: "restored"; org: OrgRow }
-  | { kind: "not_archived"; org: OrgRow }
-  | { kind: "not_found" };
-
-/** RE-OPEN A CLOSED GYM — the other half of `archiveSweep.ts`, and today the
- *  ONLY way back from `archived`.
- *
- *  **IT EXISTS BECAUSE THE AUTOMATIC WAY BACK CANNOT BE BUILT YET, and Kd was
- *  told that before he ruled the four months.** Part 3 §4.2 says an archived gym
- *  is *"restorable by reactivating"* — i.e. by paying — and nothing in this
- *  product can put a gym back on a plan: `subscriptions` has exactly two writers
- *  in `apps/api/src`, the INSERT in `startGymTrial` and the UPDATE in
- *  `trialSweep.ts` (re-measured 2026-08-31). So the trigger for the automatic
- *  half belongs to the payment card and is on its `OWED.md` line; this is the
- *  operator's hand in the meantime, driven by `tools/gym-restore.ts`.
- *
- *  **IT RESTORES THE STATUS AND NOT THE PLAN, and the difference is not a
- *  shortcut.** A re-opened gym has no live subscription, so its console is still
- *  read-only (:23711) and its members are still on the free app. What it undoes
- *  is the closure: people can type its join code again, its waiting queue can be
- *  cleared again the moment it is on a plan, and it can start a trial if it never
- *  spent one. Anything more would mean writing a subscription row nobody paid
- *  for, which is R3.1.
- *
- *  **`archived_at` IS DELIBERATELY LEFT SET, and this is the line to read
- *  twice.** It is what `archiveSweep.ts` reads as "this gym has been closed
- *  before", so leaving it is what stops the next nightly run closing this gym
- *  straight back down — the plan ended five months ago and that fact does not
- *  change by re-opening. The pair is unambiguous: `status` says whether the gym
- *  is closed NOW, `archived_at` says when it was last closed. Clearing it would
- *  make the restore last exactly one night.
- *
- *  Tenancy is not this function's axis — it is an OPERATOR action with no
- *  console route and no privilege, so the caller is a command line and the
- *  actor is null. If it ever gains a route, the route owes the authz.
- *  `FOR UPDATE` on the row, because this is a check-then-act on the column two
- *  sweeps write. */
-export async function restoreGym(
-  sql: Sql,
-  input: { gymId: string; actorUserId: string | null; via: string },
-): Promise<RestoreGymOutcome> {
-  return await sql.begin(async (tx) => {
-    const rows = await tx<RawOrg[]>`
-      SELECT id, slug, name, city, country, org_type, timezone, locale,
-             currency_display, clock_format, manual_attendance_enabled, status
-      FROM gyms WHERE id = ${input.gymId}
-      -- THE LOCK IS ON ITS OWN LINE ON PURPOSE, and not for taste. NO BACKTICKS
-      -- IN HERE: one ends the literal, and I incurred that slip twice in this
-      -- card alone. Written as one line this SELECT is byte-identical to
-      -- claimSeat's, whose lock is what mutant O1 deletes to prove the seat race
-      -- is guarded — and an anchor
-      -- matching twice mutates whichever line comes first, silently testing the
-      -- wrong guarantee (:10726's shape; :15770 forbids re-aiming the mutant at
-      -- whichever line wins). The harness's pre-check ABORTED on exactly this
-      -- while this function was being written, before a byte was mutated, and
-      -- the remedy is :21157 §5's: make the new text unique in the SOURCE and
-      -- leave the existing mutant untouched.
-      FOR UPDATE`;
-    const raw = rows[0];
-    if (raw === undefined) return { kind: "not_found" };
-    const org = toOrgRow(raw);
-    // Not an error and not silently "restored" either: the caller asked for a
-    // state that already holds, and telling them which is what stops an
-    // operator re-running this and believing they fixed something.
-    if (org.status !== "archived") return { kind: "not_archived", org };
-
-    const updated = await tx<RawOrg[]>`
-      UPDATE gyms SET status = 'active'
-      WHERE id = ${input.gymId} AND status = 'archived'
-      RETURNING id, slug, name, city, country, org_type, timezone, locale,
-                currency_display, clock_format, manual_attendance_enabled, status`;
-    const updatedRaw = updated[0];
-    if (updatedRaw === undefined) {
-      // Unreachable under the `FOR UPDATE` above, which is exactly why it is
-      // loud rather than a fabricated success (`applyByCode`'s precedent).
-      throw new Error("gym row vanished between its lock and its restore");
-    }
-
-    // Part 3 §3.3, and the row that answers "who let this gym back in" —
-    // `via` names the surface because the admin panel will be a second caller
-    // and a hardcoded string here would then be a lie (:19016's first slice).
-    await insertAudit(tx, {
-      actorUserId: input.actorUserId,
-      gymId: input.gymId,
-      action: "org.restored",
-      targetType: "gym",
-      targetId: input.gymId,
-      meta: { via: input.via },
-    });
-
-    return { kind: "restored", org: toOrgRow(updatedRaw) };
-  });
-}
-
-export interface GymSubscriptionRow {
-  status: OrgSubscriptionStatus;
-  trialEndsAt: Date | null;
-  /** The member limit in force now. */
-  seatCap: number | null;
-  /** The plan's own limit: in a paid trial it starts with the first payment. */
-  planSeatCap: number | null;
-  /** The plan's price: shown for a paid plan, never for a free trial. */
-  priceMinor: number;
-  currency: string;
-  currentPeriodEnd: Date | null;
-  cancelAtPeriodEnd: boolean;
-  /** When a Razorpay plan set to end was sent to Razorpay (1d-ii); null until then. */
-  cancelSentAt: Date | null;
-  /** Who charges for it: `paddle` for a plan the gym paid for, `none` for its own free trial. */
-  provider: string;
-  /** A paid trial's free-trial limit, held until the first payment; null otherwise. */
-  trialSeatCap: number | null;
-  /** A smaller size waiting, due at `from` (the end of the month paid). */
-  pending: { seatCap: number; priceMinor: number; from: Date } | null;
-  /** The smaller size last chosen was not made: the members counted did not fit it. */
-  kept: { seatCap: number; members: number } | null;
-  /** A bigger size than the one asked for was made: the members counted did not fit that. */
-  fitted: { askedSeatCap: number; members: number } | null;
-}
-
-export interface OrgPlanRow {
-  code: string;
-  priceMinor: number;
-  currency: string;
-  interval: PlanInterval;
-  seatCap: number | null;
-}
-
-/** A BOUND ON A LIST READ, ADDED BY T3 ROUND 1's Low-7 — :10596's L-1 is the
- *  precedent and the trigger ("the codes list had no bound, the only list in
- *  the module without one").
- *
- *  **The mitigation that precedent did not have is real and is why this is a
- *  ceiling rather than a cursor:** `plans` is OPERATOR-SEEDED. No user path
- *  writes it, so it cannot grow behind a request the way a roster or a code
- *  list can. What this stops is a re-priced book quietly serving fifty rows to
- *  a prompt designed for five.
- *
- *  Ten today (five USD, five INR) across BOTH currencies, so 50 is a ceiling
- *  nothing approaches by accident and a number a re-priced book would have to
- *  set out to exceed. No § governs it; it is chosen and recorded here. */
-export const ORG_PLANS_LIMIT = 50;
-
-/** THE GYM'S PRICE LIST — every plan it could subscribe to today, in its own
- *  currency. Kd's ruling of 2026-08-28 (:22697): the owner of a second gym,
- *  whose one free trial is spent, is shown *"the real plans at their real
- *  prices"*.
- *
- *  **THE FILTERS ARE `startGymTrial`'S OWN, MINUS ONE, and the omission is the
- *  only interesting line here.** That query adds `trial_days > 0` because a
- *  trial needs a plan that grants one; a PRICE LIST must not, or a perfectly
- *  buyable plan would be invisible for the sole reason that it does not come
- *  with a free month. (Moot on today's book — all ten org rows carry 30 — which
- *  is exactly why it is written down rather than left to be inferred from a
- *  passing test.)
- *
- *  **`interval = 'month'` IS INHERITED DELIBERATELY.** The book is monthly
- *  throughout (verified: ten org rows, all `month`), and a yearly row appearing
- *  in this list would sit beside monthly ones with nothing on screen saying so —
- *  a price that means something different from its neighbours, which is :5807's
- *  false-on-screen shape. The day an annual tier is seeded, this list needs a
- *  design and not just a wider WHERE.
- *
- *  **THE ORDER IS THE TRIAL BAND'S ORDER, `seat_cap ASC NULLS LAST`**, so the
- *  smallest gym's plan is first and the list reads as the ladder Kd priced
- *  (:17902's boundaries). `NULLS LAST` is load-bearing for the same reason it is
- *  in `startGymTrial`: Postgres sorts NULLs FIRST on ASC, so without it a
- *  capless tier would head the list as though it were the cheapest entry point.
- *  **`rank` is NOT used and cannot be: measured, all five USD rows carry rank
- *  10**, so ordering by it would leave the ladder in whatever order the seed
- *  happened to insert.
- *
- *  Not tenant-scoped and does not need to be: a price book is the same for
- *  everyone in a currency. The CALLER is scoped — the service refuses anybody
- *  without `billing.manage` on the gym whose currency this is. */
-export async function listOrgPlansForCurrency(
-  sql: SqlOrTx,
-  currency: string,
-): Promise<OrgPlanRow[]> {
-  const rows = await sql<
-    {
-      code: string;
-      price_minor: number;
-      currency: string;
-      interval: string;
-      seat_cap: number | null;
-    }[]
-  >`
-    SELECT code, price_minor, currency, interval, seat_cap
-    FROM plans
-    WHERE audience = 'org'
-      AND currency = ${currency}
-      AND active = true -- a retired band must never be quoted to a buyer
-      AND interval = 'month'
-    ORDER BY seat_cap ASC NULLS LAST, price_minor ASC -- the ladder Kd priced
-    LIMIT ${ORG_PLANS_LIMIT}`;
-  return rows.map((r) => ({
-    code: r.code,
-    priceMinor: r.price_minor,
-    currency: r.currency,
-    interval: planIntervalSchema.parse(r.interval),
-    seatCap: r.seat_cap,
-  }));
-}
-
-export type StartTrialOutcome =
-  | { kind: "started"; subscription: GymSubscriptionRow }
-  | { kind: "already_subscribed"; subscription: GymSubscriptionRow }
-  | { kind: "trial_already_used" }
-  // No `currency` on this arm: it carried one for four commits and no caller
-  // ever read it (T3 round 1, Low-7). An unread field on a typed outcome reads
-  // as a fact somebody uses.
-  | { kind: "no_plan" }
-  | { kind: "org_archived" }
-  | { kind: "not_found" };
-
-/** THE GYM STARTS ITS OWN FREE TRIAL — the first statement in this product
- *  that has ever written `subscriptions`, and the reason the seat cap stops being
- *  correct-but-inert.
- *
- *  ~~**NOTHING ENDS A TRIAL, AND UNTIL SOMETHING DOES, THIS WRITES A GYM A
- *  PERMANENT FREE PLAN.**~~ **— CLOSED 2026-08-28 BY THIS FILE'S SIBLING
- *  `trialSweep.ts` AND THE NIGHTLY `orgs.trial_expiry` JOB (DECISIONS :22341,
- *  Kd's ruling :22215 step 1).** A gym subscription still `trialing` past its
- *  `trial_ends_at` is moved to `expired`, so its members fall back to the free
- *  app within the resolver's 60-second cache window.
- *
- *  **The struck sentence is kept because the ORIGINAL MEASUREMENT still explains
- *  this INSERT's shape** (T3 round 1's C/H-1): for its whole life until that day
- *  this was the ONLY writer of `subscriptions` in the API, there was no `UPDATE
- *  subscriptions` anywhere, and `trial_ends_at` was written here and read by
- *  nothing that acted on it. **There are now TWO writers, and the second only
- *  ever ENDS a trial** — it never inserts, never touches `active`/`past_due`, and
- *  filters `owner_type = 'gym'`. A THIRD writer is billing's, and it is unbuilt.
- *
- *  **THE GUARD BESIDE THIS HAS NOW WOKEN, AND THE PREDICTION ABOUT IT WAS
- *  WRONG.** `updateOrg`'s currency lock at :571 asks `status <> 'trialing'`, so
- *  while every subscription in existence was a trial it never engaged. T3 round 2
- *  Low-6 predicted its first firing could belong to a CHECKOUT writing `active`
- *  (P3.4/P3.5) just as easily as to the sweep. **Measured: the sweep got there
- *  first — the first row it ever sees is the first this lock has ever had an
- *  opinion about** (:22341 §3). Kd ruled the resulting behaviour deliberately: a
- *  gym that trialled and never paid **stays frozen**, and what is owed is the
- *  contact channel, not a wider lock.
- *
- *  The other two features this card's commit message claimed to wake are NOT
- *  awake: the clock is inert (above) and §4.2's banner is not built at all
- *  (`Overview.jsx:32` says so in its own comment). One of three, stated as three.
- *
- *  **THE LOCK IS FIRST AND IT IS A REQUIREMENT, NOT A PREFERENCE.** T3 round 1's
- *  C/H-3 on the gym-details card found that `updateOrg`'s currency guard is a
- *  check-then-act: it asks "is this gym paying?" while holding only the GYM
- *  row's lock, which cannot lock a subscription that does not exist yet. Its
- *  `OWED.md` line names the closing half as a requirement on whichever card
- *  first inserts a gym subscription, in these words — *"whatever creates a gym
- *  subscription MUST take `lockOrgRow` on that gym first"*. This is that card and
- *  this is that line. Taking the same lock in the same order (org row → child
- *  rows) means the two serialise: a trial starting while an owner saves the
- *  settings form either commits before the guard's SELECT or waits behind its
- *  UPDATE, and never lands in between.
- *
- *  **The partial unique index `subs_one_live_uq` is the database's last word and
- *  is deliberately NOT caught here.** A 23505 from the INSERT below cannot happen
- *  while every writer takes this lock — the check three statements up would have
- *  seen the row — so swallowing it would hide the only symptom of the exact
- *  defect the OWED line exists to prevent: a second writer that skipped the lock.
- *  Letting it throw is R1.3's "fail loudly" pointed at our own future code.
- *
- *  **`already_subscribed` is not an error** (see the response schema): a double
- *  tap is a person, and the caller asked for a state that holds.
- *
- *  **ONE TRIAL PER OWNER, EVER — Part 5 §12's own rule** (*"trial re-abuse (org
- *  deletes, re-signs for another 7 days): allowed once"*), and it is what makes
- *  self-serve trials safe without an approval step. It asks about the OWNER, not
- *  the gym: a gym is free to make, so per-gym would be no gate at all. Subscription
- *  rows are never deleted (R4.3), so an expired trial is still evidence one
- *  happened. The spec's stronger form matches on owner email/phone across
- *  ACCOUNTS; this matches on the account, which is the same thing here because
- *  `users.email` is unique while the account lives.
- *
- *  **WHAT A SECOND TRIAL ACTUALLY COSTS, corrected at T3 round 1 (Low-2) — the
- *  earlier claim here was "a second email address" and that was FALSE.** The
- *  Day-14 DPDP purge sets `users.email = NULL` (`privacy/repo.ts:130`), so
- *  deleting the account RELEASES the address: the same person can re-register the
- *  same email, receive a new `users.id`, and this gate — which matches on
- *  `gyms.owner_user_id` — cannot see that they are the same person. So the price
- *  is a second email address **OR** deleting the account and waiting out fourteen
- *  days, losing everything in it. Both are soft gates of exactly the kind §12
- *  describes ("a soft gate that costs honest users nothing"), and the second is
- *  strictly the worse deal for an abuser — which is why the gate is as strong as
- *  §12 asks even though the sentence describing it was wrong.
- *
- *  **The structural note, because it is the part that will bite: the evidence is
- *  anchored on the gym row's CURRENT owner, not on the subscription.** Nothing
- *  transfers or deletes a gym today, so the anchor holds. The first feature that
- *  does either silently erases and misattributes trial history. */
-export async function startGymTrial(
-  sql: Sql,
-  input: { gymId: string; actorUserId: string },
-): Promise<StartTrialOutcome> {
-  return await sql.begin(async (tx) => {
-    // The trailing note is not decoration: `await lockOrgRow(tx, input.gymId);`
-    // appears five times in this file, so without something on the line only a
-    // two-line anchor could aim a mutant at THIS one — and a two-line anchor is
-    // the CRLF hazard :17676 counted 99 of. Naming the guarantee in the source
-    // is that finding's own remedy: one line carries it, and it is greppable.
-    await lockOrgRow(tx, input.gymId); // subscription-writer lock, :19656 C/H-3
-
-    const gymRows = await tx<{ status: string; currency_display: string; owner_user_id: string }[]>`
-      SELECT status, currency_display, owner_user_id FROM gyms WHERE id = ${input.gymId}`;
-    const gym = gymRows[0];
-    if (gym === undefined) return { kind: "not_found" };
-    if (toOrgStatus(gym.status) === "archived") return { kind: "org_archived" };
-
-    // §4.1's live set, the same three statuses `seatCapFor` and `getCandidates`
-    // treat as granting. Written out rather than shared as a fragment: R3.8
-    // forbids the shared-`sql` shape, and :14493 Low-2 is what happens when two
-    // readers of one rule drift.
-    const live = await tx<RawGymSubscription[]>`
-      SELECT s.status, s.trial_ends_at,
-             LEAST(p.seat_cap, s.trial_seat_cap, CASE WHEN s.pending_held_at IS NOT NULL THEN np.seat_cap END) AS seat_cap,
-             p.seat_cap AS plan_seat_cap, s.trial_seat_cap, p.price_minor, p.currency,
-             s.current_period_end, s.cancel_at_period_end, s.cancel_sent_at, s.provider,
-             ap.seat_cap AS pending_seat_cap, ap.price_minor AS pending_price_minor, s.pending_from,
-             CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL AND lc.recent THEN lc.seat_cap END AS kept_seat_cap,
-             CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS kept_members,
-             CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND s.pending_plan_id IS NULL AND lc.recent THEN lc.asked_seat_cap END AS fitted_asked_seat_cap,
-             CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND s.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS fitted_members
-      FROM subscriptions s JOIN plans p ON p.id = s.plan_id
-      LEFT JOIN plans np ON np.id = s.pending_plan_id
-      -- The size asked for, which the card names; np is what is being made.
-      LEFT JOIN plans ap ON ap.id = COALESCE(s.pending_requested_plan_id, s.pending_plan_id)
-      LEFT JOIN LATERAL (
-        SELECT c.state, c.failure, c.members_counted, kp.seat_cap, rp.seat_cap AS asked_seat_cap,
-               -- Said until the payment after the one it was decided for.
-               c.created_at > s.current_period_end - interval '32 days' AS recent
-        FROM billing_plan_changes c JOIN plans kp ON kp.id = c.to_plan_id
-        LEFT JOIN plans rp ON rp.id = c.requested_plan_id
-        WHERE c.gym_id = s.owner_id AND c.subscription_id = s.id
-        ORDER BY c.created_at DESC
-        LIMIT 1
-      ) lc ON true
-      WHERE s.owner_type = 'gym' AND s.owner_id = ${input.gymId}
-        AND s.status IN ('trialing','active','past_due')`;
-    const existing = live[0];
-    if (existing !== undefined) {
-      return { kind: "already_subscribed", subscription: toGymSubscription(existing) };
-    }
-
-    // One trial per OWNER: the gym's lock does not cover the owner's other gyms, so
-    // two presses on two of them would both read "never had one".
-    await tx`SELECT pg_advisory_xact_lock(hashtext(${`gym-trial:${gym.owner_user_id}`}))`;
-    const used = await tx<{ one: number }[]>`
-      SELECT 1 AS one
-      FROM subscriptions s JOIN gyms g ON g.id = s.owner_id
-      WHERE s.owner_type = 'gym'
-        AND g.owner_user_id = ${gym.owner_user_id}
-        AND s.trial_ends_at IS NOT NULL
-      LIMIT 1`;
-    if (used[0] !== undefined) return { kind: "trial_already_used" };
-
-    /** THE TRIAL BAND IS THE SMALLEST ONE, WHICH IS KD'S RULING EXPRESSED AS A
-     *  QUERY RATHER THAN AS A NUMBER. :19129: *"no plan choice at signup · EVERY
-     *  gym trials at the SAME limit, 300 members (200 since 2026-09-22) · the gym subscribes to its real
-     *  band AFTER the trial"*. The seed's own comment says `seat_cap` **is** the
-     *  band boundary, so "band 1" and "the lowest cap" are the same row — and
-     *  ordering by it means the ruling survives a re-priced book without anybody
-     *  remembering to edit a 300 here (Part 0 rule 4: the number lives in the
-     *  seed, quoted, never recalled in code).
-     *
-     *  `NULLS LAST` is load-bearing: `seat_cap` is nullable for a capless tier,
-     *  and in Postgres NULLs sort FIRST on ASC — so without it the trial would
-     *  hand every new gym the uncapped plan, which is the opposite of a cap.
-     *
-     *  `trial_days > 0` means a book with no trial-bearing plan answers "no plan"
-     *  instead of writing a trial that ended the instant it began. `interval =
-     *  'month'` keeps a yearly row from being read as a band. */
-    const planRows = await tx<{ id: string; seat_cap: number | null; trial_days: number; price_minor: number; currency: string }[]>`
-      SELECT id, seat_cap, trial_days, price_minor, currency
-      FROM plans
-      WHERE audience = 'org'
-        AND currency = ${gym.currency_display}
-        AND active = true
-        AND interval = 'month'
-        AND trial_days > 0
-      ORDER BY seat_cap ASC NULLS LAST, price_minor ASC
-      LIMIT 1`;
-    const plan = planRows[0];
-    if (plan === undefined) return { kind: "no_plan" };
-
-    // The trial holds its own member limit, below the band's (Kd, RULINGS 2026-09-29).
-    const trialSeatCap = plan.seat_cap === null ? GYM_TRIAL_MEMBERS : Math.min(plan.seat_cap, GYM_TRIAL_MEMBERS);
-    const inserted = await tx<{ id: string; status: string; trial_ends_at: Date | null }[]>`
-      INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, trial_ends_at, trial_seat_cap, provider)
-      VALUES ('gym', ${input.gymId}, ${plan.id}, 'trialing',
-              now() + ${plan.trial_days} * INTERVAL '1 day', ${trialSeatCap}, 'none')
-      RETURNING id, status, trial_ends_at`;
-    const row = inserted[0];
-    if (row === undefined) throw new Error("subscription insert returned no row");
-
-    const subscription = toGymSubscription({
-      status: row.status,
-      trial_ends_at: row.trial_ends_at,
-      seat_cap: trialSeatCap,
-      plan_seat_cap: trialSeatCap,
-      price_minor: plan.price_minor,
-      currency: plan.currency,
-      current_period_end: null,
-      cancel_at_period_end: false,
-      cancel_sent_at: null,
-      provider: "none",
-      pending_seat_cap: null,
-      pending_price_minor: null,
-      pending_from: null,
-      trial_seat_cap: trialSeatCap,
-      kept_seat_cap: null,
-      kept_members: null,
-      fitted_asked_seat_cap: null,
-      fitted_members: null,
-    });
-
-    await insertAudit(tx, {
-      actorUserId: input.actorUserId,
-      gymId: input.gymId,
-      action: "org.trial_started",
-      targetType: "subscription",
-      // THE SUBSCRIPTION'S OWN ID, not the gym's (T3 round 1, Low-6). A row
-      // saying `targetType: 'subscription'` while carrying a gym id cannot be
-      // joined to the subscription it is about, and P3's Done gate asks that any
-      // subscription's life be narratable from `audit_log` alone.
-      targetId: row.id,
-      // The two facts a person reading this row later actually wants: when it
-      // runs out, and how many members it admits. `seatCap` is null for a
-      // capless tier and is recorded as null rather than as the string "null" —
-      // `insertAudit`'s one allowance, and this is a value that genuinely does
-      // not exist rather than one nobody looked up.
-      meta: {
-        trialEndsAt: subscription.trialEndsAt?.toISOString() ?? null,
-        seatCap: subscription.seatCap === null ? null : String(subscription.seatCap),
-        currency: gym.currency_display,
-      },
-    });
-
-    return { kind: "started", subscription };
-  });
-}
-
-interface RawGymSubscription {
-  status: string;
-  trial_ends_at: Date | null;
-  /** The limit in force: a paid trial's is its free trial's until a payment is taken. */
-  seat_cap: number | null;
-  plan_seat_cap: number | null;
-  price_minor: number;
-  currency: string;
-  current_period_end: Date | null;
-  cancel_at_period_end: boolean;
-  cancel_sent_at: Date | null;
-  provider: string;
-  pending_seat_cap: number | null;
-  pending_price_minor: number | null;
-  pending_from: Date | null;
-  trial_seat_cap: number | null;
-  kept_seat_cap: number | null;
-  kept_members: number | null;
-  fitted_asked_seat_cap: number | null;
-  fitted_members: number | null;
-}
-
-function toGymSubscription(raw: RawGymSubscription): GymSubscriptionRow {
-  return {
-    status: orgSubscriptionStatusSchema.parse(raw.status),
-    trialEndsAt: raw.trial_ends_at,
-    seatCap: raw.seat_cap,
-    planSeatCap: raw.plan_seat_cap,
-    priceMinor: raw.price_minor,
-    currency: raw.currency,
-    currentPeriodEnd: raw.current_period_end,
-    cancelAtPeriodEnd: raw.cancel_at_period_end,
-    cancelSentAt: raw.cancel_sent_at,
-    provider: raw.provider,
-    trialSeatCap: raw.trial_seat_cap,
-    pending:
-      raw.pending_from === null || raw.pending_price_minor === null || raw.pending_seat_cap === null
-        ? null
-        : { seatCap: raw.pending_seat_cap, priceMinor: raw.pending_price_minor, from: raw.pending_from },
-    kept: raw.kept_seat_cap === null || raw.kept_members === null ? null : { seatCap: raw.kept_seat_cap, members: raw.kept_members },
-    fitted:
-      raw.fitted_asked_seat_cap === null || raw.fitted_members === null
-        ? null
-        : { askedSeatCap: raw.fitted_asked_seat_cap, members: raw.fitted_members },
-  };
-}
-
-/** The gym's live plan, or null: §4.1's three granting statuses. */
-export async function gymLiveSubscription(sql: SqlOrTx, gymId: string): Promise<GymSubscriptionRow | null> {
-  const rows = await sql<RawGymSubscription[]>`
-    SELECT s.status, s.trial_ends_at,
-           LEAST(p.seat_cap, s.trial_seat_cap, CASE WHEN s.pending_held_at IS NOT NULL THEN np.seat_cap END) AS seat_cap,
-           p.seat_cap AS plan_seat_cap, s.trial_seat_cap, p.price_minor, p.currency,
-           s.current_period_end, s.cancel_at_period_end, s.cancel_sent_at, s.provider,
-           ap.seat_cap AS pending_seat_cap, ap.price_minor AS pending_price_minor, s.pending_from,
-           CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL AND lc.recent THEN lc.seat_cap END AS kept_seat_cap,
-           CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS kept_members,
-           CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND s.pending_plan_id IS NULL AND lc.recent THEN lc.asked_seat_cap END AS fitted_asked_seat_cap,
-           CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND s.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS fitted_members
-    FROM subscriptions s JOIN plans p ON p.id = s.plan_id
-    LEFT JOIN plans np ON np.id = s.pending_plan_id
-    -- The size asked for, which the card names; np is what is being made.
-    LEFT JOIN plans ap ON ap.id = COALESCE(s.pending_requested_plan_id, s.pending_plan_id)
-    LEFT JOIN LATERAL (
-      SELECT c.state, c.failure, c.members_counted, kp.seat_cap, rp.seat_cap AS asked_seat_cap,
-             -- Said until the payment after the one it was decided for.
-             c.created_at > s.current_period_end - interval '32 days' AS recent
-      FROM billing_plan_changes c JOIN plans kp ON kp.id = c.to_plan_id
-      LEFT JOIN plans rp ON rp.id = c.requested_plan_id
-      WHERE c.gym_id = s.owner_id AND c.subscription_id = s.id
-      ORDER BY c.created_at DESC
-      LIMIT 1
-    ) lc ON true
-    WHERE s.owner_type = 'gym' AND s.owner_id = ${gymId}
-      AND s.status IN ('trialing','active','past_due')
-    LIMIT 1`;
-  const row = rows[0];
-  return row === undefined ? null : toGymSubscription(row);
-}
-
-export type DecideOutcome =
-  /** `applicantUserId` travels WITH the outcome rather than being re-read by
-   *  the service: the person whose entitlements just changed is the applicant,
-   *  and a second query to find out who they were is a second query that can
-   *  disagree with the row this transaction just wrote. */
-  | { kind: "confirmed"; membership: MembershipRow; applicantUserId: string }
-  | { kind: "already_confirmed"; memberId: string | null }
-  | { kind: "rejected" }
-  | { kind: "not_found" }
-  | { kind: "not_pending"; status: OrgApplicationStatus }
-  | { kind: "org_archived" }
-  | { kind: "seat_cap"; cap: number };
-
-/** THE FRONT DESK'S TAP — the only path in the product that turns a code into
- *  a membership (Kd ruling :11072).
- *
- *  **LOCK ORDER IS application → gym, ALWAYS, and it is decided here** because
- *  this is the only function that takes both. `claimSeat` takes neither on
- *  purpose (see its comment): a second lock order anywhere in this module is a
- *  deadlock waiting for two front-desk staff working the queue at once.
- *
- *  **A FULL GYM DOES NOT DESTROY THE APPLICATION.** `seat_cap` returns with
- *  the row still `pending`, so the owner adds a seat and taps again rather
- *  than hunting for a person the app threw away — the same instinct behind
- *  §4.2's idempotent success, applied to the failure side.
- *
- *  Tenancy is the WHERE (R3.2): the application is addressed by `id` AND
- *  `gym_id`, so a staff member of one gym cannot decide another gym's
- *  application even holding its uuid. */
-export async function confirmApplication(
-  sql: Sql,
-  input: { gymId: string; applicationId: string; actorUserId: string },
-): Promise<DecideOutcome> {
-  return await sql.begin(async (tx) => {
-    const appRows = await tx<
-      (RawApplication & { user_id: string; code_id: string; consent_at: Date | null; member_id: string | null })[]
-    >`
-      SELECT id, status, applied_at, expires_at, decided_at, member_nudged_at,
-             user_id, code_id, consent_at, member_id
-      FROM gym_join_applications
-      WHERE id = ${input.applicationId} AND gym_id = ${input.gymId}
-      FOR UPDATE`;
-    const app = appRows[0];
-    if (app === undefined) return { kind: "not_found" };
-
-    const status = toApplicationStatus(app.status);
-    // A double tap on Confirm is a person pressing a button twice, not an
-    // error: report the same outcome rather than "that is not pending".
-    if (status === "confirmed") return { kind: "already_confirmed", memberId: app.member_id };
-    if (status !== "pending") return { kind: "not_pending", status };
-
-    const orgRows = await tx<RawOrg[]>`
-      SELECT id, slug, name, city, country, org_type, timezone, locale,
-           currency_display, clock_format, manual_attendance_enabled, status
-      FROM gyms WHERE id = ${input.gymId} FOR UPDATE`;
-    const rawOrg = orgRows[0];
-    if (rawOrg === undefined) return { kind: "not_found" };
-    const org = toOrgRow(rawOrg);
-    if (org.status !== "active") return { kind: "org_archived" };
-
-    const codeRows = await tx<{ label: string }[]>`
-      SELECT label FROM gym_codes WHERE id = ${app.code_id} AND gym_id = ${input.gymId}`;
-    const codeLabel = codeRows[0]?.label ?? null;
-    if (codeLabel === null) {
-      // The FK is NOT NULL and gym-scoped, so this cannot happen without the
-      // code row being deleted out from under a live application. Loud.
-      throw new Error("join application references a code that is not this gym's");
-    }
-
-    const claim = await claimSeat(tx, {
-      org,
-      userId: app.user_id,
-      codeId: app.code_id,
-      codeLabel,
-      consentAt: app.consent_at,
-    });
-    if (claim.kind === "seat_cap") return { kind: "seat_cap", cap: claim.cap };
-
-    await tx`
-      UPDATE gym_join_applications
-      SET status = 'confirmed', decided_at = now(),
-          decided_by_user_id = ${input.actorUserId}, member_id = ${claim.membership.id}
-      WHERE id = ${app.id}`;
-
-    // The actor is the STAFF member who confirmed, not the joiner — that is
-    // the whole point of the record. `applicantUserId` is in `meta` because
-    // `target_id` is the membership the tap produced.
-    await insertAudit(tx, {
-      actorUserId: input.actorUserId,
-      gymId: org.id,
-      action: "org.member_joined",
-      targetType: "gym_member",
-      targetId: claim.membership.id,
-      meta: {
-        codeLabel,
-        applicationId: app.id,
-        applicantUserId: app.user_id,
-        via: "front_desk_confirm",
-      },
-    });
-
-    return { kind: "confirmed", membership: claim.membership, applicantUserId: app.user_id };
-  });
-}
-
-/** "Not this person." The row is closed, not deleted — a rejection is history
- *  the gym may need, and :11385's re-apply is free, so the applicant is not
- *  locked out by it (the per-route rate limit is what bounds a stranger's
- *  retries, never a permanent block on a real member who was mis-tapped). */
-export async function rejectApplication(
-  sql: Sql,
-  input: { gymId: string; applicationId: string; actorUserId: string },
-): Promise<DecideOutcome> {
-  return await sql.begin(async (tx) => {
-    const appRows = await tx<(RawApplication & { user_id: string })[]>`
-      SELECT id, status, applied_at, expires_at, decided_at, member_nudged_at, user_id
-      FROM gym_join_applications
-      WHERE id = ${input.applicationId} AND gym_id = ${input.gymId}
-      FOR UPDATE`;
-    const app = appRows[0];
-    if (app === undefined) return { kind: "not_found" };
-
-    const status = toApplicationStatus(app.status);
-    if (status !== "pending") return { kind: "not_pending", status };
-
-    await tx`
-      UPDATE gym_join_applications
-      SET status = 'rejected', decided_at = now(), decided_by_user_id = ${input.actorUserId}
-      WHERE id = ${app.id}`;
-
-    await insertAudit(tx, {
-      actorUserId: input.actorUserId,
-      gymId: input.gymId,
-      action: "org.join_rejected",
-      targetType: "gym_join_application",
-      targetId: app.id,
-      meta: { applicantUserId: app.user_id },
-    });
-
-    return { kind: "rejected" };
-  });
-}
-
-/** The console's confirm queue: pending applications for ONE gym, OLDEST
- *  FIRST — a queue is answered in the order people asked, and the person who
- *  has waited longest is the one closest to :11385's expiry.
- *
- *  `pendingCount` is an EXACT count over the whole queue, not this page's
- *  length: :10402's rule, because "3 people waiting" printed off a page of 3
- *  out of 90 is a wrong number on screen (:5807).
- *
- *  **THE CURSOR IS THE ROW'S ID AND THE COMPARISON READS THE ROW'S OWN STORED
- *  TIMESTAMP, which is NOT how the roster next door does it — and the
- *  difference is a bug this card's own new test caught.** Postgres stores
- *  `timestamptz` to the MICROSECOND (measured: `now()` = …467902) while a JS
- *  `Date` and therefore `toISOString()` carry MILLISECONDS (…467). A cursor
- *  built from the serialized timestamp is thus slightly SMALLER than the row it
- *  names, so an ASC `>` comparison lets that row back in and **the last row of
- *  every page reappears as the first row of the next.** Feeding the id back and
- *  letting SQL fetch the true value removes the round trip through a lossy
- *  format entirely.
- *
- *  **The roster's cursor has the mirror-image latent defect and is NOT touched
- *  here (R1.1):** DESC + `<` against a too-small cursor EXCLUDES rather than
- *  repeats, so instead of a duplicate it can silently SKIP a member whose
- *  `joined_at` falls between the truncated millisecond and the true value. It
- *  needs two rows inside the same millisecond to bite, which is why four
- *  fixtures created seconds apart have never shown it. Own `OWED.md` line. */
-export async function listApplications(
-  sql: Sql,
-  input: { gymId: string; limit: number; cursor: string | null },
-): Promise<{ items: ApplicantRow[]; nextCursor: string | null; pendingCount: number }> {
-  const cursorId = input.cursor;
-  // T3 L-2 — WHY THE `NOT EXISTS` ARM BELOW EXISTS. A well-formed cursor
-  // naming a row this gym does not have must fall back to the FIRST page, not
-  // blank the queue. The scalar subquery yields no row, so
-  // `(a.applied_at, a.id) > NULL` evaluates to NULL rather than false, and NULL
-  // filters every row out: the page came back empty while `pendingCount` still
-  // reported the true total — a console showing "3 people waiting" over an
-  // empty list. Verified against the live database rather than reasoned:
-  // `((now(), gen_random_uuid()) > (SELECT ... WHERE false)) IS NULL` → true.
-  // It also restores the convention the service states out loud, since a
-  // MALFORMED cursor already restarted and a stale one must behave the same.
-  //
-  // (Written here and not as a SQL comment inside the query on purpose: this
-  // paragraph names identifiers in backticks, and a backtick inside the
-  // template literal ENDS it — which is exactly how the first attempt turned
-  // into six parse errors.)
-  const rows = await sql<
-    {
-      id: string;
-      user_id: string;
-      display_name: string;
-      applied_at: Date;
-      expires_at: Date;
-      group_label: string;
-      gym_notified_at: Date | null;
-      member_nudged_at: Date | null;
-    }[]
-  >`
-    SELECT a.id, a.user_id, u.display_name, a.applied_at, a.expires_at,
-           a.gym_notified_at, a.member_nudged_at,
-           c.label AS group_label
-    FROM gym_join_applications a
-    JOIN users u ON u.id = a.user_id
-    JOIN gym_codes c ON c.id = a.code_id
-    WHERE a.gym_id = ${input.gymId}
-      AND a.status = 'pending'
-      AND (
-        ${cursorId}::uuid IS NULL
-        -- T3 L-2, explained above this query: an unknown cursor restarts.
-        OR NOT EXISTS (
-          SELECT 1 FROM gym_join_applications c
-          WHERE c.id = ${cursorId}::uuid AND c.gym_id = ${input.gymId}
-        )
-        OR (a.applied_at, a.id) > (
-          SELECT c.applied_at, c.id FROM gym_join_applications c
-          WHERE c.id = ${cursorId}::uuid AND c.gym_id = ${input.gymId}
-        )
-      )
-    ORDER BY a.applied_at ASC, a.id ASC
-    LIMIT ${input.limit + 1}`;
-
-  const countRows = await sql<{ n: number }[]>`
-    SELECT count(*)::int AS n FROM gym_join_applications
-    WHERE gym_id = ${input.gymId} AND status = 'pending'`;
-
-  const page = rows.slice(0, input.limit);
-  const last = page[page.length - 1];
-  const nextCursor = rows.length > input.limit && last !== undefined ? last.id : null;
-  return {
-    items: page.map((r) => ({
-      id: r.id,
-      userId: r.user_id,
-      displayName: r.display_name,
-      appliedAt: r.applied_at,
-      expiresAt: r.expires_at,
-      groupLabel: r.group_label,
-      gymNotifiedAt: r.gym_notified_at,
-      nudgedAt: r.member_nudged_at,
-    })),
-    nextCursor,
-    pendingCount: countRows[0]?.n ?? 0,
-  };
-}
-
-/** How long a DECIDED application stays visible to the person who made it.
- *
- *  It exists because a rejected applicant must be TOLD — leaving "waiting for
- *  Iron House" on screen after the gym said no is the app stating something
- *  false (:5807), and silently vanishing the card leaves a real member who was
- *  mis-tapped with no idea what happened. It is a DISPLAY window and not a
- *  rule about the data; 14 days mirrors the application's own life so a person
- *  cannot see the outcome for longer than the wait that produced it. */
-export const DECIDED_VISIBLE_DAYS = 14;
-
-/** Bounded like `MY_ORGS_LIMIT` and for the same reason. A person applies to
- *  one or two gyms; this ceiling exists so the response has one at all. */
-export const MY_APPLICATIONS_LIMIT = 50;
-
-/** The applicant's own applications: everything still pending, plus anything
- *  recently decided AGAINST them so the screen can say so.
- *
- *  `confirmed` rows are deliberately excluded — once a confirm lands the
- *  person is a member, `/v1/orgs/mine` is where that fact lives, and two
- *  readers claiming the same thing is two readers that can disagree.
- *
- *  **THE `NOT EXISTS` ARM IS T3 ROUND 1's C/H-1 AND IT IS LOAD-BEARING.** That
- *  deliberate exclusion had a cost nobody had priced: a person who was refused,
- *  asked again, was CONFIRMED, and was then REMOVED had exactly one surviving
- *  row — the refusal — because the confirmation is invisible here by design and
- *  `/v1/orgs/mine` drops the gym the moment `removed_at` is set. Their
- *  dashboard read "{gym} didn't confirm your request", with a Try again link,
- *  which is the app stating something FALSE (:5807) about a decision the gym
- *  had already made in their favour. Found live on the smoke's own account.
- *
- *  **The fix belongs HERE and could not live in the client**: the client cannot
- *  see the confirmation that supersedes the refusal, so it has nothing to rank
- *  it against — `gymMembershipView.js`'s member-beats-waiting-beats-refused is
- *  correct and was simply never handed the winning row.
- *
- *  It compares TIMESTAMPS rather than asking "was this person ever confirmed
- *  here", because the mirror case is real and must still show: confirmed →
- *  removed → asks again → refused leaves a refusal that is the NEWEST fact, and
- *  hiding that one would leave a genuinely turned-away person with a blank
- *  screen. Both directions carry a test. */
-export async function listApplicationsForUser(
-  sql: Sql,
-  userId: string,
-): Promise<{ org: OrgRow; application: ApplicationRow; orgCanConfirm: boolean }[]> {
-  // Every column is aliased explicitly. The two tables BOTH carry `id` and
-  // `status`, and an unaliased join would hand one of each to the row object —
-  // silently parsing a gym's 'active' as an application status, or worse the
-  // other way round. Naming them is the guard.
-  interface RawMyApplication {
-    app_id: string;
-    app_status: string;
-    applied_at: Date;
-    expires_at: Date;
-    decided_at: Date | null;
-    member_nudged_at: Date | null;
-    org_id: string;
-    slug: string;
-    name: string;
-    city: string | null;
-    country: string | null;
-    org_type: string;
-    timezone: string;
-    locale: string;
-    clock_format: string;
-    manual_attendance_enabled: boolean;
-    currency_display: string;
-    org_status: string;
-    org_can_confirm: boolean;
-  }
-  // **`org_can_confirm` — CAN THIS GYM ACT ON THIS REQUEST RIGHT NOW?** False
-  // while the gym has no live plan, because Confirm answers 409 for it
-  // (:23711's twelve doors). The waiting person's card needs it to stop saying
-  // "one tap at the front desk" about a tap the server refuses (:5807).
-  //
-  // **IT NAMES THE EFFECT AND NEVER THE CAUSE, AND THAT IS AN INFORMATION
-  // BOUNDARY, NOT A WORDING PREFERENCE.** An applicant is not staff of this gym
-  // — `consoleReadOnly` on `/v1/orgs/mine` is staff-only for exactly this
-  // reason, and :23711 §2(a) ordered the gate's two checks so that a signed-in
-  // stranger holding a uuid cannot learn which gyms have stopped paying. This
-  // field is served to a stranger by design, so it answers only the question
-  // that is theirs to ask — whether their own request can be acted on — and the
-  // screen's sentence stops there too.
-  //
-  // A FIFTH READER of §4.1's three live statuses, held to the other four by a
-  // test that drives one gym across the transition (`gymHasLivePlan`'s note).
-  const rows = await sql<RawMyApplication[]>`
-    SELECT a.id AS app_id, a.status AS app_status, a.applied_at, a.expires_at,
-           a.decided_at, a.member_nudged_at,
-           g.id AS org_id, g.slug, g.name, g.city, g.country, g.org_type,
-           g.timezone, g.locale, g.currency_display, g.clock_format,
-           g.manual_attendance_enabled,
-           g.status AS org_status,
-           EXISTS (
-             SELECT 1 FROM subscriptions s
-             WHERE s.owner_type = 'gym' AND s.owner_id = g.id
-               AND s.status IN ('trialing','active','past_due')
-           ) AS org_can_confirm
-    FROM gym_join_applications a
-    JOIN gyms g ON g.id = a.gym_id
-    WHERE a.user_id = ${userId}
-      AND (
-        a.status = 'pending'
-        OR (a.status IN ('rejected','expired')
-            AND coalesce(a.decided_at, a.expires_at)
-                > now() - (${DECIDED_VISIBLE_DAYS} * INTERVAL '1 day')
-            AND NOT EXISTS (
-              SELECT 1 FROM gym_join_applications newer
-              WHERE newer.user_id = a.user_id
-                AND newer.gym_id = a.gym_id
-                AND newer.status = 'confirmed'
-                AND (newer.applied_at, newer.id) > (a.applied_at, a.id)
-            ))
-      )
-    ORDER BY a.applied_at DESC, a.id DESC
-    LIMIT ${MY_APPLICATIONS_LIMIT}`;
-  return rows.map((r) => ({
-    org: toOrgRow({
-      id: r.org_id,
-      slug: r.slug,
-      name: r.name,
-      city: r.city,
-      country: r.country,
-      org_type: r.org_type,
-      timezone: r.timezone,
-      locale: r.locale,
-      currency_display: r.currency_display,
-      clock_format: r.clock_format,
-      manual_attendance_enabled: r.manual_attendance_enabled,
-      status: r.org_status,
-    }),
-    application: toApplicationRow({
-      id: r.app_id,
-      status: r.app_status,
-      applied_at: r.applied_at,
-      expires_at: r.expires_at,
-      decided_at: r.decided_at,
-      member_nudged_at: r.member_nudged_at,
-    }),
-    // Beside `ApplicationRow` rather than inside it: `ApplicationRow` is also
-    // what the JOIN DOOR returns (`applyByCode`), and a fact about the gym's
-    // plan has no business riding on that shape. This is the applicant LIST's
-    // own answer.
-    orgCanConfirm: r.org_can_confirm,
-  }));
-}
-
-/** :11385 mechanic 3, ratified by Kd 2026-08-20: the waiting member may remind
- *  the gym at most ONCE A DAY. */
-export const NUDGE_INTERVAL_HOURS = 24;
-
-export type NudgeOutcome =
-  | { kind: "sent"; nudgedAt: Date; nextNudgeAt: Date }
-  | { kind: "too_soon"; nudgedAt: Date; nextNudgeAt: Date }
-  | { kind: "not_found" }
-  | { kind: "not_pending"; status: OrgApplicationStatus };
-
-/** THE WAITING MEMBER'S NUDGE — :11385's third mechanic, and the only one of
- *  the three the person waiting can set off themselves.
- *
- *  **THE ONCE-A-DAY LIMIT IS IN THE DATABASE, NOT IN REDIS, and that is the
- *  decision worth not re-deriving.** Every other limit in this module is a
- *  request-rate floor living in a counter that a restart or an eviction may
- *  drop — which is correct for "how hard may you hammer this endpoint" and
- *  wrong for "how often may this happen at all". A dropped counter here would
- *  hand somebody a second reminder the ruling says they do not get, and the
- *  front desk would see a person asking twice in an hour. The column IS the
- *  rule, `now()` is the database's own clock, and the comparison happens inside
- *  the same transaction that writes it, so two taps racing cannot both win.
- *
- *  **Tenancy is the WHERE (R3.2) and carries NO gym id**, because the caller is
- *  addressing their OWN application: `id` AND `user_id`. Holding somebody
- *  else's application uuid nudges nobody and — like every other 404 in this
- *  module — is indistinguishable from an id that never existed.
- *
- *  **Nothing is DELIVERED anywhere and the name is honest about it.** There is
- *  no email in this product and no push on web; what this writes is a mark the
- *  console renders beside that person's row. The copy on both screens says
- *  exactly that and promises no message. */
-export async function nudgeApplication(
-  sql: Sql,
-  input: { applicationId: string; userId: string },
-): Promise<NudgeOutcome> {
-  return await sql.begin(async (tx) => {
-    const rows = await tx<
-      { id: string; status: string; gym_id: string; member_nudged_at: Date | null }[]
-    >`
-      SELECT id, status, gym_id, member_nudged_at
-      FROM gym_join_applications
-      WHERE id = ${input.applicationId} AND user_id = ${input.userId}
-      FOR UPDATE`;
-    const app = rows[0];
-    if (app === undefined) return { kind: "not_found" };
-
-    const status = toApplicationStatus(app.status);
-    // Only a WAITING person has anything to remind anybody about. A confirmed
-    // application would nudge a gym about somebody already inside it, and a
-    // rejected or expired one would ask them to reconsider a decision this
-    // endpoint has no business reopening — re-applying is the door for that,
-    // and :11385 made it free precisely so this one does not have to be.
-    if (status !== "pending") return { kind: "not_pending", status };
-
-    // One statement decides AND writes. Splitting it into "is it due?" then
-    // "write it" is the shape that lets two taps a millisecond apart both read
-    // yesterday's timestamp and both write today's; the row lock above already
-    // serialises them, and this keeps the rule true even if the lock is ever
-    // relaxed.
-    const updated = await tx<{ member_nudged_at: Date; next_nudge_at: Date }[]>`
-      UPDATE gym_join_applications
-      SET member_nudged_at = now()
-      WHERE id = ${app.id}
-        AND (member_nudged_at IS NULL
-             OR member_nudged_at <= now() - (${NUDGE_INTERVAL_HOURS} * INTERVAL '1 hour'))
-      RETURNING member_nudged_at,
-                member_nudged_at + (${NUDGE_INTERVAL_HOURS} * INTERVAL '1 hour') AS next_nudge_at`;
-
-    const sent = updated[0];
-    if (sent === undefined) {
-      // Not an error: a person tapped a button twice, or came back the same
-      // afternoon. The screen needs the two times so it can say WHEN they can
-      // ask again rather than computing a date of its own.
-      const held = app.member_nudged_at;
-      if (held === null) {
-        // The UPDATE's own WHERE admits a null, so a null here means the row
-        // changed under a lock we hold — impossible, and loud rather than a
-        // fabricated time (the `already_pending` branch's precedent).
-        throw new Error("nudge refused a never-nudged application");
-      }
-      return {
-        kind: "too_soon",
-        nudgedAt: held,
-        nextNudgeAt: new Date(held.getTime() + NUDGE_INTERVAL_HOURS * 60 * 60 * 1000),
-      };
-    }
-
-    // Part 3 §3.3: every mutating call writes `audit_log`. This is the row that
-    // answers "we never heard from them" if a gym and a member ever disagree
-    // about who was waiting on whom.
-    await insertAudit(tx, {
-      actorUserId: input.userId,
-      gymId: app.gym_id,
-      action: "org.join_nudged",
-      targetType: "gym_join_application",
-      targetId: app.id,
-      meta: {},
-    });
-
-    return { kind: "sent", nudgedAt: sent.member_nudged_at, nextNudgeAt: sent.next_nudge_at };
-  });
-}
-
-export type RemoveMemberOutcome =
-  | { kind: "removed" }
-  | { kind: "already_removed" }
-  | { kind: "never_member" }
-  /** They are staff, and the caller may not manage staff: the owner's call alone. */
-  | { kind: "staff_owner_only" }
-  /** "Also remove from staff" for an owner: an owner leaves through a hand-over (4b). */
-  | { kind: "owner_stays_owner" };
-
-/** PART 3 §4.3's REMOVE — "sets `removed_at` (seat freed instantly; history
- *  retained)".
- *
- *  **Why this exists at all, and it is Kd's finding:** shown that a confirmed
- *  member could not be removed by anyone, he answered *"if someone joins once
- *  can not be removed what is this"*. Measured before building: the only
- *  statement in the whole product that had ever written `removed_at` was the
- *  DPDP Day-0 cascade in `users/repo.ts`, i.e. a person deleting their own
- *  account. A gym had no way to correct a mis-tap, and Confirm was therefore a
- *  one-way door.
- *
- *  **THE ROW IS CLOSED, NEVER DELETED.** `[joined_at, removed_at)` is the
- *  membership interval every org-side reader is scoped by (§2.1), so closing
- *  it ends the relationship without touching a single workout: the member
- *  keeps their history, and the gym keeps the record that this person was
- *  theirs for that period. A DELETE would silently rewrite both.
- *
- *  **THE SEAT IS FREED BY THE SAME STATEMENT** — `claimSeat` counts live,
- *  non-complimentary rows, so there is no counter to decrement and no second
- *  place to get wrong.
- *
- *  **STAFF (ROADMAP 4a-ii, spec §10.3).** Staff and member are separate, so ending a
- *  staff person's membership leaves their staff access unless `alsoStaff` takes it in
- *  the same step. Only somebody who may manage staff (the owner) removes a staff
- *  person's membership, so a manager can never leave a colleague half-removed. An
- *  owner's place may go; their ownership does not (`owner_stays_owner`).
- *
- *  Tenancy is the WHERE (R3.2): gym id AND user id, so holding a uuid from
- *  another gym removes nobody. */
-export async function removeMember(
-  sql: Sql,
-  input: {
-    gymId: string;
-    userId: string;
-    actorUserId: string;
-    /** The caller holds `staff.manage`: they may remove a staff person's membership. */
-    actorManagesStaff: boolean;
-    /** Take their staff access in the same step (the box's tick). */
-    alsoStaff: boolean;
-    /** Run in the same transaction just before a live membership is closed, while the
-     *  person still counts as a member: moving their list record to past members. It
-     *  answers the record the membership is removed with, which Put back gives back. */
-    beforeClose?: (tx: TransactionSql) => Promise<string | null>;
-    /** Run in the same transaction once the membership is closed (or was already):
-     *  withdrawing the person's invitation, so signing in again lets nobody back in. */
-    afterClose?: (tx: TransactionSql) => Promise<unknown>;
-  },
-): Promise<RemoveMemberOutcome> {
-  return await sql.begin(async (tx) => {
-    // THE ORG LOCK, added by T3 round 1's C/H-2 (2026-08-22). This function
-    // reads `gym_staff` and `addStaff` reads live membership; without a shared
-    // lock they interleave into a staff row over a closed membership, i.e.
-    // somebody holding `members.read` on a gym they are no longer in. Same
-    // lock, same order, as `addStaff`, `removeStaff` and `claimSeat`.
-    await lockOrgRow(tx, input.gymId);
-
-    const staffRows = await tx<{ role: string; owns: boolean }[]>`
-      SELECT s.role, g.owner_user_id = s.user_id AS owns
-      FROM gym_staff s JOIN gyms g ON g.id = s.gym_id
-      WHERE s.gym_id = ${input.gymId} AND s.user_id = ${input.userId}`;
-    const staff = staffRows[0];
-    if (staff !== undefined) {
-      if (!input.actorManagesStaff) return { kind: "staff_owner_only" };
-      if (input.alsoStaff && (staff.owns || staff.role === "owner")) return { kind: "owner_stays_owner" };
-    }
-    // Their staff row goes in the same transaction as the membership, once it is certain
-    // they were a member here: this route never touches somebody who is staff only.
-    const endStaff = async (): Promise<void> => {
-      if (staff === undefined || !input.alsoStaff) return;
-      // An account deleted at this instant has already removed the row and said so.
-      const gone = await tx`DELETE FROM gym_staff WHERE gym_id = ${input.gymId} AND user_id = ${input.userId} RETURNING user_id`;
-      if (gone.length === 0) return;
-      await insertAudit(tx, {
-        actorUserId: input.actorUserId,
-        gymId: input.gymId,
-        action: "org.staff_removed",
-        targetType: "gym_staff",
-        targetId: input.userId,
-        meta: { role: toOrgRole(staff.role), removedWith: "membership" },
-      });
-    };
-
-    const removedWith = (await input.beforeClose?.(tx)) ?? null;
-    const closed = await tx<{ id: string }[]>`
-      UPDATE gym_members SET removed_at = now(), removed_entry_id = ${removedWith}
-      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId} AND removed_at IS NULL
-      RETURNING id`;
-    const row = closed[0];
-
-    if (row === undefined) {
-      // Two different facts, and they are not merged: a SECOND tap (a row
-      // exists, already closed) is idempotent success, while a request naming
-      // somebody who was never in this gym is a 404 — the console only offers
-      // this button on a roster row, so that case means the screen is stale or
-      // the id came from somewhere it should not have. Answering "removed" to
-      // it would be a true-sounding reply to a request nothing honoured.
-      const everRows = await tx<{ id: string }[]>`
-        SELECT id FROM gym_members
-        WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
-        LIMIT 1`;
-      if (everRows[0] === undefined) return { kind: "never_member" };
-      await input.afterClose?.(tx);
-      await endStaff();
-      return { kind: "already_removed" };
-    }
-
-    await input.afterClose?.(tx);
-    await endStaff();
-    await insertAudit(tx, {
-      actorUserId: input.actorUserId,
-      gymId: input.gymId,
-      action: "org.member_removed",
-      targetType: "gym_member",
-      targetId: row.id,
-      meta: { removedUserId: input.userId },
-    });
-
-    return { kind: "removed" };
-  });
-}
-
-/** Roster page, keyset-ordered on (joined_at, id) DESC.
- *
- *  Part 3 §4.3's default sort is last-active desc; that column comes from
- *  `org_member_stats`, which this slice does not build, so the order here is
- *  newest-joined-first and the cursor matches it exactly. Sorting is not
- *  cosmetic for a cursor walk: an ordering the cursor does not match drops or
- *  repeats rows silently.
- *
- *  **Every row here takes one of the gym's places** (§10.4): a seat is a live
- *  membership, the owner's and staff's included, so `takesSeat` is always true and
- *  `staff` says who also runs the gym. */
-export async function listMembers(
-  sql: Sql,
-  input: {
-    gymId: string;
-    limit: number;
-    cursor: { joinedAt: string; id: string } | null;
-    /** A name search, already escaped for LIKE, or null. `likeListName` also matches the
-     *  name on the gym's list (staff who may see it). */
-    like?: string | null;
-    likeListName?: boolean;
-  },
-): Promise<{ items: MemberRow[]; nextCursor: { joinedAt: Date; id: string } | null }> {
-  const like = input.like ?? null;
-  const likeListName = input.likeListName ?? false;
-  const cursorJoinedAt = input.cursor?.joinedAt ?? null;
-  const cursorId = input.cursor?.id ?? null;
-  const rows = await sql<
-    {
-      id: string;
-      user_id: string;
-      display_name: string;
-      joined_at: Date;
-      group_label: string | null;
-      complimentary: boolean;
-      list_name: string | null;
-      staff_role: string | null;
-      staff_role_name: string | null;
-    }[]
-  >`
-    SELECT m.id, m.user_id, u.display_name, m.joined_at,
-           c.label AS group_label, m.complimentary,
-           e.full_name AS list_name,
-           st.role AS staff_role, st.role_name AS staff_role_name
-    FROM gym_members m
-    JOIN users u ON u.id = m.user_id
-    LEFT JOIN gym_staff st ON st.gym_id = m.gym_id AND st.user_id = m.user_id
-    LEFT JOIN gym_codes c ON c.id = m.code_id
-    -- "On your list as ..." only while the record they joined with is on it (3a-vi-b).
-    LEFT JOIN gym_member_list_entries e ON e.gym_id = m.gym_id AND e.id = m.entry_id AND e.former_at IS NULL
-    WHERE m.gym_id = ${input.gymId}
-      AND m.removed_at IS NULL
-      AND (${like}::text IS NULL
-           OR u.display_name ILIKE ${like}::text
-           -- The list's name, for staff who see the list: of the record they joined with,
-           -- or of a current record on their proved email or stated phone — a family's
-           -- shared email finds both names, as a search should (round one, Low-7).
-           OR (${likeListName}::boolean
-               AND (e.full_name ILIKE ${like}::text
-                    OR EXISTS (
-                      SELECT 1 FROM gym_member_list_entries x
-                      WHERE x.gym_id = m.gym_id AND x.former_at IS NULL AND x.full_name ILIKE ${like}::text
-                        AND ((x.email = u.email
-                              AND EXISTS (
-                                SELECT 1 FROM one_time_tokens t
-                                WHERE t.user_id = m.user_id AND t.purpose = 'verify_email' AND t.used_at IS NOT NULL))
-                             OR (m.stated_phone_e164 IS NOT NULL AND x.phone_e164 = m.stated_phone_e164))))))
-      AND (
-        ${cursorJoinedAt}::timestamptz IS NULL
-        OR (m.joined_at, m.id) < (${cursorJoinedAt}::timestamptz, ${cursorId}::uuid)
-      )
-    ORDER BY m.joined_at DESC, m.id DESC
-    LIMIT ${input.limit + 1}`;
-
-  const page = rows.slice(0, input.limit);
-  const last = page[page.length - 1];
-  const nextCursor =
-    rows.length > input.limit && last !== undefined
-      ? { joinedAt: last.joined_at, id: last.id }
-      : null;
-  return {
-    items: page.map((r) => ({
-      id: r.id,
-      userId: r.user_id,
-      displayName: r.display_name,
-      joinedAt: r.joined_at,
-      groupLabel: r.group_label,
-      complimentary: r.complimentary,
-      takesSeat: true,
-      listName: r.list_name,
-      staff: r.staff_role === null ? null : { role: toOrgRole(r.staff_role), roleName: r.staff_role_name },
-    })),
-    nextCursor,
-  };
-}
-
-/** Every join code belonging to ONE org, oldest first — so Part 3 §4.0 step 4's
- *  "Front Desk" code, the one created with the gym, is the one at the top of an
- *  owner's screen.
- *
- *  Tenancy IS the WHERE (R3.2), and note what is deliberately absent: this
- *  module has no read-a-code-by-id anywhere, so a code can only ever be reached
- *  through a gym the caller was authorised against first. The join path's own
- *  lookup is by `code` and returns nothing but the ids it needs to lock. */
-/** T3 L-1: a bound, for the same reason `MY_ORGS_LIMIT` has one — every other
- *  list in this module is bounded and this one was not. Unreachable today (a gym
- *  has exactly one code, minted with it), but `POST /codes` is already owed and
- *  a gym running a code per class could pass this. Whoever first has a caller
- *  near it owes the cursor; the roster reader is the worked pattern. */
-export const ORG_CODES_LIMIT = 100;
-
-export async function listCodes(sql: Sql, gymId: string): Promise<CodeRow[]> {
-  const rows = await sql<RawCode[]>`
-    SELECT c.code, c.label, c.paused, c.expires_at, c.max_uses,
-           (SELECT count(*)::int FROM gym_members m
-             WHERE m.code_id = c.id AND m.removed_at IS NULL AND m.complimentary = false)
-             AS joined
-    FROM gym_codes c
-    WHERE c.gym_id = ${gymId} AND c.removed_at IS NULL
-    ORDER BY c.created_at ASC, c.code ASC
-    LIMIT ${ORG_CODES_LIMIT}`;
-  return rows.map(toCodeRow);
-}
-
-/** THE SHAPE EVERY `gym_codes` READ RETURNS, mapped in ONE place.
- *
- *  The column LIST is written out in each query rather than interpolated from a
- *  shared string: `sql.unsafe`/`sql.raw` with any interpolated value is
- *  forbidden (R3.8, playbook trap #4) and a constant that is safe today is a
- *  constant somebody parameterises tomorrow. What is shared is this MAPPER, so
- *  a query that stops selecting `paused` fails to compile here rather than
- *  quietly handing a console a code the join path will refuse. */
-interface RawCode {
-  code: string;
-  label: string;
-  paused: boolean;
-  expires_at: Date | null;
-  max_uses: number | null;
-  joined: number;
-}
-
-/** THE NUMBER, DEFINED ONCE IN PROSE BECAUSE SQL CANNOT SHARE IT SAFELY.
- *
- *  `joined` is **live memberships this code created, complimentary excluded** —
- *  people who are in the gym RIGHT NOW and came through this code. Not seat
- *  claims (that is the `uses` column, displayed nowhere) and not the owner, whose
- *  §4.0-step-6 seat carries the first code's id and who never "joined" anything.
- *
- *  It is written out as the same correlated subquery at every site rather than
- *  built from a shared string, for the reason the column lists are (R3.8): a
- *  fragment that is safe today is one somebody parameterises tomorrow. **The
- *  sites are: `listCodes`, `applyByCode`, `updateCode`, `rotateCode`'s retired
- *  row — plus `createCode` and `rotateCode`'s minted row, which select the
- *  literal `0` because a code minted in this transaction cannot have a member.**
- *  A change to the definition is a change to all six, and `orgs.routes.test.ts`
- *  holds a test that the door and the screen agree on it — drift between the two
- *  is the defect this shape exists to prevent, not a style question. */
-function toCodeRow(raw: RawCode): CodeRow {
-  return {
-    code: raw.code,
-    label: raw.label,
-    paused: raw.paused,
-    expiresAt: raw.expires_at,
-    maxUses: raw.max_uses,
-    joined: raw.joined,
-  };
-}
-
-/** HOW MANY CODES ONE GYM MAY HOLD, and the number is DERIVED rather than
- *  chosen: it is `ORG_CODES_LIMIT`, the ceiling `listCodes` already reads to.
- *
- *  Without a cap, `listCodes`' `LIMIT 100 ... ORDER BY created_at ASC` returns
- *  the OLDEST hundred — so the 101st code a gym minted would be invisible to
- *  the console that minted it, while the join path happily honoured it. Capping
- *  creation at the same figure makes the list provably whole instead of
- *  provably truncated, which is worth more than any larger number would be.
- *
- *  **REMOVED CODES DO NOT COUNT** (T3 L-5 — this paragraph said the opposite
- *  until removal shipped in the same diff that made it false). Switched-off ones
- *  still do: they stay on the list, a gym should be able to see the code it
- *  turned off last month, and every visible code is one `listCodes` must be able
- *  to return. What a gym does when it reaches the cap is take a finished code
- *  off the list — which is what the refusal now tells them to do, and, unlike
- *  the "delete one" it used to say, is a button that exists. */
-export const ORG_CODES_MAX = ORG_CODES_LIMIT;
-
-/** Serialise everything that follows against the SAME gym.
- *
- *  §4.2's instrument, on §4.2's row: the seat claim locks `gyms` and not a
- *  COUNT, because locking a count serialises nothing — a second transaction
- *  reads the same pre-insert number and passes the same check. A cap enforced by
- *  "count, then insert, in one transaction" has exactly that hole under READ
- *  COMMITTED, which is what this database runs and what every statement here has
- *  always assumed (T3 L-3).
- *
- *  **CALL IT FIRST, BEFORE ANY `gym_codes` ROW IS LOCKED.** Lock order in this
- *  module is org row → child rows, always, and it is stated in one place —
- *  `claimSeat` — for the same reason: an ordering decided per-function is an
- *  ordering that eventually reverses somewhere and deadlocks. */
-/** Exported for `classes/repo.ts`, which is the same console writing a
- *  different corner of the same gym: its caps and its calendar fill have to be
- *  serialised against every other write to this gym, and a second lock helper
- *  would be a second answer to "what does a console write hold". */
-export async function lockOrgRow(tx: TransactionSql, gymId: string): Promise<void> {
-  await tx`SELECT 1 FROM gyms WHERE id = ${gymId} FOR UPDATE`;
-}
-
-export type CreateCodeOutcome =
-  | { kind: "created"; code: CodeRow }
-  | { kind: "too_many"; cap: number };
-
-/** Mint one more code for a gym.
- *
- *  **`code` is generated by the SERVICE, not here**, for the same reason
- *  `createOrgAttempt` takes one: the collision retry needs fresh randomness and
- *  the repo does not own randomness. A `gym_codes_code_unique` violation THROWS
- *  `OrgNameTakenError('code')` and the service retries — the same typed error
- *  and the same division of labour `createOrgAttempt` already uses, rather than
- *  a second mechanism for one situation. Codes are globally unique (that
- *  constraint is in `0001_init`, not merely in Drizzle's mind), which is what
- *  lets `applyByCode` look one up without being told the gym.
- *
- *  **THE CAP IS SERIALISED ON THE GYM ROW, and one transaction was NOT enough**
- *  (T3 L-3 — this comment claimed the transaction alone did it, and under
- *  READ COMMITTED, which is what this database runs, it does not: two staff
- *  members creating at once both read 99 and both insert). The lock is §4.2's
- *  own instrument, taken on the same row and in the same order the seat claim
- *  takes it — org row first, `gym_codes` after — so the two cannot deadlock
- *  against each other. Nothing in this module locks `gym_codes` and then reaches
- *  for `gyms`, which is the ordering that would.
- *
- *  Cheap by construction: it serialises creating a code for ONE gym, an action a
- *  gym takes a handful of times a year. */
-export async function createCode(
-  sql: Sql,
-  input: {
-    gymId: string;
-    code: string;
-    label: string;
-    expiresAt: Date | null;
-    maxUses: number | null;
-    actorUserId: string;
-  },
-): Promise<CreateCodeOutcome> {
-  try {
-    return await sql.begin(async (tx) => {
-      await lockOrgRow(tx, input.gymId);
-      const counted = await tx<{ n: number }[]>`
-        SELECT count(*)::int AS n FROM gym_codes
-        WHERE gym_id = ${input.gymId} AND removed_at IS NULL`;
-      if ((counted[0]?.n ?? 0) >= ORG_CODES_MAX) {
-        return { kind: "too_many", cap: ORG_CODES_MAX };
-      }
-
-      const rows = await tx<RawCode[]>`
-        INSERT INTO gym_codes (gym_id, code, label, expires_at, max_uses)
-        VALUES (${input.gymId}, ${input.code}, ${input.label},
-                ${input.expiresAt}, ${input.maxUses})
-        RETURNING code, label, paused, expires_at, max_uses, 0::int AS joined`;
-      const raw = rows[0];
-      if (raw === undefined) throw new Error("INSERT INTO gym_codes returned no row");
-
-      await insertAudit(tx, {
-        actorUserId: input.actorUserId,
-        gymId: input.gymId,
-        action: "org.code_created",
-        targetType: "gym_code",
-        targetId: raw.code,
-        // Strings by construction (`insertAudit`'s own rule). "none" rather than
-        // an absent key: a human reading this row weeks later should see that
-        // the question was asked and answered, not wonder whether the writer
-        // forgot the field.
-        meta: {
-          expiresAt: raw.expires_at === null ? "none" : raw.expires_at.toISOString(),
-          maxUses: raw.max_uses === null ? "none" : String(raw.max_uses),
-        },
-      });
-
-      return { kind: "created", code: toCodeRow(raw) };
-    });
-  } catch (err) {
-    // Only ONE unique constraint is reachable from these transactions
-    // (`gym_codes_code_unique`), so unlike `createOrgAttempt` there is nothing
-    // to disambiguate — but the error type is shared so the service's retry is
-    // one mechanism rather than two.
-    if (isUniqueViolation(err)) throw new OrgNameTakenError("code");
-    throw err;
-  }
-}
-
-export type UpdateCodeOutcome =
-  | { kind: "updated"; code: CodeRow }
-  | { kind: "not_found" }
-  | { kind: "max_uses_below_uses"; joined: number };
-
-export interface CodePatch {
-  paused?: boolean;
-  expiresAt?: Date | null;
-  maxUses?: number | null;
-}
-
-/** Pause, wake, or move a restriction on one existing code.
- *
- *  **TENANCY IS THE PAIR (gym, code), never the code alone** (R3.2). A code is
- *  globally unique, so `WHERE code = $1` would have worked and would have let
- *  one gym's manager pause a DIFFERENT gym's poster by typing six characters —
- *  the textbook IDOR, hiding behind a column that happens to be unique.
- *
- *  `SELECT ... FOR UPDATE OF c` then `UPDATE` in one transaction, rather than one
- *  clever statement, because the new `max_uses` has to be compared against a
- *  count read in the same breath, and because two front-desk staff moving the
- *  limit at once must not each read a row the other has already changed.
- *
- *  **WHAT THE LOCK DOES NOT COVER, stated because the comment here used to imply
- *  otherwise (T3 L-4): `joined` is counted from `gym_members`, and locking this
- *  `gym_codes` row does not hold that count still.** A confirm landing between
- *  the count and the UPDATE can leave `max_uses` one below the people actually
- *  in. **Left as it is, deliberately.** The consequence is a code that reads
- *  "Fully used" a little early and revives the moment anybody leaves — no seat is
- *  lost, no member is affected, nothing is written that a later read disagrees
- *  with. The alternative is taking the gym's row lock on every limit edit, which
- *  serialises an owner's typing against every confirm in the gym to prevent a
- *  self-healing display. `createCode` takes that lock because ITS race admits a
- *  code the console can never list; this one does not, because it does not.
- *
- *  **A field the caller did not send is left ALONE**, which is what makes this a
- *  PATCH rather than a PUT: a screen that only knows about `paused` must not
- *  silently clear an expiry it never displayed. */
-export async function updateCode(
-  sql: Sql,
-  input: { gymId: string; code: string; patch: CodePatch; actorUserId: string },
-): Promise<UpdateCodeOutcome> {
-  return await sql.begin(async (tx) => {
-    const existing = await tx<(RawCode & { removed_at: Date | null })[]>`
-      SELECT c.code, c.label, c.paused, c.expires_at, c.max_uses, c.removed_at,
-             (SELECT count(*)::int FROM gym_members m
-               WHERE m.code_id = c.id AND m.removed_at IS NULL AND m.complimentary = false)
-               AS joined
-      FROM gym_codes c
-      WHERE c.gym_id = ${input.gymId} AND c.code = ${input.code}
-      FOR UPDATE OF c`;
-    const before = existing[0];
-    if (before === undefined) return { kind: "not_found" };
-    // A code the gym has TIDIED AWAY is not on any screen, so nothing legitimate
-    // can be asking to change it — and answering 404 keeps "removed" and "never
-    // existed" indistinguishable, which is the same standing 404 this module
-    // gives another gym's code.
-    if (before.removed_at !== null) return { kind: "not_found" };
-
-    const nextPaused = input.patch.paused ?? before.paused;
-    const nextExpiresAt =
-      input.patch.expiresAt === undefined ? before.expires_at : input.patch.expiresAt;
-    const nextMaxUses = input.patch.maxUses === undefined ? before.max_uses : input.patch.maxUses;
-
-    // A limit BELOW the number of people who already joined would kill the code
-    // on the spot, and the owner who typed it would see "Fully used" over a
-    // change they read as "let 10 more people in". Pause already means "off
-    // now", so refusing here takes nothing away and removes the surprise. The
-    // live count travels back so the refusal can name it.
-    if (nextMaxUses !== null && nextMaxUses < before.joined) {
-      return { kind: "max_uses_below_uses", joined: before.joined };
-    }
-
-    const rows = await tx<RawCode[]>`
-      UPDATE gym_codes AS c
-      SET paused = ${nextPaused}, expires_at = ${nextExpiresAt}, max_uses = ${nextMaxUses}
-      WHERE c.gym_id = ${input.gymId} AND c.code = ${input.code}
-      RETURNING c.code, c.label, c.paused, c.expires_at, c.max_uses,
-                (SELECT count(*)::int FROM gym_members m
-                  WHERE m.code_id = c.id AND m.removed_at IS NULL AND m.complimentary = false)
-                  AS joined`;
-    const raw = rows[0];
-    if (raw === undefined) throw new Error("UPDATE gym_codes returned no row under FOR UPDATE");
-
-    await insertAudit(tx, {
-      actorUserId: input.actorUserId,
-      gymId: input.gymId,
-      action: "org.code_updated",
-      targetType: "gym_code",
-      targetId: raw.code,
-      // BEFORE and AFTER, not just after. "who turned the poster off" is the
-      // question this row exists to answer, and an after-only row cannot tell a
-      // pause from a no-op re-save.
-      meta: {
-        pausedFrom: String(before.paused),
-        pausedTo: String(raw.paused),
-        expiresAtFrom: before.expires_at === null ? "none" : before.expires_at.toISOString(),
-        expiresAtTo: raw.expires_at === null ? "none" : raw.expires_at.toISOString(),
-        maxUsesFrom: before.max_uses === null ? "none" : String(before.max_uses),
-        maxUsesTo: raw.max_uses === null ? "none" : String(raw.max_uses),
-      },
-    });
-
-    return { kind: "updated", code: toCodeRow(raw) };
-  });
-}
-
-export type RotateCodeOutcome =
-  | { kind: "rotated"; code: CodeRow; replaced: CodeRow }
-  | { kind: "not_found" }
-  | { kind: "too_many"; cap: number };
-
-/** ROTATE — Part 3 §7's "code leaked publicly → rotate".
- *
- *  ONE TRANSACTION, and that is the whole reason this is a route rather than
- *  two client calls. Pausing the old code and minting the new one are useless
- *  apart: the half that lands first decides whether the gym is left with two
- *  live codes (harmless) or none (a gym nobody can join). Both or neither.
- *
- *  **The new code carries the old one's LABEL and NOTHING ELSE.** Copying the
- *  expiry forward would hand back a code that is already dead, and copying
- *  `max_uses` forward would hand back one that is already exhausted — a rotate
- *  whose entire point is producing something usable. The label travels because
- *  it is the group tag (§2.1) and the replacement stands in the same place in
- *  the gym as the code it replaces. */
-export async function rotateCode(
-  sql: Sql,
-  input: { gymId: string; code: string; newCode: string; actorUserId: string },
-): Promise<RotateCodeOutcome> {
-  try {
-    return await sql.begin(async (tx) => {
-      // BEFORE the code row is locked, so this path and `createCode` take the
-      // gym's row in the same order (T3 L-3's fix; `lockOrgRow` carries the why).
-      await lockOrgRow(tx, input.gymId);
-      const existing = await tx<(RawCode & { removed_at: Date | null })[]>`
-        SELECT c.code, c.label, c.paused, c.expires_at, c.max_uses, c.removed_at,
-               (SELECT count(*)::int FROM gym_members m
-                 WHERE m.code_id = c.id AND m.removed_at IS NULL AND m.complimentary = false)
-                 AS joined
-        FROM gym_codes c
-        WHERE c.gym_id = ${input.gymId} AND c.code = ${input.code}
-        FOR UPDATE OF c`;
-      const before = existing[0];
-      if (before === undefined) return { kind: "not_found" };
-      // Same 404 as `updateCode`: a tidied-away code is on no screen, so nothing
-      // legitimate is asking to replace it.
-      if (before.removed_at !== null) return { kind: "not_found" };
-
-      const counted = await tx<{ n: number }[]>`
-        SELECT count(*)::int AS n FROM gym_codes
-        WHERE gym_id = ${input.gymId} AND removed_at IS NULL`;
-      if ((counted[0]?.n ?? 0) >= ORG_CODES_MAX) {
-        return { kind: "too_many", cap: ORG_CODES_MAX };
-      }
-
-      const mintedRows = await tx<RawCode[]>`
-        INSERT INTO gym_codes (gym_id, code, label)
-        VALUES (${input.gymId}, ${input.newCode}, ${before.label})
-        RETURNING code, label, paused, expires_at, max_uses, 0::int AS joined`;
-      const minted = mintedRows[0];
-      if (minted === undefined) throw new Error("INSERT INTO gym_codes returned no row");
-
-      const retiredRows = await tx<RawCode[]>`
-        UPDATE gym_codes AS c SET paused = true
-        WHERE c.gym_id = ${input.gymId} AND c.code = ${input.code}
-        RETURNING c.code, c.label, c.paused, c.expires_at, c.max_uses,
-                  (SELECT count(*)::int FROM gym_members m
-                    WHERE m.code_id = c.id AND m.removed_at IS NULL AND m.complimentary = false)
-                    AS joined`;
-      const retired = retiredRows[0];
-      if (retired === undefined) throw new Error("UPDATE gym_codes returned no row under FOR UPDATE");
-
-      await insertAudit(tx, {
-        actorUserId: input.actorUserId,
-        gymId: input.gymId,
-        action: "org.code_rotated",
-        targetType: "gym_code",
-        // The row this audit is ABOUT is the one that was taken out of service —
-        // "when did this code stop working, and who did it" is the question a
-        // leaked poster raises. The replacement is named in the meta.
-        targetId: retired.code,
-        meta: { replacedBy: minted.code },
-      });
-
-      return { kind: "rotated", code: toCodeRow(minted), replaced: toCodeRow(retired) };
-    });
-  } catch (err) {
-    // Only ONE unique constraint is reachable from these transactions
-    // (`gym_codes_code_unique`), so unlike `createOrgAttempt` there is nothing
-    // to disambiguate — but the error type is shared so the service's retry is
-    // one mechanism rather than two.
-    if (isUniqueViolation(err)) throw new OrgNameTakenError("code");
-    throw err;
-  }
-}
-
-export type RemoveCodeOutcome =
-  | { kind: "removed" }
-  | { kind: "not_found" }
-  | { kind: "still_usable" };
-
-/** TAKE A FINISHED CODE OFF THE GYM'S LIST — Kd, 2026-08-21: *"codes will pile
- *  up should have a option to delete"*.
- *
- *  **IT IS NOT A `DELETE`, and the reason is the members.** `gym_members.code_id`
- *  and `gym_join_applications.code_id` reference this row, both `ON DELETE
- *  RESTRICT` by the schema's default (R4.3). A real delete would therefore either
- *  be refused by Postgres for exactly the codes a gym most wants gone — the ones
- *  people used — or, if the constraint were relaxed, erase the record of how
- *  today's members got in. `removed_at` is the same soft-state shape
- *  `gym_members.removed_at` already uses for the same reason.
- *
- *  **ONLY A CODE THAT CANNOT ADMIT ANYBODY MAY BE REMOVED** (paused, or past its
- *  end date), and the UPDATE pauses it in the same statement. That pairing is the
- *  whole safety argument: a code missing from the console can never be a code
- *  still opening the door, so an owner tidying their screen cannot accidentally
- *  leave a live one running unwatched. A code that is merely FULL is not
- *  removable — a member leaving revives it, and hiding it would strand a code
- *  that is about to work again.
- *
- *  Removing twice is a SUCCESS, not a 404: the second tap of a slow button must
- *  leave the same state and say the same thing (the `DELETE /members/:userId`
- *  precedent). */
-export async function removeCode(
-  sql: Sql,
-  input: { gymId: string; code: string; actorUserId: string },
-): Promise<RemoveCodeOutcome> {
-  return await sql.begin(async (tx) => {
-    // TENANCY IS THE PAIR (gym, code), never the code alone (R3.2). Codes are
-    // globally unique, so `WHERE code = $1` would compile, work, and let one
-    // gym's manager tidy away another gym's poster.
-    const rows = await tx<
-      { code: string; paused: boolean; expires_at: Date | null; removed_at: Date | null }[]
-    >`
-      SELECT code, paused, expires_at, removed_at
-      FROM gym_codes
-      WHERE gym_id = ${input.gymId} AND code = ${input.code}
-      FOR UPDATE`;
-    const before = rows[0];
-    if (before === undefined) return { kind: "not_found" };
-    if (before.removed_at !== null) return { kind: "removed" };
-
-    const expired = before.expires_at !== null && before.expires_at.getTime() <= Date.now();
-    if (!before.paused && !expired) return { kind: "still_usable" };
-
-    const updated = await tx<{ code: string }[]>`
-      UPDATE gym_codes SET removed_at = now(), paused = true
-      WHERE gym_id = ${input.gymId} AND code = ${input.code}
-      RETURNING code`;
-    if (updated[0] === undefined) {
-      throw new Error("UPDATE gym_codes returned no row under FOR UPDATE");
-    }
-
-    await insertAudit(tx, {
-      actorUserId: input.actorUserId,
-      gymId: input.gymId,
-      action: "org.code_removed",
-      targetType: "gym_code",
-      targetId: before.code,
-      // The row is still in the table and this is how a human finds out why it
-      // stopped being on screen. "was it already off" answers the only question
-      // a later reader has: whether the removal itself took a code out of service.
-      meta: { pausedBefore: String(before.paused) },
-    });
-
-    return { kind: "removed" };
-  });
-}
-
-// ---------------------------------------------------------------------------
-// STAFF — Part 3 §4.7. Until this card, the ONLY `INSERT INTO gym_staff` in the
-// product was the one inside `createOrgAttempt`, hard-coded to `'owner'`
-// (grep-verified before a line was written), so a gym had exactly one person
-// who could do anything and no way to appoint another. The join door's whole
-// design says "the front desk confirms" and no gym could have a front desk.
-// ---------------------------------------------------------------------------
-
-export interface StaffRow {
-  userId: string;
-  displayName: string;
-  email: string | null;
-  role: OrgRole;
-  /** The stored ticks, RAW — null meaning "this row predates the column". The
-   *  service turns that into the role's defaults; nothing here decides it, so
-   *  the rule lives in one place rather than in every reader. */
-  privileges: string[] | null;
-  since: Date;
-  /** They are also a live member of the gym (staff need not be, §10.1). */
-  isMember: boolean;
-  /** The gym's own role they hold ("Front desk"), or null. */
-  roleName: string | null;
-}
-
-/** Everyone who runs this gym, owner first and then oldest appointment first.
- *
- *  UNBOUNDED, and unlike `listCodes`' cap that is defensible rather than
- *  overlooked: a staff row can only be created by an owner naming an existing
- *  member of the same gym, so the ceiling is the roster and the only person who
- *  can approach it is the person reading this list. `ORG_CODES_LIMIT` exists
- *  because a code is minted by a tap; a staff row costs a deliberate act
- *  against a named human.
- *
- *  Tenancy IS the WHERE (R3.2). There is no read-a-staff-row-by-id anywhere in
- *  this module, so a staff row is only ever reachable through a gym the caller
- *  was authorised against first.
- *
- *  **THE ELIGIBILITY TEST IS WRITTEN OUT AGAIN HERE, MATCHING `getStaffRole`
- *  WORD FOR WORD, and the duplication is deliberate** (T3 round 2, Low-2). Round
- *  1's C/H-3 fix taught `getStaffRole` to refuse an ex-member and left this
- *  reader alone, so the LIST said "manager" about somebody whose authority was
- *  already `null` — the fix is what made the row false. Two readers of
- *  `gym_staff` that disagree is the defect; a shared `sql` fragment is R3.8's
- *  forbidden shape, so they are spelled twice and **anchored by a test that
- *  drives BOTH** (:14013's six-site precedent, same reasoning). Change one and
- *  the test fails; change neither and a screen lies about who holds keys. */
-export async function listStaff(sql: Sql, gymId: string): Promise<StaffRow[]> {
-  const rows = await sql<
-    {
-      user_id: string;
-      display_name: string;
-      email: string | null;
-      role: string;
-      privileges: string[] | null;
-      since: Date;
-      is_member: boolean;
-      role_name: string | null;
-    }[]
-  >`
-    SELECT s.user_id, u.display_name, u.email, s.role, s.privileges, s.created_at AS since, s.role_name,
-           EXISTS (SELECT 1 FROM gym_members lm
-                   WHERE lm.gym_id = s.gym_id AND lm.user_id = s.user_id AND lm.removed_at IS NULL) AS is_member
-    FROM gym_staff s
-    JOIN users u ON u.id = s.user_id
-    WHERE s.gym_id = ${gymId}
-      AND u.status = 'active'
-    ORDER BY (s.role = 'owner') DESC, s.created_at ASC, s.user_id ASC`;
-  return rows.map((r) => ({
-    userId: r.user_id,
-    displayName: r.display_name,
-    email: r.email,
-    role: toOrgRole(r.role),
-    privileges: r.privileges,
-    since: r.since,
-    isMember: r.is_member,
-    roleName: r.role_name,
-  }));
-}
-
-/** One staff row by (gym, user) — the shape every mutation answers with, read
- *  back through `listStaff`'s own projection so the list and the mutation can
- *  never describe the same person differently. */
-async function readStaffRow(
-  tx: TransactionSql,
-  gymId: string,
-  userId: string,
-): Promise<StaffRow | null> {
-  const rows = await tx<
-    {
-      user_id: string;
-      display_name: string;
-      email: string | null;
-      role: string;
-      privileges: string[] | null;
-      since: Date;
-      is_member: boolean;
-      role_name: string | null;
-    }[]
-  >`
-    SELECT s.user_id, u.display_name, u.email, s.role, s.privileges, s.created_at AS since, s.role_name,
-           EXISTS (SELECT 1 FROM gym_members lm
-                   WHERE lm.gym_id = s.gym_id AND lm.user_id = s.user_id AND lm.removed_at IS NULL) AS is_member
-    FROM gym_staff s
-    JOIN users u ON u.id = s.user_id
-    WHERE s.gym_id = ${gymId} AND s.user_id = ${userId}`;
-  const row = rows[0];
-  return row === undefined
-    ? null
-    : {
-        userId: row.user_id,
-        displayName: row.display_name,
-        email: row.email,
-        role: toOrgRole(row.role),
-        privileges: row.privileges,
-        since: row.since,
-        isMember: row.is_member,
-        roleName: row.role_name,
-      };
-}
-
-export type AddStaffOutcome =
-  | { kind: "added"; staff: StaffRow }
-  | { kind: "not_a_member" }
-  | { kind: "already_staff"; staff: StaffRow };
-
-/** Appoint a member of this gym as staff.
- *
- *  **THE LOOKUP IS SCOPED TO THIS GYM'S LIVE ROSTER, and that is the security
- *  property, not a convenience.** Resolving the email against `users` globally
- *  would answer "does this address have an account" for anything an owner types.
- *  Joined to `gym_members` with `removed_at IS NULL`, the only addresses that
- *  resolve are people already on a roster the caller can read.
- *
- *  `email` is `citext` (Part 4 §3.1), so the equality is case-insensitive in the
- *  DATABASE rather than by a `lower()` this file would have to remember.
- *
- *  **IT TAKES THE ORG LOCK, and the first version of this function did not —
- *  that was T3 round 1's C/H-2 (2026-08-22).** The race that matters is not two
- *  people appointing at once (one primary key, `ON CONFLICT DO NOTHING`, the
- *  loser reads the winner's row and `already_staff` is right either way). It is
- *  **appointing racing REMOVE-FROM-MEMBERS**: this function reads live
- *  membership and `removeMember` reads `gym_staff`, so interleaved they commit a
- *  staff row and a closed membership — somebody running a gym they are not in,
- *  holding `members.read` over the whole roster. Reproduced 12 times out of 12.
- *  :14174's rule is unchanged and is what selects the fix: a lock is warranted
- *  by the CONSEQUENCE, and the consequence here is an authorisation hole rather
- *  than a retryable collision. `removeMember` takes the same lock in the same
- *  order. */
-export async function addStaff(
-  sql: Sql,
-  input: {
-    gymId: string;
-    email: string;
-    role: OrgRole;
-    /** The starting ticks, computed by the SERVICE from the role's template.
-     *  Written with the row so a staff record is never a moment old without an
-     *  effective set (:11429's snapshot). */
-    privileges: readonly string[];
-    /** The gym's own role ("Front desk", 4a-i), or null. */
-    roleName?: string | null;
-    actorUserId: string;
-  },
-): Promise<AddStaffOutcome> {
-  return await sql.begin(async (tx) => {
-    await lockOrgRow(tx, input.gymId);
-
-    const candidates = await tx<{ user_id: string }[]>`
-      SELECT m.user_id
-      FROM gym_members m
-      JOIN users u ON u.id = m.user_id
-      WHERE m.gym_id = ${input.gymId}
-        AND m.removed_at IS NULL
-        AND u.email = ${input.email}
-        AND u.status = 'active'
-        -- Only an account that proved the address: anybody can register one under an
-        -- address they do not hold. Anyone else is sent the emailed invitation.
-        AND EXISTS (
-          SELECT 1 FROM one_time_tokens t
-          WHERE t.user_id = u.id AND t.purpose = 'verify_email' AND t.used_at IS NOT NULL)
-      LIMIT 1
-      -- Held until commit: an account deletion (softDeleteUser, which deletes staff rows)
-      -- waits for this appointment, or this one sees the account gone (4a-ii round one).
-      FOR SHARE OF u`;
-    const candidate = candidates[0];
-    if (candidate === undefined) return { kind: "not_a_member" };
-
-    const inserted = await tx<{ user_id: string }[]>`
-      INSERT INTO gym_staff (gym_id, user_id, role, privileges, role_name)
-      VALUES (${input.gymId}, ${candidate.user_id}, ${input.role}, ${[...input.privileges]}, ${input.roleName ?? null})
-      ON CONFLICT (gym_id, user_id) DO NOTHING
-      RETURNING user_id`;
-
-    const staff = await readStaffRow(tx, input.gymId, candidate.user_id);
-    if (staff === null) throw new Error("gym_staff row missing immediately after insert");
-
-    // The row already existed. Its role is REPORTED, never overwritten — a
-    // second POST must not silently demote a manager to trainer because a stale
-    // screen still offered "add as trainer". Changing a role is the PATCH.
-    if (inserted[0] === undefined) return { kind: "already_staff", staff };
-
-    // NOTHING IS WRITTEN TO `gym_members` HERE. Kd's "staff seats free" is
-    // enforced in `claimSeat`'s count (see the note there); the first version
-    // wrote `complimentary = true` and three other readers acted on it.
-
-    await insertAudit(tx, {
-      actorUserId: input.actorUserId,
-      gymId: input.gymId,
-      action: "org.staff_added",
-      targetType: "gym_staff",
-      targetId: candidate.user_id,
-      meta: { role: input.role, privileges: [...input.privileges] },
-    });
-
-    return { kind: "added", staff };
-  });
-}
-
-export type UpdateStaffOutcome =
-  | { kind: "updated"; staff: StaffRow }
-  | { kind: "unchanged"; staff: StaffRow }
-  | { kind: "not_staff" }
-  | { kind: "is_owner" };
-
-/** Change somebody between manager and trainer.
- *
- *  **AN OWNER'S ROLE IS REFUSED HERE.** Demoting the owner is last-owner lockout
- *  wearing a different hat — §4.7 blocks removing them and :11429's rule 2 makes
- *  the point that reaching the same lockout by another door is the same defect —
- *  and PROMOTING somebody to owner is the transfer question this card defers
- *  (`staffAssignableRoleSchema` refuses that direction at the boundary; this
- *  refuses the other one at the row).
- *
- *  `unchanged` is a distinct outcome rather than a silent success because it
- *  decides whether an audit row is written: "the owner set Priya to trainer" in
- *  a history is a claim about something that happened, and a no-op tap did not
- *  happen. The CALLER cannot tell the two apart and does not need to — both are
- *  a 200 carrying the same row. */
-export async function updateStaffRole(
-  sql: Sql,
-  input: {
-    gymId: string;
-    userId: string;
-    role: OrgRole;
-    /** The new role's DEFAULT ticks. A role change RESETS them — see the
-     *  service's note: without that, "demote to trainer" would leave every
-     *  manager tick standing and demote nobody. */
-    privileges: readonly string[];
-    actorUserId: string;
-  },
-): Promise<UpdateStaffOutcome> {
-  return await sql.begin(async (tx) => {
-    const rows = await tx<{ role: string }[]>`
-      SELECT role FROM gym_staff
-      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
-      FOR UPDATE`;
-    const before = rows[0];
-    if (before === undefined) return { kind: "not_staff" };
-    const previous = toOrgRole(before.role);
-    if (previous === "owner") return { kind: "is_owner" };
-
-    if (previous === input.role) {
-      const staff = await readStaffRow(tx, input.gymId, input.userId);
-      if (staff === null) throw new Error("gym_staff row vanished under FOR UPDATE");
-      return { kind: "unchanged", staff };
-    }
-
-    await tx`
-      UPDATE gym_staff SET role = ${input.role}, privileges = ${[...input.privileges]}, role_name = NULL
-      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;
-
-    const staff = await readStaffRow(tx, input.gymId, input.userId);
-    if (staff === null) throw new Error("gym_staff row vanished under FOR UPDATE");
-
-    await insertAudit(tx, {
-      actorUserId: input.actorUserId,
-      gymId: input.gymId,
-      action: "org.staff_role_changed",
-      targetType: "gym_staff",
-      targetId: input.userId,
-      // BOTH ends, because the question a human asks weeks later is "what did
-      // they used to be able to do", which the new role alone cannot answer.
-      // The ticks the change RESET them to are recorded for the same reason: a
-      // role change is now also a permission change, and an audit row that
-      // names only the role would hide half of what happened.
-      meta: { from: previous, to: input.role, privileges: [...input.privileges] },
-    });
-
-    return { kind: "updated", staff };
-  });
-}
-
-export type SetStaffPrivilegesOutcome =
-  | { kind: "updated"; staff: StaffRow }
-  | { kind: "unchanged"; staff: StaffRow }
-  | { kind: "not_staff" }
-  | { kind: "owner_only_privilege" }
-  | { kind: "last_owner_locked" };
-
-/** REPLACE ONE PERSON'S TICKS with the set an owner just looked at.
- *
- *  **THE WHOLE SET IS WRITTEN, never a diff** — see the request schema for why:
- *  a diff applied to a row somebody else edited produces a set nobody chose.
- *
- *  **THE LAST-OWNER GUARD IS A COUNT INSIDE THE ORG LOCK, and it is the same
- *  shape as `removeStaff`'s for the same reason** (:11429 rule 2, :14174's rule
- *  on when a lock is warranted). Reading "how many owners are there" and then
- *  writing is check-then-act; the loser of that race is a gym whose last owner
- *  can no longer manage staff, which **nobody inside the gym can repair**,
- *  because handing out `staff.manage` requires `staff.manage`. That is the
- *  severity that buys a lock, in contrast to the self-healing races :14174 says
- *  do not.
- *
- *  It counts OWNERS rather than asking "is this the owner", so it stays correct
- *  on the day a second owner becomes possible — `removeStaff`'s wording, kept
- *  deliberately identical because it is the same rule pointed at a different
- *  door.
- *
- *  **`unchanged` is a distinct outcome because it decides whether an audit row
- *  is written**: "the owner changed what Priya can do" in a gym's history is a
- *  claim about something that happened, and re-saving the same set did not
- *  happen. The caller cannot tell the two apart and does not need to. */
-export async function setStaffPrivileges(
-  sql: Sql,
-  input: {
-    gymId: string;
-    userId: string;
-    /** Already canonical (sorted, de-duplicated) — the service does that, so
-     *  the stored order is one order and "did anything change" is a question
-     *  about ACCESS rather than about ordering. */
-    privileges: readonly string[];
-    /** What the LAST owner may not be stripped of. Passed in rather than named
-     *  here: which privileges are lockout-capable is a policy question and the
-     *  service owns policy (`LAST_OWNER_REQUIRED_PRIVILEGES`). */
-    lastOwnerRequires: readonly string[];
-    /** Privileges that only an OWNER's row may carry (§2.2's owner-alone rows,
-     *  :11429 rule 1). Policy, so it is the service's — `OWNER_ONLY_PRIVILEGES`
-     *  — and this file only enforces it. */
-    ownerOnly: readonly string[];
-    actorUserId: string;
-  },
-): Promise<SetStaffPrivilegesOutcome> {
-  return await sql.begin(async (tx) => {
-    await lockOrgRow(tx, input.gymId);
-
-    const rows = await tx<{ role: string; privileges: string[] | null }[]>`
-      SELECT role, privileges FROM gym_staff
-      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;
-    const before = rows[0];
-    if (before === undefined) return { kind: "not_staff" };
-    const role = toOrgRole(before.role);
-
-    // T3 C/H-1, and it is a PRIVILEGE ESCALATION rather than a tidiness point:
-    // `staff.manage` gates this very route, so handing it to a manager hands
-    // them the power to change ANYBODY's ticks — the owner's included. The
-    // reviewer proved the whole chain by running it: a manager granted the tick
-    // stripped the owner, and the owner then got a 403 on their own roster.
-    //
-    // :11429 rule 1 is what this restores — "only an OWNER may change anybody's
-    // ticks… this ruling does not widen it" — and rule 3's licence to widen
-    // rests on it ("safe BECAUSE rule 1 means only an owner can hand out the
-    // keys"). The route's own gate could not enforce rule 1, because until this
-    // card nobody could hold that tick but an owner: **this card is what made
-    // the gate's premise false.**
-    //
-    // Refused HERE, at the write, rather than at the route: this is the only
-    // door that can put an owner-only privilege on a non-owner row (the other
-    // two writers copy a role TEMPLATE, and no template contains one), so the
-    // rule is enforced where the value is stored rather than where it is asked
-    // for. A DB-level CHECK across `role` and `privileges` was considered and
-    // NOT taken: it would need a second migration inside a fix round (:5348
-    // rule 6) and would hard-code the vocabulary into DDL a third time, which
-    // is the drift T3 Low-5's new guard exists to prevent.
-    if (role !== "owner" && input.ownerOnly.some((p) => input.privileges.includes(p))) {
-      return { kind: "owner_only_privilege" };
-    }
-
-    // T3 Low-1: this counted owner ROWS, and stripping a privilege does not
-    // remove a row, so with two owners each could strip the other and the count
-    // never fell — measured by the reviewer, both owners left unable to manage
-    // staff and nobody inside the gym able to repair it. `removeStaff`'s
-    // identically-shaped count is correct because DELETE does decrement it;
-    // copying the shape did not transfer the property.
-    //
-    // It now counts owners who still HOLD every required privilege, excluding
-    // this row — whose state after this write is the incoming set, which the
-    // condition above has already found wanting. A NULL row counts as a holder
-    // because `privilegesFor` gives it the owner template (the deploy window).
-    if (role === "owner" && input.lastOwnerRequires.some((p) => !input.privileges.includes(p))) {
-      const others = await tx<{ n: number }[]>`
-        SELECT count(*)::int AS n FROM gym_staff
-        WHERE gym_id = ${input.gymId}
-          AND role = 'owner'
-          AND user_id <> ${input.userId}
-          AND (privileges IS NULL OR privileges @> ${[...input.lastOwnerRequires]})`;
-      if ((others[0]?.n ?? 0) === 0) return { kind: "last_owner_locked" };
-    }
-
-    // A row that predates the column (`null`) is never "unchanged": writing it
-    // is what materialises the snapshot, so the deploy-window fallback stops
-    // applying to this person from here on.
-    const previous = before.privileges === null ? null : [...before.privileges].sort();
-    const next = [...input.privileges];
-    if (previous !== null && previous.length === next.length && previous.every((p, i) => p === next[i])) {
-      const staff = await readStaffRow(tx, input.gymId, input.userId);
-      if (staff === null) throw new Error("gym_staff row vanished under the org lock");
-      return { kind: "unchanged", staff };
-    }
-
-    await tx`
-      UPDATE gym_staff SET privileges = ${next}
-      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;
-
-    const staff = await readStaffRow(tx, input.gymId, input.userId);
-    if (staff === null) throw new Error("gym_staff row vanished under the org lock");
-
-    await insertAudit(tx, {
-      actorUserId: input.actorUserId,
-      gymId: input.gymId,
-      action: "org.staff_privileges_changed",
-      targetType: "gym_staff",
-      targetId: input.userId,
-      // BOTH ends, `updateStaffRole`'s reason: the question asked weeks later is
-      // "what could they do before", which the new set alone cannot answer. A
-      // null `from` is the honest record of a row that predated the column.
-      meta: { role, from: previous, to: next },
-    });
-
-    return { kind: "updated", staff };
-  });
-}
-
-export type RemoveStaffOutcome =
-  | { kind: "removed" }
-  | { kind: "not_staff" }
-  | { kind: "last_owner" };
-
-/** Take somebody off staff. **They stay a MEMBER** — the two are different
- *  relationships and Kd was shown that before approving: this takes away the
- *  keys, `removeMember` takes away the membership, and only the second one costs
- *  them the gym's perks.
- *
- *  **THE LAST-OWNER GUARD IS A COUNT INSIDE THE ORG LOCK, and the lock is the
- *  point.** Counting owners and then deleting one is check-then-act — :14174's
- *  L-3 exactly — and the consequence of losing that race is a gym with ZERO
- *  owners, which nobody inside the gym can repair, because appointing staff is
- *  owner-only. That is the severity :14174 says warrants a lock, in contrast to
- *  the self-healing count it says does not.
- *
- *  It is written as a COUNT rather than as "is this the owner" so it stays
- *  correct on the day a second owner becomes possible: today every owner is the
- *  last one, and the guard does not have to be rewritten to notice when that
- *  stops being true.
- *
- *  The seat reverts to paid in the same transaction. If that pushes the gym over
- *  its cap, the cap does what it does everywhere else — it refuses the NEXT join
- *  rather than evicting anybody — which is the honest direction. */
-export async function removeStaff(
-  sql: Sql,
-  input: {
-    gymId: string;
-    userId: string;
-    /** What the last owner may not be left without — the SAME list
-     *  `setStaffPrivileges` takes, because it is the same question at the other
-     *  door (T3 round 2, Low-1). Policy stays in the service. */
-    lastOwnerRequires: readonly string[];
-    actorUserId: string;
-  },
-): Promise<RemoveStaffOutcome> {
-  return await sql.begin(async (tx) => {
-    await lockOrgRow(tx, input.gymId);
-
-    const rows = await tx<{ role: string }[]>`
-      SELECT role FROM gym_staff
-      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;
-    const before = rows[0];
-    if (before === undefined) return { kind: "not_staff" };
-    const role = toOrgRole(before.role);
-
-    // T3 round 2, Low-1 — THE SAME LOCKOUT AT THIS DOOR, and the third time this
-    // guard has been copied and got the same thing wrong.
-    //
-    // Counting owner ROWS was right when a row was the only thing that carried
-    // authority. Since the ticks card an owner can be ticked DOWN, so two owner
-    // rows can mean one person who can manage staff: remove that person and the
-    // gym keeps an owner and loses the ability to appoint anybody — the same
-    // unrepairable state `setStaffPrivileges` was fixed for one round earlier.
-    //
-    // **The question both doors now ask is identical: does anybody ELSE still
-    // HOLD every privilege the last owner may not lose.** It is written out
-    // TWICE rather than shared, because a shared `sql` fragment is R3.8's
-    // forbidden shape (:14493 Low-2) — and, exactly as there, ONE TEST DRIVES
-    // BOTH DOORS so the copies cannot drift (:14013's precedent). Edit one, edit
-    // the other, or a gym can lock itself out through whichever you left behind.
-    if (role === "owner") {
-      const otherOwners = await tx<{ n: number }[]>`
-        SELECT count(*)::int AS n FROM gym_staff
-        WHERE gym_id = ${input.gymId}
-          AND role = 'owner'
-          AND user_id <> ${input.userId}
-          AND (privileges IS NULL OR privileges @> ${[...input.lastOwnerRequires]})`;
-      if ((otherOwners[0]?.n ?? 0) === 0) return { kind: "last_owner" };
-    }
-
-    const deleted = await tx<{ user_id: string }[]>`
-      DELETE FROM gym_staff
-      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
-      RETURNING user_id`;
-    if (deleted[0] === undefined) {
-      throw new Error("DELETE FROM gym_staff removed no row under the org lock");
-    }
-
-    // Nothing to undo on `gym_members`: their seat starts counting again the
-    // moment the staff row is gone, because `claimSeat` asks `gym_staff` rather
-    // than reading a flag somebody has to remember to clear.
-
-    await insertAudit(tx, {
-      actorUserId: input.actorUserId,
-      gymId: input.gymId,
-      action: "org.staff_removed",
-      targetType: "gym_staff",
-      targetId: input.userId,
-      meta: { role },
-    });
-
-    return { kind: "removed" };
-  });
-}
-
-/** Part 3 §3.3: "every mutating call writes `audit_log`". Written inside the
- *  caller's transaction, so a join that is rolled back leaves no audit row
- *  claiming it happened, and a committed join can never be missing one. */
-export async function insertAudit(
-  tx: TransactionSql,
-  entry: {
-    /** NULL means NOBODY DID THIS — the two SWEEPS are the writers that pass
-     *  one (`sweep.ts`'s join expiry since 2026-08-20, `trialSweep.ts`'s trial
-     *  expiry since 2026-08-28), and they pass null because no human decided.
-     *  The column has always been nullable (Part 4 §3.6); what changed is that
-     *  something finally acts without an actor. Recording a system action under
-     *  some stand-in user id would be the more convenient lie. */
-    actorUserId: string | null;
-    gymId: string;
-    action: string;
-    targetType: string;
-    targetId: string;
-    /** Strings, or a LIST of strings — and the list arrived on the terms this
-     *  comment set: "widen it when a caller genuinely needs structure, not
-     *  before". The ticks card is that caller. A permission change's whole
-     *  content is which privileges moved, and flattening them into one string
-     *  would put the interesting part inside a value nothing can query — the
-     *  opposite of what the original rule was protecting.
-     *
-     *  Still deliberately NOT `unknown`: no nested objects, no dates, nothing a
-     *  human reading the row weeks later has to unpack. `null` is allowed for
-     *  exactly one thing — a "before" state that genuinely did not exist. */
-    meta: Record<string, string | readonly string[] | null>;
-  },
-): Promise<void> {
-  await tx`
-    INSERT INTO audit_log (actor_user_id, gym_id, action, target_type, target_id, meta)
-    VALUES (${entry.actorUserId}, ${entry.gymId}, ${entry.action},
-            ${entry.targetType}, ${entry.targetId}, ${tx.json(entry.meta)})`;
-}
-
-// ---------------------------------------------------------------------------
-// OPENING HOURS (Kd 2026-08-31, :26624 + :26684 + :26736). Tenancy is in every
-// WHERE below, like every other function in this file (R3.2).
-// ---------------------------------------------------------------------------
-
-export interface GymSessionRow {
-  weekday: number;
-  opensMinute: number;
-  closesMinute: number;
-}
-
-export interface GymClosureRow {
-  day: string;
-  note: string | null;
-}
-
-/** HOW FAR AHEAD A CLOSURE IS SHOWN, and how many can come back at once.
- *
- *  366 covers a leap year, so a gym that has closed every day for the next year
- *  reads back completely; `CLOSURE_READ_LIMIT` sits above it deliberately, so
- *  the horizon is what bounds the answer and the LIMIT is a backstop that can
- *  never silently truncate a legitimate year. Both are mirrored by
- *  `gymHoursSchema`'s `.max()` in `@app/shared`, and the pair is driven by a
- *  test — two bounds that could drift apart are one bound plus a comment. */
-const CLOSURE_HORIZON_DAYS = 366;
-export const CLOSURE_READ_LIMIT = 400;
-
-export interface GymHoursRow {
-  mode: GymHoursMode;
-  timezone: string;
-  /** BESIDE `timezone` and for its reason: a minute count needs a clock to
-   *  be READ on and a zone to be TRUE in, and a member's card makes only
-   *  this one read. */
-  clockFormat: GymClockFormat;
-  sessions: GymSessionRow[];
-  closures: GymClosureRow[];
-}
-
-/** WHAT ONE GYM HAS SAID ABOUT WHEN IT IS OPEN — the whole answer in one read,
- *  because the console and the member's gym card share it and two readers is two
- *  chances to disagree.
- *
- *  **THE CLOSURE FILTER IS TODAY-FORWARD IN THE GYM'S OWN ZONE, and the zone
- *  comes off the gym's row rather than the server's clock.** `(now() AT TIME
- *  ZONE g.timezone)::date` is the gym's own calendar date — the same instrument
- *  the nightly rollup will need, and the reason a US gym and an Assam gym are
- *  both right in one run (trap #8, :26469 §5). A closure that has passed is a
- *  fact about history that no screen asks for.
- *
- *  **~~and leaving them in would grow a member's card without bound~~ — THE
- *  SENTENCE WAS FALSE AND T3 ROUND 1 (Low-5) CAUGHT IT.** Trimming the PAST
- *  bounds nothing: the far end was open to `9999-12-31`. The bound is now real
- *  and is at the query, below.
- *
- *  **`day` COMES BACK AS A STRING, NOT A `Date`, and that is the trap-#8 fix
- *  rather than a style choice.** `postgres` maps a `date` column to a JS Date at
- *  UTC midnight, and formatting that anywhere east or west of UTC prints the day
- *  before or after. `::text` means the calendar date the gym typed is the
- *  calendar date every reader gets.
- *
- *  Null for a gym that does not exist, which the service turns into its standing
- *  404. */
-export async function getGymHours(sql: SqlOrTx, gymId: string): Promise<GymHoursRow | null> {
-  const gymRows = await sql<{ hours_mode: string; timezone: string; clock_format: string }[]>`
-    SELECT hours_mode, timezone, clock_format FROM gyms WHERE id = ${gymId}`;
-  const gym = gymRows[0];
-  if (gym === undefined) return null;
-
-  const sessions = await sql<{ weekday: number; opens_minute: number; closes_minute: number }[]>`
-    SELECT weekday, opens_minute, closes_minute
-    FROM gym_hours
-    WHERE gym_id = ${gymId}
-    ORDER BY weekday, opens_minute`;
-
-  /** TODAY-FORWARD **AND BOUNDED AT BOTH ENDS** — the far end added by T3 round
-   *  1's Low-5, which found the comment below claiming a bound the query did not
-   *  have.
-   *
-   *  Trimming only the PAST bounds nothing: `day` accepts up to `9999-12-31`,
-   *  the close route has no per-gym cap, and this array is on a MEMBER-facing
-   *  response — so a gym's own owner could grow every one of its members'
-   *  payloads without limit. A horizon of one year is what a screen can draw and
-   *  is past any closure a gym plausibly types today; `LIMIT` is the second
-   *  bound, deliberately above 366 so a gym closed every day for a year still
-   *  reads back completely rather than being silently truncated. */
-  const closures = await sql<{ day: string; note: string | null }[]>`
-    SELECT c.day::text AS day, c.note
-    FROM gym_closures c
-    JOIN gyms g ON g.id = c.gym_id
-    WHERE c.gym_id = ${gymId}
-      AND c.day >= (now() AT TIME ZONE g.timezone)::date
-      AND c.day < ((now() AT TIME ZONE g.timezone)::date + ${CLOSURE_HORIZON_DAYS}::int)
-    ORDER BY c.day
-    LIMIT ${CLOSURE_READ_LIMIT}`;
-
-  return {
-    mode: gymHoursModeSchema.parse(gym.hours_mode),
-    timezone: gym.timezone,
-    clockFormat: gymClockFormatSchema.parse(gym.clock_format),
-    sessions: sessions.map((r) => ({
-      weekday: r.weekday,
-      opensMinute: r.opens_minute,
-      closesMinute: r.closes_minute,
-    })),
-    closures: closures.map((r) => ({ day: r.day, note: r.note })),
-  };
-}
-
-export type SetGymHoursOutcome = { kind: "set"; hours: GymHoursRow } | { kind: "not_found" };
-
-/** REPLACE THE WHOLE WEEK ATOMICALLY.
- *
- *  **IT IS A REPLACE AND NOT PER-SESSION CRUD, and that is a correctness
- *  decision rather than a shortcut.** Add/edit/delete on individual sessions
- *  lets two half-applied requests leave a gym advertising a timetable no human
- *  ever chose — and the overlap rule, the one thing that makes these rows
- *  readable, is only checkable against a WHOLE day. With the week in one body
- *  the service validates exactly what will exist.
- *
- *  **DELETE-THEN-INSERT INSIDE ONE TRANSACTION, under `lockOrgRow`** — the same
- *  instrument and the same order (org row → child rows) every other mutation in
- *  this module takes, so it adds no new deadlock edge. It is what stops two
- *  owners saving different timetables from interleaving into a third that is
- *  neither.
- *
- *  **~~`open_24h` DELETES THE ROWS TOO.~~ KD REVERSED THIS AT HIS OWN BROWSER ON
- *  2026-09-03, AFTER IT DESTROYED HIS WEEK.** He chose "Open 24 hours", saved,
- *  and all seven days were gone — *"no my timetable was not restored"* — with
- *  nothing on screen warning him first. **A control that silently destroys what
- *  somebody typed is the worst thing this card found, and the old reasoning is
- *  kept because it was not wrong**: the mode and the rows ARE two answers to one
- *  question, and a stale set nobody looked at is a real hazard. What changed is
- *  the remedy. **The two answers are now told apart by NAME — `week` is what the
- *  gym is TELLING people and is still emptied by the mode; `savedWeek` is what
- *  the owner would come back to** — so the hazard is closed by making the
- *  distinction explicit rather than by deleting one of them. Kd's flag is still
- *  the whole answer in that mode (:26624 §4.5); these rows say nothing to
- *  anybody until the gym goes back to `scheduled`.
- *
- *  **THE DELETE NOW HAPPENS ONLY ON A `scheduled` SAVE**, where it is the
- *  replace half of replace-then-insert and must not move.
- *
- *  `unset` cannot arrive — the request union does not admit it, because a gym
- *  that has answered cannot un-answer — so this never writes it. */
-export async function setGymHours(
-  sql: Sql,
-  input: {
-    gymId: string;
-    mode: "open_24h" | "scheduled";
-    sessions: readonly GymSessionRow[];
-    actorUserId: string;
-  },
-): Promise<SetGymHoursOutcome> {
-  return await sql.begin(async (tx) => {
-    await lockOrgRow(tx, input.gymId);
-    // Read through `getGymHours` rather than `getOrgById`: the audit row below
-    // needs the mode this gym was in, and `OrgRow` deliberately does not carry
-    // `hours_mode` — widening it would put the field in front of six callers
-    // that have no business with it.
-    const before = await getGymHours(tx, input.gymId);
-    if (before === null) return { kind: "not_found" };
-
-    // THE WHOLE `if` IS THE FIX, AND THE DELETE INSIDE IT IS UNCHANGED.
-    // A `scheduled` save still replaces the week outright — that is what makes
-    // it a REPLACE and is what the overlap rule is validated against. An
-    // `open_24h` save now touches nothing, so the rows survive to be handed back
-    // as `savedWeek` when the owner switches the mode again.
-    if (input.mode === "scheduled") {
-      await tx`DELETE FROM gym_hours WHERE gym_id = ${input.gymId}`;
-    }
-    if (input.mode === "scheduled" && input.sessions.length > 0) {
-      // One multi-row INSERT rather than a loop: this is one statement's worth
-      // of work, and a loop inside a transaction is N round trips buying no
-      // extra guarantee.
-      await tx`
-        INSERT INTO gym_hours ${tx(
-          input.sessions.map((s) => ({
-            gym_id: input.gymId,
-            weekday: s.weekday,
-            opens_minute: s.opensMinute,
-            closes_minute: s.closesMinute,
-          })),
-          "gym_id",
-          "weekday",
-          "opens_minute",
-          "closes_minute",
-        )}`;
-    }
-    await tx`UPDATE gyms SET hours_mode = ${input.mode} WHERE id = ${input.gymId}`;
-
-    await insertAudit(tx, {
-      actorUserId: input.actorUserId,
-      gymId: input.gymId,
-      action: "org.hours_set",
-      targetType: "gym",
-      targetId: input.gymId,
-      // The COUNT, not the timetable. A reader weeks later wants "who changed
-      // the hours and when"; a whole week of ranges in a meta column is the
-      // whole-row snapshot :19366's `changed` list exists to avoid.
-      //
-      // **NULL AND NOT `"0"` FOR AN `open_24h` SAVE — T3 round 1's L-2.**
-      // `"0"` was true while the writer deleted the rows: it said "the week was
-      // emptied", and it was. Since `:31508` the rows SURVIVE, so a `"0"` here
-      // is the audit log describing a deletion that did not happen — a false
-      // sentence in the one place whose whole job is to say what happened
-      // (:5807's shape, in a record rather than on a screen). **`null` says the
-      // field does not apply to this save**, which is what "the gym declared a
-      // flag" actually means; the count belongs to a `scheduled` save alone.
-      meta: {
-        before: before.mode,
-        after: input.mode,
-        sessions: input.mode === "scheduled" ? String(input.sessions.length) : null,
-      },
-    });
-
-    const hours = await getGymHours(tx, input.gymId);
-    // Unreachable: the row is locked in this transaction and was read above.
-    if (hours === null) throw new Error("gym vanished inside its own transaction");
-    return { kind: "set", hours };
-  });
-}
-
-export type CloseGymDayOutcome = { kind: "closed"; hours: GymHoursRow } | { kind: "not_found" };
-
-/** MARK ONE DAY CLOSED — Kd's *"we are close today"* (:26684 §3).
- *
- *  **IDEMPOTENT BY THE DATABASE, NOT BY A CHECK (R3.5).** `ON CONFLICT
- *  (gym_id, day) DO UPDATE` is what makes an owner's double-tap leave one row,
- *  and it is also how a note is EDITED — re-closing a day replaces its reason. A
- *  service-side "is it already closed?" would be a check-then-act with a window
- *  in it.
- *
- *  **NO CHECK THAT THE DAY IS IN THE FUTURE, deliberately.** A gym typing
- *  yesterday's closure in at 1am is recording something true, and the READ
- *  already hides past dates from every screen — so a refusal would buy nothing
- *  but an error message for a gym telling the truth late. */
-export async function closeGymDay(
-  sql: Sql,
-  input: { gymId: string; day: string; note: string | null; actorUserId: string },
-): Promise<CloseGymDayOutcome> {
-  return await sql.begin(async (tx) => {
-    await lockOrgRow(tx, input.gymId);
-    const before = await getOrgById(tx, input.gymId);
-    if (before === null) return { kind: "not_found" };
-
-    /** WHAT THIS DAY SAID BEFORE, read under the lock already held — T3 round 1
-     *  Low-6.
-     *
-     *  **A RE-CLOSE THAT CHANGES NOTHING MUST NOT WRITE AN AUDIT ROW.**
-     *  `removeGymClosure` three functions below already refuses to log a
-     *  non-event, with the reason spelled out — *"a log that records non-events
-     *  is one nobody can read a real event out of"* — and this function was
-     *  writing `org.day_closed` on every call, so an owner double-tapping left
-     *  two rows claiming two changes for one state. That is :19366's own
-     *  no-op rule, which this module states and this function was breaking.
-     *
-     *  A read-then-write is safe here and nowhere near a check-then-act: the gym
-     *  row is locked above, and the write below is an upsert whose correctness
-     *  does not depend on this read — only the AUDIT decision does. */
-    const previous = await tx<{ note: string | null }[]>`
-      SELECT note FROM gym_closures
-      WHERE gym_id = ${input.gymId} AND day = ${input.day}::date`;
-    const existing = previous[0];
-
-    await tx`
-      INSERT INTO gym_closures (gym_id, day, note, created_by_user_id)
-      VALUES (${input.gymId}, ${input.day}::date, ${input.note}, ${input.actorUserId})
-      ON CONFLICT (gym_id, day) DO UPDATE
-        SET note = EXCLUDED.note, created_by_user_id = EXCLUDED.created_by_user_id`;
-
-    // Newly closed, or the reason changed. Re-closing an already-closed day with
-    // the same note is the caller confirming a state, not changing one.
-    if (existing === undefined || existing.note !== input.note) {
-      await insertAudit(tx, {
-        actorUserId: input.actorUserId,
-        gymId: input.gymId,
-        action: "org.day_closed",
-        targetType: "gym",
-        targetId: input.gymId,
-        // The previous note distinguishes "this day was open and is now closed"
-        // from "somebody corrected the reason", which is the question a person
-        // reading this row weeks later is actually asking.
-        meta: {
-          day: input.day,
-          before: existing === undefined ? null : existing.note,
-          note: input.note,
-        },
-      });
-    }
-
-    const hours = await getGymHours(tx, input.gymId);
-    if (hours === null) throw new Error("gym vanished inside its own transaction");
-    return { kind: "closed", hours };
-  });
-}
-
-export type RemoveGymClosureOutcome =
-  | { kind: "removed"; hours: GymHoursRow }
-  | { kind: "not_found" };
-
-/** UN-CLOSE A DAY, restoring the weekly pattern.
- *
- *  **A HARD `DELETE`, and it is the declared R4.3 exception this table was
- *  designed around.** A closure is a statement about ONE day that expires by
- *  itself; un-closing is a CORRECTION rather than an event with a history worth
- *  keeping, and `audit_log` records both ends anyway.
- *
- *  **Deleting a day that was never closed is NOT an error.** The outcome names
- *  the STATE — this day is not marked closed — which is true whether this call
- *  removed the row or there never was one, so a double-tap and a stale screen
- *  answer the same way. `not_found` is reserved for the GYM. */
-export async function removeGymClosure(
-  sql: Sql,
-  input: { gymId: string; day: string; actorUserId: string },
-): Promise<RemoveGymClosureOutcome> {
-  return await sql.begin(async (tx) => {
-    await lockOrgRow(tx, input.gymId);
-    const before = await getOrgById(tx, input.gymId);
-    if (before === null) return { kind: "not_found" };
-
-    const deleted = await tx<{ day: string }[]>`
-      DELETE FROM gym_closures
-      WHERE gym_id = ${input.gymId} AND day = ${input.day}::date
-      RETURNING day::text AS day`;
-
-    // Only a real removal writes an audit row: a log that records non-events is
-    // one nobody can read a real event out of (:19366's rule, same module).
-    if (deleted.length > 0) {
-      await insertAudit(tx, {
-        actorUserId: input.actorUserId,
-        gymId: input.gymId,
-        action: "org.day_reopened",
-        targetType: "gym",
-        targetId: input.gymId,
-        meta: { day: input.day },
-      });
-    }
-
-    const hours = await getGymHours(tx, input.gymId);
-    if (hours === null) throw new Error("gym vanished inside its own transaction");
-    return { kind: "removed", hours };
-  });
-}
-
-/** IS THIS PERSON A LIVE MEMBER OF THIS GYM — the read side of the hours route.
- *
- *  **Deliberately NOT `getStaffAuthority`'s question.** That answers "what may
- *  this person DO here", and staff need not be members. This asks the simpler
- *  thing a member's gym card needs: is this person, right now, in this gym. The service ORs the two,
- *  so an invited manager who never joined still reads the hours.
- *
- *  `removed_at IS NULL` is the same live-membership predicate every other reader
- *  in this codebase uses, deliberately not re-spelled as something cleverer —
- *  a second definition of "live member" is how one of them drifts. */
-export async function isLiveMember(sql: SqlOrTx, gymId: string, userId: string): Promise<boolean> {
-  const rows = await sql<{ one: number }[]>`
-    SELECT 1 AS one
-    FROM gym_members m
-    JOIN users u ON u.id = m.user_id
-    WHERE m.gym_id = ${gymId}
-      AND m.user_id = ${userId}
-      AND m.removed_at IS NULL
-      AND u.status = 'active'
-    LIMIT 1`;
-  return rows.length > 0;
-}
-
-/* ─────────────────────────── ATTENDANCE ───────────────────────────
- *
- *  Kd 2026-08-31 (:26469) and 2026-09-01 (:27900, :27992, :28055, :28107).
- */
-
-export interface GymAttendanceVisitRow {
-  day: string;
-  markedAt: Date;
-  method: GymAttendanceMethod;
-  hoursStatus: GymAttendanceHoursStatus;
-  sessionOpensMinute: number | null;
-  sessionClosesMinute: number | null;
-}
-
-function toAttendanceVisitRow(raw: {
-  day: string;
-  marked_at: Date;
-  method: string;
-  hours_status: string;
-  session_opens_minute: number | null;
-  session_closes_minute: number | null;
-}): GymAttendanceVisitRow {
-  return {
-    day: raw.day,
-    markedAt: raw.marked_at,
-    method: gymAttendanceMethodSchema.parse(raw.method),
-    hoursStatus: gymAttendanceHoursStatusSchema.parse(raw.hours_status),
-    sessionOpensMinute: raw.session_opens_minute,
-    sessionClosesMinute: raw.session_closes_minute,
-  };
-}
-
-/** WHAT THE GYM'S HOURS SAY ABOUT *NOW*, IN THE GYM'S OWN ZONE — the whole
- *  status decision, in SQL, in one place.
- *
- *  **IT IS SQL AND NOT TYPESCRIPT FOR ONE REASON: THE CLOCK.** Every answer here
- *  is derived from `now()` bucketed by `gyms.timezone`, and a JavaScript
- *  `new Date()` on the api box would silently use the SERVER's zone — trap #8,
- *  and the defect :26812 §2a caught in a test that disagreed with the truth for
- *  only ten hours of every day. The database is the one clock in this system
- *  that already knows how to stand in the gym's zone.
- *
- *  **THE ORDER OF THE BRANCHES IS THE RULING, NOT AN IMPLEMENTATION DETAIL:**
- *
- *  1. `unset` FIRST — before the closure, before everything. :26736: a gym that
- *     has not answered is told NOTHING about opening times, and
- *     `GymHoursNote.jsx`'s mode gate returns null for `unset` before it ever
- *     looks at closures. **If this branch came second, a member could be told
- *     `closed_day` about a gym whose own card shows them nothing** — two
- *     surfaces disagreeing about one gym, which is what a shared reader exists
- *     to prevent.
- *  2. The CLOSURE next: a dated closure WINS over the weekly pattern (:26684
- *     §3) — including over `open_24h`, which is a pattern like any other.
- *  3. `open_24h` — nothing to be outside of.
- *  4. A session containing this minute → `in_session`, carrying its window.
- *  5. Otherwise `outside_hours`.
- *
- *  **`opens <= m AND m < closes` — HALF-OPEN, and the boundary is load-bearing.**
- *  Sessions may TOUCH (10:00–12:00 beside 12:00–14:00 is legal — `flattenWeek`'s
- *  rule), so an inclusive upper bound would put the instant of 12:00 in TWO
- *  sessions and hand `slot_key` two answers for one visit. `LIMIT 1` is a
- *  backstop and not the guarantee; the guarantee is the overlap check on write.
- *
- *  Null for a gym that does not exist, which the service turns into its 404. */
-export async function readAttendanceContext(
-  tx: SqlOrTx,
-  gymId: string,
-): Promise<{
-  day: string;
-  hoursStatus: GymAttendanceHoursStatus;
-  opensMinute: number | null;
-  closesMinute: number | null;
-  manualEnabled: boolean;
-  timezone: string;
-  clockFormat: GymClockFormat;
-} | null> {
-  const rows = await tx<
-    {
-      day: string;
-      hours_mode: string;
-      manual_attendance_enabled: boolean;
-      timezone: string;
-      clock_format: string;
-      closed: boolean;
-      opens_minute: number | null;
-      closes_minute: number | null;
-    }[]
-  >`
-    SELECT (now() AT TIME ZONE g.timezone)::date::text AS day,
-           g.hours_mode, g.manual_attendance_enabled, g.timezone, g.clock_format,
-           EXISTS (
-             SELECT 1 FROM gym_closures c
-             WHERE c.gym_id = g.id
-               AND c.day = (now() AT TIME ZONE g.timezone)::date
-           ) AS closed,
-           s.opens_minute, s.closes_minute
-    FROM gyms g
-    LEFT JOIN LATERAL (
-      SELECT h.opens_minute, h.closes_minute
-      FROM gym_hours h
-      WHERE h.gym_id = g.id
-        AND h.weekday = EXTRACT(ISODOW FROM (now() AT TIME ZONE g.timezone))::int
-        AND h.opens_minute <= (EXTRACT(HOUR FROM (now() AT TIME ZONE g.timezone))::int * 60
-                               + EXTRACT(MINUTE FROM (now() AT TIME ZONE g.timezone))::int)
-        AND h.closes_minute > (EXTRACT(HOUR FROM (now() AT TIME ZONE g.timezone))::int * 60
-                               + EXTRACT(MINUTE FROM (now() AT TIME ZONE g.timezone))::int)
-      ORDER BY h.opens_minute
-      LIMIT 1
-    ) s ON true
-    WHERE g.id = ${gymId}`;
-  const row = rows[0];
-  if (row === undefined) return null;
-
-  const mode = gymHoursModeSchema.parse(row.hours_mode);
-  const common = {
-    day: row.day,
-    manualEnabled: row.manual_attendance_enabled,
-    timezone: row.timezone,
-    clockFormat: gymClockFormatSchema.parse(row.clock_format),
-  };
-  if (mode === "unset") {
-    return { ...common, hoursStatus: "hours_unset", opensMinute: null, closesMinute: null };
-  }
-  if (row.closed) {
-    return { ...common, hoursStatus: "closed_day", opensMinute: null, closesMinute: null };
-  }
-  if (mode === "open_24h") {
-    return { ...common, hoursStatus: "open_24h", opensMinute: null, closesMinute: null };
-  }
-  if (row.opens_minute !== null && row.closes_minute !== null) {
-    return {
-      ...common,
-      hoursStatus: "in_session",
-      opensMinute: row.opens_minute,
-      closesMinute: row.closes_minute,
-    };
-  }
-  return { ...common, hoursStatus: "outside_hours", opensMinute: null, closesMinute: null };
-}
-
-export type MarkAttendanceOutcome =
-  | {
-      kind: "marked";
-      alreadyMarked: boolean;
-      visit: GymAttendanceVisitRow;
-      timezone: string;
-      clockFormat: GymClockFormat;
-    }
-  | { kind: "manual_disabled" }
-  /** THE GYM IS NOT OPEN RIGHT NOW — Kd's ruling of 2026-09-03, which REVERSES
-   *  :26624 §4.4. That was a CHAT'S CALL ("attendance outside opening hours is
-   *  RECORDED AND MARKED, never refused"), listed under *"the calls I am making
-   *  rather than asking"*, and he has now made the opposite one: *"if a gym has
-   *  set certain times not 24 hour then if a member comes outside of time
-   *  should not be able to press i am here"*.
-   *
-   *  **IT FIRES ONLY WHERE THE GYM HAS ACTUALLY ANSWERED.** `hours_unset` and
-   *  `open_24h` are NOT refused — a gym that has never said when it opens has
-   *  said nothing to enforce, and refusing there would invent a rule the gym
-   *  never set (:26736's distinction between "no answer" and "closed", now
-   *  load-bearing for a WRITE rather than only for a sentence).
-   *
-   *  `todayHours` carries the day's real sessions so the refusal can say when
-   *  the gym IS open — a bare "no" leaves a member standing at a door with no
-   *  idea when to come back. */
-  | {
-      kind: "closed";
-      hoursStatus: Extract<GymAttendanceHoursStatus, "outside_hours" | "closed_day">;
-      todayHours: { opensMinute: number; closesMinute: number }[];
-      timezone: string;
-      clockFormat: GymClockFormat;
-    }
-  | { kind: "not_found" };
-
-/** RECORD THAT SOMEBODY IS HERE.
- *
- *  **IDEMPOTENT BY THE DATABASE, NOT BY A CHECK (R3.5).** `ON CONFLICT DO
- *  NOTHING` on `(gym_id, user_id, day, slot_key)` is what makes a double-tap
- *  leave one row, and the read that follows returns whichever row is there — so
- *  both taps answer 200 with the SAME visit. A service-side "have they already
- *  marked?" would be a check-then-act with a window in it, on a button a member
- *  can hit twice in a second.
- *
- *  **`alreadyMarked` IS DERIVED FROM WHETHER THE INSERT RETURNED**, never from a
- *  prior read. It is a display hint and never the record; the record is the
- *  visit, which is identical either way.
- *
- *  **THE MANUAL SWITCH IS CHECKED INSIDE THE TRANSACTION, under the lock the
- *  gym's own writes take.** An owner switching it off while a member is mid-tap
- *  is a real race, and that switch is what makes a gym's numbers mean something
- *  (:26469 §4) — checking it outside the lock would let a tap the owner had just
- *  forbidden land anyway.
- *
- *  **THE STATUS IS FROZEN AT THE MOMENT OF THE TAP.** If the owner edits the
- *  timetable an hour later this row keeps the label it was given: it describes
- *  the VISIT and not the current timetable, which is why the window is COPIED
- *  rather than joined at read time.
- *
- *  **NO AUDIT ROW, and that is a decision rather than an omission.** `audit_log`
- *  records what STAFF did to a gym — every other writer in this module is a
- *  console action behind a privilege. An attendance is a MEMBER acting on their
- *  own membership, the row IS the record, and several hundred a day would bury
- *  the staff actions the log exists to make readable. */
-export async function markGymAttendance(
-  sql: Sql,
-  input: {
-    gymId: string;
-    userId: string;
-    markedByUserId: string;
-    method: GymAttendanceMethod;
-  },
-): Promise<MarkAttendanceOutcome> {
-  return await sql.begin(async (tx) => {
-    await lockOrgRow(tx, input.gymId);
-    const ctx = await readAttendanceContext(tx, input.gymId);
-    if (ctx === null) return { kind: "not_found" };
-    if (input.method === "manual" && !ctx.manualEnabled) return { kind: "manual_disabled" };
-
-    // KD'S RULING, 2026-09-03 — see the `closed` arm of `MarkAttendanceOutcome`.
-    // Checked INSIDE the transaction and under the gym lock, like every other
-    // decision here: the hours and the closure are read by `readAttendanceContext`
-    // above, and a gym editing its timetable between that read and this insert
-    // would otherwise admit a visit the rule had just refused.
-    if (ctx.hoursStatus === "outside_hours" || ctx.hoursStatus === "closed_day") {
-      const todayHours = await tx<{ opens_minute: number; closes_minute: number }[]>`
-        SELECT h.opens_minute, h.closes_minute
-        FROM gym_hours h
-        WHERE h.gym_id = ${input.gymId}
-          AND h.weekday = EXTRACT(ISODOW FROM (now() AT TIME ZONE ${ctx.timezone}))::int
-        ORDER BY h.opens_minute`;
-      return {
-        kind: "closed",
-        hoursStatus: ctx.hoursStatus,
-        // A CLOSED DAY REPORTS NO SESSIONS EVEN IF THE WEEKLY PATTERN HAS THEM.
-        // A dated closure WINS over the pattern (:26684), so listing the
-        // weekday's usual hours would tell a member to come at six on a day the
-        // gym has said it is shut.
-        todayHours:
-          ctx.hoursStatus === "closed_day"
-            ? []
-            : todayHours.map((h) => ({ opensMinute: h.opens_minute, closesMinute: h.closes_minute })),
-        timezone: ctx.timezone,
-        clockFormat: ctx.clockFormat,
-      };
-    }
-
-    const slotKey = slotKeyFor(ctx.hoursStatus, ctx.opensMinute, ctx.closesMinute);
-    const inserted = await tx<{ one: number }[]>`
-      INSERT INTO gym_attendance
-        (gym_id, user_id, marked_by_user_id, day, method, hours_status,
-         session_opens_minute, session_closes_minute, slot_key)
-      VALUES (${input.gymId}, ${input.userId}, ${input.markedByUserId}, ${ctx.day}::date,
-              ${input.method}, ${ctx.hoursStatus},
-              ${ctx.opensMinute}, ${ctx.closesMinute}, ${slotKey})
-      ON CONFLICT (gym_id, user_id, day, slot_key) DO NOTHING
-      RETURNING 1 AS one`;
-
-    // Read back rather than trusting the INSERT's RETURNING: on the conflict
-    // path it returns nothing, and the row that IS there is the answer both
-    // callers must receive.
-    const rows = await tx<
-      {
-        day: string;
-        marked_at: Date;
-        method: string;
-        hours_status: string;
-        session_opens_minute: number | null;
-        session_closes_minute: number | null;
-      }[]
-    >`
-      SELECT day::text AS day, marked_at, method, hours_status,
-             session_opens_minute, session_closes_minute
-      FROM gym_attendance
-      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
-        AND day = ${ctx.day}::date AND slot_key = ${slotKey}`;
-    const row = rows[0];
-    // Unreachable: the gym row is locked, so nothing deletes between the upsert
-    // above and this read.
-    if (row === undefined) throw new Error("attendance vanished inside its own transaction");
-
-    return {
-      kind: "marked",
-      alreadyMarked: inserted.length === 0,
-      visit: toAttendanceVisitRow(row),
-      timezone: ctx.timezone,
-      clockFormat: ctx.clockFormat,
-    };
-  });
-}
-
-/** HOW MANY PEOPLE COME BACK IN ONE PAGE, how many visits one person can carry,
- *  and how many lines the day's SHAPE can have.
- *
- *  ~~Each is mirrored by a `.max()` in `@app/shared`~~ **THE THREE NOW LIVE IN
- *  `@app/shared` AND ARE IMPORTED HERE, so there is nothing left to mirror.**
- *  They were declared in this file and written as literals beside the schemas,
- *  paired by nothing but the paragraph you are reading — and a docstring is not
- *  an enforcement (:26947 Low-5's shape, one level up from the bound itself).
- *  Four `.max()` sites read them: `gymAttendanceDaySchema.people` and
- *  `gymAttendanceHistorySchema.visits` take `ATTENDANCE_PAGE_LIMIT`,
- *  `gymAttendancePersonSchema.visits` takes `ATTENDANCE_VISITS_PER_PERSON`, and
- *  `gymAttendanceDaySchema.summary` takes `ATTENDANCE_SUMMARY_LIMIT`.
- *
- *  **DRIFT UPWARD IS THE DIRECTION THAT HURT AND IT HAD NO OBSERVER**: raising
- *  a `LIMIT` here while a literal stayed put in the contract restores exactly
- *  the permanent 500 :28452 §3 fixed, and no test named any of these constants
- *  (grep-verified). One declaration is the guard; `tsc` is what watches it.
- *
- *  **AND EACH IS ENFORCED HERE, IN THE QUERY, WHICH IS THE HALF THAT WAS
- *  MISSING.** `ATTENDANCE_VISITS_PER_PERSON` had no reader at all: a constant,
- *  a paragraph explaining it, and no `LIMIT` anywhere. :26947 Low-5 is *"a
- *  comment that claimed a bound the query did not have"*, and this file quoted
- *  that lesson while repeating it one card later.
- *
- *  ~~24 is not arbitrary: sessions never overlap and never wrap past midnight,
- *  so the finest timetable a gym can express is 24 slots, and one person cannot
- *  produce more distinct visits in a day than the gym has slots to put them
- *  in.~~ **STRUCK: TRUE OF ONE TIMETABLE, AND A DAY CAN HOLD SEVERAL.** A visit
- *  stores a FROZEN COPY of the window it fell in — which is exactly what the
- *  test *"the window a visit carries survives the whole timetable being
- *  replaced"* pins — and `PUT /hours` may run any number of times in a day. The
- *  distinct `(hours_status, opens, closes)` groups in one gym-day are therefore
- *  **not bounded by the timetable at all**, and both old ceilings were
- *  arithmetic about a quantity nothing enforces. The sentence is struck in place
- *  rather than deleted so the next reader sees what it used to claim (:26947 §4).
- *
- *  **WHAT IT COST, AND WHY THE BOUND MOVED INTO THE QUERY:** asserted only in
- *  the response schema, a gym that edited its hours enough times in one day made
- *  its own attendance page fail `gymAttendanceDayResponseSchema.parse` — a 500
- *  on that date, permanently, since nothing in this product deletes an
- *  attendance row.
- *
- *  **400 IS `CLOSURE_READ_LIMIT`'s REASONING REUSED**: far above any honest day
- *  (a stable timetable yields 24 and 29), so a real gym is never silently
- *  truncated, and bounded so no one response can run away. The pairs move
- *  together or a legitimate answer becomes a parse failure. */
-export interface GymAttendanceSlotCountRow {
-  hoursStatus: GymAttendanceHoursStatus;
-  opensMinute: number | null;
-  closesMinute: number | null;
-  visits: number;
-  people: number;
-}
-
-export interface GymAttendancePersonRow {
-  userId: string;
-  displayName: string;
-  /** Kd's 2026-09-03 ruling — a knowing deviation from Part 3 §2.4, with the
-   *  join screen's disclosure changed in the same commit. The field's full note
-   *  is on the shared schema. */
-  email: string;
-  visits: GymAttendanceVisitRow[];
-}
-
-export interface GymAttendanceDayRow {
-  day: string;
-  timezone: string;
-  clockFormat: GymClockFormat;
-  /** THE DAY'S TOTALS, and `people` is the only DISTINCT count in this response
-   *  that cannot be derived from `summary`. Per slot the two are provably equal
-   *  (the UNIQUE admits one visit per person per slot); across the day they
-   *  differ exactly when somebody came twice — the case Kd's ruling 12 created.
-   *  A screen summing the slot rows would print a number bigger than the gym's
-   *  roster, which is why this is computed here. */
-  totals: { visits: number; people: number };
-  summary: GymAttendanceSlotCountRow[];
-  people: GymAttendancePersonRow[];
-  nextCursor: string | null;
-}
-
-/** WHO CAME ON ONE DAY — the gym-side read, and the shape is Kd's ruling 14
- *  (:27992 §3, *"it might pile up and may be hard to analuse and see"*).
- *
- *  **THE SUMMARY IS COUNTED OVER THE WHOLE DAY AND THE PEOPLE ARE A PAGE, and
- *  the two must never be derived from each other.** A screen that counted the
- *  page it downloaded would be right on a fixture of six and would report the
- *  FIRST PAGE on a gym of four hundred — the specific breakage that ruling
- *  names. So the counts are `GROUP BY` in SQL over every row of the day, and
- *  `nextCursor` moves the people without moving them.
- *
- *  **`visits` AND `people` ARE DIFFERENT NUMBERS AND BOTH ARE SERVED.** They
- *  differ exactly when somebody came twice — which Kd's ruling 12 made possible
- *  on purpose — and printing one under the other's label is the :5807 defect
- *  this card is most likely to ship.
- *
- *  **THE PAGE IS BY PERSON, NOT BY VISIT**, so a member who came twice is ONE
- *  entry with TWO times (ruling 12 at the screen) and a 400-tap day is 300 rows
- *  rather than 400. Ordered by first arrival then `user_id` — a total order, so
- *  the cursor cannot skip or repeat somebody when two people arrive in the same
- *  millisecond (:12227's lesson about a cursor that compares one column).
- *
- *  `statuses` narrows to the exceptions an owner goes looking for — outside
- *  hours, closed day — **without paging through everybody**; it filters the
- *  PEOPLE and deliberately not the SUMMARY, which always describes the whole
- *  day. A screen whose totals changed when a filter was applied would be
- *  answering a different question from the one on the label. */
-export async function getGymAttendanceDay(
-  sql: SqlOrTx,
-  input: {
-    gymId: string;
-    day?: string | undefined;
-    statuses?: readonly GymAttendanceHoursStatus[] | undefined;
-    cursor?: { markedAt: Date; userId: string } | undefined;
-    limit?: number | undefined;
-  },
-): Promise<GymAttendanceDayRow | null> {
-  const gymRows = await sql<
-    { day: string; timezone: string; clock_format: string }[]
-  >`
-    SELECT coalesce(${input.day ?? null}::date, (now() AT TIME ZONE g.timezone)::date)::text AS day,
-           g.timezone, g.clock_format
-    FROM gyms g WHERE g.id = ${input.gymId}`;
-  const gym = gymRows[0];
-  if (gym === undefined) return null;
-
-  const limit = Math.min(input.limit ?? ATTENDANCE_PAGE_LIMIT, ATTENDANCE_PAGE_LIMIT);
-  const statuses = input.statuses ?? null;
-
-  // THE DAY'S TOTALS, over every row of the day. `count(DISTINCT user_id)` is
-  // load-bearing HERE and only here — see `GymAttendanceDayRow.totals`.
-  //
-  // Every read on this page counts the visits of app accounts only, the ones its list of
-  // people can name; a desk's visit of somebody without the app joins it with the live
-  // log (ROADMAP 16b).
-  const totalsRows = await sql<{ visits: string; people: string }[]>`
-    SELECT count(*) AS visits, count(DISTINCT user_id) AS people
-    FROM gym_attendance
-    WHERE gym_id = ${input.gymId} AND day = ${gym.day}::date AND user_id IS NOT NULL`;
-
-  // THE DAY'S SHAPE, over every row of the day — never over the page below.
-  const summary = await sql<
-    {
-      hours_status: string;
-      session_opens_minute: number | null;
-      session_closes_minute: number | null;
-      visits: string;
-      people: string;
-    }[]
-  >`
-    SELECT hours_status, session_opens_minute, session_closes_minute,
-           count(*) AS visits,
-           count(DISTINCT user_id) AS people
-    FROM gym_attendance
-    WHERE gym_id = ${input.gymId} AND day = ${gym.day}::date AND user_id IS NOT NULL
-    GROUP BY hours_status, session_opens_minute, session_closes_minute
-    ORDER BY session_opens_minute NULLS LAST, hours_status
-    LIMIT ${ATTENDANCE_SUMMARY_LIMIT}`;
-
-  /** ONE PAGE OF PEOPLE. The inner select finds WHO, ordered and bounded; the
-   *  outer one fetches every visit belonging to those people, so a person is
-   *  never split across a page boundary — which is what would make "attended
-   *  twice" show as one visit on one page and one on the next. */
-  const people = await sql<
-    {
-      user_id: string;
-      display_name: string;
-      email: string;
-      first_marked_at: Date;
-      day: string;
-      marked_at: Date;
-      method: string;
-      hours_status: string;
-      session_opens_minute: number | null;
-      session_closes_minute: number | null;
-    }[]
-  >`
-    WITH page AS (
-      SELECT a.user_id, min(a.marked_at) AS first_marked_at
-      FROM gym_attendance a
-      WHERE a.gym_id = ${input.gymId} AND a.day = ${gym.day}::date AND a.user_id IS NOT NULL
-        AND (${statuses}::text[] IS NULL OR a.hours_status = ANY (${statuses}::text[]))
-      GROUP BY a.user_id
-      HAVING (${input.cursor?.markedAt ?? null}::timestamptz IS NULL
-              OR (min(a.marked_at), a.user_id)
-                 > (${input.cursor?.markedAt ?? null}::timestamptz, ${input.cursor?.userId ?? null}::uuid))
-      ORDER BY first_marked_at, a.user_id
-      LIMIT ${limit + 1}
-    )
-    SELECT v.user_id, v.display_name, v.email, v.first_marked_at, v.day, v.marked_at,
-           v.method, v.hours_status, v.session_opens_minute, v.session_closes_minute
-    FROM (
-      -- EMAIL IS HERE BY A KD RULING OF 2026-09-03 AND IS A KNOWING DEVIATION
-      -- FROM Part 3 §2.4 (R0.3). That section lists what an org may see and
-      -- email is NOT on it; he ruled otherwise ("gym can see email also"). The
-      -- join screen's own disclosure was changed in the SAME commit, because a
-      -- field added to a gym-facing payload without re-reading §2.4 is exactly
-      -- how that promise gets broken silently -- OrgVisibilitySheet.jsx says so
-      -- in its own header. (No backticks in here: inside a sql template literal
-      -- one ends the template, which is :30094 section 3b and cost this file a
-      -- nine-line TypeScript error pointing nowhere near the cause.)
-      SELECT p.user_id, u.display_name, u.email, p.first_marked_at,
-             a.day::text AS day, a.marked_at, a.method, a.hours_status,
-             a.session_opens_minute, a.session_closes_minute,
-             -- THE PER-PERSON CEILING, ENFORCED RATHER THAN ASSERTED. Earliest
-             -- first, so a truncated person keeps the visits they actually made
-             -- in order rather than an arbitrary window of them.
-             row_number() OVER (PARTITION BY p.user_id ORDER BY a.marked_at) AS rn
-      FROM page p
-      JOIN users u ON u.id = p.user_id
-      JOIN gym_attendance a
-        ON a.gym_id = ${input.gymId} AND a.day = ${gym.day}::date AND a.user_id = p.user_id
-    ) v
-    WHERE v.rn <= ${ATTENDANCE_VISITS_PER_PERSON}
-    ORDER BY v.first_marked_at, v.user_id, v.marked_at`;
-
-  const grouped: GymAttendancePersonRow[] = [];
-  /** EACH GROUPED PERSON'S CURSOR KEY, index-aligned with `grouped`.
-   *
-   *  It is kept beside the rows rather than read back off them because
-   *  `GymAttendancePersonRow` carries RENDERED visits — a time somebody reads —
-   *  while the cursor needs the raw `first_marked_at` the inner select ordered
-   *  by. Deriving one from the other would be re-parsing our own output. */
-  const keys: { userId: string; markedAt: Date }[] = [];
-  for (const r of people) {
-    const tail = grouped[grouped.length - 1];
-    if (tail !== undefined && tail.userId === r.user_id) {
-      tail.visits.push(toAttendanceVisitRow(r));
-    } else {
-      grouped.push({
-        userId: r.user_id,
-        displayName: r.display_name,
-        email: r.email,
-        visits: [toAttendanceVisitRow(r)],
-      });
-      keys.push({ userId: r.user_id, markedAt: r.first_marked_at });
-    }
-  }
-
-  // THE PAGE IS WHAT IS SERVED; THE PERSON PAST IT ONLY EVER ANSWERS "IS THERE
-  // MORE". The cursor is the LAST PERSON OF THE PAGE, never the extra one, or
-  // page two would begin after somebody nobody has seen.
-  const page = grouped.slice(0, limit);
-  const lastKey = keys[page.length - 1];
-
-  return {
-    day: gym.day,
-    timezone: gym.timezone,
-    clockFormat: gymClockFormatSchema.parse(gym.clock_format),
-    totals: {
-      visits: Number(totalsRows[0]?.visits ?? 0),
-      people: Number(totalsRows[0]?.people ?? 0),
-    },
-    summary: summary.map((r) => ({
-      hoursStatus: gymAttendanceHoursStatusSchema.parse(r.hours_status),
-      opensMinute: r.session_opens_minute,
-      closesMinute: r.session_closes_minute,
-      visits: Number(r.visits),
-      people: Number(r.people),
-    })),
-    people: page,
-    // A FULL PAGE MEANS THERE IS ANOTHER ONE, because one more person than the
-    // page holds was asked for. Derived from the number of PEOPLE, which is
-    // what the LIMIT bounded — deriving it from the row count would page on
-    // visits and skip whoever came twice.
-    //
-    // **`> limit` AND NOT `=== limit`, AND THE OWNER'S SCREEN IS WHY.** A day
-    // with exactly `ATTENDANCE_PAGE_LIMIT` people drew a *Show more people*
-    // button that added nobody, and — worse — made every failed name search say
-    // *"in the people loaded so far — load the rest to search them too"* when
-    // the rest were already loaded, sending an owner hunting for a member who
-    // never came (:5807: on screen AND wrong). `searchCoversEverybody` reads
-    // this field and nothing else, so this is where that sentence is decided.
-    nextCursor:
-      grouped.length > limit && lastKey !== undefined
-        ? encodeAttendanceCursor(lastKey.markedAt, lastKey.userId)
-        : null,
-  };
-}
-
-export interface GymAttendanceHistoryRow {
-  timezone: string;
-  clockFormat: GymClockFormat;
-  visits: GymAttendanceVisitRow[];
-  nextCursor: string | null;
-}
-
-/** ONE PERSON'S OWN ATTENDANCE — what a member sees of themselves (Kd, :27900),
- *  and what an owner sees on picking a name out of the list (:28055).
- *
- *  **THE SAME FUNCTION SERVES BOTH, and the caller decides WHOSE.** The service
- *  passes the caller's own id for a member and the queried id for staff, so
- *  there is one predicate and one tenancy clause rather than two that could
- *  drift apart — a second reader of somebody else's attendance is a second place
- *  to get an IDOR wrong (R3.2, :14401's shape).
- *
- *  Newest first: "have I been this week" is the question and its answer is at
- *  the top. The cursor compares the PAIR `(marked_at, id)` because two visits
- *  can share a millisecond, and a cursor on one column silently drops rows.
- *
- *  **THE WINDOW FILTERS `day` WHILE THE CURSOR ORDERS `marked_at`, AND THE TWO
- *  BEING DIFFERENT COLUMNS IS DELIBERATE.** `day` is the gym's own calendar date,
- *  frozen at write time in the gym's zone, and it is the quantity a calendar
- *  square is — so it is what a month request must mean (the reasoning is on
- *  `attendanceHistoryQuerySchema`). `marked_at` is the instant, which is what
- *  gives a total order to page on. They agree for every row a gym writes under
- *  one timezone and are NOT re-derived from each other: a gym that later changes
- *  its zone leaves old rows filed under the day they were stamped with (:27900
- *  §3's "as is"), and re-bucketing them here would move visits between months
- *  under somebody's feet.
- *
- *  **THE FILTER IS APPLIED ON EVERY PAGE, which is the half a cursor makes easy
- *  to lose.** Both predicates sit beside the cursor comparison rather than being
- *  applied to the first read only — the web calendar's own M33 (:4622) is that
- *  mutant one layer up, and here it would serve a neighbouring month's visits
- *  the moment somebody pressed for more (**O252**).
- *
- *  **NO MIGRATION: `gym_attendance_gym_user_day_slot_uq` leads on
- *  `(gym_id, user_id, day)`** (`0019_gym_attendance.sql:176`, read this
- *  session), which is exactly this predicate's columns. That is a statement
- *  about the index's shape and not a claim about a plan nobody has run. */
-export async function getGymAttendanceHistory(
-  sql: SqlOrTx,
-  input: {
-    gymId: string;
-    userId: string;
-    /** GYM DAYS, `YYYY-MM-DD`, half-open: `from` inclusive, `to` exclusive, so
-     *  adjacent months tile. Both already calendar-checked by the service —
-     *  reaching Postgres with a shape-valid non-date is a 500, which is the
-     *  whole reason that check exists. */
-    from?: string | undefined;
-    to?: string | undefined;
-    cursor?: { markedAt: Date; id: string } | undefined;
-    limit?: number | undefined;
-  },
-): Promise<GymAttendanceHistoryRow | null> {
-  const gymRows = await sql<{ timezone: string; clock_format: string }[]>`
-    SELECT timezone, clock_format FROM gyms WHERE id = ${input.gymId}`;
-  const gym = gymRows[0];
-  if (gym === undefined) return null;
-
-  const limit = Math.min(input.limit ?? ATTENDANCE_PAGE_LIMIT, ATTENDANCE_PAGE_LIMIT);
-  const rows = await sql<
-    {
-      id: string;
-      day: string;
-      marked_at: Date;
-      method: string;
-      hours_status: string;
-      session_opens_minute: number | null;
-      session_closes_minute: number | null;
-    }[]
-  >`
-    SELECT id, day::text AS day, marked_at, method, hours_status,
-           session_opens_minute, session_closes_minute
-    FROM gym_attendance
-    WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
-      AND (${input.from ?? null}::date IS NULL OR day >= ${input.from ?? null}::date)
-      AND (${input.to ?? null}::date IS NULL OR day < ${input.to ?? null}::date)
-      AND (${input.cursor?.markedAt ?? null}::timestamptz IS NULL
-           OR (marked_at, id) < (${input.cursor?.markedAt ?? null}::timestamptz,
-                                 ${input.cursor?.id ?? null}::uuid))
-    ORDER BY marked_at DESC, id DESC
-    LIMIT ${limit + 1}`;
-
-  const page = rows.slice(0, limit);
-  const lastRow = page[page.length - 1];
-  return {
-    timezone: gym.timezone,
-    clockFormat: gymClockFormatSchema.parse(gym.clock_format),
-    visits: page.map(toAttendanceVisitRow),
-    // ONE MORE IS FETCHED THAN IS SERVED, AND THAT EXTRA ROW IS THE WHOLE
-    // ANSWER. `rows.length === limit` cannot tell a full page with nothing
-    // behind it from a full page with more, so a member whose month held
-    // EXACTLY `ATTENDANCE_PAGE_LIMIT` visits was handed a cursor to nowhere —
-    // and the calendar turns that cursor into "some days may be missing" over
-    // a grid on which every day is drawn (:5807: on screen AND wrong).
-    // Asking for `limit + 1` makes a full page mean there really is another,
-    // which is the idiom this file already uses for applicants and members.
-    nextCursor:
-      rows.length > limit && lastRow !== undefined
-        ? encodeAttendanceCursor(lastRow.marked_at, lastRow.id)
-        : null,
-  };
-}
-
-/** A cursor is an INSTANT AND A UUID, joined by a character neither can contain,
- *  so parsing it back cannot be ambiguous. It is opaque to the client by
- *  convention only — it carries nothing secret, and nothing downstream trusts it
- *  beyond the two parsers below, both of which reject anything they cannot read
- *  rather than substituting a default (a cursor silently read as "the
- *  beginning" would re-serve page one for ever). */
-function encodeAttendanceCursor(markedAt: Date, id: string): string {
-  return `${markedAt.toISOString()}|${id}`;
-}
-
-/** BOTH HALVES ARE CHECKED, AND THE UUID HALF IS THE ONE THAT WAS MISSING.
- *
- *  Both queries interpolate the id as `::uuid`, so a cursor this function
- *  accepts and Postgres cannot cast is a **500 with a Sentry event** rather than
- *  the 400 the caller above it exists to raise — from something as ordinary as a
- *  stale or truncated marker in a client's hands. The module states the rule two
- *  files away (`applicationParamsSchema`: *"a non-uuid must fail as a 400 at the
- *  boundary and never as a 500 from Postgres refusing the cast"*) and this is
- *  the same rule, one layer down. :26947 §5's shape — a rule a file states in
- *  one place is not a rule the file keeps. */
-const ATTENDANCE_CURSOR_UUID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export function parseAttendanceCursor(
-  raw: string,
-): { markedAt: Date; id: string } | null {
-  const bar = raw.indexOf("|");
-  if (bar <= 0) return null;
-  const instant = raw.slice(0, bar);
-  const id = raw.slice(bar + 1);
-  const markedAt = new Date(instant);
-  // The empty-id case is subsumed: an empty string fails the pattern too.
-  if (Number.isNaN(markedAt.getTime()) || !ATTENDANCE_CURSOR_UUID.test(id)) return null;
-  return { markedAt, id };
-}
-
-/** ── THE GYM'S NUMBERS (Part 3 §4.1) ────────────────────────────────────────
- *
- *  **EVERY FIGURE HERE IS READ LIVE FROM `gym_attendance`, NOT FROM THE NIGHTLY
- *  `org_daily_stats`, AND THAT IS A DECISION WITH TWO REASONS** (both recorded
- *  in `modules/orgs/rollup.ts`'s header, which is where the other half lives):
- *
- *    1. **A DISTINCT COUNT CANNOT BE SUMMED.** The chart's line is *"how many
- *       different people came that week"*. Adding up seven daily figures counts
- *       a Monday-and-Thursday member twice. Once the line has to read raw rows,
- *       the bars reading them too is one query rather than two sources that can
- *       disagree at their seam.
- *    2. **A NIGHTLY TABLE IS PARTIAL FOR PART OF EVERY DAY.** Rendering a
- *       not-yet-written day as zero is a false number on a screen (:5807).
- *
- *  The rollup is still written, and when `gym_attendance` becomes deletable
- *  under DPDP (it is on the UNRULED half of that list today —
- *  `modules/privacy/tables.ts`) this reader moves onto it, because a live read
- *  would then silently rewrite a gym's history.
- *
- *  **THE DAY IS PINNED ONCE AND THREADED THROUGH EVERY QUERY BELOW.**
- *  `getGymAttendanceDay` sets the precedent and the reason is the same: four
- *  queries each asking Postgres for "today" can straddle a midnight in the
- *  gym's zone and answer about two different days in one response. */
-export interface OrgOverviewRow {
-  timezone: string;
-  today: string;
-  todayVisits: number;
-  todayVisitors: number;
-  weekVisits: number;
-  weekVisitors: number;
-  prevWeekVisits: number;
-  prevWeekVisitors: number;
-  monthVisitors: number;
-  members: number;
-  weeks: { weekStart: string; visits: number; visitors: number }[];
-}
-
-export async function getOrgOverview(
-  sql: SqlOrTx,
-  input: { gymId: string; weeks?: number; monthDays?: number },
-): Promise<OrgOverviewRow | null> {
-  // CLAMPED, NOT MERELY DEFAULTED. `orgOverviewSchema.weeks` caps the array at
-  // `OVERVIEW_WEEKS`, so a caller asking for more would build a valid response
-  // that fails its own outgoing parse — a 500 on a read, from a number nobody
-  // would think to look at. The default and the cap are the same constant and
-  // they are paired HERE rather than by a paragraph (:28649 §2).
-  const weeks = Math.min(input.weeks ?? OVERVIEW_WEEKS, OVERVIEW_WEEKS);
-  const monthDays = input.monthDays ?? OVERVIEW_MONTH_DAYS;
-
-  const gymRows = await sql<{ timezone: string; today: string }[]>`
-    SELECT g.timezone, (now() AT TIME ZONE g.timezone)::date::text AS today
-    FROM gyms g WHERE g.id = ${input.gymId}`;
-  const gym = gymRows[0];
-  if (gym === undefined) return null;
-
-  /** THE WEEK STARTS ON MONDAY BECAUSE POSTGRES' `date_trunc('week')` DOES, and
-   *  it is computed in SQL from the pinned day rather than in JS — one calendar,
-   *  and the one the chart's buckets are already grouped by. A second
-   *  implementation in JavaScript is a second answer to "which Monday". */
-  const tiles = await sql<
-    {
-      today_visits: string;
-      today_visitors: string;
-      week_visits: string;
-      week_visitors: string;
-      prev_week_visits: string;
-      prev_week_visitors: string;
-    }[]
-  >`
-    WITH b AS (
-      SELECT ${gym.today}::date AS today,
-             date_trunc('week', ${gym.today}::date)::date AS week_start,
-             date_trunc('week', ${gym.today}::date)::date - 7 AS prev_week_start,
-             date_trunc('week', ${gym.today}::date)::date - (7 * (${weeks}::int - 1))
-               AS series_start
-    )
-    SELECT
-      -- "count(*)" IS SAFE HERE ONLY BECAUSE OF THE FILTER, and the series
-      -- query twenty lines below uses "count(a.id)" for the opposite reason.
-      -- This is a LEFT JOIN, so a gym nobody has ever visited produces one
-      -- all-NULL row; every FILTER here tests "a.day", which is NULL on that
-      -- row, so it is excluded and the count is 0. Delete or widen a FILTER and
-      -- "count(*)" starts reporting that empty row as one visit.
-      count(*) FILTER (WHERE a.day = b.today) AS today_visits,
-      count(DISTINCT a.user_id) FILTER (WHERE a.day = b.today) AS today_visitors,
-      count(*) FILTER (WHERE a.day >= b.week_start) AS week_visits,
-      count(DISTINCT a.user_id) FILTER (WHERE a.day >= b.week_start) AS week_visitors,
-      count(*) FILTER (WHERE a.day >= b.prev_week_start AND a.day < b.week_start)
-        AS prev_week_visits,
-      count(DISTINCT a.user_id)
-        FILTER (WHERE a.day >= b.prev_week_start AND a.day < b.week_start)
-        AS prev_week_visitors
-    FROM b
-    LEFT JOIN gym_attendance a
-      ON a.gym_id = ${input.gymId} AND a.day >= b.series_start AND a.day <= b.today`;
-  const t = tiles[0];
-  // Unreachable: `b` is a one-row CTE and the join is a LEFT JOIN, so this
-  // aggregate always produces exactly one row — zeros when nobody has ever come.
-  if (t === undefined) throw new Error("overview tiles vanished");
-
-  /** THE SERIES IS GENERATED AND THE COUNTS ARE JOINED ONTO IT, never the other
-   *  way round: a week nobody came to must draw a ZERO BAR rather than vanish
-   *  and shift every other bar left. Oldest first so a chart reads left to
-   *  right without reversing. */
-  const series = await sql<{ week_start: string; visits: string; visitors: string }[]>`
-    WITH b AS (
-      SELECT ${gym.today}::date AS today,
-             date_trunc('week', ${gym.today}::date)::date - (7 * (${weeks}::int - 1))
-               AS series_start
-    ),
-    s AS (
-      SELECT (b.series_start + (n * 7)) AS week_start, b.today
-      FROM b CROSS JOIN generate_series(0, ${weeks}::int - 1) AS n
-    )
-    SELECT s.week_start::text AS week_start,
-           -- "count(a.id)" and NOT "count(*)": this is a LEFT JOIN, so a week
-           -- nobody came to still produces one all-NULL row, and "count(*)"
-           -- would report that empty week as ONE visit.
-           count(a.id) AS visits,
-           count(DISTINCT a.user_id) AS visitors
-    FROM s
-    LEFT JOIN gym_attendance a
-      ON a.gym_id = ${input.gymId}
-     AND a.day >= s.week_start
-     AND a.day < s.week_start + 7
-     AND a.day <= s.today
-    GROUP BY s.week_start
-    ORDER BY s.week_start`;
-
-  /** ADOPTION'S TWO HALVES, COUNTED OVER THE SAME POPULATION SO THE RATIO CANNOT
-   *  EXCEED 100%.
-   *
-   *  **The denominator excludes the owner's complimentary seat**, exactly as the
-   *  roster's own count does (Part 3 §4.0 step 6 — it is not a customer whose
-   *  attendance measures anything), and the numerator is restricted to the SAME
-   *  set. Counting every visitor against only paying members is how a gym gets
-   *  told 120% of it turned up. */
-  const adoption = await sql<{ members: string; month_visitors: string }[]>`
-    WITH m AS (
-      SELECT user_id FROM gym_members
-      WHERE gym_id = ${input.gymId} AND removed_at IS NULL AND complimentary = false
-    )
-    SELECT (SELECT count(*) FROM m) AS members,
-           (SELECT count(DISTINCT a.user_id)
-              FROM gym_attendance a JOIN m ON m.user_id = a.user_id
-             WHERE a.gym_id = ${input.gymId}
-               AND a.day > ${gym.today}::date - ${monthDays}::int
-               AND a.day <= ${gym.today}::date) AS month_visitors`;
-  const ad = adoption[0];
-  // Unreachable for the reason above: both halves are scalar sub-selects.
-  if (ad === undefined) throw new Error("overview adoption vanished");
-
-  return {
-    timezone: gym.timezone,
-    today: gym.today,
-    todayVisits: Number(t.today_visits),
-    todayVisitors: Number(t.today_visitors),
-    weekVisits: Number(t.week_visits),
-    weekVisitors: Number(t.week_visitors),
-    prevWeekVisits: Number(t.prev_week_visits),
-    prevWeekVisitors: Number(t.prev_week_visitors),
-    monthVisitors: Number(ad.month_visitors),
-    members: Number(ad.members),
-    weeks: series.map((w) => ({
-      weekStart: w.week_start,
-      visits: Number(w.visits),
-      visitors: Number(w.visitors),
-    })),
-  };
-}
-
-export interface GymRegularRow {
-  userId: string;
-  displayName: string;
-  weeksRunning: number;
-  daysRunning: number;
-  visits: number;
-  cheerableAt: Date | null;
-}
-
-/** HOW FAR BACK THE STREAK SEARCH LOOKS.
- *
- *  **A BOUND IS NOT OPTIONAL ON A TABLE THAT ONLY GROWS** (:10596's class), and
- *  this one is generous on purpose: at 400 days a member who has come every
- *  week for a year still reads the full 52, so the cap is invisible to any real
- *  gym and the scan stays bounded for a gym with years of history.
- *
- *  **THE FAILURE DIRECTION IS TRUNCATION, NEVER A WRONG STREAK.** Islands are
- *  built from the days INSIDE the window, so a streak longer than the window
- *  reports the window rather than a number that is too big — understating a
- *  regular's loyalty, which is the safe way for this figure to be wrong. */
-const REGULARS_LOOKBACK_DAYS = 400;
-
-/** THE MEMBERS WHO KEEP TURNING UP — Kd's ruling of 2026-09-04, *"both weeks and
- *  days run"*, over his own :29961 ruling 4.
- *
- *  **WEEKS RUNNING IS THE LEADERBOARD'S STREAK** (spec Part 3 §15.5, ROADMAP 19a-i):
- *  desk scans and staff check-ins only, a visit before the app counted by its record, and
- *  a week the gym recorded nobody skipped. `leaderboard/visits.ts` holds the one rule.
- *
- *  **EVERY FIGURE COMES FROM `gym_attendance` AT THIS GYM AND NOWHERE ELSE.**
- *  :26469 §1.3 is his ruling that a gym is never shown what a member did away
- *  from it. **`getStreakDays` in `modules/gamification` is the obvious function
- *  to reach for and is wrong TWICE OVER**: it unions workouts from every gym and
- *  from home, AND it spends Part 7 §3.2 freezes, so it reports days on which
- *  nobody attended anything. A gym-facing *"5 days in a row"* for a member who
- *  came three times is :5807 on the screen an owner makes decisions from.
- *  **This module must never import from `gamification/`**, and the freeze test
- *  in `orgs.cheers.test.ts` is what holds that after today.
- *
- *  **SO A MEMBER MAY SEE A LONGER STREAK IN THEIR OWN APP THAN THEIR GYM SHOWS,
- *  AND THAT IS CORRECT** — "did I keep my streak alive" and "how often is this
- *  person actually here" are different questions. The deliberate divergence is
- *  :27900 §4's shape, commented here as that entry requires rather than only in
- *  the record.
- *
- *  **BOTH STREAKS ARE ALIVE ON A GAP OF ≤ 1, WHICH IS BORROWED AND NOT
- *  INVENTED.** `streak.ts`'s `reconcile` treats a gap of one as "nothing missed
- *  yet — today is still open", so a member who came yesterday and not yet today
- *  keeps their streak. Using the same rule means these two figures differ from
- *  the member's own by freezes ALONE, rather than by a second arbitrary
- *  convention nobody can explain.
- *
- *  **THE ISLAND ARITHMETIC, because it is the part that looks like magic.** For
- *  each member, `day - row_number()` is CONSTANT across a run of consecutive
- *  days and changes at every gap — so grouping by it gives one row per unbroken
- *  run, and `count(*)` is that run's length. The weekly half numbers the gym's own
- *  weeks instead of the calendar's. The run that matters is the one ending at
- *  today or yesterday, and there can be at most ONE of those per member: two
- *  islands ending inside that window would be adjacent and would therefore be
- *  one island.
- *
- *  **`visits` COVERS THE WEEK-STREAK'S OWN SPAN AND NOT A FIXED WINDOW.**
- *  "5 weeks running · 11 visits" has to describe one stretch of time or it is
- *  :30624's defect exactly — two true figures arranged into a false sentence, on
- *  this very screen, one card ago. */
-export async function getGymRegulars(
-  sql: SqlOrTx,
-  input: { gymId: string; limit?: number | undefined },
-): Promise<GymRegularRow[] | null> {
-  // **THE TIMEZONE IS READ AS WELL AS THE DAY, and `cheerable_at` is why.**
-  // Kd's cap is one per member per GYM-DAY (:35762), so the instant the button
-  // reopens is the gym's next midnight — which cannot be derived from `today`
-  // alone without knowing the zone that produced it.
-  const gymRows = await sql<{ today: string; timezone: string }[]>`
-    SELECT (now() AT TIME ZONE g.timezone)::date::text AS today, g.timezone
-    FROM gyms g WHERE g.id = ${input.gymId}`;
-  const gym = gymRows[0];
-  if (gym === undefined) return null;
-
-  // FLOORED AND CAPPED AND WHOLE, IN THAT ORDER. `Math.min` alone hands
-  // `LIMIT -3` straight to Postgres for a negative argument (T3 round 1);
-  // `Math.max(1, Math.min(…))` still hands it `LIMIT 2.5` and `LIMIT NaN`
-  // (round 2). **This bound is the ONLY parser this value ever meets** — no
-  // route schema reaches it, because no route passes a limit at all — so it
-  // has to be total rather than merely floored. `Math.trunc` first so the
-  // clamp works on a whole number; `Number.isFinite` because `Math.max(1, NaN)`
-  // is NaN and would reach the query.
-  const asked = Math.trunc(input.limit ?? ON_A_ROLL_LIMIT);
-  const limit = Number.isFinite(asked)
-    ? Math.max(1, Math.min(asked, ON_A_ROLL_LIMIT))
-    : ON_A_ROLL_LIMIT;
-
-  const rows = await sql<
-    {
-      user_id: string;
-      display_name: string;
-      // int4 (`count(*)::int`) reaches JS as a NUMBER; a bare `count(*)` is int8 and a STRING.
-      weeks_running: number;
-      days_running: number;
-      visits: string;
-      cheerable_at: Date | null;
-    }[]
-  >`
-    WITH b AS (
-      SELECT ${gym.today}::date AS today,
-             ${gym.today}::date - ${REGULARS_LOOKBACK_DAYS}::int AS floor_day
-    ),
-    -- THE POPULATION IS THE ROSTER'S, NOT ATTENDANCE'S: a removed member's visits are
-    -- still in the table and would otherwise keep a ghost on the owner's home screen.
-    mem AS (
-      SELECT m.user_id FROM gym_members m
-      WHERE m.gym_id = ${input.gymId} AND m.removed_at IS NULL AND m.complimentary = false
-    ),
-    -- The visits the leaderboard counts, and whose they are: ONE rule for both screens
-    -- (spec Part 3 §15.5, leaderboard/visits.ts).
-    cd AS (
-      SELECT d.owner_id AS user_id, d.day
-      FROM (${countedDays(sql, input.gymId, gym.today)}) d
-      JOIN mem ON mem.user_id = d.owner_id
-    ),
-    -- DAY ISLANDS. day minus row_number() is constant inside a consecutive run.
-    dg AS (
-      SELECT cd.user_id, cd.day,
-             cd.day - (row_number() OVER (PARTITION BY cd.user_id ORDER BY cd.day))::int AS grp
-      FROM cd CROSS JOIN b
-      WHERE cd.day > b.floor_day
-    ),
-    day_streak AS (
-      SELECT dg.user_id, count(*)::int AS days_running
-      FROM dg
-      GROUP BY dg.user_id, dg.grp
-      HAVING max(dg.day) >= (SELECT today FROM b) - 1
-    ),
-    -- THE LEADERBOARD'S STREAK, so this panel and the members' board never disagree.
-    ws AS (
-      SELECT st.owner_id AS user_id, st.weeks AS weeks_running, st.from_week AS streak_from,
-             (SELECT min(c.day) FROM cd c WHERE c.user_id = st.owner_id AND c.day >= st.from_week) AS first_day
-      FROM (${streaks(sql, input.gymId, gym.today, gym.today)}) st
-      JOIN mem ON mem.user_id = st.owner_id
-      WHERE st.weeks > 0
-    ),
-    vis AS (
-      SELECT v.owner_id, v.day
-      FROM (${visitsWithOwner(sql, input.gymId)}) v
-      WHERE v.method IN ('pass','key_tag','staff') AND v.owner_id IS NOT NULL
-        AND v.day <= ${gym.today}::date
-    )
-    SELECT ws.user_id,
-           u.display_name,
-           ws.weeks_running,
-           coalesce(ds.days_running, 0) AS days_running,
-           -- Counted over the streak's own span, so the row's two numbers describe one stretch.
-           (SELECT count(*) FROM vis WHERE vis.owner_id = ws.user_id AND vis.day >= ws.streak_from) AS visits,
-           -- WHEN THIS GYM MAY CHEER THEM AGAIN: one per member per GYM-DAY (Kd, :35762),
-           -- so the gym's next midnight; NULL means the window is open now. NO BACKTICKS
-           -- IN THIS QUERY'S COMMENTS: one would end the template literal.
-           (SELECT ((${gym.today}::date + 1)::timestamp AT TIME ZONE ${gym.timezone})
-              FROM gym_cheers c
-             WHERE c.gym_id = ${input.gymId} AND c.user_id = ws.user_id
-               AND (c.created_at AT TIME ZONE ${gym.timezone})::date = ${gym.today}::date
-             LIMIT 1) AS cheerable_at
-    FROM ws
-    JOIN users u ON u.id = ws.user_id
-    LEFT JOIN day_streak ds ON ds.user_id = ws.user_id
-    WHERE ws.weeks_running >= ${ON_A_ROLL_MIN_WEEKS}::int
-      -- AND THE STREAK MUST HAVE LASTED, not merely straddled a Monday: somebody whose
-      -- whole history is yesterday and today never reads "2 weeks running".
-      AND (SELECT today FROM b) - ws.first_day >= ${ON_A_ROLL_MIN_SPAN_DAYS}::int
-    ORDER BY ws.weeks_running DESC, coalesce(ds.days_running, 0) DESC,
-             u.display_name ASC, ws.user_id ASC
-    LIMIT ${limit}`;
-
-  return rows.map((r) => ({
-    userId: r.user_id,
-    displayName: r.display_name,
-    // `weeks_running` and `days_running` are int4 and arrive as NUMBERS; only
-    // `visits` is a bare `count(*)`, i.e. int8, which postgres.js hands over as
-    // a STRING. All three were typed `string` and wrapped in `Number()`, which
-    // made the difference invisible — and lint is what proved the correction,
-    // by objecting that two of these conversions could not do anything.
-    weeksRunning: r.weeks_running,
-    daysRunning: r.days_running,
-    visits: Number(r.visits),
-    cheerableAt: r.cheerable_at,
-  }));
-}
-
-export interface GymSlippingAwayRow {
-  userId: string;
-  displayName: string;
-  lastVisitDay: string;
-  visits: number;
-  nudgeableAt: Date | null;
-}
-
-export interface GymSlippingAwayResult {
-  rows: GymSlippingAwayRow[];
-  /** Whether an EMPTY `rows` may be read as *"nobody is slipping"*. See
-   *  `SLIPPING_AWAY_MIN_HISTORY_DAYS`. */
-  hasHistory: boolean;
-  /** The gym's own date of its first ever recorded visit, or null. */
-  since: string | null;
-}
-
-/** THE MEMBERS WHO HAVE STOPPED COMING — Part 3 §4.1's at-risk list, which Kd
- *  chose as this card's panel (:36503) and whose window he ruled twice in one day
- *  (:36694 ruling 1, then :36816).
- *
- *  **THE DEFINITION IS THE SPEC'S WITH TWO SUBSTITUTIONS, BOTH KD'S OWN
- *  RULINGS.** `03-part3-org-console.md:195-197` reads *"current member · joined >
- *  14 days ago · had ≥ 1 workout in their first 21 days or in the prior 30-day
- *  window · 0 workouts in the last 14 days. Sorted by lifetime workouts desc,
- *  capped at 20."* Every `workout` becomes a VISIT AT THIS GYM (:26469 §1.3), and
- *  the quiet window's fourteen becomes THREE (:36816).
- *
- *  **THE FIRST-21-DAYS ARM IS DELIBERATELY NOT BUILT AND THAT IS A NARROWING,
- *  NOT AN OVERSIGHT.** The spec offers two ways to have been engaged: a visit in
- *  the first 21 days of membership, OR one in the prior 30-day window. At the
- *  spec's own fourteen-day silence those two describe roughly the same recent
- *  person; at Kd's three, the first-21-days arm would qualify somebody who came
- *  once in their opening fortnight and never again — **for years** — because
- *  membership has no upper age here. That is not *"slipping away"*, it is
- *  *"never started"*, and the two need different words from an owner. **The
- *  30-day arm alone is the narrower and safer reading**, and narrowing a spec
- *  clause is recorded rather than done quietly (R0.3).
- *
- *  ⚠️ **THREE WINDOWS, THREE DIFFERENT NUMBERS, AND ONLY ONE OF THEM MOVED**
- *  (:36816 §2 — :35762's coincidence trap, second time on this card): the QUIET
- *  window is Kd's `SLIPPING_AWAY_QUIET_DAYS` = 3 · the NUDGE'S CAP is Part 3
- *  §4.1's rolling seven days, read below as `nudgeable_at` · the MESSAGE EXPIRY
- *  is seven because it is derived from the CAP, and lives on the web.
- *  **`SLIPPING_AWAY_MIN_MEMBERSHIP_DAYS` is a FOURTH number that used to equal
- *  the quiet window and no longer does.** Folding any two together reverses a
- *  ruling or breaks a spec limit.
- *
- *  **IT MUST NEVER READ `org_member_stats` AND MUST NEVER IMPORT FROM
- *  `gamification/`** — the view counts workouts ANYWHERE and has sat unread since
- *  `0001_init` (:29961 §6.1, :36503 §3b), and `getStreakDays` unions every gym
- *  and spends freezes. Both are the obvious thing to reach for on this screen and
- *  both are :26469 §1.3's one forbidden thing.
- *
- *  **THE POPULATION IS THE ROSTER'S**, exactly as `getGymRegulars`' is: live,
- *  non-complimentary members, so no panel on this screen can name somebody the
- *  Members screen does not list, and the two panels cannot disagree about who
- *  counts.
- *
- *  **AND THE TWO PANELS ARE DISJOINT BY CONSTRUCTION**, which is worth stating
- *  because a person appearing on both would be visible to any owner: "on a roll"
- *  requires a visit in the last day or two, this requires none for three. A
- *  fixture asserts it rather than the arithmetic being trusted. */
-export async function getGymSlippingAway(
-  sql: SqlOrTx,
-  input: { gymId: string; limit?: number | undefined },
-): Promise<GymSlippingAwayResult | null> {
-  // THE GYM'S OWN DATE AND ZONE, READ TOGETHER — `nudgeable_at` needs the zone
-  // for the same reason `cheerable_at` does, and every window below is counted
-  // in gym-days rather than instants (trap #8).
-  const gymRows = await sql<{ today: string; timezone: string }[]>`
-    SELECT (now() AT TIME ZONE g.timezone)::date::text AS today, g.timezone
-    FROM gyms g WHERE g.id = ${input.gymId}`;
-  const gym = gymRows[0];
-  if (gym === undefined) return null;
-
-  // FLOORED AND CAPPED AND WHOLE, IN THAT ORDER — `getGymRegulars`' bound, for
-  // its recorded reason: `Math.min` alone hands `LIMIT -3` to Postgres, and
-  // `Math.max(1, Math.min(...))` still hands it `LIMIT 2.5` and `LIMIT NaN`.
-  // **This bound is the ONLY parser this value ever meets**, no route passing a
-  // limit at all, so it has to be total rather than merely floored.
-  const asked = Math.trunc(input.limit ?? SLIPPING_AWAY_LIMIT);
-  const limit = Number.isFinite(asked)
-    ? Math.max(1, Math.min(asked, SLIPPING_AWAY_LIMIT))
-    : SLIPPING_AWAY_LIMIT;
-
-  // HOW LONG THIS GYM HAS BEEN RECORDING, ANSWERED SEPARATELY FROM THE LIST.
-  //
-  // **IT IS A DIFFERENT QUESTION FROM "who is slipping" AND CANNOT BE DERIVED
-  // FROM THE ANSWER TO THAT ONE** — an empty list means "nobody is slipping" or
-  // "we have not been watching long enough", and the rows cannot tell them
-  // apart (:27992 section 3's rule in its least obvious form). The card's own
-  // first draft got the arithmetic behind this wrong in the other direction
-  // (:36694 section 1): a window that REACHES BACK a month needs one visit
-  // inside it, not a month of data.
-  //
-  // MIN over the whole table for this gym, which is an index-only scan on
-  // gym_attendance_gym_day_idx and is not bounded by the lookback below --
-  // deliberately, because the question is when recording BEGAN.
-  const historyRows = await sql<{ since: string | null }[]>`
-    SELECT min(a.day)::text AS since
-    FROM gym_attendance a WHERE a.gym_id = ${input.gymId}`;
-  const since = historyRows[0]?.since ?? null;
-  const hasHistory =
-    since !== null &&
-    // Counted in the gym's own days, both sides, so a gym eleven hours away
-    // does not flip this sentence at the wrong hour.
-    (Date.parse(`${gym.today}T00:00:00Z`) - Date.parse(`${since}T00:00:00Z`)) / 86_400_000 >=
-      SLIPPING_AWAY_MIN_HISTORY_DAYS;
-
-  const rows = await sql<
-    {
-      user_id: string;
-      display_name: string;
-      last_visit_day: string;
-      // int8 (`count(*)`) reaches JS as a STRING; `count(*)::int` would arrive
-      // as a number. `getGymRegulars` records the day that difference was
-      // invisible because three fields were all typed `string` and wrapped in
-      // `Number()`, and lint is what caught it.
-      visits: string;
-      nudgeable_at: Date | null;
-    }[]
-  >`
-    WITH b AS (
-      SELECT ${gym.today}::date AS today,
-             ${gym.today}::date - ${SLIPPING_AWAY_QUIET_DAYS}::int AS quiet_from,
-             ${gym.today}::date - ${SLIPPING_AWAY_QUIET_DAYS}::int
-               - ${SLIPPING_AWAY_ENGAGED_DAYS}::int AS engaged_from
-    ),
-    -- THE POPULATION IS THE ROSTER'S, NOT ATTENDANCE'S -- getGymRegulars' own
-    -- CTE, and the two must agree or one panel names somebody the other and the
-    -- Members screen do not. joined_at is bucketed in the GYM'S zone because
-    -- "joined more than N days ago" is a question about the gym's calendar.
-    mem AS (
-      SELECT m.user_id
-      FROM gym_members m CROSS JOIN b
-      WHERE m.gym_id = ${input.gymId}
-        AND m.removed_at IS NULL
-        AND m.complimentary = false
-        AND (m.joined_at AT TIME ZONE ${gym.timezone})::date
-              <= b.today - ${SLIPPING_AWAY_MIN_MEMBERSHIP_DAYS}::int
-    ),
-    -- WAS ENGAGED: at least one visit in the 30 gym-days BEFORE the quiet
-    -- window. Both bounds are closed on the quiet side and open on the far
-    -- side, so a visit exactly quiet_from days ago counts as engagement and NOT
-    -- as breaking the silence -- one day cannot do both jobs.
-    engaged AS (
-      SELECT DISTINCT a.user_id
-      FROM gym_attendance a JOIN mem ON mem.user_id = a.user_id CROSS JOIN b
-      WHERE a.gym_id = ${input.gymId}
-        AND a.day > b.engaged_from AND a.day <= b.quiet_from
-    ),
-    -- HAS GONE QUIET: no visit at all inside the window. NOT EXISTS rather than
-    -- a LEFT JOIN with a NULL test, because the join would have to be
-    -- de-duplicated first and a missed DISTINCT there is silent.
-    quiet AS (
-      SELECT e.user_id
-      FROM engaged e CROSS JOIN b
-      WHERE NOT EXISTS (
-        SELECT 1 FROM gym_attendance a
-        WHERE a.gym_id = ${input.gymId} AND a.user_id = e.user_id
-          AND a.day > b.quiet_from AND a.day <= b.today
-      )
-    )
-    SELECT q.user_id,
-           u.display_name,
-           -- LIFETIME, both of these, and NOT bounded by the windows above --
-           -- Part 3 section 4.1's "sorted by lifetime workouts desc (save the
-           -- most invested first)" under :26469's substitution. It is a
-           -- DIFFERENT span from orgRegularSchema's visits, which covers its
-           -- streak's own stretch so that two figures on one row describe one
-           -- period (:30624). Two fields named visits meaning different spans is
-           -- exactly that defect waiting to happen, and the screen says which.
-           (SELECT max(v.day)::text FROM gym_attendance v
-             WHERE v.gym_id = ${input.gymId} AND v.user_id = q.user_id) AS last_visit_day,
-           (SELECT count(*) FROM gym_attendance v
-             WHERE v.gym_id = ${input.gymId} AND v.user_id = q.user_id) AS visits,
-           -- WHEN THIS GYM MAY NUDGE THEM AGAIN -- the server's answer to the
-           -- server's own rule, so two open consoles cannot disagree. NULL means
-           -- the window is open now.
-           --
-           -- **PART 3 SECTION 4.1's ROLLING SEVEN DAYS, WHICH IS NEITHER THE
-           -- CHEER'S CALENDAR GYM-DAY NOR KD'S THREE-DAY QUIET WINDOW.**
-           -- :35762 section 1 rules that the spec's rate-limit describes THIS
-           -- feature and is not loosened by the cheer's cap; :36816 moved the
-           -- quiet window and left this one alone. Three numbers, one edit away
-           -- from being wrongly unified.
-           --
-           -- NO BACKTICKS IN THIS COMMENT: it lives inside a sql template
-           -- literal, where one would END the template (:30094 3b, :31098 --
-           -- walked into a third time on the sibling of this very query).
-           --
-           -- The interval is added to the ROW'S OWN created_at rather than
-           -- computed from now(), so the answer is the instant the window
-           -- actually reopens and not a duration a screen must add to something.
-           (SELECT max(n.created_at) + interval '7 days'
-              FROM gym_nudges n
-             WHERE n.gym_id = ${input.gymId} AND n.user_id = q.user_id
-               AND n.created_at > now() - interval '7 days') AS nudgeable_at
-    FROM quiet q
-    JOIN users u ON u.id = q.user_id
-    -- FOUR KEYS, because the first three can tie and an unstable ORDER BY makes
-    -- a list that reshuffles on every reload. user_id last is the tiebreak that
-    -- cannot tie.
-    ORDER BY (SELECT count(*) FROM gym_attendance v
-               WHERE v.gym_id = ${input.gymId} AND v.user_id = q.user_id) DESC,
-             (SELECT max(v.day) FROM gym_attendance v
-               WHERE v.gym_id = ${input.gymId} AND v.user_id = q.user_id) DESC,
-             u.display_name ASC, q.user_id ASC
-    LIMIT ${limit}`;
-
-  return {
-    rows: rows.map((r) => ({
-      userId: r.user_id,
-      displayName: r.display_name,
-      lastVisitDay: r.last_visit_day,
-      // int8 arrives as a string; this Number() is real work, unlike the two
-      // that lint deleted from getGymRegulars.
-      visits: Number(r.visits),
-      nudgeableAt: r.nudgeable_at,
-    })),
-    hasHistory,
-    since,
-  };
-}
-
-export type SendNudgeOutcome =
-  | { kind: "sent"; preset: GymNudgePreset; sentAt: Date }
-  | { kind: "not_found" }
-  /** NO `nudgeableAt` HERE, deliberately — `sendGymCheer`'s sibling made the
-   *  same mistake and T3 round 1 struck it (L-3). The 409 carries a status, a
-   *  code and a sentence; the instant reaches a screen on the overview payload,
-   *  which a stale page needs re-read anyway. */
-  | { kind: "too_soon" };
-
-/** A GYM ASKS SOMEBODY TO COME BACK — Part 3 §4.1's one-tap nudge, and the
- *  SEVENTEENTH write door in this module.
- *
- *  **THE CAP IS PART 3 §4.1's `rate-limit 1/member/7d` AND IT IS ROLLING, WHICH
- *  IS WHY NO CONSTRAINT ENFORCES IT.** No UNIQUE or CHECK in Postgres can express
- *  a rolling window. **DO NOT COPY `sendGymCheer`'s CURRENT REASONING ACROSS AND
- *  DO NOT COPY THIS ONE BACK**: the cheer's cap USED to be rolling and stopped
- *  being when Kd made it a calendar gym-day (:35762), which a stored day column
- *  plus a UNIQUE *could* express — so the paragraph that is dead there is alive
- *  here, and the two docblocks disagree on purpose.
- *
- *  **THE CHECK-THEN-ACT IS SAFE FOR THE SEAT CLAIM'S REASON**: `lockOrgRow`
- *  serialises it, so two members of staff pressing at once cannot both pass.
- *  **WITHOUT THE LOCK IT IS A REAL RACE AND NOT A THEORETICAL ONE** — a gym's
- *  staff sit at one desk, and the button is on the screen they all land on.
- *
- *  **THE RECIPIENT MUST BE A LIVE, NON-COMPLIMENTARY MEMBER OF THIS GYM AND THAT
- *  IS THE WHOLE CONDITION** (:27992 §2 — the app never asks whether a member has
- *  paid the gym; `members.remove` is the gym's remedy for anyone else). A
- *  stranger's uuid answers `not_found` rather than a sentence distinguishing "no
- *  such person" from "not your member" (R3.2).
- *
- *  **IT DOES NOT CHECK THAT THE MEMBER IS ACTUALLY ON THE LIST, AND THAT IS A
- *  DECISION.** The list is a view over a query that moves with the clock: a
- *  member listed when the console was drawn can have walked in before the button
- *  was pressed. Refusing on that would produce *"that person isn't slipping
- *  away"* for somebody the owner is looking at — a race reported as a mistake.
- *  The cap is what stops the door being abused, and it is the same shape
- *  `sendGymCheer` uses for the same reason.
- *
- *  **IT WRITES NOTHING INTO `gym_cheers` AND NOTHING HERE IS READ BY THE CHEER'S
- *  CAP** — the two tables are separate precisely so that a nudge cannot block a
- *  cheer or arrive on the member's card wearing a cheer's clothes
- *  (`0022_gym_nudges.sql` §1). */
-export async function sendGymNudge(
-  sql: Sql,
-  input: { gymId: string; userId: string; sentByUserId: string; preset: GymNudgePreset },
-): Promise<SendNudgeOutcome> {
-  return await sql.begin(async (tx) => {
-    // The trailing note is not decoration, and :21157 and `sendGymCheer` both
-    // wrote one for the same reason: `await lockOrgRow(tx, input.gymId);`
-    // appears a dozen times in this file, so a mutant aimed at THIS lock needs
-    // the line to name its own subject (:27204 §6 — an anchor is lengthened to
-    // reach something unique to its subject, never to include its
-    // neighbourhood).
-    await lockOrgRow(tx, input.gymId); // the only guarantee behind the nudge cap, O286
-
-    // `complimentary = false` MATCHES THE LIST'S OWN POPULATION. Without it the
-    // door and the panel disagree: a comped member can never be drawn on the
-    // panel (the `mem` CTE excludes them) and could still be nudged by a
-    // hand-made request. `sendGymCheer` shipped that exact gap and a review
-    // found it.
-    //
-    // THE TRAILING SQL COMMENT IS LOAD-BEARING AND IS NOT DECORATION — the lock
-    // line above carries one for the same reason (:21157, :27204 §6). This
-    // predicate is textually IDENTICAL to `sendGymCheer`'s, and O268 anchors on
-    // that exact line: adding this function made its anchor match TWICE, and the
-    // harness's whole-table pre-check ABORTED before a byte was written
-    // (:15770's guard doing its job, :5199's class). **The fix is to make the
-    // SOURCE unique, never to re-aim the old mutant at whichever line comes
-    // first** — and a single unique line beats a two-line anchor, which is
-    // :17676's 99-strong CRLF hazard.
-    const member = await tx<{ one: number }[]>`
-      SELECT 1 AS one FROM gym_members
-      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
-        AND removed_at IS NULL AND complimentary = false -- the nudge's own, O289
-    `;
-    if (member.length === 0) return { kind: "not_found" };
-
-    // A ROLLING SEVEN DAYS, READ INSIDE THE LOCK — Part 3 §4.1's
-    // `rate-limit 1/member/7d`, quoted and not chosen (V2).
-    //
-    // **NO ZONE IS READ HERE AND THAT IS THE DIFFERENCE FROM `sendGymCheer`,
-    // WHICH JOINS `gyms` FOR ITS TIMEZONE.** A rolling window is a duration and
-    // has no calendar in it, so bucketing by a zone would be work that changes
-    // nothing — and copying that join across would invite the next reader to
-    // think this cap has a midnight. It does not: seven days after 11pm Tuesday
-    // is 11pm the following Tuesday, in every zone at once.
-    //
-    // **`now()` IS THE TRANSACTION'S CLOCK**, so a send and its guard cannot
-    // straddle the boundary.
-    const recent = await tx<{ one: number }[]>`
-      SELECT 1 AS one
-      FROM gym_nudges n
-      WHERE n.gym_id = ${input.gymId} AND n.user_id = ${input.userId}
-        AND n.created_at > now() - interval '7 days'
-      LIMIT 1`;
-    if (recent.length > 0) return { kind: "too_soon" };
-
-    const inserted = await tx<{ preset: string; created_at: Date }[]>`
-      INSERT INTO gym_nudges (gym_id, user_id, sent_by_user_id, preset)
-      VALUES (${input.gymId}, ${input.userId}, ${input.sentByUserId}, ${input.preset})
-      RETURNING preset, created_at`;
-    const row = inserted[0];
-    // Unreachable: a plain INSERT with no ON CONFLICT either returns its row or
-    // throws. Asserted rather than non-null-asserted, which R2.2 bans here.
-    if (row === undefined) throw new Error("nudge vanished inside its own transaction");
-
-    // Part 3 §3.3: every mutating call writes `audit_log`. THIS DOOR IS A STAFF
-    // ACTION BEHIND A PRIVILEGE, which is the whole of the test — and the
-    // exemption a chat reaches for here (`:28221` §7) says the OPPOSITE, which
-    // was a Critical/High on this feature's sibling (:34443 C/H-3). That
-    // exemption is about a MEMBER tapping "I'm here" several hundred times a
-    // day; `markGymAttendance`'s own docblock draws the line: *"every other
-    // writer in this module is a console action behind a privilege"*.
-    //
-    // It is also the only record of WHICH staffer sent it — the member is
-    // deliberately never told (§2.4), and here that matters more than it does
-    // for a cheer: they are never told the list exists either.
-    //
-    // THE TRAILING MARKER IS LOAD-BEARING, for the membership predicate's
-    // reason two blocks up: this call is textually identical to
-    // `sendGymCheer`'s, O275 anchors on its first two lines, and writing this
-    // function made that anchor match twice — the pre-check aborted before a
-    // byte was written (:15770). **The SOURCE is what is made unique, never the
-    // old mutant re-aimed at whichever line comes first.**
-    await insertAudit(tx, { // the nudge's own, O296
-      actorUserId: input.sentByUserId,
-      gymId: input.gymId,
-      action: "org.member_nudged",
-      targetType: "user",
-      targetId: input.userId,
-      meta: { preset: input.preset },
-    });
-
-    return {
-      kind: "sent",
-      preset: gymNudgePresetSchema.parse(row.preset),
-      sentAt: row.created_at,
-    };
-  });
-}
-
-export type SendCheerOutcome =
-  | { kind: "sent"; preset: GymCheerPreset; sentAt: Date }
-  | { kind: "not_found" }
-  /** NO `cheerableAt` HERE, deliberately. The 409 does not carry the instant —
-   *  `service.ts` says why, and `cheerableAt` on the overview payload is where a
-   *  screen gets it. This carried one that every caller discarded, which is a
-   *  value that looks like an answer nobody is using (T3 round 1, L-3). */
-  | { kind: "too_soon" };
-
-/** ONE TAP — Kd's :29961 ruling 4.
- *
- *  **THE CAP IS ONE PER MEMBER PER GYM-DAY — Kd, :35762, REVERSING HIS OWN
- *  *"one per member per week"* at :29961 ruling 4** after seeing it on screen:
- *  *"after chering gym can sheer after 7 days men what is even this"*. **Part 3
- *  §4.1's `rate-limit 1/member/7d` describes the AT-RISK NUDGE, a different
- *  feature, and is NOT loosened by this.**
- *
- *  **IT IS STILL CHECKED HERE UNDER THE GYM LOCK RATHER THAN BY A CONSTRAINT,
- *  BUT THE REASON HAS CHANGED AND THE OLD ONE MUST NOT BE QUOTED.** A ROLLING
- *  seven days was inexpressible as a UNIQUE (the migration says so at length,
- *  including the `EXCLUDE USING gist` route that would and the extension it
- *  would cost). **A calendar day is not inexpressible** — a stored gym-day
- *  column plus `UNIQUE (gym_id, user_id, day)` would carry it, which is exactly
- *  what `gym_attendance` does (:27992 §1, *"the ruling lives in a constraint
- *  rather than a comment"*). **That was NOT built, deliberately: it is a
- *  migration, a backfill and a second writer of the gym's day, against a lock
- *  that already exists and is already proven (O274).** R1.1 — the ruling was a
- *  rule change, not a schema change. **If this cap is ever contended in earnest,
- *  the constraint is the upgrade and this comment is where to start.**
- *
- *  The check-then-act is safe for the reason the seat claim is: `lockOrgRow`
- *  serialises it, so two members of staff pressing at once cannot both pass.
- *
- *  **WITHOUT THE LOCK IT IS A REAL RACE AND NOT A THEORETICAL ONE** — a gym's
- *  staff sit at one desk, and the button is on the screen they all land on.
- *
- *  **THE RECIPIENT MUST BE A LIVE MEMBER OF THIS GYM AND THAT IS THE WHOLE
- *  CONDITION** (:27992 §2 — the app never asks whether a member has paid the
- *  gym; `members.remove` is the gym's remedy for anyone else). A stranger's uuid
- *  answers `not_found` rather than a sentence distinguishing "no such person"
- *  from "not your member" (R3.2). */
-export async function sendGymCheer(
-  sql: Sql,
-  input: { gymId: string; userId: string; sentByUserId: string; preset: GymCheerPreset },
-): Promise<SendCheerOutcome> {
-  return await sql.begin(async (tx) => {
-    // The trailing note is not decoration, and :21157 wrote the same one for the
-    // same reason: `await lockOrgRow(tx, input.gymId);` appears a dozen times in
-    // this file, so a mutant aimed at THIS lock needs the line to name its own
-    // subject — an anchor is lengthened to reach something unique to its
-    // subject, never to include its neighbourhood (:27204 §6).
-    await lockOrgRow(tx, input.gymId); // the only guarantee behind the cap, O274
-
-    // `complimentary = false` MATCHES THE LIST'S OWN POPULATION. Without it the
-    // door and the panel disagree: a comped member can never be drawn on the
-    // panel (the `mem` CTE excludes them) and could still be cheered by a
-    // hand-made request. The card names both halves — a LIVE, non-complimentary
-    // member — and only one of them was built.
-    const member = await tx<{ one: number }[]>`
-      SELECT 1 AS one FROM gym_members
-      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
-        AND removed_at IS NULL AND complimentary = false`;
-    if (member.length === 0) return { kind: "not_found" };
-
-    // THE GYM'S OWN DAY, READ INSIDE THE LOCK — Kd's :35762, one cheer per
-    // member per day, superseding his own rolling seven of :29961 ruling 4.
-    //
-    // **THE ZONE COMES OFF THE `gyms` ROW IN THIS SAME QUERY, and that is not
-    // tidiness.** Both sides of the comparison have to be bucketed by the SAME
-    // zone or the boundary moves between them; passing a zone in from JavaScript
-    // gives a second copy that can drift from the one `getGymRegulars` uses, and
-    // the two answers appear on one screen. The row is already locked above, so
-    // reading it again here is consistent by construction.
-    //
-    // **THIS IS A CALENDAR DAY AND NOT 24 HOURS, WHICH IS THE WHOLE RULING.** A
-    // member cheered at 9am cannot be cheered again that evening; one cheered at
-    // 11pm can be cheered at 12:01am. Kd was shown that second consequence
-    // before he ruled — the alternative was a gym unable to greet somebody
-    // standing in front of it (:35762 §2). **`now()` is the transaction's
-    // clock**, so a send at 23:59:59.9 and its guard cannot straddle midnight.
-    const recent = await tx<{ one: number }[]>`
-      SELECT 1 AS one
-      FROM gym_cheers c
-      JOIN gyms g ON g.id = c.gym_id
-      WHERE c.gym_id = ${input.gymId} AND c.user_id = ${input.userId}
-        AND (c.created_at AT TIME ZONE g.timezone)::date
-          = (now() AT TIME ZONE g.timezone)::date
-      LIMIT 1`;
-    if (recent.length > 0) return { kind: "too_soon" };
-
-    const inserted = await tx<{ preset: string; created_at: Date }[]>`
-      INSERT INTO gym_cheers (gym_id, user_id, sent_by_user_id, preset)
-      VALUES (${input.gymId}, ${input.userId}, ${input.sentByUserId}, ${input.preset})
-      RETURNING preset, created_at`;
-    const row = inserted[0];
-    // Unreachable: a plain INSERT with no ON CONFLICT either returns its row or
-    // throws. Asserted rather than non-null-asserted, which R2.2 bans here.
-    if (row === undefined) throw new Error("cheer vanished inside its own transaction");
-
-    // Part 3 §3.3: every mutating call writes `audit_log`. THIS DOOR IS A STAFF
-    // ACTION BEHIND A PRIVILEGE, which is the whole of the test — the exemption
-    // this card originally cited (`:28221` §7) is about a MEMBER tapping "I'm
-    // here" several hundred times a day, and `markGymAttendance`'s own docblock
-    // spells out the distinction: *"every other writer in this module is a
-    // console action behind a privilege"*. A cheer is one of those, and Kd's
-    // own cap — one per member per gym-day (:35762) — is what disposes of the volume
-    // half of that reasoning. It is also the only record of WHICH staffer sent
-    // it — the member is deliberately never told (§2.4).
-    await insertAudit(tx, {
-      actorUserId: input.sentByUserId,
-      gymId: input.gymId,
-      action: "org.member_cheered",
-      targetType: "user",
-      targetId: input.userId,
-      meta: { preset: input.preset },
-    });
-
-    return {
-      kind: "sent",
-      preset: gymCheerPresetSchema.parse(row.preset),
-      sentAt: row.created_at,
-    };
-  });
-}
+// Orgs repo — gyms / gym_codes / gym_members / gym_staff /
+// gym_join_applications (v1 §6.2). Every query that reads or writes a
+// tenant-owned row carries the gym id (and, for "my orgs" and the applicant's
+// own list, the user id) in its WHERE — a fetch-by-id alone would be an IDOR
+// (R3.2).
+//
+// THE HEADER USED TO SAY "the ONLY file that touches" those tables AND THAT
+// WAS ALREADY FALSE when it was written: the DPDP Day-0 flow in
+// `modules/users/repo.ts` closes `gym_members` inline, because the deletion
+// cascade is cross-cutting and R7.1 forbids it calling into this repo. The
+// 2026-08-19 waiting-room card added a second such statement beside it
+// (cancelling pending applications) and corrected this sentence rather than
+// adding a second breach of a rule the file claimed to keep. A record is a
+// claim (:8707): the two DPDP statements are the whole exception, and any
+// THIRD writer of these tables is a defect, not a precedent.
+import type { Sql, TransactionSql } from "postgres";
+import { slotKeyFor } from "./attendanceSlot.js";
+import { streaks, visitsWithOwner } from "./leaderboard/visits.js";
+import {
+  ATTENDANCE_PAGE_LIMIT,
+  ATTENDANCE_SUMMARY_LIMIT,
+  ATTENDANCE_VISITS_PER_PERSON,
+  gymAttendanceHoursStatusSchema,
+  gymAttendanceMethodSchema,
+  gymCheerPresetSchema,
+  gymClockFormatSchema,
+  gymHoursModeSchema,
+  gymNudgePresetSchema,
+  GYM_TRIAL_MEMBERS,
+  LEADERBOARD_CHECKIN_DAYS,
+  ON_A_ROLL_LIMIT,
+  ON_A_ROLL_MIN_SPAN_DAYS,
+  ON_A_ROLL_MIN_WEEKS,
+  OVERVIEW_MONTH_DAYS,
+  OVERVIEW_WEEKS,
+  SLIPPING_AWAY_ENGAGED_DAYS,
+  SLIPPING_AWAY_LIMIT,
+  SLIPPING_AWAY_MIN_HISTORY_DAYS,
+  SLIPPING_AWAY_MIN_MEMBERSHIP_DAYS,
+  SLIPPING_AWAY_QUIET_DAYS,
+  orgApplicationStatusSchema,
+  orgRoleSchema,
+  orgStatusSchema,
+  orgSubscriptionStatusSchema,
+  orgTypeSchema,
+  planIntervalSchema,
+} from "@app/shared";
+import type {
+  GymAttendanceHoursStatus,
+  GymAttendanceMethod,
+  GymCheerPreset,
+  GymClockFormat,
+  GymHoursMode,
+  GymNudgePreset,
+  OrgApplicationStatus,
+  OrgRole,
+  OrgStatus,
+  OrgSubscriptionStatus,
+  OrgType,
+  PlanInterval,
+} from "@app/shared";
+
+type SqlOrTx = Sql | TransactionSql;
+
+export interface OrgRow {
+  id: string;
+  slug: string;
+  name: string;
+  city: string | null;
+  /** ISO 3166-1 alpha-2, or `null` for a gym created before migration `0014`
+   *  wrote the column — the wizard asked and the server discarded the answer. */
+  country: string | null;
+  orgType: OrgType;
+  timezone: string;
+  locale: string;
+  currencyDisplay: string;
+  /** Which clock this gym reads its hours on (Kd, 2026-09-01). Carried on
+   *  the ORG row as well as on the hours response, because the console
+   *  holds this row before it asks for hours and the switch must work on
+   *  a gym that has never set any. */
+  clockFormat: GymClockFormat;
+  /** MAY A MEMBER MARK THEMSELVES PRESENT (:26469 §1.4). On the org row for
+   *  `clockFormat`'s reason — the console holds it before it asks for anything
+   *  else, and the member's gym card needs it to decide whether to DRAW the
+   *  "I'm here" button at all. */
+  manualAttendanceEnabled: boolean;
+  status: OrgStatus;
+}
+
+export interface MyOrgRow extends OrgRow {
+  staffRole: OrgRole | null;
+  /** THE STORED TICKS ON THE CALLER'S OWN STAFF ROW, raw. `null` means either no
+   *  staff row at all (a plain member) or a row written before the column
+   *  existed — the service's `privilegesFor` is the one place that tells those
+   *  apart, exactly as it does for `getStaffAuthority`. Never interpreted here
+   *  (T3 round 1 C/H-1). */
+  privileges: string[] | null;
+  /** The gym's live subscription, or null when it has none. Read for EVERY row
+   *  and withheld from non-staff callers by the service, in the same place and
+   *  for the same reason `privileges` is interpreted there — one function
+   *  decides who is told what about a gym. */
+  subscription: GymSubscriptionRow | null;
+  /** Live members occupying a paid place, by `claimSeat`'s own rule. Always a
+   *  number here; the service nulls it for a caller who is not staff. */
+  seatsUsed: number;
+  /** Has the OWNER OF THIS GYM already spent their one free trial, ever —
+   *  `startGymTrial`'s own refusal condition, asked ahead of the press so a
+   *  screen can stop offering what the door will refuse. Always a boolean here;
+   *  the service nulls it for a caller who is not staff, as it does the two
+   *  fields above. */
+  ownerTrialUsed: boolean;
+  /** The gym's postal address for its invitations; the service withholds it from a
+   *  caller who is not staff. */
+  postalAddress: string | null;
+  /** IS THIS GYM'S CONSOLE READ-ONLY — i.e. will every write route refuse it.
+   *  Derived from the SAME lateral `subscription` comes out of, so this reader
+   *  cannot disagree with itself about what a live plan is. Always a boolean
+   *  here; the service nulls it for a caller who is not staff, as it does the
+   *  three fields above.
+   *
+   *  **The other reader of this rule is `gymHasLivePlan` below, and what stops
+   *  the two drifting is a TEST rather than a shared fragment** (R3.8 forbids
+   *  the fragment; :14493's Low-2 is what drift costs). That test drives this
+   *  FIELD and a refused WRITE across one gym's transition from trialling to
+   *  expired — :21580's seat-meter precedent, the same instrument for the same
+   *  hazard. */
+  consoleReadOnly: boolean;
+  /** The console is read-only because a paid plan's payment is overdue, not because a
+   *  trial ended: the fix is the card on Paddle's page (ROADMAP Stage 3 item 1c-i). */
+  paymentOverdue: boolean;
+  /** Who is owed that payment: Paddle, or Razorpay for an Indian gym (1d-i). Null when none is. */
+  paymentOverdueThrough: "paddle" | "razorpay" | null;
+  /** An Indian gym's owner's mobile for its payments (1d-i); the service shows it only to
+   *  staff who manage billing. */
+  billingMobile: string | null;
+  /** THE NEWEST CHEER THIS GYM HAS SENT THE CALLER, or null — Kd's :29961
+   *  ruling 4 reaching the member, and the whole of its delivery.
+   *
+   *  **UNLIKE THE FOUR FIELDS ABOVE, THIS ONE IS FOR A PLAIN MEMBER** and the
+   *  service does NOT null it for a non-staff caller. Those four are facts about
+   *  the GYM that §2.4 keeps from a member; this is a message addressed TO them,
+   *  and withholding it would hide the feature from the only person it is for.
+   *
+   *  **It carries the preset and the instant, never the sender.**
+   *  `gym_cheers.sent_by_user_id` is stored and deliberately not read here —
+   *  §2.4's mirror, a member learns their gym cheered them and not who was on
+   *  the desk. */
+  latestCheer: { preset: string; sentAt: Date } | null;
+  /** THE NEWEST *"we miss you"* THIS GYM HAS SENT THE CALLER, or null — Part 3
+   *  §4.1's nudge reaching the member, and the whole of its delivery.
+   *
+   *  **IT IS FOR A PLAIN MEMBER, LIKE `latestCheer` AND UNLIKE THE FIELDS ABOVE
+   *  IT**, and the service does not null it for a non-staff caller: it is a
+   *  message addressed TO them.
+   *
+   *  **IT CARRIES THE PRESET AND THE INSTANT, NEVER THE SENDER, AND NEVER THE
+   *  FACT THAT A LIST EXISTS.** §2.4's mirror, one step further than the cheer
+   *  needs it: a member learns their gym is thinking of them, not that their gym
+   *  has a screen headed *"slipping away"* with their name on it.
+   *
+   *  **ONE OF THESE TWO FIELDS REACHES THE SCREEN, NEVER BOTH** — Kd's own
+   *  question (:36694 §3): exactly one line draws on a gym's card, the newer.
+   *  They are two fields here because the SENDER'S side needs them apart. */
+  latestNudge: { preset: string; sentAt: Date } | null;
+  isMember: boolean;
+  joinedAt: Date | null;
+}
+
+export interface MembershipRow {
+  id: string;
+  joinedAt: Date;
+  groupLabel: string | null;
+}
+
+export interface MemberRow {
+  id: string;
+  userId: string;
+  displayName: string;
+  joinedAt: Date;
+  groupLabel: string | null;
+  complimentary: boolean;
+  /** Does this person occupy one of the gym's paid places? Derived, never
+   *  stored — see `listMembers`, which writes out `claimSeat`'s count rule. */
+  takesSeat: boolean;
+  /** The name on the gym's list of the record this membership was joined through
+   *  (§10.2), or null when it names none. */
+  listName: string | null;
+  /** They also run this gym: their staff role and the gym's own name for it. */
+  staff: { role: OrgRole; roleName: string | null } | null;
+}
+
+export interface CodeRow {
+  code: string;
+  label: string;
+  paused: boolean;
+  expiresAt: Date | null;
+  maxUses: number | null;
+  /** People in the gym NOW who came through this code — see `toCodeRow`. */
+  joined: number;
+}
+
+/** A join application as its own applicant sees it (Kd ruling :11072). */
+export interface ApplicationRow {
+  id: string;
+  status: OrgApplicationStatus;
+  appliedAt: Date;
+  expiresAt: Date;
+  decidedAt: Date | null;
+  /** Last time this person tapped "Remind them" (:11385 mechanic 3). */
+  nudgedAt: Date | null;
+}
+
+/** One row of the console's confirm queue. */
+export interface ApplicantRow {
+  id: string;
+  userId: string;
+  displayName: string;
+  appliedAt: Date;
+  expiresAt: Date;
+  groupLabel: string;
+  /** Stamped by the reminder sweep, and read by the expiry statement before it
+   *  is allowed to touch this row — one fact, so the mark the owner sees and
+   *  the gate the machine obeys cannot disagree (:11385's ordering rule). */
+  gymNotifiedAt: Date | null;
+  nudgedAt: Date | null;
+}
+
+interface RawOrg {
+  id: string;
+  slug: string;
+  name: string;
+  city: string | null;
+  country: string | null;
+  org_type: string;
+  timezone: string;
+  locale: string;
+  currency_display: string;
+  clock_format: string;
+  manual_attendance_enabled: boolean;
+  status: string;
+}
+
+interface RawApplication {
+  id: string;
+  status: string;
+  applied_at: Date;
+  expires_at: Date;
+  decided_at: Date | null;
+  member_nudged_at: Date | null;
+}
+
+/** The DB CHECK constraints (Part 4 §3.2) already guarantee these vocabularies.
+ *  Parsing rather than casting (R2.2) means that if a constraint is ever
+ *  dropped, this throws loudly here instead of quietly widening a response
+ *  shape the clients trust. */
+function toOrgType(value: string): OrgType {
+  return orgTypeSchema.parse(value);
+}
+function toOrgStatus(value: string): OrgStatus {
+  return orgStatusSchema.parse(value);
+}
+function toOrgRole(value: string): OrgRole {
+  return orgRoleSchema.parse(value);
+}
+function toApplicationStatus(value: string): OrgApplicationStatus {
+  return orgApplicationStatusSchema.parse(value);
+}
+
+function toApplicationRow(raw: RawApplication): ApplicationRow {
+  return {
+    id: raw.id,
+    status: toApplicationStatus(raw.status),
+    appliedAt: raw.applied_at,
+    expiresAt: raw.expires_at,
+    decidedAt: raw.decided_at,
+    nudgedAt: raw.member_nudged_at,
+  };
+}
+
+function toOrgRow(raw: RawOrg): OrgRow {
+  return {
+    id: raw.id,
+    slug: raw.slug,
+    name: raw.name,
+    city: raw.city,
+    country: raw.country,
+    orgType: toOrgType(raw.org_type),
+    timezone: raw.timezone,
+    locale: raw.locale,
+    currencyDisplay: raw.currency_display,
+    clockFormat: gymClockFormatSchema.parse(raw.clock_format),
+    manualAttendanceEnabled: raw.manual_attendance_enabled,
+    status: toOrgStatus(raw.status),
+  };
+}
+
+/** A 23505 from any statement in this module. TS narrows via `in` — no cast. */
+function isUniqueViolation(err: unknown): boolean {
+  return typeof err === "object" && err !== null && "code" in err && err.code === "23505";
+}
+
+/** Which unique index a 23505 came from. `gyms.slug` and `gym_codes.code` are
+ *  both minted from randomness and both retried, but they are retried
+ *  DIFFERENTLY (a slug keeps the readable stem, a code is thrown away whole),
+ *  so the caller has to be able to tell them apart. */
+export type TakenWhat = "slug" | "code";
+
+export class OrgNameTakenError extends Error {
+  readonly what: TakenWhat;
+  constructor(what: TakenWhat) {
+    super(`org create lost a uniqueness race on ${what}`);
+    this.name = "OrgNameTakenError";
+    this.what = what;
+  }
+}
+
+export interface CreateOrgInput {
+  ownerUserId: string;
+  slug: string;
+  name: string;
+  city: string | null;
+  /** The country the wizard asked for, STORED from this card on. It used to
+   *  reach the service, become a currency and evaporate — so every gym created
+   *  before migration `0014` reads back `null` and no honest backfill exists. */
+  country: string;
+  orgType: OrgType;
+  timezone: string;
+  locale: string;
+  currencyDisplay: string;
+  /** The gym's first join code; null while join codes are switched off (ROADMAP 3c). */
+  code: { code: string; label: string } | null;
+  /** An Indian gym's owner's mobile for its payments (`+91…`), already read by the service. */
+  billingMobile: string | null;
+  /** The owner's "Do you train here too?": yes is an ordinary seat (§10.4). */
+  trainsHere: boolean;
+  /** The owner's starting ticks, computed by the service from the owner role's
+   *  template — policy stays in one place, storage in this one. */
+  ownerPrivileges: readonly string[];
+}
+
+export interface CreateOrgResult {
+  org: OrgRow;
+  code: { code: string; label: string } | null;
+}
+
+/** One attempt at Part 3 §4.0's steps 1 and 4 as a single transaction: the org, its
+ *  owner staff row, its first join code (none while codes are switched off), and — only when the owner answered yes to "Do
+ *  you train here too?" — the owner's membership, an ordinary seat (§10.4). All or
+ *  none.
+ *
+ *  Throws `OrgNameTakenError` on a uniqueness race; the SERVICE decides how to
+ *  retry, because it owns the randomness. */
+export async function createOrgAttempt(
+  sql: Sql,
+  input: CreateOrgInput,
+): Promise<CreateOrgResult> {
+  try {
+    return await sql.begin(async (tx) => {
+      const orgRows = await tx<RawOrg[]>`
+        INSERT INTO gyms (slug, name, city, country, org_type, timezone, locale,
+                          currency_display, owner_user_id, billing_mobile)
+        VALUES (${input.slug}, ${input.name}, ${input.city}, ${input.country},
+                ${input.orgType}, ${input.timezone}, ${input.locale},
+                ${input.currencyDisplay}, ${input.ownerUserId}, ${input.billingMobile})
+        RETURNING id, slug, name, city, country, org_type, timezone, locale,
+                  currency_display, clock_format, manual_attendance_enabled, status`;
+      const rawOrg = orgRows[0];
+      if (rawOrg === undefined) throw new Error("INSERT INTO gyms returned no row");
+      const org = toOrgRow(rawOrg);
+
+      // The owner's ticks are written HERE, with the row, for the same reason
+      // an appointment's are: a staff record whose effective set arrives later
+      // is a record whose authority depends on when you looked. This is the
+      // SECOND writer of `gym_staff` in the product and the one that is easy to
+      // forget — the ticks card's own tests caught it doing exactly that.
+      await tx`
+        INSERT INTO gym_staff (gym_id, user_id, role, privileges)
+        VALUES (${org.id}, ${input.ownerUserId}, 'owner', ${[...input.ownerPrivileges]})`;
+
+      let code: { code: string; label: string } | null = null;
+      if (input.code !== null) {
+        const codeRows = await tx<{ id: string; code: string; label: string }[]>`
+          INSERT INTO gym_codes (gym_id, code, label)
+          VALUES (${org.id}, ${input.code.code}, ${input.code.label})
+          RETURNING id, code, label`;
+        const codeRow = codeRows[0];
+        if (codeRow === undefined) throw new Error("INSERT INTO gym_codes returned no row");
+        code = { code: codeRow.code, label: codeRow.label };
+      }
+
+      // The owner's place is asked, never given (§10.4): a yes is an ordinary seat,
+      // counted like anyone's, through no code, with the answer's time as its consent.
+      if (input.trainsHere) {
+        await tx`
+          INSERT INTO gym_members (gym_id, user_id, code_id, consent_at, complimentary)
+          VALUES (${org.id}, ${input.ownerUserId}, NULL, now(), false)`;
+      }
+
+      await insertAudit(tx, {
+        actorUserId: input.ownerUserId,
+        gymId: org.id,
+        action: "org.created",
+        targetType: "gym",
+        targetId: org.id,
+        meta: { orgType: org.orgType },
+      });
+
+      return { org, code };
+    });
+  } catch (err) {
+    if (isUniqueViolation(err)) {
+      // Only two unique constraints are reachable from this transaction.
+      const constraint =
+        typeof err === "object" && err !== null && "constraint_name" in err
+          ? String(err.constraint_name)
+          : "";
+      throw new OrgNameTakenError(constraint.includes("code") ? "code" : "slug");
+    }
+    throw err;
+  }
+}
+
+/** How many orgs `/mine` will return. A person belongs to one or two gyms; a
+ *  multi-site owner might reach a dozen. The bound exists so the response has a
+ *  ceiling at all (T3 round 1 L-4) — an unbounded list is a shape that works
+ *  until the day it does not. Its own `OWED.md` line covers paginating this
+ *  properly if anyone ever approaches it. */
+export const MY_ORGS_LIMIT = 100;
+
+/** Every org the caller has ANY relationship with. One row per org even when
+ *  they are both staff and member (the default for an owner), so a caller can
+ *  never render the same gym twice. */
+export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyOrgRow[]> {
+  const rows = await sql<
+    (RawOrg & {
+      staff_role: string | null;
+      privileges: string[] | null;
+      is_member: boolean;
+      joined_at: Date | null;
+      sub_status: string | null;
+      sub_trial_ends_at: Date | null;
+      sub_seat_cap: number | null;
+      sub_plan_seat_cap: number | null;
+      sub_price_minor: number | null;
+      sub_currency: string | null;
+      sub_current_period_end: Date | null;
+      sub_cancel_at_period_end: boolean | null;
+      sub_cancel_sent_at: Date | null;
+      sub_provider: string | null;
+      sub_pending_seat_cap: number | null;
+      sub_pending_price_minor: number | null;
+      sub_pending_from: Date | null;
+      sub_trial_seat_cap: number | null;
+      sub_kept_seat_cap: number | null;
+      sub_kept_members: number | null;
+      sub_fitted_asked_seat_cap: number | null;
+      sub_fitted_members: number | null;
+      payment_overdue: boolean;
+      overdue_provider: string | null;
+      billing_mobile: string | null;
+      seats_used: number;
+      owner_trial_used: boolean;
+      postal_address: string | null;
+      cheer_preset: string | null;
+      cheer_sent_at: Date | null;
+      nudge_preset: string | null;
+      nudge_sent_at: Date | null;
+    })[]
+  >`
+    SELECT g.id, g.slug, g.name, g.city, g.country, g.org_type, g.timezone,
+           g.locale, g.currency_display, g.clock_format, g.manual_attendance_enabled, g.status,
+           g.postal_address,
+           g.billing_mobile,
+           s.role AS staff_role,
+           s.privileges,
+           (m.id IS NOT NULL) AS is_member,
+           m.joined_at,
+           sub.status AS sub_status,
+           sub.trial_ends_at AS sub_trial_ends_at,
+           sub.seat_cap AS sub_seat_cap,
+           sub.plan_seat_cap AS sub_plan_seat_cap,
+           sub.price_minor AS sub_price_minor,
+           sub.currency AS sub_currency,
+           sub.current_period_end AS sub_current_period_end,
+           sub.cancel_at_period_end AS sub_cancel_at_period_end,
+           sub.cancel_sent_at AS sub_cancel_sent_at,
+           sub.provider AS sub_provider,
+           sub.pending_seat_cap AS sub_pending_seat_cap,
+           sub.pending_price_minor AS sub_pending_price_minor,
+           sub.pending_from AS sub_pending_from,
+           sub.trial_seat_cap AS sub_trial_seat_cap,
+           sub.kept_seat_cap AS sub_kept_seat_cap,
+           sub.kept_members AS sub_kept_members,
+           sub.fitted_asked_seat_cap AS sub_fitted_asked_seat_cap,
+           sub.fitted_members AS sub_fitted_members,
+           -- A paid plan whose grace ended while Paddle or Razorpay still retries (1c-i, 1d-i).
+           EXISTS (
+             SELECT 1 FROM subscriptions so
+             WHERE so.owner_type = 'gym' AND so.owner_id = g.id AND so.cancel_reason = 'grace_expired'
+           ) AS payment_overdue,
+           (
+             SELECT so.provider FROM subscriptions so
+             WHERE so.owner_type = 'gym' AND so.owner_id = g.id AND so.cancel_reason = 'grace_expired'
+             ORDER BY so.ended_at DESC NULLS LAST, so.id
+             LIMIT 1
+           ) AS overdue_provider,
+           -- THE SEAT METER'S NUMERATOR: every live membership, the owner's and
+           -- staff's included (spec Part 3 10.4), the same count as claimSeat's
+           -- paidPlacesUsed and billing's seatsUsed. NO BACKTICKS IN THIS TEMPLATE.
+           -- Correlated per gym and the outer query is capped at MY_ORGS_LIMIT.
+           (SELECT count(*)::int FROM gym_members sm
+             WHERE sm.gym_id = g.id
+               AND sm.removed_at IS NULL
+           ) AS seats_used,
+           -- HAS THIS GYM'S OWNER ALREADY SPENT THEIR ONE FREE TRIAL — the arm
+           -- selector for the unskippable prompt (:22697), and the SECOND COPY
+           -- of a rule whose first copy is the "used" query inside
+           -- startGymTrial, far below in this same file.
+           --
+           -- NO BACKTICKS HERE EITHER, and I incurred that slip AGAIN writing
+           -- this block — the third recorded time in this one template (:12227,
+           -- then the seat meter above, now here). One backtick ends the literal
+           -- and the rest of the query becomes a run of parse errors. The
+           -- warning fifty lines up did not stop it happening; typecheck did.
+           --
+           -- IT IS THE SAME THREE CONDITIONS DELIBERATELY, and they are the
+           -- door's rather than a paraphrase of it: gym-owned subscriptions,
+           -- anchored on THIS gym's owner_user_id, evidenced by trial_ends_at
+           -- being set. A screen fed anything looser offers a trial the door
+           -- then refuses, which is :22341 §7's defect with the sign flipped.
+           --
+           -- IT TESTS trial_ends_at AND NEVER A STATUS, which is the line to
+           -- read twice. The evidence has to SURVIVE the trial ending, so it
+           -- cannot key on trialing; and nothing in the product ever clears that
+           -- column (the shared schema says so in as many words), which is
+           -- precisely what makes it durable proof that a trial once existed.
+           -- An expired row, a canceled one and a gym that converted to paying
+           -- all still carry it.
+           --
+           -- R3.8 forbids sharing this as an sql fragment and :14493's Low-2 is
+           -- what two readers of one rule cost when they drift, so what holds
+           -- the copies together is a test driving THIS FIELD and THAT REFUSAL
+           -- on one fixture — :14013's six-site precedent, the same instrument
+           -- the seat meter above is pinned by.
+           EXISTS (
+             SELECT 1 FROM subscriptions ts JOIN gyms tg ON tg.id = ts.owner_id
+             WHERE ts.owner_type = 'gym'
+               AND tg.owner_user_id = g.owner_user_id
+               AND ts.trial_ends_at IS NOT NULL
+           ) AS owner_trial_used,
+           ch.preset AS cheer_preset,
+           ch.created_at AS cheer_sent_at,
+           nd.preset AS nudge_preset,
+           nd.created_at AS nudge_sent_at
+    FROM gyms g
+    LEFT JOIN gym_staff s ON s.gym_id = g.id AND s.user_id = ${userId}
+    LEFT JOIN gym_members m ON m.gym_id = g.id AND m.user_id = ${userId}
+                           AND m.removed_at IS NULL
+    -- THE NEWEST CHEER THIS GYM HAS SENT THE CALLER (:29961 ruling 4).
+    --
+    -- NO BACKTICKS IN THIS BLOCK EITHER — one ends the template literal and the
+    -- rest of the query becomes parse errors. Three recorded slips in this one
+    -- template already (:12227, the seat meter, the trial-used EXISTS).
+    --
+    -- A LATERAL AND NOT A SECOND ROUND TRIP: the member's card needs this beside
+    -- the gym it belongs to, and a separate read would have to be re-joined in
+    -- JavaScript by gym id. Correlated per gym, the outer query is capped at
+    -- MY_ORGS_LIMIT, and gym_cheers_user_created_idx leads with user_id,
+    -- which is this predicate's own leading column.
+    --
+    -- BOTH PREDICATES ARE LOAD-BEARING AND THEY FAIL DIFFERENTLY. Dropping
+    -- user_id hands somebody another member's cheer; dropping gym_id puts
+    -- one gym's cheer on a different gym's card, for a gym that never sent it.
+    -- Neither is visible on a fixture with one gym or one member, which is why
+    -- the test builds two of each (:28221 §3b).
+    LEFT JOIN LATERAL (
+      SELECT c.preset, c.created_at
+      FROM gym_cheers c
+      WHERE c.gym_id = g.id AND c.user_id = ${userId}
+      ORDER BY c.created_at DESC
+      LIMIT 1
+    ) ch ON true
+    -- THE NEWEST "we miss you" THIS GYM HAS SENT THE CALLER (Part 3 section 4.1;
+    -- Kd chose the panel at :36503).
+    --
+    -- A SECOND LATERAL AND NOT A UNION WITH THE ONE ABOVE, WHICH LOOKS LIKE THE
+    -- TIDIER BUILD AND IS THE WRONG ONE. The two carry different preset
+    -- vocabularies, different caps and different audit actions, and the member's
+    -- card is the only place they ever meet -- so merging them here would make
+    -- this query the one component in the system unable to tell a compliment
+    -- from a come-back, to save one scan of an index that leads with user_id.
+    --
+    -- **AND ONLY ONE OF THEM MAY REACH THE SCREEN: the newer.** Kd asked what
+    -- happens when a second message arrives -- "will messages piled up and cover
+    -- the whole screen?" (:36694 section 3) -- and the answer is that exactly one
+    -- line draws. Both fields ride the wire; the CHOICE is the client's, and it
+    -- is a build rule with a test rather than an accident of how slice 1
+    -- happened to work.
+    --
+    -- BOTH PREDICATES ARE LOAD-BEARING AND THEY FAIL DIFFERENTLY, exactly as the
+    -- cheer's do: dropping user_id hands somebody another member's message,
+    -- dropping gym_id puts one gym's message on another gym's card. Neither is
+    -- visible on a fixture with one gym or one member (:28221 section 3b).
+    LEFT JOIN LATERAL (
+      SELECT n.preset, n.created_at
+      FROM gym_nudges n
+      WHERE n.gym_id = g.id AND n.user_id = ${userId}
+      ORDER BY n.created_at DESC
+      LIMIT 1
+    ) nd ON true
+    -- §4.1's live set, the same three statuses seatCapFor, startGymTrial and
+    -- getCandidates treat as granting — so past_due still counts during v1
+    -- §10's grace. subs_one_live_uq already permits only one such row per gym;
+    -- the LIMIT is what makes that a property of the QUERY rather than a fact
+    -- this reader inherits from an index it does not name.
+    LEFT JOIN LATERAL (
+      SELECT su.status, su.trial_ends_at,
+             LEAST(p.seat_cap, su.trial_seat_cap, CASE WHEN su.pending_held_at IS NOT NULL THEN np.seat_cap END) AS seat_cap,
+             p.seat_cap AS plan_seat_cap, su.trial_seat_cap, p.price_minor, p.currency,
+             su.current_period_end, su.cancel_at_period_end, su.cancel_sent_at, su.provider,
+             ap.seat_cap AS pending_seat_cap, ap.price_minor AS pending_price_minor, su.pending_from,
+             CASE WHEN lc.failure = 'too_many_members' AND su.pending_plan_id IS NULL AND lc.recent THEN lc.seat_cap END AS kept_seat_cap,
+             CASE WHEN lc.failure = 'too_many_members' AND su.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS kept_members,
+             CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND su.pending_plan_id IS NULL AND lc.recent THEN lc.asked_seat_cap END AS fitted_asked_seat_cap,
+             CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND su.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS fitted_members
+      FROM subscriptions su JOIN plans p ON p.id = su.plan_id
+      LEFT JOIN plans np ON np.id = su.pending_plan_id
+      -- The size asked for, which the card names; np is what is being made.
+      LEFT JOIN plans ap ON ap.id = COALESCE(su.pending_requested_plan_id, su.pending_plan_id)
+      -- The last size change: a smaller size the members did not fit is said on the card.
+      LEFT JOIN LATERAL (
+        SELECT c.state, c.failure, c.members_counted, kp.seat_cap, rp.seat_cap AS asked_seat_cap,
+               -- Said until the payment after the one it was decided for.
+               c.created_at > su.current_period_end - interval '32 days' AS recent
+        FROM billing_plan_changes c JOIN plans kp ON kp.id = c.to_plan_id
+        LEFT JOIN plans rp ON rp.id = c.requested_plan_id
+        WHERE c.gym_id = su.owner_id AND c.subscription_id = su.id
+        ORDER BY c.created_at DESC
+        LIMIT 1
+      ) lc ON true
+      WHERE su.owner_type = 'gym' AND su.owner_id = g.id
+        AND su.status IN ('trialing','active','past_due')
+      LIMIT 1
+    ) sub ON true
+    WHERE s.user_id IS NOT NULL OR m.id IS NOT NULL
+    ORDER BY g.created_at DESC, g.id DESC
+    LIMIT ${MY_ORGS_LIMIT}`;
+  return rows.map((r) => ({
+    ...toOrgRow(r),
+    staffRole: r.staff_role === null ? null : toOrgRole(r.staff_role),
+    privileges: r.privileges,
+    subscription:
+      r.sub_status === null
+        ? null
+        : toGymSubscription({
+            status: r.sub_status,
+            trial_ends_at: r.sub_trial_ends_at,
+            seat_cap: r.sub_seat_cap,
+            plan_seat_cap: r.sub_plan_seat_cap,
+            price_minor: r.sub_price_minor ?? 0,
+            currency: r.sub_currency ?? "",
+            current_period_end: r.sub_current_period_end,
+            cancel_at_period_end: r.sub_cancel_at_period_end ?? false,
+            cancel_sent_at: r.sub_cancel_sent_at,
+            provider: r.sub_provider ?? "none",
+            pending_seat_cap: r.sub_pending_seat_cap,
+            pending_price_minor: r.sub_pending_price_minor,
+            pending_from: r.sub_pending_from,
+            trial_seat_cap: r.sub_trial_seat_cap,
+            kept_seat_cap: r.sub_kept_seat_cap,
+            kept_members: r.sub_kept_members,
+            fitted_asked_seat_cap: r.sub_fitted_asked_seat_cap,
+            fitted_members: r.sub_fitted_members,
+          }),
+    seatsUsed: r.seats_used,
+    ownerTrialUsed: r.owner_trial_used,
+    postalAddress: r.postal_address,
+    billingMobile: r.billing_mobile,
+    // THE CONSOLE IS READ-ONLY EXACTLY WHEN THIS GYM HAS NO LIVE PLAN — Part 3
+    // §4.2, and Kd's ruling of 2026-08-29 that it stops every member of staff.
+    //
+    // Read off the LATERAL rather than by a second query, so this response
+    // cannot say "you may change things" beside a `subscription: null` that says
+    // the gym is on nothing. It is one bit of the same row.
+    //
+    // NOT `subscription === null` AT THE CLIENT, which is the same arithmetic
+    // and a different guarantee: that null also covers "the caller is not staff"
+    // and "the api is too old", and a lock-out driven by an unknown is C97's
+    // defect. The service nulls this for a non-staff caller and the shared
+    // schema defaults it to null for an old api, so a definite `true` is the
+    // only thing that ever greys a control out.
+    consoleReadOnly: r.sub_status === null,
+    // Only while there is no live plan: a gym on a plan again owes nothing.
+    paymentOverdue: r.sub_status === null && r.payment_overdue,
+    paymentOverdueThrough:
+      r.sub_status === null && r.payment_overdue && (r.overdue_provider === "paddle" || r.overdue_provider === "razorpay")
+        ? r.overdue_provider
+        : null,
+    // BOTH HALVES OR NEITHER. The lateral either matched a row or did not, so a
+    // preset without an instant is impossible — and writing it as two
+    // independent `=== null` tests would let a future edit produce a cheer with
+    // no time on it, which the member's screen renders as "cheered" with nothing
+    // to say when.
+    latestCheer:
+      r.cheer_preset === null || r.cheer_sent_at === null
+        ? null
+        : { preset: r.cheer_preset, sentAt: r.cheer_sent_at },
+    // BOTH HALVES OR NEITHER, for the reason above it — and written as its own
+    // expression rather than folded in with the cheer's, because the two
+    // laterals succeed and fail independently and a shared guard would tie them.
+    latestNudge:
+      r.nudge_preset === null || r.nudge_sent_at === null
+        ? null
+        : { preset: r.nudge_preset, sentAt: r.nudge_sent_at },
+    isMember: r.is_member,
+    joinedAt: r.joined_at,
+  }));
+}
+
+export interface FormerOrgRow {
+  org: OrgRow;
+  removedAt: Date;
+}
+
+/** Gyms the caller was REMOVED from, recently enough to still be worth saying.
+ *
+ *  **Kd's ruling of 2026-08-20**: after a removal the app said nothing at all
+ *  about that gym. The T3 round-1 fix stopped it saying something FALSE
+ *  ("{gym} didn't confirm your request"); this is what makes it say something
+ *  TRUE. A person who was let into a gym and then taken out is entitled to know
+ *  that is what happened.
+ *
+ *  **Deliberately NOT folded into `listOrgsForUser`.** That reader means "gyms
+ *  I have a live relationship with" and the CONSOLE reads the same response; a
+ *  removed gym appearing in `orgs` would put a gym into a console list whose
+ *  every subsequent read the server answers 404 to. Separate list, same
+ *  response, one fact in one place.
+ *
+ *  **THIS CANNOT TELL A GYM'S REMOVAL FROM A PERSON'S OWN DELETION, and the
+ *  earlier version of this comment claimed it could. T3 round 2 L2-2.** The
+ *  DPDP Day-0 cascade closes memberships when somebody deletes their OWN
+ *  account, and the claim that such a person can never be reading this — "by
+ *  definition a live account" — is FALSE: `restoreUser` reactivates the account
+ *  and DELIBERATELY leaves memberships closed (DECISIONS 2026-07-11, P2.2 T3
+ *  finding 4 — auto-reopen could exceed seat caps). Both windows are 14 days
+ *  (`DPDP_RETENTION_DAYS` and `DECIDED_VISIBLE_DAYS`), so a restored account
+ *  reads this list carrying a `removed_at` it caused itself.
+ *
+ *  **Nothing user-visible is false today** — "You're no longer a member of X"
+ *  is true however the membership ended — which is why this is a comment fix
+ *  and not a code one. The sharp edge is real but narrow: an owner who deletes
+ *  and restores their account is told they are no longer a member of their own
+ *  gym while the console still lists them as its owner. **The durable fix is a
+ *  reason column on `gym_members`** so the two endings can be told apart and
+ *  worded differently; it is not built and is NOT invented here (R0.2), and it
+ *  belongs with whatever card revisits restore at P3.10. */
+export async function listFormerOrgsForUser(
+  sql: SqlOrTx,
+  userId: string,
+): Promise<FormerOrgRow[]> {
+  // DISTINCT ON IS LOAD-BEARING (T3 round 2 L2-3). `gym_members_live_uq` is a
+  // PARTIAL unique index — `WHERE removed_at IS NULL` — so one person may hold
+  // many CLOSED rows for one gym: join, removed, join again, removed again is
+  // two. Without this the same gym arrives twice and `listOrgsForUser`'s own
+  // promise one function above ("one row per org … so a caller can never render
+  // the same gym twice") would be false of its neighbour in the same response.
+  // The client happens to dedupe by org id, which is what kept it invisible —
+  // a contract that holds only because of what the one caller does today.
+  //
+  // The inner ORDER BY is what DISTINCT ON picks with: gym first (required),
+  // then the MOST RECENT removal, so the surviving row is the latest ending.
+  const rows = await sql<(RawOrg & { removed_at: Date })[]>`
+    SELECT * FROM (
+      SELECT DISTINCT ON (m.gym_id)
+             g.id, g.slug, g.name, g.city, g.country, g.org_type, g.timezone,
+             g.locale, g.currency_display, g.clock_format, g.manual_attendance_enabled, g.status, m.removed_at
+      FROM gym_members m
+      JOIN gyms g ON g.id = m.gym_id
+      WHERE m.user_id = ${userId}
+        AND m.removed_at IS NOT NULL
+        AND m.removed_at > now() - (${DECIDED_VISIBLE_DAYS} * INTERVAL '1 day')
+        -- Somebody who was removed and has since REJOINED is simply a member
+        -- again; saying both would be one gym with two contradictory rows.
+        AND NOT EXISTS (
+          SELECT 1 FROM gym_members live
+          WHERE live.gym_id = m.gym_id AND live.user_id = m.user_id
+            AND live.removed_at IS NULL
+        )
+      ORDER BY m.gym_id, m.removed_at DESC
+    ) latest
+    ORDER BY latest.removed_at DESC, latest.id DESC
+    LIMIT ${MY_ORGS_LIMIT}`;
+  return rows.map((r) => ({ org: toOrgRow(r), removedAt: r.removed_at }));
+}
+
+export async function getOrgById(sql: SqlOrTx, gymId: string): Promise<OrgRow | null> {
+  const rows = await sql<RawOrg[]>`
+    SELECT id, slug, name, city, country, org_type, timezone, locale,
+           currency_display, clock_format, manual_attendance_enabled, status
+    FROM gyms WHERE id = ${gymId}`;
+  const row = rows[0];
+  return row === undefined ? null : toOrgRow(row);
+}
+
+/** The gym's own editable details. **Only the keys that are PRESENT are
+ *  written** — an absent key leaves that column alone, while `city: null`
+ *  genuinely clears the city. A patch object cannot express that distinction
+ *  with `undefined` alone once it crosses into SQL, so the writer below checks
+ *  `in` rather than `!== undefined`. */
+export interface OrgPatch {
+  name?: string;
+  city?: string | null;
+  country?: string;
+  /** Never accepted from a caller — the service derives it from `country` and
+   *  always sets the two together, so this key is present exactly when
+   *  `country` is (R3.1, :10010). */
+  currencyDisplay?: string;
+  timezone?: string;
+  /** Which clock this gym's hours are shown on. Bound by nothing the
+   *  currency lock protects — it moves no money and no day boundary — so it
+   *  is the one field here a paying gym may always change. */
+  clockFormat?: GymClockFormat;
+  /** The owner's attendance switch (:26469 §1.4). Bound by nothing the currency
+   *  lock protects — no money, no day boundary — so like `clockFormat` it is a
+   *  field a paying gym may always change. */
+  manualAttendanceEnabled?: boolean;
+  /** The postal address printed in the gym's invitations (Part 3 §9.12), already
+   *  tidied by the service; null clears it. */
+  postalAddress?: string | null;
+  /** An Indian gym's owner's mobile for its payments (`+91…`), already read by the service;
+   *  null clears it. */
+  billingMobile?: string | null;
+}
+
+export type UpdateOrgOutcome =
+  | { kind: "updated"; org: OrgRow; postalAddress: string | null; billingMobile: string | null; changed: readonly string[] }
+  | { kind: "unchanged"; org: OrgRow; postalAddress: string | null; billingMobile: string | null }
+  /** RENAMED from `country_locked` in the T3 round-1 fix, because the old name
+   *  described the wrong thing and the message built on it was false to a gym
+   *  with no country recorded. What is locked is the CURRENCY. */
+  | { kind: "currency_locked" }
+  | { kind: "not_found" };
+
+/** EDIT THE GYM'S OWN ROW (Kd's `org.manage`, 2026-08-26).
+ *
+ *  **The lock is taken for the AUDIT ROW, not for the write.** Two concurrent
+ *  edits of different columns are last-write-wins and need no lock; what needs
+ *  one is "did anything actually change", which is a read followed by a write
+ *  and would otherwise let two owners saving at once produce an audit trail
+ *  where one of them appears to have changed nothing. :14174 L-4's rule applied
+ *  in the direction it points — a lock is warranted by the CONSEQUENCE — and the
+ *  consequence here is the record of who changed a gym's billing country. It is
+ *  `lockOrgRow`, the same instrument and the same order (org row → child rows)
+ *  every other mutation in this module takes, so it adds no new deadlock edge.
+ *
+ *  **A NO-OP WRITES NOTHING AND SAYS SO.** Saving the same name twice must not
+ *  leave two rows in `audit_log` claiming two changes; a log that records
+ *  non-events is one nobody can read a real event out of.
+ *
+ *  `changed` names the columns that genuinely moved, so the service can put the
+ *  before/after of exactly those into the audit meta rather than a whole-row
+ *  snapshot nobody can diff. */
+export async function updateOrg(
+  sql: Sql,
+  input: { gymId: string; patch: OrgPatch; actorUserId: string },
+): Promise<UpdateOrgOutcome> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId);
+    const before = await getOrgById(tx, input.gymId);
+    if (before === null) return { kind: "not_found" };
+
+    /** KD RULING 2026-08-26: **a gym's country freezes the day it starts
+     *  paying.** *"a gym should not be able to change the country as it will
+     *  create problem of money"* — his instinct, and both providers agree with
+     *  it. **Stripe refuses to change a customer's currency once they have been
+     *  invoiced even once**, and **Paddle — the route Kd ruled at :17366 —
+     *  refuses a COUNTRY change on a live subscription outright**, its own
+     *  answer being cancel-and-resubscribe. Neither freezes from day one, which
+     *  is why this is a condition and not a deleted field: before any money has
+     *  moved there is no invoice to protect, and a gym that mistyped its country
+     *  on the FIRST screen of signup — the screen that decides which price book
+     *  it is shown — would otherwise be stuck for ever.
+     *
+     *  **THE TRIAL IS DELIBERATELY NOT A LOCK.** Kd's gym trial is card-less and
+     *  10 days (`GYM_TRIAL_DAYS`), so a `trialing` gym has paid nothing and has no invoice;
+     *  locking there would freeze the typo at exactly the moment before it starts
+     *  to cost — the worst possible instant. Every other status locks, including
+     *  `canceled` and `expired`, because a subscription that ended may still have
+     *  raised invoices and because over-locking is the safe direction.
+     *
+     *  It reads `subscriptions` rather than `invoices` on purpose: an invoice
+     *  cannot exist without one (`invoices.subscription_id` is NOT NULL), and
+     *  Part 5 §3's machine leaves `trialing` on the first payment, so this
+     *  question is answerable from a column the billing card must maintain
+     *  anyway rather than from a table that card has to remember to write.
+     *
+     *  **IT ASKS WHETHER THE MONEY WOULD MOVE, NOT WHETHER THE COUNTRY WAS
+     *  MENTIONED — T3 round 1 C/H-1, and the first version asked the wrong
+     *  question in a way that broke the whole route.** A settings screen fills
+     *  every box and sends all four fields back on save, so a paying owner
+     *  fixing a typo in the NAME also re-sent an unchanged country; the old
+     *  guard saw the key, refused the entire request, and threw the name, the
+     *  city and the time zone away with it. Kd's ruling says those three stay
+     *  editable and in practice none of them were. **Every other field in this
+     *  function compares against the stored row; the country was the odd one
+     *  out, and it was the one that blocked everything.**
+     *
+     *  **THE REVIEWER'S OWN PROPOSED FIX WAS MEASURED AND REJECTED — it
+     *  re-opens the hole this rule exists to close** (T3 C/H-2). "Refuse only
+     *  when the country DIFFERS, and treat an unrecorded country as free to
+     *  set" fixes the typo case and lets one of the 59 pre-`0014` gyms — billed
+     *  in rupees, `country` NULL — record `DE` and flip itself to euros. That is
+     *  a paying gym's billing currency moving, which is the entire thing Kd
+     *  stopped. :13552's standing lesson: **a reviewer's proposed fix is a claim
+     *  and takes the same evidence as the code it replaces.**
+     *
+     *  So the question is the CURRENCY's, which is what the ruling was always
+     *  about: unchanged country ⇒ unchanged currency ⇒ allowed · an unrecorded
+     *  country recorded as the one it is ALREADY billed for ⇒ allowed, and the
+     *  gym finally has its country ⇒ closes C/H-2 · Canada → Germany ⇒ both USD
+     *  ⇒ allowed, address updated, money untouched · India → Germany ⇒ REFUSED.
+     *
+     *  **THAT THIRD EXAMPLE READ "France → Germany ⇒ both EUR" UNTIL
+     *  2026-08-28**, when Kd ruled Canada, the UK and the euro area onto US
+     *  dollars (:22215 §3.5). The example was still TRUE — France and Germany do
+     *  still share a currency in this map — but it had stopped being the
+     *  interesting case, because after that ruling the pairs that share a
+     *  currency are almost all of them. Corrected here rather than only in the
+     *  test that drives it (:5748), and the test now drives Canada → Germany so
+     *  the two agree.
+     *  It also makes the refusal TRUE: the old sentence told a gym with no
+     *  country that its country was fixed (:5807).
+     *
+     *  **INSIDE THE TRANSACTION AND UNDER THE ORG LOCK, AND THAT IS NOT
+     *  SUFFICIENT ON ITS OWN — T3 C/H-3, and this note used to claim otherwise.**
+     *  `lockOrgRow` locks the GYM row; it cannot lock a subscription that does
+     *  not exist yet, so one committing between this SELECT and the UPDATE below
+     *  is missed and a now-paying gym's currency moves.
+     *
+     *  **THE REQUIREMENT IS NOW DISCHARGED, and this note said otherwise for a
+     *  commit — T3 round 2, Low-4.** It read *"Unreachable today — nothing in the
+     *  product inserts into `subscriptions`, grep-verified — and live the day the
+     *  billing card ships"*, which stopped being true when `startGymTrial` landed
+     *  630 lines below it in this same file. **The CREATION race is genuinely
+     *  closed**: the only statement that CREATES a gym subscription is
+     *  `startGymTrial`, and it takes `lockOrgRow` on the same gym as its FIRST
+     *  statement, so a trial either commits before this guard's SELECT or waits
+     *  behind its UPDATE.
+     *
+     *  **THERE ARE NOW TWO WRITERS OF `subscriptions`, NOT ONE — this sentence
+     *  said "exactly one" for a commit (T3 round 1 on the sweep, L-3).**
+     *  `trialSweep.ts` is the second and it takes NO lock, deliberately: it only
+     *  ENDS a trial, and :19656 C/H-3 binds whatever CREATES one. **The residual
+     *  race is named rather than restructured for, because it is Low and the
+     *  restructuring is worse:** the sweep can commit `expired` between this
+     *  SELECT and the UPDATE below, letting a country change through on a gym that
+     *  lapsed in that instant. Sub-second, once per gym ever, on a gym with no
+     *  live subscription and no invoice — and the direction of the error is that
+     *  somebody edits their own address a moment before a freeze Kd imposed for
+     *  gyms that have PAID (:22341 §3). Serialising a nightly set-based sweep
+     *  against every owner's typing to close it would cost more than it buys.
+     *  **The requirement does not expire with the discharge — it binds every
+     *  FUTURE writer**: whatever else creates a gym subscription must take
+     *  `lockOrgRow` on that gym first, which is the lock and the order every
+     *  mutation in this module already uses. Own `OWED.md` line. **Do not read this
+     *  guard as complete.** */
+    const movesMoney =
+      "country" in input.patch &&
+      input.patch.currencyDisplay !== undefined &&
+      input.patch.currencyDisplay !== before.currencyDisplay;
+    if (movesMoney) {
+      const billed = await tx<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM subscriptions
+        WHERE owner_type = 'gym'
+          AND owner_id = ${input.gymId}
+          AND (status <> 'trialing' OR provider NOT IN ('none','pilot'))`;
+      if ((billed[0]?.n ?? 0) > 0) return { kind: "currency_locked" };
+    }
+
+    // Compared against the CURRENT row rather than trusted from the request:
+    // a screen sending back every field it drew is the normal case, so without
+    // this every save of an untouched form would write an audit row.
+    const changed: string[] = [];
+    if ("name" in input.patch && input.patch.name !== before.name) changed.push("name");
+    if ("city" in input.patch && (input.patch.city ?? null) !== before.city) changed.push("city");
+    if ("country" in input.patch && input.patch.country !== before.country) {
+      changed.push("country");
+      // The currency moves WITH the country and never on its own. It is listed
+      // separately because it is what a gym is BILLED in — a reader of the audit
+      // log asking "when did this gym's money change" must not have to know that
+      // a country implies one.
+      if (input.patch.currencyDisplay !== before.currencyDisplay) changed.push("currencyDisplay");
+    }
+    if ("timezone" in input.patch && input.patch.timezone !== before.timezone) {
+      changed.push("timezone");
+    }
+    if ("clockFormat" in input.patch && input.patch.clockFormat !== before.clockFormat) {
+      changed.push("clockFormat");
+    }
+    if (
+      "manualAttendanceEnabled" in input.patch &&
+      input.patch.manualAttendanceEnabled !== before.manualAttendanceEnabled
+    ) {
+      changed.push("manualAttendanceEnabled");
+    }
+    const extras = (
+      await tx<{ postal_address: string | null; billing_mobile: string | null }[]>`
+        SELECT postal_address, billing_mobile FROM gyms WHERE id = ${input.gymId}`
+    )[0];
+    const postalBefore = extras?.postal_address ?? null;
+    const postalAfter = "postalAddress" in input.patch ? (input.patch.postalAddress ?? null) : postalBefore;
+    if (postalAfter !== postalBefore) changed.push("postalAddress");
+    const mobileBefore = extras?.billing_mobile ?? null;
+    const mobileAfter = "billingMobile" in input.patch ? (input.patch.billingMobile ?? null) : mobileBefore;
+    if (mobileAfter !== mobileBefore) changed.push("billingMobile");
+    if (changed.length === 0) return { kind: "unchanged", org: before, postalAddress: postalBefore, billingMobile: mobileBefore };
+
+    // Written out column by column rather than assembled from a loop over the
+    // patch's keys: a dynamic identifier built from caller-controlled data is
+    // exactly what R3.8 forbids, and `coalesce` cannot express "clear the city"
+    // because null is a legitimate destination. Each `${}` is a VALUE.
+    const rows = await tx<RawOrg[]>`
+      UPDATE gyms SET
+        name = ${"name" in input.patch ? (input.patch.name ?? before.name) : before.name},
+        city = ${"city" in input.patch ? (input.patch.city ?? null) : before.city},
+        country = ${"country" in input.patch ? (input.patch.country ?? before.country) : before.country},
+        currency_display = ${
+          "country" in input.patch
+            ? (input.patch.currencyDisplay ?? before.currencyDisplay)
+            : before.currencyDisplay
+        },
+        timezone = ${"timezone" in input.patch ? (input.patch.timezone ?? before.timezone) : before.timezone},
+        clock_format = ${
+          "clockFormat" in input.patch
+            ? (input.patch.clockFormat ?? before.clockFormat)
+            : before.clockFormat
+        },
+        manual_attendance_enabled = ${
+          "manualAttendanceEnabled" in input.patch
+            ? (input.patch.manualAttendanceEnabled ?? before.manualAttendanceEnabled)
+            : before.manualAttendanceEnabled
+        },
+        postal_address = ${postalAfter},
+        billing_mobile = ${mobileAfter}
+      WHERE id = ${input.gymId}
+      RETURNING id, slug, name, city, country, org_type, timezone, locale,
+                currency_display, clock_format, manual_attendance_enabled, status`;
+    const raw = rows[0];
+    if (raw === undefined) throw new Error("UPDATE gyms changed no row under the org lock");
+
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.updated",
+      targetType: "gyms",
+      targetId: input.gymId,
+      // WHICH FIELDS MOVED, and their before values. The after state is the row
+      // itself, so recording it twice would only create somewhere for the two to
+      // disagree. `null` is allowed in this meta for exactly the case it means
+      // here — a city that was not set, or a country nobody had ever recorded.
+      meta: {
+        changed,
+        name: changed.includes("name") ? before.name : null,
+        city: changed.includes("city") ? before.city : null,
+        country: changed.includes("country") ? before.country : null,
+        currencyDisplay: changed.includes("currencyDisplay") ? before.currencyDisplay : null,
+        timezone: changed.includes("timezone") ? before.timezone : null,
+      },
+    });
+
+    return { kind: "updated", org: toOrgRow(raw), postalAddress: postalAfter, billingMobile: mobileAfter, changed };
+  });
+}
+
+/** A staff row's authority: the role it was appointed under, and the effective
+ *  ticks stored on it. `privileges` is null only for a row written by code that
+ *  predates the column (see the schema's own note). */
+export interface StaffAuthority {
+  role: OrgRole;
+  privileges: string[] | null;
+}
+
+/** WHAT THE CALLER MAY DO IN ONE ORG — their role and the ticks stored beside
+ *  it. Null means "not staff here", which the service turns into a 404 — a
+ *  stranger must not learn the org exists.
+ *
+ *  **It reads the ticks in the SAME query as the role, deliberately.** Two
+ *  reads would leave a window where the role is this person's and the ticks are
+ *  from a moment before an owner changed them, and the seam would decide against
+ *  a set that never existed. `privileges` null is the deploy window R4.4's
+ *  expand-then-contract creates; `privilegesFor` in the service is the one place
+ *  that decides what null means, and it means "the role's defaults".
+ *
+ *  **Renamed from `getStaffRole` in the same card that gave it the ticks** — it
+ *  no longer answers "what role", it answers "what authority", and a name that
+ *  says role invites a caller to compare it to one (the exact thing :11429's
+ *  seam exists to stop).
+ *
+ *  **SINCE 4a-ii THE RULE IS THE STAFF ROW AND A LIVE ACCOUNT, and nothing about
+ *  membership.** Staff and member are separate (spec §10.3): an owner may end a
+ *  trainer's membership and keep them as staff, or take both in one step. The ghost
+ *  this guard once denied (a membership closed after the staff row) had two sources,
+ *  and both now end the staff row itself: appointing is serialised against removing
+ *  by the org lock, and deleting an account deletes its staff rows (`softDeleteUser`;
+ *  rows left from before, by migration 0062). The owner of a gym keeps theirs, so a
+ *  restore gives them their gym back.
+ *
+ *  `users.status` is checked, so an account inside its deletion window holds nothing. */
+export async function getStaffAuthority(
+  sql: Sql,
+  gymId: string,
+  userId: string,
+): Promise<StaffAuthority | null> {
+  const rows = await sql<{ role: string; privileges: string[] | null }[]>`
+    SELECT s.role, s.privileges
+    FROM gym_staff s
+    JOIN users u ON u.id = s.user_id
+    WHERE s.gym_id = ${gymId}
+      AND s.user_id = ${userId}
+      AND u.status = 'active'`;
+  const row = rows[0];
+  return row === undefined ? null : { role: toOrgRole(row.role), privileges: row.privileges };
+}
+
+export type ApplyOutcome =
+  // `orgCanConfirm` rides BESIDE `ApplicationRow` on both waiting arms rather
+  // than inside it: it is a fact about the GYM, and `ApplicationRow` is the
+  // shape the confirm/reject paths hand around too. Same placement as
+  // `listApplicationsForUser`'s, and for the same reason.
+  | { kind: "pending"; org: OrgRow; application: ApplicationRow; orgCanConfirm: boolean }
+  | { kind: "already_pending"; org: OrgRow; application: ApplicationRow; orgCanConfirm: boolean }
+  | { kind: "already_member"; org: OrgRow; membership: MembershipRow }
+  | { kind: "no_such_code" }
+  // `orgType` RIDES ON BOTH REFUSALS SO THE SENTENCE CAN NAME THE PLACE (Kd's
+  // roadmap line 2b): *"Ask the studio for a current one"*. It is the org's own
+  // column, read in the same transaction two statements above, and it tells the
+  // holder of the code nothing they were not about to be told anyway — the
+  // pending arm returns the whole org summary. `no_such_code` has none by
+  // construction: no code, no org, and inventing one would be the wrong kind of
+  // guess.
+  | { kind: "code_unusable"; reason: "paused" | "expired" | "exhausted"; orgType: OrgType }
+  | { kind: "org_archived"; orgType: OrgType }
+  | { kind: "consent_required" };
+
+/** :11385's ratified default: a pending application dies after 14 days if
+ *  nobody acts on it. Stamped at APPLY time rather than computed by the sweep,
+ *  so the row carries its own deadline and the sweep is a reader — a deadline
+ *  the sweep computes is a deadline that changes when the sweep changes. */
+export const APPLICATION_TTL_DAYS = 14;
+
+/** KD RULING 2026-08-19 (:11072) — typing a code creates an APPLICATION.
+ *
+ *  **NO SEAT IS TAKEN AND NO MEMBERSHIP ROW IS WRITTEN HERE.** That is the
+ *  whole content of the ruling: a leaked code yields the owner a reject list
+ *  rather than a full roster, and a real member is never locked out by
+ *  strangers because strangers consume nothing while pending. The membership
+ *  is created at CONFIRM, by `claimSeat` below, which is where Part 4 §4.2
+ *  now lives.
+ *
+ *  **NO `FOR UPDATE` ON THE ORG ROW, deliberately.** §4.2's lock exists to
+ *  serialise SEAT consumption; applying consumes nothing, so taking it would
+ *  serialise every applicant in a gym gym-wide for no guarantee. Two
+ *  simultaneous applies from one account race on
+ *  `gym_join_applications_pending_uq` instead and `ON CONFLICT DO NOTHING`
+ *  settles it — the same declarative idempotence §4.2 uses, for the same
+ *  reason (a raised 23505 would abort the transaction).
+ *
+ *  **`uses` IS NOT INCREMENTED HERE EITHER** — see `claimSeat`. A code's
+ *  `uses` counts memberships it created; if applying burned a use, a stranger
+ *  with a leaked code could exhaust a `max_uses` code and shut a real gym's
+ *  poster down without ever getting in.
+ *
+ *  Check ORDER is unchanged from the pre-ruling join: the code's own refusals
+ *  come before the membership check, so an existing member re-typing a paused
+ *  code still gets the code refusal. That is TRUE, therefore not :5807's
+ *  class, and it was reviewed as correct at :10329 — do not "improve" it into
+ *  an already_member answer. */
+export async function applyByCode(
+  sql: Sql,
+  input: { userId: string; code: string; consent: boolean },
+): Promise<ApplyOutcome> {
+  const codeLookup = await sql<{ id: string; gym_id: string }[]>`
+    SELECT id, gym_id FROM gym_codes WHERE code = ${input.code}`;
+  const found = codeLookup[0];
+  if (found === undefined) return { kind: "no_such_code" };
+
+  return await sql.begin(async (tx) => {
+    const orgRows = await tx<RawOrg[]>`
+      SELECT id, slug, name, city, country, org_type, timezone, locale,
+           currency_display, clock_format, manual_attendance_enabled, status
+      FROM gyms WHERE id = ${found.gym_id}`;
+    const rawOrg = orgRows[0];
+    if (rawOrg === undefined) return { kind: "no_such_code" };
+    const org = toOrgRow(rawOrg);
+    if (org.status !== "active") return { kind: "org_archived", orgType: org.orgType };
+
+    const codeRows = await tx<
+      {
+        id: string;
+        label: string;
+        paused: boolean;
+        expires_at: Date | null;
+        joined: number;
+        max_uses: number | null;
+      }[]
+    >`
+      SELECT c.id, c.label, c.paused, c.expires_at, c.max_uses,
+             (SELECT count(*)::int FROM gym_members m
+               WHERE m.code_id = c.id AND m.removed_at IS NULL AND m.complimentary = false)
+               AS joined
+      FROM gym_codes c WHERE c.id = ${found.id} AND c.gym_id = ${found.gym_id}`;
+    const code = codeRows[0];
+    if (code === undefined) return { kind: "no_such_code" };
+    if (code.paused) return { kind: "code_unusable", reason: "paused", orgType: org.orgType };
+    if (code.expires_at !== null && code.expires_at.getTime() <= Date.now()) {
+      return { kind: "code_unusable", reason: "expired", orgType: org.orgType };
+    }
+    // MEASURED AGAINST PEOPLE WHO ARE STILL IN, not against claims ever made
+    // (Kd's smoke, 2026-08-21). A gym that limits a code to 20 means twenty
+    // people at once; under the old `uses` counter a member who left took their
+    // place with them and the code died one short, which no screen explained.
+    // `toCodeRow`'s comment carries the definition and the list of sites.
+    if (code.max_uses !== null && code.joined >= code.max_uses) {
+      return { kind: "code_unusable", reason: "exhausted", orgType: org.orgType };
+    }
+
+    // Part 3 §2.4: joining a CLINIC code IS the consent record. The refusal
+    // stays here and the TIMESTAMP is captured on the APPLICATION, then copied
+    // onto the membership at confirm — so the consent record is dated to the
+    // moment the person agreed, not to the moment the front desk got round to
+    // them. (Clinics are out of the product per :10182; this path is reachable
+    // only by a legacy row, and it stays live for exactly that reason.)
+    if (org.orgType === "clinic" && !input.consent) return { kind: "consent_required" };
+
+    const existingMember = await liveMembership(tx, org.id, input.userId);
+    if (existingMember !== null) {
+      return { kind: "already_member", org, membership: existingMember };
+    }
+
+    const consentAt = input.consent ? new Date() : null;
+    const inserted = await tx<RawApplication[]>`
+      INSERT INTO gym_join_applications (gym_id, user_id, code_id, consent_at, expires_at)
+      VALUES (${org.id}, ${input.userId}, ${code.id}, ${consentAt},
+              now() + (${APPLICATION_TTL_DAYS} * INTERVAL '1 day'))
+      ON CONFLICT (gym_id, user_id) WHERE status = 'pending' DO NOTHING
+      RETURNING id, status, applied_at, expires_at, decided_at, member_nudged_at`;
+
+    const newRow = inserted[0];
+    if (newRow === undefined) {
+      const existingRows = await tx<RawApplication[]>`
+        SELECT id, status, applied_at, expires_at, decided_at, member_nudged_at
+        FROM gym_join_applications
+        WHERE gym_id = ${org.id} AND user_id = ${input.userId} AND status = 'pending'`;
+      const existing = existingRows[0];
+      if (existing === undefined) {
+        // The conflict fired, so a pending row existed a moment ago; nothing
+        // in this transaction can have removed it. Loud rather than a
+        // fabricated reply (the `gym_members` branch's own precedent).
+        throw new Error("gym_join_applications conflict with no pending row to return");
+      }
+      return {
+        kind: "already_pending",
+        org,
+        application: toApplicationRow(existing),
+        // **`gymHasLivePlan` HERE, AND AN INLINE `EXISTS` IN
+        // `listApplicationsForUser` — the difference is deliberate.** This path
+        // asks about ONE gym and is already inside a transaction, which is the
+        // caller that function's signature was widened for; the list asks about
+        // every row it returns at once and would need a query per application.
+        // Both read §4.1's three live statuses and a test drives one gym across
+        // the transition on each surface.
+        orgCanConfirm: await gymHasLivePlan(tx, org.id),
+      };
+    }
+
+    // Part 3 §3.3: every mutating call writes `audit_log`. Applying is a
+    // mutation by the MEMBER, and it is the row that answers "when did this
+    // person first ask?" if a gym ever disputes it.
+    await insertAudit(tx, {
+      actorUserId: input.userId,
+      gymId: org.id,
+      action: "org.join_applied",
+      targetType: "gym_join_application",
+      targetId: newRow.id,
+      meta: { codeLabel: code.label },
+    });
+
+    return {
+      kind: "pending",
+      org,
+      application: toApplicationRow(newRow),
+      orgCanConfirm: await gymHasLivePlan(tx, org.id),
+    };
+  });
+}
+
+/** The caller's LIVE membership in one org, or null. Extracted because the
+ *  apply path, the seat claim and the confirm path all ask the same question
+ *  and three spellings of it is how two of them drift. */
+async function liveMembership(
+  tx: SqlOrTx,
+  gymId: string,
+  userId: string,
+): Promise<MembershipRow | null> {
+  const rows = await tx<{ id: string; joined_at: Date; label: string | null }[]>`
+    SELECT m.id, m.joined_at, c.label
+    FROM gym_members m
+    LEFT JOIN gym_codes c ON c.id = m.code_id
+    WHERE m.gym_id = ${gymId} AND m.user_id = ${userId} AND m.removed_at IS NULL`;
+  const row = rows[0];
+  return row === undefined
+    ? null
+    : { id: row.id, joinedAt: row.joined_at, groupLabel: row.label };
+}
+
+export type ClaimSeatOutcome =
+  | { kind: "joined"; membership: MembershipRow }
+  | { kind: "already_member"; membership: MembershipRow }
+  | { kind: "seat_cap"; cap: number };
+
+/** PART 4 §4.2, THE SEAT-SAFE JOIN — moved here INTACT when the join door
+ *  became an application door (Kd ruling :11072). The statements and their
+ *  order are the ones that were written and reviewed against §4.2; what
+ *  changed is WHO triggers them (the gym's front desk, at confirm) and not
+ *  WHAT they do.
+ *
+ *    -- caller holds:  SELECT 1 FROM gyms WHERE id=$gym FOR UPDATE
+ *    seat check: (count live members) < plan.seat_cap
+ *    INSERT INTO gym_members ...
+ *    UPDATE gym_codes SET uses = uses + 1
+ *
+ *  **THE ORG-ROW LOCK IS THE WHOLE POINT and this function does NOT take it —
+ *  its caller does, and must.** It is a precondition rather than something
+ *  taken here because the confirm path locks the APPLICATION row first and
+ *  lock order has to be decided in one place: application → gym, always.
+ *  Locking a COUNT instead of the org row would serialise nothing — the second
+ *  transaction reads the same pre-insert number.
+ *
+ *  §4.2 finishes "on unique_violation of gym_members_live_uq → idempotent
+ *  success". Done DECLARATIVELY with ON CONFLICT on the same partial index: a
+ *  raised 23505 aborts the surrounding transaction, so catching it would mean
+ *  re-running the whole claim to answer "already a member". A repeat
+ *  deliberately does NOT increment the code's `uses`.
+ *
+ *  **THE CODE'S AUTOMATIC REFUSALS (paused / expired / max_uses) ARE NOT
+ *  RE-APPLIED HERE, and that is a decision, not an omission.** They gate the
+ *  APPLY door, where they stop a dead poster admitting strangers. At confirm a
+ *  human being has looked at a named person and said yes; refusing them
+ *  because the gym paused the code afterwards would be the app overruling the
+ *  gym about its own member. The SEAT cap is different and is enforced — that
+ *  one is money, and it is not the front desk's to waive. */
+async function claimSeat(
+  tx: TransactionSql,
+  input: {
+    org: OrgRow;
+    userId: string;
+    /** Null for a join by invitation (§10.2), which comes through no code. */
+    codeId: string | null;
+    codeLabel: string | null;
+    consentAt: Date | null;
+    /** A join by invitation: the list record it was for (null when the list could not
+     *  say whose it was), and the moment the person was on the list. */
+    entryId?: string | null;
+    listedAt?: Date | null;
+  },
+): Promise<ClaimSeatOutcome> {
+  // T3 ROUND 1 C/H-1 (carried forward verbatim): the seat check must not run
+  // for somebody who ALREADY holds a seat. They are inside `used` themselves,
+  // so at the cap this returned "this gym has no free places" about a person
+  // already standing in the gym. Read under the caller's org lock, so it
+  // cannot race with the insert below.
+  const held = await liveMembership(tx, input.org.id, input.userId);
+
+  if (held === null) {
+    const cap = await seatCapFor(tx, input.org.id);
+    if (cap !== null) {
+      // A SEAT IS A LIVE MEMBERSHIP, whoever holds it — the owner's and staff's
+      // included (RULINGS 2026-09-21, spec Part 3 §10.4). A staff login opens the
+      // console and takes nothing; using the member app takes a place, so
+      // appointing members as staff frees none. `paidPlacesUsed` is the one count
+      // the meter (`listOrgsForUser`) and billing (`seatsUsed`) repeat.
+      const used = await paidPlacesUsed(tx, input.org.id);
+      if (used >= cap) return { kind: "seat_cap", cap };
+    }
+  }
+
+  const inserted = await tx<{ id: string; joined_at: Date }[]>`
+    INSERT INTO gym_members (gym_id, user_id, code_id, consent_at, complimentary, entry_id, last_listed_at)
+    VALUES (${input.org.id}, ${input.userId}, ${input.codeId}, ${input.consentAt}, false,
+            ${input.entryId ?? null}, ${input.listedAt ?? null})
+    ON CONFLICT (gym_id, user_id) WHERE removed_at IS NULL DO NOTHING
+    RETURNING id, joined_at`;
+
+  const newRow = inserted[0];
+  if (newRow === undefined) {
+    const existing = held ?? (await liveMembership(tx, input.org.id, input.userId));
+    if (existing === null) {
+      // The conflict fired, so a live row existed a moment ago; nothing in
+      // this transaction can remove it. Loud rather than a fabricated reply.
+      throw new Error("gym_members conflict with no live row to return");
+    }
+    return { kind: "already_member", membership: existing };
+  }
+
+  if (input.codeId !== null) await tx`UPDATE gym_codes SET uses = uses + 1 WHERE id = ${input.codeId}`;
+  return {
+    kind: "joined",
+    membership: { id: newRow.id, joinedAt: newRow.joined_at, groupLabel: input.codeLabel },
+  };
+}
+
+/** The gym's row, locked: every change to a gym's list and seats takes this first. */
+export async function lockOrg(tx: TransactionSql, gymId: string): Promise<OrgRow | null> {
+  const rows = await tx<RawOrg[]>`
+    SELECT id, slug, name, city, country, org_type, timezone, locale,
+         currency_display, clock_format, manual_attendance_enabled, status
+    FROM gyms WHERE id = ${gymId} FOR UPDATE`;
+  const raw = rows[0];
+  return raw === undefined ? null : toOrgRow(raw);
+}
+
+/** A seat taken by accepting an invitation (§10.2): no code, the tap's own consent
+ *  time, the list record it was for. The caller holds the gym's lock (`lockOrg`). A
+ *  person who is already a member keeps their membership, now linked to the record
+ *  where it had none, and stamped as listed. */
+export async function claimSeatByInvitation(
+  tx: TransactionSql,
+  input: { org: OrgRow; userId: string; entryId: string | null; at: Date },
+): Promise<ClaimSeatOutcome> {
+  const claim = await claimSeat(tx, {
+    org: input.org,
+    userId: input.userId,
+    codeId: null,
+    codeLabel: null,
+    consentAt: input.at,
+    entryId: input.entryId,
+    listedAt: input.at,
+  });
+  if (claim.kind === "already_member") {
+    await tx`
+      UPDATE gym_members
+      SET entry_id = coalesce(entry_id, ${input.entryId}::uuid), last_listed_at = ${input.at}
+      WHERE gym_id = ${input.org.id} AND user_id = ${input.userId} AND removed_at IS NULL`;
+  }
+  return claim;
+}
+
+/** How many paid places the gym's live members hold — every live membership, the
+ *  owner's and staff's included (§10.4): `claimSeat`'s count, which Put back asks too
+ *  (`placesFree`). */
+export async function paidPlacesUsed(tx: SqlOrTx, gymId: string): Promise<number> {
+  const rows = await tx<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM gym_members m
+    WHERE m.gym_id = ${gymId} AND m.removed_at IS NULL`;
+  return rows[0]?.n ?? 0;
+}
+
+/** CAN `wanted` MORE PEOPLE TAKE A PAID PLACE NOW — Put back giving people their app back
+ *  (RULINGS 2026-09-27), asked under the caller's lock on the gym with the door's own cap
+ *  and count. A gym with no live plan takes nobody, as the door refuses a join. */
+export async function placesFree(tx: TransactionSql, gymId: string, wanted: number): Promise<boolean> {
+  if (!(await gymHasLivePlan(tx, gymId))) return false;
+  const cap = await seatCapFor(tx, gymId);
+  return cap === null || (await paidPlacesUsed(tx, gymId)) + wanted <= cap;
+}
+
+/** The org's seat cap, or null when nothing caps it.
+ *
+ *  Null has TWO causes and they are deliberately not distinguished here: the
+ *  plan declares no cap (`seat_cap` is nullable for capless tiers), or the org
+ *  has no live subscription at all — which today is EVERY org, because billing
+ *  does not exist yet. The uncapped-without-a-plan case is a tracked deferral
+ *  (OWED.md), not an oversight: the check below is live and correct the moment
+ *  a subscription row exists.
+ *
+ *  Status set is §4.1's, so `past_due` still grants during v1 §10's grace. */
+async function seatCapFor(tx: SqlOrTx, gymId: string): Promise<number | null> {
+  // A trial the gym has paid for keeps its free trial's limit until a payment is taken, and
+  // a smaller size holds for joins once its switch has begun (LEAST ignores the nulls).
+  const rows = await tx<{ seat_cap: number | null }[]>`
+    SELECT LEAST(p.seat_cap, s.trial_seat_cap, CASE WHEN s.pending_held_at IS NOT NULL THEN np.seat_cap END) AS seat_cap
+    FROM subscriptions s JOIN plans p ON p.id = s.plan_id
+    LEFT JOIN plans np ON np.id = s.pending_plan_id
+    WHERE s.owner_type = 'gym' AND s.owner_id = ${gymId}
+      AND s.status IN ('trialing','active','past_due')`;
+  return rows[0]?.seat_cap ?? null;
+}
+
+/** THE SAME QUESTION, FOR A CALLER OUTSIDE A TRANSACTION — the member list's
+ *  preview, which shows staff where the gym stands on seats before they invite
+ *  anybody (Part 3 §9.9). Exported rather than copied: the granting statuses
+ *  above are already written in three places with a test holding them together,
+ *  and a fourth would be a fourth answer to "is this gym paying".
+ *
+ *  It caps NOTHING here. A gym's list may be longer than its seats — being on a
+ *  list is not holding a seat — so this is a number on a screen, and the refusal
+ *  stays where seats are actually taken (`claimSeat`). */
+export async function gymSeatCap(sql: SqlOrTx, gymId: string): Promise<number | null> {
+  return await seatCapFor(sql, gymId);
+}
+
+/** DOES THIS GYM HAVE A LIVE PLAN — the one question Part 3 §4.2's read-only
+ *  console turns on, and the enforcement half of Kd's ruling of 2026-08-29.
+ *
+ *  **It is §4.1's three granting statuses and nothing else**, the same set
+ *  `seatCapFor` directly above, `startGymTrial`, `listOrgsForUser`'s lateral and
+ *  `entitlements/repo.ts` all treat as live — so a gym whose members are getting
+ *  gym-tier features is exactly a gym whose console still works, and the two
+ *  cannot come apart. `past_due` counts, because v1 §10's grace is a paying gym
+ *  having a bad week rather than a lapsed one.
+ *
+ *  **IT ASKS THE STATUS AND NEVER A DATE** (:21580 rule (c)). Nothing clears
+ *  `trial_ends_at` when a subscription leaves `trialing`, so a reader keying on
+ *  "has the trial end date passed" would seal a PAYING gym out of its own console
+ *  the day billing exists. It also means this needs no notion of the 14-day
+ *  window: §4.2's read-only period and the archived state after it BOTH have no
+ *  live plan, so both refuse here, and the 14 days only decides when `gyms.status`
+ *  flips — a separate card with its own line.
+ *
+ *  **A THIRD COPY OF ONE RULE, PINNED BY A TEST AND NOT BY A SHARED FRAGMENT.**
+ *  R3.8 forbids interpolating a shared `sql` fragment, and :14493's Low-2 is what
+ *  two readers of one rule cost when they drift. What holds this to
+ *  `listOrgsForUser`'s `consoleReadOnly` is a test driving the FIELD and this
+ *  REFUSAL across one gym's transition from trialling to expired — :14013's
+ *  six-site precedent, and the instrument :21580 used for the seat meter.
+ *
+ *  Takes `SqlOrTx` so a future caller can run it inside a write's own
+ *  transaction; today's caller is the service's gate, which runs it before one.
+ */
+export async function gymHasLivePlan(sql: SqlOrTx, gymId: string): Promise<boolean> {
+  const rows = await sql<{ live: boolean }[]>`
+    SELECT EXISTS (
+      SELECT 1 FROM subscriptions s
+      WHERE s.owner_type = 'gym' AND s.owner_id = ${gymId}
+        AND s.status IN ('trialing','active','past_due') -- read-only gate, §4.1's live set
+    ) AS live`;
+  // A missing row is impossible — `SELECT EXISTS` always returns one — but the
+  // fallback is `false`, i.e. read-only, because refusing a write we cannot
+  // justify is the safe direction and granting one is not.
+  return rows[0]?.live ?? false;
+}
+
+/** A GYM'S ID FROM THE NAME IN THE CONSOLE'S ADDRESS BAR.
+ *
+ *  **It exists because the restore command was otherwise unusable, and that was
+ *  found by checking rather than assumed.** `tools/gym-restore.ts` takes the gym
+ *  to re-open, and its first draft said *"the same uuid the console's URL
+ *  carries"* — the console's routes are `/console/:orgSlug` (`App.jsx`), so the
+ *  URL carries a SLUG and the uuid appears on no screen at all. An operator
+ *  instruction naming a value nobody can obtain is :5807's class arriving in a
+ *  runbook, and the tool now takes either.
+ *
+ *  No tenancy axis, deliberately: it answers "which gym is this" for a command
+ *  line with no signed-in user, and returns an id and nothing else. Any ROUTE
+ *  that ever wants a slug lookup owes its own authorisation — this is not it. */
+export async function getOrgIdBySlug(sql: SqlOrTx, slug: string): Promise<string | null> {
+  const rows = await sql<{ id: string }[]>`SELECT id FROM gyms WHERE slug = ${slug}`;
+  return rows[0]?.id ?? null;
+}
+
+export type RestoreGymOutcome =
+  | { kind: "restored"; org: OrgRow }
+  | { kind: "not_archived"; org: OrgRow }
+  | { kind: "not_found" };
+
+/** RE-OPEN A CLOSED GYM — the other half of `archiveSweep.ts`, and today the
+ *  ONLY way back from `archived`.
+ *
+ *  **IT EXISTS BECAUSE THE AUTOMATIC WAY BACK CANNOT BE BUILT YET, and Kd was
+ *  told that before he ruled the four months.** Part 3 §4.2 says an archived gym
+ *  is *"restorable by reactivating"* — i.e. by paying — and nothing in this
+ *  product can put a gym back on a plan: `subscriptions` has exactly two writers
+ *  in `apps/api/src`, the INSERT in `startGymTrial` and the UPDATE in
+ *  `trialSweep.ts` (re-measured 2026-08-31). So the trigger for the automatic
+ *  half belongs to the payment card and is on its `OWED.md` line; this is the
+ *  operator's hand in the meantime, driven by `tools/gym-restore.ts`.
+ *
+ *  **IT RESTORES THE STATUS AND NOT THE PLAN, and the difference is not a
+ *  shortcut.** A re-opened gym has no live subscription, so its console is still
+ *  read-only (:23711) and its members are still on the free app. What it undoes
+ *  is the closure: people can type its join code again, its waiting queue can be
+ *  cleared again the moment it is on a plan, and it can start a trial if it never
+ *  spent one. Anything more would mean writing a subscription row nobody paid
+ *  for, which is R3.1.
+ *
+ *  **`archived_at` IS DELIBERATELY LEFT SET, and this is the line to read
+ *  twice.** It is what `archiveSweep.ts` reads as "this gym has been closed
+ *  before", so leaving it is what stops the next nightly run closing this gym
+ *  straight back down — the plan ended five months ago and that fact does not
+ *  change by re-opening. The pair is unambiguous: `status` says whether the gym
+ *  is closed NOW, `archived_at` says when it was last closed. Clearing it would
+ *  make the restore last exactly one night.
+ *
+ *  Tenancy is not this function's axis — it is an OPERATOR action with no
+ *  console route and no privilege, so the caller is a command line and the
+ *  actor is null. If it ever gains a route, the route owes the authz.
+ *  `FOR UPDATE` on the row, because this is a check-then-act on the column two
+ *  sweeps write. */
+export async function restoreGym(
+  sql: Sql,
+  input: { gymId: string; actorUserId: string | null; via: string },
+): Promise<RestoreGymOutcome> {
+  return await sql.begin(async (tx) => {
+    const rows = await tx<RawOrg[]>`
+      SELECT id, slug, name, city, country, org_type, timezone, locale,
+             currency_display, clock_format, manual_attendance_enabled, status
+      FROM gyms WHERE id = ${input.gymId}
+      -- THE LOCK IS ON ITS OWN LINE ON PURPOSE, and not for taste. NO BACKTICKS
+      -- IN HERE: one ends the literal, and I incurred that slip twice in this
+      -- card alone. Written as one line this SELECT is byte-identical to
+      -- claimSeat's, whose lock is what mutant O1 deletes to prove the seat race
+      -- is guarded — and an anchor
+      -- matching twice mutates whichever line comes first, silently testing the
+      -- wrong guarantee (:10726's shape; :15770 forbids re-aiming the mutant at
+      -- whichever line wins). The harness's pre-check ABORTED on exactly this
+      -- while this function was being written, before a byte was mutated, and
+      -- the remedy is :21157 §5's: make the new text unique in the SOURCE and
+      -- leave the existing mutant untouched.
+      FOR UPDATE`;
+    const raw = rows[0];
+    if (raw === undefined) return { kind: "not_found" };
+    const org = toOrgRow(raw);
+    // Not an error and not silently "restored" either: the caller asked for a
+    // state that already holds, and telling them which is what stops an
+    // operator re-running this and believing they fixed something.
+    if (org.status !== "archived") return { kind: "not_archived", org };
+
+    const updated = await tx<RawOrg[]>`
+      UPDATE gyms SET status = 'active'
+      WHERE id = ${input.gymId} AND status = 'archived'
+      RETURNING id, slug, name, city, country, org_type, timezone, locale,
+                currency_display, clock_format, manual_attendance_enabled, status`;
+    const updatedRaw = updated[0];
+    if (updatedRaw === undefined) {
+      // Unreachable under the `FOR UPDATE` above, which is exactly why it is
+      // loud rather than a fabricated success (`applyByCode`'s precedent).
+      throw new Error("gym row vanished between its lock and its restore");
+    }
+
+    // Part 3 §3.3, and the row that answers "who let this gym back in" —
+    // `via` names the surface because the admin panel will be a second caller
+    // and a hardcoded string here would then be a lie (:19016's first slice).
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.restored",
+      targetType: "gym",
+      targetId: input.gymId,
+      meta: { via: input.via },
+    });
+
+    return { kind: "restored", org: toOrgRow(updatedRaw) };
+  });
+}
+
+export interface GymSubscriptionRow {
+  status: OrgSubscriptionStatus;
+  trialEndsAt: Date | null;
+  /** The member limit in force now. */
+  seatCap: number | null;
+  /** The plan's own limit: in a paid trial it starts with the first payment. */
+  planSeatCap: number | null;
+  /** The plan's price: shown for a paid plan, never for a free trial. */
+  priceMinor: number;
+  currency: string;
+  currentPeriodEnd: Date | null;
+  cancelAtPeriodEnd: boolean;
+  /** When a Razorpay plan set to end was sent to Razorpay (1d-ii); null until then. */
+  cancelSentAt: Date | null;
+  /** Who charges for it: `paddle` for a plan the gym paid for, `none` for its own free trial. */
+  provider: string;
+  /** A paid trial's free-trial limit, held until the first payment; null otherwise. */
+  trialSeatCap: number | null;
+  /** A smaller size waiting, due at `from` (the end of the month paid). */
+  pending: { seatCap: number; priceMinor: number; from: Date } | null;
+  /** The smaller size last chosen was not made: the members counted did not fit it. */
+  kept: { seatCap: number; members: number } | null;
+  /** A bigger size than the one asked for was made: the members counted did not fit that. */
+  fitted: { askedSeatCap: number; members: number } | null;
+}
+
+export interface OrgPlanRow {
+  code: string;
+  priceMinor: number;
+  currency: string;
+  interval: PlanInterval;
+  seatCap: number | null;
+}
+
+/** A BOUND ON A LIST READ, ADDED BY T3 ROUND 1's Low-7 — :10596's L-1 is the
+ *  precedent and the trigger ("the codes list had no bound, the only list in
+ *  the module without one").
+ *
+ *  **The mitigation that precedent did not have is real and is why this is a
+ *  ceiling rather than a cursor:** `plans` is OPERATOR-SEEDED. No user path
+ *  writes it, so it cannot grow behind a request the way a roster or a code
+ *  list can. What this stops is a re-priced book quietly serving fifty rows to
+ *  a prompt designed for five.
+ *
+ *  Ten today (five USD, five INR) across BOTH currencies, so 50 is a ceiling
+ *  nothing approaches by accident and a number a re-priced book would have to
+ *  set out to exceed. No § governs it; it is chosen and recorded here. */
+export const ORG_PLANS_LIMIT = 50;
+
+/** THE GYM'S PRICE LIST — every plan it could subscribe to today, in its own
+ *  currency. Kd's ruling of 2026-08-28 (:22697): the owner of a second gym,
+ *  whose one free trial is spent, is shown *"the real plans at their real
+ *  prices"*.
+ *
+ *  **THE FILTERS ARE `startGymTrial`'S OWN, MINUS ONE, and the omission is the
+ *  only interesting line here.** That query adds `trial_days > 0` because a
+ *  trial needs a plan that grants one; a PRICE LIST must not, or a perfectly
+ *  buyable plan would be invisible for the sole reason that it does not come
+ *  with a free month. (Moot on today's book — all ten org rows carry 30 — which
+ *  is exactly why it is written down rather than left to be inferred from a
+ *  passing test.)
+ *
+ *  **`interval = 'month'` IS INHERITED DELIBERATELY.** The book is monthly
+ *  throughout (verified: ten org rows, all `month`), and a yearly row appearing
+ *  in this list would sit beside monthly ones with nothing on screen saying so —
+ *  a price that means something different from its neighbours, which is :5807's
+ *  false-on-screen shape. The day an annual tier is seeded, this list needs a
+ *  design and not just a wider WHERE.
+ *
+ *  **THE ORDER IS THE TRIAL BAND'S ORDER, `seat_cap ASC NULLS LAST`**, so the
+ *  smallest gym's plan is first and the list reads as the ladder Kd priced
+ *  (:17902's boundaries). `NULLS LAST` is load-bearing for the same reason it is
+ *  in `startGymTrial`: Postgres sorts NULLs FIRST on ASC, so without it a
+ *  capless tier would head the list as though it were the cheapest entry point.
+ *  **`rank` is NOT used and cannot be: measured, all five USD rows carry rank
+ *  10**, so ordering by it would leave the ladder in whatever order the seed
+ *  happened to insert.
+ *
+ *  Not tenant-scoped and does not need to be: a price book is the same for
+ *  everyone in a currency. The CALLER is scoped — the service refuses anybody
+ *  without `billing.manage` on the gym whose currency this is. */
+export async function listOrgPlansForCurrency(
+  sql: SqlOrTx,
+  currency: string,
+): Promise<OrgPlanRow[]> {
+  const rows = await sql<
+    {
+      code: string;
+      price_minor: number;
+      currency: string;
+      interval: string;
+      seat_cap: number | null;
+    }[]
+  >`
+    SELECT code, price_minor, currency, interval, seat_cap
+    FROM plans
+    WHERE audience = 'org'
+      AND currency = ${currency}
+      AND active = true -- a retired band must never be quoted to a buyer
+      AND interval = 'month'
+    ORDER BY seat_cap ASC NULLS LAST, price_minor ASC -- the ladder Kd priced
+    LIMIT ${ORG_PLANS_LIMIT}`;
+  return rows.map((r) => ({
+    code: r.code,
+    priceMinor: r.price_minor,
+    currency: r.currency,
+    interval: planIntervalSchema.parse(r.interval),
+    seatCap: r.seat_cap,
+  }));
+}
+
+export type StartTrialOutcome =
+  | { kind: "started"; subscription: GymSubscriptionRow }
+  | { kind: "already_subscribed"; subscription: GymSubscriptionRow }
+  | { kind: "trial_already_used" }
+  // No `currency` on this arm: it carried one for four commits and no caller
+  // ever read it (T3 round 1, Low-7). An unread field on a typed outcome reads
+  // as a fact somebody uses.
+  | { kind: "no_plan" }
+  | { kind: "org_archived" }
+  | { kind: "not_found" };
+
+/** THE GYM STARTS ITS OWN FREE TRIAL — the first statement in this product
+ *  that has ever written `subscriptions`, and the reason the seat cap stops being
+ *  correct-but-inert.
+ *
+ *  ~~**NOTHING ENDS A TRIAL, AND UNTIL SOMETHING DOES, THIS WRITES A GYM A
+ *  PERMANENT FREE PLAN.**~~ **— CLOSED 2026-08-28 BY THIS FILE'S SIBLING
+ *  `trialSweep.ts` AND THE NIGHTLY `orgs.trial_expiry` JOB (DECISIONS :22341,
+ *  Kd's ruling :22215 step 1).** A gym subscription still `trialing` past its
+ *  `trial_ends_at` is moved to `expired`, so its members fall back to the free
+ *  app within the resolver's 60-second cache window.
+ *
+ *  **The struck sentence is kept because the ORIGINAL MEASUREMENT still explains
+ *  this INSERT's shape** (T3 round 1's C/H-1): for its whole life until that day
+ *  this was the ONLY writer of `subscriptions` in the API, there was no `UPDATE
+ *  subscriptions` anywhere, and `trial_ends_at` was written here and read by
+ *  nothing that acted on it. **There are now TWO writers, and the second only
+ *  ever ENDS a trial** — it never inserts, never touches `active`/`past_due`, and
+ *  filters `owner_type = 'gym'`. A THIRD writer is billing's, and it is unbuilt.
+ *
+ *  **THE GUARD BESIDE THIS HAS NOW WOKEN, AND THE PREDICTION ABOUT IT WAS
+ *  WRONG.** `updateOrg`'s currency lock at :571 asks `status <> 'trialing'`, so
+ *  while every subscription in existence was a trial it never engaged. T3 round 2
+ *  Low-6 predicted its first firing could belong to a CHECKOUT writing `active`
+ *  (P3.4/P3.5) just as easily as to the sweep. **Measured: the sweep got there
+ *  first — the first row it ever sees is the first this lock has ever had an
+ *  opinion about** (:22341 §3). Kd ruled the resulting behaviour deliberately: a
+ *  gym that trialled and never paid **stays frozen**, and what is owed is the
+ *  contact channel, not a wider lock.
+ *
+ *  The other two features this card's commit message claimed to wake are NOT
+ *  awake: the clock is inert (above) and §4.2's banner is not built at all
+ *  (`Overview.jsx:32` says so in its own comment). One of three, stated as three.
+ *
+ *  **THE LOCK IS FIRST AND IT IS A REQUIREMENT, NOT A PREFERENCE.** T3 round 1's
+ *  C/H-3 on the gym-details card found that `updateOrg`'s currency guard is a
+ *  check-then-act: it asks "is this gym paying?" while holding only the GYM
+ *  row's lock, which cannot lock a subscription that does not exist yet. Its
+ *  `OWED.md` line names the closing half as a requirement on whichever card
+ *  first inserts a gym subscription, in these words — *"whatever creates a gym
+ *  subscription MUST take `lockOrgRow` on that gym first"*. This is that card and
+ *  this is that line. Taking the same lock in the same order (org row → child
+ *  rows) means the two serialise: a trial starting while an owner saves the
+ *  settings form either commits before the guard's SELECT or waits behind its
+ *  UPDATE, and never lands in between.
+ *
+ *  **The partial unique index `subs_one_live_uq` is the database's last word and
+ *  is deliberately NOT caught here.** A 23505 from the INSERT below cannot happen
+ *  while every writer takes this lock — the check three statements up would have
+ *  seen the row — so swallowing it would hide the only symptom of the exact
+ *  defect the OWED line exists to prevent: a second writer that skipped the lock.
+ *  Letting it throw is R1.3's "fail loudly" pointed at our own future code.
+ *
+ *  **`already_subscribed` is not an error** (see the response schema): a double
+ *  tap is a person, and the caller asked for a state that holds.
+ *
+ *  **ONE TRIAL PER OWNER, EVER — Part 5 §12's own rule** (*"trial re-abuse (org
+ *  deletes, re-signs for another 7 days): allowed once"*), and it is what makes
+ *  self-serve trials safe without an approval step. It asks about the OWNER, not
+ *  the gym: a gym is free to make, so per-gym would be no gate at all. Subscription
+ *  rows are never deleted (R4.3), so an expired trial is still evidence one
+ *  happened. The spec's stronger form matches on owner email/phone across
+ *  ACCOUNTS; this matches on the account, which is the same thing here because
+ *  `users.email` is unique while the account lives.
+ *
+ *  **WHAT A SECOND TRIAL ACTUALLY COSTS, corrected at T3 round 1 (Low-2) — the
+ *  earlier claim here was "a second email address" and that was FALSE.** The
+ *  Day-14 DPDP purge sets `users.email = NULL` (`privacy/repo.ts:130`), so
+ *  deleting the account RELEASES the address: the same person can re-register the
+ *  same email, receive a new `users.id`, and this gate — which matches on
+ *  `gyms.owner_user_id` — cannot see that they are the same person. So the price
+ *  is a second email address **OR** deleting the account and waiting out fourteen
+ *  days, losing everything in it. Both are soft gates of exactly the kind §12
+ *  describes ("a soft gate that costs honest users nothing"), and the second is
+ *  strictly the worse deal for an abuser — which is why the gate is as strong as
+ *  §12 asks even though the sentence describing it was wrong.
+ *
+ *  **The structural note, because it is the part that will bite: the evidence is
+ *  anchored on the gym row's CURRENT owner, not on the subscription.** Nothing
+ *  transfers or deletes a gym today, so the anchor holds. The first feature that
+ *  does either silently erases and misattributes trial history. */
+export async function startGymTrial(
+  sql: Sql,
+  input: { gymId: string; actorUserId: string },
+): Promise<StartTrialOutcome> {
+  return await sql.begin(async (tx) => {
+    // The trailing note is not decoration: `await lockOrgRow(tx, input.gymId);`
+    // appears five times in this file, so without something on the line only a
+    // two-line anchor could aim a mutant at THIS one — and a two-line anchor is
+    // the CRLF hazard :17676 counted 99 of. Naming the guarantee in the source
+    // is that finding's own remedy: one line carries it, and it is greppable.
+    await lockOrgRow(tx, input.gymId); // subscription-writer lock, :19656 C/H-3
+
+    const gymRows = await tx<{ status: string; currency_display: string; owner_user_id: string }[]>`
+      SELECT status, currency_display, owner_user_id FROM gyms WHERE id = ${input.gymId}`;
+    const gym = gymRows[0];
+    if (gym === undefined) return { kind: "not_found" };
+    if (toOrgStatus(gym.status) === "archived") return { kind: "org_archived" };
+
+    // §4.1's live set, the same three statuses `seatCapFor` and `getCandidates`
+    // treat as granting. Written out rather than shared as a fragment: R3.8
+    // forbids the shared-`sql` shape, and :14493 Low-2 is what happens when two
+    // readers of one rule drift.
+    const live = await tx<RawGymSubscription[]>`
+      SELECT s.status, s.trial_ends_at,
+             LEAST(p.seat_cap, s.trial_seat_cap, CASE WHEN s.pending_held_at IS NOT NULL THEN np.seat_cap END) AS seat_cap,
+             p.seat_cap AS plan_seat_cap, s.trial_seat_cap, p.price_minor, p.currency,
+             s.current_period_end, s.cancel_at_period_end, s.cancel_sent_at, s.provider,
+             ap.seat_cap AS pending_seat_cap, ap.price_minor AS pending_price_minor, s.pending_from,
+             CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL AND lc.recent THEN lc.seat_cap END AS kept_seat_cap,
+             CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS kept_members,
+             CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND s.pending_plan_id IS NULL AND lc.recent THEN lc.asked_seat_cap END AS fitted_asked_seat_cap,
+             CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND s.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS fitted_members
+      FROM subscriptions s JOIN plans p ON p.id = s.plan_id
+      LEFT JOIN plans np ON np.id = s.pending_plan_id
+      -- The size asked for, which the card names; np is what is being made.
+      LEFT JOIN plans ap ON ap.id = COALESCE(s.pending_requested_plan_id, s.pending_plan_id)
+      LEFT JOIN LATERAL (
+        SELECT c.state, c.failure, c.members_counted, kp.seat_cap, rp.seat_cap AS asked_seat_cap,
+               -- Said until the payment after the one it was decided for.
+               c.created_at > s.current_period_end - interval '32 days' AS recent
+        FROM billing_plan_changes c JOIN plans kp ON kp.id = c.to_plan_id
+        LEFT JOIN plans rp ON rp.id = c.requested_plan_id
+        WHERE c.gym_id = s.owner_id AND c.subscription_id = s.id
+        ORDER BY c.created_at DESC
+        LIMIT 1
+      ) lc ON true
+      WHERE s.owner_type = 'gym' AND s.owner_id = ${input.gymId}
+        AND s.status IN ('trialing','active','past_due')`;
+    const existing = live[0];
+    if (existing !== undefined) {
+      return { kind: "already_subscribed", subscription: toGymSubscription(existing) };
+    }
+
+    // One trial per OWNER: the gym's lock does not cover the owner's other gyms, so
+    // two presses on two of them would both read "never had one".
+    await tx`SELECT pg_advisory_xact_lock(hashtext(${`gym-trial:${gym.owner_user_id}`}))`;
+    const used = await tx<{ one: number }[]>`
+      SELECT 1 AS one
+      FROM subscriptions s JOIN gyms g ON g.id = s.owner_id
+      WHERE s.owner_type = 'gym'
+        AND g.owner_user_id = ${gym.owner_user_id}
+        AND s.trial_ends_at IS NOT NULL
+      LIMIT 1`;
+    if (used[0] !== undefined) return { kind: "trial_already_used" };
+
+    /** THE TRIAL BAND IS THE SMALLEST ONE, WHICH IS KD'S RULING EXPRESSED AS A
+     *  QUERY RATHER THAN AS A NUMBER. :19129: *"no plan choice at signup · EVERY
+     *  gym trials at the SAME limit, 300 members (200 since 2026-09-22) · the gym subscribes to its real
+     *  band AFTER the trial"*. The seed's own comment says `seat_cap` **is** the
+     *  band boundary, so "band 1" and "the lowest cap" are the same row — and
+     *  ordering by it means the ruling survives a re-priced book without anybody
+     *  remembering to edit a 300 here (Part 0 rule 4: the number lives in the
+     *  seed, quoted, never recalled in code).
+     *
+     *  `NULLS LAST` is load-bearing: `seat_cap` is nullable for a capless tier,
+     *  and in Postgres NULLs sort FIRST on ASC — so without it the trial would
+     *  hand every new gym the uncapped plan, which is the opposite of a cap.
+     *
+     *  `trial_days > 0` means a book with no trial-bearing plan answers "no plan"
+     *  instead of writing a trial that ended the instant it began. `interval =
+     *  'month'` keeps a yearly row from being read as a band. */
+    const planRows = await tx<{ id: string; seat_cap: number | null; trial_days: number; price_minor: number; currency: string }[]>`
+      SELECT id, seat_cap, trial_days, price_minor, currency
+      FROM plans
+      WHERE audience = 'org'
+        AND currency = ${gym.currency_display}
+        AND active = true
+        AND interval = 'month'
+        AND trial_days > 0
+      ORDER BY seat_cap ASC NULLS LAST, price_minor ASC
+      LIMIT 1`;
+    const plan = planRows[0];
+    if (plan === undefined) return { kind: "no_plan" };
+
+    // The trial holds its own member limit, below the band's (Kd, RULINGS 2026-09-29).
+    const trialSeatCap = plan.seat_cap === null ? GYM_TRIAL_MEMBERS : Math.min(plan.seat_cap, GYM_TRIAL_MEMBERS);
+    const inserted = await tx<{ id: string; status: string; trial_ends_at: Date | null }[]>`
+      INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, trial_ends_at, trial_seat_cap, provider)
+      VALUES ('gym', ${input.gymId}, ${plan.id}, 'trialing',
+              now() + ${plan.trial_days} * INTERVAL '1 day', ${trialSeatCap}, 'none')
+      RETURNING id, status, trial_ends_at`;
+    const row = inserted[0];
+    if (row === undefined) throw new Error("subscription insert returned no row");
+
+    const subscription = toGymSubscription({
+      status: row.status,
+      trial_ends_at: row.trial_ends_at,
+      seat_cap: trialSeatCap,
+      plan_seat_cap: trialSeatCap,
+      price_minor: plan.price_minor,
+      currency: plan.currency,
+      current_period_end: null,
+      cancel_at_period_end: false,
+      cancel_sent_at: null,
+      provider: "none",
+      pending_seat_cap: null,
+      pending_price_minor: null,
+      pending_from: null,
+      trial_seat_cap: trialSeatCap,
+      kept_seat_cap: null,
+      kept_members: null,
+      fitted_asked_seat_cap: null,
+      fitted_members: null,
+    });
+
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.trial_started",
+      targetType: "subscription",
+      // THE SUBSCRIPTION'S OWN ID, not the gym's (T3 round 1, Low-6). A row
+      // saying `targetType: 'subscription'` while carrying a gym id cannot be
+      // joined to the subscription it is about, and P3's Done gate asks that any
+      // subscription's life be narratable from `audit_log` alone.
+      targetId: row.id,
+      // The two facts a person reading this row later actually wants: when it
+      // runs out, and how many members it admits. `seatCap` is null for a
+      // capless tier and is recorded as null rather than as the string "null" —
+      // `insertAudit`'s one allowance, and this is a value that genuinely does
+      // not exist rather than one nobody looked up.
+      meta: {
+        trialEndsAt: subscription.trialEndsAt?.toISOString() ?? null,
+        seatCap: subscription.seatCap === null ? null : String(subscription.seatCap),
+        currency: gym.currency_display,
+      },
+    });
+
+    return { kind: "started", subscription };
+  });
+}
+
+interface RawGymSubscription {
+  status: string;
+  trial_ends_at: Date | null;
+  /** The limit in force: a paid trial's is its free trial's until a payment is taken. */
+  seat_cap: number | null;
+  plan_seat_cap: number | null;
+  price_minor: number;
+  currency: string;
+  current_period_end: Date | null;
+  cancel_at_period_end: boolean;
+  cancel_sent_at: Date | null;
+  provider: string;
+  pending_seat_cap: number | null;
+  pending_price_minor: number | null;
+  pending_from: Date | null;
+  trial_seat_cap: number | null;
+  kept_seat_cap: number | null;
+  kept_members: number | null;
+  fitted_asked_seat_cap: number | null;
+  fitted_members: number | null;
+}
+
+function toGymSubscription(raw: RawGymSubscription): GymSubscriptionRow {
+  return {
+    status: orgSubscriptionStatusSchema.parse(raw.status),
+    trialEndsAt: raw.trial_ends_at,
+    seatCap: raw.seat_cap,
+    planSeatCap: raw.plan_seat_cap,
+    priceMinor: raw.price_minor,
+    currency: raw.currency,
+    currentPeriodEnd: raw.current_period_end,
+    cancelAtPeriodEnd: raw.cancel_at_period_end,
+    cancelSentAt: raw.cancel_sent_at,
+    provider: raw.provider,
+    trialSeatCap: raw.trial_seat_cap,
+    pending:
+      raw.pending_from === null || raw.pending_price_minor === null || raw.pending_seat_cap === null
+        ? null
+        : { seatCap: raw.pending_seat_cap, priceMinor: raw.pending_price_minor, from: raw.pending_from },
+    kept: raw.kept_seat_cap === null || raw.kept_members === null ? null : { seatCap: raw.kept_seat_cap, members: raw.kept_members },
+    fitted:
+      raw.fitted_asked_seat_cap === null || raw.fitted_members === null
+        ? null
+        : { askedSeatCap: raw.fitted_asked_seat_cap, members: raw.fitted_members },
+  };
+}
+
+/** The gym's live plan, or null: §4.1's three granting statuses. */
+export async function gymLiveSubscription(sql: SqlOrTx, gymId: string): Promise<GymSubscriptionRow | null> {
+  const rows = await sql<RawGymSubscription[]>`
+    SELECT s.status, s.trial_ends_at,
+           LEAST(p.seat_cap, s.trial_seat_cap, CASE WHEN s.pending_held_at IS NOT NULL THEN np.seat_cap END) AS seat_cap,
+           p.seat_cap AS plan_seat_cap, s.trial_seat_cap, p.price_minor, p.currency,
+           s.current_period_end, s.cancel_at_period_end, s.cancel_sent_at, s.provider,
+           ap.seat_cap AS pending_seat_cap, ap.price_minor AS pending_price_minor, s.pending_from,
+           CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL AND lc.recent THEN lc.seat_cap END AS kept_seat_cap,
+           CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS kept_members,
+           CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND s.pending_plan_id IS NULL AND lc.recent THEN lc.asked_seat_cap END AS fitted_asked_seat_cap,
+           CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND s.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS fitted_members
+    FROM subscriptions s JOIN plans p ON p.id = s.plan_id
+    LEFT JOIN plans np ON np.id = s.pending_plan_id
+    -- The size asked for, which the card names; np is what is being made.
+    LEFT JOIN plans ap ON ap.id = COALESCE(s.pending_requested_plan_id, s.pending_plan_id)
+    LEFT JOIN LATERAL (
+      SELECT c.state, c.failure, c.members_counted, kp.seat_cap, rp.seat_cap AS asked_seat_cap,
+             -- Said until the payment after the one it was decided for.
+             c.created_at > s.current_period_end - interval '32 days' AS recent
+      FROM billing_plan_changes c JOIN plans kp ON kp.id = c.to_plan_id
+      LEFT JOIN plans rp ON rp.id = c.requested_plan_id
+      WHERE c.gym_id = s.owner_id AND c.subscription_id = s.id
+      ORDER BY c.created_at DESC
+      LIMIT 1
+    ) lc ON true
+    WHERE s.owner_type = 'gym' AND s.owner_id = ${gymId}
+      AND s.status IN ('trialing','active','past_due')
+    LIMIT 1`;
+  const row = rows[0];
+  return row === undefined ? null : toGymSubscription(row);
+}
+
+export type DecideOutcome =
+  /** `applicantUserId` travels WITH the outcome rather than being re-read by
+   *  the service: the person whose entitlements just changed is the applicant,
+   *  and a second query to find out who they were is a second query that can
+   *  disagree with the row this transaction just wrote. */
+  | { kind: "confirmed"; membership: MembershipRow; applicantUserId: string }
+  | { kind: "already_confirmed"; memberId: string | null }
+  | { kind: "rejected" }
+  | { kind: "not_found" }
+  | { kind: "not_pending"; status: OrgApplicationStatus }
+  | { kind: "org_archived" }
+  | { kind: "seat_cap"; cap: number };
+
+/** THE FRONT DESK'S TAP — the only path in the product that turns a code into
+ *  a membership (Kd ruling :11072).
+ *
+ *  **LOCK ORDER IS application → gym, ALWAYS, and it is decided here** because
+ *  this is the only function that takes both. `claimSeat` takes neither on
+ *  purpose (see its comment): a second lock order anywhere in this module is a
+ *  deadlock waiting for two front-desk staff working the queue at once.
+ *
+ *  **A FULL GYM DOES NOT DESTROY THE APPLICATION.** `seat_cap` returns with
+ *  the row still `pending`, so the owner adds a seat and taps again rather
+ *  than hunting for a person the app threw away — the same instinct behind
+ *  §4.2's idempotent success, applied to the failure side.
+ *
+ *  Tenancy is the WHERE (R3.2): the application is addressed by `id` AND
+ *  `gym_id`, so a staff member of one gym cannot decide another gym's
+ *  application even holding its uuid. */
+export async function confirmApplication(
+  sql: Sql,
+  input: { gymId: string; applicationId: string; actorUserId: string },
+): Promise<DecideOutcome> {
+  return await sql.begin(async (tx) => {
+    const appRows = await tx<
+      (RawApplication & { user_id: string; code_id: string; consent_at: Date | null; member_id: string | null })[]
+    >`
+      SELECT id, status, applied_at, expires_at, decided_at, member_nudged_at,
+             user_id, code_id, consent_at, member_id
+      FROM gym_join_applications
+      WHERE id = ${input.applicationId} AND gym_id = ${input.gymId}
+      FOR UPDATE`;
+    const app = appRows[0];
+    if (app === undefined) return { kind: "not_found" };
+
+    const status = toApplicationStatus(app.status);
+    // A double tap on Confirm is a person pressing a button twice, not an
+    // error: report the same outcome rather than "that is not pending".
+    if (status === "confirmed") return { kind: "already_confirmed", memberId: app.member_id };
+    if (status !== "pending") return { kind: "not_pending", status };
+
+    const orgRows = await tx<RawOrg[]>`
+      SELECT id, slug, name, city, country, org_type, timezone, locale,
+           currency_display, clock_format, manual_attendance_enabled, status
+      FROM gyms WHERE id = ${input.gymId} FOR UPDATE`;
+    const rawOrg = orgRows[0];
+    if (rawOrg === undefined) return { kind: "not_found" };
+    const org = toOrgRow(rawOrg);
+    if (org.status !== "active") return { kind: "org_archived" };
+
+    const codeRows = await tx<{ label: string }[]>`
+      SELECT label FROM gym_codes WHERE id = ${app.code_id} AND gym_id = ${input.gymId}`;
+    const codeLabel = codeRows[0]?.label ?? null;
+    if (codeLabel === null) {
+      // The FK is NOT NULL and gym-scoped, so this cannot happen without the
+      // code row being deleted out from under a live application. Loud.
+      throw new Error("join application references a code that is not this gym's");
+    }
+
+    const claim = await claimSeat(tx, {
+      org,
+      userId: app.user_id,
+      codeId: app.code_id,
+      codeLabel,
+      consentAt: app.consent_at,
+    });
+    if (claim.kind === "seat_cap") return { kind: "seat_cap", cap: claim.cap };
+
+    await tx`
+      UPDATE gym_join_applications
+      SET status = 'confirmed', decided_at = now(),
+          decided_by_user_id = ${input.actorUserId}, member_id = ${claim.membership.id}
+      WHERE id = ${app.id}`;
+
+    // The actor is the STAFF member who confirmed, not the joiner — that is
+    // the whole point of the record. `applicantUserId` is in `meta` because
+    // `target_id` is the membership the tap produced.
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: org.id,
+      action: "org.member_joined",
+      targetType: "gym_member",
+      targetId: claim.membership.id,
+      meta: {
+        codeLabel,
+        applicationId: app.id,
+        applicantUserId: app.user_id,
+        via: "front_desk_confirm",
+      },
+    });
+
+    return { kind: "confirmed", membership: claim.membership, applicantUserId: app.user_id };
+  });
+}
+
+/** "Not this person." The row is closed, not deleted — a rejection is history
+ *  the gym may need, and :11385's re-apply is free, so the applicant is not
+ *  locked out by it (the per-route rate limit is what bounds a stranger's
+ *  retries, never a permanent block on a real member who was mis-tapped). */
+export async function rejectApplication(
+  sql: Sql,
+  input: { gymId: string; applicationId: string; actorUserId: string },
+): Promise<DecideOutcome> {
+  return await sql.begin(async (tx) => {
+    const appRows = await tx<(RawApplication & { user_id: string })[]>`
+      SELECT id, status, applied_at, expires_at, decided_at, member_nudged_at, user_id
+      FROM gym_join_applications
+      WHERE id = ${input.applicationId} AND gym_id = ${input.gymId}
+      FOR UPDATE`;
+    const app = appRows[0];
+    if (app === undefined) return { kind: "not_found" };
+
+    const status = toApplicationStatus(app.status);
+    if (status !== "pending") return { kind: "not_pending", status };
+
+    await tx`
+      UPDATE gym_join_applications
+      SET status = 'rejected', decided_at = now(), decided_by_user_id = ${input.actorUserId}
+      WHERE id = ${app.id}`;
+
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.join_rejected",
+      targetType: "gym_join_application",
+      targetId: app.id,
+      meta: { applicantUserId: app.user_id },
+    });
+
+    return { kind: "rejected" };
+  });
+}
+
+/** The console's confirm queue: pending applications for ONE gym, OLDEST
+ *  FIRST — a queue is answered in the order people asked, and the person who
+ *  has waited longest is the one closest to :11385's expiry.
+ *
+ *  `pendingCount` is an EXACT count over the whole queue, not this page's
+ *  length: :10402's rule, because "3 people waiting" printed off a page of 3
+ *  out of 90 is a wrong number on screen (:5807).
+ *
+ *  **THE CURSOR IS THE ROW'S ID AND THE COMPARISON READS THE ROW'S OWN STORED
+ *  TIMESTAMP, which is NOT how the roster next door does it — and the
+ *  difference is a bug this card's own new test caught.** Postgres stores
+ *  `timestamptz` to the MICROSECOND (measured: `now()` = …467902) while a JS
+ *  `Date` and therefore `toISOString()` carry MILLISECONDS (…467). A cursor
+ *  built from the serialized timestamp is thus slightly SMALLER than the row it
+ *  names, so an ASC `>` comparison lets that row back in and **the last row of
+ *  every page reappears as the first row of the next.** Feeding the id back and
+ *  letting SQL fetch the true value removes the round trip through a lossy
+ *  format entirely.
+ *
+ *  **The roster's cursor has the mirror-image latent defect and is NOT touched
+ *  here (R1.1):** DESC + `<` against a too-small cursor EXCLUDES rather than
+ *  repeats, so instead of a duplicate it can silently SKIP a member whose
+ *  `joined_at` falls between the truncated millisecond and the true value. It
+ *  needs two rows inside the same millisecond to bite, which is why four
+ *  fixtures created seconds apart have never shown it. Own `OWED.md` line. */
+export async function listApplications(
+  sql: Sql,
+  input: { gymId: string; limit: number; cursor: string | null },
+): Promise<{ items: ApplicantRow[]; nextCursor: string | null; pendingCount: number }> {
+  const cursorId = input.cursor;
+  // T3 L-2 — WHY THE `NOT EXISTS` ARM BELOW EXISTS. A well-formed cursor
+  // naming a row this gym does not have must fall back to the FIRST page, not
+  // blank the queue. The scalar subquery yields no row, so
+  // `(a.applied_at, a.id) > NULL` evaluates to NULL rather than false, and NULL
+  // filters every row out: the page came back empty while `pendingCount` still
+  // reported the true total — a console showing "3 people waiting" over an
+  // empty list. Verified against the live database rather than reasoned:
+  // `((now(), gen_random_uuid()) > (SELECT ... WHERE false)) IS NULL` → true.
+  // It also restores the convention the service states out loud, since a
+  // MALFORMED cursor already restarted and a stale one must behave the same.
+  //
+  // (Written here and not as a SQL comment inside the query on purpose: this
+  // paragraph names identifiers in backticks, and a backtick inside the
+  // template literal ENDS it — which is exactly how the first attempt turned
+  // into six parse errors.)
+  const rows = await sql<
+    {
+      id: string;
+      user_id: string;
+      display_name: string;
+      applied_at: Date;
+      expires_at: Date;
+      group_label: string;
+      gym_notified_at: Date | null;
+      member_nudged_at: Date | null;
+    }[]
+  >`
+    SELECT a.id, a.user_id, u.display_name, a.applied_at, a.expires_at,
+           a.gym_notified_at, a.member_nudged_at,
+           c.label AS group_label
+    FROM gym_join_applications a
+    JOIN users u ON u.id = a.user_id
+    JOIN gym_codes c ON c.id = a.code_id
+    WHERE a.gym_id = ${input.gymId}
+      AND a.status = 'pending'
+      AND (
+        ${cursorId}::uuid IS NULL
+        -- T3 L-2, explained above this query: an unknown cursor restarts.
+        OR NOT EXISTS (
+          SELECT 1 FROM gym_join_applications c
+          WHERE c.id = ${cursorId}::uuid AND c.gym_id = ${input.gymId}
+        )
+        OR (a.applied_at, a.id) > (
+          SELECT c.applied_at, c.id FROM gym_join_applications c
+          WHERE c.id = ${cursorId}::uuid AND c.gym_id = ${input.gymId}
+        )
+      )
+    ORDER BY a.applied_at ASC, a.id ASC
+    LIMIT ${input.limit + 1}`;
+
+  const countRows = await sql<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM gym_join_applications
+    WHERE gym_id = ${input.gymId} AND status = 'pending'`;
+
+  const page = rows.slice(0, input.limit);
+  const last = page[page.length - 1];
+  const nextCursor = rows.length > input.limit && last !== undefined ? last.id : null;
+  return {
+    items: page.map((r) => ({
+      id: r.id,
+      userId: r.user_id,
+      displayName: r.display_name,
+      appliedAt: r.applied_at,
+      expiresAt: r.expires_at,
+      groupLabel: r.group_label,
+      gymNotifiedAt: r.gym_notified_at,
+      nudgedAt: r.member_nudged_at,
+    })),
+    nextCursor,
+    pendingCount: countRows[0]?.n ?? 0,
+  };
+}
+
+/** How long a DECIDED application stays visible to the person who made it.
+ *
+ *  It exists because a rejected applicant must be TOLD — leaving "waiting for
+ *  Iron House" on screen after the gym said no is the app stating something
+ *  false (:5807), and silently vanishing the card leaves a real member who was
+ *  mis-tapped with no idea what happened. It is a DISPLAY window and not a
+ *  rule about the data; 14 days mirrors the application's own life so a person
+ *  cannot see the outcome for longer than the wait that produced it. */
+export const DECIDED_VISIBLE_DAYS = 14;
+
+/** Bounded like `MY_ORGS_LIMIT` and for the same reason. A person applies to
+ *  one or two gyms; this ceiling exists so the response has one at all. */
+export const MY_APPLICATIONS_LIMIT = 50;
+
+/** The applicant's own applications: everything still pending, plus anything
+ *  recently decided AGAINST them so the screen can say so.
+ *
+ *  `confirmed` rows are deliberately excluded — once a confirm lands the
+ *  person is a member, `/v1/orgs/mine` is where that fact lives, and two
+ *  readers claiming the same thing is two readers that can disagree.
+ *
+ *  **THE `NOT EXISTS` ARM IS T3 ROUND 1's C/H-1 AND IT IS LOAD-BEARING.** That
+ *  deliberate exclusion had a cost nobody had priced: a person who was refused,
+ *  asked again, was CONFIRMED, and was then REMOVED had exactly one surviving
+ *  row — the refusal — because the confirmation is invisible here by design and
+ *  `/v1/orgs/mine` drops the gym the moment `removed_at` is set. Their
+ *  dashboard read "{gym} didn't confirm your request", with a Try again link,
+ *  which is the app stating something FALSE (:5807) about a decision the gym
+ *  had already made in their favour. Found live on the smoke's own account.
+ *
+ *  **The fix belongs HERE and could not live in the client**: the client cannot
+ *  see the confirmation that supersedes the refusal, so it has nothing to rank
+ *  it against — `gymMembershipView.js`'s member-beats-waiting-beats-refused is
+ *  correct and was simply never handed the winning row.
+ *
+ *  It compares TIMESTAMPS rather than asking "was this person ever confirmed
+ *  here", because the mirror case is real and must still show: confirmed →
+ *  removed → asks again → refused leaves a refusal that is the NEWEST fact, and
+ *  hiding that one would leave a genuinely turned-away person with a blank
+ *  screen. Both directions carry a test. */
+export async function listApplicationsForUser(
+  sql: Sql,
+  userId: string,
+): Promise<{ org: OrgRow; application: ApplicationRow; orgCanConfirm: boolean }[]> {
+  // Every column is aliased explicitly. The two tables BOTH carry `id` and
+  // `status`, and an unaliased join would hand one of each to the row object —
+  // silently parsing a gym's 'active' as an application status, or worse the
+  // other way round. Naming them is the guard.
+  interface RawMyApplication {
+    app_id: string;
+    app_status: string;
+    applied_at: Date;
+    expires_at: Date;
+    decided_at: Date | null;
+    member_nudged_at: Date | null;
+    org_id: string;
+    slug: string;
+    name: string;
+    city: string | null;
+    country: string | null;
+    org_type: string;
+    timezone: string;
+    locale: string;
+    clock_format: string;
+    manual_attendance_enabled: boolean;
+    currency_display: string;
+    org_status: string;
+    org_can_confirm: boolean;
+  }
+  // **`org_can_confirm` — CAN THIS GYM ACT ON THIS REQUEST RIGHT NOW?** False
+  // while the gym has no live plan, because Confirm answers 409 for it
+  // (:23711's twelve doors). The waiting person's card needs it to stop saying
+  // "one tap at the front desk" about a tap the server refuses (:5807).
+  //
+  // **IT NAMES THE EFFECT AND NEVER THE CAUSE, AND THAT IS AN INFORMATION
+  // BOUNDARY, NOT A WORDING PREFERENCE.** An applicant is not staff of this gym
+  // — `consoleReadOnly` on `/v1/orgs/mine` is staff-only for exactly this
+  // reason, and :23711 §2(a) ordered the gate's two checks so that a signed-in
+  // stranger holding a uuid cannot learn which gyms have stopped paying. This
+  // field is served to a stranger by design, so it answers only the question
+  // that is theirs to ask — whether their own request can be acted on — and the
+  // screen's sentence stops there too.
+  //
+  // A FIFTH READER of §4.1's three live statuses, held to the other four by a
+  // test that drives one gym across the transition (`gymHasLivePlan`'s note).
+  const rows = await sql<RawMyApplication[]>`
+    SELECT a.id AS app_id, a.status AS app_status, a.applied_at, a.expires_at,
+           a.decided_at, a.member_nudged_at,
+           g.id AS org_id, g.slug, g.name, g.city, g.country, g.org_type,
+           g.timezone, g.locale, g.currency_display, g.clock_format,
+           g.manual_attendance_enabled,
+           g.status AS org_status,
+           EXISTS (
+             SELECT 1 FROM subscriptions s
+             WHERE s.owner_type = 'gym' AND s.owner_id = g.id
+               AND s.status IN ('trialing','active','past_due')
+           ) AS org_can_confirm
+    FROM gym_join_applications a
+    JOIN gyms g ON g.id = a.gym_id
+    WHERE a.user_id = ${userId}
+      AND (
+        a.status = 'pending'
+        OR (a.status IN ('rejected','expired')
+            AND coalesce(a.decided_at, a.expires_at)
+                > now() - (${DECIDED_VISIBLE_DAYS} * INTERVAL '1 day')
+            AND NOT EXISTS (
+              SELECT 1 FROM gym_join_applications newer
+              WHERE newer.user_id = a.user_id
+                AND newer.gym_id = a.gym_id
+                AND newer.status = 'confirmed'
+                AND (newer.applied_at, newer.id) > (a.applied_at, a.id)
+            ))
+      )
+    ORDER BY a.applied_at DESC, a.id DESC
+    LIMIT ${MY_APPLICATIONS_LIMIT}`;
+  return rows.map((r) => ({
+    org: toOrgRow({
+      id: r.org_id,
+      slug: r.slug,
+      name: r.name,
+      city: r.city,
+      country: r.country,
+      org_type: r.org_type,
+      timezone: r.timezone,
+      locale: r.locale,
+      currency_display: r.currency_display,
+      clock_format: r.clock_format,
+      manual_attendance_enabled: r.manual_attendance_enabled,
+      status: r.org_status,
+    }),
+    application: toApplicationRow({
+      id: r.app_id,
+      status: r.app_status,
+      applied_at: r.applied_at,
+      expires_at: r.expires_at,
+      decided_at: r.decided_at,
+      member_nudged_at: r.member_nudged_at,
+    }),
+    // Beside `ApplicationRow` rather than inside it: `ApplicationRow` is also
+    // what the JOIN DOOR returns (`applyByCode`), and a fact about the gym's
+    // plan has no business riding on that shape. This is the applicant LIST's
+    // own answer.
+    orgCanConfirm: r.org_can_confirm,
+  }));
+}
+
+/** :11385 mechanic 3, ratified by Kd 2026-08-20: the waiting member may remind
+ *  the gym at most ONCE A DAY. */
+export const NUDGE_INTERVAL_HOURS = 24;
+
+export type NudgeOutcome =
+  | { kind: "sent"; nudgedAt: Date; nextNudgeAt: Date }
+  | { kind: "too_soon"; nudgedAt: Date; nextNudgeAt: Date }
+  | { kind: "not_found" }
+  | { kind: "not_pending"; status: OrgApplicationStatus };
+
+/** THE WAITING MEMBER'S NUDGE — :11385's third mechanic, and the only one of
+ *  the three the person waiting can set off themselves.
+ *
+ *  **THE ONCE-A-DAY LIMIT IS IN THE DATABASE, NOT IN REDIS, and that is the
+ *  decision worth not re-deriving.** Every other limit in this module is a
+ *  request-rate floor living in a counter that a restart or an eviction may
+ *  drop — which is correct for "how hard may you hammer this endpoint" and
+ *  wrong for "how often may this happen at all". A dropped counter here would
+ *  hand somebody a second reminder the ruling says they do not get, and the
+ *  front desk would see a person asking twice in an hour. The column IS the
+ *  rule, `now()` is the database's own clock, and the comparison happens inside
+ *  the same transaction that writes it, so two taps racing cannot both win.
+ *
+ *  **Tenancy is the WHERE (R3.2) and carries NO gym id**, because the caller is
+ *  addressing their OWN application: `id` AND `user_id`. Holding somebody
+ *  else's application uuid nudges nobody and — like every other 404 in this
+ *  module — is indistinguishable from an id that never existed.
+ *
+ *  **Nothing is DELIVERED anywhere and the name is honest about it.** There is
+ *  no email in this product and no push on web; what this writes is a mark the
+ *  console renders beside that person's row. The copy on both screens says
+ *  exactly that and promises no message. */
+export async function nudgeApplication(
+  sql: Sql,
+  input: { applicationId: string; userId: string },
+): Promise<NudgeOutcome> {
+  return await sql.begin(async (tx) => {
+    const rows = await tx<
+      { id: string; status: string; gym_id: string; member_nudged_at: Date | null }[]
+    >`
+      SELECT id, status, gym_id, member_nudged_at
+      FROM gym_join_applications
+      WHERE id = ${input.applicationId} AND user_id = ${input.userId}
+      FOR UPDATE`;
+    const app = rows[0];
+    if (app === undefined) return { kind: "not_found" };
+
+    const status = toApplicationStatus(app.status);
+    // Only a WAITING person has anything to remind anybody about. A confirmed
+    // application would nudge a gym about somebody already inside it, and a
+    // rejected or expired one would ask them to reconsider a decision this
+    // endpoint has no business reopening — re-applying is the door for that,
+    // and :11385 made it free precisely so this one does not have to be.
+    if (status !== "pending") return { kind: "not_pending", status };
+
+    // One statement decides AND writes. Splitting it into "is it due?" then
+    // "write it" is the shape that lets two taps a millisecond apart both read
+    // yesterday's timestamp and both write today's; the row lock above already
+    // serialises them, and this keeps the rule true even if the lock is ever
+    // relaxed.
+    const updated = await tx<{ member_nudged_at: Date; next_nudge_at: Date }[]>`
+      UPDATE gym_join_applications
+      SET member_nudged_at = now()
+      WHERE id = ${app.id}
+        AND (member_nudged_at IS NULL
+             OR member_nudged_at <= now() - (${NUDGE_INTERVAL_HOURS} * INTERVAL '1 hour'))
+      RETURNING member_nudged_at,
+                member_nudged_at + (${NUDGE_INTERVAL_HOURS} * INTERVAL '1 hour') AS next_nudge_at`;
+
+    const sent = updated[0];
+    if (sent === undefined) {
+      // Not an error: a person tapped a button twice, or came back the same
+      // afternoon. The screen needs the two times so it can say WHEN they can
+      // ask again rather than computing a date of its own.
+      const held = app.member_nudged_at;
+      if (held === null) {
+        // The UPDATE's own WHERE admits a null, so a null here means the row
+        // changed under a lock we hold — impossible, and loud rather than a
+        // fabricated time (the `already_pending` branch's precedent).
+        throw new Error("nudge refused a never-nudged application");
+      }
+      return {
+        kind: "too_soon",
+        nudgedAt: held,
+        nextNudgeAt: new Date(held.getTime() + NUDGE_INTERVAL_HOURS * 60 * 60 * 1000),
+      };
+    }
+
+    // Part 3 §3.3: every mutating call writes `audit_log`. This is the row that
+    // answers "we never heard from them" if a gym and a member ever disagree
+    // about who was waiting on whom.
+    await insertAudit(tx, {
+      actorUserId: input.userId,
+      gymId: app.gym_id,
+      action: "org.join_nudged",
+      targetType: "gym_join_application",
+      targetId: app.id,
+      meta: {},
+    });
+
+    return { kind: "sent", nudgedAt: sent.member_nudged_at, nextNudgeAt: sent.next_nudge_at };
+  });
+}
+
+export type RemoveMemberOutcome =
+  | { kind: "removed" }
+  | { kind: "already_removed" }
+  | { kind: "never_member" }
+  /** They are staff, and the caller may not manage staff: the owner's call alone. */
+  | { kind: "staff_owner_only" }
+  /** "Also remove from staff" for an owner: an owner leaves through a hand-over (4b). */
+  | { kind: "owner_stays_owner" };
+
+/** PART 3 §4.3's REMOVE — "sets `removed_at` (seat freed instantly; history
+ *  retained)".
+ *
+ *  **Why this exists at all, and it is Kd's finding:** shown that a confirmed
+ *  member could not be removed by anyone, he answered *"if someone joins once
+ *  can not be removed what is this"*. Measured before building: the only
+ *  statement in the whole product that had ever written `removed_at` was the
+ *  DPDP Day-0 cascade in `users/repo.ts`, i.e. a person deleting their own
+ *  account. A gym had no way to correct a mis-tap, and Confirm was therefore a
+ *  one-way door.
+ *
+ *  **THE ROW IS CLOSED, NEVER DELETED.** `[joined_at, removed_at)` is the
+ *  membership interval every org-side reader is scoped by (§2.1), so closing
+ *  it ends the relationship without touching a single workout: the member
+ *  keeps their history, and the gym keeps the record that this person was
+ *  theirs for that period. A DELETE would silently rewrite both.
+ *
+ *  **THE SEAT IS FREED BY THE SAME STATEMENT** — `claimSeat` counts live,
+ *  non-complimentary rows, so there is no counter to decrement and no second
+ *  place to get wrong.
+ *
+ *  **STAFF (ROADMAP 4a-ii, spec §10.3).** Staff and member are separate, so ending a
+ *  staff person's membership leaves their staff access unless `alsoStaff` takes it in
+ *  the same step. Only somebody who may manage staff (the owner) removes a staff
+ *  person's membership, so a manager can never leave a colleague half-removed. An
+ *  owner's place may go; their ownership does not (`owner_stays_owner`).
+ *
+ *  Tenancy is the WHERE (R3.2): gym id AND user id, so holding a uuid from
+ *  another gym removes nobody. */
+export async function removeMember(
+  sql: Sql,
+  input: {
+    gymId: string;
+    userId: string;
+    actorUserId: string;
+    /** The caller holds `staff.manage`: they may remove a staff person's membership. */
+    actorManagesStaff: boolean;
+    /** Take their staff access in the same step (the box's tick). */
+    alsoStaff: boolean;
+    /** Run in the same transaction just before a live membership is closed, while the
+     *  person still counts as a member: moving their list record to past members. It
+     *  answers the record the membership is removed with, which Put back gives back. */
+    beforeClose?: (tx: TransactionSql) => Promise<string | null>;
+    /** Run in the same transaction once the membership is closed (or was already):
+     *  withdrawing the person's invitation, so signing in again lets nobody back in. */
+    afterClose?: (tx: TransactionSql) => Promise<unknown>;
+  },
+): Promise<RemoveMemberOutcome> {
+  return await sql.begin(async (tx) => {
+    // THE ORG LOCK, added by T3 round 1's C/H-2 (2026-08-22). This function
+    // reads `gym_staff` and `addStaff` reads live membership; without a shared
+    // lock they interleave into a staff row over a closed membership, i.e.
+    // somebody holding `members.read` on a gym they are no longer in. Same
+    // lock, same order, as `addStaff`, `removeStaff` and `claimSeat`.
+    await lockOrgRow(tx, input.gymId);
+
+    const staffRows = await tx<{ role: string; owns: boolean }[]>`
+      SELECT s.role, g.owner_user_id = s.user_id AS owns
+      FROM gym_staff s JOIN gyms g ON g.id = s.gym_id
+      WHERE s.gym_id = ${input.gymId} AND s.user_id = ${input.userId}`;
+    const staff = staffRows[0];
+    if (staff !== undefined) {
+      if (!input.actorManagesStaff) return { kind: "staff_owner_only" };
+      if (input.alsoStaff && (staff.owns || staff.role === "owner")) return { kind: "owner_stays_owner" };
+    }
+    // Their staff row goes in the same transaction as the membership, once it is certain
+    // they were a member here: this route never touches somebody who is staff only.
+    const endStaff = async (): Promise<void> => {
+      if (staff === undefined || !input.alsoStaff) return;
+      // An account deleted at this instant has already removed the row and said so.
+      const gone = await tx`DELETE FROM gym_staff WHERE gym_id = ${input.gymId} AND user_id = ${input.userId} RETURNING user_id`;
+      if (gone.length === 0) return;
+      await insertAudit(tx, {
+        actorUserId: input.actorUserId,
+        gymId: input.gymId,
+        action: "org.staff_removed",
+        targetType: "gym_staff",
+        targetId: input.userId,
+        meta: { role: toOrgRole(staff.role), removedWith: "membership" },
+      });
+    };
+
+    const removedWith = (await input.beforeClose?.(tx)) ?? null;
+    const closed = await tx<{ id: string }[]>`
+      UPDATE gym_members SET removed_at = now(), removed_entry_id = ${removedWith}
+      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId} AND removed_at IS NULL
+      RETURNING id`;
+    const row = closed[0];
+
+    if (row === undefined) {
+      // Two different facts, and they are not merged: a SECOND tap (a row
+      // exists, already closed) is idempotent success, while a request naming
+      // somebody who was never in this gym is a 404 — the console only offers
+      // this button on a roster row, so that case means the screen is stale or
+      // the id came from somewhere it should not have. Answering "removed" to
+      // it would be a true-sounding reply to a request nothing honoured.
+      const everRows = await tx<{ id: string }[]>`
+        SELECT id FROM gym_members
+        WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
+        LIMIT 1`;
+      if (everRows[0] === undefined) return { kind: "never_member" };
+      await input.afterClose?.(tx);
+      await endStaff();
+      return { kind: "already_removed" };
+    }
+
+    await input.afterClose?.(tx);
+    await endStaff();
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.member_removed",
+      targetType: "gym_member",
+      targetId: row.id,
+      meta: { removedUserId: input.userId },
+    });
+
+    return { kind: "removed" };
+  });
+}
+
+/** Roster page, keyset-ordered on (joined_at, id) DESC.
+ *
+ *  Part 3 §4.3's default sort is last-active desc; that column comes from
+ *  `org_member_stats`, which this slice does not build, so the order here is
+ *  newest-joined-first and the cursor matches it exactly. Sorting is not
+ *  cosmetic for a cursor walk: an ordering the cursor does not match drops or
+ *  repeats rows silently.
+ *
+ *  **Every row here takes one of the gym's places** (§10.4): a seat is a live
+ *  membership, the owner's and staff's included, so `takesSeat` is always true and
+ *  `staff` says who also runs the gym. */
+export async function listMembers(
+  sql: Sql,
+  input: {
+    gymId: string;
+    limit: number;
+    cursor: { joinedAt: string; id: string } | null;
+    /** A name search, already escaped for LIKE, or null. `likeListName` also matches the
+     *  name on the gym's list (staff who may see it). */
+    like?: string | null;
+    likeListName?: boolean;
+  },
+): Promise<{ items: MemberRow[]; nextCursor: { joinedAt: Date; id: string } | null }> {
+  const like = input.like ?? null;
+  const likeListName = input.likeListName ?? false;
+  const cursorJoinedAt = input.cursor?.joinedAt ?? null;
+  const cursorId = input.cursor?.id ?? null;
+  const rows = await sql<
+    {
+      id: string;
+      user_id: string;
+      display_name: string;
+      joined_at: Date;
+      group_label: string | null;
+      complimentary: boolean;
+      list_name: string | null;
+      staff_role: string | null;
+      staff_role_name: string | null;
+    }[]
+  >`
+    SELECT m.id, m.user_id, u.display_name, m.joined_at,
+           c.label AS group_label, m.complimentary,
+           e.full_name AS list_name,
+           st.role AS staff_role, st.role_name AS staff_role_name
+    FROM gym_members m
+    JOIN users u ON u.id = m.user_id
+    LEFT JOIN gym_staff st ON st.gym_id = m.gym_id AND st.user_id = m.user_id
+    LEFT JOIN gym_codes c ON c.id = m.code_id
+    -- "On your list as ..." only while the record they joined with is on it (3a-vi-b).
+    LEFT JOIN gym_member_list_entries e ON e.gym_id = m.gym_id AND e.id = m.entry_id AND e.former_at IS NULL
+    WHERE m.gym_id = ${input.gymId}
+      AND m.removed_at IS NULL
+      AND (${like}::text IS NULL
+           OR u.display_name ILIKE ${like}::text
+           -- The list's name, for staff who see the list: of the record they joined with,
+           -- or of a current record on their proved email or stated phone — a family's
+           -- shared email finds both names, as a search should (round one, Low-7).
+           OR (${likeListName}::boolean
+               AND (e.full_name ILIKE ${like}::text
+                    OR EXISTS (
+                      SELECT 1 FROM gym_member_list_entries x
+                      WHERE x.gym_id = m.gym_id AND x.former_at IS NULL AND x.full_name ILIKE ${like}::text
+                        AND ((x.email = u.email
+                              AND EXISTS (
+                                SELECT 1 FROM one_time_tokens t
+                                WHERE t.user_id = m.user_id AND t.purpose = 'verify_email' AND t.used_at IS NOT NULL))
+                             OR (m.stated_phone_e164 IS NOT NULL AND x.phone_e164 = m.stated_phone_e164))))))
+      AND (
+        ${cursorJoinedAt}::timestamptz IS NULL
+        OR (m.joined_at, m.id) < (${cursorJoinedAt}::timestamptz, ${cursorId}::uuid)
+      )
+    ORDER BY m.joined_at DESC, m.id DESC
+    LIMIT ${input.limit + 1}`;
+
+  const page = rows.slice(0, input.limit);
+  const last = page[page.length - 1];
+  const nextCursor =
+    rows.length > input.limit && last !== undefined
+      ? { joinedAt: last.joined_at, id: last.id }
+      : null;
+  return {
+    items: page.map((r) => ({
+      id: r.id,
+      userId: r.user_id,
+      displayName: r.display_name,
+      joinedAt: r.joined_at,
+      groupLabel: r.group_label,
+      complimentary: r.complimentary,
+      takesSeat: true,
+      listName: r.list_name,
+      staff: r.staff_role === null ? null : { role: toOrgRole(r.staff_role), roleName: r.staff_role_name },
+    })),
+    nextCursor,
+  };
+}
+
+/** Every join code belonging to ONE org, oldest first — so Part 3 §4.0 step 4's
+ *  "Front Desk" code, the one created with the gym, is the one at the top of an
+ *  owner's screen.
+ *
+ *  Tenancy IS the WHERE (R3.2), and note what is deliberately absent: this
+ *  module has no read-a-code-by-id anywhere, so a code can only ever be reached
+ *  through a gym the caller was authorised against first. The join path's own
+ *  lookup is by `code` and returns nothing but the ids it needs to lock. */
+/** T3 L-1: a bound, for the same reason `MY_ORGS_LIMIT` has one — every other
+ *  list in this module is bounded and this one was not. Unreachable today (a gym
+ *  has exactly one code, minted with it), but `POST /codes` is already owed and
+ *  a gym running a code per class could pass this. Whoever first has a caller
+ *  near it owes the cursor; the roster reader is the worked pattern. */
+export const ORG_CODES_LIMIT = 100;
+
+export async function listCodes(sql: Sql, gymId: string): Promise<CodeRow[]> {
+  const rows = await sql<RawCode[]>`
+    SELECT c.code, c.label, c.paused, c.expires_at, c.max_uses,
+           (SELECT count(*)::int FROM gym_members m
+             WHERE m.code_id = c.id AND m.removed_at IS NULL AND m.complimentary = false)
+             AS joined
+    FROM gym_codes c
+    WHERE c.gym_id = ${gymId} AND c.removed_at IS NULL
+    ORDER BY c.created_at ASC, c.code ASC
+    LIMIT ${ORG_CODES_LIMIT}`;
+  return rows.map(toCodeRow);
+}
+
+/** THE SHAPE EVERY `gym_codes` READ RETURNS, mapped in ONE place.
+ *
+ *  The column LIST is written out in each query rather than interpolated from a
+ *  shared string: `sql.unsafe`/`sql.raw` with any interpolated value is
+ *  forbidden (R3.8, playbook trap #4) and a constant that is safe today is a
+ *  constant somebody parameterises tomorrow. What is shared is this MAPPER, so
+ *  a query that stops selecting `paused` fails to compile here rather than
+ *  quietly handing a console a code the join path will refuse. */
+interface RawCode {
+  code: string;
+  label: string;
+  paused: boolean;
+  expires_at: Date | null;
+  max_uses: number | null;
+  joined: number;
+}
+
+/** THE NUMBER, DEFINED ONCE IN PROSE BECAUSE SQL CANNOT SHARE IT SAFELY.
+ *
+ *  `joined` is **live memberships this code created, complimentary excluded** —
+ *  people who are in the gym RIGHT NOW and came through this code. Not seat
+ *  claims (that is the `uses` column, displayed nowhere) and not the owner, whose
+ *  §4.0-step-6 seat carries the first code's id and who never "joined" anything.
+ *
+ *  It is written out as the same correlated subquery at every site rather than
+ *  built from a shared string, for the reason the column lists are (R3.8): a
+ *  fragment that is safe today is one somebody parameterises tomorrow. **The
+ *  sites are: `listCodes`, `applyByCode`, `updateCode`, `rotateCode`'s retired
+ *  row — plus `createCode` and `rotateCode`'s minted row, which select the
+ *  literal `0` because a code minted in this transaction cannot have a member.**
+ *  A change to the definition is a change to all six, and `orgs.routes.test.ts`
+ *  holds a test that the door and the screen agree on it — drift between the two
+ *  is the defect this shape exists to prevent, not a style question. */
+function toCodeRow(raw: RawCode): CodeRow {
+  return {
+    code: raw.code,
+    label: raw.label,
+    paused: raw.paused,
+    expiresAt: raw.expires_at,
+    maxUses: raw.max_uses,
+    joined: raw.joined,
+  };
+}
+
+/** HOW MANY CODES ONE GYM MAY HOLD, and the number is DERIVED rather than
+ *  chosen: it is `ORG_CODES_LIMIT`, the ceiling `listCodes` already reads to.
+ *
+ *  Without a cap, `listCodes`' `LIMIT 100 ... ORDER BY created_at ASC` returns
+ *  the OLDEST hundred — so the 101st code a gym minted would be invisible to
+ *  the console that minted it, while the join path happily honoured it. Capping
+ *  creation at the same figure makes the list provably whole instead of
+ *  provably truncated, which is worth more than any larger number would be.
+ *
+ *  **REMOVED CODES DO NOT COUNT** (T3 L-5 — this paragraph said the opposite
+ *  until removal shipped in the same diff that made it false). Switched-off ones
+ *  still do: they stay on the list, a gym should be able to see the code it
+ *  turned off last month, and every visible code is one `listCodes` must be able
+ *  to return. What a gym does when it reaches the cap is take a finished code
+ *  off the list — which is what the refusal now tells them to do, and, unlike
+ *  the "delete one" it used to say, is a button that exists. */
+export const ORG_CODES_MAX = ORG_CODES_LIMIT;
+
+/** Serialise everything that follows against the SAME gym.
+ *
+ *  §4.2's instrument, on §4.2's row: the seat claim locks `gyms` and not a
+ *  COUNT, because locking a count serialises nothing — a second transaction
+ *  reads the same pre-insert number and passes the same check. A cap enforced by
+ *  "count, then insert, in one transaction" has exactly that hole under READ
+ *  COMMITTED, which is what this database runs and what every statement here has
+ *  always assumed (T3 L-3).
+ *
+ *  **CALL IT FIRST, BEFORE ANY `gym_codes` ROW IS LOCKED.** Lock order in this
+ *  module is org row → child rows, always, and it is stated in one place —
+ *  `claimSeat` — for the same reason: an ordering decided per-function is an
+ *  ordering that eventually reverses somewhere and deadlocks. */
+/** Exported for `classes/repo.ts`, which is the same console writing a
+ *  different corner of the same gym: its caps and its calendar fill have to be
+ *  serialised against every other write to this gym, and a second lock helper
+ *  would be a second answer to "what does a console write hold". */
+export async function lockOrgRow(tx: TransactionSql, gymId: string): Promise<void> {
+  await tx`SELECT 1 FROM gyms WHERE id = ${gymId} FOR UPDATE`;
+}
+
+export type CreateCodeOutcome =
+  | { kind: "created"; code: CodeRow }
+  | { kind: "too_many"; cap: number };
+
+/** Mint one more code for a gym.
+ *
+ *  **`code` is generated by the SERVICE, not here**, for the same reason
+ *  `createOrgAttempt` takes one: the collision retry needs fresh randomness and
+ *  the repo does not own randomness. A `gym_codes_code_unique` violation THROWS
+ *  `OrgNameTakenError('code')` and the service retries — the same typed error
+ *  and the same division of labour `createOrgAttempt` already uses, rather than
+ *  a second mechanism for one situation. Codes are globally unique (that
+ *  constraint is in `0001_init`, not merely in Drizzle's mind), which is what
+ *  lets `applyByCode` look one up without being told the gym.
+ *
+ *  **THE CAP IS SERIALISED ON THE GYM ROW, and one transaction was NOT enough**
+ *  (T3 L-3 — this comment claimed the transaction alone did it, and under
+ *  READ COMMITTED, which is what this database runs, it does not: two staff
+ *  members creating at once both read 99 and both insert). The lock is §4.2's
+ *  own instrument, taken on the same row and in the same order the seat claim
+ *  takes it — org row first, `gym_codes` after — so the two cannot deadlock
+ *  against each other. Nothing in this module locks `gym_codes` and then reaches
+ *  for `gyms`, which is the ordering that would.
+ *
+ *  Cheap by construction: it serialises creating a code for ONE gym, an action a
+ *  gym takes a handful of times a year. */
+export async function createCode(
+  sql: Sql,
+  input: {
+    gymId: string;
+    code: string;
+    label: string;
+    expiresAt: Date | null;
+    maxUses: number | null;
+    actorUserId: string;
+  },
+): Promise<CreateCodeOutcome> {
+  try {
+    return await sql.begin(async (tx) => {
+      await lockOrgRow(tx, input.gymId);
+      const counted = await tx<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM gym_codes
+        WHERE gym_id = ${input.gymId} AND removed_at IS NULL`;
+      if ((counted[0]?.n ?? 0) >= ORG_CODES_MAX) {
+        return { kind: "too_many", cap: ORG_CODES_MAX };
+      }
+
+      const rows = await tx<RawCode[]>`
+        INSERT INTO gym_codes (gym_id, code, label, expires_at, max_uses)
+        VALUES (${input.gymId}, ${input.code}, ${input.label},
+                ${input.expiresAt}, ${input.maxUses})
+        RETURNING code, label, paused, expires_at, max_uses, 0::int AS joined`;
+      const raw = rows[0];
+      if (raw === undefined) throw new Error("INSERT INTO gym_codes returned no row");
+
+      await insertAudit(tx, {
+        actorUserId: input.actorUserId,
+        gymId: input.gymId,
+        action: "org.code_created",
+        targetType: "gym_code",
+        targetId: raw.code,
+        // Strings by construction (`insertAudit`'s own rule). "none" rather than
+        // an absent key: a human reading this row weeks later should see that
+        // the question was asked and answered, not wonder whether the writer
+        // forgot the field.
+        meta: {
+          expiresAt: raw.expires_at === null ? "none" : raw.expires_at.toISOString(),
+          maxUses: raw.max_uses === null ? "none" : String(raw.max_uses),
+        },
+      });
+
+      return { kind: "created", code: toCodeRow(raw) };
+    });
+  } catch (err) {
+    // Only ONE unique constraint is reachable from these transactions
+    // (`gym_codes_code_unique`), so unlike `createOrgAttempt` there is nothing
+    // to disambiguate — but the error type is shared so the service's retry is
+    // one mechanism rather than two.
+    if (isUniqueViolation(err)) throw new OrgNameTakenError("code");
+    throw err;
+  }
+}
+
+export type UpdateCodeOutcome =
+  | { kind: "updated"; code: CodeRow }
+  | { kind: "not_found" }
+  | { kind: "max_uses_below_uses"; joined: number };
+
+export interface CodePatch {
+  paused?: boolean;
+  expiresAt?: Date | null;
+  maxUses?: number | null;
+}
+
+/** Pause, wake, or move a restriction on one existing code.
+ *
+ *  **TENANCY IS THE PAIR (gym, code), never the code alone** (R3.2). A code is
+ *  globally unique, so `WHERE code = $1` would have worked and would have let
+ *  one gym's manager pause a DIFFERENT gym's poster by typing six characters —
+ *  the textbook IDOR, hiding behind a column that happens to be unique.
+ *
+ *  `SELECT ... FOR UPDATE OF c` then `UPDATE` in one transaction, rather than one
+ *  clever statement, because the new `max_uses` has to be compared against a
+ *  count read in the same breath, and because two front-desk staff moving the
+ *  limit at once must not each read a row the other has already changed.
+ *
+ *  **WHAT THE LOCK DOES NOT COVER, stated because the comment here used to imply
+ *  otherwise (T3 L-4): `joined` is counted from `gym_members`, and locking this
+ *  `gym_codes` row does not hold that count still.** A confirm landing between
+ *  the count and the UPDATE can leave `max_uses` one below the people actually
+ *  in. **Left as it is, deliberately.** The consequence is a code that reads
+ *  "Fully used" a little early and revives the moment anybody leaves — no seat is
+ *  lost, no member is affected, nothing is written that a later read disagrees
+ *  with. The alternative is taking the gym's row lock on every limit edit, which
+ *  serialises an owner's typing against every confirm in the gym to prevent a
+ *  self-healing display. `createCode` takes that lock because ITS race admits a
+ *  code the console can never list; this one does not, because it does not.
+ *
+ *  **A field the caller did not send is left ALONE**, which is what makes this a
+ *  PATCH rather than a PUT: a screen that only knows about `paused` must not
+ *  silently clear an expiry it never displayed. */
+export async function updateCode(
+  sql: Sql,
+  input: { gymId: string; code: string; patch: CodePatch; actorUserId: string },
+): Promise<UpdateCodeOutcome> {
+  return await sql.begin(async (tx) => {
+    const existing = await tx<(RawCode & { removed_at: Date | null })[]>`
+      SELECT c.code, c.label, c.paused, c.expires_at, c.max_uses, c.removed_at,
+             (SELECT count(*)::int FROM gym_members m
+               WHERE m.code_id = c.id AND m.removed_at IS NULL AND m.complimentary = false)
+               AS joined
+      FROM gym_codes c
+      WHERE c.gym_id = ${input.gymId} AND c.code = ${input.code}
+      FOR UPDATE OF c`;
+    const before = existing[0];
+    if (before === undefined) return { kind: "not_found" };
+    // A code the gym has TIDIED AWAY is not on any screen, so nothing legitimate
+    // can be asking to change it — and answering 404 keeps "removed" and "never
+    // existed" indistinguishable, which is the same standing 404 this module
+    // gives another gym's code.
+    if (before.removed_at !== null) return { kind: "not_found" };
+
+    const nextPaused = input.patch.paused ?? before.paused;
+    const nextExpiresAt =
+      input.patch.expiresAt === undefined ? before.expires_at : input.patch.expiresAt;
+    const nextMaxUses = input.patch.maxUses === undefined ? before.max_uses : input.patch.maxUses;
+
+    // A limit BELOW the number of people who already joined would kill the code
+    // on the spot, and the owner who typed it would see "Fully used" over a
+    // change they read as "let 10 more people in". Pause already means "off
+    // now", so refusing here takes nothing away and removes the surprise. The
+    // live count travels back so the refusal can name it.
+    if (nextMaxUses !== null && nextMaxUses < before.joined) {
+      return { kind: "max_uses_below_uses", joined: before.joined };
+    }
+
+    const rows = await tx<RawCode[]>`
+      UPDATE gym_codes AS c
+      SET paused = ${nextPaused}, expires_at = ${nextExpiresAt}, max_uses = ${nextMaxUses}
+      WHERE c.gym_id = ${input.gymId} AND c.code = ${input.code}
+      RETURNING c.code, c.label, c.paused, c.expires_at, c.max_uses,
+                (SELECT count(*)::int FROM gym_members m
+                  WHERE m.code_id = c.id AND m.removed_at IS NULL AND m.complimentary = false)
+                  AS joined`;
+    const raw = rows[0];
+    if (raw === undefined) throw new Error("UPDATE gym_codes returned no row under FOR UPDATE");
+
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.code_updated",
+      targetType: "gym_code",
+      targetId: raw.code,
+      // BEFORE and AFTER, not just after. "who turned the poster off" is the
+      // question this row exists to answer, and an after-only row cannot tell a
+      // pause from a no-op re-save.
+      meta: {
+        pausedFrom: String(before.paused),
+        pausedTo: String(raw.paused),
+        expiresAtFrom: before.expires_at === null ? "none" : before.expires_at.toISOString(),
+        expiresAtTo: raw.expires_at === null ? "none" : raw.expires_at.toISOString(),
+        maxUsesFrom: before.max_uses === null ? "none" : String(before.max_uses),
+        maxUsesTo: raw.max_uses === null ? "none" : String(raw.max_uses),
+      },
+    });
+
+    return { kind: "updated", code: toCodeRow(raw) };
+  });
+}
+
+export type RotateCodeOutcome =
+  | { kind: "rotated"; code: CodeRow; replaced: CodeRow }
+  | { kind: "not_found" }
+  | { kind: "too_many"; cap: number };
+
+/** ROTATE — Part 3 §7's "code leaked publicly → rotate".
+ *
+ *  ONE TRANSACTION, and that is the whole reason this is a route rather than
+ *  two client calls. Pausing the old code and minting the new one are useless
+ *  apart: the half that lands first decides whether the gym is left with two
+ *  live codes (harmless) or none (a gym nobody can join). Both or neither.
+ *
+ *  **The new code carries the old one's LABEL and NOTHING ELSE.** Copying the
+ *  expiry forward would hand back a code that is already dead, and copying
+ *  `max_uses` forward would hand back one that is already exhausted — a rotate
+ *  whose entire point is producing something usable. The label travels because
+ *  it is the group tag (§2.1) and the replacement stands in the same place in
+ *  the gym as the code it replaces. */
+export async function rotateCode(
+  sql: Sql,
+  input: { gymId: string; code: string; newCode: string; actorUserId: string },
+): Promise<RotateCodeOutcome> {
+  try {
+    return await sql.begin(async (tx) => {
+      // BEFORE the code row is locked, so this path and `createCode` take the
+      // gym's row in the same order (T3 L-3's fix; `lockOrgRow` carries the why).
+      await lockOrgRow(tx, input.gymId);
+      const existing = await tx<(RawCode & { removed_at: Date | null })[]>`
+        SELECT c.code, c.label, c.paused, c.expires_at, c.max_uses, c.removed_at,
+               (SELECT count(*)::int FROM gym_members m
+                 WHERE m.code_id = c.id AND m.removed_at IS NULL AND m.complimentary = false)
+                 AS joined
+        FROM gym_codes c
+        WHERE c.gym_id = ${input.gymId} AND c.code = ${input.code}
+        FOR UPDATE OF c`;
+      const before = existing[0];
+      if (before === undefined) return { kind: "not_found" };
+      // Same 404 as `updateCode`: a tidied-away code is on no screen, so nothing
+      // legitimate is asking to replace it.
+      if (before.removed_at !== null) return { kind: "not_found" };
+
+      const counted = await tx<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM gym_codes
+        WHERE gym_id = ${input.gymId} AND removed_at IS NULL`;
+      if ((counted[0]?.n ?? 0) >= ORG_CODES_MAX) {
+        return { kind: "too_many", cap: ORG_CODES_MAX };
+      }
+
+      const mintedRows = await tx<RawCode[]>`
+        INSERT INTO gym_codes (gym_id, code, label)
+        VALUES (${input.gymId}, ${input.newCode}, ${before.label})
+        RETURNING code, label, paused, expires_at, max_uses, 0::int AS joined`;
+      const minted = mintedRows[0];
+      if (minted === undefined) throw new Error("INSERT INTO gym_codes returned no row");
+
+      const retiredRows = await tx<RawCode[]>`
+        UPDATE gym_codes AS c SET paused = true
+        WHERE c.gym_id = ${input.gymId} AND c.code = ${input.code}
+        RETURNING c.code, c.label, c.paused, c.expires_at, c.max_uses,
+                  (SELECT count(*)::int FROM gym_members m
+                    WHERE m.code_id = c.id AND m.removed_at IS NULL AND m.complimentary = false)
+                    AS joined`;
+      const retired = retiredRows[0];
+      if (retired === undefined) throw new Error("UPDATE gym_codes returned no row under FOR UPDATE");
+
+      await insertAudit(tx, {
+        actorUserId: input.actorUserId,
+        gymId: input.gymId,
+        action: "org.code_rotated",
+        targetType: "gym_code",
+        // The row this audit is ABOUT is the one that was taken out of service —
+        // "when did this code stop working, and who did it" is the question a
+        // leaked poster raises. The replacement is named in the meta.
+        targetId: retired.code,
+        meta: { replacedBy: minted.code },
+      });
+
+      return { kind: "rotated", code: toCodeRow(minted), replaced: toCodeRow(retired) };
+    });
+  } catch (err) {
+    // Only ONE unique constraint is reachable from these transactions
+    // (`gym_codes_code_unique`), so unlike `createOrgAttempt` there is nothing
+    // to disambiguate — but the error type is shared so the service's retry is
+    // one mechanism rather than two.
+    if (isUniqueViolation(err)) throw new OrgNameTakenError("code");
+    throw err;
+  }
+}
+
+export type RemoveCodeOutcome =
+  | { kind: "removed" }
+  | { kind: "not_found" }
+  | { kind: "still_usable" };
+
+/** TAKE A FINISHED CODE OFF THE GYM'S LIST — Kd, 2026-08-21: *"codes will pile
+ *  up should have a option to delete"*.
+ *
+ *  **IT IS NOT A `DELETE`, and the reason is the members.** `gym_members.code_id`
+ *  and `gym_join_applications.code_id` reference this row, both `ON DELETE
+ *  RESTRICT` by the schema's default (R4.3). A real delete would therefore either
+ *  be refused by Postgres for exactly the codes a gym most wants gone — the ones
+ *  people used — or, if the constraint were relaxed, erase the record of how
+ *  today's members got in. `removed_at` is the same soft-state shape
+ *  `gym_members.removed_at` already uses for the same reason.
+ *
+ *  **ONLY A CODE THAT CANNOT ADMIT ANYBODY MAY BE REMOVED** (paused, or past its
+ *  end date), and the UPDATE pauses it in the same statement. That pairing is the
+ *  whole safety argument: a code missing from the console can never be a code
+ *  still opening the door, so an owner tidying their screen cannot accidentally
+ *  leave a live one running unwatched. A code that is merely FULL is not
+ *  removable — a member leaving revives it, and hiding it would strand a code
+ *  that is about to work again.
+ *
+ *  Removing twice is a SUCCESS, not a 404: the second tap of a slow button must
+ *  leave the same state and say the same thing (the `DELETE /members/:userId`
+ *  precedent). */
+export async function removeCode(
+  sql: Sql,
+  input: { gymId: string; code: string; actorUserId: string },
+): Promise<RemoveCodeOutcome> {
+  return await sql.begin(async (tx) => {
+    // TENANCY IS THE PAIR (gym, code), never the code alone (R3.2). Codes are
+    // globally unique, so `WHERE code = $1` would compile, work, and let one
+    // gym's manager tidy away another gym's poster.
+    const rows = await tx<
+      { code: string; paused: boolean; expires_at: Date | null; removed_at: Date | null }[]
+    >`
+      SELECT code, paused, expires_at, removed_at
+      FROM gym_codes
+      WHERE gym_id = ${input.gymId} AND code = ${input.code}
+      FOR UPDATE`;
+    const before = rows[0];
+    if (before === undefined) return { kind: "not_found" };
+    if (before.removed_at !== null) return { kind: "removed" };
+
+    const expired = before.expires_at !== null && before.expires_at.getTime() <= Date.now();
+    if (!before.paused && !expired) return { kind: "still_usable" };
+
+    const updated = await tx<{ code: string }[]>`
+      UPDATE gym_codes SET removed_at = now(), paused = true
+      WHERE gym_id = ${input.gymId} AND code = ${input.code}
+      RETURNING code`;
+    if (updated[0] === undefined) {
+      throw new Error("UPDATE gym_codes returned no row under FOR UPDATE");
+    }
+
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.code_removed",
+      targetType: "gym_code",
+      targetId: before.code,
+      // The row is still in the table and this is how a human finds out why it
+      // stopped being on screen. "was it already off" answers the only question
+      // a later reader has: whether the removal itself took a code out of service.
+      meta: { pausedBefore: String(before.paused) },
+    });
+
+    return { kind: "removed" };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// STAFF — Part 3 §4.7. Until this card, the ONLY `INSERT INTO gym_staff` in the
+// product was the one inside `createOrgAttempt`, hard-coded to `'owner'`
+// (grep-verified before a line was written), so a gym had exactly one person
+// who could do anything and no way to appoint another. The join door's whole
+// design says "the front desk confirms" and no gym could have a front desk.
+// ---------------------------------------------------------------------------
+
+export interface StaffRow {
+  userId: string;
+  displayName: string;
+  email: string | null;
+  role: OrgRole;
+  /** The stored ticks, RAW — null meaning "this row predates the column". The
+   *  service turns that into the role's defaults; nothing here decides it, so
+   *  the rule lives in one place rather than in every reader. */
+  privileges: string[] | null;
+  since: Date;
+  /** They are also a live member of the gym (staff need not be, §10.1). */
+  isMember: boolean;
+  /** The gym's own role they hold ("Front desk"), or null. */
+  roleName: string | null;
+}
+
+/** Everyone who runs this gym, owner first and then oldest appointment first.
+ *
+ *  UNBOUNDED, and unlike `listCodes`' cap that is defensible rather than
+ *  overlooked: a staff row can only be created by an owner naming an existing
+ *  member of the same gym, so the ceiling is the roster and the only person who
+ *  can approach it is the person reading this list. `ORG_CODES_LIMIT` exists
+ *  because a code is minted by a tap; a staff row costs a deliberate act
+ *  against a named human.
+ *
+ *  Tenancy IS the WHERE (R3.2). There is no read-a-staff-row-by-id anywhere in
+ *  this module, so a staff row is only ever reachable through a gym the caller
+ *  was authorised against first.
+ *
+ *  **THE ELIGIBILITY TEST IS WRITTEN OUT AGAIN HERE, MATCHING `getStaffRole`
+ *  WORD FOR WORD, and the duplication is deliberate** (T3 round 2, Low-2). Round
+ *  1's C/H-3 fix taught `getStaffRole` to refuse an ex-member and left this
+ *  reader alone, so the LIST said "manager" about somebody whose authority was
+ *  already `null` — the fix is what made the row false. Two readers of
+ *  `gym_staff` that disagree is the defect; a shared `sql` fragment is R3.8's
+ *  forbidden shape, so they are spelled twice and **anchored by a test that
+ *  drives BOTH** (:14013's six-site precedent, same reasoning). Change one and
+ *  the test fails; change neither and a screen lies about who holds keys. */
+export async function listStaff(sql: Sql, gymId: string): Promise<StaffRow[]> {
+  const rows = await sql<
+    {
+      user_id: string;
+      display_name: string;
+      email: string | null;
+      role: string;
+      privileges: string[] | null;
+      since: Date;
+      is_member: boolean;
+      role_name: string | null;
+    }[]
+  >`
+    SELECT s.user_id, u.display_name, u.email, s.role, s.privileges, s.created_at AS since, s.role_name,
+           EXISTS (SELECT 1 FROM gym_members lm
+                   WHERE lm.gym_id = s.gym_id AND lm.user_id = s.user_id AND lm.removed_at IS NULL) AS is_member
+    FROM gym_staff s
+    JOIN users u ON u.id = s.user_id
+    WHERE s.gym_id = ${gymId}
+      AND u.status = 'active'
+    ORDER BY (s.role = 'owner') DESC, s.created_at ASC, s.user_id ASC`;
+  return rows.map((r) => ({
+    userId: r.user_id,
+    displayName: r.display_name,
+    email: r.email,
+    role: toOrgRole(r.role),
+    privileges: r.privileges,
+    since: r.since,
+    isMember: r.is_member,
+    roleName: r.role_name,
+  }));
+}
+
+/** One staff row by (gym, user) — the shape every mutation answers with, read
+ *  back through `listStaff`'s own projection so the list and the mutation can
+ *  never describe the same person differently. */
+async function readStaffRow(
+  tx: TransactionSql,
+  gymId: string,
+  userId: string,
+): Promise<StaffRow | null> {
+  const rows = await tx<
+    {
+      user_id: string;
+      display_name: string;
+      email: string | null;
+      role: string;
+      privileges: string[] | null;
+      since: Date;
+      is_member: boolean;
+      role_name: string | null;
+    }[]
+  >`
+    SELECT s.user_id, u.display_name, u.email, s.role, s.privileges, s.created_at AS since, s.role_name,
+           EXISTS (SELECT 1 FROM gym_members lm
+                   WHERE lm.gym_id = s.gym_id AND lm.user_id = s.user_id AND lm.removed_at IS NULL) AS is_member
+    FROM gym_staff s
+    JOIN users u ON u.id = s.user_id
+    WHERE s.gym_id = ${gymId} AND s.user_id = ${userId}`;
+  const row = rows[0];
+  return row === undefined
+    ? null
+    : {
+        userId: row.user_id,
+        displayName: row.display_name,
+        email: row.email,
+        role: toOrgRole(row.role),
+        privileges: row.privileges,
+        since: row.since,
+        isMember: row.is_member,
+        roleName: row.role_name,
+      };
+}
+
+export type AddStaffOutcome =
+  | { kind: "added"; staff: StaffRow }
+  | { kind: "not_a_member" }
+  | { kind: "already_staff"; staff: StaffRow };
+
+/** Appoint a member of this gym as staff.
+ *
+ *  **THE LOOKUP IS SCOPED TO THIS GYM'S LIVE ROSTER, and that is the security
+ *  property, not a convenience.** Resolving the email against `users` globally
+ *  would answer "does this address have an account" for anything an owner types.
+ *  Joined to `gym_members` with `removed_at IS NULL`, the only addresses that
+ *  resolve are people already on a roster the caller can read.
+ *
+ *  `email` is `citext` (Part 4 §3.1), so the equality is case-insensitive in the
+ *  DATABASE rather than by a `lower()` this file would have to remember.
+ *
+ *  **IT TAKES THE ORG LOCK, and the first version of this function did not —
+ *  that was T3 round 1's C/H-2 (2026-08-22).** The race that matters is not two
+ *  people appointing at once (one primary key, `ON CONFLICT DO NOTHING`, the
+ *  loser reads the winner's row and `already_staff` is right either way). It is
+ *  **appointing racing REMOVE-FROM-MEMBERS**: this function reads live
+ *  membership and `removeMember` reads `gym_staff`, so interleaved they commit a
+ *  staff row and a closed membership — somebody running a gym they are not in,
+ *  holding `members.read` over the whole roster. Reproduced 12 times out of 12.
+ *  :14174's rule is unchanged and is what selects the fix: a lock is warranted
+ *  by the CONSEQUENCE, and the consequence here is an authorisation hole rather
+ *  than a retryable collision. `removeMember` takes the same lock in the same
+ *  order. */
+export async function addStaff(
+  sql: Sql,
+  input: {
+    gymId: string;
+    email: string;
+    role: OrgRole;
+    /** The starting ticks, computed by the SERVICE from the role's template.
+     *  Written with the row so a staff record is never a moment old without an
+     *  effective set (:11429's snapshot). */
+    privileges: readonly string[];
+    /** The gym's own role ("Front desk", 4a-i), or null. */
+    roleName?: string | null;
+    actorUserId: string;
+  },
+): Promise<AddStaffOutcome> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId);
+
+    const candidates = await tx<{ user_id: string }[]>`
+      SELECT m.user_id
+      FROM gym_members m
+      JOIN users u ON u.id = m.user_id
+      WHERE m.gym_id = ${input.gymId}
+        AND m.removed_at IS NULL
+        AND u.email = ${input.email}
+        AND u.status = 'active'
+        -- Only an account that proved the address: anybody can register one under an
+        -- address they do not hold. Anyone else is sent the emailed invitation.
+        AND EXISTS (
+          SELECT 1 FROM one_time_tokens t
+          WHERE t.user_id = u.id AND t.purpose = 'verify_email' AND t.used_at IS NOT NULL)
+      LIMIT 1
+      -- Held until commit: an account deletion (softDeleteUser, which deletes staff rows)
+      -- waits for this appointment, or this one sees the account gone (4a-ii round one).
+      FOR SHARE OF u`;
+    const candidate = candidates[0];
+    if (candidate === undefined) return { kind: "not_a_member" };
+
+    const inserted = await tx<{ user_id: string }[]>`
+      INSERT INTO gym_staff (gym_id, user_id, role, privileges, role_name)
+      VALUES (${input.gymId}, ${candidate.user_id}, ${input.role}, ${[...input.privileges]}, ${input.roleName ?? null})
+      ON CONFLICT (gym_id, user_id) DO NOTHING
+      RETURNING user_id`;
+
+    const staff = await readStaffRow(tx, input.gymId, candidate.user_id);
+    if (staff === null) throw new Error("gym_staff row missing immediately after insert");
+
+    // The row already existed. Its role is REPORTED, never overwritten — a
+    // second POST must not silently demote a manager to trainer because a stale
+    // screen still offered "add as trainer". Changing a role is the PATCH.
+    if (inserted[0] === undefined) return { kind: "already_staff", staff };
+
+    // NOTHING IS WRITTEN TO `gym_members` HERE. Kd's "staff seats free" is
+    // enforced in `claimSeat`'s count (see the note there); the first version
+    // wrote `complimentary = true` and three other readers acted on it.
+
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.staff_added",
+      targetType: "gym_staff",
+      targetId: candidate.user_id,
+      meta: { role: input.role, privileges: [...input.privileges] },
+    });
+
+    return { kind: "added", staff };
+  });
+}
+
+export type UpdateStaffOutcome =
+  | { kind: "updated"; staff: StaffRow }
+  | { kind: "unchanged"; staff: StaffRow }
+  | { kind: "not_staff" }
+  | { kind: "is_owner" };
+
+/** Change somebody between manager and trainer.
+ *
+ *  **AN OWNER'S ROLE IS REFUSED HERE.** Demoting the owner is last-owner lockout
+ *  wearing a different hat — §4.7 blocks removing them and :11429's rule 2 makes
+ *  the point that reaching the same lockout by another door is the same defect —
+ *  and PROMOTING somebody to owner is the transfer question this card defers
+ *  (`staffAssignableRoleSchema` refuses that direction at the boundary; this
+ *  refuses the other one at the row).
+ *
+ *  `unchanged` is a distinct outcome rather than a silent success because it
+ *  decides whether an audit row is written: "the owner set Priya to trainer" in
+ *  a history is a claim about something that happened, and a no-op tap did not
+ *  happen. The CALLER cannot tell the two apart and does not need to — both are
+ *  a 200 carrying the same row. */
+export async function updateStaffRole(
+  sql: Sql,
+  input: {
+    gymId: string;
+    userId: string;
+    role: OrgRole;
+    /** The new role's DEFAULT ticks. A role change RESETS them — see the
+     *  service's note: without that, "demote to trainer" would leave every
+     *  manager tick standing and demote nobody. */
+    privileges: readonly string[];
+    actorUserId: string;
+  },
+): Promise<UpdateStaffOutcome> {
+  return await sql.begin(async (tx) => {
+    const rows = await tx<{ role: string }[]>`
+      SELECT role FROM gym_staff
+      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
+      FOR UPDATE`;
+    const before = rows[0];
+    if (before === undefined) return { kind: "not_staff" };
+    const previous = toOrgRole(before.role);
+    if (previous === "owner") return { kind: "is_owner" };
+
+    if (previous === input.role) {
+      const staff = await readStaffRow(tx, input.gymId, input.userId);
+      if (staff === null) throw new Error("gym_staff row vanished under FOR UPDATE");
+      return { kind: "unchanged", staff };
+    }
+
+    await tx`
+      UPDATE gym_staff SET role = ${input.role}, privileges = ${[...input.privileges]}, role_name = NULL
+      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;
+
+    const staff = await readStaffRow(tx, input.gymId, input.userId);
+    if (staff === null) throw new Error("gym_staff row vanished under FOR UPDATE");
+
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.staff_role_changed",
+      targetType: "gym_staff",
+      targetId: input.userId,
+      // BOTH ends, because the question a human asks weeks later is "what did
+      // they used to be able to do", which the new role alone cannot answer.
+      // The ticks the change RESET them to are recorded for the same reason: a
+      // role change is now also a permission change, and an audit row that
+      // names only the role would hide half of what happened.
+      meta: { from: previous, to: input.role, privileges: [...input.privileges] },
+    });
+
+    return { kind: "updated", staff };
+  });
+}
+
+export type SetStaffPrivilegesOutcome =
+  | { kind: "updated"; staff: StaffRow }
+  | { kind: "unchanged"; staff: StaffRow }
+  | { kind: "not_staff" }
+  | { kind: "owner_only_privilege" }
+  | { kind: "last_owner_locked" };
+
+/** REPLACE ONE PERSON'S TICKS with the set an owner just looked at.
+ *
+ *  **THE WHOLE SET IS WRITTEN, never a diff** — see the request schema for why:
+ *  a diff applied to a row somebody else edited produces a set nobody chose.
+ *
+ *  **THE LAST-OWNER GUARD IS A COUNT INSIDE THE ORG LOCK, and it is the same
+ *  shape as `removeStaff`'s for the same reason** (:11429 rule 2, :14174's rule
+ *  on when a lock is warranted). Reading "how many owners are there" and then
+ *  writing is check-then-act; the loser of that race is a gym whose last owner
+ *  can no longer manage staff, which **nobody inside the gym can repair**,
+ *  because handing out `staff.manage` requires `staff.manage`. That is the
+ *  severity that buys a lock, in contrast to the self-healing races :14174 says
+ *  do not.
+ *
+ *  It counts OWNERS rather than asking "is this the owner", so it stays correct
+ *  on the day a second owner becomes possible — `removeStaff`'s wording, kept
+ *  deliberately identical because it is the same rule pointed at a different
+ *  door.
+ *
+ *  **`unchanged` is a distinct outcome because it decides whether an audit row
+ *  is written**: "the owner changed what Priya can do" in a gym's history is a
+ *  claim about something that happened, and re-saving the same set did not
+ *  happen. The caller cannot tell the two apart and does not need to. */
+export async function setStaffPrivileges(
+  sql: Sql,
+  input: {
+    gymId: string;
+    userId: string;
+    /** Already canonical (sorted, de-duplicated) — the service does that, so
+     *  the stored order is one order and "did anything change" is a question
+     *  about ACCESS rather than about ordering. */
+    privileges: readonly string[];
+    /** What the LAST owner may not be stripped of. Passed in rather than named
+     *  here: which privileges are lockout-capable is a policy question and the
+     *  service owns policy (`LAST_OWNER_REQUIRED_PRIVILEGES`). */
+    lastOwnerRequires: readonly string[];
+    /** Privileges that only an OWNER's row may carry (§2.2's owner-alone rows,
+     *  :11429 rule 1). Policy, so it is the service's — `OWNER_ONLY_PRIVILEGES`
+     *  — and this file only enforces it. */
+    ownerOnly: readonly string[];
+    actorUserId: string;
+  },
+): Promise<SetStaffPrivilegesOutcome> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId);
+
+    const rows = await tx<{ role: string; privileges: string[] | null }[]>`
+      SELECT role, privileges FROM gym_staff
+      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;
+    const before = rows[0];
+    if (before === undefined) return { kind: "not_staff" };
+    const role = toOrgRole(before.role);
+
+    // T3 C/H-1, and it is a PRIVILEGE ESCALATION rather than a tidiness point:
+    // `staff.manage` gates this very route, so handing it to a manager hands
+    // them the power to change ANYBODY's ticks — the owner's included. The
+    // reviewer proved the whole chain by running it: a manager granted the tick
+    // stripped the owner, and the owner then got a 403 on their own roster.
+    //
+    // :11429 rule 1 is what this restores — "only an OWNER may change anybody's
+    // ticks… this ruling does not widen it" — and rule 3's licence to widen
+    // rests on it ("safe BECAUSE rule 1 means only an owner can hand out the
+    // keys"). The route's own gate could not enforce rule 1, because until this
+    // card nobody could hold that tick but an owner: **this card is what made
+    // the gate's premise false.**
+    //
+    // Refused HERE, at the write, rather than at the route: this is the only
+    // door that can put an owner-only privilege on a non-owner row (the other
+    // two writers copy a role TEMPLATE, and no template contains one), so the
+    // rule is enforced where the value is stored rather than where it is asked
+    // for. A DB-level CHECK across `role` and `privileges` was considered and
+    // NOT taken: it would need a second migration inside a fix round (:5348
+    // rule 6) and would hard-code the vocabulary into DDL a third time, which
+    // is the drift T3 Low-5's new guard exists to prevent.
+    if (role !== "owner" && input.ownerOnly.some((p) => input.privileges.includes(p))) {
+      return { kind: "owner_only_privilege" };
+    }
+
+    // T3 Low-1: this counted owner ROWS, and stripping a privilege does not
+    // remove a row, so with two owners each could strip the other and the count
+    // never fell — measured by the reviewer, both owners left unable to manage
+    // staff and nobody inside the gym able to repair it. `removeStaff`'s
+    // identically-shaped count is correct because DELETE does decrement it;
+    // copying the shape did not transfer the property.
+    //
+    // It now counts owners who still HOLD every required privilege, excluding
+    // this row — whose state after this write is the incoming set, which the
+    // condition above has already found wanting. A NULL row counts as a holder
+    // because `privilegesFor` gives it the owner template (the deploy window).
+    if (role === "owner" && input.lastOwnerRequires.some((p) => !input.privileges.includes(p))) {
+      const others = await tx<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM gym_staff
+        WHERE gym_id = ${input.gymId}
+          AND role = 'owner'
+          AND user_id <> ${input.userId}
+          AND (privileges IS NULL OR privileges @> ${[...input.lastOwnerRequires]})`;
+      if ((others[0]?.n ?? 0) === 0) return { kind: "last_owner_locked" };
+    }
+
+    // A row that predates the column (`null`) is never "unchanged": writing it
+    // is what materialises the snapshot, so the deploy-window fallback stops
+    // applying to this person from here on.
+    const previous = before.privileges === null ? null : [...before.privileges].sort();
+    const next = [...input.privileges];
+    if (previous !== null && previous.length === next.length && previous.every((p, i) => p === next[i])) {
+      const staff = await readStaffRow(tx, input.gymId, input.userId);
+      if (staff === null) throw new Error("gym_staff row vanished under the org lock");
+      return { kind: "unchanged", staff };
+    }
+
+    await tx`
+      UPDATE gym_staff SET privileges = ${next}
+      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;
+
+    const staff = await readStaffRow(tx, input.gymId, input.userId);
+    if (staff === null) throw new Error("gym_staff row vanished under the org lock");
+
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.staff_privileges_changed",
+      targetType: "gym_staff",
+      targetId: input.userId,
+      // BOTH ends, `updateStaffRole`'s reason: the question asked weeks later is
+      // "what could they do before", which the new set alone cannot answer. A
+      // null `from` is the honest record of a row that predated the column.
+      meta: { role, from: previous, to: next },
+    });
+
+    return { kind: "updated", staff };
+  });
+}
+
+export type RemoveStaffOutcome =
+  | { kind: "removed" }
+  | { kind: "not_staff" }
+  | { kind: "last_owner" };
+
+/** Take somebody off staff. **They stay a MEMBER** — the two are different
+ *  relationships and Kd was shown that before approving: this takes away the
+ *  keys, `removeMember` takes away the membership, and only the second one costs
+ *  them the gym's perks.
+ *
+ *  **THE LAST-OWNER GUARD IS A COUNT INSIDE THE ORG LOCK, and the lock is the
+ *  point.** Counting owners and then deleting one is check-then-act — :14174's
+ *  L-3 exactly — and the consequence of losing that race is a gym with ZERO
+ *  owners, which nobody inside the gym can repair, because appointing staff is
+ *  owner-only. That is the severity :14174 says warrants a lock, in contrast to
+ *  the self-healing count it says does not.
+ *
+ *  It is written as a COUNT rather than as "is this the owner" so it stays
+ *  correct on the day a second owner becomes possible: today every owner is the
+ *  last one, and the guard does not have to be rewritten to notice when that
+ *  stops being true.
+ *
+ *  The seat reverts to paid in the same transaction. If that pushes the gym over
+ *  its cap, the cap does what it does everywhere else — it refuses the NEXT join
+ *  rather than evicting anybody — which is the honest direction. */
+export async function removeStaff(
+  sql: Sql,
+  input: {
+    gymId: string;
+    userId: string;
+    /** What the last owner may not be left without — the SAME list
+     *  `setStaffPrivileges` takes, because it is the same question at the other
+     *  door (T3 round 2, Low-1). Policy stays in the service. */
+    lastOwnerRequires: readonly string[];
+    actorUserId: string;
+  },
+): Promise<RemoveStaffOutcome> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId);
+
+    const rows = await tx<{ role: string }[]>`
+      SELECT role FROM gym_staff
+      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;
+    const before = rows[0];
+    if (before === undefined) return { kind: "not_staff" };
+    const role = toOrgRole(before.role);
+
+    // T3 round 2, Low-1 — THE SAME LOCKOUT AT THIS DOOR, and the third time this
+    // guard has been copied and got the same thing wrong.
+    //
+    // Counting owner ROWS was right when a row was the only thing that carried
+    // authority. Since the ticks card an owner can be ticked DOWN, so two owner
+    // rows can mean one person who can manage staff: remove that person and the
+    // gym keeps an owner and loses the ability to appoint anybody — the same
+    // unrepairable state `setStaffPrivileges` was fixed for one round earlier.
+    //
+    // **The question both doors now ask is identical: does anybody ELSE still
+    // HOLD every privilege the last owner may not lose.** It is written out
+    // TWICE rather than shared, because a shared `sql` fragment is R3.8's
+    // forbidden shape (:14493 Low-2) — and, exactly as there, ONE TEST DRIVES
+    // BOTH DOORS so the copies cannot drift (:14013's precedent). Edit one, edit
+    // the other, or a gym can lock itself out through whichever you left behind.
+    if (role === "owner") {
+      const otherOwners = await tx<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM gym_staff
+        WHERE gym_id = ${input.gymId}
+          AND role = 'owner'
+          AND user_id <> ${input.userId}
+          AND (privileges IS NULL OR privileges @> ${[...input.lastOwnerRequires]})`;
+      if ((otherOwners[0]?.n ?? 0) === 0) return { kind: "last_owner" };
+    }
+
+    const deleted = await tx<{ user_id: string }[]>`
+      DELETE FROM gym_staff
+      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
+      RETURNING user_id`;
+    if (deleted[0] === undefined) {
+      throw new Error("DELETE FROM gym_staff removed no row under the org lock");
+    }
+
+    // Nothing to undo on `gym_members`: their seat starts counting again the
+    // moment the staff row is gone, because `claimSeat` asks `gym_staff` rather
+    // than reading a flag somebody has to remember to clear.
+
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.staff_removed",
+      targetType: "gym_staff",
+      targetId: input.userId,
+      meta: { role },
+    });
+
+    return { kind: "removed" };
+  });
+}
+
+/** Part 3 §3.3: "every mutating call writes `audit_log`". Written inside the
+ *  caller's transaction, so a join that is rolled back leaves no audit row
+ *  claiming it happened, and a committed join can never be missing one. */
+export async function insertAudit(
+  tx: TransactionSql,
+  entry: {
+    /** NULL means NOBODY DID THIS — the two SWEEPS are the writers that pass
+     *  one (`sweep.ts`'s join expiry since 2026-08-20, `trialSweep.ts`'s trial
+     *  expiry since 2026-08-28), and they pass null because no human decided.
+     *  The column has always been nullable (Part 4 §3.6); what changed is that
+     *  something finally acts without an actor. Recording a system action under
+     *  some stand-in user id would be the more convenient lie. */
+    actorUserId: string | null;
+    gymId: string;
+    action: string;
+    targetType: string;
+    targetId: string;
+    /** Strings, or a LIST of strings — and the list arrived on the terms this
+     *  comment set: "widen it when a caller genuinely needs structure, not
+     *  before". The ticks card is that caller. A permission change's whole
+     *  content is which privileges moved, and flattening them into one string
+     *  would put the interesting part inside a value nothing can query — the
+     *  opposite of what the original rule was protecting.
+     *
+     *  Still deliberately NOT `unknown`: no nested objects, no dates, nothing a
+     *  human reading the row weeks later has to unpack. `null` is allowed for
+     *  exactly one thing — a "before" state that genuinely did not exist. */
+    meta: Record<string, string | readonly string[] | null>;
+  },
+): Promise<void> {
+  await tx`
+    INSERT INTO audit_log (actor_user_id, gym_id, action, target_type, target_id, meta)
+    VALUES (${entry.actorUserId}, ${entry.gymId}, ${entry.action},
+            ${entry.targetType}, ${entry.targetId}, ${tx.json(entry.meta)})`;
+}
+
+// ---------------------------------------------------------------------------
+// OPENING HOURS (Kd 2026-08-31, :26624 + :26684 + :26736). Tenancy is in every
+// WHERE below, like every other function in this file (R3.2).
+// ---------------------------------------------------------------------------
+
+export interface GymSessionRow {
+  weekday: number;
+  opensMinute: number;
+  closesMinute: number;
+}
+
+export interface GymClosureRow {
+  day: string;
+  note: string | null;
+}
+
+/** HOW FAR AHEAD A CLOSURE IS SHOWN, and how many can come back at once.
+ *
+ *  366 covers a leap year, so a gym that has closed every day for the next year
+ *  reads back completely; `CLOSURE_READ_LIMIT` sits above it deliberately, so
+ *  the horizon is what bounds the answer and the LIMIT is a backstop that can
+ *  never silently truncate a legitimate year. Both are mirrored by
+ *  `gymHoursSchema`'s `.max()` in `@app/shared`, and the pair is driven by a
+ *  test — two bounds that could drift apart are one bound plus a comment. */
+const CLOSURE_HORIZON_DAYS = 366;
+export const CLOSURE_READ_LIMIT = 400;
+
+export interface GymHoursRow {
+  mode: GymHoursMode;
+  timezone: string;
+  /** BESIDE `timezone` and for its reason: a minute count needs a clock to
+   *  be READ on and a zone to be TRUE in, and a member's card makes only
+   *  this one read. */
+  clockFormat: GymClockFormat;
+  sessions: GymSessionRow[];
+  closures: GymClosureRow[];
+}
+
+/** WHAT ONE GYM HAS SAID ABOUT WHEN IT IS OPEN — the whole answer in one read,
+ *  because the console and the member's gym card share it and two readers is two
+ *  chances to disagree.
+ *
+ *  **THE CLOSURE FILTER IS TODAY-FORWARD IN THE GYM'S OWN ZONE, and the zone
+ *  comes off the gym's row rather than the server's clock.** `(now() AT TIME
+ *  ZONE g.timezone)::date` is the gym's own calendar date — the same instrument
+ *  the nightly rollup will need, and the reason a US gym and an Assam gym are
+ *  both right in one run (trap #8, :26469 §5). A closure that has passed is a
+ *  fact about history that no screen asks for.
+ *
+ *  **~~and leaving them in would grow a member's card without bound~~ — THE
+ *  SENTENCE WAS FALSE AND T3 ROUND 1 (Low-5) CAUGHT IT.** Trimming the PAST
+ *  bounds nothing: the far end was open to `9999-12-31`. The bound is now real
+ *  and is at the query, below.
+ *
+ *  **`day` COMES BACK AS A STRING, NOT A `Date`, and that is the trap-#8 fix
+ *  rather than a style choice.** `postgres` maps a `date` column to a JS Date at
+ *  UTC midnight, and formatting that anywhere east or west of UTC prints the day
+ *  before or after. `::text` means the calendar date the gym typed is the
+ *  calendar date every reader gets.
+ *
+ *  Null for a gym that does not exist, which the service turns into its standing
+ *  404. */
+export async function getGymHours(sql: SqlOrTx, gymId: string): Promise<GymHoursRow | null> {
+  const gymRows = await sql<{ hours_mode: string; timezone: string; clock_format: string }[]>`
+    SELECT hours_mode, timezone, clock_format FROM gyms WHERE id = ${gymId}`;
+  const gym = gymRows[0];
+  if (gym === undefined) return null;
+
+  const sessions = await sql<{ weekday: number; opens_minute: number; closes_minute: number }[]>`
+    SELECT weekday, opens_minute, closes_minute
+    FROM gym_hours
+    WHERE gym_id = ${gymId}
+    ORDER BY weekday, opens_minute`;
+
+  /** TODAY-FORWARD **AND BOUNDED AT BOTH ENDS** — the far end added by T3 round
+   *  1's Low-5, which found the comment below claiming a bound the query did not
+   *  have.
+   *
+   *  Trimming only the PAST bounds nothing: `day` accepts up to `9999-12-31`,
+   *  the close route has no per-gym cap, and this array is on a MEMBER-facing
+   *  response — so a gym's own owner could grow every one of its members'
+   *  payloads without limit. A horizon of one year is what a screen can draw and
+   *  is past any closure a gym plausibly types today; `LIMIT` is the second
+   *  bound, deliberately above 366 so a gym closed every day for a year still
+   *  reads back completely rather than being silently truncated. */
+  const closures = await sql<{ day: string; note: string | null }[]>`
+    SELECT c.day::text AS day, c.note
+    FROM gym_closures c
+    JOIN gyms g ON g.id = c.gym_id
+    WHERE c.gym_id = ${gymId}
+      AND c.day >= (now() AT TIME ZONE g.timezone)::date
+      AND c.day < ((now() AT TIME ZONE g.timezone)::date + ${CLOSURE_HORIZON_DAYS}::int)
+    ORDER BY c.day
+    LIMIT ${CLOSURE_READ_LIMIT}`;
+
+  return {
+    mode: gymHoursModeSchema.parse(gym.hours_mode),
+    timezone: gym.timezone,
+    clockFormat: gymClockFormatSchema.parse(gym.clock_format),
+    sessions: sessions.map((r) => ({
+      weekday: r.weekday,
+      opensMinute: r.opens_minute,
+      closesMinute: r.closes_minute,
+    })),
+    closures: closures.map((r) => ({ day: r.day, note: r.note })),
+  };
+}
+
+export type SetGymHoursOutcome = { kind: "set"; hours: GymHoursRow } | { kind: "not_found" };
+
+/** REPLACE THE WHOLE WEEK ATOMICALLY.
+ *
+ *  **IT IS A REPLACE AND NOT PER-SESSION CRUD, and that is a correctness
+ *  decision rather than a shortcut.** Add/edit/delete on individual sessions
+ *  lets two half-applied requests leave a gym advertising a timetable no human
+ *  ever chose — and the overlap rule, the one thing that makes these rows
+ *  readable, is only checkable against a WHOLE day. With the week in one body
+ *  the service validates exactly what will exist.
+ *
+ *  **DELETE-THEN-INSERT INSIDE ONE TRANSACTION, under `lockOrgRow`** — the same
+ *  instrument and the same order (org row → child rows) every other mutation in
+ *  this module takes, so it adds no new deadlock edge. It is what stops two
+ *  owners saving different timetables from interleaving into a third that is
+ *  neither.
+ *
+ *  **~~`open_24h` DELETES THE ROWS TOO.~~ KD REVERSED THIS AT HIS OWN BROWSER ON
+ *  2026-09-03, AFTER IT DESTROYED HIS WEEK.** He chose "Open 24 hours", saved,
+ *  and all seven days were gone — *"no my timetable was not restored"* — with
+ *  nothing on screen warning him first. **A control that silently destroys what
+ *  somebody typed is the worst thing this card found, and the old reasoning is
+ *  kept because it was not wrong**: the mode and the rows ARE two answers to one
+ *  question, and a stale set nobody looked at is a real hazard. What changed is
+ *  the remedy. **The two answers are now told apart by NAME — `week` is what the
+ *  gym is TELLING people and is still emptied by the mode; `savedWeek` is what
+ *  the owner would come back to** — so the hazard is closed by making the
+ *  distinction explicit rather than by deleting one of them. Kd's flag is still
+ *  the whole answer in that mode (:26624 §4.5); these rows say nothing to
+ *  anybody until the gym goes back to `scheduled`.
+ *
+ *  **THE DELETE NOW HAPPENS ONLY ON A `scheduled` SAVE**, where it is the
+ *  replace half of replace-then-insert and must not move.
+ *
+ *  `unset` cannot arrive — the request union does not admit it, because a gym
+ *  that has answered cannot un-answer — so this never writes it. */
+export async function setGymHours(
+  sql: Sql,
+  input: {
+    gymId: string;
+    mode: "open_24h" | "scheduled";
+    sessions: readonly GymSessionRow[];
+    actorUserId: string;
+  },
+): Promise<SetGymHoursOutcome> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId);
+    // Read through `getGymHours` rather than `getOrgById`: the audit row below
+    // needs the mode this gym was in, and `OrgRow` deliberately does not carry
+    // `hours_mode` — widening it would put the field in front of six callers
+    // that have no business with it.
+    const before = await getGymHours(tx, input.gymId);
+    if (before === null) return { kind: "not_found" };
+
+    // THE WHOLE `if` IS THE FIX, AND THE DELETE INSIDE IT IS UNCHANGED.
+    // A `scheduled` save still replaces the week outright — that is what makes
+    // it a REPLACE and is what the overlap rule is validated against. An
+    // `open_24h` save now touches nothing, so the rows survive to be handed back
+    // as `savedWeek` when the owner switches the mode again.
+    if (input.mode === "scheduled") {
+      await tx`DELETE FROM gym_hours WHERE gym_id = ${input.gymId}`;
+    }
+    if (input.mode === "scheduled" && input.sessions.length > 0) {
+      // One multi-row INSERT rather than a loop: this is one statement's worth
+      // of work, and a loop inside a transaction is N round trips buying no
+      // extra guarantee.
+      await tx`
+        INSERT INTO gym_hours ${tx(
+          input.sessions.map((s) => ({
+            gym_id: input.gymId,
+            weekday: s.weekday,
+            opens_minute: s.opensMinute,
+            closes_minute: s.closesMinute,
+          })),
+          "gym_id",
+          "weekday",
+          "opens_minute",
+          "closes_minute",
+        )}`;
+    }
+    await tx`UPDATE gyms SET hours_mode = ${input.mode} WHERE id = ${input.gymId}`;
+
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.hours_set",
+      targetType: "gym",
+      targetId: input.gymId,
+      // The COUNT, not the timetable. A reader weeks later wants "who changed
+      // the hours and when"; a whole week of ranges in a meta column is the
+      // whole-row snapshot :19366's `changed` list exists to avoid.
+      //
+      // **NULL AND NOT `"0"` FOR AN `open_24h` SAVE — T3 round 1's L-2.**
+      // `"0"` was true while the writer deleted the rows: it said "the week was
+      // emptied", and it was. Since `:31508` the rows SURVIVE, so a `"0"` here
+      // is the audit log describing a deletion that did not happen — a false
+      // sentence in the one place whose whole job is to say what happened
+      // (:5807's shape, in a record rather than on a screen). **`null` says the
+      // field does not apply to this save**, which is what "the gym declared a
+      // flag" actually means; the count belongs to a `scheduled` save alone.
+      meta: {
+        before: before.mode,
+        after: input.mode,
+        sessions: input.mode === "scheduled" ? String(input.sessions.length) : null,
+      },
+    });
+
+    const hours = await getGymHours(tx, input.gymId);
+    // Unreachable: the row is locked in this transaction and was read above.
+    if (hours === null) throw new Error("gym vanished inside its own transaction");
+    return { kind: "set", hours };
+  });
+}
+
+export type CloseGymDayOutcome = { kind: "closed"; hours: GymHoursRow } | { kind: "not_found" };
+
+/** MARK ONE DAY CLOSED — Kd's *"we are close today"* (:26684 §3).
+ *
+ *  **IDEMPOTENT BY THE DATABASE, NOT BY A CHECK (R3.5).** `ON CONFLICT
+ *  (gym_id, day) DO UPDATE` is what makes an owner's double-tap leave one row,
+ *  and it is also how a note is EDITED — re-closing a day replaces its reason. A
+ *  service-side "is it already closed?" would be a check-then-act with a window
+ *  in it.
+ *
+ *  **NO CHECK THAT THE DAY IS IN THE FUTURE, deliberately.** A gym typing
+ *  yesterday's closure in at 1am is recording something true, and the READ
+ *  already hides past dates from every screen — so a refusal would buy nothing
+ *  but an error message for a gym telling the truth late. */
+export async function closeGymDay(
+  sql: Sql,
+  input: { gymId: string; day: string; note: string | null; actorUserId: string },
+): Promise<CloseGymDayOutcome> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId);
+    const before = await getOrgById(tx, input.gymId);
+    if (before === null) return { kind: "not_found" };
+
+    /** WHAT THIS DAY SAID BEFORE, read under the lock already held — T3 round 1
+     *  Low-6.
+     *
+     *  **A RE-CLOSE THAT CHANGES NOTHING MUST NOT WRITE AN AUDIT ROW.**
+     *  `removeGymClosure` three functions below already refuses to log a
+     *  non-event, with the reason spelled out — *"a log that records non-events
+     *  is one nobody can read a real event out of"* — and this function was
+     *  writing `org.day_closed` on every call, so an owner double-tapping left
+     *  two rows claiming two changes for one state. That is :19366's own
+     *  no-op rule, which this module states and this function was breaking.
+     *
+     *  A read-then-write is safe here and nowhere near a check-then-act: the gym
+     *  row is locked above, and the write below is an upsert whose correctness
+     *  does not depend on this read — only the AUDIT decision does. */
+    const previous = await tx<{ note: string | null }[]>`
+      SELECT note FROM gym_closures
+      WHERE gym_id = ${input.gymId} AND day = ${input.day}::date`;
+    const existing = previous[0];
+
+    await tx`
+      INSERT INTO gym_closures (gym_id, day, note, created_by_user_id)
+      VALUES (${input.gymId}, ${input.day}::date, ${input.note}, ${input.actorUserId})
+      ON CONFLICT (gym_id, day) DO UPDATE
+        SET note = EXCLUDED.note, created_by_user_id = EXCLUDED.created_by_user_id`;
+
+    // Newly closed, or the reason changed. Re-closing an already-closed day with
+    // the same note is the caller confirming a state, not changing one.
+    if (existing === undefined || existing.note !== input.note) {
+      await insertAudit(tx, {
+        actorUserId: input.actorUserId,
+        gymId: input.gymId,
+        action: "org.day_closed",
+        targetType: "gym",
+        targetId: input.gymId,
+        // The previous note distinguishes "this day was open and is now closed"
+        // from "somebody corrected the reason", which is the question a person
+        // reading this row weeks later is actually asking.
+        meta: {
+          day: input.day,
+          before: existing === undefined ? null : existing.note,
+          note: input.note,
+        },
+      });
+    }
+
+    const hours = await getGymHours(tx, input.gymId);
+    if (hours === null) throw new Error("gym vanished inside its own transaction");
+    return { kind: "closed", hours };
+  });
+}
+
+export type RemoveGymClosureOutcome =
+  | { kind: "removed"; hours: GymHoursRow }
+  | { kind: "not_found" };
+
+/** UN-CLOSE A DAY, restoring the weekly pattern.
+ *
+ *  **A HARD `DELETE`, and it is the declared R4.3 exception this table was
+ *  designed around.** A closure is a statement about ONE day that expires by
+ *  itself; un-closing is a CORRECTION rather than an event with a history worth
+ *  keeping, and `audit_log` records both ends anyway.
+ *
+ *  **Deleting a day that was never closed is NOT an error.** The outcome names
+ *  the STATE — this day is not marked closed — which is true whether this call
+ *  removed the row or there never was one, so a double-tap and a stale screen
+ *  answer the same way. `not_found` is reserved for the GYM. */
+export async function removeGymClosure(
+  sql: Sql,
+  input: { gymId: string; day: string; actorUserId: string },
+): Promise<RemoveGymClosureOutcome> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId);
+    const before = await getOrgById(tx, input.gymId);
+    if (before === null) return { kind: "not_found" };
+
+    const deleted = await tx<{ day: string }[]>`
+      DELETE FROM gym_closures
+      WHERE gym_id = ${input.gymId} AND day = ${input.day}::date
+      RETURNING day::text AS day`;
+
+    // Only a real removal writes an audit row: a log that records non-events is
+    // one nobody can read a real event out of (:19366's rule, same module).
+    if (deleted.length > 0) {
+      await insertAudit(tx, {
+        actorUserId: input.actorUserId,
+        gymId: input.gymId,
+        action: "org.day_reopened",
+        targetType: "gym",
+        targetId: input.gymId,
+        meta: { day: input.day },
+      });
+    }
+
+    const hours = await getGymHours(tx, input.gymId);
+    if (hours === null) throw new Error("gym vanished inside its own transaction");
+    return { kind: "removed", hours };
+  });
+}
+
+/** IS THIS PERSON A LIVE MEMBER OF THIS GYM — the read side of the hours route.
+ *
+ *  **Deliberately NOT `getStaffAuthority`'s question.** That answers "what may
+ *  this person DO here", and staff need not be members. This asks the simpler
+ *  thing a member's gym card needs: is this person, right now, in this gym. The service ORs the two,
+ *  so an invited manager who never joined still reads the hours.
+ *
+ *  `removed_at IS NULL` is the same live-membership predicate every other reader
+ *  in this codebase uses, deliberately not re-spelled as something cleverer —
+ *  a second definition of "live member" is how one of them drifts. */
+export async function isLiveMember(sql: SqlOrTx, gymId: string, userId: string): Promise<boolean> {
+  const rows = await sql<{ one: number }[]>`
+    SELECT 1 AS one
+    FROM gym_members m
+    JOIN users u ON u.id = m.user_id
+    WHERE m.gym_id = ${gymId}
+      AND m.user_id = ${userId}
+      AND m.removed_at IS NULL
+      AND u.status = 'active'
+    LIMIT 1`;
+  return rows.length > 0;
+}
+
+/* ─────────────────────────── ATTENDANCE ───────────────────────────
+ *
+ *  Kd 2026-08-31 (:26469) and 2026-09-01 (:27900, :27992, :28055, :28107).
+ */
+
+export interface GymAttendanceVisitRow {
+  day: string;
+  markedAt: Date;
+  method: GymAttendanceMethod;
+  hoursStatus: GymAttendanceHoursStatus;
+  sessionOpensMinute: number | null;
+  sessionClosesMinute: number | null;
+}
+
+function toAttendanceVisitRow(raw: {
+  day: string;
+  marked_at: Date;
+  method: string;
+  hours_status: string;
+  session_opens_minute: number | null;
+  session_closes_minute: number | null;
+}): GymAttendanceVisitRow {
+  return {
+    day: raw.day,
+    markedAt: raw.marked_at,
+    method: gymAttendanceMethodSchema.parse(raw.method),
+    hoursStatus: gymAttendanceHoursStatusSchema.parse(raw.hours_status),
+    sessionOpensMinute: raw.session_opens_minute,
+    sessionClosesMinute: raw.session_closes_minute,
+  };
+}
+
+/** WHAT THE GYM'S HOURS SAY ABOUT *NOW*, IN THE GYM'S OWN ZONE — the whole
+ *  status decision, in SQL, in one place.
+ *
+ *  **IT IS SQL AND NOT TYPESCRIPT FOR ONE REASON: THE CLOCK.** Every answer here
+ *  is derived from `now()` bucketed by `gyms.timezone`, and a JavaScript
+ *  `new Date()` on the api box would silently use the SERVER's zone — trap #8,
+ *  and the defect :26812 §2a caught in a test that disagreed with the truth for
+ *  only ten hours of every day. The database is the one clock in this system
+ *  that already knows how to stand in the gym's zone.
+ *
+ *  **THE ORDER OF THE BRANCHES IS THE RULING, NOT AN IMPLEMENTATION DETAIL:**
+ *
+ *  1. `unset` FIRST — before the closure, before everything. :26736: a gym that
+ *     has not answered is told NOTHING about opening times, and
+ *     `GymHoursNote.jsx`'s mode gate returns null for `unset` before it ever
+ *     looks at closures. **If this branch came second, a member could be told
+ *     `closed_day` about a gym whose own card shows them nothing** — two
+ *     surfaces disagreeing about one gym, which is what a shared reader exists
+ *     to prevent.
+ *  2. The CLOSURE next: a dated closure WINS over the weekly pattern (:26684
+ *     §3) — including over `open_24h`, which is a pattern like any other.
+ *  3. `open_24h` — nothing to be outside of.
+ *  4. A session containing this minute → `in_session`, carrying its window.
+ *  5. Otherwise `outside_hours`.
+ *
+ *  **`opens <= m AND m < closes` — HALF-OPEN, and the boundary is load-bearing.**
+ *  Sessions may TOUCH (10:00–12:00 beside 12:00–14:00 is legal — `flattenWeek`'s
+ *  rule), so an inclusive upper bound would put the instant of 12:00 in TWO
+ *  sessions and hand `slot_key` two answers for one visit. `LIMIT 1` is a
+ *  backstop and not the guarantee; the guarantee is the overlap check on write.
+ *
+ *  Null for a gym that does not exist, which the service turns into its 404. */
+export async function readAttendanceContext(
+  tx: SqlOrTx,
+  gymId: string,
+): Promise<{
+  day: string;
+  hoursStatus: GymAttendanceHoursStatus;
+  opensMinute: number | null;
+  closesMinute: number | null;
+  manualEnabled: boolean;
+  timezone: string;
+  clockFormat: GymClockFormat;
+} | null> {
+  const rows = await tx<
+    {
+      day: string;
+      hours_mode: string;
+      manual_attendance_enabled: boolean;
+      timezone: string;
+      clock_format: string;
+      closed: boolean;
+      opens_minute: number | null;
+      closes_minute: number | null;
+    }[]
+  >`
+    SELECT (now() AT TIME ZONE g.timezone)::date::text AS day,
+           g.hours_mode, g.manual_attendance_enabled, g.timezone, g.clock_format,
+           EXISTS (
+             SELECT 1 FROM gym_closures c
+             WHERE c.gym_id = g.id
+               AND c.day = (now() AT TIME ZONE g.timezone)::date
+           ) AS closed,
+           s.opens_minute, s.closes_minute
+    FROM gyms g
+    LEFT JOIN LATERAL (
+      SELECT h.opens_minute, h.closes_minute
+      FROM gym_hours h
+      WHERE h.gym_id = g.id
+        AND h.weekday = EXTRACT(ISODOW FROM (now() AT TIME ZONE g.timezone))::int
+        AND h.opens_minute <= (EXTRACT(HOUR FROM (now() AT TIME ZONE g.timezone))::int * 60
+                               + EXTRACT(MINUTE FROM (now() AT TIME ZONE g.timezone))::int)
+        AND h.closes_minute > (EXTRACT(HOUR FROM (now() AT TIME ZONE g.timezone))::int * 60
+                               + EXTRACT(MINUTE FROM (now() AT TIME ZONE g.timezone))::int)
+      ORDER BY h.opens_minute
+      LIMIT 1
+    ) s ON true
+    WHERE g.id = ${gymId}`;
+  const row = rows[0];
+  if (row === undefined) return null;
+
+  const mode = gymHoursModeSchema.parse(row.hours_mode);
+  const common = {
+    day: row.day,
+    manualEnabled: row.manual_attendance_enabled,
+    timezone: row.timezone,
+    clockFormat: gymClockFormatSchema.parse(row.clock_format),
+  };
+  if (mode === "unset") {
+    return { ...common, hoursStatus: "hours_unset", opensMinute: null, closesMinute: null };
+  }
+  if (row.closed) {
+    return { ...common, hoursStatus: "closed_day", opensMinute: null, closesMinute: null };
+  }
+  if (mode === "open_24h") {
+    return { ...common, hoursStatus: "open_24h", opensMinute: null, closesMinute: null };
+  }
+  if (row.opens_minute !== null && row.closes_minute !== null) {
+    return {
+      ...common,
+      hoursStatus: "in_session",
+      opensMinute: row.opens_minute,
+      closesMinute: row.closes_minute,
+    };
+  }
+  return { ...common, hoursStatus: "outside_hours", opensMinute: null, closesMinute: null };
+}
+
+export type MarkAttendanceOutcome =
+  | {
+      kind: "marked";
+      alreadyMarked: boolean;
+      visit: GymAttendanceVisitRow;
+      timezone: string;
+      clockFormat: GymClockFormat;
+    }
+  | { kind: "manual_disabled" }
+  /** THE GYM IS NOT OPEN RIGHT NOW — Kd's ruling of 2026-09-03, which REVERSES
+   *  :26624 §4.4. That was a CHAT'S CALL ("attendance outside opening hours is
+   *  RECORDED AND MARKED, never refused"), listed under *"the calls I am making
+   *  rather than asking"*, and he has now made the opposite one: *"if a gym has
+   *  set certain times not 24 hour then if a member comes outside of time
+   *  should not be able to press i am here"*.
+   *
+   *  **IT FIRES ONLY WHERE THE GYM HAS ACTUALLY ANSWERED.** `hours_unset` and
+   *  `open_24h` are NOT refused — a gym that has never said when it opens has
+   *  said nothing to enforce, and refusing there would invent a rule the gym
+   *  never set (:26736's distinction between "no answer" and "closed", now
+   *  load-bearing for a WRITE rather than only for a sentence).
+   *
+   *  `todayHours` carries the day's real sessions so the refusal can say when
+   *  the gym IS open — a bare "no" leaves a member standing at a door with no
+   *  idea when to come back. */
+  | {
+      kind: "closed";
+      hoursStatus: Extract<GymAttendanceHoursStatus, "outside_hours" | "closed_day">;
+      todayHours: { opensMinute: number; closesMinute: number }[];
+      timezone: string;
+      clockFormat: GymClockFormat;
+    }
+  | { kind: "not_found" };
+
+/** RECORD THAT SOMEBODY IS HERE.
+ *
+ *  **IDEMPOTENT BY THE DATABASE, NOT BY A CHECK (R3.5).** `ON CONFLICT DO
+ *  NOTHING` on `(gym_id, user_id, day, slot_key)` is what makes a double-tap
+ *  leave one row, and the read that follows returns whichever row is there — so
+ *  both taps answer 200 with the SAME visit. A service-side "have they already
+ *  marked?" would be a check-then-act with a window in it, on a button a member
+ *  can hit twice in a second.
+ *
+ *  **`alreadyMarked` IS DERIVED FROM WHETHER THE INSERT RETURNED**, never from a
+ *  prior read. It is a display hint and never the record; the record is the
+ *  visit, which is identical either way.
+ *
+ *  **THE MANUAL SWITCH IS CHECKED INSIDE THE TRANSACTION, under the lock the
+ *  gym's own writes take.** An owner switching it off while a member is mid-tap
+ *  is a real race, and that switch is what makes a gym's numbers mean something
+ *  (:26469 §4) — checking it outside the lock would let a tap the owner had just
+ *  forbidden land anyway.
+ *
+ *  **THE STATUS IS FROZEN AT THE MOMENT OF THE TAP.** If the owner edits the
+ *  timetable an hour later this row keeps the label it was given: it describes
+ *  the VISIT and not the current timetable, which is why the window is COPIED
+ *  rather than joined at read time.
+ *
+ *  **NO AUDIT ROW, and that is a decision rather than an omission.** `audit_log`
+ *  records what STAFF did to a gym — every other writer in this module is a
+ *  console action behind a privilege. An attendance is a MEMBER acting on their
+ *  own membership, the row IS the record, and several hundred a day would bury
+ *  the staff actions the log exists to make readable. */
+export async function markGymAttendance(
+  sql: Sql,
+  input: {
+    gymId: string;
+    userId: string;
+    markedByUserId: string;
+    method: GymAttendanceMethod;
+  },
+): Promise<MarkAttendanceOutcome> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId);
+    const ctx = await readAttendanceContext(tx, input.gymId);
+    if (ctx === null) return { kind: "not_found" };
+    if (input.method === "manual" && !ctx.manualEnabled) return { kind: "manual_disabled" };
+
+    // KD'S RULING, 2026-09-03 — see the `closed` arm of `MarkAttendanceOutcome`.
+    // Checked INSIDE the transaction and under the gym lock, like every other
+    // decision here: the hours and the closure are read by `readAttendanceContext`
+    // above, and a gym editing its timetable between that read and this insert
+    // would otherwise admit a visit the rule had just refused.
+    if (ctx.hoursStatus === "outside_hours" || ctx.hoursStatus === "closed_day") {
+      const todayHours = await tx<{ opens_minute: number; closes_minute: number }[]>`
+        SELECT h.opens_minute, h.closes_minute
+        FROM gym_hours h
+        WHERE h.gym_id = ${input.gymId}
+          AND h.weekday = EXTRACT(ISODOW FROM (now() AT TIME ZONE ${ctx.timezone}))::int
+        ORDER BY h.opens_minute`;
+      return {
+        kind: "closed",
+        hoursStatus: ctx.hoursStatus,
+        // A CLOSED DAY REPORTS NO SESSIONS EVEN IF THE WEEKLY PATTERN HAS THEM.
+        // A dated closure WINS over the pattern (:26684), so listing the
+        // weekday's usual hours would tell a member to come at six on a day the
+        // gym has said it is shut.
+        todayHours:
+          ctx.hoursStatus === "closed_day"
+            ? []
+            : todayHours.map((h) => ({ opensMinute: h.opens_minute, closesMinute: h.closes_minute })),
+        timezone: ctx.timezone,
+        clockFormat: ctx.clockFormat,
+      };
+    }
+
+    const slotKey = slotKeyFor(ctx.hoursStatus, ctx.opensMinute, ctx.closesMinute);
+    const inserted = await tx<{ one: number }[]>`
+      INSERT INTO gym_attendance
+        (gym_id, user_id, marked_by_user_id, day, method, hours_status,
+         session_opens_minute, session_closes_minute, slot_key)
+      VALUES (${input.gymId}, ${input.userId}, ${input.markedByUserId}, ${ctx.day}::date,
+              ${input.method}, ${ctx.hoursStatus},
+              ${ctx.opensMinute}, ${ctx.closesMinute}, ${slotKey})
+      ON CONFLICT (gym_id, user_id, day, slot_key) DO NOTHING
+      RETURNING 1 AS one`;
+
+    // Read back rather than trusting the INSERT's RETURNING: on the conflict
+    // path it returns nothing, and the row that IS there is the answer both
+    // callers must receive.
+    const rows = await tx<
+      {
+        day: string;
+        marked_at: Date;
+        method: string;
+        hours_status: string;
+        session_opens_minute: number | null;
+        session_closes_minute: number | null;
+      }[]
+    >`
+      SELECT day::text AS day, marked_at, method, hours_status,
+             session_opens_minute, session_closes_minute
+      FROM gym_attendance
+      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
+        AND day = ${ctx.day}::date AND slot_key = ${slotKey}`;
+    const row = rows[0];
+    // Unreachable: the gym row is locked, so nothing deletes between the upsert
+    // above and this read.
+    if (row === undefined) throw new Error("attendance vanished inside its own transaction");
+
+    return {
+      kind: "marked",
+      alreadyMarked: inserted.length === 0,
+      visit: toAttendanceVisitRow(row),
+      timezone: ctx.timezone,
+      clockFormat: ctx.clockFormat,
+    };
+  });
+}
+
+/** HOW MANY PEOPLE COME BACK IN ONE PAGE, how many visits one person can carry,
+ *  and how many lines the day's SHAPE can have.
+ *
+ *  ~~Each is mirrored by a `.max()` in `@app/shared`~~ **THE THREE NOW LIVE IN
+ *  `@app/shared` AND ARE IMPORTED HERE, so there is nothing left to mirror.**
+ *  They were declared in this file and written as literals beside the schemas,
+ *  paired by nothing but the paragraph you are reading — and a docstring is not
+ *  an enforcement (:26947 Low-5's shape, one level up from the bound itself).
+ *  Four `.max()` sites read them: `gymAttendanceDaySchema.people` and
+ *  `gymAttendanceHistorySchema.visits` take `ATTENDANCE_PAGE_LIMIT`,
+ *  `gymAttendancePersonSchema.visits` takes `ATTENDANCE_VISITS_PER_PERSON`, and
+ *  `gymAttendanceDaySchema.summary` takes `ATTENDANCE_SUMMARY_LIMIT`.
+ *
+ *  **DRIFT UPWARD IS THE DIRECTION THAT HURT AND IT HAD NO OBSERVER**: raising
+ *  a `LIMIT` here while a literal stayed put in the contract restores exactly
+ *  the permanent 500 :28452 §3 fixed, and no test named any of these constants
+ *  (grep-verified). One declaration is the guard; `tsc` is what watches it.
+ *
+ *  **AND EACH IS ENFORCED HERE, IN THE QUERY, WHICH IS THE HALF THAT WAS
+ *  MISSING.** `ATTENDANCE_VISITS_PER_PERSON` had no reader at all: a constant,
+ *  a paragraph explaining it, and no `LIMIT` anywhere. :26947 Low-5 is *"a
+ *  comment that claimed a bound the query did not have"*, and this file quoted
+ *  that lesson while repeating it one card later.
+ *
+ *  ~~24 is not arbitrary: sessions never overlap and never wrap past midnight,
+ *  so the finest timetable a gym can express is 24 slots, and one person cannot
+ *  produce more distinct visits in a day than the gym has slots to put them
+ *  in.~~ **STRUCK: TRUE OF ONE TIMETABLE, AND A DAY CAN HOLD SEVERAL.** A visit
+ *  stores a FROZEN COPY of the window it fell in — which is exactly what the
+ *  test *"the window a visit carries survives the whole timetable being
+ *  replaced"* pins — and `PUT /hours` may run any number of times in a day. The
+ *  distinct `(hours_status, opens, closes)` groups in one gym-day are therefore
+ *  **not bounded by the timetable at all**, and both old ceilings were
+ *  arithmetic about a quantity nothing enforces. The sentence is struck in place
+ *  rather than deleted so the next reader sees what it used to claim (:26947 §4).
+ *
+ *  **WHAT IT COST, AND WHY THE BOUND MOVED INTO THE QUERY:** asserted only in
+ *  the response schema, a gym that edited its hours enough times in one day made
+ *  its own attendance page fail `gymAttendanceDayResponseSchema.parse` — a 500
+ *  on that date, permanently, since nothing in this product deletes an
+ *  attendance row.
+ *
+ *  **400 IS `CLOSURE_READ_LIMIT`'s REASONING REUSED**: far above any honest day
+ *  (a stable timetable yields 24 and 29), so a real gym is never silently
+ *  truncated, and bounded so no one response can run away. The pairs move
+ *  together or a legitimate answer becomes a parse failure. */
+export interface GymAttendanceSlotCountRow {
+  hoursStatus: GymAttendanceHoursStatus;
+  opensMinute: number | null;
+  closesMinute: number | null;
+  visits: number;
+  people: number;
+}
+
+export interface GymAttendancePersonRow {
+  userId: string;
+  displayName: string;
+  /** Kd's 2026-09-03 ruling — a knowing deviation from Part 3 §2.4, with the
+   *  join screen's disclosure changed in the same commit. The field's full note
+   *  is on the shared schema. */
+  email: string;
+  visits: GymAttendanceVisitRow[];
+}
+
+export interface GymAttendanceDayRow {
+  day: string;
+  timezone: string;
+  clockFormat: GymClockFormat;
+  /** THE DAY'S TOTALS, and `people` is the only DISTINCT count in this response
+   *  that cannot be derived from `summary`. Per slot the two are provably equal
+   *  (the UNIQUE admits one visit per person per slot); across the day they
+   *  differ exactly when somebody came twice — the case Kd's ruling 12 created.
+   *  A screen summing the slot rows would print a number bigger than the gym's
+   *  roster, which is why this is computed here. */
+  totals: { visits: number; people: number };
+  summary: GymAttendanceSlotCountRow[];
+  people: GymAttendancePersonRow[];
+  nextCursor: string | null;
+}
+
+/** WHO CAME ON ONE DAY — the gym-side read, and the shape is Kd's ruling 14
+ *  (:27992 §3, *"it might pile up and may be hard to analuse and see"*).
+ *
+ *  **THE SUMMARY IS COUNTED OVER THE WHOLE DAY AND THE PEOPLE ARE A PAGE, and
+ *  the two must never be derived from each other.** A screen that counted the
+ *  page it downloaded would be right on a fixture of six and would report the
+ *  FIRST PAGE on a gym of four hundred — the specific breakage that ruling
+ *  names. So the counts are `GROUP BY` in SQL over every row of the day, and
+ *  `nextCursor` moves the people without moving them.
+ *
+ *  **`visits` AND `people` ARE DIFFERENT NUMBERS AND BOTH ARE SERVED.** They
+ *  differ exactly when somebody came twice — which Kd's ruling 12 made possible
+ *  on purpose — and printing one under the other's label is the :5807 defect
+ *  this card is most likely to ship.
+ *
+ *  **THE PAGE IS BY PERSON, NOT BY VISIT**, so a member who came twice is ONE
+ *  entry with TWO times (ruling 12 at the screen) and a 400-tap day is 300 rows
+ *  rather than 400. Ordered by first arrival then `user_id` — a total order, so
+ *  the cursor cannot skip or repeat somebody when two people arrive in the same
+ *  millisecond (:12227's lesson about a cursor that compares one column).
+ *
+ *  `statuses` narrows to the exceptions an owner goes looking for — outside
+ *  hours, closed day — **without paging through everybody**; it filters the
+ *  PEOPLE and deliberately not the SUMMARY, which always describes the whole
+ *  day. A screen whose totals changed when a filter was applied would be
+ *  answering a different question from the one on the label. */
+export async function getGymAttendanceDay(
+  sql: SqlOrTx,
+  input: {
+    gymId: string;
+    day?: string | undefined;
+    statuses?: readonly GymAttendanceHoursStatus[] | undefined;
+    cursor?: { markedAt: Date; userId: string } | undefined;
+    limit?: number | undefined;
+  },
+): Promise<GymAttendanceDayRow | null> {
+  const gymRows = await sql<
+    { day: string; timezone: string; clock_format: string }[]
+  >`
+    SELECT coalesce(${input.day ?? null}::date, (now() AT TIME ZONE g.timezone)::date)::text AS day,
+           g.timezone, g.clock_format
+    FROM gyms g WHERE g.id = ${input.gymId}`;
+  const gym = gymRows[0];
+  if (gym === undefined) return null;
+
+  const limit = Math.min(input.limit ?? ATTENDANCE_PAGE_LIMIT, ATTENDANCE_PAGE_LIMIT);
+  const statuses = input.statuses ?? null;
+
+  // THE DAY'S TOTALS, over every row of the day. `count(DISTINCT user_id)` is
+  // load-bearing HERE and only here — see `GymAttendanceDayRow.totals`.
+  //
+  // Every read on this page counts the visits of app accounts only, the ones its list of
+  // people can name; a desk's visit of somebody without the app joins it with the live
+  // log (ROADMAP 16b).
+  const totalsRows = await sql<{ visits: string; people: string }[]>`
+    SELECT count(*) AS visits, count(DISTINCT user_id) AS people
+    FROM gym_attendance
+    WHERE gym_id = ${input.gymId} AND day = ${gym.day}::date AND user_id IS NOT NULL`;
+
+  // THE DAY'S SHAPE, over every row of the day — never over the page below.
+  const summary = await sql<
+    {
+      hours_status: string;
+      session_opens_minute: number | null;
+      session_closes_minute: number | null;
+      visits: string;
+      people: string;
+    }[]
+  >`
+    SELECT hours_status, session_opens_minute, session_closes_minute,
+           count(*) AS visits,
+           count(DISTINCT user_id) AS people
+    FROM gym_attendance
+    WHERE gym_id = ${input.gymId} AND day = ${gym.day}::date AND user_id IS NOT NULL
+    GROUP BY hours_status, session_opens_minute, session_closes_minute
+    ORDER BY session_opens_minute NULLS LAST, hours_status
+    LIMIT ${ATTENDANCE_SUMMARY_LIMIT}`;
+
+  /** ONE PAGE OF PEOPLE. The inner select finds WHO, ordered and bounded; the
+   *  outer one fetches every visit belonging to those people, so a person is
+   *  never split across a page boundary — which is what would make "attended
+   *  twice" show as one visit on one page and one on the next. */
+  const people = await sql<
+    {
+      user_id: string;
+      display_name: string;
+      email: string;
+      first_marked_at: Date;
+      day: string;
+      marked_at: Date;
+      method: string;
+      hours_status: string;
+      session_opens_minute: number | null;
+      session_closes_minute: number | null;
+    }[]
+  >`
+    WITH page AS (
+      SELECT a.user_id, min(a.marked_at) AS first_marked_at
+      FROM gym_attendance a
+      WHERE a.gym_id = ${input.gymId} AND a.day = ${gym.day}::date AND a.user_id IS NOT NULL
+        AND (${statuses}::text[] IS NULL OR a.hours_status = ANY (${statuses}::text[]))
+      GROUP BY a.user_id
+      HAVING (${input.cursor?.markedAt ?? null}::timestamptz IS NULL
+              OR (min(a.marked_at), a.user_id)
+                 > (${input.cursor?.markedAt ?? null}::timestamptz, ${input.cursor?.userId ?? null}::uuid))
+      ORDER BY first_marked_at, a.user_id
+      LIMIT ${limit + 1}
+    )
+    SELECT v.user_id, v.display_name, v.email, v.first_marked_at, v.day, v.marked_at,
+           v.method, v.hours_status, v.session_opens_minute, v.session_closes_minute
+    FROM (
+      -- EMAIL IS HERE BY A KD RULING OF 2026-09-03 AND IS A KNOWING DEVIATION
+      -- FROM Part 3 §2.4 (R0.3). That section lists what an org may see and
+      -- email is NOT on it; he ruled otherwise ("gym can see email also"). The
+      -- join screen's own disclosure was changed in the SAME commit, because a
+      -- field added to a gym-facing payload without re-reading §2.4 is exactly
+      -- how that promise gets broken silently -- OrgVisibilitySheet.jsx says so
+      -- in its own header. (No backticks in here: inside a sql template literal
+      -- one ends the template, which is :30094 section 3b and cost this file a
+      -- nine-line TypeScript error pointing nowhere near the cause.)
+      SELECT p.user_id, u.display_name, u.email, p.first_marked_at,
+             a.day::text AS day, a.marked_at, a.method, a.hours_status,
+             a.session_opens_minute, a.session_closes_minute,
+             -- THE PER-PERSON CEILING, ENFORCED RATHER THAN ASSERTED. Earliest
+             -- first, so a truncated person keeps the visits they actually made
+             -- in order rather than an arbitrary window of them.
+             row_number() OVER (PARTITION BY p.user_id ORDER BY a.marked_at) AS rn
+      FROM page p
+      JOIN users u ON u.id = p.user_id
+      JOIN gym_attendance a
+        ON a.gym_id = ${input.gymId} AND a.day = ${gym.day}::date AND a.user_id = p.user_id
+    ) v
+    WHERE v.rn <= ${ATTENDANCE_VISITS_PER_PERSON}
+    ORDER BY v.first_marked_at, v.user_id, v.marked_at`;
+
+  const grouped: GymAttendancePersonRow[] = [];
+  /** EACH GROUPED PERSON'S CURSOR KEY, index-aligned with `grouped`.
+   *
+   *  It is kept beside the rows rather than read back off them because
+   *  `GymAttendancePersonRow` carries RENDERED visits — a time somebody reads —
+   *  while the cursor needs the raw `first_marked_at` the inner select ordered
+   *  by. Deriving one from the other would be re-parsing our own output. */
+  const keys: { userId: string; markedAt: Date }[] = [];
+  for (const r of people) {
+    const tail = grouped[grouped.length - 1];
+    if (tail !== undefined && tail.userId === r.user_id) {
+      tail.visits.push(toAttendanceVisitRow(r));
+    } else {
+      grouped.push({
+        userId: r.user_id,
+        displayName: r.display_name,
+        email: r.email,
+        visits: [toAttendanceVisitRow(r)],
+      });
+      keys.push({ userId: r.user_id, markedAt: r.first_marked_at });
+    }
+  }
+
+  // THE PAGE IS WHAT IS SERVED; THE PERSON PAST IT ONLY EVER ANSWERS "IS THERE
+  // MORE". The cursor is the LAST PERSON OF THE PAGE, never the extra one, or
+  // page two would begin after somebody nobody has seen.
+  const page = grouped.slice(0, limit);
+  const lastKey = keys[page.length - 1];
+
+  return {
+    day: gym.day,
+    timezone: gym.timezone,
+    clockFormat: gymClockFormatSchema.parse(gym.clock_format),
+    totals: {
+      visits: Number(totalsRows[0]?.visits ?? 0),
+      people: Number(totalsRows[0]?.people ?? 0),
+    },
+    summary: summary.map((r) => ({
+      hoursStatus: gymAttendanceHoursStatusSchema.parse(r.hours_status),
+      opensMinute: r.session_opens_minute,
+      closesMinute: r.session_closes_minute,
+      visits: Number(r.visits),
+      people: Number(r.people),
+    })),
+    people: page,
+    // A FULL PAGE MEANS THERE IS ANOTHER ONE, because one more person than the
+    // page holds was asked for. Derived from the number of PEOPLE, which is
+    // what the LIMIT bounded — deriving it from the row count would page on
+    // visits and skip whoever came twice.
+    //
+    // **`> limit` AND NOT `=== limit`, AND THE OWNER'S SCREEN IS WHY.** A day
+    // with exactly `ATTENDANCE_PAGE_LIMIT` people drew a *Show more people*
+    // button that added nobody, and — worse — made every failed name search say
+    // *"in the people loaded so far — load the rest to search them too"* when
+    // the rest were already loaded, sending an owner hunting for a member who
+    // never came (:5807: on screen AND wrong). `searchCoversEverybody` reads
+    // this field and nothing else, so this is where that sentence is decided.
+    nextCursor:
+      grouped.length > limit && lastKey !== undefined
+        ? encodeAttendanceCursor(lastKey.markedAt, lastKey.userId)
+        : null,
+  };
+}
+
+export interface GymAttendanceHistoryRow {
+  timezone: string;
+  clockFormat: GymClockFormat;
+  visits: GymAttendanceVisitRow[];
+  nextCursor: string | null;
+}
+
+/** ONE PERSON'S OWN ATTENDANCE — what a member sees of themselves (Kd, :27900),
+ *  and what an owner sees on picking a name out of the list (:28055).
+ *
+ *  **THE SAME FUNCTION SERVES BOTH, and the caller decides WHOSE.** The service
+ *  passes the caller's own id for a member and the queried id for staff, so
+ *  there is one predicate and one tenancy clause rather than two that could
+ *  drift apart — a second reader of somebody else's attendance is a second place
+ *  to get an IDOR wrong (R3.2, :14401's shape).
+ *
+ *  Newest first: "have I been this week" is the question and its answer is at
+ *  the top. The cursor compares the PAIR `(marked_at, id)` because two visits
+ *  can share a millisecond, and a cursor on one column silently drops rows.
+ *
+ *  **THE WINDOW FILTERS `day` WHILE THE CURSOR ORDERS `marked_at`, AND THE TWO
+ *  BEING DIFFERENT COLUMNS IS DELIBERATE.** `day` is the gym's own calendar date,
+ *  frozen at write time in the gym's zone, and it is the quantity a calendar
+ *  square is — so it is what a month request must mean (the reasoning is on
+ *  `attendanceHistoryQuerySchema`). `marked_at` is the instant, which is what
+ *  gives a total order to page on. They agree for every row a gym writes under
+ *  one timezone and are NOT re-derived from each other: a gym that later changes
+ *  its zone leaves old rows filed under the day they were stamped with (:27900
+ *  §3's "as is"), and re-bucketing them here would move visits between months
+ *  under somebody's feet.
+ *
+ *  **THE FILTER IS APPLIED ON EVERY PAGE, which is the half a cursor makes easy
+ *  to lose.** Both predicates sit beside the cursor comparison rather than being
+ *  applied to the first read only — the web calendar's own M33 (:4622) is that
+ *  mutant one layer up, and here it would serve a neighbouring month's visits
+ *  the moment somebody pressed for more (**O252**).
+ *
+ *  **NO MIGRATION: `gym_attendance_gym_user_day_slot_uq` leads on
+ *  `(gym_id, user_id, day)`** (`0019_gym_attendance.sql:176`, read this
+ *  session), which is exactly this predicate's columns. That is a statement
+ *  about the index's shape and not a claim about a plan nobody has run. */
+export async function getGymAttendanceHistory(
+  sql: SqlOrTx,
+  input: {
+    gymId: string;
+    userId: string;
+    /** GYM DAYS, `YYYY-MM-DD`, half-open: `from` inclusive, `to` exclusive, so
+     *  adjacent months tile. Both already calendar-checked by the service —
+     *  reaching Postgres with a shape-valid non-date is a 500, which is the
+     *  whole reason that check exists. */
+    from?: string | undefined;
+    to?: string | undefined;
+    cursor?: { markedAt: Date; id: string } | undefined;
+    limit?: number | undefined;
+  },
+): Promise<GymAttendanceHistoryRow | null> {
+  const gymRows = await sql<{ timezone: string; clock_format: string }[]>`
+    SELECT timezone, clock_format FROM gyms WHERE id = ${input.gymId}`;
+  const gym = gymRows[0];
+  if (gym === undefined) return null;
+
+  const limit = Math.min(input.limit ?? ATTENDANCE_PAGE_LIMIT, ATTENDANCE_PAGE_LIMIT);
+  const rows = await sql<
+    {
+      id: string;
+      day: string;
+      marked_at: Date;
+      method: string;
+      hours_status: string;
+      session_opens_minute: number | null;
+      session_closes_minute: number | null;
+    }[]
+  >`
+    SELECT id, day::text AS day, marked_at, method, hours_status,
+           session_opens_minute, session_closes_minute
+    FROM gym_attendance
+    WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
+      AND (${input.from ?? null}::date IS NULL OR day >= ${input.from ?? null}::date)
+      AND (${input.to ?? null}::date IS NULL OR day < ${input.to ?? null}::date)
+      AND (${input.cursor?.markedAt ?? null}::timestamptz IS NULL
+           OR (marked_at, id) < (${input.cursor?.markedAt ?? null}::timestamptz,
+                                 ${input.cursor?.id ?? null}::uuid))
+    ORDER BY marked_at DESC, id DESC
+    LIMIT ${limit + 1}`;
+
+  const page = rows.slice(0, limit);
+  const lastRow = page[page.length - 1];
+  return {
+    timezone: gym.timezone,
+    clockFormat: gymClockFormatSchema.parse(gym.clock_format),
+    visits: page.map(toAttendanceVisitRow),
+    // ONE MORE IS FETCHED THAN IS SERVED, AND THAT EXTRA ROW IS THE WHOLE
+    // ANSWER. `rows.length === limit` cannot tell a full page with nothing
+    // behind it from a full page with more, so a member whose month held
+    // EXACTLY `ATTENDANCE_PAGE_LIMIT` visits was handed a cursor to nowhere —
+    // and the calendar turns that cursor into "some days may be missing" over
+    // a grid on which every day is drawn (:5807: on screen AND wrong).
+    // Asking for `limit + 1` makes a full page mean there really is another,
+    // which is the idiom this file already uses for applicants and members.
+    nextCursor:
+      rows.length > limit && lastRow !== undefined
+        ? encodeAttendanceCursor(lastRow.marked_at, lastRow.id)
+        : null,
+  };
+}
+
+/** A cursor is an INSTANT AND A UUID, joined by a character neither can contain,
+ *  so parsing it back cannot be ambiguous. It is opaque to the client by
+ *  convention only — it carries nothing secret, and nothing downstream trusts it
+ *  beyond the two parsers below, both of which reject anything they cannot read
+ *  rather than substituting a default (a cursor silently read as "the
+ *  beginning" would re-serve page one for ever). */
+function encodeAttendanceCursor(markedAt: Date, id: string): string {
+  return `${markedAt.toISOString()}|${id}`;
+}
+
+/** BOTH HALVES ARE CHECKED, AND THE UUID HALF IS THE ONE THAT WAS MISSING.
+ *
+ *  Both queries interpolate the id as `::uuid`, so a cursor this function
+ *  accepts and Postgres cannot cast is a **500 with a Sentry event** rather than
+ *  the 400 the caller above it exists to raise — from something as ordinary as a
+ *  stale or truncated marker in a client's hands. The module states the rule two
+ *  files away (`applicationParamsSchema`: *"a non-uuid must fail as a 400 at the
+ *  boundary and never as a 500 from Postgres refusing the cast"*) and this is
+ *  the same rule, one layer down. :26947 §5's shape — a rule a file states in
+ *  one place is not a rule the file keeps. */
+const ATTENDANCE_CURSOR_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function parseAttendanceCursor(
+  raw: string,
+): { markedAt: Date; id: string } | null {
+  const bar = raw.indexOf("|");
+  if (bar <= 0) return null;
+  const instant = raw.slice(0, bar);
+  const id = raw.slice(bar + 1);
+  const markedAt = new Date(instant);
+  // The empty-id case is subsumed: an empty string fails the pattern too.
+  if (Number.isNaN(markedAt.getTime()) || !ATTENDANCE_CURSOR_UUID.test(id)) return null;
+  return { markedAt, id };
+}
+
+/** ── THE GYM'S NUMBERS (Part 3 §4.1) ────────────────────────────────────────
+ *
+ *  **EVERY FIGURE HERE IS READ LIVE FROM `gym_attendance`, NOT FROM THE NIGHTLY
+ *  `org_daily_stats`, AND THAT IS A DECISION WITH TWO REASONS** (both recorded
+ *  in `modules/orgs/rollup.ts`'s header, which is where the other half lives):
+ *
+ *    1. **A DISTINCT COUNT CANNOT BE SUMMED.** The chart's line is *"how many
+ *       different people came that week"*. Adding up seven daily figures counts
+ *       a Monday-and-Thursday member twice. Once the line has to read raw rows,
+ *       the bars reading them too is one query rather than two sources that can
+ *       disagree at their seam.
+ *    2. **A NIGHTLY TABLE IS PARTIAL FOR PART OF EVERY DAY.** Rendering a
+ *       not-yet-written day as zero is a false number on a screen (:5807).
+ *
+ *  The rollup is still written, and when `gym_attendance` becomes deletable
+ *  under DPDP (it is on the UNRULED half of that list today —
+ *  `modules/privacy/tables.ts`) this reader moves onto it, because a live read
+ *  would then silently rewrite a gym's history.
+ *
+ *  **THE DAY IS PINNED ONCE AND THREADED THROUGH EVERY QUERY BELOW.**
+ *  `getGymAttendanceDay` sets the precedent and the reason is the same: four
+ *  queries each asking Postgres for "today" can straddle a midnight in the
+ *  gym's zone and answer about two different days in one response. */
+export interface OrgOverviewRow {
+  timezone: string;
+  today: string;
+  todayVisits: number;
+  todayVisitors: number;
+  weekVisits: number;
+  weekVisitors: number;
+  prevWeekVisits: number;
+  prevWeekVisitors: number;
+  monthVisitors: number;
+  members: number;
+  weeks: { weekStart: string; visits: number; visitors: number }[];
+}
+
+export async function getOrgOverview(
+  sql: SqlOrTx,
+  input: { gymId: string; weeks?: number; monthDays?: number },
+): Promise<OrgOverviewRow | null> {
+  // CLAMPED, NOT MERELY DEFAULTED. `orgOverviewSchema.weeks` caps the array at
+  // `OVERVIEW_WEEKS`, so a caller asking for more would build a valid response
+  // that fails its own outgoing parse — a 500 on a read, from a number nobody
+  // would think to look at. The default and the cap are the same constant and
+  // they are paired HERE rather than by a paragraph (:28649 §2).
+  const weeks = Math.min(input.weeks ?? OVERVIEW_WEEKS, OVERVIEW_WEEKS);
+  const monthDays = input.monthDays ?? OVERVIEW_MONTH_DAYS;
+
+  const gymRows = await sql<{ timezone: string; today: string }[]>`
+    SELECT g.timezone, (now() AT TIME ZONE g.timezone)::date::text AS today
+    FROM gyms g WHERE g.id = ${input.gymId}`;
+  const gym = gymRows[0];
+  if (gym === undefined) return null;
+
+  /** THE WEEK STARTS ON MONDAY BECAUSE POSTGRES' `date_trunc('week')` DOES, and
+   *  it is computed in SQL from the pinned day rather than in JS — one calendar,
+   *  and the one the chart's buckets are already grouped by. A second
+   *  implementation in JavaScript is a second answer to "which Monday". */
+  const tiles = await sql<
+    {
+      today_visits: string;
+      today_visitors: string;
+      week_visits: string;
+      week_visitors: string;
+      prev_week_visits: string;
+      prev_week_visitors: string;
+    }[]
+  >`
+    WITH b AS (
+      SELECT ${gym.today}::date AS today,
+             date_trunc('week', ${gym.today}::date)::date AS week_start,
+             date_trunc('week', ${gym.today}::date)::date - 7 AS prev_week_start,
+             date_trunc('week', ${gym.today}::date)::date - (7 * (${weeks}::int - 1))
+               AS series_start
+    )
+    SELECT
+      -- "count(*)" IS SAFE HERE ONLY BECAUSE OF THE FILTER, and the series
+      -- query twenty lines below uses "count(a.id)" for the opposite reason.
+      -- This is a LEFT JOIN, so a gym nobody has ever visited produces one
+      -- all-NULL row; every FILTER here tests "a.day", which is NULL on that
+      -- row, so it is excluded and the count is 0. Delete or widen a FILTER and
+      -- "count(*)" starts reporting that empty row as one visit.
+      count(*) FILTER (WHERE a.day = b.today) AS today_visits,
+      count(DISTINCT a.user_id) FILTER (WHERE a.day = b.today) AS today_visitors,
+      count(*) FILTER (WHERE a.day >= b.week_start) AS week_visits,
+      count(DISTINCT a.user_id) FILTER (WHERE a.day >= b.week_start) AS week_visitors,
+      count(*) FILTER (WHERE a.day >= b.prev_week_start AND a.day < b.week_start)
+        AS prev_week_visits,
+      count(DISTINCT a.user_id)
+        FILTER (WHERE a.day >= b.prev_week_start AND a.day < b.week_start)
+        AS prev_week_visitors
+    FROM b
+    LEFT JOIN gym_attendance a
+      ON a.gym_id = ${input.gymId} AND a.day >= b.series_start AND a.day <= b.today`;
+  const t = tiles[0];
+  // Unreachable: `b` is a one-row CTE and the join is a LEFT JOIN, so this
+  // aggregate always produces exactly one row — zeros when nobody has ever come.
+  if (t === undefined) throw new Error("overview tiles vanished");
+
+  /** THE SERIES IS GENERATED AND THE COUNTS ARE JOINED ONTO IT, never the other
+   *  way round: a week nobody came to must draw a ZERO BAR rather than vanish
+   *  and shift every other bar left. Oldest first so a chart reads left to
+   *  right without reversing. */
+  const series = await sql<{ week_start: string; visits: string; visitors: string }[]>`
+    WITH b AS (
+      SELECT ${gym.today}::date AS today,
+             date_trunc('week', ${gym.today}::date)::date - (7 * (${weeks}::int - 1))
+               AS series_start
+    ),
+    s AS (
+      SELECT (b.series_start + (n * 7)) AS week_start, b.today
+      FROM b CROSS JOIN generate_series(0, ${weeks}::int - 1) AS n
+    )
+    SELECT s.week_start::text AS week_start,
+           -- "count(a.id)" and NOT "count(*)": this is a LEFT JOIN, so a week
+           -- nobody came to still produces one all-NULL row, and "count(*)"
+           -- would report that empty week as ONE visit.
+           count(a.id) AS visits,
+           count(DISTINCT a.user_id) AS visitors
+    FROM s
+    LEFT JOIN gym_attendance a
+      ON a.gym_id = ${input.gymId}
+     AND a.day >= s.week_start
+     AND a.day < s.week_start + 7
+     AND a.day <= s.today
+    GROUP BY s.week_start
+    ORDER BY s.week_start`;
+
+  /** ADOPTION'S TWO HALVES, COUNTED OVER THE SAME POPULATION SO THE RATIO CANNOT
+   *  EXCEED 100%.
+   *
+   *  **The denominator excludes the owner's complimentary seat**, exactly as the
+   *  roster's own count does (Part 3 §4.0 step 6 — it is not a customer whose
+   *  attendance measures anything), and the numerator is restricted to the SAME
+   *  set. Counting every visitor against only paying members is how a gym gets
+   *  told 120% of it turned up. */
+  const adoption = await sql<{ members: string; month_visitors: string }[]>`
+    WITH m AS (
+      SELECT user_id FROM gym_members
+      WHERE gym_id = ${input.gymId} AND removed_at IS NULL AND complimentary = false
+    )
+    SELECT (SELECT count(*) FROM m) AS members,
+           (SELECT count(DISTINCT a.user_id)
+              FROM gym_attendance a JOIN m ON m.user_id = a.user_id
+             WHERE a.gym_id = ${input.gymId}
+               AND a.day > ${gym.today}::date - ${monthDays}::int
+               AND a.day <= ${gym.today}::date) AS month_visitors`;
+  const ad = adoption[0];
+  // Unreachable for the reason above: both halves are scalar sub-selects.
+  if (ad === undefined) throw new Error("overview adoption vanished");
+
+  return {
+    timezone: gym.timezone,
+    today: gym.today,
+    todayVisits: Number(t.today_visits),
+    todayVisitors: Number(t.today_visitors),
+    weekVisits: Number(t.week_visits),
+    weekVisitors: Number(t.week_visitors),
+    prevWeekVisits: Number(t.prev_week_visits),
+    prevWeekVisitors: Number(t.prev_week_visitors),
+    monthVisitors: Number(ad.month_visitors),
+    members: Number(ad.members),
+    weeks: series.map((w) => ({
+      weekStart: w.week_start,
+      visits: Number(w.visits),
+      visitors: Number(w.visitors),
+    })),
+  };
+}
+
+export interface GymRegularRow {
+  userId: string;
+  displayName: string;
+  weeksRunning: number;
+  daysRunning: number;
+  visits: number;
+  cheerableAt: Date | null;
+}
+
+/** HOW FAR BACK THE STREAK SEARCH LOOKS.
+ *
+ *  **A BOUND IS NOT OPTIONAL ON A TABLE THAT ONLY GROWS** (:10596's class), and
+ *  this one is generous on purpose: at 400 days a member who has come every
+ *  week for a year still reads the full 52, so the cap is invisible to any real
+ *  gym and the scan stays bounded for a gym with years of history.
+ *
+ *  **THE FAILURE DIRECTION IS TRUNCATION, NEVER A WRONG STREAK.** Islands are
+ *  built from the days INSIDE the window, so a streak longer than the window
+ *  reports the window rather than a number that is too big — understating a
+ *  regular's loyalty, which is the safe way for this figure to be wrong. */
+const REGULARS_LOOKBACK_DAYS = 400;
+
+/** THE MEMBERS WHO KEEP TURNING UP — Kd's ruling of 2026-09-04, *"both weeks and
+ *  days run"*, over his own :29961 ruling 4.
+ *
+ *  **WEEKS RUNNING IS THE LEADERBOARD'S STREAK** (spec Part 3 §15.5, ROADMAP 19a-i):
+ *  desk scans and staff check-ins only, a visit before the app counted by its record, and
+ *  a week the gym recorded nobody skipped. `leaderboard/visits.ts` holds the one rule.
+ *
+ *  **EVERY FIGURE COMES FROM `gym_attendance` AT THIS GYM AND NOWHERE ELSE.**
+ *  :26469 §1.3 is his ruling that a gym is never shown what a member did away
+ *  from it. **`getStreakDays` in `modules/gamification` is the obvious function
+ *  to reach for and is wrong TWICE OVER**: it unions workouts from every gym and
+ *  from home, AND it spends Part 7 §3.2 freezes, so it reports days on which
+ *  nobody attended anything. A gym-facing *"5 days in a row"* for a member who
+ *  came three times is :5807 on the screen an owner makes decisions from.
+ *  **This module must never import from `gamification/`**, and the freeze test
+ *  in `orgs.cheers.test.ts` is what holds that after today.
+ *
+ *  **SO A MEMBER MAY SEE A LONGER STREAK IN THEIR OWN APP THAN THEIR GYM SHOWS,
+ *  AND THAT IS CORRECT** — "did I keep my streak alive" and "how often is this
+ *  person actually here" are different questions. The deliberate divergence is
+ *  :27900 §4's shape, commented here as that entry requires rather than only in
+ *  the record.
+ *
+ *  **BOTH STREAKS ARE ALIVE ON A GAP OF ≤ 1, WHICH IS BORROWED AND NOT
+ *  INVENTED.** `streak.ts`'s `reconcile` treats a gap of one as "nothing missed
+ *  yet — today is still open", so a member who came yesterday and not yet today
+ *  keeps their streak. Using the same rule means these two figures differ from
+ *  the member's own by freezes ALONE, rather than by a second arbitrary
+ *  convention nobody can explain.
+ *
+ *  **THE ISLAND ARITHMETIC, because it is the part that looks like magic.** For
+ *  each member, `day - row_number()` is CONSTANT across a run of consecutive
+ *  days and changes at every gap — so grouping by it gives one row per unbroken
+ *  run, and `count(*)` is that run's length. The weekly half numbers the gym's own
+ *  weeks instead of the calendar's. The run that matters is the one ending at
+ *  today or yesterday, and there can be at most ONE of those per member: two
+ *  islands ending inside that window would be adjacent and would therefore be
+ *  one island.
+ *
+ *  **`visits` COVERS THE WEEK-STREAK'S OWN SPAN AND NOT A FIXED WINDOW.**
+ *  "5 weeks running · 11 visits" has to describe one stretch of time or it is
+ *  :30624's defect exactly — two true figures arranged into a false sentence, on
+ *  this very screen, one card ago. */
+export async function getGymRegulars(
+  sql: SqlOrTx,
+  input: { gymId: string; limit?: number | undefined },
+): Promise<GymRegularRow[] | null> {
+  // **THE TIMEZONE IS READ AS WELL AS THE DAY, and `cheerable_at` is why.**
+  // Kd's cap is one per member per GYM-DAY (:35762), so the instant the button
+  // reopens is the gym's next midnight — which cannot be derived from `today`
+  // alone without knowing the zone that produced it.
+  const gymRows = await sql<{ today: string; timezone: string; checking_in: boolean }[]>`
+    WITH g AS (
+      SELECT id, timezone, (now() AT TIME ZONE timezone)::date AS today FROM gyms WHERE id = ${input.gymId}
+    )
+    SELECT g.today::text AS today, g.timezone,
+           EXISTS (
+             SELECT 1 FROM gym_attendance a
+             WHERE a.gym_id = g.id AND a.method IN ('pass','key_tag','staff')
+               AND a.day > g.today - ${LEADERBOARD_CHECKIN_DAYS}::int AND a.day <= g.today
+           ) AS checking_in
+    FROM g`;
+  const gym = gymRows[0];
+  if (gym === undefined) return null;
+  // A gym that has checked nobody in for 30 days has nobody on a roll: a streak skips the
+  // gym's silent weeks, so without this it would never end at a gym that stopped checking
+  // in. The members' board is withheld by the same test.
+  if (!gym.checking_in) return [];
+
+  // FLOORED AND CAPPED AND WHOLE, IN THAT ORDER. `Math.min` alone hands
+  // `LIMIT -3` straight to Postgres for a negative argument (T3 round 1);
+  // `Math.max(1, Math.min(…))` still hands it `LIMIT 2.5` and `LIMIT NaN`
+  // (round 2). **This bound is the ONLY parser this value ever meets** — no
+  // route schema reaches it, because no route passes a limit at all — so it
+  // has to be total rather than merely floored. `Math.trunc` first so the
+  // clamp works on a whole number; `Number.isFinite` because `Math.max(1, NaN)`
+  // is NaN and would reach the query.
+  const asked = Math.trunc(input.limit ?? ON_A_ROLL_LIMIT);
+  const limit = Number.isFinite(asked)
+    ? Math.max(1, Math.min(asked, ON_A_ROLL_LIMIT))
+    : ON_A_ROLL_LIMIT;
+
+  const rows = await sql<
+    {
+      user_id: string;
+      display_name: string;
+      // int4 (`count(*)::int`) reaches JS as a NUMBER; a bare `count(*)` is int8 and a STRING.
+      weeks_running: number;
+      days_running: number;
+      visits: string;
+      cheerable_at: Date | null;
+    }[]
+  >`
+    WITH b AS (
+      SELECT ${gym.today}::date AS today,
+             ${gym.today}::date - ${REGULARS_LOOKBACK_DAYS}::int AS floor_day
+    ),
+    -- THE POPULATION IS THE ROSTER'S, NOT ATTENDANCE'S: a removed member's visits are
+    -- still in the table and would otherwise keep a ghost on the owner's home screen.
+    mem AS (
+      SELECT m.user_id FROM gym_members m
+      WHERE m.gym_id = ${input.gymId} AND m.removed_at IS NULL AND m.complimentary = false
+    ),
+    -- THE LEADERBOARD'S STREAK, so this panel and the members' board never disagree
+    -- (spec Part 3 §15.5, leaderboard/visits.ts). Read ONCE and kept: a plain CTE read
+    -- per row re-reads the gym's whole history for every member.
+    st AS MATERIALIZED (
+      SELECT s.owner_id AS user_id, s.weeks AS weeks_running, s.from_week AS streak_from
+      FROM (${streaks(sql, input.gymId, gym.today, gym.today)}) s
+      JOIN mem ON mem.user_id = s.owner_id
+      WHERE s.weeks >= ${ON_A_ROLL_MIN_WEEKS}::int
+    ),
+    -- The counted visits of the people with a streak, and whose they are: ONE rule for
+    -- both screens. Read once.
+    cv AS MATERIALIZED (
+      SELECT v.owner_id AS user_id, v.day
+      FROM (${visitsWithOwner(sql, input.gymId)}) v
+      JOIN st ON st.user_id = v.owner_id
+      WHERE v.method IN ('pass','key_tag','staff') AND v.day <= ${gym.today}::date
+        -- No further back than the longest streak or the day search needs.
+        AND v.day >= least((SELECT min(streak_from) FROM st), (SELECT floor_day FROM b))
+    ),
+    -- Over the streak's own span, so the row's two numbers describe one stretch: the
+    -- first real visit in it, and how many visits.
+    span AS (
+      SELECT st.user_id, min(cv.day) AS first_day, count(*) AS visits
+      FROM st JOIN cv ON cv.user_id = st.user_id AND cv.day >= st.streak_from
+      GROUP BY st.user_id
+    ),
+    -- DAY ISLANDS. day minus row_number() is constant inside a consecutive run.
+    dg AS (
+      SELECT d.user_id, d.day,
+             d.day - (row_number() OVER (PARTITION BY d.user_id ORDER BY d.day))::int AS grp
+      FROM (SELECT DISTINCT cv.user_id, cv.day FROM cv CROSS JOIN b WHERE cv.day > b.floor_day) d
+    ),
+    day_streak AS (
+      SELECT dg.user_id, count(*)::int AS days_running
+      FROM dg
+      GROUP BY dg.user_id, dg.grp
+      HAVING max(dg.day) >= (SELECT today FROM b) - 1
+    )
+    SELECT st.user_id,
+           u.display_name,
+           st.weeks_running,
+           coalesce(ds.days_running, 0) AS days_running,
+           span.visits,
+           -- WHEN THIS GYM MAY CHEER THEM AGAIN: one per member per GYM-DAY (Kd, :35762),
+           -- so the gym's next midnight; NULL means the window is open now. NO BACKTICKS
+           -- IN THIS QUERY'S COMMENTS: one would end the template literal.
+           (SELECT ((${gym.today}::date + 1)::timestamp AT TIME ZONE ${gym.timezone})
+              FROM gym_cheers c
+             WHERE c.gym_id = ${input.gymId} AND c.user_id = st.user_id
+               AND (c.created_at AT TIME ZONE ${gym.timezone})::date = ${gym.today}::date
+             LIMIT 1) AS cheerable_at
+    FROM st
+    JOIN span ON span.user_id = st.user_id
+    JOIN users u ON u.id = st.user_id
+    LEFT JOIN day_streak ds ON ds.user_id = st.user_id
+    -- THE STREAK MUST HAVE LASTED, not merely straddled a Monday: somebody whose whole
+    -- history is yesterday and today never reads "2 weeks running".
+    WHERE (SELECT today FROM b) - span.first_day >= ${ON_A_ROLL_MIN_SPAN_DAYS}::int
+    ORDER BY st.weeks_running DESC, coalesce(ds.days_running, 0) DESC,
+             u.display_name ASC, st.user_id ASC
+    LIMIT ${limit}`;
+
+  return rows.map((r) => ({
+    userId: r.user_id,
+    displayName: r.display_name,
+    // `weeks_running` and `days_running` are int4 and arrive as NUMBERS; only
+    // `visits` is a bare `count(*)`, i.e. int8, which postgres.js hands over as
+    // a STRING. All three were typed `string` and wrapped in `Number()`, which
+    // made the difference invisible — and lint is what proved the correction,
+    // by objecting that two of these conversions could not do anything.
+    weeksRunning: r.weeks_running,
+    daysRunning: r.days_running,
+    visits: Number(r.visits),
+    cheerableAt: r.cheerable_at,
+  }));
+}
+
+export interface GymSlippingAwayRow {
+  userId: string;
+  displayName: string;
+  lastVisitDay: string;
+  visits: number;
+  nudgeableAt: Date | null;
+}
+
+export interface GymSlippingAwayResult {
+  rows: GymSlippingAwayRow[];
+  /** Whether an EMPTY `rows` may be read as *"nobody is slipping"*. See
+   *  `SLIPPING_AWAY_MIN_HISTORY_DAYS`. */
+  hasHistory: boolean;
+  /** The gym's own date of its first ever recorded visit, or null. */
+  since: string | null;
+}
+
+/** THE MEMBERS WHO HAVE STOPPED COMING — Part 3 §4.1's at-risk list, which Kd
+ *  chose as this card's panel (:36503) and whose window he ruled twice in one day
+ *  (:36694 ruling 1, then :36816).
+ *
+ *  **THE DEFINITION IS THE SPEC'S WITH TWO SUBSTITUTIONS, BOTH KD'S OWN
+ *  RULINGS.** `03-part3-org-console.md:195-197` reads *"current member · joined >
+ *  14 days ago · had ≥ 1 workout in their first 21 days or in the prior 30-day
+ *  window · 0 workouts in the last 14 days. Sorted by lifetime workouts desc,
+ *  capped at 20."* Every `workout` becomes a VISIT AT THIS GYM (:26469 §1.3), and
+ *  the quiet window's fourteen becomes THREE (:36816).
+ *
+ *  **THE FIRST-21-DAYS ARM IS DELIBERATELY NOT BUILT AND THAT IS A NARROWING,
+ *  NOT AN OVERSIGHT.** The spec offers two ways to have been engaged: a visit in
+ *  the first 21 days of membership, OR one in the prior 30-day window. At the
+ *  spec's own fourteen-day silence those two describe roughly the same recent
+ *  person; at Kd's three, the first-21-days arm would qualify somebody who came
+ *  once in their opening fortnight and never again — **for years** — because
+ *  membership has no upper age here. That is not *"slipping away"*, it is
+ *  *"never started"*, and the two need different words from an owner. **The
+ *  30-day arm alone is the narrower and safer reading**, and narrowing a spec
+ *  clause is recorded rather than done quietly (R0.3).
+ *
+ *  ⚠️ **THREE WINDOWS, THREE DIFFERENT NUMBERS, AND ONLY ONE OF THEM MOVED**
+ *  (:36816 §2 — :35762's coincidence trap, second time on this card): the QUIET
+ *  window is Kd's `SLIPPING_AWAY_QUIET_DAYS` = 3 · the NUDGE'S CAP is Part 3
+ *  §4.1's rolling seven days, read below as `nudgeable_at` · the MESSAGE EXPIRY
+ *  is seven because it is derived from the CAP, and lives on the web.
+ *  **`SLIPPING_AWAY_MIN_MEMBERSHIP_DAYS` is a FOURTH number that used to equal
+ *  the quiet window and no longer does.** Folding any two together reverses a
+ *  ruling or breaks a spec limit.
+ *
+ *  **IT MUST NEVER READ `org_member_stats` AND MUST NEVER IMPORT FROM
+ *  `gamification/`** — the view counts workouts ANYWHERE and has sat unread since
+ *  `0001_init` (:29961 §6.1, :36503 §3b), and `getStreakDays` unions every gym
+ *  and spends freezes. Both are the obvious thing to reach for on this screen and
+ *  both are :26469 §1.3's one forbidden thing.
+ *
+ *  **THE POPULATION IS THE ROSTER'S**, exactly as `getGymRegulars`' is: live,
+ *  non-complimentary members, so no panel on this screen can name somebody the
+ *  Members screen does not list, and the two panels cannot disagree about who
+ *  counts.
+ *
+ *  **AND THE TWO PANELS ARE DISJOINT BY CONSTRUCTION**, which is worth stating
+ *  because a person appearing on both would be visible to any owner: "on a roll"
+ *  requires a visit in the last day or two, this requires none for three. A
+ *  fixture asserts it rather than the arithmetic being trusted. */
+export async function getGymSlippingAway(
+  sql: SqlOrTx,
+  input: { gymId: string; limit?: number | undefined },
+): Promise<GymSlippingAwayResult | null> {
+  // THE GYM'S OWN DATE AND ZONE, READ TOGETHER — `nudgeable_at` needs the zone
+  // for the same reason `cheerable_at` does, and every window below is counted
+  // in gym-days rather than instants (trap #8).
+  const gymRows = await sql<{ today: string; timezone: string }[]>`
+    SELECT (now() AT TIME ZONE g.timezone)::date::text AS today, g.timezone
+    FROM gyms g WHERE g.id = ${input.gymId}`;
+  const gym = gymRows[0];
+  if (gym === undefined) return null;
+
+  // FLOORED AND CAPPED AND WHOLE, IN THAT ORDER — `getGymRegulars`' bound, for
+  // its recorded reason: `Math.min` alone hands `LIMIT -3` to Postgres, and
+  // `Math.max(1, Math.min(...))` still hands it `LIMIT 2.5` and `LIMIT NaN`.
+  // **This bound is the ONLY parser this value ever meets**, no route passing a
+  // limit at all, so it has to be total rather than merely floored.
+  const asked = Math.trunc(input.limit ?? SLIPPING_AWAY_LIMIT);
+  const limit = Number.isFinite(asked)
+    ? Math.max(1, Math.min(asked, SLIPPING_AWAY_LIMIT))
+    : SLIPPING_AWAY_LIMIT;
+
+  // HOW LONG THIS GYM HAS BEEN RECORDING, ANSWERED SEPARATELY FROM THE LIST.
+  //
+  // **IT IS A DIFFERENT QUESTION FROM "who is slipping" AND CANNOT BE DERIVED
+  // FROM THE ANSWER TO THAT ONE** — an empty list means "nobody is slipping" or
+  // "we have not been watching long enough", and the rows cannot tell them
+  // apart (:27992 section 3's rule in its least obvious form). The card's own
+  // first draft got the arithmetic behind this wrong in the other direction
+  // (:36694 section 1): a window that REACHES BACK a month needs one visit
+  // inside it, not a month of data.
+  //
+  // MIN over the whole table for this gym, which is an index-only scan on
+  // gym_attendance_gym_day_idx and is not bounded by the lookback below --
+  // deliberately, because the question is when recording BEGAN.
+  const historyRows = await sql<{ since: string | null }[]>`
+    SELECT min(a.day)::text AS since
+    FROM gym_attendance a WHERE a.gym_id = ${input.gymId}`;
+  const since = historyRows[0]?.since ?? null;
+  const hasHistory =
+    since !== null &&
+    // Counted in the gym's own days, both sides, so a gym eleven hours away
+    // does not flip this sentence at the wrong hour.
+    (Date.parse(`${gym.today}T00:00:00Z`) - Date.parse(`${since}T00:00:00Z`)) / 86_400_000 >=
+      SLIPPING_AWAY_MIN_HISTORY_DAYS;
+
+  const rows = await sql<
+    {
+      user_id: string;
+      display_name: string;
+      last_visit_day: string;
+      // int8 (`count(*)`) reaches JS as a STRING; `count(*)::int` would arrive
+      // as a number. `getGymRegulars` records the day that difference was
+      // invisible because three fields were all typed `string` and wrapped in
+      // `Number()`, and lint is what caught it.
+      visits: string;
+      nudgeable_at: Date | null;
+    }[]
+  >`
+    WITH b AS (
+      SELECT ${gym.today}::date AS today,
+             ${gym.today}::date - ${SLIPPING_AWAY_QUIET_DAYS}::int AS quiet_from,
+             ${gym.today}::date - ${SLIPPING_AWAY_QUIET_DAYS}::int
+               - ${SLIPPING_AWAY_ENGAGED_DAYS}::int AS engaged_from
+    ),
+    -- THE POPULATION IS THE ROSTER'S, NOT ATTENDANCE'S -- getGymRegulars' own
+    -- CTE, and the two must agree or one panel names somebody the other and the
+    -- Members screen do not. joined_at is bucketed in the GYM'S zone because
+    -- "joined more than N days ago" is a question about the gym's calendar.
+    mem AS (
+      SELECT m.user_id
+      FROM gym_members m CROSS JOIN b
+      WHERE m.gym_id = ${input.gymId}
+        AND m.removed_at IS NULL
+        AND m.complimentary = false
+        AND (m.joined_at AT TIME ZONE ${gym.timezone})::date
+              <= b.today - ${SLIPPING_AWAY_MIN_MEMBERSHIP_DAYS}::int
+    ),
+    -- WAS ENGAGED: at least one visit in the 30 gym-days BEFORE the quiet
+    -- window. Both bounds are closed on the quiet side and open on the far
+    -- side, so a visit exactly quiet_from days ago counts as engagement and NOT
+    -- as breaking the silence -- one day cannot do both jobs.
+    engaged AS (
+      SELECT DISTINCT a.user_id
+      FROM gym_attendance a JOIN mem ON mem.user_id = a.user_id CROSS JOIN b
+      WHERE a.gym_id = ${input.gymId}
+        AND a.day > b.engaged_from AND a.day <= b.quiet_from
+    ),
+    -- HAS GONE QUIET: no visit at all inside the window. NOT EXISTS rather than
+    -- a LEFT JOIN with a NULL test, because the join would have to be
+    -- de-duplicated first and a missed DISTINCT there is silent.
+    quiet AS (
+      SELECT e.user_id
+      FROM engaged e CROSS JOIN b
+      WHERE NOT EXISTS (
+        SELECT 1 FROM gym_attendance a
+        WHERE a.gym_id = ${input.gymId} AND a.user_id = e.user_id
+          AND a.day > b.quiet_from AND a.day <= b.today
+      )
+    )
+    SELECT q.user_id,
+           u.display_name,
+           -- LIFETIME, both of these, and NOT bounded by the windows above --
+           -- Part 3 section 4.1's "sorted by lifetime workouts desc (save the
+           -- most invested first)" under :26469's substitution. It is a
+           -- DIFFERENT span from orgRegularSchema's visits, which covers its
+           -- streak's own stretch so that two figures on one row describe one
+           -- period (:30624). Two fields named visits meaning different spans is
+           -- exactly that defect waiting to happen, and the screen says which.
+           (SELECT max(v.day)::text FROM gym_attendance v
+             WHERE v.gym_id = ${input.gymId} AND v.user_id = q.user_id) AS last_visit_day,
+           (SELECT count(*) FROM gym_attendance v
+             WHERE v.gym_id = ${input.gymId} AND v.user_id = q.user_id) AS visits,
+           -- WHEN THIS GYM MAY NUDGE THEM AGAIN -- the server's answer to the
+           -- server's own rule, so two open consoles cannot disagree. NULL means
+           -- the window is open now.
+           --
+           -- **PART 3 SECTION 4.1's ROLLING SEVEN DAYS, WHICH IS NEITHER THE
+           -- CHEER'S CALENDAR GYM-DAY NOR KD'S THREE-DAY QUIET WINDOW.**
+           -- :35762 section 1 rules that the spec's rate-limit describes THIS
+           -- feature and is not loosened by the cheer's cap; :36816 moved the
+           -- quiet window and left this one alone. Three numbers, one edit away
+           -- from being wrongly unified.
+           --
+           -- NO BACKTICKS IN THIS COMMENT: it lives inside a sql template
+           -- literal, where one would END the template (:30094 3b, :31098 --
+           -- walked into a third time on the sibling of this very query).
+           --
+           -- The interval is added to the ROW'S OWN created_at rather than
+           -- computed from now(), so the answer is the instant the window
+           -- actually reopens and not a duration a screen must add to something.
+           (SELECT max(n.created_at) + interval '7 days'
+              FROM gym_nudges n
+             WHERE n.gym_id = ${input.gymId} AND n.user_id = q.user_id
+               AND n.created_at > now() - interval '7 days') AS nudgeable_at
+    FROM quiet q
+    JOIN users u ON u.id = q.user_id
+    -- FOUR KEYS, because the first three can tie and an unstable ORDER BY makes
+    -- a list that reshuffles on every reload. user_id last is the tiebreak that
+    -- cannot tie.
+    ORDER BY (SELECT count(*) FROM gym_attendance v
+               WHERE v.gym_id = ${input.gymId} AND v.user_id = q.user_id) DESC,
+             (SELECT max(v.day) FROM gym_attendance v
+               WHERE v.gym_id = ${input.gymId} AND v.user_id = q.user_id) DESC,
+             u.display_name ASC, q.user_id ASC
+    LIMIT ${limit}`;
+
+  return {
+    rows: rows.map((r) => ({
+      userId: r.user_id,
+      displayName: r.display_name,
+      lastVisitDay: r.last_visit_day,
+      // int8 arrives as a string; this Number() is real work, unlike the two
+      // that lint deleted from getGymRegulars.
+      visits: Number(r.visits),
+      nudgeableAt: r.nudgeable_at,
+    })),
+    hasHistory,
+    since,
+  };
+}
+
+export type SendNudgeOutcome =
+  | { kind: "sent"; preset: GymNudgePreset; sentAt: Date }
+  | { kind: "not_found" }
+  /** NO `nudgeableAt` HERE, deliberately — `sendGymCheer`'s sibling made the
+   *  same mistake and T3 round 1 struck it (L-3). The 409 carries a status, a
+   *  code and a sentence; the instant reaches a screen on the overview payload,
+   *  which a stale page needs re-read anyway. */
+  | { kind: "too_soon" };
+
+/** A GYM ASKS SOMEBODY TO COME BACK — Part 3 §4.1's one-tap nudge, and the
+ *  SEVENTEENTH write door in this module.
+ *
+ *  **THE CAP IS PART 3 §4.1's `rate-limit 1/member/7d` AND IT IS ROLLING, WHICH
+ *  IS WHY NO CONSTRAINT ENFORCES IT.** No UNIQUE or CHECK in Postgres can express
+ *  a rolling window. **DO NOT COPY `sendGymCheer`'s CURRENT REASONING ACROSS AND
+ *  DO NOT COPY THIS ONE BACK**: the cheer's cap USED to be rolling and stopped
+ *  being when Kd made it a calendar gym-day (:35762), which a stored day column
+ *  plus a UNIQUE *could* express — so the paragraph that is dead there is alive
+ *  here, and the two docblocks disagree on purpose.
+ *
+ *  **THE CHECK-THEN-ACT IS SAFE FOR THE SEAT CLAIM'S REASON**: `lockOrgRow`
+ *  serialises it, so two members of staff pressing at once cannot both pass.
+ *  **WITHOUT THE LOCK IT IS A REAL RACE AND NOT A THEORETICAL ONE** — a gym's
+ *  staff sit at one desk, and the button is on the screen they all land on.
+ *
+ *  **THE RECIPIENT MUST BE A LIVE, NON-COMPLIMENTARY MEMBER OF THIS GYM AND THAT
+ *  IS THE WHOLE CONDITION** (:27992 §2 — the app never asks whether a member has
+ *  paid the gym; `members.remove` is the gym's remedy for anyone else). A
+ *  stranger's uuid answers `not_found` rather than a sentence distinguishing "no
+ *  such person" from "not your member" (R3.2).
+ *
+ *  **IT DOES NOT CHECK THAT THE MEMBER IS ACTUALLY ON THE LIST, AND THAT IS A
+ *  DECISION.** The list is a view over a query that moves with the clock: a
+ *  member listed when the console was drawn can have walked in before the button
+ *  was pressed. Refusing on that would produce *"that person isn't slipping
+ *  away"* for somebody the owner is looking at — a race reported as a mistake.
+ *  The cap is what stops the door being abused, and it is the same shape
+ *  `sendGymCheer` uses for the same reason.
+ *
+ *  **IT WRITES NOTHING INTO `gym_cheers` AND NOTHING HERE IS READ BY THE CHEER'S
+ *  CAP** — the two tables are separate precisely so that a nudge cannot block a
+ *  cheer or arrive on the member's card wearing a cheer's clothes
+ *  (`0022_gym_nudges.sql` §1). */
+export async function sendGymNudge(
+  sql: Sql,
+  input: { gymId: string; userId: string; sentByUserId: string; preset: GymNudgePreset },
+): Promise<SendNudgeOutcome> {
+  return await sql.begin(async (tx) => {
+    // The trailing note is not decoration, and :21157 and `sendGymCheer` both
+    // wrote one for the same reason: `await lockOrgRow(tx, input.gymId);`
+    // appears a dozen times in this file, so a mutant aimed at THIS lock needs
+    // the line to name its own subject (:27204 §6 — an anchor is lengthened to
+    // reach something unique to its subject, never to include its
+    // neighbourhood).
+    await lockOrgRow(tx, input.gymId); // the only guarantee behind the nudge cap, O286
+
+    // `complimentary = false` MATCHES THE LIST'S OWN POPULATION. Without it the
+    // door and the panel disagree: a comped member can never be drawn on the
+    // panel (the `mem` CTE excludes them) and could still be nudged by a
+    // hand-made request. `sendGymCheer` shipped that exact gap and a review
+    // found it.
+    //
+    // THE TRAILING SQL COMMENT IS LOAD-BEARING AND IS NOT DECORATION — the lock
+    // line above carries one for the same reason (:21157, :27204 §6). This
+    // predicate is textually IDENTICAL to `sendGymCheer`'s, and O268 anchors on
+    // that exact line: adding this function made its anchor match TWICE, and the
+    // harness's whole-table pre-check ABORTED before a byte was written
+    // (:15770's guard doing its job, :5199's class). **The fix is to make the
+    // SOURCE unique, never to re-aim the old mutant at whichever line comes
+    // first** — and a single unique line beats a two-line anchor, which is
+    // :17676's 99-strong CRLF hazard.
+    const member = await tx<{ one: number }[]>`
+      SELECT 1 AS one FROM gym_members
+      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
+        AND removed_at IS NULL AND complimentary = false -- the nudge's own, O289
+    `;
+    if (member.length === 0) return { kind: "not_found" };
+
+    // A ROLLING SEVEN DAYS, READ INSIDE THE LOCK — Part 3 §4.1's
+    // `rate-limit 1/member/7d`, quoted and not chosen (V2).
+    //
+    // **NO ZONE IS READ HERE AND THAT IS THE DIFFERENCE FROM `sendGymCheer`,
+    // WHICH JOINS `gyms` FOR ITS TIMEZONE.** A rolling window is a duration and
+    // has no calendar in it, so bucketing by a zone would be work that changes
+    // nothing — and copying that join across would invite the next reader to
+    // think this cap has a midnight. It does not: seven days after 11pm Tuesday
+    // is 11pm the following Tuesday, in every zone at once.
+    //
+    // **`now()` IS THE TRANSACTION'S CLOCK**, so a send and its guard cannot
+    // straddle the boundary.
+    const recent = await tx<{ one: number }[]>`
+      SELECT 1 AS one
+      FROM gym_nudges n
+      WHERE n.gym_id = ${input.gymId} AND n.user_id = ${input.userId}
+        AND n.created_at > now() - interval '7 days'
+      LIMIT 1`;
+    if (recent.length > 0) return { kind: "too_soon" };
+
+    const inserted = await tx<{ preset: string; created_at: Date }[]>`
+      INSERT INTO gym_nudges (gym_id, user_id, sent_by_user_id, preset)
+      VALUES (${input.gymId}, ${input.userId}, ${input.sentByUserId}, ${input.preset})
+      RETURNING preset, created_at`;
+    const row = inserted[0];
+    // Unreachable: a plain INSERT with no ON CONFLICT either returns its row or
+    // throws. Asserted rather than non-null-asserted, which R2.2 bans here.
+    if (row === undefined) throw new Error("nudge vanished inside its own transaction");
+
+    // Part 3 §3.3: every mutating call writes `audit_log`. THIS DOOR IS A STAFF
+    // ACTION BEHIND A PRIVILEGE, which is the whole of the test — and the
+    // exemption a chat reaches for here (`:28221` §7) says the OPPOSITE, which
+    // was a Critical/High on this feature's sibling (:34443 C/H-3). That
+    // exemption is about a MEMBER tapping "I'm here" several hundred times a
+    // day; `markGymAttendance`'s own docblock draws the line: *"every other
+    // writer in this module is a console action behind a privilege"*.
+    //
+    // It is also the only record of WHICH staffer sent it — the member is
+    // deliberately never told (§2.4), and here that matters more than it does
+    // for a cheer: they are never told the list exists either.
+    //
+    // THE TRAILING MARKER IS LOAD-BEARING, for the membership predicate's
+    // reason two blocks up: this call is textually identical to
+    // `sendGymCheer`'s, O275 anchors on its first two lines, and writing this
+    // function made that anchor match twice — the pre-check aborted before a
+    // byte was written (:15770). **The SOURCE is what is made unique, never the
+    // old mutant re-aimed at whichever line comes first.**
+    await insertAudit(tx, { // the nudge's own, O296
+      actorUserId: input.sentByUserId,
+      gymId: input.gymId,
+      action: "org.member_nudged",
+      targetType: "user",
+      targetId: input.userId,
+      meta: { preset: input.preset },
+    });
+
+    return {
+      kind: "sent",
+      preset: gymNudgePresetSchema.parse(row.preset),
+      sentAt: row.created_at,
+    };
+  });
+}
+
+export type SendCheerOutcome =
+  | { kind: "sent"; preset: GymCheerPreset; sentAt: Date }
+  | { kind: "not_found" }
+  /** NO `cheerableAt` HERE, deliberately. The 409 does not carry the instant —
+   *  `service.ts` says why, and `cheerableAt` on the overview payload is where a
+   *  screen gets it. This carried one that every caller discarded, which is a
+   *  value that looks like an answer nobody is using (T3 round 1, L-3). */
+  | { kind: "too_soon" };
+
+/** ONE TAP — Kd's :29961 ruling 4.
+ *
+ *  **THE CAP IS ONE PER MEMBER PER GYM-DAY — Kd, :35762, REVERSING HIS OWN
+ *  *"one per member per week"* at :29961 ruling 4** after seeing it on screen:
+ *  *"after chering gym can sheer after 7 days men what is even this"*. **Part 3
+ *  §4.1's `rate-limit 1/member/7d` describes the AT-RISK NUDGE, a different
+ *  feature, and is NOT loosened by this.**
+ *
+ *  **IT IS STILL CHECKED HERE UNDER THE GYM LOCK RATHER THAN BY A CONSTRAINT,
+ *  BUT THE REASON HAS CHANGED AND THE OLD ONE MUST NOT BE QUOTED.** A ROLLING
+ *  seven days was inexpressible as a UNIQUE (the migration says so at length,
+ *  including the `EXCLUDE USING gist` route that would and the extension it
+ *  would cost). **A calendar day is not inexpressible** — a stored gym-day
+ *  column plus `UNIQUE (gym_id, user_id, day)` would carry it, which is exactly
+ *  what `gym_attendance` does (:27992 §1, *"the ruling lives in a constraint
+ *  rather than a comment"*). **That was NOT built, deliberately: it is a
+ *  migration, a backfill and a second writer of the gym's day, against a lock
+ *  that already exists and is already proven (O274).** R1.1 — the ruling was a
+ *  rule change, not a schema change. **If this cap is ever contended in earnest,
+ *  the constraint is the upgrade and this comment is where to start.**
+ *
+ *  The check-then-act is safe for the reason the seat claim is: `lockOrgRow`
+ *  serialises it, so two members of staff pressing at once cannot both pass.
+ *
+ *  **WITHOUT THE LOCK IT IS A REAL RACE AND NOT A THEORETICAL ONE** — a gym's
+ *  staff sit at one desk, and the button is on the screen they all land on.
+ *
+ *  **THE RECIPIENT MUST BE A LIVE MEMBER OF THIS GYM AND THAT IS THE WHOLE
+ *  CONDITION** (:27992 §2 — the app never asks whether a member has paid the
+ *  gym; `members.remove` is the gym's remedy for anyone else). A stranger's uuid
+ *  answers `not_found` rather than a sentence distinguishing "no such person"
+ *  from "not your member" (R3.2). */
+export async function sendGymCheer(
+  sql: Sql,
+  input: { gymId: string; userId: string; sentByUserId: string; preset: GymCheerPreset },
+): Promise<SendCheerOutcome> {
+  return await sql.begin(async (tx) => {
+    // The trailing note is not decoration, and :21157 wrote the same one for the
+    // same reason: `await lockOrgRow(tx, input.gymId);` appears a dozen times in
+    // this file, so a mutant aimed at THIS lock needs the line to name its own
+    // subject — an anchor is lengthened to reach something unique to its
+    // subject, never to include its neighbourhood (:27204 §6).
+    await lockOrgRow(tx, input.gymId); // the only guarantee behind the cap, O274
+
+    // `complimentary = false` MATCHES THE LIST'S OWN POPULATION. Without it the
+    // door and the panel disagree: a comped member can never be drawn on the
+    // panel (the `mem` CTE excludes them) and could still be cheered by a
+    // hand-made request. The card names both halves — a LIVE, non-complimentary
+    // member — and only one of them was built.
+    const member = await tx<{ one: number }[]>`
+      SELECT 1 AS one FROM gym_members
+      WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
+        AND removed_at IS NULL AND complimentary = false`;
+    if (member.length === 0) return { kind: "not_found" };
+
+    // THE GYM'S OWN DAY, READ INSIDE THE LOCK — Kd's :35762, one cheer per
+    // member per day, superseding his own rolling seven of :29961 ruling 4.
+    //
+    // **THE ZONE COMES OFF THE `gyms` ROW IN THIS SAME QUERY, and that is not
+    // tidiness.** Both sides of the comparison have to be bucketed by the SAME
+    // zone or the boundary moves between them; passing a zone in from JavaScript
+    // gives a second copy that can drift from the one `getGymRegulars` uses, and
+    // the two answers appear on one screen. The row is already locked above, so
+    // reading it again here is consistent by construction.
+    //
+    // **THIS IS A CALENDAR DAY AND NOT 24 HOURS, WHICH IS THE WHOLE RULING.** A
+    // member cheered at 9am cannot be cheered again that evening; one cheered at
+    // 11pm can be cheered at 12:01am. Kd was shown that second consequence
+    // before he ruled — the alternative was a gym unable to greet somebody
+    // standing in front of it (:35762 §2). **`now()` is the transaction's
+    // clock**, so a send at 23:59:59.9 and its guard cannot straddle midnight.
+    const recent = await tx<{ one: number }[]>`
+      SELECT 1 AS one
+      FROM gym_cheers c
+      JOIN gyms g ON g.id = c.gym_id
+      WHERE c.gym_id = ${input.gymId} AND c.user_id = ${input.userId}
+        AND (c.created_at AT TIME ZONE g.timezone)::date
+          = (now() AT TIME ZONE g.timezone)::date
+      LIMIT 1`;
+    if (recent.length > 0) return { kind: "too_soon" };
+
+    const inserted = await tx<{ preset: string; created_at: Date }[]>`
+      INSERT INTO gym_cheers (gym_id, user_id, sent_by_user_id, preset)
+      VALUES (${input.gymId}, ${input.userId}, ${input.sentByUserId}, ${input.preset})
+      RETURNING preset, created_at`;
+    const row = inserted[0];
+    // Unreachable: a plain INSERT with no ON CONFLICT either returns its row or
+    // throws. Asserted rather than non-null-asserted, which R2.2 bans here.
+    if (row === undefined) throw new Error("cheer vanished inside its own transaction");
+
+    // Part 3 §3.3: every mutating call writes `audit_log`. THIS DOOR IS A STAFF
+    // ACTION BEHIND A PRIVILEGE, which is the whole of the test — the exemption
+    // this card originally cited (`:28221` §7) is about a MEMBER tapping "I'm
+    // here" several hundred times a day, and `markGymAttendance`'s own docblock
+    // spells out the distinction: *"every other writer in this module is a
+    // console action behind a privilege"*. A cheer is one of those, and Kd's
+    // own cap — one per member per gym-day (:35762) — is what disposes of the volume
+    // half of that reasoning. It is also the only record of WHICH staffer sent
+    // it — the member is deliberately never told (§2.4).
+    await insertAudit(tx, {
+      actorUserId: input.sentByUserId,
+      gymId: input.gymId,
+      action: "org.member_cheered",
+      targetType: "user",
+      targetId: input.userId,
+      meta: { preset: input.preset },
+    });
+
+    return {
+      kind: "sent",
+      preset: gymCheerPresetSchema.parse(row.preset),
+      sentAt: row.created_at,
+    };
+  });
+}

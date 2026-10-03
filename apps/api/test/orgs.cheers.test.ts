@@ -579,6 +579,26 @@ d("gym cheers and the on-a-roll list (real Postgres)", () => {
    *  skipped, so the seventh day is not a hole (:7104's PG1). Six days in seven
    *  this test goes red without the span floor. */
   it(
+    "nobody is on a roll at a gym that stopped checking people in, however long their streak was",
+    async () => {
+      const owner = await makeUser("l9-owner");
+      const org = await makeOrg(owner.cookies, "Roll Gym Stopped");
+      const member = await makeUser("l9-member");
+      await joinAsMember(member.cookies, org, owner.cookies);
+      // Four weeks in a row, the last 40 days ago, and nobody at the gym since: every
+      // week after is silent, which a streak skips, so only the 30-day rule ends it.
+      for (const daysAgo of [40, 47, 54, 61]) await visit(org.org.id, member.userId, daysAgo);
+      expect((await readOverview(org.org.id, owner.cookies)).onARoll).toEqual([]);
+
+      // THE CONTROL: one visit inside the 30 days and the same four weeks count again,
+      // with the silent weeks between skipped.
+      await visit(org.org.id, member.userId, 29);
+      expect(rollFor(await readOverview(org.org.id, owner.cookies), member.userId)?.weeksRunning).toBe(5);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "a streak that only straddled a Monday is not two weeks running",
     async () => {
       const owner = await makeUser("l7-owner");

@@ -1,6 +1,8 @@
 // What the leaderboard costs at full size (ROADMAP 19a-i; CLAUDE.md §4 "Cost at full size").
 // One gym of 2,100 live app members (the biggest; --members= for another size) with three years of desk visits; every board and period
-// read as a member reads it. Two numbers each, over several runs:
+// read as a member reads it, and the console's "On a roll". Half the members have a record on
+// the gym's list and a tenth of their visits name only the record, so the by-record path is
+// timed too. Two numbers each, over several runs:
 //   - db: how long the read takes (it holds one of the pool's connections meanwhile);
 //   - js: how long the server's one thread is busy and answers nobody (parsing the rows,
 //     ranking, checking the reply).
@@ -11,11 +13,12 @@
 // --keep leaves the gym in place (for EXPLAIN); the next run removes it first.
 //
 // LOCAL DATABASES ONLY: it writes a gym, 2,100 accounts and ~650,000 visits, and removes them.
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import postgres from "postgres";
 import { LEADERBOARD_PERIODS, type LeaderboardQuery } from "@app/shared";
 import { getLeaderboard, getMyCounted, getProfile } from "../src/modules/orgs/leaderboard/service.js";
+import { getGymRegulars } from "../src/modules/orgs/repo.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
 if (!/localhost|127\.0\.0\.1/.test(url)) {
@@ -36,6 +39,7 @@ async function cleanup(): Promise<void> {
   await sql`DELETE FROM gym_attendance WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_checkin_devices WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_members WHERE gym_id IN (${gyms})`;
+  await sql`DELETE FROM gym_member_list_entries WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_staff WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gyms WHERE slug LIKE ${PREFIX + "%"}`;
   await sql`DELETE FROM users WHERE email LIKE ${PREFIX + "%@example.com"}`;
@@ -61,17 +65,31 @@ async function seed(): Promise<{ gymId: string; viewers: string[] }> {
     VALUES ('gym', ${gymId}, (SELECT id FROM plans WHERE code = ${PLAN}), 'active', 'pilot')`;
   const device = randomUUID();
   await sql`INSERT INTO gym_checkin_devices (id, gym_id, name) VALUES (${device}, ${gymId}, 'Desk')`;
-  const members = users.map((u) => ({ gym_id: gymId, user_id: u.id }));
+  // Every second member joined with a record on the gym's list.
+  const records = users.filter((_, i) => i % 2 === 0).map((u) => ({
+    id: randomUUID(),
+    gym_id: gymId,
+    full_name: u.display_name,
+    email: u.email,
+    identity_key: createHash("sha256").update(u.id).digest("hex"),
+    source: "typed",
+  }));
+  for (let i = 0; i < records.length; i += 1000) await sql`INSERT INTO gym_member_list_entries ${sql(records.slice(i, i + 1000))}`;
+  const recordOf = new Map(records.map((r) => [r.email, r.id]));
+  const members = users.map((u) => ({ gym_id: gymId, user_id: u.id, entry_id: recordOf.get(u.email) ?? null }));
   for (let i = 0; i < members.length; i += 1000) await sql`INSERT INTO gym_members ${sql(members.slice(i, i + 1000))}`;
   // Three years of visits: each member comes on about two days in seven, all in SQL.
   await sql`
-    INSERT INTO gym_attendance (gym_id, user_id, device_id, day, marked_at, method, hours_status, slot_key)
-    SELECT ${gymId}, m.user_id, ${device}, d::date, d + time '18:00', 'pass', 'hours_unset', 'hours_unset'
+    INSERT INTO gym_attendance (gym_id, user_id, entry_id, device_id, day, marked_at, method, hours_status, slot_key)
+    SELECT ${gymId},
+           CASE WHEN m.entry_id IS NOT NULL AND random() < 0.2 THEN NULL ELSE m.user_id END,
+           m.entry_id, ${device}, d::date, d + time '18:00', 'key_tag', 'hours_unset', 'hours_unset'
     FROM gym_members m
     CROSS JOIN generate_series((now() AT TIME ZONE 'Asia/Kolkata')::date - ${365 * YEARS}::int,
                                (now() AT TIME ZONE 'Asia/Kolkata')::date, interval '1 day') d
     WHERE m.gym_id = ${gymId} AND random() < 0.3`;
-  await sql`ANALYZE gym_attendance`;
+  // As autovacuum leaves a table in production: the boards' index is read alone.
+  await sql`VACUUM ANALYZE gym_attendance`;
   return { gymId, viewers: users.slice(1, 3).map((u) => u.id) };
 }
 
@@ -107,6 +125,7 @@ queries.push(["board streak", () => getLeaderboard(deps, viewers[0] ?? "", gymId
 queries.push(["what counted, all time", () => getMyCounted(deps, viewers[0] ?? "", gymId, { board: "gym_days", period: "all_time" })]);
 queries.push(["what counted, streak", () => getMyCounted(deps, viewers[0] ?? "", gymId, { board: "streak", period: "this_week" })]);
 queries.push(["a profile", () => getProfile(deps, viewers[0] ?? "", gymId, viewers[1] ?? "", "this_week")]);
+queries.push(["On a roll (console)", () => getGymRegulars(sql, { gymId })]);
 
 for (const [name, fn] of queries) {
   await fn(); // warm

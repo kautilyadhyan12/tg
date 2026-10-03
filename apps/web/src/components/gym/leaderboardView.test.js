@@ -44,7 +44,7 @@ describe('the leaderboard in words', () => {
   it('tells the hidden person why only they see their row', () => {
     expect(hiddenText('hide_me', 'Iron House')).toBe('Hide me is on. Only you see this row.');
     expect(hiddenText('under_18', 'Iron House')).toMatch(/under 18/);
-    expect(hiddenText('no_name', 'Iron House')).toMatch(/Add your name/);
+    expect(hiddenText('no_name', 'Iron House')).toBe('Add your full name in Settings → Profile to be on the board.');
     expect(hiddenText('taken_off', 'Iron House')).toBe('Iron House took you off the board. Only you see this row.');
     expect(hiddenText('staff', 'Iron House')).toBe('Staff, not ranked.');
     expect(hiddenText(null, 'Iron House')).toBeNull();

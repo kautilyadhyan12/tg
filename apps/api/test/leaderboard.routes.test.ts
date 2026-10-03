@@ -68,11 +68,11 @@ d("the members' leaderboard (real Postgres)", () => {
     await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
   };
 
-  const inject = (method: "GET" | "POST" | "PUT", path: string, cookies: Cookies, payload?: unknown) =>
+  const inject = (method: "GET" | "POST" | "PUT", path: string, cookies: Cookies, payload?: unknown, ip = nextIp()) =>
     api().inject({
       method,
       url: path,
-      remoteAddress: nextIp(),
+      remoteAddress: ip,
       cookies,
       ...(payload === undefined ? {} : { headers: { "content-type": "application/json" }, payload: JSON.stringify(payload) }),
     });
@@ -310,7 +310,8 @@ d("the members' leaderboard (real Postgres)", () => {
         ["Tom T.", 3],
         ["Una T.", 3],
       ]);
-      expect((await board(gym.id, others.length > 0 ? hidden : hidden)).rows.find((r) => r.name === "Tom T.")?.place).toBe(3);
+      // The member still hidden sees the same places everybody else does.
+      expect((await board(gym.id, hidden)).rows.map((r) => [r.name, r.place])).toEqual(after.rows.map((r) => [r.name, r.place]));
 
       const bad = await inject("PUT", "/v1/users/me/leaderboard", young.cookies, { hidden: "no" });
       expect(bad.statusCode).toBe(400);
@@ -529,6 +530,11 @@ d("the members' leaderboard (real Postgres)", () => {
       const q = await board(quiet.id, viewer, "board=gym_days&period=all_time");
       expect(q.status).toBe("no_checkins");
       expect(q.rows).toEqual([]);
+      // Nor a profile: the same 404 as a gym that does not exist, whatever the period.
+      for (const period of ["this_week", "all_time"]) {
+        const res = await get(`/v1/orgs/${quiet.id}/leaderboard/people/${people[0]?.userId ?? ""}?period=${period}`, viewer.cookies);
+        expect([period, res.statusCode]).toEqual([period, 404]);
+      }
 
       const lapsed = await makeGym("Lapsed Gym", "Asia/Kolkata", false);
       await join(lapsed.id, viewer.userId);
@@ -540,6 +546,137 @@ d("the members' leaderboard (real Postgres)", () => {
       expect(l.status).toBe("paused");
       expect(l.rows).toEqual([]);
       expect((await get(`/v1/orgs/${lapsed.id}/leaderboard/people/${people[0]?.userId ?? ""}`, viewer.cookies)).statusCode).toBe(404);
+    },
+    T,
+  );
+
+  it(
+    "a gym that stopped checking in: nobody keeps a streak, though its silent weeks are skipped while it is checking in",
+    async () => {
+      const gym = await makeGym("Stopped Gym");
+      const viewer = await signedIn("Stu Stopped");
+      const others = [await account("Ari One"), await account("Bex Two"), await account("Cy Three")];
+      for (const p of [viewer, ...others]) {
+        await join(gym.id, p.userId);
+        for (const day of ["2026-07-06", "2026-07-13", "2026-07-20", "2026-07-27"]) await visit(gym, { userId: p.userId }, day);
+      }
+      // Three weeks later the gym was shut for a fortnight and nobody has come since:
+      // inside 30 days the four weeks still stand.
+      clock = new Date("2026-08-19T06:30:00Z");
+      const during = await board(gym.id, viewer, "board=streak");
+      expect([during.status, during.me.value]).toEqual(["shown", 4]);
+      // Ten weeks after the last visit there is no board and no streak, on the row or in its list.
+      clock = WEDNESDAY;
+      const after = await board(gym.id, viewer, "board=streak");
+      expect([after.status, after.me.value, after.rows]).toEqual(["no_checkins", 0, []]);
+      const mine = JSON.parse((await get(`/v1/orgs/${gym.id}/leaderboard/mine?board=streak`, viewer.cookies)).body) as LeaderboardCountedResponse;
+      expect(mine.value).toBe(0);
+      expect(mine.weeks.filter((w) => w.state === "counted")).toEqual([]);
+    },
+    T,
+  );
+
+  it(
+    "a profile is the 404 of a gym that does not exist while its board has too few people",
+    async () => {
+      clock = WEDNESDAY;
+      const gym = await makeGym("Few Gym");
+      const viewer = await signedIn("Fay Few");
+      const other = await account("Lona Lane");
+      await join(gym.id, viewer.userId);
+      await join(gym.id, other.userId);
+      await visit(gym, { userId: other.userId }, "2026-10-05");
+      await visit(gym, { userId: other.userId }, "2026-10-06");
+      expect((await board(gym.id, viewer)).status).toBe("too_few");
+      const res = await get(`/v1/orgs/${gym.id}/leaderboard/people/${other.userId}`, viewer.cookies);
+      expect(res.statusCode).toBe(404);
+      expect(res.body).not.toContain("Lona");
+    },
+    T,
+  );
+
+  // ===========================================================================
+  // UNDER 18, ONE RULE EVERYWHERE
+  // ===========================================================================
+
+  it(
+    "an under-18 by ONE gym's record is hidden at every gym, as their own switch says; Show me shows them at both",
+    async () => {
+      clock = WEDNESDAY;
+      const gymA = await makeGym("Age Gym A");
+      const gymB = await makeGym("Age Gym B");
+      const tina = await signedIn("Tina Teen");
+      const viewer = await signedIn("Vik Viewer");
+      const fill = [await account("Asha Rao"), await account("Bilal Khan")];
+      // Her date of birth is on gym B's record only; gym A holds no record of her.
+      await join(gymA.id, tina.userId);
+      await join(gymB.id, tina.userId, await record(gymB.id, "Tina Teen", "2010-03-01"));
+      for (const gym of [gymA, gymB]) {
+        await join(gym.id, viewer.userId);
+        await visit(gym, { userId: viewer.userId }, "2026-10-05");
+        for (const p of fill) {
+          await join(gym.id, p.userId);
+          await visit(gym, { userId: p.userId }, "2026-10-05");
+        }
+        await visit(gym, { userId: tina.userId }, "2026-10-05");
+        await visit(gym, { userId: tina.userId }, "2026-10-06");
+      }
+      expect(JSON.parse((await get("/v1/users/me/leaderboard", tina.cookies)).body)).toEqual({ hidden: true, hideMe: false, under18: true });
+      for (const gym of [gymA, gymB]) {
+        for (const q of ["board=gym_days&period=this_week", "board=gym_days&period=all_time", "board=streak"]) {
+          const res = await get(`/v1/orgs/${gym.id}/leaderboard?${q}`, viewer.cookies);
+          expect(res.body).not.toContain(tina.userId);
+          expect(res.body).not.toContain("Tina");
+        }
+        expect((await get(`/v1/orgs/${gym.id}/leaderboard/people/${tina.userId}`, viewer.cookies)).statusCode).toBe(404);
+        expect((await board(gym.id, tina)).me.hidden).toBe("under_18");
+      }
+      await inject("PUT", "/v1/users/me/leaderboard", tina.cookies, { hidden: false });
+      for (const gym of [gymA, gymB]) {
+        expect((await board(gym.id, viewer)).rows[0]).toMatchObject({ name: "Tina T.", place: 1, value: 2 });
+      }
+    },
+    T,
+  );
+
+  it(
+    "eighteen today is shown; eighteen tomorrow is hidden — by the gym's own date",
+    async () => {
+      clock = WEDNESDAY;
+      const gym = await makeGym("Birthday Gym");
+      const viewer = await signedIn("Bo Viewer");
+      const today = await account("Eve Eighteen");
+      const tomorrow = await account("Sev Seventeen");
+      const fill = [await account("Asha Rao"), await account("Bilal Khan")];
+      await join(gym.id, viewer.userId);
+      await join(gym.id, today.userId, await record(gym.id, "Eve Eighteen", "2008-10-07"));
+      await join(gym.id, tomorrow.userId, await record(gym.id, "Sev Seventeen", "2008-10-08"));
+      for (const p of fill) await join(gym.id, p.userId);
+      for (const p of [viewer, today, tomorrow, ...fill]) await visit(gym, { userId: p.userId }, "2026-10-05");
+      expect((await board(gym.id, viewer)).rows.map((r) => r.name)).toEqual(["Asha R.", "Bilal K.", "Bo V.", "Eve E."]);
+      // In Kolkata it is already the 8th at 18:30 UTC on the 7th: Sev is eighteen.
+      clock = new Date("2026-10-07T18:30:00Z");
+      expect((await board(gym.id, viewer)).rows.map((r) => r.name)).toContain("Sev S.");
+      clock = WEDNESDAY;
+    },
+    T,
+  );
+
+  it(
+    "what counted names staff who typed a name, and says only 'staff' for one who did not",
+    async () => {
+      clock = WEDNESDAY;
+      const gym = await makeGym("Staff Name Gym");
+      const viewer = await signedIn("Nia Named");
+      await join(gym.id, viewer.userId);
+      await visit(gym, { userId: viewer.userId }, "2026-10-05", "staff");
+      const read = async () =>
+        (JSON.parse((await get(`/v1/orgs/${gym.id}/leaderboard/mine?board=gym_days&period=this_week`, viewer.cookies)).body) as LeaderboardCountedResponse).days[0]?.visits[0];
+      expect(await read()).toMatchObject({ how: "staff", by: "Staff Name Gym Owner" });
+      await sql`UPDATE users SET display_name = split_part(email::text, '@', 1) WHERE id = ${gym.owner.userId}`;
+      const unnamed = await read();
+      expect(unnamed).toMatchObject({ how: "staff", by: null });
+      expect(JSON.stringify(unnamed)).not.toContain("lb-t-");
     },
     T,
   );
@@ -576,6 +713,25 @@ d("the members' leaderboard (real Postgres)", () => {
       expect((await get(`/v1/orgs/${gym.id}/leaderboard?board=gym_days&period=forever`, member.cookies)).statusCode).toBe(400);
       expect((await get(`/v1/orgs/not-a-gym/leaderboard?board=gym_days`, member.cookies)).statusCode).toBe(400);
       expect((await get(`/v1/orgs/${gym.id}/leaderboard?board=gym_days`, member.cookies)).statusCode).toBe(200);
+    },
+    T,
+  );
+
+  it(
+    "a gym on one wi-fi: three members at ONE address read the board 651 times between them and nobody is refused",
+    async () => {
+      clock = WEDNESDAY;
+      const gym = await makeGym("Wifi Gym");
+      const members = [await signedIn("Wes One"), await signedIn("Xia Two"), await signedIn("Yan Three")];
+      for (const m of members) await join(gym.id, m.userId);
+      const address = "10.19.250.7";
+      const path = `/v1/orgs/${gym.id}/leaderboard?board=gym_days`;
+      let refused = 0;
+      for (let i = 0; i < 217; i++) {
+        const answers = await Promise.all(members.map((m) => inject("GET", path, m.cookies, undefined, address)));
+        refused += answers.filter((a) => a.statusCode !== 200).length;
+      }
+      expect(refused).toBe(0);
     },
     T,
   );

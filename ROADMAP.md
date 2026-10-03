@@ -123,7 +123,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 3b-ii. **Join by invitation** (§10.2): split 2026-09-23 in two, built back to back (the line as first written is in `archive/records/ROADMAP-stories.md`).
        - 3b-ii-a. [x] **Join** — merged 2026-09-24 (PR #102).
        - 3b-ii-b. [x] **Not me, and the edges** — merged 2026-09-24 (PR #104).
-     - 3b-iii. [ ] **Change email** (RULINGS 2026-09-23, E): in Settings, proved by a code sent to the new address; memberships and workouts stay with the account. Its place in Folder A's order is Kd's.
+     - 3b-iii. [ ] **Change email** (RULINGS 2026-09-23, E): in Settings, proved by a code sent to the new address; memberships and workouts stay with the account. It also clears a name that is only the OLD address's first part, which the leaderboard would otherwise print (19a-i round one, L2). Its place in Folder A's order is Kd's.
    - 3c. [x] **Join codes switched off** — merged 2026-10-02 (PR #152).
    - 3d. [x] **The two extra passes' fixes** over "getting in" — merged 2026-10-02 (PR #154).
    - ~~3c. **The code admits at once**~~ **(STRUCK 2026-09-21, never built)**; its plan of 2026-09-19 (spec Part 3 §9.13) went with it.
