@@ -23,8 +23,10 @@ export type CheckinPassResponse = z.infer<typeof checkinPassResponseSchema>;
 /** What the desk read: a pass, or a gym's own key tag (its member number). A USB
  *  scanner types it and presses Enter, so it is trimmed and nothing more. */
 export const CHECKIN_READ_MAX = 64;
+/** No control characters: a scanner types none, and Postgres refuses a zero byte. */
+const NO_CONTROL_CHARACTERS = /^\P{Cc}*$/u;
 export const checkinScanRequestSchema = z
-  .object({ code: z.string().trim().min(1).max(CHECKIN_READ_MAX) })
+  .object({ code: z.string().trim().min(1).max(CHECKIN_READ_MAX).regex(NO_CONTROL_CHARACTERS) })
   .strict();
 export type CheckinScanRequest = z.infer<typeof checkinScanRequestSchema>;
 
@@ -87,7 +89,7 @@ export const checkinDeviceIdParamsSchema = z
   .strict();
 
 export const addCheckinDeviceRequestSchema = z
-  .object({ name: z.string().trim().min(1).max(CHECKIN_DEVICE_NAME_MAX) })
+  .object({ name: z.string().trim().min(1).max(CHECKIN_DEVICE_NAME_MAX).regex(NO_CONTROL_CHARACTERS) })
   .strict();
 export type AddCheckinDeviceRequest = z.infer<typeof addCheckinDeviceRequestSchema>;
 
@@ -142,6 +144,8 @@ export const CHECKIN_WORDS = {
   checkin_unavailable: "Check-in isn't working right now. Please try again in a moment.",
   too_many_devices: `A gym can have up to ${String(CHECKIN_DEVICES_MAX)} check-in devices.`,
   device_not_found: "That check-in device isn't here any more.",
+  device_name_taken: "Another check-in device already has that name. Give this one a different name.",
+  link_just_made: "A new link was made for this device a moment ago. Use that one, or try again in a few seconds.",
   key_tags_slow: "Too many cards at once. Please wait a moment and scan again.",
   key_tags_paused: "Cards aren't being taken at this desk for a few minutes. Show your pass in the app, or ask staff to check you in.",
 } as const;
@@ -153,7 +157,7 @@ export const CHECKIN_SEARCH_LIMIT = 10;
 export const CHECKIN_SEARCH_MAX = 100;
 
 export const checkinPeopleQuerySchema = z
-  .object({ query: z.string().trim().min(1).max(CHECKIN_SEARCH_MAX) })
+  .object({ query: z.string().trim().min(1).max(CHECKIN_SEARCH_MAX).regex(NO_CONTROL_CHARACTERS) })
   .strict();
 export type CheckinPeopleQuery = z.infer<typeof checkinPeopleQuerySchema>;
 
@@ -216,6 +220,10 @@ export const checkinLogVisitSchema = z
     /** The desk's name for a pass or key tag, the staff member's for staff; null for the
      *  member's own tap. */
     by: z.string().nullable(),
+    /** The gym's own status and payment words on the person's record, as the desk showed
+     *  them: sent only to staff who can check people in (`attendance.mark`). */
+    status: z.string().nullable(),
+    payment: z.string().nullable(),
   })
   .strict();
 export type CheckinLogVisit = z.infer<typeof checkinLogVisitSchema>;

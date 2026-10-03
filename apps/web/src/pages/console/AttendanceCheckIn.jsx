@@ -3,7 +3,8 @@
 // "Check someone in": staff find a person by name, member number or email and press
 // Check in beside them; the answer is the desk's (green, or "Already checked in at …",
 // with the gym's own status and payment words in orange). "Checked in today": every visit
-// today, newest first, asked again every 5 seconds while the page is in view.
+// today, newest first, with those same words, asked again every 5 seconds while the page
+// is in view.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CHECKIN_LOG_LIMIT, CHECKIN_LOG_POLL_MS } from '@app/shared';
 import { Check, Loader2, Search } from 'lucide-react';
@@ -11,7 +12,7 @@ import { orgService, errorText, isRetryable } from '../../api/orgsApi';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading, ConsoleSection } from '../../components/console/ConsoleStates';
 import { visitTimeLabel } from '../../components/gym/attendanceView';
 import { deskAnswer } from '../checkin/deskView';
-import { foundDetails, howLine, mergeLog, newestAt, pickKey } from './checkinLogView';
+import { foundDetails, howLine, mergeLog, newestAt, pickKey, wordsLine } from './checkinLogView';
 
 const SEARCH_WAIT_MS = 250;
 
@@ -142,7 +143,7 @@ export function CheckSomeoneIn({ gymId, words, keepsList, onCheckedIn }) {
           {people.map((person) => {
             const key = pickKey(person.pick);
             const details = foundDetails(person);
-            const notice = [person.notice?.status, person.notice?.payment].filter((w) => typeof w === 'string' && w.trim() !== '');
+            const notice = wordsLine(person.notice);
             return (
               <li
                 key={key}
@@ -158,9 +159,9 @@ export function CheckSomeoneIn({ gymId, words, keepsList, onCheckedIn }) {
                       {details}
                     </span>
                   ) : null}
-                  {notice.length > 0 ? (
+                  {notice !== '' ? (
                     <span className="block text-xs truncate" style={{ color: ORANGE }}>
-                      {notice.join(' · ')}
+                      {notice}
                     </span>
                   ) : null}
                 </span>
@@ -285,21 +286,29 @@ export function CheckedInToday({ gymId, words, refreshSignal }) {
         </p>
       ) : (
         <ul className="mt-1 flex flex-col">
-          {log.visits.map((visit) => (
-            <li key={visit.id} className="flex items-baseline gap-3 py-2" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-              <span className="text-xs w-16 flex-shrink-0 tabular-nums" style={{ color: ORANGE }}>
-                {visitTimeLabel(visit.markedAt, log.timezone, log.clockFormat)}
-              </span>
-              <span className="min-w-0">
-                <span className="block text-sm font-medium truncate" style={{ color: '#fff' }}>
-                  {visit.name === '' ? `A ${words.person}` : visit.name}
+          {log.visits.map((visit) => {
+            const notice = wordsLine(visit);
+            return (
+              <li key={visit.id} className="flex items-baseline gap-3 py-2" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                <span className="text-xs w-16 flex-shrink-0 tabular-nums" style={{ color: ORANGE }}>
+                  {visitTimeLabel(visit.markedAt, log.timezone, log.clockFormat)}
                 </span>
-                <span className="block text-xs truncate" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                  {howLine(visit)}
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium truncate" style={{ color: '#fff' }}>
+                    {visit.name === '' ? `A ${words.person}` : visit.name}
+                  </span>
+                  <span className="block text-xs truncate" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                    {howLine(visit)}
+                  </span>
+                  {notice !== '' ? (
+                    <span className="block text-xs truncate" style={{ color: ORANGE }}>
+                      {notice}
+                    </span>
+                  ) : null}
                 </span>
-              </span>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       )}
       {count >= CHECKIN_LOG_LIMIT ? (

@@ -1174,6 +1174,16 @@ export async function lockGym(tx: TransactionSql, gymId: string): Promise<void> 
   await tx`SELECT 1 FROM gyms WHERE id = ${gymId} FOR UPDATE`;
 }
 
+/** Holds records for a join of two: a check-in being written on either lands first, and
+ *  one that arrives now waits for the join (`checkin/repo.ts`, `insertVisit`). */
+export async function lockEntries(tx: TransactionSql, gymId: string, entryIds: readonly string[]): Promise<void> {
+  await tx`
+    SELECT 1 FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND id = ANY (${[...entryIds]}::uuid[])
+    ORDER BY id
+    FOR UPDATE`;
+}
+
 /** One person as the list stores them. Not `ListEntry`: that one carries the
  *  identity key of somebody already on the list, and this is what goes ON it. */
 export interface EntryToWrite {

@@ -196,12 +196,12 @@ export async function rollUpGymDays(
       FROM target t
       JOIN gym_attendance a ON a.gym_id = t.gym_id AND a.day = t.day AND a.user_id IS NOT NULL
     ),
-    -- Every visit, and a visitor is their account or, without the app, their record
-    -- (ROADMAP 16b-ii), as the console's day read counts them.
+    -- Every visit, and a visitor is their record or, with no record, their account,
+    -- as the console's day read counts them.
     att AS (
       SELECT t.gym_id, t.day,
              count(*)::int AS visits,
-             count(DISTINCT coalesce(a.user_id, a.entry_id))::int AS visitors
+             count(DISTINCT coalesce(a.entry_id, a.user_id))::int AS visitors
       FROM target t
       JOIN gym_attendance a ON a.gym_id = t.gym_id AND a.day = t.day
       GROUP BY t.gym_id, t.day

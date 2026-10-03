@@ -31,6 +31,8 @@ import type { AppConfig } from "../../../config.js";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { orgParamsSchema } from "../schemas.js";
+import { OrgsError } from "../service.js";
+import { deviceCookieValue, deviceLimitId, readDeviceCookie } from "./deviceKey.js";
 import * as service from "./service.js";
 
 export const CHECKIN_DEVICE_COOKIE = "checkinDevice";
@@ -44,6 +46,21 @@ export function checkinPassKey(config: Pick<AppConfig, "NODE_ENV" | "JWT_SECRET"
   if (config.CHECKIN_PASS_SECRET !== undefined) return Buffer.from(config.CHECKIN_PASS_SECRET, "utf8");
   if (config.NODE_ENV === "production") return null;
   return createHmac("sha256", config.JWT_SECRET).update("checkin-pass").digest();
+}
+
+/** The key a desk device's cookie is marked with (`deviceKey.ts`). */
+export function checkinDeviceSecret(config: Pick<AppConfig, "JWT_SECRET">): Buffer {
+  return createHmac("sha256", config.JWT_SECRET).update("checkin-device").digest();
+}
+
+const SCAN_PATH = `${CHECKIN_PATH}/scan`;
+
+/** The app-wide limit's name for a scan from a desk the server set up, or null: such a
+ *  desk is counted on its own, so nobody at its address can use up its allowance. */
+export function checkinDeskLimitKey(req: FastifyRequest, config: Pick<AppConfig, "JWT_SECRET">): string | null {
+  if (req.routeOptions.url !== SCAN_PATH) return null;
+  const cookie = readDeviceCookie(checkinDeviceSecret(config), req.cookies[CHECKIN_DEVICE_COOKIE]);
+  return cookie?.marked === true ? `desk:${deviceLimitId(cookie.key)}` : null;
 }
 
 function parseOr400<S extends z.ZodTypeAny>(
@@ -87,6 +104,7 @@ export function registerCheckinRoutes(app: FastifyInstance, deps: CheckinRouteDe
     log: app.log,
   };
   const prod = deps.config.NODE_ENV === "production";
+  const deviceSecret = checkinDeviceSecret(deps.config);
 
   const gate =
     (limit: (req: FastifyRequest, reply: FastifyReply) => Promise<void>) =>
@@ -122,18 +140,13 @@ export function registerCheckinRoutes(app: FastifyInstance, deps: CheckinRouteDe
     identifier: (req) => req.authUser?.id ?? null,
     redis: deps.redis,
   });
-  /** Opening a link: by address, since nobody is signed in. A link is 256 random bits,
-   *  so the limit is against noise, not guessing. */
-  const claimLimit = createDualRateLimit({
-    name: "checkin_claim",
-    max: 30,
-    ipMax: 30,
-    windowMs: 60 * 60 * 1000,
-    identifier: () => null,
-    redis: deps.redis,
-  });
-  /** Scans from one address, before the key is looked up: a gym's several desks share
-   *  it (each is also held to 120 a minute of its own). */
+  /** Opening a link: only links that open nothing are counted, by address, and past 30 an
+   *  hour they are refused. A real link (256 random bits) always opens, however many
+   *  made-up ones its address sent; the app-wide limit bounds how many are tried. */
+  const CLAIM_MISSES_PER_HOUR = 30;
+  const claimMissKey = (req: FastifyRequest): string => `rl:checkin_claim_missed:ip:${req.ip}`;
+  /** Scans whose cookie the server did not mark, by address, before any key is looked
+   *  up. A desk the server set up is not counted here: it has its own 120 a minute. */
   const scanAddressLimit = createDualRateLimit({
     name: "checkin_scan",
     max: 600,
@@ -256,15 +269,22 @@ export function registerCheckinRoutes(app: FastifyInstance, deps: CheckinRouteDe
   });
 
   app.post(`${CHECKIN_PATH}/device/claim`, async (req, reply) => {
-    await claimLimit(req, reply);
-    if (reply.sent) return;
     const body = parseOr400(claimCheckinDeviceRequestSchema, req.body, req, reply);
     if (body === null) return;
-    const claimed = await service.claimDevice(checkinDeps, body.token);
+    const missed = Number((await deps.redis.get(claimMissKey(req))) ?? "0");
+    let claimed: Awaited<ReturnType<typeof service.claimDevice>>;
+    try {
+      claimed = await service.claimDevice(checkinDeps, body.token);
+    } catch (err) {
+      if (!(err instanceof OrgsError) || err.code !== "link_not_valid") throw err;
+      await deps.redis.incrWithTtl(claimMissKey(req), 60 * 60);
+      if (missed < CLAIM_MISSES_PER_HOUR) throw err;
+      return reply.status(429).send({ error: "rate_limited", message: "Too many attempts. Please try again later.", requestId: req.id });
+    }
     return reply
       .status(200)
       .header("cache-control", "no-store")
-      .setCookie(CHECKIN_DEVICE_COOKIE, claimed.key, {
+      .setCookie(CHECKIN_DEVICE_COOKIE, deviceCookieValue(deviceSecret, claimed.key), {
         httpOnly: true,
         secure: prod,
         // The desk page and the api are different sites in production, as the session
@@ -277,10 +297,13 @@ export function registerCheckinRoutes(app: FastifyInstance, deps: CheckinRouteDe
       .send(claimed.answer);
   });
 
-  app.post(`${CHECKIN_PATH}/scan`, async (req, reply) => {
-    await scanAddressLimit(req, reply);
-    if (reply.sent) return;
-    const device = await service.deviceFor(checkinDeps, req.cookies[CHECKIN_DEVICE_COOKIE]);
+  app.post(SCAN_PATH, async (req, reply) => {
+    const cookie = readDeviceCookie(deviceSecret, req.cookies[CHECKIN_DEVICE_COOKIE]);
+    if (cookie?.marked !== true) {
+      await scanAddressLimit(req, reply);
+      if (reply.sent) return;
+    }
+    const device = cookie === null ? null : await service.deviceFor(checkinDeps, cookie.key);
     if (device === null) {
       return reply.status(401).send({ error: "device_not_recognised", message: CHECKIN_WORDS.device_not_recognised, requestId: req.id });
     }

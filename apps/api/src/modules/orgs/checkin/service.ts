@@ -42,6 +42,7 @@ import {
   type StaffCheckinResponse,
 } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
+import { streakHasDay } from "../../gamification/repo.js";
 import { onAttendanceMarked } from "../../gamification/service.js";
 import { getUserSyncContext } from "../../users/service.js";
 import { insertAudit, lockOrgRow } from "../repo.js";
@@ -80,6 +81,14 @@ const deviceNotFound = (): OrgsError => new OrgsError(404, "device_not_found", C
 const tagCountKey = (deviceId: string): string => `rl:checkin_tags_device:${deviceId}`;
 const tagMissKey = (deviceId: string): string => `checkin:tag_misses:${deviceId}`;
 const tagPauseKey = (deviceId: string): string => `checkin:tag_pause:${deviceId}`;
+/** The key tags a device is reading right now, each dropped when its answer is known. */
+const tagReadsKey = (deviceId: string): string => `checkin:tag_reads:${deviceId}`;
+const TAG_READ_TTL_S = 30;
+
+/** A device's name is one of its gym's switched-on devices' alone (migration `0066`). */
+const DEVICE_NAME_KEY = "gym_checkin_devices_gym_name_uq";
+const nameTaken = (err: unknown): boolean =>
+  typeof err === "object" && err !== null && "constraint_name" in err && err.constraint_name === DEVICE_NAME_KEY;
 
 /** Until when a device takes no key tags, or null; Redis down reads as not paused. */
 async function pausedUntil(deps: Pick<CheckinDeps, "redis">, deviceId: string): Promise<string | null> {
@@ -160,12 +169,15 @@ export async function addDevice(
       meta: {},
     });
     return row;
+  }).catch((err: unknown) => {
+    throw nameTaken(err) ? new OrgsError(409, "device_name_taken", CHECKIN_WORDS.device_name_taken) : err;
   });
   return checkinDeviceLinkResponseSchema.parse({ device: await toDevice(deps, device), link: linkFor(deps, token) });
 }
 
 /** A new one-time link for a device (its browser forgot its key, or it is a new tablet):
- *  the old key stops working now. */
+ *  the old key stops working now. A second press within a few seconds is refused, so two
+ *  staff pressing together are not each shown a link of which one is already dead. */
 export async function renewDeviceLink(
   deps: CheckinDeps,
   userId: string,
@@ -179,6 +191,7 @@ export async function renewDeviceLink(
   const device = await deps.sql.begin(async (tx) => {
     const row = await repo.renewLink(tx, { gymId, deviceId, linkHash: sha256(token), linkMinutes: CHECKIN_LINK_TTL_MINUTES });
     if (row === null) throw deviceNotFound();
+    if (row === "just_made") throw new OrgsError(409, "link_just_made", CHECKIN_WORDS.link_just_made);
     await insertAudit(tx, {
       actorUserId: userId,
       gymId,
@@ -188,6 +201,9 @@ export async function renewDeviceLink(
       meta: {},
     });
     return row;
+  }).catch((err: unknown) => {
+    // A switched-off device coming back on under a name another device has taken since.
+    throw nameTaken(err) ? new OrgsError(409, "device_name_taken", CHECKIN_WORDS.device_name_taken) : err;
   });
   return checkinDeviceLinkResponseSchema.parse({ device: await toDevice(deps, device), link: linkFor(deps, token) });
 }
@@ -251,8 +267,10 @@ export function deviceRoom(deps: Pick<CheckinDeps, "redis" | "log">, device: rep
   };
 }
 
-/** Whether this device may read a key tag now: not while paused, and 20 a minute. Redis
- *  down lets it through with a log, as every limiter here does. */
+/** Whether this device may read a key tag now: not while paused, 20 a minute, and never
+ *  more on their way than unknown numbers are left before the pause — so ten unknown
+ *  numbers are ten looked up, however many arrive together. Redis down lets it through
+ *  with a log, as every limiter here does. */
 async function keyTagRoom(deps: CheckinDeps, device: repo.DeskDevice): Promise<void> {
   if ((await pausedUntil(deps, device.deviceId)) !== null) {
     throw new OrgsError(429, "key_tags_paused", CHECKIN_WORDS.key_tags_paused);
@@ -263,16 +281,32 @@ async function keyTagRoom(deps: CheckinDeps, device: repo.DeskDevice): Promise<v
     return;
   }
   if (count > CHECKIN_KEY_TAGS_PER_MINUTE) throw new OrgsError(429, "key_tags_slow", CHECKIN_WORDS.key_tags_slow);
+  // Counted in before the misses are read, and a miss is counted before its read is let
+  // go (`keyTagRead`), so the two together never read low.
+  const reading = await deps.redis.incrWithTtl(tagReadsKey(device.deviceId), TAG_READ_TTL_S);
+  const misses = Number((await deps.redis.get(tagMissKey(device.deviceId))) ?? "0");
+  if (reading !== null && reading + misses > CHECKIN_KEY_TAG_MISSES) {
+    await deps.redis.decrIfPositive(tagReadsKey(device.deviceId));
+    throw new OrgsError(429, "key_tags_slow", CHECKIN_WORDS.key_tags_slow);
+  }
 }
 
-/** A key tag nobody has: the tenth in 10 minutes pauses the device's key tags for 10. */
-async function keyTagMissed(deps: CheckinDeps, device: repo.DeskDevice): Promise<void> {
-  const misses = await deps.redis.incrWithTtl(tagMissKey(device.deviceId), CHECKIN_KEY_TAG_PAUSE_MINUTES * 60);
-  if (misses === null || misses < CHECKIN_KEY_TAG_MISSES) return;
-  const until = new Date(deps.now().getTime() + CHECKIN_KEY_TAG_PAUSE_MINUTES * 60_000);
-  await deps.redis.setex(tagPauseKey(device.deviceId), CHECKIN_KEY_TAG_PAUSE_MINUTES * 60, until.toISOString());
-  await deps.redis.del(tagMissKey(device.deviceId));
-  deps.log.warn({ event: "checkin.key_tags_paused", gymId: device.gymId, deviceId: device.deviceId }, "a desk's key tags paused after too many unknown numbers");
+/** A key tag's read is over. A number nobody has is counted, and the tenth in 10 minutes
+ *  pauses the device's key tags for 10 and starts every count again. */
+async function keyTagRead(deps: CheckinDeps, device: repo.DeskDevice, missed: boolean): Promise<void> {
+  // A read still on its way when the pause began is not carried into the next count.
+  if (missed && (await pausedUntil(deps, device.deviceId)) === null) {
+    const misses = await deps.redis.incrWithTtl(tagMissKey(device.deviceId), CHECKIN_KEY_TAG_PAUSE_MINUTES * 60);
+    if (misses !== null && misses >= CHECKIN_KEY_TAG_MISSES) {
+      const until = new Date(deps.now().getTime() + CHECKIN_KEY_TAG_PAUSE_MINUTES * 60_000);
+      await deps.redis.setex(tagPauseKey(device.deviceId), CHECKIN_KEY_TAG_PAUSE_MINUTES * 60, until.toISOString());
+      await deps.redis.del(tagMissKey(device.deviceId));
+      await deps.redis.del(tagReadsKey(device.deviceId));
+      deps.log.warn({ event: "checkin.key_tags_paused", gymId: device.gymId, deviceId: device.deviceId }, "a desk's key tags paused after too many unknown numbers");
+      return;
+    }
+  }
+  await deps.redis.decrIfPositive(tagReadsKey(device.deviceId));
 }
 
 interface Named {
@@ -333,7 +367,9 @@ async function namedByRecord(sql: Sql, gymId: string, entryId: string): Promise<
   return record === null ? NOBODY : await namedRecord(sql, gymId, record);
 }
 
-/** A current record, and the app member whose record it certainly is, if any. */
+/** A current record, and the account whose record it certainly is, if any: the one app
+ *  member holding it, or, when no member does, the account a pass would name as this
+ *  record — so a card and a pass write the same visit for the same person. */
 async function namedRecord(
   sql: Sql,
   gymId: string,
@@ -343,44 +379,78 @@ async function namedRecord(
     (member) => currentRecordOf(member) === record.id,
   );
   const owner = owners.length === 1 ? owners[0] : undefined;
+  const userId = owner?.userId ?? (owners.length === 0 ? await accountOfRecord(sql, gymId, record) : null);
   return {
     person: { kind: "member" },
-    who: { userId: owner?.userId ?? null, entryId: record.id },
+    who: { userId, entryId: record.id },
     name: record.fullName.trim() || (owner?.fullName ?? ""),
     notice: { status: record.status, payment: record.payment, onList: true },
   };
 }
 
-/** What a read pass is, spending it if it is fresh. */
-async function readThePass(deps: CheckinDeps, code: string): Promise<{ read: ScanRead; userId: string | null }> {
+/** The account on a record's address whose own pass names that record, or null: an
+ *  address nobody proved, or a relative's record on a shared one, is nobody's. */
+async function accountOfRecord(sql: Sql, gymId: string, record: { id: string; email: string | null }): Promise<string | null> {
+  if (record.email === null) return null;
+  const userId = await repo.accountByEmail(sql, record.email);
+  if (userId === null) return null;
+  return (await namedByAccount(sql, gymId, userId)).who?.entryId === record.id ? userId : null;
+}
+
+/** What a read pass is, taking its one use if it is fresh; `spent` is where that use is
+ *  kept, so it can be given back. */
+async function readThePass(deps: CheckinDeps, code: string): Promise<{ read: ScanRead; userId: string | null; spent: string | null }> {
   if (deps.passKey === null) throw new OrgsError(503, "passes_off", CHECKIN_WORDS.passes_off);
   const pass = readPass(deps.passKey, code, passWindow(deps.now()));
-  if (pass.kind !== "fresh") return { read: { kind: "pass", pass: pass.kind }, userId: null };
-  const uses = await deps.redis.incrWithTtl(`checkin:pass_used:${pass.userId}:${String(pass.window)}`, USED_PASS_TTL_S);
+  if (pass.kind !== "fresh") return { read: { kind: "pass", pass: pass.kind }, userId: null, spent: null };
+  const spent = `checkin:pass_used:${pass.userId}:${String(pass.window)}`;
+  const uses = await deps.redis.incrWithTtl(spent, USED_PASS_TTL_S);
   // Without Redis a pass could be shown twice, so it is refused; key tags still work.
   if (uses === null) throw new OrgsError(503, "checkin_unavailable", CHECKIN_WORDS.checkin_unavailable);
-  if (uses > 1) return { read: { kind: "pass", pass: "used" }, userId: null };
-  return { read: { kind: "pass", pass: "fresh" }, userId: pass.userId };
+  if (uses > 1) return { read: { kind: "pass", pass: "used" }, userId: null, spent: null };
+  return { read: { kind: "pass", pass: "fresh" }, userId: pass.userId, spent };
 }
 
 export async function scan(deps: CheckinDeps, device: repo.DeskDevice, code: string): Promise<CheckinScanResponse> {
   const gymId = device.gymId;
   let read: ScanRead;
   let named: Named | null = null;
-  if (looksLikePass(code)) {
-    const pass = await readThePass(deps, code);
-    read = pass.read;
-    if (pass.userId !== null) named = await namedByAccount(deps.sql, gymId, pass.userId);
-  } else {
-    await keyTagRoom(deps, device);
-    read = { kind: "key_tag" };
-    named = await namedByMemberNumber(deps.sql, gymId, code);
-    if (named.person.kind === "not_a_member") await keyTagMissed(deps, device);
+  let name: () => Promise<Named | null> = () => Promise.resolve(null);
+  let spent: string | null = null;
+  let visit: Visit;
+  try {
+    if (looksLikePass(code)) {
+      const pass = await readThePass(deps, code);
+      read = pass.read;
+      spent = pass.spent;
+      const userId = pass.userId;
+      if (userId !== null) {
+        name = () => namedByAccount(deps.sql, gymId, userId);
+        named = await name();
+      }
+    } else {
+      await keyTagRoom(deps, device);
+      read = { kind: "key_tag" };
+      name = () => namedByMemberNumber(deps.sql, gymId, code);
+      let missed = false;
+      try {
+        named = await name();
+        missed = named?.person.kind === "not_a_member";
+      } finally {
+        await keyTagRead(deps, device, missed);
+      }
+    }
+    await repo.touchDevice(deps.sql, gymId, device.deviceId);
+    visit = await writeVisit(deps, gymId, read, named, name, { deviceId: device.deviceId, markedBy: null });
+  } catch (err) {
+    if (spent !== null) await deps.redis.decrIfPositive(spent);
+    throw err;
   }
-  await repo.touchDevice(deps.sql, gymId, device.deviceId);
+  // A pass is used up by a visit and by nothing else: shown at a desk where its person is
+  // not a member, it still works at their own.
+  if (spent !== null && visit.result !== "checked_in" && visit.result !== "already") await deps.redis.decrIfPositive(spent);
 
   const gymName = device.gymName;
-  const visit = await writeVisit(deps, gymId, read, named, { deviceId: device.deviceId, markedBy: null });
   if (visit.result === "fresh_pass_needed" || visit.result === "not_a_member" || visit.result === "see_staff") {
     return checkinScanResponseSchema.parse({ result: visit.result, gymName });
   }
@@ -406,15 +476,56 @@ type Visit =
   | { result: "checked_in"; named: Named }
   | { result: "already"; named: Named; firstAt: Date; timezone: string; clockFormat: GymClockFormat };
 
+type Made = { deviceId: string; markedBy: null } | { deviceId: null; markedBy: string };
+
+/** What Postgres says when a visit's record was deleted under it, or the write was the
+ *  one stopped to end a deadlock: both happen only while two records are being joined. */
+const LOST_A_RACE = new Set(["23503", "40P01"]);
+const lostARace = (err: unknown): boolean =>
+  typeof err === "object" && err !== null && "code" in err && typeof err.code === "string" && LOST_A_RACE.has(err.code);
+
 /** The scan rule's answer for one read, and the visit it writes: the desk's and staff's
- *  one way in, so the two can never disagree about who is let in or what counts twice. */
+ *  one way in, so the two can never disagree about who is let in or what counts twice.
+ *  When the person's record went while it was being written (two records joined), the
+ *  person is named again and the visit written once more. */
 async function writeVisit(
   deps: CheckinDeps,
   gymId: string,
   read: ScanRead,
   named: Named | null,
-  made: { deviceId: string; markedBy: null } | { deviceId: null; markedBy: string },
+  name: () => Promise<Named | null>,
+  made: Made,
 ): Promise<Visit> {
+  try {
+    const first = await writeNamedVisit(deps, gymId, read, named, made);
+    if (first !== null) return first;
+  } catch (err) {
+    if (!lostARace(err)) throw err;
+  }
+  const second = await writeNamedVisit(deps, gymId, read, await name(), made);
+  if (second === null) throw new OrgsError(503, "checkin_unavailable", CHECKIN_WORDS.checkin_unavailable);
+  return second;
+}
+
+/** Coming to the gym keeps a streak alive (RULINGS 2026-09-01). The visit is saved first;
+ *  the streak is recomputed for a new visit, for one just joined to the account, and for
+ *  an old one whose day the streak never got (`changed` false asks). A failure is logged
+ *  and put right by the person's next scan. */
+async function keepStreak(deps: CheckinDeps, gymId: string, userId: string, day: string, changed: boolean): Promise<void> {
+  try {
+    if (!changed && (await streakHasDay(deps.sql, userId, day))) return;
+    const sync = await getUserSyncContext(deps.sql, userId);
+    await onAttendanceMarked({ sql: deps.sql }, userId, sync.timezone);
+  } catch (err: unknown) {
+    deps.log.warn(
+      { event: "gamification.attendance_streak_failed", gymId, errName: err instanceof Error ? err.name : typeof err },
+      "attendance streak recompute failed",
+    );
+  }
+}
+
+/** One try at the visit; null when the record it names is no longer on the list. */
+async function writeNamedVisit(deps: CheckinDeps, gymId: string, read: ScanRead, named: Named | null, made: Made): Promise<Visit | null> {
   const who = named?.who ?? null;
   const ctx = who === null ? null : await repo.scanContext(deps.sql, gymId, who);
   const decision = decideScan({
@@ -435,7 +546,11 @@ async function writeVisit(
     timezone: ctx.timezone,
     clockFormat: ctx.clockFormat,
   });
-  if (decision.result === "already") return already(decision.firstAt);
+  if (decision.result === "already") {
+    const joined = await repo.joinVisits(deps.sql, gymId, ctx.day, who);
+    if (who.userId !== null) await keepStreak(deps, gymId, who.userId, ctx.day, joined > 0);
+    return already(decision.firstAt);
+  }
 
   const written = await repo.insertVisit(deps.sql, {
     gymId,
@@ -447,21 +562,9 @@ async function writeVisit(
     period: ctx.period,
     slotKey: decision.slotKey,
   });
-  if (!written.inserted) return already(written.firstAt);
-  if (who.userId !== null) {
-    // Coming to the gym keeps a streak alive (RULINGS 2026-09-01). The visit is saved;
-    // a streak that fails to recompute is put right on its next read.
-    const userId = who.userId;
-    await getUserSyncContext(deps.sql, userId)
-      .then((sync) => onAttendanceMarked({ sql: deps.sql }, userId, sync.timezone))
-      .catch((err: unknown) => {
-        deps.log.warn(
-          { event: "gamification.attendance_streak_failed", gymId, errName: err instanceof Error ? err.name : typeof err },
-          "attendance streak recompute failed",
-        );
-      });
-  }
-  return { result: "checked_in", named };
+  if (written === null) return null;
+  if (who.userId !== null) await keepStreak(deps, gymId, who.userId, ctx.day, written.inserted || written.joined > 0);
+  return written.inserted ? { result: "checked_in", named } : already(written.firstAt);
 }
 
 // ── STAFF, IN THE CONSOLE (16b-ii; spec Part 3 §12.5) ──
@@ -506,6 +609,8 @@ export async function findPeople(
     const own = member === undefined ? null : currentRecordOf(member);
     if (own !== null) {
       if (shown.has(own)) continue;
+      // Found by an address the row below would not show: not found.
+      if (!withEmail && !account.byName) continue;
       const record = await repo.currentRecord(deps.sql, gymId, own);
       if (record !== null) {
         shown.add(own);
@@ -536,9 +641,9 @@ export async function staffCheckIn(
 ): Promise<StaffCheckinResponse | null> {
   await requireWritablePrivilege(deps, gymId, userId, "attendance.mark");
   if (!(await limit())) return null;
-  const named =
-    "entryId" in pick ? await namedByRecord(deps.sql, gymId, pick.entryId) : await namedByAccount(deps.sql, gymId, pick.userId);
-  const visit = await writeVisit(deps, gymId, { kind: "staff" }, named, { deviceId: null, markedBy: userId });
+  const name = (): Promise<Named> =>
+    "entryId" in pick ? namedByRecord(deps.sql, gymId, pick.entryId) : namedByAccount(deps.sql, gymId, pick.userId);
+  const visit = await writeVisit(deps, gymId, { kind: "staff" }, await name(), name, { deviceId: null, markedBy: userId });
   if (visit.result === "checked_in") {
     return staffCheckinResponseSchema.parse({ result: "checked_in", person: { name: visit.named.name }, notice: visit.named.notice });
   }
@@ -563,8 +668,10 @@ export async function readLog(
   since: string | undefined,
   limit: Limit,
 ): Promise<CheckinLogResponse | null> {
-  await requirePrivilege(deps, gymId, userId, "attendance.read");
+  const { privileges } = await requirePrivilege(deps, gymId, userId, "attendance.read");
   if (!(await limit())) return null;
+  // The gym's status and payment words, as the desk shows them, for staff who check people in.
+  const withWords = privileges.includes("attendance.mark");
   const log = await repo.logVisits(deps.sql, gymId, since === undefined ? null : new Date(since), CHECKIN_LOG_LIMIT);
   if (log === null) throw new OrgsError(404, "org_not_found", "We couldn't find that organisation.");
   return checkinLogResponseSchema.parse({
@@ -572,7 +679,12 @@ export async function readLog(
       day: log.day,
       timezone: log.timezone,
       clockFormat: log.clockFormat,
-      visits: log.visits.map((visit) => ({ ...visit, markedAt: visit.markedAt.toISOString() })),
+      visits: log.visits.map((visit) => ({
+        ...visit,
+        markedAt: visit.markedAt.toISOString(),
+        status: withWords ? visit.status : null,
+        payment: withWords ? visit.payment : null,
+      })),
     },
   });
 }

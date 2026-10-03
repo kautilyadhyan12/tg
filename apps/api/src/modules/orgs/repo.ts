@@ -4627,10 +4627,10 @@ export async function getGymAttendanceDay(
   // THE DAY'S TOTALS, over every row of the day. `count(DISTINCT user_id)` is
   // load-bearing HERE and only here — see `GymAttendanceDayRow.totals`.
   //
-  // A person is their app account, or their record when they have no app (16b-ii), so a
-  // key tag's or staff's visit of somebody without the app is counted too.
+  // A person is their record on the gym's list, or their app account when the visit has
+  // no record: a member counted by card before they had the app is the same person after.
   const totalsRows = await sql<{ visits: string; people: string }[]>`
-    SELECT count(*) AS visits, count(DISTINCT coalesce(user_id, entry_id)) AS people
+    SELECT count(*) AS visits, count(DISTINCT coalesce(entry_id, user_id)) AS people
     FROM gym_attendance
     WHERE gym_id = ${input.gymId} AND day = ${gym.day}::date`;
 
@@ -4646,7 +4646,7 @@ export async function getGymAttendanceDay(
   >`
     SELECT hours_status, session_opens_minute, session_closes_minute,
            count(*) AS visits,
-           count(DISTINCT coalesce(user_id, entry_id)) AS people
+           count(DISTINCT coalesce(entry_id, user_id)) AS people
     FROM gym_attendance
     WHERE gym_id = ${input.gymId} AND day = ${gym.day}::date
     GROUP BY hours_status, session_opens_minute, session_closes_minute
@@ -4674,18 +4674,18 @@ export async function getGymAttendanceDay(
     }[]
   >`
     WITH page AS (
-      -- A person is their app account, or their record when they have no app (16b-ii).
+      -- A person is their record, or their app account when the visit has no record.
       -- The record named is the newest of the day's, which is the one the desk read.
-      SELECT coalesce(a.user_id, a.entry_id) AS person_id,
+      SELECT coalesce(a.entry_id, a.user_id) AS person_id,
              min(a.marked_at) AS first_marked_at,
              (array_agg(a.user_id) FILTER (WHERE a.user_id IS NOT NULL))[1] AS user_id,
              (array_agg(a.entry_id ORDER BY a.marked_at DESC) FILTER (WHERE a.entry_id IS NOT NULL))[1] AS entry_id
       FROM gym_attendance a
       WHERE a.gym_id = ${input.gymId} AND a.day = ${gym.day}::date
         AND (${statuses}::text[] IS NULL OR a.hours_status = ANY (${statuses}::text[]))
-      GROUP BY coalesce(a.user_id, a.entry_id)
+      GROUP BY coalesce(a.entry_id, a.user_id)
       HAVING (${input.cursor?.markedAt ?? null}::timestamptz IS NULL
-              OR (min(a.marked_at), coalesce(a.user_id, a.entry_id))
+              OR (min(a.marked_at), coalesce(a.entry_id, a.user_id))
                  > (${input.cursor?.markedAt ?? null}::timestamptz, ${input.cursor?.userId ?? null}::uuid))
       ORDER BY first_marked_at, person_id
       LIMIT ${limit + 1}
@@ -4718,7 +4718,7 @@ export async function getGymAttendanceDay(
       LEFT JOIN gym_member_list_entries e ON e.gym_id = ${input.gymId} AND e.id = p.entry_id
       JOIN gym_attendance a
         ON a.gym_id = ${input.gymId} AND a.day = ${gym.day}::date
-       AND coalesce(a.user_id, a.entry_id) = p.person_id
+       AND coalesce(a.entry_id, a.user_id) = p.person_id
     ) v
     WHERE v.rn <= ${ATTENDANCE_VISITS_PER_PERSON}
     ORDER BY v.first_marked_at, v.person_id, v.marked_at`;
@@ -5012,7 +5012,7 @@ export async function getOrgOverview(
                AS series_start
     )
     SELECT
-      -- A visitor is an app account, or a record for somebody without the app (16b-ii).
+      -- A visitor is their record on the list, or their app account when the visit has none.
       -- "count(*)" IS SAFE HERE ONLY BECAUSE OF THE FILTER, and the series
       -- query twenty lines below uses "count(a.id)" for the opposite reason.
       -- This is a LEFT JOIN, so a gym nobody has ever visited produces one
@@ -5020,12 +5020,12 @@ export async function getOrgOverview(
       -- row, so it is excluded and the count is 0. Delete or widen a FILTER and
       -- "count(*)" starts reporting that empty row as one visit.
       count(*) FILTER (WHERE a.day = b.today) AS today_visits,
-      count(DISTINCT coalesce(a.user_id, a.entry_id)) FILTER (WHERE a.day = b.today) AS today_visitors,
+      count(DISTINCT coalesce(a.entry_id, a.user_id)) FILTER (WHERE a.day = b.today) AS today_visitors,
       count(*) FILTER (WHERE a.day >= b.week_start) AS week_visits,
-      count(DISTINCT coalesce(a.user_id, a.entry_id)) FILTER (WHERE a.day >= b.week_start) AS week_visitors,
+      count(DISTINCT coalesce(a.entry_id, a.user_id)) FILTER (WHERE a.day >= b.week_start) AS week_visitors,
       count(*) FILTER (WHERE a.day >= b.prev_week_start AND a.day < b.week_start)
         AS prev_week_visits,
-      count(DISTINCT coalesce(a.user_id, a.entry_id))
+      count(DISTINCT coalesce(a.entry_id, a.user_id))
         FILTER (WHERE a.day >= b.prev_week_start AND a.day < b.week_start)
         AS prev_week_visitors
     FROM b
@@ -5055,7 +5055,7 @@ export async function getOrgOverview(
            -- nobody came to still produces one all-NULL row, and "count(*)"
            -- would report that empty week as ONE visit.
            count(a.id) AS visits,
-           count(DISTINCT coalesce(a.user_id, a.entry_id)) AS visitors
+           count(DISTINCT coalesce(a.entry_id, a.user_id)) AS visitors
     FROM s
     LEFT JOIN gym_attendance a
       ON a.gym_id = ${input.gymId}

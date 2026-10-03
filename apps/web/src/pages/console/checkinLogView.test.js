@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CHECKIN_LOG_LIMIT } from '@app/shared';
-import { canCheckPeopleIn, foundDetails, howLine, mergeLog, newestAt, personKey, pickKey } from './checkinLogView';
+import { canCheckPeopleIn, foundDetails, howLine, mergeLog, newestAt, personKey, pickKey, wordsLine } from './checkinLogView';
 
 const v = (id, markedAt, over = {}) => ({ id, markedAt, name: id, method: 'pass', by: 'Front desk', ...over });
 
@@ -51,6 +51,20 @@ describe('how a visit was made', () => {
     [null, ''],
   ])('%j reads %s', (visit, line) => {
     expect(howLine(visit)).toBe(line);
+  });
+});
+
+describe("the gym's own words for a person", () => {
+  it.each([
+    [{ status: 'Active', payment: 'Overdue' }, 'Active · Overdue'],
+    [{ status: ' Expired ', payment: null }, 'Expired'],
+    [{ status: null, payment: 'Unpaid' }, 'Unpaid'],
+    [{ status: '', payment: '  ' }, ''],
+    [{ status: null, payment: null }, ''],
+    [{ name: 'No words sent' }, ''],
+    [null, ''],
+  ])('%j reads %j', (words, line) => {
+    expect(wordsLine(words)).toBe(line);
   });
 });
 
