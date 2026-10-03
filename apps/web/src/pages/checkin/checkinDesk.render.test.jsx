@@ -562,6 +562,18 @@ describe('the scanner box', () => {
     fireEvent.blur(box);
     await waitFor(() => expect(document.activeElement).toBe(box));
   });
+
+  // Kd's click-through of 16f: with the camera open the page is taller than the window, and
+  // taking the focus back scrolled the page under the mouse, so no button could be pressed.
+  it('takes the focus back without moving the page under a button being pressed', async () => {
+    mount();
+    const box = screen.getByLabelText(/scanner/i);
+    const focus = vi.spyOn(box, 'focus');
+    screen.getByRole('button', { name: /use the camera/i }).focus();
+    fireEvent.blur(box);
+    await waitFor(() => expect(focus).toHaveBeenCalled());
+    for (const call of focus.mock.calls) expect(call).toEqual([{ preventScroll: true }]);
+  });
 });
 
 describe('the camera', () => {

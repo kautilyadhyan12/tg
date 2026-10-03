@@ -208,6 +208,7 @@ function Desk({ look }) {
 
   useEffect(() => {
     document.title = 'Check-in';
+    inputRef.current?.focus({ preventScroll: true });
     // A browser plays no sound until the page has been touched or a key pressed.
     document.addEventListener('pointerdown', wakeDeskSound);
     document.addEventListener('keydown', wakeDeskSound);
@@ -340,8 +341,10 @@ function Desk({ look }) {
   );
 
   // The scanner types into this box, so it always holds the focus.
+  // Without scrolling to it: a page taller than the window (the camera open) would move
+  // under the mouse between press and release, and the button pressed would never click.
   const keepFocus = () => {
-    setTimeout(() => inputRef.current?.focus(), 0);
+    setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 0);
   };
 
   return (
@@ -388,7 +391,6 @@ function Desk({ look }) {
           autoCorrect="off"
           autoCapitalize="off"
           spellCheck={false}
-          autoFocus
           placeholder="Scan a pass or key tag"
         />
       </form>
