@@ -176,6 +176,13 @@ export async function getActivityDays(
  *  The 🔥 badges become reachable by attendance as a direct consequence
  *  (`badges.ts` fires `streak_3/7/30/100` off `current_streak`). That IS the
  *  ruling, not a leak. */
+/** Whether the stored streak has reached `day`: false for a gym visit whose day the
+ *  streak was never recomputed for. */
+export async function streakHasDay(sql: Sql, userId: string, day: string): Promise<boolean> {
+  const rows = await sql`SELECT 1 FROM streaks WHERE user_id = ${userId} AND last_activity_date >= ${day}::date`;
+  return rows.length > 0;
+}
+
 export async function getStreakDays(
   tx: TransactionSql,
   userId: string,

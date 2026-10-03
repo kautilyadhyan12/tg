@@ -782,6 +782,7 @@ export async function mergeEntries(
   const at = deps.now();
   const done = await guarded(() => deps.sql.begin(async (tx): Promise<Done> => {
     await repo.lockGym(tx, gymId);
+    await repo.lockEntries(tx, gymId, [goneId, keepId]);
     const [gone, keep] = await Promise.all([repo.entryFor(tx, gymId, goneId), repo.entryFor(tx, gymId, keepId)]);
     if (gone === null || keep === null) throw notFound();
     // The kept record keeps its own address and phone, so a member only the other

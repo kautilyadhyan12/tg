@@ -1151,6 +1151,56 @@ d("0001_init on a real database", () => {
       });
   });
 
+  /** `0066`'s rename, on a copy of the table (the real one's index already refuses two
+   *  of a name): the oldest device keeps its name, each other gets the start of its own id
+   *  after it, a switched-off twin and another gym's are left alone, and the index builds. */
+  it("0066 renames devices that share a name so its index builds, and leaves the rest", async () => {
+    const migration = await readFile(new URL("../drizzle/0066_checkin_device_names.sql", import.meta.url), "utf8");
+    const [rename, index] = migration.split("--> statement-breakpoint").map((s) => s.trim());
+    if (rename === undefined || index === undefined || !rename.includes("UPDATE") || !index.includes("CREATE UNIQUE INDEX")) {
+      throw new Error("0066 no longer holds its rename and its index");
+    }
+    const onCopy = (statement: string): string =>
+      statement.replaceAll('"gym_checkin_devices_gym_name_uq"', '"zz_0066_name_uq"').replaceAll('"gym_checkin_devices"', '"zz_0066_devices"');
+    const gymA = "00000000-0000-4000-8000-0000000066a1";
+    const gymB = "00000000-0000-4000-8000-0000000066b1";
+    const long = "L".repeat(60);
+
+    await sql
+      .begin(async (tx) => {
+        await tx`CREATE TEMP TABLE zz_0066_devices (LIKE gym_checkin_devices INCLUDING DEFAULTS) ON COMMIT DROP`;
+        const add = (id: string, gymId: string, name: string, minutesAgo: number, off = false) => tx`
+          INSERT INTO zz_0066_devices (id, gym_id, name, created_at, switched_off_at)
+          VALUES (${id}, ${gymId}, ${name}, now() - make_interval(mins => ${minutesAgo}), ${off ? tx`now()` : null})`;
+        await add("11111111-0000-4000-8000-000000000001", gymA, "Front desk", 30);
+        await add("22222222-0000-4000-8000-000000000002", gymA, "front DESK", 20);
+        await add("33333333-0000-4000-8000-000000000003", gymA, "Front desk", 10, true);
+        await add("44444444-0000-4000-8000-000000000004", gymB, "Front desk", 5);
+        await add("55555555-0000-4000-8000-000000000005", gymA, long, 4);
+        await add("66666666-0000-4000-8000-000000000006", gymA, long, 3);
+
+        await tx.unsafe(onCopy(rename));
+        await tx.unsafe(onCopy(rename));
+        await tx.unsafe(onCopy(index));
+
+        const rows = await tx<{ id: string; name: string }[]>`SELECT id, name FROM zz_0066_devices ORDER BY id`;
+        expect(rows.map((r) => r.name)).toEqual([
+          "Front desk",
+          "front DESK (22222222)",
+          "Front desk",
+          "Front desk",
+          long,
+          `${"L".repeat(49)} (66666666)`,
+        ]);
+        expect(rows.every((r) => r.name.length <= 60)).toBe(true);
+        throw new Error("ROLLBACK-0066-FIXTURE");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0066-FIXTURE") return;
+        throw err;
+      });
+  });
+
   /** `0064`'s backfill: an owner's and a manager's stored ticks gain "check people in";
    *  a trainer's, and a row reading its role's defaults, are left as they were. */
   it("0064's backfill gives owners and managers attendance.mark and nobody else", async () => {

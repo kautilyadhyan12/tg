@@ -291,13 +291,16 @@ d("check-in at the front desk (real Postgres)", () => {
       expect(differ).toEqual([]);
 
       // The key is not a session in any other shape either.
-      const key = desk.cookies["checkinDevice"] ?? "";
-      expect(key).toMatch(/^[A-Za-z0-9_-]{43}$/);
-      for (const res of [
-        await get(`/v1/orgs/${ironHouse}/member-list/entries`, { accessToken: key }),
-        await api().inject({ method: "GET", url: `/v1/orgs/${ironHouse}/members`, remoteAddress: nextIp(), headers: { authorization: `Bearer ${key}` } }),
-      ]) {
-        expect(res.statusCode).toBe(401);
+      const cookie = desk.cookies["checkinDevice"] ?? "";
+      // The key, and the server's mark on it (`deviceKey.ts`).
+      expect(cookie).toMatch(/^[A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]{22}$/);
+      for (const key of [cookie, cookie.slice(0, 43)]) {
+        for (const res of [
+          await get(`/v1/orgs/${ironHouse}/member-list/entries`, { accessToken: key }),
+          await api().inject({ method: "GET", url: `/v1/orgs/${ironHouse}/members`, remoteAddress: nextIp(), headers: { authorization: `Bearer ${key}` } }),
+        ]) {
+          expect(res.statusCode).toBe(401);
+        }
       }
     },
     TEST_TIMEOUT_MS * 5,

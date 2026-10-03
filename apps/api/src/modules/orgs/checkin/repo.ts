@@ -74,20 +74,28 @@ export async function insertDevice(
   return toDevice(row);
 }
 
+/** How long after a link is made a second one for the same device is refused. */
+const LINK_JUST_MADE_SECONDS = 10;
+
 /** A new link: the key the device held stops working at once, and a device switched off
- *  is on again once the link is opened. */
+ *  is on again once the link is opened. `just_made` when a link made in the last few
+ *  seconds is still waiting: the row's own lock decides between two presses at once. */
 export async function renewLink(
   tx: TransactionSql,
   input: { gymId: string; deviceId: string; linkHash: string; linkMinutes: number },
-): Promise<DeviceRow | null> {
+): Promise<DeviceRow | "just_made" | null> {
   const rows = await tx<RawDevice[]>`
     UPDATE gym_checkin_devices
     SET key_hash = NULL, switched_off_at = NULL, link_hash = ${input.linkHash},
         link_expires_at = now() + make_interval(mins => ${input.linkMinutes})
     WHERE gym_id = ${input.gymId} AND id = ${input.deviceId}
+      AND NOT (link_hash IS NOT NULL
+               AND link_expires_at > now() + make_interval(mins => ${input.linkMinutes}) - make_interval(secs => ${LINK_JUST_MADE_SECONDS}))
     RETURNING id, name, CASE WHEN switched_off_at IS NOT NULL THEN 'off' WHEN key_hash IS NOT NULL THEN 'on' WHEN link_expires_at > now() THEN 'waiting' ELSE 'off' END AS state, link_expires_at, last_seen_at, created_at`;
   const row = rows[0];
-  return row === undefined ? null : toDevice(row);
+  if (row !== undefined) return toDevice(row);
+  const there = await tx`SELECT 1 FROM gym_checkin_devices WHERE gym_id = ${input.gymId} AND id = ${input.deviceId}`;
+  return there.length === 0 ? null : "just_made";
 }
 
 /** Switched off: its key and any open link stop working in the same statement. Doing it
@@ -237,22 +245,29 @@ export async function recordsLike(
   return rows.map(toFound);
 }
 
-/** The gym's live members in the app a search finds, by their name or email. */
+/** The gym's live members in the app a search finds, by their name or email; `byName`
+ *  false is one found by their email alone. */
 export async function appMembersLike(
   sql: SqlOrTx,
   gymId: string,
   like: string,
   limit: number,
-): Promise<{ userId: string; displayName: string; email: string }[]> {
-  const rows = await sql<{ user_id: string; display_name: string; email: string }[]>`
-    SELECT m.user_id, u.display_name, u.email::text AS email
+): Promise<{ userId: string; displayName: string; email: string; byName: boolean }[]> {
+  const rows = await sql<{ user_id: string; display_name: string; email: string; by_name: boolean }[]>`
+    SELECT m.user_id, u.display_name, u.email::text AS email, u.display_name ILIKE ${like} AS by_name
     FROM gym_members m
     JOIN users u ON u.id = m.user_id
     WHERE m.gym_id = ${gymId} AND m.removed_at IS NULL AND u.status = 'active'
       AND (u.display_name ILIKE ${like} OR u.email::text ILIKE ${like})
     ORDER BY lower(u.display_name), u.id
     LIMIT ${limit}`;
-  return rows.map((row) => ({ userId: row.user_id, displayName: row.display_name, email: row.email }));
+  return rows.map((row) => ({ userId: row.user_id, displayName: row.display_name, email: row.email, byName: row.by_name }));
+}
+
+/** The active account on an address, if there is one. */
+export async function accountByEmail(sql: SqlOrTx, email: string): Promise<string | null> {
+  const rows = await sql<{ id: string }[]>`SELECT id FROM users WHERE email = ${email} AND status = 'active'`;
+  return rows[0]?.id ?? null;
 }
 
 /** The gym's CURRENT records with this member number, folding case as its index does;
@@ -325,8 +340,40 @@ export async function scanContext(
   };
 }
 
+/** A person named by both their account and their record: their visits of the day that
+ *  carry only one of the two are given the other, so one person is one person on every
+ *  count. A visit is left as it is where the same period already holds one for them.
+ *  Answers how many visits changed. */
+export async function joinVisits(sql: SqlOrTx, gymId: string, day: string, who: Who): Promise<number> {
+  if (who.userId === null || who.entryId === null) return 0;
+  const rows = await sql<{ n: number }[]>`
+    WITH account AS (
+      UPDATE gym_attendance a SET user_id = ${who.userId}
+      WHERE a.gym_id = ${gymId} AND a.day = ${day}::date AND a.entry_id = ${who.entryId} AND a.user_id IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM gym_attendance o
+          WHERE o.gym_id = a.gym_id AND o.user_id = ${who.userId} AND o.day = a.day AND o.slot_key = a.slot_key)
+      RETURNING 1
+    ),
+    record AS (
+      UPDATE gym_attendance a SET entry_id = ${who.entryId}
+      WHERE a.gym_id = ${gymId} AND a.day = ${day}::date AND a.user_id = ${who.userId} AND a.entry_id IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM gym_attendance o
+          WHERE o.gym_id = a.gym_id AND o.entry_id = ${who.entryId} AND o.day = a.day AND o.slot_key = a.slot_key)
+      RETURNING 1
+    )
+    SELECT ((SELECT count(*) FROM account) + (SELECT count(*) FROM record))::int AS n`;
+  return rows[0]?.n ?? 0;
+}
+
 /** Writes the visit, or finds the one already there: the database's two unique keys (an
- *  account's, a record's) decide when two scans race, never a read before the write. */
+ *  account's, a record's) decide when two scans race, never a read before the write.
+ *
+ *  Null when the record it names is no longer on the list. The record is held from the
+ *  first statement to the commit, and a join of two records holds both of its own
+ *  (`lockEntries`): a visit lands before the join moves the record's visits, or waits for
+ *  the join and finds the record gone. */
 export async function insertVisit(
   sql: Sql,
   input: {
@@ -339,26 +386,36 @@ export async function insertVisit(
     period: ScanPeriod;
     slotKey: string;
   },
-): Promise<{ inserted: true; markedAt: Date } | { inserted: false; firstAt: Date }> {
-  const inserted = await sql<{ marked_at: Date }[]>`
-    INSERT INTO gym_attendance
-      (gym_id, user_id, entry_id, device_id, marked_by_user_id, day, method, hours_status,
-       session_opens_minute, session_closes_minute, slot_key)
-    VALUES (${input.gymId}, ${input.who.userId}, ${input.who.entryId}, ${input.deviceId}, ${input.markedBy},
-            ${input.day}::date, ${input.method}, ${input.period.hoursStatus},
-            ${input.period.opensMinute}, ${input.period.closesMinute}, ${input.slotKey})
-    ON CONFLICT DO NOTHING
-    RETURNING marked_at`;
-  const row = inserted[0];
-  if (row !== undefined) return { inserted: true, markedAt: row.marked_at };
-  const first = await sql<{ marked_at: Date | null }[]>`
-    SELECT min(marked_at) AS marked_at FROM gym_attendance
-    WHERE gym_id = ${input.gymId} AND day = ${input.day}::date AND slot_key = ${input.slotKey}
-      AND (user_id = ${input.who.userId}::uuid OR entry_id = ${input.who.entryId}::uuid)`;
-  const firstAt = first[0]?.marked_at;
-  // The conflict was with a row that names this account or record, so it is there.
-  if (firstAt === undefined || firstAt === null) throw new Error("a visit's conflict found no visit");
-  return { inserted: false, firstAt };
+): Promise<{ inserted: true; markedAt: Date; joined: number } | { inserted: false; firstAt: Date; joined: number } | null> {
+  return await sql.begin(async (tx) => {
+    if (input.who.entryId !== null) {
+      const held = await tx`
+        SELECT 1 FROM gym_member_list_entries
+        WHERE gym_id = ${input.gymId} AND id = ${input.who.entryId} AND former_at IS NULL
+        FOR KEY SHARE`;
+      if (held.length === 0) return null;
+    }
+    const inserted = await tx<{ marked_at: Date }[]>`
+      INSERT INTO gym_attendance
+        (gym_id, user_id, entry_id, device_id, marked_by_user_id, day, method, hours_status,
+         session_opens_minute, session_closes_minute, slot_key)
+      VALUES (${input.gymId}, ${input.who.userId}, ${input.who.entryId}, ${input.deviceId}, ${input.markedBy},
+              ${input.day}::date, ${input.method}, ${input.period.hoursStatus},
+              ${input.period.opensMinute}, ${input.period.closesMinute}, ${input.slotKey})
+      ON CONFLICT DO NOTHING
+      RETURNING marked_at`;
+    const joined = await joinVisits(tx, input.gymId, input.day, input.who);
+    const row = inserted[0];
+    if (row !== undefined) return { inserted: true as const, markedAt: row.marked_at, joined };
+    const first = await tx<{ marked_at: Date | null }[]>`
+      SELECT min(marked_at) AS marked_at FROM gym_attendance
+      WHERE gym_id = ${input.gymId} AND day = ${input.day}::date AND slot_key = ${input.slotKey}
+        AND (user_id = ${input.who.userId}::uuid OR entry_id = ${input.who.entryId}::uuid)`;
+    const firstAt = first[0]?.marked_at;
+    // The conflict was with a row that names this account or record, so it is there.
+    if (firstAt === undefined || firstAt === null) throw new Error("a visit's conflict found no visit");
+    return { inserted: false as const, firstAt, joined };
+  });
 }
 
 // ── THE LIVE LOG (16b-ii) ──
@@ -369,6 +426,8 @@ export interface LogVisit {
   name: string;
   method: GymAttendanceMethod;
   by: string | null;
+  status: string | null;
+  payment: string | null;
 }
 
 /** A poll asks again from a little before its newest visit: a visit stamped just before
@@ -387,8 +446,10 @@ export async function logVisits(
     SELECT (now() AT TIME ZONE timezone)::date::text AS day, timezone, clock_format FROM gyms WHERE id = ${gymId}`;
   const gym = gyms[0];
   if (gym === undefined) return null;
-  const rows = await sql<{ id: string; marked_at: Date; method: string; name: string; by: string | null }[]>`
-    SELECT a.id, a.marked_at, a.method,
+  const rows = await sql<
+    { id: string; marked_at: Date; method: string; name: string; by: string | null; status: string | null; payment_status: string | null }[]
+  >`
+    SELECT a.id, a.marked_at, a.method, e.status, e.payment_status,
            coalesce(nullif(btrim(e.full_name), ''), u.display_name, '') AS name,
            CASE WHEN a.device_id IS NOT NULL THEN d.name
                 WHEN a.method = 'staff' THEN coalesce(s.display_name, '')
@@ -413,6 +474,8 @@ export async function logVisits(
       name: row.name,
       method: gymAttendanceMethodSchema.parse(row.method),
       by: row.by,
+      status: row.status,
+      payment: row.payment_status,
     })),
   };
 }
