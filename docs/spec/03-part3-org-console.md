@@ -2666,7 +2666,10 @@ list, by test.
 
 **Day-circles** (2026-09-17, amended 2026-10-02): on a week view, seven circles, Monday to
 Sunday, for the days THAT board counted, so they add up to its number; the Streak's
-circles are its last seven weeks; month and all-time views show none.
+circles are its last seven weeks; month and all-time views show none. **Amended
+2026-10-04 (RULINGS that day):** every period draws the same row — a month and all time
+carry THIS week's seven marks, read beside the board, and the page says so — and a mark
+is a flame, lit and glowing when it counted, its outline when it did not.
 
 **Gyms that use only part of the app** (Kd, 2026-10-02). Gym days and Streak show to
 members only while the gym has recorded a counted visit in the last 30 days; Workout
@@ -2689,6 +2692,25 @@ database and the model must agree on every place and number. Real clocks, each c
 against the tz database: Asia/Kolkata, America/New_York, Europe/London, Asia/Kathmandu,
 Australia/Lord_Howe, America/Santiago, and 29 February 2028. The deliberate breaks
 (CLAUDE.md §4) are on Hide me.
+
+**The board in the console, as built (19a-iii).** A Leaderboard page in the menu for staff
+holding the tick `leaderboard.manage` ("Run the leaderboard": owner and manager; the owner
+can give it to a trainer; it gates the reads too). Everyone with a number, a hundred a
+page, by full name (the app name, or the record's when the app's is automatic; never an
+email), ties by name: a person members see carries the place members see, from the same
+function that ranks the members' board; a hidden person carries the reason and no place.
+A person's panel: their place and number on all three boards, hidden or not, and what
+counted for each (visits with time and desk or staff; a workout as its date only); their
+posts join it with 19b. Take off the board / Put back (`gym_members.hidden_from_boards`),
+behind a box naming who changes and what is kept; noted in `audit_log` once. Which boards
+members see: `gyms.leaderboard_boards_off` (migration `0067`), a switch a board; a
+switched-off board answers members `switched_off` with no row, no number and no profile
+line, and their app draws no tab for it. Each switch says why its board is not showing
+(switched off · no plan · nobody checked in for 30 days · fewer than 3 people), and the
+page says how many people on the list have no app (Members' own match). A lapsed gym's
+staff still read it and change nothing. A place is the place members see: while members
+see no board (switched off, no plan, no check-ins, fewer than 3), nobody carries one. A
+switch is one board a request, so two staff never undo each other.
 
 **Jobs** (ROADMAP 19a-i to 19a-iv): the members' board with Gym days and Streak · Workout
 days · the board in the console · fixing a visit (after 16b-ii).

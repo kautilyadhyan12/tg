@@ -26,7 +26,7 @@ const ConsoleLayout = (await import('../../components/console/ConsoleLayout')).d
 const More = (await import('./More')).default;
 const Overview = (await import('./Overview')).default;
 
-const GATES = ['members.confirm', 'attendance.read', 'schedule.manage', 'staff.manage', 'org.manage'];
+const GATES = ['members.confirm', 'attendance.read', 'schedule.manage', 'staff.manage', 'org.manage', 'leaderboard.manage'];
 const BASE = '/console/iron-house';
 
 /** What the menu offered this person before R1. */
@@ -38,6 +38,7 @@ function openableToday(privileges) {
     ...(has('members.confirm') ? [`${BASE}/leads`] : []),
     ...(has('attendance.read') ? [`${BASE}/attendance`] : []),
     ...(has('schedule.manage') ? [`${BASE}/classes`] : []),
+    ...(has('leaderboard.manage') ? [`${BASE}/leaderboard`] : []),
     ...(has('staff.manage') || has('org.manage') ? [`${BASE}/settings`] : []),
   ].sort();
 }
@@ -80,7 +81,7 @@ function menus() {
   return { rail, tabs, more };
 }
 
-/** Every one of the 32 mixes of the five permissions that decide a page. */
+/** Every one of the 64 mixes of the six permissions that decide a page. */
 const EVERY_MIX = Array.from({ length: 2 ** GATES.length }, (_, bits) =>
   ['members.read', ...GATES.filter((_, i) => bits & (1 << i))],
 );

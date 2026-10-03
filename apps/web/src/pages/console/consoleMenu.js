@@ -3,6 +3,7 @@ import { canManageStaff } from './staffView';
 import { canManageOrg } from './gymDetailsView';
 import { canReadAttendance } from './attendanceView';
 import { canManageSchedule } from './classesView';
+import { canSeeLeaderboard } from './leaderboardStaffView';
 
 /** Settings holds two sections gated on two permissions (Staff: `staff.manage`; the gym's
  *  details: `org.manage`, which an owner may tick across to a manager), so its page is drawn
@@ -31,6 +32,13 @@ export function consoleMenu(orgSlug, privileges, orgType) {
       phone: 'tab',
     },
     canManageSchedule(privileges) && { key: 'classes', to: `${base}/classes`, end: false, label: 'Classes', phone: 'tab' },
+    canSeeLeaderboard(privileges) && {
+      key: 'leaderboard',
+      to: `${base}/leaderboard`,
+      end: false,
+      label: 'Leaderboard',
+      phone: 'more',
+    },
     settingsIsReachable(privileges) && {
       key: 'settings',
       to: `${base}/settings`,
