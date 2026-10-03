@@ -131,6 +131,12 @@ const envSchema = z.object({
     .enum(["on", "off"])
     .default("off")
     .transform((value) => value === "on"),
+  // The member's own "I'm here" tap (ROADMAP 16c; RULINGS 2026-09-21): a visit is made at
+  // the front desk, so the tap's route answers 410. "on" exists for its old suite.
+  MEMBER_TAP: z
+    .enum(["on", "off"])
+    .default("off")
+    .transform((value) => value === "on"),
   // Paddle sells our plans (ROADMAP Stage 3 item 1a). Sandbox until Kd's live account is
   // approved; each key is checked against the environment below at boot. All unset:
   // paying online answers 503 and the webhook answers 503; the rest of the app runs.

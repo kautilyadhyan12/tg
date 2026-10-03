@@ -71,7 +71,6 @@ export default function OverviewNumbers({
   overview,
   day,
   orgSlug,
-  manualAttendanceEnabled,
   gymId,
   orgType,
   privileges,
@@ -92,7 +91,7 @@ export default function OverviewNumbers({
       <ConsoleCard>
         <Header href={attendanceHref} />
         <p className="text-sm mt-3" style={{ color: 'rgba(255,255,255,0.55)' }}>
-          {nothingRecordedSentence(manualAttendanceEnabled)}
+          {nothingRecordedSentence()}
         </p>
       </ConsoleCard>
     );

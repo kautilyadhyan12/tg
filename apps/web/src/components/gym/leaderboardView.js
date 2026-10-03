@@ -59,7 +59,7 @@ export function whatCounts(boardId, gymName) {
   }
   return [
     `One gym day for each day you were checked in at ${gymName} — a scan at the front desk or a check-in by staff.`,
-    "Two visits on one day are one gym day. Tapping \"I'm here\" in the app doesn't count.",
+    'Two visits on one day are one gym day. Nothing you tap or type yourself counts.',
     common,
   ];
 }

@@ -111,14 +111,10 @@ export function numbersState(overview) {
  *  never asked about. "Nobody has marked attendance yet" would be false for a
  *  gym that was busy nine weeks ago — so the sentence says what is known.
  *
- *  **The switch outranks it**, because a gym whose button is off has no members
- *  who COULD have marked, and telling that owner "nobody came" points them at
- *  their members when the answer is in Settings. */
-export function nothingRecordedSentence(manualAttendanceEnabled) {
-  if (manualAttendanceEnabled === false) {
-    return 'Nobody can mark attendance — the switch is off in Settings.';
-  }
-  return `Nobody has marked attendance in the last ${OVERVIEW_WEEKS} weeks.`;
+ *  The gym's old "members can mark themselves in" switch is not asked (ROADMAP
+ *  16c): the tap is off for every gym and a visit is made at the front desk. */
+export function nothingRecordedSentence() {
+  return `Nobody has checked in in the last ${OVERVIEW_WEEKS} weeks.`;
 }
 
 /** TODAY, SO FAR — and it is `dayTotalsLine`, not a second spelling of it.

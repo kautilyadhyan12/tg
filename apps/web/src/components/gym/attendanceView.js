@@ -31,6 +31,11 @@
 // could land in either: they cannot any more — the server refuses first — and
 // they survive for the visits recorded BEFORE the rule, and for gyms the rule
 // does not reach.
+//
+// THE TAP IS SWITCHED OFF (ROADMAP 16c): a visit is made at the front desk. The tap's
+// own rules below — `markedSentence`, `attendanceShutReason`, the two "isn't open"
+// sentences, `withVisit`, `mergeVisits` — are read by no screen now and are kept, with
+// their tests, beside the server's switched-off route. The calendar's rules are live.
 import { orgWords } from '@app/shared';
 import { clockLabel, closureDateLabel, gymToday, isoWeekdayOfDay } from '../../pages/console/hoursView';
 

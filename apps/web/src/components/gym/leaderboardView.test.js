@@ -52,7 +52,7 @@ describe('the leaderboard in words', () => {
 
   it('says what each board counts, and that the old tap does not', () => {
     expect(whatCounts('gym_days', 'Iron House').join(' ')).toMatch(/front desk/);
-    expect(whatCounts('gym_days', 'Iron House').join(' ')).toMatch(/I'm here" in the app doesn't count/);
+    expect(whatCounts('gym_days', 'Iron House').join(' ')).toMatch(/Nothing you tap or type yourself counts/);
     expect(whatCounts('streak', 'Iron House').join(' ')).toMatch(/checked nobody in doesn't count and doesn't break it/);
   });
 

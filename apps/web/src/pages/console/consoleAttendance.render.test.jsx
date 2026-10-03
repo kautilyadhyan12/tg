@@ -373,15 +373,16 @@ describe('an empty day says WHICH empty', () => {
 
   // THE :8267/:8343 CLASS, which this project has shipped once. The three cases
   // look identical in the data and only one of them is a problem.
-  it('tells the owner the app button is switched off, and that the desk and staff still check people in', async () => {
+  // The tap is off for every gym and its switch has left Settings (ROADMAP 16c), so a
+  // gym that once turned it off is not pointed at a switch that is no longer there.
+  it('says nothing about a switch to a gym that once turned the app button off', async () => {
     api.getMine.mockResolvedValue({
       data: { orgs: [{ ...ORG, manualAttendanceEnabled: false }], formerOrgs: [] },
     });
     api.getAttendanceDay.mockResolvedValue(empty());
     drawScreen();
-    await waitFor(() => expect(screen.getByText(/can't mark themselves in from the app/i)).toBeTruthy());
-    expect(screen.getByText(/switched off in Settings/i)).toBeTruthy();
-    expect(screen.getByText(/front desk and staff can still check them in/i)).toBeTruthy();
+    await waitFor(() => expect(screen.getByText(/nobody has checked in on this day yet/i)).toBeTruthy());
+    expect(document.body.textContent).not.toMatch(/switched off|in Settings|mark themselves/i);
   });
 
 

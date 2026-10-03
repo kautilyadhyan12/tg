@@ -318,6 +318,10 @@ export const orgSummarySchema = z.object({
   clockFormat: gymClockFormatSchema.default('24h'),
   /** MAY A MEMBER MARK THEMSELVES PRESENT (:26469 §1.4, the owner's switch).
    *
+   *  **KEPT; NO SCREEN READS IT (ROADMAP 16c).** The tap is switched off for every gym
+   *  (`MEMBER_TAP`), so the button this decided is drawn nowhere. What follows is the
+   *  tap's own history.
+   *
    *  On the org row for `clockFormat`'s reason: the console holds this row
    *  before it asks for anything else, and the member's gym card needs it to
    *  decide whether to DRAW the "I'm here" button at all — **absent, never
@@ -2277,7 +2281,8 @@ export type RemoveGymClosureResponse = z.infer<typeof removeGymClosureResponseSc
 /* ─────────────────────────── ATTENDANCE ───────────────────────────
  *
  *  Kd 2026-08-31 (:26469) and 2026-09-01 (:27900 + :27992, :28055, :28107).
- *  A member taps "I'm here"; the gym sees who came.
+ *  A member tapped "I'm here"; the gym sees who came. Since ROADMAP 16c the tap is
+ *  switched off and a visit is made at the front desk (`checkin.ts`).
  */
 
 /** HOW A VISIT WAS MARKED. **Only `manual` is reachable today** — :26586 struck

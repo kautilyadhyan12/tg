@@ -406,11 +406,6 @@ export default function Overview() {
           overview={overview.data}
           day={day}
           orgSlug={orgSlug}
-          /* "Nobody came" and "nobody COULD come" are different sentences with
-             different next moves, and the switch is what tells them apart
-             (`emptyDayReason`'s rule, one screen over). It rides on the org row
-             this screen already holds — no read of its own. */
-          manualAttendanceEnabled={org.manualAttendanceEnabled}
           /* The words this panel and the cheer button speak (roadmap 2b). */
           orgType={org.orgType}
           /* THE CHEER'S THREE FACTS, and each is a DIFFERENT question the panel
