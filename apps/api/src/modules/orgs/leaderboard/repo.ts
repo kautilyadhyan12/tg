@@ -1,7 +1,7 @@
 // THE LEADERBOARD'S READS (spec Part 3 §15.5). Fresh, never stored: one query a board,
 // worked out from the visits and workouts each time it opens.
 import type { PendingQuery, Row, Sql, TransactionSql } from "postgres";
-import { LEADERBOARD_CHECKIN_DAYS, type LeaderboardWorkoutNotCounted } from "@app/shared";
+import { LEADERBOARD_BOARDS, LEADERBOARD_CHECKIN_DAYS, type LeaderboardBoard, type LeaderboardWorkoutNotCounted } from "@app/shared";
 import { countedDays, streaks, visitsWithOwner } from "./visits.js";
 import { countedWorkoutDays, memberWorkouts } from "./workouts.js";
 
@@ -15,16 +15,22 @@ export interface BoardGym {
   live: boolean;
   /** The gym counted a visit in the last 30 days. */
   checkingIn: boolean;
+  /** The boards the gym switched off for its members. */
+  boardsOff: LeaderboardBoard[];
 }
+
+/** The stored names, in the boards' own order; anything else is dropped. */
+const asBoards = (stored: readonly string[]): LeaderboardBoard[] => LEADERBOARD_BOARDS.filter((b) => stored.includes(b));
 
 /** The gym, its own today at `now`, and whether its members may see a board. */
 export async function boardGym(sql: SqlOrTx, gymId: string, now: Date): Promise<BoardGym | null> {
-  const rows = await sql<{ name: string; timezone: string; today: string; live: boolean; checking_in: boolean }[]>`
+  const rows = await sql<{ name: string; timezone: string; today: string; live: boolean; checking_in: boolean; boards_off: string[] }[]>`
     WITH g AS (
-      SELECT id, name, timezone, (${now.toISOString()}::timestamptz AT TIME ZONE timezone)::date AS today
+      SELECT id, name, timezone, leaderboard_boards_off AS boards_off,
+             (${now.toISOString()}::timestamptz AT TIME ZONE timezone)::date AS today
       FROM gyms WHERE id = ${gymId}
     )
-    SELECT g.name, g.timezone, g.today::text AS today,
+    SELECT g.name, g.timezone, g.today::text AS today, g.boards_off,
            EXISTS (
              SELECT 1 FROM subscriptions s
              WHERE s.owner_type = 'gym' AND s.owner_id = g.id AND s.status IN ('trialing','active','past_due')
@@ -37,7 +43,14 @@ export async function boardGym(sql: SqlOrTx, gymId: string, now: Date): Promise<
     FROM g`;
   const row = rows[0];
   if (row === undefined) return null;
-  return { name: row.name, timezone: row.timezone, today: row.today, live: row.live, checkingIn: row.checking_in };
+  return {
+    name: row.name,
+    timezone: row.timezone,
+    today: row.today,
+    live: row.live,
+    checkingIn: row.checking_in,
+    boardsOff: asBoards(row.boards_off),
+  };
 }
 
 /** A live app member of the gym and the facts that decide whether and how they are shown. */
@@ -46,6 +59,8 @@ export interface MemberFacts {
   displayName: string;
   email: string | null;
   recordName: string | null;
+  /** Their record on the gym's list, while it is a current one. */
+  entryId: string | null;
   isStaff: boolean;
   takenOff: boolean;
   hideMe: boolean;
@@ -58,6 +73,7 @@ interface RawFacts {
   display_name: string;
   email: string | null;
   record_name: string | null;
+  entry_id: string | null;
   is_staff: boolean;
   taken_off: boolean;
   hide_me: boolean;
@@ -69,6 +85,7 @@ const toFacts = (r: RawFacts): MemberFacts => ({
   displayName: r.display_name,
   email: r.email,
   recordName: r.record_name,
+  entryId: r.entry_id,
   isStaff: r.is_staff,
   takenOff: r.taken_off,
   hideMe: r.hide_me,
@@ -98,6 +115,7 @@ function members(sql: SqlOrTx, gymId: string, at: string) {
   return sql`
     SELECT m.user_id, u.display_name, u.email::text AS email,
            nullif(btrim(e.full_name), '') AS record_name,
+           CASE WHEN e.former_at IS NULL THEN e.id END AS entry_id,
            EXISTS (SELECT 1 FROM gym_staff s WHERE s.gym_id = m.gym_id AND s.user_id = m.user_id) AS is_staff,
            m.hidden_from_boards AS taken_off,
            u.leaderboard_opt_out AS hide_me,
@@ -303,4 +321,60 @@ export async function setVisibility(sql: SqlOrTx, userId: string, hidden: boolea
         leaderboard_shown_at = CASE WHEN ${hidden} THEN leaderboard_shown_at
                                     ELSE coalesce(leaderboard_shown_at, now()) END
     WHERE id = ${userId} AND status = 'active'`;
+}
+
+// ── THE BOARD IN THE CONSOLE (19a-iii) ──
+
+/** People on the gym's list who are not in the app: on no board. */
+export async function notInAppCount(sql: SqlOrTx, gymId: string): Promise<number> {
+  const rows = await sql<{ n: number }[]>`
+    SELECT count(*)::int AS n
+    FROM gym_member_list_entries e
+    WHERE e.gym_id = ${gymId} AND e.former_at IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM gym_members m
+        WHERE m.gym_id = e.gym_id AND m.entry_id = e.id AND m.removed_at IS NULL
+      )`;
+  return rows[0]?.n ?? 0;
+}
+
+/** Take a live member off the gym's boards, or put them back. `null`: not a live member of
+ *  this gym. `changed` is false when they were already so. */
+export async function setTakenOff(
+  tx: TransactionSql,
+  gymId: string,
+  userId: string,
+  takenOff: boolean,
+): Promise<{ changed: boolean } | null> {
+  const rows = await tx<{ taken_off: boolean }[]>`
+    SELECT m.hidden_from_boards AS taken_off
+    FROM gym_members m
+    JOIN users u ON u.id = m.user_id AND u.status = 'active'
+    WHERE m.gym_id = ${gymId} AND m.user_id = ${userId} AND m.removed_at IS NULL
+    FOR UPDATE OF m`;
+  const row = rows[0];
+  if (row === undefined) return null;
+  if (row.taken_off === takenOff) return { changed: false };
+  await tx`
+    UPDATE gym_members SET hidden_from_boards = ${takenOff}
+    WHERE gym_id = ${gymId} AND user_id = ${userId} AND removed_at IS NULL`;
+  return { changed: true };
+}
+
+/** The boards switched off for members, replaced whole. Call under the gym's lock. */
+export async function setBoardsOff(
+  tx: TransactionSql,
+  gymId: string,
+  off: readonly LeaderboardBoard[],
+): Promise<{ before: LeaderboardBoard[]; after: LeaderboardBoard[] } | null> {
+  const rows = await tx<{ boards_off: string[] }[]>`
+    SELECT leaderboard_boards_off AS boards_off FROM gyms WHERE id = ${gymId}`;
+  const row = rows[0];
+  if (row === undefined) return null;
+  const before = asBoards(row.boards_off);
+  const after = asBoards(off);
+  if (before.join() !== after.join()) {
+    await tx`UPDATE gyms SET leaderboard_boards_off = ${after} WHERE id = ${gymId}`;
+  }
+  return { before, after };
 }

@@ -2,7 +2,7 @@
 // §15.5). The worst thing: a hidden person seen by somebody else, in a row, a count or a gap.
 import { describe, expect, it } from "vitest";
 import { LEADERBOARD_TOP } from "@app/shared";
-import { hiddenReason, isAutomaticName, rankBoard, shownName, type BoardPerson } from "../src/modules/orgs/leaderboard/rank.js";
+import { fullName, hiddenReason, isAutomaticName, rankBoard, rankStaffBoard, shownName, type BoardPerson } from "../src/modules/orgs/leaderboard/rank.js";
 import { addDays, mondayOf, periodRange, streakWeeks } from "../src/modules/orgs/leaderboard/periods.js";
 
 let n = 0;
@@ -191,5 +191,111 @@ describe("periods, in the gym's calendar", () => {
     expect(streakWeeks("2028-02-29")).toEqual(["2028-01-17", "2028-01-24", "2028-01-31", "2028-02-07", "2028-02-14", "2028-02-21", "2028-02-28"]);
     expect(mondayOf("2026-10-04")).toBe("2026-09-28");
     expect(addDays("2028-02-28", 1)).toBe("2028-02-29");
+  });
+});
+
+// THE BOARD AS STAFF SEE IT (19a-iii): everyone with a number, full names, and for each
+// person either the place MEMBERS see or the reason members do not see them.
+describe("the staff board", () => {
+  const staffView = (people: BoardPerson[]) => rankStaffBoard(people).rows.map((r) => [r.name, r.place, r.value, r.hidden]);
+
+  it("every way of being hidden: listed with the reason and no place, and nobody else's place moves", () => {
+    const cases: [Partial<BoardPerson>, string][] = [
+      [{ isStaff: true }, "staff"],
+      [{ takenOff: true }, "taken_off"],
+      [{ hideMe: true }, "hide_me"],
+      [{ under18: true }, "under_18"],
+      [{ displayName: "New User" }, "no_name"],
+      // The first reason wins, in the order members' own greyed row reads it.
+      [{ isStaff: true, takenOff: true, hideMe: true, under18: true }, "staff"],
+      [{ takenOff: true, hideMe: true, under18: true }, "taken_off"],
+      [{ hideMe: true, under18: true }, "hide_me"],
+    ];
+    for (const [facts, reason] of cases) {
+      const hidden = person("Hal Hidden", 9, facts);
+      const shown = [person("Ann Ames", 3), person("Bob Bell", 3), person("Cat Cole", 1)];
+      const board = rankStaffBoard([shown[2] as BoardPerson, hidden, shown[0] as BoardPerson, shown[1] as BoardPerson]);
+      expect(board.rows.map((r) => [r.userId, r.place, r.hidden])).toEqual([
+        [hidden.userId, null, reason],
+        [shown[0]?.userId, 1, null],
+        [shown[1]?.userId, 1, null],
+        [shown[2]?.userId, 3, null],
+      ]);
+      expect([board.ranked, board.status]).toEqual([3, "shown"]);
+    }
+  });
+
+  it("a place on the staff board is the place on the members' board, for every person and every mix", () => {
+    // A seeded sweep: 300 boards of up to 12 people with ties and every hidden reason.
+    let seed = 20261003;
+    const next = (mod: number): number => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed % mod;
+    };
+    const names = ["Ann Ames", "Bob Bell", "Cat Cole", "Dev Dutt", "Eve Ely", "New User", "Flo", "Gus van Gil"];
+    for (let round = 0; round < 300; round += 1) {
+      const people = Array.from({ length: 1 + next(12) }, () =>
+        person(names[next(names.length)] ?? "Ann Ames", next(5), {
+          isStaff: next(6) === 0,
+          takenOff: next(6) === 0,
+          hideMe: next(6) === 0,
+          under18: next(6) === 0,
+          recordName: next(3) === 0 ? "Rec Ord" : null,
+        }),
+      );
+      const staff = rankStaffBoard(people);
+      const members = rankBoard(people, "nobody");
+      // Members' rows are exactly staff's unhidden rows, with the same places and numbers.
+      const unhidden = staff.rows.filter((r) => r.hidden === null);
+      expect(staff.ranked).toBe(unhidden.length);
+      expect(staff.status).toBe(members.status);
+      if (members.status === "shown") {
+        const seen = new Map(members.rows.map((r) => [r.userId, [r.place, r.value]]));
+        for (const r of unhidden) expect(seen.get(r.userId)).toEqual([r.place, r.value]);
+        expect(members.rows.length).toBe(unhidden.length);
+      }
+      // Everyone with a number is listed once; nobody at 0 is.
+      expect(staff.rows.map((r) => r.userId).sort()).toEqual(people.filter((p) => p.value > 0).map((p) => p.userId).sort());
+      for (const r of staff.rows) expect(r.place === null).toBe(r.hidden !== null);
+    }
+  });
+
+  it("ties are listed by full name, a person with no name last; nobody at 0 is listed", () => {
+    expect(
+      staffView([
+        person("Zed Young", 2),
+        person("New User", 2),
+        person("Amy Zane", 2),
+        person("Amy Abel", 2, { hideMe: true }),
+        person("Nil Nought", 0),
+      ]),
+    ).toEqual([
+      ["Amy Abel", null, 2, "hide_me"],
+      ["Amy Zane", 1, 2, null],
+      ["Zed Young", 1, 2, null],
+      [null, null, 2, "no_name"],
+    ]);
+  });
+
+  it("fewer than three people members can see: staff still see the rows, and are told members see none", () => {
+    const board = rankStaffBoard([person("Ann Ames", 2), person("Bob Bell", 1), person("Hal Hidden", 5, { hideMe: true })]);
+    expect([board.status, board.ranked, board.rows.length]).toEqual(["too_few", 2, 3]);
+  });
+
+  it("the full name: every word they typed, the record's when the app's is automatic, and never an address", () => {
+    const cases: [Partial<BoardPerson> & { displayName: string }, string | null, string][] = [
+      [{ displayName: "Priya Sharma" }, "Priya Sharma", "PS"],
+      [{ displayName: "  Maria   de la  Cruz " }, "Maria de la Cruz", "MC"],
+      [{ displayName: "Cher" }, "Cher", "C"],
+      [{ displayName: "New User", recordName: "Ravi Kumar Das" }, "Ravi Kumar Das", "RD"],
+      [{ displayName: "ravi77", email: "ravi77@example.com", recordName: "Ravi Das" }, "Ravi Das", "RD"],
+      [{ displayName: "ravi77", email: "ravi77@example.com" }, null, "?"],
+      [{ displayName: "someone@example.com" }, null, "?"],
+      [{ displayName: "", recordName: null }, null, "?"],
+      [{ displayName: "élodie östberg" }, "élodie östberg", "ÉÖ"],
+    ];
+    for (const [facts, name, initials] of cases) {
+      expect(fullName({ email: null, recordName: null, ...facts })).toEqual({ name, initials });
+    }
   });
 });

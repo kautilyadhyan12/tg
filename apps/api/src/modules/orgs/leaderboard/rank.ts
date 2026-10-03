@@ -12,6 +12,7 @@ import {
   type LeaderboardMe,
   type LeaderboardRow,
   type LeaderboardStatus,
+  type StaffLeaderboardRow,
 } from "@app/shared";
 
 /** A live app member of the gym, as the repo read them. */
@@ -73,8 +74,9 @@ export interface Board {
 
 const byName = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
-/** Places for the people the viewer may see, and the viewer's own line. */
-export function rankBoard(people: readonly BoardPerson[], viewerId: string): Board {
+/** Everybody members may see, in order, each with their place. Hidden people are left out
+ *  before a place is given. */
+function placedRows(people: readonly BoardPerson[], viewerId: string | null): LeaderboardRow[] {
   const shown: { person: BoardPerson; name: string; initials: string }[] = [];
   for (const person of people) {
     if (person.value <= 0 || hiddenReason(person) !== null) continue;
@@ -103,7 +105,12 @@ export function rankBoard(people: readonly BoardPerson[], viewerId: string): Boa
       isMe: s.person.userId === viewerId,
     });
   });
+  return placed;
+}
 
+/** Places for the people the viewer may see, and the viewer's own line. */
+export function rankBoard(people: readonly BoardPerson[], viewerId: string): Board {
+  const placed = placedRows(people, viewerId);
   const enough = placed.length >= LEADERBOARD_MIN_PEOPLE;
   const viewer = people.find((p) => p.userId === viewerId);
   const value = viewer?.value ?? 0;
@@ -124,4 +131,55 @@ export function rankBoard(people: readonly BoardPerson[], viewerId: string): Boa
     rows: enough ? placed.slice(0, LEADERBOARD_TOP) : [],
     me,
   };
+}
+
+/** The person's whole name for staff, as on Members: what they typed, or their record's
+ *  name when the app's is automatic; null with neither. Never an email. */
+export function fullName(person: Pick<BoardPerson, "displayName" | "email" | "recordName">): { name: string | null; initials: string } {
+  const source = isAutomaticName(person.displayName, person.email) ? (person.recordName ?? "") : person.displayName;
+  const parts = words(source);
+  const first = parts[0];
+  if (first === undefined) return { name: null, initials: "?" };
+  const last = parts.length > 1 ? parts[parts.length - 1] : undefined;
+  const initials = `${firstLetter(first)}${last === undefined ? "" : firstLetter(last)}`.toUpperCase();
+  return { name: parts.join(" "), initials };
+}
+
+export interface StaffBoard {
+  /** What members see: the rows, or nothing while fewer than three are on it. */
+  status: Extract<LeaderboardStatus, "shown" | "too_few">;
+  /** People members see on it. */
+  ranked: number;
+  /** Everyone with a number, the hidden included: by number, then by full name, a person
+   *  with no name last. */
+  rows: StaffLeaderboardRow[];
+}
+
+/** The board as staff see it. A place is the one MEMBERS see, from the same function that
+ *  ranks their board; a hidden person has none, only the reason. */
+export function rankStaffBoard(people: readonly BoardPerson[]): StaffBoard {
+  const placed = placedRows(people, null);
+  const placeOf = new Map(placed.map((row) => [row.userId, row.place]));
+  const rows = people
+    .filter((person) => person.value > 0)
+    .map((person): StaffLeaderboardRow => {
+      const named = fullName(person);
+      return {
+        userId: person.userId,
+        name: named.name,
+        initials: named.initials,
+        place: placeOf.get(person.userId) ?? null,
+        value: person.value,
+        circles: person.circles,
+        hidden: hiddenReason(person),
+      };
+    })
+    .sort(
+      (a, b) =>
+        b.value - a.value ||
+        Number(a.name === null) - Number(b.name === null) ||
+        byName(a.name ?? "", b.name ?? "") ||
+        byName(a.userId, b.userId),
+    );
+  return { status: placed.length >= LEADERBOARD_MIN_PEOPLE ? "shown" : "too_few", ranked: placed.length, rows };
 }

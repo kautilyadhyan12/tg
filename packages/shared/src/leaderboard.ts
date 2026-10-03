@@ -35,8 +35,8 @@ export type LeaderboardHiddenReason = (typeof LEADERBOARD_HIDDEN_REASONS)[number
 
 /** shown: the rows · too_few: fewer than three people on it · no_checkins: the gym has
  *  checked nobody in for 30 days (Gym days and Streak only) · paused: the gym's plan has
- *  lapsed. */
-export const LEADERBOARD_STATUSES = ["shown", "too_few", "no_checkins", "paused"] as const;
+ *  lapsed · switched_off: the gym switched this board off for its members. */
+export const LEADERBOARD_STATUSES = ["shown", "too_few", "no_checkins", "paused", "switched_off"] as const;
 export type LeaderboardStatus = (typeof LEADERBOARD_STATUSES)[number];
 
 /** One circle: a day on a week view of a day board, or a week on the Streak (oldest first,
@@ -106,6 +106,8 @@ export const leaderboardResponseSchema = z
     /** What each circle stands for: seven days (a week view) or seven Mondays (the Streak). */
     circleDays: z.array(day).length(7).nullable(),
     status: z.enum(LEADERBOARD_STATUSES),
+    /** The boards the gym has switched off for its members. */
+    boardsOff: z.array(z.enum(LEADERBOARD_BOARDS)),
     /** People on the board. */
     ranked: z.number().int().min(0),
     rows: z.array(leaderboardRowSchema).max(LEADERBOARD_TOP),
@@ -210,3 +212,136 @@ export const leaderboardVisibilitySchema = z
 export type LeaderboardVisibility = z.infer<typeof leaderboardVisibilitySchema>;
 
 export const setLeaderboardVisibilityRequestSchema = z.object({ hidden: z.boolean() }).strict();
+
+// ── THE BOARD IN THE CONSOLE (19a-iii) ──
+// Staff holding `leaderboard.manage` see everyone, full names, the hidden with the reason.
+
+/** Rows on one page of the staff board. */
+export const LEADERBOARD_STAFF_PAGE = 100;
+
+export const staffLeaderboardQuerySchema = z
+  .object({
+    board: z.enum(LEADERBOARD_BOARDS),
+    period: z.enum(LEADERBOARD_PERIODS).default("this_week"),
+    page: z.coerce.number().int().min(1).max(10_000).default(1),
+  })
+  .strict();
+export type StaffLeaderboardQuery = z.infer<typeof staffLeaderboardQuerySchema>;
+
+export const staffLeaderboardRowSchema = z
+  .object({
+    userId: z.string().uuid(),
+    /** The full name, or null when the person has typed none and their record has none. */
+    name: z.string().nullable(),
+    initials: z.string(),
+    /** The place members see them in; null for anyone hidden from members. */
+    place: z.number().int().min(1).nullable(),
+    value: z.number().int().min(1),
+    circles: z.array(leaderboardCircleSchema).length(7).nullable(),
+    /** Why members do not see this person, or null when they do. */
+    hidden: z.enum(LEADERBOARD_HIDDEN_REASONS).nullable(),
+  })
+  .strict();
+export type StaffLeaderboardRow = z.infer<typeof staffLeaderboardRowSchema>;
+
+export const staffLeaderboardResponseSchema = z
+  .object({
+    gymId: z.string().uuid(),
+    gymName: z.string(),
+    timezone: z.string(),
+    board: z.enum(LEADERBOARD_BOARDS),
+    period: z.enum(LEADERBOARD_PERIODS).nullable(),
+    from: day.nullable(),
+    to: day,
+    circleDays: z.array(day).length(7).nullable(),
+    /** What the gym's members see of THIS board and period right now, and so why it is not
+     *  showing. */
+    memberStatus: z.enum(LEADERBOARD_STATUSES),
+    /** The gym's plan is live; it counted a visit in the last 30 days. With `boardsOff`,
+     *  why any other board is not showing. */
+    live: z.boolean(),
+    checkingIn: z.boolean(),
+    boardsOff: z.array(z.enum(LEADERBOARD_BOARDS)),
+    /** People members see on this board. */
+    ranked: z.number().int().min(0),
+    /** Everyone with a number on it, the hidden included. */
+    total: z.number().int().min(0),
+    page: z.number().int().min(1),
+    pages: z.number().int().min(1),
+    rows: z.array(staffLeaderboardRowSchema).max(LEADERBOARD_STAFF_PAGE),
+    /** People on the gym's list who are not in the app, so are on no board. */
+    notInApp: z.number().int().min(0),
+    asOf: z.string().datetime(),
+  })
+  .strict();
+export type StaffLeaderboardResponse = z.infer<typeof staffLeaderboardResponseSchema>;
+
+/** One person, for staff: their place on every board, hidden or not. */
+export const staffLeaderboardProfileResponseSchema = z
+  .object({
+    userId: z.string().uuid(),
+    name: z.string().nullable(),
+    initials: z.string(),
+    hidden: z.enum(LEADERBOARD_HIDDEN_REASONS).nullable(),
+    /** Staff took them off the board; another reason may be the one shown. */
+    takenOff: z.boolean(),
+    isStaff: z.boolean(),
+    /** Their record on the gym's list, when they have one. */
+    entryId: z.string().uuid().nullable(),
+    boards: z.array(
+      z
+        .object({
+          board: z.enum(LEADERBOARD_BOARDS),
+          period: z.enum(LEADERBOARD_PERIODS).nullable(),
+          place: z.number().int().min(1).nullable(),
+          value: z.number().int().min(0),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+export type StaffLeaderboardProfileResponse = z.infer<typeof staffLeaderboardProfileResponseSchema>;
+
+/** What counted for anyone, for staff. A workout is a date and nothing else: staff never
+ *  see what the workout was or when in the day it was done. */
+export const staffLeaderboardCountedResponseSchema = z
+  .object({
+    userId: z.string().uuid(),
+    gymName: z.string(),
+    timezone: z.string(),
+    board: z.enum(LEADERBOARD_BOARDS),
+    period: z.enum(LEADERBOARD_PERIODS).nullable(),
+    from: day.nullable(),
+    to: day,
+    value: z.number().int().min(0),
+    days: z.array(z.object({ day, visits: z.array(leaderboardVisitSchema).min(1) }).strict()),
+    notCounted: z.array(
+      z.object({ day, at: z.string().datetime(), why: z.enum(["own_tap", "app_code"]) }).strict(),
+    ),
+    workoutDays: z.array(z.object({ day, workouts: z.number().int().min(1) }).strict()),
+    workoutsNotCounted: z.array(
+      z
+        .object({ day, why: z.enum(LEADERBOARD_WORKOUT_NOT_COUNTED), daysLate: z.number().int().min(1).nullable() })
+        .strict(),
+    ),
+    weeks: z.array(
+      z
+        .object({
+          weekStart: day,
+          state: z.enum(["counted", "missed", "skipped", "open"]),
+          gymDays: z.number().int().min(0),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+export type StaffLeaderboardCountedResponse = z.infer<typeof staffLeaderboardCountedResponseSchema>;
+
+export const setLeaderboardTakenOffRequestSchema = z.object({ takenOff: z.boolean() }).strict();
+export const leaderboardTakenOffResponseSchema = z.object({ takenOff: z.boolean() }).strict();
+
+/** Which boards the gym's members do NOT see. */
+export const setLeaderboardBoardsRequestSchema = z
+  .object({ off: z.array(z.enum(LEADERBOARD_BOARDS)).max(LEADERBOARD_BOARDS.length) })
+  .strict();
+export const leaderboardBoardsResponseSchema = z.object({ boardsOff: z.array(z.enum(LEADERBOARD_BOARDS)) }).strict();
