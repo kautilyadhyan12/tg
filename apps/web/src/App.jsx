@@ -48,6 +48,7 @@ import ConsoleMembersDuplicates from './pages/console/MembersDuplicates';
 import ConsoleAttendance from './pages/console/Attendance';
 import ConsoleClasses  from './pages/console/Classes';
 import ConsoleLeads    from './pages/console/Leads';
+import ConsoleLeaderboard from './pages/console/Leaderboard';
 import ConsoleSettings from './pages/console/Settings';
 import ConsoleMore     from './pages/console/More';
 
@@ -276,6 +277,13 @@ export default function App() {
             <Route path="/console/:orgSlug/classes" element={
               <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
                 <ConsoleLayout><ConsoleClasses /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
+            {/* THE LEADERBOARD FOR STAFF (19a-iii). The nav draws it for `leaderboard.manage`;
+                the server is the enforcement. */}
+            <Route path="/console/:orgSlug/leaderboard" element={
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
+                <ConsoleLayout><ConsoleLeaderboard /></ConsoleLayout>
               </ProtectedRoute>
             } />
             <Route path="/console/:orgSlug/settings" element={

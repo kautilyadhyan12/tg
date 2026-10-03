@@ -6,6 +6,7 @@ import HideMeSwitch from './HideMeSwitch';
 import {
   BOARD_TABS,
   PERIODS,
+  boardTabs,
   circleLabel,
   datesLine,
   dayCountText,
@@ -259,6 +260,8 @@ export default function Leaderboard({ gym }) {
   const [state, setState] = useState({ key: null, error: null, board: null });
   const [info, setInfo] = useState(false);
   const [sheet, setSheet] = useState(null);
+  /** The boards the gym shows its members; all three until the first answer says otherwise. */
+  const [tabs, setTabs] = useState(BOARD_TABS);
   const [visibility, setVisibility] = useState(null);
   const [savingHide, setSavingHide] = useState(false);
   const [hideError, setHideError] = useState(null);
@@ -278,6 +281,14 @@ export default function Leaderboard({ gym }) {
             setBoardId('workout_days');
             return;
           }
+          // A board the gym switched off has no tab: the first one still on is shown.
+          const on = boardTabs(board.boardsOff);
+          if (board.status === 'switched_off' && on.length > 0) {
+            setTabs(on);
+            setBoardId(on[0].id);
+            return;
+          }
+          setTabs(on);
           setState({ key, error: null, board });
         })
         .catch((err) => {
@@ -345,7 +356,7 @@ export default function Leaderboard({ gym }) {
 
       <div className="flex flex-wrap items-center gap-2 mb-2">
         <div role="tablist" aria-label="Boards" className="flex rounded-xl p-0.5" style={{ background: 'rgba(255,255,255,0.05)' }}>
-          {BOARD_TABS.map((t) => (
+          {tabs.map((t) => (
             <button
               key={t.id}
               type="button"
@@ -362,7 +373,7 @@ export default function Leaderboard({ gym }) {
             </button>
           ))}
         </div>
-        {boardId !== 'streak' && (
+        {boardId !== 'streak' && tabs.length > 0 && (
           <select
             aria-label="Period"
             value={period}
@@ -440,7 +451,7 @@ export default function Leaderboard({ gym }) {
             </ol>
           )}
 
-          {me !== null && board.status !== 'no_checkins' && board.status !== 'paused' && (
+          {me !== null && board.status !== 'no_checkins' && board.status !== 'paused' && board.status !== 'switched_off' && (
             <div className="rounded-xl px-2 py-2 mt-1" style={{ background: 'rgba(255,255,255,0.03)', opacity: me.hidden !== null ? 0.6 : 1 }}>
               <button
                 type="button"

@@ -12,6 +12,11 @@ export const BOARD_TABS = [
 const UNIT = { gym_days: 'gym day', workout_days: 'workout day', streak: 'week' };
 const plural = (n, unit) => `${n} ${unit}${n === 1 ? '' : 's'}`;
 
+/** The tabs a member is offered: every board the gym has not switched off. */
+export function boardTabs(boardsOff) {
+  const off = Array.isArray(boardsOff) ? boardsOff : [];
+  return BOARD_TABS.filter((t) => !off.includes(t.id));
+}
 export const PERIODS = [
   { id: 'this_week', label: 'This week' },
   { id: 'last_week', label: 'Last week' },
@@ -87,7 +92,10 @@ export function statusText(board) {
     case 'no_checkins':
       return `${board.gymName} hasn't checked anyone in at the front desk in the last 30 days, so Gym days and Streak aren't showing. Workout days doesn't need the front desk — see that tab.`;
     case 'paused':
-      return `The leaderboard isn't available at ${board.gymName} right now.`;
+      return `The leaderboard isn't available at ${board.gymName} right now.`;    case 'switched_off':
+      return boardTabs(board.boardsOff).length === 0
+        ? `${board.gymName} has switched its leaderboard off.`
+        : `${board.gymName} has switched this board off.`;
     default:
       return null;
   }

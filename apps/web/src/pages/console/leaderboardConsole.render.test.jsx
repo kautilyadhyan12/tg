@@ -1,0 +1,367 @@
+// THE LEADERBOARD IN THE CONSOLE, drawn (ROADMAP 19a-iii; spec Part 3 §15.5). Only the
+// network is mocked: what staff see is read off the real page.
+//
+// The worst thing the screen could do: take somebody off the board that staff did not pick,
+// or do it without the box that names them — so the press is checked against the row opened.
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+
+const svc = {
+  board: vi.fn(),
+  profile: vi.fn(),
+  counted: vi.fn(),
+  setTakenOff: vi.fn(),
+  setBoardsOff: vi.fn(),
+};
+const orgApi = { getMine: vi.fn() };
+vi.mock('../../api/leaderboardApi', () => ({ staffLeaderboardService: svc }));
+vi.mock('../../api/orgsApi', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, orgService: orgApi };
+});
+
+const Leaderboard = (await import('./Leaderboard')).default;
+const { resetConsoleOrgs } = await import('./consoleOrgs');
+
+const ORG = {
+  id: 'g1',
+  slug: 'iron-house',
+  name: 'Iron House',
+  staffRole: 'owner',
+  privileges: ['members.read', 'leaderboard.manage'],
+  timezone: 'Asia/Kolkata',
+  orgType: 'gym',
+  subscription: { status: 'trialing', trialEndsAt: '2099-01-01T00:00:00.000Z' },
+};
+const WEEK = ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09', '2026-10-10', '2026-10-11'];
+const circles = (n) => WEEK.map((_, i) => (i < n ? 'yes' : 'no'));
+const row = (userId, name, place, value, hidden = null) => ({
+  userId,
+  name,
+  initials: name === null ? '?' : name.split(' ').map((w) => w[0]).join(''),
+  place,
+  value,
+  circles: circles(value),
+  hidden,
+});
+const CHEN = row('u-chen', 'Chen Wu', 1, 3);
+const HEMA = row('u-hema', 'Hema Hidden', null, 3, 'hide_me');
+const TARIQ = row('u-tariq', 'Tariq Taken', null, 3, 'taken_off');
+const BILAL = row('u-bilal', 'Bilal Khan', 2, 2);
+
+const answer = (over = {}) => ({
+  gymId: 'g1',
+  gymName: 'Iron House',
+  timezone: 'Asia/Kolkata',
+  board: 'gym_days',
+  period: 'this_week',
+  from: '2026-10-05',
+  to: '2026-10-11',
+  circleDays: WEEK,
+  memberStatus: 'shown',
+  live: true,
+  checkingIn: true,
+  boardsOff: [],
+  ranked: 4,
+  total: 6,
+  page: 1,
+  pages: 1,
+  rows: [CHEN, HEMA, TARIQ, BILAL, row('u-asha', 'Asha Rao', 3, 1), row('u-x', null, null, 1, 'no_name')],
+  notInApp: 12,
+  asOf: '2026-10-07T05:12:00.000Z',
+  ...over,
+});
+const profile = (r, over = {}) => ({
+  userId: r.userId,
+  name: r.name,
+  initials: r.initials,
+  hidden: r.hidden,
+  takenOff: r.hidden === 'taken_off',
+  isStaff: r.hidden === 'staff',
+  entryId: null,
+  boards: [
+    { board: 'gym_days', period: 'this_week', place: r.place, value: r.value },
+    { board: 'workout_days', period: 'this_week', place: null, value: 0 },
+    { board: 'streak', period: null, place: r.place, value: 4 },
+  ],
+  ...over,
+});
+
+const open = (org = ORG) => {
+  orgApi.getMine.mockResolvedValue({ data: { orgs: [org], formerOrgs: [] } });
+  render(
+    <MemoryRouter initialEntries={['/console/iron-house/leaderboard']}>
+      <Routes>
+        <Route path="/console/:orgSlug/leaderboard" element={<Leaderboard />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+};
+const rows = () => screen.getAllByTestId('board-row').map((el) => el.textContent);
+
+beforeEach(() => {
+  resetConsoleOrgs();
+  svc.board.mockResolvedValue(answer());
+  svc.profile.mockImplementation((_gym, userId) => {
+    const r = answer().rows.find((x) => x.userId === userId);
+    return Promise.resolve(profile(r));
+  });
+});
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
+describe('the board for staff', () => {
+  it('lists everyone by full name: a place for people members see, the reason for people they do not', async () => {
+    open();
+    await screen.findByText('Chen Wu');
+    expect(rows()).toEqual([
+      '1stChen Wu3On the board',
+      '—Hema Hidden3Chose Hide me',
+      '—Tariq Taken3Taken off by staff',
+      '2ndBilal Khan2On the board',
+      '3rdAsha Rao1On the board',
+      '—No name yet1No name yet',
+    ]);
+    expect(screen.getByTestId('board-dates').textContent).toBe(
+      "Mon 5 Oct – Sun 11 Oct · Iron House's time · Updated 10:42 am · 6 people have a gym day · 2 are hidden from members",
+    );
+    expect(screen.getByTestId('not-in-app').textContent).toBe("12 members on your list don't have the app yet, so they aren't on any board.");
+    expect(svc.board).toHaveBeenCalledWith('g1', 'gym_days', 'this_week', 1);
+  });
+
+  it('a tab or a period asks for that board, from its first page', async () => {
+    open();
+    await screen.findByText('Chen Wu');
+    fireEvent.change(screen.getByLabelText('Period'), { target: { value: 'all_time' } });
+    await waitFor(() => expect(svc.board).toHaveBeenLastCalledWith('g1', 'gym_days', 'all_time', 1));
+    fireEvent.click(screen.getByRole('tab', { name: 'Streak' }));
+    await waitFor(() => expect(svc.board).toHaveBeenLastCalledWith('g1', 'streak', 'all_time', 1));
+    // The Streak has no period.
+    expect(screen.queryByLabelText('Period')).toBeNull();
+  });
+
+  it('a slow answer for the tab staff left is never drawn under the tab they are on', async () => {
+    let releaseOld;
+    svc.board.mockImplementation((_g, boardId) =>
+      boardId === 'gym_days'
+        ? new Promise((resolve) => {
+            releaseOld = () => resolve(answer());
+          })
+        : Promise.resolve(answer({ board: 'workout_days', rows: [row('u-w', 'Wendy Workout', 1, 5)], total: 1, ranked: 1 })),
+    );
+    open();
+    await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('tab', { name: 'Workout days' }));
+    await screen.findByText('Wendy Workout');
+    releaseOld();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByText('Chen Wu')).toBeNull();
+    expect(screen.getByText('Wendy Workout')).toBeTruthy();
+  });
+
+  it('pages: Next asks for the next hundred', async () => {
+    svc.board.mockResolvedValue(answer({ total: 250, pages: 3 }));
+    open();
+    await screen.findByText('Page 1 of 3');
+    expect(screen.getByRole('button', { name: 'Previous' }).disabled).toBe(true);
+    svc.board.mockResolvedValue(answer({ total: 250, pages: 3, page: 2 }));
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await screen.findByText('Page 2 of 3');
+    expect(svc.board).toHaveBeenLastCalledWith('g1', 'gym_days', 'this_week', 2);
+  });
+
+  it('asks again every minute while open', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    try {
+      open();
+      await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(1));
+      vi.advanceTimersByTime(60_000);
+      expect(svc.board).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a refusal from the server is said, with no table and no switches', async () => {
+    const refused = Object.assign(new Error('no'), { response: { status: 403, data: { message: "Your role doesn't allow that." } } });
+    svc.board.mockRejectedValue(refused);
+    open();
+    expect(await screen.findByText("Your role doesn't allow that.")).toBeTruthy();
+    expect(screen.queryByTestId('board-row')).toBeNull();
+    expect(screen.queryByTestId('board-switches')).toBeNull();
+  });
+
+  it('an empty board says so', async () => {
+    svc.board.mockResolvedValue(answer({ rows: [], total: 0, ranked: 0, memberStatus: 'too_few', notInApp: 0 }));
+    open();
+    expect(await screen.findByText('Nobody was checked in during this period.')).toBeTruthy();
+    expect(screen.queryByTestId('not-in-app')).toBeNull();
+  });
+});
+
+describe('which boards members see', () => {
+  it('each board has a switch and a line saying whether members see it, and why not', async () => {
+    svc.board.mockResolvedValue(answer({ boardsOff: ['streak'] }));
+    open();
+    await screen.findByText('Chen Wu');
+    const days = within(screen.getByTestId('switch-gym_days'));
+    expect(days.getByRole('switch', { name: 'Members see Gym days' }).getAttribute('aria-checked')).toBe('true');
+    expect(days.getByText('Members see this board.')).toBeTruthy();
+    const streak = within(screen.getByTestId('switch-streak'));
+    expect(streak.getByRole('switch', { name: 'Members see Streak' }).getAttribute('aria-checked')).toBe('false');
+    expect(streak.getByText("Switched off. Members don't see this board.")).toBeTruthy();
+  });
+
+  it('pressing a switch sends the whole list of boards that are off, then reads the board again', async () => {
+    svc.board.mockResolvedValue(answer({ boardsOff: ['streak'] }));
+    svc.setBoardsOff.mockResolvedValue({ boardsOff: ['gym_days', 'streak'] });
+    open();
+    await screen.findByText('Chen Wu');
+    svc.board.mockResolvedValue(answer({ boardsOff: ['gym_days', 'streak'], memberStatus: 'switched_off' }));
+    fireEvent.click(screen.getByRole('switch', { name: 'Members see Gym days' }));
+    await waitFor(() => expect(svc.setBoardsOff).toHaveBeenCalledWith('g1', ['gym_days', 'streak']));
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Members see Gym days' }).getAttribute('aria-checked')).toBe('false'));
+    // Staff still see the people.
+    expect(screen.getByText('Chen Wu')).toBeTruthy();
+  });
+
+  it('a switch that could not be saved says so and stays as it was', async () => {
+    svc.setBoardsOff.mockRejectedValue(Object.assign(new Error('down'), { response: { status: 500, data: {} } }));
+    open();
+    await screen.findByText('Chen Wu');
+    fireEvent.click(screen.getByRole('switch', { name: 'Members see Streak' }));
+    expect(await screen.findByText("We couldn't change that. Please try again.")).toBeTruthy();
+    expect(screen.getByRole('switch', { name: 'Members see Streak' }).getAttribute('aria-checked')).toBe('true');
+  });
+
+  it("a gym with no plan: the switches can't be pressed, and the page says why", async () => {
+    svc.board.mockResolvedValue(answer({ live: false, memberStatus: 'paused' }));
+    open({ ...ORG, subscription: null, consoleReadOnly: true });
+    await screen.findByText('Chen Wu');
+    expect(screen.getByRole('switch', { name: 'Members see Gym days' }).disabled).toBe(true);
+    expect(screen.getAllByText('Not showing to members: this gym has no plan right now.').length).toBe(3);
+  });
+});
+
+describe('a person’s panel', () => {
+  it('shows their place on all three boards, and what counted when asked — a workout as a date only', async () => {
+    svc.counted.mockResolvedValue({
+      userId: 'u-chen',
+      gymName: 'Iron House',
+      timezone: 'Asia/Kolkata',
+      board: 'workout_days',
+      period: 'this_week',
+      from: '2026-10-05',
+      to: '2026-10-11',
+      value: 1,
+      days: [],
+      notCounted: [],
+      workoutDays: [{ day: '2026-10-06', workouts: 2 }],
+      workoutsNotCounted: [{ day: '2026-09-28', why: 'saved_late', daysLate: 9 }],
+      weeks: [],
+    });
+    open();
+    fireEvent.click((await screen.findAllByTestId('board-row'))[0]);
+    const box = within(await screen.findByTestId('person-box'));
+    expect(await box.findByText('Gym days, this week')).toBeTruthy();
+    expect(box.getByTestId('person-gym_days').textContent).toContain('1st · 3 gym days');
+    expect(box.getByTestId('person-workout_days').textContent).toContain('No place · 0 workout days');
+    expect(box.getByTestId('person-streak').textContent).toContain('1st · 4 weeks');
+    expect(svc.profile).toHaveBeenCalledWith('g1', 'u-chen', 'this_week');
+
+    fireEvent.click(within(box.getByTestId('person-workout_days')).getByRole('button', { name: 'What counted' }));
+    const counted = await box.findByTestId('counted-workout_days');
+    expect(svc.counted).toHaveBeenCalledWith('g1', 'u-chen', 'workout_days', 'this_week');
+    expect(counted.textContent).toContain('Tue 6 Oct · 2 workouts, 1 day');
+    expect(counted.textContent).toContain('Mon 28 Sep · Saved more than 9 days after the workout');
+    // Never a time of day for a workout.
+    expect(counted.textContent).not.toMatch(/\d\s?[ap]m|\d\d:\d\d/);
+  });
+
+  it('a hidden person opens too, with the reason in words', async () => {
+    open();
+    fireEvent.click((await screen.findAllByTestId('board-row'))[1]);
+    const box = within(await screen.findByTestId('person-box'));
+    expect(await box.findByText(/They switched on Hide me in their app/)).toBeTruthy();
+    expect(box.getByText('Chose Hide me')).toBeTruthy();
+  });
+
+  it('Take off the board: a box names the person and what is kept; the press is for that person; the list is read again', async () => {
+    svc.setTakenOff.mockResolvedValue({ takenOff: true });
+    open();
+    fireEvent.click((await screen.findAllByTestId('board-row'))[3]);
+    const box = within(await screen.findByTestId('person-box'));
+    fireEvent.click(await box.findByTestId('take-off-open'));
+    // Nothing is sent by opening the box.
+    expect(svc.setTakenOff).not.toHaveBeenCalled();
+    const ask = within(box.getByTestId('take-off-box'));
+    expect(screen.getByRole('dialog', { name: 'Take Bilal Khan off the board?' })).toBeTruthy();
+    expect(ask.getByText('Bilal Khan — members will stop seeing them on every board at Iron House.')).toBeTruthy();
+    expect(ask.getByText('Their visits and workouts are kept.')).toBeTruthy();
+    expect(ask.getByText('Nobody else is removed. Everyone below them moves up a place.')).toBeTruthy();
+
+    const before = svc.board.mock.calls.length;
+    fireEvent.click(box.getByTestId('take-off-press'));
+    await waitFor(() => expect(svc.setTakenOff).toHaveBeenCalledTimes(1));
+    expect(svc.setTakenOff).toHaveBeenCalledWith('g1', 'u-bilal', true);
+    await waitFor(() => expect(svc.board.mock.calls.length).toBe(before + 1));
+    expect(await screen.findByText('Bilal Khan is off the board.')).toBeTruthy();
+  });
+
+  it('Cancel sends nothing', async () => {
+    open();
+    fireEvent.click((await screen.findAllByTestId('board-row'))[3]);
+    const box = within(await screen.findByTestId('person-box'));
+    fireEvent.click(await box.findByTestId('take-off-open'));
+    fireEvent.click(box.getByRole('button', { name: 'Cancel' }));
+    expect(svc.setTakenOff).not.toHaveBeenCalled();
+    expect(box.getByTestId('take-off-open').textContent).toBe('Take off the board');
+  });
+
+  it('somebody already taken off is offered Put back, and it sends false', async () => {
+    svc.setTakenOff.mockResolvedValue({ takenOff: false });
+    open();
+    fireEvent.click((await screen.findAllByTestId('board-row'))[2]);
+    const box = within(await screen.findByTestId('person-box'));
+    const button = await box.findByTestId('take-off-open');
+    expect(button.textContent).toBe('Put back on the board');
+    fireEvent.click(button);
+    expect(screen.getByRole('dialog', { name: 'Put Tariq Taken back on the board?' })).toBeTruthy();
+    fireEvent.click(box.getByTestId('take-off-press'));
+    await waitFor(() => expect(svc.setTakenOff).toHaveBeenCalledWith('g1', 'u-tariq', false));
+  });
+
+  it('a failed press says so, keeps the box, and takes nobody off', async () => {
+    svc.setTakenOff.mockRejectedValue(Object.assign(new Error('down'), { response: { status: 500, data: {} } }));
+    open();
+    fireEvent.click((await screen.findAllByTestId('board-row'))[3]);
+    const box = within(await screen.findByTestId('person-box'));
+    fireEvent.click(await box.findByTestId('take-off-open'));
+    fireEvent.click(box.getByTestId('take-off-press'));
+    expect(await box.findByText("We couldn't change that. Please try again.")).toBeTruthy();
+    expect(box.getByTestId('take-off-box')).toBeTruthy();
+    expect(screen.queryByText('Bilal Khan is off the board.')).toBeNull();
+  });
+
+  it('staff are never ranked, so there is no Take off for them; nor at a gym with no plan', async () => {
+    const coach = row('u-coach', 'Cora Coach', null, 3, 'staff');
+    svc.board.mockResolvedValue(answer({ rows: [coach, CHEN] }));
+    svc.profile.mockImplementation((_g, userId) => Promise.resolve(profile(userId === 'u-coach' ? coach : CHEN)));
+    open();
+    fireEvent.click((await screen.findAllByTestId('board-row'))[0]);
+    const box = within(await screen.findByTestId('person-box'));
+    await box.findByText('Staff, not ranked');
+    expect(box.queryByTestId('take-off-open')).toBeNull();
+    cleanup();
+
+    resetConsoleOrgs();
+    open({ ...ORG, subscription: null, consoleReadOnly: true });
+    fireEvent.click((await screen.findAllByTestId('board-row'))[1]);
+    const lapsed = within(await screen.findByTestId('person-box'));
+    await lapsed.findByText('Gym days, this week');
+    expect(lapsed.queryByTestId('take-off-open')).toBeNull();
+  });
+});

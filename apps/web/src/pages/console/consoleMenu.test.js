@@ -5,17 +5,22 @@ import { consoleLook, consoleMenu, moreIsCurrent } from './consoleMenu';
 const keys = (list) => list.map((p) => p.key);
 
 describe('where each page sits on a phone', () => {
-  it('an owner: four tabs, Leads and Settings under More', () => {
+  it('an owner: four tabs; Leads, Leaderboard and Settings under More', () => {
     const menu = consoleMenu('iron-house', ROLE_PRIVILEGES.owner, 'gym');
-    expect(keys(menu.pages)).toEqual(['overview', 'members', 'leads', 'attendance', 'classes', 'settings']);
+    expect(keys(menu.pages)).toEqual(['overview', 'members', 'leads', 'attendance', 'classes', 'leaderboard', 'settings']);
     expect(keys(menu.tabs)).toEqual(['overview', 'members', 'attendance', 'classes']);
-    expect(keys(menu.more)).toEqual(['leads', 'settings']);
+    expect(keys(menu.more)).toEqual(['leads', 'leaderboard', 'settings']);
   });
 
-  it('a manager: Leads under More, no Settings', () => {
+  it('a manager: Leads and Leaderboard under More, no Settings', () => {
     const menu = consoleMenu('iron-house', ROLE_PRIVILEGES.manager, 'gym');
     expect(keys(menu.tabs)).toEqual(['overview', 'members', 'attendance', 'classes']);
-    expect(keys(menu.more)).toEqual(['leads']);
+    expect(keys(menu.more)).toEqual(['leads', 'leaderboard']);
+  });
+
+  it('a trainer the owner gave the leaderboard: it is under More', () => {
+    const menu = consoleMenu('iron-house', [...ROLE_PRIVILEGES.trainer, 'leaderboard.manage'], 'gym');
+    expect(keys(menu.more)).toEqual(['leaderboard']);
   });
 
   it('a trainer: three tabs, nothing under More but the way out', () => {
@@ -26,7 +31,7 @@ describe('where each page sits on a phone', () => {
 
   it('Settings for a manager given the gym details only', () => {
     const menu = consoleMenu('iron-house', [...ROLE_PRIVILEGES.manager, 'org.manage'], 'gym');
-    expect(keys(menu.more)).toEqual(['leads', 'settings']);
+    expect(keys(menu.more)).toEqual(['leads', 'leaderboard', 'settings']);
   });
 
   it('draws only Overview and Members before the permissions arrive', () => {
@@ -52,6 +57,7 @@ describe('the More tab is lit', () => {
   it.each([
     ['/console/iron-house/more', true],
     ['/console/iron-house/leads', true],
+    ['/console/iron-house/leaderboard', true],
     ['/console/iron-house/settings', true],
     ['/console/iron-house/settings/staff', true],
     ['/console/iron-house', false],
