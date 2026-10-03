@@ -3,7 +3,6 @@ import { orgWords } from '@app/shared';
 import {
   HIDDEN_TAG,
   boardSwitch,
-  boardsOffAfter,
   canSeeLeaderboard,
   countLine,
   emptyLine,
@@ -11,6 +10,8 @@ import {
   hiddenLine,
   notInAppLine,
   pageLine,
+  panelPlace,
+  rowTag,
   staffVisitNotCountedText,
   staffWorkoutNotCountedText,
   takeOffBox,
@@ -67,9 +68,9 @@ describe('each board’s switch says whether members see it, and why not', () =>
       'Not showing to members: nobody has been checked in at the front desk in the last 30 days.',
       false,
     ],
-    ['Workout days needs no check-in', 'workout_days', { checkingIn: false, memberStatus: 'no_checkins' }, true, 'Members see this board once 3 people are on it.', false],
+    ['Workout days needs no check-in', 'workout_days', { checkingIn: false, memberStatus: 'no_checkins' }, true, 'Members see this board when 3 or more people are on it.', false],
     ['too few this period', 'gym_days', { memberStatus: 'too_few' }, true, 'Not showing to members yet: fewer than 3 people have a gym day in this period.', false],
-    ['another board, not read', 'streak', {}, true, 'Members see this board once 3 people are on it.', false],
+    ['another board, not read', 'streak', {}, true, 'Members see this board when 3 or more people are on it.', false],
   ])('%s', (_name, id, over, on, line, showing) => {
     expect(boardSwitch(id, board(over), words)).toMatchObject({ on, line, showing });
   });
@@ -85,14 +86,6 @@ describe('each board’s switch says whether members see it, and why not', () =>
 
   it('a studio reads its own word for its people', () => {
     expect(boardSwitch('gym_days', board(), orgWords('studio')).line).toBe('Clients see this board.');
-  });
-
-  it('pressing a switch gives the next list, in the boards’ order, whatever order it was pressed in', () => {
-    expect(boardsOffAfter([], 'streak', false)).toEqual(['streak']);
-    expect(boardsOffAfter(['streak'], 'gym_days', false)).toEqual(['gym_days', 'streak']);
-    expect(boardsOffAfter(['gym_days', 'streak'], 'gym_days', true)).toEqual(['streak']);
-    expect(boardsOffAfter(['streak'], 'streak', false)).toEqual(['streak']);
-    expect(boardsOffAfter([], 'gym_days', true)).toEqual([]);
   });
 });
 
@@ -135,30 +128,75 @@ describe('a hidden person', () => {
 });
 
 describe('the box before taking somebody off, or putting them back', () => {
-  it('names the person, says who stops seeing them, and what is kept', () => {
-    const box = takeOffBox({ name: 'Chen Wu' }, true, 'Iron House', words);
+  const onBoard = { name: 'Chen Wu', hiddenWithoutTakeOff: null, boards: [{ place: 1, value: 3, memberStatus: 'shown' }] };
+  const noPlace = { name: 'Chen Wu', hiddenWithoutTakeOff: null, boards: [{ place: null, value: 3, memberStatus: 'too_few' }] };
+  const hidAnyway = { name: 'Hema Hidden', hiddenWithoutTakeOff: 'hide_me', boards: [{ place: null, value: 4, memberStatus: 'shown' }] };
+
+  it('somebody members see: names them, says who stops seeing them, what is kept, and that people below move up', () => {
+    const box = takeOffBox(onBoard, true, 'Iron House', words);
     expect(box.title).toBe('Take Chen Wu off the board?');
     expect(box.button).toBe('Take off the board');
     expect(box.changes).toEqual([
-      'Chen Wu — members will stop seeing them on every board at Iron House.',
+      'Chen Wu — members will not see them on any board at Iron House.',
       'In their app, their own row will say "Iron House took you off the board".',
     ]);
-    expect(box.keeps).toEqual(['Their visits and workouts are kept.', 'Nobody else is removed. Everyone below them moves up a place.']);
+    expect(box.keeps).toEqual(['Their visits and workouts are kept.', 'Nobody else is removed. People below them move up.']);
     expect(box.done).toBe('Chen Wu is off the board.');
   });
 
-  it('putting back', () => {
-    const box = takeOffBox({ name: 'Chen Wu' }, false, 'Iron House', words);
+  it('somebody with no place now: nobody is said to move up', () => {
+    const box = takeOffBox(noPlace, true, 'Iron House', words);
+    expect(box.keeps).toEqual(['Their visits and workouts are kept.', 'Nobody else is removed.']);
+    expect(JSON.stringify(box)).not.toMatch(/move up/);
+  });
+
+  it('somebody already hidden for another reason: the box says so, and promises no change members would see', () => {
+    const box = takeOffBox(hidAnyway, true, 'Iron House', words);
+    expect(box.changes[0]).toBe('Hema Hidden is already hidden from members (Chose Hide me). Taking them off keeps them hidden even if that changes.');
+    expect(box.keeps).toEqual(['Their visits and workouts are kept.', "Nobody else's place changes."]);
+    expect(JSON.stringify(box)).not.toMatch(/will not see them|move up/);
+  });
+
+  it('putting back somebody members will see again', () => {
+    const box = takeOffBox(noPlace, false, 'Iron House', words);
     expect(box.title).toBe('Put Chen Wu back on the board?');
-    expect(box.changes).toEqual(['Chen Wu — members will see them again, in the place their numbers give.']);
+    expect(box.changes).toEqual(['Chen Wu — members will see them again, on every board that is showing where they have a number.']);
     expect(box.done).toBe('Chen Wu is back on the board.');
   });
 
+  it('putting back somebody who is hidden anyway: never "members will see them again" or "back on the board"', () => {
+    for (const reason of ['hide_me', 'under_18', 'no_name']) {
+      const box = takeOffBox({ ...hidAnyway, hiddenWithoutTakeOff: reason }, false, 'Iron House', words);
+      expect(box.changes[0]).toBe('Hema Hidden will no longer be taken off by your staff.');
+      expect(box.changes[1]).toMatch(/^Members still won't see them\. /);
+      expect(box.done).toMatch(/^Hema Hidden is no longer taken off, and is still hidden \(/);
+      expect(JSON.stringify(box)).not.toMatch(/see them again|is back on the board/);
+    }
+  });
+
   it('a person with no name is still named as something', () => {
-    expect(takeOffBox({ name: null }, true, 'Iron House', words).title).toBe('Take No name yet off the board?');
+    expect(takeOffBox({ ...onBoard, name: null }, true, 'Iron House', words).title).toBe('Take No name yet off the board?');
   });
 });
 
+describe('a place is only ever the place members see', () => {
+  it('the row says "On the board" only while members see the board', () => {
+    const row = { hidden: null };
+    expect(rowTag(row, board())).toEqual({ tag: false, text: 'On the board' });
+    for (const memberStatus of ['too_few', 'no_checkins', 'paused', 'switched_off']) {
+      expect(rowTag(row, board({ memberStatus }))).toEqual({ tag: false, text: 'Board not showing' });
+    }
+    expect(rowTag({ hidden: 'hide_me' }, board({ memberStatus: 'too_few' }))).toEqual({ tag: true, text: 'Chose Hide me' });
+  });
+
+  it('the panel says why somebody with a number has no place', () => {
+    expect(panelPlace({ place: 2, value: 3, memberStatus: 'shown' }, null)).toBeNull();
+    expect(panelPlace({ place: null, value: 3, memberStatus: 'too_few' }, null)).toBe("No place — members don't see this board now");
+    expect(panelPlace({ place: null, value: 3, memberStatus: 'switched_off' }, null)).toBe("No place — members don't see this board now");
+    expect(panelPlace({ place: null, value: 0, memberStatus: 'too_few' }, null)).toBe('No place');
+    expect(panelPlace({ place: null, value: 3, memberStatus: 'shown' }, 'hide_me')).toBe('No place');
+  });
+});
 describe('what did not count, said about somebody else', () => {
   it.each([
     [{ why: 'saved_late', daysLate: 9 }, 'Saved more than 9 days after the workout — a workout counts when it is saved within 7 days'],

@@ -187,13 +187,20 @@ export function rankStaffBoard(people: readonly BoardPerson[]): StaffBoard {
 /** One person's line on the staff board without ranking everybody: the same place and
  *  number `rankStaffBoard` gives them (equal numbers share a place, so a place is one more
  *  than the people members see above them). */
-export function staffPlace(people: readonly BoardPerson[], userId: string): { place: number | null; value: number } {
+export function staffPlace(
+  people: readonly BoardPerson[],
+  userId: string,
+): { place: number | null; value: number; status: StaffBoard["status"] } {
   const person = people.find((p) => p.userId === userId);
-  if (person === undefined || person.value <= 0) return { place: null, value: 0 };
-  if (hiddenReason(person) !== null) return { place: null, value: person.value };
+  const mine = person === undefined || person.value <= 0 ? 0 : person.value;
+  let ranked = 0;
   let above = 0;
   for (const other of people) {
-    if (other.value > person.value && hiddenReason(other) === null) above += 1;
+    if (other.value <= 0 || hiddenReason(other) !== null) continue;
+    ranked += 1;
+    if (other.value > mine) above += 1;
   }
-  return { place: above + 1, value: person.value };
+  const status = ranked >= LEADERBOARD_MIN_PEOPLE ? "shown" : "too_few";
+  const placed = person !== undefined && mine > 0 && hiddenReason(person) === null;
+  return { place: placed ? above + 1 : null, value: mine, status };
 }

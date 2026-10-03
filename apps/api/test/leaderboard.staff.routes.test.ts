@@ -142,10 +142,10 @@ d("the leaderboard in the console (real Postgres)", () => {
     await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${userId}, ${role}, ${privileges})`;
   };
 
-  const record = async (gymId: string, fullName: string, former = false): Promise<string> => {
+  const record = async (gymId: string, fullName: string, former = false, email = `lbs-r-${uniq()}@example.com`): Promise<string> => {
     const rows = await sql<{ id: string }[]>`
       INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source, former_at)
-      VALUES (${gymId}, ${fullName}, ${`lbs-r-${uniq()}@example.com`}, encode(sha256(${`lbs-${uniq()}`}::bytea), 'hex'), 'typed',
+      VALUES (${gymId}, ${fullName}, ${email}, encode(sha256(${`lbs-${uniq()}`}::bytea), 'hex'), 'typed',
               ${former ? sql`now()` : null})
       RETURNING id`;
     return rows[0]?.id ?? "";
@@ -253,7 +253,7 @@ d("the leaderboard in the console (real Postgres)", () => {
       ];
       const writes: [string, unknown][] = [
         [`${base(gym.id)}/people/${chen.userId}`, { takenOff: true }],
-        [`${base(gym.id)}/boards`, { off: ["gym_days", "workout_days", "streak"] }],
+        [`${base(gym.id)}/boards`, { board: "gym_days", off: true }],
       ];
       const leaks = /Asha|Bilal|Chen|Vera|Rao|Khan|Front desk|"at"|"value"/;
       const refused: [string, Cookies, number][] = [
@@ -354,6 +354,30 @@ d("the leaderboard in the console (real Postgres)", () => {
       expect(board.ranked).toBe(4);
       expect(board.memberStatus).toBe("shown");
       expect(board.notInApp).toBe(2);
+      // Somebody who joined with NO record, whose proved email is on the list, is in the app:
+      // Members says so, and this page must not count them as without it.
+      const byEmail = await account("Erin Email");
+      await sql`
+        INSERT INTO one_time_tokens (user_id, purpose, token_hash, expires_at, used_at)
+        VALUES (${byEmail.userId}, 'verify_email', md5(random()::text), now(), now())`;
+      await join(gym.id, byEmail.userId);
+      await record(gym.id, "Erin Email", false, byEmail.email);
+      expect((await staffBoard(gym, gym.owner)).notInApp).toBe(2);
+      const list = await get(`/v1/orgs/${gym.id}/member-list`, gym.owner.cookies);
+      expect(list.statusCode).toBe(200);
+      // Members' own totals for the whole list, wherever its answer carries them.
+      const totalsIn = (value: unknown): { entries: number; inApp: number } | null => {
+        if (typeof value !== "object" || value === null) return null;
+        const o = value as Record<string, unknown>;
+        if (typeof o["entries"] === "number" && typeof o["inApp"] === "number") return { entries: o["entries"], inApp: o["inApp"] };
+        for (const inner of Object.values(o)) {
+          const found = totalsIn(inner);
+          if (found !== null) return found;
+        }
+        return null;
+      };
+      const totals = totalsIn(JSON.parse(list.body));
+      expect(totals).toEqual({ entries: 4, inApp: 2 });
       expect(JSON.stringify(board)).not.toContain("@");
 
       // The places staff see are the ones members see.
@@ -365,12 +389,21 @@ d("the leaderboard in the console (real Postgres)", () => {
       const res = await get(`${base(gym.id)}/people/${takenOff.userId}`, gym.owner.cookies);
       expect(res.statusCode).toBe(200);
       const profile = JSON.parse(res.body) as StaffLeaderboardProfileResponse;
-      expect(profile).toMatchObject({ name: "Tariq Taken", hidden: "taken_off", takenOff: true, isStaff: false, entryId: null });
+      expect(profile).toMatchObject({ name: "Tariq Taken", hidden: "taken_off", takenOff: true, hiddenWithoutTakeOff: null, isStaff: false, entryId: null });
       expect(profile.boards).toEqual([
-        { board: "gym_days", period: "this_week", place: null, value: 3 },
-        { board: "workout_days", period: "this_week", place: null, value: 0 },
-        { board: "streak", period: null, place: null, value: 1 },
+        { board: "gym_days", period: "this_week", place: null, value: 3, memberStatus: "shown" },
+        { board: "workout_days", period: "this_week", place: null, value: 0, memberStatus: "too_few" },
+        { board: "streak", period: null, place: null, value: 1, memberStatus: "shown" },
       ]);
+      // A shown person's panel carries the place members see.
+      const chenRow = board.rows[0];
+      const chenPanel = JSON.parse((await get(`${base(gym.id)}/people/${chenRow?.userId ?? ""}`, gym.owner.cookies)).body) as StaffLeaderboardProfileResponse;
+      expect(chenPanel.boards[0]).toEqual({ board: "gym_days", period: "this_week", place: 1, value: 3, memberStatus: "shown" });
+      expect(chenPanel.boards[0]?.place).toBe(members.rows.find((r) => r.userId === chenRow?.userId)?.place);
+      // Somebody who chose Hide me AND was taken off: put back, members still would not see them.
+      await sql`UPDATE gym_members SET hidden_from_boards = true WHERE gym_id = ${gym.id} AND user_id = ${hideMe.userId}`;
+      const both = JSON.parse((await get(`${base(gym.id)}/people/${hideMe.userId}`, gym.owner.cookies)).body) as StaffLeaderboardProfileResponse;
+      expect([both.hidden, both.takenOff, both.hiddenWithoutTakeOff]).toEqual(["taken_off", true, "hide_me"]);
       const rita = await get(`${base(gym.id)}/people/${withRecord.userId}`, gym.owner.cookies);
       expect((JSON.parse(rita.body) as StaffLeaderboardProfileResponse).entryId).toMatch(/^[0-9a-f-]{36}$/);
     },
@@ -441,7 +474,7 @@ d("the leaderboard in the console (real Postgres)", () => {
       expect(workouts.data.workoutsNotCounted).toEqual([{ day: "2026-09-28", why: "saved_late", daysLate: 9 }]);
       expect(workouts.data.value).toBe(workouts.data.workoutDays.length);
       // No time of day and no word about the workout itself reaches staff.
-      expect(workouts.body).not.toMatch(/T0\d:\d\d|countedBy|camera|"at"/);
+      expect(workouts.body).not.toMatch(/T\d\d:\d\d|countedBy|camera|"at"/);
 
       const streak = await counted("board=streak");
       expect(streak.data.value).toBe(1);
@@ -517,12 +550,15 @@ d("the leaderboard in the console (real Postgres)", () => {
       const before = await memberBoard(gym, viewer);
       expect([before.status, before.boardsOff]).toEqual(["shown", []]);
 
-      const res = await put(`${base(gym.id)}/boards`, gym.owner.cookies, { off: ["streak", "gym_days"] });
+      const switchBoard = (board: string, off: boolean) => put(`${base(gym.id)}/boards`, gym.owner.cookies, { board, off });
+      expect(JSON.parse((await switchBoard("streak", true)).body)).toEqual({ boardsOff: ["streak"] });
+      const res = await switchBoard("gym_days", true);
       expect(res.statusCode).toBe(200);
+      // The answer is the whole stored list, in the boards' own order.
       expect(JSON.parse(res.body)).toEqual({ boardsOff: ["gym_days", "streak"] });
-      // The same answer twice is one note.
-      await put(`${base(gym.id)}/boards`, gym.owner.cookies, { off: ["gym_days", "streak"] });
-      expect(await audits(gym.id, "leaderboard.boards_changed")).toBe(1);
+      // A switch pressed again changes nothing and notes nothing.
+      await switchBoard("gym_days", true);
+      expect(await audits(gym.id, "leaderboard.boards_changed")).toBe(2);
 
       for (const q of ["board=gym_days&period=this_week", "board=gym_days&period=all_time", "board=streak"]) {
         const off = await memberBoard(gym, viewer, q);
@@ -542,15 +578,16 @@ d("the leaderboard in the console (real Postgres)", () => {
       expect(staff.boardsOff).toEqual(["gym_days", "streak"]);
 
       // All three off: a member's profile of anyone is not found.
-      await put(`${base(gym.id)}/boards`, gym.owner.cookies, { off: ["gym_days", "workout_days", "streak"] });
+      await switchBoard("workout_days", true);
       expect((await memberBoard(gym, viewer, "board=workout_days&period=this_week")).status).toBe("switched_off");
       expect((await get(`/v1/orgs/${gym.id}/leaderboard/people/${chen.userId}`, viewer.cookies)).statusCode).toBe(404);
 
-      // Back on.
-      await put(`${base(gym.id)}/boards`, gym.owner.cookies, { off: [] });
+      // Back on, one at a time: the others stay off.
+      expect(JSON.parse((await switchBoard("gym_days", false)).body)).toEqual({ boardsOff: ["workout_days", "streak"] });
       expect((await memberBoard(gym, viewer)).status).toBe("shown");
+      expect((await memberBoard(gym, viewer, "board=streak")).status).toBe("switched_off");
 
-      for (const body of [{}, { off: ["visits"] }, { off: "streak" }, { off: [], more: true }]) {
+      for (const body of [{}, { off: ["visits"] }, { board: "visits", off: true }, { board: "streak" }, { board: "streak", off: "yes" }, { board: "streak", off: true, more: 1 }]) {
         expect((await put(`${base(gym.id)}/boards`, gym.owner.cookies, body)).statusCode).toBe(400);
       }
       expect((await get(`${base(gym.id)}?board=visits`, gym.owner.cookies)).statusCode).toBe(400);
@@ -571,6 +608,17 @@ d("the leaderboard in the console (real Postgres)", () => {
       }
       const fewBoard = await staffBoard(few, few.owner);
       expect([fewBoard.memberStatus, fewBoard.rows.length, fewBoard.live, fewBoard.checkingIn]).toEqual(["too_few", 2, true, true]);
+      // Members see no board, so nobody has a place: not on the row, not on the panel.
+      expect(fewBoard.rows.map((r) => [r.name, r.place, r.hidden])).toEqual([
+        ["Asha Rao", null, null],
+        ["Bilal Khan", null, null],
+      ]);
+      const fewPanel = JSON.parse((await get(`${base(few.id)}/people/${a.userId}`, few.owner.cookies)).body) as StaffLeaderboardProfileResponse;
+      expect(fewPanel.boards).toEqual([
+        { board: "gym_days", period: "this_week", place: null, value: 1, memberStatus: "too_few" },
+        { board: "workout_days", period: "this_week", place: null, value: 0, memberStatus: "too_few" },
+        { board: "streak", period: null, place: null, value: 1, memberStatus: "too_few" },
+      ]);
 
       // Nobody checked in for 30 days: Gym days and Streak are not showing, Workout days is.
       const quiet = await makeGym("Quiet House");
@@ -582,6 +630,7 @@ d("the leaderboard in the console (real Postgres)", () => {
       }
       const quietDays = await staffBoard(quiet, quiet.owner, "board=gym_days&period=all_time");
       expect([quietDays.memberStatus, quietDays.checkingIn, quietDays.rows.length]).toEqual(["no_checkins", false, 3]);
+      expect(quietDays.rows.map((r) => r.place)).toEqual([null, null, null]);
       const quietStreak = await staffBoard(quiet, quiet.owner, "board=streak");
       expect([quietStreak.memberStatus, quietStreak.rows]).toEqual(["no_checkins", []]);
       expect((await staffBoard(quiet, quiet.owner, "board=workout_days&period=this_week")).memberStatus).toBe("shown");
@@ -592,10 +641,73 @@ d("the leaderboard in the console (real Postgres)", () => {
       await join(lapsed.id, c.userId);
       await visit(lapsed, c.userId, "2026-10-06");
       const lapsedBoard = await staffBoard(lapsed, lapsed.owner);
-      expect([lapsedBoard.memberStatus, lapsedBoard.live, lapsedBoard.rows.length]).toEqual(["paused", false, 1]);
+      expect([lapsedBoard.memberStatus, lapsedBoard.live, lapsedBoard.rows.length, lapsedBoard.rows[0]?.place]).toEqual(["paused", false, 1, null]);
       expect((await put(`${base(lapsed.id)}/people/${c.userId}`, lapsed.owner.cookies, { takenOff: true })).statusCode).toBe(409);
-      expect((await put(`${base(lapsed.id)}/boards`, lapsed.owner.cookies, { off: ["streak"] })).statusCode).toBe(409);
+      expect((await put(`${base(lapsed.id)}/boards`, lapsed.owner.cookies, { board: "streak", off: true })).statusCode).toBe(409);
     },
     T,
+  );
+
+  // ===========================================================================
+  // TWO STAFF AT ONCE, AND THE LIMITS
+  // ===========================================================================
+
+  it(
+    "two staff pressing different switches at the same instant: both land; ten take-offs at once are one note",
+    async () => {
+      const { gym, chen } = await busyGym("Racing House");
+      const manager = await signedIn("Mona Manager");
+      await addStaff(gym.id, manager.userId, "manager", null);
+      for (let round = 0; round < 3; round += 1) {
+        const [a, b] = await Promise.all([
+          put(`${base(gym.id)}/boards`, gym.owner.cookies, { board: "gym_days", off: true }),
+          put(`${base(gym.id)}/boards`, manager.cookies, { board: "streak", off: true }),
+        ]);
+        expect([a.statusCode, b.statusCode]).toEqual([200, 200]);
+        const stored = await sql<{ off: string[] }[]>`SELECT leaderboard_boards_off AS off FROM gyms WHERE id = ${gym.id}`;
+        expect([...(stored[0]?.off ?? [])].sort()).toEqual(["gym_days", "streak"]);
+        // Whoever answered second answered with both.
+        const answers = [a, b].map((r) => (JSON.parse(r.body) as { boardsOff: string[] }).boardsOff.length).sort();
+        expect(answers).toEqual([1, 2]);
+        await Promise.all([
+          put(`${base(gym.id)}/boards`, gym.owner.cookies, { board: "gym_days", off: false }),
+          put(`${base(gym.id)}/boards`, manager.cookies, { board: "streak", off: false }),
+        ]);
+        expect((await sql<{ off: string[] }[]>`SELECT leaderboard_boards_off AS off FROM gyms WHERE id = ${gym.id}`)[0]?.off).toEqual([]);
+      }
+      const many = await Promise.all(
+        Array.from({ length: 10 }, (_, i) => put(`${base(gym.id)}/people/${chen.userId}`, (i % 2 === 0 ? gym.owner : manager).cookies, { takenOff: true })),
+      );
+      expect(many.map((r) => r.statusCode)).toEqual(Array.from({ length: 10 }, () => 200));
+      expect(await audits(gym.id, "leaderboard.taken_off")).toBe(1);
+    },
+    T,
+  );
+
+  it(
+    "the limits, at one address: a person past their writes is stopped, a colleague is not; a stranger's 404 is never a 429",
+    async () => {
+      const { gym, chen } = await busyGym("Limit House");
+      const manager = await signedIn("Mona Manager");
+      await addStaff(gym.id, manager.userId, "manager", null);
+      const stranger = await signedIn("Sam Stranger");
+      const ip = "10.99.0.7";
+      const path = `${base(gym.id)}/people/${chen.userId}`;
+      let last = 0;
+      let allowed = 0;
+      for (let i = 0; i < 301; i += 1) {
+        last = (await inject("PUT", path, manager.cookies, { takenOff: i % 2 === 0 }, ip)).statusCode;
+        if (last === 200) allowed += 1;
+      }
+      expect([allowed, last]).toEqual([300, 429]);
+      // The owner, at the same address, still writes; the manager still reads.
+      expect((await inject("PUT", path, gym.owner.cookies, { takenOff: false }, ip)).statusCode).toBe(200);
+      expect((await inject("GET", `${base(gym.id)}?board=streak`, manager.cookies, undefined, ip)).statusCode).toBe(200);
+      // Somebody with no standing is refused before any limit is counted, however often.
+      for (let i = 0; i < 40; i += 1) {
+        expect((await inject("PUT", path, stranger.cookies, { takenOff: true }, ip)).statusCode).toBe(404);
+      }
+    },
+    120_000,
   );
 });

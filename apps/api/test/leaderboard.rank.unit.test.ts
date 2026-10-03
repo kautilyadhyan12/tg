@@ -270,9 +270,9 @@ describe("the staff board", () => {
       // anybody with no number or not on the board at all.
       for (const p of people) {
         const listed = staff.rows.find((r) => r.userId === p.userId);
-        expect(staffPlace(people, p.userId)).toEqual({ place: listed?.place ?? null, value: listed?.value ?? 0 });
+        expect(staffPlace(people, p.userId)).toEqual({ place: listed?.place ?? null, value: listed?.value ?? 0, status: staff.status });
       }
-      expect(staffPlace(people, "nobody")).toEqual({ place: null, value: 0 });
+      expect(staffPlace(people, "nobody")).toEqual({ place: null, value: 0, status: staff.status });
     }
   });
 

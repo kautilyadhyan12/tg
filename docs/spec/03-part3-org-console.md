@@ -2687,8 +2687,10 @@ members see: `gyms.leaderboard_boards_off` (migration `0067`), a switch a board;
 switched-off board answers members `switched_off` with no row, no number and no profile
 line, and their app draws no tab for it. Each switch says why its board is not showing
 (switched off · no plan · nobody checked in for 30 days · fewer than 3 people), and the
-page says how many people on the list have no app. A lapsed gym's staff read and change
-nothing.
+page says how many people on the list have no app (Members' own match). A lapsed gym's
+staff still read it and change nothing. A place is the place members see: while members
+see no board (switched off, no plan, no check-ins, fewer than 3), nobody carries one. A
+switch is one board a request, so two staff never undo each other.
 
 **Jobs** (ROADMAP 19a-i to 19a-iv): the members' board with Gym days and Streak · Workout
 days · the board in the console · fixing a visit (after 16b-ii).

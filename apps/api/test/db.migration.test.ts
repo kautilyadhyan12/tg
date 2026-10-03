@@ -1295,7 +1295,7 @@ d("0001_init on a real database", () => {
     await sql
       .begin(async (tx) => {
         const ids: Record<string, string> = {};
-        for (const name of ["owner", "manager", "trainer", "defaults"]) {
+        for (const name of ["owner", "manager", "trainer", "defaults", "frontdesk"]) {
           const [user] = await tx<{ id: string }[]>`
             INSERT INTO users (display_name) VALUES (${`zz-0067-${name}`}) RETURNING id`;
           if (user === undefined) throw new Error("0067 user insert failed");
@@ -1310,6 +1310,7 @@ d("0001_init on a real database", () => {
         await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${ids.manager ?? ""}, 'manager', ${before})`;
         await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${ids.trainer ?? ""}, 'trainer', ${before})`;
         await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${ids.defaults ?? ""}, 'manager', NULL)`;
+        await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges, role_name) VALUES (${gymId}, ${ids.frontdesk ?? ""}, 'manager', ${before}, 'Front desk')`;
 
         // Invitations: a manager's still waiting gets it; a trainer's, a gym's own role's and
         // a cancelled one are left alone.
@@ -1341,6 +1342,8 @@ d("0001_init on a real database", () => {
           WHERE s.gym_id = ${gymId} ORDER BY u.display_name`;
         expect(rows).toEqual([
           { display_name: "zz-0067-defaults", privileges: null },
+          // One of the gym's own roles: the owner chose its ticks.
+          { display_name: "zz-0067-frontdesk", privileges: before },
           { display_name: "zz-0067-manager", privileges: [...before, "leaderboard.manage"] },
           { display_name: "zz-0067-owner", privileges: [...before, "leaderboard.manage"] },
           { display_name: "zz-0067-trainer", privileges: before },

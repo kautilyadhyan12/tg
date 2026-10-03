@@ -89,10 +89,16 @@ export function statusText(board) {
       return board.board === 'streak'
         ? 'The board shows once 3 people have a streak.'
         : `The board shows once 3 people have a ${UNIT[board.board]} in this period.`;
-    case 'no_checkins':
-      return `${board.gymName} hasn't checked anyone in at the front desk in the last 30 days, so Gym days and Streak aren't showing. Workout days doesn't need the front desk — see that tab.`;
+    case 'no_checkins': {
+      const quiet = `${board.gymName} hasn't checked anyone in at the front desk in the last 30 days, so Gym days and Streak aren't showing.`;
+      // Workout days needs no front desk, but only while the gym shows it.
+      return boardTabs(board.boardsOff).some((t) => t.id === 'workout_days')
+        ? `${quiet} Workout days doesn't need the front desk — see that tab.`
+        : quiet;
+    }
     case 'paused':
-      return `The leaderboard isn't available at ${board.gymName} right now.`;    case 'switched_off':
+      return `The leaderboard isn't available at ${board.gymName} right now.`;
+    case 'switched_off':
       return boardTabs(board.boardsOff).length === 0
         ? `${board.gymName} has switched its leaderboard off.`
         : `${board.gymName} has switched this board off.`;

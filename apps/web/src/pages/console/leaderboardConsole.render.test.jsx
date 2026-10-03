@@ -12,7 +12,7 @@ const svc = {
   profile: vi.fn(),
   counted: vi.fn(),
   setTakenOff: vi.fn(),
-  setBoardsOff: vi.fn(),
+  setBoardOff: vi.fn(),
 };
 const orgApi = { getMine: vi.fn() };
 vi.mock('../../api/leaderboardApi', () => ({ staffLeaderboardService: svc }));
@@ -78,12 +78,13 @@ const profile = (r, over = {}) => ({
   initials: r.initials,
   hidden: r.hidden,
   takenOff: r.hidden === 'taken_off',
+  hiddenWithoutTakeOff: r.hidden === 'taken_off' || r.hidden === 'staff' ? null : r.hidden,
   isStaff: r.hidden === 'staff',
   entryId: null,
   boards: [
-    { board: 'gym_days', period: 'this_week', place: r.place, value: r.value },
-    { board: 'workout_days', period: 'this_week', place: null, value: 0 },
-    { board: 'streak', period: null, place: r.place, value: 4 },
+    { board: 'gym_days', period: 'this_week', place: r.place, value: r.value, memberStatus: 'shown' },
+    { board: 'workout_days', period: 'this_week', place: null, value: 0, memberStatus: 'too_few' },
+    { board: 'streak', period: null, place: r.place, value: 4, memberStatus: 'shown' },
   ],
   ...over,
 });
@@ -223,21 +224,21 @@ describe('which boards members see', () => {
     expect(streak.getByText("Switched off. Members don't see this board.")).toBeTruthy();
   });
 
-  it('pressing a switch sends the whole list of boards that are off, then reads the board again', async () => {
+  it('pressing a switch sends that ONE board and nothing about the others, then reads the board again', async () => {
     svc.board.mockResolvedValue(answer({ boardsOff: ['streak'] }));
-    svc.setBoardsOff.mockResolvedValue({ boardsOff: ['gym_days', 'streak'] });
+    svc.setBoardOff.mockResolvedValue({ boardsOff: ['gym_days', 'streak'] });
     open();
     await screen.findByText('Chen Wu');
     svc.board.mockResolvedValue(answer({ boardsOff: ['gym_days', 'streak'], memberStatus: 'switched_off' }));
     fireEvent.click(screen.getByRole('switch', { name: 'Members see Gym days' }));
-    await waitFor(() => expect(svc.setBoardsOff).toHaveBeenCalledWith('g1', ['gym_days', 'streak']));
+    await waitFor(() => expect(svc.setBoardOff).toHaveBeenCalledWith('g1', 'gym_days', true));
     await waitFor(() => expect(screen.getByRole('switch', { name: 'Members see Gym days' }).getAttribute('aria-checked')).toBe('false'));
     // Staff still see the people.
     expect(screen.getByText('Chen Wu')).toBeTruthy();
   });
 
   it('a switch that could not be saved says so and stays as it was', async () => {
-    svc.setBoardsOff.mockRejectedValue(Object.assign(new Error('down'), { response: { status: 500, data: {} } }));
+    svc.setBoardOff.mockRejectedValue(Object.assign(new Error('down'), { response: { status: 500, data: {} } }));
     open();
     await screen.findByText('Chen Wu');
     fireEvent.click(screen.getByRole('switch', { name: 'Members see Streak' }));
@@ -307,9 +308,9 @@ describe('a person’s panel', () => {
     expect(svc.setTakenOff).not.toHaveBeenCalled();
     const ask = within(box.getByTestId('take-off-box'));
     expect(screen.getByRole('dialog', { name: 'Take Bilal Khan off the board?' })).toBeTruthy();
-    expect(ask.getByText('Bilal Khan — members will stop seeing them on every board at Iron House.')).toBeTruthy();
+    expect(ask.getByText('Bilal Khan — members will not see them on any board at Iron House.')).toBeTruthy();
     expect(ask.getByText('Their visits and workouts are kept.')).toBeTruthy();
-    expect(ask.getByText('Nobody else is removed. Everyone below them moves up a place.')).toBeTruthy();
+    expect(ask.getByText('Nobody else is removed. People below them move up.')).toBeTruthy();
 
     const before = svc.board.mock.calls.length;
     fireEvent.click(box.getByTestId('take-off-press'));
@@ -371,5 +372,45 @@ describe('a person’s panel', () => {
     const lapsed = within(await screen.findByTestId('person-box'));
     await lapsed.findByText('Gym days, this week');
     expect(lapsed.queryByTestId('take-off-open')).toBeNull();
+  });
+
+  it('somebody taken off who also chose Hide me: Put back never says members will see them again', async () => {
+    svc.setTakenOff.mockResolvedValue({ takenOff: false });
+    svc.profile.mockResolvedValue(profile(TARIQ, { hiddenWithoutTakeOff: 'hide_me' }));
+    open();
+    fireEvent.click((await screen.findAllByTestId('board-row'))[2]);
+    const box = within(await screen.findByTestId('person-box'));
+    fireEvent.click(await box.findByTestId('take-off-open'));
+    const ask = box.getByTestId('take-off-box');
+    expect(ask.textContent).toContain('Tariq Taken will no longer be taken off by your staff.');
+    expect(ask.textContent).toContain("Members still won't see them. They switched on Hide me in their app.");
+    expect(ask.textContent).not.toMatch(/see them again/);
+    fireEvent.click(box.getByTestId('take-off-press'));
+    expect(await screen.findByText('Tariq Taken is no longer taken off, and is still hidden (Chose Hide me).')).toBeTruthy();
+    expect(screen.queryByText(/is back on the board/)).toBeNull();
+  });
+});
+
+describe('a board members do not see', () => {
+  it('gives nobody a place or "On the board", on the row or on the panel', async () => {
+    const few = [row('u-chen', 'Chen Wu', null, 3), row('u-bilal', 'Bilal Khan', null, 2)];
+    svc.board.mockResolvedValue(answer({ memberStatus: 'too_few', rows: few, total: 2, ranked: 2 }));
+    svc.profile.mockResolvedValue(
+      profile(few[0], {
+        boards: [
+          { board: 'gym_days', period: 'this_week', place: null, value: 3, memberStatus: 'too_few' },
+          { board: 'workout_days', period: 'this_week', place: null, value: 0, memberStatus: 'too_few' },
+          { board: 'streak', period: null, place: null, value: 2, memberStatus: 'too_few' },
+        ],
+      }),
+    );
+    open();
+    await screen.findByText('Chen Wu');
+    expect(rows()).toEqual(['—Chen Wu3Board not showing', '—Bilal Khan2Board not showing']);
+    fireEvent.click(screen.getAllByTestId('board-row')[0]);
+    const box = within(await screen.findByTestId('person-box'));
+    expect((await box.findByTestId('person-gym_days')).textContent).toContain("No place — members don't see this board now · 3 gym days");
+    expect(box.getByTestId('person-workout_days').textContent).toContain('No place · 0 workout days');
+    expect(box.queryByText('On the board')).toBeNull();
   });
 });

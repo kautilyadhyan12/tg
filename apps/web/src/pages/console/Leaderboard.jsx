@@ -10,16 +10,15 @@ import { useConsoleOrg } from './useConsoleOrg';
 import { orgWords } from './consoleView';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
 import {
-  HIDDEN_TAG,
   WHAT_IT_COUNTS,
   boardSwitch,
-  boardsOffAfter,
   countLine,
   emptyLine,
   flamesNote,
   nameOf,
   notInAppLine,
   pageLine,
+  rowTag,
 } from './leaderboardStaffView';
 
 // The gym's leaderboard, for staff (ROADMAP 19a-iii; spec Part 3 §15.5): everyone with a
@@ -151,7 +150,7 @@ export default function Leaderboard() {
     setSaving(true);
     setSwitchError(null);
     try {
-      const done = await staffLeaderboardService.setBoardsOff(gymId, boardsOffAfter(state.board.boardsOff, id, on));
+      const done = await staffLeaderboardService.setBoardOff(gymId, id, !on);
       setState((s) => (s.board === null ? s : { ...s, board: { ...s.board, boardsOff: done.boardsOff } }));
       await load();
     } catch (err) {
@@ -285,7 +284,9 @@ export default function Leaderboard() {
                     <span style={{ gridArea: 'tag' }}>{`What ${words.people} see`}</span>
                   </div>
                   <ul>
-                    {board.rows.map((r, i) => (
+                    {board.rows.map((r, i) => {
+                      const said = rowTag(r, board);
+                      return (
                       <li key={r.userId} className={i > 0 ? 'border-t' : 'md:border-t'} style={{ borderColor: 'var(--line)' }}>
                         <button
                           type="button"
@@ -310,16 +311,17 @@ export default function Leaderboard() {
                             {r.value}
                           </span>
                           <span style={{ gridArea: 'tag' }}>
-                            {r.hidden !== null ? (
-                              <span className="c-tag c-tag-plain">{HIDDEN_TAG[r.hidden]}</span>
+                            {said.tag ? (
+                              <span className="c-tag c-tag-plain">{said.text}</span>
                             ) : (
-                              <span className="hidden md:inline c-s14 c-t2">On the board</span>
+                              <span className="hidden md:inline c-s14 c-t2">{said.text}</span>
                             )}
                           </span>
                           <ChevronRight aria-hidden="true" className="w-[18px] h-[18px] c-t3" style={{ gridArea: 'go' }} />
                         </button>
                       </li>
-                    ))}
+                      );
+                    })}
                   </ul>
                 </section>
               )}

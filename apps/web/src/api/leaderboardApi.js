@@ -70,7 +70,7 @@ export const staffLeaderboardService = {
   /** Take a person off the board, or put them back. */
   setTakenOff: (gymId, userId, takenOff) =>
     readThrough(leaderboardTakenOffResponseSchema, 'the change', authApi.put(personPath(gymId, userId), { takenOff })),
-  /** The boards members do not see. */
-  setBoardsOff: (gymId, off) =>
-    readThrough(leaderboardBoardsResponseSchema, 'the change', authApi.put(`${staffPath(gymId)}/boards`, { off })),
+  /** Switch one board off or on for members; answers every board that is off. */
+  setBoardOff: (gymId, board, off) =>
+    readThrough(leaderboardBoardsResponseSchema, 'the change', authApi.put(`${staffPath(gymId)}/boards`, { board, off })),
 };

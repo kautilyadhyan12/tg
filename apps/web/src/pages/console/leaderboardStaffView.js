@@ -63,7 +63,7 @@ export function boardSwitch(boardId, board, words) {
         ? `Not showing to ${words.people} yet: fewer than 3 people have a streak.`
         : `Not showing to ${words.people} yet: fewer than 3 people have a ${UNIT[boardId]} in this period.`;
   } else if (boardId === board.board) line = `${words.peopleCap} see this board.`;
-  else line = `${words.peopleCap} see this board once 3 people are on it.`;
+  else line = `${words.peopleCap} see this board when 3 or more people are on it.`;
   return { id: boardId, label, on, line, showing: on && boardId === board.board && board.memberStatus === 'shown' };
 }
 
@@ -104,30 +104,70 @@ export function pageLine(board) {
   return board.pages > 1 ? `Page ${count(board.page)} of ${count(board.pages)}` : null;
 }
 
-/** The box before a person is taken off the board, or put back: who changes and who won't. */
-export function takeOffBox(person, takenOff, gymName, words) {
-  const name = nameOf(person);
+/** What the row says under "What members see". A place and "On the board" only while
+ *  members really see this board. */
+export function rowTag(row, board) {
+  if (row.hidden !== null) return { tag: true, text: HIDDEN_TAG[row.hidden] };
+  return { tag: false, text: board.memberStatus === 'shown' ? 'On the board' : 'Board not showing' };
+}
+
+/** One board's line on a person's panel: "1st · 3 gym days", or why there is no place. */
+export function panelPlace(board, hidden) {
+  if (board.place !== null) return null;
+  if (hidden === null && board.value > 0 && board.memberStatus !== 'shown') return "No place — members don't see this board now";
+  return 'No place';
+}
+
+/** The box before a person is taken off the board, or put back: what changes and what
+ *  stays. `profile` is the server's answer for the person: `hiddenWithoutTakeOff` is why
+ *  members would not see them anyway, and a place on a board means members see them now. */
+export function takeOffBox(profile, takenOff, gymName, words) {
+  const name = nameOf(profile);
+  const anyway = profile.hiddenWithoutTakeOff ?? null;
+  const ranked = Array.isArray(profile.boards) && profile.boards.some((b) => b.place !== null);
+  const ownRow = `In their app, their own row will say "${gymName} took you off the board".`;
   if (takenOff) {
+    const title = `Take ${name} off the board?`;
+    const button = 'Take off the board';
+    if (anyway !== null) {
+      return {
+        title,
+        button,
+        changes: [
+          `${name} is already hidden from ${words.people} (${HIDDEN_TAG[anyway]}). Taking them off keeps them hidden even if that changes.`,
+          ownRow,
+        ],
+        keeps: ['Their visits and workouts are kept.', "Nobody else's place changes."],
+        done: `${name} is taken off the board.`,
+      };
+    }
     return {
-      title: `Take ${name} off the board?`,
-      button: 'Take off the board',
-      changes: [
-        `${name} — ${words.people} will stop seeing them on every board at ${gymName}.`,
-        `In their app, their own row will say "${gymName} took you off the board".`,
-      ],
-      keeps: ['Their visits and workouts are kept.', `Nobody else is removed. Everyone below them moves up a place.`],
+      title,
+      button,
+      changes: [`${name} — ${words.people} will not see them on any board at ${gymName}.`, ownRow],
+      keeps: ['Their visits and workouts are kept.', ranked ? 'Nobody else is removed. People below them move up.' : 'Nobody else is removed.'],
       done: `${name} is off the board.`,
     };
   }
+  const title = `Put ${name} back on the board?`;
+  const button = 'Put back on the board';
+  if (anyway !== null) {
+    return {
+      title,
+      button,
+      changes: [`${name} will no longer be taken off by your staff.`, `${words.peopleCap} still won't see them. ${hiddenLine(anyway, words)}`],
+      keeps: ['Nothing else changes.'],
+      done: `${name} is no longer taken off, and is still hidden (${HIDDEN_TAG[anyway]}).`,
+    };
+  }
   return {
-    title: `Put ${name} back on the board?`,
-    button: 'Put back on the board',
-    changes: [`${name} — ${words.people} will see them again, in the place their numbers give.`],
+    title,
+    button,
+    changes: [`${name} — ${words.people} will see them again, on every board that is showing where they have a number.`],
     keeps: ['Nothing else changes.'],
     done: `${name} is back on the board.`,
   };
 }
-
 /** A workout that did not count, said about somebody else. */
 export function staffWorkoutNotCountedText(item, gymName) {
   switch (item.why) {
@@ -150,12 +190,4 @@ export function staffVisitNotCountedText(item) {
   return item.why === 'own_tap'
     ? 'Their own "I\'m here" tap — only front-desk and staff check-ins count'
     : "Checked in with the app's code — only front-desk and staff check-ins count";
-}
-
-/** The next boards-off list after one switch is pressed. */
-export function boardsOffAfter(boardsOff, boardId, on) {
-  const off = new Set(boardsOff);
-  if (on) off.delete(boardId);
-  else off.add(boardId);
-  return BOARD_TABS.map((t) => t.id).filter((id) => off.has(id));
 }

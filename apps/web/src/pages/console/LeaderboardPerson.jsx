@@ -14,7 +14,7 @@ import {
   weekText,
   workoutCountText,
 } from '../../components/gym/leaderboardView';
-import { HIDDEN_TAG, hiddenLine, nameOf, staffVisitNotCountedText, staffWorkoutNotCountedText, takeOffBox } from './leaderboardStaffView';
+import { HIDDEN_TAG, hiddenLine, nameOf, panelPlace, staffVisitNotCountedText, staffWorkoutNotCountedText, takeOffBox } from './leaderboardStaffView';
 
 // One person on the console's leaderboard (ROADMAP 19a-iii): their place and number on all
 // three boards, what counted for each, and Take off the board / Put back. Before either
@@ -151,7 +151,8 @@ export default function LeaderboardPerson({ gymId, gym, orgSlug, row, period, wo
   const profile = state.profile;
   const person = profile ?? row;
   const periodLabel = PERIODS.find((p) => p.id === period)?.label.toLowerCase() ?? '';
-  const box = asking === null ? null : takeOffBox(person, asking, gym.name, words);
+  // The box is built from the server's answer for the person, never from the row alone.
+  const box = asking === null || profile === null ? null : takeOffBox(profile, asking, gym.name, words);
 
   const press = async () => {
     setSaving(true);
@@ -213,9 +214,9 @@ export default function LeaderboardPerson({ gymId, gym, orgSlug, row, period, wo
           <div className="flex flex-col gap-1 min-w-0">
             {profile.hidden !== null ? (
               <span className="c-tag c-tag-plain self-start">{HIDDEN_TAG[profile.hidden]}</span>
-            ) : (
+            ) : profile.boards.some((b) => b.place !== null) ? (
               <span className="c-tag c-tag-good self-start">On the board</span>
-            )}
+            ) : null}
             {reason !== null ? <span className="c-s14 c-t2">{reason}</span> : null}
           </div>
         </div>
@@ -230,7 +231,7 @@ export default function LeaderboardPerson({ gymId, gym, orgSlug, row, period, wo
                   <div className="flex flex-col gap-0.5 min-w-0 flex-grow">
                     <span className="c-s15 c-w6 c-t1">{b.board === 'streak' ? 'Streak' : `${label}, ${periodLabel}`}</span>
                     <span className="c-s14 c-t2">
-                      {b.place === null ? 'No place' : ordinal(b.place)} · {valueText(b.value, b.board)}
+                      {panelPlace(b, profile.hidden) ?? ordinal(b.place)} · {valueText(b.value, b.board)}
                     </span>
                   </div>
                   <button type="button" aria-expanded={isOpen} onClick={() => setCounted(isOpen ? null : b.board)} className="c-btn c-btn-link c-btn-sm">

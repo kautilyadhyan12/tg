@@ -202,7 +202,7 @@ export function registerLeaderboardRoutes(
     if (params === null) return;
     const body = parseOr400(setLeaderboardBoardsRequestSchema, req.body, req, reply);
     if (body === null) return;
-    const done = await service.setBoardsOff(deps, requireUserId(req), params.gymId, body.off, gate(staffWriteLimit)(req, reply));
+    const done = await service.setBoardOff(deps, requireUserId(req), params.gymId, body.board, body.off, gate(staffWriteLimit)(req, reply));
     if (done === null) return;
     return reply.status(200).send(done);
   });

@@ -234,7 +234,8 @@ export const staffLeaderboardRowSchema = z
     /** The full name, or null when the person has typed none and their record has none. */
     name: z.string().nullable(),
     initials: z.string(),
-    /** The place members see them in; null for anyone hidden from members. */
+    /** The place members see them in; null for anyone hidden from members, and for
+     *  everyone while members do not see this board. */
     place: z.number().int().min(1).nullable(),
     value: z.number().int().min(1),
     circles: z.array(leaderboardCircleSchema).length(7).nullable(),
@@ -285,6 +286,8 @@ export const staffLeaderboardProfileResponseSchema = z
     hidden: z.enum(LEADERBOARD_HIDDEN_REASONS).nullable(),
     /** Staff took them off the board; another reason may be the one shown. */
     takenOff: z.boolean(),
+    /** Why members would still not see them if staff had not taken them off, or null. */
+    hiddenWithoutTakeOff: z.enum(LEADERBOARD_HIDDEN_REASONS).nullable(),
     isStaff: z.boolean(),
     /** Their record on the gym's list, when they have one. */
     entryId: z.string().uuid().nullable(),
@@ -293,8 +296,11 @@ export const staffLeaderboardProfileResponseSchema = z
         .object({
           board: z.enum(LEADERBOARD_BOARDS),
           period: z.enum(LEADERBOARD_PERIODS).nullable(),
+          /** The place members see; null while they see no place for this person. */
           place: z.number().int().min(1).nullable(),
           value: z.number().int().min(0),
+          /** What members see of this board and period right now. */
+          memberStatus: z.enum(LEADERBOARD_STATUSES),
         })
         .strict(),
     ),
@@ -340,8 +346,7 @@ export type StaffLeaderboardCountedResponse = z.infer<typeof staffLeaderboardCou
 export const setLeaderboardTakenOffRequestSchema = z.object({ takenOff: z.boolean() }).strict();
 export const leaderboardTakenOffResponseSchema = z.object({ takenOff: z.boolean() }).strict();
 
-/** Which boards the gym's members do NOT see. */
-export const setLeaderboardBoardsRequestSchema = z
-  .object({ off: z.array(z.enum(LEADERBOARD_BOARDS)).max(LEADERBOARD_BOARDS.length) })
-  .strict();
+/** Switch ONE board off or on for the gym's members. One board a request, so two staff
+ *  pressing different switches never undo each other. */
+export const setLeaderboardBoardsRequestSchema = z.object({ board: z.enum(LEADERBOARD_BOARDS), off: z.boolean() }).strict();
 export const leaderboardBoardsResponseSchema = z.object({ boardsOff: z.array(z.enum(LEADERBOARD_BOARDS)) }).strict();

@@ -373,6 +373,9 @@ export async function getStaffLeaderboard(
   // Nobody has a streak at a gym that has stopped checking in (see getLeaderboard).
   const dormant = query.board === "streak" && !gym.checkingIn;
   const staff = rankStaffBoard(dormant ? [] : built.people);
+  const status = memberStatus(gym, query.board, staff.status);
+  // A place is the place MEMBERS see: while they see no board, nobody has one.
+  const rows = status === "shown" ? staff.rows : staff.rows.map((row) => ({ ...row, place: null }));
   const pages = Math.max(1, Math.ceil(staff.rows.length / LEADERBOARD_STAFF_PAGE));
   const page = Math.min(query.page, pages);
   return staffLeaderboardResponseSchema.parse({
@@ -384,7 +387,7 @@ export async function getStaffLeaderboard(
     from: built.from,
     to: built.to,
     circleDays: built.circleDays,
-    memberStatus: memberStatus(gym, query.board, staff.status),
+    memberStatus: status,
     live: gym.live,
     checkingIn: gym.checkingIn,
     boardsOff: gym.boardsOff,
@@ -392,7 +395,7 @@ export async function getStaffLeaderboard(
     total: staff.rows.length,
     page,
     pages,
-    rows: staff.rows.slice((page - 1) * LEADERBOARD_STAFF_PAGE, page * LEADERBOARD_STAFF_PAGE),
+    rows: rows.slice((page - 1) * LEADERBOARD_STAFF_PAGE, page * LEADERBOARD_STAFF_PAGE),
     notInApp,
     asOf: now.toISOString(),
   });
@@ -429,7 +432,10 @@ export async function getStaffProfile(
   const boards = built.map((b) => {
     // Nobody has a streak at a gym that has stopped checking in (see getLeaderboard).
     const dormant = b.id === "streak" && !gym.checkingIn;
-    return { board: b.id, period: b.period, ...staffPlace(dormant ? [] : b.people, userId) };
+    const mine = staffPlace(dormant ? [] : b.people, userId);
+    const status = memberStatus(gym, b.id, mine.status);
+    // A place is the place MEMBERS see: none while they do not see this board.
+    return { board: b.id, period: b.period, place: status === "shown" ? mine.place : null, value: mine.value, memberStatus: status };
   });
   const named = fullName(person);
   return staffLeaderboardProfileResponseSchema.parse({
@@ -438,6 +444,7 @@ export async function getStaffProfile(
     initials: named.initials,
     hidden: hiddenReason({ ...person, value: 1, circles: null }),
     takenOff: person.takenOff,
+    hiddenWithoutTakeOff: hiddenReason({ ...person, takenOff: false, value: 1, circles: null }),
     isStaff: person.isStaff,
     entryId: person.entryId,
     boards,
@@ -506,19 +513,20 @@ export async function setTakenOff(
   return { takenOff };
 }
 
-/** Which boards the gym's members do not see. */
-export async function setBoardsOff(
+/** Switch one board off or on for the gym's members; answers the whole stored list. */
+export async function setBoardOff(
   deps: LeaderboardDeps,
   staffId: string,
   gymId: string,
-  off: readonly LeaderboardBoard[],
+  board: LeaderboardBoard,
+  off: boolean,
   limit: Limit,
 ): Promise<{ boardsOff: LeaderboardBoard[] } | null> {
   await requireWritablePrivilege(deps, gymId, staffId, TICK);
   if (!(await limit())) return null;
   const done = await deps.sql.begin(async (tx) => {
     await lockOrgRow(tx, gymId);
-    const set = await repo.setBoardsOff(tx, gymId, off);
+    const set = await repo.setBoardOff(tx, gymId, board, off);
     if (set !== null && set.before.join() !== set.after.join()) {
       await insertAudit(tx, {
         actorUserId: staffId,

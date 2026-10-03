@@ -2,6 +2,7 @@
 // worked out from the visits and workouts each time it opens.
 import type { PendingQuery, Row, Sql, TransactionSql } from "postgres";
 import { LEADERBOARD_BOARDS, LEADERBOARD_CHECKIN_DAYS, type LeaderboardBoard, type LeaderboardWorkoutNotCounted } from "@app/shared";
+import { membersAgainstList } from "../memberList/repo.js";
 import { countedDays, streaks, visitsWithOwner } from "./visits.js";
 import { countedWorkoutDays, memberWorkouts } from "./workouts.js";
 
@@ -325,16 +326,16 @@ export async function setVisibility(sql: SqlOrTx, userId: string, hidden: boolea
 
 // ── THE BOARD IN THE CONSOLE (19a-iii) ──
 
-/** People on the gym's list who are not in the app: on no board. */
+/** People on the gym's list who are not in the app: on no board. Who is in the app is
+ *  Members' own match (`membersAgainstList`: the record a member joined with, or the list's
+ *  email), so this page and Members never give two numbers. */
 export async function notInAppCount(sql: SqlOrTx, gymId: string): Promise<number> {
+  const members = await membersAgainstList(sql, gymId);
+  const inApp = [...new Set(members.flatMap((member) => (member.entryId === null ? [] : [member.entryId])))];
   const rows = await sql<{ n: number }[]>`
     SELECT count(*)::int AS n
     FROM gym_member_list_entries e
-    WHERE e.gym_id = ${gymId} AND e.former_at IS NULL
-      AND NOT EXISTS (
-        SELECT 1 FROM gym_members m
-        WHERE m.gym_id = e.gym_id AND m.entry_id = e.id AND m.removed_at IS NULL
-      )`;
+    WHERE e.gym_id = ${gymId} AND e.former_at IS NULL AND e.id <> ALL(${inApp}::uuid[])`;
   return rows[0]?.n ?? 0;
 }
 
@@ -361,18 +362,20 @@ export async function setTakenOff(
   return { changed: true };
 }
 
-/** The boards switched off for members, replaced whole. Call under the gym's lock. */
-export async function setBoardsOff(
+/** One board switched off or on for members; the others stay as they are stored. Call
+ *  under the gym's lock, so two switches pressed together both land. */
+export async function setBoardOff(
   tx: TransactionSql,
   gymId: string,
-  off: readonly LeaderboardBoard[],
+  board: LeaderboardBoard,
+  off: boolean,
 ): Promise<{ before: LeaderboardBoard[]; after: LeaderboardBoard[] } | null> {
   const rows = await tx<{ boards_off: string[] }[]>`
     SELECT leaderboard_boards_off AS boards_off FROM gyms WHERE id = ${gymId}`;
   const row = rows[0];
   if (row === undefined) return null;
   const before = asBoards(row.boards_off);
-  const after = asBoards(off);
+  const after = asBoards(off ? [...before, board] : before.filter((b) => b !== board));
   if (before.join() !== after.join()) {
     await tx`UPDATE gyms SET leaderboard_boards_off = ${after} WHERE id = ${gymId}`;
   }

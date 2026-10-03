@@ -12,12 +12,13 @@ ALTER TABLE "gym_staff" DROP CONSTRAINT "gym_staff_privileges_check";--> stateme
 ALTER TABLE "gym_staff" ADD CONSTRAINT "gym_staff_privileges_check" CHECK ("gym_staff"."privileges" IS NULL OR "gym_staff"."privileges" <@ ARRAY['members.read','codes.invite','codes.manage','members.confirm','members.remove','staff.manage','org.manage','billing.manage','attendance.read','schedule.manage','attendance.mark','leaderboard.manage']::text[]);--> statement-breakpoint
 
 -- Every owner and manager row holding its own ticks gets it, as `0064` did for
--- `attendance.mark`. A trainer's row, and a NULL set (which reads the role's defaults), are
--- left alone.
+-- `attendance.mark`. A trainer's row, a NULL set (which reads the role's defaults), and a
+-- person on one of the gym's own roles (whose ticks the owner chose) are left alone.
 UPDATE "gym_staff"
 SET "privileges" = array_append("privileges", 'leaderboard.manage')
 WHERE "privileges" IS NOT NULL
   AND "role" IN ('owner','manager')
+  AND "role_name" IS NULL
   AND NOT ("privileges" @> ARRAY['leaderboard.manage']::text[]);--> statement-breakpoint
 
 -- A manager's invitation still waiting gets it too. A gym's own saved roles
