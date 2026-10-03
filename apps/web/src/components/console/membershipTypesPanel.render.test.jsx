@@ -29,6 +29,7 @@ let n = 0;
 const type = (over = {}) => ({
   id: `22222222-2222-4222-8222-${String(n++).padStart(12, '0')}`,
   name: 'Gold Monthly',
+  description: null,
   kind: 'recurring',
   priceMinor: 4999,
   currency: 'GBP',
@@ -37,7 +38,8 @@ const type = (over = {}) => ({
   packClasses: null,
   packDays: null,
   access: 'all_classes',
-  weeklyBookings: null,
+  bookingsLimit: null,
+  bookingsPeriod: null,
   classTypes: null,
   archivedAt: null,
   ...over,
@@ -74,10 +76,10 @@ describe('the closed box says what is there', () => {
       .mockResolvedValueOnce({ data: listOf() });
     render(<MembershipTypesPanel org={ORG} readOnly={false} />);
     expect(await screen.findByText("We couldn't load your membership types.")).toBeTruthy();
-    expect(screen.queryByText("You haven't added anything yet.")).toBeNull();
+    expect(screen.queryByText(/You haven't added anything yet/)).toBeNull();
     expect(screen.queryByText('Add a membership type')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /try again/i }));
-    expect(await screen.findByText("You haven't added anything yet.")).toBeTruthy();
+    expect(await screen.findByText(/You haven't added anything yet/)).toBeTruthy();
   });
 });
 
@@ -87,7 +89,7 @@ describe('the list', () => {
       listOf({
         types: [
           type({ name: 'Day pass', kind: 'pack', termCount: null, termUnit: null, packClasses: 1, packDays: 1, priceMinor: 1500 }),
-          type({ name: 'Gold Monthly', access: 'weekly_bookings', weeklyBookings: 3, classTypes: [YOGA] }),
+          type({ name: 'Gold Monthly', description: 'Small groups', access: 'limited', bookingsLimit: 8, bookingsPeriod: 'month', classTypes: [YOGA] }),
           type({ name: 'Old dollars', currency: 'USD', priceMinor: 2000 }),
         ],
       }),
@@ -96,9 +98,10 @@ describe('the list', () => {
     const rows = screen.getAllByRole('listitem');
     expect(within(rows[0]).getByText('Day pass', { selector: 'span.font-semibold.text-sm' })).toBeTruthy();
     expect(within(rows[0]).getByText('£15.00 · 1 visit, on the day')).toBeTruthy();
-    expect(within(rows[1]).getByText('Repeating')).toBeTruthy();
+    expect(within(rows[1]).getByText('Recurring')).toBeTruthy();
     expect(within(rows[1]).getByText('£49.99 every month')).toBeTruthy();
-    expect(within(rows[1]).getByText('3 classes a week · only Yoga')).toBeTruthy();
+    expect(within(rows[1]).getByText('8 classes a month · only Yoga')).toBeTruthy();
+    expect(within(rows[1]).getByText('Small groups')).toBeTruthy();
     // A type made while the gym was in another country keeps that money.
     expect(within(rows[2]).getByText('$20.00 every month')).toBeTruthy();
   });
@@ -116,6 +119,7 @@ describe('adding a type', () => {
     await waitFor(() => expect(orgService.createMembershipType).toHaveBeenCalledTimes(1));
     expect(orgService.createMembershipType).toHaveBeenCalledWith(ORG.id, {
       name: 'Gold Monthly',
+      description: null,
       kind: 'recurring',
       priceMinor: 4999,
       termCount: 1,
@@ -123,7 +127,8 @@ describe('adding a type', () => {
       packClasses: null,
       packDays: null,
       access: 'all_classes',
-      weeklyBookings: null,
+      bookingsLimit: null,
+      bookingsPeriod: null,
       classTypeIds: null,
     });
     expect(await screen.findByText('£49.99 every month')).toBeTruthy();
@@ -139,7 +144,18 @@ describe('adding a type', () => {
       type_('Price (GBP)', typed);
       fireEvent.click(screen.getByRole('button', { name: 'Add membership type' }));
       expect(screen.getByText('Type the price as a number, like 49.99. Type 0 for free.')).toBeTruthy();
+      // Beside the button too, and the wrong box takes the keyboard: the sentence under
+      // it may be off the screen on a long form.
+      expect(screen.getByRole('alert').textContent).toBe('Not saved yet. Fix what is marked in red above.');
+      expect(document.activeElement).toBe(screen.getByLabelText('Price (GBP)'));
     }
+    // Typing does not pull the keyboard back, and a right price clears both sentences.
+    screen.getByLabelText('Name').focus();
+    type_('Name', 'Gold Monthly');
+    expect(document.activeElement).toBe(screen.getByLabelText('Name'));
+    type_('Price (GBP)', '49.99');
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByText(/Type the price as a number/)).toBeNull();
     expect(orgService.createMembershipType).not.toHaveBeenCalled();
   });
 
@@ -148,15 +164,16 @@ describe('adding a type', () => {
     open(listOf({ classChoices: [SPIN, YOGA] }));
     fireEvent.click(await screen.findByRole('button', { name: 'Add a membership type' }));
     expect(screen.getByLabelText('Charged every')).toBeTruthy();
-    expect(screen.getByLabelText('What it includes')).toBeTruthy();
+    expect(screen.getByLabelText('Classes')).toBeTruthy();
+    expect(within(screen.getByRole('radiogroup', { name: 'How is it paid?' })).getAllByRole('radio')).toHaveLength(5);
 
-    type_('What kind is it?', 'pack');
+    fireEvent.click(screen.getByRole('radio', { name: /^Class pack/ }));
     expect(screen.getByLabelText('Classes in the pack')).toBeTruthy();
     expect(screen.getByLabelText('Days to use them in')).toBeTruthy();
     expect(screen.queryByLabelText('Charged every')).toBeNull();
-    expect(screen.queryByLabelText('What it includes')).toBeNull();
+    expect(screen.queryByLabelText('Classes')).toBeNull();
 
-    type_('What kind is it?', 'day_pass');
+    fireEvent.click(screen.getByRole('radio', { name: /^Day pass/ }));
     expect(screen.queryByLabelText('Classes in the pack')).toBeNull();
     type_('Name', 'Day pass');
     type_('Price (GBP)', '15');
@@ -204,6 +221,36 @@ describe('adding a type', () => {
   });
 });
 
+describe('the gym\x27s own options', () => {
+  it('sends its description and a class limit counted by the week or the month', async () => {
+    orgService.createMembershipType.mockResolvedValue({ data: listOf() });
+    open(listOf());
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a membership type' }));
+    type_('Name', 'Twice a week');
+    type_('Description (optional)', ' Two classes a week, any time ');
+    type_('Price (GBP)', '35');
+    type_('Classes', 'limited');
+    type_('How many classes', '2');
+    type_('How many classes: a week or a month', 'week');
+    fireEvent.click(screen.getByRole('button', { name: 'Add membership type' }));
+    await waitFor(() => expect(orgService.createMembershipType).toHaveBeenCalledTimes(1));
+    expect(orgService.createMembershipType.mock.calls[0][1]).toMatchObject({
+      name: 'Twice a week',
+      description: 'Two classes a week, any time',
+      kind: 'recurring',
+      priceMinor: 3500,
+      access: 'limited',
+      bookingsLimit: 2,
+      bookingsPeriod: 'week',
+    });
+  });
+
+  it('an empty list says how a gym starts, in its own words', async () => {
+    open(listOf());
+    expect(await screen.findByText(/Add each thing you sell, with your own name and price/)).toBeTruthy();
+  });
+});
+
 describe('changing, archiving and putting back', () => {
   it('opens a type as it was saved, its kind fixed, and saves in the money it was made in', async () => {
     const gold = type({ name: 'Gold Monthly', currency: 'USD', priceMinor: 4999, termCount: 3 });
@@ -213,8 +260,9 @@ describe('changing, archiving and putting back', () => {
     expect(screen.getByLabelText('Name').value).toBe('Gold Monthly');
     expect(screen.getByLabelText('Price (USD)').value).toBe('49.99');
     expect(screen.getByLabelText('Charged every').value).toBe('3');
-    expect(screen.getByLabelText('What kind is it?').disabled).toBe(true);
-    expect(screen.getByText(/The kind can't be changed/)).toBeTruthy();
+    for (const radio of screen.getAllByRole('radio')) expect(radio.disabled).toBe(true);
+    expect(screen.getByRole('radio', { name: /^Recurring/ }).checked).toBe(true);
+    expect(screen.getByText(/How it is paid can't be changed once it is saved/)).toBeTruthy();
 
     type_('Price (USD)', '55');
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));

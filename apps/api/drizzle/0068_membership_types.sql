@@ -8,12 +8,14 @@
 -- country when the type is made (`MEMBER_CURRENCY` in `@app/shared`) and never changes.
 -- `term_count`/`term_unit` are a repeating type's billing period and a one-time type's or a
 -- trial's length; a pack holds `pack_classes` to use within `pack_days` (a day pass is 1 and 1).
+-- `bookings_limit` a `bookings_period` is the class limit of a `limited` type ("8 a month").
 -- `covers_all_classes` false means the set in `gym_membership_type_classes`.
 -- `archived_at`, never a delete: a person's membership (17a-ii) points at its type.
 CREATE TABLE "gym_membership_types" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"gym_id" uuid NOT NULL,
 	"name" text NOT NULL,
+	"description" text,
 	"kind" text NOT NULL,
 	"price_minor" integer NOT NULL,
 	"currency" text NOT NULL,
@@ -22,17 +24,19 @@ CREATE TABLE "gym_membership_types" (
 	"pack_classes" integer,
 	"pack_days" integer,
 	"access" text NOT NULL,
-	"weekly_bookings" integer,
+	"bookings_limit" integer,
+	"bookings_period" text,
 	"covers_all_classes" boolean DEFAULT true NOT NULL,
 	"archived_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "gym_membership_types_name_len_check" CHECK (char_length("gym_membership_types"."name") BETWEEN 1 AND 80),
+	CONSTRAINT "gym_membership_types_description_len_check" CHECK ("gym_membership_types"."description" IS NULL OR char_length("gym_membership_types"."description") BETWEEN 1 AND 300),
 	CONSTRAINT "gym_membership_types_kind_check" CHECK ("gym_membership_types"."kind" IN ('recurring','one_time','pack','trial')),
 	CONSTRAINT "gym_membership_types_price_check" CHECK ("gym_membership_types"."price_minor" BETWEEN 0 AND 99999999),
 	CONSTRAINT "gym_membership_types_currency_check" CHECK ("gym_membership_types"."currency" ~ '^[A-Z]{3}$'),
-	CONSTRAINT "gym_membership_types_access_check" CHECK ("gym_membership_types"."access" IN ('all_classes','weekly_bookings','gym_only')),
-	CONSTRAINT "gym_membership_types_weekly_check" CHECK (("gym_membership_types"."access" = 'weekly_bookings') = ("gym_membership_types"."weekly_bookings" IS NOT NULL) AND ("gym_membership_types"."weekly_bookings" IS NULL OR "gym_membership_types"."weekly_bookings" BETWEEN 1 AND 50)),
+	CONSTRAINT "gym_membership_types_access_check" CHECK ("gym_membership_types"."access" IN ('all_classes','limited','gym_only')),
+	CONSTRAINT "gym_membership_types_limit_check" CHECK (("gym_membership_types"."access" = 'limited') = ("gym_membership_types"."bookings_limit" IS NOT NULL) AND ("gym_membership_types"."access" = 'limited') = ("gym_membership_types"."bookings_period" IS NOT NULL) AND ("gym_membership_types"."bookings_limit" IS NULL OR "gym_membership_types"."bookings_limit" BETWEEN 1 AND 200) AND ("gym_membership_types"."bookings_period" IS NULL OR "gym_membership_types"."bookings_period" IN ('week','month'))),
 	CONSTRAINT "gym_membership_types_shape_check" CHECK (
 		CASE WHEN "gym_membership_types"."kind" = 'pack' THEN
 			"gym_membership_types"."pack_classes" IS NOT NULL

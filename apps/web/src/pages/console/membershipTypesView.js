@@ -2,12 +2,13 @@
 // 17a-i). Pure, so the tests read every state without a browser. A price is typed as a
 // plain number and becomes whole minor units through `priceToMinor`, nowhere else.
 import {
+  MEMBERSHIP_BOOKINGS_LIMIT_MAX,
+  MEMBERSHIP_DESCRIPTION_MAX,
   MEMBERSHIP_NAME_MAX,
   MEMBERSHIP_PACK_CLASSES_MAX,
   MEMBERSHIP_PACK_DAYS_MAX,
   MEMBERSHIP_TERM_COUNT_MAX,
   MEMBERSHIP_TYPES_MAX,
-  MEMBERSHIP_WEEKLY_BOOKINGS_MAX,
   currencyDecimals,
   formatMinor,
   isDayPass,
@@ -21,19 +22,27 @@ export function canManageMemberships(privileges) {
   return Array.isArray(privileges) && privileges.includes('memberships.manage');
 }
 
-/** The five things the form offers. A day pass is kept as a pack of 1 class for 1 day. */
+/** HOW A MEMBERSHIP IS PAID FOR: the five ways the form offers, in the words gym software
+ *  uses (PushPress, TeamUp and Gymdesk all say "Recurring"; TeamUp "Pack"; Gymdesk "One
+ *  time" and "Trial"). The membership itself, its name, price and what it includes, is
+ *  the gym's own. A day pass is kept as a pack of 1 class for 1 day. */
 export const KIND_CHOICES = [
-  { value: 'recurring', label: 'Repeating membership', hint: 'Paid every week, month or year until it is cancelled.' },
-  { value: 'one_time', label: 'One-time membership', hint: 'Paid once, and lasts a set time.' },
-  { value: 'pack', label: 'Class pack', hint: 'A number of classes to use within a set time.' },
-  { value: 'day_pass', label: 'Day pass', hint: 'One visit, on the day.' },
+  { value: 'recurring', label: 'Recurring', hint: 'Charged every week, month or year until the member cancels.' },
+  { value: 'one_time', label: 'One-time payment', hint: 'Paid once. Lasts a set time, then ends.' },
+  { value: 'pack', label: 'Class pack', hint: 'Paid once. A number of classes to use within a set time.' },
+  { value: 'day_pass', label: 'Day pass', hint: 'Paid once. One visit, on the day.' },
   { value: 'trial', label: 'Trial', hint: 'A short first membership, free or paid.' },
 ];
 
 export const ACCESS_CHOICES = [
-  { value: 'all_classes', label: 'As many classes as they like' },
-  { value: 'weekly_bookings', label: 'A set number of classes a week' },
-  { value: 'gym_only', label: 'The gym only, no classes' },
+  { value: 'all_classes', label: 'Unlimited classes' },
+  { value: 'limited', label: 'A limit on classes' },
+  { value: 'gym_only', label: 'No classes, gym only' },
+];
+
+export const LIMIT_PERIOD_CHOICES = [
+  { value: 'week', label: 'a week' },
+  { value: 'month', label: 'a month' },
 ];
 
 /** Which of the five a saved type is. */
@@ -42,7 +51,7 @@ export function kindChoice(type) {
 }
 
 const KIND_TAGS = {
-  recurring: 'Repeating',
+  recurring: 'Recurring',
   one_time: 'One time',
   pack: 'Class pack',
   day_pass: 'Day pass',
@@ -79,20 +88,20 @@ export function termLine(type) {
   return choice === 'one_time' ? `${price} once · ${lasts}` : `${price} · ${lasts}`;
 }
 
-/** What it includes: "All classes", "3 classes a week · only Yoga and Spin", "Gym only, no classes". */
+/** What it includes: "Unlimited classes", "8 classes a month · only Yoga", "No classes, gym only". */
 export function includesLine(type) {
-  if (type.access === 'gym_only') return 'Gym only, no classes';
-  const weekly = type.access === 'weekly_bookings';
-  const amount = weekly
-    ? `${plural(type.weeklyBookings, 'class', 'classes')} a week`
+  if (type.access === 'gym_only') return 'No classes, gym only';
+  const limited = type.access === 'limited';
+  const amount = limited
+    ? `${plural(type.bookingsLimit, 'class', 'classes')} a ${type.bookingsPeriod}`
     : type.kind === 'pack'
       ? 'Any class'
-      : 'All classes';
+      : 'Unlimited classes';
   if (!Array.isArray(type.classTypes)) return amount;
   const names = type.classTypes.map((c) => c.name);
   const shown = names.length <= 3 ? names.join(', ') : `${names.slice(0, 3).join(', ')} and ${String(names.length - 3)} more`;
   const which = names.length === 0 ? 'no classes ticked' : `only ${shown}`;
-  return weekly ? `${amount} · ${which}` : `${which.charAt(0).toUpperCase()}${which.slice(1)}`;
+  return limited ? `${amount} · ${which}` : `${which.charAt(0).toUpperCase()}${which.slice(1)}`;
 }
 
 /** The closed box's line. */
@@ -120,6 +129,7 @@ export function emptyDraft() {
   return {
     id: null,
     name: '',
+    description: '',
     choice: 'recurring',
     price: '',
     termCount: '1',
@@ -127,7 +137,8 @@ export function emptyDraft() {
     packClasses: '10',
     packDays: '60',
     access: 'all_classes',
-    weeklyBookings: '3',
+    bookingsLimit: '8',
+    bookingsPeriod: 'month',
     classScope: 'all',
     classIds: [],
   };
@@ -141,6 +152,7 @@ export function draftFromType(type) {
     ...base,
     id: type.id,
     name: type.name,
+    description: type.description ?? '',
     choice,
     price: minorToPriceText(type.priceMinor, type.currency),
     termCount: type.termCount === null ? base.termCount : String(type.termCount),
@@ -148,7 +160,8 @@ export function draftFromType(type) {
     packClasses: type.packClasses === null ? base.packClasses : String(type.packClasses),
     packDays: type.packDays === null ? base.packDays : String(type.packDays),
     access: type.access,
-    weeklyBookings: type.weeklyBookings === null ? base.weeklyBookings : String(type.weeklyBookings),
+    bookingsLimit: type.bookingsLimit === null ? base.bookingsLimit : String(type.bookingsLimit),
+    bookingsPeriod: type.bookingsPeriod ?? base.bookingsPeriod,
     classScope: type.classTypes === null ? 'all' : 'some',
     classIds: type.classTypes === null ? [] : type.classTypes.map((c) => c.id),
   };
@@ -183,12 +196,27 @@ export function priceExample(currency) {
 const usesTerm = (choice) => choice === 'recurring' || choice === 'one_time' || choice === 'trial';
 const usesAccess = usesTerm;
 
+/** The boxes in the order the form draws them, so the first wrong one can be shown. */
+export const PROBLEM_ORDER = ['name', 'description', 'price', 'termCount', 'packClasses', 'packDays', 'bookingsLimit', 'classes'];
+
+/** The first box that is wrong, top to bottom, or null. */
+export function firstProblem(problems) {
+  if (problems === null || problems === undefined) return null;
+  return PROBLEM_ORDER.find((key) => problems[key] !== undefined) ?? null;
+}
+
+/** The line beside the Save button when the form was not saved. */
+export const NOT_SAVED = 'Not saved yet. Fix what is marked in red above.';
+
 /** What is wrong with the form, one sentence a field, or null when it can be saved. */
 export function draftProblems(draft, currency) {
   const problems = {};
   const name = draft.name.trim();
   if (name === '') problems.name = 'Give it a name, like Gold Monthly.';
   else if (name.length > MEMBERSHIP_NAME_MAX) problems.name = `Keep the name to ${String(MEMBERSHIP_NAME_MAX)} letters.`;
+  if (draft.description.trim().length > MEMBERSHIP_DESCRIPTION_MAX) {
+    problems.description = `Keep the description to ${String(MEMBERSHIP_DESCRIPTION_MAX)} letters.`;
+  }
   if (priceToMinor(draft.price, currency) === null) {
     problems.price = `Type the price as a number, like ${priceExample(currency)}. Type 0 for free.`;
   }
@@ -205,10 +233,10 @@ export function draftProblems(draft, currency) {
   }
   if (
     usesAccess(draft.choice) &&
-    draft.access === 'weekly_bookings' &&
-    wholeNumber(draft.weeklyBookings, 1, MEMBERSHIP_WEEKLY_BOOKINGS_MAX) === null
+    draft.access === 'limited' &&
+    wholeNumber(draft.bookingsLimit, 1, MEMBERSHIP_BOOKINGS_LIMIT_MAX) === null
   ) {
-    problems.weeklyBookings = `Type how many classes a week, from 1 to ${String(MEMBERSHIP_WEEKLY_BOOKINGS_MAX)}.`;
+    problems.bookingsLimit = `Type how many classes, from 1 to ${String(MEMBERSHIP_BOOKINGS_LIMIT_MAX)}.`;
   }
   if (coversSomeClasses(draft) && draft.classIds.length === 0) {
     problems.classes = 'Tick at least one class, or choose Every class.';
@@ -229,6 +257,7 @@ export function draftBody(draft, currency) {
   const access = pack ? 'all_classes' : draft.access;
   return {
     name: draft.name.trim(),
+    description: draft.description.trim() === '' ? null : draft.description.trim(),
     kind: draft.choice === 'day_pass' ? 'pack' : draft.choice,
     priceMinor: priceToMinor(draft.price, currency),
     termCount: pack ? null : wholeNumber(draft.termCount, 1, MEMBERSHIP_TERM_COUNT_MAX),
@@ -236,7 +265,8 @@ export function draftBody(draft, currency) {
     packClasses: draft.choice === 'day_pass' ? 1 : pack ? wholeNumber(draft.packClasses, 1, MEMBERSHIP_PACK_CLASSES_MAX) : null,
     packDays: draft.choice === 'day_pass' ? 1 : pack ? wholeNumber(draft.packDays, 1, MEMBERSHIP_PACK_DAYS_MAX) : null,
     access,
-    weeklyBookings: access === 'weekly_bookings' ? wholeNumber(draft.weeklyBookings, 1, MEMBERSHIP_WEEKLY_BOOKINGS_MAX) : null,
+    bookingsLimit: access === 'limited' ? wholeNumber(draft.bookingsLimit, 1, MEMBERSHIP_BOOKINGS_LIMIT_MAX) : null,
+    bookingsPeriod: access === 'limited' ? draft.bookingsPeriod : null,
     classTypeIds: coversSomeClasses(draft) ? [...draft.classIds] : null,
   };
 }

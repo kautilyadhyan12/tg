@@ -51,6 +51,7 @@ const cookieMap = (res: { cookies: { name: string; value: string }[] }) =>
 
 const monthly = (over: Record<string, unknown> = {}) => ({
   name: "Gold Monthly",
+  description: null,
   kind: "recurring",
   priceMinor: 4999,
   termCount: 1,
@@ -58,7 +59,8 @@ const monthly = (over: Record<string, unknown> = {}) => ({
   packClasses: null,
   packDays: null,
   access: "all_classes",
-  weeklyBookings: null,
+  bookingsLimit: null,
+  bookingsPeriod: null,
   classTypeIds: null,
   ...over,
 });
@@ -392,9 +394,9 @@ d("a gym's membership types: who may read and change them, and what is kept (rea
       const yoga = await makeClass(gymId, owner.cookies, "Yoga");
       const spin = await makeClass(gymId, owner.cookies, "Spin");
 
-      await addType(gymId, owner.cookies, monthly({ name: "Monthly", access: "weekly_bookings", weeklyBookings: 3, classTypeIds: [yoga, spin] }));
-      await addType(gymId, owner.cookies, monthly({ name: "Three months", kind: "one_time", termCount: 3, termUnit: "month", access: "gym_only" }));
-      await addType(gymId, owner.cookies, monthly({ name: "Free week", kind: "trial", priceMinor: 0, termCount: 7, termUnit: "day" }));
+      await addType(gymId, owner.cookies, monthly({ name: "Monthly", access: "limited", bookingsLimit: 3, bookingsPeriod: "week", classTypeIds: [yoga, spin] }));
+      await addType(gymId, owner.cookies, monthly({ name: "Three months", kind: "one_time", termCount: 3, termUnit: "month", access: "gym_only", description: "  Gym floor only.  " }));
+      await addType(gymId, owner.cookies, monthly({ name: "Free week", kind: "trial", priceMinor: 0, termCount: 7, termUnit: "day", description: "", access: "limited", bookingsLimit: 8, bookingsPeriod: "month" }));
       await addType(gymId, owner.cookies, pack({ name: "Ten classes", classTypeIds: [yoga] }));
       const answer = await addType(gymId, owner.cookies, pack({ name: "Day pass", packClasses: 1, packDays: 1, priceMinor: 1500 }));
 
@@ -408,13 +410,15 @@ d("a gym's membership types: who may read and change them, and what is kept (rea
         termUnit: "month",
         packClasses: null,
         packDays: null,
-        access: "weekly_bookings",
-        weeklyBookings: 3,
+        access: "limited",
+        bookingsLimit: 3,
+        bookingsPeriod: "week",
         classTypes: [{ id: spin, name: "Spin" }, { id: yoga, name: "Yoga" }],
         archivedAt: null,
       });
-      expect(byName("Three months")).toMatchObject({ kind: "one_time", termCount: 3, termUnit: "month", access: "gym_only", classTypes: null });
-      expect(byName("Free week")).toMatchObject({ kind: "trial", priceMinor: 0, termCount: 7, termUnit: "day", classTypes: null });
+      expect(byName("Three months")).toMatchObject({ kind: "one_time", termCount: 3, termUnit: "month", access: "gym_only", classTypes: null, description: "Gym floor only." });
+      // An empty description is none; a limit can be counted by the month.
+      expect(byName("Free week")).toMatchObject({ kind: "trial", priceMinor: 0, termCount: 7, termUnit: "day", classTypes: null, description: null, access: "limited", bookingsLimit: 8, bookingsPeriod: "month" });
       expect(byName("Ten classes")).toMatchObject({ kind: "pack", packClasses: 10, packDays: 60, termCount: null, termUnit: null, classTypes: [{ id: yoga, name: "Yoga" }] });
       expect(byName("Day pass")).toMatchObject({ kind: "pack", packClasses: 1, packDays: 1, priceMinor: 1500, classTypes: null });
 
@@ -423,7 +427,8 @@ d("a gym's membership types: who may read and change them, and what is kept (rea
       const fewer = await put(typeUrl(gymId, monthlyId), monthly({ name: "Monthly", classTypeIds: [spin] }), owner.cookies);
       expect(fewer.statusCode).toBe(200);
       expect(await coveredOf(monthlyId)).toEqual([spin]);
-      expect(list(fewer).types.find((t) => t.id === monthlyId)).toMatchObject({ access: "all_classes", weeklyBookings: null, classTypes: [{ id: spin, name: "Spin" }] });
+      expect(list(fewer).types.find((t) => t.id === monthlyId)).toMatchObject({ access: "all_classes", bookingsLimit: null,
+  bookingsPeriod: null, classTypes: [{ id: spin, name: "Spin" }] });
       const all = await put(typeUrl(gymId, monthlyId), monthly({ name: "Monthly" }), owner.cookies);
       expect(list(all).types.find((t) => t.id === monthlyId)?.classTypes).toBeNull();
       expect(await coveredOf(monthlyId)).toEqual([]);
@@ -441,7 +446,9 @@ d("a gym's membership types: who may read and change them, and what is kept (rea
         monthly({ name: "Bad", packClasses: 5 }),
         pack({ name: "Bad", packDays: null }),
         pack({ name: "Bad", access: "gym_only" }),
-        monthly({ name: "Bad", access: "weekly_bookings" }),
+        monthly({ name: "Bad", access: "limited" }),
+        monthly({ name: "Bad", access: "limited", bookingsLimit: 3, bookingsPeriod: "year" }),
+        monthly({ name: "Bad", description: "x".repeat(301) }),
         monthly({ name: "Bad", access: "gym_only", classTypeIds: [yoga] }),
         monthly({ name: "Bad", classTypeIds: [] }),
         monthly({ name: "" }),

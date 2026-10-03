@@ -2289,7 +2289,11 @@ by default; the owner can tick it for anyone on staff, RULINGS 2026-10-04).
 dollars in Canada — not `COUNTRY_CURRENCY`, which is what the gym pays US in. The server
 stamps it on a type when it is made and never changes it, nor the type's kind. Reading
 the list needs `members.read`. One live type of a name per gym, whatever its capitals;
-60 live types. Built in three jobs: 17a-i the price list, 17a-ii a person's membership,
+60 live types. A type has a description (optional), and its class limit is so many a
+WEEK OR A MONTH (`limited`, `bookings_limit`, `bookings_period`), not a week alone
+(RULINGS 2026-10-04: the gym’s own options; PushPress and TeamUp count both). The screen
+asks "How is it paid?" in the industry’s words: Recurring · One-time payment · Class pack
+· Day pass · Trial. Built in three jobs: 17a-i the price list, 17a-ii a person's membership,
 17a-iii a file's word linked to a type.
 
 ### 13.2 A person's membership

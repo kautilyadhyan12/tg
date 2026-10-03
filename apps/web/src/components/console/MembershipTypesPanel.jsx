@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
-import { MEMBERSHIP_NAME_MAX } from '@app/shared';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { MEMBERSHIP_DESCRIPTION_MAX, MEMBERSHIP_NAME_MAX } from '@app/shared';
 import { Loader2 } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
 import {
   ACCESS_CHOICES,
   KIND_CHOICES,
+  LIMIT_PERIOD_CHOICES,
+  NOT_SAVED,
   TOO_MANY_TYPES,
   archivedNote,
   canAddType,
@@ -14,8 +16,10 @@ import {
   draftFromType,
   draftProblems,
   emptyDraft,
+  firstProblem,
   includesLine,
   kindTag,
+  priceExample,
   termLine,
   termUnitOptions,
   typesSummary,
@@ -61,7 +65,19 @@ function Field({ id, label, children, problem }) {
   );
 }
 
-function TypeForm({ gymId, currency, options, draft, setDraft, problems, busy, onSave, onCancel }) {
+/** One part of the form, under its own small heading. */
+function Part({ title, children }) {
+  return (
+    <fieldset className="flex flex-col gap-4 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+      <legend className="text-xs font-semibold uppercase tracking-wide pr-2" style={{ color: 'rgba(255,255,255,0.55)' }}>
+        {title}
+      </legend>
+      {children}
+    </fieldset>
+  );
+}
+
+function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused, busy, onSave, onCancel }) {
   const editing = draft.id !== null;
   const id = (name) => `membership-${name}-${gymId}`;
   const set = (patch) => setDraft((d) => ({ ...d, ...patch }));
@@ -71,9 +87,24 @@ function TypeForm({ gymId, currency, options, draft, setDraft, problems, busy, o
   const picksClasses = !(hasTerm && draft.access === 'gym_only') && options.length > 0;
   const toggleClass = (classId) =>
     set({ classIds: draft.classIds.includes(classId) ? draft.classIds.filter((c) => c !== classId) : [...draft.classIds, classId] });
+  const first = firstProblem(problems);
+  const formRef = useRef(null);
+
+  // A refused save shows its first wrong box: the button is at the bottom of a long form,
+  // and a sentence under a box that has scrolled away is a sentence nobody reads. Once a
+  // press, never while the person types.
+  useEffect(() => {
+    if (refused === 0) return;
+    const box = formRef.current?.querySelector('[aria-invalid="true"]');
+    if (!box) return;
+    if (typeof box.scrollIntoView === 'function') box.scrollIntoView({ block: 'center' });
+    box.focus({ preventScroll: true });
+  }, [refused]);
 
   return (
     <form
+      ref={formRef}
+      noValidate
       onSubmit={(event) => {
         event.preventDefault();
         onSave();
@@ -82,13 +113,19 @@ function TypeForm({ gymId, currency, options, draft, setDraft, problems, busy, o
       style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}
       aria-label={editing ? 'Change membership type' : 'Add a membership type'}
     >
-      <p className="text-sm font-semibold" style={{ color: '#fff' }}>
-        {editing ? 'Change membership type' : 'Add a membership type'}
-      </p>
+      <div>
+        <p className="text-sm font-semibold" style={{ color: '#fff' }}>
+          {editing ? 'Change membership type' : 'Add a membership type'}
+        </p>
+        <p className="text-sm mt-1" style={hintStyle}>
+          Make it your own: give it your name and price, then say how it is paid and what it includes.
+        </p>
+      </div>
 
       <Field id={id('name')} label="Name" problem={problems?.name}>
         <input
           id={id('name')}
+          aria-invalid={problems?.name ? 'true' : undefined}
           value={draft.name}
           maxLength={MEMBERSHIP_NAME_MAX}
           onChange={text('name')}
@@ -98,138 +135,201 @@ function TypeForm({ gymId, currency, options, draft, setDraft, problems, busy, o
         />
       </Field>
 
-      <Field id={id('kind')} label="What kind is it?">
-        <select
-          id={id('kind')}
-          value={choice}
-          disabled={editing}
-          onChange={(event) => setDraft((d) => withChoice(d, event.target.value))}
-          className={`${inputClass} disabled:opacity-60`}
-          style={inputStyle}
-        >
-          {KIND_CHOICES.map((k) => (
-            <option key={k.value} value={k.value}>
-              {k.label}
-            </option>
-          ))}
-        </select>
-        <p className="text-sm" style={hintStyle}>
-          {editing
-            ? "The kind can't be changed. To sell a different kind, archive this one and add a new one."
-            : KIND_CHOICES.find((k) => k.value === choice)?.hint}
-        </p>
-      </Field>
-
-      <Field id={id('price')} label={`Price (${currency})`} problem={problems?.price}>
+      <Field id={id('description')} label="Description (optional)" problem={problems?.description}>
         <input
-          id={id('price')}
-          value={draft.price}
-          inputMode="decimal"
-          onChange={text('price')}
-          placeholder="0"
+          id={id('description')}
+          aria-invalid={problems?.description ? 'true' : undefined}
+          value={draft.description}
+          maxLength={MEMBERSHIP_DESCRIPTION_MAX}
+          onChange={text('description')}
+          placeholder="For example: All classes and open gym"
           className={inputClass}
           style={inputStyle}
         />
       </Field>
 
-      {hasTerm ? (
-        <Field
-          id={id('term-count')}
-          label={choice === 'recurring' ? 'Charged every' : 'How long it lasts'}
-          problem={problems?.termCount}
-        >
-          <div className="flex gap-2">
-            <input
-              id={id('term-count')}
-              value={draft.termCount}
-              inputMode="numeric"
-              onChange={text('termCount')}
-              className={inputClass}
-              style={inputStyle}
-            />
-            <select
-              aria-label={choice === 'recurring' ? 'Charged every: weeks, months or years' : 'How long it lasts: days, weeks, months or years'}
-              value={draft.termUnit}
-              onChange={text('termUnit')}
-              className={inputClass}
-              style={inputStyle}
+      <Part title="Price and payment">
+        <div role="radiogroup" aria-label="How is it paid?" className="flex flex-col gap-1">
+          <span className="text-sm font-medium" style={labelStyle}>
+            How is it paid?
+          </span>
+          {KIND_CHOICES.map((k) => (
+            <label
+              key={k.value}
+              className="flex items-start gap-3 rounded-xl px-3 py-2 min-h-11"
+              style={{
+                background: choice === k.value ? 'rgba(255,138,31,0.10)' : 'transparent',
+                border: `1px solid ${choice === k.value ? 'rgba(255,138,31,0.45)' : 'rgba(255,255,255,0.08)'}`,
+                opacity: editing && choice !== k.value ? 0.45 : 1,
+              }}
             >
-              {termUnitOptions(choice).map((u) => (
-                <option key={u.value} value={u.value}>
-                  {u.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </Field>
-      ) : null}
-
-      {choice === 'pack' ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field id={id('pack-classes')} label="Classes in the pack" problem={problems?.packClasses}>
-            <input id={id('pack-classes')} value={draft.packClasses} inputMode="numeric" onChange={text('packClasses')} className={inputClass} style={inputStyle} />
-          </Field>
-          <Field id={id('pack-days')} label="Days to use them in" problem={problems?.packDays}>
-            <input id={id('pack-days')} value={draft.packDays} inputMode="numeric" onChange={text('packDays')} className={inputClass} style={inputStyle} />
-          </Field>
-        </div>
-      ) : null}
-
-      {hasTerm ? (
-        <Field id={id('access')} label="What it includes">
-          <select id={id('access')} value={draft.access} onChange={text('access')} className={inputClass} style={inputStyle}>
-            {ACCESS_CHOICES.map((a) => (
-              <option key={a.value} value={a.value}>
-                {a.label}
-              </option>
-            ))}
-          </select>
-        </Field>
-      ) : null}
-
-      {hasTerm && draft.access === 'weekly_bookings' ? (
-        <Field id={id('weekly')} label="Classes a week" problem={problems?.weeklyBookings}>
-          <input id={id('weekly')} value={draft.weeklyBookings} inputMode="numeric" onChange={text('weeklyBookings')} className={inputClass} style={inputStyle} />
-        </Field>
-      ) : null}
-
-      {picksClasses ? (
-        <Field id={id('scope')} label="Which classes" problem={problems?.classes}>
-          <select id={id('scope')} value={draft.classScope} onChange={text('classScope')} className={inputClass} style={inputStyle}>
-            <option value="all">Every class</option>
-            <option value="some">Only the classes I tick</option>
-          </select>
-          {draft.classScope === 'some' ? (
-            <div className="flex flex-col mt-1">
-              {options.map((option) => (
-                <label key={option.id} className="flex items-center gap-3 min-h-11 text-sm" style={{ color: '#fff' }}>
-                  <input
-                    type="checkbox"
-                    className="w-5 h-5"
-                    checked={draft.classIds.includes(option.id)}
-                    onChange={() => toggleClass(option.id)}
-                  />
-                  {option.name}
-                </label>
-              ))}
-            </div>
+              <input
+                type="radio"
+                name={id('kind')}
+                className="w-5 h-5 mt-0.5"
+                value={k.value}
+                checked={choice === k.value}
+                disabled={editing}
+                onChange={() => setDraft((d) => withChoice(d, k.value))}
+              />
+              <span className="flex flex-col">
+                <span className="text-sm font-semibold" style={{ color: '#fff' }}>
+                  {k.label}
+                </span>
+                <span className="text-sm" style={hintStyle}>
+                  {k.hint}
+                </span>
+              </span>
+            </label>
+          ))}
+          {editing ? (
+            <p className="text-sm" style={hintStyle}>
+              How it is paid can&apos;t be changed once it is saved. To sell it another way, archive this one and add a new one.
+            </p>
           ) : null}
+        </div>
+
+        <Field id={id('price')} label={`Price (${currency})`} problem={problems?.price}>
+          <input
+            id={id('price')}
+            aria-invalid={problems?.price ? 'true' : undefined}
+            value={draft.price}
+            inputMode="decimal"
+            onChange={text('price')}
+            placeholder={`For example: ${priceExample(currency)}`}
+            className={inputClass}
+            style={inputStyle}
+          />
         </Field>
+
+        {hasTerm ? (
+          <Field
+            id={id('term-count')}
+            label={choice === 'recurring' ? 'Charged every' : 'How long it lasts'}
+            problem={problems?.termCount}
+          >
+            <div className="flex gap-2">
+              <input
+                id={id('term-count')}
+                aria-invalid={problems?.termCount ? 'true' : undefined}
+                value={draft.termCount}
+                inputMode="numeric"
+                onChange={text('termCount')}
+                className={inputClass}
+                style={inputStyle}
+              />
+              <select
+                aria-label={choice === 'recurring' ? 'Charged every: weeks, months or years' : 'How long it lasts: days, weeks, months or years'}
+                value={draft.termUnit}
+                onChange={text('termUnit')}
+                className={inputClass}
+                style={inputStyle}
+              >
+                {termUnitOptions(choice).map((u) => (
+                  <option key={u.value} value={u.value}>
+                    {u.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </Field>
+        ) : null}
+
+        {choice === 'pack' ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field id={id('pack-classes')} label="Classes in the pack" problem={problems?.packClasses}>
+              <input id={id('pack-classes')} aria-invalid={problems?.packClasses ? 'true' : undefined} value={draft.packClasses} inputMode="numeric" onChange={text('packClasses')} className={inputClass} style={inputStyle} />
+            </Field>
+            <Field id={id('pack-days')} label="Days to use them in" problem={problems?.packDays}>
+              <input id={id('pack-days')} aria-invalid={problems?.packDays ? 'true' : undefined} value={draft.packDays} inputMode="numeric" onChange={text('packDays')} className={inputClass} style={inputStyle} />
+            </Field>
+          </div>
+        ) : null}
+      </Part>
+
+      {hasTerm || picksClasses ? (
+        <Part title="What it includes">
+          {hasTerm ? (
+            <Field id={id('access')} label="Classes">
+              <select id={id('access')} value={draft.access} onChange={text('access')} className={inputClass} style={inputStyle}>
+                {ACCESS_CHOICES.map((a) => (
+                  <option key={a.value} value={a.value}>
+                    {a.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          ) : null}
+
+          {hasTerm && draft.access === 'limited' ? (
+            <Field id={id('limit')} label="How many classes" problem={problems?.bookingsLimit}>
+              <div className="flex gap-2">
+                <input
+                  id={id('limit')}
+                  aria-invalid={problems?.bookingsLimit ? 'true' : undefined}
+                  value={draft.bookingsLimit}
+                  inputMode="numeric"
+                  onChange={text('bookingsLimit')}
+                  className={inputClass}
+                  style={inputStyle}
+                />
+                <select aria-label="How many classes: a week or a month" value={draft.bookingsPeriod} onChange={text('bookingsPeriod')} className={inputClass} style={inputStyle}>
+                  {LIMIT_PERIOD_CHOICES.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </Field>
+          ) : null}
+
+          {picksClasses ? (
+            <Field id={id('scope')} label="Which classes" problem={problems?.classes}>
+              <select id={id('scope')} aria-invalid={problems?.classes ? 'true' : undefined} value={draft.classScope} onChange={text('classScope')} className={inputClass} style={inputStyle}>
+                <option value="all">Every class</option>
+                <option value="some">Only the classes I tick</option>
+              </select>
+              {draft.classScope === 'some' ? (
+                <div className="flex flex-col mt-1">
+                  {options.map((option) => (
+                    <label key={option.id} className="flex items-center gap-3 min-h-11 text-sm" style={{ color: '#fff' }}>
+                      <input
+                        type="checkbox"
+                        className="w-5 h-5"
+                        checked={draft.classIds.includes(option.id)}
+                        onChange={() => toggleClass(option.id)}
+                      />
+                      {option.name}
+                    </label>
+                  ))}
+                </div>
+              ) : null}
+            </Field>
+          ) : null}
+        </Part>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="submit"
-          disabled={busy}
-          className="rounded-xl px-5 py-3 text-sm font-semibold flex items-center justify-center gap-2 min-h-11 disabled:opacity-40"
-          style={mainButton}
-        >
-          {busy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : null}
-          {editing ? 'Save changes' : 'Add membership type'}
-        </button>
-        <button type="button" disabled={busy} onClick={onCancel} className="rounded-xl px-4 py-3 text-sm min-h-11 disabled:opacity-40" style={quietButton}>
-          Cancel
-        </button>
+      <div className="flex flex-col gap-2">
+        {first !== null ? (
+          <p className="text-sm font-semibold" style={{ color: '#ef4444' }} role="alert">
+            {NOT_SAVED}
+          </p>
+        ) : null}
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="submit"
+            disabled={busy}
+            className="rounded-xl px-5 py-3 text-sm font-semibold flex items-center justify-center gap-2 min-h-11 disabled:opacity-40"
+            style={mainButton}
+          >
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : null}
+            {editing ? 'Save changes' : 'Add membership type'}
+          </button>
+          <button type="button" disabled={busy} onClick={onCancel} className="rounded-xl px-4 py-3 text-sm min-h-11 disabled:opacity-40" style={quietButton}>
+            Cancel
+          </button>
+        </div>
       </div>
     </form>
   );
@@ -247,6 +347,11 @@ function TypeRow({ type, readOnly, busy, onEdit, onArchive }) {
           {kindTag(type)}
         </span>
       </div>
+      {type.description ? (
+        <p className="text-sm" style={hintStyle}>
+          {type.description}
+        </p>
+      ) : null}
       <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
         {termLine(type)}
       </p>
@@ -298,6 +403,7 @@ export default function MembershipTypesPanel({ org, readOnly }) {
   const [loadError, setLoadError] = useState(null);
   const [draft, setDraft] = useState(null);
   const [showProblems, setShowProblems] = useState(false);
+  const [refused, setRefused] = useState(0);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -348,10 +454,12 @@ export default function MembershipTypesPanel({ org, readOnly }) {
   const closeForm = () => {
     setDraft(null);
     setShowProblems(false);
+    setRefused(0);
   };
 
   const save = async () => {
     setShowProblems(true);
+    if (draft !== null && problems !== null) setRefused((n) => n + 1);
     if (draft === null || draftCurrency === null || problems !== null || readOnly || busy) return;
     const body = draftBody(draft, draftCurrency);
     const done =
@@ -375,7 +483,8 @@ export default function MembershipTypesPanel({ org, readOnly }) {
         </p>
       ) : null}
       <p className="text-sm" style={hintStyle}>
-        What you sell: memberships, class packs, day passes and trials, each with its price.
+        Your own list of what you sell. You name each one, set its price, and choose how it is paid and what it
+        includes.
         {list?.currency ? ` Prices are in ${list.currency}.` : ''}
       </p>
 
@@ -407,7 +516,8 @@ export default function MembershipTypesPanel({ org, readOnly }) {
             </ul>
           ) : (
             <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-              You haven&apos;t added anything yet.
+              You haven&apos;t added anything yet. Add each thing you sell, with your own name and price: a monthly
+              membership, a 10-class pack, a day pass, a free trial week.
             </p>
           )}
 
@@ -419,6 +529,7 @@ export default function MembershipTypesPanel({ org, readOnly }) {
               draft={draft}
               setDraft={setDraft}
               problems={showProblems ? problems : null}
+              refused={refused}
               busy={busy}
               onSave={() => void save()}
               onCancel={closeForm}

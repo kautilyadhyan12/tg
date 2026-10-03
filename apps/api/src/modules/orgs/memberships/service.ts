@@ -82,6 +82,12 @@ function throwOnFailure(outcome: repo.MembershipWriteOutcome): void {
   }
 }
 
+/** An empty description box means "none", stored as NULL. */
+function typeInput(req: SaveGymMembershipTypeRequest): repo.MembershipTypeInput {
+  const description = req.description ?? "";
+  return { ...req, description: description.length === 0 ? null : description };
+}
+
 export async function getMembershipTypes(
   deps: MembershipsDeps,
   userId: string,
@@ -106,7 +112,9 @@ export async function createMembershipType(
       "Set your country in Settings before adding a membership type.",
     );
   }
-  throwOnFailure(await repo.createMembershipType(deps.sql, { ...req, gymId, currency, actorUserId: userId }));
+  throwOnFailure(
+    await repo.createMembershipType(deps.sql, { ...typeInput(req), gymId, currency, actorUserId: userId }),
+  );
   return await readOr404(deps, gymId);
 }
 
@@ -119,7 +127,13 @@ export async function updateMembershipType(
 ): Promise<GymMembershipTypesResponse> {
   await requireWritablePrivilege(deps, gymId, userId, "memberships.manage");
   throwOnFailure(
-    await repo.updateMembershipType(deps.sql, { ...req, gymId, typeId, actorUserId: userId, now: deps.now() }),
+    await repo.updateMembershipType(deps.sql, {
+      ...typeInput(req),
+      gymId,
+      typeId,
+      actorUserId: userId,
+      now: deps.now(),
+    }),
   );
   return await readOr404(deps, gymId);
 }

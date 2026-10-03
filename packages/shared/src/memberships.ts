@@ -23,8 +23,9 @@ export const membershipTermUnitSchema = z.enum(MEMBERSHIP_TERM_UNITS);
 export type MembershipTermUnit = z.infer<typeof membershipTermUnitSchema>;
 export const MEMBERSHIP_PERIOD_UNITS = ["week", "month", "year"] as const;
 
-/** What it includes: every class, so many bookings a week, or the gym floor only. */
-export const MEMBERSHIP_ACCESS = ["all_classes", "weekly_bookings", "gym_only"] as const;
+/** What it includes: every class, a limit of so many classes a week or a month, or
+ *  the gym floor only. */
+export const MEMBERSHIP_ACCESS = ["all_classes", "limited", "gym_only"] as const;
 export const membershipAccessSchema = z.enum(MEMBERSHIP_ACCESS);
 export type MembershipAccess = z.infer<typeof membershipAccessSchema>;
 
@@ -38,7 +39,12 @@ export const MEMBERSHIP_PRICE_MINOR_MAX = 99_999_999;
 export const MEMBERSHIP_TERM_COUNT_MAX = 365;
 export const MEMBERSHIP_PACK_CLASSES_MAX = 500;
 export const MEMBERSHIP_PACK_DAYS_MAX = 730;
-export const MEMBERSHIP_WEEKLY_BOOKINGS_MAX = 50;
+/** What a class limit is counted over. */
+export const MEMBERSHIP_LIMIT_PERIODS = ["week", "month"] as const;
+export const membershipLimitPeriodSchema = z.enum(MEMBERSHIP_LIMIT_PERIODS);
+export type MembershipLimitPeriod = z.infer<typeof membershipLimitPeriodSchema>;
+export const MEMBERSHIP_BOOKINGS_LIMIT_MAX = 200;
+export const MEMBERSHIP_DESCRIPTION_MAX = 300;
 /** A gym's live class types are capped at 60 (`CLASS_TYPES_MAX`); a type edited
  *  later may still cover archived ones. */
 export const MEMBERSHIP_CLASS_TYPES_MAX = 200;
@@ -68,17 +74,19 @@ const priceMinorSchema = z.number().int().min(0).max(MEMBERSHIP_PRICE_MINOR_MAX)
 const termCountSchema = z.number().int().min(1).max(MEMBERSHIP_TERM_COUNT_MAX);
 const packClassesSchema = z.number().int().min(1).max(MEMBERSHIP_PACK_CLASSES_MAX);
 const packDaysSchema = z.number().int().min(1).max(MEMBERSHIP_PACK_DAYS_MAX);
-const weeklyBookingsSchema = z.number().int().min(1).max(MEMBERSHIP_WEEKLY_BOOKINGS_MAX);
+const bookingsLimitSchema = z.number().int().min(1).max(MEMBERSHIP_BOOKINGS_LIMIT_MAX);
 
 /** One line of the price list, as the console reads it.
  *
  *  `termCount` and `termUnit` are the billing period of a repeating type and the
  *  length of a one-time type or a trial; a pack has `packClasses` and `packDays`
- *  instead. `classTypes` null means every class; a list means only those. */
+ *  instead. `bookingsLimit` a `bookingsPeriod` is the class limit where `access` is
+ *  `limited`. `classTypes` null means every class; a list means only those. */
 export const gymMembershipTypeSchema = z
   .object({
     id: z.string().uuid(),
     name: z.string().min(1).max(MEMBERSHIP_NAME_MAX),
+    description: z.string().min(1).max(MEMBERSHIP_DESCRIPTION_MAX).nullable(),
     kind: membershipKindSchema,
     priceMinor: priceMinorSchema,
     currency: currencyCodeSchema,
@@ -87,7 +95,8 @@ export const gymMembershipTypeSchema = z
     packClasses: packClassesSchema.nullable(),
     packDays: packDaysSchema.nullable(),
     access: membershipAccessSchema,
-    weeklyBookings: weeklyBookingsSchema.nullable(),
+    bookingsLimit: bookingsLimitSchema.nullable(),
+    bookingsPeriod: membershipLimitPeriodSchema.nullable(),
     classTypes: z
       .array(z.object({ id: z.string().uuid(), name: z.string().min(1).max(80) }).strict())
       .nullable(),
@@ -121,6 +130,13 @@ export const saveGymMembershipTypeRequestSchema = z
       .min(1)
       .max(MEMBERSHIP_NAME_MAX)
       .regex(/^\P{Cc}+$/u),
+    /** One or two lines for staff and, later, members. Empty is "none". */
+    description: z
+      .string()
+      .trim()
+      .max(MEMBERSHIP_DESCRIPTION_MAX)
+      .regex(/^\P{Cc}*$/u)
+      .nullable(),
     kind: membershipKindSchema,
     priceMinor: priceMinorSchema,
     termCount: termCountSchema.nullable(),
@@ -128,7 +144,8 @@ export const saveGymMembershipTypeRequestSchema = z
     packClasses: packClassesSchema.nullable(),
     packDays: packDaysSchema.nullable(),
     access: membershipAccessSchema,
-    weeklyBookings: weeklyBookingsSchema.nullable(),
+    bookingsLimit: bookingsLimitSchema.nullable(),
+    bookingsPeriod: membershipLimitPeriodSchema.nullable(),
     classTypeIds: z.array(z.string().uuid()).min(1).max(MEMBERSHIP_CLASS_TYPES_MAX).nullable(),
   })
   .strict()
@@ -150,7 +167,8 @@ export const saveGymMembershipTypeRequestSchema = z
       if (value.packDays !== null) wrong("packDays");
       if (value.kind === "recurring" && value.termUnit === "day") wrong("termUnit");
     }
-    if ((value.access === "weekly_bookings") !== (value.weeklyBookings !== null)) wrong("weeklyBookings");
+    if ((value.access === "limited") !== (value.bookingsLimit !== null)) wrong("bookingsLimit");
+    if ((value.access === "limited") !== (value.bookingsPeriod !== null)) wrong("bookingsPeriod");
     if (value.access === "gym_only" && value.classTypeIds !== null) wrong("classTypeIds");
     if (value.classTypeIds !== null && new Set(value.classTypeIds).size !== value.classTypeIds.length) {
       wrong("classTypeIds");

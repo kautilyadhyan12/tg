@@ -27,6 +27,7 @@ export const gymMembershipTypes = pgTable(
       .notNull()
       .references(() => gyms.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    description: text("description"),
     kind: text("kind").notNull(),
     priceMinor: integer("price_minor").notNull(),
     currency: text("currency").notNull(),
@@ -35,7 +36,8 @@ export const gymMembershipTypes = pgTable(
     packClasses: integer("pack_classes"),
     packDays: integer("pack_days"),
     access: text("access").notNull(),
-    weeklyBookings: integer("weekly_bookings"),
+    bookingsLimit: integer("bookings_limit"),
+    bookingsPeriod: text("bookings_period"),
     coversAllClasses: boolean("covers_all_classes").notNull().default(true),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: createdAt(),
@@ -43,13 +45,17 @@ export const gymMembershipTypes = pgTable(
   },
   (t) => [
     check("gym_membership_types_name_len_check", sql`char_length(${t.name}) BETWEEN 1 AND 80`),
+    check(
+      "gym_membership_types_description_len_check",
+      sql`${t.description} IS NULL OR char_length(${t.description}) BETWEEN 1 AND 300`,
+    ),
     check("gym_membership_types_kind_check", sql`${t.kind} IN ('recurring','one_time','pack','trial')`),
     check("gym_membership_types_price_check", sql`${t.priceMinor} BETWEEN 0 AND 99999999`),
     check("gym_membership_types_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
-    check("gym_membership_types_access_check", sql`${t.access} IN ('all_classes','weekly_bookings','gym_only')`),
+    check("gym_membership_types_access_check", sql`${t.access} IN ('all_classes','limited','gym_only')`),
     check(
-      "gym_membership_types_weekly_check",
-      sql`(${t.access} = 'weekly_bookings') = (${t.weeklyBookings} IS NOT NULL) AND (${t.weeklyBookings} IS NULL OR ${t.weeklyBookings} BETWEEN 1 AND 50)`,
+      "gym_membership_types_limit_check",
+      sql`(${t.access} = 'limited') = (${t.bookingsLimit} IS NOT NULL) AND (${t.access} = 'limited') = (${t.bookingsPeriod} IS NOT NULL) AND (${t.bookingsLimit} IS NULL OR ${t.bookingsLimit} BETWEEN 1 AND 200) AND (${t.bookingsPeriod} IS NULL OR ${t.bookingsPeriod} IN ('week','month'))`,
     ),
     check(
       "gym_membership_types_shape_check",

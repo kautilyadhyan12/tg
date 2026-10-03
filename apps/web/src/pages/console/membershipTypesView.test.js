@@ -10,6 +10,7 @@ import {
   draftFromType,
   draftProblems,
   emptyDraft,
+  firstProblem,
   includesLine,
   kindChoice,
   kindTag,
@@ -27,6 +28,7 @@ const SPIN = { id: '33333333-3333-4333-8333-000000000002', name: 'Spin' };
 const type = (over = {}) => ({
   id: '22222222-2222-4222-8222-000000000001',
   name: 'Gold Monthly',
+  description: null,
   kind: 'recurring',
   priceMinor: 4999,
   currency: 'USD',
@@ -35,7 +37,8 @@ const type = (over = {}) => ({
   packClasses: null,
   packDays: null,
   access: 'all_classes',
-  weeklyBookings: null,
+  bookingsLimit: null,
+  bookingsPeriod: null,
   classTypes: null,
   archivedAt: null,
   ...over,
@@ -80,7 +83,7 @@ describe('the price a gym typed is the price that is sent and shown', () => {
 
 describe('what each type says on the list', () => {
   it('names its kind, and a pack of 1 for 1 day is a day pass', () => {
-    expect(kindTag(type())).toBe('Repeating');
+    expect(kindTag(type())).toBe('Recurring');
     expect(kindTag(type({ kind: 'one_time' }))).toBe('One time');
     expect(kindTag(type({ kind: 'trial' }))).toBe('Trial');
     expect(kindTag(packType())).toBe('Class pack');
@@ -101,12 +104,13 @@ describe('what each type says on the list', () => {
   });
 
   it('says what it includes', () => {
-    expect(includesLine(type())).toBe('All classes');
-    expect(includesLine(type({ access: 'gym_only' }))).toBe('Gym only, no classes');
-    expect(includesLine(type({ access: 'weekly_bookings', weeklyBookings: 3 }))).toBe('3 classes a week');
-    expect(includesLine(type({ access: 'weekly_bookings', weeklyBookings: 1 }))).toBe('1 class a week');
+    expect(includesLine(type())).toBe('Unlimited classes');
+    expect(includesLine(type({ access: 'gym_only' }))).toBe('No classes, gym only');
+    expect(includesLine(type({ access: 'limited', bookingsLimit: 3, bookingsPeriod: 'week' }))).toBe('3 classes a week');
+    expect(includesLine(type({ access: 'limited', bookingsLimit: 8, bookingsPeriod: 'month' }))).toBe('8 classes a month');
+    expect(includesLine(type({ access: 'limited', bookingsLimit: 1, bookingsPeriod: 'week' }))).toBe('1 class a week');
     expect(includesLine(type({ classTypes: [YOGA, SPIN] }))).toBe('Only Yoga, Spin');
-    expect(includesLine(type({ access: 'weekly_bookings', weeklyBookings: 2, classTypes: [YOGA] }))).toBe('2 classes a week · only Yoga');
+    expect(includesLine(type({ access: 'limited', bookingsLimit: 2, bookingsPeriod: 'week', classTypes: [YOGA] }))).toBe('2 classes a week · only Yoga');
     expect(includesLine(packType())).toBe('Any class');
     expect(includesLine(packType({ classTypes: [YOGA] }))).toBe('Only Yoga');
     const five = ['A', 'B', 'C', 'D', 'E'].map((name, i) => ({ id: `33333333-3333-4333-8333-00000000001${String(i)}`, name }));
@@ -149,6 +153,7 @@ describe('the form', () => {
   it('sends each kind in the shape the server takes', () => {
     expect(draftBody(named(), 'USD')).toEqual({
       name: 'Gold',
+      description: null,
       kind: 'recurring',
       priceMinor: 4999,
       termCount: 1,
@@ -156,17 +161,20 @@ describe('the form', () => {
       packClasses: null,
       packDays: null,
       access: 'all_classes',
-      weeklyBookings: null,
+      bookingsLimit: null,
+      bookingsPeriod: null,
       classTypeIds: null,
     });
+    expect(draftBody(named({ description: '  All classes and open gym  ' }), 'USD').description).toBe('All classes and open gym');
     expect(draftBody(named({ choice: 'pack' }), 'USD')).toMatchObject({ kind: 'pack', packClasses: 10, packDays: 60, termCount: null, termUnit: null, access: 'all_classes' });
     expect(draftBody(named({ choice: 'day_pass', packClasses: '25', packDays: '90' }), 'USD')).toMatchObject({ kind: 'pack', packClasses: 1, packDays: 1 });
     expect(draftBody(named({ choice: 'trial', termCount: '7', termUnit: 'day' }), 'USD')).toMatchObject({ kind: 'trial', termCount: 7, termUnit: 'day' });
-    expect(draftBody(named({ access: 'weekly_bookings', weeklyBookings: '2' }), 'USD')).toMatchObject({ access: 'weekly_bookings', weeklyBookings: 2 });
+    expect(draftBody(named({ access: 'limited', bookingsLimit: '2', bookingsPeriod: 'week' }), 'USD')).toMatchObject({ access: 'limited', bookingsLimit: 2, bookingsPeriod: 'week' });
+    expect(draftBody(named({ access: 'limited' }), 'USD')).toMatchObject({ access: 'limited', bookingsLimit: 8, bookingsPeriod: 'month' });
     expect(draftBody(named({ classScope: 'some', classIds: [YOGA.id] }), 'USD').classTypeIds).toEqual([YOGA.id]);
     // What does not apply to the kind is never sent, whatever the form still holds.
     expect(draftBody(named({ access: 'gym_only', classScope: 'some', classIds: [YOGA.id] }), 'USD')).toMatchObject({ access: 'gym_only', classTypeIds: null });
-    expect(draftBody(named({ choice: 'pack', access: 'gym_only', weeklyBookings: '4' }), 'USD')).toMatchObject({ access: 'all_classes', weeklyBookings: null });
+    expect(draftBody(named({ choice: 'pack', access: 'limited', bookingsLimit: '4' }), 'USD')).toMatchObject({ access: 'all_classes', bookingsLimit: null, bookingsPeriod: null });
 
     for (const draft of [
       named(),
@@ -174,7 +182,8 @@ describe('the form', () => {
       named({ choice: 'pack' }),
       named({ choice: 'day_pass' }),
       named({ choice: 'trial', price: '0', termCount: '7', termUnit: 'day' }),
-      named({ access: 'weekly_bookings' }),
+      named({ access: 'limited' }),
+      named({ description: 'Open gym' }),
       named({ access: 'gym_only', classScope: 'some' }),
       named({ choice: 'pack', classScope: 'some', classIds: [YOGA.id, SPIN.id] }),
     ]) {
@@ -191,27 +200,37 @@ describe('the form', () => {
       packClasses: 'Type how many classes, from 1 to 500.',
       packDays: 'Type how many days, from 1 to 730.',
     });
-    expect(draftProblems(named({ access: 'weekly_bookings', weeklyBookings: '51' }), 'USD')).toEqual({
-      weeklyBookings: 'Type how many classes a week, from 1 to 50.',
+    expect(draftProblems(named({ access: 'limited', bookingsLimit: '201' }), 'USD')).toEqual({
+      bookingsLimit: 'Type how many classes, from 1 to 200.',
     });
+    expect(draftProblems(named({ description: 'x'.repeat(301) }), 'USD')).toEqual({ description: 'Keep the description to 300 letters.' });
     expect(draftProblems(named({ classScope: 'some' }), 'USD')).toEqual({ classes: 'Tick at least one class, or choose Every class.' });
     // A box the kind does not use is not checked.
-    expect(draftProblems(named({ choice: 'day_pass', termCount: '', packClasses: '', weeklyBookings: '' }), 'USD')).toBeNull();
+    expect(draftProblems(named({ choice: 'day_pass', termCount: '', packClasses: '', bookingsLimit: '' }), 'USD')).toBeNull();
     expect(draftProblems(named({ choice: 'pack', termCount: '' }), 'USD')).toBeNull();
   });
 
+  it('names the first wrong box from the top, for a refused save to show', () => {
+    expect(firstProblem(null)).toBeNull();
+    expect(firstProblem(draftProblems(named({ price: '49,99', termCount: '0' }), 'USD'))).toBe('price');
+    expect(firstProblem(draftProblems(named({ name: '', price: '' }), 'USD'))).toBe('name');
+    expect(firstProblem(draftProblems(named({ classScope: 'some' }), 'USD'))).toBe('classes');
+  });
+
   it('opens a saved type as it was saved', () => {
-    const saved = type({ access: 'weekly_bookings', weeklyBookings: 3, classTypes: [YOGA], termCount: 3 });
+    const saved = type({ access: 'limited', bookingsLimit: 3, bookingsPeriod: 'week', classTypes: [YOGA], termCount: 3, description: 'Small groups' });
     expect(draftBody(draftFromType(saved), 'USD')).toEqual({
       name: 'Gold Monthly',
+      description: 'Small groups',
       kind: 'recurring',
       priceMinor: 4999,
       termCount: 3,
       termUnit: 'month',
       packClasses: null,
       packDays: null,
-      access: 'weekly_bookings',
-      weeklyBookings: 3,
+      access: 'limited',
+      bookingsLimit: 3,
+      bookingsPeriod: 'week',
       classTypeIds: [YOGA.id],
     });
     expect(draftFromType(packType({ packClasses: 1, packDays: 1 })).choice).toBe('day_pass');

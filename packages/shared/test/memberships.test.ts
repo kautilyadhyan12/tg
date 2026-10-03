@@ -142,6 +142,7 @@ describe("the money a gym's members pay in", () => {
 describe("what a gym may save as a membership type", () => {
   const monthly = {
     name: "Gold Monthly",
+    description: null,
     kind: "recurring",
     priceMinor: 4999,
     termCount: 1,
@@ -149,7 +150,8 @@ describe("what a gym may save as a membership type", () => {
     packClasses: null,
     packDays: null,
     access: "all_classes",
-    weeklyBookings: null,
+    bookingsLimit: null,
+    bookingsPeriod: null,
     classTypeIds: null,
   };
   const pack = {
@@ -169,7 +171,10 @@ describe("what a gym may save as a membership type", () => {
     expect(ok({ ...monthly, kind: "one_time", termCount: 90, termUnit: "day" })).toBe(true);
     expect(ok({ ...monthly, kind: "trial", priceMinor: 0, termCount: 7, termUnit: "day" })).toBe(true);
     expect(ok(pack)).toBe(true);
-    expect(ok({ ...monthly, access: "weekly_bookings", weeklyBookings: 3 })).toBe(true);
+    expect(ok({ ...monthly, access: "limited", bookingsLimit: 3, bookingsPeriod: "week" })).toBe(true);
+    expect(ok({ ...monthly, access: "limited", bookingsLimit: 8, bookingsPeriod: "month" })).toBe(true);
+    expect(ok({ ...monthly, description: "Unlimited classes and open gym." })).toBe(true);
+    expect(ok({ ...monthly, description: "" })).toBe(true);
     expect(ok({ ...monthly, access: "gym_only" })).toBe(true);
     expect(ok({ ...monthly, classTypeIds: [id] })).toBe(true);
     expect(saveGymMembershipTypeRequestSchema.parse({ ...monthly, name: "  Gold  " }).name).toBe("Gold");
@@ -186,9 +191,17 @@ describe("what a gym may save as a membership type", () => {
       { ...pack, packDays: null },
       { ...pack, termCount: 1, termUnit: "month" },
       { ...pack, access: "gym_only" },
-      { ...pack, access: "weekly_bookings", weeklyBookings: 2 },
-      { ...monthly, access: "weekly_bookings" },
-      { ...monthly, weeklyBookings: 3 },
+      { ...pack, access: "limited", bookingsLimit: 2, bookingsPeriod: "week" },
+      { ...monthly, access: "limited" },
+      { ...monthly, access: "limited", bookingsLimit: 3 },
+      { ...monthly, access: "limited", bookingsPeriod: "week" },
+      { ...monthly, access: "limited", bookingsLimit: 3, bookingsPeriod: "day" },
+      { ...monthly, access: "limited", bookingsLimit: 0, bookingsPeriod: "week" },
+      { ...monthly, access: "limited", bookingsLimit: 201, bookingsPeriod: "month" },
+      { ...monthly, bookingsLimit: 3 },
+      { ...monthly, bookingsPeriod: "week" },
+      { ...monthly, description: "x".repeat(301) },
+      { ...monthly, description: "one\nline" },
       { ...monthly, access: "gym_only", classTypeIds: [id] },
       { ...monthly, classTypeIds: [] },
       { ...monthly, classTypeIds: [id, id] },
