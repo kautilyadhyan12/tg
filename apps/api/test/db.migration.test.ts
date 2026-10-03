@@ -1151,6 +1151,56 @@ d("0001_init on a real database", () => {
       });
   });
 
+  /** `0066`'s rename, on a copy of the table (the real one's index already refuses two
+   *  of a name): the oldest device keeps its name, each other gets the start of its own id
+   *  after it, a switched-off twin and another gym's are left alone, and the index builds. */
+  it("0066 renames devices that share a name so its index builds, and leaves the rest", async () => {
+    const migration = await readFile(new URL("../drizzle/0066_checkin_device_names.sql", import.meta.url), "utf8");
+    const [rename, index] = migration.split("--> statement-breakpoint").map((s) => s.trim());
+    if (rename === undefined || index === undefined || !rename.includes("UPDATE") || !index.includes("CREATE UNIQUE INDEX")) {
+      throw new Error("0066 no longer holds its rename and its index");
+    }
+    const onCopy = (statement: string): string =>
+      statement.replaceAll('"gym_checkin_devices_gym_name_uq"', '"zz_0066_name_uq"').replaceAll('"gym_checkin_devices"', '"zz_0066_devices"');
+    const gymA = "00000000-0000-4000-8000-0000000066a1";
+    const gymB = "00000000-0000-4000-8000-0000000066b1";
+    const long = "L".repeat(60);
+
+    await sql
+      .begin(async (tx) => {
+        await tx`CREATE TEMP TABLE zz_0066_devices (LIKE gym_checkin_devices INCLUDING DEFAULTS) ON COMMIT DROP`;
+        const add = (id: string, gymId: string, name: string, minutesAgo: number, off = false) => tx`
+          INSERT INTO zz_0066_devices (id, gym_id, name, created_at, switched_off_at)
+          VALUES (${id}, ${gymId}, ${name}, now() - make_interval(mins => ${minutesAgo}), ${off ? tx`now()` : null})`;
+        await add("11111111-0000-4000-8000-000000000001", gymA, "Front desk", 30);
+        await add("22222222-0000-4000-8000-000000000002", gymA, "front DESK", 20);
+        await add("33333333-0000-4000-8000-000000000003", gymA, "Front desk", 10, true);
+        await add("44444444-0000-4000-8000-000000000004", gymB, "Front desk", 5);
+        await add("55555555-0000-4000-8000-000000000005", gymA, long, 4);
+        await add("66666666-0000-4000-8000-000000000006", gymA, long, 3);
+
+        await tx.unsafe(onCopy(rename));
+        await tx.unsafe(onCopy(rename));
+        await tx.unsafe(onCopy(index));
+
+        const rows = await tx<{ id: string; name: string }[]>`SELECT id, name FROM zz_0066_devices ORDER BY id`;
+        expect(rows.map((r) => r.name)).toEqual([
+          "Front desk",
+          "front DESK (22222222)",
+          "Front desk",
+          "Front desk",
+          long,
+          `${"L".repeat(49)} (66666666)`,
+        ]);
+        expect(rows.every((r) => r.name.length <= 60)).toBe(true);
+        throw new Error("ROLLBACK-0066-FIXTURE");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0066-FIXTURE") return;
+        throw err;
+      });
+  });
+
   /** `0064`'s backfill: an owner's and a manager's stored ticks gain "check people in";
    *  a trainer's, and a row reading its role's defaults, are left as they were. */
   it("0064's backfill gives owners and managers attendance.mark and nobody else", async () => {
@@ -1227,10 +1277,10 @@ d("0001_init on a real database", () => {
       });
   });
 
-  /** `0066`'s backfill: an owner's and a manager's stored ticks gain the Leaderboard page;
+  /** `0067`'s backfill: an owner's and a manager's stored ticks gain the Leaderboard page;
    *  a trainer's, and a row reading its role's defaults, are left as they were. */
-  it("0066's backfill gives owners and managers leaderboard.manage and nobody else", async () => {
-    const migration = await readFile(new URL("../drizzle/0066_leaderboard_console.sql", import.meta.url), "utf8");
+  it("0067's backfill gives owners and managers leaderboard.manage and nobody else", async () => {
+    const migration = await readFile(new URL("../drizzle/0067_leaderboard_console.sql", import.meta.url), "utf8");
     const matches = migration
       .split("--> statement-breakpoint")
       .map((s) => s.trim())
@@ -1238,7 +1288,7 @@ d("0001_init on a real database", () => {
     const backfill = matches.find((s) => /UPDATE "gym_staff"\s/.test(s));
     const invites = matches.find((s) => s.includes('UPDATE "gym_staff_invites"'));
     if (matches.length !== 2 || backfill === undefined || invites === undefined) {
-      throw new Error(`0066 no longer contains its two backfill UPDATEs (found ${String(matches.length)})`);
+      throw new Error(`0067 no longer contains its two backfill UPDATEs (found ${String(matches.length)})`);
     }
     const before = ["members.read", "attendance.read"];
 
@@ -1247,15 +1297,15 @@ d("0001_init on a real database", () => {
         const ids: Record<string, string> = {};
         for (const name of ["owner", "manager", "trainer", "defaults"]) {
           const [user] = await tx<{ id: string }[]>`
-            INSERT INTO users (display_name) VALUES (${`zz-0066-${name}`}) RETURNING id`;
-          if (user === undefined) throw new Error("0066 user insert failed");
+            INSERT INTO users (display_name) VALUES (${`zz-0067-${name}`}) RETURNING id`;
+          if (user === undefined) throw new Error("0067 user insert failed");
           ids[name] = user.id;
         }
         const owner = ids.owner ?? "";
         const [gym] = await tx<{ id: string }[]>`
-          INSERT INTO gyms (slug, name, owner_user_id) VALUES ('zz-0066', 'zz 0066', ${owner}) RETURNING id`;
+          INSERT INTO gyms (slug, name, owner_user_id) VALUES ('zz-0067', 'zz 0067', ${owner}) RETURNING id`;
         const gymId = gym?.id;
-        if (gymId === undefined) throw new Error("0066 gym insert failed");
+        if (gymId === undefined) throw new Error("0067 gym insert failed");
         await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${owner}, 'owner', ${before})`;
         await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${ids.manager ?? ""}, 'manager', ${before})`;
         await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${ids.trainer ?? ""}, 'trainer', ${before})`;
@@ -1267,10 +1317,10 @@ d("0001_init on a real database", () => {
           INSERT INTO gym_staff_invites (gym_id, email, role, privileges, role_name, created_at, expires_at, state, answered_at)
           VALUES (${gymId}, ${email}, ${role}, ${before}, ${roleName}, now(), now() + interval '7 days', ${state},
                   ${state === "pending" ? null : tx`now()`})`;
-        await invite("zz-0066-a@example.com", "manager", null, "pending");
-        await invite("zz-0066-b@example.com", "trainer", null, "pending");
-        await invite("zz-0066-c@example.com", "manager", "Front desk", "pending");
-        await invite("zz-0066-d@example.com", "manager", null, "cancelled");
+        await invite("zz-0067-a@example.com", "manager", null, "pending");
+        await invite("zz-0067-b@example.com", "trainer", null, "pending");
+        await invite("zz-0067-c@example.com", "manager", "Front desk", "pending");
+        await invite("zz-0067-d@example.com", "manager", null, "cancelled");
 
         await tx.unsafe(backfill);
         await tx.unsafe(backfill);
@@ -1280,25 +1330,25 @@ d("0001_init on a real database", () => {
         const invited = await tx<{ email: string; privileges: string[] }[]>`
           SELECT email::text AS email, privileges FROM gym_staff_invites WHERE gym_id = ${gymId} ORDER BY email`;
         expect(invited).toEqual([
-          { email: "zz-0066-a@example.com", privileges: [...before, "leaderboard.manage"] },
-          { email: "zz-0066-b@example.com", privileges: before },
-          { email: "zz-0066-c@example.com", privileges: before },
-          { email: "zz-0066-d@example.com", privileges: before },
+          { email: "zz-0067-a@example.com", privileges: [...before, "leaderboard.manage"] },
+          { email: "zz-0067-b@example.com", privileges: before },
+          { email: "zz-0067-c@example.com", privileges: before },
+          { email: "zz-0067-d@example.com", privileges: before },
         ]);
 
         const rows = await tx<{ display_name: string; privileges: string[] | null }[]>`
           SELECT u.display_name, s.privileges FROM gym_staff s JOIN users u ON u.id = s.user_id
           WHERE s.gym_id = ${gymId} ORDER BY u.display_name`;
         expect(rows).toEqual([
-          { display_name: "zz-0066-defaults", privileges: null },
-          { display_name: "zz-0066-manager", privileges: [...before, "leaderboard.manage"] },
-          { display_name: "zz-0066-owner", privileges: [...before, "leaderboard.manage"] },
-          { display_name: "zz-0066-trainer", privileges: before },
+          { display_name: "zz-0067-defaults", privileges: null },
+          { display_name: "zz-0067-manager", privileges: [...before, "leaderboard.manage"] },
+          { display_name: "zz-0067-owner", privileges: [...before, "leaderboard.manage"] },
+          { display_name: "zz-0067-trainer", privileges: before },
         ]);
-        throw new Error("ROLLBACK-0066-BACKFILL-FIXTURE");
+        throw new Error("ROLLBACK-0067-BACKFILL-FIXTURE");
       })
       .catch((err: unknown) => {
-        if (err instanceof Error && err.message === "ROLLBACK-0066-BACKFILL-FIXTURE") return;
+        if (err instanceof Error && err.message === "ROLLBACK-0067-BACKFILL-FIXTURE") return;
         throw err;
       });
   });

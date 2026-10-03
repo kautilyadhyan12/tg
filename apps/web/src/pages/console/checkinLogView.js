@@ -47,6 +47,15 @@ export function howLine(visit) {
   }
 }
 
+/** The gym's own status and payment words for a person, as the list has them: "Active ·
+ *  Overdue". Empty when the gym keeps neither, or the reader is not sent them. */
+export function wordsLine(words) {
+  return [words?.status, words?.payment]
+    .filter((word) => typeof word === 'string' && word.trim() !== '')
+    .map((word) => word.trim())
+    .join(' · ');
+}
+
 /** A found person's second line: member number and email, whichever the gym has. */
 export function foundDetails(person) {
   const parts = [];

@@ -40,7 +40,7 @@ import { GeoError } from "./modules/geo/errors.js";
 import { registerOrgRoutes, type OrgRouteOverrides } from "./modules/orgs/routes.js";
 import { inviteSettings } from "./modules/orgs/invites/settings.js";
 import { registerUnsubscribeRoutes } from "./modules/orgs/invites/unsubscribe.js";
-import { registerCheckinRoutes } from "./modules/orgs/checkin/routes.js";
+import { checkinDeskLimitKey, registerCheckinRoutes } from "./modules/orgs/checkin/routes.js";
 import { createRobotCheck, type RobotCheck } from "./modules/orgs/gymPage/robotCheck.js";
 import { createDiskPhotoStore, type PhotoStore } from "./modules/orgs/gymPage/photoStore.js";
 import { registerResendWebhookRoutes } from "./modules/webhooks/resendRoutes.js";
@@ -175,12 +175,14 @@ export async function buildApp(
   // answer is reused by `authenticate`) and an address counts only the people who are
   // not signed in. One person signing in made 7 requests with no session (measured
   // 2026-10-02), so 600 a minute lets some eighty people at one address sign in in the
-  // same minute.
+  // same minute. A front desk's scan is counted by its own device, once the server's mark
+  // on its cookie verifies, so nobody on the gym's wi-fi can use up the desk's allowance.
   await app.register(rateLimit, {
     global: true,
     keyGenerator: (req) => {
       const claims = accessClaimsOf(req, config);
-      return claims === null ? `address:${req.ip}` : `person:${claims.userId}`;
+      if (claims !== null) return `person:${claims.userId}`;
+      return checkinDeskLimitKey(req, config) ?? `address:${req.ip}`;
     },
     max: 600,
     timeWindow: "1 minute",

@@ -33,6 +33,10 @@ export const gymCheckinDevices = pgTable(
     uniqueIndex("gym_checkin_devices_key_hash_uq").on(t.keyHash).where(sql`${t.keyHash} IS NOT NULL`),
     uniqueIndex("gym_checkin_devices_link_hash_uq").on(t.linkHash).where(sql`${t.linkHash} IS NOT NULL`),
     index("gym_checkin_devices_gym_idx").on(t.gymId, t.createdAt),
+    // One name a gym among its switched-on devices: the log names a visit's desk by it.
+    uniqueIndex("gym_checkin_devices_gym_name_uq")
+      .on(t.gymId, sql`lower(${t.name})`)
+      .where(sql`${t.switchedOffAt} IS NULL`),
     check("gym_checkin_devices_name_check", sql`char_length(${t.name}) BETWEEN 1 AND 60`),
     check("gym_checkin_devices_key_hash_check", sql`${t.keyHash} IS NULL OR ${t.keyHash} ~ '^[0-9a-f]{64}$'`),
     check("gym_checkin_devices_link_hash_check", sql`${t.linkHash} IS NULL OR ${t.linkHash} ~ '^[0-9a-f]{64}$'`),

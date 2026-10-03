@@ -117,7 +117,7 @@ export const gyms = pgTable(
     pageEmailsStoppedAt: timestamp("page_emails_stopped_at", { withTimezone: true }),
     pageEmailsStoppedReason: text("page_emails_stopped_reason"),
     pageEmailsCountedFrom: timestamp("page_emails_counted_from", { withTimezone: true }),
-    /** The leaderboard's boards the gym has switched off for its members (0066; spec
+    /** The leaderboard's boards the gym has switched off for its members (0067; spec
      *  Part 3 §15.5). Empty: members see all three. */
     leaderboardBoardsOff: text("leaderboard_boards_off").array().notNull().default(sql`'{}'::text[]`),
     createdAt: createdAt(),
@@ -763,7 +763,7 @@ export const gymStaff = pgTable(
      *  next wrong one hides. **The order is `ORG_PRIVILEGES`' order**: this
      *  array, that array and `0035`'s CHECK are one vocabulary written three
      *  times, and they move together or not at all. `attendance.mark` is the
-     *  eleventh (`0064`), `leaderboard.manage` the twelfth (`0066`). */
+     *  eleventh (`0064`), `leaderboard.manage` the twelfth (`0067`). */
     check(
       "gym_staff_privileges_check",
       sql`${t.privileges} IS NULL OR ${t.privileges} <@ ARRAY['members.read','codes.invite','codes.manage','members.confirm','members.remove','staff.manage','org.manage','billing.manage','attendance.read','schedule.manage','attendance.mark','leaderboard.manage']::text[]`,

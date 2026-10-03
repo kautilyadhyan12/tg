@@ -2129,8 +2129,11 @@ the app draws as a QR: gym, person and a 30-second window, signed with a server 
 asks again every 30 seconds while the pass is on screen. The scan accepts the current
 window and the one before it (clocks, slow hands) and each pass ONCE (a Redis key that
 lives as long as the window), so a screenshot or a second phone showing the same pass
-gets "Show a fresh pass". 10 passes a minute a person. The phone needs the internet to
-show a pass; a pass the phone can make offline is the phone app's later work.
+gets "Show a fresh pass". A pass is used up by a visit and by nothing else: read at a
+desk where its person is not a member, or when the visit could not be saved, it still
+works (the two extra passes, 2026-10-03). 10 passes a minute a person. The phone needs
+the internet to show a pass; a pass the phone can make offline is the phone app's later
+work.
 
 ### 12.3 The desk device
 
@@ -2145,7 +2148,11 @@ Enter), a camera button (`jsqr`), and the result: green with the name · grey "S
 fresh pass" · red "Not a member of {gym}" · orange under a green tick for the gym's
 own status or payment word. It shows one result at a time and clears it after a few
 seconds, so the last person's name is not left on the screen. Finding a person BY NAME
-is never on this page: it is staff's, in the console (12.5).
+is never on this page: it is staff's, in the console (12.5). The cookie holds the key
+and the server's own mark on it, which opens nothing and only lets the rate limits count
+a desk on its own (12.8). A device's name is its own among the gym's switched-on devices,
+and a second "New link" within 10 seconds of the first is refused, so two staff pressing
+together are not each shown a link of which one is dead.
 
 ### 12.4 The scan rule — ONE pure function, one table test
 
@@ -2157,7 +2164,12 @@ status, a payment word or the hour (a gym that runs its memberships and bills in
 opening period the scan falls in, or "outside hours" when it falls in none, and the
 table's own uniqueness — gym, person, day, period (`slot_key`, built 2026-09-01) —
 makes a second scan the same visit. A member number that fits two records asks staff
-which. The table test covers every class: each way in × member · former · removed ·
+which. **One person is one person:** a card and a pass write the same visit, the record
+and the account together — a card names the app member who holds the record, or else the
+account a pass would name as that record (its proved email; on a shared address, the
+record with its own name), never an account that has not proved the address. A person
+named by both has their earlier visits of the day joined to them, and every count takes a
+person as their record, or their account when the visit has no record. The table test covers every class: each way in × member · former · removed ·
 never a member · another gym's person × first scan · same period · next period ·
 outside hours × the pass fresh · old · used · garbled.
 
@@ -2167,7 +2179,9 @@ The console's Attendance page gains a search and **Check in** for signed-in staf
 a new tick, `attendance.mark` (owner and manager by default; the owner can give it to
 a trainer) — logged with who did it. The page refreshes itself every 5 seconds
 (`GET …/attendance?since=`; plain polling, no socket): name, time, how, which device or
-which member of staff. Adding a visit for an earlier time is a later card.
+which member of staff, and under the name the gym's own status and payment words in
+orange, as the desk showed them (RULINGS 2026-10-03; sent only to staff who hold
+`attendance.mark`). Adding a visit for an earlier time is a later card.
 
 ### 12.6 Data
 
@@ -2192,7 +2206,12 @@ A device: 120 scans a minute, of which at most 20 key tags; after 10 key tags no
 within 10 minutes, the device takes no key tags for 10 minutes and the console says so
 (RULINGS 2026-10-02: a typed member number must not read the gym's list). Every refusal looks the same from outside and says
 nothing about who is or is not a member beyond the one red line. A device key is
-random, stored hashed, and useless for anything but the scan.
+random, stored hashed, and useless for anything but the scan. A desk the server set up
+is counted by its own device, by the app-wide limit too, so nobody on the gym's wi-fi can
+use up its allowance; a scan with no key, or one the server did not mark, is counted by
+its address. Ten unknown numbers are ten looked up, however many arrive together: a
+device never has more key tags on their way than misses left before its pause. A set-up
+link that opens nothing is counted by its address (30 an hour); a real link always opens.
 
 ### 12.9 Packages, cards, the two extra passes
 
@@ -2661,7 +2680,7 @@ A person's panel: their place and number on all three boards, hidden or not, and
 counted for each (visits with time and desk or staff; a workout as its date only); their
 posts join it with 19b. Take off the board / Put back (`gym_members.hidden_from_boards`),
 behind a box naming who changes and what is kept; noted in `audit_log` once. Which boards
-members see: `gyms.leaderboard_boards_off` (migration `0066`), a switch a board; a
+members see: `gyms.leaderboard_boards_off` (migration `0067`), a switch a board; a
 switched-off board answers members `switched_off` with no row, no number and no profile
 line, and their app draws no tab for it. Each switch says why its board is not showing
 (switched off · no plan · nobody checked in for 30 days · fewer than 3 people), and the

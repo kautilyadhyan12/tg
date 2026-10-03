@@ -5099,7 +5099,7 @@ d("orgs routes (real Postgres)", () => {
       // that is the assertion rather than an oversight**: §13.3 grants the
       // timetable to owner and manager only, so a trainer's three ticks are
       // still three. `attendance.mark` (16b-ii, `0064`) and `leaderboard.manage`
-      // (19a-iii, `0066`) are owner and manager too.
+      // (19a-iii, `0067`) are owner and manager too.
       "attendance.mark",
       "attendance.read",
       "codes.invite",

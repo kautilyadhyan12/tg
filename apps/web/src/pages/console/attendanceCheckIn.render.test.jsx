@@ -40,7 +40,7 @@ const ORG = {
 };
 
 const logAnswer = (visits, day = '2026-10-03') => ({ data: { log: { day, timezone: 'Europe/London', clockFormat: '24h', visits } } });
-const lv = (id, markedAt, name, over = {}) => ({ id, markedAt, name, method: 'pass', by: 'Front desk', ...over });
+const lv = (id, markedAt, name, over = {}) => ({ id, markedAt, name, method: 'pass', by: 'Front desk', status: null, payment: null, ...over });
 
 const ANIL = { pick: { entryId: 'e-anil' }, name: 'Anil Kumar', memberNumber: '7102', email: null, notice: { status: null, payment: null, onList: true } };
 const ANITA = {
@@ -239,6 +239,21 @@ describe('checked in today', () => {
     expect(api.getCheckinLog).toHaveBeenLastCalledWith('g1', '2026-10-03T06:05:00.000Z');
     const names = screen.getAllByText(/^(New Person|Ravi Noapp|Asha App)$/).map((el) => el.textContent);
     expect(names).toEqual(['New Person', 'Ravi Noapp', 'Asha App']);
+  });
+
+  it("shows the gym's status and payment words under a person who has them, and nothing under one who has none", async () => {
+    api.getCheckinLog.mockResolvedValueOnce(
+      logAnswer([
+        lv('v2', '2026-10-03T06:05:00.000Z', 'Maya Patel', { method: 'key_tag', status: 'Active', payment: 'Overdue' }),
+        lv('v1', '2026-10-03T06:02:00.000Z', 'Asha App'),
+      ]),
+    );
+    drawScreen();
+    const maya = (await screen.findByText('Maya Patel')).closest('li');
+    expect(maya.textContent).toContain('Key tag · Front desk');
+    expect(maya.textContent).toContain('Active · Overdue');
+    const asha = screen.getByText('Asha App').closest('li');
+    expect(asha.textContent).toBe('07:02Asha AppPass · Front desk');
   });
 
   it('keeps asking after a failure that may clear, and stops with the server\'s words after one that will not', async () => {
