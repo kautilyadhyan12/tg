@@ -93,6 +93,7 @@ interface MWorkout {
   userId: string;
   startedAt: number;
   sets: number;
+  reps: number;
   savedAt: number;
 }
 interface MRecord {
@@ -212,9 +213,13 @@ function addWorkouts(gym: MGym, rand: () => number, instant: number): void {
       const startedAt =
         edge < 0.03 ? p.joinedAt : edge < 0.05 ? instant : edge < 0.07 ? instant + 1000 : instant - span + Math.floor(rand() * (span + 3 * DAY_MS));
       const save = rand();
+      // Some reach the server before their own start: within the hour a fast clock is
+      // allowed, on its edge, and days before.
       const savedAfter =
-        save < 0.75 ? Math.floor(rand() * HOUR_MS) : save < 0.85 ? Math.floor(rand() * SAVE_MS) : save < 0.9 ? SAVE_MS : save < 0.95 ? SAVE_MS + 1000 : SAVE_MS + Math.floor(rand() * 5 * DAY_MS);
-      gym.workouts.push({ userId: p.userId, startedAt, sets: rand() < 0.1 ? 0 : 1 + Math.floor(rand() * 6), savedAt: startedAt + savedAfter });
+        save < 0.04 ? -Math.floor(rand() * HOUR_MS) : save < 0.06 ? -HOUR_MS : save < 0.08 ? -HOUR_MS - 1000 : save < 0.12 ? -Math.floor(rand() * 30 * DAY_MS)
+        : save < 0.75 ? Math.floor(rand() * HOUR_MS) : save < 0.85 ? Math.floor(rand() * SAVE_MS) : save < 0.9 ? SAVE_MS : save < 0.95 ? SAVE_MS + 1000 : SAVE_MS + Math.floor(rand() * 5 * DAY_MS);
+      const sets = rand() < 0.1 ? 0 : 1 + Math.floor(rand() * 6);
+      gym.workouts.push({ userId: p.userId, startedAt, sets, reps: sets === 0 || rand() < 0.08 ? 0 : sets * 10, savedAt: startedAt + savedAfter });
     }
   }
 }
@@ -292,7 +297,8 @@ function modelBoard(gym: MGym, instant: Date, viewerId: string, query: Leaderboa
     rows = live.map((p) => {
       const days = new Set<number>();
       for (const w of gym.workouts) {
-        if (w.userId !== p.userId || w.sets < 1) continue;
+        if (w.userId !== p.userId || w.sets < 1 || w.reps < 1) continue;
+        if (w.savedAt < w.startedAt - HOUR_MS) continue;
         if (w.startedAt < p.joinedAt || w.startedAt > instant.getTime() || w.savedAt > w.startedAt + SAVE_MS) continue;
         const day = dayNumber(gymToday(new Date(w.startedAt), gym.zone));
         if (day >= from && day <= to) days.add(day);
@@ -451,6 +457,7 @@ d("the leaderboard agrees with a plain model (real Postgres)", () => {
         platform: "web",
         engine_version: "test",
         sets_count: w.sets,
+        total_reps: w.reps,
         created_at: new Date(w.savedAt),
       })),
     );

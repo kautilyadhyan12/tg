@@ -110,6 +110,7 @@ describe('the members’ board', () => {
   it('says why there is no board instead of drawing an empty one, and draws no row of your own', async () => {
     svc.board.mockResolvedValue(shown({ status: 'no_checkins', rows: [], ranked: 0 }));
     render(<Leaderboard gym={GYM} />);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Gym days' }));
     expect(await screen.findByText(/hasn't checked anyone in at the front desk in the last 30 days/)).toBeTruthy();
     expect(screen.queryByRole('list', { name: /people on the board/ })).toBeNull();
     expect(screen.queryByText(/What counted/)).toBeNull();
@@ -243,6 +244,7 @@ describe('the members’ board', () => {
       ],
       workoutsNotCounted: [
         { day: '2026-09-29', at: '2026-09-29T02:00:00.000Z', why: 'saved_late', daysLate: 9 },
+        { day: '2026-09-29', at: '2026-09-29T02:00:00.000Z', why: 'no_sets', daysLate: null },
         { day: '2026-09-28', at: '2026-09-28T02:00:00.000Z', why: 'before_joining', daysLate: null },
       ],
       weeks: [],
@@ -253,9 +255,24 @@ describe('the members’ board', () => {
     expect(await within(counted).findByText('1 workout day')).toBeTruthy();
     expect(within(counted).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
       'Wed 30 Sep · 2 workouts, 1 day6:00 pm · counted by you7:30 am · counted by the camera',
-      'Tue 29 Sep · 7:30 am · Saved 9 days after the workout — a workout counts when it is saved within 7 days',
+      'Tue 29 Sep · 7:30 am · Saved more than 9 days after the workout — a workout counts when it is saved within 7 days',
+      'Tue 29 Sep · 7:30 am · No reps or holds saved',
       'Mon 28 Sep · 7:30 am · Before you joined Iron House',
     ]);
+  });
+
+  it('a gym that checks nobody in opens on Workout days, and Gym days says where the board is', async () => {
+    svc.board.mockImplementation((_gym, board) =>
+      Promise.resolve(board === 'gym_days' ? shown({ status: 'no_checkins', rows: [], ranked: 0 }) : shown({ board: 'workout_days' })),
+    );
+    render(<Leaderboard gym={GYM} />);
+    expect(await screen.findByText('Chen W.')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Workout days' }).getAttribute('aria-selected')).toBe('true');
+    expect(svc.board).toHaveBeenLastCalledWith('g1', 'workout_days', 'this_week');
+    // The member's own tap on Gym days stays there, and says why.
+    fireEvent.click(screen.getByRole('tab', { name: 'Gym days' }));
+    expect(await screen.findByText(/so Gym days and Streak aren't showing\. Workout days still is\./)).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Gym days' }).getAttribute('aria-selected')).toBe('true');
   });
 
   it('the Streak has no period and shows weeks', async () => {

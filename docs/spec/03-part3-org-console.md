@@ -2572,10 +2572,13 @@ are listed by name, as PushPress does.
   `joined_at` and not in the future, and reaching the server (`created_at`) within 7
   days of its start. A home workout counts at each of the person's gyms (2026-09-23).
   *As built (19a-ii):* one SQL rule (`leaderboard/workouts.ts`) gives each workout its gym
-  day and the first reason it does not count — still ahead · before joining · no set ·
-  saved late — and the board and "what counted" both read it. A workout dated ahead
-  counts once its time has passed. All time's own list leaves out workouts from before
-  the person joined. A profile at a gym that checks nobody in carries Workout days only.
+  day and the first reason it does not count — saved before it started · still ahead ·
+  before joining · no set with a rep or a hold · saved late — and the board and "what
+  counted" both read it. A workout that reached the server more than an hour before its
+  own start NEVER counts (the sync route takes any start time; the hour is for a phone's
+  fast clock). All time's own list leaves out workouts from before the person joined. A
+  profile at a gym that checks nobody in carries Workout days only, and there the board
+  opens on Workout days.
 - **Streak** — weeks, Monday to Sunday in the gym's dates, in a row with a gym day. Last
   week keeps it alive until this Sunday ends. A week in which the gym recorded no counted
   visit for anybody is skipped: it neither counts nor breaks. It ranks the streak now;

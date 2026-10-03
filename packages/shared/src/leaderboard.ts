@@ -17,11 +17,16 @@ export const LEADERBOARD_TOP = 100;
 export const LEADERBOARD_CHECKIN_DAYS = 30;
 /** A workout counts when it reached the server within this many days of its start. */
 export const LEADERBOARD_WORKOUT_SAVE_DAYS = 7;
+/** A phone's clock may run this far ahead: a workout saved longer than this before its own
+ *  start never counts. */
+export const LEADERBOARD_WORKOUT_EARLY_MINUTES = 60;
 
-/** Why a workout is not a workout day. future: its start is still ahead · before_joining:
- *  it started before the person joined this gym · no_sets: no set was saved · saved_late:
- *  it reached the server more than seven days after it started. */
-export const LEADERBOARD_WORKOUT_NOT_COUNTED = ["future", "before_joining", "no_sets", "saved_late"] as const;
+/** Why a workout is not a workout day. saved_early: it reached the server more than an
+ *  hour before its own start, and never counts · future: its start is still ahead ·
+ *  before_joining: it started before the person joined this gym · no_sets: no set with a
+ *  rep or a hold was saved · saved_late: it reached the server more than seven days after
+ *  it started. */
+export const LEADERBOARD_WORKOUT_NOT_COUNTED = ["saved_early", "future", "before_joining", "no_sets", "saved_late"] as const;
 export type LeaderboardWorkoutNotCounted = (typeof LEADERBOARD_WORKOUT_NOT_COUNTED)[number];
 
 /** Why a person is not ranked. Taken out before places are given, so no gap shows them. */
@@ -148,8 +153,8 @@ export const leaderboardCountedResponseSchema = z
     ),
     /** Workout days: each counted day, newest first. */
     workoutDays: z.array(z.object({ day, workouts: z.array(leaderboardWorkoutSchema).min(1) }).strict()),
-    /** Workout days: a workout in the period that did not count, with why. `daysLate` is
-     *  how many days after its start a `saved_late` one reached the server. */
+    /** Workout days: a workout in the period that did not count, with why. A `saved_late`
+     *  one reached the server more than `daysLate` whole days after its start. */
     workoutsNotCounted: z.array(
       z
         .object({

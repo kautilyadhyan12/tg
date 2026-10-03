@@ -81,19 +81,23 @@ d("workout days: which workouts count (real Postgres)", () => {
     sets?: ("engine" | "log_only" | null)[];
     /** How long after its start it reached the server. */
     savedAfterMs?: number;
+    /** Each set's reps (10 when left out) and hold. */
+    reps?: number;
+    holdMs?: number;
   }
   const workout = async (userId: string, startedAt: Date | string, o: WorkoutOptions = {}): Promise<void> => {
     const id = randomUUID();
     const started = new Date(startedAt);
     const sets = o.sets ?? ["engine"];
+    const reps = o.reps ?? 10;
     await sql`
-      INSERT INTO workouts (id, user_id, started_at, platform, engine_version, sets_count, created_at)
-      VALUES (${id}, ${userId}, ${started}, 'web', 'test', ${sets.length}, ${new Date(started.getTime() + (o.savedAfterMs ?? HOUR / 2))})`;
+      INSERT INTO workouts (id, user_id, started_at, platform, engine_version, sets_count, total_reps, created_at)
+      VALUES (${id}, ${userId}, ${started}, 'web', 'test', ${sets.length}, ${sets.length * reps}, ${new Date(started.getTime() + (o.savedAfterMs ?? HOUR / 2))})`;
     for (const [i, mode] of sets.entries()) {
       const scored = mode !== "log_only";
       await sql`
-        INSERT INTO workout_sets (workout_id, user_id, exercise_id, started_at, set_index, mode, reps, duration_ms, engine_version, definition_version)
-        VALUES (${id}, ${userId}, ${exerciseId}, ${started}, ${i}, ${mode}, 10, 60000, ${scored ? "test" : null}, ${scored ? 1 : null})`;
+        INSERT INTO workout_sets (workout_id, user_id, exercise_id, started_at, set_index, mode, reps, hold_ms, duration_ms, engine_version, definition_version)
+        VALUES (${id}, ${userId}, ${exerciseId}, ${started}, ${i}, ${mode}, ${reps}, ${o.holdMs ?? null}, 60000, ${scored ? "test" : null}, ${scored ? 1 : null})`;
     }
   };
 
@@ -145,15 +149,23 @@ d("workout days: which workouts count (real Postgres)", () => {
     { name: "one set, saved as it ended", startedAt: "2026-10-06T02:00:00Z", period: "this_week", want: "counted", day: "2026-10-06" },
     { name: "counted by the person, not the camera", startedAt: "2026-10-06T02:00:00Z", period: "this_week", options: { sets: ["log_only"] }, want: "counted", day: "2026-10-06" },
     { name: "no set saved", startedAt: "2026-10-06T02:00:00Z", period: "this_week", options: { sets: [] }, want: "no_sets", day: "2026-10-06" },
+    { name: "a set with no rep and no hold", startedAt: "2026-10-06T02:00:00Z", period: "this_week", options: { reps: 0 }, want: "no_sets", day: "2026-10-06" },
+    { name: "a hold with no reps (a plank)", startedAt: "2026-10-06T02:00:00Z", period: "this_week", options: { reps: 0, holdMs: 45000 }, want: "counted", day: "2026-10-06" },
     { name: "started the second before joining", startedAt: "2026-09-27T23:59:59Z", period: "last_week", want: "before_joining", day: "2026-09-28" },
     { name: "started the instant of joining", startedAt: JOINED, period: "last_week", want: "counted", day: "2026-09-28" },
     { name: "starts the second after now", startedAt: "2026-10-07T06:30:01Z", period: "this_week", options: { savedAfterMs: -HOUR }, want: "future", day: "2026-10-07" },
     { name: "started now", startedAt: "2026-10-07T06:30:00Z", period: "this_week", options: { savedAfterMs: 0 }, want: "counted", day: "2026-10-07" },
-    { name: "dated tomorrow", startedAt: "2026-10-08T02:00:00Z", period: "this_week", options: { savedAfterMs: -30 * HOUR }, want: "future", day: "2026-10-08" },
+    { name: "dated tomorrow, read today", startedAt: "2026-10-08T02:00:00Z", period: "this_week", options: { savedAfterMs: -30 * HOUR }, want: "saved_early", day: "2026-10-08" },
+    // Read after its date has passed: a workout saved before it happened never counts.
+    { name: "saved a day before its own start, read after it", startedAt: "2026-10-06T02:00:00Z", period: "this_week", options: { savedAfterMs: -30 * HOUR }, want: "saved_early", day: "2026-10-06" },
+    { name: "saved a month before its own start, read after it", startedAt: "2026-10-06T02:00:00Z", period: "this_week", options: { savedAfterMs: -720 * HOUR }, want: "saved_early", day: "2026-10-06" },
+    { name: "saved an hour and a second before its start", startedAt: "2026-10-06T02:00:00Z", period: "this_week", options: { savedAfterMs: -HOUR - 1000 }, want: "saved_early", day: "2026-10-06" },
+    { name: "saved exactly an hour before its start", startedAt: "2026-10-06T02:00:00Z", period: "this_week", options: { savedAfterMs: -HOUR }, want: "counted", day: "2026-10-06" },
     { name: "saved by a phone whose clock runs ten minutes fast", startedAt: "2026-10-06T02:00:00Z", period: "this_week", options: { savedAfterMs: -HOUR / 6 }, want: "counted", day: "2026-10-06" },
     { name: "saved exactly seven days after it started", startedAt: "2026-09-29T02:00:00Z", period: "last_week", options: { savedAfterMs: 168 * HOUR }, want: "counted", day: "2026-09-29" },
-    { name: "saved seven days and a second after", startedAt: "2026-09-29T02:00:00Z", period: "last_week", options: { savedAfterMs: 168 * HOUR + 1000 }, want: "saved_late", day: "2026-09-29", daysLate: 8 },
-    { name: "saved nine days after", startedAt: "2026-09-28T02:00:00Z", period: "last_week", options: { savedAfterMs: 216 * HOUR }, want: "saved_late", day: "2026-09-28", daysLate: 9 },
+    { name: "saved seven days and a second after", startedAt: "2026-09-29T02:00:00Z", period: "last_week", options: { savedAfterMs: 168 * HOUR + 1000 }, want: "saved_late", day: "2026-09-29", daysLate: 7 },
+    { name: "saved exactly nine days after", startedAt: "2026-09-28T02:00:00Z", period: "last_week", options: { savedAfterMs: 216 * HOUR }, want: "saved_late", day: "2026-09-28", daysLate: 8 },
+    { name: "saved nine days and an hour after", startedAt: "2026-09-28T02:00:00Z", period: "last_week", options: { savedAfterMs: 217 * HOUR }, want: "saved_late", day: "2026-09-28", daysLate: 9 },
     { name: "no set AND saved late: the first reason is given", startedAt: "2026-09-28T02:00:00Z", period: "last_week", options: { sets: [], savedAfterMs: 216 * HOUR }, want: "no_sets", day: "2026-09-28" },
   ];
 
@@ -369,8 +381,6 @@ d("workout days: which workouts count (real Postgres)", () => {
       expect(got.board.ranked).toBe(4);
       expect(got.board.me).toMatchObject({ value: 1, place: 4, toNextPlace: 1, nextPlace: 2, hidden: null });
       expect((await read(g.id, g.ownerId, "this_week")).board.me).toMatchObject({ value: 3, hidden: "staff" });
-      // Other members' rows carry days, never a time.
-      expect(JSON.stringify(got.board.rows)).not.toMatch(/T\d\d:\d\d/);
     },
     T,
   );

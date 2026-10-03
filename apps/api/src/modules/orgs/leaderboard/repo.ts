@@ -226,7 +226,7 @@ export interface OwnWorkout {
   startedAt: Date;
   /** Null when it counted. */
   why: LeaderboardWorkoutNotCounted | null;
-  /** Whole days from its start to reaching the server, rounded up. */
+  /** It reached the server more than this many whole days after its start. */
   daysToSave: number;
   /** A set the camera counted, and a set the person counted. */
   camera: boolean;
@@ -243,7 +243,7 @@ export async function ownWorkouts(
     { day: string; started_at: Date; why: LeaderboardWorkoutNotCounted | null; days_to_save: number; camera: boolean; by_hand: boolean }[]
   >`
     SELECT x.day::text AS day, x.started_at, x.why,
-           ceil(extract(epoch FROM (x.created_at - x.started_at)) / 86400)::int AS days_to_save,
+           (ceil(extract(epoch FROM (x.created_at - x.started_at)) / 86400) - 1)::int AS days_to_save,
            coalesce(s.camera, false) AS camera, coalesce(s.by_hand, false) AS by_hand
     FROM (${memberWorkouts(sql, input)}) x
     LEFT JOIN LATERAL (

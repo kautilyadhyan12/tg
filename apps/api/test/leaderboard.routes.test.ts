@@ -146,8 +146,8 @@ d("the members' leaderboard (real Postgres)", () => {
   /** A finished app workout at 07:30 on a day of Kolkata's calendar, saved half an hour later. */
   const workout = async (userId: string, day: string): Promise<void> => {
     await sql`
-      INSERT INTO workouts (id, user_id, started_at, platform, engine_version, sets_count, created_at)
-      VALUES (gen_random_uuid(), ${userId}, ${`${day}T02:00:00Z`}, 'web', 'test', 1, ${`${day}T02:30:00Z`})`;
+      INSERT INTO workouts (id, user_id, started_at, platform, engine_version, sets_count, total_reps, created_at)
+      VALUES (gen_random_uuid(), ${userId}, ${`${day}T02:00:00Z`}, 'web', 'test', 1, 10, ${`${day}T02:30:00Z`})`;
   };
 
   /** A visit on a day of the gym's calendar. `who` is an account, or only a record. */
@@ -353,6 +353,11 @@ d("the members' leaderboard (real Postgres)", () => {
       expect(asha.statusCode).toBe(200);
       expect((JSON.parse(asha.body) as LeaderboardProfileResponse).boards).toEqual([
         { board: "workout_days", period: "this_week", place: 1, value: 2 },
+      ]);
+      // All time, where the old desk visits would fill a Gym days board: still Workout days alone.
+      const ashaAll = await get(`/v1/orgs/${gym.id}/leaderboard/people/${shown[0]?.userId ?? ""}?period=all_time`, viewer.cookies);
+      expect((JSON.parse(ashaAll.body) as LeaderboardProfileResponse).boards).toEqual([
+        { board: "workout_days", period: "all_time", place: 1, value: 2 },
       ]);
 
       // The hidden person sees their own number, the place they would have, and why.

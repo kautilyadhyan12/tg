@@ -94,8 +94,8 @@ async function seed(): Promise<{ gymId: string; viewers: string[] }> {
     WHERE m.gym_id = ${gymId} AND random() < 0.3`;
   // Three years of app workouts at the same rate, each saved forty minutes after it began.
   await sql`
-    INSERT INTO workouts (id, user_id, started_at, platform, engine_version, sets_count, created_at)
-    SELECT gen_random_uuid(), m.user_id, t.at, 'android', 'cost', 3, t.at + interval '40 minutes'
+    INSERT INTO workouts (id, user_id, started_at, platform, engine_version, sets_count, total_reps, created_at)
+    SELECT gen_random_uuid(), m.user_id, t.at, 'android', 'cost', 3, 30, t.at + interval '40 minutes'
     FROM gym_members m
     CROSS JOIN generate_series((now() AT TIME ZONE 'Asia/Kolkata')::date - ${365 * YEARS}::int,
                                (now() AT TIME ZONE 'Asia/Kolkata')::date - 1, interval '1 day') d

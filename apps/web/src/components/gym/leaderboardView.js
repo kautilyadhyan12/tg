@@ -66,7 +66,7 @@ export function whatCounts(boardId, gymName) {
     return [
       `One workout day for each day you finished a workout in the app since you joined ${gymName}, at the gym or at home.`,
       'Two workouts on one day are one workout day. A workout counts however its reps were counted, by the camera or by you.',
-      'It needs at least one set, and to be saved within 7 days.',
+      'It needs at least one set with a rep or a hold, and to be saved within 7 days.',
       common,
     ];
   }
@@ -85,7 +85,7 @@ export function statusText(board) {
         ? 'The board shows once 3 people have a streak.'
         : `The board shows once 3 people have a ${UNIT[board.board]} in this period.`;
     case 'no_checkins':
-      return `${board.gymName} hasn't checked anyone in at the front desk in the last 30 days, so there's no board for now.`;
+      return `${board.gymName} hasn't checked anyone in at the front desk in the last 30 days, so Gym days and Streak aren't showing. Workout days still is.`;
     case 'paused':
       return `The leaderboard isn't available at ${board.gymName} right now.`;
     default:
@@ -176,13 +176,17 @@ export function workoutCountText(workouts) {
 export function workoutNotCountedText(item, gymName) {
   switch (item.why) {
     case 'saved_late':
-      return `Saved ${item.daysLate} days after the workout — a workout counts when it is saved within 7 days`;
+      return `Saved more than ${item.daysLate} days after the workout — a workout counts when it is saved within 7 days`;
+    case 'saved_early':
+      return 'Saved before its own start time — check the date and time on your phone';
     case 'before_joining':
       return `Before you joined ${gymName}`;
     case 'no_sets':
-      return 'No sets saved';
-    default:
+      return 'No reps or holds saved';
+    case 'future':
       return 'Its time is still ahead — it counts once that time has passed';
+    default:
+      return "Didn't count";
   }
 }
 

@@ -166,8 +166,8 @@ function CountedSheet({ gymId, boardId, period, onClose }) {
                       <p className="text-sm text-white">
                         {dayLabel(d.day)} <span style={{ color: MUTED }}>· {workoutCountText(d.workouts.length)}</span>
                       </p>
-                      {d.workouts.map((w) => (
-                        <p key={w.at} className="text-xs mt-1" style={{ color: MUTED }}>{workoutText(w, data.timezone)}</p>
+                      {d.workouts.map((w, i) => (
+                        <p key={`${w.at}-${i}`} className="text-xs mt-1" style={{ color: MUTED }}>{workoutText(w, data.timezone)}</p>
                       ))}
                     </li>
                   ))}
@@ -177,8 +177,8 @@ function CountedSheet({ gymId, boardId, period, onClose }) {
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide mt-1 mb-1" style={{ color: MUTED }}>Didn&apos;t count</p>
                   <ul className="flex flex-col gap-1">
-                    {data.workoutsNotCounted.map((n) => (
-                      <li key={n.at + n.why} className="text-xs" style={{ color: MUTED }}>
+                    {data.workoutsNotCounted.map((n, i) => (
+                      <li key={`${n.at}-${i}`} className="text-xs" style={{ color: MUTED }}>
                         {dayLabel(n.day)} · {timeText(n.at, data.timezone)} · {workoutNotCountedText(n, data.gymName)}
                       </li>
                     ))}
@@ -265,12 +265,20 @@ export default function Leaderboard({ gym }) {
 
   // The tab on screen now: an answer for a tab the member has left is dropped.
   const shownKey = useRef(key);
+  // Until the member picks a tab, a gym that checks nobody in opens on its one board.
+  const pickedTab = useRef(false);
   const load = useCallback(
     () =>
       leaderboardService
         .board(gym.id, boardId, period)
         .then((board) => {
-          if (shownKey.current === key) setState({ key, error: null, board });
+          if (shownKey.current !== key) return;
+          if (board.status === 'no_checkins' && boardId === 'gym_days' && !pickedTab.current) {
+            pickedTab.current = true;
+            setBoardId('workout_days');
+            return;
+          }
+          setState({ key, error: null, board });
         })
         .catch((err) => {
           if (shownKey.current !== key) return;
@@ -343,7 +351,10 @@ export default function Leaderboard({ gym }) {
               type="button"
               role="tab"
               aria-selected={boardId === t.id}
-              onClick={() => setBoardId(t.id)}
+              onClick={() => {
+                pickedTab.current = true;
+                setBoardId(t.id);
+              }}
               className="px-3 py-1.5 rounded-lg text-sm font-semibold"
               style={boardId === t.id ? { background: 'rgba(255,138,31,0.18)', color: ORANGE } : { color: MUTED }}
             >

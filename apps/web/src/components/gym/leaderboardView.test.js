@@ -42,7 +42,9 @@ describe('the leaderboard in words', () => {
     expect(statusText(board({ status: 'too_few' }))).toBe('The board shows once 3 people have a gym day in this period.');
     expect(statusText(board({ status: 'too_few', board: 'workout_days' }))).toBe('The board shows once 3 people have a workout day in this period.');
     expect(statusText(board({ status: 'too_few', board: 'streak' }))).toBe('The board shows once 3 people have a streak.');
-    expect(statusText(board({ status: 'no_checkins' }))).toMatch(/^Iron House hasn't checked anyone in at the front desk in the last 30 days/);
+    expect(statusText(board({ status: 'no_checkins' }))).toBe(
+      "Iron House hasn't checked anyone in at the front desk in the last 30 days, so Gym days and Streak aren't showing. Workout days still is.",
+    );
     expect(statusText(board({ status: 'paused' }))).toBe("The leaderboard isn't available at Iron House right now.");
   });
 
@@ -62,7 +64,7 @@ describe('the leaderboard in words', () => {
     expect(whatCounts('workout_days', 'Iron House')).toEqual([
       'One workout day for each day you finished a workout in the app since you joined Iron House, at the gym or at home.',
       'Two workouts on one day are one workout day. A workout counts however its reps were counted, by the camera or by you.',
-      'It needs at least one set, and to be saved within 7 days.',
+      'It needs at least one set with a rep or a hold, and to be saved within 7 days.',
       'Equal numbers share a place. Staff, under-18s and anyone who chose Hide me are not shown.',
     ]);
   });
@@ -101,11 +103,16 @@ describe('the leaderboard in words', () => {
     expect(workoutText({ at, countedBy: 'you' }, 'America/New_York')).toBe('10:00 pm · counted by you');
     expect(workoutCountText(1)).toBe('1 workout');
     expect(workoutCountText(2)).toBe('2 workouts, 1 day');
-    expect(workoutNotCountedText({ why: 'saved_late', daysLate: 9 }, 'Iron House')).toBe(
-      'Saved 9 days after the workout — a workout counts when it is saved within 7 days',
+    expect(workoutNotCountedText({ why: 'saved_late', daysLate: 7 }, 'Iron House')).toBe(
+      'Saved more than 7 days after the workout — a workout counts when it is saved within 7 days',
     );
+    expect(workoutNotCountedText({ why: 'saved_early', daysLate: null }, 'Iron House')).toBe(
+      'Saved before its own start time — check the date and time on your phone',
+    );
+    // A reason this screen has never heard of is never given another reason's words.
+    expect(workoutNotCountedText({ why: 'something_new', daysLate: null }, 'Iron House')).toBe("Didn't count");
     expect(workoutNotCountedText({ why: 'before_joining', daysLate: null }, 'Iron House')).toBe('Before you joined Iron House');
-    expect(workoutNotCountedText({ why: 'no_sets', daysLate: null }, 'Iron House')).toBe('No sets saved');
+    expect(workoutNotCountedText({ why: 'no_sets', daysLate: null }, 'Iron House')).toBe('No reps or holds saved');
     expect(workoutNotCountedText({ why: 'future', daysLate: null }, 'Iron House')).toBe('Its time is still ahead — it counts once that time has passed');
     expect(circleLabel('yes', '2026-10-05', 'workout_days')).toBe('Mon 5 Oct: workout day');
     expect(circleLabel('no', '2026-10-06', 'workout_days')).toBe('Tue 6 Oct: no workout day');
