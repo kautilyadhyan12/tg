@@ -188,6 +188,33 @@ d("the member's tap switched off (real Postgres)", () => {
     TEST_TIMEOUT_MS,
   );
 
+  // The 410 comes before the body is read, so a body Fastify itself would refuse gets
+  // the same answer as any other.
+  it(
+    "a broken, empty or oversized body is answered 410 like any other",
+    async () => {
+      const gym = await makeGym();
+      const raw = (payload: string, type = "application/json") =>
+        need(off).inject({
+          method: "POST",
+          url: `/v1/orgs/${gym.id}/attendance`,
+          remoteAddress: nextIp(),
+          cookies: gym.member.cookies,
+          headers: { "content-type": type },
+          payload,
+        });
+      const answers = [
+        await raw("{not json"),
+        await raw(""),
+        await raw(JSON.stringify({ pad: "x".repeat(2 * 1024 * 1024) })),
+        await raw("hello", "text/plain"),
+      ].map((res) => `${String(res.statusCode)} ${res.statusCode === 410 ? (JSON.parse(res.body) as { error: string }).error : res.body.slice(0, 80)}`);
+      expect(answers).toEqual(Array.from({ length: 4 }, () => "410 member_tap_retired"));
+      expect(await visits(gym.id)).toEqual([]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   it(
     "with the switch on, the same tap is taken and writes one visit",
     async () => {
@@ -195,6 +222,8 @@ d("the member's tap switched off (real Postgres)", () => {
       const tapped = await send(need(on), "POST", `/v1/orgs/${gym.id}/attendance`, gym.member.cookies, {});
       expect(tapped.statusCode, tapped.body).toBe(200);
       expect(await visits(gym.id)).toEqual(["manual"]);
+      // The control for the first test's "no streak day": a tap that is taken makes one.
+      expect(await streakRows(gym.member.userId)).toBe(1);
     },
     TEST_TIMEOUT_MS,
   );

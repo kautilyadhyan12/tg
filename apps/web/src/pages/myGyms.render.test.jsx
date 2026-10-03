@@ -495,6 +495,33 @@ describe('the pass', () => {
     expect(api.getAttendanceHistory).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps the days already on screen when the read made on closing the pass fails', async () => {
+    api.getAttendanceHistory.mockResolvedValue(history([visit()]));
+    drawScreen();
+    await openCalendar();
+    await waitFor(() => expect(cameOn(2)).toBeTruthy());
+
+    fireEvent.click(passButton());
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
+    api.getAttendanceHistory.mockRejectedValue(new Error('offline'));
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+    await waitFor(() => expect(api.getAttendanceHistory).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(cameOn(2)).toBeTruthy();
+    expect(screen.queryByText(/couldn't load the days you came/i)).toBeNull();
+  });
+
+  it('hands the pass the place’s type, so a trainer’s client is not told of a scanner', async () => {
+    api.getMine.mockResolvedValue({ data: { orgs: [{ ...GYM, orgType: 'personal_trainer' }], formerOrgs: [] } });
+    drawScreen();
+    await waitFor(() => expect(passButton()).toBeTruthy());
+    fireEvent.click(passButton());
+    await waitFor(() => expect(screen.getByText('Hold this up for your trainer to scan.')).toBeTruthy());
+  });
+
   it('reads no history when the pass is closed over a calendar never opened', async () => {
     drawScreen();
     await waitFor(() => expect(passButton()).toBeTruthy());

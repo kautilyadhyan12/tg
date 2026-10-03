@@ -219,6 +219,19 @@ afterEach(() => {
 });
 
 describe('orgService endpoints', () => {
+  // A stalled request must fail while the pass on screen is still good (16c).
+  it('asks for the pass at the person’s own address, and gives up after 10 seconds', async () => {
+    const seen = [];
+    authApi.defaults.adapter = async (config) => {
+      seen.push({ url: config.url, method: config.method, timeout: config.timeout });
+      const data = { pass: `AHGP${'A'.repeat(58)}`, refreshAt: '2026-10-03T10:00:30.000Z' };
+      return { data, status: 200, statusText: '', headers: {}, config, request: {} };
+    };
+    const res = await orgService.getCheckinPass();
+    expect(seen).toEqual([{ url: '/v1/users/me/checkin-pass', method: 'get', timeout: 10_000 }]);
+    expect(res.data.pass).toHaveLength(62);
+  });
+
   it('pays through the gym’s own billing doors, with the press’s key and no amount', async () => {
     const seen = [];
     authApi.defaults.adapter = async (config) => {

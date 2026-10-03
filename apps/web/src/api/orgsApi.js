@@ -135,6 +135,8 @@ function contractError(what) {
   return err;
 }
 
+export const CHECKIN_PASS_TIMEOUT_MS = 10_000;
+
 async function readThrough(schema, what, request) {
   const res = await request;
   const parsed = schema.safeParse(res.data);
@@ -397,8 +399,11 @@ export const orgService = {
     ),
 
   /** GET /v1/users/me/checkin-pass — the person's pass for the front desk (16c): one pass
-   *  a person, good at every gym they belong to, and new every 30 seconds. */
-  getCheckinPass: () => readThrough(checkinPassResponseSchema, 'your pass', authApi.get('/v1/users/me/checkin-pass')),
+   *  a person, good at every gym they belong to, and new every 30 seconds. Given 10
+   *  seconds: a phone that loses its signal stalls a request rather than failing it, and
+   *  the screen must hear of it while the pass it is showing is still good. */
+  getCheckinPass: () =>
+    readThrough(checkinPassResponseSchema, 'your pass', authApi.get('/v1/users/me/checkin-pass', { timeout: CHECKIN_PASS_TIMEOUT_MS })),
 
   /** GET /v1/orgs/:gymId/attendance — WHO CAME TO THE GYM ON ONE DAY, for the
    *  console's Attendance section (:28107). Needs `attendance.read`, which every

@@ -3,7 +3,7 @@
 // drawn but cannot be scanned fails here and not at a gym's front desk.
 import { describe, expect, it } from 'vitest';
 import jsQR from 'jsqr';
-import { nextPassDelayMs, passCells, passPath, PASS_QUIET_CELLS } from './checkinPassView';
+import { nextPassDelayMs, passCells, passPath, PASS_GOOD_MS, PASS_QUIET_CELLS } from './checkinPassView';
 
 /** The cells as the picture a camera sees: black on white, `scale` pixels a cell. */
 function picture(cells, scale = 4) {
@@ -88,22 +88,33 @@ describe('when the next pass is asked for', () => {
 
   it.each([
     ['the window ends in 12 seconds', inMs(12_000), 12_000],
-    ['the window ends in 30 seconds', inMs(30_000), 30_000],
-    ['the window ends in 29.5 seconds', inMs(29_500), 29_500],
+    ['the window ends in 25 seconds', inMs(25_000), 25_000],
+    // Never later than 25 s: the next pass has 5 s to arrive before this one comes off.
+    ['the window ends in 30 seconds', inMs(30_000), 25_000],
+    ['the window ends in 29.5 seconds', inMs(29_500), 25_000],
     // A device clock that is ahead sees the end as already past: never faster than 7 s.
     ['the end looks past by a second', inMs(-1_000), 7_000],
     ['the end looks past by an hour', inMs(-3_600_000), 7_000],
     ['the window ends in 2 seconds', inMs(2_000), 7_000],
-    // A device clock that is behind sees the end as far off: never slower than 30 s.
-    ['the end looks a minute off', inMs(60_000), 30_000],
-    ['the end looks a day off', inMs(86_400_000), 30_000],
-    ['the time cannot be read', 'soon', 30_000],
-    ['there is no time', undefined, 30_000],
+    // A device clock that is behind sees the end as far off: never slower than 25 s.
+    ['the end looks a minute off', inMs(60_000), 25_000],
+    ['the end looks a day off', inMs(86_400_000), 25_000],
+    ['the time cannot be read', 'soon', 25_000],
+    ['there is no time', undefined, 25_000],
   ])('%s', (_name, refreshAt, expected) => {
     expect(nextPassDelayMs(refreshAt, NOW)).toBe(expected);
   });
 
-  it('waits 30 seconds when this device has no clock to read', () => {
-    expect(nextPassDelayMs(inMs(10_000), Number.NaN)).toBe(30_000);
+  it('waits 25 seconds when this device has no clock to read', () => {
+    expect(nextPassDelayMs(inMs(10_000), Number.NaN)).toBe(25_000);
+  });
+
+  // The desk takes a pass in its window and the next: one that arrived at the very end
+  // of its window is good for 30 seconds more (the api's CHECKIN_PASS_WINDOW_SECONDS).
+  it('a pass stays on screen 30 seconds at most, and the next is always asked for before that', () => {
+    expect(PASS_GOOD_MS).toBe(30_000);
+    for (const refreshAt of [inMs(-3_600_000), inMs(1), inMs(30_000), inMs(86_400_000), 'soon']) {
+      expect(nextPassDelayMs(refreshAt, NOW)).toBeLessThanOrEqual(PASS_GOOD_MS - 5_000);
+    }
   });
 });

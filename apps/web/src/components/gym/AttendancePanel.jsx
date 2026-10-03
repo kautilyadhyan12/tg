@@ -272,7 +272,11 @@ export default function AttendancePanel({ gym }) {
       .catch(() => {
         if (cancelled) return;
         // Stamped like the success, so a failure on one month cannot mark another failed.
-        setHistory((held) => ({ ...held, status: 'failed', forMonth: month }));
+        // A month already read stays as it is: the read made when the pass is closed is
+        // an extra look, and its failure is no reason to take a good calendar away.
+        setHistory((held) =>
+          held.forMonth === month && held.status === 'ready' ? held : { ...held, status: 'failed', forMonth: month },
+        );
       });
     return () => {
       cancelled = true;
@@ -325,6 +329,7 @@ export default function AttendancePanel({ gym }) {
       </button>
       {passOpen ? (
         <CheckinPass
+          orgType={gym?.orgType}
           onClose={() => {
             setPassOpen(false);
             setReads((n) => n + 1);

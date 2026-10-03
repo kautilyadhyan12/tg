@@ -139,16 +139,72 @@ describe('the pass, open', () => {
     expect(api.getCheckinPass.mock.calls.length).toBeLessThanOrEqual(9);
   });
 
-  it('never leaves a pass on screen longer than 30 seconds, when the clock is behind', async () => {
+  it('asks for the next pass after 25 seconds at the latest, when this device’s clock is behind', async () => {
     api.getCheckinPass
       .mockResolvedValueOnce(answer(PASS_A, '2026-10-03T12:00:00.000Z'))
       .mockResolvedValueOnce(answer(PASS_B, '2026-10-03T12:00:30.000Z'));
     render(<CheckinPass onClose={() => {}} />);
     await pass(0);
-    await pass(29_999);
+    await pass(24_999);
     expect(codeOnScreen()).toBe(drawnPath(PASS_A));
     await pass(1);
     expect(codeOnScreen()).toBe(drawnPath(PASS_B));
+  });
+
+  // A phone that loses its signal inside the gym stalls the request rather than failing
+  // it. The pass on screen runs out at the desk meanwhile, so it must not stay up.
+  it('takes the pass off after 30 seconds when the next one never answers, and offers Try again once the wait is given up', async () => {
+    let fail;
+    api.getCheckinPass
+      .mockResolvedValueOnce(answer(PASS_A, '2026-10-03T10:00:30.000Z'))
+      .mockReturnValueOnce(new Promise((_resolve, reject) => (fail = reject)));
+    render(<CheckinPass onClose={() => {}} />);
+    await pass(0);
+
+    await pass(18_000);
+    expect(api.getCheckinPass).toHaveBeenCalledTimes(2);
+    await pass(11_999);
+    expect(codeOnScreen()).toBe(drawnPath(PASS_A));
+
+    await pass(1);
+    expect(codeOnScreen()).toBeNull();
+    expect(screen.getByText('Getting your pass…')).toBeTruthy();
+    expect(screen.queryByText(/Hold this up/)).toBeNull();
+
+    await pass(60_000);
+    expect(codeOnScreen()).toBeNull();
+    expect(api.getCheckinPass).toHaveBeenCalledTimes(2);
+
+    // The request's own 10-second limit gives up on it (`orgsApi.getCheckinPass`).
+    fail(new Error('timeout of 10000ms exceeded'));
+    await pass(0);
+    expect(screen.getByText("We couldn't get your pass just now. Please try again.")).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+  });
+
+  it('a late answer still draws the new pass, after the old one was taken off', async () => {
+    let land;
+    api.getCheckinPass
+      .mockResolvedValueOnce(answer(PASS_A, '2026-10-03T10:00:30.000Z'))
+      .mockReturnValueOnce(new Promise((resolve) => (land = resolve)))
+      .mockReturnValueOnce(new Promise(() => {}));
+    render(<CheckinPass onClose={() => {}} />);
+    await pass(30_000);
+    expect(codeOnScreen()).toBeNull();
+    land(answer(PASS_B, '2026-10-03T10:01:00.000Z'));
+    await pass(0);
+    expect(codeOnScreen()).toBe(drawnPath(PASS_B));
+    // And the new pass gets its own 30 seconds, not what was left of the old one's.
+    await pass(24_999);
+    expect(codeOnScreen()).toBe(drawnPath(PASS_B));
+  });
+
+  it('tells a personal trainer’s client to hold it up for the trainer, not for a scanner', async () => {
+    api.getCheckinPass.mockResolvedValue(answer(PASS_A, '2026-10-03T10:00:30.000Z'));
+    render(<CheckinPass onClose={() => {}} orgType="personal_trainer" />);
+    await pass(0);
+    expect(screen.getByText('Hold this up for your trainer to scan.')).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/scanner/);
   });
 });
 
@@ -169,10 +225,11 @@ describe('the pass, closed or out of view', () => {
     expect(codeOnScreen()).toBeNull();
   });
 
-  it('asks for nothing while the page is out of view, and at once when it is back', async () => {
+  it('asks for nothing while the page is out of view; back in view the old pass is not shown while the new one is fetched', async () => {
+    let land;
     api.getCheckinPass
       .mockResolvedValueOnce(answer(PASS_A, '2026-10-03T10:00:30.000Z'))
-      .mockResolvedValueOnce(answer(PASS_B, '2026-10-03T10:06:00.000Z'));
+      .mockReturnValueOnce(new Promise((resolve) => (land = resolve)));
     render(<CheckinPass onClose={() => {}} />);
     await pass(0);
 
@@ -183,7 +240,61 @@ describe('the pass, closed or out of view', () => {
     setVisibility('visible');
     await pass(0);
     expect(api.getCheckinPass).toHaveBeenCalledTimes(2);
+    // The answer has not landed: no five-minute-old code under "Hold this up".
+    expect(codeOnScreen()).toBeNull();
+    expect(screen.getByText('Getting your pass…')).toBeTruthy();
+
+    land(answer(PASS_B, '2026-10-03T10:06:00.000Z'));
+    await pass(0);
     expect(codeOnScreen()).toBe(drawnPath(PASS_B));
+  });
+
+  // A browser slows a hidden page's timers, so the 30-second timer cannot be relied on
+  // there: coming back is what takes an old pass off.
+  it('takes an old pass off on coming back even if the hidden page’s own timer never ran', async () => {
+    api.getCheckinPass
+      .mockResolvedValueOnce(answer(PASS_A, '2026-10-03T10:00:30.000Z'))
+      .mockReturnValueOnce(new Promise(() => {}));
+    render(<CheckinPass onClose={() => {}} />);
+    await pass(0);
+    setVisibility('hidden');
+    // The clock moves five minutes and no timer runs, as on a sleeping phone.
+    vi.setSystemTime(new Date(NOW.getTime() + 5 * 60_000));
+    expect(codeOnScreen()).toBe(drawnPath(PASS_A));
+
+    await act(async () => {
+      setVisibility('visible');
+    });
+    expect(codeOnScreen()).toBeNull();
+    expect(screen.getByText('Getting your pass…')).toBeTruthy();
+  });
+
+  it('a short look away keeps a pass that is still good on screen while the next is fetched', async () => {
+    api.getCheckinPass
+      .mockResolvedValueOnce(answer(PASS_A, '2026-10-03T10:00:30.000Z'))
+      .mockReturnValueOnce(new Promise(() => {}));
+    render(<CheckinPass onClose={() => {}} />);
+    await pass(0);
+    setVisibility('hidden');
+    await pass(5_000);
+    setVisibility('visible');
+    await pass(0);
+    expect(api.getCheckinPass).toHaveBeenCalledTimes(2);
+    expect(codeOnScreen()).toBe(drawnPath(PASS_A));
+  });
+
+  it('after a failure, coming back to the page asks nothing: the person presses Try again', async () => {
+    api.getCheckinPass.mockRejectedValue(new Error('offline'));
+    render(<CheckinPass onClose={() => {}} />);
+    await pass(0);
+    expect(api.getCheckinPass).toHaveBeenCalledTimes(1);
+
+    setVisibility('hidden');
+    await pass(1_000);
+    setVisibility('visible');
+    await pass(60_000);
+    expect(api.getCheckinPass).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
   });
 
   it('closes on the X, on Escape and on a tap outside, and not on a tap on the pass', async () => {

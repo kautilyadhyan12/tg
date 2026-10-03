@@ -32,13 +32,18 @@ export function passPath(cells) {
   return parts.join('');
 }
 
+/** How long a pass may stay on screen. The desk takes a pass in its own 30-second window
+ *  and the next, so one that arrived at the very end of its window is good for 30 more
+ *  seconds and no longer; this device's clock is not trusted to say more. */
+export const PASS_GOOD_MS = 30_000;
+
 const SOONEST_MS = 7_000;
-const LATEST_MS = 30_000;
+const LATEST_MS = 25_000;
 
 /** How long to wait before asking for the next pass. The server says when this one's
- *  window ends; this device's clock may be wrong, so the wait is held between 7 and 30
- *  seconds whatever it says. A pass is good for its window and the next, so one asked for
- *  at most 30 seconds ago is still good; and 7 seconds keeps a wrong clock under the
+ *  window ends; this device's clock may be wrong, so the wait is held between 7 and 25
+ *  seconds whatever it says: 25 leaves the next pass 5 seconds to arrive before this one
+ *  is taken off the screen (`PASS_GOOD_MS`), and 7 keeps a wrong clock under the
  *  server's 10 passes a minute. */
 export function nextPassDelayMs(refreshAt, nowMs) {
   const at = typeof refreshAt === 'string' ? Date.parse(refreshAt) : Number.NaN;
