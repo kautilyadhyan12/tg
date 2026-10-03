@@ -202,7 +202,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 18e. [ ] The second Connect button (GoCardless: the member's bank account). 18f. [ ] Razorpay, for Indian gyms.
 19. **The gym's shared page** (RULINGS 2026-09-22, Part 6 of the re-plan; spec Part 3 §15) — it takes in items 1b, 6, 10 and 11. Every card Opus xhigh.
    - 19a. **The leaderboard** (re-planned 2026-10-02, RULINGS that day; spec Part 3 §15.5), in four jobs. It takes item 1b's place.
-     - 19a-i. [ ] **The members' board: Gym days and Streak.** The gym's page in the member web (gym picker), every period, the ⓘ, "what counted", a tap for a person's profile, Hide me on the board and in Settings; "On a roll" moves onto the same streak rule. **First test: a hidden member shows to nobody else.**
+     - 19a-i. [x] **The members' board: Gym days and Streak** — merged 2026-10-03 (PR #160).
      - 19a-ii. [ ] **Workout days**: any finished app workout, one a day (Kd chose it, 2026-10-02).
      - 19a-iii. [ ] **The board in the console**: everyone, the hidden greyed; anyone's "what counted"; take someone off the board; which boards members see, and why one is not showing.
      - 19a-iv. [ ] **Fixing a visit** (after 16b-ii): staff add a missed visit for an earlier day or remove a wrong one, and who did it shows in "what counted".
