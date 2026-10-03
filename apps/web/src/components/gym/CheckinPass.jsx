@@ -51,7 +51,8 @@ export default function CheckinPass({ onClose, orgType }) {
     let staleTimer = null;
     let asking = false;
     let failed = false;
-    // When the pass on screen arrived, by this device's clock, or null with none shown.
+    // When the pass on screen was ASKED for, by this device's clock, or null with none
+    // shown: its 30 seconds run from when the server made it, not from when it arrived.
     let shownAt = null;
 
     /** Take a pass that has been up for 30 seconds off the screen: it may be dead at the
@@ -67,17 +68,20 @@ export default function CheckinPass({ onClose, orgType }) {
       timer = null;
       if (asking) return;
       asking = true;
+      const askedAt = Date.now();
       void orgService
         .getCheckinPass()
         .then((res) => {
           asking = false;
           if (stopped) return;
-          shownAt = Date.now();
+          const age = Date.now() - askedAt;
+          shownAt = askedAt;
           setState({ status: 'ready', pass: res.data.pass, error: null });
           if (staleTimer !== null) clearTimeout(staleTimer);
-          staleTimer = setTimeout(hideOld, PASS_GOOD_MS);
+          staleTimer = setTimeout(hideOld, Math.max(0, PASS_GOOD_MS - age));
           if (document.visibilityState !== 'hidden') {
-            timer = setTimeout(ask, nextPassDelayMs(res.data.refreshAt, Date.now()));
+            // A slow answer has used up part of the wait already.
+            timer = setTimeout(ask, Math.max(1_000, nextPassDelayMs(res.data.refreshAt, Date.now()) - age));
           }
         })
         .catch((err) => {

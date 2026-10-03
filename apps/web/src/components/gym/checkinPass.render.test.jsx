@@ -182,6 +182,28 @@ describe('the pass, open', () => {
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
   });
 
+  // The server made the pass when it was asked, so a slow answer has less time left.
+  it('counts a pass’s 30 seconds from when it was asked for, not from when it arrived', async () => {
+    let land;
+    api.getCheckinPass
+      .mockReturnValueOnce(new Promise((resolve) => (land = resolve)))
+      .mockReturnValueOnce(new Promise(() => {}));
+    render(<CheckinPass onClose={() => {}} />);
+    await pass(8_000);
+    land(answer(PASS_A, '2026-10-03T10:00:30.000Z'));
+    await pass(0);
+    expect(codeOnScreen()).toBe(drawnPath(PASS_A));
+
+    // 8 seconds went on the way: the next is asked for sooner, and 22 seconds after
+    // arriving the pass is off.
+    await pass(21_999);
+    expect(api.getCheckinPass).toHaveBeenCalledTimes(2);
+    expect(codeOnScreen()).toBe(drawnPath(PASS_A));
+    await pass(1);
+    expect(codeOnScreen()).toBeNull();
+    expect(screen.getByText('Getting your pass…')).toBeTruthy();
+  });
+
   it('a late answer still draws the new pass, after the old one was taken off', async () => {
     let land;
     api.getCheckinPass
@@ -194,9 +216,12 @@ describe('the pass, open', () => {
     land(answer(PASS_B, '2026-10-03T10:01:00.000Z'));
     await pass(0);
     expect(codeOnScreen()).toBe(drawnPath(PASS_B));
-    // And the new pass gets its own 30 seconds, not what was left of the old one's.
-    await pass(24_999);
+    // And the new pass gets its own 30 seconds, from when it was asked for (12 seconds
+    // before it landed), not what was left of the old one's.
+    await pass(17_999);
     expect(codeOnScreen()).toBe(drawnPath(PASS_B));
+    await pass(1);
+    expect(codeOnScreen()).toBeNull();
   });
 
   it('tells a personal trainer’s client to hold it up for the trainer, not for a scanner', async () => {
