@@ -20,7 +20,7 @@
 import { writeFileSync } from 'node:fs';
 import jsQR from 'jsqr';
 import { PASS_CORRECTION, PASS_QUIET_CELLS, passCells } from '../src/components/gym/checkinPassView.js';
-import { READ_WAYS, applyLevels, readPlan } from '../src/pages/checkin/deskRead.js';
+import { READ_WAYS, readPixels, readPlan } from '../src/pages/checkin/deskRead.js';
 
 const PICTURES = Number(process.argv[2] ?? 100);
 
@@ -153,11 +153,10 @@ function readPart(grey, width, plan, levels) {
       rgba[at + 3] = 255;
     }
   }
-  if (levels > 0) applyLevels(rgba, levels);
   const from = performance.now();
-  const found = jsQR(rgba, plan.width, plan.height, { inversionAttempts: 'dontInvert' });
+  const text = readPixels(jsQR, rgba, plan.width, plan.height, levels);
   jsqrMs += performance.now() - from;
-  return found?.data ?? null;
+  return text;
 }
 
 const cameras = {

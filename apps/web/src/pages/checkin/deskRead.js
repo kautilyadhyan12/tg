@@ -75,9 +75,17 @@ export function applyLevels(pixels, share) {
   }
 }
 
+/** One read: the picture's pixels (RGBA) by one way's `levels`, through the reader
+ *  (`jsqr`, handed in). The text of the QR found, or null. */
+export function readPixels(reader, pixels, width, height, levels) {
+  if (levels > 0) applyLevels(pixels, levels);
+  const found = reader(pixels, width, height, { inversionAttempts: 'dontInvert' });
+  return found !== null && found !== undefined && typeof found.data === 'string' && found.data !== '' ? found.data : null;
+}
+
 /** A read that found nothing rests this many times as long as it took. In a dark, grainy
- *  picture some ways take half a second and find nothing; resting them keeps the page
- *  answering and leaves the turns to the ways that are quick there. */
+ *  picture some ways take half a second and find nothing; resting them leaves the turns
+ *  to the ways that are quick there, and the device its breath. */
 export const REST_TIMES = 15;
 
 /** Which way reads next: the first after `last`, in order, that has rested (`restUntil[i]`

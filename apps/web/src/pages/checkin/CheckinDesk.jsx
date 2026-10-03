@@ -228,8 +228,8 @@ function Desk({ look }) {
     mutedRef.current = next;
     setMuted(next);
     writeDeskMuted(storage(), next);
-    // Turned on, it plays once, so staff hear it is on and how loud.
-    if (!next) playDeskSound('in');
+    // Turned on, it plays its own short note, so staff hear it is on and how loud.
+    if (!next) playDeskSound('on');
   };
 
   /** Puts an answer on the screen with its sound; `quiet` for an answer already heard. */
@@ -328,8 +328,9 @@ function Desk({ look }) {
       if (typeof text !== 'string') return;
       const now = Date.now();
       const last = lastCameraRead.current;
-      if (last.code === text && now - last.at < CAMERA_SAME_CODE_MS) return;
       lastCameraRead.current = { code: text, at: now };
+      // Still the code the camera has been looking at: it was sent when it first appeared.
+      if (last.code === text && now - last.at < CAMERA_SAME_CODE_MS) return;
       if (tooLongToScan(text)) {
         showNow(NOT_A_SCAN);
         return;
@@ -355,7 +356,7 @@ function Desk({ look }) {
           <p className="c-h1 c-ell">{names?.gymName || 'Check-in'}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" className="c-btn c-btn-s" onClick={toggleMuted} aria-pressed={!muted}>
+          <button type="button" className="c-btn c-btn-s" onClick={toggleMuted}>
             {muted ? <VolumeX aria-hidden="true" className="w-5 h-5" /> : <Volume2 aria-hidden="true" className="w-5 h-5" />}
             {muted ? 'Turn sound on' : 'Turn sound off'}
           </button>
@@ -373,7 +374,10 @@ function Desk({ look }) {
         {camera ? <DeskCamera onCode={onCameraCode} /> : null}
       </main>
 
-      <form onSubmit={onSubmit} className="px-4 md:px-12 pb-8 w-full max-w-2xl mx-auto">
+      {/* Held at the bottom of the window: with the camera open the page is taller than
+          the window, and a scanner's typing would otherwise scroll down to this box and
+          take the answer off the screen. */}
+      <form onSubmit={onSubmit} className="sticky bottom-0 px-4 md:px-12 pt-3 pb-8 w-full max-w-2xl mx-auto" style={{ background: 'var(--page)' }}>
         <label htmlFor="desk-scan" className="c-label flex items-center gap-2">
           <ScanLine aria-hidden="true" className="w-4 h-4" />
           Scanner

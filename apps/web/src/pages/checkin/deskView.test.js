@@ -151,7 +151,8 @@ describe('the sound for an answer', () => {
     ['the server down', deskTrouble(failed(500, 'internal'))],
     ['no connection', deskTrouble(new Error('Network Error'))],
     ['nothing', null],
-    ['a green colour with no person', { tone: 'good', title: 'Checked in', name: null, notice: null }],
+    ['a green colour that deskAnswer did not mark as let in', { tone: 'good', title: 'Checked in', name: 'Olivia', notice: null }],
+    ['a mark that is not exactly true', { tone: 'good', title: 'Checked in', name: 'Olivia', notice: null, letIn: 'yes' }],
   ])('%s is "out"', (_name, shown) => {
     expect(deskSound(shown)).toBe('out');
   });
@@ -163,6 +164,24 @@ describe('the sound for an answer', () => {
   ])('let in with the gym’s word %j is the warning sound, not the plain one', (notice) => {
     expect(deskSound(deskAnswer({ ...person, notice }))).toBe('in_warn');
     expect(deskSound(deskAnswer({ ...person, result: 'already', notice, firstAt: 'garbage' }))).toBe('in_warn');
+  });
+
+  // A list record may have no name (the member list keeps it; the server then answers
+  // `name: ""`). They are let in like anybody else, and must sound like it.
+  it.each(['', '   '])('a member let in whose record has no name (%j) still gets "let in"', (name) => {
+    const first = { ...person, person: { name }, notice: clean };
+    const again = { ...first, result: 'already', firstAt: '2026-10-02T06:02:00.000Z', timezone: 'Europe/London', clockFormat: '24h' };
+    for (const answer of [first, again]) {
+      expect(checkinScanResponseSchema.safeParse(answer).success).toBe(true);
+      expect(deskSound(deskAnswer(answer))).toBe('in');
+      expect(deskSound(deskAnswer({ ...answer, notice: { ...clean, payment: 'Overdue' } }))).toBe('in_warn');
+    }
+  });
+
+  it('the mute button’s own note is none of the three answers, and no note of "let in" is in it', () => {
+    const pitches = (kind) => DESK_SOUNDS[kind].map((note) => note.hz);
+    expect(DESK_SOUNDS.on).toHaveLength(1);
+    for (const kind of ['in', 'in_warn', 'out']) for (const hz of pitches(kind)) expect(pitches('on')).not.toContain(hz);
   });
 
   it('the three sounds are three different sounds, and "out" is the low one', () => {

@@ -2159,15 +2159,19 @@ together are not each shown a link of which one is dead.
 **Sound, and the camera in poor light (ROADMAP 16f; RULINGS 2026-10-03).** Each answer
 has a sound, so staff hear the desk without watching it: two rising notes for somebody
 let in · the same and two lower notes when the gym's own status or payment word is
-shown · one long low buzz for everything else. Only a green answer with its person is
-ever "let in"; the same pass shown again is silent. **Turn sound off** is on the page and
-the desk remembers it. The camera is the backup, and Check-in devices says so: a USB
+shown · one long low buzz for everything else. Only the two answers that let somebody in
+are ever "let in" (a member whose record has no name included); the same pass shown again
+is silent, and a pass the camera is still looking at is sent once, whatever the answer.
+**Turn sound off** is on the page and the desk remembers it; turned back on it plays one
+short note of its own, which is none of the three, so nobody at the desk can make it
+sound like a check-in. A sound the browser cannot play at once is not played later. The camera is the backup, and Check-in devices says so: a USB
 scanner that reads QR codes is the reliable way for a busy desk, and the camera reads a
 pass but not a key tag. The camera is asked for a 1280 × 720 picture and reads it up to
 ten times a second, each time one of six ways in turn — the whole picture or its middle,
 as it is or with the grey pulled apart from the white, which is what a phone's bright
 screen needs in a dim room (`deskRead.js`); a way that is slow and finds nothing rests,
-so the page keeps answering. `tools/measure-desk-reads.mjs` measures it on made pictures.
+and the reading is done in a worker, one picture at a time, so the page keeps answering.
+The Scanner box stays at the bottom of the window. `tools/measure-desk-reads.mjs` measures it on made pictures.
 The desk's own screen is kept awake.
 
 ### 12.4 The scan rule — ONE pure function, one table test

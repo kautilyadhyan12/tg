@@ -28,7 +28,9 @@ export function playDeskSound(kind) {
   if (notes === undefined) return;
   try {
     const ctx = audio();
-    if (ctx === null) return;
+    // A browser holding its audio (a tablet after an interruption) would play these later,
+    // to whoever is at the desk by then: a sound that cannot play now is not played.
+    if (ctx === null || ctx.state !== 'running') return;
     for (const note of notes) {
       const from = ctx.currentTime + note.at / 1000;
       const to = from + note.ms / 1000;

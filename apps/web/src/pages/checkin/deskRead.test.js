@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import jsQR from 'jsqr';
 import { passCells, PASS_QUIET_CELLS } from '../../components/gym/checkinPassView';
-import { CAMERA_ASK, MIDDLE_SHARE, READ_WAYS, REST_TIMES, WHOLE_WIDTH, applyLevels, nextWay, readPlan } from './deskRead';
+import { CAMERA_ASK, MIDDLE_SHARE, READ_WAYS, WHOLE_WIDTH, applyLevels, nextWay, readPixels, readPlan } from './deskRead';
 
 const PASS = 'AHGPLG763ESHTVB2ZAG44DJVO6OZTIBY55AU7C4WIZRMWOB6SNIWULCDANFKYI';
 
@@ -144,8 +144,33 @@ describe('whose turn it is', () => {
     expect(nextWay(3, restUntil, 1000)).toBe(3);
   });
 
-  it('a slow read that finds nothing leaves the page most of its time', () => {
-    // Every way slow at once uses 1 part in REST_TIMES each.
-    expect(ways / REST_TIMES).toBeLessThan(0.5);
+});
+
+describe('one read', () => {
+  it('gives the pass in a picture, and null where there is none', () => {
+    const { pixels, side } = washedPicture(0);
+    expect(readPixels(jsQR, pixels, side, side, 0)).toBe(PASS);
+    expect(readPixels(jsQR, new Uint8ClampedArray(64 * 64 * 4).fill(255), 64, 64, 0)).toBeNull();
+  });
+
+  it('pulls the grey apart first when the way asks for it: a washed pass reads at 0.85 and not as it is', () => {
+    const washed = () => washedPicture(215);
+    const plain = washed();
+    expect(readPixels(jsQR, plain.pixels, plain.side, plain.side, 0)).toBeNull();
+    const pulled = washed();
+    expect(readPixels(jsQR, pulled.pixels, pulled.side, pulled.side, 0.85)).toBe(PASS);
+  });
+
+  it.each([null, undefined, { data: '' }, { data: 42 }])('a reader that answers %j is nothing read', (answer) => {
+    expect(readPixels(() => answer, new Uint8ClampedArray(4), 1, 1, 0)).toBeNull();
+  });
+
+  it('asks the reader for dark squares on light only', () => {
+    let asked;
+    readPixels((_pixels, _width, _height, options) => {
+      asked = options;
+      return null;
+    }, new Uint8ClampedArray(4), 1, 1, 0);
+    expect(asked).toEqual({ inversionAttempts: 'dontInvert' });
   });
 });

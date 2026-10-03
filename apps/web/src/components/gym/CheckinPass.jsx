@@ -14,6 +14,7 @@ import { nextPassDelayMs, passCells, passPath, PASS_GOOD_MS, PASS_QUIET_CELLS } 
 //
 // Drawn as big as the phone allows and the screen kept awake while it is open (ROADMAP
 // 16f): a desk's camera reads a big code in poor light far more often than a small one.
+// On a phone held sideways it is as big as the height allows, never cut.
 
 const COULD_NOT = "We couldn't get your pass just now. Please try again.";
 const LOADING = { status: 'loading', pass: null, error: null };
@@ -36,7 +37,7 @@ function PassCode({ pass }) {
       viewBox={`0 0 ${String(side)} ${String(side)}`}
       shapeRendering="crispEdges"
       className="w-full h-auto rounded-xl"
-      style={{ background: '#fff', maxWidth: '22rem' }}
+      style={{ background: '#fff', maxWidth: 'min(22rem, 52vh)' }}
     >
       <rect width={side} height={side} fill="#fff" />
       <path d={passPath(cells)} fill="#000" />
@@ -152,7 +153,7 @@ export default function CheckinPass({ onClose, orgType }) {
         aria-modal="true"
         aria-label="Your pass"
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-sm rounded-3xl overflow-hidden p-3 sm:p-4"
+        className="w-full max-w-sm max-h-full rounded-3xl overflow-y-auto p-3 sm:p-4"
         style={{ background: '#121110', border: '1px solid rgba(255,255,255,0.08)' }}
       >
         <div className="flex items-start justify-between gap-3 px-2 pt-2 sm:px-1 sm:pt-1">
