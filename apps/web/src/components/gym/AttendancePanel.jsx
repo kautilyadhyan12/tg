@@ -1,101 +1,42 @@
 import { useEffect, useState } from 'react';
-import { orgWords } from '@app/shared';
 import {
   CalendarDays,
-  CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   Flame,
-  Loader2,
+  QrCode,
   X,
 } from 'lucide-react';
-import { orgService, errorText } from '../../api/orgsApi';
+import { orgService } from '../../api/orgsApi';
 import { gymToday } from '../../pages/console/hoursView';
+import CheckinPass from './CheckinPass';
 import {
-  attendanceShutReason,
   emptyMonthNote,
-  markedSentence,
-  mergeVisits,
   monthGrid,
   monthKeyOfDay,
   monthWindow,
   shiftMonthKey,
-  withVisit,
 } from './attendanceView';
 
-// "I'M HERE" — Kd's ruling of 2026-08-31 (:26469), and the member's own list of
-// the days they came (:27900, his answer at the card's gate).
+// CHECKING IN, AND THE DAYS A MEMBER CAME — one gym's card on My Gyms.
 //
-// THERE IS ONE WAY IN ON THE WEB AND IT IS THIS BUTTON. The QR code, the
-// poster, the deep link and the scan-confirm screen are ALL phone-app work
-// (:26558, :26586 — *"drop the scan part completely from web"*), so nothing
-// here draws or consumes a QR. `method` still records `manual` today and `qr`
-// when the phone app ships, which is why the two are separate values in the
-// database from day one rather than one "attended" flag.
+// A visit is made at the front desk (RULINGS 2026-09-21; spec Part 3 §12): the member
+// shows their pass, and the desk reads it. So this card has a "Show my pass" button where
+// the "I'm here" tap was (ROADMAP 16c); the tap's route answers 410. The pass is the
+// PERSON's, not this gym's (RULINGS 2026-09-23), so every card opens the same one.
 //
-// THE BUTTON IS ABSENT, NEVER GREYED, WHEN THE GYM HAS THE SWITCH OFF (ruling
-// 4, :24141's defect): a dead control with no explanation is worse than no
-// control. **The member's own history stays** in that state — those visits
-// really happened, and hiding them because the gym stopped taking new ones
-// would remove a thing Kd ruled in.
+// Under it, the member's own calendar of the days they came (Kd, 2026-09-03), whatever
+// made each visit: the old tap, a pass, a key tag or staff.
 //
-// AND IT IS GREYED, NEVER ABSENT, WHEN THE GYM IS SHUT RIGHT NOW — the OTHER
-// half of :24141, and the two are not in tension. That entry rules on which of
-// the two a state gets: a power somebody NEVER has draws nothing, because
-// nothing false is being said; **a TEMPORARY fact about the GYM is greyed with
-// a true sentence beside it, because a control that vanished would leave them
-// guessing whether they had lost something.** The switch being off is the first
-// kind — it is the gym's settled answer and the member has no way in at all.
-// Being shut at 05:28 is the second: it clears at opening time, on its own, and
-// the button is drawn all along so a member can see what will be there. The
-// sentence is not optional either — a greyed control with nothing beside it is
-// what :29500's C/H-1 graded Critical/High, on the sixth panel to do it.
+// THIS PANEL MUST BE MOUNTED ONE PER GYM, KEYED BY THE GYM'S ID. Nothing in here resets
+// when `gym` changes; `MyGyms.jsx` keys the card on `gym.id`, so React throws this away
+// rather than handing gym B a panel holding gym A's visits.
 //
-// KD ASKED FOR THE BUTTON TO SAY WHAT IT IS FOR, in the same message that
-// approved this: *"there should be some indication that i am here means
-// attandance in gym so that user understands"*. **"I'm here" is his own
-// wording and does not change** (:30867 quotes it); what was missing is
-// anywhere on the card saying that pressing it marks attendance, so the label
-// and the line under it do that and the button is left alone.
-//
-// THIS PANEL MUST BE MOUNTED ONE PER GYM, KEYED BY THE GYM'S ID, and that is a
-// requirement on the CALLER rather than a detail of it (T3 round 2, F4).
-// Nothing in here resets when `gym` changes — not the taps it is holding, not
-// the history it read — because :20712 ruled that a per-field reset fixes the
-// field somebody remembered and leaves the next one behind. `MyGyms.jsx` keys
-// the card on `gym.id`, so React throws this away rather than handing gym B a
-// panel holding gym A's visits. A second mount site that keys on anything else
-// re-arms that, and no type or lint rule can see it.
-//
-// NOTHING HERE POLLS OR RE-READS ON FOCUS, and that is a SERVER constraint
-// rather than a style choice: the history read and the console's day list share
-// ONE rate-limit bucket — 600 an hour between them, one Redis key — so a loop
-// on this screen would spend an owner's allowance as well as the member's.
-// After a successful tap the server's own answer is kept and merged into what
-// is drawn (`mergeVisits`) instead of asking again — held apart from the read's
-// list, because a read already in flight cannot know about a tap and used to
-// erase it (T3 round 1 C/H-2).
-//
-// ~~OR RUNS ON A TIMER~~ — **STRUCK 2026-09-03, and the distinction it was
-// hiding is the one that matters: the constraint above is about REQUESTS, and
-// this file now runs a timer that makes none.** `tick` re-reads the browser's
-// CLOCK every half minute so the gate below can notice the gym opening. Without
-// it the button is decided once, at paint, and a member sitting on this screen
-// at 06:59 is still refused at 07:05 — blocked from something they are entitled
-// to do, which is :5807's second clause and Critical/High. It issues no fetch,
-// touches no bucket, and is cleared on unmount.
-//
-// ~~**The two reads are unchanged and still happen exactly once each.**~~
-// **STRUCK 2026-09-03 BY THE CALENDAR (Kd, `:31508`): the history read now
-// happens ONCE PER MONTH VIEWED.** The list it replaced grew without bound,
-// which is the problem he named; a month grid is a fixed height however often
-// somebody comes. **The cost is one request per arrow press and it is bounded by
-// the person pressing** — nothing polls, nothing re-reads on focus, and stepping
-// is an action rather than something the screen does on its own. Against the
-// shared 600/hour bucket (`orgs_attendance_read`, split with the console's day
-// list) a member would have to step through fifty years of months in an hour to
-// reach it.
+// THE HISTORY IS READ ONCE PER MONTH VIEWED, and once more when the pass is closed.
+// Nothing polls or re-reads on focus: the history read and the console's day list share
+// one rate-limit bucket (`orgs_attendance_read`, 600 an hour). The half-minute `tick`
+// re-reads the browser's clock, not the server.
 
 /** THE TIMES OF ONE DAY, OPENED BY TAPPING IT — Kd was told this cost before he
  *  chose the calendar (`OWED.md`): *"a square in a grid cannot show that
@@ -233,31 +174,10 @@ function CameDay({ day }) {
 
 export default function AttendancePanel({ gym }) {
   const gymId = gym?.id ?? null;
-  // The words this panel speaks — off the org row `/v1/orgs/mine` already
-  // carries for this membership (roadmap 2b).
-  const orgType = gym?.orgType;
-  const [mark, setMark] = useState({ busy: false, done: null, error: null });
-  // `status` is named rather than inferred from an empty list: "nobody has a
-  // visit yet" and "we could not ask" look identical in the data and must never
-  // look identical on screen (:8267/:8343).
-  //
-  // **ONLY THE READ EVER SETS `status`, and T3 round 1 C/H-1 is why.** A mark
-  // used to flip a FAILED read to `ready` so the new visit could be drawn — and
-  // that drew the whole list off a read that never answered, so a member with
-  // months of history was shown a history of exactly one day, with `more` false
-  // so not even the "most recent visits" line appeared. A tap tells you what it
-  // recorded; it does not tell you what else is in your history, and a screen
-  // that answers the second question from the first is guessing.
-  // THE ANSWER IS STAMPED WITH THE MONTH IT WAS FETCHED FOR — `Attendance.jsx`'s
-  // own instrument (:29250 §6), on this side of the product.
-  //
-  // **A synchronous reset at the top of the effect is what this replaces**: it
-  // is a cascading render (`react-hooks/set-state-in-effect`) and, worse, two
-  // sources of truth — the held visits belong to the OLD month for as long as
-  // the new read is in flight, and only the setter's timing keeps them off
-  // screen. Stamping makes staleness a property of the DATA, so a read that
-  // lands late cannot be drawn under the wrong month's heading whatever the
-  // ordering.
+  const [passOpen, setPassOpen] = useState(false);
+  // THE ANSWER IS STAMPED WITH THE MONTH IT WAS FETCHED FOR, so a read that lands late is
+  // never drawn under another month's heading. `status` is named rather than inferred
+  // from an empty list: "no visits" and "we could not ask" must not look the same.
   const [history, setHistory] = useState({
     status: 'loading',
     forMonth: null,
@@ -266,79 +186,27 @@ export default function AttendancePanel({ gym }) {
     clockFormat: '24h',
     more: false,
   });
-  // WHICH MONTH THE MEMBER HAS STEPPED TO, or null meaning "wherever the gym is
-  // now". **DERIVED AT RENDER RATHER THAN SET IN AN EFFECT** — the month is a
-  // function of the gym's zone and this member's presses, and computing it in an
-  // effect was both a cascading render and a second place for it to live.
+  // The month the member has stepped to, or null meaning the gym's own month now.
   const [monthStep, setMonthStep] = useState(null);
-  // **THE CALENDAR IS FOLDED AWAY UNTIL SOMEBODY ASKS FOR IT — Kd, at his own
-  // browser, 2026-09-03:** *"the calender need to be compact small and only
-  // appear when click may be have a calendar symbol big that the user can see
-  // properly"*. A full month opened by default filled the whole page under a
-  // two-line gym card, which is the shape he was shown and rejected.
-  //
-  // **CLOSED IS THE STARTING STATE AND IT MUST BE ABLE TO GO BACK THERE**
-  // (:31295 — a dropdown that arrived open and could not be closed, because one
-  // `||` overrode the tap). Nothing forces this open; it is `useState` and the
-  // header row is its only writer.
+  // Folded away until somebody asks for it (Kd, 2026-09-03).
   const [calendarOpen, setCalendarOpen] = useState(false);
-  // **AND WHETHER IT HAS EVER BEEN OPENED, WHICH IS A DIFFERENT QUESTION.** The
-  // read is gated on THIS rather than on `calendarOpen`, so folding the calendar
-  // away and opening it again does not spend another request on a month already
-  // in hand — the shared 600/hour bucket, again. Two states because they mean
-  // two things; collapsing them into one re-reads on every open.
+  // Whether it has EVER been opened: the read waits for this, so a member who never opens
+  // the calendar asks nothing, and folding it away and back does not ask again.
   const [everOpened, setEverOpened] = useState(false);
-  // THE DAY WHOSE TIMES ARE OPEN, or null. Holds the DATE and not the row, so a
-  // month re-read cannot leave a stale row on screen — the row is looked up out
-  // of the current grid at render.
+  // The day whose times are open, or null. The date and not the row, so a month re-read
+  // cannot leave a stale row on screen.
   const [openDay, setOpenDay] = useState(null);
-  // THE TAPS THIS SESSION CONFIRMED, HELD APART FROM THE READ'S LIST (C/H-2).
-  // See `mergeVisits` — a read already in flight when somebody taps cannot know
-  // about the tap, and holding both in one place let it erase them.
-  const [marked, setMarked] = useState([]);
-  // THE ZONE AND CLOCK THE MARK CAME BACK WITH, HELD APART FROM THE READ'S FOR
-  // THE SAME REASON THE VISITS ARE (C/H-2), and this is the second time that
-  // lesson has had to be applied on this panel.
-  //
-  // **T3 round 1's L-4 made the MARK's pair win because it is the FRESHER of two
-  // answers about one gym. It won by ORDERING — the read had almost always
-  // landed first — and the calendar broke that**: the history read now waits for
-  // the hours read to name a month, so it lands AFTER a quick tap and its whole
-  // object replaced `clockFormat`, spelling the new chip on the gym's OLD clock.
-  // Found by a probe, not by a test, and not by reading (the setter was
-  // untouched and still correct).
-  //
-  // Holding it separately makes the precedence a FACT rather than a race: the
-  // tap's pair wins whenever there is one, whatever order the two responses
-  // arrive in.
-  const [markedClock, setMarkedClock] = useState(null);
-  // WHEN THE GYM IS OPEN — the SAME reader `GymHoursNote` uses two lines above
-  // this button, which is what stops the button and the times it is judged
-  // against ever disagreeing (`gymHoursSchema`'s own header: *"one reader for
-  // the console and for the member's gym card"*).
-  //
-  // **IT IS A SECOND CALL ON THIS CARD AND THAT COST IS STATED, NOT HIDDEN.**
-  // `GymHoursNote` makes its own, so `/my-gyms` asks each gym for its hours
-  // twice. Sharing one answer means either a cache that outlives a component or
-  // a second, optional shape for a note THREE screens already draw — both
-  // bigger than this card and both able to break a screen Kd has smoked. It has
-  // an `OWED.md` line instead, which is what :28822 §3 did with the identical
-  // duplicate it created on the same screen.
-  //
-  // **`null` MEANS "WE HAVE NOT ASKED OR COULD NOT", AND THE GATE ADMITS ON
-  // IT** — see `attendanceShutReason`. A failed read draws no error strip here
-  // for `GymHoursNote`'s reason: this card is ADDITIVE, and the button still
-  // works because the server is the enforcement.
+  // Bumped when the pass is closed: a scan at the desk while it was open made a visit
+  // this screen was not told about, so the month on screen is read once more.
+  const [reads, setReads] = useState(0);
+  // The gym's hours, read for its time zone: the calendar's month and "today" are the
+  // gym's, not the reader's. Null until read, and after a failed read.
   const [hours, setHours] = useState(null);
-  // WHETHER THE HOURS READ HAS FINISHED, WHICHEVER WAY IT WENT — and it exists
-  // because `hours === null` cannot tell "not back yet" from "it failed". The
-  // BUTTON does not care (both admit), but the CALENDAR does: it anchors its
-  // first month on the gym's zone, which arrives with this read, and without
-  // this flag a failed read would leave the grid waiting for ever.
+  // Whether that read has finished, whichever way it went: a failed read must still
+  // produce a calendar.
   const [hoursDone, setHoursDone] = useState(false);
-  // THE CLOCK, AND IT MAKES NO REQUEST — see the header. Held in state because
-  // nothing else on this screen re-renders between the read landing and the
-  // gym's opening minute, so without it the gate is frozen at paint.
+  // The browser's clock, so a member sitting here past the gym's midnight is not left a
+  // day or a month behind.
   const [tick, setTick] = useState(() => new Date());
 
   useEffect(() => {
@@ -361,15 +229,8 @@ export default function AttendancePanel({ gym }) {
         setHoursDone(true);
       })
       .catch(() => {
-        // Deliberately silent, and the gate admits on the null this leaves
-        // behind: a member must never be refused their own gym's door because a
-        // background read dropped (:24141 §3a).
-        //
-        // **THE FLAG IS STILL SET, and that is the point of having one.** The
-        // calendar below waits for this read to RESOLVE before it names a month;
-        // leaving the flag false on a failure would hang the grid on a request
-        // that is never coming back, which is the loading-spinner-for-ever shape
-        // :4267's F4 records.
+        // Silent: `GymHoursNote` above draws the hours and their failure. The flag is
+        // still set, or the calendar would wait for ever on a read that is not coming.
         if (!cancelled) setHoursDone(true);
       });
     return () => {
@@ -377,28 +238,9 @@ export default function AttendancePanel({ gym }) {
     };
   }, [gymId]);
 
-  // THE MONTH THE GYM IS IN, and the month on screen — both DERIVED, neither
-  // stored.
-  //
-  // **THE ZONE COMES FROM THE HOURS READ THIS CARD ALREADY MAKES, which is what
-  // keeps the history read at ONE REQUEST PER MONTH.** The obvious alternative —
-  // a first unwindowed history read to learn the zone, then a windowed one —
-  // costs two requests on every mount, on a screen that draws one panel per gym
-  // and shares a 600/hour bucket with the console.
-  //
-  // **IT WAITS FOR THE READ TO RESOLVE, NOT TO SUCCEED** (`hoursDone`): a failed
-  // hours read must still produce a calendar, or a dropped background request
-  // would remove a feature.
-  //
-  // **A ZONE WE CANNOT READ FALLS BACK TO THE READER'S, DELIBERATELY, AND IT IS
-  // THE ONLY DATE ON THIS CARD THAT DOES.** `gymToday` already has that fallback
-  // and `attendanceShutReason` refuses to use it — correctly, because that
-  // decides whether a control is DEAD. This decides which month a grid OPENS on,
-  // and the reader can step. Drawing no calendar at all because a zone failed to
-  // resolve would remove the feature over a label being a day out.
-  //
-  // **RECOMPUTED OFF `tick`**, so a member sitting on this screen past the gym's
-  // midnight is not left a month behind with the forward arrow dead.
+  // The month the gym is in and the month on screen, both derived. A zone that cannot be
+  // read falls back to the reader's: it decides only which month the grid OPENS on, and
+  // the reader can step.
   const gymZone =
     typeof hours?.timezone === 'string' && hours.timezone !== '' ? hours.timezone : null;
   const currentMonth = hoursDone
@@ -406,28 +248,9 @@ export default function AttendancePanel({ gym }) {
     : null;
   const month = monthStep ?? currentMonth;
 
-  // THE HISTORY READ — ONE REQUEST PER MONTH VIEWED, and `month` is the only
-  // dependency that moves after mount.
-  //
-  // **A TAP, A TICK OR AN OPENED DAY ISSUES NOTHING**, which is the shared
-  // 600/hour bucket (`orgs_attendance_read`) the console's own day list also
-  // draws from. Stepping months is the one thing that re-reads, and it is an
-  // action a person takes rather than something the screen does on its own.
-  //
-  // **IT WAITS FOR `month`, WHICH MEANS IT WAITS FOR THE GYM'S ZONE.** A window
-  // built from the browser's clock would ask for the wrong month for any member
-  // not in their gym's zone — the window and the grid disagreeing about one
-  // visit, which is the defect the server half was arranged to prevent
-  // (DECISIONS `:31921` §1), arriving on the client instead.
   useEffect(() => {
-    // **NOTHING IS ASKED FOR UNTIL THE CALENDAR HAS BEEN OPENED.** It is folded
-    // away by default (Kd, 2026-09-03), so a member who never opens it costs the
-    // server nothing at all — and `/my-gyms` draws one of these per gym, so on a
-    // member of three that is three requests saved on every page load.
     if (gymId === null || month === null || !everOpened) return undefined;
-    // NOT `window` — that shadows the browser global for the rest of this
-    // effect, so a later line reaching for `window.…` would silently get a
-    // `{from, to}` instead of failing.
+    // Not `window`: that would shadow the browser global for the rest of this effect.
     const range = monthWindow(month);
     if (range === null) return undefined;
     let cancelled = false;
@@ -438,8 +261,7 @@ export default function AttendancePanel({ gym }) {
         const answer = res.data?.attendance;
         setHistory({
           status: 'ready',
-          // STAMPED WITH THE MONTH ASKED FOR, never with whatever `month` is by
-          // the time this lands.
+          // The month ASKED for, never whatever `month` is by the time this lands.
           forMonth: month,
           visits: answer?.visits ?? [],
           timezone: answer?.timezone ?? null,
@@ -449,179 +271,65 @@ export default function AttendancePanel({ gym }) {
       })
       .catch(() => {
         if (cancelled) return;
-        // The grid is not drawn at all on a failure — no empty month, no error
-        // strip. The BUTTON is the point of this panel and it still works; a
-        // red bar about a background read would be noise on the screen somebody
-        // opened to say they had arrived. Stamped like the success, so a failure
-        // on one month cannot mark another month failed.
+        // Stamped like the success, so a failure on one month cannot mark another failed.
         setHistory((held) => ({ ...held, status: 'failed', forMonth: month }));
       });
     return () => {
       cancelled = true;
     };
-  }, [gymId, month, everOpened]);
+  }, [gymId, month, everOpened, reads]);
 
-  const markPresent = async () => {
-    if (gymId === null) return;
-    setMark({ busy: true, done: null, error: null });
-    try {
-      const res = await orgService.markAttendance(gymId);
-      const answer = res.data;
-      setMark({ busy: false, done: answer, error: null });
-      // THE SERVER'S OWN VISIT GOES INTO ITS OWN LIST — see the header for why
-      // this is not a re-read, and `mergeVisits` for why it is not put into the
-      // read's list. `status` is deliberately untouched: a tap says what it
-      // recorded and says nothing about what else is in the history (C/H-1).
-      setMarked((held) => withVisit(held, answer?.visit ?? null));
-      // THE MARK'S ZONE AND CLOCK ARE THE FRESHER PAIR AND WIN (T3 round 1,
-      // L-4). Both answers describe the same gym, and this one was computed
-      // now — so a gym that changed its clock between the read and the tap
-      // draws the new chip the way the gym reads it today, not the way it did
-      // when the page loaded.
-      //
-      // **INTO ITS OWN STATE, NEVER INTO `history`.** Merging it there made the
-      // precedence depend on which response landed last, and the calendar's
-      // month gate is what made the read land second — see `markedClock`.
-      setMarkedClock({
-        timezone: answer?.timezone ?? null,
-        clockFormat: answer?.clockFormat ?? null,
-      });
-    } catch (err) {
-      setMark({
-        busy: false,
-        done: null,
-        // The server's own sentence where it has one — the refusals here are
-        // things only it knows (the switch is off, the membership ended, the
-        // gym was closed down), and inventing a friendlier reason would be
-        // guessing at which.
-        error: errorText(err, "We couldn't record that just now. Please try again."),
-      });
-    }
-  };
-
-  // AN ANSWER TO A DIFFERENT MONTH IS NOT AN ANSWER (:29250 §6). Until the read
-  // for the month on screen lands, this grid is loading — it never draws
-  // September's days under October's heading, whatever order the responses
-  // arrive in.
+  // An answer to a different month is not an answer: until the read for the month on
+  // screen lands, the grid is loading and draws no visits.
   const fresh = history.forMonth === month && month !== null;
   const gridStatus = fresh ? history.status : 'loading';
-
-  // THE GRID. `mergeVisits` is unchanged and still holds the read's list and
-  // this session's taps apart (T3 round 1 C/H-2) — what the month adds is that a
-  // tap made TODAY simply does not match any cell of a month somebody has
-  // stepped back to. That falls out of indexing by date rather than needing a
-  // filter, and it is asserted rather than assumed.
-  //
-  // **THE VISITS ARE THE STAMPED ONES ONLY.** Drawing `history.visits` while the
-  // stamp disagrees is the exact defect the stamp exists to prevent.
-  // THE FRESHER PAIR WINS, DECIDED HERE RATHER THAN BY WHICH RESPONSE LANDED
-  // LAST (T3 round 1 L-4, re-fixed — see `markedClock`).
-  const shownZone = markedClock?.timezone ?? history.timezone;
-  const shownClock = markedClock?.clockFormat ?? history.clockFormat;
   const grid =
     month === null
       ? null
-      : monthGrid(month, fresh ? mergeVisits(history.visits, marked) : marked, {
-          timezone: shownZone,
-          clockFormat: shownClock,
-          // The GYM's today, so a day is greyed as future by the gym's calendar
-          // and not the reader's. Null when we have no zone — nothing is greyed,
-          // which is the admit-on-unknown direction this file uses everywhere.
+      : monthGrid(month, fresh ? history.visits : [], {
+          timezone: history.timezone,
+          clockFormat: history.clockFormat,
+          // The GYM's today, so a day is greyed as future by the gym's calendar. Null
+          // with no zone: nothing is greyed.
           today: gymZone === null ? null : gymToday(gymZone, tick),
         });
   const openRow = grid?.cells.find((c) => c.date === openDay && c.came) ?? null;
 
-  /** MOVE A MONTH, AND CLOSE WHATEVER DAY WAS OPEN.
-   *
-   *  **ONE FUNCTION RATHER THAN THE SAME TWO LINES IN BOTH ARROWS, AND THE
-   *  MUTATION SWEEP IS WHY.** With the clear written into each handler, deleting
-   *  it from ONE of them changed nothing observable: the sheet is looked up out
-   *  of the CURRENT grid, so stepping away closes it either way, and the OTHER
-   *  handler cleared it on the way back. The mutant survived both single
-   *  deletions — :28221 §3(d)'s question, and the answer here was that the
-   *  guarantee was held by the PAIR, so no honest fixture could attack it.
-   *
-   *  **WHAT IT PROTECTS IS THE ROUND TRIP.** Without the clear, a member who
-   *  opens the 2nd, steps to August and steps back finds the sheet OPEN again —
-   *  a panel appearing over the screen that nobody tapped. */
+  /** Move a month, and close whatever day was open: without the clear, a member who
+   *  opens the 2nd, steps away and steps back finds the sheet open again, untapped. */
   const stepMonth = (delta) => {
     setOpenDay(null);
     setMonthStep(shiftMonthKey(month, delta));
   };
-  // KD'S RULING OF 2026-09-03 REACHING THE SCREEN. Null means press away — and
-  // it is null for every state we cannot decide, because the server is the
-  // enforcement and refusing on a guess is the worse mistake (:24141 §3a).
-  const shutReason = attendanceShutReason(hours, tick, orgType);
 
   return (
     <div className="mt-3">
-      {/* ABSENT, NOT GREYED (ruling 4). Only an explicit `false` hides it: the
-          shared contract defaults the field to `true`, so an api older than
-          this bundle cannot make a gym's only way in disappear. */}
-      {gym?.manualAttendanceEnabled !== false ? (
-        <>
-          {/* WHAT THE BUTTON IS FOR, because Kd asked for it in as many words
-              and because "I'm here" on its own names no subject. It heads the
-              control rather than the panel: a member whose gym has the switch
-              off sees neither this nor the button, and their history below is
-              left exactly as it was. */}
-          <p
-            className="text-xs uppercase tracking-wider"
-            style={{ color: 'rgba(255,255,255,0.35)' }}
-          >
-            Attendance
-          </p>
-          <p className="text-sm mt-0.5 mb-2" style={{ color: 'rgba(255,255,255,0.55)' }}>
-            Pressing this marks your attendance at the {orgWords(orgType).itToMembers}.
-          </p>
-          <button
-            type="button"
-            onClick={markPresent}
-            // GREYED, NEVER HIDDEN, and the sentence below is not decoration —
-            // :29500's C/H-1 is a greyed control with nothing beside it.
-            disabled={mark.busy || shutReason !== null}
-            className="rounded-xl px-4 py-2.5 text-sm font-semibold inline-flex items-center gap-2 disabled:opacity-40"
-            style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
-          >
-            {mark.busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            I&apos;m here
-          </button>
-          {/* IT NAMES THE STATE AND NOT THE TIMES — `GymHoursNote` has already
-              drawn today's opening times on this same card, on the gym's own
-              clock, which is a better answer to "when should I come back" than
-              this sentence could give without spelling one minute twice. */}
-          {shutReason !== null ? (
-            <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.55)' }}>
-              {shutReason}
-            </p>
-          ) : null}
-        </>
-      ) : null}
-
-      {mark.done !== null ? (
-        <p
-          className="text-sm mt-2 flex items-start gap-1.5"
-          style={{ color: '#FF8A1F' }}
-        >
-          <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
-          {/* The five states are five sentences and one of them says nothing
-              about opening hours — see `markedSentence`. The clock is the one
-              the SERVER sent with the visit, not the one the history read
-              happened to bring back. */}
-          <span>
-            {markedSentence(mark.done.visit, {
-              alreadyMarked: mark.done.alreadyMarked === true,
-              clockFormat: mark.done.clockFormat ?? '24h',
-              orgType,
-            })}
-          </span>
-        </p>
-      ) : null}
-
-      {mark.error !== null ? (
-        <p className="text-sm mt-2" style={{ color: '#ef4444' }}>
-          {mark.error}
-        </p>
+      <p className="text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.35)' }}>
+        Check in
+      </p>
+      <p className="text-sm mt-0.5 mb-2" style={{ color: 'rgba(255,255,255,0.55)' }}>
+        {gym?.orgType === 'personal_trainer'
+          ? 'Show your pass to your trainer when you arrive.'
+          : 'Show your pass at the front desk when you arrive.'}
+      </p>
+      <button
+        type="button"
+        onClick={() => {
+          setPassOpen(true);
+        }}
+        className="rounded-xl px-4 py-2.5 text-sm font-semibold inline-flex items-center gap-2"
+        style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
+      >
+        <QrCode className="w-4 h-4" aria-hidden="true" />
+        Show my pass
+      </button>
+      {passOpen ? (
+        <CheckinPass
+          onClose={() => {
+            setPassOpen(false);
+            setReads((n) => n + 1);
+          }}
+        />
       ) : null}
 
       {/* THE DAYS THEY CAME — Kd's calendar (`:31508`). The heading stays and

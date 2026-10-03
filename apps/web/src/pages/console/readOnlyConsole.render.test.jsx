@@ -995,9 +995,9 @@ describe('a step already open when the gym lapses', () => {
  *  It asserts BOTH directions per panel, because a component that printed the
  *  sentence unconditionally would satisfy the lapsed half alone (:7104's PG1). */
 describe('every Settings panel that greys a control explains itself, in its own section', () => {
-  const GREYING_SECTIONS = ['gym details', "when we're open", 'marking attendance', 'check-in devices', 'follow-up emails to leads', 'staff'];
+  const GREYING_SECTIONS = ['gym details', "when we're open", 'check-in devices', 'follow-up emails to leads', 'staff'];
 
-  it('draws exactly these six sections and no seventh one nobody is checking', async () => {
+  it('draws exactly these five sections and no sixth one nobody is checking', async () => {
     orgService.getMine.mockResolvedValue(mineIs(LAPSED));
     renderConsole(Settings, '/console/iron-house/settings');
     await screen.findByTestId('console-banner');

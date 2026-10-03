@@ -69,11 +69,6 @@ const { orgService } = await import('../../api/orgsApi');
 // One store, shared by the shell and the screen inside it and re-read on window
 // focus — so it survives `cleanup()` and must be emptied between tests.
 const { resetConsoleOrgs } = await import('./consoleOrgs');
-// THE SENTENCE ITSELF, never a copy of its words. :19960's rule — an assertion
-// typed out by hand goes green against a screen that says something else the
-// day the constant is reworded.
-const { readOnlyNote } = await import('./billingView');
-const READ_ONLY_NOTE = readOnlyNote('gym');
 const Settings = (await import('./Settings')).default;
 const ConsoleLayout = (await import('../../components/console/ConsoleLayout')).default;
 // Imported to be mounted DIRECTLY, which is the only way one of its guarantees
@@ -186,36 +181,6 @@ const drawSettings = () =>
  *  the START of it. */
 const openSection = async (title) => {
   fireEvent.click(await screen.findByRole('button', { name: new RegExp(`^${title}`) }));
-};
-
-/** THE BODY OF ONE SECTION, so an assertion about a panel cannot be satisfied by
- *  a different panel on the same screen.
- *
- *  **ROUND 1 WROTE A FALSE REASON HERE AND ROUND 2 CORRECTED IT.** It said C/H-1
- *  survived because Settings *"mounts five panels"* sharing one sentence, so a
- *  screen-wide `getAllByText(READ_ONLY_NOTE).length > 0` was green for all of
- *  them. **Both halves were wrong.** Settings mounts FOUR panels (`Settings.jsx`
- *  :127, :150, :175, :203 — the count this file's own sibling case asserts), and
- *  a closed `ConsoleSection` is UNMOUNTED, so a case that opens one section had
- *  only that section's body to search. **The real reason is that no test opened
- *  the attendance section with a note assertion in it** — a missing case, not a
- *  blind instrument. Kept and corrected rather than deleted: a wrong diagnosis
- *  left standing is how the next chat inherits a false premise.
- *
- *  Scoping is still right, for the reason above this line rather than that one:
- *  `ConsoleSection` publishes the handle — the heading button points at its own
- *  body with `aria-controls` — so there is no need to guess at a class name. */
-const sectionBody = async (title) => {
-  const heading = await screen.findByRole('button', { name: new RegExp(`^${title}`) });
-  const bodyId = heading.getAttribute('aria-controls');
-  // A shut section has no body and deliberately no `aria-controls` (:24141's
-  // sibling fix — an attribute promising a screen reader an element that does
-  // not exist). Reaching here with null means the section was never opened,
-  // and saying so beats an unhelpful `getElementById(null)`.
-  expect(bodyId).toBeTruthy();
-  const body = document.getElementById(bodyId);
-  expect(body).toBeTruthy();
-  return within(body);
 };
 
 const drawStaff = async () => {
@@ -2294,125 +2259,16 @@ describe('a permission this screen is too old to show', () => {
   });
 });
 
-describe('the attendance switch', () => {
-  /** KD'S RULING (:26469 §1.4), and its place on this screen is ruling 17
-   *  (:28107): **the SWITCH configures the feature and stays on Settings, while
-   *  the LIST of who came is its own console section.** *"Settings is where a
-   *  gym CONFIGURES itself; a section is where it WORKS."* */
-  const drawAttendance = async () => {
+describe('attendance on Settings', () => {
+  // The member's own tap is switched off for every gym (ROADMAP 16c; RULINGS 2026-09-21),
+  // so its on/off switch has left this screen: a visit is made at the front desk.
+  it.each([true, false])('has no "Marking attendance" switch, whatever the gym once set (%s)', async (manualAttendanceEnabled) => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, manualAttendanceEnabled }], formerOrgs: [] } });
     drawSettings();
-    await openSection('Marking attendance');
-  };
-
-  it('is on, and says so on the closed heading', async () => {
-    drawSettings();
-    // :20338's requirement — a shut row still answers the question the owner
-    // opened Settings with, so the state is readable without opening anything.
-    expect(await screen.findByText(/Members can mark themselves in/i)).toBeTruthy();
-  });
-
-  it('says Switched off on the closed heading when the gym turned it off', async () => {
-    orgService.getMine.mockResolvedValue({
-      data: { orgs: [{ ...ORG, manualAttendanceEnabled: false }], formerOrgs: [] },
-    });
-    drawSettings();
-    expect(await screen.findByText(/Switched off/i)).toBeTruthy();
-  });
-
-  it('sends the change on its own, with no Save button', async () => {
-    await drawAttendance();
-    const box = screen.getByLabelText(/Let members mark themselves in/i);
-    expect(box.checked).toBe(true);
-    fireEvent.click(box);
-    await waitFor(() => expect(orgService.updateOrg).toHaveBeenCalledTimes(1));
-    expect(orgService.updateOrg).toHaveBeenCalledWith(ORG.id, { manualAttendanceEnabled: false });
-  });
-
-  /** THE SWITCH DRAWS FROM THE SERVER'S ANSWER, NOT FROM THE PRESS. A failed
-   *  save must leave it showing what the gym actually has — a toggle that
-   *  reported a state the server rejected is the one thing it must never do
-   *  (:5807: on screen and wrong). */
-  it('stays where it was when the save is refused, and says why', async () => {
-    orgService.updateOrg.mockRejectedValue(apiError(403, 'forbidden', 'You cannot change that.'));
-    await drawAttendance();
-    fireEvent.click(screen.getByLabelText(/Let members mark themselves in/i));
-    await waitFor(() => expect(screen.getByText(/You cannot change that./i)).toBeTruthy());
-    expect(screen.getByLabelText(/Let members mark themselves in/i).checked).toBe(true);
-  });
-
-  /** SAYS WHAT TURNING IT OFF ACTUALLY COSTS. Today this is the ONLY way a
-   *  visit can be recorded — the QR path is the phone app's (:26558, :26586) and
-   *  staff marking somebody present is not built (:27900) — so an owner should
-   *  read that here rather than discover it from an empty screen tomorrow. */
-  it('warns that switching it off stops attendance entirely', async () => {
-    await drawAttendance();
-    expect(screen.getByText(/stops attendance being recorded at all/i)).toBeTruthy();
-  });
-
-  /** A LAPSED GYM'S CONSOLE IS READ-ONLY (:24141, :23711) and this panel obeys
-   *  it like every other. The server refuses the write too — `updateOrg` goes
-   *  through `requireWritablePrivilege` — so this is the screen not offering a
-   *  control it knows will be refused, never the enforcement (R3.3). */
-  it('is not usable on a gym whose plan has lapsed', async () => {
-    // `consoleReadOnly` IS THE SERVER'S OWN THREE-STATE ANSWER and the lock is
-    // NOT derived from the subscription — `null` means "we could not ask" (a
-    // plain member, an older api) and must never grey anything out. A first
-    // draft of this test set an `expired` subscription and left the flag off,
-    // which greyed nothing and would have sent me looking for a defect in the
-    // panel; the panel was right and the fixture was not.
-    orgService.getMine.mockResolvedValue({
-      data: {
-        orgs: [{ ...ORG, subscription: null, consoleReadOnly: true }],
-        formerOrgs: [],
-      },
-    });
-    await drawAttendance();
-    const box = screen.getByLabelText(/Let members mark themselves in/i);
-    expect(box.disabled).toBe(true);
-    fireEvent.click(box);
+    // Non-vacuity: Settings drew its other sections for this owner.
+    expect(await screen.findByRole('button', { name: /Check-in devices/ })).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/Marking attendance|mark themselves in|Switched off/i);
     expect(orgService.updateOrg).not.toHaveBeenCalled();
-    // AND IT STOPS INVITING THE CLICK IT WILL IGNORE (T3 round 1, L-3). The
-    // whole row is a `<label>`, so the pointer cursor covered the words as well
-    // as the box — an affordance offered by a control that cannot act.
-    expect(box.closest('label').className).not.toMatch(/cursor-pointer/);
-  });
-
-  /** **THE GREYED SWITCH SAYS WHY, INSIDE ITS OWN SECTION** — :24141 §3(c), and
-   *  the regression test for T3 round 1's C/H-1 (:5348 rule 3).
-   *
-   *  The case above ships the disable half and is green without the sentence,
-   *  which is exactly how this shipped: five panels grey a control and write
-   *  `READ_ONLY_NOTE` beside it, this one greyed and wrote nothing, and an owner
-   *  opening only this row met a dead switch under no explanation at all.
-   *
-   *  **SCOPED TO THE SECTION, AND ROUND 2 CORRECTED WHY.** This used to say a
-   *  screen-wide `getAllByText(...).length > 0` is satisfied by any OTHER
-   *  panel's copy of the sentence. It is not, on this screen: a closed
-   *  `ConsoleSection` is unmounted, so only the section a case opens is there to
-   *  find. Scoping is worth having anyway — it is what makes the assertion say
-   *  *this* panel rather than *the screen* — but the thing that let C/H-1 ship
-   *  was that no case opened THIS section at all, which is what the case below
-   *  is. */
-  it('says WHY it is greyed, in this section rather than only in the strip at the top', async () => {
-    orgService.getMine.mockResolvedValue({
-      data: {
-        orgs: [{ ...ORG, subscription: null, consoleReadOnly: true }],
-        formerOrgs: [],
-      },
-    });
-    await drawAttendance();
-    const panel = await sectionBody('Marking attendance');
-    expect(panel.getByText(READ_ONLY_NOTE)).toBeTruthy();
-  });
-
-  /** THE POSITIVE CONTROL, one field apart — without it the case above is
-   *  satisfied by a panel that prints the sentence to every gym on earth,
-   *  including the ones whose switch works perfectly (:7104's PG1). */
-  it('says nothing of the sort on a gym that is paying', async () => {
-    await drawAttendance();
-    const panel = await sectionBody('Marking attendance');
-    expect(panel.queryByText(READ_ONLY_NOTE)).toBeNull();
-    expect(screen.getByLabelText(/Let members mark themselves in/i).disabled).toBe(false);
   });
 
   /** THE TICK BOX KD'S RULING 18 REQUIRES, without which *"the owner can change

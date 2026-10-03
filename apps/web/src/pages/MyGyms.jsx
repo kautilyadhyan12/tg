@@ -65,7 +65,7 @@ export default function MyGyms() {
           My {words.plural}
         </h1>
         <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          Where you train, when it&apos;s open, and telling it you&apos;re here.
+          Where you train, when it&apos;s open, and your pass to check in.
         </p>
       </div>
 

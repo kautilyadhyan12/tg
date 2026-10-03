@@ -2676,12 +2676,14 @@ describe("the gym's numbers", () => {
     );
     drawOverview();
 
-    expect(await screen.findByText('Nobody has marked attendance in the last 8 weeks.')).toBeTruthy();
+    expect(await screen.findByText('Nobody has checked in in the last 8 weeks.')).toBeTruthy();
     expect(screen.queryByText('0%')).toBeNull();
     expect(screen.queryByText('0 people')).toBeNull();
   });
 
-  it('points a gym whose button is off at the switch instead', async () => {
+  // The tap's switch has left Settings (ROADMAP 16c): a gym that once turned it off
+  // reads the same sentence, not a pointer at a switch that is no longer there.
+  it('says the same to a gym that once switched the app button off', async () => {
     orgService.getMine.mockResolvedValue({
       data: { orgs: [{ ...ORG, manualAttendanceEnabled: false }] },
     });
@@ -2690,8 +2692,8 @@ describe("the gym's numbers", () => {
     );
     drawOverview();
 
-    expect(await screen.findByText(/the switch is off in Settings/)).toBeTruthy();
-    expect(screen.queryByText(/Nobody has marked attendance/)).toBeNull();
+    expect(await screen.findByText('Nobody has checked in in the last 8 weeks.')).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/switch is off|in Settings/);
   });
 
   it('draws no numbers at all for a gym nobody has joined — the join code is the screen', async () => {
@@ -2701,7 +2703,7 @@ describe("the gym's numbers", () => {
 
     expect(within(await screen.findByTestId('join-code-card')).getByText('K7QM2X')).toBeTruthy();
     expect(screen.queryByText(/turning up/i)).toBeNull();
-    expect(screen.queryByText(/Nobody has marked attendance/)).toBeNull();
+    expect(screen.queryByText(/Nobody has checked in/)).toBeNull();
   });
 
   it('offers a Try again when the numbers fail on their own, and never draws zeros over a failed read', async () => {

@@ -330,6 +330,7 @@ export async function buildApp(
       // The server's own disk until Cloudflare R2 is connected at deploy (Stage 4 item 1).
       photos: overrides.photoStore ?? createDiskPhotoStore(config.PHOTO_DIR ?? join(tmpdir(), "aihg-gym-photos")),
       joinCodes: config.JOIN_CODES,
+      memberTap: config.MEMBER_TAP,
     },
     overrides.orgs ?? {},
   );

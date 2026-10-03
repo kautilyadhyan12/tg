@@ -4,6 +4,17 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-10-03 · 16c (Folder A): the member's side of check-in (branch `checkin-member-pass`)
+
+- **Why this job:** next in Folder A after 16b-ii. **Risky (it switches off a way of recording a visit, and shows a signed pass), Opus xhigh; Kd: *"go"*** after asking how a member could still check in from home and whether "I'm here" should be deleted (RULINGS 2026-10-03). No migration, no new cost; new package `qrcode-generator` 2.0.4 (MIT, no dependencies; RULINGS 2026-09-21).
+- **Built:** `MEMBER_TAP` (default off): `POST /v1/orgs/:gymId/attendance` answers 410 `member_tap_retired` to everybody before anything is read; its handler and suite kept (`MEMBER_TAP=on`). My Gyms: **Show my pass** where "I'm here" was — one pass a person (RULINGS 2026-09-23), a QR drawn dark on white, asked for only while open and in view, renewed when its window ends (held between 7 and 30 s whatever the device's clock says), taken off the screen when a renewal fails, with Try again; the open month is read once more when the pass is closed. A trainer's client reads "to your trainer", not "front desk". Settings' "Marking attendance" switch is gone (`AttendanceSettingsPanel.jsx` deleted; the column and the PATCH field stay); Overview and Attendance no longer point at it ("Nobody has checked in in the last 8 weeks.").
+- **Worst thing, first test:** a member still checks themselves in from home: the tap is refused, no visit row and no streak row, for a gym whose own switch is on; 410 to member, owner, stranger and signed out. **Breaks, each RED, restored sha256-identical:** the route not asking the switch; the switch read backwards; the switch starting on.
+- **Verified:** api tsc and eslint 0; api **4,846 of 4,847** in one full run (the one, `leads.sentForYou`'s whole-app day count, the known flake; the file then 18/18 alone); new api suite 3/3. Web: eslint 0 on every touched file; full run 3,604 of 3,607 plus `poseAssets.contract` (local Node 24) — the 3 were the Settings census still listing the removed section, fixed, that file then 41/41; new suites 11 (pass on screen) + 29 (pass as a code, read back by `jsqr`, three passes from the server's own `makePass`); `vite build` clean.
+- **Real run on :3000/:5173:** the tap 410; a real pass drawn (33 cells a side), read back by `jsqr` letter for letter, scanned at a real desk device: `checked_in`, the same code again `fresh_pass_needed`, the visit in the member's history as `pass`. Headless Edge, 1000 and 400 wide: My Gyms, the pass (278 px square), the calendar with the day lit. Smoke account and gym removed.
+- **Cost at full size:** reads no list of people (the pass is one HMAC, no database read; the 410 answers before any read).
+- **Kept, not on any screen:** the tap's pure web rules in `components/gym/attendanceView.js` with their tests.
+- **Open:** round one's review (`reviews/16c-1-review.md`), Kd's click-through, then the two extra passes over check-in (16a–16c) before any gym uses it. Still open from Stage 1 item 10: a lapsed gym's desk keeps checking people in.
+
 ## 2026-10-03 · 16b-ii (Folder A): staff check-in and the live log (branch `checkin-staff-log`)
 
 - **Why this job:** next in Folder A after 16b-i. **Risky (other people's names on a screen), Opus xhigh; Kd: *"go"*.** Migration `0064` (a new tick); no new package, no new cost.
