@@ -12,6 +12,9 @@ vi.mock('../../api/checkinApi', () => ({
   checkinService: { claimDevice: vi.fn(), scan: vi.fn() },
 }));
 vi.mock('jsqr', () => ({ default: vi.fn() }));
+// The sounds are the browser's own audio, which a test has none of: what is asked for is
+// what is checked.
+vi.mock('./deskSound', () => ({ playDeskSound: vi.fn(), wakeDeskSound: vi.fn() }));
 // Who is signed in to this browser: a small store, so a sign-out redraws the page as the
 // real AuthContext does.
 vi.mock('../../context/AuthContext', async () => {
@@ -37,9 +40,11 @@ vi.mock('../../context/AuthContext', async () => {
 
 const { checkinService } = await import('../../api/checkinApi');
 const jsQR = (await import('jsqr')).default;
+const { playDeskSound } = await import('./deskSound');
+const { CAMERA_ASK, READ_WAYS, REST_TIMES } = await import('./deskRead');
 const { testAuth } = await import('../../context/AuthContext');
 const CheckinDesk = (await import('./CheckinDesk')).default;
-const { DESK_NAMES_KEY, RESULT_SHOW_MS, SAME_PASS_MS } = await import('./deskView');
+const { CAMERA_SAME_CODE_MS, DESK_MUTED_KEY, DESK_NAMES_KEY, RESULT_SHOW_MS, SAME_PASS_MS } = await import('./deskView');
 
 const TOKEN = 'a'.repeat(20) + 'B_-' + 'c'.repeat(20);
 const PASS = 'AHGP' + 'A'.repeat(58);
@@ -424,6 +429,126 @@ describe('every answer the scan gives', () => {
   });
 });
 
+// ROADMAP 16f. Staff hear the desk from across the room, so the sound must be the answer's
+// own: "let in" for somebody refused is the worst thing this job could do.
+describe('the worst thing: a "let in" sound for somebody not let in', () => {
+  const sounds = () => playDeskSound.mock.calls.map(([kind]) => kind);
+  const refused = { response: { status: 401, data: { error: 'device_not_recognised' } } };
+
+  it.each([
+    ['not a member', () => checkinService.scan.mockResolvedValue({ result: 'not_a_member', gymName: 'Iron House' }), 'Not a member of Iron House'],
+    ['an old or used pass', () => checkinService.scan.mockResolvedValue({ result: 'fresh_pass_needed', gymName: 'Iron House' }), 'Show a fresh pass'],
+    ['a key tag two people share', () => checkinService.scan.mockResolvedValue({ result: 'see_staff', gymName: 'Iron House' }), 'Please see a member of staff'],
+    ['an answer this page does not know', () => checkinService.scan.mockResolvedValue({ result: 'checked_in_maybe', gymName: 'Iron House' }), 'Please scan again'],
+    ['key tags paused', () => checkinService.scan.mockRejectedValue({ response: { status: 429, data: { error: 'key_tags_paused' } } }), 'Please wait'],
+    ['no connection', () => checkinService.scan.mockRejectedValue(new Error('Network Error')), 'No connection'],
+    ['a device switched off', () => checkinService.scan.mockRejectedValue(refused), "This device can't check people in"],
+  ])('%s plays the "not let in" sound, once, and no other', async (_name, arrange, title) => {
+    arrange();
+    mount();
+    scan(PASS);
+    expect(await screen.findByText(title)).toBeTruthy();
+    expect(sounds()).toEqual(['out']);
+  });
+
+  it('a read that is no pass or key tag is "not let in" too', async () => {
+    mount();
+    scan('x'.repeat(80));
+    expect(await screen.findByText("That isn't a pass or key tag")).toBeTruthy();
+    expect(sounds()).toEqual(['out']);
+  });
+
+  it('somebody let in hears "let in"; with the gym’s warning word, the warning sound', async () => {
+    checkinService.scan
+      .mockResolvedValueOnce(checkedIn('Olivia Bennett'))
+      .mockResolvedValueOnce(checkedIn('Arjun Shah', { status: 'Expired', payment: 'Overdue', onList: true }));
+    mount();
+    scan(PASS);
+    expect(await screen.findByText('Olivia Bennett')).toBeTruthy();
+    expect(sounds()).toEqual(['in']);
+    scan(PASS_B);
+    expect(await screen.findByText('Arjun Shah')).toBeTruthy();
+    expect(sounds()).toEqual(['in', 'in_warn']);
+  });
+
+  it('a member whose record has no name is let in with the "let in" sound, not the buzz', async () => {
+    checkinService.scan.mockResolvedValue(checkedIn(''));
+    const { container } = mount();
+    scan('1001');
+    expect(await screen.findByText('Checked in')).toBeTruthy();
+    expect(container.querySelector('[data-tone="good"]')).not.toBeNull();
+    expect(sounds()).toEqual(['in']);
+  });
+
+  it('the sound comes with the answer, not with the scan: nothing plays while the desk is still checking', async () => {
+    let answer;
+    checkinService.scan.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    mount();
+    scan(PASS);
+    expect(await screen.findByText('Checking…')).toBeTruthy();
+    expect(sounds()).toEqual([]);
+    await act(async () => answer({ result: 'not_a_member', gymName: 'Iron House' }));
+    expect(sounds()).toEqual(['out']);
+  });
+
+  it('the same pass read again shows the person their answer again without a second sound', async () => {
+    checkinService.scan.mockResolvedValue(checkedIn('Olivia Bennett'));
+    mount();
+    scan(PASS);
+    expect(await screen.findByText('Olivia Bennett')).toBeTruthy();
+    scan(PASS);
+    scan(PASS);
+    expect(await screen.findByText('Olivia Bennett')).toBeTruthy();
+    expect(checkinService.scan).toHaveBeenCalledTimes(1);
+    expect(sounds()).toEqual(['in']);
+  });
+});
+
+describe('the mute button', () => {
+  it('says what it will do, stops every sound, and the desk remembers it', async () => {
+    checkinService.scan.mockResolvedValue({ result: 'not_a_member', gymName: 'Iron House' });
+    const first = mount();
+    const button = screen.getByRole('button', { name: 'Turn sound off' });
+    // Its words say what a press will do; it is not also a pressed/unpressed switch.
+    expect(button.hasAttribute('aria-pressed')).toBe(false);
+    fireEvent.click(button);
+    expect(screen.getByRole('button', { name: 'Turn sound on' }).hasAttribute('aria-pressed')).toBe(false);
+    expect(window.localStorage.getItem(DESK_MUTED_KEY)).toBe('1');
+    scan('9999');
+    expect(await screen.findByText('Not a member of Iron House')).toBeTruthy();
+    expect(playDeskSound).not.toHaveBeenCalled();
+
+    // The page opened again (the tablet restarted): still off.
+    first.unmount();
+    mount();
+    expect(screen.getByRole('button', { name: 'Turn sound on' })).toBeTruthy();
+    scan('9998');
+    expect(await screen.findByText('Not a member of Iron House')).toBeTruthy();
+    expect(playDeskSound).not.toHaveBeenCalled();
+  });
+
+  it('turned back on, it plays its own note so staff hear it, and answers have their sound again', async () => {
+    window.localStorage.setItem(DESK_MUTED_KEY, '1');
+    checkinService.scan.mockResolvedValue({ result: 'not_a_member', gymName: 'Iron House' });
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: 'Turn sound on' }));
+    expect(playDeskSound.mock.calls).toEqual([['on']]);
+    expect(window.localStorage.getItem(DESK_MUTED_KEY)).toBeNull();
+    scan('9999');
+    expect(await screen.findByText('Not a member of Iron House')).toBeTruthy();
+    expect(playDeskSound.mock.calls).toEqual([['on'], ['out']]);
+  });
+
+  // The button is on a page members stand at: no tapping of it may sound like a check-in.
+  it('nobody at the desk can make it play "let in" with the button, however often it is pressed', () => {
+    mount();
+    for (let press = 0; press < 6; press += 1) fireEvent.click(screen.getByRole('button', { name: /turn sound (on|off)/i }));
+    expect(checkinService.scan).not.toHaveBeenCalled();
+    expect(playDeskSound).toHaveBeenCalledTimes(3);
+    for (const [kind] of playDeskSound.mock.calls) expect(['in', 'in_warn', 'out']).not.toContain(kind);
+  });
+});
+
 describe('the scanner box', () => {
   it('sends what the scanner typed, trimmed, and empties itself', async () => {
     checkinService.scan.mockResolvedValue(checkedIn('Olivia Bennett'));
@@ -456,6 +581,47 @@ describe('the scanner box', () => {
     fireEvent.blur(box);
     await waitFor(() => expect(document.activeElement).toBe(box));
   });
+
+  // Kd's click-through of 16f: with the camera open the page is taller than the window, and
+  // taking the focus back scrolled the page under the mouse, so no button could be pressed.
+  it('takes the focus, first and back again, without moving the page under a button being pressed', async () => {
+    // Watched from before the page is drawn, so the first focus is seen too.
+    const focus = vi.spyOn(HTMLInputElement.prototype, 'focus');
+    try {
+      mount();
+      const box = screen.getByLabelText(/scanner/i);
+      expect(document.activeElement).toBe(box);
+      expect(focus.mock.calls).toEqual([[{ preventScroll: true }]]);
+      const button = screen.getByRole('button', { name: /use the camera/i });
+      button.focus();
+      fireEvent.blur(box);
+      await waitFor(() => expect(focus.mock.calls.length).toBeGreaterThanOrEqual(2));
+      for (const call of focus.mock.calls) expect(call).toEqual([{ preventScroll: true }]);
+    } finally {
+      focus.mockRestore();
+    }
+  });
+
+  it('stays at the bottom of the window, so a scanner’s typing never scrolls the answer away', () => {
+    mount();
+    expect(screen.getByLabelText(/scanner/i).closest('form').className).toMatch(/\bsticky\b.*\bbottom-0\b/);
+  });
+});
+
+describe('the desk’s own screen', () => {
+  it('is kept awake while the desk is open, and let go when it closes', async () => {
+    const release = vi.fn(() => Promise.resolve());
+    const request = vi.fn(() => Promise.resolve({ release }));
+    Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: { request } });
+    try {
+      const view = mount();
+      await waitFor(() => expect(request.mock.calls).toEqual([['screen']]));
+      view.unmount();
+      await waitFor(() => expect(release).toHaveBeenCalledTimes(1));
+    } finally {
+      delete navigator.wakeLock;
+    }
+  });
 });
 
 describe('the camera', () => {
@@ -470,6 +636,10 @@ describe('the camera', () => {
 
   beforeEach(() => {
     stop.mockClear();
+    // The page's clock follows the test's: a read's rest is counted in the test's time,
+    // not in how long this machine happened to take.
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => Date.now());
+    restore.push(() => clock.mockRestore());
     stub(navigator, 'mediaDevices', { value: { getUserMedia: vi.fn(() => Promise.resolve({ getTracks: () => [{ stop }] })) } });
     stub(HTMLMediaElement.prototype, 'readyState', { get: () => 4 });
     stub(HTMLVideoElement.prototype, 'videoWidth', { get: () => 640 });
@@ -493,7 +663,7 @@ describe('the camera', () => {
     expect(await screen.findByText('Olivia Bennett')).toBeTruthy();
     for (let second = 0; second < SAME_PASS_MS / 1000 - 1; second += 1) {
       await act(async () => {
-        vi.advanceTimersByTime(1000);
+        await vi.advanceTimersByTimeAsync(1000);
       });
       expect(screen.queryByText('Show a fresh pass')).toBeNull();
     }
@@ -503,6 +673,243 @@ describe('the camera', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /close the camera/i }));
     expect(stop).toHaveBeenCalled();
+  });
+
+  it('asks the camera for the sharper picture', async () => {
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: /use the camera/i }));
+    await waitFor(() => expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledWith(CAMERA_ASK));
+  });
+
+  it('a pass the camera reads is sent, and its answer has its sound', async () => {
+    jsQR.mockReturnValue({ data: PASS });
+    checkinService.scan.mockResolvedValue(checkedIn('Olivia Bennett'));
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: /use the camera/i }));
+    expect(await screen.findByText('Olivia Bennett')).toBeTruthy();
+    expect(playDeskSound.mock.calls).toEqual([['in']]);
+  });
+
+  // A refused pass held up was sent, and buzzed, every 3 seconds.
+  it('a refused pass held up to the camera is sent once and buzzes once; shown again after it has gone, it is asked again', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    jsQR.mockReturnValue({ data: PASS });
+    checkinService.scan.mockResolvedValue({ result: 'not_a_member', gymName: 'Iron House' });
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: /use the camera/i }));
+    expect(await screen.findByText('Not a member of Iron House')).toBeTruthy();
+    for (let second = 0; second < 20; second += 1) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+    }
+    expect(jsQR.mock.calls.length).toBeGreaterThan(100);
+    expect(checkinService.scan).toHaveBeenCalledTimes(1);
+    expect(playDeskSound.mock.calls).toEqual([['out']]);
+
+    // Taken away for longer than the camera remembers it, then held up again.
+    jsQR.mockReturnValue(null);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(CAMERA_SAME_CODE_MS + 500);
+    });
+    jsQR.mockReturnValue({ data: PASS });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(checkinService.scan).toHaveBeenCalledTimes(2);
+    expect(playDeskSound.mock.calls).toEqual([['out'], ['out']]);
+  });
+
+  // A trouble is not an answer about the person: the pass still held up is tried again.
+  it('after "No connection" a pass still held up is sent again by itself, about every 3 seconds, until it is answered', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    jsQR.mockReturnValue({ data: PASS });
+    checkinService.scan
+      .mockRejectedValueOnce(new Error('Network Error'))
+      .mockRejectedValueOnce(new Error('Network Error'))
+      .mockResolvedValue(checkedIn('Olivia Bennett'));
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: /use the camera/i }));
+    expect(await screen.findByText('No connection')).toBeTruthy();
+    expect(checkinService.scan).toHaveBeenCalledTimes(1);
+    // Not at once: the same code waits its three seconds.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(CAMERA_SAME_CODE_MS - 500);
+    });
+    expect(checkinService.scan).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(checkinService.scan).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(CAMERA_SAME_CODE_MS + 500);
+    });
+    expect(checkinService.scan).toHaveBeenCalledTimes(3);
+    expect(screen.getByText('Olivia Bennett')).toBeTruthy();
+    // Answered: held up for the rest of its life, it is not sent again.
+    for (let second = 0; second < 20; second += 1) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+    }
+    expect(checkinService.scan).toHaveBeenCalledTimes(3);
+    expect(playDeskSound.mock.calls).toEqual([['out'], ['out'], ['in']]);
+  });
+
+  it('reads each picture six ways in turn: the whole and the middle, as it is and with the grey pulled from the white', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const drawn = [];
+    const given = [];
+    // A picture of greys with a little white: a levels turn changes it, a plain turn does not.
+    const greys = () => {
+      const data = new Uint8ClampedArray(100 * 4);
+      for (let i = 0; i < 100; i += 1) data.set(i < 96 ? [150, 150, 150, 255] : [250, 250, 250, 255], i * 4);
+      return data;
+    };
+    stub(HTMLCanvasElement.prototype, 'getContext', {
+      value: () => ({ drawImage: (_video, ...where) => drawn.push(where), getImageData: () => ({ data: greys() }) }),
+    });
+    // The page's clock follows the test's, so a quick read's rest is over by the next turn.
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => Date.now());
+    restore.push(() => clock.mockRestore());
+    jsQR.mockImplementation((data, width, height) => {
+      given.push({ levels: [...new Set(data.filter((_, at) => at % 4 === 0))].sort((a, b) => a - b), width, height });
+      return null;
+    });
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: /use the camera/i }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    const whole = [0, 0, 640, 480, 0, 0, 640, 480];
+    const middle = [176, 96, 288, 288, 0, 0, 288, 288];
+    expect(READ_WAYS.map((way) => way.part)).toEqual(['whole', 'middle', 'whole', 'middle', 'whole', 'middle']);
+    expect(drawn.slice(0, 6)).toEqual([whole, middle, whole, middle, whole, middle]);
+    expect(given.slice(0, 6).map((read) => [read.width, read.height])).toEqual([[640, 480], [288, 288], [640, 480], [288, 288], [640, 480], [288, 288]]);
+    // 0.85: grey 150 is under 85 % of white 250, so it is black. As it is: untouched. 0.5: pulled apart, not black.
+    expect(given[0].levels).toEqual([0, 255]);
+    expect(given[1].levels).toEqual([0, 255]);
+    expect(given[2].levels).toEqual([150, 250]);
+    expect(given[3].levels).toEqual([150, 250]);
+    expect(given[4].levels).toEqual([51, 255]);
+    expect(given[5].levels).toEqual([51, 255]);
+    // And round again.
+    expect(drawn[6]).toEqual(whole);
+  });
+
+  it('a way that is slow and finds nothing rests, and comes back after its rest', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    // Every read takes half a second by the page's clock and finds nothing.
+    const SLOW_MS = 500;
+    let slow = 0;
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => Date.now() + slow);
+    restore.push(() => clock.mockRestore());
+    jsQR.mockImplementation(() => {
+      slow += SLOW_MS;
+      return null;
+    });
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: /use the camera/i }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    // Each of the six ways once, then all resting: not fifty reads in five seconds.
+    expect(jsQR).toHaveBeenCalledTimes(READ_WAYS.length);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SLOW_MS * REST_TIMES);
+    });
+    expect(jsQR.mock.calls.length).toBeGreaterThan(READ_WAYS.length);
+    // Unrested, twelve and a half seconds are 125 reads.
+    expect(jsQR.mock.calls.length).toBeLessThan(READ_WAYS.length * 4);
+  });
+
+  describe('in a browser with workers, the reading is done off the page', () => {
+    const workers = [];
+    class FakeWorker {
+      constructor(url, options) {
+        this.url = String(url);
+        this.options = options;
+        this.posted = [];
+        this.terminated = false;
+        workers.push(this);
+      }
+      postMessage(message) {
+        this.posted.push(message);
+      }
+      terminate() {
+        this.terminated = true;
+      }
+    }
+    beforeEach(() => {
+      workers.length = 0;
+      stub(globalThis, 'Worker', { value: FakeWorker, writable: true });
+    });
+
+    it('one picture at a time goes to the worker, its answer is the scan, and closing the camera ends it', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      checkinService.scan.mockResolvedValue(checkedIn('Olivia Bennett'));
+      mount();
+      fireEvent.click(screen.getByRole('button', { name: /use the camera/i }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+      });
+      expect(workers).toHaveLength(1);
+      const [worker] = workers;
+      expect(worker.url).toMatch(/deskReadWorker/);
+      // Nothing is read on the page, and the next picture waits for this one's answer.
+      expect(jsQR).not.toHaveBeenCalled();
+      expect(worker.posted).toHaveLength(1);
+      const [first] = worker.posted;
+      expect([first.width, first.height, first.levels]).toEqual([640, 480, READ_WAYS[0].levels]);
+      expect(first.pixels).toBeInstanceOf(ArrayBuffer);
+
+      await act(async () => {
+        worker.onmessage({ data: { id: first.id, text: null } });
+        await vi.advanceTimersByTimeAsync(300);
+      });
+      expect(worker.posted).toHaveLength(2);
+      expect(checkinService.scan).not.toHaveBeenCalled();
+
+      await act(async () => {
+        worker.onmessage({ data: { id: worker.posted[1].id, text: PASS } });
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(checkinService.scan).toHaveBeenCalledWith(PASS);
+      expect(await screen.findByText('Olivia Bennett')).toBeTruthy();
+
+      fireEvent.click(screen.getByRole('button', { name: /close the camera/i }));
+      expect(worker.terminated).toBe(true);
+      expect(stop).toHaveBeenCalled();
+    });
+
+    // A desk page left open across a new release asks for a worker file that is gone.
+    it('a worker whose file cannot be loaded says so too, though it failed before the camera opened', async () => {
+      let open;
+      navigator.mediaDevices.getUserMedia.mockImplementation(() => new Promise((resolve) => (open = resolve)));
+      mount();
+      fireEvent.click(screen.getByRole('button', { name: /use the camera/i }));
+      await waitFor(() => expect(workers).toHaveLength(1));
+      await waitFor(() => expect(open).toBeTypeOf('function'));
+      workers[0].onerror(new Event('error'));
+      await act(async () => open({ getTracks: () => [{ stop }] }));
+      expect((await screen.findByRole('alert')).textContent).toMatch(/can't read passes in this browser\. Use a scanner/);
+      expect(stop).toHaveBeenCalled();
+      expect(workers[0].terminated).toBe(true);
+    });
+
+    it('a worker that fails says to use a scanner, and the camera is let go', async () => {
+      mount();
+      fireEvent.click(screen.getByRole('button', { name: /use the camera/i }));
+      await waitFor(() => expect(workers).toHaveLength(1));
+      await waitFor(() => expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalled());
+      await act(async () => {
+        await Promise.resolve();
+        workers[0].onerror(new Event('error'));
+      });
+      expect((await screen.findByRole('alert')).textContent).toMatch(/can't read passes in this browser\. Use a scanner/);
+      expect(stop).toHaveBeenCalled();
+      expect(workers[0].terminated).toBe(true);
+    });
   });
 
   it('a QR that is no pass (a web address) says so once, and sends nothing', async () => {

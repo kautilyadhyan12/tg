@@ -6,12 +6,15 @@ import qrcode from 'qrcode-generator';
  *  reading a phone needs them. */
 export const PASS_QUIET_CELLS = 4;
 
+/** How much of the code may be lost and still read: 'M' 15 %, 'Q' 25 %, 'H' 30 %. */
+export const PASS_CORRECTION = 'Q';
+
 /** The pass as a QR code's cells, `true` where a cell is dark, or null when it cannot be
  *  drawn. A pass is uppercase letters and digits, which a QR packs most tightly. */
-export function passCells(pass) {
+export function passCells(pass, correction = PASS_CORRECTION) {
   if (typeof pass !== 'string' || !/^[A-Z0-9]+$/.test(pass)) return null;
   try {
-    const code = qrcode(0, 'M');
+    const code = qrcode(0, correction);
     code.addData(pass, 'Alphanumeric');
     code.make();
     const size = code.getModuleCount();

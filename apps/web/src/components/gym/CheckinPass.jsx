@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
+import useScreenAwake from '../../hooks/useScreenAwake';
 import { nextPassDelayMs, passCells, passPath, PASS_GOOD_MS, PASS_QUIET_CELLS } from './checkinPassView';
 
 // THE MEMBER'S PASS (spec Part 3 §12.2; ROADMAP 16c): the code the front desk reads. One
@@ -10,6 +11,10 @@ import { nextPassDelayMs, passCells, passPath, PASS_GOOD_MS, PASS_QUIET_CELLS } 
 // It asks only while it is open and the page is in view. A pass is never left on screen
 // to be scanned stale: it comes off when its renewal fails, and after 30 seconds
 // (`PASS_GOOD_MS`) when the renewal has not arrived, whatever the reason.
+//
+// Drawn as big as the phone allows and the screen kept awake while it is open (ROADMAP
+// 16f): a desk's camera reads a big code in poor light far more often than a small one.
+// On a phone held sideways it is as big as the height allows, never cut.
 
 const COULD_NOT = "We couldn't get your pass just now. Please try again.";
 const LOADING = { status: 'loading', pass: null, error: null };
@@ -32,7 +37,7 @@ function PassCode({ pass }) {
       viewBox={`0 0 ${String(side)} ${String(side)}`}
       shapeRendering="crispEdges"
       className="w-full h-auto rounded-xl"
-      style={{ background: '#fff', maxWidth: '18rem' }}
+      style={{ background: '#fff', maxWidth: 'min(22rem, 52vh)' }}
     >
       <rect width={side} height={side} fill="#fff" />
       <path d={passPath(cells)} fill="#000" />
@@ -44,6 +49,7 @@ export default function CheckinPass({ onClose, orgType }) {
   const [state, setState] = useState(LOADING);
   // Bumped by Try again, which starts the asking over.
   const [attempt, setAttempt] = useState(0);
+  useScreenAwake();
 
   useEffect(() => {
     let stopped = false;
@@ -139,7 +145,7 @@ export default function CheckinPass({ onClose, orgType }) {
     <div
       role="presentation"
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-2 sm:p-4"
       style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }}
     >
       <div
@@ -147,10 +153,10 @@ export default function CheckinPass({ onClose, orgType }) {
         aria-modal="true"
         aria-label="Your pass"
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-xs rounded-3xl overflow-hidden p-5"
+        className="w-full max-w-sm max-h-full rounded-3xl overflow-y-auto p-3 sm:p-4"
         style={{ background: '#121110', border: '1px solid rgba(255,255,255,0.08)' }}
       >
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start justify-between gap-3 px-2 pt-2 sm:px-1 sm:pt-1">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#FF8A1F' }}>
               Check in
@@ -168,7 +174,7 @@ export default function CheckinPass({ onClose, orgType }) {
           </button>
         </div>
 
-        <div className="mt-4 flex flex-col items-center">
+        <div className="mt-3 flex flex-col items-center">
           {state.status === 'loading' ? (
             <p className="text-sm flex items-center gap-2 py-10" style={{ color: 'rgba(255,255,255,0.55)' }}>
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -185,11 +191,14 @@ export default function CheckinPass({ onClose, orgType }) {
               <p className="text-xs mt-1 text-center" style={{ color: 'rgba(255,255,255,0.45)' }}>
                 It changes every 30 seconds, so a screenshot won&apos;t work.
               </p>
+              <p className="text-xs mt-1 mb-2 text-center" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                If it doesn&apos;t scan, turn your screen&apos;s brightness up.
+              </p>
             </>
           ) : null}
 
           {state.status === 'failed' ? (
-            <div className="w-full">
+            <div className="w-full px-2 pb-2">
               <p className="text-sm" style={{ color: '#ef4444' }}>
                 {state.error}
               </p>

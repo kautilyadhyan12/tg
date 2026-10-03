@@ -9,7 +9,9 @@ import { visitTimeLabel } from '../../components/gym/attendanceView';
 
 /** How long one answer stays on the desk. */
 export const RESULT_SHOW_MS = 5000;
-/** The camera reads the same QR many times a second: one read of a code in this time. */
+/** The camera reads the same QR many times a second. A code is sent once, and not again
+ *  until the camera has not seen it for this long: a pass held up is one scan and one
+ *  sound, whatever the answer. */
 export const CAMERA_SAME_CODE_MS = 3000;
 /** How long the server takes a pass (its window and the next). A code that was let in is
  *  not sent again within it: the server has spent the pass and would answer "Show a fresh
@@ -69,11 +71,11 @@ export function noticeLine(notice) {
 
 /** One scan's answer, as the desk shows it: `tone` is the colour (good · plain · bad ·
  *  warn), `title` the big words, `name` the person on a green tick, `notice` the orange
- *  line. */
+ *  line. `letIn` is on the two answers that let somebody in and on nothing else. */
 export function deskAnswer(answer) {
   switch (answer?.result) {
     case 'checked_in':
-      return { tone: 'good', title: 'Checked in', name: answer.person.name, notice: noticeLine(answer.notice) };
+      return { tone: 'good', title: 'Checked in', name: answer.person.name, notice: noticeLine(answer.notice), letIn: true };
     case 'already': {
       const time = visitTimeLabel(answer.firstAt, answer.timezone, answer.clockFormat);
       return {
@@ -81,6 +83,7 @@ export function deskAnswer(answer) {
         title: time === '' ? 'Already checked in' : `Already checked in at ${time}`,
         name: answer.person.name,
         notice: noticeLine(answer.notice),
+        letIn: true,
       };
     }
     case 'fresh_pass_needed':
@@ -122,6 +125,50 @@ export function deskTrouble(err) {
     return { tone: 'warn', title: 'Please wait', message: typeof message === 'string' ? message : CHECKIN_WORDS.key_tags_slow, stop: false };
   }
   return { tone: 'warn', title: 'Please scan again', message: CHECKIN_WORDS.checkin_unavailable, stop: false };
+}
+
+/** The sound for what the desk shows (RULINGS 2026-10-03): 'in' somebody let in ·
+ *  'in_warn' let in, with the gym's own word for staff to look at · 'out' everything else.
+ *  Staff hear it across the room, so only an answer `deskAnswer` marked as let in is ever
+ *  "in" — a member whose record has no name is let in like any other. */
+export function deskSound(shown) {
+  if (shown?.letIn !== true) return 'out';
+  return typeof shown.notice === 'string' && shown.notice !== '' ? 'in_warn' : 'in';
+}
+
+/** Each sound as its notes: pitch, when it starts and how long it lasts (milliseconds).
+ *  "In" is two rising notes; the warning is the same two and then two more, lower; "out"
+ *  is one long low buzz. "On" is the mute button's own short note, which is none of the
+ *  three answers: nobody at the desk can make it sound as if somebody was let in. */
+const IN_NOTES = [
+  { hz: 880, at: 0, ms: 110, wave: 'sine' },
+  { hz: 1320, at: 110, ms: 190, wave: 'sine' },
+];
+export const DESK_SOUNDS = {
+  in: IN_NOTES,
+  in_warn: [...IN_NOTES, { hz: 660, at: 400, ms: 130, wave: 'sine' }, { hz: 660, at: 590, ms: 130, wave: 'sine' }],
+  out: [{ hz: 196, at: 0, ms: 650, wave: 'square' }],
+  on: [{ hz: 520, at: 0, ms: 90, wave: 'sine' }],
+};
+
+/** Whether this desk's sound was turned off, kept in the browser beside its names. */
+export const DESK_MUTED_KEY = 'checkinDeskMuted';
+
+export function readDeskMuted(storage) {
+  try {
+    return storage?.getItem(DESK_MUTED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function writeDeskMuted(storage, muted) {
+  try {
+    if (muted) storage?.setItem(DESK_MUTED_KEY, '1');
+    else storage?.removeItem(DESK_MUTED_KEY);
+  } catch {
+    // Storage blocked: the button still works until the page is closed.
+  }
 }
 
 /** The set-up link that could not be opened. */
