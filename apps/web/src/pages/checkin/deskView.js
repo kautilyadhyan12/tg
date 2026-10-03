@@ -147,7 +147,7 @@ const IN_NOTES = [
 export const DESK_SOUNDS = {
   in: IN_NOTES,
   in_warn: [...IN_NOTES, { hz: 660, at: 400, ms: 130, wave: 'sine' }, { hz: 660, at: 590, ms: 130, wave: 'sine' }],
-  out: [{ hz: 196, at: 0, ms: 450, wave: 'square' }],
+  out: [{ hz: 196, at: 0, ms: 650, wave: 'square' }],
   on: [{ hz: 520, at: 0, ms: 90, wave: 'sine' }],
 };
 
