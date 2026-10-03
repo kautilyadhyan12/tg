@@ -720,6 +720,42 @@ describe('the camera', () => {
     expect(playDeskSound.mock.calls).toEqual([['out'], ['out']]);
   });
 
+  // A trouble is not an answer about the person: the pass still held up is tried again.
+  it('after "No connection" a pass still held up is sent again by itself, about every 3 seconds, until it is answered', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    jsQR.mockReturnValue({ data: PASS });
+    checkinService.scan
+      .mockRejectedValueOnce(new Error('Network Error'))
+      .mockRejectedValueOnce(new Error('Network Error'))
+      .mockResolvedValue(checkedIn('Olivia Bennett'));
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: /use the camera/i }));
+    expect(await screen.findByText('No connection')).toBeTruthy();
+    expect(checkinService.scan).toHaveBeenCalledTimes(1);
+    // Not at once: the same code waits its three seconds.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(CAMERA_SAME_CODE_MS - 500);
+    });
+    expect(checkinService.scan).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(checkinService.scan).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(CAMERA_SAME_CODE_MS + 500);
+    });
+    expect(checkinService.scan).toHaveBeenCalledTimes(3);
+    expect(screen.getByText('Olivia Bennett')).toBeTruthy();
+    // Answered: held up for the rest of its life, it is not sent again.
+    for (let second = 0; second < 20; second += 1) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+    }
+    expect(checkinService.scan).toHaveBeenCalledTimes(3);
+    expect(playDeskSound.mock.calls).toEqual([['out'], ['out'], ['in']]);
+  });
+
   it('reads each picture six ways in turn: the whole and the middle, as it is and with the grey pulled from the white', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const drawn = [];
@@ -844,6 +880,21 @@ describe('the camera', () => {
       fireEvent.click(screen.getByRole('button', { name: /close the camera/i }));
       expect(worker.terminated).toBe(true);
       expect(stop).toHaveBeenCalled();
+    });
+
+    // A desk page left open across a new release asks for a worker file that is gone.
+    it('a worker whose file cannot be loaded says so too, though it failed before the camera opened', async () => {
+      let open;
+      navigator.mediaDevices.getUserMedia.mockImplementation(() => new Promise((resolve) => (open = resolve)));
+      mount();
+      fireEvent.click(screen.getByRole('button', { name: /use the camera/i }));
+      await waitFor(() => expect(workers).toHaveLength(1));
+      await waitFor(() => expect(open).toBeTypeOf('function'));
+      workers[0].onerror(new Event('error'));
+      await act(async () => open({ getTracks: () => [{ stop }] }));
+      expect((await screen.findByRole('alert')).textContent).toMatch(/can't read passes in this browser\. Use a scanner/);
+      expect(stop).toHaveBeenCalled();
+      expect(workers[0].terminated).toBe(true);
     });
 
     it('a worker that fails says to use a scanner, and the camera is let go', async () => {

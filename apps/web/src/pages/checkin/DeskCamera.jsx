@@ -24,9 +24,12 @@ async function openReader() {
     waiting.get(event.data.id)?.(event.data.text);
     waiting.delete(event.data.id);
   };
-  // A worker that fails reads nothing; the camera says so rather than looking alive.
+  // A worker that fails reads nothing; the camera says so rather than looking alive. Its
+  // file may fail to load before anybody is listening, so the failure is remembered.
   let failed = null;
+  let hasFailed = false;
   worker.onerror = () => {
+    hasFailed = true;
     failed?.();
   };
   return {
@@ -39,6 +42,7 @@ async function openReader() {
     close: () => worker.terminate(),
     onFail: (tell) => {
       failed = tell;
+      if (hasFailed) tell();
     },
   };
 }

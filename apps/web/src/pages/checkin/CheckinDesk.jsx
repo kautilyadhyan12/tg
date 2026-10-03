@@ -197,7 +197,8 @@ function Desk({ look }) {
   const inputRef = useRef(null);
   const seq = useRef(0);
   const clearTimer = useRef(null);
-  const lastCameraRead = useRef({ code: '', at: 0 });
+  // The code the camera is looking at; `again` is when it may be sent once more, after a trouble.
+  const lastCameraRead = useRef({ code: '', at: 0, again: null });
   // The codes let in within SAME_PASS_MS, and what was shown for each.
   const letIn = useRef(new Map());
   const inFlight = useRef(null);
@@ -300,6 +301,9 @@ function Desk({ look }) {
           writeDeskNames(storage(), null);
         } else {
           show(trouble, code);
+          // A trouble is not an answer about the person: a pass the camera is still looking
+          // at is sent again after its wait, not left unanswered until it is taken away.
+          if (lastCameraRead.current.code === code) lastCameraRead.current.again = Date.now() + CAMERA_SAME_CODE_MS;
         }
       } finally {
         if (seq.current === mine) {
@@ -328,9 +332,11 @@ function Desk({ look }) {
       if (typeof text !== 'string') return;
       const now = Date.now();
       const last = lastCameraRead.current;
-      lastCameraRead.current = { code: text, at: now };
+      const same = last.code === text && now - last.at < CAMERA_SAME_CODE_MS;
+      const again = same && last.again !== null && now >= last.again;
+      lastCameraRead.current = { code: text, at: now, again: same && !again ? last.again : null };
       // Still the code the camera has been looking at: it was sent when it first appeared.
-      if (last.code === text && now - last.at < CAMERA_SAME_CODE_MS) return;
+      if (same && !again) return;
       if (tooLongToScan(text)) {
         showNow(NOT_A_SCAN);
         return;
