@@ -225,20 +225,22 @@ export default function Leaderboard() {
                   role="tab"
                   aria-selected={boardId === t.id}
                   onClick={() => pick(t.id, period)}
-                  className={boardId === t.id ? 'c-utab c-utab-on' : 'c-utab'}
+                  className={boardId === t.id ? 'c-utab c-utab-on whitespace-nowrap' : 'c-utab whitespace-nowrap'}
                 >
                   {t.label}
                 </button>
               ))}
             </div>
             {boardId !== 'streak' ? (
-              <select aria-label="Period" value={period} onChange={(e) => pick(boardId, e.target.value)} className="c-sel md:w-[200px]">
-                {PERIODS.map((p) => (
-                  <option key={p.id} value={p.id} className="c-opt">
-                    {p.label}
-                  </option>
-                ))}
-              </select>
+              <div className="w-full md:w-[200px] md:flex-shrink-0">
+                <select aria-label="Period" value={period} onChange={(e) => pick(boardId, e.target.value)} className="c-sel">
+                  {PERIODS.map((p) => (
+                    <option key={p.id} value={p.id} className="c-opt">
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             ) : null}
           </div>
 
