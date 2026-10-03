@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Info, Loader2, Trophy, X } from 'lucide-react';
+import { Flame, Info, Loader2, Trophy, X } from 'lucide-react';
 import { leaderboardService } from '../../api/leaderboardApi';
 import { errorText } from '../../api/orgsApi';
 import HideMeSwitch from './HideMeSwitch';
@@ -20,6 +20,7 @@ import {
   updatedText,
   valueText,
   visitText,
+  weekLabel,
   weekText,
   weekdayInitial,
   whatCounts,
@@ -39,26 +40,23 @@ const REFRESH_MS = 60_000;
 function Circles({ circles, days, boardId }) {
   if (circles === null || days === null) return null;
   return (
-    <div className="flex gap-1" aria-label={boardId === 'streak' ? 'Last seven weeks' : 'This week, Monday to Sunday'}>
+    <div className="flex gap-0.5" aria-label={weekLabel(days, boardId)}>
       {circles.map((c, i) => {
         const day = days[i];
+        // A day or week that counted is a lit flame; the rest are its outline, fainter for
+        // a week still open or one the gym checked nobody in.
         const style =
           c === 'yes'
-            ? { background: ORANGE, border: `1px solid ${ORANGE}` }
+            ? { color: ORANGE, fill: ORANGE, filter: 'drop-shadow(0 0 4px rgba(255,138,31,0.9))' }
             : c === 'open'
-              ? { border: `1px dashed ${ORANGE}` }
+              ? { color: ORANGE, opacity: 0.45 }
               : c === 'skipped'
-                ? { border: '1px dashed rgba(255,255,255,0.18)' }
-                : { border: '1px solid rgba(255,255,255,0.22)' };
+                ? { color: 'rgba(255,255,255,0.14)' }
+                : { color: 'rgba(255,255,255,0.24)' };
         return (
-          <span
-            key={day}
-            role="img"
-            aria-label={circleLabel(c, day, boardId)}
-            title={circleLabel(c, day, boardId)}
-            className="w-2.5 h-2.5 rounded-full inline-block"
-            style={style}
-          />
+          <span key={day} role="img" aria-label={circleLabel(c, day, boardId)} title={circleLabel(c, day, boardId)} className="flex">
+            <Flame aria-hidden="true" className="w-3.5 h-3.5" style={style} />
+          </span>
         );
       })}
     </div>
@@ -419,9 +417,9 @@ export default function Leaderboard({ gym }) {
                   <span className="w-8" />
                   <span className="w-8" />
                   <span className="flex-1" />
-                  <span className="flex gap-1">
+                  <span className="flex gap-0.5">
                     {board.circleDays.map((d) => (
-                      <span key={d} className="w-2.5 text-center text-[9px]" style={{ color: MUTED }}>
+                      <span key={d} className="w-3.5 text-center text-[9px]" style={{ color: MUTED }}>
                         {boardId === 'streak' ? '' : weekdayInitial(d)}
                       </span>
                     ))}

@@ -93,10 +93,22 @@ type DayBoard = Exclude<LeaderboardBoard, "streak">;
 
 async function buildDays(deps: LeaderboardDeps, id: DayBoard, gymId: string, viewerId: string, { at, today }: At, period: LeaderboardPeriod): Promise<Built> {
   const { from, to } = periodRange(today, period);
-  const week = isWeek(period) && from !== null ? weekDays(from) : null;
-  const input = { gymId, at, today, from, to, viewerId, withDays: week !== null };
-  const rows = id === "gym_days" ? await repo.gymDaysBoard(deps.sql, input) : await repo.workoutDaysBoard(deps.sql, input);
-  const people: BoardPerson[] = rows.map((r) => ({ ...r, circles: week === null ? null : dayCircles(r.days, week) }));
+  const read = id === "gym_days" ? repo.gymDaysBoard : repo.workoutDaysBoard;
+  // The seven marks beside a name are one week, Monday to Sunday: the period's own on a
+  // week view, where they add up to the number; this week on a month or all time, read
+  // beside the board, so every period draws the same row (Kd, RULINGS 2026-10-04).
+  const own = isWeek(period) && from !== null;
+  const shown = own ? { from, to } : periodRange(today, "this_week");
+  const week = weekDays(shown.from ?? mondayOf(today));
+  const [rows, thisWeek] = await Promise.all([
+    read(deps.sql, { gymId, at, today, from, to, viewerId, withDays: own }),
+    own ? null : read(deps.sql, { gymId, at, today, from: shown.from, to: shown.to, viewerId, withDays: true }),
+  ]);
+  const weekOf = thisWeek === null ? null : new Map(thisWeek.map((r) => [r.userId, r.days]));
+  const people: BoardPerson[] = rows.map((r) => ({
+    ...r,
+    circles: dayCircles(weekOf === null ? r.days : (weekOf.get(r.userId) ?? []), week),
+  }));
   return { id, people, board: rankBoard(people, viewerId), from, to, circleDays: week, period };
 }
 

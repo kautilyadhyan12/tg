@@ -94,6 +94,12 @@ export function notInAppLine(n, words) {
     : `${count(n)} ${words.people} on your list don't have the app yet, so they aren't on any board.`;
 }
 
+/** Which week the seven flames are, when the board's own dates are not that week. */
+export function flamesNote(board) {
+  if (board.board === 'streak') return 'the flames are the last 7 weeks';
+  return board.period === 'this_week' || board.period === 'last_week' ? null : 'the flames are this week';
+}
+
 export function pageLine(board) {
   return board.pages > 1 ? `Page ${count(board.page)} of ${count(board.pages)}` : null;
 }

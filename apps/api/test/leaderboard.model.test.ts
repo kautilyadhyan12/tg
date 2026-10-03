@@ -282,12 +282,15 @@ function modelBoard(gym: MGym, instant: Date, viewerId: string, query: Leaderboa
     const [from, to] = modelRange(today, query.period);
     const week = query.period === "this_week" || query.period === "last_week";
     rows = live.map((p) => {
-      const days = [...(daysOf.get(p.userId) ?? [])].filter((x) => x >= from && x <= to);
+      const all = [...(daysOf.get(p.userId) ?? [])];
+      const days = all.filter((x) => x >= from && x <= to);
+      // The marks are the period's own week, or this week on a month and all time.
+      const start = week ? from : thisMonday;
       return {
         userId: p.userId,
         name: name(p) ?? "",
         value: days.length,
-        circles: week ? [0, 1, 2, 3, 4, 5, 6].map((i) => (days.includes(from + i) ? "yes" : "no")) : null,
+        circles: [0, 1, 2, 3, 4, 5, 6].map((i) => (all.includes(start + i) ? "yes" : "no")),
         hidden: hidden(p),
       };
     });
@@ -296,18 +299,20 @@ function modelBoard(gym: MGym, instant: Date, viewerId: string, query: Leaderboa
     const week = query.period === "this_week" || query.period === "last_week";
     rows = live.map((p) => {
       const days = new Set<number>();
+      const all = new Set<number>();
       for (const w of gym.workouts) {
         if (w.userId !== p.userId || w.sets < 1 || w.reps < 1) continue;
         if (w.savedAt < w.startedAt - HOUR_MS) continue;
         if (w.startedAt < p.joinedAt || w.startedAt > instant.getTime() || w.savedAt > w.startedAt + SAVE_MS) continue;
         const day = dayNumber(gymToday(new Date(w.startedAt), gym.zone));
+        all.add(day);
         if (day >= from && day <= to) days.add(day);
       }
       return {
         userId: p.userId,
         name: name(p) ?? "",
         value: days.size,
-        circles: week ? [0, 1, 2, 3, 4, 5, 6].map((i) => (days.has(from + i) ? "yes" : "no")) : null,
+        circles: [0, 1, 2, 3, 4, 5, 6].map((i) => (all.has((week ? from : thisMonday) + i) ? "yes" : "no")),
         hidden: hidden(p),
       };
     });

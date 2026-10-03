@@ -213,6 +213,12 @@ export function weekText(week, gymName) {
   }
 }
 
+/** Which seven marks a row carries, for screen readers. */
+export function weekLabel(days, boardId) {
+  if (boardId === 'streak') return 'Last seven weeks';
+  return `Week of ${shortDay(days[0])}, Monday to Sunday`;
+}
+
 /** What a circle means, for screen readers. */
 export function circleLabel(circle, day, boardId) {
   const when = boardId === 'streak' ? `Week of ${shortDay(day)}` : dayLabel(day);

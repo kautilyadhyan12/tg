@@ -135,8 +135,16 @@ describe('the board for staff', () => {
   it('a tab or a period asks for that board, from its first page', async () => {
     open();
     await screen.findByText('Chen Wu');
+    // A week: seven flames a row, the counted days lit.
+    const lit = () => screen.getAllByTestId('board-row').map((r) => r.querySelectorAll('.c-flame-on').length);
+    expect(screen.getAllByTestId('board-row').map((r) => r.querySelectorAll('.c-flame').length)).toEqual([7, 7, 7, 7, 7, 7]);
+    expect(lit()).toEqual([3, 3, 3, 2, 1, 1]);
+    svc.board.mockResolvedValue(answer({ period: 'all_time', from: null }));
     fireEvent.change(screen.getByLabelText('Period'), { target: { value: 'all_time' } });
     await waitFor(() => expect(svc.board).toHaveBeenLastCalledWith('g1', 'gym_days', 'all_time', 1));
+    // All time draws the same row: seven flames each, and the line says which week they are.
+    await waitFor(() => expect(screen.getByTestId('board-dates').textContent).toContain('the flames are this week'));
+    expect(screen.getAllByTestId('board-row').map((r) => r.querySelectorAll('.c-flame').length)).toEqual([7, 7, 7, 7, 7, 7]);
     fireEvent.click(screen.getByRole('tab', { name: 'Streak' }));
     await waitFor(() => expect(svc.board).toHaveBeenLastCalledWith('g1', 'streak', 'all_time', 1));
     // The Streak has no period.

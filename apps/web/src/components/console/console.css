@@ -1023,22 +1023,26 @@
 }
 @media (min-width: 768px) {
   .c-board-grid {
-    grid-template-columns: 56px minmax(0, 2.2fr) 112px 96px minmax(0, 1.4fr) 20px;
+    grid-template-columns: 56px minmax(0, 2.2fr) 136px 96px minmax(0, 1.4fr) 20px;
     grid-template-areas: "place who dots num tag go";
     column-gap: 16px;
   }
 }
-.c-dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  box-sizing: border-box;
-  border-radius: 50%;
-  border: 1px solid var(--raise-line);
+/* A day or week that counted is a lit flame; one that did not is its outline; a week
+   still open, or one the gym checked nobody in, is the outline fainter. */
+.c-flame {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--raise-line);
 }
-.c-dot-on { background: var(--accent); border-color: var(--accent); }
-.c-dot-open { border-style: dashed; }
-.c-dot-head { width: 10px; text-align: center; font-size: 10px; line-height: 18px; }
+.c-flame-on {
+  color: var(--accent);
+  fill: var(--accent);
+  filter: drop-shadow(0 0 4px var(--accent));
+}
+.c-flame-open { opacity: 0.5; }
+.c-flame-head { width: 16px; text-align: center; font-size: 10px; line-height: 18px; }
 .c-avatar {
   display: inline-flex;
   align-items: center;

@@ -2646,7 +2646,10 @@ list, by test.
 
 **Day-circles** (2026-09-17, amended 2026-10-02): on a week view, seven circles, Monday to
 Sunday, for the days THAT board counted, so they add up to its number; the Streak's
-circles are its last seven weeks; month and all-time views show none.
+circles are its last seven weeks; month and all-time views show none. **Amended
+2026-10-04 (RULINGS that day):** every period draws the same row — a month and all time
+carry THIS week's seven marks, read beside the board, and the page says so — and a mark
+is a flame, lit and glowing when it counted, its outline when it did not.
 
 **Gyms that use only part of the app** (Kd, 2026-10-02). Gym days and Streak show to
 members only while the gym has recorded a counted visit in the last 30 days; Workout

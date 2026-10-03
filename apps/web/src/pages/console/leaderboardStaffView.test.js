@@ -7,6 +7,7 @@ import {
   canSeeLeaderboard,
   countLine,
   emptyLine,
+  flamesNote,
   hiddenLine,
   notInAppLine,
   pageLine,
@@ -173,5 +174,18 @@ describe('what did not count, said about somebody else', () => {
   it('a visit', () => {
     expect(staffVisitNotCountedText({ why: 'own_tap' })).toMatch(/^Their own "I'm here" tap/);
     expect(staffVisitNotCountedText({ why: 'app_code' })).toMatch(/^Checked in with the app's code/);
+  });
+});
+
+describe('which week the flames are', () => {
+  it.each([
+    ['this_week', 'gym_days', null],
+    ['last_week', 'workout_days', null],
+    ['this_month', 'gym_days', 'the flames are this week'],
+    ['last_month', 'gym_days', 'the flames are this week'],
+    ['all_time', 'workout_days', 'the flames are this week'],
+    [null, 'streak', 'the flames are the last 7 weeks'],
+  ])('%s on %s: %s', (period, id, note) => {
+    expect(flamesNote(board({ board: id, period }))).toBe(note);
   });
 });

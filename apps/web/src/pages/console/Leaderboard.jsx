@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Flame } from 'lucide-react';
 import { staffLeaderboardService } from '../../api/leaderboardApi';
 import { errorStatus, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
-import { BOARD_TABS, PERIODS, circleLabel, datesLine, ordinal, updatedText, weekdayInitial } from '../../components/gym/leaderboardView';
+import { BOARD_TABS, PERIODS, circleLabel, datesLine, ordinal, updatedText, weekLabel, weekdayInitial } from '../../components/gym/leaderboardView';
 import LeaderboardPerson from './LeaderboardPerson';
 import { useConsoleOrg } from './useConsoleOrg';
 import { orgWords } from './consoleView';
@@ -16,6 +16,7 @@ import {
   boardsOffAfter,
   countLine,
   emptyLine,
+  flamesNote,
   nameOf,
   notInAppLine,
   pageLine,
@@ -32,15 +33,11 @@ const REFRESH_MS = 60_000;
 function Circles({ circles, days, boardId }) {
   if (circles === null || days === null) return null;
   return (
-    <span className="flex gap-1" aria-label={boardId === 'streak' ? 'Last seven weeks' : 'This week, Monday to Sunday'}>
+    <span className="flex gap-[3px]" aria-label={weekLabel(days, boardId)}>
       {circles.map((c, i) => (
-        <span
-          key={days[i]}
-          role="img"
-          aria-label={circleLabel(c, days[i], boardId)}
-          title={circleLabel(c, days[i], boardId)}
-          className={`c-dot${c === 'yes' ? ' c-dot-on' : c === 'open' || c === 'skipped' ? ' c-dot-open' : ''}`}
-        />
+        <span key={days[i]} role="img" aria-label={circleLabel(c, days[i], boardId)} title={circleLabel(c, days[i], boardId)} className="flex">
+          <Flame aria-hidden="true" className={`c-flame${c === 'yes' ? ' c-flame-on' : c === 'open' || c === 'skipped' ? ' c-flame-open' : ''}`} />
+        </span>
       ))}
     </span>
   );
@@ -196,6 +193,7 @@ export default function Leaderboard() {
   const count = board === null ? null : countLine(board, words);
   const noApp = board === null ? null : notInAppLine(board.notInApp, words);
   const pages = board === null ? null : pageLine(board);
+  const flames = board === null || board.rows.length === 0 ? null : flamesNote(board);
 
   return (
     <div className="c-page">
@@ -258,6 +256,7 @@ export default function Leaderboard() {
               <p className="c-s14 c-t2" data-testid="board-dates">
                 {datesLine(board)} · {updatedText(board.asOf, board.timezone)}
                 {count !== null ? ` · ${count}` : ''}
+                {flames !== null ? ` · ${flames}` : ''}
               </p>
 
               {board.rows.length === 0 ? (
@@ -269,10 +268,10 @@ export default function Leaderboard() {
                   <div className="c-board-grid c-th hidden md:grid px-5 py-3">
                     <span style={{ gridArea: 'place' }}>Place</span>
                     <span style={{ gridArea: 'who' }}>Name</span>
-                    <span style={{ gridArea: 'dots' }} className="flex gap-1" aria-hidden="true">
+                    <span style={{ gridArea: 'dots' }} className="flex gap-[3px]" aria-hidden="true">
                       {board.circleDays !== null && boardId !== 'streak'
                         ? board.circleDays.map((d) => (
-                            <span key={d} className="c-dot-head">
+                            <span key={d} className="c-flame-head">
                               {weekdayInitial(d)}
                             </span>
                           ))
