@@ -125,7 +125,9 @@ export function personTimes(person, { timezone, clockFormat } = {}) {
     .map((visit) => ({
       markedAt: visit?.markedAt ?? '',
       hoursStatus: visit?.hoursStatus ?? null,
-      time: visitTimeLabel(visit?.markedAt, timezone, clockFormat),
+      // A visit staff added on a later day (19a-iv) has no time of its own: `markedAt` is
+      // when it was added.
+      time: visit?.hoursStatus === 'added_later' ? 'Added later by staff' : visitTimeLabel(visit?.markedAt, timezone, clockFormat),
     }))
     .filter((chip) => chip.time !== '');
 }

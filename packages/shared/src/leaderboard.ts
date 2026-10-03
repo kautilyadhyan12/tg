@@ -125,8 +125,26 @@ export const leaderboardVisitSchema = z
     how: z.enum(["desk", "staff"]),
     /** The desk's or the staff member's name. */
     by: z.string().nullable(),
+    /** The gym's date on which staff added it, for a visit added on a later day (19a-iv):
+     *  `at` is then when it was added, not when the person came. Null otherwise. */
+    addedOn: day.nullable(),
   })
   .strict();
+export type LeaderboardVisit = z.infer<typeof leaderboardVisitSchema>;
+
+/** A visit that did not count. own_tap, app_code: the member's own old tap or code ·
+ *  removed: staff removed it (19a-iv), `by` and `removedOn` say who and on which of the
+ *  gym's dates. */
+export const leaderboardVisitNotCountedSchema = z
+  .object({
+    day,
+    at: z.string().datetime(),
+    why: z.enum(["own_tap", "app_code", "removed"]),
+    by: z.string().nullable(),
+    removedOn: day.nullable(),
+  })
+  .strict();
+export type LeaderboardVisitNotCounted = z.infer<typeof leaderboardVisitNotCountedSchema>;
 
 /** One counted workout, for the person's own list. */
 export const leaderboardWorkoutSchema = z
@@ -150,9 +168,7 @@ export const leaderboardCountedResponseSchema = z
     /** Gym days: each counted day, newest first. */
     days: z.array(z.object({ day, visits: z.array(leaderboardVisitSchema).min(1) }).strict()),
     /** Gym days: a visit in the period that did not count, with why. */
-    notCounted: z.array(
-      z.object({ day, at: z.string().datetime(), why: z.enum(["own_tap", "app_code"]) }).strict(),
-    ),
+    notCounted: z.array(leaderboardVisitNotCountedSchema),
     /** Workout days: each counted day, newest first. */
     workoutDays: z.array(z.object({ day, workouts: z.array(leaderboardWorkoutSchema).min(1) }).strict()),
     /** Workout days: a workout in the period that did not count, with why. A `saved_late`
@@ -320,10 +336,11 @@ export const staffLeaderboardCountedResponseSchema = z
     from: day.nullable(),
     to: day,
     value: z.number().int().min(0),
-    days: z.array(z.object({ day, visits: z.array(leaderboardVisitSchema).min(1) }).strict()),
-    notCounted: z.array(
-      z.object({ day, at: z.string().datetime(), why: z.enum(["own_tap", "app_code"]) }).strict(),
+    /** Each visit carries its id, which staff holding `attendance.mark` remove it by. */
+    days: z.array(
+      z.object({ day, visits: z.array(leaderboardVisitSchema.extend({ id: z.string().uuid() }).strict()).min(1) }).strict(),
     ),
+    notCounted: z.array(leaderboardVisitNotCountedSchema),
     workoutDays: z.array(z.object({ day, workouts: z.number().int().min(1) }).strict()),
     workoutsNotCounted: z.array(
       z

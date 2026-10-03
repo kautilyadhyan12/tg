@@ -2337,6 +2337,8 @@ export const gymAttendanceHoursStatusSchema = z.enum([
   "outside_hours",
   "closed_day",
   "hours_unset",
+  // Staff added the visit on a later day (19a-iv): the hour it happened is not known.
+  "added_later",
 ]);
 export type GymAttendanceHoursStatus = z.infer<typeof gymAttendanceHoursStatusSchema>;
 

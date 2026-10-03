@@ -3,7 +3,7 @@
 import type { PendingQuery, Row, Sql, TransactionSql } from "postgres";
 import { LEADERBOARD_BOARDS, LEADERBOARD_CHECKIN_DAYS, type LeaderboardBoard, type LeaderboardWorkoutNotCounted } from "@app/shared";
 import { membersAgainstList } from "../memberList/repo.js";
-import { countedDays, streaks, visitsWithOwner } from "./visits.js";
+import { countedDays, gymWeeks, removedVisitsWithOwner, streaks, visitsWithOwner } from "./visits.js";
 import { countedWorkoutDays, memberWorkouts } from "./workouts.js";
 
 type SqlOrTx = Sql | TransactionSql;
@@ -201,10 +201,8 @@ export async function streakBoard(
     LEFT JOIN (${streaks(sql, input.gymId, input.today, input.sinceWeek)}) st ON st.owner_id = mem.user_id
     WHERE st.weeks > 0 OR mem.user_id = ${input.viewerId}`;
   const gym = await sql<{ wk: string }[]>`
-    SELECT DISTINCT date_trunc('week', a.day)::date::text AS wk
-    FROM gym_attendance a
-    WHERE a.gym_id = ${input.gymId} AND a.method IN ('pass','key_tag','staff')
-      AND a.day >= ${input.sinceWeek}::date AND a.day <= ${input.today}::date`;
+    SELECT w.wk::text AS wk FROM (${gymWeeks(sql, input.gymId, input.today)}) w
+    WHERE w.wk >= ${input.sinceWeek}::date`;
   return {
     rows: rows.map((r) => ({ ...toFacts(r), value: r.value, weeks: r.weeks ?? [] })),
     gymWeeks: gym.map((g) => g.wk),
@@ -212,6 +210,7 @@ export async function streakBoard(
 }
 
 export interface OwnVisit {
+  id: string;
   day: string;
   markedAt: Date;
   method: string;
@@ -219,6 +218,8 @@ export interface OwnVisit {
   by: string | null;
   /** That member of staff's address, to tell a name they typed from an automatic one. */
   byEmail: string | null;
+  /** The gym's date staff added it on, for a visit added on a later day. */
+  addedOn: string | null;
 }
 
 /** The person's own visits in [from, to], every method, newest first. */
@@ -226,18 +227,56 @@ export async function ownVisits(
   sql: SqlOrTx,
   input: { gymId: string; userId: string; today: string; from: string | null; to: string },
 ): Promise<OwnVisit[]> {
-  const rows = await sql<{ day: string; marked_at: Date; method: string; by: string | null; by_email: string | null }[]>`
-    SELECT v.day::text AS day, v.marked_at, v.method,
+  const rows = await sql<
+    { id: string; day: string; marked_at: Date; method: string; by: string | null; by_email: string | null; added_on: string | null }[]
+  >`
+    SELECT v.id, v.day::text AS day, v.marked_at, v.method,
            CASE WHEN v.method IN ('pass','key_tag') THEN dev.name
                 WHEN v.method = 'staff' THEN staff.display_name END AS by,
-           CASE WHEN v.method = 'staff' THEN staff.email::text END AS by_email
+           CASE WHEN v.method = 'staff' THEN staff.email::text END AS by_email,
+           CASE WHEN v.hours_status = 'added_later' THEN (v.marked_at AT TIME ZONE g.timezone)::date::text END AS added_on
     FROM (${visitsWithOwner(sql, input.gymId)}) v
+    JOIN gyms g ON g.id = ${input.gymId}
     LEFT JOIN gym_checkin_devices dev ON dev.gym_id = ${input.gymId} AND dev.id = v.device_id
     LEFT JOIN users staff ON staff.id = v.marked_by_user_id
     WHERE v.owner_id = ${input.userId} AND v.day <= ${input.today}::date AND v.day <= ${input.to}::date
       AND (${input.from}::date IS NULL OR v.day >= ${input.from}::date)
     ORDER BY v.day DESC, v.marked_at DESC, v.id`;
-  return rows.map((r) => ({ day: r.day, markedAt: r.marked_at, method: r.method, by: r.by, byEmail: r.by_email }));
+  return rows.map((r) => ({
+    id: r.id,
+    day: r.day,
+    markedAt: r.marked_at,
+    method: r.method,
+    by: r.by,
+    byEmail: r.by_email,
+    addedOn: r.added_on,
+  }));
+}
+
+export interface OwnRemovedVisit {
+  day: string;
+  markedAt: Date;
+  /** The gym's date it was removed on, and the member of staff who removed it. */
+  removedOn: string;
+  by: string | null;
+  byEmail: string | null;
+}
+
+/** The person's visits in [from, to] that staff removed (19a-iv), newest first. */
+export async function ownRemovedVisits(
+  sql: SqlOrTx,
+  input: { gymId: string; userId: string; today: string; from: string | null; to: string },
+): Promise<OwnRemovedVisit[]> {
+  const rows = await sql<{ day: string; marked_at: Date; removed_on: string; by: string | null; by_email: string | null }[]>`
+    SELECT r.day::text AS day, r.marked_at, (r.removed_at AT TIME ZONE g.timezone)::date::text AS removed_on,
+           staff.display_name AS by, staff.email::text AS by_email
+    FROM (${removedVisitsWithOwner(sql, input.gymId)}) r
+    JOIN gyms g ON g.id = ${input.gymId}
+    LEFT JOIN users staff ON staff.id = r.removed_by_user_id
+    WHERE r.owner_id = ${input.userId} AND r.day <= ${input.today}::date AND r.day <= ${input.to}::date
+      AND (${input.from}::date IS NULL OR r.day >= ${input.from}::date)
+    ORDER BY r.day DESC, r.marked_at DESC, r.id`;
+  return rows.map((r) => ({ day: r.day, markedAt: r.marked_at, removedOn: r.removed_on, by: r.by, byEmail: r.by_email }));
 }
 
 export interface OwnWorkout {
@@ -293,10 +332,7 @@ export async function ownWeeks(
     WHERE d.owner_id = ${input.userId}
     GROUP BY 1`;
   const gym = await sql<{ wk: string }[]>`
-    SELECT DISTINCT date_trunc('week', a.day)::date::text AS wk
-    FROM gym_attendance a
-    WHERE a.gym_id = ${input.gymId} AND a.method IN ('pass','key_tag','staff') AND a.day <= ${input.today}::date
-    ORDER BY 1 DESC`;
+    SELECT w.wk::text AS wk FROM (${gymWeeks(sql, input.gymId, input.today)}) w ORDER BY w.wk DESC`;
   return { mine: new Map(mine.map((m) => [m.wk, m.days])), gym: gym.map((g) => g.wk) };
 }
 

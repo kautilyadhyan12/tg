@@ -470,6 +470,13 @@
       "when": 1788220800051,
       "tag": "0067_leaderboard_console",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1788220800052,
+      "tag": "0068_fix_a_visit",
+      "breakpoints": true
     }
   ]
 }

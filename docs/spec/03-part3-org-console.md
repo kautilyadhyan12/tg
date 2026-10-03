@@ -2201,7 +2201,24 @@ a trainer) — logged with who did it. The page refreshes itself every 5 seconds
 (`GET …/attendance?since=`; plain polling, no socket): name, time, how, which device or
 which member of staff, and under the name the gym's own status and payment words in
 orange, as the desk showed them (RULINGS 2026-10-03; sent only to staff who hold
-`attendance.mark`). Adding a visit for an earlier time is a later card.
+`attendance.mark`).
+
+**Fixing a visit, as built (19a-iv).** The same tick, `attendance.mark`, adds a visit
+somebody made on an earlier day and removes a wrong one; a lapsed gym changes nothing.
+*Add:* "Day they came" on Check someone in (today, or back 62 days of the gym's own
+calendar, which covers all of last month's board); for an earlier day the button reads Add
+visit and a box names the person and the day first. The visit is staff's, with no hour:
+`hours_status` and `slot_key` are `added_later` (migration `0068`), so a person has at most
+one a day, the same request twice adds once, and a day that already holds a visit that
+counts answers `already` and adds nothing. `marked_at` is when it was added, and every
+screen says "added by … on …" instead of a time. *Remove:* beside each of today's visits
+on Attendance, and beside each visit in a person's "What counted" on the Leaderboard page.
+The row leaves `gym_attendance`, so no count reads it, and is kept under its own id in
+`gym_attendance_removed` with who removed it and when; asking again answers the same and
+writes nothing more. A removed visit follows its record as a visit does (a join moves it,
+a deleted record takes the ones only it named). Both are noted in `audit_log`
+(`attendance.visit_added`, `attendance.visit_removed`) and the person's app streak is
+worked out again.
 
 ### 12.6 Data
 
@@ -2711,6 +2728,17 @@ page says how many people on the list have no app (Members' own match). A lapsed
 staff still read it and change nothing. A place is the place members see: while members
 see no board (switched off, no plan, no check-ins, fewer than 3), nobody carries one. A
 switch is one board a request, so two staff never undo each other.
+
+**Fixing a visit, as built (19a-iv; §12.5 has the rule).** In "What counted" an added visit
+reads "Added by Sam (staff) on 4 Oct" for the person and for staff, and a removed one stays
+under "Didn't count" as "Visit removed by Sam (staff) on 4 Oct", so nothing leaves a
+person's list without a trace. Staff who hold `attendance.mark` see Remove beside each
+visit and Add a visit under Gym days on a person's panel; the box before either names the
+person, the visit or the day, and the number it leaves ("Their Gym days, this week, go
+from 3 to 2"). The person's own list carries no visit id; staff's does. An added visit
+counts as its person's gym day and never makes a silent week the gym's: a week is the
+gym's when the desk or staff checked somebody in AT THE TIME, so fixing one person's week
+cannot break everybody else's Streak (the week stays skipped, for that person too).
 
 **Jobs** (ROADMAP 19a-i to 19a-iv): the members' board with Gym days and Streak · Workout
 days · the board in the console · fixing a visit (after 16b-ii).

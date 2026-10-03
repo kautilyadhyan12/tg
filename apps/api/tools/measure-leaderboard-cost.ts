@@ -1,7 +1,7 @@
 // What the leaderboard costs at full size (ROADMAP 19a; CLAUDE.md §4 "Cost at full size").
 // One gym of 2,100 live app members (the biggest; --members= for another size) with three years of desk visits and app workouts; every board and period
 // read as a member reads it, the console's "On a roll", and the console's Leaderboard page
-// as its owner reads it (19a-iii: everyone, a page of a hundred). Half the members have a record on
+// as its owner reads it (19a-iii: everyone, a page of a hundred), and staff adding and removing a visit (19a-iv). Half the members have a record on
 // the gym's list and a tenth of their visits name only the record, so the by-record path is
 // timed too. Two numbers each, over several runs:
 //   - db: how long the read takes (it holds one of the pool's connections meanwhile);
@@ -27,7 +27,9 @@ import {
   getStaffLeaderboard,
   getStaffProfile,
 } from "../src/modules/orgs/leaderboard/service.js";
+import { addVisit, removeVisit } from "../src/modules/orgs/checkin/service.js";
 import { getGymRegulars } from "../src/modules/orgs/repo.js";
+import { createMemoryRedis } from "../src/redis.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
 if (!/localhost|127\.0\.0\.1/.test(url)) {
@@ -45,6 +47,8 @@ const PREFIX = "lb-cost-";
 async function cleanup(): Promise<void> {
   const gyms = sql`SELECT id FROM gyms WHERE slug LIKE ${PREFIX + "%"}`;
   await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${gyms})`;
+  await sql`DELETE FROM audit_log WHERE gym_id IN (${gyms})`;
+  await sql`DELETE FROM gym_attendance_removed WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_attendance WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_checkin_devices WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_members WHERE gym_id IN (${gyms})`;
@@ -52,6 +56,8 @@ async function cleanup(): Promise<void> {
   await sql`DELETE FROM gym_staff WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gyms WHERE slug LIKE ${PREFIX + "%"}`;
   await sql`DELETE FROM workouts WHERE user_id IN (SELECT id FROM users WHERE email LIKE ${PREFIX + "%@example.com"})`;
+  await sql`DELETE FROM streaks WHERE user_id IN (SELECT id FROM users WHERE email LIKE ${PREFIX + "%@example.com"})`;
+  await sql`DELETE FROM user_achievements WHERE user_id IN (SELECT id FROM users WHERE email LIKE ${PREFIX + "%@example.com"})`;
   await sql`DELETE FROM users WHERE email LIKE ${PREFIX + "%@example.com"}`;
   await sql`DELETE FROM plans WHERE code = ${PLAN}`;
 }
@@ -183,6 +189,55 @@ for (const [name, fn] of queries) {
     jss.push(t.js);
   }
   console.log(`${name.padEnd(31)} total median ${fmt(median(walls))} (worst ${fmt(Math.max(...walls))}) · server thread busy median ${fmt(median(jss))} (worst ${fmt(Math.max(...jss))})`);
+}
+// Fixing a visit (19a-iv): staff add a visit for an earlier day and remove it again, a
+// different day each run. Each write also works the person's app streak out again.
+{
+  const checkin = {
+    sql,
+    redis: createMemoryRedis(),
+    now: () => new Date(),
+    passKey: null,
+    webOrigin: "http://localhost",
+    log: { warn: () => undefined },
+  };
+  const person = viewers[1] ?? "";
+  // Days with no visit of this person's, inside the window a visit can be added for.
+  const free = await sql<{ day: string }[]>`
+    SELECT d.day::text AS day
+    FROM (SELECT ((now() AT TIME ZONE g.timezone)::date - n) AS day FROM gyms g, generate_series(1, 60) n WHERE g.id = ${gymId}) d
+    WHERE NOT EXISTS (SELECT 1 FROM gym_attendance a WHERE a.gym_id = ${gymId} AND a.user_id = ${person} AND a.day = d.day)
+    ORDER BY d.day DESC
+    LIMIT ${RUNS + 1}`;
+  const adds: { wall: number; js: number }[] = [];
+  const removes: { wall: number; js: number }[] = [];
+  for (const { day } of free) {
+    adds.push(await time(() => addVisit(checkin, owner, gymId, { pick: { userId: person }, day }, allowed)));
+    const row = await sql<{ id: string }[]>`
+      SELECT id FROM gym_attendance WHERE gym_id = ${gymId} AND user_id = ${person} AND day = ${day}::date AND hours_status = 'added_later'`;
+    const visitId = row[0]?.id;
+    if (visitId === undefined) throw new Error("the visit was not added");
+    removes.push(await time(() => removeVisit(checkin, owner, gymId, visitId, allowed)));
+  }
+  // The first of each is the warm-up, as for the reads.
+  for (const [name, runs] of [["staff add a visit", adds.slice(1)], ["staff remove a visit", removes.slice(1)]] as const) {
+    const walls = runs.map((r) => r.wall);
+    const jss = runs.map((r) => r.js);
+    console.log(`${name.padEnd(31)} total median ${fmt(median(walls))} (worst ${fmt(Math.max(...walls))}) · server thread busy median ${fmt(median(jss))} (worst ${fmt(Math.max(...jss))})`);
+  }
+  queries.length = 0;
+  queries.push(["what counted, after removals", () => getMyCounted(deps, person, gymId, { board: "gym_days", period: "all_time" })]);
+  for (const [name, fn] of queries) {
+    await fn();
+    const walls: number[] = [];
+    const jss: number[] = [];
+    for (let i = 0; i < RUNS; i++) {
+      const t = await time(fn);
+      walls.push(t.wall);
+      jss.push(t.js);
+    }
+    console.log(`${name.padEnd(31)} total median ${fmt(median(walls))} (worst ${fmt(Math.max(...walls))}) · server thread busy median ${fmt(median(jss))} (worst ${fmt(Math.max(...jss))})`);
+  }
 }
 delay.disable();
 console.log(`longest single stall of the thread during all reads: ${fmt(delay.max / 1e6)}`);

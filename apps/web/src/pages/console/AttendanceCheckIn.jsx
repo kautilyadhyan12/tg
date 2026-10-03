@@ -5,25 +5,72 @@
 // with the gym's own status and payment words in orange). "Checked in today": every visit
 // today, newest first, with those same words, asked again every 5 seconds while the page
 // is in view.
+//
+// Fixing a visit (ROADMAP 19a-iv): "Day they came" turns Check in into Add visit for an
+// earlier day, and each of today's visits has Remove. A box names the person, the day and
+// what it counts for before either happens.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CHECKIN_LOG_LIMIT, CHECKIN_LOG_POLL_MS } from '@app/shared';
+import { CHECKIN_LOG_LIMIT, CHECKIN_LOG_POLL_MS, VISIT_ADD_DAYS_BACK } from '@app/shared';
 import { Check, Loader2, Search } from 'lucide-react';
 import { orgService, errorText, isRetryable } from '../../api/orgsApi';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading, ConsoleSection } from '../../components/console/ConsoleStates';
 import { visitTimeLabel } from '../../components/gym/attendanceView';
+import { dayLabel } from '../../components/gym/leaderboardView';
 import { deskAnswer } from '../checkin/deskView';
 import { foundDetails, howLine, mergeLog, newestAt, pickKey, wordsLine } from './checkinLogView';
+import { gymToday } from './hoursView';
+import { addVisitWindow } from './leaderboardStaffView';
 
 const SEARCH_WAIT_MS = 250;
 
 const muted = { color: 'rgba(255,255,255,0.55)' };
 const ORANGE = '#FFB347';
 
-export function CheckSomeoneIn({ gymId, words, keepsList, onCheckedIn }) {
+/** The two buttons under a box that asks before it changes a visit. */
+function BoxButtons({ label, busy, danger, onPress, onCancel }) {
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      <button
+        type="button"
+        onClick={onPress}
+        disabled={busy}
+        className="rounded-xl px-3.5 py-2 text-sm font-semibold inline-flex items-center gap-1.5 disabled:opacity-40"
+        style={danger ? { background: 'rgba(239,68,68,0.18)', color: '#f87171' } : { background: '#FF8A1F', color: '#0b0a09' }}
+      >
+        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+        {label}
+      </button>
+      <button
+        type="button"
+        onClick={onCancel}
+        disabled={busy}
+        className="rounded-xl px-3.5 py-2 text-sm font-semibold disabled:opacity-40"
+        style={{ background: 'rgba(255,255,255,0.07)', color: '#fff' }}
+      >
+        Cancel
+      </button>
+    </div>
+  );
+}
+
+const boxStyle = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)' };
+
+export function CheckSomeoneIn({ gymId, words, keepsList, timezone, clearSignal, onCheckedIn, onAdded }) {
+  const today = gymToday(timezone);
+  const range = addVisitWindow(today);
+  /** The day the visit is for: the gym's today, or an earlier day. */
+  const [day, setDay] = useState(today);
+  const earlier = day < today;
+  /** The person an earlier day's visit is about to be added for. */
+  const [adding, setAdding] = useState(null);
   const [typed, setTyped] = useState('');
   const [found, setFound] = useState({ status: 'idle', people: [], error: null, forQuery: '' });
   const [busy, setBusy] = useState(null);
-  const [answer, setAnswer] = useState(null);
+  // The last answer, with the count of removals it was given under: a visit removed below
+  // may be the one a green line is about, so an answer from before a removal is not drawn.
+  const [said, setSaid] = useState(null);
+  const setAnswer = (next) => setSaid(next === null ? null : { ...next, under: clearSignal });
+  const answer = said !== null && said.under === clearSignal ? said : null;
   const asked = useRef(0);
   const input = useRef(null);
 
@@ -70,6 +117,33 @@ export function CheckSomeoneIn({ gymId, words, keepsList, onCheckedIn }) {
       .finally(() => setBusy(null));
   };
 
+  const addVisit = () => {
+    if (busy !== null || adding === null) return;
+    const person = adding;
+    setBusy(pickKey(person.pick));
+    setAnswer(null);
+    void orgService
+      .addVisit(gymId, person.pick, day)
+      .then((res) => {
+        const on = dayLabel(res.data.day);
+        setAnswer({
+          tone: 'good',
+          title: res.data.result === 'added' ? `Visit added for ${on}` : `Already has a visit that counts on ${on}. Nothing was added.`,
+          name: res.data.person.name,
+          notice: null,
+        });
+        setAdding(null);
+        setTyped('');
+        onAdded?.(res.data.day);
+        input.current?.focus();
+      })
+      .catch((err) => {
+        setAnswer({ tone: 'bad', title: errorText(err, "We couldn't add that visit just now."), name: person.name, notice: null });
+        setAdding(null);
+      })
+      .finally(() => setBusy(null));
+  };
+
   const query = typed.trim();
   // An answer is drawn only for what is in the box now: the last search's people are never
   // on screen, with a Check in beside them, under a new one.
@@ -85,6 +159,31 @@ export function CheckSomeoneIn({ gymId, words, keepsList, onCheckedIn }) {
       <p className="text-sm mt-1" style={muted}>
         For a {words.person} without the app or without their pass. Find them, then press Check in.
       </p>
+
+      <label className="mt-3 flex flex-wrap items-center gap-2 text-sm" style={{ color: '#fff' }}>
+        Day they came
+        <input
+          type="date"
+          value={day}
+          min={range.min}
+          max={today}
+          // A date box cleared with Backspace gives '': back to today.
+          onChange={(e) => {
+            setDay(e.target.value === '' ? today : e.target.value);
+            setAdding(null);
+            // The last answer was about another day.
+            setAnswer(null);
+          }}
+          aria-label="Day they came"
+          className="rounded-lg px-2 py-1 text-sm"
+          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.10)', color: '#fff', colorScheme: 'dark' }}
+        />
+        <span className="text-xs" style={muted}>
+          {earlier
+            ? `${dayLabel(day)}: a missed visit is added for that day.`
+            : `Today. Pick an earlier day, up to ${VISIT_ADD_DAYS_BACK} days back, to add a visit they missed.`}
+        </span>
+      </label>
 
       <label
         className="mt-3 flex items-center gap-2 rounded-xl px-3 py-2"
@@ -138,7 +237,22 @@ export function CheckSomeoneIn({ gymId, words, keepsList, onCheckedIn }) {
         </p>
       ) : null}
 
-      {people.length > 0 ? (
+      {adding !== null ? (
+        <div role="group" aria-label={`Add a visit for ${adding.name}`} className="mt-3 rounded-xl px-3 py-3" style={boxStyle}>
+          <p className="text-sm font-semibold" style={{ color: '#fff' }}>
+            Add a visit for {adding.name} on {dayLabel(day)}?
+          </p>
+          <p className="text-sm mt-1" style={muted}>
+            {adding.name} — a visit is added for {dayLabel(day)}. It counts as a gym day on the leaderboard and for their streak.
+          </p>
+          <p className="text-sm mt-1" style={muted}>
+            In their app, they see it with your name and today&apos;s date. Nobody else&apos;s visits change.
+          </p>
+          <BoxButtons label="Add visit" busy={busy !== null} onPress={addVisit} onCancel={() => setAdding(null)} />
+        </div>
+      ) : null}
+
+      {people.length > 0 && adding === null ? (
         <ul className="mt-2 flex flex-col">
           {people.map((person) => {
             const key = pickKey(person.pick);
@@ -167,14 +281,18 @@ export function CheckSomeoneIn({ gymId, words, keepsList, onCheckedIn }) {
                 </span>
                 <button
                   type="button"
-                  onClick={() => checkIn(person)}
+                  onClick={() => {
+                    if (!earlier) return checkIn(person);
+                    setAnswer(null);
+                    return setAdding(person);
+                  }}
                   disabled={busy !== null}
-                  aria-label={`Check in ${person.name}`}
+                  aria-label={earlier ? `Add a visit for ${person.name}` : `Check in ${person.name}`}
                   className="rounded-xl px-3.5 py-2 text-sm font-semibold inline-flex items-center gap-1.5 disabled:opacity-40 flex-shrink-0"
                   style={{ background: '#FF8A1F', color: '#0b0a09' }}
                 >
                   {busy === key ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                  Check in
+                  {earlier ? 'Add visit' : 'Check in'}
                 </button>
               </li>
             );
@@ -190,7 +308,11 @@ function pageVisible() {
   return typeof document === 'undefined' || document.visibilityState !== 'hidden';
 }
 
-export function CheckedInToday({ gymId, words, refreshSignal }) {
+export function CheckedInToday({ gymId, words, refreshSignal, canFix, onRemoved }) {
+  /** The visit whose Remove box is open, and how its removal is going. */
+  const [removing, setRemoving] = useState(null);
+  const [removeBusy, setRemoveBusy] = useState(false);
+  const [removeError, setRemoveError] = useState(null);
   const [log, setLog] = useState({ status: 'loading', visits: [], day: null, timezone: null, clockFormat: '24h', error: null, retryable: true, stale: false });
   const held = useRef(log);
   useEffect(() => {
@@ -260,6 +382,21 @@ export function CheckedInToday({ gymId, words, refreshSignal }) {
     if (refreshSignal > 0) read(false);
   }, [refreshSignal, read]);
 
+  const removeVisit = (visit) => {
+    if (removeBusy) return;
+    setRemoveBusy(true);
+    setRemoveError(null);
+    void orgService
+      .removeVisit(gymId, visit.id)
+      .then(() => {
+        setLog((prev) => ({ ...prev, visits: prev.visits.filter((held) => held.id !== visit.id) }));
+        setRemoving(null);
+        onRemoved?.();
+      })
+      .catch((err) => setRemoveError(errorText(err, "We couldn't remove that visit just now.")))
+      .finally(() => setRemoveBusy(false));
+  };
+
   if (log.status === 'loading') return <ConsoleLoading label="Loading today's check-ins…" />;
   if (log.status === 'failed') {
     return (
@@ -288,14 +425,50 @@ export function CheckedInToday({ gymId, words, refreshSignal }) {
         <ul className="mt-1 flex flex-col">
           {log.visits.map((visit) => {
             const notice = wordsLine(visit);
+            const name = visit.name === '' ? `A ${words.person}` : visit.name;
+            const time = visitTimeLabel(visit.markedAt, log.timezone, log.clockFormat);
+            if (removing === visit.id) {
+              return (
+                <li key={visit.id} className="py-2" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div role="group" aria-label={`Remove ${name}'s check-in`} className="rounded-xl px-3 py-3" style={boxStyle}>
+                    <p className="text-sm font-semibold" style={{ color: '#fff' }}>
+                      Remove {name}&apos;s {time} check-in?
+                    </p>
+                    <p className="text-sm mt-1" style={muted}>
+                      {name} — this visit is removed. It no longer counts as a visit today, on the leaderboard or for their streak,
+                      unless they have another visit today.
+                    </p>
+                    <p className="text-sm mt-1" style={muted}>
+                      In their app, they still see it under &ldquo;Didn&apos;t count&rdquo;, with your name and today&apos;s date. Nobody
+                      else&apos;s visits change.
+                    </p>
+                    {removeError !== null ? (
+                      <p className="text-sm mt-2" role="alert" style={{ color: '#f87171' }}>
+                        {removeError}
+                      </p>
+                    ) : null}
+                    <BoxButtons
+                      label="Remove visit"
+                      danger
+                      busy={removeBusy}
+                      onPress={() => removeVisit(visit)}
+                      onCancel={() => {
+                        setRemoving(null);
+                        setRemoveError(null);
+                      }}
+                    />
+                  </div>
+                </li>
+              );
+            }
             return (
               <li key={visit.id} className="flex items-baseline gap-3 py-2" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
                 <span className="text-xs w-16 flex-shrink-0 tabular-nums" style={{ color: ORANGE }}>
-                  {visitTimeLabel(visit.markedAt, log.timezone, log.clockFormat)}
+                  {time}
                 </span>
-                <span className="min-w-0">
+                <span className="min-w-0 flex-1">
                   <span className="block text-sm font-medium truncate" style={{ color: '#fff' }}>
-                    {visit.name === '' ? `A ${words.person}` : visit.name}
+                    {name}
                   </span>
                   <span className="block text-xs truncate" style={{ color: 'rgba(255,255,255,0.45)' }}>
                     {howLine(visit)}
@@ -306,6 +479,20 @@ export function CheckedInToday({ gymId, words, refreshSignal }) {
                     </span>
                   ) : null}
                 </span>
+                {canFix ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRemoving(visit.id);
+                      setRemoveError(null);
+                    }}
+                    aria-label={`Remove ${name}'s ${time} check-in`}
+                    className="text-xs font-semibold underline flex-shrink-0"
+                    style={{ color: 'rgba(255,255,255,0.65)' }}
+                  >
+                    Remove
+                  </button>
+                ) : null}
               </li>
             );
           })}

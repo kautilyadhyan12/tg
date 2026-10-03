@@ -97,6 +97,11 @@ describe('a person’s times', () => {
     expect(personTimes(person, { timezone: 'Europe/London', clockFormat: '12h' })[0].time).toBe('7:12 AM');
   });
 
+  it('a visit staff added on a later day shows no time: its instant is when it was added', () => {
+    const person = { visits: [{ ...at('2026-09-02T06:12:00.000Z'), hoursStatus: 'added_later' }] };
+    expect(personTimes(person, { timezone: 'Europe/London', clockFormat: '24h' }).map((c) => c.time)).toEqual(['Added later by staff']);
+  });
+
   it('drops a chip it cannot read and never the person', () => {
     const person = { visits: [at('not-a-time'), at('2026-09-02T06:12:00.000Z')] };
     const chips = personTimes(person, { timezone: 'UTC', clockFormat: '24h' });

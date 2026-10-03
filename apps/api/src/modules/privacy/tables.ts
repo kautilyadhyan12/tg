@@ -314,6 +314,10 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   "gym_staff",
   "gym_join_applications",
   "gym_attendance",
+  // gym_attendance_removed (19a-iv) — a visit staff removed, kept with who removed it. On
+  // gym_attendance's footing: the same dated record of a person at a gym, and the member
+  // of staff who removed it.
+  "gym_attendance_removed",
   "gym_cheers",
   "gym_nudges",
   "gym_closures",

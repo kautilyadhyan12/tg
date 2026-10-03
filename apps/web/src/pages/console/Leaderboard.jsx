@@ -7,11 +7,12 @@ import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleS
 import { BOARD_TABS, PERIODS, circleLabel, datesLine, ordinal, updatedText, weekLabel, weekdayInitial } from '../../components/gym/leaderboardView';
 import LeaderboardPerson from './LeaderboardPerson';
 import { useConsoleOrg } from './useConsoleOrg';
-import { orgWords } from './consoleView';
+import { orgWords, viewerPrivileges } from './consoleView';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
 import {
   WHAT_IT_COUNTS,
   boardSwitch,
+  canFixVisits,
   countLine,
   emptyLine,
   flamesNote,
@@ -359,6 +360,7 @@ export default function Leaderboard() {
           period={period}
           words={words}
           readOnly={readOnly}
+          canFix={canFixVisits(viewerPrivileges(org))}
           onClose={() => setOpen(null)}
           onChanged={(line) => {
             setNotice(line);
