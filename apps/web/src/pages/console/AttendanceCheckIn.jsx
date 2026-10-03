@@ -18,7 +18,7 @@ const SEARCH_WAIT_MS = 250;
 const muted = { color: 'rgba(255,255,255,0.55)' };
 const ORANGE = '#FFB347';
 
-export function CheckSomeoneIn({ gymId, words, onCheckedIn }) {
+export function CheckSomeoneIn({ gymId, words, keepsList, onCheckedIn }) {
   const [typed, setTyped] = useState('');
   const [found, setFound] = useState({ status: 'idle', people: [], error: null, forQuery: '' });
   const [busy, setBusy] = useState(null);
@@ -95,7 +95,8 @@ export function CheckSomeoneIn({ gymId, words, onCheckedIn }) {
           type="search"
           value={typed}
           onChange={(e) => setTyped(e.target.value)}
-          placeholder="Name, member number or email"
+          // A list person's email is searched only for staff who keep the list.
+          placeholder={keepsList ? 'Name, member number or email' : 'Name or member number'}
           aria-label="Find someone to check in"
           maxLength={100}
           className="flex-1 bg-transparent text-sm outline-none"

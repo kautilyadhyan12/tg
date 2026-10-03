@@ -497,6 +497,7 @@ function AttendanceDay({ org }) {
         <CheckSomeoneIn
           gymId={gymId}
           words={words}
+          keepsList={viewerPrivileges(org).includes('members.confirm')}
           onCheckedIn={() => {
             setCheckedIn((n) => n + 1);
             // The day list is read again when it shows today, so the person is in it.

@@ -205,6 +205,18 @@ describe('check someone in', () => {
   });
 });
 
+describe('what the search box promises', () => {
+  it('names the email only for staff who keep the list', async () => {
+    drawScreen();
+    expect((await screen.findByLabelText('Find someone to check in')).placeholder).toBe('Name or member number');
+    cleanup();
+    resetConsoleOrgs();
+    api.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, privileges: [...ORG.privileges, 'members.confirm'] }], formerOrgs: [] } });
+    drawScreen();
+    expect((await screen.findByLabelText('Find someone to check in')).placeholder).toBe('Name, member number or email');
+  });
+});
+
 describe('checked in today', () => {
   it('shows each visit with how and by whom, and asks every 5 seconds from the newest it has', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
