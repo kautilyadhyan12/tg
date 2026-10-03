@@ -338,6 +338,58 @@ describe('the pass, closed or out of view', () => {
     expect(onClose).toHaveBeenCalledTimes(3);
   });
 
+  // ROADMAP 16f: a phone that dims or locks while it is held up to the desk cannot be read.
+  describe('the screen stays awake', () => {
+    const release = vi.fn(() => Promise.resolve());
+    const request = vi.fn(() => Promise.resolve({ release }));
+    beforeEach(() => {
+      release.mockClear();
+      request.mockClear();
+      Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: { request } });
+    });
+    afterEach(() => {
+      delete navigator.wakeLock;
+    });
+
+    it('while the pass is open, and is let go when it closes', async () => {
+      api.getCheckinPass.mockResolvedValue(answer(PASS_A, '2026-10-03T10:00:30.000Z'));
+      const view = render(<CheckinPass onClose={() => {}} />);
+      await pass(0);
+      expect(request.mock.calls).toEqual([['screen']]);
+      expect(release).not.toHaveBeenCalled();
+      view.unmount();
+      await pass(0);
+      expect(release).toHaveBeenCalledTimes(1);
+    });
+
+    it('is asked for again when the page comes back into view, since the phone lets go of it', async () => {
+      api.getCheckinPass.mockResolvedValue(answer(PASS_A, '2026-10-03T10:00:30.000Z'));
+      render(<CheckinPass onClose={() => {}} />);
+      await pass(0);
+      setVisibility('hidden');
+      await pass(0);
+      expect(request).toHaveBeenCalledTimes(1);
+      setVisibility('visible');
+      await pass(0);
+      expect(request).toHaveBeenCalledTimes(2);
+    });
+
+    it('a phone that refuses still shows the pass', async () => {
+      request.mockImplementation(() => Promise.reject(new Error('NotAllowedError')));
+      api.getCheckinPass.mockResolvedValue(answer(PASS_A, '2026-10-03T10:00:30.000Z'));
+      render(<CheckinPass onClose={() => {}} />);
+      await pass(0);
+      expect(codeOnScreen()).toBe(drawnPath(PASS_A));
+    });
+  });
+
+  it('says what to do when it does not scan', async () => {
+    api.getCheckinPass.mockResolvedValue(answer(PASS_A, '2026-10-03T10:00:30.000Z'));
+    render(<CheckinPass onClose={() => {}} />);
+    await pass(0);
+    expect(screen.getByText("If it doesn't scan, turn your screen's brightness up.")).toBeTruthy();
+  });
+
   // My Gyms re-renders every half minute and hands over a new `onClose` each time.
   it('does not ask again because the screen behind it drew again', async () => {
     api.getCheckinPass.mockResolvedValue(answer(PASS_A, '2026-10-03T10:00:30.000Z'));

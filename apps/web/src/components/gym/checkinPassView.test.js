@@ -3,15 +3,17 @@
 // drawn but cannot be scanned fails here and not at a gym's front desk.
 import { describe, expect, it } from 'vitest';
 import jsQR from 'jsqr';
-import { nextPassDelayMs, passCells, passPath, PASS_GOOD_MS, PASS_QUIET_CELLS } from './checkinPassView';
+import { nextPassDelayMs, passCells, passPath, PASS_CORRECTION, PASS_GOOD_MS, PASS_QUIET_CELLS } from './checkinPassView';
 
-/** The cells as the picture a camera sees: black on white, `scale` pixels a cell. */
-function picture(cells, scale = 4) {
+/** The cells as the picture a camera sees: black on white, `scale` pixels a cell. A
+ *  `patch` is a square of cells a lamp's glare has turned white. */
+function picture(cells, scale = 4, patch = null) {
   const side = (cells.length + PASS_QUIET_CELLS * 2) * scale;
   const pixels = new Uint8ClampedArray(side * side * 4).fill(255);
   cells.forEach((row, y) => {
     row.forEach((dark, x) => {
       if (!dark) return;
+      if (patch !== null && x >= patch.x && x < patch.x + patch.size && y >= patch.y && y < patch.y + patch.size) return;
       for (let dy = 0; dy < scale; dy += 1) {
         for (let dx = 0; dx < scale; dx += 1) {
           const at = (((y + PASS_QUIET_CELLS) * scale + dy) * side + (x + PASS_QUIET_CELLS) * scale + dx) * 4;
@@ -25,8 +27,8 @@ function picture(cells, scale = 4) {
   return { pixels, side };
 }
 
-const read = (cells) => {
-  const { pixels, side } = picture(cells);
+const read = (cells, patch = null) => {
+  const { pixels, side } = picture(cells, 4, patch);
   return jsQR(pixels, side, side)?.data ?? null;
 };
 
@@ -68,6 +70,27 @@ describe('the pass as a code', () => {
     expect(cells.every((row) => row.length === cells.length)).toBe(true);
     // 62 letters fit a version-4 code (33 cells a side) at this error correction.
     expect(cells.length).toBeLessThanOrEqual(37);
+  });
+
+  // ROADMAP 16f: a lamp on the phone's glass turns part of the code white. The pass is
+  // drawn so a quarter of it may be lost, in the same 33 cells the old one took.
+  it('still reads with a patch of glare 11 cells wide on it, which the old pass did not', () => {
+    const SIZE = 11;
+    const spots = [9, 12, 15, 18].flatMap((x) => [9, 12, 15, 18].map((y) => ({ x, y, size: SIZE })));
+    const readsOf = (correction) =>
+      REAL_PASSES.flatMap((pass) => spots.map((patch) => read(passCells(pass, correction), patch) === pass)).filter(Boolean).length;
+    expect(passCells(REAL_PASSES[0]).length).toBe(passCells(REAL_PASSES[0], 'M').length);
+    expect(readsOf('M')).toBeLessThan(5);
+    expect(readsOf(PASS_CORRECTION)).toBeGreaterThan(30);
+  });
+
+  it('a patch of glare never turns one pass into another: it reads as itself or not at all', () => {
+    for (const pass of REAL_PASSES) {
+      for (const size of [8, 11, 13, 16]) {
+        const got = read(passCells(pass), { x: 10, y: 14, size });
+        expect([pass, null]).toContain(got);
+      }
+    }
   });
 
   it.each([null, undefined, 42, '', 'ahgplowercase', 'AHGP WITH SPACE', 'AHGP-DASH'])('draws nothing for %j', (value) => {
