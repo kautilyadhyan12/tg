@@ -177,7 +177,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 16b-ii. [x] **Staff check-in and the live log** — merged 2026-10-03 (PR #159).
    - 16c. [x] **The member's side** — merged 2026-10-03 (PR #161).
    - 16d. [ ] **Who can check in** (RULINGS 2026-10-02): a Check-in setting the gym picks — everyone on the list (the starting value) or only people with a current membership, and a payment overdue let in or sent to staff — read from the app's own memberships and bills, never a file's words; a person stopped reads "Please see a member of staff" at the desk, and staff can still check them in. After 18a; Opus xhigh.
-   - 16e. [ ] **The two extra passes' fixes** over check-in, and the gym's status and payment words in staff's live list (RULINGS 2026-10-03).
+   - 16e. [x] **The two extra passes' fixes** over check-in — merged 2026-10-03 (PR #162).
    - 16f. [ ] **The desk reads a pass in poor light** (Kd, RULINGS 2026-10-03): the camera asks for a sharper picture and reads more often, the pass is drawn to survive glare and keeps the phone's screen awake, each measured with a real phone in dim and bright light; Check-in devices says a USB scanner is the reliable way for a busy desk. The desk also plays a sound for each answer (let in · let in with the gym's warning word · not let in), with a mute button. Next in Folder A after 16e; a screen job with a real-phone test.
 
 17. **What a gym sells, and its timetable** (RULINGS 2026-09-21, Part 4 of the re-plan; spec Part 3 §13) — items 8 and 9's prices, planned; "the largest gym item". Every card Opus xhigh; every number a starting value the gym can change; the two extra passes run once over 17a–17f.
