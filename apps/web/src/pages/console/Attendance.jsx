@@ -325,6 +325,8 @@ function AttendanceDay({ org }) {
   const [day, setDay] = useState(() => gymToday(timezone));
   const mayCheckIn = canCheckPeopleIn(viewerPrivileges(org));
   const [checkedIn, setCheckedIn] = useState(0);
+  /** Counts visits removed from "Checked in today", so the last check-in's answer is cleared. */
+  const [removed, setRemoved] = useState(0);
   const [search, setSearch] = useState('');
   const [picked, setPicked] = useState(null);
 
@@ -499,6 +501,7 @@ function AttendanceDay({ org }) {
           words={words}
           keepsList={viewerPrivileges(org).includes('members.confirm')}
           timezone={timezone}
+          clearSignal={removed}
           onCheckedIn={() => {
             setCheckedIn((n) => n + 1);
             // The day list is read again when it shows today, so the person is in it.
@@ -517,6 +520,7 @@ function AttendanceDay({ org }) {
         refreshSignal={checkedIn}
         canFix={mayCheckIn}
         onRemoved={() => {
+          setRemoved((n) => n + 1);
           if (day === gymToday(timezone)) setAttempt((a) => a + 1);
         }}
       />

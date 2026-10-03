@@ -298,8 +298,14 @@ describe('fixing a visit on Attendance', () => {
       logAnswer([lv('v2', '2026-10-03T06:05:00.000Z', 'Ravi Noapp', { method: 'staff', by: 'Iron Owner' }), lv('v1', '2026-10-03T06:02:00.000Z', 'Asha App')]),
     );
     api.removeVisit.mockResolvedValue({ data: { removed: true, day: '2026-10-03' } });
+    api.findCheckinPeople.mockResolvedValue({ data: { people: [ANIL] } });
+    api.staffCheckIn.mockResolvedValue({ data: { result: 'checked_in', person: { name: 'Anil Kumar' }, notice: { status: null, payment: null, onList: true } } });
     drawScreen();
     await screen.findByText('Ravi Noapp');
+    // A check-in's green line is on screen when the visit is removed.
+    await typeSearch('Anil');
+    fireEvent.click(await screen.findByRole('button', { name: 'Check in Anil Kumar' }));
+    expect((await screen.findByRole('status')).textContent).toContain('Checked in');
     fireEvent.click(screen.getByRole('button', { name: "Remove Ravi Noapp's 07:05 check-in" }));
     const box = screen.getByRole('group', { name: "Remove Ravi Noapp's check-in" });
     expect(box.textContent).toContain("Remove Ravi Noapp's 07:05 check-in?");
@@ -311,6 +317,8 @@ describe('fixing a visit on Attendance', () => {
     expect(api.removeVisit).toHaveBeenCalledTimes(1);
     expect(api.removeVisit).toHaveBeenCalledWith('g1', 'v2');
     expect(screen.getByText('Asha App')).toBeTruthy();
+    // "Checked in" may be about the visit just removed: it is not left on screen.
+    expect(screen.queryByRole('status')).toBeNull();
   });
 
   it('Cancel removes nothing; a failed removal says so and keeps the visit; staff without the tick see no Remove', async () => {

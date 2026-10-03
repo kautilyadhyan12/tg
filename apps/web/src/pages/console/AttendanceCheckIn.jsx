@@ -55,7 +55,7 @@ function BoxButtons({ label, busy, danger, onPress, onCancel }) {
 
 const boxStyle = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)' };
 
-export function CheckSomeoneIn({ gymId, words, keepsList, timezone, onCheckedIn, onAdded }) {
+export function CheckSomeoneIn({ gymId, words, keepsList, timezone, clearSignal, onCheckedIn, onAdded }) {
   const today = gymToday(timezone);
   const range = addVisitWindow(today);
   /** The day the visit is for: the gym's today, or an earlier day. */
@@ -66,7 +66,11 @@ export function CheckSomeoneIn({ gymId, words, keepsList, timezone, onCheckedIn,
   const [typed, setTyped] = useState('');
   const [found, setFound] = useState({ status: 'idle', people: [], error: null, forQuery: '' });
   const [busy, setBusy] = useState(null);
-  const [answer, setAnswer] = useState(null);
+  // The last answer, with the count of removals it was given under: a visit removed below
+  // may be the one a green line is about, so an answer from before a removal is not drawn.
+  const [said, setSaid] = useState(null);
+  const setAnswer = (next) => setSaid(next === null ? null : { ...next, under: clearSignal });
+  const answer = said !== null && said.under === clearSignal ? said : null;
   const asked = useRef(0);
   const input = useRef(null);
 
@@ -167,6 +171,8 @@ export function CheckSomeoneIn({ gymId, words, keepsList, timezone, onCheckedIn,
           onChange={(e) => {
             setDay(e.target.value === '' ? today : e.target.value);
             setAdding(null);
+            // The last answer was about another day.
+            setAnswer(null);
           }}
           aria-label="Day they came"
           className="rounded-lg px-2 py-1 text-sm"
@@ -275,7 +281,11 @@ export function CheckSomeoneIn({ gymId, words, keepsList, timezone, onCheckedIn,
                 </span>
                 <button
                   type="button"
-                  onClick={() => (earlier ? setAdding(person) : checkIn(person))}
+                  onClick={() => {
+                    if (!earlier) return checkIn(person);
+                    setAnswer(null);
+                    return setAdding(person);
+                  }}
                   disabled={busy !== null}
                   aria-label={earlier ? `Add a visit for ${person.name}` : `Check in ${person.name}`}
                   className="rounded-xl px-3.5 py-2 text-sm font-semibold inline-flex items-center gap-1.5 disabled:opacity-40 flex-shrink-0"
