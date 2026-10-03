@@ -12,6 +12,9 @@ vi.mock('../../api/checkinApi', () => ({
   checkinService: { claimDevice: vi.fn(), scan: vi.fn() },
 }));
 vi.mock('jsqr', () => ({ default: vi.fn() }));
+// The sounds are the browser's own audio, which a test has none of: what is asked for is
+// what is checked.
+vi.mock('./deskSound', () => ({ playDeskSound: vi.fn(), wakeDeskSound: vi.fn() }));
 // Who is signed in to this browser: a small store, so a sign-out redraws the page as the
 // real AuthContext does.
 vi.mock('../../context/AuthContext', async () => {
@@ -37,9 +40,11 @@ vi.mock('../../context/AuthContext', async () => {
 
 const { checkinService } = await import('../../api/checkinApi');
 const jsQR = (await import('jsqr')).default;
+const { playDeskSound } = await import('./deskSound');
+const { CAMERA_ASK } = await import('./deskRead');
 const { testAuth } = await import('../../context/AuthContext');
 const CheckinDesk = (await import('./CheckinDesk')).default;
-const { DESK_NAMES_KEY, RESULT_SHOW_MS, SAME_PASS_MS } = await import('./deskView');
+const { DESK_MUTED_KEY, DESK_NAMES_KEY, RESULT_SHOW_MS, SAME_PASS_MS } = await import('./deskView');
 
 const TOKEN = 'a'.repeat(20) + 'B_-' + 'c'.repeat(20);
 const PASS = 'AHGP' + 'A'.repeat(58);
@@ -424,6 +429,107 @@ describe('every answer the scan gives', () => {
   });
 });
 
+// ROADMAP 16f. Staff hear the desk from across the room, so the sound must be the answer's
+// own: "let in" for somebody refused is the worst thing this job could do.
+describe('the worst thing: a "let in" sound for somebody not let in', () => {
+  const sounds = () => playDeskSound.mock.calls.map(([kind]) => kind);
+  const refused = { response: { status: 401, data: { error: 'device_not_recognised' } } };
+
+  it.each([
+    ['not a member', () => checkinService.scan.mockResolvedValue({ result: 'not_a_member', gymName: 'Iron House' }), 'Not a member of Iron House'],
+    ['an old or used pass', () => checkinService.scan.mockResolvedValue({ result: 'fresh_pass_needed', gymName: 'Iron House' }), 'Show a fresh pass'],
+    ['a key tag two people share', () => checkinService.scan.mockResolvedValue({ result: 'see_staff', gymName: 'Iron House' }), 'Please see a member of staff'],
+    ['an answer this page does not know', () => checkinService.scan.mockResolvedValue({ result: 'checked_in_maybe', gymName: 'Iron House' }), 'Please scan again'],
+    ['key tags paused', () => checkinService.scan.mockRejectedValue({ response: { status: 429, data: { error: 'key_tags_paused' } } }), 'Please wait'],
+    ['no connection', () => checkinService.scan.mockRejectedValue(new Error('Network Error')), 'No connection'],
+    ['a device switched off', () => checkinService.scan.mockRejectedValue(refused), "This device can't check people in"],
+  ])('%s plays the "not let in" sound, once, and no other', async (_name, arrange, title) => {
+    arrange();
+    mount();
+    scan(PASS);
+    expect(await screen.findByText(title)).toBeTruthy();
+    expect(sounds()).toEqual(['out']);
+  });
+
+  it('a read that is no pass or key tag is "not let in" too', async () => {
+    mount();
+    scan('x'.repeat(80));
+    expect(await screen.findByText("That isn't a pass or key tag")).toBeTruthy();
+    expect(sounds()).toEqual(['out']);
+  });
+
+  it('somebody let in hears "let in"; with the gym’s warning word, the warning sound', async () => {
+    checkinService.scan
+      .mockResolvedValueOnce(checkedIn('Olivia Bennett'))
+      .mockResolvedValueOnce(checkedIn('Arjun Shah', { status: 'Expired', payment: 'Overdue', onList: true }));
+    mount();
+    scan(PASS);
+    expect(await screen.findByText('Olivia Bennett')).toBeTruthy();
+    expect(sounds()).toEqual(['in']);
+    scan(PASS_B);
+    expect(await screen.findByText('Arjun Shah')).toBeTruthy();
+    expect(sounds()).toEqual(['in', 'in_warn']);
+  });
+
+  it('the sound comes with the answer, not with the scan: nothing plays while the desk is still checking', async () => {
+    let answer;
+    checkinService.scan.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    mount();
+    scan(PASS);
+    expect(await screen.findByText('Checking…')).toBeTruthy();
+    expect(sounds()).toEqual([]);
+    await act(async () => answer({ result: 'not_a_member', gymName: 'Iron House' }));
+    expect(sounds()).toEqual(['out']);
+  });
+
+  it('the same pass read again shows the person their answer again without a second sound', async () => {
+    checkinService.scan.mockResolvedValue(checkedIn('Olivia Bennett'));
+    mount();
+    scan(PASS);
+    expect(await screen.findByText('Olivia Bennett')).toBeTruthy();
+    scan(PASS);
+    scan(PASS);
+    expect(await screen.findByText('Olivia Bennett')).toBeTruthy();
+    expect(checkinService.scan).toHaveBeenCalledTimes(1);
+    expect(sounds()).toEqual(['in']);
+  });
+});
+
+describe('the mute button', () => {
+  it('says what it will do, stops every sound, and the desk remembers it', async () => {
+    checkinService.scan.mockResolvedValue({ result: 'not_a_member', gymName: 'Iron House' });
+    const first = mount();
+    const button = screen.getByRole('button', { name: 'Turn sound off' });
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(button);
+    expect(screen.getByRole('button', { name: 'Turn sound on' }).getAttribute('aria-pressed')).toBe('false');
+    expect(window.localStorage.getItem(DESK_MUTED_KEY)).toBe('1');
+    scan('9999');
+    expect(await screen.findByText('Not a member of Iron House')).toBeTruthy();
+    expect(playDeskSound).not.toHaveBeenCalled();
+
+    // The page opened again (the tablet restarted): still off.
+    first.unmount();
+    mount();
+    expect(screen.getByRole('button', { name: 'Turn sound on' })).toBeTruthy();
+    scan('9998');
+    expect(await screen.findByText('Not a member of Iron House')).toBeTruthy();
+    expect(playDeskSound).not.toHaveBeenCalled();
+  });
+
+  it('turned back on, it plays once so staff hear it, and answers have their sound again', async () => {
+    window.localStorage.setItem(DESK_MUTED_KEY, '1');
+    checkinService.scan.mockResolvedValue({ result: 'not_a_member', gymName: 'Iron House' });
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: 'Turn sound on' }));
+    expect(playDeskSound.mock.calls).toEqual([['in']]);
+    expect(window.localStorage.getItem(DESK_MUTED_KEY)).toBeNull();
+    scan('9999');
+    expect(await screen.findByText('Not a member of Iron House')).toBeTruthy();
+    expect(playDeskSound.mock.calls).toEqual([['in'], ['out']]);
+  });
+});
+
 describe('the scanner box', () => {
   it('sends what the scanner typed, trimmed, and empties itself', async () => {
     checkinService.scan.mockResolvedValue(checkedIn('Olivia Bennett'));
@@ -503,6 +609,21 @@ describe('the camera', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /close the camera/i }));
     expect(stop).toHaveBeenCalled();
+  });
+
+  it('asks the camera for the sharper picture', async () => {
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: /use the camera/i }));
+    await waitFor(() => expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledWith(CAMERA_ASK));
+  });
+
+  it('a pass the camera reads is sent, and its answer has its sound', async () => {
+    jsQR.mockReturnValue({ data: PASS });
+    checkinService.scan.mockResolvedValue(checkedIn('Olivia Bennett'));
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: /use the camera/i }));
+    expect(await screen.findByText('Olivia Bennett')).toBeTruthy();
+    expect(playDeskSound.mock.calls).toEqual([['in']]);
   });
 
   it('a QR that is no pass (a web address) says so once, and sends nothing', async () => {

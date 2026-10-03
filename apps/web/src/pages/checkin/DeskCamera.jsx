@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
+import { CAMERA_ASK, READS_PER_SECOND, READ_WAYS, REST_TIMES, applyLevels, nextWay, readPlan } from './deskRead';
 
 // THE DESK'S CAMERA (spec Part 3 §12.3): for a desk with no USB scanner, the tablet's own
 // camera reads the member's pass. `jsqr` is loaded only when the camera is opened, so no
 // other page carries it. Every frame read stays in this browser; only the text of a QR
 // goes to the scan, as a scanner's typing would.
-
-/** Frames a second the camera is read at: enough to feel instant, light on a tablet. */
-const READS_PER_SECOND = 5;
-/** Frames are read at this width at most; a pass fills the frame, so detail is not needed. */
-const READ_WIDTH = 640;
+//
+// Each picture is read one way a turn (`deskRead.js`): whole or its middle, as it is or
+// with the grey pulled apart from the white, which is what a phone's screen needs in a dim
+// room.
 
 export default function DeskCamera({ onCode }) {
   const videoRef = useRef(null);
@@ -42,9 +42,7 @@ export default function DeskCamera({ onCode }) {
         // The reader first, so a camera is never opened that nothing then reads.
         jsQR = (await import('jsqr')).default;
         if (cancelled) return;
-        // A tablet at the desk faces the member, so its front camera is the one that sees
-        // the pass; a computer has one camera, and `ideal` takes whatever it has.
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'user' } }, audio: false });
+        stream = await navigator.mediaDevices.getUserMedia(CAMERA_ASK);
       } catch {
         if (!cancelled) setProblem("We couldn't open the camera. Allow camera access for this page in the browser, or use a scanner.");
         stop();
@@ -62,17 +60,30 @@ export default function DeskCamera({ onCode }) {
       video.srcObject = stream;
       void video.play().catch(() => {});
       const context = canvas.getContext('2d', { willReadFrequently: true });
+      let last = -1;
+      const restUntil = READ_WAYS.map(() => 0);
       timer = setInterval(() => {
         if (context === null || video.readyState < 2 || video.videoWidth === 0) return;
-        const scale = Math.min(1, READ_WIDTH / video.videoWidth);
-        const width = Math.round(video.videoWidth * scale);
-        const height = Math.round(video.videoHeight * scale);
-        canvas.width = width;
-        canvas.height = height;
-        context.drawImage(video, 0, 0, width, height);
-        const frame = context.getImageData(0, 0, width, height);
-        const found = jsQR(frame.data, width, height, { inversionAttempts: 'dontInvert' });
-        if (found !== null && typeof found.data === 'string' && found.data !== '') onCodeRef.current(found.data);
+        const from = performance.now();
+        const turn = nextWay(last, restUntil, from);
+        if (turn === -1) return;
+        const way = READ_WAYS[turn];
+        const plan = readPlan(video.videoWidth, video.videoHeight, way);
+        canvas.width = plan.width;
+        canvas.height = plan.height;
+        context.drawImage(video, plan.sx, plan.sy, plan.sw, plan.sh, 0, 0, plan.width, plan.height);
+        const frame = context.getImageData(0, 0, plan.width, plan.height);
+        if (way.levels > 0) applyLevels(frame.data, way.levels);
+        const found = jsQR(frame.data, plan.width, plan.height, { inversionAttempts: 'dontInvert' });
+        if (found !== null && typeof found.data === 'string' && found.data !== '') {
+          // The way that read it goes again next turn: it suits this light.
+          last = turn - 1;
+          onCodeRef.current(found.data);
+          return;
+        }
+        last = turn;
+        const now = performance.now();
+        restUntil[turn] = now + (now - from) * REST_TIMES;
       }, Math.round(1000 / READS_PER_SECOND));
     };
 
@@ -102,7 +113,8 @@ export default function DeskCamera({ onCode }) {
         playsInline
         aria-label="Camera: hold the pass up to it"
       />
-      <p className="c-s14 c-t2 mt-2 text-center">Hold the pass up to the camera.</p>
+      <p className="c-s14 c-t2 mt-2 text-center">Hold the pass up to the camera and keep it still.</p>
+      <p className="c-s14 c-t2 mt-1 text-center">If it doesn&apos;t read, bring the phone closer or tilt it away from the lights.</p>
     </div>
   );
 }

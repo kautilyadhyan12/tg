@@ -124,6 +124,47 @@ export function deskTrouble(err) {
   return { tone: 'warn', title: 'Please scan again', message: CHECKIN_WORDS.checkin_unavailable, stop: false };
 }
 
+/** The sound for what the desk shows (RULINGS 2026-10-03): 'in' somebody let in ·
+ *  'in_warn' let in, with the gym's own word for staff to look at · 'out' everything else.
+ *  Staff hear it across the room, so only a green answer with its person is ever "in". */
+export function deskSound(shown) {
+  if (shown?.tone !== 'good' || typeof shown.name !== 'string' || shown.name === '') return 'out';
+  return typeof shown.notice === 'string' && shown.notice !== '' ? 'in_warn' : 'in';
+}
+
+/** Each sound as its notes: pitch, when it starts and how long it lasts (milliseconds).
+ *  "In" is two rising notes; the warning is the same two and then two more, lower; "out"
+ *  is one long low buzz. */
+const IN_NOTES = [
+  { hz: 880, at: 0, ms: 110, wave: 'sine' },
+  { hz: 1320, at: 110, ms: 190, wave: 'sine' },
+];
+export const DESK_SOUNDS = {
+  in: IN_NOTES,
+  in_warn: [...IN_NOTES, { hz: 660, at: 400, ms: 130, wave: 'sine' }, { hz: 660, at: 590, ms: 130, wave: 'sine' }],
+  out: [{ hz: 196, at: 0, ms: 450, wave: 'square' }],
+};
+
+/** Whether this desk's sound was turned off, kept in the browser beside its names. */
+export const DESK_MUTED_KEY = 'checkinDeskMuted';
+
+export function readDeskMuted(storage) {
+  try {
+    return storage?.getItem(DESK_MUTED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function writeDeskMuted(storage, muted) {
+  try {
+    if (muted) storage?.setItem(DESK_MUTED_KEY, '1');
+    else storage?.removeItem(DESK_MUTED_KEY);
+  } catch {
+    // Storage blocked: the button still works until the page is closed.
+  }
+}
+
 /** The set-up link that could not be opened. */
 export function claimTrouble(err) {
   const code = err?.response?.data?.error;

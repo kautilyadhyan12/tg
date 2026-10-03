@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { AlertTriangle, Camera, CheckCircle2, Loader2, LogOut, QrCode, RefreshCw, ScanLine, XCircle } from 'lucide-react';
+import { AlertTriangle, Camera, CheckCircle2, Loader2, LogOut, QrCode, RefreshCw, ScanLine, Volume2, VolumeX, XCircle } from 'lucide-react';
 import { CHECKIN_WORDS } from '@app/shared';
 import { checkinService } from '../../api/checkinApi';
 import { useAuth } from '../../context/AuthContext';
+import useScreenAwake from '../../hooks/useScreenAwake';
 import { consoleLook } from '../console/consoleMenu';
 import DeskCamera from './DeskCamera';
+import { playDeskSound, wakeDeskSound } from './deskSound';
 import {
   CAMERA_SAME_CODE_MS,
   DESK_READ_MAX,
@@ -14,13 +16,16 @@ import {
   SAME_PASS_MS,
   claimTrouble,
   deskAnswer,
+  deskSound,
   deskTrouble,
   isLetIn,
+  readDeskMuted,
   readDeskNames,
   readyCode,
   signedInLine,
   tokenFromHash,
   tooLongToScan,
+  writeDeskMuted,
   writeDeskNames,
 } from './deskView';
 import '../../components/console/console.css';
@@ -28,7 +33,8 @@ import '../../components/console/console.css';
 // THE FRONT DESK (spec Part 3 §12.3; ROADMAP 16b-i). A tablet or computer the owner set up
 // from Settings → Check-in devices. It is LOCKED: no menu, no links, no list — its key is
 // a cookie that opens the scan and nothing else, and this page draws nothing the scan did
-// not just answer. One answer at a time, gone after RESULT_SHOW_MS.
+// not just answer. One answer at a time, gone after RESULT_SHOW_MS, each with its sound
+// (let in · let in with the gym's warning word · not let in) unless the desk is muted.
 //
 // `/check-in/setup#<token>` is the one-time link: the token is read, wiped from the
 // address bar, spent, and the page moves to `/check-in`, the desk itself.
@@ -186,6 +192,8 @@ function Desk({ look }) {
   const [pending, setPending] = useState(false);
   const [stopped, setStopped] = useState(null);
   const [camera, setCamera] = useState(false);
+  const [muted, setMuted] = useState(() => readDeskMuted(storage()));
+  const mutedRef = useRef(muted);
   const inputRef = useRef(null);
   const seq = useRef(0);
   const clearTimer = useRef(null);
@@ -196,30 +204,52 @@ function Desk({ look }) {
   // The code whose answer is on the screen now, or null.
   const onScreen = useRef(null);
 
+  useScreenAwake();
+
   useEffect(() => {
     document.title = 'Check-in';
+    // A browser plays no sound until the page has been touched or a key pressed.
+    document.addEventListener('pointerdown', wakeDeskSound);
+    document.addEventListener('keydown', wakeDeskSound);
     return () => {
+      document.removeEventListener('pointerdown', wakeDeskSound);
+      document.removeEventListener('keydown', wakeDeskSound);
       if (clearTimer.current !== null) clearTimeout(clearTimer.current);
     };
   }, []);
 
-  const show = useCallback((answer, code = null) => {
+  const sound = useCallback((answer) => {
+    if (!mutedRef.current) playDeskSound(deskSound(answer));
+  }, []);
+
+  const toggleMuted = () => {
+    const next = !muted;
+    mutedRef.current = next;
+    setMuted(next);
+    writeDeskMuted(storage(), next);
+    // Turned on, it plays once, so staff hear it is on and how loud.
+    if (!next) playDeskSound('in');
+  };
+
+  /** Puts an answer on the screen with its sound; `quiet` for an answer already heard. */
+  const show = useCallback((answer, code = null, quiet = false) => {
     if (clearTimer.current !== null) clearTimeout(clearTimer.current);
     onScreen.current = code;
     setShown(answer);
+    if (!quiet) sound(answer);
     clearTimer.current = setTimeout(() => {
       clearTimer.current = null;
       onScreen.current = null;
       setShown(null);
     }, RESULT_SHOW_MS);
-  }, []);
+  }, [sound]);
 
   /** An answer the desk already has, shown at once — but never over a scan still on its
    *  way: that is the next person, and their answer is the one they are waiting for. */
   const showNow = useCallback(
-    (answer, code = null) => {
+    (answer, code = null, quiet = false) => {
       if (inFlight.current !== null) return;
-      show(answer, code);
+      show(answer, code, quiet);
     },
     [show],
   );
@@ -233,8 +263,9 @@ function Desk({ look }) {
       for (const [kept, entry] of letIn.current) if (now - entry.at >= SAME_PASS_MS) letIn.current.delete(kept);
       const before = letIn.current.get(code);
       if (before !== undefined) {
-        // Not over somebody else's answer: the next person keeps their few seconds.
-        if (onScreen.current === null || onScreen.current === code) showNow(before.shown, code);
+        // Not over somebody else's answer: the next person keeps their few seconds. And
+        // without its sound: they heard it when they were let in.
+        if (onScreen.current === null || onScreen.current === code) showNow(before.shown, code, true);
         return;
       }
       if (inFlight.current === code) return;
@@ -263,6 +294,7 @@ function Desk({ look }) {
         if (trouble.stop) {
           letIn.current.clear();
           setStopped(trouble);
+          sound(trouble);
           setNames(null);
           writeDeskNames(storage(), null);
         } else {
@@ -275,7 +307,7 @@ function Desk({ look }) {
         }
       }
     },
-    [names, show, showNow],
+    [names, show, showNow, sound],
   );
 
   const onSubmit = (event) => {
@@ -319,10 +351,16 @@ function Desk({ look }) {
           {names?.gymName ? <p className="c-eyebrow">{names.deviceName ? `Check-in · ${names.deviceName}` : 'Check-in'}</p> : null}
           <p className="c-h1 c-ell">{names?.gymName || 'Check-in'}</p>
         </div>
-        <button type="button" className="c-btn c-btn-s" onClick={() => setCamera((on) => !on)} aria-pressed={camera}>
-          <Camera aria-hidden="true" className="w-5 h-5" />
-          {camera ? 'Close the camera' : 'Use the camera'}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="c-btn c-btn-s" onClick={toggleMuted} aria-pressed={!muted}>
+            {muted ? <VolumeX aria-hidden="true" className="w-5 h-5" /> : <Volume2 aria-hidden="true" className="w-5 h-5" />}
+            {muted ? 'Turn sound on' : 'Turn sound off'}
+          </button>
+          <button type="button" className="c-btn c-btn-s" onClick={() => setCamera((on) => !on)} aria-pressed={camera}>
+            <Camera aria-hidden="true" className="w-5 h-5" />
+            {camera ? 'Close the camera' : 'Use the camera'}
+          </button>
+        </div>
       </header>
 
       <main className="flex-grow flex flex-col items-center justify-center gap-6 px-4 py-8">

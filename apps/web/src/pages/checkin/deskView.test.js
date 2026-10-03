@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { CHECKIN_WORDS, checkinScanResponseSchema } from '@app/shared';
 import {
   DESK_NAMES_KEY,
+  DESK_SOUNDS,
   NOT_A_SCAN,
   SAME_PASS_MS,
   claimTrouble,
@@ -10,11 +11,14 @@ import {
   signedInLine,
   tooLongToScan,
   deskAnswer,
+  deskSound,
   deskTrouble,
   noticeLine,
+  readDeskMuted,
   readDeskNames,
   readyCode,
   tokenFromHash,
+  writeDeskMuted,
   writeDeskNames,
 } from './deskView';
 
@@ -118,6 +122,85 @@ describe('deskAnswer covers every answer the contract allows', () => {
   it('something unknown is "Please scan again", never a green tick', () => {
     expect(deskAnswer({ result: 'checked_in_maybe' })).toMatchObject({ tone: 'warn', title: 'Please scan again' });
     expect(deskAnswer(null)).toMatchObject({ tone: 'warn' });
+  });
+});
+
+// The worst thing the desk's sound could do: play "let in" for somebody it refused, so
+// staff across the room wave them through (ROADMAP 16f).
+describe('the sound for an answer', () => {
+  const failed = (status, error) => ({ response: { status, data: { error } } });
+  const person = { result: 'checked_in', gymName: 'Iron House', person: { name: 'Olivia' } };
+  const clean = { status: null, payment: null, onList: true };
+
+  it('only somebody let in gets a "let in" sound: every other answer the contract has is "out"', () => {
+    const results = checkinScanResponseSchema.options.map((option) => option.shape.result.value);
+    expect(results.length).toBeGreaterThan(2);
+    for (const result of results) {
+      const answer = { ...person, result, notice: clean, firstAt: '2026-10-02T06:02:00.000Z', timezone: 'Europe/London', clockFormat: '24h' };
+      const sound = deskSound(deskAnswer(answer));
+      expect([result, sound]).toEqual([result, result === 'checked_in' || result === 'already' ? 'in' : 'out']);
+    }
+  });
+
+  it.each([
+    ['an answer this page has never heard of', deskAnswer({ ...person, result: 'checked_in_maybe' })],
+    ['no answer at all', deskAnswer(null)],
+    ['a read that is no pass', NOT_A_SCAN],
+    ['a device switched off', deskTrouble(failed(401, 'device_not_recognised'))],
+    ['key tags paused', deskTrouble(failed(429, 'key_tags_paused'))],
+    ['the server down', deskTrouble(failed(500, 'internal'))],
+    ['no connection', deskTrouble(new Error('Network Error'))],
+    ['nothing', null],
+    ['a green colour with no person', { tone: 'good', title: 'Checked in', name: null, notice: null }],
+  ])('%s is "out"', (_name, shown) => {
+    expect(deskSound(shown)).toBe('out');
+  });
+
+  it.each([
+    [{ status: 'Expired', payment: null, onList: true }],
+    [{ status: null, payment: 'Overdue', onList: true }],
+    [{ status: null, payment: null, onList: false }],
+  ])('let in with the gym’s word %j is the warning sound, not the plain one', (notice) => {
+    expect(deskSound(deskAnswer({ ...person, notice }))).toBe('in_warn');
+    expect(deskSound(deskAnswer({ ...person, result: 'already', notice, firstAt: 'garbage' }))).toBe('in_warn');
+  });
+
+  it('the three sounds are three different sounds, and "out" is the low one', () => {
+    const notes = (kind) => DESK_SOUNDS[kind].map((note) => `${String(note.hz)}@${String(note.at)}+${String(note.ms)}`).join(' ');
+    expect(new Set(['in', 'in_warn', 'out'].map(notes)).size).toBe(3);
+    const lowestIn = Math.min(...[...DESK_SOUNDS.in, ...DESK_SOUNDS.in_warn].map((note) => note.hz));
+    for (const note of DESK_SOUNDS.out) expect(note.hz).toBeLessThan(lowestIn / 2);
+    // The warning starts as "let in" does and then goes on: nobody hears it as a refusal.
+    expect(DESK_SOUNDS.in_warn.slice(0, DESK_SOUNDS.in.length)).toEqual(DESK_SOUNDS.in);
+    expect(DESK_SOUNDS.in_warn.length).toBeGreaterThan(DESK_SOUNDS.in.length);
+  });
+});
+
+describe('the desk’s mute button', () => {
+  it('starts with the sound on, and remembers being turned off and on again', () => {
+    const store = memoryStorage();
+    expect(readDeskMuted(store)).toBe(false);
+    writeDeskMuted(store, true);
+    expect(readDeskMuted(store)).toBe(true);
+    writeDeskMuted(store, false);
+    expect(readDeskMuted(store)).toBe(false);
+  });
+
+  it('a browser that blocks storage has the sound on', () => {
+    const blocked = {
+      getItem() {
+        throw new Error('blocked');
+      },
+      setItem() {
+        throw new Error('blocked');
+      },
+      removeItem() {
+        throw new Error('blocked');
+      },
+    };
+    expect(readDeskMuted(blocked)).toBe(false);
+    expect(() => writeDeskMuted(blocked, true)).not.toThrow();
+    expect(readDeskMuted(null)).toBe(false);
   });
 });
 

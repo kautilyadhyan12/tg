@@ -2133,7 +2133,9 @@ gets "Show a fresh pass". A pass is used up by a visit and by nothing else: read
 desk where its person is not a member, or when the visit could not be saved, it still
 works (the two extra passes, 2026-10-03). 10 passes a minute a person. The phone needs
 the internet to show a pass; a pass the phone can make offline is the phone app's later
-work.
+work. The pass is drawn as wide as the phone allows, with a quarter of the code spare
+(error correction Q, the same 33 cells), so a patch of glare does not stop it reading,
+and the phone's screen is kept awake while it is open (ROADMAP 16f).
 
 ### 12.3 The desk device
 
@@ -2153,6 +2155,20 @@ and the server's own mark on it, which opens nothing and only lets the rate limi
 a desk on its own (12.8). A device's name is its own among the gym's switched-on devices,
 and a second "New link" within 10 seconds of the first is refused, so two staff pressing
 together are not each shown a link of which one is dead.
+
+**Sound, and the camera in poor light (ROADMAP 16f; RULINGS 2026-10-03).** Each answer
+has a sound, so staff hear the desk without watching it: two rising notes for somebody
+let in · the same and two lower notes when the gym's own status or payment word is
+shown · one long low buzz for everything else. Only a green answer with its person is
+ever "let in"; the same pass shown again is silent. **Turn sound off** is on the page and
+the desk remembers it. The camera is the backup, and Check-in devices says so: a USB
+scanner that reads QR codes is the reliable way for a busy desk, and the camera reads a
+pass but not a key tag. The camera is asked for a 1280 × 720 picture and reads it up to
+ten times a second, each time one of six ways in turn — the whole picture or its middle,
+as it is or with the grey pulled apart from the white, which is what a phone's bright
+screen needs in a dim room (`deskRead.js`); a way that is slow and finds nothing rests,
+so the page keeps answering. `tools/measure-desk-reads.mjs` measures it on made pictures.
+The desk's own screen is kept awake.
 
 ### 12.4 The scan rule — ONE pure function, one table test
 

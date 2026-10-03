@@ -70,6 +70,14 @@ describe('the closed box says what is there', () => {
   });
 });
 
+describe('which reader to use', () => {
+  it('says a USB scanner is the reliable way, and what the camera cannot do', async () => {
+    open([]);
+    expect(await screen.findByText(/plug in a USB scanner that reads QR codes/)).toBeTruthy();
+    expect(screen.getByText(/own camera reads a pass too, but not a key tag/)).toBeTruthy();
+  });
+});
+
 describe('adding a device', () => {
   it('shows its link once, for that device, and Done takes it away for good', async () => {
     // The day the link is made, so its end reads as a time today ("15:00"), not a date.

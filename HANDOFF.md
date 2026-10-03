@@ -4,6 +4,18 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-10-03 · 16f (Folder A): the desk reads a pass in poor light, and has a sound for each answer (branch `desk-poor-light-sound`)
+
+- **Why this job:** next in Folder A after 16e (RULINGS 2026-10-03). **Screen job, Opus high, no review; Kd: *"go"*.** Web only: no server change, no migration, no new package, no new cost.
+- **Sounds:** `deskView.js`'s `deskSound` is the ONE rule (let in · let in with the gym's word · not let in); `deskSound.js` plays the notes with the browser's own audio. **Turn sound off** on the desk, remembered; the same pass shown again is silent.
+- **Camera:** `deskRead.js`: asks 1280 × 720, up to 10 reads a second, six ways in turn (whole or middle; as it is, or the grey pulled from the white at 0.85 or 0.5); a slow way that finds nothing rests 15 times as long as it took. **Pass:** error correction Q in the same 33 cells, 318 px wide on a 360 phone (was 280), screen kept awake (`useScreenAwake`, the desk too). **Check-in devices** says a USB scanner that reads QR codes is the reliable way, and that the camera reads no key tag.
+- **Worst thing, first test:** a "let in" sound for somebody not let in. **Breaks, each RED, restored sha256-identical:** the page plays "let in" whatever the answer (11 red) · the rule takes any answer as let in (19) · a muted desk still plays (1).
+- **Measured, 100 MADE pictures a row** (`node apps/web/tools/measure-desk-reads.mjs`, 2,592 MHz on mains; read before → after): good light close 100 → 100 · arm's length 95 → 100 · far 4 → 100 · dim room close 0 → 100 · dim arm's length 0 → 82 · dark room close 0 → 100 · **dark arm's length 0 → 0** · a lamp's glare small 63 → 79, large 31 → 72 · a moving hand 0 → 100. `jsqr` took 334–782 ms a picture where the old settings read nothing in dim light, 16–32 ms where the new ones read. The light is a model, not a camera: it ranks settings; Kd's phone at a desk is the real test.
+- **Real run, headless Edge on :5173 with a made dim-room video as its camera** (the tool's `--video`): this branch sent the scan 736 ms after the camera opened; master's `DeskCamera` on the same video sent nothing in 20 s. The notes started in Edge: a refused scan `square 196 Hz`, muted none, sound turned on `sine 880` + `sine 1320`. Looked at the pass at 360, 400 and 1000 wide and the desk at 400 and 1000.
+- **Verified:** eslint 0 on every touched file; the six touched suites 218/218; web full run **3,702 of 3,702**, 142 of 143 files, the one `poseAssets.contract` (local Node 24).
+- **Cost at full size:** reads no list of people and asks the server nothing more: one scan a pass, as before (its test holds).
+- **Open:** Kd's click-through with a real phone in dim and bright light. A pass at arm's length in a dark room still does not read: hold it closer, or a USB scanner. Not built, said to nobody yet: the browser's own QR reader (`BarcodeDetector`, on Android and ChromeOS tablets) in place of `jsqr` where it exists, which could not be tried on this Windows machine.
+
 ## 2026-10-03 · 16e (Folder A): the two extra passes over check-in, and their fixes (branch `checkin-passes-fixes`)
 
 - **Why this job:** next in Folder A after 16c. Both passes ran in Kd's fresh terminals over 16a–16c (`reviews/checkin-security-findings.md`, `checkin-integrity-findings.md`): no Critical, one High each. **Risky, Opus xhigh.** Kd checked the desk-to-staff flow himself first (*"all passed"*) and said *"yes"* to one addition (RULINGS 2026-10-03). Migration `0066`; no new package, no new cost.

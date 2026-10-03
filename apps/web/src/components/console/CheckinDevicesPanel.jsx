@@ -240,6 +240,11 @@ export default function CheckinDevicesPanel({ org, readOnly }) {
         their key tag. It can only check people in: it can&apos;t open your members or your
         settings.
       </p>
+      <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.55)' }}>
+        For a busy desk, plug in a USB scanner that reads QR codes: it reads a pass or a key tag
+        at once, in any light. The device&apos;s own camera reads a pass too, but not a key tag,
+        and it needs the phone held close and still.
+      </p>
 
       {loadError !== null ? (
         <div className="mt-3">
