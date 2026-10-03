@@ -388,6 +388,12 @@ export const classTypeParamsSchema = z
   .strict();
 export type ClassTypeParams = z.infer<typeof classTypeParamsSchema>;
 
+/** A gym and one of its membership types (§13.1). The pair, as for a class type. */
+export const membershipTypeParamsSchema = z
+  .object({ gymId: z.string().uuid(), typeId: z.string().uuid() })
+  .strict();
+export type MembershipTypeParams = z.infer<typeof membershipTypeParamsSchema>;
+
 /** A gym and one of its repeats. See the note above on why it is its own shape. */
 export const classScheduleParamsSchema = z
   .object({ gymId: z.string().uuid(), scheduleId: z.string().uuid() })

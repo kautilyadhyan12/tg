@@ -756,10 +756,10 @@ export const gymStaff = pgTable(
      *  next wrong one hides. **The order is `ORG_PRIVILEGES`' order**: this
      *  array, that array and `0035`'s CHECK are one vocabulary written three
      *  times, and they move together or not at all. `attendance.mark` is the
-     *  eleventh (`0064`). */
+     *  eleventh (`0064`) and `memberships.manage` the twelfth (`0067`). */
     check(
       "gym_staff_privileges_check",
-      sql`${t.privileges} IS NULL OR ${t.privileges} <@ ARRAY['members.read','codes.invite','codes.manage','members.confirm','members.remove','staff.manage','org.manage','billing.manage','attendance.read','schedule.manage','attendance.mark']::text[]`,
+      sql`${t.privileges} IS NULL OR ${t.privileges} <@ ARRAY['members.read','codes.invite','codes.manage','members.confirm','members.remove','staff.manage','org.manage','billing.manage','attendance.read','schedule.manage','attendance.mark','memberships.manage']::text[]`,
     ),
   ],
 );

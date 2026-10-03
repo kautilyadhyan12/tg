@@ -4,6 +4,18 @@ Format: date · what was built or decided · what is verified (commands run) · 
 entries move to `archive/records/` when this file passes forty entries. The record before
 2026-09-07 is `archive/records/HANDOFF-2026-07-06-to-2026-09-07.md`.
 
+## 2026-10-04 · 17a-i (Folder A): the gym's price list (branch `membership-types`)
+
+- **Why this job:** next in Folder A after 16f. 17a was too big for one terminal, so it is split in three (ROADMAP): 17a-i the price list, 17a-ii a person's membership, 17a-iii a file's word linked to a type. **Risky (money, other gyms' data), Opus xhigh recommended; Kd: *"go but staff can also do if allowed"*** (RULINGS 2026-10-04). Migration `0067`; no new package, no new cost.
+- **Built:** Settings → Memberships: add, change, archive and put back a type (repeating · one time · class pack · day pass · trial), its price, how long it lasts or how many classes, what it includes, which classes. Routes under `/v1/orgs/:gymId/membership-types`; reading needs `members.read`, changing needs the new tick `memberships.manage` (owner and manager from the start; "Change membership types and prices" on Staff). A manager's usual permissions now open Settings, showing that one box.
+- **The terminal's own choice, for Kd to overrule:** a type is priced in the COUNTRY's own money (`MEMBER_CURRENCY`: GBP, EUR, CAD, INR, USD), not the dollars a gym outside India pays us in. The server stamps it when the type is made; it and the kind never change. Spec §13.1 has the note.
+- **Worst thing, first test:** a price saved or shown a hundred times off. `priceToMinor` and `formatMinor` in `@app/shared` are the only two places a price changes form; decimals come from the platform's ISO 4217 table (yen 0, dinar 3), a comma is refused. **Breaks, each RED, restored sha256-identical:** every currency taken as 2 decimals (4 shared + 2 web tests red) · the typed price through a float (2 + 1) · minor units printed as whole units (2 + 7).
+- **Verified:** shared 289/289, tsc and eslint 0; api tsc and eslint 0, new routes 6/6, full run **4,944 of 4,945** (`leads.sentForYou`'s whole-app day count, the known flake; it and `auth.signupBurst` 38/38 alone; a second file was marked failed with no failed test and its name was not captured); web full run 3,815 of 3,816 then the one (`consoleMenu.test.js`, a manager had no Settings) corrected and 20/20, plus `poseAssets.contract` (local Node 24); eslint 0 on the touched web files.
+- **Real run on :3000 with the real Redis:** six requests adding the same name at one instant gave one 201 and five 409 and one row; a fractional price and a sender's currency 400; a second account at the same address 404 on read and write, no cookie 401; the table held 4999 GBP. Headless Edge on :5173 at 1280 and 400 wide: a pack added, "49,99" refused with its sentence, the list drawn, no sideways scroll, no console errors.
+- **Cost:** reads no list of people. With 60 live and 200 archived types the read took a median 229 ms of 12 against 224 ms for a signed-in `GET /v1/users/me` on the same machine (73,489 bytes).
+- **Open:** Kd's click-through; the review round (`reviews/17a-i-1-review.md`). The four changed pictures under `apps/web/public/images/dashboard` were in the folder before this job and are not in its commits. The feature's two extra passes run once after 17f.
+- **Next in Folder A:** 17a-ii.
+
 ## 2026-10-03 · 16f (Folder A): the desk reads a pass in poor light, and has a sound for each answer (branch `desk-poor-light-sound`)
 
 - **Why this job:** next in Folder A after 16e (RULINGS 2026-10-03). **Planned as a screen job, Opus high; Kd: *"go"*, and after his click-through *"lets do review"*, so it had a review round.** Web only: no server change, no migration, no new package, no new cost.

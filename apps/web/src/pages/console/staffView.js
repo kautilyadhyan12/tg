@@ -215,6 +215,13 @@ function privilegeCopy(orgType) {
       hint: 'Make a new code, pause one, or give it an end date.',
     },
     {
+      // Spec Part 3 §13.1 (17a-i): owner and manager by default; the owner can tick it
+      // for anyone on staff.
+      value: 'memberships.manage',
+      label: 'Change membership types and prices',
+      hint: `What your ${words.it} sells and what each costs, in Settings.`,
+    },
+    {
       value: 'staff.manage',
       label: 'Manage staff',
       hint: 'Add people, change what they can do, and take their keys back.',

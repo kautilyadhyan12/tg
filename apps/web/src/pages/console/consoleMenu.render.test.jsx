@@ -4,8 +4,9 @@
 // The pages each person may open are written out HERE, from the menu as it was before
 // R1 (ConsoleLayout at fa8e38a): Overview and Members always, Leads with
 // `members.confirm`, Attendance with `attendance.read`, Classes with `schedule.manage`,
-// Settings with `staff.manage` or `org.manage`. Every mix of those five is drawn, and the
-// computer menu and the phone's tabs plus More must each hold exactly those pages.
+// Settings with `staff.manage` or `org.manage`, and since 17a-i with `memberships.manage`
+// too (its Memberships box). Every mix of those six is drawn, and the computer menu and
+// the phone's tabs plus More must each hold exactly those pages.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, within, cleanup } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -26,7 +27,7 @@ const ConsoleLayout = (await import('../../components/console/ConsoleLayout')).d
 const More = (await import('./More')).default;
 const Overview = (await import('./Overview')).default;
 
-const GATES = ['members.confirm', 'attendance.read', 'schedule.manage', 'staff.manage', 'org.manage'];
+const GATES = ['members.confirm', 'attendance.read', 'schedule.manage', 'staff.manage', 'org.manage', 'memberships.manage'];
 const BASE = '/console/iron-house';
 
 /** What the menu offered this person before R1. */
@@ -38,7 +39,7 @@ function openableToday(privileges) {
     ...(has('members.confirm') ? [`${BASE}/leads`] : []),
     ...(has('attendance.read') ? [`${BASE}/attendance`] : []),
     ...(has('schedule.manage') ? [`${BASE}/classes`] : []),
-    ...(has('staff.manage') || has('org.manage') ? [`${BASE}/settings`] : []),
+    ...(has('staff.manage') || has('org.manage') || has('memberships.manage') ? [`${BASE}/settings`] : []),
   ].sort();
 }
 
@@ -80,7 +81,7 @@ function menus() {
   return { rail, tabs, more };
 }
 
-/** Every one of the 32 mixes of the five permissions that decide a page. */
+/** Every one of the 64 mixes of the six permissions that decide a page. */
 const EVERY_MIX = Array.from({ length: 2 ** GATES.length }, (_, bits) =>
   ['members.read', ...GATES.filter((_, i) => bits & (1 << i))],
 );

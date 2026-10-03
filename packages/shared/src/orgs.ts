@@ -1760,6 +1760,7 @@ export const ORG_PRIVILEGES = [
   "attendance.read",
   "schedule.manage",
   "attendance.mark",
+  "memberships.manage",
 ] as const;
 export const orgPrivilegeSchema = z.enum(ORG_PRIVILEGES);
 export type OrgPrivilege = z.infer<typeof orgPrivilegeSchema>;
@@ -1913,7 +1914,12 @@ export type OrgPrivilege = z.infer<typeof orgPrivilegeSchema>;
  *  It is a separate tick from `attendance.read`, which every role holds: seeing who
  *  came in is not the power to say somebody did. Its search shows a name and a member
  *  number; the email on a RECORD is matched and shown only for staff who also keep the
- *  list (`members.confirm`). */
+ *  list (`members.confirm`).
+ *
+ *  `memberships.manage` is "change what the gym sells": its membership types and
+ *  their prices (spec Part 3 §13.1: owner and manager by default; the owner can
+ *  tick it for anyone on staff, Kd 2026-10-04). Reading the price list needs only
+ *  `members.read`. */
 export const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>> = {
   owner: [
     "members.read",
@@ -1927,6 +1933,7 @@ export const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>>
     "attendance.read",
     "schedule.manage",
     "attendance.mark",
+    "memberships.manage",
   ],
   manager: [
     "members.read",
@@ -1937,6 +1944,7 @@ export const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>>
     "attendance.read",
     "schedule.manage",
     "attendance.mark",
+    "memberships.manage",
   ],
   trainer: ["members.read", "codes.invite", "attendance.read"],
 };
