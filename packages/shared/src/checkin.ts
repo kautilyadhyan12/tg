@@ -1,7 +1,7 @@
 // Check-in at the front desk (spec Part 3 §12; ROADMAP 16a). The member's pass, the
 // gym's desk devices, and the scan that reads a pass or a key tag.
 import { z } from "zod";
-import { gymClockFormatSchema } from "./orgs.js";
+import { gymAttendanceMethodSchema, gymClockFormatSchema } from "./orgs.js";
 
 /** A pass is "AHGP" and 58 letters and digits (base32 of 36 bytes): the uppercase
  *  letters and digits a QR code packs most tightly and every USB scanner types the
@@ -144,4 +144,96 @@ export const CHECKIN_WORDS = {
   device_not_found: "That check-in device isn't here any more.",
   key_tags_slow: "Too many cards at once. Please wait a moment and scan again.",
   key_tags_paused: "Cards aren't being taken at this desk for a few minutes. Show your pass in the app, or ask staff to check you in.",
+} as const;
+
+// ── STAFF CHECK-IN AND THE LIVE LOG (ROADMAP 16b-ii; spec Part 3 §12.5) ──
+
+/** Staff find a person by name, member number or email: at most this many answers. */
+export const CHECKIN_SEARCH_LIMIT = 10;
+export const CHECKIN_SEARCH_MAX = 100;
+
+export const checkinPeopleQuerySchema = z
+  .object({ query: z.string().trim().min(1).max(CHECKIN_SEARCH_MAX) })
+  .strict();
+export type CheckinPeopleQuery = z.infer<typeof checkinPeopleQuerySchema>;
+
+/** Whom staff picked: a record on the gym's list, or a member in the app who has none. */
+export const checkinPickSchema = z.union([
+  z.object({ entryId: z.string().uuid() }).strict(),
+  z.object({ userId: z.string().uuid() }).strict(),
+]);
+export type CheckinPick = z.infer<typeof checkinPickSchema>;
+
+export const checkinPersonFoundSchema = z
+  .object({
+    pick: checkinPickSchema,
+    name: z.string(),
+    memberNumber: z.string().nullable(),
+    email: z.string().nullable(),
+    notice: checkinNoticeSchema,
+  })
+  .strict();
+export type CheckinPersonFound = z.infer<typeof checkinPersonFoundSchema>;
+
+export const checkinPeopleResponseSchema = z
+  .object({ people: z.array(checkinPersonFoundSchema).max(CHECKIN_SEARCH_LIMIT) })
+  .strict();
+export type CheckinPeopleResponse = z.infer<typeof checkinPeopleResponseSchema>;
+
+export const staffCheckinRequestSchema = checkinPickSchema;
+export type StaffCheckinRequest = z.infer<typeof staffCheckinRequestSchema>;
+
+export const staffCheckinResponseSchema = z.discriminatedUnion("result", [
+  z.object({ result: z.literal("checked_in"), person: checkinPersonSchema, notice: checkinNoticeSchema }).strict(),
+  z
+    .object({
+      result: z.literal("already"),
+      person: checkinPersonSchema,
+      notice: checkinNoticeSchema,
+      firstAt: z.string().datetime(),
+      timezone: z.string(),
+      clockFormat: gymClockFormatSchema,
+    })
+    .strict(),
+]);
+export type StaffCheckinResponse = z.infer<typeof staffCheckinResponseSchema>;
+
+/** The live log: today's newest visits; asked again every few seconds with `since`. */
+export const CHECKIN_LOG_LIMIT = 50;
+export const CHECKIN_LOG_POLL_MS = 5000;
+
+export const checkinLogQuerySchema = z
+  .object({ since: z.string().datetime().optional() })
+  .strict();
+export type CheckinLogQuery = z.infer<typeof checkinLogQuerySchema>;
+
+export const checkinLogVisitSchema = z
+  .object({
+    id: z.string().uuid(),
+    markedAt: z.string().datetime(),
+    name: z.string(),
+    method: gymAttendanceMethodSchema,
+    /** The desk's name for a pass or key tag, the staff member's for staff; null for the
+     *  member's own tap. */
+    by: z.string().nullable(),
+  })
+  .strict();
+export type CheckinLogVisit = z.infer<typeof checkinLogVisitSchema>;
+
+export const checkinLogResponseSchema = z
+  .object({
+    log: z
+      .object({
+        day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        timezone: z.string(),
+        clockFormat: gymClockFormatSchema,
+        visits: z.array(checkinLogVisitSchema).max(CHECKIN_LOG_LIMIT),
+      })
+      .strict(),
+  })
+  .strict();
+export type CheckinLogResponse = z.infer<typeof checkinLogResponseSchema>;
+
+export const STAFF_CHECKIN_WORDS = {
+  person_not_found: "That person isn't on your list any more.",
 } as const;

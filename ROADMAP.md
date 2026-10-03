@@ -174,7 +174,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 16. **Check-in at the front desk** (RULINGS 2026-09-21, Part 3 of the re-plan; spec Part 3 §12). After 3a-v-b — a visit hangs on the durable member record. Every card Opus xhigh; the two extra passes run once over 16a–16c before any gym uses it.
    - 16a. [x] **The scan, on the server** — merged 2026-10-02 (PR #155).
    - 16b-i. [x] **The front desk** — merged 2026-10-02 (PR #157).
-   - 16b-ii. [ ] **Staff check-in and the live log.** The staff check-in route (`method` `staff`) behind a new `attendance.mark` tick, Attendance's search and Check in, the log refreshing every 5 seconds (`?since=`), and Attendance and Overview counting visits by record (people without the app too). Opus xhigh.
+   - 16b-ii. [x] **Staff check-in and the live log** — merged 2026-10-03 (PR #159).
    - 16c. [ ] **The member's side.** My Gyms shows the pass where "I'm here" was (the member web is the test rig until the phone app shows it); the member's tap answers 410 behind a switch, its code and suite kept; Settings' manual-attendance switch leaves the screen.
    - 16d. [ ] **Who can check in** (RULINGS 2026-10-02): a Check-in setting the gym picks — everyone on the list (the starting value) or only people with a current membership, and a payment overdue let in or sent to staff — read from the app's own memberships and bills, never a file's words; a person stopped reads "Please see a member of staff" at the desk, and staff can still check them in. After 18a; Opus xhigh.
 

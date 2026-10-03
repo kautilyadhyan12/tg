@@ -4545,7 +4545,9 @@ export interface GymAttendanceSlotCountRow {
 }
 
 export interface GymAttendancePersonRow {
-  userId: string;
+  /** Null for somebody without the app, checked in on their record (16b-ii). */
+  userId: string | null;
+  entryId: string | null;
   displayName: string;
   /** Kd's 2026-09-03 ruling — a knowing deviation from Part 3 §2.4, with the
    *  join screen's disclosure changed in the same commit. The field's full note
@@ -4604,6 +4606,9 @@ export async function getGymAttendanceDay(
     statuses?: readonly GymAttendanceHoursStatus[] | undefined;
     cursor?: { markedAt: Date; userId: string } | undefined;
     limit?: number | undefined;
+    /** Whether the reader keeps the gym's list (`members.confirm`): only they are sent the
+     *  email on a RECORD. An app account's email goes to every reader (RULINGS 2026-09-03). */
+    recordEmails?: boolean | undefined;
   },
 ): Promise<GymAttendanceDayRow | null> {
   const gymRows = await sql<
@@ -4621,13 +4626,12 @@ export async function getGymAttendanceDay(
   // THE DAY'S TOTALS, over every row of the day. `count(DISTINCT user_id)` is
   // load-bearing HERE and only here — see `GymAttendanceDayRow.totals`.
   //
-  // Every read on this page counts the visits of app accounts only, the ones its list of
-  // people can name; a desk's visit of somebody without the app joins it with the live
-  // log (ROADMAP 16b).
+  // A person is their app account, or their record when they have no app (16b-ii), so a
+  // key tag's or staff's visit of somebody without the app is counted too.
   const totalsRows = await sql<{ visits: string; people: string }[]>`
-    SELECT count(*) AS visits, count(DISTINCT user_id) AS people
+    SELECT count(*) AS visits, count(DISTINCT coalesce(user_id, entry_id)) AS people
     FROM gym_attendance
-    WHERE gym_id = ${input.gymId} AND day = ${gym.day}::date AND user_id IS NOT NULL`;
+    WHERE gym_id = ${input.gymId} AND day = ${gym.day}::date`;
 
   // THE DAY'S SHAPE, over every row of the day — never over the page below.
   const summary = await sql<
@@ -4641,9 +4645,9 @@ export async function getGymAttendanceDay(
   >`
     SELECT hours_status, session_opens_minute, session_closes_minute,
            count(*) AS visits,
-           count(DISTINCT user_id) AS people
+           count(DISTINCT coalesce(user_id, entry_id)) AS people
     FROM gym_attendance
-    WHERE gym_id = ${input.gymId} AND day = ${gym.day}::date AND user_id IS NOT NULL
+    WHERE gym_id = ${input.gymId} AND day = ${gym.day}::date
     GROUP BY hours_status, session_opens_minute, session_closes_minute
     ORDER BY session_opens_minute NULLS LAST, hours_status
     LIMIT ${ATTENDANCE_SUMMARY_LIMIT}`;
@@ -4654,7 +4658,9 @@ export async function getGymAttendanceDay(
    *  twice" show as one visit on one page and one on the next. */
   const people = await sql<
     {
-      user_id: string;
+      person_id: string;
+      user_id: string | null;
+      entry_id: string | null;
       display_name: string;
       email: string;
       first_marked_at: Date;
@@ -4667,19 +4673,24 @@ export async function getGymAttendanceDay(
     }[]
   >`
     WITH page AS (
-      SELECT a.user_id, min(a.marked_at) AS first_marked_at
+      -- A person is their app account, or their record when they have no app (16b-ii).
+      -- The record named is the newest of the day's, which is the one the desk read.
+      SELECT coalesce(a.user_id, a.entry_id) AS person_id,
+             min(a.marked_at) AS first_marked_at,
+             (array_agg(a.user_id) FILTER (WHERE a.user_id IS NOT NULL))[1] AS user_id,
+             (array_agg(a.entry_id ORDER BY a.marked_at DESC) FILTER (WHERE a.entry_id IS NOT NULL))[1] AS entry_id
       FROM gym_attendance a
-      WHERE a.gym_id = ${input.gymId} AND a.day = ${gym.day}::date AND a.user_id IS NOT NULL
+      WHERE a.gym_id = ${input.gymId} AND a.day = ${gym.day}::date
         AND (${statuses}::text[] IS NULL OR a.hours_status = ANY (${statuses}::text[]))
-      GROUP BY a.user_id
+      GROUP BY coalesce(a.user_id, a.entry_id)
       HAVING (${input.cursor?.markedAt ?? null}::timestamptz IS NULL
-              OR (min(a.marked_at), a.user_id)
+              OR (min(a.marked_at), coalesce(a.user_id, a.entry_id))
                  > (${input.cursor?.markedAt ?? null}::timestamptz, ${input.cursor?.userId ?? null}::uuid))
-      ORDER BY first_marked_at, a.user_id
+      ORDER BY first_marked_at, person_id
       LIMIT ${limit + 1}
     )
-    SELECT v.user_id, v.display_name, v.email, v.first_marked_at, v.day, v.marked_at,
-           v.method, v.hours_status, v.session_opens_minute, v.session_closes_minute
+    SELECT v.person_id, v.user_id, v.entry_id, v.display_name, v.email, v.first_marked_at, v.day,
+           v.marked_at, v.method, v.hours_status, v.session_opens_minute, v.session_closes_minute
     FROM (
       -- EMAIL IS HERE BY A KD RULING OF 2026-09-03 AND IS A KNOWING DEVIATION
       -- FROM Part 3 §2.4 (R0.3). That section lists what an org may see and
@@ -4690,20 +4701,26 @@ export async function getGymAttendanceDay(
       -- in its own header. (No backticks in here: inside a sql template literal
       -- one ends the template, which is :30094 section 3b and cost this file a
       -- nine-line TypeScript error pointing nowhere near the cause.)
-      SELECT p.user_id, u.display_name, u.email, p.first_marked_at,
+      -- The name is the gym's own record's first, as the desk shows it.
+      SELECT p.person_id, p.user_id, p.entry_id,
+             coalesce(nullif(btrim(e.full_name), ''), u.display_name, '') AS display_name,
+             coalesce(u.email::text, CASE WHEN ${input.recordEmails === true} THEN e.email::text END, '') AS email,
+             p.first_marked_at,
              a.day::text AS day, a.marked_at, a.method, a.hours_status,
              a.session_opens_minute, a.session_closes_minute,
              -- THE PER-PERSON CEILING, ENFORCED RATHER THAN ASSERTED. Earliest
              -- first, so a truncated person keeps the visits they actually made
              -- in order rather than an arbitrary window of them.
-             row_number() OVER (PARTITION BY p.user_id ORDER BY a.marked_at) AS rn
+             row_number() OVER (PARTITION BY p.person_id ORDER BY a.marked_at) AS rn
       FROM page p
-      JOIN users u ON u.id = p.user_id
+      LEFT JOIN users u ON u.id = p.user_id
+      LEFT JOIN gym_member_list_entries e ON e.gym_id = ${input.gymId} AND e.id = p.entry_id
       JOIN gym_attendance a
-        ON a.gym_id = ${input.gymId} AND a.day = ${gym.day}::date AND a.user_id = p.user_id
+        ON a.gym_id = ${input.gymId} AND a.day = ${gym.day}::date
+       AND coalesce(a.user_id, a.entry_id) = p.person_id
     ) v
     WHERE v.rn <= ${ATTENDANCE_VISITS_PER_PERSON}
-    ORDER BY v.first_marked_at, v.user_id, v.marked_at`;
+    ORDER BY v.first_marked_at, v.person_id, v.marked_at`;
 
   const grouped: GymAttendancePersonRow[] = [];
   /** EACH GROUPED PERSON'S CURSOR KEY, index-aligned with `grouped`.
@@ -4713,18 +4730,21 @@ export async function getGymAttendanceDay(
    *  while the cursor needs the raw `first_marked_at` the inner select ordered
    *  by. Deriving one from the other would be re-parsing our own output. */
   const keys: { userId: string; markedAt: Date }[] = [];
+  let tailPerson: string | null = null;
   for (const r of people) {
     const tail = grouped[grouped.length - 1];
-    if (tail !== undefined && tail.userId === r.user_id) {
+    if (tail !== undefined && tailPerson === r.person_id) {
       tail.visits.push(toAttendanceVisitRow(r));
     } else {
       grouped.push({
         userId: r.user_id,
+        entryId: r.entry_id,
         displayName: r.display_name,
         email: r.email,
         visits: [toAttendanceVisitRow(r)],
       });
-      keys.push({ userId: r.user_id, markedAt: r.first_marked_at });
+      tailPerson = r.person_id;
+      keys.push({ userId: r.person_id, markedAt: r.first_marked_at });
     }
   }
 
@@ -4814,7 +4834,9 @@ export async function getGymAttendanceHistory(
   sql: SqlOrTx,
   input: {
     gymId: string;
-    userId: string;
+    /** Whose visits: an app account's, or a record's for somebody without the app. */
+    userId: string | null;
+    entryId?: string | null | undefined;
     /** GYM DAYS, `YYYY-MM-DD`, half-open: `from` inclusive, `to` exclusive, so
      *  adjacent months tile. Both already calendar-checked by the service —
      *  reaching Postgres with a shape-valid non-date is a 500, which is the
@@ -4845,7 +4867,8 @@ export async function getGymAttendanceHistory(
     SELECT id, day::text AS day, marked_at, method, hours_status,
            session_opens_minute, session_closes_minute
     FROM gym_attendance
-    WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}
+    WHERE gym_id = ${input.gymId}
+      AND (user_id = ${input.userId}::uuid OR entry_id = ${input.entryId ?? null}::uuid)
       AND (${input.from ?? null}::date IS NULL OR day >= ${input.from ?? null}::date)
       AND (${input.to ?? null}::date IS NULL OR day < ${input.to ?? null}::date)
       AND (${input.cursor?.markedAt ?? null}::timestamptz IS NULL
@@ -4988,6 +5011,7 @@ export async function getOrgOverview(
                AS series_start
     )
     SELECT
+      -- A visitor is an app account, or a record for somebody without the app (16b-ii).
       -- "count(*)" IS SAFE HERE ONLY BECAUSE OF THE FILTER, and the series
       -- query twenty lines below uses "count(a.id)" for the opposite reason.
       -- This is a LEFT JOIN, so a gym nobody has ever visited produces one
@@ -4995,12 +5019,12 @@ export async function getOrgOverview(
       -- row, so it is excluded and the count is 0. Delete or widen a FILTER and
       -- "count(*)" starts reporting that empty row as one visit.
       count(*) FILTER (WHERE a.day = b.today) AS today_visits,
-      count(DISTINCT a.user_id) FILTER (WHERE a.day = b.today) AS today_visitors,
+      count(DISTINCT coalesce(a.user_id, a.entry_id)) FILTER (WHERE a.day = b.today) AS today_visitors,
       count(*) FILTER (WHERE a.day >= b.week_start) AS week_visits,
-      count(DISTINCT a.user_id) FILTER (WHERE a.day >= b.week_start) AS week_visitors,
+      count(DISTINCT coalesce(a.user_id, a.entry_id)) FILTER (WHERE a.day >= b.week_start) AS week_visitors,
       count(*) FILTER (WHERE a.day >= b.prev_week_start AND a.day < b.week_start)
         AS prev_week_visits,
-      count(DISTINCT a.user_id)
+      count(DISTINCT coalesce(a.user_id, a.entry_id))
         FILTER (WHERE a.day >= b.prev_week_start AND a.day < b.week_start)
         AS prev_week_visitors
     FROM b
@@ -5030,7 +5054,7 @@ export async function getOrgOverview(
            -- nobody came to still produces one all-NULL row, and "count(*)"
            -- would report that empty week as ONE visit.
            count(a.id) AS visits,
-           count(DISTINCT a.user_id) AS visitors
+           count(DISTINCT coalesce(a.user_id, a.entry_id)) AS visitors
     FROM s
     LEFT JOIN gym_attendance a
       ON a.gym_id = ${input.gymId}

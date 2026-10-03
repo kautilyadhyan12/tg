@@ -442,6 +442,13 @@
       "when": 1788220800046,
       "tag": "0063_checkin_desk",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1788220800048,
+      "tag": "0064_attendance_mark",
+      "breakpoints": true
     }
   ]
 }

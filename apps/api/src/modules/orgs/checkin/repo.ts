@@ -1,7 +1,13 @@
 // Check-in's reads and writes (spec Part 3 §12; ROADMAP 16a). Every statement names its
 // gym in the WHERE, and a device is found by its key's hash alone and then knows its gym.
 import type { Sql, TransactionSql } from "postgres";
-import { CHECKIN_DEVICES_MAX, gymClockFormatSchema, type GymAttendanceMethod, type GymClockFormat } from "@app/shared";
+import {
+  CHECKIN_DEVICES_MAX,
+  gymAttendanceMethodSchema,
+  gymClockFormatSchema,
+  type GymAttendanceMethod,
+  type GymClockFormat,
+} from "@app/shared";
 import { readAttendanceContext } from "../repo.js";
 import type { ScanPeriod, VisitToday } from "./scanRule.js";
 
@@ -180,6 +186,75 @@ export async function recordWords(sql: SqlOrTx, gymId: string, entryId: string):
   return row === undefined ? null : toRecord(row);
 }
 
+export interface FoundRecord extends RecordWords {
+  memberNumber: string | null;
+  email: string | null;
+  phone: string | null;
+}
+
+interface RawFoundRecord extends RawRecord {
+  member_number: string | null;
+  email: string | null;
+  phone_e164: string | null;
+}
+
+const toFound = (row: RawFoundRecord): FoundRecord => ({
+  ...toRecord(row),
+  memberNumber: row.member_number,
+  email: row.email,
+  phone: row.phone_e164,
+});
+
+/** One of the gym's CURRENT records, by id: a former record lets nobody in. */
+export async function currentRecord(sql: SqlOrTx, gymId: string, entryId: string): Promise<FoundRecord | null> {
+  const rows = await sql<RawFoundRecord[]>`
+    SELECT id, full_name, status, payment_status, member_number, email::text AS email, phone_e164
+    FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND id = ${entryId} AND former_at IS NULL`;
+  const row = rows[0];
+  return row === undefined ? null : toFound(row);
+}
+
+/** The gym's current records a search finds, by what the box names: name, member number,
+ *  and email. The email is matched and sent only for staff who keep the list (`withEmail`). */
+export async function recordsLike(
+  sql: SqlOrTx,
+  gymId: string,
+  like: string,
+  limit: number,
+  withEmail: boolean,
+): Promise<FoundRecord[]> {
+  const rows = await sql<RawFoundRecord[]>`
+    SELECT id, full_name, status, payment_status, member_number,
+           CASE WHEN ${withEmail} THEN email::text END AS email, phone_e164
+    FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND former_at IS NULL
+      AND (full_name ILIKE ${like}
+           OR (${withEmail} AND email::text ILIKE ${like})
+           OR coalesce(member_number, '') ILIKE ${like})
+    ORDER BY lower(full_name), id
+    LIMIT ${limit}`;
+  return rows.map(toFound);
+}
+
+/** The gym's live members in the app a search finds, by their name or email. */
+export async function appMembersLike(
+  sql: SqlOrTx,
+  gymId: string,
+  like: string,
+  limit: number,
+): Promise<{ userId: string; displayName: string; email: string }[]> {
+  const rows = await sql<{ user_id: string; display_name: string; email: string }[]>`
+    SELECT m.user_id, u.display_name, u.email::text AS email
+    FROM gym_members m
+    JOIN users u ON u.id = m.user_id
+    WHERE m.gym_id = ${gymId} AND m.removed_at IS NULL AND u.status = 'active'
+      AND (u.display_name ILIKE ${like} OR u.email::text ILIKE ${like})
+    ORDER BY lower(u.display_name), u.id
+    LIMIT ${limit}`;
+  return rows.map((row) => ({ userId: row.user_id, displayName: row.display_name, email: row.email }));
+}
+
 /** The gym's CURRENT records with this member number, folding case as its index does;
  *  two are enough to know the number does not say who. */
 export async function recordsByMemberNumber(
@@ -234,7 +309,7 @@ export async function scanContext(
   sql: Sql,
   gymId: string,
   who: Who,
-): Promise<{ day: string; period: ScanPeriod; visitsToday: VisitToday[] } | null> {
+): Promise<{ day: string; period: ScanPeriod; visitsToday: VisitToday[]; timezone: string; clockFormat: GymClockFormat } | null> {
   const ctx = await readAttendanceContext(sql, gymId);
   if (ctx === null) return null;
   const rows = await sql<{ slot_key: string; marked_at: Date }[]>`
@@ -245,6 +320,8 @@ export async function scanContext(
     day: ctx.day,
     period: { hoursStatus: ctx.hoursStatus, opensMinute: ctx.opensMinute, closesMinute: ctx.closesMinute },
     visitsToday: rows.map((row) => ({ slotKey: row.slot_key, markedAt: row.marked_at })),
+    timezone: ctx.timezone,
+    clockFormat: ctx.clockFormat,
   };
 }
 
@@ -282,4 +359,60 @@ export async function insertVisit(
   // The conflict was with a row that names this account or record, so it is there.
   if (firstAt === undefined || firstAt === null) throw new Error("a visit's conflict found no visit");
   return { inserted: false, firstAt };
+}
+
+// ── THE LIVE LOG (16b-ii) ──
+
+export interface LogVisit {
+  id: string;
+  markedAt: Date;
+  name: string;
+  method: GymAttendanceMethod;
+  by: string | null;
+}
+
+/** A poll asks again from a little before its newest visit: a visit stamped just before
+ *  that one but saved just after it is still found, and the screen keeps each id once. */
+const LOG_OVERLAP_SECONDS = 5;
+
+/** Today's newest visits at the gym, by its own day: the gym's record name first, as the
+ *  desk shows it, and the desk or the member of staff that made each. */
+export async function logVisits(
+  sql: SqlOrTx,
+  gymId: string,
+  since: Date | null,
+  limit: number,
+): Promise<{ day: string; timezone: string; clockFormat: GymClockFormat; visits: LogVisit[] } | null> {
+  const gyms = await sql<{ day: string; timezone: string; clock_format: string }[]>`
+    SELECT (now() AT TIME ZONE timezone)::date::text AS day, timezone, clock_format FROM gyms WHERE id = ${gymId}`;
+  const gym = gyms[0];
+  if (gym === undefined) return null;
+  const rows = await sql<{ id: string; marked_at: Date; method: string; name: string; by: string | null }[]>`
+    SELECT a.id, a.marked_at, a.method,
+           coalesce(nullif(btrim(e.full_name), ''), u.display_name, '') AS name,
+           CASE WHEN a.device_id IS NOT NULL THEN d.name
+                WHEN a.method = 'staff' THEN coalesce(s.display_name, '')
+                ELSE NULL END AS by
+    FROM gym_attendance a
+    LEFT JOIN gym_member_list_entries e ON e.gym_id = a.gym_id AND e.id = a.entry_id
+    LEFT JOIN users u ON u.id = a.user_id
+    LEFT JOIN gym_checkin_devices d ON d.gym_id = a.gym_id AND d.id = a.device_id
+    LEFT JOIN users s ON s.id = a.marked_by_user_id
+    WHERE a.gym_id = ${gymId} AND a.day = ${gym.day}::date
+      AND (${since}::timestamptz IS NULL
+           OR a.marked_at > ${since}::timestamptz - make_interval(secs => ${LOG_OVERLAP_SECONDS}))
+    ORDER BY a.marked_at DESC, a.id DESC
+    LIMIT ${limit}`;
+  return {
+    day: gym.day,
+    timezone: gym.timezone,
+    clockFormat: gymClockFormatSchema.parse(gym.clock_format),
+    visits: rows.map((row) => ({
+      id: row.id,
+      markedAt: row.marked_at,
+      name: row.name,
+      method: gymAttendanceMethodSchema.parse(row.method),
+      by: row.by,
+    })),
+  };
 }

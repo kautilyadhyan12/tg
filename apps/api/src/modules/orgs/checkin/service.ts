@@ -13,21 +13,33 @@ import {
   CHECKIN_KEY_TAG_PAUSE_MINUTES,
   CHECKIN_KEY_TAGS_PER_MINUTE,
   CHECKIN_LINK_TTL_MINUTES,
+  CHECKIN_LOG_LIMIT,
+  CHECKIN_SEARCH_LIMIT,
   CHECKIN_WORDS,
+  STAFF_CHECKIN_WORDS,
   checkinDeviceLinkResponseSchema,
   checkinDeviceResponseSchema,
   checkinDevicesResponseSchema,
+  checkinLogResponseSchema,
   checkinPassResponseSchema,
+  checkinPeopleResponseSchema,
   checkinScanResponseSchema,
   claimCheckinDeviceResponseSchema,
+  staffCheckinResponseSchema,
   type CheckinDevice,
   type CheckinDeviceLinkResponse,
   type CheckinDeviceResponse,
   type CheckinDevicesResponse,
+  type CheckinLogResponse,
   type CheckinNotice,
   type CheckinPassResponse,
+  type CheckinPeopleResponse,
+  type CheckinPersonFound,
+  type CheckinPick,
   type CheckinScanResponse,
   type ClaimCheckinDeviceResponse,
+  type GymClockFormat,
+  type StaffCheckinResponse,
 } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
 import { onAttendanceMarked } from "../../gamification/service.js";
@@ -312,6 +324,21 @@ async function namedByMemberNumber(sql: Sql, gymId: string, code: string): Promi
   const record = records[0];
   if (record === undefined) return NOBODY;
   if (records.length > 1) return AMBIGUOUS;
+  return await namedRecord(sql, gymId, record);
+}
+
+/** Who staff picked from the list: one of the gym's current records, never a former one. */
+async function namedByRecord(sql: Sql, gymId: string, entryId: string): Promise<Named> {
+  const record = await repo.currentRecord(sql, gymId, entryId);
+  return record === null ? NOBODY : await namedRecord(sql, gymId, record);
+}
+
+/** A current record, and the app member whose record it certainly is, if any. */
+async function namedRecord(
+  sql: Sql,
+  gymId: string,
+  record: repo.RecordWords & { email: string | null; phone: string | null },
+): Promise<Named> {
   const owners = (await membersAgainstList(sql, gymId, { email: record.email, phone: record.phone, entryIds: [record.id] })).filter(
     (member) => currentRecordOf(member) === record.id,
   );
@@ -352,6 +379,42 @@ export async function scan(deps: CheckinDeps, device: repo.DeskDevice, code: str
   }
   await repo.touchDevice(deps.sql, gymId, device.deviceId);
 
+  const gymName = device.gymName;
+  const visit = await writeVisit(deps, gymId, read, named, { deviceId: device.deviceId, markedBy: null });
+  if (visit.result === "fresh_pass_needed" || visit.result === "not_a_member" || visit.result === "see_staff") {
+    return checkinScanResponseSchema.parse({ result: visit.result, gymName });
+  }
+  const person = { name: visit.named.name };
+  if (visit.result === "already") {
+    return checkinScanResponseSchema.parse({
+      result: "already",
+      gymName,
+      person,
+      notice: visit.named.notice,
+      firstAt: visit.firstAt.toISOString(),
+      timezone: device.timezone,
+      clockFormat: device.clockFormat,
+    });
+  }
+  return checkinScanResponseSchema.parse({ result: "checked_in", gymName, person, notice: visit.named.notice });
+}
+
+type Visit =
+  | { result: "fresh_pass_needed" }
+  | { result: "not_a_member" }
+  | { result: "see_staff" }
+  | { result: "checked_in"; named: Named }
+  | { result: "already"; named: Named; firstAt: Date; timezone: string; clockFormat: GymClockFormat };
+
+/** The scan rule's answer for one read, and the visit it writes: the desk's and staff's
+ *  one way in, so the two can never disagree about who is let in or what counts twice. */
+async function writeVisit(
+  deps: CheckinDeps,
+  gymId: string,
+  read: ScanRead,
+  named: Named | null,
+  made: { deviceId: string; markedBy: null } | { deviceId: null; markedBy: string },
+): Promise<Visit> {
   const who = named?.who ?? null;
   const ctx = who === null ? null : await repo.scanContext(deps.sql, gymId, who);
   const decision = decideScan({
@@ -360,31 +423,26 @@ export async function scan(deps: CheckinDeps, device: repo.DeskDevice, code: str
     period: ctx?.period ?? { hoursStatus: "hours_unset", opensMinute: null, closesMinute: null },
     visitsToday: ctx?.visitsToday ?? [],
   });
-  const gymName = device.gymName;
   if (decision.result === "fresh_pass_needed" || decision.result === "not_a_member" || decision.result === "see_staff") {
-    return checkinScanResponseSchema.parse({ result: decision.result, gymName });
+    return decision;
   }
   // Unreachable: the rule says checked_in or already only for a member, who has a `who`.
-  if (named === null || who === null || ctx === null) throw new Error("a member's scan had nobody to write");
-  const person = { name: named.name };
-  const already = (firstAt: Date): CheckinScanResponse =>
-    checkinScanResponseSchema.parse({
-      result: "already",
-      gymName,
-      person,
-      notice: named.notice,
-      firstAt: firstAt.toISOString(),
-      timezone: device.timezone,
-      clockFormat: device.clockFormat,
-    });
+  if (named === null || who === null || ctx === null) throw new Error("a member's visit had nobody to write");
+  const already = (firstAt: Date): Visit => ({
+    result: "already",
+    named,
+    firstAt,
+    timezone: ctx.timezone,
+    clockFormat: ctx.clockFormat,
+  });
   if (decision.result === "already") return already(decision.firstAt);
 
   const written = await repo.insertVisit(deps.sql, {
     gymId,
     who,
-    deviceId: device.deviceId,
-    markedBy: null,
-    method: read.kind === "pass" ? "pass" : "key_tag",
+    deviceId: made.deviceId,
+    markedBy: made.markedBy,
+    method: read.kind === "pass" ? "pass" : read.kind === "key_tag" ? "key_tag" : "staff",
     day: ctx.day,
     period: ctx.period,
     slotKey: decision.slotKey,
@@ -403,5 +461,118 @@ export async function scan(deps: CheckinDeps, device: repo.DeskDevice, code: str
         );
       });
   }
-  return checkinScanResponseSchema.parse({ result: "checked_in", gymName, person, notice: named.notice });
+  return { result: "checked_in", named };
+}
+
+// ── STAFF, IN THE CONSOLE (16b-ii; spec Part 3 §12.5) ──
+
+/** A search as LIKE reads it, its own three characters escaped. */
+const escapeLike = (text: string): string => text.replace(/[\\%_]/g, (char) => `\\${char}`);
+
+const foundRecord = (record: repo.FoundRecord): CheckinPersonFound => ({
+  pick: { entryId: record.id },
+  name: record.fullName.trim(),
+  memberNumber: record.memberNumber,
+  email: record.email,
+  notice: { status: record.status, payment: record.payment, onList: true },
+});
+
+/** Whom staff can check in: the gym's current records, and its members in the app who
+ *  have none. A member whose record is current is found as that record, once. */
+export async function findPeople(
+  deps: CheckinDeps,
+  userId: string,
+  gymId: string,
+  query: string,
+  limit: Limit,
+): Promise<CheckinPeopleResponse | null> {
+  const { privileges } = await requirePrivilege(deps, gymId, userId, "attendance.mark");
+  if (!(await limit())) return null;
+  // A record's email is the list's: only staff who keep the list match on it or are sent it.
+  const withEmail = privileges.includes("members.confirm");
+  const like = `%${escapeLike(query)}%`;
+  const [records, accounts] = await Promise.all([
+    repo.recordsLike(deps.sql, gymId, like, CHECKIN_SEARCH_LIMIT, withEmail),
+    repo.appMembersLike(deps.sql, gymId, like, CHECKIN_SEARCH_LIMIT),
+  ]);
+  const members =
+    accounts.length === 0
+      ? []
+      : await membersAgainstList(deps.sql, gymId, { email: null, phone: null, userIds: accounts.map((account) => account.userId) });
+  const found: CheckinPersonFound[] = records.map(foundRecord);
+  const shown = new Set(records.map((record) => record.id));
+  for (const account of accounts) {
+    const member = members.find((row) => row.userId === account.userId);
+    const own = member === undefined ? null : currentRecordOf(member);
+    if (own !== null) {
+      if (shown.has(own)) continue;
+      const record = await repo.currentRecord(deps.sql, gymId, own);
+      if (record !== null) {
+        shown.add(own);
+        found.push(foundRecord(withEmail ? record : { ...record, email: null }));
+        continue;
+      }
+    }
+    found.push({
+      pick: { userId: account.userId },
+      name: account.displayName,
+      memberNumber: null,
+      email: account.email,
+      notice: { status: null, payment: null, onList: member?.onList ?? false },
+    });
+  }
+  found.sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" }));
+  return checkinPeopleResponseSchema.parse({ people: found.slice(0, CHECKIN_SEARCH_LIMIT) });
+}
+
+/** Staff check a person in: the desk's rule, never refused for the hour or a payment
+ *  word, logged with who did it. */
+export async function staffCheckIn(
+  deps: CheckinDeps,
+  userId: string,
+  gymId: string,
+  pick: CheckinPick,
+  limit: Limit,
+): Promise<StaffCheckinResponse | null> {
+  await requireWritablePrivilege(deps, gymId, userId, "attendance.mark");
+  if (!(await limit())) return null;
+  const named =
+    "entryId" in pick ? await namedByRecord(deps.sql, gymId, pick.entryId) : await namedByAccount(deps.sql, gymId, pick.userId);
+  const visit = await writeVisit(deps, gymId, { kind: "staff" }, named, { deviceId: null, markedBy: userId });
+  if (visit.result === "checked_in") {
+    return staffCheckinResponseSchema.parse({ result: "checked_in", person: { name: visit.named.name }, notice: visit.named.notice });
+  }
+  if (visit.result === "already") {
+    return staffCheckinResponseSchema.parse({
+      result: "already",
+      person: { name: visit.named.name },
+      notice: visit.named.notice,
+      firstAt: visit.firstAt.toISOString(),
+      timezone: visit.timezone,
+      clockFormat: visit.clockFormat,
+    });
+  }
+  throw new OrgsError(404, "person_not_found", STAFF_CHECKIN_WORDS.person_not_found);
+}
+
+/** The live log: today's newest visits, or those since the screen's newest. */
+export async function readLog(
+  deps: CheckinDeps,
+  userId: string,
+  gymId: string,
+  since: string | undefined,
+  limit: Limit,
+): Promise<CheckinLogResponse | null> {
+  await requirePrivilege(deps, gymId, userId, "attendance.read");
+  if (!(await limit())) return null;
+  const log = await repo.logVisits(deps.sql, gymId, since === undefined ? null : new Date(since), CHECKIN_LOG_LIMIT);
+  if (log === null) throw new OrgsError(404, "org_not_found", "We couldn't find that organisation.");
+  return checkinLogResponseSchema.parse({
+    log: {
+      day: log.day,
+      timezone: log.timezone,
+      clockFormat: log.clockFormat,
+      visits: log.visits.map((visit) => ({ ...visit, markedAt: visit.markedAt.toISOString() })),
+    },
+  });
 }

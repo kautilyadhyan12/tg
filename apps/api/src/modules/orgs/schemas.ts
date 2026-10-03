@@ -293,6 +293,8 @@ export type AttendanceDayQuery = z.infer<typeof attendanceDayQuerySchema>;
 export const attendanceHistoryQuerySchema = z
   .object({
     userId: z.string().uuid().optional(),
+    /** Staff reading somebody without the app: their record's visits (16b-ii). */
+    entryId: z.string().uuid().optional(),
     from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     cursor: z.string().min(1).max(200).optional(),
@@ -319,6 +321,10 @@ export const attendanceHistoryQuerySchema = z
   .refine((q) => q.from === undefined || q.to === undefined || q.from < q.to, {
     message: "`to` must be later than `from`",
     path: ["to"],
+  })
+  .refine((q) => q.userId === undefined || q.entryId === undefined, {
+    message: "ask for `userId` or `entryId`, not both",
+    path: ["entryId"],
   });
 export type AttendanceHistoryQuery = z.infer<typeof attendanceHistoryQuerySchema>;
 

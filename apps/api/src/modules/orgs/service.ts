@@ -2860,7 +2860,7 @@ export async function getOrgAttendanceDay(
   // filter silently did nothing for a whole card (see `attendanceDayQuerySchema`).
   query: AttendanceDayQuery,
 ): Promise<GymAttendanceDayResponse> {
-  await requirePrivilege(deps, gymId, userId, "attendance.read");
+  const { privileges } = await requirePrivilege(deps, gymId, userId, "attendance.read");
 
   const cursor = requireAttendanceCursor(query.cursor);
 
@@ -2869,6 +2869,7 @@ export async function getOrgAttendanceDay(
     day: query.day === undefined ? undefined : requireCalendarDate(query.day),
     statuses: query.statuses,
     cursor: cursor === undefined ? undefined : { markedAt: cursor.markedAt, userId: cursor.id },
+    recordEmails: privileges.includes("members.confirm"),
   });
   if (row === null) throw new OrgsError(404, "org_not_found", ORG_NOT_FOUND_MESSAGE);
 
@@ -2889,6 +2890,7 @@ export async function getOrgAttendanceDay(
       })),
       people: row.people.map((p) => ({
         userId: p.userId,
+        entryId: p.entryId,
         displayName: p.displayName,
         // Kd's 2026-09-03 ruling — a knowing deviation from Part 3 §2.4, with
         // the join screen's disclosure changed in the same commit. See the
@@ -2927,7 +2929,9 @@ export async function getOrgAttendanceHistory(
   // worth nothing if it covers one of the two readers.
   query: AttendanceHistoryQuery,
 ): Promise<GymAttendanceHistoryResponse> {
-  const subjectId = query.userId ?? userId;
+  // Somebody without the app is read by their record, by staff only (16b-ii).
+  const entryId = query.entryId ?? null;
+  const subjectId = entryId !== null ? null : (query.userId ?? userId);
   if (subjectId === userId) {
     const [org, member] = await Promise.all([
       repo.getOrgById(deps.sql, gymId),
@@ -2943,6 +2947,7 @@ export async function getOrgAttendanceHistory(
   const row = await repo.getGymAttendanceHistory(deps.sql, {
     gymId,
     userId: subjectId,
+    entryId,
     // THE CALENDAR CHECK IS HERE AND THE SHAPE CHECK IS IN THE SCHEMA, which is
     // the split `getOrgAttendanceDay` above already makes for `day`: the pattern
     // admits `2026-02-31`, which is not a date, and Postgres refusing the

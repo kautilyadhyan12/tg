@@ -189,20 +189,21 @@ export async function rollUpGymDays(
     -- TWICE. "count(DISTINCT w.id)" would hide it for the workout count and
     -- silently double "sum(sets_count)" beside it.
     --
-    -- App accounts' visits only, as the console's day read counts them until the
-    -- live log counts by record (ROADMAP 16b): a desk's visit of somebody without
-    -- the app names no account.
+    -- App accounts only: a workout belongs to an account, and a desk's visit of
+    -- somebody without the app names none.
     present AS (
       SELECT DISTINCT t.gym_id, t.day, a.user_id
       FROM target t
       JOIN gym_attendance a ON a.gym_id = t.gym_id AND a.day = t.day AND a.user_id IS NOT NULL
     ),
+    -- Every visit, and a visitor is their account or, without the app, their record
+    -- (ROADMAP 16b-ii), as the console's day read counts them.
     att AS (
       SELECT t.gym_id, t.day,
              count(*)::int AS visits,
-             count(DISTINCT a.user_id)::int AS visitors
+             count(DISTINCT coalesce(a.user_id, a.entry_id))::int AS visitors
       FROM target t
-      JOIN gym_attendance a ON a.gym_id = t.gym_id AND a.day = t.day AND a.user_id IS NOT NULL
+      JOIN gym_attendance a ON a.gym_id = t.gym_id AND a.day = t.day
       GROUP BY t.gym_id, t.day
     ),
     -- **:29961 RULING 2, AND IT IS TWO CONDITIONS.** "present" is the second

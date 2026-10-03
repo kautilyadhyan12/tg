@@ -7,6 +7,9 @@
 //   POST /v1/orgs/:gymId/checkin-devices/:deviceId/off   switch it off
 //   POST /v1/checkin/device/claim                        the tablet opens its link
 //   POST /v1/checkin/scan                                the device's key, and nothing else
+//   GET  /v1/orgs/:gymId/attendance/people?query=        staff find a person (`attendance.mark`)
+//   POST /v1/orgs/:gymId/attendance/check-in             staff check them in (`attendance.mark`)
+//   GET  /v1/orgs/:gymId/attendance/log?since=           the live log (`attendance.read`)
 //
 // The device's key lives in an httpOnly cookie sent only to `/v1/checkin`, and the scan is
 // the one route that reads it: every other route asks for a signed-in person.
@@ -18,8 +21,11 @@ import {
   addCheckinDeviceRequestSchema,
   CHECKIN_WORDS,
   checkinDeviceIdParamsSchema,
+  checkinLogQuerySchema,
+  checkinPeopleQuerySchema,
   checkinScanRequestSchema,
   claimCheckinDeviceRequestSchema,
+  staffCheckinRequestSchema,
 } from "@app/shared";
 import type { AppConfig } from "../../../config.js";
 import type { RedisLike } from "../../../redis.js";
@@ -137,6 +143,36 @@ export function registerCheckinRoutes(app: FastifyInstance, deps: CheckinRouteDe
     redis: deps.redis,
   });
 
+  /** Staff at the desk: a search a few letters at a time, and a check-in a person. A gym's
+   *  staff share the desk's one address. */
+  const staffSearchLimit = createDualRateLimit({
+    name: "checkin_staff_search",
+    max: 600,
+    ipMax: 3000,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+  const staffCheckinLimit = createDualRateLimit({
+    name: "checkin_staff",
+    max: 600,
+    ipMax: 3000,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+  /** The log is asked again every 5 seconds while Attendance is open, and once more after
+   *  each check-in: 720 an hour a screen, so 3,000 an account (three screens and a busy
+   *  desk), 12,000 for a gym's staff on one address. */
+  const logLimit = createDualRateLimit({
+    name: "checkin_log",
+    max: 3000,
+    ipMax: 12000,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+  });
+
   app.get("/v1/users/me/checkin-pass", { preHandler: [app.authenticate] }, async (req, reply) => {
     const pass = await service.getPass(checkinDeps, gate(passLimit)(req, reply), requireUserId(req));
     if (pass === null) return;
@@ -187,6 +223,36 @@ export function registerCheckinRoutes(app: FastifyInstance, deps: CheckinRouteDe
     );
     if (off === null) return;
     return reply.status(200).send(off);
+  });
+
+  app.get("/v1/orgs/:gymId/attendance/people", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(checkinPeopleQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const found = await service.findPeople(checkinDeps, requireUserId(req), params.gymId, query.query, gate(staffSearchLimit)(req, reply));
+    if (found === null) return;
+    return reply.status(200).header("cache-control", "no-store").send(found);
+  });
+
+  app.post("/v1/orgs/:gymId/attendance/check-in", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(staffCheckinRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const answer = await service.staffCheckIn(checkinDeps, requireUserId(req), params.gymId, body, gate(staffCheckinLimit)(req, reply));
+    if (answer === null) return;
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  app.get("/v1/orgs/:gymId/attendance/log", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(checkinLogQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const log = await service.readLog(checkinDeps, requireUserId(req), params.gymId, query.since, gate(logLimit)(req, reply));
+    if (log === null) return;
+    return reply.status(200).header("cache-control", "no-store").send(log);
   });
 
   app.post(`${CHECKIN_PATH}/device/claim`, async (req, reply) => {
