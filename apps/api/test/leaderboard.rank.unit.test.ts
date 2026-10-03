@@ -59,7 +59,7 @@ describe("places", () => {
     const me = person("Hal Hidden", 2, { hideMe: true });
     const shown = [person("Ann A", 3), person("Bob B", 2), person("Cat C", 1)];
     const b = rankBoard([me, ...shown], me.userId);
-    expect(b.me).toEqual({ value: 2, place: 2, hidden: "hide_me", toNextPlace: 1, circles: null });
+    expect(b.me).toEqual({ value: 2, place: 2, hidden: "hide_me", toNextPlace: 1, nextPlace: 1, circles: null });
     expect(b.rows.map((r) => r.place)).toEqual([1, 2, 3]);
   });
 
@@ -68,7 +68,7 @@ describe("places", () => {
     const shown = [person("Ann A", 3), person("Bob B", 2), person("Cat C", 1)];
     const b = rankBoard([me, ...shown], me.userId);
     expect(b.rows).toHaveLength(3);
-    expect(b.me).toEqual({ value: 0, place: null, hidden: null, toNextPlace: null, circles: null });
+    expect(b.me).toEqual({ value: 0, place: null, hidden: null, toNextPlace: null, nextPlace: null, circles: null });
   });
 
   it("no board under three people, counted after the hidden are out", () => {
@@ -86,12 +86,15 @@ describe("places", () => {
     const b = rankBoard(people, me.userId);
     expect(b.rows).toHaveLength(LEADERBOARD_TOP);
     expect(b.ranked).toBe(150);
-    expect(b.me).toMatchObject({ value: 80, place: 121, toNextPlace: 1 });
+    expect(b.me).toMatchObject({ value: 80, place: 121, toNextPlace: 1, nextPlace: 120 });
     const first = rankBoard(people, (people[0] as BoardPerson).userId);
-    expect(first.me).toMatchObject({ place: 1, toNextPlace: null });
+    expect(first.me).toMatchObject({ place: 1, toNextPlace: null, nextPlace: null });
     // A tie above: the next place up is the tied pair's.
     const tied = [person("Ann A", 5), person("Bob B", 5), person("Cat C", 2)];
-    expect(rankBoard(tied, (tied[2] as BoardPerson).userId).me).toMatchObject({ place: 3, toNextPlace: 3 });
+    expect(rankBoard(tied, (tied[2] as BoardPerson).userId).me).toMatchObject({ place: 3, toNextPlace: 3, nextPlace: 1 });
+    // 4th behind two tied 2nd: the next place up is 2nd, not a 3rd nobody holds.
+    const four = [person("Ann A", 5), person("Bob B", 3), person("Cat C", 3), person("Dan D", 1)];
+    expect(rankBoard(four, (four[3] as BoardPerson).userId).me).toMatchObject({ place: 4, toNextPlace: 2, nextPlace: 2 });
   });
 
   it("a staff reason outranks the others, so staff always read 'Staff, not ranked'", () => {

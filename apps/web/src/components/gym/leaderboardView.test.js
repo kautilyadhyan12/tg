@@ -60,10 +60,12 @@ describe('the leaderboard in words', () => {
     expect([1, 2, 3, 4, 11, 12, 13, 21, 22, 101, 111].map(ordinal)).toEqual(['1st', '2nd', '3rd', '4th', '11th', '12th', '13th', '21st', '22nd', '101st', '111th']);
     expect(valueText(1, 'gym_days')).toBe('1 gym day');
     expect(valueText(4, 'streak')).toBe('4 weeks');
-    expect(nextPlaceText({ place: 4, toNextPlace: 2 }, 'gym_days')).toBe('2 more gym days to reach 3rd');
-    expect(nextPlaceText({ place: 2, toNextPlace: 1 }, 'streak')).toBe('1 more week to reach 1st');
-    expect(nextPlaceText({ place: 1, toNextPlace: null }, 'gym_days')).toBeNull();
-    expect(nextPlaceText({ place: null, toNextPlace: null }, 'gym_days')).toBeNull();
+    expect(nextPlaceText({ place: 4, toNextPlace: 2, nextPlace: 3 }, 'gym_days')).toBe('2 more gym days to reach 3rd');
+    // 4th behind two people tied 2nd: the next place is 2nd, never a 3rd nobody holds.
+    expect(nextPlaceText({ place: 4, toNextPlace: 1, nextPlace: 2 }, 'gym_days')).toBe('1 more gym day to reach 2nd');
+    expect(nextPlaceText({ place: 2, toNextPlace: 1, nextPlace: 1 }, 'streak')).toBe('1 more week to reach 1st');
+    expect(nextPlaceText({ place: 1, toNextPlace: null, nextPlace: null }, 'gym_days')).toBeNull();
+    expect(nextPlaceText({ place: null, toNextPlace: null, nextPlace: null }, 'gym_days')).toBeNull();
   });
 
   it('prints times in the gym’s zone', () => {

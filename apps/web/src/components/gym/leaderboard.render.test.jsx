@@ -37,7 +37,7 @@ const shown = (over = {}) => ({
     row('u4', 'Asha R.', 'AR', 3, 1),
     row('u1', 'Vera V.', 'VV', 3, 1, true),
   ],
-  me: { value: 1, place: 3, hidden: null, toNextPlace: 1, circles: circles(1) },
+  me: { value: 1, place: 3, hidden: null, toNextPlace: 1, nextPlace: 2, circles: circles(1) },
   asOf: '2026-10-07T05:12:00.000Z',
   ...over,
 });
@@ -79,7 +79,7 @@ describe('the members’ board', () => {
       shown({
         ranked: 3,
         rows: [row('u2', 'Chen W.', 'CW', 1, 3), row('u3', 'Bilal K.', 'BK', 2, 2), row('u4', 'Asha R.', 'AR', 3, 1)],
-        me: { value: 7, place: 1, hidden: 'hide_me', toNextPlace: null, circles: circles(7) },
+        me: { value: 7, place: 1, hidden: 'hide_me', toNextPlace: null, nextPlace: null, circles: circles(7) },
       }),
     );
     svc.visibility.mockResolvedValue({ hidden: true, hideMe: true, under18: false });

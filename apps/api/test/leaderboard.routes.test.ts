@@ -292,7 +292,7 @@ d("the members' leaderboard (real Postgres)", () => {
       expect(JSON.parse(put.body)).toEqual({ hidden: true, hideMe: true, under18: false });
 
       const own = await board(gym.id, hidden);
-      expect(own.me).toEqual({ value: 2, place: 1, hidden: "hide_me", toNextPlace: null, circles: ["yes", "yes", "no", "no", "no", "no", "no"] });
+      expect(own.me).toEqual({ value: 2, place: 1, hidden: "hide_me", toNextPlace: null, nextPlace: null, circles: ["yes", "yes", "no", "no", "no", "no", "no"] });
       expect(own.rows.some((r) => r.userId === hidden.userId)).toBe(false);
 
       const youngView = await get("/v1/users/me/leaderboard", young.cookies);
@@ -358,6 +358,7 @@ d("the members' leaderboard (real Postgres)", () => {
         place: 1,
         hidden: null,
         toNextPlace: null,
+        nextPlace: null,
         circles: ["yes", "yes", "no", "no", "no", "no", "no"],
       });
       expect(b.rows.map((r) => r.name)).toEqual(["Rita R.", "Max O.", "Nia T.", "Oz T."]);

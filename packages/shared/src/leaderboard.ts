@@ -72,6 +72,8 @@ export const leaderboardMeSchema = z
     hidden: z.enum(LEADERBOARD_HIDDEN_REASONS).nullable(),
     /** How many more it takes to reach the next place up; null when first or not placed. */
     toNextPlace: z.number().int().min(1).nullable(),
+    /** That next place up, which ties make more than one above their own (4th → 2nd). */
+    nextPlace: z.number().int().min(1).nullable(),
     circles: z.array(leaderboardCircleSchema).length(7).nullable(),
   })
   .strict();

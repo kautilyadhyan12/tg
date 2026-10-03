@@ -112,10 +112,9 @@ export function valueText(value, boardId) {
 
 /** "2 more gym days to reach 3rd", or null. */
 export function nextPlaceText(me, boardId) {
-  if (me.toNextPlace === null || me.place === null || me.place <= 1) return null;
+  if (me.toNextPlace === null || me.nextPlace === null) return null;
   const more = boardId === 'streak' ? `${me.toNextPlace} more week${me.toNextPlace === 1 ? '' : 's'}` : `${me.toNextPlace} more gym day${me.toNextPlace === 1 ? '' : 's'}`;
-  const nextPlace = me.place - 1;
-  return `${more} to reach ${ordinal(nextPlace)}`;
+  return `${more} to reach ${ordinal(me.nextPlace)}`;
 }
 
 /** "Updated 10:42 am", in the gym's zone. */

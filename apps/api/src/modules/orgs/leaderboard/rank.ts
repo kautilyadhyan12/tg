@@ -113,6 +113,7 @@ export function rankBoard(people: readonly BoardPerson[], viewerId: string): Boa
     place: enough && value > 0 ? above.length + 1 : null,
     hidden: viewer === undefined ? null : hiddenReason(viewer),
     toNextPlace: enough && value > 0 && nextUp !== null ? nextUp - value : null,
+    nextPlace: enough && value > 0 && nextUp !== null ? placed.filter((r) => r.value > nextUp).length + 1 : null,
     circles: viewer?.circles ?? null,
   };
 

@@ -274,6 +274,7 @@ function modelBoard(gym: MGym, today: string, viewerId: string, query: Leaderboa
       place: showing && value > 0 ? above.length + 1 : null,
       hidden: me?.hidden ?? null,
       toNextPlace: showing && value > 0 && above.length > 0 ? Math.min(...above.map((r) => r.value)) - value : null,
+      nextPlace: showing && value > 0 && above.length > 0 ? Math.max(...above.map((r) => r.place)) : null,
       circles: me?.circles ?? null,
     },
   };

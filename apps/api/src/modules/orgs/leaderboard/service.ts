@@ -103,7 +103,7 @@ export async function getLeaderboard(
     status,
     ranked: showing ? built.board.ranked : 0,
     rows: showing ? built.board.rows : [],
-    me: showing ? built.board.me : { ...built.board.me, place: null, toNextPlace: null },
+    me: showing ? built.board.me : { ...built.board.me, place: null, toNextPlace: null, nextPlace: null },
     asOf: now.toISOString(),
   });
 }
