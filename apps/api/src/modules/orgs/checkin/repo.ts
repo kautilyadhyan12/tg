@@ -215,15 +215,22 @@ export async function currentRecord(sql: SqlOrTx, gymId: string, entryId: string
   return row === undefined ? null : toFound(row);
 }
 
-/** The gym's current records a search finds, by the fields the Members search reads. */
-export async function recordsLike(sql: SqlOrTx, gymId: string, like: string, limit: number): Promise<FoundRecord[]> {
+/** The gym's current records a search finds, by what the box names: name, member number,
+ *  and email. The email is matched and sent only for staff who keep the list (`withEmail`). */
+export async function recordsLike(
+  sql: SqlOrTx,
+  gymId: string,
+  like: string,
+  limit: number,
+  withEmail: boolean,
+): Promise<FoundRecord[]> {
   const rows = await sql<RawFoundRecord[]>`
-    SELECT id, full_name, status, payment_status, member_number, email::text AS email, phone_e164
+    SELECT id, full_name, status, payment_status, member_number,
+           CASE WHEN ${withEmail} THEN email::text END AS email, phone_e164
     FROM gym_member_list_entries
     WHERE gym_id = ${gymId} AND former_at IS NULL
       AND (full_name ILIKE ${like}
-           OR email::text ILIKE ${like}
-           OR coalesce(phone_e164, '') ILIKE ${like}
+           OR (${withEmail} AND email::text ILIKE ${like})
            OR coalesce(member_number, '') ILIKE ${like})
     ORDER BY lower(full_name), id
     LIMIT ${limit}`;

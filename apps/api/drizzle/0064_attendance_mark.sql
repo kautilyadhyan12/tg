@@ -14,4 +14,14 @@ UPDATE "gym_staff"
 SET "privileges" = array_append("privileges", 'attendance.mark')
 WHERE "privileges" IS NOT NULL
   AND "role" IN ('owner','manager')
+  AND NOT ("privileges" @> ARRAY['attendance.mark']::text[]);--> statement-breakpoint
+
+-- A manager's invitation still waiting gets it too, or they would arrive without what every
+-- other manager holds. A gym's own saved roles (`gym_staff_roles`), and an invitation to one
+-- of them, are left alone: their ticks are the owner's own choice.
+UPDATE "gym_staff_invites"
+SET "privileges" = array_append("privileges", 'attendance.mark')
+WHERE "state" = 'pending'
+  AND "role" = 'manager'
+  AND "role_name" IS NULL
   AND NOT ("privileges" @> ARRAY['attendance.mark']::text[]);

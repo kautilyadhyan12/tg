@@ -488,7 +488,8 @@ function AttendanceDay({ org }) {
           Attendance
         </h1>
         <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          Check people in, and see who came in, by day. Times are your {words.it}&apos;s own.
+          {mayCheckIn ? 'Check people in, and see who came in, by day.' : 'Who came in, by day.'} Times are your{' '}
+          {words.it}&apos;s own.
         </p>
       </div>
 

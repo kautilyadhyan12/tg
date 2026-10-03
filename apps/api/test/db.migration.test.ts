@@ -1159,9 +1159,10 @@ d("0001_init on a real database", () => {
       .split("--> statement-breakpoint")
       .map((s) => s.trim())
       .filter((s) => s.includes("array_append"));
-    const backfill = matches[0];
-    if (matches.length !== 1 || backfill === undefined || !backfill.includes("UPDATE")) {
-      throw new Error(`0064 no longer contains exactly one backfill UPDATE (found ${String(matches.length)})`);
+    const backfill = matches.find((s) => /UPDATE "gym_staff"\s/.test(s));
+    const invites = matches.find((s) => s.includes('UPDATE "gym_staff_invites"'));
+    if (matches.length !== 2 || backfill === undefined || invites === undefined) {
+      throw new Error(`0064 no longer contains its two backfill UPDATEs (found ${String(matches.length)})`);
     }
     const before = ["members.read", "attendance.read"];
 
@@ -1184,8 +1185,30 @@ d("0001_init on a real database", () => {
         await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${ids.trainer ?? ""}, 'trainer', ${before})`;
         await tx`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${ids.defaults ?? ""}, 'manager', NULL)`;
 
+        // Invitations: a manager's still waiting gets it; a trainer's, a gym's own role's and
+        // a cancelled one are left alone.
+        const invite = (email: string, role: string, roleName: string | null, state: string) => tx`
+          INSERT INTO gym_staff_invites (gym_id, email, role, privileges, role_name, created_at, expires_at, state, answered_at)
+          VALUES (${gymId}, ${email}, ${role}, ${before}, ${roleName}, now(), now() + interval '7 days', ${state},
+                  ${state === "pending" ? null : tx`now()`})`;
+        await invite("zz-0064-a@example.com", "manager", null, "pending");
+        await invite("zz-0064-b@example.com", "trainer", null, "pending");
+        await invite("zz-0064-c@example.com", "manager", "Front desk", "pending");
+        await invite("zz-0064-d@example.com", "manager", null, "cancelled");
+
         await tx.unsafe(backfill);
         await tx.unsafe(backfill);
+        await tx.unsafe(invites);
+        await tx.unsafe(invites);
+
+        const invited = await tx<{ email: string; privileges: string[] }[]>`
+          SELECT email::text AS email, privileges FROM gym_staff_invites WHERE gym_id = ${gymId} ORDER BY email`;
+        expect(invited).toEqual([
+          { email: "zz-0064-a@example.com", privileges: [...before, "attendance.mark"] },
+          { email: "zz-0064-b@example.com", privileges: before },
+          { email: "zz-0064-c@example.com", privileges: before },
+          { email: "zz-0064-d@example.com", privileges: before },
+        ]);
 
         const rows = await tx<{ display_name: string; privileges: string[] | null }[]>`
           SELECT u.display_name, s.privileges FROM gym_staff s JOIN users u ON u.id = s.user_id

@@ -2860,7 +2860,7 @@ export async function getOrgAttendanceDay(
   // filter silently did nothing for a whole card (see `attendanceDayQuerySchema`).
   query: AttendanceDayQuery,
 ): Promise<GymAttendanceDayResponse> {
-  await requirePrivilege(deps, gymId, userId, "attendance.read");
+  const { privileges } = await requirePrivilege(deps, gymId, userId, "attendance.read");
 
   const cursor = requireAttendanceCursor(query.cursor);
 
@@ -2869,6 +2869,7 @@ export async function getOrgAttendanceDay(
     day: query.day === undefined ? undefined : requireCalendarDate(query.day),
     statuses: query.statuses,
     cursor: cursor === undefined ? undefined : { markedAt: cursor.markedAt, userId: cursor.id },
+    recordEmails: privileges.includes("members.confirm"),
   });
   if (row === null) throw new OrgsError(404, "org_not_found", ORG_NOT_FOUND_MESSAGE);
 

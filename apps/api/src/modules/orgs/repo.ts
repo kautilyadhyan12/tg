@@ -4606,6 +4606,9 @@ export async function getGymAttendanceDay(
     statuses?: readonly GymAttendanceHoursStatus[] | undefined;
     cursor?: { markedAt: Date; userId: string } | undefined;
     limit?: number | undefined;
+    /** Whether the reader keeps the gym's list (`members.confirm`): only they are sent the
+     *  email on a RECORD. An app account's email goes to every reader (RULINGS 2026-09-03). */
+    recordEmails?: boolean | undefined;
   },
 ): Promise<GymAttendanceDayRow | null> {
   const gymRows = await sql<
@@ -4701,7 +4704,7 @@ export async function getGymAttendanceDay(
       -- The name is the gym's own record's first, as the desk shows it.
       SELECT p.person_id, p.user_id, p.entry_id,
              coalesce(nullif(btrim(e.full_name), ''), u.display_name, '') AS display_name,
-             coalesce(u.email::text, e.email::text, '') AS email,
+             coalesce(u.email::text, CASE WHEN ${input.recordEmails === true} THEN e.email::text END, '') AS email,
              p.first_marked_at,
              a.day::text AS day, a.marked_at, a.method, a.hours_status,
              a.session_opens_minute, a.session_closes_minute,

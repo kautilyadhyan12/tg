@@ -157,6 +157,37 @@ describe('check someone in', () => {
     expect(screen.getByText('Anita Kumar')).toBeTruthy();
   });
 
+  it("takes the last search's people off the screen the moment the box changes, and after a check-in", async () => {
+    let ravi;
+    api.findCheckinPeople.mockImplementation((_gym, query) =>
+      query === 'Kumar'
+        ? Promise.resolve({ data: { people: [ANIL, ANITA] } })
+        : new Promise((resolve) => {
+            ravi = resolve;
+          }),
+    );
+    api.staffCheckIn.mockResolvedValue({ data: { result: 'checked_in', person: { name: 'Anita Kumar' }, notice: { status: null, payment: null, onList: true } } });
+    drawScreen();
+    await typeSearch('Kumar');
+    await screen.findByRole('button', { name: 'Check in Anil Kumar' });
+
+    // Another name typed over it: nobody from the old search can be pressed while the new one is on its way.
+    await typeSearch('Ravi');
+    expect(screen.queryByRole('button', { name: /^Check in / })).toBeNull();
+    await waitFor(() => expect(api.findCheckinPeople).toHaveBeenCalledWith('g1', 'Ravi'));
+    expect(screen.queryByRole('button', { name: /^Check in / })).toBeNull();
+    expect(screen.queryByText(/Nobody on your list matches/)).toBeNull();
+    await act(async () => ravi({ data: { people: [] } }));
+    expect(await screen.findByText(/Nobody on your list matches “Ravi”/)).toBeTruthy();
+
+    // After a check-in the box is empty; the first letter of the next name brings nobody back.
+    await typeSearch('Kumar');
+    fireEvent.click(await screen.findByRole('button', { name: 'Check in Anita Kumar' }));
+    await screen.findByRole('status');
+    await typeSearch('K');
+    expect(screen.queryByRole('button', { name: /^Check in / })).toBeNull();
+  });
+
   it('says so when nobody matches, and the box is not there without the tick', async () => {
     api.findCheckinPeople.mockResolvedValue({ data: { people: [] } });
     drawScreen();
@@ -168,6 +199,9 @@ describe('check someone in', () => {
     drawScreen();
     await screen.findByText('Checked in today');
     expect(screen.queryByText('Check someone in')).toBeNull();
+    // The page's first line promises only what this person can do.
+    expect(screen.getByText(/^Who came in, by day\./)).toBeTruthy();
+    expect(screen.queryByText(/Check people in/)).toBeNull();
   });
 });
 
@@ -193,6 +227,33 @@ describe('checked in today', () => {
     expect(api.getCheckinLog).toHaveBeenLastCalledWith('g1', '2026-10-03T06:05:00.000Z');
     const names = screen.getAllByText(/^(New Person|Ravi Noapp|Asha App)$/).map((el) => el.textContent);
     expect(names).toEqual(['New Person', 'Ravi Noapp', 'Asha App']);
+  });
+
+  it('keeps asking after a failure that may clear, and stops with the server\'s words after one that will not', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    api.getCheckinLog.mockResolvedValueOnce(logAnswer([lv('v1', '2026-10-03T06:02:00.000Z', 'Asha App')]));
+    drawScreen();
+    await screen.findByText('Asha App');
+
+    api.getCheckinLog.mockRejectedValueOnce({ response: { status: 500, data: {} } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(await screen.findByText("Couldn't refresh — trying again")).toBeTruthy();
+    expect(screen.getByText('Asha App')).toBeTruthy();
+
+    api.getCheckinLog.mockRejectedValueOnce({ response: { status: 403, data: { error: 'forbidden', message: "Your role doesn't allow that." } } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(await screen.findByText("Your role doesn't allow that.")).toBeTruthy();
+    expect(screen.queryByText('Asha App')).toBeNull();
+    expect(screen.queryByRole('button', { name: /try again/i })).toBeNull();
+    const asked = api.getCheckinLog.mock.calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15000);
+    });
+    expect(api.getCheckinLog.mock.calls.length).toBe(asked);
   });
 
   it('asks nothing while the page is hidden', async () => {

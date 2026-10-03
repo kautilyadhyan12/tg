@@ -161,12 +161,13 @@ export function registerCheckinRoutes(app: FastifyInstance, deps: CheckinRouteDe
     identifier: (req) => req.authUser?.id ?? null,
     redis: deps.redis,
   });
-  /** The log is asked again every 5 seconds while Attendance is open: 720 an hour a
-   *  screen, so 1,500 an account (two screens), 6,000 for a gym's staff on one address. */
+  /** The log is asked again every 5 seconds while Attendance is open, and once more after
+   *  each check-in: 720 an hour a screen, so 3,000 an account (three screens and a busy
+   *  desk), 12,000 for a gym's staff on one address. */
   const logLimit = createDualRateLimit({
     name: "checkin_log",
-    max: 1500,
-    ipMax: 6000,
+    max: 3000,
+    ipMax: 12000,
     windowMs: 60 * 60 * 1000,
     identifier: (req) => req.authUser?.id ?? null,
     redis: deps.redis,

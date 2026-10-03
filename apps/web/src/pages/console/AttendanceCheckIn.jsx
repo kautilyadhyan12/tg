@@ -35,7 +35,6 @@ export function CheckSomeoneIn({ gymId, words, onCheckedIn }) {
     }
     const mine = ++asked.current;
     const timer = setTimeout(() => {
-      setFound((held) => ({ ...held, status: 'loading' }));
       void orgService
         .findCheckinPeople(gymId, query)
         .then((res) => {
@@ -71,7 +70,11 @@ export function CheckSomeoneIn({ gymId, words, onCheckedIn }) {
   };
 
   const query = typed.trim();
-  const people = query !== '' && (found.status === 'ready' || found.status === 'loading') ? found.people : [];
+  // An answer is drawn only for what is in the box now: the last search's people are never
+  // on screen, with a Check in beside them, under a new one.
+  const answered = query !== '' && found.forQuery === query;
+  const people = answered && found.status === 'ready' ? found.people : [];
+  const searching = query !== '' && !answered;
 
   return (
     <ConsoleCard>
@@ -98,7 +101,7 @@ export function CheckSomeoneIn({ gymId, words, onCheckedIn }) {
           className="flex-1 bg-transparent text-sm outline-none"
           style={{ color: '#fff' }}
         />
-        {query !== '' && found.status === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" style={muted} /> : null}
+        {searching ? <Loader2 className="w-4 h-4 animate-spin" style={muted} /> : null}
       </label>
 
       {answer !== null ? (
@@ -121,13 +124,13 @@ export function CheckSomeoneIn({ gymId, words, onCheckedIn }) {
         </div>
       ) : null}
 
-      {query !== '' && found.status === 'failed' ? (
+      {answered && found.status === 'failed' ? (
         <p className="text-sm mt-3" style={{ color: '#f87171' }}>
           {found.error}
         </p>
       ) : null}
 
-      {found.status === 'ready' && people.length === 0 && query !== '' ? (
+      {answered && found.status === 'ready' && people.length === 0 ? (
         <p className="text-sm mt-3" style={muted}>
           Nobody on your list matches &ldquo;{found.forQuery}&rdquo;.
         </p>
@@ -219,10 +222,13 @@ export function CheckedInToday({ gymId, words, refreshSignal }) {
           });
         })
         .catch((err) => {
+          // A refusal that will not clear (the tick taken away, the gym gone) ends the asking
+          // and is said in the server's words; anything else is tried again on the next turn.
+          const retryable = isRetryable(err);
           setLog((prev) =>
-            prev.status === 'ready'
+            prev.status === 'ready' && retryable
               ? { ...prev, stale: true }
-              : { ...prev, status: 'failed', error: errorText(err, "We couldn't load today's check-ins."), retryable: isRetryable(err) },
+              : { ...prev, status: 'failed', error: errorText(err, "We couldn't load today's check-ins."), retryable },
           );
         })
         .finally(() => {
@@ -297,7 +303,7 @@ export function CheckedInToday({ gymId, words, refreshSignal }) {
       )}
       {count >= CHECKIN_LOG_LIMIT ? (
         <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.35)' }}>
-          Showing the latest {CHECKIN_LOG_LIMIT}. Everyone who came is in the day list below.
+          Showing the latest {CHECKIN_LOG_LIMIT}. Everyone who came today is in the day list for today.
         </p>
       ) : null}
     </ConsoleSection>

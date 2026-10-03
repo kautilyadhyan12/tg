@@ -75,6 +75,7 @@ d("staff check-in and the live log (real Postgres)", () => {
     await sql`DELETE FROM gym_members WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_member_list_entries WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_member_lists WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_staff_invites WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_staff WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM audit_log WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM org_daily_stats WHERE gym_id IN (${mine})`;
@@ -86,11 +87,11 @@ d("staff check-in and the live log (real Postgres)", () => {
     await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
   };
 
-  const inject = (method: "GET" | "POST", path: string, cookies: Cookies, payload?: unknown) =>
+  const inject = (method: "GET" | "POST", path: string, cookies: Cookies, payload?: unknown, ip = nextIp()) =>
     api().inject({
       method,
       url: path,
-      remoteAddress: nextIp(),
+      remoteAddress: ip,
       cookies,
       ...(payload === undefined ? {} : { headers: { "content-type": "application/json" }, payload: JSON.stringify(payload) }),
     });
@@ -351,6 +352,16 @@ d("staff check-in and the live log (real Postgres)", () => {
     const byEmail = await found(ironHouse, withRecord.email.slice(0, 20), owner);
     expect(byEmail.map((p) => p.pick)).toEqual([{ entryId: zubin }]);
 
+    // A household on one address: the list has them, though not which record is theirs.
+    const zed = await makeUser("zed", "Zed Nickname");
+    await addRecord(ironHouse, { fullName: "Zedekiah Senior", email: zed.email });
+    await addRecord(ironHouse, { fullName: "Zara Junior", email: zed.email });
+    await join(ironHouse, zed);
+    const household = (await found(ironHouse, "Zed Nickname", owner))[0];
+    expect(household).toMatchObject({ pick: { userId: zed.userId }, notice: { onList: true } });
+    const zedIn = JSON.parse((await checkIn(ironHouse, { userId: zed.userId }, owner)).body) as { notice: { onList: boolean } };
+    expect(zedIn.notice.onList).toBe(true);
+
     expect((await checkIn(ironHouse, { userId: noRecord.userId }, owner)).statusCode).toBe(200);
     const rows = (await visits(ironHouse)).filter((row) => row.user_id === noRecord.userId);
     expect(rows).toEqual([{ user_id: noRecord.userId, entry_id: null, device_id: null, marked_by_user_id: owner.userId, method: "staff" }]);
@@ -362,6 +373,113 @@ d("staff check-in and the live log (real Postgres)", () => {
     // "%" is the one member whose number has it, never everybody.
     expect((await found(ironHouse, "%", owner)).map((p) => p.name)).toEqual(["Percy Plain"]);
     expect(await found(ironHouse, "_", owner)).toEqual([]);
+  }, TEST_TIMEOUT_MS);
+
+  it("a phone number finds nobody, and a record's email is matched and sent only to staff who keep the list", async () => {
+    const gymOwner = await makeUser("mail", "Mail Owner");
+    const gym = await makeGym(gymOwner, "Mail Gym");
+    const rita = await addRecord(gym, { fullName: "Rita Noapp", email: "rita-noapp-list@example.com", memberNumber: "7301" });
+    await sql`UPDATE gym_member_list_entries SET phone_e164 = '+919812345678' WHERE id = ${rita}`;
+    expect(await found(gym, "12345678", gymOwner)).toEqual([]);
+    expect(await found(gym, "+9198", gymOwner)).toEqual([]);
+    // The owner keeps the list: found by her email, and shown it.
+    expect((await found(gym, "rita-noapp-list", gymOwner)).map((p) => [p.name, p.email])).toEqual([["Rita Noapp", "rita-noapp-list@example.com"]]);
+
+    // A trainer holding "Check people in" but not the list: her name and number, never her email.
+    const trainer = await makeUser("mailtrainer", "Mail Trainer");
+    await addStaff(gym, trainer, "trainer", ["members.read", "attendance.read", "attendance.mark"]);
+    expect(await found(gym, "rita-noapp-list", trainer)).toEqual([]);
+    expect(await found(gym, "noapp-list@", trainer)).toEqual([]);
+    expect(await found(gym, "Rita", trainer)).toEqual([
+      { pick: { entryId: rita }, name: "Rita Noapp", memberNumber: "7301", email: null, notice: { status: null, payment: null, onList: true } },
+    ]);
+    expect((await checkIn(gym, { entryId: rita }, trainer)).statusCode).toBe(200);
+    // The day list names her for both, and sends her record's email to the owner alone.
+    const dayFor = async (who: Person) =>
+      (JSON.parse((await get(`/v1/orgs/${gym}/attendance`, who.cookies)).body) as { attendance: { people: { displayName: string; email: string }[] } })
+        .attendance.people;
+    expect(await dayFor(gymOwner)).toMatchObject([{ displayName: "Rita Noapp", email: "rita-noapp-list@example.com" }]);
+    expect(await dayFor(trainer)).toMatchObject([{ displayName: "Rita Noapp", email: "" }]);
+  }, TEST_TIMEOUT_MS);
+
+  it("a member removed from the app, or whose account is closed, is never found and never checked in", async () => {
+    const removed = await makeUser("removed", "Rem Oved");
+    const closed = await makeUser("closed", "Clo Sed");
+    await join(ironHouse, removed);
+    await join(ironHouse, closed);
+    expect((await found(ironHouse, "Rem Oved", owner)).map((p) => p.name)).toEqual(["Rem Oved"]);
+    expect((await found(ironHouse, "Clo Sed", owner)).map((p) => p.name)).toEqual(["Clo Sed"]);
+    await sql`UPDATE gym_members SET removed_at = now() WHERE gym_id = ${ironHouse} AND user_id = ${removed.userId}`;
+    await sql`UPDATE users SET status = 'deleted' WHERE id = ${closed.userId}`;
+    try {
+      const before = (await visits(ironHouse)).length;
+      expect(await found(ironHouse, "Rem Oved", owner)).toEqual([]);
+      expect(await found(ironHouse, "Clo Sed", owner)).toEqual([]);
+      expect((await checkIn(ironHouse, { userId: removed.userId }, owner)).statusCode).toBe(404);
+      expect((await checkIn(ironHouse, { userId: closed.userId }, owner)).statusCode).toBe(404);
+      expect(await visits(ironHouse)).toHaveLength(before);
+    } finally {
+      await sql`UPDATE users SET status = 'active' WHERE id = ${closed.userId}`;
+    }
+  }, TEST_TIMEOUT_MS);
+
+  it("an account is held to its own allowance and an address to its ceiling: one member of staff refused, the next at the same address is not", async () => {
+    const gymOwner = await makeUser("limit", "Limit Owner");
+    const gym = await makeGym(gymOwner, "Limit Gym");
+    const second = await makeUser("limit2", "Limit Manager");
+    await addStaff(gym, second, "manager", null);
+    const person = await addRecord(gym, { fullName: "Lim Ited" });
+    const desk = "10.18.0.1";
+    const asks = (who: Person) => ({
+      search: () => inject("GET", `/v1/orgs/${gym}/attendance/people?query=Lim`, who.cookies, undefined, desk),
+      checkIn: () => inject("POST", `/v1/orgs/${gym}/attendance/check-in`, who.cookies, { entryId: person }, desk),
+      log: () => inject("GET", `/v1/orgs/${gym}/attendance/log`, who.cookies, undefined, desk),
+    });
+    const limits = [
+      { ask: "search", name: "checkin_staff_search", max: 600, ipMax: 3000 },
+      { ask: "checkIn", name: "checkin_staff", max: 600, ipMax: 3000 },
+      { ask: "log", name: "checkin_log", max: 3000, ipMax: 12000 },
+    ] as const;
+    for (const limit of limits) {
+      // The owner has used all but one of the hour's allowance.
+      for (let i = 0; i < limit.max - 1; i++) await redis.incrWithTtl(`rl:${limit.name}:id:${gymOwner.userId}`, 3600);
+      expect((await asks(gymOwner)[limit.ask]()).statusCode).toBe(200);
+      expect((await asks(gymOwner)[limit.ask]()).statusCode).toBe(429);
+      // The manager at the same address is not held back by it.
+      expect((await asks(second)[limit.ask]()).statusCode).toBe(200);
+      // The address at its ceiling: nobody there gets through.
+      for (let i = 0; i < limit.ipMax; i++) await redis.incrWithTtl(`rl:${limit.name}:ip:${desk}`, 3600);
+      expect((await asks(second)[limit.ask]()).statusCode).toBe(429);
+    }
+  }, TEST_TIMEOUT_MS * 2);
+
+  it("the log is today's alone, and its newest fifty", async () => {
+    const gymOwner = await makeUser("page", "Page Owner");
+    const gym = await makeGym(gymOwner, "Page Gym");
+    const today = await addRecord(gym, { fullName: "To Day" });
+    const yesterday = await addRecord(gym, { fullName: "Yester Day" });
+    await sql`
+      INSERT INTO gym_attendance (gym_id, entry_id, marked_by_user_id, day, method, hours_status, slot_key, marked_at)
+      VALUES (${gym}, ${yesterday}, ${gymOwner.userId}, (now() AT TIME ZONE 'Asia/Kolkata')::date - 1, 'staff', 'hours_unset', 'hours_unset', now() - interval '1 day')`;
+    expect((await checkIn(gym, { entryId: today }, gymOwner)).statusCode).toBe(200);
+    expect((await logOf(gym, gymOwner)).map((v) => v.name)).toEqual(["To Day"]);
+    // Asked from before yesterday's visit, it is still today's alone.
+    expect((await logOf(gym, gymOwner, new Date(Date.now() - 3 * 86_400_000).toISOString())).map((v) => v.name)).toEqual(["To Day"]);
+
+    // Sixty more people today: the newest fifty, newest first.
+    await sql`
+      INSERT INTO gym_member_list_entries (gym_id, full_name, phone_e164, identity_key, source)
+      SELECT ${gym}, 'Crowd ' || lpad(n::text, 2, '0'), '+9196' || lpad(n::text, 8, '0'), encode(sha256(('chks-crowd-' || ${gym}::text || n)::bytea), 'hex'), 'typed'
+      FROM generate_series(1, 60) n`;
+    await sql`
+      INSERT INTO gym_attendance (gym_id, entry_id, marked_by_user_id, day, method, hours_status, slot_key, marked_at)
+      SELECT ${gym}, e.id, ${gymOwner.userId}, (now() AT TIME ZONE 'Asia/Kolkata')::date, 'staff', 'hours_unset', 'hours_unset',
+             now() + make_interval(secs => right(e.full_name, 2)::int)
+      FROM gym_member_list_entries e WHERE e.gym_id = ${gym} AND e.full_name LIKE 'Crowd %'`;
+    const page = await logOf(gym, gymOwner);
+    expect(page).toHaveLength(50);
+    expect(page[0]?.name).toBe("Crowd 60");
+    expect(page[49]?.name).toBe("Crowd 11");
   }, TEST_TIMEOUT_MS);
 
   it("refuses what it cannot read", async () => {

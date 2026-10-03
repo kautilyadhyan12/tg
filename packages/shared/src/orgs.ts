@@ -1907,8 +1907,9 @@ export type OrgPrivilege = z.infer<typeof orgPrivilegeSchema>;
  *  `attendance.mark` is "check people in" from the console's Attendance page (spec
  *  Part 3 §12.5: owner and manager by default; the owner can give it to a trainer).
  *  It is a separate tick from `attendance.read`, which every role holds: seeing who
- *  came in is not the power to say somebody did. Its search shows a name, a member
- *  number and an email, the least that tells two people of one name apart. */
+ *  came in is not the power to say somebody did. Its search shows a name and a member
+ *  number; the email on a RECORD is matched and shown only for staff who also keep the
+ *  list (`members.confirm`). */
 export const ROLE_PRIVILEGES: Readonly<Record<OrgRole, readonly OrgPrivilege[]>> = {
   owner: [
     "members.read",

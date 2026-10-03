@@ -486,11 +486,13 @@ export async function findPeople(
   query: string,
   limit: Limit,
 ): Promise<CheckinPeopleResponse | null> {
-  await requirePrivilege(deps, gymId, userId, "attendance.mark");
+  const { privileges } = await requirePrivilege(deps, gymId, userId, "attendance.mark");
   if (!(await limit())) return null;
+  // A record's email is the list's: only staff who keep the list match on it or are sent it.
+  const withEmail = privileges.includes("members.confirm");
   const like = `%${escapeLike(query)}%`;
   const [records, accounts] = await Promise.all([
-    repo.recordsLike(deps.sql, gymId, like, CHECKIN_SEARCH_LIMIT),
+    repo.recordsLike(deps.sql, gymId, like, CHECKIN_SEARCH_LIMIT, withEmail),
     repo.appMembersLike(deps.sql, gymId, like, CHECKIN_SEARCH_LIMIT),
   ]);
   const members =
@@ -507,7 +509,7 @@ export async function findPeople(
       const record = await repo.currentRecord(deps.sql, gymId, own);
       if (record !== null) {
         shown.add(own);
-        found.push(foundRecord(record));
+        found.push(foundRecord(withEmail ? record : { ...record, email: null }));
         continue;
       }
     }
@@ -516,7 +518,7 @@ export async function findPeople(
       name: account.displayName,
       memberNumber: null,
       email: account.email,
-      notice: { status: null, payment: null, onList: false },
+      notice: { status: null, payment: null, onList: member?.onList ?? false },
     });
   }
   found.sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" }));
